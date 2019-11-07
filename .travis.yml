@@ -1,14 +1,36 @@
-dist: trusty
-sudo: false
 language: cpp
+os:
+  - linux
+  - windows
 
-addons:
-  apt:
-    sources:
-      - ubuntu-toolchain-r-test
-    packages:
-      - g++-6 
+matrix:
+  include:
+    - os: linux
+      dist: bionic
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-7
+        env:
+          - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+
+before_install:
+    - eval "${MATRIX_EVAL}"
 
 script:
-  - CXX=/usr/bin/g++-6 CC=/usr/bin/gcc-6 cmake .
-  - cmake --build .
+  - |
+    (
+      set -Eeuo pipefail
+      set -x
+      if [ "$TRAVIS_OS_NAME" = 'windows' ]; then
+        cmake -G "NMake Makefiles" .
+        nmake
+        nmake nsis_template_installer
+      else
+        cmake -DBUILD_DEB=1 -DOS_DIST=ubuntu1804 .
+        cmake --build .
+        cpack ./
+      fi
+     )
