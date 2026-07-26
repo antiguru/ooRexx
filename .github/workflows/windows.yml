@@ -86,6 +86,18 @@ jobs:
           svn checkout --non-interactive --trust-server-cert
           https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest
 
+      # The interpreter crashed partway through the suite on the first run, so
+      # the run is set up to capture why rather than just report that it did.
+      # Local dumps are collected by Windows itself, which also catches the
+      # child interpreters the suite spawns.
+      - name: Enable crash dumps
+        shell: cmd
+        run: |
+          mkdir C:\dumps
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps" /v DumpFolder /t REG_EXPAND_SZ /d C:\dumps /f
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps" /v DumpType /t REG_DWORD /d 2 /f
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps" /v DumpCount /t REG_DWORD /d 10 /f
+
       - name: Run the test suite
         shell: cmd
         # setTestEnv.bat only prepends the suite root and its framework directory
@@ -99,16 +111,34 @@ jobs:
         run: |
           set PATH=%GITHUB_WORKSPACE%\build\bin;%GITHUB_WORKSPACE%\ootest;%GITHUB_WORKSPACE%\ootest\framework;%PATH%
           cd ootest
-          rexx.exe testOORexx.rex > "%GITHUB_WORKSPACE%\testresults.txt" 2>&1
+          rexx.exe testOORexx.rex -s > "%GITHUB_WORKSPACE%\testresults.txt" 2>&1
           echo testOORexx exit code: %ERRORLEVEL%
           type "%GITHUB_WORKSPACE%\testresults.txt"
 
+      # These are informational, and findstr exits 1 when it matches nothing.
+      # `echo` does not reset ERRORLEVEL in cmd, so the usual `|| echo ...`
+      # guard leaves the failure in place and fails the step; hence exit /b 0.
       - name: Test summary
         if: always()
         shell: cmd
         run: |
-          findstr /R /C:"Tests ran:" /C:"Assertions:" /C:"Failures:" /C:"Errors:" "%GITHUB_WORKSPACE%\testresults.txt" || echo no summary found
-          findstr /R /C:"^\[failure\]" /C:"^\[error\]" "%GITHUB_WORKSPACE%\testresults.txt" || echo no failure or error records
+          findstr /R /C:"Tests ran:" /C:"Assertions:" /C:"Failures:" /C:"Errors:" "%GITHUB_WORKSPACE%\testresults.txt"
+          echo ---- last container reached ----
+          findstr /R /C:"^Executing " "%GITHUB_WORKSPACE%\testresults.txt" | more +0
+          exit /b 0
+
+      - name: Analyse crash dumps
+        if: always()
+        shell: cmd
+        run: |
+          dir C:\dumps
+          set CDB=C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe
+          if not exist "%CDB%" echo cdb not found at "%CDB%"
+          for %%f in (C:\dumps\*.dmp) do (
+            echo ================ %%f
+            "%CDB%" -z "%%f" -c ".lines;!analyze -v;~*kv;q"
+          )
+          exit /b 0
 
       - name: Upload test results
         if: always()
@@ -117,3 +147,11 @@ jobs:
           name: oorexx-windows-testresults
           path: testresults.txt
           if-no-files-found: warn
+
+      - name: Upload crash dumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oorexx-windows-dumps
+          path: C:\dumps
+          if-no-files-found: ignore
