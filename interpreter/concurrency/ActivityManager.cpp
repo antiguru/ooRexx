@@ -120,9 +120,15 @@ size_t ActivityManager::interpreterInstances = 0;
 void ActivityManager::init()
 {
     availableActivities = new_queue();
-    // any Activity * carried over refers to storage from before the image was
-    // restored, so drop them; the sibling registries are reset here too
-    allActivities().clear();
+    // Defensive only. init() runs once per process, from memoryObject.initialize()
+    // via startInterpreter(), whose body is guarded by !isActive(), and active is
+    // never cleared -- so no activity exists yet and this list is always already
+    // empty. It must NOT be re-entered with a populated list: clearing one would
+    // unroot live activities, which is as fatal as keeping stale pointers.
+    {
+        ResourceSection lock;
+        allActivities().clear();
+    }
     currentActivity = OREF_NULL;
 }
 

@@ -362,11 +362,14 @@ protected:
     // NOT a Rexx object: see ActivityList.hpp. activityEnded() maintains this
     // after runThread() has released kernel access, so it must not be walked by
     // the collector.
-    // A thread may touch this list while it holds the resource
-    // lock OR while it holds kernel access; either one excludes the collector,
-    // which runs under the kernel lock and takes the resource lock to mark.
-    // (InterpreterInstance::initialize() appends under kernel access, with no
-    // resource lock, and is correct for that reason.)
+    // Every touch of this list needs the resource lock, with no
+    // exceptions. Kernel access is NOT a substitute: it excludes the collector,
+    // but not a thread holding only the resource lock, and Interpreter::
+    // haltAllActivities() and traceAllActivities() are exactly that -- reachable
+    // from a signal handler and from the RexxHaltInstance API on any thread.
+    // Unlike the QueueClass this replaced, whose backing store was a Rexx object
+    // and so stayed live for a stale reader, a vector reallocation hands the old
+    // buffer straight back to operator delete.
     //
     // A function-local static that is never destroyed. As a namespace-scope
     // object its destructor would be registered with __cxa_atexit, and its order

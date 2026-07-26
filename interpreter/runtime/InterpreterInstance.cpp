@@ -134,15 +134,22 @@ void InterpreterInstance::live(size_t liveMark)
  */
 void InterpreterInstance::liveGeneral(MarkReason reason)
 {
-    memory_mark_general(rootActivity);
-    // NOT during an image save. createImage() calls liveGeneral(SAVINGIMAGE) on a
-    // bytewise copy of this object placed in the image buffer, and a copied vector
-    // still points at the original's storage -- the write-back below would put
-    // image offsets into the live activity list. Nothing belonging to an activity
-    // goes into the image anyway. ActivityManager::liveGeneral() guards the same
-    // way.
+    // Nothing owned by an interpreter instance belongs in the saved image, and
+    // both siblings guard their whole body the same way (Interpreter::liveGeneral,
+    // ActivityManager::liveGeneral). Guarding everything, rather than just the
+    // activity list, makes the invariant "this object contributes nothing to an
+    // image" checkable at a glance -- marking rootActivity would otherwise drag
+    // the whole activity graph in behind it, since Activity::liveGeneral has no
+    // guard of its own.
+    //
+    // The activity list makes this mandatory rather than merely tidy:
+    // createImage() calls liveGeneral(SAVINGIMAGE) on a bytewise COPY of this
+    // object in the image buffer, and a copied vector still points at the
+    // original's storage, so the write-back below would put image offsets into
+    // the live activity list.
     if (reason != SAVINGIMAGE)
     {
+        memory_mark_general(rootActivity);
         ResourceSection lock;
         std::vector<Activity *> &acts = allActivities.contents();
         for (size_t i = 0; i < acts.size(); i++)
@@ -152,14 +159,15 @@ void InterpreterInstance::liveGeneral(MarkReason reason)
             memory_mark_general(entry);
             acts[i] = (Activity *)entry;
         }
+
+        memory_mark_general(defaultEnvironment);
+        memory_mark_general(searchPath);
+        memory_mark_general(searchExtensions);
+        memory_mark_general(securityManager);
+        memory_mark_general(localEnvironment);
+        memory_mark_general(commandHandlers);
+        memory_mark_general(requiresFiles);
     }
-    memory_mark_general(defaultEnvironment);
-    memory_mark_general(searchPath);
-    memory_mark_general(searchExtensions);
-    memory_mark_general(securityManager);
-    memory_mark_general(localEnvironment);
-    memory_mark_general(commandHandlers);
-    memory_mark_general(requiresFiles);
 }
 
 
@@ -177,8 +185,16 @@ void InterpreterInstance::initialize(Activity *activity, RexxOption *options)
     rootActivity = activity;
     searchExtensions = new_array();       // this will be filled in during options processing
     requiresFiles = new_string_table();   // our list of loaded requires packages
-    // this gets added to the entire active list.
-    allActivities.append(activity);
+    // this gets added to the entire active list. The resource lock is required
+    // even though this thread holds kernel access: haltAllActivities() and
+    // traceAllActivities() read this list holding only the resource lock, and
+    // this instance is already published in interpreterInstances by the time
+    // initialize() runs, so they can reach it. Kernel access excludes only the
+    // collector.
+    {
+        ResourceSection lock;
+        allActivities.append(activity);
+    }
     // create a default wrapper for this security manager
     securityManager = new SecurityManager(OREF_NULL);
     // set the default system address environment (can be overridden by options)
