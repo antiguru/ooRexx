@@ -17,6 +17,7 @@ jobs:
     runs-on: windows-2022
     # Pinned rather than windows-latest: "latest" moves between images and would
     # turn an unrelated push into a toolchain change.
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
@@ -63,4 +64,56 @@ jobs:
           path: |
             build/bin/
             build/lib/
+          if-no-files-found: warn
+
+      # The test suite is not part of this repository. It lives in a separate
+      # SourceForge SVN repository and its version has to match the interpreter,
+      # so trunk tests go with trunk sources.
+      - name: Ensure an svn client is present
+        shell: pwsh
+        run: |
+          if (-not (Get-Command svn -ErrorAction SilentlyContinue)) {
+            Write-Host "no svn on PATH, installing SlikSVN"
+            choco install -y svn --no-progress
+            "C:\Program Files\SlikSvn\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          } else {
+            svn --version --quiet
+          }
+
+      - name: Check out the test suite
+        shell: cmd
+        run: >
+          svn checkout --non-interactive --trust-server-cert
+          https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest
+
+      - name: Run the test suite
+        shell: cmd
+        # setTestEnv.bat only prepends the suite root and its framework directory
+        # to PATH, so it is inlined here rather than called, which keeps the
+        # build tree ahead of any interpreter that might be on the image.
+        #
+        # Not gated on the result yet. The suite documents failures that are
+        # expected whenever its output is redirected, which CI always does, so
+        # the baseline has to be observed before it can be enforced.
+        continue-on-error: true
+        run: |
+          set PATH=%GITHUB_WORKSPACE%\build\bin;%GITHUB_WORKSPACE%\ootest;%GITHUB_WORKSPACE%\ootest\framework;%PATH%
+          cd ootest
+          rexx.exe testOORexx.rex > "%GITHUB_WORKSPACE%\testresults.txt" 2>&1
+          echo testOORexx exit code: %ERRORLEVEL%
+          type "%GITHUB_WORKSPACE%\testresults.txt"
+
+      - name: Test summary
+        if: always()
+        shell: cmd
+        run: |
+          findstr /R /C:"Tests ran:" /C:"Assertions:" /C:"Failures:" /C:"Errors:" "%GITHUB_WORKSPACE%\testresults.txt" || echo no summary found
+          findstr /R /C:"^\[failure\]" /C:"^\[error\]" "%GITHUB_WORKSPACE%\testresults.txt" || echo no failure or error records
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oorexx-windows-testresults
+          path: testresults.txt
           if-no-files-found: warn
