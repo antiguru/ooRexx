@@ -43,6 +43,7 @@
 #ifndef Included_InterpreterInstance_hpp
 #define Included_InterpreterInstance_hpp
 
+#include "ActivityList.hpp"
 #include "RexxCore.h"
 #include "ExitHandler.hpp"
 #include "ActivationApiContexts.hpp"
@@ -140,7 +141,9 @@ protected:
 
     Activity            *rootActivity;       // the initial activity
     SecurityManager     *securityManager;    // the security manager for our instance
-    QueueClass          *allActivities;      // all activities associated with this instance
+    // NOT a Rexx object: see ActivityList.hpp. The paths that maintain this
+    // cannot all hold kernel access, so it must not be walked by the collector.
+    ActivityList         allActivities;      // all activities associated with this instance
     RexxString          *defaultEnvironment; // the default address environment
     RexxString          *searchPath;         // additional Rexx search path
     ArrayClass          *searchExtensions;   // extensions to search on for external calls
