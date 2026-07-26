@@ -40,6 +40,7 @@
 
 #include "Activity.hpp"
 #include "ActivationSettings.hpp"
+#include "ActivityList.hpp"
 #include <deque>
 #include <atomic>
 #include "GlobalNames.hpp"
@@ -358,7 +359,10 @@ protected:
     static const uint64_t timeSliceLength = 24;            // how long we'll run before checking for a control yield.
 
     static QueueClass       *availableActivities;     // table of available activities
-    static QueueClass       *allActivities;           // table of all activities
+    // NOT a Rexx object: see ActivityList.hpp. activityEnded() maintains this
+    // after runThread() has released kernel access, so it must not be walked by
+    // the collector.
+    static ActivityList      allActivities;            // table of all activities
     static bool              processTerminating;      // shutdown processing started
     static size_t            interpreterInstances;    // number of times an interpreter has been created.
 

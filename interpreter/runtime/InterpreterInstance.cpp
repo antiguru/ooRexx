@@ -102,7 +102,19 @@ InterpreterInstance::InterpreterInstance()
 void InterpreterInstance::live(size_t liveMark)
 {
     memory_mark(rootActivity);
-    memory_mark(allActivities);
+    // the list itself is not a Rexx object, but its contents are, and this is
+    // what keeps the activities alive. The resource lock is what the paths that
+    // maintain the list hold; we already have kernel access here, so taking it
+    // in that order is permitted.
+    {
+        ResourceSection lock;
+        std::vector<Activity *> &acts = allActivities.contents();
+        for (size_t i = 0; i < acts.size(); i++)
+        {
+            RexxInternalObject *entry = acts[i];
+            memory_mark(entry);
+        }
+    }
     memory_mark(defaultEnvironment);
     memory_mark(searchPath);
     memory_mark(searchExtensions);
@@ -123,7 +135,17 @@ void InterpreterInstance::live(size_t liveMark)
 void InterpreterInstance::liveGeneral(MarkReason reason)
 {
     memory_mark_general(rootActivity);
-    memory_mark_general(allActivities);
+    {
+        ResourceSection lock;
+        std::vector<Activity *> &acts = allActivities.contents();
+        for (size_t i = 0; i < acts.size(); i++)
+        {
+            // markGeneral can update the reference, so write it back
+            RexxInternalObject *entry = acts[i];
+            memory_mark_general(entry);
+            acts[i] = (Activity *)entry;
+        }
+    }
     memory_mark_general(defaultEnvironment);
     memory_mark_general(searchPath);
     memory_mark_general(searchExtensions);
@@ -146,11 +168,10 @@ void InterpreterInstance::liveGeneral(MarkReason reason)
 void InterpreterInstance::initialize(Activity *activity, RexxOption *options)
 {
     rootActivity = activity;
-    allActivities = new_queue();
     searchExtensions = new_array();       // this will be filled in during options processing
     requiresFiles = new_string_table();   // our list of loaded requires packages
     // this gets added to the entire active list.
-    allActivities->append(activity);
+    allActivities.append(activity);
     // create a default wrapper for this security manager
     securityManager = new SecurityManager(OREF_NULL);
     // set the default system address environment (can be overridden by options)
@@ -254,7 +275,7 @@ int InterpreterInstance::attachThread(RexxThreadContext *&attachedContext)
     // the resource lock.
     ResourceSection lock;
     // add this to the activity lists
-    allActivities->append(activity);
+    allActivities.append(activity);
     // associate the thread with this instance
     activity->setupAttachedActivity(this);
     return activity;
@@ -292,13 +313,13 @@ bool InterpreterInstance::detachThread(Activity *activity)
     activity->releaseAccess();
     ResourceSection lock;
 
-    allActivities->removeItem(activity);
+    allActivities.removeItem(activity);
     // have the activity manager remove this from the global tables
     // and perform resource cleanup
     ActivityManager::returnActivity(activity);
 
     // Was this the last detach of an thread?  Signal the shutdown event
-    if (allActivities->items() <= 1 && terminating)
+    if (allActivities.items() <= 1 && terminating)
     {
         terminationSem.post();
     }
@@ -335,7 +356,7 @@ Activity* InterpreterInstance::spawnActivity(Activity *parent)
     // add this to the activities list
     ResourceSection lock;
 
-    allActivities->append(activity);
+    allActivities.append(activity);
     return activity;
 }
 
@@ -356,13 +377,13 @@ bool InterpreterInstance::poolActivity(Activity *activity)
     // detach from this instance
     activity->detachInstance();
     // remove from the activities lists for the instance
-    allActivities->removeItem(activity);
+    allActivities.removeItem(activity);
     if (terminating)
     {
         // is this the last one to finish up?  Generally, the main thread
         // will be waiting for this to terminate.  That is thread 1, we're thread
         // 2.  In reality, this is the test for the last "spawned" thread.
-        if (allActivities->items() <= 1)
+        if (allActivities.items() <= 1)
         {
             terminationSem.post();
         }
@@ -390,9 +411,9 @@ Activity* InterpreterInstance::findActivity(thread_id_t threadId)
     // NB:  New activities are pushed on to the end, so it's prudent to search
     // from the list end toward the front of the list.  Also, this ensures we
     // will find the toplevel activity nested on a given thread first.
-    for (size_t listIndex = allActivities->items(); listIndex > 0; listIndex--)
+    for (size_t listIndex = allActivities.items(); listIndex > 0; listIndex--)
     {
-        Activity *activity = (Activity *)allActivities->get(listIndex);
+        Activity *activity = (Activity *)allActivities.get(listIndex);
         // this should never happen, but we never return suspended threads
         if (activity->isThread(threadId) && !activity->isSuspended())
         {
@@ -438,7 +459,7 @@ Activity* InterpreterInstance::enterOnCurrentThread(bool &newActivity)
 
 void InterpreterInstance::removeInactiveActivities()
 {
-    size_t count = allActivities->items();
+    size_t count = allActivities.items();
 
     // This is a bit complicated.  Each activity will be removed from the
     // head of the list, and any activity not ready for termination is
@@ -447,11 +468,11 @@ void InterpreterInstance::removeInactiveActivities()
     // If there are any items left, those are activities we can't release yet.
     for (size_t i = 0; i < count; i++)
     {
-        Activity *activity = (Activity *)allActivities->pull();
+        Activity *activity = (Activity *)allActivities.pull();
         // we never terminate the root activity or any activity current in use
         if (activity == rootActivity || activity->isActive())
         {
-            allActivities->append(activity);
+            allActivities.append(activity);
         }
         else
         {
@@ -502,7 +523,7 @@ bool InterpreterInstance::terminate()
         // go remove all of the activities that are not doing work for this instance
         removeInactiveActivities();
         // if we just have the single root activity left, then we can shutdown
-        terminated = allActivities->items() == 1;
+        terminated = allActivities.items() == 1;
     }
 
     // if there are active threads still running, we need to wait until
@@ -566,7 +587,7 @@ bool InterpreterInstance::terminate()
     // just in case there's still a reference held to this, clear out all object reference fields
     rootActivity = OREF_NULL;
     securityManager = OREF_NULL;
-    allActivities = OREF_NULL;
+    allActivities.clear();
     defaultEnvironment = OREF_NULL;
     searchPath = OREF_NULL;
     searchExtensions = OREF_NULL;
@@ -630,9 +651,9 @@ bool InterpreterInstance::haltAllActivities(RexxString *name)
     ResourceSection lock;
     bool result = true;
 
-    for (size_t listIndex = 1; listIndex <= allActivities->items(); listIndex++)
+    for (size_t listIndex = 1; listIndex <= allActivities.items(); listIndex++)
     {
-        Activity *activity = (Activity *)allActivities->get(listIndex);
+        Activity *activity = (Activity *)allActivities.get(listIndex);
         // only halt the active ones
         if (activity->isActive())
         {
@@ -651,9 +672,9 @@ void InterpreterInstance::traceAllActivities(bool on)
     // make sure we lock this, since it is possible the table can get updated
     // as a result of setting these flags
     ResourceSection lock;
-    for (size_t listIndex = 1; listIndex <= allActivities->items(); listIndex++)
+    for (size_t listIndex = 1; listIndex <= allActivities.items(); listIndex++)
     {
-        Activity *activity = (Activity *)allActivities->get(listIndex);
+        Activity *activity = (Activity *)allActivities.get(listIndex);
         // only tap the active ones
         if (activity->isActive())
         {
