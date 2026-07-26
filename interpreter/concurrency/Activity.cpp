@@ -2285,8 +2285,20 @@ void Activity::checkStackSpace()
 // recursive-descent parser exhausts this budget while parsing the class definitions during
 // image creation, and rexx.img can never be built.  That blocks ASan/TSan/MSan on the
 // interpreter entirely.  Skip the check when building under a sanitizer.  See bugs #2076/#1923.
-#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__) || \
-    (defined(__has_feature) && (__has_feature(address_sanitizer) || __has_feature(thread_sanitizer)))
+//
+// The __has_feature test has to be nested rather than &&-ed onto the line above.  A
+// preprocessor still parses the whole #if expression when the left side is false, and a
+// compiler without __has_feature turns that identifier into 0, leaving 0(address_sanitizer)
+// to be parsed as an expression.  MSVC rejects that outright with C1012.
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+#define ORX_SANITIZER_BUILD
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer) || __has_feature(thread_sanitizer)
+#define ORX_SANITIZER_BUILD
+#endif
+#endif
+
+#ifdef ORX_SANITIZER_BUILD
     return;
 #else
     // note that we use a size_t variable here to get proper alignment
