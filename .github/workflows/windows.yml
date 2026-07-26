@@ -1,0 +1,66 @@
+name: Windows
+
+# Deliberately scoped away from master. This workflow only runs for pushes to
+# CI branches, so merging it to master would still not start builds there
+# without an explicit change to this list.
+on:
+  push:
+    branches:
+      - 'ci/**'
+  workflow_dispatch:
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    runs-on: windows-2022
+    # Pinned rather than windows-latest: "latest" moves between images and would
+    # turn an unrelated push into a toolchain change.
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Report toolchain
+        shell: cmd
+        # `where` exits non-zero when it finds nothing, and cmd steps fail on the
+        # exit code of the last line, so every probe swallows its own failure.
+        run: |
+          cmake --version || ver > nul
+          cl 2>&1 | findstr /C:"Version" || ver > nul
+          where nmake || echo no nmake
+          where ninja || echo no ninja
+          ver
+
+      - name: Configure
+        shell: cmd
+        run: >
+          cmake -S . -B build -G "NMake Makefiles"
+          -DCMAKE_BUILD_TYPE=%BUILD_TYPE%
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build
+        shell: cmd
+        run: cmake --build build
+
+      - name: Smoke test
+        shell: cmd
+        run: |
+          build\bin\rexx.exe -v
+          echo say .rexxinfo~version > hello.rex
+          build\bin\rexx.exe hello.rex
+
+      - name: Upload build output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oorexx-windows-x64
+          path: |
+            build/bin/
+            build/lib/
+          if-no-files-found: warn
