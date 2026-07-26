@@ -1,0 +1,29 @@
+# Test failures that are expected when the ooRexx suite runs on a GitHub
+# Actions Windows runner, as CLASS/TEST, matched case insensitively.
+#
+# Everything here has to be a property of the runner rather than of the
+# interpreter. A test that fails because of an interpreter defect does not
+# belong in this file; it belongs in a bug report.
+#
+# Anything failing that is not listed fails the build, as does the suite
+# not reaching its summary at all, which is how an interpreter crash shows up.
+
+# ReadMe.first records these as failing whenever the suite's output is
+# redirected. CI has no console at all, so they cannot pass here. The same two
+# fail for the same reason on a redirected Linux run.
+CHAROUT.testGroup/TEST_STDOUT_START
+LINEOUT.testGroup/TEST_LINE_TRANSIENT
+
+# No printer is installed on a hosted runner, so every one of these gets back
+# "no default printer" instead of the value it asserts.
+SysWin_xxx_Printer.testGroup/TEST_GETDEFAULTPRINTER_RET
+SysWin_xxx_Printer.testGroup/TEST_SETDEFAULTPRINTER_RET_NEW_STYLE
+SysWin_xxx_Printer.testGroup/TEST_SETDEFAULTPRINTER_RET_OLD_STYLE
+SysWin_xxx_Printer.testGroup/TEST_SETDEFAULTPRINTER_SYNTAX2
+
+# The test asserts that SysGetShortPathName returns an 8.3 name. Windows only
+# generates those if 8dot3 name creation is enabled on the volume, and it is
+# off by default on volumes other than the system one. The runner's workspace
+# is on D:, so the call returns the long path unchanged: the assertion sees
+# the full 259 characters where it wanted 34.
+SysGetXxxPathName.testGroup/TEST_ARG_LIMIT

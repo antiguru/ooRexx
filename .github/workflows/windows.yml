@@ -104,28 +104,26 @@ jobs:
         # to PATH, so it is inlined here rather than called, which keeps the
         # build tree ahead of any interpreter that might be on the image.
         #
-        # Not gated on the result yet. The suite documents failures that are
-        # expected whenever its output is redirected, which CI always does, so
-        # the baseline has to be observed before it can be enforced.
-        continue-on-error: true
+        # The suite's exit code is recorded rather than acted on here. Judging
+        # the run is left to the check step, which can tell an environmental
+        # failure apart from a real one.
         run: |
           set PATH=%GITHUB_WORKSPACE%\build\bin;%GITHUB_WORKSPACE%\ootest;%GITHUB_WORKSPACE%\ootest\framework;%PATH%
           cd ootest
           rexx.exe testOORexx.rex -s > "%GITHUB_WORKSPACE%\testresults.txt" 2>&1
-          echo testOORexx exit code: %ERRORLEVEL%
+          echo %ERRORLEVEL% > "%GITHUB_WORKSPACE%\testexitcode.txt"
           type "%GITHUB_WORKSPACE%\testresults.txt"
-
-      # These are informational, and findstr exits 1 when it matches nothing.
-      # `echo` does not reset ERRORLEVEL in cmd, so the usual `|| echo ...`
-      # guard leaves the failure in place and fails the step; hence exit /b 0.
-      - name: Test summary
-        if: always()
-        shell: cmd
-        run: |
-          findstr /R /C:"Tests ran:" /C:"Assertions:" /C:"Failures:" /C:"Errors:" "%GITHUB_WORKSPACE%\testresults.txt"
-          echo ---- last container reached ----
-          findstr /R /C:"^Executing " "%GITHUB_WORKSPACE%\testresults.txt" | more +0
           exit /b 0
+
+      - name: Check test results
+        if: always()
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\.github\check-test-results.ps1" `
+              -ResultsFile "$env:GITHUB_WORKSPACE\testresults.txt" `
+              -KnownFailuresFile "$env:GITHUB_WORKSPACE\.github\known-test-failures.txt" `
+              -ExitCodeFile "$env:GITHUB_WORKSPACE\testexitcode.txt"
+          exit $LASTEXITCODE
 
       - name: Analyse crash dumps
         if: always()
