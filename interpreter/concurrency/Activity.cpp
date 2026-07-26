@@ -2279,12 +2279,21 @@ void Activity::checkStackSpace()
 /* Function:  Make sure there is enough stack space to run a method           */
 /******************************************************************************/
 {
+// Sanitizer builds add substantial per-frame overhead (redzones, shadow state), so the
+// recursive-descent parser exhausts this budget while parsing the class definitions during
+// image creation, and rexx.img can never be built.  That blocks ASan/TSan/MSan on the
+// interpreter entirely.  Skip the check when building under a sanitizer.  See bugs #2076/#1923.
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__) || \
+    (defined(__has_feature) && (__has_feature(address_sanitizer) || __has_feature(thread_sanitizer)))
+    return;
+#else
     // note that we use a size_t variable here to get proper alignment
     size_t temp;                          // if checking and there isn't room
     if ((char *)&temp < stackLimit && stackcheck == true)
     {
         reportException(Error_Control_stack_full);
     }
+#endif
 }
 
 
