@@ -69,11 +69,30 @@ class Activity;
  * The operations mirror the QueueClass ones that the call sites used, including
  * get() being 1-based, so that converting a call site is only a change of
  * punctuation and cannot silently change an index.
+ *
+ * IMPORTANT: an ActivityList must never be walked by a handler that is running
+ * against a bytewise copy of its owner. MemoryObject::createImage() memcpy's an
+ * object into the image buffer and then calls liveGeneral(SAVINGIMAGE) on the
+ * *copy*; a QueueClass copy is self-contained, but a copied vector still points
+ * at the original's storage, so marking it would write image offsets into the
+ * live list. Owners must skip these entries when the reason is SAVINGIMAGE.
+ * That constraint is invisible at the call site, which is why it is stated here.
  */
 class ActivityList
 {
+    // contents() hands out the raw vector, so only the two owners that mark it
+    // are allowed to reach it. Anything else must go through the operations.
+    friend class ActivityManager;
+    friend class InterpreterInstance;
+
 public:
     ActivityList() { }
+
+    // A copy would leave two objects sharing one buffer. Nothing copies these
+    // today; deleting the operations keeps it that way by construction rather
+    // than by review.
+    ActivityList(const ActivityList &) = delete;
+    ActivityList &operator=(const ActivityList &) = delete;
 
     // append to the end of the list
     inline void append(Activity *activity) { activities.push_back(activity); }
@@ -133,8 +152,22 @@ public:
 
     inline void clear() { activities.clear(); }
 
-    // Direct access for the owner's live()/liveGeneral(), which must mark every
-    // entry. The caller holds the resource lock while doing so.
+    /**
+     * Release the storage, not just the contents.
+     *
+     * InterpreterInstance is a Rexx heap object: its operator delete is empty
+     * and swept objects never run a C++ destructor, so ~vector never runs and
+     * clear() alone would leak the buffer for the life of the process. An
+     * embedder creating and terminating instances in a loop would leak without
+     * bound.
+     */
+    inline void reset() { std::vector<Activity *>().swap(activities); }
+
+protected:
+
+    // Direct access for the owners' live()/liveGeneral(), which must mark every
+    // entry, and for liveGeneral must write the entry back. The caller holds the
+    // resource lock, or kernel access, while doing so.
     inline std::vector<Activity *> &contents() { return activities; }
 
 private:

@@ -143,6 +143,11 @@ protected:
     SecurityManager     *securityManager;    // the security manager for our instance
     // NOT a Rexx object: see ActivityList.hpp. The paths that maintain this
     // cannot all hold kernel access, so it must not be walked by the collector.
+    // A thread may touch this list while it holds the resource
+    // lock OR while it holds kernel access; either one excludes the collector,
+    // which runs under the kernel lock and takes the resource lock to mark.
+    // (InterpreterInstance::initialize() appends under kernel access, with no
+    // resource lock, and is correct for that reason.)
     ActivityList         allActivities;      // all activities associated with this instance
     RexxString          *defaultEnvironment; // the default address environment
     RexxString          *searchPath;         // additional Rexx search path

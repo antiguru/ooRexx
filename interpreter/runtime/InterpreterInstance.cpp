@@ -135,6 +135,13 @@ void InterpreterInstance::live(size_t liveMark)
 void InterpreterInstance::liveGeneral(MarkReason reason)
 {
     memory_mark_general(rootActivity);
+    // NOT during an image save. createImage() calls liveGeneral(SAVINGIMAGE) on a
+    // bytewise copy of this object placed in the image buffer, and a copied vector
+    // still points at the original's storage -- the write-back below would put
+    // image offsets into the live activity list. Nothing belonging to an activity
+    // goes into the image anyway. ActivityManager::liveGeneral() guards the same
+    // way.
+    if (reason != SAVINGIMAGE)
     {
         ResourceSection lock;
         std::vector<Activity *> &acts = allActivities.contents();
@@ -469,6 +476,12 @@ void InterpreterInstance::removeInactiveActivities()
     for (size_t i = 0; i < count; i++)
     {
         Activity *activity = (Activity *)allActivities.pull();
+        // the caller holds the resource lock, so the list cannot shrink under us
+        // and this cannot be NULL -- but do not dereference it on trust
+        if (activity == OREF_NULL)
+        {
+            break;
+        }
         // we never terminate the root activity or any activity current in use
         if (activity == rootActivity || activity->isActive())
         {
@@ -587,7 +600,17 @@ bool InterpreterInstance::terminate()
     // just in case there's still a reference held to this, clear out all object reference fields
     rootActivity = OREF_NULL;
     securityManager = OREF_NULL;
-    allActivities.clear();
+    // The resource lock is required here: this instance can still be reached by
+    // the collector. Activities killed by removeInactiveActivities() never run
+    // detachInstance() -- runThread() sees the exit flag and goes straight to
+    // activityEnded() -- so they sit in ActivityManager::allActivities, which is
+    // a permanent root, still pointing at this instance. reset() rather than
+    // clear() because this object never runs a C++ destructor, so clear() would
+    // leak the buffer.
+    {
+        ResourceSection lock;
+        allActivities.reset();
+    }
     defaultEnvironment = OREF_NULL;
     searchPath = OREF_NULL;
     searchExtensions = OREF_NULL;

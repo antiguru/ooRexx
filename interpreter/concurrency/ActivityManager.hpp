@@ -362,7 +362,18 @@ protected:
     // NOT a Rexx object: see ActivityList.hpp. activityEnded() maintains this
     // after runThread() has released kernel access, so it must not be walked by
     // the collector.
-    static ActivityList      allActivities;            // table of all activities
+    // A thread may touch this list while it holds the resource
+    // lock OR while it holds kernel access; either one excludes the collector,
+    // which runs under the kernel lock and takes the resource lock to mark.
+    // (InterpreterInstance::initialize() appends under kernel access, with no
+    // resource lock, and is correct for that reason.)
+    //
+    // A function-local static that is never destroyed. As a namespace-scope
+    // object its destructor would be registered with __cxa_atexit, and its order
+    // relative to _rexx_fini() -- an ELF destructor -- is unspecified, so a
+    // thread reaching activityEnded() or returnRootActivity() during shutdown
+    // could search and erase freed storage. Same reasoning as the locks above.
+    static ActivityList &allActivities();             // table of all activities
     static bool              processTerminating;      // shutdown processing started
     static size_t            interpreterInstances;    // number of times an interpreter has been created.
 
