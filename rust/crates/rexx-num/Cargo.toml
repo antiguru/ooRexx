@@ -5,5 +5,12 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[dev-dependencies]
+criterion = "0.8.2"
+
+[[bench]]
+name = "arith"
+harness = false
+
 [lints]
 workspace = true

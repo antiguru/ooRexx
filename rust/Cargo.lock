@@ -439,6 +439,9 @@ dependencies = [
 [[package]]
 name = "rexx-num"
 version = "0.1.0"
+dependencies = [
+ "criterion",
+]
 
 [[package]]
 name = "rexx-oracle"
