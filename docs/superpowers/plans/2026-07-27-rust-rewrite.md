@@ -33,7 +33,7 @@ Every task's requirements implicitly include this section.
 - **The C++ tree is read-only.** No file under `interpreter/`, `api/`, `common/`, `rexxapi/`, `extensions/` is modified by this project. It is the oracle. The only exception is `.github/workflows/` (adding Rust legs) and new files under `rust/` and `docs/`.
 - **`api/oorexxapi.h`, `api/rexx.h`, `api/rexxapidefs.h`, `api/oorexxerrors.h` are frozen.** Source compatibility is the contract: native extensions must recompile unchanged. ABI compatibility is explicitly *not* required — struct layouts and symbol addresses may change, but declarations, macro names, type names, and call semantics may not.
 - **Platform matrix:** Linux (ubuntu-24.04), macOS 15 arm64, Windows/MSVC, FreeBSD 14.2, OpenBSD 7.8. Every phase gate runs on all five. The known OpenBSD SIGSEGV in the current C++ baseline is pre-existing; it does not block Rust work but must not be *reproduced* by the Rust build.
-- **Conformance oracle:** `svn checkout https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest` (409 `.testGroup` files, 6,380 `::method test*`, 20 MB), run as **`rexx testOORexx.rex -s < /dev/null`**, judged by `.github/check-test-results.ps1` against `.github/known-test-failures/common.txt` plus the per-platform file.
+- **Conformance oracle:** `svn checkout https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest` (409 `.testGroup` files, 14,122 `::method test*`, 20 MB), run as **`rexx testOORexx.rex -s < /dev/null`**, judged by `.github/check-test-results.ps1` against `.github/known-test-failures/common.txt` plus the per-platform file.
   - **The `< /dev/null` is not optional.** Several groups — `ADDRESS.testGroup`, and the `CHARIN`/`CHAROUT` BIF groups — start child processes that read stdin. Without an stdin of its own the suite silently hangs there rather than failing, and in an ssh-driven VM it takes the session down with it. This repository already fixed it once for the BSD legs (commit `5ea8bc6c`); it applies equally to any local run, and this project hung on it before noticing. The Rust interpreter is judged by the *same* baselines. Adding an entry to a known-failure file is a plan-level decision, never a task-level one.
 - **Performance gate.** Two thresholds, deliberately different, and it matters which applies where:
   - **Shipping gate (parity).** No phase from 2 onward closes with a Rust subsystem slower than its C++ counterpart on the Phase 0 benchmark suite, measured on Linux and macOS. "Slower" means the criterion point estimate falls outside the C++ baseline's confidence interval on the slow side. This is the rule everywhere unless a phase says otherwise.
@@ -103,7 +103,7 @@ Blocks are numbered in the order they were raised and ordered below by topic, so
 | **D11** | RexxUtil / `Sys*` | Phase 7, and L2 | settled — subset in Phase 7, rest in Phase 10 |
 | **D12** | Security manager | Phases 5 and 7 | settled — split across both |
 | **D7** | RXAPI daemon | Phase 10 | **closed** — bridge to the C++ rxapi (2026-07-27) |
-| **D8** | Conformance ladder | everything | open — Task 0.4 measures L1's viability |
+| **D8** | Conformance ladder | everything | **closed** — L1 viable at 86.2% (2026-07-27) |
 | **D9** | Performance gate | every phase exit | settled — two thresholds, see Global Constraints |
 | **D10** | Parser construction | Phase 3 | open — spike at the head of Phase 3 |
 
@@ -260,7 +260,7 @@ So the suite cannot start — not "runs with some failures", cannot start — wi
 
 `SysFileExists` and `SysFileTree` are implemented in `interpreter/runtime/RexxUtilCommon.cpp` with platform halves in `interpreter/platform/{unix,windows}/SysRexxUtil.cpp`.
 
-**The full suite is now checked out, and the surface is far wider than the framework's three functions.** 409 `.testGroup` files, 6,380 `::method test*` methods, 20 MB. Grepping all of it for `Sys*` yields **99 distinct identifiers**, of which roughly half are real routines — the remainder are documentation placeholders (`SysFileXXX`, `SysXxx`), deliberately-absent names (`SysDoesNotExist`), and false positives from the pattern (`System`, `SystemRoot`). Call-site counts for the busiest:
+**The full suite is now checked out, and the surface is far wider than the framework's three functions.** 409 `.testGroup` files, 14,122 `::method test*` methods, 20 MB. Grepping all of it for `Sys*` yields **99 distinct identifiers**, of which roughly half are real routines — the remainder are documentation placeholders (`SysFileXXX`, `SysXxx`), deliberately-absent names (`SysDoesNotExist`), and false positives from the pattern (`System`, `SystemRoot`). Call-site counts for the busiest:
 
 | | | | |
 |---|---|---|---|
@@ -317,7 +317,17 @@ Roughly 1–2k lines of Rust against 12k LOC of porting. The bridge wins clearly
 **The problem.** `testOORexx.rex` and the `.testGroup` files are themselves ooRexx programs — they use `::class`/`::method`/`::requires`, the `TestGroup` and `ooTestCase` classes, streams, and packages (confirmed by inspection of `extensions/json/json_02.testGroup`). The suite cannot run until the interpreter is nearly complete. "ooTest green" is therefore a *final* gate, useless as an incremental signal. A ladder is required.
 
 - **L0 — Differential runner.** A Rust harness runs a `.rex` file under both `build/bin/rexx` (C++) and `rexx-rs`, and diffs normalised stdout/stderr/exit code. Corpus: hand-written micro-programs per feature, growing to the 301 in-repo samples.
-- **L1 — Extracted assertions.** Mechanically lift `::method test*` bodies out of the `.testGroup` files and emit standalone micro-programs against a tiny assert shim. This buys partial credit from the *real* suite long before the framework runs. **Regularity is unverified** — Phase 0 Task 4 measures the extractable fraction and reports it. If it is under ~40%, L1 is not worth building and the ladder becomes L0 → L2.
+- **L1 — Extracted assertions. VIABLE, measured 2026-07-27.** Mechanically lift `::method test*` bodies out of the `.testGroup` files and emit standalone micro-programs against a tiny assert shim. **409 groups, 14,122 test methods, 12,176 extractable = 86.2%**, or **82.7%** after correcting for the `expose` blind spot below. Either figure is far clear of the 40% threshold, so **the ladder is L0 → L1 → L2 → L3** and `rexx-extract` stays. Full per-file table in `docs/superpowers/plans/l1-coverage.md`.
+
+  Three limits of the extractor, known and quantified rather than discovered later:
+
+  1. **The `expose` blind spot.** `touches_fixture` catches `self~<message>` but not the other fixture idiom — `setUp` stores state in an exposed instance variable and the test body says `expose <var>` then uses `<var>` directly, with no `self~` anywhere. Those are wrongly marked extractable and would fail to parse, since `expose` is not legal inside `::routine`. Measured: 491 of 12,176 extracted files (4.0%) contain `expose`. That is the 86.2% → 82.7% correction.
+  2. **No block-comment awareness.** `extract()` does not track `/* … */`, so a commented-out `::method test…` is counted as live. Observed in the sibling `Assert.testUnit`, where 20 of 48 methods were dead code inside a comment. Inflates the numerator on files that carry commented-out tests.
+  3. **`ASSERTIONS` omits `expectCondition`,** which is the same kind of assertion as `expectSyntax` and appears in real test code. Add it.
+
+  Two real defects the full run hit, both fixed in the binary: `C2X.testGroup` is ISO-8859 with a literal `0xAA` byte, so `read_to_string` aborted the whole run — read bytes and use `from_utf8_lossy`, which is safe because `extract()` only matches ASCII markers. And `Assignments.testGroup` defines `::method "test_/="` and `"test_//="` to test the `/=` and `//=` operators, so building `<group>_<method>.rex` from the raw name tried to write through a `/` — sanitise the method-name component with `[^A-Za-z0-9_-]` → `_`.
+
+  Note for anyone re-measuring: **do not count test methods with a naive `grep '::method test'`.** ooTest quotes method names heavily, and the unquoted-only count is 6,380 — less than half the real 14,122. This plan carried that undercount for several commits.
 - **L2 — Framework boots.** `ooTest.frm` loads and a single test group executes. This is the "object model, packages, `::requires`, and streams all work" milestone.
 - **L3 — Full suite green** against `known-test-failures/` on all five platforms.
 
@@ -396,7 +406,7 @@ Phases 6, 7, and 8 are independent of each other and may run in parallel once Ph
 
 **Why Phase 9's gate is L3-*core*, not L3.** The suite exercises things Phase 10 delivers — the extension test groups (`json`, `yaml`, `rxregexp`, and the rest), and the RXAPI-dependent features: external data queues, macrospace, and `rxsubcom` registration. This is confirmed rather than assumed: the checked-out suite calls the seven `Sys*RexxMacro*`/`Sys*RexxMacroSpace` routines, which the RXAPI daemon serves (see D11). Gating Phase 9 on the unqualified full suite would make it unevaluable until Phase 10 was already done. Phase 9's plan must therefore **enumerate the excluded groups explicitly, by name, in a committed file** (`docs/superpowers/plans/phase-9-exclusions.txt`), and Phase 10 deletes that file. An exclusion list that is not written down is indistinguishable from a suite that quietly does not run.
 
-**Rungs L1 and L2 assume D8 kept L1.** If Task 0.4 measured the extractable fraction below 40%, L1 does not exist and the Phase 2 and Phase 4 rows read L0 instead.
+**D8 kept L1** — measured at 86.2%, so the Phase 2 and Phase 4 rows stand as written.
 
 ---
 
@@ -858,7 +868,7 @@ git commit -m "Add the differential runner and a deterministic seed corpus"
 **Interfaces:**
 - Produces: `extract(source: &str) -> Vec<TestMethod>`, `TestMethod { name: String, body: String, uses_fixture: bool }`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `rust/crates/rexx-extract/tests/extract.rs`:
 ```rust
@@ -899,12 +909,12 @@ fn methods_touching_instance_state_are_flagged_as_fixture_dependent() {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd rust && cargo test -p rexx-extract`
 Expected: FAIL — crate does not exist.
 
-- [ ] **Step 3: Implement the extractor**
+- [x] **Step 3: Implement the extractor**
 
 `rust/crates/rexx-extract/src/lib.rs`:
 ```rust
@@ -919,7 +929,7 @@ Expected: FAIL — crate does not exist.
 const ASSERTIONS: &[&str] = &[
     "assertequals", "assertnotequals", "asserttrue", "assertfalse",
     "assertnull", "assertnotnull", "assertsame", "assertnotsame",
-    "expectsyntax", "assertlistequals", "assertarrayequals",
+    "expectsyntax", "expectcondition", "assertlistequals", "assertarrayequals",
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -986,12 +996,12 @@ fn touches_fixture(body: &str) -> bool {
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-extract`
 Expected: 2 passed.
 
-- [ ] **Step 5: Write the `rexx-extract` binary**
+- [x] **Step 5: Write the `rexx-extract` binary**
 
 `rust/crates/rexx-extract/src/bin/rexx-extract.rs` takes three flags, parsed the same way as `rexx-diff` in Task 0.3:
 
@@ -1018,7 +1028,7 @@ The shim must define exactly the assertion messages listed in `ASSERTIONS`; a me
 
 Exit non-zero if the suite directory holds no `.testGroup` files, for the same reason `rexx-diff` refuses an empty corpus.
 
-- [ ] **Step 6: Measure L1 viability against the real suite**
+- [x] **Step 6: Measure L1 viability against the real suite**
 
 Run:
 ```bash
@@ -1029,11 +1039,11 @@ cd rust && cargo run --release -p rexx-extract --bin rexx-extract -- \
   --suite ../ootest --out ../rust/corpus/extracted --report ../docs/superpowers/plans/l1-coverage.md
 ```
 
-- [ ] **Step 7: Record the D8 decision**
+- [x] **Step 7: Record the D8 decision**
 
-Read `l1-coverage.md`. **If the extractable fraction is ≥40%, L1 is viable — record D8 as L0→L1→L2→L3.** Below 40%, the extraction machinery costs more than it returns; record D8 as L0→L2→L3, delete `rexx-extract`, and change the Phase 2 and Phase 4 roadmap rows from L1 to L0. Write the decision and the measured number into Section 1's D8 block in this file.
+Read `l1-coverage.md`. **Measured 2026-07-27: 86.2% (82.7% corrected). L1 is viable; D8 is closed as L0→L1→L2→L3.** The rule was: if the fraction is ≥40%, keep L1. Below 40%, the extraction machinery costs more than it returns; record D8 as L0→L2→L3, delete `rexx-extract`, and change the Phase 2 and Phase 4 roadmap rows from L1 to L0. Write the decision and the measured number into Section 1's D8 block in this file.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add rust docs

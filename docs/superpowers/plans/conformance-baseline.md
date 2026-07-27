@@ -22,8 +22,8 @@ Test execution:     00:05:28.108636
 Total time:         00:05:30.176061
 ```
 
-Suite: 409 `.testGroup` files, 6,380 `::method test*` definitions, checked out from
-`https://svn.code.sf.net/p/oorexx/code-0/test/trunk`. The 24,372 figure exceeds 6,380
+Suite: 409 `.testGroup` files, 14,122 `::method test*` definitions, checked out from
+`https://svn.code.sf.net/p/oorexx/code-0/test/trunk`. The 24,372 figure exceeds 14,122
 because groups parameterise tests at run time.
 
 ## How it was run

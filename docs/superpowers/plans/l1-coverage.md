@@ -1,3 +1,23 @@
+# L1 coverage measurement (Task 0.4, Step 6)
+
+**This is the real, full-suite measurement**, not a sample: the SVN checkout
+of `code-0/test/trunk` completed during this task (the network came back
+partway through), landing at `../ootest` — 409 `.testGroup` files, 20 MB.
+An earlier draft of this file measured a 4-file local sample under a
+"PROVISIONAL" label before the checkout was available; that draft has been
+replaced by the numbers below. See "Re-running this measurement" at the
+bottom for the exact command.
+
+## Result
+
+```
+409 groups, 14122 test methods, 12176 extractable (86.2%)
+```
+
+**86.2% ≥ 40% — comfortably clears the D8 threshold the plan sets for L1
+viability.** (This report only measures and records the number; per
+instructions, the D8 ladder decision itself is left to the main session.)
+
 | File | Total | Extractable | Percentage |
 |---|---|---|---|
 | ../ootest/misc/Advanced.testGroup | 5 | 0 | 0.0% |
@@ -410,3 +430,86 @@
 | ../ootest/ooRexx/utilities/rxqueue/rxQueue.testGroup | 9 | 6 | 66.7% |
 | ../ootest/ooRexx/utilities/rxsubcom/rxsubcom.testGroup | 13 | 0 | 0.0% |
 | **Total** | **14122** | **12176** | **86.2%** |
+
+## Two real bugs the full run found (fixed in `rexx-extract`)
+
+Both only surface once you point the tool at the actual suite instead of a
+handful of files — the sample used before the checkout completed didn't hit
+either.
+
+1. **Non-UTF-8 source.** `ooRexx/base/bif/C2X.testGroup` is ISO-8859 text
+   that embeds a literal `0xAA` byte inside a string argument to `C2X()`
+   (testing hex-conversion of raw high bytes). `std::fs::read_to_string`
+   rejected it outright and aborted the whole run. Fixed by reading bytes
+   and using `String::from_utf8_lossy` — safe here because `extract()` only
+   looks for ASCII markers (`::method`, `self~`); a lossy-decoded string
+   literal payload doesn't change where those markers fall.
+2. **Path-unsafe method names.** `ooRexx/base/keyword/Assignments.testGroup`
+   has `::method "test_/="` and `::method "test_//="` (testing the `/=` and
+   `//=` operators) — the quoted name itself contains `/`, which is a path
+   separator. Building `<group>_<method>.rex` from the raw name therefore
+   tried to write into a nonexistent subdirectory and failed. Fixed by
+   sanitizing the method-name component: anything outside
+   `[A-Za-z0-9_-]` becomes `_`.
+
+## Why the raw number is probably a little optimistic, and by how much
+
+`touches_fixture` (as specified) only flags fixture access sent as
+`self~<message>`. It does **not** recognize the other common idiom: `setUp`
+stores fixture state in an exposed instance variable, and test methods do
+`expose <var>` then call `<var>~...` directly, never through `self~`. Since
+`extract()` never sees a `self~` message in that body, it reports no fixture
+use, and the method is marked extractable — even though the emitted
+`.rex` wraps it in `::routine main public`, where `expose` isn't even legal
+(it's a method-only instruction), so the program would fail to parse, not
+just fail an assertion.
+
+Checked against the full 12,176-file extraction output (files that mention
+`expose` anywhere in the extracted body, as a proxy for this blind spot):
+
+- 491 of 12,176 extracted files (**4.0%**) contain `expose`.
+- Treating all of those as actually fixture-dependent: adjusted extractable
+  = 12,176 − 491 = **11,685**, adjusted percentage = 11,685 / 14,122 =
+  **82.7%**.
+
+So the correction is small at full-suite scale (86.2% → 82.7%, both well
+above 40%) — **not** the ~4x drop an earlier draft of this file (measured
+against just `json_02.testGroup`, `json_01_Claude.testGroup`, and
+`yaml.testGroup`) suggested. Those three files turned out to be
+unrepresentative outliers: they're ~80% `expose`-based, while the suite as a
+whole is ~4%. That's itself worth remembering when eyeballing individual
+rows above — a handful of files (the `json`/`yaml`/`OLE`/directive-heavy
+groups) carry most of the remaining `expose` risk, not the corpus broadly.
+
+## Other things this run surfaced in the spec (not fixed — flagging, not redesigning)
+
+- **No comment-awareness.** `extract()` is a line-by-line scanner with no
+  concept of Rexx's `/* ... */` block comments. Any `.testGroup` with a
+  commented-out `::method test...` block (seen in the older-framework
+  `Assert.testUnit`, not part of this SVN tree but present in the sibling
+  `ootRexxUnit`-style scratchpad checkout) will have those dead methods
+  counted as live and extracted into `.rex` files with no corresponding real
+  test. Not observed to matter at scale in this suite, but it's a real gap.
+- **`ASSERTIONS` has no `expectCondition`.** Only `expectSyntax` is listed,
+  even though `expectCondition` is the same style of assertion (expect a
+  condition to be raised) and appears in ooRexxUnit-family test code. Methods
+  using it are (correctly, given the list) marked fixture-dependent, which
+  looks like an omission rather than an intentional exclusion.
+- **Shim completeness was underspecified.** Step 5's example Rexx snippet
+  shows only `::method assertEquals`, while the surrounding prose says the
+  shim "must define exactly the assertion messages listed in `ASSERTIONS`"
+  (11 names). The snippet was read as illustrative rather than exhaustive;
+  the shipped binary emits all 11 shim methods. Worth confirming that
+  reading was intended.
+
+## Re-running this measurement
+
+```bash
+cd /home/moritz/dev/repos/ooRexx-rust-rewrite
+# already checked out at ../ootest for this run; re-checkout only if it's
+# missing or stale:
+svn checkout --non-interactive --trust-server-cert \
+  https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest
+cd rust && cargo run --release -p rexx-extract --bin rexx-extract -- \
+  --suite ../ootest --out ../rust/corpus/extracted --report ../docs/superpowers/plans/l1-coverage.md
+```
