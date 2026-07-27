@@ -50,6 +50,38 @@ def fmt(digits, befores, afters, expps, expts, places):
             out += [f"{d}|FORMAT|{n}|||{p}|{t}" for p in expps for t in expts]
     return out
 
+FMT3_NUMS = ["7.25","-7.25","9.5","10.5","99.5","-99.5","12","123","1234",
+             "1e0","1e1","1e2","1e3","5e0","5e1","5e2","0.0999","0.00999","9.99e-1",
+             "1.001e2","-1.001e2","8","-8","80","800","8000","0.25","-0.25",
+             "1e-1","1e-2","1e-3","1e-9","0.000000001","0.0001234","2e-7",
+             "999.999","1000.0001","77777777.7","6.02e23","1.6e-19","0e0"]
+
+def fmt3():
+    """Independent third set: shares no values with `fmt`/`fmt2`, and reaches
+    two things neither of them does.
+
+    A digits field ending in `E` runs the case under NUMERIC FORM ENGINEERING;
+    the earlier sets were SCIENTIFIC only, so the engineering path went
+    untested even though it is what collapses a nonzero adjusted exponent to a
+    displayed 0. The last family passes before/after *together with*
+    expp/expt -- `fmt()` emits those two argument families separately, so the
+    interaction where expp blank-pads an otherwise plain result was never
+    exercised. Values cluster near adjusted exponent 0, 1 and 2 for the same
+    reason. 15 of these differ between the two forms without erroring.
+    """
+    out = []
+    for d in ["5", "9", "5E", "9E"]:
+        for n in FMT3_NUMS:
+            out += [f"{d}|TRUNC|{n}|{p}|||" for p in ["","0","1","2","5"]]
+            out += [f"{d}|FORMAT|{n}|{b}|{a}||"
+                    for b in ["","0","1","3","6"] for a in ["","0","1","3"]]
+            out += [f"{d}|FORMAT|{n}|||{p}|{t}"
+                    for p in ["","0","1","2","5"] for t in ["","0","1","2","4"]]
+            out += [f"{d}|FORMAT|{n}|{b}|{a}|{p}|{t}"
+                    for b in ["","2"] for a in ["","3"]
+                    for p in ["","0","2"] for t in ["","0"]]
+    return out
+
 SETS = {
     "addsub":  lambda: binary(ARITH_A, ["+","-"], [1,3,9,15]),
     "addsub2": lambda: binary(ARITH_B, ["+","-"], [2,4,6,7,11,20]),
@@ -60,6 +92,7 @@ SETS = {
     "fmt":     lambda: fmt([5,9], ["","1","4","10"], ["","0","2","4"], ["0","2","4"], ["","0","2"], ["","0","1","2","3"]),
     "fmt2":    lambda: fmt([1,3,9,15], ["","0","1","2","6","12"], ["","0","1","3","8"],
                            ["","0","1","2","5"], ["","0","1","4"], ["","0","1","2","5","9"]),
+    "fmt3":    fmt3,
 }
 
 if __name__ == "__main__":
