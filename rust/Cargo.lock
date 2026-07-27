@@ -18,6 +18,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rexx-extract"
+version = "0.1.0"
+
+[[package]]
 name = "rexx-inventory"
 version = "0.1.0"
 dependencies = [

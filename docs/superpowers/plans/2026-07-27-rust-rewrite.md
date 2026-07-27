@@ -98,7 +98,7 @@ Blocks are numbered in the order they were raised and ordered below by topic, so
 | **D4** | Numeric core | Phase 2 | settled — port `NumberString` |
 | **D5** | Native API surface | Phase 8 | settled by the user — source-compatible |
 | **D6** | Platform layer | Phase 7 | settled — `std` → `rustix` → `libc` |
-| **D13** | AST ownership | Phase 3 | open — grep at the head of Phase 3 |
+| **D13** | AST ownership | Phase 3 | **closed** — plain owned Rust data (2026-07-27) |
 | **D11** | RexxUtil / `Sys*` | Phase 7, and L2 | settled — subset in Phase 7, rest in Phase 10 |
 | **D12** | Security manager | Phases 5 and 7 | settled — split across both |
 | **D7** | RXAPI daemon | Phase 10 | open — Task 0.8 answers it |
@@ -224,9 +224,21 @@ The 15,293 LOC of `interpreter/platform/` is mostly things `std` covers. The gen
 
 For `rexxc` (which needs program flattening regardless of D2), owned Rust data with a derived serializer is easier than 105 hand-written `flatten` methods, not harder.
 
-**Evidence that settles this.** (a) is correct only if no Rexx-visible object exposes AST structure below `.Method`/`.Routine`/`.Package` granularity. Those three are Rexx objects and must stay arena objects under either option; the question is whether anything reaches *inside* them. Before Phase 3, grep the checked-out `ootest/` tree and the ooRexx documentation for any message that returns an instruction- or clause-level object. If none exists, take (a). If one does, that specific structure becomes an arena object and everything else stays plain — the options are not all-or-nothing.
+**CLOSED — take (a).** Settled 2026-07-27 by interrogating the running interpreter rather than by sampling the test suite, which is both faster and a stronger argument. An earlier draft proposed grepping `ootest/` for messages returning instruction-level objects. That is the wrong instrument: a test can only observe what the language exposes, so enumerating the *exposed surface* settles it for every possible test, present and future, while a grep settles it only for the tests that exist today.
 
-**Cost of being wrong.** High if discovered late: it is the representation the parser produces and the executor consumes, so Phases 3 and 4 both rest on it. Cheap to settle now, which is the point of a grep before Phase 3 rather than a discovery during Phase 4.
+The complete instance-method surface of the code-bearing classes, dumped from ooRexx 5.3.0 via `~methods`:
+
+- **`Package`** (38 methods) — `SOURCE` returns an `Array` of `String`; `SOURCELINE` returns a `String`; `SOURCESIZE` an integer; `CLASSES`/`ROUTINES`/`DEFINEDMETHODS`/`PUBLICROUTINES`/… return collections of `Class`, `Routine`, and `Method` objects. `PROLOG` returns a **`Routine`**, which was the one plausible leak and is not one.
+- **`Method`** (17) — `SOURCE` returns source *text*. Nothing else reaches code structure.
+- **`Routine`** (8) — `SOURCE`, `CALL`, `CALLWITH`, `[]`. Same.
+- **`StackFrame`** (11) — `LINE` is an integer, `TRACELINE` a formatted `String`, `EXECUTABLE` a `Method`/`Routine`, `CONTEXT` a `RexxContext`.
+- **`RexxContext`** (16) — `EXECUTABLE`, `PACKAGE`, `LINE`, `VARIABLES`, `STACKFRAMES`, … all coarser than an instruction.
+
+And the native API is no different: `api/oorexxapi.h` declares `RexxMethodObject`, `RexxRoutineObject`, and `RexxPackageObject`, and **no type naming an instruction, clause, expression, or code node at all** — so D5's source-compatibility contract does not constrain this either.
+
+**Nothing in the language or the C API exposes an object below `Method`/`Routine`/`Package` granularity, and source is exposed as text, never as structure.** The AST is therefore a private implementation detail, and Rust is free to represent it as plain owned data. As a bonus, `Package~source` returning an `Array` of `String` confirms the source-retention approach Phase 3 already planned: keep the program text and hand out slices of it.
+
+**Cost of being wrong.** Would have been high — it is the representation the parser produces and the executor consumes, so Phases 3 and 4 both rest on it. Settled for the cost of two probe programs.
 
 ### D11 — RexxUtil / `Sys*` functions
 
@@ -338,7 +350,7 @@ Gates are hard. A phase does not close until every exit criterion is demonstrate
 | 0 | Oracle & inventory | — | Differ runs C++ against itself with zero diffs on the corpus; benchmark baselines committed for all 5 platforms; error table and builtin inventory generated; L1 extraction fraction reported; D7 protocol stability answered | — |
 | 1 | Heap & object model | D1 open | Allocation throughput and full-GC pause within the C++ baseline CI; `Trace` derived, not hand-written; root set enumerable and documented. **D1 closes here.** | — |
 | 2 | Numeric core | D1 closed | Every extractable ooTest arithmetic assertion passes; ANSI X3.274 vectors pass; arithmetic benchmark at parity | L1 (arithmetic) |
-| 3 | Scanner & parser | D1 closed, **D13 closed**, D10 spiked | Round-trips every `.rex` in `samples/` to an AST; `SOURCELINE`, error line/column reporting, and `TRACE` output formatting match the oracle byte-for-byte; parse throughput on `CoreClasses.orx` recorded | L0 (syntax errors) |
+| 3 | Scanner & parser | D1 closed, D13 closed ✓, D10 spiked | Round-trips every `.rex` in `samples/` to an AST; `SOURCELINE`, error line/column reporting, and `TRACE` output formatting match the oracle byte-for-byte; parse throughput on `CoreClasses.orx` recorded | L0 (syntax errors) |
 | 4 | Classic executor | 2, 3 | Non-OO Rexx runs: assignment, `DO` (all variants), `IF`, `SELECT`, `CALL`, `PARSE`, `SAY`, `SIGNAL`, conditions, and all **81 builtin functions** | L0 full corpus + L1 majority |
 | 5 | Object model | 4 | **`CoreClasses.orx` parses and executes**; 32 classes exist and respond; `::class`/`::method`/`::routine`/`::requires` work; security manager interception points in place (D12); cold start measured and recorded against C++ (D2) | L2 |
 | 6 | Concurrency | 5 | Activities, kernel lock, guard locks, `REPLY`, `GUARD`, message objects; ooTest concurrency groups pass; TSan (or `loom`) clean. **D3's frame-ownership constraint verified.** | L2 |
@@ -2277,7 +2289,7 @@ The generating procedure for each phase:
 
 **Phase-specific notes to carry forward:**
 
-- **Phase 3** opens by closing D13 (the AST-ownership grep, which is an hour's work and gates everything after it), then runs the D10 spike (parser construction), then decides how source text is retained. `SOURCELINE`, error reporting, and `TRACE` all expose the original text, so the AST cannot discard it. Keep the program source as one string and have AST nodes hold byte ranges into it — which is also what makes `chumsky`'s span support directly usable if D10 lands on (a). Measure parse throughput on `CoreClasses.orx`, since under D2 that number *is* cold-start time.
+- **Phase 3** opens with the D10 spike (parser construction), then decides how source text is retained. D13 is already closed: the AST is plain owned Rust data inside one arena object per code body. `SOURCELINE`, error reporting, and `TRACE` all expose the original text, so the AST cannot discard it. Keep the program source as one string and have AST nodes hold byte ranges into it — which is also what makes `chumsky`'s span support directly usable if D10 lands on (a). Measure parse throughput on `CoreClasses.orx`, since under D2 that number *is* cold-start time.
 - **Phase 4** is where the execution model is fixed. Read the existing performance profile before designing the dispatch loop. The 81 builtins from Task 0.6 are the checklist; tick them off individually.
 - **Phase 5** is the project's inflection point. When `CoreClasses.orx` runs, 32 classes appear at once and the L2 rung becomes reachable. Budget for the fact that it will expose parser and executor gaps in bulk rather than one at a time.
 - **Phase 6** must hold D3's frame-ownership constraint: activities own their frames; cross-activity signalling goes through a channel or a polled atomic, never a foreign frame reference. Verify this by construction (no shared frame type exists) rather than by test.
