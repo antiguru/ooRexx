@@ -158,7 +158,13 @@ Each ends with an independently testable deliverable and a commit. TDD throughou
   - **Non-numeric operands fall back to string comparison rather than erroring** — strip leading blanks and tabs, byte-compare, blank-pad the shorter tail.
   - `FUZZ` relaxes the numeric operators only, never the strict ones. It is not expressible in the `digits|a|op|b` harness format, so it was probed directly and pinned in a unit test.
 
-  **One deliberate deviation, flagged rather than buried:** the interpreter's digit-array fast path was not separately ported, on the argument that the subtraction branch subsumes it. That is the exact shape of reasoning this phase has punished five times, so it was checked with a boundary-focused batch and against the independent set. It holds so far; if a future divergence appears in comparison, this is the first place to look.
+  **One deviation, raised as a risk and then resolved.** The interpreter's digit-array fast path (`NumberStringClass.cpp:3246-3319`) was not separately ported, on the argument that the subtraction branch subsumes it. That is the shape of reasoning this phase has punished six times, so it was challenged rather than accepted — and it survives, with an argument that also explains *why* the earlier six failed.
+
+  Fast-path eligibility requires both operands' aligned digit widths to be within `DIGITS - FUZZ`. When that holds, their exact difference is also below `10^(DIGITS - FUZZ)`, so `sub` never reaches its truncation or rounding step and returns the exact difference — whose sign is by definition the same answer the digit comparison gives. Operands with wildly differing exponents are never fast-path-eligible and take the general branch regardless.
+
+  **The distinction that matters: this omission does not move a rounding point.** Every one of the six earlier failures did — exponentiation order, leading zeros in multiply versus subtract, trailing zeros in `/` versus `//`, the reciprocal's double rounding. Those are observable precisely because rounding is observable. An algebraic identity between "compare digit arrays that fit" and "subtract exactly and read the sign" involves no rounding decision at all, and is therefore safe in a way those were not.
+
+  Checked with a further 64,316 cases generated specifically for that zone — low `DIGITS`, both signs, same-adjusted-length pairs differing in digit count — on top of the implementer's 46,270 and the controller's independent 32,368. Over 140,000 cases, zero divergences, and no counterexample constructible.
 - **2.7 — Formatting:** E-notation thresholds (both directions), `SCIENTIFIC` and `ENGINEERING`, `FORMAT()`, `TRUNC()`.
 - **2.8 — Errors:** 41, 42, 26 raised at the right boundaries, using the `rexx-inventory` message table rather than hand-written text.
 - **2.9 — Benchmark** `arith.rex` against `perf-baseline.md` (C++ 1.157 s). **Parity required** — this is the first phase under the parity gate.
