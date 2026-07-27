@@ -27,6 +27,8 @@ pub use compare::{compare, CompareOp};
 pub use muldiv::DivOp;
 mod settings;
 pub use settings::{Form, Settings, SettingsError};
+mod format;
+pub use format::FormatError;
 
 /// Rexx's default `NUMERIC DIGITS`.
 pub const DEFAULT_DIGITS: u32 = 9;
