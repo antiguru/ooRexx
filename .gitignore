@@ -1,0 +1,6 @@
+# CMake build tree for the C++ oracle. Configured with:
+#   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+build/
+
+# The ooTest conformance suite, checked out from SVN by Phase 0.
+ootest/

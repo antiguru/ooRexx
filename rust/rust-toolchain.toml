@@ -1,0 +1,11 @@
+# Pin the channel, not the exact version number.
+#
+# `channel = "1.96.1"` makes rustup insist on a toolchain installed under that
+# exact name, and install it if absent -- which fails outright in any
+# environment where ~/.rustup is not writable. The version floor is enforced
+# where it actually belongs: `rust-version = "1.96.1"` in the workspace
+# manifest, which cargo checks against whatever toolchain is in use and
+# refuses to build under an older one.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

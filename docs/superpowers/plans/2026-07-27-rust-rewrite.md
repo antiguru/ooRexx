@@ -415,7 +415,7 @@ One crate per subsystem, and one file per concept inside it. Crate boundaries ar
 **Interfaces:**
 - Produces: a built C++ interpreter at `build/bin/rexx`, and a Rust workspace that compiles.
 
-- [ ] **Step 1: Build the C++ oracle**
+- [x] **Step 1: Build the C++ oracle**
 
 ```bash
 cd /home/moritz/dev/repos/ooRexx-rust-rewrite
@@ -423,7 +423,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.
 cmake --build build --parallel "$(getconf _NPROCESSORS_ONLN)"
 ```
 
-- [ ] **Step 2: Verify the oracle runs**
+- [x] **Step 2: Verify the oracle runs**
 
 Run:
 ```bash
@@ -432,7 +432,7 @@ echo 'say .rexxinfo~version' > /tmp/hello.rex && build/bin/rexx /tmp/hello.rex
 ```
 Expected: a version banner, then a version string. If this fails, stop — nothing downstream is meaningful without a working oracle.
 
-- [ ] **Step 3: Create the workspace**
+- [x] **Step 3: Create the workspace**
 
 `rust/Cargo.toml`:
 ```toml
@@ -452,16 +452,18 @@ unsafe_code = "forbid"
 `rust/rust-toolchain.toml`:
 ```toml
 [toolchain]
-channel = "1.96.1"
+channel = "stable"
 components = ["rustfmt", "clippy"]
 ```
+
+**Pin the channel, not the version number.** `channel = "1.96.1"` makes rustup insist on a toolchain installed under that exact name and try to install it if absent, which fails outright wherever `~/.rustup` is not writable — including sandboxed and CI environments that pre-provision a toolchain. The version floor belongs in `rust-version = "1.96.1"` in the workspace manifest, which cargo checks against whatever toolchain is actually in use and refuses to build under an older one. That is the constraint Global Constraints asks for, and it is enforced where it works.
 
 `rust/.gitignore`:
 ```
 target/
 ```
 
-- [ ] **Step 4: Create the oracle crate**
+- [x] **Step 4: Create the oracle crate**
 
 `rust/crates/rexx-oracle/Cargo.toml`:
 ```toml
@@ -517,12 +519,12 @@ impl Interpreter {
 }
 ```
 
-- [ ] **Step 5: Verify it compiles**
+- [x] **Step 5: Verify it compiles**
 
 Run: `cd rust && cargo build`
 Expected: success, no warnings.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add rust docs
