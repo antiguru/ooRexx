@@ -1,0 +1,7 @@
+# Linux-only expected failures. See common.txt for the shared ones and
+# README.md for what may go in here.
+#
+# Empty on purpose. The Windows list was written from an observed run rather
+# than from guesses, and this one will be too: whatever the first Linux run
+# reports gets investigated and then either listed here with its reason or
+# treated as a bug.

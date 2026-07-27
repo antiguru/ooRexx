@@ -1,0 +1,72 @@
+name: BSD
+
+# Same scoping as the other workflows: CI branches only, never master.
+on:
+  push:
+    branches:
+      - 'ci/**'
+  workflow_dispatch:
+
+# GitHub has no BSD runners, so these jobs boot a VM on a Linux runner. That is
+# emulated rather than native, so it is slow and the jobs are build and smoke
+# test only to begin with. Whether the full suite is affordable here is a
+# question for the timings these first runs produce, not a guess.
+jobs:
+  freebsd:
+    name: FreeBSD 14.2
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and smoke test
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: '14.2'
+          usesh: true
+          prepare: |
+            pkg install -y cmake ninja
+          run: |
+            set -eux
+            cmake --version
+            c++ --version
+            uname -a
+            cmake -S . -B build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+            cmake --build build --parallel 4
+            build/bin/rexx -v
+            echo 'say .rexxinfo~version' > hello.rex
+            build/bin/rexx hello.rex
+
+  openbsd:
+    name: OpenBSD 7.6
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    # OpenBSD is here rather than only FreeBSD because it is where the project
+    # has actually been seeing trouble: master currently carries a revert made
+    # to find out whether a fix was behind crashes on Arch, Manjaro and
+    # OpenBSD 7. A build that only ever runs on Linux and Windows cannot say
+    # anything about that.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and smoke test
+        uses: vmactions/openbsd-vm@v1
+        with:
+          release: '7.6'
+          usesh: true
+          prepare: |
+            pkg_add cmake ninja
+          run: |
+            set -eux
+            cmake --version
+            c++ --version
+            uname -a
+            cmake -S . -B build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+            cmake --build build --parallel 4
+            build/bin/rexx -v
+            echo 'say .rexxinfo~version' > hello.rex
+            build/bin/rexx hello.rex

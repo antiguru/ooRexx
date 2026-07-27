@@ -12,8 +12,10 @@
 
 param(
     [Parameter(Mandatory = $true)][string] $ResultsFile,
-    [Parameter(Mandatory = $true)][string] $KnownFailuresFile,
-    [string] $ExitCodeFile
+    # Several files, so a platform can be given common.txt plus its own.
+    [Parameter(Mandatory = $true)][string[]] $KnownFailuresFile,
+    [string] $ExitCodeFile,
+    [string] $Platform = $env:RUNNER_OS
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,7 +26,7 @@ function Add-Summary([string] $line) {
 }
 
 if (-not (Test-Path $ResultsFile)) {
-    Add-Summary "## Windows test suite"
+    Add-Summary "## ooRexx test suite"
     Add-Summary ''
     Add-Summary 'FAILED: the suite produced no output file at all.'
     exit 1
@@ -43,7 +45,8 @@ $assertions = [regex]::Match($text, '(?m)^Assertions:\s+(\d+)')
 $failures = [regex]::Match($text, '(?m)^Failures:\s+(\d+)')
 $errors = [regex]::Match($text, '(?m)^Errors:\s+(\d+)')
 
-Add-Summary "## Windows test suite"
+$label = if ($Platform) { $Platform } else { 'unknown platform' }
+Add-Summary "## ooRexx test suite - $label"
 Add-Summary ''
 
 if (-not $ran.Success) {
@@ -53,7 +56,9 @@ if (-not $ran.Success) {
     $lastContainer = $lines | Where-Object { $_ -match '^Executing ' } | Select-Object -Last 1
     if ($lastContainer) { Add-Summary "Last container started: ``$lastContainer``" }
     Add-Summary ''
-    Add-Summary 'An exit code of -1073741819 (0xC0000005) is an access violation in the interpreter.'
+    Add-Summary 'Exit code -1073741819 (0xC0000005) is an access violation on Windows.'
+    Add-Summary 'On a Unix host the shell reports a fatal signal as 128+N, so 139 is SIGSEGV'
+    Add-Summary 'and 134 is SIGABRT.'
     exit 1
 }
 
@@ -69,10 +74,16 @@ Add-Summary ''
 # Lines starting a failure or error record, followed by indented Test:/Class:
 # fields. Pair them up so a failure can be identified as CLASS/TEST.
 $known = @{}
-foreach ($line in (Get-Content $KnownFailuresFile)) {
-    $trimmed = $line.Trim()
-    if ($trimmed -eq '' -or $trimmed.StartsWith('#')) { continue }
-    $known[$trimmed.ToLowerInvariant()] = $true
+foreach ($file in $KnownFailuresFile) {
+    if (-not (Test-Path $file)) {
+        Add-Summary "FAILED: known failures file '$file' does not exist."
+        exit 1
+    }
+    foreach ($line in (Get-Content $file)) {
+        $trimmed = $line.Trim()
+        if ($trimmed -eq '' -or $trimmed.StartsWith('#')) { continue }
+        $known[$trimmed.ToLowerInvariant()] = $true
+    }
 }
 
 $records = @()

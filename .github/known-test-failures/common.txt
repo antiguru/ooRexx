@@ -1,0 +1,9 @@
+# Test failures expected on every CI platform, as CLASS/TEST, matched case
+# insensitively. Read .github/known-test-failures/README.md before adding to
+# any file in this directory.
+
+# ReadMe.first records these as failing whenever the suite's output is
+# redirected. A hosted runner has no console at all, so they cannot pass
+# anywhere in CI. Confirmed failing for this reason on both Windows and Linux.
+CHAROUT.testGroup/TEST_STDOUT_START
+LINEOUT.testGroup/TEST_LINE_TRANSIENT
