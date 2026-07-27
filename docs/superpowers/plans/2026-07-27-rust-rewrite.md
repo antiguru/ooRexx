@@ -6,7 +6,9 @@
 
 **Goal:** Replace the ooRexx interpreter (~198k LOC C++) with a clean-room Rust implementation that passes the ooTest conformance suite on all five CI platforms at or above the C++ build's performance, keeping `api/oorexxapi.h` source-compatible so existing native extensions recompile without being rewritten.
 
-**Architecture:** A new Rust workspace under `rust/` alongside the untouched C++ tree, which serves as the executable oracle for the entire project. The Rust interpreter uses an **arena heap with tagged index handles** rather than raw pointers; this collapses the C++ implementation's 149 hand-written `live()` trace methods and its pervasive `ProtectedObject` root-pinning discipline into a single derived `Trace` impl and a ~5-entry root set. Everything else — the tree-walking execution model, the expression stack, the activity/guard concurrency semantics, the Rexx-source class library — is preserved deliberately, because it is observable behaviour.
+**Explicitly out of scope:** `extensions/platform/` — ooDialog and the OLE/ActiveX support, 115,835 LOC of Windows-only GUI code, 90% of everything under `extensions/`. It is a consumer of the native API, not part of the interpreter, and rewriting it is a separate project with a separate justification. The source-compatibility contract (D5) is what should let it recompile against the Rust interpreter unchanged; **whether it actually does is untested by this plan and must not be claimed.** The in-scope extensions are `rxregexp`, `rxmath`, `rxsock`, `hostemu`, `orxncurses`, and the Rexx-source packages (`json`, `yaml`, `csvStream`, `dateparser`, `rxftp`), all in Phase 10.
+
+**Architecture:** A new Rust workspace under `rust/` alongside the untouched C++ tree, which serves as the executable oracle for the entire project. The Rust interpreter uses an **arena heap with tagged index handles** rather than raw pointers; this collapses the C++ implementation's 148 hand-written `live()` trace methods and its pervasive `ProtectedObject` root-pinning discipline into a single derived `Trace` impl and a ~5-entry root set. Everything else — the tree-walking execution model, the expression stack, the activity/guard concurrency semantics, the Rexx-source class library — is preserved deliberately, because it is observable behaviour.
 
 **Tech Stack:** Rust 1.96+ (2024 edition). `unsafe` is forbidden by default in every crate and admitted only per-site, encapsulated and justified in writing (see Global Constraints). `rustix`/`windows-sys` for platform calls. `criterion` for benchmarks. `quick-xml` for build-time message-catalogue generation. `chumsky` is a candidate above the token stream, pending the D10 spike. CMake stays for the C++ oracle build only. The existing SVN-hosted ooTest suite is the conformance gate; the existing `.github/known-test-failures/*.txt` baselines are the pass criteria.
 
@@ -28,7 +30,9 @@ Every task's requirements implicitly include this section.
 - **`api/oorexxapi.h`, `api/rexx.h`, `api/rexxapidefs.h`, `api/oorexxerrors.h` are frozen.** Source compatibility is the contract: native extensions must recompile unchanged. ABI compatibility is explicitly *not* required — struct layouts and symbol addresses may change, but declarations, macro names, type names, and call semantics may not.
 - **Platform matrix:** Linux (ubuntu-24.04), macOS 15 arm64, Windows/MSVC, FreeBSD 14.2, OpenBSD 7.8. Every phase gate runs on all five. The known OpenBSD SIGSEGV in the current C++ baseline is pre-existing; it does not block Rust work but must not be *reproduced* by the Rust build.
 - **Conformance oracle:** `svn checkout https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest`, run as `rexx testOORexx.rex -s`, judged by `.github/check-test-results.ps1` against `.github/known-test-failures/common.txt` plus the per-platform file. The Rust interpreter is judged by the *same* baselines. Adding an entry to a known-failure file is a plan-level decision, never a task-level one.
-- **Performance gate:** no phase closes with a Rust subsystem slower than its C++ counterpart on the Phase 0 benchmark suite, measured on Linux and macOS. "Slower" means the criterion point estimate is outside the C++ baseline's confidence interval on the slow side.
+- **Performance gate.** Two thresholds, deliberately different, and it matters which applies where:
+  - **Shipping gate (parity).** No phase from 2 onward closes with a Rust subsystem slower than its C++ counterpart on the Phase 0 benchmark suite, measured on Linux and macOS. "Slower" means the criterion point estimate falls outside the C++ baseline's confidence interval on the slow side. This is the rule everywhere unless a phase says otherwise.
+  - **Phase 1 viability threshold (1.5×).** Task 1.8 judges D1 against a *looser* bar, because at that point there is no interpreter — only a heap benchmarked through a Rust API against a C++ heap benchmarked through an interpreted Rexx program. That comparison is directional, not like-for-like, and a tight bar on a rough measurement would reject a sound design on noise. Phase 1 exits at 1.5×; the parity gate then applies from Phase 2 on, once there is a real interpreter to measure. A Phase 1 result between parity and 1.5× is a recorded debt, not a pass — name it in `d1-decision.md` and re-measure at Phase 4 when dispatch exists.
 - **Licence:** every new file carries the CPL v1.0 header block used throughout the tree (copy the block verbatim from any existing `.cpp`, adjusting the year).
 - **Commits:** every task ends with a commit. Branch is `plan/rust-rewrite` or a descendant.
 
@@ -41,7 +45,7 @@ All numbers measured on `8c880bdd` (`ci/platforms`). Re-measure if the base move
 | Area | LOC | Notes |
 |---|---:|---|
 | `interpreter/classes/` | 54,271 | 40 primitive classes. `NumberStringClass.cpp` 4,231 + `NumberStringMath*.cpp` |
-| `interpreter/instructions/` | 19,152 | 59 files: 36 keyword instructions + directives + DO-loop variants |
+| `interpreter/instructions/` | 19,152 | 59 `.cpp` (112 files with headers): 35 keyword instructions + directives + DO-loop variants |
 | `interpreter/execution/` | 18,062 | `RexxActivation.cpp` alone is 5,311 |
 | `interpreter/parser/` | 17,483 | `InstructionParser` 4,650, `LanguageParser` 4,398, `Scanner` 1,955 |
 | `interpreter/platform/` | 15,293 | unix 23 files / windows 21 files |
@@ -86,11 +90,11 @@ Each block states the question, the options, the *evidence* that settles it, and
 
 **Question.** How are Rexx objects represented and collected?
 
-The C++ implementation uses a segmented mark-sweep heap with an old-space/new-space split, a 2-bit mark in a 16-bit `ObjectHeader` flags word (`interpreter/classes/ObjectClass.hpp:95–171`), and `UninitPending`/`HasUninit` bits driving finalizers. Object references are raw `RexxInternalObject*`. Because raw pointers in C++ locals are invisible to the collector, correctness depends on **149 hand-written `live(size_t)` implementations** plus a `ProtectedObject` RAII root-pinning discipline applied at every allocation-crossing site. Getting one wrong is a use-after-free, not a compile error.
+The C++ implementation uses a segmented mark-sweep heap with an old-space/new-space split, a 2-bit mark in a 16-bit `ObjectHeader` flags word (`interpreter/classes/ObjectClass.hpp:95–171`), and `UninitPending`/`HasUninit` bits driving finalizers. Object references are raw `RexxInternalObject*`. Because raw pointers in C++ locals are invisible to the collector, correctness depends on **148 hand-written `live(size_t)` implementations** plus a `ProtectedObject` RAII root-pinning discipline applied at every allocation-crossing site. Getting one wrong is a use-after-free, not a compile error.
 
 **Options.**
 
-- **(a) Arena + tagged index handles. RECOMMENDED.** All heap objects live in `Vec<Slot>` inside a `Heap`. A reference is `ObjRef(u64)` — a slot index with a low-bit tag that also encodes small integers inline. Tracing is one `match` over a `Body` enum (derivable), not 149 methods. Root set becomes small and *enumerable*: the activation stack, the expression stack, the C-API local-reference tables, and the global tables (`.environment`, `.local`, class registry).
+- **(a) Arena + tagged index handles. RECOMMENDED.** All heap objects live in `Vec<Slot>` inside a `Heap`. A reference is `ObjRef(u64)` — a slot index with a low-bit tag that also encodes small integers inline. Tracing is one `match` over a `Body` enum (derivable), not 148 methods. Root set becomes small and *enumerable*: the activation stack, the expression stack, the C-API local-reference tables, and the global tables (`.environment`, `.local`, class registry).
   - Cost: an index-and-bounds-check per field access instead of a pointer deref; loss of pointer locality; `#[repr(C)]` value interop needs a handle table at the FFI boundary (which the C++ already has — see D5).
   - Offset: tagged small integers remove a large fraction of allocations that the C++ pays for via `RexxInteger` objects.
 - **(b) `gc-arena` crate.** Branded `'gc` lifetimes, `#[derive(Collect)]`, precise and safe. Rejected as a default because arena access is scoped through `arena.mutate(|mc, root| …)`, which fights an FFI boundary where foreign C code holds object references across calls, and because it is single-threaded — ooRexx is not.
@@ -111,11 +115,13 @@ The C++ implementation uses a segmented mark-sweep heap with an old-space/new-sp
 
 **Question.** Does an image earn its keep, or does bootstrapping from source at every start suffice?
 
-The C++ build runs `rexximage` to flatten a bootstrapped heap into `rexx.img`, with **106 `flatten(Envelope*)` implementations**, proxy objects for un-flattenable state, and virtual-function-table repatching on restore (`RexxMemory.cpp:691`, `:1539`). The VFT repatching exists solely because C++ objects embed vtable pointers that are invalid in another process image. **Rust has no vtables to repatch** — under D1(a), heap objects are plain data in a `Vec` and references are indices, so an image is a serialization of a flat array with no pointer fixups at all.
+The C++ build runs `rexximage` to flatten a bootstrapped heap into `rexx.img`, with **105 `flatten(Envelope*)` implementations**, proxy objects for un-flattenable state, and virtual-function-table repatching on restore (`RexxMemory.cpp:691`, `:1539`). The VFT repatching exists solely because C++ objects embed vtable pointers that are invalid in another process image. **Rust has no vtables to repatch** — under D1(a), heap objects are plain data in a `Vec` and references are indices, so an image is a serialization of a flat array with no pointer fixups at all.
 
 **Options.**
 
-- **(a) No image. DEFAULT — build this first, unconditionally.** Parse and execute `CoreClasses.orx` + `StreamClasses.orx` (5,203 lines of Rexx) at every startup. Nothing corresponding to the 106 `flatten` impls, `Envelope`, or the proxy mechanism ever gets written.
+**What dropping the image does *not* buy.** Object flattening is not only the image's mechanism — it is also how compiled programs are serialized. `RoutineClass::save`/`restore` (`interpreter/classes/RoutineClass.cpp:143`, `:291–311`, `:389–426`) runs through `Envelope` plus `ProgramMetaData`, and that is exactly what `rexxc` does. Phase 9 ships `rexxc`, so **program flattening survives regardless of D2**. The saving from choosing (a) is the image build step, the proxy mechanism, and the VFT repatching — not the flattening machinery wholesale. Treat the `.rxo`/`ProgramMetaData` format as its own Phase 9 sub-problem with its own compatibility question: whether Rust-produced compiled files must be readable by the C++ interpreter (probably not, since both ship together) and whether C++-produced ones must be readable by Rust (also probably not, but say so deliberately rather than discovering it).
+
+- **(a) No image. DEFAULT — build this first, unconditionally.** Parse and execute `CoreClasses.orx` + `StreamClasses.orx` (5,203 lines of Rexx) at every startup. Nothing corresponding to the image build, the proxy mechanism, or the VFT repatching ever gets written; program serialization is built separately for `rexxc`.
 - **(b) Serialize the arena, *if* (a) measures too slow.** Under D1(a) this is close to a `memcpy` of `Vec<Slot>` plus a string table — no pointer fixups, no per-class serialization code, no proxies. It costs a format version, a staleness check against the `.orx` sources, and a build step. Purely additive: it caches what (a) computes, so semantics cannot diverge between the two paths.
 
 **Evidence that settles this.** Phase 5 exit measures cold start for (a) with hyperfine against `build/bin/rexx`. **Ship (a) either way.** Build (b) only if (a) is slower than the C++ startup by a margin a user would notice — treat ~2× or a wall-clock delta above roughly 50 ms as the threshold, and record the actual numbers rather than the ratio. Startup is user-visible in a scripting language, which is why the measurement exists; it is not a reason to build a cache before knowing one is needed.
@@ -159,7 +165,9 @@ Rexx numbers are strings; arithmetic is arbitrary-precision decimal under `NUMER
 
 **What that means concretely.** `api/oorexxapi.h` stays byte-identical. Rust exports `#[repr(C)]` function tables matching `RexxInstanceInterface` (`oorexxapi.h:493`), `RexxThreadInterface` (`:674`), and the method/call/exit context structs, plus the 37 `RexxReturnCode REXXENTRY` entry points in `api/rexx.h`. The C++ reference for the vtable population is `interpreter/api/ThreadContextStubs.cpp` (2,265 lines).
 
-**The part that matters for D1.** `RexxObjectPtr` becomes an **opaque handle registered in the calling activation's local-reference table**, not a heap address. This is not a new idea imposed by Rust — the C++ already does exactly this via `NativeActivation::createLocalReference` / `removeLocalReference` / `clearLocalReferences` (`NativeActivation.hpp:177–179`), because native code holds references across GC points. Under D1(a) the same mechanism becomes the *only* mechanism, and it is naturally safe: a handle that outlives its activation is a lookup miss, not a use-after-free.
+**The part that matters for D1.** `RexxObjectPtr` becomes an **opaque handle registered in the calling activation's local-reference table**, not a heap address. This is not a new idea imposed by Rust — the C++ already does exactly this via `NativeActivation::createLocalReference` / `removeLocalReference` / `clearLocalReferences` (`NativeActivation.hpp:177–179`), because native code holds references across GC points. Under D1(a) the same mechanism becomes the *only* mechanism, and a handle that outlives its activation is a lookup miss rather than a use-after-free.
+
+**That claim depends on the generation field in `ObjRef` (Task 1.1), and is false without it.** Slots are recycled through a free list, so a bare slot index held across a collection would silently name whatever is allocated into that slot next — memory-safe, but returning the wrong object, which is the same defect class in different clothing and landing at precisely the boundary this decision advertises as the win. The generation is what converts "stale" into "miss". Do not treat it as an optimisation to add later.
 
 **Evidence that settles this.** Phase 8 exit: `testbinaries/` build against the frozen headers with no source edits, and the ooTest native-API groups pass.
 
@@ -172,6 +180,26 @@ Rexx numbers are strings; arithmetic is arbitrary-precision decimal under `NUMER
 The ordering is a safety decision, not a taste one: `rustix` wraps the syscalls this layer needs behind a safe API, so choosing it over raw `libc` discharges the Global Constraints unsafe bar by construction rather than by argument. A raw `libc` call in this crate needs its own justification block naming the `rustix` function that does not exist.
 
 The 15,293 LOC of `interpreter/platform/` is mostly things `std` covers. The genuine gaps, which need care because they are observable: the Rexx **stream model** (line vs binary access, `RESET`, explicit positioning, the `CHARIN`/`LINEIN` interaction, `StreamNative.cpp` is 3,765 lines), **`ADDRESS` command routing** to shells and subcom handlers, file-name and path semantics, and console/terminal behaviour. Treat the stream model as a subsystem in its own right, not as "file I/O".
+
+### D11 — RexxUtil / `Sys*` functions
+
+**Blocks:** Phase 7, and through it **L2** — which makes this more urgent than its size suggests.
+
+`interpreter/runtime/RexxUtilCommon.cpp` (2,207) plus `interpreter/platform/unix/SysRexxUtil.cpp` (1,631) and `interpreter/platform/windows/SysRexxUtil.cpp` (3,325) implement the `Sys*` library: `SysFileTree`, `SysTempFileName`, `SysSleep`, `SysFileDelete`, `SysDumpVariables`, and the rest.
+
+**Why it is on the critical path.** The ooTest framework uses these to enumerate test groups off disk. So `Sys*` does not merely need to work eventually — **it blocks L2**, the rung at which the framework boots at all. A plan that schedules it as a Phase 10 nicety cannot reach its own Phase 5 gate.
+
+**Decision: build the `Sys*` subset ooTest depends on as part of Phase 7, and the remainder in Phase 10.** Phase 7's plan opens by determining that subset empirically — grep the checked-out `ootest/` tree for `Sys` call sites — rather than guessing it. The rest of the library is ordinary work with no ordering constraint.
+
+**Note the platform asymmetry:** the Windows `SysRexxUtil.cpp` is twice the size of the unix one, so this is also where the Windows leg is most likely to fall behind.
+
+### D12 — Security manager
+
+**Blocks:** Phase 5.
+
+`interpreter/execution/SecurityManager.{cpp,hpp}` intercepts command issuance, stream access, external function calls, and `.local`/`.environment` lookups when a security manager object is installed. It is observable, it is reachable from the public API, and ooTest exercises it.
+
+**Decision: implement it in Phase 5 alongside the object model,** because the interception points are call sites threaded through dispatch, command handling, and name resolution. Retrofitting them after Phases 6–8 means touching every one of those paths a second time. Cheap if built in, expensive if bolted on.
 
 ### D7 — RXAPI daemon
 
@@ -247,15 +275,19 @@ Gates are hard. A phase does not close until every exit criterion is demonstrate
 | 1 | Heap & object model | D1 open | Allocation throughput and full-GC pause within the C++ baseline CI; `Trace` derived, not hand-written; root set enumerable and documented. **D1 closes here.** | — |
 | 2 | Numeric core | D1 closed | Every extractable ooTest arithmetic assertion passes; ANSI X3.274 vectors pass; arithmetic benchmark at parity | L1 (arithmetic) |
 | 3 | Scanner & parser | D1 closed, D10 spiked | Round-trips every `.rex` in `samples/` to an AST; `SOURCELINE`, error line/column reporting, and `TRACE` output formatting match the oracle byte-for-byte; parse throughput on `CoreClasses.orx` recorded | L0 (syntax errors) |
-| 4 | Classic executor | 2, 3 | Non-OO Rexx runs: assignment, `DO` (all variants), `IF`, `SELECT`, `CALL`, `PARSE`, `SAY`, `SIGNAL`, conditions, and all **162 builtin functions** | L0 full corpus + L1 majority |
-| 5 | Object model | 4 | **`CoreClasses.orx` parses and executes**; 32 classes exist and respond; `::class`/`::method`/`::routine`/`::requires` work; cold start measured and recorded against C++ (D2) | L2 |
+| 4 | Classic executor | 2, 3 | Non-OO Rexx runs: assignment, `DO` (all variants), `IF`, `SELECT`, `CALL`, `PARSE`, `SAY`, `SIGNAL`, conditions, and all **81 builtin functions** | L0 full corpus + L1 majority |
+| 5 | Object model | 4 | **`CoreClasses.orx` parses and executes**; 32 classes exist and respond; `::class`/`::method`/`::routine`/`::requires` work; security manager interception points in place (D12); cold start measured and recorded against C++ (D2) | L2 |
 | 6 | Concurrency | 5 | Activities, kernel lock, guard locks, `REPLY`, `GUARD`, message objects; ooTest concurrency groups pass; TSan (or `loom`) clean. **D3's frame-ownership constraint verified.** | L2 |
-| 7 | Streams & platform | 5 | `StreamClasses.orx` runs; stream model, `ADDRESS`, file system green on all 5 platforms | L2 |
+| 7 | Streams & platform | 5 | `StreamClasses.orx` runs; stream model, `ADDRESS`, file system green on all 5 platforms; the `Sys*` subset ooTest needs (D11) works | L2 |
 | 8 | Native API | 5, 7 | `testbinaries/` compile unchanged against frozen headers; native-API ooTest groups pass | L2 |
-| 9 | Full conformance | 6, 7, 8 | **L3 on all 5 platforms** against existing baselines; every benchmark at or above parity; `rexx`, `rexxc`, `rxqueue`, `rxsubcom` ship | L3 |
-| 10 | RXAPI & extensions | 9 | `rxregexp`, `rxmath`, `rxsock`, `hostemu` recompile and pass; RXAPI decision (D7) executed | L3 |
+| 9 | Core conformance | 6, 7, 8 | **L3-core on all 5 platforms**: the full suite green against existing baselines *excluding* the groups enumerated below; every benchmark at parity; `rexx`, `rexxc`, `rxqueue`, `rxsubcom` ship | L3-core |
+| 10 | RXAPI & extensions | 9 | `rxregexp`, `rxmath`, `rxsock`, `hostemu`, `orxncurses` recompile and pass; RXAPI decision (D7) executed; **L3-full** with no exclusions | L3-full |
 
 Phases 6, 7, and 8 are independent of each other and may run in parallel once Phase 5 closes.
+
+**Why Phase 9's gate is L3-*core*, not L3.** The suite exercises things Phase 10 delivers — the extension test groups (`json`, `yaml`, `rxregexp`, and the rest), and the RXAPI-dependent features: external data queues, macrospace, and `rxsubcom` registration. Gating Phase 9 on the unqualified full suite would make it unevaluable until Phase 10 was already done. Phase 9's plan must therefore **enumerate the excluded groups explicitly, by name, in a committed file** (`docs/superpowers/plans/phase-9-exclusions.txt`), and Phase 10 deletes that file. An exclusion list that is not written down is indistinguishable from a suite that quietly does not run.
+
+**Rungs L1 and L2 assume D8 kept L1.** If Task 0.4 measured the extractable fraction below 40%, L1 does not exist and the Phase 2 and Phase 4 rows read L0 instead.
 
 ---
 
@@ -274,9 +306,9 @@ rust/
       src/lib.rs
       src/bin/rexx-extract.rs
     rexx-inventory/           # Phase 0: generate Rust tables from the C++ tree
-      build.rs                #   rexxmsg.xml -> errors.rs (704 codes)
-      src/errors.rs           #   generated; do not edit
-      src/builtins.rs         #   generated from BuiltinFunctions.cpp table
+      build.rs                #   rexxmsg.xml -> $OUT_DIR/errors.rs (704 messages)
+      src/lib.rs              #   include!()s the generated files; no generated
+                              #   file is ever written into src/
     rexx-bench/               # Phase 0: criterion suite, runs against any interpreter
     rexx-core/                # Phase 1: Heap, ObjRef, Slot, Body, Trace, roots, behaviours
       src/handle.rs           #   ObjRef tagging
@@ -629,6 +661,13 @@ fn main() -> ExitCode {
 
     let mut programs: Vec<PathBuf> = walk(&corpus);
     programs.sort();
+    // A mistyped or empty corpus directory would otherwise report
+    // "0 programs, 0 divergences" and exit 0 -- the phase's central
+    // self-test passing by finding nothing.
+    if programs.is_empty() {
+        eprintln!("no .rex programs under {}", corpus.display());
+        return ExitCode::from(2);
+    }
     let mut divergences = 0usize;
     for program in &programs {
         let cwd = program.parent().expect("corpus entries have a parent");
@@ -645,7 +684,12 @@ fn main() -> ExitCode {
 
 fn walk(dir: &std::path::Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    let Ok(entries) = std::fs::read_dir(dir) else { return out };
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        // Do not swallow this: an unreadable directory read as "empty" is how
+        // a self-test reports success for work it never did.
+        Err(e) => panic!("cannot read {}: {e}", dir.display()),
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
@@ -820,7 +864,34 @@ fn touches_fixture(body: &str) -> bool {
 Run: `cd rust && cargo test -p rexx-extract`
 Expected: 2 passed.
 
-- [ ] **Step 5: Measure L1 viability against the real suite**
+- [ ] **Step 5: Write the `rexx-extract` binary**
+
+`rust/crates/rexx-extract/src/bin/rexx-extract.rs` takes three flags, parsed the same way as `rexx-diff` in Task 0.3:
+
+- `--suite <dir>` — the checked-out `ootest/` tree; walked recursively for `*.testGroup`.
+- `--out <dir>` — where standalone micro-programs are written, one `.rex` per extractable method, named `<group>_<method>.rex`.
+- `--report <file>` — a Markdown table written with one row per `.testGroup`: file, total `::method test*` count, extractable count, percentage; then a total line.
+
+Each emitted program wraps the method body with a minimal assert shim so it stands alone:
+
+```rexx
+/* extracted from <group>::<method> */
+::routine main public
+  <body>
+::class shim public
+::method assertEquals
+  use arg expected, actual
+  if expected \== actual then do
+    say "FAIL expected["expected"] actual["actual"]"
+    exit 1
+  end
+```
+
+The shim must define exactly the assertion messages listed in `ASSERTIONS`; a method using one that the shim lacks is not extractable, so extend `touches_fixture` to treat an unknown `self~` message as fixture-dependent — which it already does, since anything not in `ASSERTIONS` returns true.
+
+Exit non-zero if the suite directory holds no `.testGroup` files, for the same reason `rexx-diff` refuses an empty corpus.
+
+- [ ] **Step 6: Measure L1 viability against the real suite**
 
 Run:
 ```bash
@@ -831,13 +902,11 @@ cd rust && cargo run --release -p rexx-extract --bin rexx-extract -- \
   --suite ../ootest --out ../rust/corpus/extracted --report ../docs/superpowers/plans/l1-coverage.md
 ```
 
-The binary must write, per `.testGroup` file: total `::method test*` count, extractable count (`!uses_fixture`), and the overall percentage.
+- [ ] **Step 7: Record the D8 decision**
 
-- [ ] **Step 6: Record the D8 decision**
+Read `l1-coverage.md`. **If the extractable fraction is ≥40%, L1 is viable — record D8 as L0→L1→L2→L3.** Below 40%, the extraction machinery costs more than it returns; record D8 as L0→L2→L3, delete `rexx-extract`, and change the Phase 2 and Phase 4 roadmap rows from L1 to L0. Write the decision and the measured number into Section 1's D8 block in this file.
 
-Read `l1-coverage.md`. **If the extractable fraction is ≥40%, L1 is viable — record D8 as L0→L1→L2→L3.** Below 40%, the extraction machinery costs more than it returns; record D8 as L0→L2→L3 and delete `rexx-extract`. Write the decision and the measured number into Section 1's D8 block in this file.
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add rust docs
@@ -851,26 +920,44 @@ git commit -m "Extract standalone assertions from ooTest groups and measure L1 c
 - Create: `rust/crates/rexx-inventory/tests/errors.rs`
 
 **Interfaces:**
-- Produces: `rexx_inventory::errors::MESSAGES: &[(u32, &str)]` — all 704 codes with their text, generated at build time.
+- Produces: `rexx_inventory::errors::MESSAGES: &[Message]`, `Message { major: u16, sub: u16, number: u16, symbol: &'static str, text: &'static str }`, `errors::lookup(major: u16, sub: u16) -> Option<&'static Message>`.
+
+**The catalogue's shape, which decides the key.** `rexxmsg.xml` holds **56 `<Message>` majors and 648 `<SubMessage>` children**, 704 total. Identity is the pair `(Code, Subcode)`; `Code` alone repeats across every submessage of a major. There is also a separate `<MessageNumber>` that is neither the code nor contiguous — error 3.001 carries `MessageNumber` 200. A flat `&[(u32, &str)]` has no unique key and must not be used. Key on `(major, sub)`.
+
+Substitutions are markup, not `printf`: the text of 3.001 is `Failure during initialization: File <q><Sub position="1" name="filename"/></q> is unreadable.` The build script renders `<Sub position="N"/>` as `%N` and drops the `<q>` wrapper, recording that choice in a comment — `<q>` is quoting markup for the documentation build, and the interpreter's runtime output does not carry it.
 
 - [ ] **Step 1: Write the failing test**
 
 `rust/crates/rexx-inventory/tests/errors.rs`:
 ```rust
+use rexx_inventory::errors;
+
 #[test]
-fn every_error_code_from_the_catalogue_is_present() {
-    // rexxmsg.xml carries 704 codes as of 8c880bdd. If this number changes,
+fn every_message_from_the_catalogue_is_present() {
+    // 56 <Message> + 648 <SubMessage> = 704, as of 8c880bdd. If this changes,
     // the C++ tree gained or lost an error and the Rust side must follow.
-    assert_eq!(rexx_inventory::errors::MESSAGES.len(), 704);
+    assert_eq!(errors::MESSAGES.len(), 704);
+    assert_eq!(errors::MESSAGES.iter().filter(|m| m.sub == 0).count(), 56);
+}
+
+#[test]
+fn a_major_carries_its_own_text_with_no_substitutions() {
+    let m = errors::lookup(3, 0).expect("error 3 exists");
+    assert_eq!(m.text, "Failure during initialization.");
+    assert_eq!(m.symbol, "Error_Program_unreadable");
+}
+
+#[test]
+fn a_submessage_is_keyed_by_the_pair_and_renders_substitutions_as_percent_n() {
+    let m = errors::lookup(3, 1).expect("error 3.001 exists");
+    assert_eq!(m.number, 200, "MessageNumber is independent of the code");
+    assert_eq!(m.text, "Failure during initialization: File %1 is unreadable.");
 }
 
 #[test]
 fn error_13_is_invalid_character_in_program() {
-    let (_, text) = rexx_inventory::errors::MESSAGES
-        .iter()
-        .find(|(code, _)| *code == 13)
-        .expect("error 13 exists");
-    assert!(text.to_ascii_lowercase().contains("invalid character"));
+    let m = errors::lookup(13, 0).expect("error 13 exists");
+    assert!(m.text.to_ascii_lowercase().contains("invalid character"));
 }
 ```
 
@@ -897,14 +984,32 @@ quick-xml = "0.37"
 workspace = true
 ```
 
-`rust/crates/rexx-inventory/build.rs` reads `../../../interpreter/messages/rexxmsg.xml`, walks the message elements, and writes `$OUT_DIR/errors.rs` containing:
+`rust/crates/rexx-inventory/build.rs` reads `../../../interpreter/messages/rexxmsg.xml`, walks each `<Message>` and its nested `<Subcodes>/<SubMessage>` children, and writes `$OUT_DIR/errors.rs` containing:
 ```rust
-pub static MESSAGES: &[(u32, &str)] = &[
-    (3, "Failure during initialization: %1"),
-    // ... one line per code, in ascending order
+pub struct Message {
+    pub major: u16,
+    pub sub: u16,
+    pub number: u16,
+    pub symbol: &'static str,
+    pub text: &'static str,
+}
+
+pub static MESSAGES: &[Message] = &[
+    Message { major: 3, sub: 0, number: 3, symbol: "Error_Program_unreadable",
+              text: "Failure during initialization." },
+    Message { major: 3, sub: 1, number: 200, symbol: "Error_Program_unreadable_name",
+              text: "Failure during initialization: File %1 is unreadable." },
+    // ... one entry per message, majors and their submessages in document order
 ];
+
+pub fn lookup(major: u16, sub: u16) -> Option<&'static Message> {
+    MESSAGES.iter().find(|m| m.major == major && m.sub == sub)
+}
 ```
-It must `println!("cargo::rerun-if-changed=../../../interpreter/messages/rexxmsg.xml");` and fail loudly — `panic!` — if the file is missing or the code count is zero. A silently empty table would let every later phase report false conformance.
+
+Text rendering rules, applied in this order: unwrap `<q>…</q>` to its contents; replace `<Sub position="N" …/>` with `%N`; unescape XML entities. A major with no `<Text>` of its own is an error in the catalogue, not something to paper over with an empty string — panic.
+
+It must `println!("cargo::rerun-if-changed=../../../interpreter/messages/rexxmsg.xml");` and `panic!` if the file is missing, if the total is zero, or if any `(major, sub)` pair repeats. A silently empty or colliding table would let every later phase report false conformance.
 
 `rust/crates/rexx-inventory/src/lib.rs`:
 ```rust
@@ -918,7 +1023,7 @@ pub mod errors {
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-inventory`
-Expected: 2 passed. If the count assertion fails with a number other than 704, the base commit moved — update the constant and note it.
+Expected: 4 passed. If the count assertion fails with a number other than 704, the base commit moved — update the constant and note it.
 
 - [ ] **Step 5: Commit**
 
@@ -930,24 +1035,31 @@ git commit -m "Generate the Rexx error-message table from rexxmsg.xml at build t
 ### Task 0.6: Builtin-function inventory
 
 **Files:**
-- Create: `rust/crates/rexx-inventory/src/builtins.rs` (generated), extend `build.rs`
+- Modify: `rust/crates/rexx-inventory/build.rs` (emit `$OUT_DIR/builtins.rs`), `src/lib.rs` (add `pub mod builtins { include!(...) }`)
 - Create: `rust/crates/rexx-inventory/tests/builtins.rs`
 
 **Interfaces:**
-- Produces: `rexx_inventory::builtins::NAMES: &[&str]` — the 162 builtin function names in table order.
+- Produces: `rexx_inventory::builtins::NAMES: &[&str]` — the 81 builtin function names **in table order**, which is the index order the parser uses.
 
 - [ ] **Step 1: Write the failing test**
 
 ```rust
 #[test]
-fn the_builtin_table_has_162_entries() {
-    assert_eq!(rexx_inventory::builtins::NAMES.len(), 162);
+fn the_builtin_table_has_81_entries() {
+    // The table at BuiltinFunctions.cpp:3042 holds 81 entries plus a leading
+    // NULL dummy, which the extractor skips.
+    assert_eq!(rexx_inventory::builtins::NAMES.len(), 81);
 }
 
 #[test]
-fn the_table_is_alphabetical_and_starts_at_abbrev() {
+fn table_order_is_preserved_because_the_parser_indexes_by_position() {
+    // NOT alphabetical: the table is mostly sorted but has an appended tail
+    // (…X2D, XRANGE, USERID, LOWER, UPPER, RXFUNCADD, RXFUNCDROP,
+    // RXFUNCQUERY, ENDLOCAL, SETLOCAL, QUALIFY, GC). Sorting it would break
+    // the index the parser resolves builtins through, so the test pins the
+    // ends rather than asserting an ordering.
     assert_eq!(rexx_inventory::builtins::NAMES[0], "ABBREV");
-    assert!(rexx_inventory::builtins::NAMES.windows(2).all(|w| w[0] <= w[1]));
+    assert_eq!(rexx_inventory::builtins::NAMES[80], "GC");
 }
 ```
 
@@ -958,7 +1070,7 @@ Expected: FAIL — module does not exist.
 
 - [ ] **Step 3: Extend the build script**
 
-Parse `../../../interpreter/expression/BuiltinFunctions.cpp` from the line matching `pbuiltin LanguageParser::builtinTable[] =` to the closing `};`, taking each `&builtin_function_NAME` and emitting `NAME`. Skip the leading `NULL` dummy entry. Panic if fewer than 100 names are found.
+Parse `../../../interpreter/expression/BuiltinFunctions.cpp` from the line matching `pbuiltin LanguageParser::builtinTable[] =` to the closing `};`, taking each `&builtin_function_NAME` and emitting `NAME` **in source order**. Skip the leading `NULL` dummy entry. Panic if fewer than 50 names are found — a threshold that catches a broken parse without tripping on the real count of 81.
 
 - [ ] **Step 4: Run to verify it passes**
 
@@ -1011,6 +1123,8 @@ Write the result into `perf-baseline.md`. This number is the D2 gate.
 
 Add a `bench` job to `.github/workflows/{unix,windows,bsd}.yml` that builds the C++ tree, runs the suite, and uploads `target/criterion` as an artifact. Do not gate CI on it yet — this run only produces numbers.
 
+**If OpenBSD cannot produce a baseline,** because of the open SIGSEGV in the current C++ build, record that in `perf-baseline.md` as a missing row with the failure output attached, and proceed. Benchmarks may well run on a build whose test suite crashes, so try first. What is not acceptable is a silently absent row: the Phase 0 gate below asks for five platforms, and "four plus a documented reason" passes while "four" does not.
+
 - [ ] **Step 6: Write the baseline report**
 
 `perf-baseline.md` records, per platform: each benchmark's point estimate and confidence interval, the toolchain versions, and the machine class. **Every later phase gate compares against this file.**
@@ -1051,8 +1165,8 @@ git commit -m "Document the RXAPI wire protocol and settle the bridge-or-port de
 All must hold before Phase 1 starts:
 
 - [ ] `rexx-diff --cpp build/bin/rexx --rs build/bin/rexx --corpus rust/corpus` reports **0 divergences**.
-- [ ] `perf-baseline.md` contains committed C++ numbers for all five platforms.
-- [ ] `rexx_inventory::errors::MESSAGES` has 704 entries; `builtins::NAMES` has 162.
+- [ ] `perf-baseline.md` contains committed C++ numbers for all five platforms, or a documented failure for any platform that could not produce them.
+- [ ] `rexx_inventory::errors::MESSAGES` has 704 entries (56 majors + 648 submessages, keyed by `(major, sub)`); `builtins::NAMES` has 81 in table order.
 - [ ] `l1-coverage.md` exists and D8 is recorded in this file with its measured number.
 - [ ] `rxapi-protocol.md` exists and D7 is recorded in this file.
 
@@ -1069,7 +1183,9 @@ All must hold before Phase 1 starts:
 - Create: `rust/crates/rexx-core/tests/handle.rs`
 
 **Interfaces:**
-- Produces: `ObjRef` (Copy, Eq, Hash), `ObjRef::heap(u32)`, `ObjRef::small_int(i64) -> Option<ObjRef>`, `ObjRef::NIL`, `ObjRef::decode() -> Decoded`, `enum Decoded { Heap(u32), SmallInt(i64), Nil }`.
+- Produces: `ObjRef` (Copy, Eq, Hash), `ObjRef::heap(slot: u32, generation: u32)`, `ObjRef::small_int(i64) -> Option<ObjRef>`, `ObjRef::NIL`, `ObjRef::decode() -> Decoded`, `enum Decoded { Heap { slot: u32, generation: u32 }, SmallInt(i64), Nil }`, `GENERATION_MAX`.
+
+**Why the generation field exists.** Slots are recycled through a free list (Task 1.2) and swept (Task 1.5). Without a generation, a handle held across a collection silently aliases whatever is allocated into that slot next — `Heap::get` returns `Some(wrong object)`. That is memory-safe and semantically exactly the wrong-object defect class this rewrite exists to eliminate, and it would land at the FFI boundary, which is the one place D5 advertises as the win. The generation makes a stale handle a lookup miss, which is what D5 actually claims.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1078,9 +1194,19 @@ use rexx_core::{Decoded, ObjRef};
 
 #[test]
 fn heap_handles_round_trip() {
-    for slot in [0u32, 1, 1000, u32::MAX / 2] {
-        assert_eq!(ObjRef::heap(slot).decode(), Decoded::Heap(slot));
+    for slot in [0u32, 1, 1000, u32::MAX] {
+        for generation in [0u32, 1, 7, rexx_core::GENERATION_MAX] {
+            assert_eq!(
+                ObjRef::heap(slot, generation).decode(),
+                Decoded::Heap { slot, generation }
+            );
+        }
     }
+}
+
+#[test]
+fn the_same_slot_at_different_generations_is_a_different_handle() {
+    assert_ne!(ObjRef::heap(4, 0), ObjRef::heap(4, 1));
 }
 
 #[test]
@@ -1100,7 +1226,7 @@ fn integers_outside_the_tagged_range_are_rejected_rather_than_truncated() {
 #[test]
 fn nil_is_distinct_from_every_heap_slot_and_every_integer() {
     assert_eq!(ObjRef::NIL.decode(), Decoded::Nil);
-    assert_ne!(ObjRef::NIL, ObjRef::heap(0));
+    assert_ne!(ObjRef::NIL, ObjRef::heap(0, 0));
     assert_ne!(ObjRef::NIL, ObjRef::small_int(0).unwrap());
 }
 ```
@@ -1116,13 +1242,16 @@ Expected: FAIL — crate does not exist.
 ```rust
 //! A reference to a Rexx object.
 //!
-//! Two low bits carry a tag. `Heap` handles index the arena; `SmallInt`
-//! carries a 62-bit signed value inline, which removes the allocation the
-//! C++ implementation pays for via `RexxInteger`. `.nil` is a singleton
-//! because Rexx code compares against it by identity.
+//! Two low bits carry a tag. A `Heap` handle carries a 32-bit slot index and
+//! a 30-bit generation; `SmallInt` carries a 62-bit signed value inline,
+//! which removes the allocation the C++ implementation pays for via
+//! `RexxInteger`. `.nil` is a singleton because Rexx code compares against it
+//! by identity.
 //!
 //! Note that `.true` and `.false` need no encoding: in Rexx they are the
 //! strings "1" and "0".
+//!
+//! Layout, low to high: [tag: 2][slot: 32][generation: 30].
 
 const TAG_BITS: u32 = 2;
 const TAG_MASK: u64 = 0b11;
@@ -1130,12 +1259,22 @@ const TAG_HEAP: u64 = 0b00;
 const TAG_INT: u64 = 0b01;
 const TAG_NIL: u64 = 0b10;
 
+const SLOT_SHIFT: u32 = TAG_BITS;
+const SLOT_BITS: u32 = 32;
+const SLOT_MASK: u64 = (1 << SLOT_BITS) - 1;
+const GEN_SHIFT: u32 = SLOT_SHIFT + SLOT_BITS;
+const GEN_BITS: u32 = 30;
+
+/// The highest generation a slot can reach. A slot that would exceed this is
+/// retired rather than reused, so a stale handle can never alias a live one.
+pub const GENERATION_MAX: u32 = (1 << GEN_BITS) - 1;
+
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct ObjRef(u64);
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Decoded {
-    Heap(u32),
+    Heap { slot: u32, generation: u32 },
     SmallInt(i64),
     Nil,
 }
@@ -1147,8 +1286,13 @@ pub const SMALL_INT_MIN: i64 = -(1 << 61);
 impl ObjRef {
     pub const NIL: ObjRef = ObjRef(TAG_NIL);
 
-    pub const fn heap(slot: u32) -> Self {
-        ObjRef(((slot as u64) << TAG_BITS) | TAG_HEAP)
+    pub const fn heap(slot: u32, generation: u32) -> Self {
+        debug_assert!(generation <= GENERATION_MAX);
+        ObjRef(
+            ((generation as u64) << GEN_SHIFT)
+                | ((slot as u64) << SLOT_SHIFT)
+                | TAG_HEAP,
+        )
     }
 
     pub const fn small_int(value: i64) -> Option<Self> {
@@ -1160,31 +1304,29 @@ impl ObjRef {
 
     pub const fn decode(self) -> Decoded {
         match self.0 & TAG_MASK {
-            TAG_HEAP => Decoded::Heap((self.0 >> TAG_BITS) as u32),
+            TAG_HEAP => Decoded::Heap {
+                slot: ((self.0 >> SLOT_SHIFT) & SLOT_MASK) as u32,
+                generation: (self.0 >> GEN_SHIFT) as u32,
+            },
             TAG_INT => Decoded::SmallInt((self.0 as i64) >> TAG_BITS),
             _ => Decoded::Nil,
-        }
-    }
-
-    pub const fn heap_slot(self) -> Option<u32> {
-        match self.decode() {
-            Decoded::Heap(slot) => Some(slot),
-            _ => None,
         }
     }
 }
 ```
 
+Note the cost this buys back: a `Heap` handle no longer has spare bits, so the arena is capped at 2^32 slots. That is 4 billion live objects, far past any Rexx program, and `Heap::alloc` already fails loudly at that bound.
+
 `src/lib.rs`:
 ```rust
 mod handle;
-pub use handle::{Decoded, ObjRef, SMALL_INT_MAX, SMALL_INT_MIN};
+pub use handle::{Decoded, ObjRef, GENERATION_MAX, SMALL_INT_MAX, SMALL_INT_MIN};
 ```
 
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-core`
-Expected: 4 passed.
+Expected: 5 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -1213,8 +1355,17 @@ use rexx_core::{Body, Decoded, Heap, ObjRef};
 fn allocation_returns_a_heap_handle_that_reads_back() {
     let mut heap = Heap::new();
     let s = heap.alloc(Body::String("hello".into()));
-    assert!(matches!(s.decode(), Decoded::Heap(_)));
+    assert!(matches!(s.decode(), Decoded::Heap { .. }));
     assert!(matches!(heap.get(s).map(|o| &o.body), Some(Body::String(t)) if t == "hello"));
+}
+
+#[test]
+fn a_handle_from_a_stale_generation_does_not_read_the_slots_new_occupant() {
+    let mut heap = Heap::new();
+    let stale = heap.alloc(Body::String("gone".into()));
+    let Decoded::Heap { slot, generation } = stale.decode() else { panic!("heap handle") };
+    let forged = ObjRef::heap(slot, generation + 1);
+    assert!(heap.get(forged).is_none(), "a generation mismatch is a miss, not an alias");
 }
 
 #[test]
@@ -1286,9 +1437,19 @@ pub struct Object {
 use crate::body::{BehaviourId, Body, Object};
 use crate::{Decoded, ObjRef};
 
+/// A slot carries its generation whether occupied or not, so that a handle
+/// minted before a sweep cannot read the slot's next occupant.
 enum Slot {
-    Free { next: Option<u32> },
-    Live(Object),
+    Free { next: Option<u32>, generation: u32 },
+    Live { object: Object, generation: u32 },
+}
+
+impl Slot {
+    fn generation(&self) -> u32 {
+        match self {
+            Slot::Free { generation, .. } | Slot::Live { generation, .. } => *generation,
+        }
+    }
 }
 
 pub struct Heap {
@@ -1311,38 +1472,43 @@ impl Heap {
         self.live += 1;
         match self.free_head {
             Some(slot) => {
-                let Slot::Free { next } = self.slots[slot as usize] else {
+                let Slot::Free { next, generation } = self.slots[slot as usize] else {
                     unreachable!("the free list only threads free slots")
                 };
                 self.free_head = next;
-                self.slots[slot as usize] = Slot::Live(object);
-                ObjRef::heap(slot)
+                self.slots[slot as usize] = Slot::Live { object, generation };
+                ObjRef::heap(slot, generation)
             }
             None => {
                 let slot = u32::try_from(self.slots.len()).expect("heap exceeds 2^32 slots");
-                self.slots.push(Slot::Live(object));
-                ObjRef::heap(slot)
+                self.slots.push(Slot::Live { object, generation: 0 });
+                ObjRef::heap(slot, 0)
             }
         }
     }
 
+    /// Resolves a handle, or `None` if it names no slot, a free slot, or a
+    /// slot whose generation has moved on.
+    fn resolve(&self, r: ObjRef) -> Option<usize> {
+        let Decoded::Heap { slot, generation } = r.decode() else { return None };
+        let entry = self.slots.get(slot as usize)?;
+        (entry.generation() == generation && matches!(entry, Slot::Live { .. }))
+            .then_some(slot as usize)
+    }
+
     pub fn get(&self, r: ObjRef) -> Option<&Object> {
-        match r.decode() {
-            Decoded::Heap(slot) => match self.slots.get(slot as usize) {
-                Some(Slot::Live(o)) => Some(o),
-                _ => None,
-            },
-            _ => None,
+        let slot = self.resolve(r)?;
+        match &self.slots[slot] {
+            Slot::Live { object, .. } => Some(object),
+            Slot::Free { .. } => unreachable!("resolve rejects free slots"),
         }
     }
 
     pub fn get_mut(&mut self, r: ObjRef) -> Option<&mut Object> {
-        match r.decode() {
-            Decoded::Heap(slot) => match self.slots.get_mut(slot as usize) {
-                Some(Slot::Live(o)) => Some(o),
-                _ => None,
-            },
-            _ => None,
+        let slot = self.resolve(r)?;
+        match &mut self.slots[slot] {
+            Slot::Live { object, .. } => Some(object),
+            Slot::Free { .. } => unreachable!("resolve rejects free slots"),
         }
     }
 
@@ -1358,12 +1524,12 @@ impl Default for Heap {
 }
 ```
 
-Export both modules from `src/lib.rs`.
+Export both modules from `src/lib.rs`. Note that `Slot::Free` is not constructed until Task 1.5, so this task's commit would trip `-D warnings` on dead code; add `#[allow(dead_code)] // constructed by the sweep in Task 1.5` to the variant and delete the attribute in Task 1.5. Suppressing a warning you are about to make true is fine; leaving it suppressed is not.
 
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-core --test heap`
-Expected: 3 passed.
+Expected: 4 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -1397,7 +1563,7 @@ fn a_string_reaches_nothing() {
 
 #[test]
 fn an_array_reaches_every_element_including_duplicates() {
-    let a = ObjRef::heap(3);
+    let a = ObjRef::heap(3, 0);
     let mut out = Vec::new();
     Body::Array(vec![a, a, ObjRef::NIL]).trace(&mut out);
     assert_eq!(out, vec![a, a, ObjRef::NIL]);
@@ -1405,7 +1571,7 @@ fn an_array_reaches_every_element_including_duplicates() {
 
 #[test]
 fn an_instance_reaches_its_variable_values_but_not_their_names() {
-    let v = ObjRef::heap(9);
+    let v = ObjRef::heap(9, 0);
     let mut out = Vec::new();
     Body::Instance(vec![("NAME".into(), v)]).trace(&mut out);
     assert_eq!(out, vec![v]);
@@ -1423,7 +1589,7 @@ Expected: FAIL — no method named `trace`.
 impl Body {
     /// Appends every object this one can reach.
     ///
-    /// This single exhaustive match replaces the 149 hand-written `live()`
+    /// This single exhaustive match replaces the 148 hand-written `live()`
     /// implementations in the C++ tree. It has no wildcard arm on purpose:
     /// adding a `Body` variant must be a compile error here, not a runtime
     /// use-after-free.
@@ -1467,7 +1633,7 @@ use rexx_core::{ObjRef, RootSet};
 #[test]
 fn globals_are_always_roots() {
     let mut roots = RootSet::new();
-    let env = ObjRef::heap(1);
+    let env = ObjRef::heap(1, 0);
     roots.add_global(".ENVIRONMENT", env);
     assert!(roots.iter().any(|r| r == env));
 }
@@ -1475,7 +1641,7 @@ fn globals_are_always_roots() {
 #[test]
 fn temporaries_stop_being_roots_when_their_frame_is_popped() {
     let mut roots = RootSet::new();
-    let tmp = ObjRef::heap(5);
+    let tmp = ObjRef::heap(5, 0);
     let frame = roots.push_frame();
     roots.push_temp(tmp);
     assert!(roots.iter().any(|r| r == tmp));
@@ -1487,9 +1653,9 @@ fn temporaries_stop_being_roots_when_their_frame_is_popped() {
 fn popping_an_outer_frame_discards_the_inner_frames_it_contains() {
     let mut roots = RootSet::new();
     let outer = roots.push_frame();
-    roots.push_temp(ObjRef::heap(1));
+    roots.push_temp(ObjRef::heap(1, 0));
     let _inner = roots.push_frame();
-    roots.push_temp(ObjRef::heap(2));
+    roots.push_temp(ObjRef::heap(2, 0));
     roots.pop_frame(outer);
     assert_eq!(roots.iter().count(), 0);
 }
@@ -1640,6 +1806,18 @@ fn swept_slots_are_reused_by_the_next_allocation() {
     assert_eq!(heap.slot_capacity(), 1, "the freed slot was reused, not appended");
     assert!(heap.get(reused).is_some());
 }
+
+#[test]
+fn a_handle_to_a_swept_object_does_not_alias_the_slots_next_occupant() {
+    let mut heap = Heap::new();
+    let roots = RootSet::new();
+    let stale = heap.alloc(Body::String("x".into()));
+    heap.collect(&roots);
+    let reused = heap.alloc(Body::String("y".into()));
+    assert_ne!(stale, reused, "reuse must bump the generation");
+    assert!(heap.get(stale).is_none(), "the stale handle reads as a miss");
+    assert!(matches!(heap.get(reused).map(|o| &o.body), Some(Body::String(t)) if t == "y"));
+}
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -1649,12 +1827,70 @@ Expected: FAIL — no method named `collect`.
 
 - [ ] **Step 3: Implement**
 
-Add to `Heap`: a `marks: Vec<bool>` sized to `slots`, a `collect` that clears marks, seeds a worklist from `roots.iter()` filtered to heap slots, pops until empty (marking, then tracing into the worklist via a reusable scratch `Vec<ObjRef>`), then sweeps unmarked `Slot::Live` into `Slot::Free` threaded onto `free_head`. Add `slot_capacity(&self) -> usize` returning `self.slots.len()`. The worklist must skip already-marked slots — that is what terminates the cycle test.
+Add to `Heap` a `marks: Vec<bool>`, and:
+
+```rust
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CollectStats {
+    pub swept: usize,
+    pub live: usize,
+}
+
+impl Heap {
+    pub fn slot_capacity(&self) -> usize {
+        self.slots.len()
+    }
+
+    pub fn collect(&mut self, roots: &RootSet) -> CollectStats {
+        self.marks.clear();
+        self.marks.resize(self.slots.len(), false);
+
+        let mut work: Vec<ObjRef> = roots.iter().collect();
+        let mut reached = Vec::new();
+        while let Some(r) = work.pop() {
+            let Some(slot) = self.resolve(r) else { continue };
+            if std::mem::replace(&mut self.marks[slot], true) {
+                continue; // already marked: this is what terminates cycles
+            }
+            let Slot::Live { object, .. } = &self.slots[slot] else {
+                unreachable!("resolve rejects free slots")
+            };
+            reached.clear();
+            object.body.trace(&mut reached);
+            work.extend(reached.iter().copied());
+        }
+
+        let mut swept = 0;
+        for slot in 0..self.slots.len() {
+            if self.marks[slot] || matches!(self.slots[slot], Slot::Free { .. }) {
+                continue;
+            }
+            let generation = self.slots[slot].generation();
+            swept += 1;
+            self.live -= 1;
+            // A slot whose generation would overflow is retired, not reused:
+            // wrapping would let a stale handle alias a live object again,
+            // which is the whole reason the generation exists.
+            self.slots[slot] = match generation.checked_add(1) {
+                Some(next) if next <= crate::GENERATION_MAX => {
+                    let free = Slot::Free { next: self.free_head, generation: next };
+                    self.free_head = Some(slot as u32);
+                    free
+                }
+                _ => Slot::Free { next: None, generation },
+            };
+        }
+        CollectStats { swept, live: self.live }
+    }
+}
+```
+
+Note the two invariants the tests depend on and that are easy to drop: the sweep decrements `live`, and `marks` is resized on every collection because the heap grows between them.
 
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-core --test collect`
-Expected: 5 passed.
+Expected: 6 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -1671,6 +1907,10 @@ git commit -m "Collect unreachable objects with mark and sweep over the arena"
 
 **Interfaces:**
 - Produces: `Body::WeakRef(ObjRef)`, `Object::has_uninit: bool`, `CollectStats::pending_uninit: Vec<ObjRef>`.
+
+**Pass order is fixed by the oracle, and it is the opposite of the intuitive one.** `MemoryObject::markObjects` (`interpreter/memory/RexxMemory.cpp:415–433`) runs `markObjectsMain` → **`checkWeakReferences`** → `checkUninit` → `markObjectsMain(uninitTable)`, and the comment at `:422–426` gives the reason verbatim: weak references are processed before the uninit list *"so that the uninit list doesn't mark any of the weakly referenced items. We don't want an object placed on the uninit queue to end up strongly referenced later."*
+
+Getting this backwards is observable: take a `WeakReference` whose target is unreachable but pending `UNINIT`. Clearing weak refs first — the oracle's order — reads `.nil`. Resurrecting first reads the live object. Both are defensible designs; only one is ooRexx.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1709,6 +1949,26 @@ fn a_cleared_weak_reference_reads_as_nil() {
     heap.collect(&roots);
     assert!(matches!(heap.get(weak).map(|o| &o.body), Some(Body::WeakRef(r)) if *r == rexx_core::ObjRef::NIL));
 }
+
+#[test]
+fn a_weak_reference_to_an_uninit_pending_object_is_still_cleared() {
+    // The oracle clears weak references BEFORE the uninit list is marked, so
+    // resurrection for UNINIT must not retroactively rescue a weak reference.
+    // See RexxMemory.cpp:422-426.
+    let mut heap = Heap::new();
+    let mut roots = RootSet::new();
+    let target = heap.alloc(Body::Instance(vec![]));
+    heap.get_mut(target).unwrap().has_uninit = true;
+    let weak = heap.alloc(Body::WeakRef(target));
+    roots.add_global(".WEAK", weak);
+    let stats = heap.collect(&roots);
+    assert_eq!(stats.pending_uninit, vec![target], "it is still queued for UNINIT");
+    assert!(heap.get(target).is_some(), "and still alive until UNINIT has run");
+    assert!(
+        matches!(heap.get(weak).map(|o| &o.body), Some(Body::WeakRef(r)) if *r == rexx_core::ObjRef::NIL),
+        "but the weak reference was cleared before resurrection, as in the oracle"
+    );
+}
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -1718,12 +1978,19 @@ Expected: FAIL — `Body::WeakRef` does not exist.
 
 - [ ] **Step 3: Implement**
 
-`Body::WeakRef(ObjRef)` traces to nothing. `collect` gains two post-mark passes, in this order: (1) for every unmarked object with `has_uninit`, mark it and everything it reaches, and record it in `pending_uninit` — running `UNINIT` must not see a half-collected object graph; (2) for every surviving `Body::WeakRef` whose target is unmarked, rewrite the target to `ObjRef::NIL`. Then sweep. `has_uninit` is cleared when the caller reports the finalizer has run, so the next collection sweeps the object normally.
+`Body::WeakRef(ObjRef)` traces to nothing. `collect` gains two post-mark passes **in the oracle's order**:
+
+1. **Clear weak references.** For every surviving `Body::WeakRef` whose target is unmarked, rewrite the target to `ObjRef::NIL`.
+2. **Resurrect for `UNINIT`.** For every unmarked object with `has_uninit`, mark it and everything it reaches, and record it in `pending_uninit` — running `UNINIT` must not see a half-collected object graph.
+
+Then sweep. `has_uninit` is cleared when the caller reports the finalizer has run, so the next collection sweeps the object normally.
+
+Do not swap these for tidiness. Pass 2 marks objects; if it ran first, pass 1 would see those marks and leave the weak references pointing at objects the oracle would have cleared.
 
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-core --test uninit`
-Expected: 3 passed.
+Expected: 4 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -1816,7 +2083,9 @@ Build a graph of 1,000,000 objects with a realistic shape — a root directory h
 
 - [ ] **Step 3: Write the equivalent C++ measurement**
 
-A Rexx program (`rust/bench-programs/heapshape.rex`) that builds the same graph shape using `.array` and `.directory`, run under `build/bin/rexx`, timed with hyperfine. It measures allocation plus collection together, so subtract the interpreter overhead measured by an equivalent program that builds nothing. Document the subtraction in `d1-decision.md` — an unstated adjustment is how a benchmark lies.
+A Rexx program (`rust/bench-programs/heapshape.rex`) that builds the same graph shape using `.array` and `.directory`, run under `build/bin/rexx`, timed with hyperfine. It measures allocation plus collection together, so subtract the interpreter overhead measured by an equivalent program that builds nothing.
+
+**State the comparison's weakness in `d1-decision.md`, do not bury it.** The Rust side is a direct API microbenchmark; the C++ side is an interpreted program minus an estimated overhead. These are not like-for-like, the subtraction is an estimate, and the interpreted side pays for parsing, dispatch, and variable lookup that the Rust side never touches. The number is directional — good enough to detect a 3× disaster, not good enough to adjudicate 15%. That is exactly why the Phase 1 threshold is 1.5× rather than parity, and why Phase 4 re-measures on equal footing. An unstated adjustment is how a benchmark lies.
 
 - [ ] **Step 4: Run both and record**
 
@@ -1869,7 +2138,7 @@ The generating procedure for each phase:
 **Phase-specific notes to carry forward:**
 
 - **Phase 3** opens with the D10 spike (parser construction), and must decide how source text is retained. `SOURCELINE`, error reporting, and `TRACE` all expose the original text, so the AST cannot discard it. Keep the program source as one string and have AST nodes hold byte ranges into it — which is also what makes `chumsky`'s span support directly usable if D10 lands on (a). Measure parse throughput on `CoreClasses.orx`, since under D2 that number *is* cold-start time.
-- **Phase 4** is where the execution model is fixed. Read the existing performance profile before designing the dispatch loop. The 162 builtins from Task 0.6 are the checklist; tick them off individually.
+- **Phase 4** is where the execution model is fixed. Read the existing performance profile before designing the dispatch loop. The 81 builtins from Task 0.6 are the checklist; tick them off individually.
 - **Phase 5** is the project's inflection point. When `CoreClasses.orx` runs, 32 classes appear at once and the L2 rung becomes reachable. Budget for the fact that it will expose parser and executor gaps in bulk rather than one at a time.
 - **Phase 6** must hold D3's frame-ownership constraint: activities own their frames; cross-activity signalling goes through a channel or a polled atomic, never a foreign frame reference. Verify this by construction (no shared frame type exists) rather than by test.
 - **Phase 7**'s stream model is a subsystem, not file I/O. `StreamNative.cpp` is 3,765 lines and its positioning and line/character interaction rules are all observable.
@@ -1887,6 +2156,9 @@ The generating procedure for each phase:
 | ooTest depends on undocumented C++ internals | Suite fails in ways the corpus never predicted | Treat each as a new L0 corpus entry first, then fix. Never add to `known-test-failures/` to close a phase |
 | RXAPI protocol is not portable | Phase 0 Task 8 finds unversioned struct dumps | D7 flips to "port it"; Phase 10 grows by 12k LOC |
 | Windows and BSD diverge late | Phases 1–5 are developed on Linux only | Run the full gate on all five platforms at **every** phase exit, not at Phase 9 |
+| `Sys*` blocks L2 later than expected | ooTest cannot enumerate groups without `SysFileTree` (D11) | Phase 7's plan opens by grepping `ootest/` for `Sys` call sites, so the required subset is measured rather than guessed |
+| ooDialog does not recompile against the Rust API | Only discovered after Phase 10, if ever | Accepted. It is out of scope and the goal statement says so. If recompiling it matters, add a Phase 11 with its own gate rather than letting D5 imply a guarantee nothing tests |
+| A stale native-API handle reads the wrong object | Silent wrong answers at the FFI boundary, not a crash | Designed out by the generation field in `ObjRef` (Task 1.1), tested in Tasks 1.2 and 1.5. If a future change drops generations for space, this row is why it must not |
 | Effort exceeds available time | Phase 4 not closed within its estimate | **Decision point, not a failure.** The C++ tree is untouched and still ships. Either narrow scope to a Rexx subset that is explicitly not ooRexx-conformant, or stop and keep Phase 0's oracle and benchmark suite, which have standalone value for the C++ project |
 
 **The strongest property of this plan is that abandoning it is cheap.** The C++ tree is never modified. Phase 0 produces a differential runner and a five-platform benchmark baseline that improve the existing project whether or not a single line of the Rust interpreter is ever written. Stopping after any phase leaves the repository better than it started.
@@ -1909,10 +2181,14 @@ The generating procedure for each phase:
 
 **Spec coverage.** Every decision from the user's four answers is carried: clean-room reimplementation (Section 3 crate tree, C++ tree frozen in Global Constraints); source-compatible C API (D5, Phase 8); ooTest as gate (D8, the L-rungs, Phase 9); perf non-regression (D9, Task 0.7, every phase gate); agent-executable roadmap (Phases 0–1 at step granularity, Section 6 for the rest).
 
-**Placeholders.** None. Every code step carries real code; every gate carries a runnable command. Four things are deliberately unmeasured and each names the task or spike that measures it: the L1 extractable fraction (Task 0.4), the RXAPI protocol answer (Task 0.8), the D1 verdict (Task 1.8), and the D10 parser comparison (the Phase 3 opening spike).
+**Placeholders.** No "TBD"s, and every gate carries a runnable command. But the earlier claim that *every* code step carries real code was false, and is withdrawn: several steps specify behaviour in prose rather than code — `build.rs` in Tasks 0.5 and 0.6, the benchmark harness in Task 0.7, the `rexx-extract` binary in Task 0.4, and `BehaviourTable` in Task 1.7. Each of those states its inputs, outputs, failure modes, and the tests it must satisfy, which is enough to implement against; but an implementer will be writing code the plan describes rather than transcribing code the plan supplies, and should expect that. The steps that *do* supply code supply all of it.
+
+Four things are deliberately unmeasured and each names the task or spike that measures it: the L1 extractable fraction (Task 0.4), the RXAPI protocol answer (Task 0.8), the D1 verdict (Task 1.8), and the D10 parser comparison (the Phase 3 opening spike).
 
 **Constraints added after the first draft, and where they landed.** The image is optional rather than obligatory — D2 now defaults to no image, builds one only on a measured startup miss, and records why that ordering cannot waste work. `unsafe` is forbidden by default everywhere with no blanket crate exemptions; the four-bar admission protocol is in Global Constraints, the unsafe-block count is a reportable item at every phase exit, and the D1 fallback to raw pointers is explicitly *not* granted a pass on it.
 
-**Type consistency.** `ObjRef`, `Decoded`, `Body`, `Object`, `BehaviourId`, `MethodId`, `Heap`, `RootSet`, `FrameId`, `CollectStats`, `Outcome`, `Interpreter`, `Divergence`, and `TestMethod` are each defined once and used with the same signature everywhere they appear.
+**Type consistency.** `ObjRef`, `Decoded`, `Body`, `Object`, `BehaviourId`, `MethodId`, `Heap`, `Slot`, `RootSet`, `FrameId`, `CollectStats`, `Message`, `Outcome`, `Interpreter`, `Divergence`, and `TestMethod` are each defined once and used with the same signature everywhere they appear.
+
+**Corrections applied after external review, recorded so the same errors are not reintroduced.** The builtin count was 162 and is 81 — the original figure double-counted declarations against table entries, and the table is *not* alphabetical, so the sortedness assertion went too. `live()` is 148 and `flatten()` is 105, both counted as definitions in `.cpp`; the 106th `flatten` match is a commented-out line in `RexxCore.h`. Keyword instructions are 35. The error catalogue is 56 majors plus 648 submessages keyed by `(major, sub)`, not a flat code table, and substitutions are `<Sub position="N"/>` markup rather than `%N` in the source. Task 1.6's weak-reference and `UNINIT` passes were in the wrong order relative to `RexxMemory.cpp:415–433`. `ObjRef` gained a generation field because the original design let a stale handle alias a recycled slot, which would have falsified D5's central safety claim. D2 overstated its savings by ignoring that `rexxc` needs program flattening regardless.
 
 **Known soft spot.** Task 1.4's `RootSet` is standalone; Phase 4 must connect it to the real activation and expression stacks, and the borrow-checker shape of that connection — who owns `Heap` versus `RootSet` during evaluation — is not solved here. It is a Phase 4 design output, and the first task of Phase 4's plan should be a spike on exactly that question. Recording it as unsolved is deliberate: pretending otherwise would put a wrong answer into a plan that later phases build on.
