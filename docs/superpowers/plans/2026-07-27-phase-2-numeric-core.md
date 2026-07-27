@@ -49,10 +49,12 @@ These are behaviours, not functions. Each is pinned by a corpus program that the
 3. **`NUMERIC FORM`** — `SCIENTIFIC` (default) gives `1.23456789E+10`; `ENGINEERING` gives `12.3456789E+9`, exponent forced to a multiple of 3.
 4. **E-notation thresholds, and they are asymmetric.** Measured across `DIGITS` 1, 3, 5 and 9:
 
-   - **positive:** exponential once the exponent **≥ `DIGITS`**
-   - **negative:** exponential once the exponent **≤ −(2·`DIGITS` + 1)**
+   - **positive:** exponential once the **adjusted** exponent (that of the most significant digit) is **≥ `DIGITS`**
+   - **negative:** exponential once the **raw** exponent (that of the least significant digit) is **≤ −(2·`DIGITS` + 1)**
 
-   So at `DIGITS 9` a value stays in plain form all the way down to `1e-18` but switches at `1e+9`. An implementation that picks one threshold for both directions is silently wrong across most numeric output. Pinned by `notation_thresholds.rex`.
+   The two sides use *different exponents*, which is the part that is easy to miss: they coincide only for a single-digit mantissa. `1e-18` prints plain but `10e-19` — the same value — prints `1.0E-18`, because their raw exponents are −18 and −19.
+
+   This was originally recorded as "adjusted exponent on both sides", derived from a probe that used only `1eN` values and therefore could not distinguish the two rules. Differentially testing 1,674 inputs against the interpreter found 78 disagreements, all of them here. Pinned by `notation_thresholds.rex`.
 
 5. **Canonicalisation on arithmetic.** Trailing zeros *after* a decimal point are significant and preserved — `1.50 + 0` is `1.50`, and `1.50 + 0.50` is `2.00` — while leading zeros, a bare trailing point, a unary plus and surrounding whitespace are stripped. Zero is the exception and collapses completely: `-0`, `0.0` and `00.00` all become `0`. Pinned by `canonical_form.rex`.
 6. **`NUMERIC FUZZ`** — default 0; relaxes `=` comparison by that many digits, without affecting `==`.

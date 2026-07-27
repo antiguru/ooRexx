@@ -58,7 +58,7 @@ what makes a zero meaningful.
 | `exponential.rex` | E-notation thresholds, which are asymmetric |
 | `errors.rex` | error numbers 42, 41 and 26 |
 | `canonical_form.rex` | trailing-zero preservation; zero collapsing |
-| `notation_thresholds.rex` | the exact positive and negative E-notation boundaries |
+| `notation_thresholds.rex` | the E-notation boundaries, which use *different* exponents per side |
 
 ## Things this corpus learned the hard way
 
