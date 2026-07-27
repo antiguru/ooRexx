@@ -62,7 +62,10 @@ impl Default for Settings {
 /// `NUMERIC DIGITS 1e3` sets 1000. Rejects fractions and non-numbers.
 fn whole_number(text: &str) -> Option<i64> {
     let n = Number::parse(text)?;
-    let plain = n.format(u32::MAX.min(1_000));
+    // Format with far more digits than any settings value could need, so the
+    // check sees the number itself rather than a rounded rendering of it.
+    const NO_ROUNDING: u32 = 1_000;
+    let plain = n.format(NO_ROUNDING);
     if plain.contains(['.', 'E']) {
         return None;
     }
