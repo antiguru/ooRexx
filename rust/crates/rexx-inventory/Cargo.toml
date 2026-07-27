@@ -1,0 +1,12 @@
+[package]
+name = "rexx-inventory"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[build-dependencies]
+quick-xml = "0.37"
+
+[lints]
+workspace = true

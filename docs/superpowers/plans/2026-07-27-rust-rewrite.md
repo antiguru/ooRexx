@@ -1025,7 +1025,7 @@ There are **363 `<q>` occurrences** — nearly every message that names an opera
 
 Keep the substitution marker as `&N` rather than translating to `%N`. The table is private to the Rust side and either would work, but matching the oracle byte-for-byte removes a transformation that could silently disagree, and makes the generated table directly diffable against `RexxErrorMessages.h`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `rust/crates/rexx-inventory/tests/errors.rs`:
 ```rust
@@ -1070,12 +1070,12 @@ fn error_13_is_invalid_character_in_program() {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd rust && cargo test -p rexx-inventory`
 Expected: FAIL — crate does not exist.
 
-- [ ] **Step 3: Implement the build script**
+- [x] **Step 3: Implement the build script**
 
 `rust/crates/rexx-inventory/Cargo.toml`:
 ```toml
@@ -1118,7 +1118,7 @@ pub fn lookup(major: u16, sub: u16) -> Option<&'static Message> {
 
 Text rendering, applied in this order: replace `<q>X</q>` with `"X"`, `<sq/>` with `'`, `<dq/>` with `"`; replace `<Sub position="N" …/>` with `&N`; unescape XML entities last. The ordering is safe — only four texts contain entities (`&gt;`, `&lt;`, `&apos;`), none of which can form markup when unescaped, and there are no nested `<q>`. A major with no `<Text>` of its own is an error in the catalogue, not something to paper over with an empty string — panic.
 
-Cross-check the output against the checked-in `interpreter/messages/RexxErrorMessages.h`, which the oracle generates from the same XML through `RexxErrorMessages.xsl`. If the Rust table and that header disagree on any text, the Rust renderer is wrong.
+Cross-check the output against the checked-in `interpreter/messages/RexxErrorMessages.h`, which the oracle generates from the same XML through `RexxErrorMessages.xsl`. If the Rust table and that header disagree on any text, the Rust renderer is wrong. **Encode this as a test** (`tests/oracle_agreement.rs`), not a one-off script: it validates every markup rule across all 704 messages at once, which is the only check that would catch a `<q>` regression. Note that the header carries 705 `MESSAGE(...)` lines — the extra one is a `Table_end` sentinel with empty text, and must be skipped. The only escape the header uses is `\"`.
 
 It must `println!("cargo::rerun-if-changed=../../../interpreter/messages/rexxmsg.xml");` and `panic!` if the file is missing, if the total is zero, or if any `(major, sub)` pair repeats. A silently empty or colliding table would let every later phase report false conformance.
 
@@ -1131,12 +1131,12 @@ pub mod errors {
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-inventory`
 Expected: 5 passed. If the count assertion fails with a number other than 704, the base commit moved — update the constant and note it.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add rust
@@ -1152,7 +1152,7 @@ git commit -m "Generate the Rexx error-message table from rexxmsg.xml at build t
 **Interfaces:**
 - Produces: `rexx_inventory::builtins::NAMES: &[&str]` — the 81 builtin function names **in table order**, which is the index order the parser uses.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 #[test]
@@ -1174,21 +1174,21 @@ fn table_order_is_preserved_because_the_parser_indexes_by_position() {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd rust && cargo test -p rexx-inventory builtins`
 Expected: FAIL — module does not exist.
 
-- [ ] **Step 3: Extend the build script**
+- [x] **Step 3: Extend the build script**
 
 Parse `../../../interpreter/expression/BuiltinFunctions.cpp` from the line matching `pbuiltin LanguageParser::builtinTable[] =` to the closing `};`, taking each `&builtin_function_NAME` and emitting `NAME` **in source order**. Skip the leading `NULL` dummy entry. Panic if fewer than 50 names are found — a threshold that catches a broken parse without tripping on the real count of 81.
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-inventory builtins`
 Expected: 2 passed. This list is Phase 4's definition of done.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add rust
