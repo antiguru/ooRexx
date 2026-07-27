@@ -132,7 +132,25 @@ Each ends with an independently testable deliverable and a commit. TDD throughou
 
   **What was deliberately not done: classic algebraic property tests.** Most are simply false in Rexx arithmetic under rounding, as the interpreter confirms — at DIGITS 9, `(1e-9 + 1) + -1` is `0` while `1e-9 + (1 + -1)` is `1e-9`; `3 * (1/3)` is `0.999999999`; `(1/3) * 3` is not `1`. Only commutativity holds, and it is a far weaker assertion than the oracle already provides. With a reference implementation available, randomising the *inputs* is worth far more than weakening the *assertion*.
 
-- **2.5 — Power (`**`)**, integer exponents only, with error 26 for non-whole exponents.
+- **2.5 — Power (`**`). IMPLEMENTED, with two known residual divergences — see below.** Zero divergences on 2,112 curated cases and on one 8,000-case random seed; **2 of 8,000 on another seed**, both negative powers near the exponent limit.
+
+  Rules ported:
+
+  1. **The exponent is rounded to `DIGITS` before being required to be whole.** `2 ** 2.5` is error 26 at DIGITS 9 but `8` at DIGITS 1, where 2.5 rounds to 3.
+  2. **An exponent too wide for `DIGITS` is error 26, not an overflow.** `2 ** 1e10` is 26 at DIGITS 9 (eleven digits needed) and 42 at DIGITS 15, where it is a usable whole number but the result is out of range.
+  3. **The base is truncated to `DIGITS + 1` first**, so `123456789 ** 2` at DIGITS 1 is `1E+16`, from 1.2e8 squared — not `2E+16` from the full base. Removing this truncation took the failures from 1 to 28.
+  4. **Zero has its own rules:** `0**0` is 1 (Rexx defines it), `0**n` is 0, and `0**-n` is error 42 rather than infinity.
+  5. **Working precision is `DIGITS + (digits in the exponent) + 1`.**
+  6. **Exponentiation goes low bit first.** This was worth one full case: high-bit-first is mathematically identical but lands its intermediate roundings differently, and on a knife-edge value that changes the last digit. `123456789 ** -7` at DIGITS 3 is `2.29E-57` one way and `2.30E-57` the other.
+
+  **The two residuals, both negative powers:**
+
+  ```
+  2|730361.1e999999992|**|-1   oracle 1.4E-999999998   ours <E42>
+  7|129720.468|**|-23          oracle 2.516546E-118    ours 2.516547E-118
+  ```
+
+  The reciprocal is the suspect in both — it is computed as `1 / acc` through the general division, where the interpreter uses a dedicated `dividePower` (`NumberStringMath2.cpp:1059`). Raising the reciprocal's working precision does not fix either, so the difference is structural rather than accumulated error. **Port `dividePower` rather than reusing `div`** before considering this task closed.
 - **2.6 — Comparison,** numeric and strict, with `FUZZ`.
 - **2.7 — Formatting:** E-notation thresholds (both directions), `SCIENTIFIC` and `ENGINEERING`, `FORMAT()`, `TRUNC()`.
 - **2.8 — Errors:** 41, 42, 26 raised at the right boundaries, using the `rexx-inventory` message table rather than hand-written text.

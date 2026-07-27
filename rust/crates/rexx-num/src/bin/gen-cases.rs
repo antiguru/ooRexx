@@ -79,14 +79,27 @@ fn main() {
     let count: usize = args.next().and_then(|s| s.parse().ok()).unwrap_or(20_000);
     let mut rng = Rng(seed.max(1));
 
-    const OPS: [&str; 6] = ["+", "-", "*", "/", "%", "//"];
+    const OPS: [&str; 7] = ["+", "-", "*", "/", "%", "//", "**"];
     const DIGITS: [u32; 9] = [1, 2, 3, 5, 7, 9, 12, 18, 30];
 
     for _ in 0..count {
         let d = rng.pick(&DIGITS);
         let a = literal(&mut rng);
-        let op = rng.pick(&OPS);
-        let b = literal(&mut rng);
+        let op = *rng.pick(&OPS);
+        // `**` gets a small exponent: a random 12-digit one would ask the
+        // interpreter for a number with more digits than the machine has
+        // memory, and the interesting cases are near the whole/non-whole and
+        // overflow boundaries anyway.
+        let b = if op == "**" {
+            match rng.below(4) {
+                0 => format!("{}", rng.below(40) as i64 - 20),
+                1 => format!("{}.{}", rng.below(6), rng.below(10)),
+                2 => format!("{}", rng.below(1_000_000_000)),
+                _ => format!("-{}", rng.below(30)),
+            }
+        } else {
+            literal(&mut rng)
+        };
         println!("{d}|{a}|{op}|{b}");
     }
 }

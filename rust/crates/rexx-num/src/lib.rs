@@ -21,6 +21,7 @@
 
 mod addsub;
 mod muldiv;
+mod pow;
 pub use muldiv::DivOp;
 mod settings;
 pub use settings::{Form, Settings, SettingsError};

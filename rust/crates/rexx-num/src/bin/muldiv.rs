@@ -19,6 +19,7 @@ fn main() {
                     "/" => x.div(&y, digits, DivOp::Divide),
                     "%" => x.div(&y, digits, DivOp::IntegerDivide),
                     "//" => x.div(&y, digits, DivOp::Remainder),
+                    "**" => x.pow(&y, digits),
                     other => panic!("unknown operator {other}"),
                 };
                 match r {
