@@ -26,3 +26,13 @@ can prefix an assertion message with `.ooRexxUnit.knownBugFlag` to mark a
 failure as known, and the suite then keeps it out of its own exit code. That is
 for interpreter bugs the project already knows about. These files are only for
 things the CI machine causes.
+
+## Wildcards
+
+An entry may name one test as `CLASS/TEST`, or a whole group as `CLASS/*`.
+
+Use the wildcard only for a group that fails intermittently on a different test
+each run, where naming tests would neither match reliably nor describe the
+problem. It hides every test in that group, so it costs real coverage. Say in
+the comment what was measured and, if the cause is in ooRexx rather than in the
+machine, say that too and treat the entry as temporary.
