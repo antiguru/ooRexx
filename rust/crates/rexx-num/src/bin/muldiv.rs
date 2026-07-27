@@ -1,5 +1,5 @@
 //! Differential harness for * / % and //.
-use rexx_num::Number;
+use rexx_num::{DivError, DivOp, Number};
 
 fn main() {
     let path = std::env::args().nth(1).expect("usage: muldiv <file>");
@@ -13,6 +13,17 @@ fn main() {
         let out = match (Number::parse(a), Number::parse(b)) {
             (Some(x), Some(y)) => match op {
                 "*" => x.mul(&y, digits).format(digits),
+                "/" | "%" | "//" => {
+                    let op = match op {
+                        "/" => DivOp::Divide,
+                        "%" => DivOp::IntegerDivide,
+                        _ => DivOp::Remainder,
+                    };
+                    match x.div(&y, digits, op) {
+                        Ok(r) => r.format(digits),
+                        Err(e) => format!("<E{}>", DivError::code(e)),
+                    }
+                }
                 _ => "<unimplemented>".to_string(),
             },
             _ => "<E41>".to_string(),

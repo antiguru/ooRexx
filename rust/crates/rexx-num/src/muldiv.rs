@@ -9,9 +9,10 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! Multiplication.
+//! Multiplication and division.
 //!
-//! Ported from `NumberString::Multiply` (`NumberStringMath2.cpp:106`).
+//! Ported from `NumberString::Multiply` (`NumberStringMath2.cpp:106`) and
+//! `NumberString::Division` (`:331`), which serves `/`, `%` and `//`.
 
 use crate::Number;
 
@@ -72,4 +73,196 @@ fn mul_magnitudes(a: &[u8], b: &[u8]) -> Vec<u8> {
     let lead = out.iter().take_while(|d| **d == 0).count();
     let lead = lead.min(out.len() - 1);
     out[lead..].iter().map(|d| *d as u8).collect()
+}
+
+/// Which division the caller wants. All three share one algorithm in the
+/// interpreter, differing in when they stop and what they return.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum DivOp {
+    /// `/`
+    Divide,
+    /// `%` -- the integer part of the quotient.
+    IntegerDivide,
+    /// `//` -- the residue left after an integer divide.
+    Remainder,
+}
+
+/// Errors the division operators can raise, with the interpreter's numbers.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum DivError {
+    /// Division by zero. Error 42.
+    DivideByZero,
+    /// The `%` or `//` result is not expressible as a whole number at the
+    /// current DIGITS. Error 26.
+    NotWholeNumber,
+}
+
+impl DivError {
+    pub fn code(self) -> u16 {
+        match self {
+            DivError::DivideByZero => 42,
+            DivError::NotWholeNumber => 26,
+        }
+    }
+}
+
+impl Number {
+    pub fn div(&self, other: &Number, digits: u32, op: DivOp) -> Result<Number, DivError> {
+        if other.is_zero() {
+            return Err(DivError::DivideByZero);
+        }
+        if self.is_zero() {
+            return Ok(Number::zero());
+        }
+
+        let left = self.truncated_to(digits as usize + 1);
+        let right = other.truncated_to(digits as usize + 1);
+        let negative = left.negative != right.negative;
+
+        // The interpreter's estimate of where the quotient's first digit
+        // lands, from the operand exponents and lengths.
+        let calc_exp = left.exponent - right.exponent + left.digits.len() as i32
+            - right.digits.len() as i32;
+
+        // A quotient below 1 has no integer part, so % is zero and // is the
+        // left operand unchanged.
+        if calc_exp < 0 && op != DivOp::Divide {
+            return Ok(match op {
+                DivOp::IntegerDivide => Number::zero(),
+                _ => {
+                    let mut r = left.clone();
+                    r.negative = self.negative && !r.is_zero();
+                    r
+                }
+            });
+        }
+
+        // Long-divide the digit strings, generating one more digit than
+        // DIGITS so the final rounding has something to look at.
+        let want = digits as usize + 1;
+        let (mut q, rem, shift) = long_divide(&left.digits, &right.digits, want);
+
+        // value = q * 10^(left.exponent - right.exponent - shift)
+        let q_exp = left.exponent - right.exponent - shift;
+
+        if op == DivOp::Divide {
+            let raw = Number { negative, digits: q, exponent: q_exp };
+            let mut rounded = raw.round_to(digits);
+            // Division strips trailing zeros; `1 / 7.7` at DIGITS 3 is 0.13,
+            // not 0.130. Addition and the remainder operators do the
+            // opposite and keep them -- `1.50 + 0.50` is 2.00 and
+            // `100 // 6.66666665` is 0.010 -- because there the zeros come
+            // from the operands rather than from a generated quotient.
+            while rounded.digits.len() > 1 && *rounded.digits.last().unwrap() == 0 {
+                rounded.digits.pop();
+                rounded.exponent += 1;
+            }
+            return Ok(Number::assemble(rounded.negative, rounded.digits, rounded.exponent));
+        }
+
+        // For % and //, keep only the integer part of the quotient.
+        if q_exp < 0 {
+            let drop = (-q_exp) as usize;
+            if drop >= q.len() {
+                q = vec![0];
+            } else {
+                q.truncate(q.len() - drop);
+            }
+        }
+        let int_digits = Number::assemble(negative, q, q_exp.max(0));
+        if !int_digits.is_zero() && int_digits.digits.len() as i32 + int_digits.exponent > digits as i32
+        {
+            return Err(DivError::NotWholeNumber);
+        }
+
+        Ok(match op {
+            DivOp::IntegerDivide => int_digits,
+            _ => {
+                // remainder = left - (left % right) * right. The intermediate
+                // must be computed at enough precision to be exact, or a large
+                // dividend loses the low digits that ARE the remainder.
+                let _ = rem;
+                let exact = (left.digits.len()
+                    + right.digits.len()
+                    + int_digits.digits.len()
+                    + digits as usize
+                    + 10) as u32;
+                let product = int_digits.mul(&right, exact);
+                let mut r = left.sub(&product, exact);
+                r.negative = self.negative && !r.is_zero();
+                r.round_to(digits)
+            }
+        })
+    }
+}
+
+/// Divides two digit strings, returning `want` quotient digits, the residue,
+/// and how many powers of ten the quotient was scaled by.
+fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Vec<u8>, Vec<u8>, i32) {
+    let mut rem: Vec<u8> = Vec::new();
+    let mut q: Vec<u8> = Vec::new();
+    let mut shift = 0i32;
+    let mut i = 0usize;
+    // Feed digits of the numerator, then zeros, taking one quotient digit
+    // per step once the quotient has started.
+    while q.len() < want {
+        rem.push(if i < n.len() { n[i] } else { 0 });
+        if i >= n.len() {
+            shift += 1;
+        }
+        i += 1;
+        strip_leading(&mut rem);
+        let mut count = 0u8;
+        while cmp_digits(&rem, d) != std::cmp::Ordering::Less {
+            sub_in_place(&mut rem, d);
+            strip_leading(&mut rem);
+            count += 1;
+        }
+        if q.is_empty() && count == 0 {
+            // Not yet reached the first significant quotient digit.
+            if i > n.len() + want + d.len() {
+                break;
+            }
+            continue;
+        }
+        q.push(count);
+        // The interpreter stops as soon as the division comes out even
+        // rather than padding to the full width, so 1 / 1 is `1` and not
+        // `1.00000000`.
+        if rem.iter().all(|x| *x == 0) && i >= n.len() {
+            break;
+        }
+    }
+    (q, rem, shift)
+}
+
+fn strip_leading(v: &mut Vec<u8>) {
+    let lead = v.iter().take_while(|d| **d == 0).count();
+    let lead = lead.min(v.len().saturating_sub(1));
+    v.drain(..lead);
+}
+
+fn cmp_digits(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
+    let a_start = a.iter().take_while(|d| **d == 0).count().min(a.len().saturating_sub(1));
+    let b_start = b.iter().take_while(|d| **d == 0).count().min(b.len().saturating_sub(1));
+    let (a, b) = (&a[a_start..], &b[b_start..]);
+    a.len().cmp(&b.len()).then_with(|| a.cmp(b))
+}
+
+/// `a -= b`, where `a >= b`.
+fn sub_in_place(a: &mut [u8], b: &[u8]) {
+    let mut borrow = 0i8;
+    for i in 0..a.len() {
+        let ai = a.len() - 1 - i;
+        let x = a[ai] as i8;
+        let y = b.len().checked_sub(i + 1).map_or(0, |k| b[k] as i8);
+        let mut v = x - y - borrow;
+        if v < 0 {
+            v += 10;
+            borrow = 1;
+        } else {
+            borrow = 0;
+        }
+        a[ai] = v as u8;
+    }
 }
