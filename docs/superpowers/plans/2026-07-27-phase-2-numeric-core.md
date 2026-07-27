@@ -47,7 +47,14 @@ These are behaviours, not functions. Each is pinned by a corpus program that the
 1. **`NUMERIC DIGITS`** — default 9; controls significant digits of every arithmetic result; settable well beyond 9 (40 verified).
 2. **Rounding** — round-half-up on the discarded portion, applied at the `DIGITS` boundary, not at display.
 3. **`NUMERIC FORM`** — `SCIENTIFIC` (default) gives `1.23456789E+10`; `ENGINEERING` gives `12.3456789E+9`, exponent forced to a multiple of 3.
-4. **E-notation thresholds, and they are asymmetric.** `1e10 * 1` displays `1E+10`, but `1e-10 * 1` displays `0.0000000001`. Getting one side right and the other wrong is a silent conformance failure across most numeric output.
+4. **E-notation thresholds, and they are asymmetric.** Measured across `DIGITS` 1, 3, 5 and 9:
+
+   - **positive:** exponential once the exponent **≥ `DIGITS`**
+   - **negative:** exponential once the exponent **≤ −(2·`DIGITS` + 1)**
+
+   So at `DIGITS 9` a value stays in plain form all the way down to `1e-18` but switches at `1e+9`. An implementation that picks one threshold for both directions is silently wrong across most numeric output. Pinned by `notation_thresholds.rex`.
+
+11. **Canonicalisation on arithmetic.** Trailing zeros *after* a decimal point are significant and preserved — `1.50 + 0` is `1.50`, and `1.50 + 0.50` is `2.00` — while leading zeros, a bare trailing point, a unary plus and surrounding whitespace are stripped. Zero is the exception and collapses completely: `-0`, `0.0` and `00.00` all become `0`. Pinned by `canonical_form.rex`.
 5. **`NUMERIC FUZZ`** — default 0; relaxes `=` comparison by that many digits, without affecting `==`.
 6. **Operators** — `+ - * / % // **` across sign combinations. Note `%` and `//` truncate toward zero and take the sign of the dividend.
 7. **Comparison** — `= == < > <= >= \= \== << >>`. Numeric comparison ignores leading zeros and format (`1 = 1.0` is true); strict comparison is bytewise (`1 == 1.0` is false).
@@ -62,7 +69,7 @@ These are behaviours, not functions. Each is pinned by a corpus program that the
 
 ## 3. The corpus — written first, already green against the oracle
 
-Nine programs in `rust/corpus/num/`, all passing `rexx-diff` (22 programs total, 0 divergences):
+Eleven programs in `rust/corpus/num/`, all passing `rexx-diff` (24 programs total, 0 divergences):
 
 | Program | Pins |
 |---|---|
@@ -75,6 +82,8 @@ Nine programs in `rust/corpus/num/`, all passing `rexx-diff` (22 programs total,
 | `datatype_num.rex` | `DATATYPE` `N`/`W`/default |
 | `exponential.rex` | the asymmetric E-notation thresholds, 1e±100, 1e-200 |
 | `errors.rex` | error numbers 42, 41, 26 |
+| `canonical_form.rex` | trailing-zero preservation; zero collapsing |
+| `notation_thresholds.rex` | the exact positive and negative E-notation boundaries |
 
 These are the acceptance tests. **A Rust change that makes one of them diverge is wrong, regardless of how defensible it looks in isolation.**
 
@@ -98,7 +107,7 @@ Each ends with an independently testable deliverable and a commit. TDD throughou
 
 ## 5. Exit gate
 
-- [ ] All nine `rust/corpus/num/` programs run under the Rust build with **zero divergences** from the oracle.
+- [ ] All eleven `rust/corpus/num/` programs run under the Rust build with **zero divergences** from the oracle.
 - [ ] Every arithmetic assertion extractable from ooTest passes (L1; D8 measured extraction at 86.2%, so this is a large real sample — `ootest/ooRexx/base/bif` and the arithmetic groups).
 - [ ] ANSI X3.274 arithmetic test vectors pass, or the deviations are documented and justified against the oracle's behaviour where the standard and ooRexx disagree.
 - [ ] `arith` benchmark at **parity** with `perf-baseline.md`.

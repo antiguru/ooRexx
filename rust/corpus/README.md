@@ -22,8 +22,8 @@ cargo build --release
     --cpp ../build/bin/rexx --rs ../build/bin/rexx --corpus corpus
 ```
 
-Expect `22 programs, 0 divergences` and exit 0. Substituting any other binary
-for `--rs` should report 22 divergences and exit 1; that negative control is
+Expect `24 programs, 0 divergences` and exit 0. Substituting any other binary
+for `--rs` should report 24 divergences and exit 1; that negative control is
 what makes a zero meaningful.
 
 ## Current programs
@@ -57,6 +57,8 @@ what makes a zero meaningful.
 | `datatype_num.rex` | `DATATYPE` `N`/`W`/default |
 | `exponential.rex` | E-notation thresholds, which are asymmetric |
 | `errors.rex` | error numbers 42, 41 and 26 |
+| `canonical_form.rex` | trailing-zero preservation; zero collapsing |
+| `notation_thresholds.rex` | the exact positive and negative E-notation boundaries |
 
 ## Things this corpus learned the hard way
 
