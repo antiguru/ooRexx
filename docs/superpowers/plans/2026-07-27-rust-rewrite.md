@@ -2224,7 +2224,7 @@ git commit -m "Resurrect objects pending UNINIT and clear dead weak references"
 **Interfaces:**
 - Produces: `BehaviourTable::new()`, `define(BehaviourId, name: &str, MethodId)`, `set_superclass(BehaviourId, BehaviourId)`, `lookup(BehaviourId, name: &str) -> Option<MethodId>`, `MethodId(u32)`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 use rexx_core::{BehaviourId, BehaviourTable, MethodId};
@@ -2261,21 +2261,21 @@ fn a_subclass_method_overrides_the_superclass() {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd rust && cargo test -p rexx-core --test behaviour`
 Expected: FAIL — `BehaviourTable` is not defined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 A `Vec<BehaviourEntry>` indexed by `BehaviourId.0`, each with `superclass: Option<BehaviourId>` and a `HashMap<String, MethodId>` keyed by the uppercased name. `lookup` walks the superclass chain, with a visited set so a bootstrap cycle (`Class` ↔ metaclass) cannot loop forever.
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-core --test behaviour`
 Expected: 4 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add rust
