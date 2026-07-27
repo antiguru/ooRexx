@@ -74,6 +74,17 @@ esac
 chmod -R a+rX "$WS/build"
 chown -R "$TESTUSER" ootest
 
+# The test user also has to be able to walk down to the workspace. On the
+# runner those directories are world-executable already, so this changes
+# nothing there; run the same script in a VM with the tree staged somewhere
+# private and it fails with a bare "Permission denied" that says nothing about
+# which directory refused. Only the traverse bit is added, never read or write.
+dir=$WS
+while [ "$dir" != "/" ] && [ -n "$dir" ]; do
+    chmod a+x "$dir" 2>/dev/null || true
+    dir=`dirname "$dir"`
+done
+
 # Run out of the build tree rather than an install, so the suite picks up the
 # interpreter, the runtime libraries and the compiled native API test binaries
 # together and the native API tests actually run.
@@ -116,6 +127,25 @@ chown "$TESTUSER" "$WS/testresults.txt" "$WS/testexitcode.txt"
 cat > "$WS/run-suite.sh" <<SCRIPT
 #!/bin/sh
 cd "$WS/ootest" || exit 1
+
+# FreeBSD gives this login a 512MB stack limit, and CALL.testGroup's
+# test_stacksize deliberately recurses until the interpreter's stack check
+# stops it. Every Rexx activation carries heap with it, so the deeper the
+# limit lets it go, the more memory it takes. Measured on FreeBSD 14.2, the
+# same test group either way:
+#
+#   ulimit -s 524288   25 tests, 0 failures, 1m54s, peak RSS 5.6GB
+#   ulimit -s 8192     25 tests, 0 failures, 2.3s,  peak RSS 126MB
+#
+# 5.6GB in the 6144MB VM the runner gives us is most of the machine, and the
+# kernel starts killing things, sshd included. That is why the FreeBSD job kept
+# ending with the connection closed by the remote host rather than with a test
+# failure, and why it never reproduced on a workstation with room to spare.
+#
+# 8MB is what the Linux and macOS runners use, so this makes the platforms
+# comparable rather than leaving BSD the outlier. The test still passes.
+ulimit -s 8192 2>/dev/null || true
+
 PATH="$WS/build/bin:\$PATH"
 LD_LIBRARY_PATH="$WS/build/lib:$WS/build/bin"
 export PATH LD_LIBRARY_PATH
