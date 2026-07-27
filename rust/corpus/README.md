@@ -44,7 +44,7 @@ what makes a zero meaningful.
 | `primitive_classes.rex` | `~id` of every class reachable as an environment symbol |
 | `whitespace_significant.rex` | `f(x)` vs `f (x)`, abuttal forms, and the empty-binary-literal trap |
 
-## Two things this corpus learned the hard way
+## Things this corpus learned the hard way
 
 `say a"|"b` does not concatenate three values. `"|"b` is read as a **binary
 string literal** — the `b` suffix binds to the preceding quote — and the
