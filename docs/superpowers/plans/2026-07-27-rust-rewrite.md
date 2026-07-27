@@ -93,7 +93,7 @@ Blocks are numbered in the order they were raised and ordered below by topic, so
 
 | | Decision | Blocks | State |
 |---|---|---|---|
-| **D1** | Heap representation and GC strategy | everything | open — closes on Task 1.8's measurement |
+| **D1** | Heap representation and GC strategy | everything | **closed** — arena + handles; pause 1.45×, a recorded debt (2026-07-27) |
 | **D2** | The saved image | Phase 5 | default set (no image); threshold measured at Phase 5 |
 | **D3** | Concurrency model | Phase 6 | recommendation set; constrains Phase 1 |
 | **D4** | Numeric core | Phase 2 | settled — port `NumberString` |
@@ -2289,21 +2289,21 @@ git commit -m "Look up methods through behaviours and the superclass chain"
 - Modify: `rust/crates/rexx-core/Cargo.toml`
 - Create: `docs/superpowers/plans/d1-decision.md`
 
-- [ ] **Step 1: Write the allocation-throughput benchmark**
+- [x] **Step 1: Write the allocation-throughput benchmark**
 
 Criterion benchmark: allocate 1,000,000 `Body::String` objects of ~16 bytes with no collection, and separately 1,000,000 `Body::Array(vec![_; 4])`. Report allocations per second.
 
-- [ ] **Step 2: Write the collection-pause benchmark**
+- [x] **Step 2: Write the collection-pause benchmark**
 
 Build a graph of 1,000,000 objects with a realistic shape — a root directory holding 1,000 arrays of 1,000 elements each, 10% of which are cross-links — then time a single full `collect`. Report the pause.
 
-- [ ] **Step 3: Write the equivalent C++ measurement**
+- [x] **Step 3: Write the equivalent C++ measurement**
 
 A Rexx program (`rust/bench-programs/heapshape.rex`) that builds the same graph shape using `.array` and `.directory`, run under `build/bin/rexx`, timed with hyperfine. It measures allocation plus collection together, so subtract the interpreter overhead measured by an equivalent program that builds nothing.
 
 **State the comparison's weakness in `d1-decision.md`, do not bury it.** The Rust side is a direct API microbenchmark; the C++ side is an interpreted program minus an estimated overhead. These are not like-for-like, the subtraction is an estimate, and the interpreted side pays for parsing, dispatch, and variable lookup that the Rust side never touches. The number is directional — good enough to detect a 3× disaster, not good enough to adjudicate 15%. That is exactly why the Phase 1 threshold is 1.5× rather than parity, and why Phase 4 re-measures on equal footing. An unstated adjustment is how a benchmark lies.
 
-- [ ] **Step 4: Run both and record**
+- [x] **Step 4: Run both and record**
 
 ```bash
 cd rust
@@ -2311,7 +2311,7 @@ cargo bench -p rexx-core -- --save-baseline rust-heap-linux
 hyperfine --warmup 3 '../build/bin/rexx bench-programs/heapshape.rex'
 ```
 
-- [ ] **Step 5: Close D1**
+- [x] **Step 5: Close D1**
 
 Write `d1-decision.md` with both sets of numbers and the verdict:
 
@@ -2329,7 +2329,7 @@ Write `d1-decision.md` with both sets of numbers and the verdict:
 
 **Do not soften the gate to keep the schedule.** The whole argument for this rewrite is that it can be safe *and* fast; a Rust interpreter that is safe and slow is not worth 200k LOC of work, and finding that out at Phase 1 costs weeks instead of years.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add rust docs
