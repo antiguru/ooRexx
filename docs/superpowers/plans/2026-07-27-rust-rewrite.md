@@ -1533,7 +1533,7 @@ git commit -m "Add tagged object handles with inline small integers"
 - Consumes: `ObjRef`, `Decoded` from Task 1.1.
 - Produces: `Heap::new()`, `Heap::alloc(Body) -> ObjRef`, `Heap::get(ObjRef) -> Option<&Object>`, `Heap::get_mut(ObjRef) -> Option<&mut Object>`, `Heap::live_count() -> usize`, `Object { behaviour: BehaviourId, body: Body }`, `enum Body`, `BehaviourId(u16)`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 use rexx_core::{Body, Decoded, Heap, ObjRef};
@@ -1575,12 +1575,12 @@ fn arrays_hold_handles_to_other_objects() {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd rust && cargo test -p rexx-core --test heap`
 Expected: FAIL — `Heap` is not defined.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `rust/crates/rexx-core/src/body.rs`:
 ```rust
@@ -1713,12 +1713,12 @@ impl Default for Heap {
 
 Export both modules from `src/lib.rs`. Note that `Slot::Free` is not constructed until Task 1.5, so this task's commit would trip `-D warnings` on dead code; add `#[allow(dead_code)] // constructed by the sweep in Task 1.5` to the variant and delete the attribute in Task 1.5. Suppressing a warning you are about to make true is fine; leaving it suppressed is not.
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-core --test heap`
 Expected: 4 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add rust

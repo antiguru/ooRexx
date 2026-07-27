@@ -11,6 +11,10 @@
 
 //! The Rexx object model: handles, the arena heap, tracing, and behaviours.
 
+mod body;
 mod handle;
+mod heap;
 
+pub use body::{BehaviourId, Body, Object};
 pub use handle::{Decoded, GENERATION_MAX, ObjRef, SMALL_INT_MAX, SMALL_INT_MIN};
+pub use heap::Heap;
