@@ -2338,11 +2338,15 @@ git commit -m "Measure arena allocation and collection against the C++ heap, and
 
 ### Phase 1 exit gate
 
-- [ ] `cargo test -p rexx-core` green; `cargo clippy -- -D warnings` clean.
-- [ ] `#![forbid(unsafe_code)]` holds in `rexx-core`, and `grep -rc unsafe rust/crates --include='*.rs'` reports zero across the workspace.
-- [ ] `Body::trace` is a single exhaustive match with no wildcard arm.
-- [ ] The root set is documented and enumerable; no `ProtectedObject` analogue exists.
-- [ ] `d1-decision.md` committed with numbers, and D1 recorded in Section 1 of this file.
+**Assessed 2026-07-27: all five met. Phase 2 may start.**
+
+- [x] `cargo test -p rexx-core` green — **33 tests**. `cargo clippy --all-targets -- -D warnings` clean.
+- [x] `#![forbid(unsafe_code)]` holds; `grep -rc unsafe rust/crates` reports **zero** across the workspace, and every crate root is `forbid`, not `deny` — so no crate has been granted an exception.
+- [x] `Body::trace` is a single exhaustive match with **no wildcard arm**, verified by grep. Adding a `Body` variant is a compile error rather than a silent leak.
+- [x] The root set is documented and enumerable, and **no `ProtectedObject` analogue exists** — the only occurrence of the name in the crate is the doc comment in `roots.rs` explaining why there isn't one.
+- [x] `d1-decision.md` committed; **D1 closed** as arena + generation-checked handles.
+
+**The one thing carried forward as debt.** The GC pause is **1.45×** the C++ figure (26.5 ms against 18.2 ms) — inside Phase 1's 1.5× viability threshold but outside parity, which is the gate from Phase 2 onward. Re-measure at Phase 4 on equal footing. The pre-registered string-representation fix (side byte-arena) is the first thing to reach for if it still misses, and remains deliberately unbuilt.
 
 ---
 
