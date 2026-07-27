@@ -12,3 +12,17 @@
 # SysSleep pair did once Windows reproduced it, rather than being moved now on
 # the assumption that it will.
 TICKER.testGroup/TEST_TICKER_THREE_ARGS_TIMESPAN_TRIGGER_MULTIPLE
+
+# This one enumerates the shared system temp directory, /var/folders/.../T on
+# macOS, and asserts on what is in it. That only holds if nothing else on the
+# machine is using it, which is not true of a CI runner. The observed failure
+# was against a pair of .NET debug pipes belonging to some other process:
+#
+#   Expected: .../T/clr-debug-pipe-1535-1785161276-out
+#   Actual:   .../T/clr-debug-pipe-1535-1785161276-in
+#              prwx------   both of them named pipes
+#
+# It comes and goes depending on whether anything happens to be running at the
+# time, which is why it passed on some runs and not others. Nothing to do with
+# the interpreter; the test is assuming it owns a directory it shares.
+SYSFILETREE.testGroup/TEST_TREE_DIRECTORY
