@@ -198,10 +198,25 @@ impl Number {
 /// Divides two digit strings, returning `want` quotient digits, the residue,
 /// and how many powers of ten the quotient was scaled by.
 fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Vec<u8>, Vec<u8>, i32) {
+    // The live remainder is `rem[start..]`: leading zeros are skipped by
+    // advancing `start` instead of draining them out, which cost a memmove
+    // on every subtraction pass. The dead prefix stays zero, so slicing from
+    // `start` is always the whole value.
     let mut rem: Vec<u8> = Vec::new();
+    let mut start = 0usize;
     let mut q: Vec<u8> = Vec::new();
     let mut shift = 0i32;
     let mut i = 0usize;
+
+    // Digit guesses divide by the divisor's first two digits plus one, so a
+    // guess is either correct or errs low, never high -- the estimate the
+    // interpreter's `Division` uses, shared with `divide_power`.
+    let mut div_char = d[0] as i32 * 10;
+    if d.len() > 1 {
+        div_char += d[1] as i32;
+    }
+    div_char += 1;
+
     // Feed digits of the numerator, then zeros, taking one quotient digit
     // per step once the quotient has started.
     while q.len() < want {
@@ -210,12 +225,42 @@ fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Vec<u8>, Vec<u8>, i32) {
             shift += 1;
         }
         i += 1;
-        strip_leading(&mut rem);
+        while rem.len() - start > 1 && rem[start] == 0 {
+            start += 1;
+        }
+        // The digit accumulates from under-guesses until the remainder drops
+        // below the divisor. The remainder enters each step below ten times
+        // the divisor, so the total never exceeds 9.
         let mut count = 0u8;
-        while cmp_digits(&rem, d) != std::cmp::Ordering::Less {
-            sub_in_place(&mut rem, d);
-            strip_leading(&mut rem);
-            count += 1;
+        loop {
+            let cur = &rem[start..];
+            let multiplier = if cur.len() == d.len() {
+                match cur.cmp(d) {
+                    // The remainder is smaller: this digit is complete.
+                    std::cmp::Ordering::Less => break,
+                    // Exactly equal: one last subtraction empties it.
+                    std::cmp::Ordering::Equal => {
+                        count += 1;
+                        rem.clear();
+                        rem.push(0);
+                        start = 0;
+                        break;
+                    }
+                    std::cmp::Ordering::Greater => cur[0] as i32,
+                }
+            } else if cur.len() > d.len() {
+                // The remainder is longer, so it has at least two digits.
+                cur[0] as i32 * 10 + cur[1] as i32
+            } else {
+                break;
+            };
+            // A zero guess gets wrapped to 1.
+            let m = (multiplier * 10 / div_char).max(1);
+            count += m as u8;
+            subtract_multiple(&mut rem[start..], d, m);
+            while rem.len() - start > 1 && rem[start] == 0 {
+                start += 1;
+            }
         }
         if q.is_empty() && count == 0 {
             // Not yet reached the first significant quotient digit.
@@ -228,11 +273,11 @@ fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Vec<u8>, Vec<u8>, i32) {
         // The interpreter stops as soon as the division comes out even
         // rather than padding to the full width, so 1 / 1 is `1` and not
         // `1.00000000`.
-        if rem.iter().all(|x| *x == 0) && i >= n.len() {
+        if rem[start..].iter().all(|x| *x == 0) && i >= n.len() {
             break;
         }
     }
-    (q, rem, shift)
+    (q, rem.split_off(start), shift)
 }
 
 pub(crate) fn strip_leading(v: &mut Vec<u8>) {
@@ -241,27 +286,26 @@ pub(crate) fn strip_leading(v: &mut Vec<u8>) {
     v.drain(..lead);
 }
 
-fn cmp_digits(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
-    let a_start = a.iter().take_while(|d| **d == 0).count().min(a.len().saturating_sub(1));
-    let b_start = b.iter().take_while(|d| **d == 0).count().min(b.len().saturating_sub(1));
-    let (a, b) = (&a[a_start..], &b[b_start..]);
-    a.len().cmp(&b.len()).then_with(|| a.cmp(b))
-}
-
-/// `a -= b`, where `a >= b`.
-fn sub_in_place(a: &mut [u8], b: &[u8]) {
-    let mut borrow = 0i8;
-    for i in 0..a.len() {
-        let ai = a.len() - 1 - i;
-        let x = a[ai] as i8;
-        let y = b.len().checked_sub(i + 1).map_or(0, |k| b[k] as i8);
-        let mut v = x - y - borrow;
+/// `left -= m * divisor`, aligned at the low-order ends. The guess `m` is
+/// correct or low, never high, so the result cannot go negative. Ported from
+/// `NumberString::subtractDivisor` (`NumberStringMath2.cpp:224`); shared by
+/// `long_divide` and `pow`'s `divide_power`.
+pub(crate) fn subtract_multiple(left: &mut [u8], divisor: &[u8], m: i32) {
+    let mut carry: i32 = 0;
+    for i in 0..left.len() {
+        let pos = left.len() - 1 - i;
+        let sub = divisor.len().checked_sub(i + 1).map_or(0, |k| divisor[k] as i32 * m);
+        let mut v = carry + left[pos] as i32 - sub;
         if v < 0 {
-            v += 10;
-            borrow = 1;
+            // A single digit product can leave a deficit as large as 81, so
+            // the borrow out can span two positions.
+            v += 100;
+            carry = v / 10 - 10;
+            v %= 10;
         } else {
-            borrow = 0;
+            carry = 0;
         }
-        a[ai] = v as u8;
+        left[pos] = v as u8;
     }
+    debug_assert_eq!(carry, 0, "an under-guess never drives the remainder negative");
 }

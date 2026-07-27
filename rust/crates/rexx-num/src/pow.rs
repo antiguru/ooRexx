@@ -13,7 +13,7 @@
 //!
 //! Ported from `NumberString::power` (`NumberStringMath2.cpp:811`).
 
-use crate::muldiv::strip_leading;
+use crate::muldiv::{strip_leading, subtract_multiple};
 use crate::{ArithError, MAX_EXPONENT, Number};
 
 impl Number {
@@ -224,27 +224,4 @@ fn divide_power(accum: &Number, digits: u32) -> Number {
     // caller's range check reject it.
     let exponent = calc_exp.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
     Number { negative: accum.negative, digits: result, exponent }
-}
-
-/// `left -= m * divisor`, aligned at the low-order ends. The guess `m` is
-/// correct or low, never high, so the result cannot go negative. Ported from
-/// `NumberString::subtractDivisor` (`NumberStringMath2.cpp:224`).
-fn subtract_multiple(left: &mut [u8], divisor: &[u8], m: i32) {
-    let mut carry: i32 = 0;
-    for i in 0..left.len() {
-        let pos = left.len() - 1 - i;
-        let sub = divisor.len().checked_sub(i + 1).map_or(0, |k| divisor[k] as i32 * m);
-        let mut v = carry + left[pos] as i32 - sub;
-        if v < 0 {
-            // A single digit product can leave a deficit as large as 81, so
-            // the borrow out can span two positions.
-            v += 100;
-            carry = v / 10 - 10;
-            v %= 10;
-        } else {
-            carry = 0;
-        }
-        left[pos] = v as u8;
-    }
-    debug_assert_eq!(carry, 0, "an under-guess never drives the remainder negative");
 }
