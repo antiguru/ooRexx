@@ -166,8 +166,8 @@ impl Number {
     }
 
     /// Shortens an over-long operand to the working precision, as
-    /// `addSub` does before aligning.
-    fn truncated_to(&self, max_length: usize) -> Number {
+    /// `addSub` and `checkNumber` both do. Truncation, not rounding.
+    pub(crate) fn truncated_to(&self, max_length: usize) -> Number {
         if self.digits.len() <= max_length {
             return self.clone();
         }

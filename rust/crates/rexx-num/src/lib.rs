@@ -20,6 +20,7 @@
 //! See `rust/corpus/num/` for the programs that pin it.
 
 mod addsub;
+mod muldiv;
 mod settings;
 pub use settings::{Form, Settings, SettingsError};
 
