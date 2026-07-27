@@ -1,0 +1,5 @@
+say datatype(" 12 ") , datatype("12")   , datatype("1.5")
+say datatype("1e5") , datatype("abc")   , datatype("")
+say datatype("12", "N") , datatype("1.5", "W") , datatype("12", "W")
+say datatype("-7", "W") , datatype("1e2", "N") , datatype("0x1f", "N")
+say datatype(" 1 2 ", "N")

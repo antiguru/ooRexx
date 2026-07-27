@@ -22,8 +22,8 @@ cargo build --release
     --cpp ../build/bin/rexx --rs ../build/bin/rexx --corpus corpus
 ```
 
-Expect `13 programs, 0 divergences` and exit 0. Substituting any other binary
-for `--rs` should report 13 divergences and exit 1; that negative control is
+Expect `22 programs, 0 divergences` and exit 0. Substituting any other binary
+for `--rs` should report 22 divergences and exit 1; that negative control is
 what makes a zero meaningful.
 
 ## Current programs
@@ -43,6 +43,20 @@ what makes a zero meaningful.
 | `source_arg.rex` | `PARSE SOURCE`, `SOURCELINE()`, `ARG()` option forms |
 | `primitive_classes.rex` | `~id` of every class reachable as an environment symbol |
 | `whitespace_significant.rex` | `f(x)` vs `f (x)`, abuttal forms, and the empty-binary-literal trap |
+
+### `num/` — Phase 2, the numeric core
+
+| File | Covers |
+|---|---|
+| `digits_rounding.rex` | `NUMERIC DIGITS` 1-12 and 40; round-half-up at the boundary |
+| `form_notation.rex` | `SCIENTIFIC` vs `ENGINEERING`; `FORM()` |
+| `operators.rex` | `+ - * / % // **` across sign combinations |
+| `comparison.rex` | numeric vs strict comparison, `<<` and `>>` |
+| `fuzz.rex` | `NUMERIC FUZZ` altering `=` but not `==` |
+| `format_trunc.rex` | `FORMAT()` in all argument forms, `TRUNC()` |
+| `datatype_num.rex` | `DATATYPE` `N`/`W`/default |
+| `exponential.rex` | E-notation thresholds, which are asymmetric |
+| `errors.rex` | error numbers 42, 41 and 26 |
 
 ## Things this corpus learned the hard way
 

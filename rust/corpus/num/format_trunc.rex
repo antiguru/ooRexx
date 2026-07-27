@@ -1,0 +1,10 @@
+numeric digits 9
+say format(3.14159, 4, 2)
+say format(3.14159, 4)
+say format(-1.5, 5, 1)
+say format(12345.6789, , 3)
+say format(1, 10, 4)
+say trunc(3.99) , trunc(3.99, 1) , trunc(-3.99, 2)
+say trunc(12.345, 2)
+say format(1e10, , , 3)
+say format(0.000012345, , , , 0)
