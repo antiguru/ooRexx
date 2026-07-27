@@ -10,8 +10,16 @@
 //! forms can share one case file.
 use rexx_num::{Form, FormatError, Number};
 
+/// An empty field means the argument was omitted. Anything else must parse:
+/// silently treating a malformed field as "omitted" would turn a typo in a
+/// case file into a case that quietly tests something other than what it
+/// says, and it would still be compared against the oracle's answer for the
+/// case as written.
 fn arg(s: &str) -> Option<u32> {
-    if s.is_empty() { None } else { s.parse().ok() }
+    if s.is_empty() {
+        return None;
+    }
+    Some(s.parse().unwrap_or_else(|_| panic!("malformed argument field {s:?}")))
 }
 
 fn main() {
