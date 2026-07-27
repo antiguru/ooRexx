@@ -25,7 +25,14 @@ fn main() {
         };
         let digits: u32 = digits_field.parse().unwrap();
         let out = match Number::parse(f[2]) {
-            None => "<E41>".to_string(),
+            // A value that is not a number reaches FORMAT and TRUNC as a bad
+            // *argument*, which is error 93 -- not the 41 that a bad numeric
+            // literal in source text raises. Both builtins agree, and both
+            // report 93 for `abc` and for an out-of-range exponent alike.
+            // `Number::parse` returning None is right either way; picking the
+            // error number is the caller's job, so the harness has to model
+            // the calling context rather than the parse failure.
+            None => "<E93>".to_string(),
             Some(n) => match f[1] {
                 "TRUNC" => n.trunc(digits, arg(f[3]).unwrap_or(0)),
                 "FORMAT" => {

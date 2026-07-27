@@ -82,6 +82,34 @@ def fmt3():
                     for p in ["","0","2"] for t in ["","0"]]
     return out
 
+def fmtedge():
+    """Exponent extremes, plus values that are not numbers at all.
+
+    Two shapes here will fill a disk if you widen them carelessly, because
+    both are faithful to the interpreter rather than wrong. `expp` of 0
+    suppresses exponential form, so `format(1e999999999,,,0)` really is a
+    billion plain digits; and TRUNC never uses exponential form at all, so
+    TRUNC of any huge value is equally large. Every FORMAT argument set below
+    therefore keeps exponential form, and TRUNC is confined to values whose
+    plain form is short.
+
+    The unparseable values are the point of the set: they are what showed the
+    harness had been asserting the wrong error number for them.
+    """
+    fmt_args = ["|||", "0|||", "|9||", "||9|0", "9|9|9|9", "|||0", "|||1",
+                "||12|", "3|3|12|4", "||1|"]
+    big = ["1e999999999", "-1e999999999", "1e-999999999", "9.99999999e999999998",
+           "1e999999998", "-9.9e-999999999", "1e300", "1e-300"]
+    small = ["1e300", "1e-300", "3.9", "0.000012345", "-7.25", "1e20", "1e-20", "0"]
+    out = []
+    for n in big:
+        for d in ["1", "9", "15", "20", "9E", "15E"]:
+            out += [f"{d}|FORMAT|{n}|{a}" for a in fmt_args]
+    for n in small:
+        for d in ["1", "9", "15", "20"]:
+            out += [f"{d}|TRUNC|{n}|{p}|||" for p in ["", "0", "1", "5", "20"]]
+    return out
+
 SETS = {
     "addsub":  lambda: binary(ARITH_A, ["+","-"], [1,3,9,15]),
     "addsub2": lambda: binary(ARITH_B, ["+","-"], [2,4,6,7,11,20]),
@@ -93,6 +121,7 @@ SETS = {
     "fmt2":    lambda: fmt([1,3,9,15], ["","0","1","2","6","12"], ["","0","1","3","8"],
                            ["","0","1","2","5"], ["","0","1","4"], ["","0","1","2","5","9"]),
     "fmt3":    fmt3,
+    "fmtedge": fmtedge,
 }
 
 if __name__ == "__main__":
