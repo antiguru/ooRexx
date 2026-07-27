@@ -31,7 +31,7 @@
 //! Stripping the zero first, which is the obvious thing to do, gets every
 //! such case wrong.
 
-use crate::Number;
+use crate::{ArithError, Number};
 
 impl Number {
     /// Extends the digit vector downward so both operands share an exponent.
@@ -42,15 +42,20 @@ impl Number {
         digits
     }
 
-    pub fn add(&self, other: &Number, digits: u32) -> Number {
+    pub fn add(&self, other: &Number, digits: u32) -> Result<Number, ArithError> {
         self.add_signed(other, false, digits)
     }
 
-    pub fn sub(&self, other: &Number, digits: u32) -> Number {
+    pub fn sub(&self, other: &Number, digits: u32) -> Result<Number, ArithError> {
         self.add_signed(other, true, digits)
     }
 
-    fn add_signed(&self, other: &Number, negate_other: bool, digits: u32) -> Number {
+    fn add_signed(
+        &self,
+        other: &Number,
+        negate_other: bool,
+        digits: u32,
+    ) -> Result<Number, ArithError> {
         let left_negative = self.negative;
         let right_negative = other.negative != negate_other;
 
@@ -90,7 +95,7 @@ impl Number {
         if let Some((value, negative)) = fast {
             let mut result = value.round_to(digits);
             result.negative = negative && !result.is_zero();
-            return result;
+            return result.check_range();
         }
 
         // Alignment adjustment, ported from addSub. When the two operands
@@ -123,20 +128,20 @@ impl Number {
             if adjusted_left_exp != 0 {
                 let taken = adjust.min(adjusted_left_exp);
                 drop_low_digits(&mut right_digits, taken);
-                right_exp += taken as i32;
+                right_exp = right_exp.saturating_add(taken as i32);
                 adjust -= taken;
             } else if adjusted_right_exp != 0 {
                 let taken = adjust.min(adjusted_right_exp);
                 drop_low_digits(&mut left_digits, taken);
-                left_exp += taken as i32;
+                left_exp = left_exp.saturating_add(taken as i32);
                 adjust -= taken;
             }
 
             if adjust != 0 {
                 drop_low_digits(&mut left_digits, adjust);
-                left_exp += adjust as i32;
+                left_exp = left_exp.saturating_add(adjust as i32);
                 drop_low_digits(&mut right_digits, adjust);
-                right_exp += adjust as i32;
+                right_exp = right_exp.saturating_add(adjust as i32);
             }
         }
 
@@ -150,7 +155,7 @@ impl Number {
             (add_magnitudes(&a, &b), left_negative)
         } else {
             match compare_magnitudes(&a, &b) {
-                std::cmp::Ordering::Equal => return Number::zero(),
+                std::cmp::Ordering::Equal => return Ok(Number::zero()),
                 std::cmp::Ordering::Greater => (sub_magnitudes(&a, &b), left_negative),
                 std::cmp::Ordering::Less => (sub_magnitudes(&b, &a), right_negative),
             }
@@ -162,7 +167,7 @@ impl Number {
         // after the rounding decision has been made.
         let raw = Number { negative, digits: raw_digits, exponent: min_exp };
         let rounded = raw.round_to(digits);
-        Number::assemble(rounded.negative, rounded.digits, rounded.exponent)
+        Number::assemble(rounded.negative, rounded.digits, rounded.exponent).check_range()
     }
 
     /// Shortens an over-long operand to the working precision, as

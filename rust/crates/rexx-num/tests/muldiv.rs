@@ -1,13 +1,13 @@
-use rexx_num::{DivError, DivOp, Number};
+use rexx_num::{ArithError, DivOp, Number};
 
 fn n(s: &str) -> Number {
     Number::parse(s).unwrap()
 }
 fn mul(a: &str, b: &str, d: u32) -> String {
-    n(a).mul(&n(b), d).format(d)
+    n(a).mul(&n(b), d).unwrap().format(d)
 }
 fn div(a: &str, b: &str, d: u32, op: DivOp) -> Result<String, u16> {
-    n(a).div(&n(b), d, op).map(|r| r.format(d)).map_err(DivError::code)
+    n(a).div(&n(b), d, op).map(|r| r.format(d)).map_err(ArithError::code)
 }
 
 #[test]
@@ -66,4 +66,35 @@ fn a_quotient_too_wide_to_be_whole_is_error_26() {
     assert_eq!(div("1", "1e-9", 9, DivOp::Remainder), Err(26));
     // but / is fine with it
     assert_eq!(div("1", "1e-9", 9, DivOp::Divide).unwrap(), "1E+9");
+}
+
+#[test]
+fn a_result_outside_the_representable_range_is_error_42() {
+    assert_eq!(
+        n("1e999999999").mul(&n("1e999999999"), 9).map_err(ArithError::code),
+        Err(42)
+    );
+    // and the operation must not panic on the way there
+    assert_eq!(
+        n("9e999999999").mul(&n("9e999999999"), 9).map_err(ArithError::code),
+        Err(42)
+    );
+}
+
+#[test]
+fn a_literal_outside_the_representable_range_is_not_a_number_at_all() {
+    // Rejected at parse: the interpreter reports error 41, not an overflow.
+    assert!(Number::parse("1e1000000000").is_none());
+    assert!(Number::parse("1e-1000000000").is_none());
+    // The top end is judged on the most significant digit ...
+    assert!(Number::parse("123456789e999999999").is_none());
+    assert!(Number::parse("123456789e999999991").is_some());
+    // ... and the bottom end on the least significant one.
+    assert!(Number::parse(".96329e-999999995").is_none());
+    assert!(Number::parse("96329e-999999999").is_some());
+    // The exponent as written is checked too, before decimals fold in.
+    assert!(Number::parse(".235468758140e1000000000").is_none());
+    // Zero is exempt from all of it: it has no magnitude.
+    assert_eq!(Number::parse("0e1000000996").unwrap().format(9), "0");
+    assert_eq!(Number::parse("-0e-1000000246").unwrap().format(9), "0");
 }

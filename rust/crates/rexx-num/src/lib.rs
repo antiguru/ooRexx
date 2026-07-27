@@ -21,12 +21,38 @@
 
 mod addsub;
 mod muldiv;
-pub use muldiv::{DivError, DivOp};
+pub use muldiv::DivOp;
 mod settings;
 pub use settings::{Form, Settings, SettingsError};
 
 /// Rexx's default `NUMERIC DIGITS`.
 pub const DEFAULT_DIGITS: u32 = 9;
+
+/// The largest adjusted exponent a Rexx number may have. Beyond this a
+/// literal will not convert (error 41) and an arithmetic result overflows
+/// (error 42). `Numerics.hpp:113`.
+pub const MAX_EXPONENT: i32 = 999_999_999;
+pub const MIN_EXPONENT: i32 = -999_999_999;
+
+/// What arithmetic can fail with, carrying the interpreter's error numbers.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum ArithError {
+    /// Result exponent outside +/- MAX_EXPONENT. Error 42.
+    Overflow,
+    /// Error 42.
+    DivideByZero,
+    /// A `%` or `//` result too wide to be whole at this DIGITS. Error 26.
+    NotWholeNumber,
+}
+
+impl ArithError {
+    pub fn code(self) -> u16 {
+        match self {
+            ArithError::Overflow | ArithError::DivideByZero => 42,
+            ArithError::NotWholeNumber => 26,
+        }
+    }
+}
 
 /// A decimal number: `digits * 10^exponent`, with a sign.
 ///
@@ -106,6 +132,7 @@ impl Number {
         }
 
         let mut exponent = -decimals;
+        let mut written_exponent: Option<i64> = None;
         if i < bytes.len() && (bytes[i] == b'e' || bytes[i] == b'E') {
             i += 1;
             let exp_negative = match bytes.get(i) {
@@ -129,14 +156,60 @@ impl Number {
                 return None; // "1e", "1e+"
             }
             let signed = if exp_negative { -value } else { value };
-            exponent = exponent.saturating_add(signed.clamp(i32::MIN as i64, i32::MAX as i64) as i32);
+            // The exponent as *written* must itself be in range, separately
+            // from the range check on the assembled number. Without this,
+            // `.235468758140e1000000000` looks fine once the twelve decimal
+            // places are folded in, but the interpreter never gets that far.
+            // Zero is exempt: `0e1000000996` is simply 0.
+            written_exponent = Some(signed);
+            exponent = exponent.saturating_add(signed.clamp(
+                MIN_EXPONENT as i64 * 2,
+                MAX_EXPONENT as i64 * 2,
+            ) as i32);
         }
 
         if i != bytes.len() {
             return None; // trailing junk: "1.2.3", "1 2", "0x1f"
         }
 
-        Some(Self::assemble(negative, digits, exponent))
+        let assembled = Self::assemble(negative, digits, exponent);
+        // A literal outside the representable range is not a number at all:
+        // the interpreter reports error 41 rather than an overflow. Zero is
+        // exempt from both checks -- it has no magnitude to be out of range.
+        if !assembled.is_zero() {
+            if let Some(written) = written_exponent
+                && !(MIN_EXPONENT as i64..=MAX_EXPONENT as i64).contains(&written)
+            {
+                return None;
+            }
+            if !assembled.in_range() {
+                return None;
+            }
+        }
+        Some(assembled)
+    }
+
+    /// True when every digit of the number lies within 10^±`MAX_EXPONENT`.
+    ///
+    /// The two ends are tested against different exponents, which is the same
+    /// asymmetry the display thresholds use. The most significant digit sits
+    /// at the *adjusted* exponent and must not exceed the maximum; the least
+    /// significant sits at the *raw* exponent and must not fall below the
+    /// minimum. Testing one exponent at both ends accepts numbers the
+    /// interpreter rejects -- `123456789e999999999` at the top,
+    /// `.96329e-999999995` at the bottom.
+    pub(crate) fn in_range(&self) -> bool {
+        self.adjusted_exponent() <= MAX_EXPONENT && self.exponent >= MIN_EXPONENT
+    }
+
+    /// Fails with `Overflow` when an arithmetic result has run outside the
+    /// representable range, which the interpreter reports as error 42.
+    pub(crate) fn check_range(self) -> Result<Self, ArithError> {
+        if self.is_zero() || self.in_range() {
+            Ok(self)
+        } else {
+            Err(ArithError::Overflow)
+        }
     }
 
     /// Strips leading zeros and collapses any zero to the canonical form.
@@ -152,7 +225,7 @@ impl Number {
     /// The power of ten of the most significant digit. This is what the
     /// display thresholds are expressed in terms of.
     fn adjusted_exponent(&self) -> i32 {
-        self.exponent + self.digits.len() as i32 - 1
+        self.exponent.saturating_add(self.digits.len() as i32 - 1)
     }
 
     /// Rounds to at most `digits` significant digits, half-up.

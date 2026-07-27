@@ -1,5 +1,5 @@
-//! Differential harness for * / % and //.
-use rexx_num::{DivError, DivOp, Number};
+//! Differential harness for + - * / % and //.
+use rexx_num::{ArithError, DivOp, Number};
 
 fn main() {
     let path = std::env::args().nth(1).expect("usage: muldiv <file>");
@@ -11,21 +11,21 @@ fn main() {
         let op = parts.next().unwrap();
         let b = parts.next().unwrap();
         let out = match (Number::parse(a), Number::parse(b)) {
-            (Some(x), Some(y)) => match op {
-                "*" => x.mul(&y, digits).format(digits),
-                "/" | "%" | "//" => {
-                    let op = match op {
-                        "/" => DivOp::Divide,
-                        "%" => DivOp::IntegerDivide,
-                        _ => DivOp::Remainder,
-                    };
-                    match x.div(&y, digits, op) {
-                        Ok(r) => r.format(digits),
-                        Err(e) => format!("<E{}>", DivError::code(e)),
-                    }
+            (Some(x), Some(y)) => {
+                let r = match op {
+                    "+" => x.add(&y, digits),
+                    "-" => x.sub(&y, digits),
+                    "*" => x.mul(&y, digits),
+                    "/" => x.div(&y, digits, DivOp::Divide),
+                    "%" => x.div(&y, digits, DivOp::IntegerDivide),
+                    "//" => x.div(&y, digits, DivOp::Remainder),
+                    other => panic!("unknown operator {other}"),
+                };
+                match r {
+                    Ok(v) => v.format(digits),
+                    Err(e) => format!("<E{}>", ArithError::code(e)),
                 }
-                _ => "<unimplemented>".to_string(),
-            },
+            }
             _ => "<E41>".to_string(),
         };
         println!("{line}={out}");

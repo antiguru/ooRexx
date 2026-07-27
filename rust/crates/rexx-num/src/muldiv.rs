@@ -14,10 +14,10 @@
 //! Ported from `NumberString::Multiply` (`NumberStringMath2.cpp:106`) and
 //! `NumberString::Division` (`:331`), which serves `/`, `%` and `//`.
 
-use crate::Number;
+use crate::{ArithError, Number};
 
 impl Number {
-    pub fn mul(&self, other: &Number, digits: u32) -> Number {
+    pub fn mul(&self, other: &Number, digits: u32) -> Result<Number, ArithError> {
         // checkNumber truncates an over-long operand to DIGITS + 1 and does
         // NOT round it. Rounding operands here instead would turn
         // `2 * 1.5` at DIGITS 1 into `2 * 2` = 4, where the answer is 3.
@@ -25,7 +25,7 @@ impl Number {
         let right = other.truncated_to(digits as usize + 1);
 
         if left.is_zero() || right.is_zero() {
-            return Number::zero();
+            return Ok(Number::zero());
         }
 
         let product = mul_magnitudes(&left.digits, &right.digits);
@@ -41,11 +41,17 @@ impl Number {
             (product, 0)
         };
 
-        let exponent = left.exponent + right.exponent + extra as i32;
+        // Checked, not wrapping: two operands near the exponent limit
+        // multiply to something well outside i32.
+        let exponent = left
+            .exponent
+            .checked_add(right.exponent)
+            .and_then(|e| e.checked_add(extra as i32))
+            .ok_or(ArithError::Overflow)?;
         let negative = left.negative != right.negative;
         let raw = Number { negative, digits: kept, exponent };
         let rounded = raw.round_to(digits);
-        Number::assemble(rounded.negative, rounded.digits, rounded.exponent)
+        Number::assemble(rounded.negative, rounded.digits, rounded.exponent).check_range()
     }
 }
 
@@ -87,29 +93,10 @@ pub enum DivOp {
     Remainder,
 }
 
-/// Errors the division operators can raise, with the interpreter's numbers.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum DivError {
-    /// Division by zero. Error 42.
-    DivideByZero,
-    /// The `%` or `//` result is not expressible as a whole number at the
-    /// current DIGITS. Error 26.
-    NotWholeNumber,
-}
-
-impl DivError {
-    pub fn code(self) -> u16 {
-        match self {
-            DivError::DivideByZero => 42,
-            DivError::NotWholeNumber => 26,
-        }
-    }
-}
-
 impl Number {
-    pub fn div(&self, other: &Number, digits: u32, op: DivOp) -> Result<Number, DivError> {
+    pub fn div(&self, other: &Number, digits: u32, op: DivOp) -> Result<Number, ArithError> {
         if other.is_zero() {
-            return Err(DivError::DivideByZero);
+            return Err(ArithError::DivideByZero);
         }
         if self.is_zero() {
             return Ok(Number::zero());
@@ -121,8 +108,11 @@ impl Number {
 
         // The interpreter's estimate of where the quotient's first digit
         // lands, from the operand exponents and lengths.
-        let calc_exp = left.exponent - right.exponent + left.digits.len() as i32
-            - right.digits.len() as i32;
+        let calc_exp = left
+            .exponent
+            .checked_sub(right.exponent)
+            .and_then(|e| e.checked_add(left.digits.len() as i32 - right.digits.len() as i32))
+            .ok_or(ArithError::Overflow)?;
 
         // A quotient below 1 has no integer part, so % is zero and // is the
         // left operand unchanged.
@@ -143,11 +133,20 @@ impl Number {
         let (mut q, rem, shift) = long_divide(&left.digits, &right.digits, want);
 
         // value = q * 10^(left.exponent - right.exponent - shift)
-        let q_exp = left.exponent - right.exponent - shift;
+        let q_exp = left
+            .exponent
+            .checked_sub(right.exponent)
+            .and_then(|e| e.checked_sub(shift))
+            .ok_or(ArithError::Overflow)?;
 
         if op == DivOp::Divide {
             let raw = Number { negative, digits: q, exponent: q_exp };
-            let mut rounded = raw.round_to(digits);
+            // The range check goes after rounding but BEFORE the trailing
+            // zeros come off. Those zeros are significant to the check: a
+            // quotient of 1.0120 sits one power of ten lower than the 1.012
+            // it prints as, and that is the difference between representable
+            // and not.
+            let mut rounded = raw.round_to(digits).check_range()?;
             // Division strips trailing zeros; `1 / 7.7` at DIGITS 3 is 0.13,
             // not 0.130. Addition and the remainder operators do the
             // opposite and keep them -- `1.50 + 0.50` is 2.00 and
@@ -157,7 +156,7 @@ impl Number {
                 rounded.digits.pop();
                 rounded.exponent += 1;
             }
-            return Ok(Number::assemble(rounded.negative, rounded.digits, rounded.exponent));
+            return Number::assemble(rounded.negative, rounded.digits, rounded.exponent).check_range();
         }
 
         // For % and //, keep only the integer part of the quotient.
@@ -172,7 +171,7 @@ impl Number {
         let int_digits = Number::assemble(negative, q, q_exp.max(0));
         if !int_digits.is_zero() && int_digits.digits.len() as i32 + int_digits.exponent > digits as i32
         {
-            return Err(DivError::NotWholeNumber);
+            return Err(ArithError::NotWholeNumber);
         }
 
         Ok(match op {
@@ -187,8 +186,8 @@ impl Number {
                     + int_digits.digits.len()
                     + digits as usize
                     + 10) as u32;
-                let product = int_digits.mul(&right, exact);
-                let mut r = left.sub(&product, exact);
+                let product = int_digits.mul(&right, exact)?;
+                let mut r = left.sub(&product, exact)?;
                 r.negative = self.negative && !r.is_zero();
                 r.round_to(digits)
             }
