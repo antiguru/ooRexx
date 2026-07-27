@@ -7,10 +7,14 @@ on:
       - 'ci/**'
   workflow_dispatch:
 
-# GitHub has no BSD runners, so these jobs boot a VM on a Linux runner. That is
-# emulated rather than native, so it is slow and the jobs are build and smoke
-# test only to begin with. Whether the full suite is affordable here is a
-# question for the timings these first runs produce, not a guess.
+# GitHub has no BSD runners, so these jobs boot a VM on a Linux runner. That
+# turned out to be cheap: a full FreeBSD build is 358 ninja steps in 81 seconds,
+# VM boot included, so the jobs run the whole test suite rather than only
+# building.
+#
+# The two jobs are near duplicates because they cannot be collapsed. A matrix
+# cannot select the `uses:` of an action, and GitHub Actions does not support
+# YAML anchors. What they have in common is in .github/ci-bsd.sh instead.
 jobs:
   freebsd:
     name: FreeBSD 14.2
@@ -19,54 +23,79 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build and smoke test
+      - name: Build and test in a FreeBSD VM
         uses: vmactions/freebsd-vm@v1
         with:
           release: '14.2'
           usesh: true
           prepare: |
-            pkg install -y cmake ninja
+            pkg install -y cmake ninja subversion
           run: |
-            set -eux
-            cmake --version
-            c++ --version
-            uname -a
-            cmake -S . -B build -G Ninja \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-            cmake --build build --parallel 4
-            build/bin/rexx -v
-            echo 'say .rexxinfo~version' > hello.rex
-            build/bin/rexx hello.rex
+            sh .github/ci-bsd.sh
+
+      - name: Check test results
+        if: always()
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE/.github/check-test-results.ps1" `
+              -ResultsFile "$env:GITHUB_WORKSPACE/testresults.txt" `
+              -KnownFailuresFile @(
+                  "$env:GITHUB_WORKSPACE/.github/known-test-failures/common.txt",
+                  "$env:GITHUB_WORKSPACE/.github/known-test-failures/freebsd.txt") `
+              -ExitCodeFile "$env:GITHUB_WORKSPACE/testexitcode.txt" `
+              -Platform "FreeBSD 14.2"
+          exit $LASTEXITCODE
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oorexx-testresults-freebsd
+          path: testresults.txt
+          if-no-files-found: warn
 
   openbsd:
-    name: OpenBSD 7.6
+    name: OpenBSD 7.8
     runs-on: ubuntu-24.04
     timeout-minutes: 90
-    # OpenBSD is here rather than only FreeBSD because it is where the project
-    # has actually been seeing trouble: master currently carries a revert made
-    # to find out whether a fix was behind crashes on Arch, Manjaro and
-    # OpenBSD 7. A build that only ever runs on Linux and Windows cannot say
-    # anything about that.
+    # OpenBSD is here alongside FreeBSD deliberately. master currently carries a
+    # revert made to find out whether a fix caused crashes on Arch, Manjaro and
+    # OpenBSD 7, and CI that never runs there cannot help answer that.
+    #
+    # The release has to stay recent. OpenBSD only keeps packages for the newest
+    # couple of releases, so an older image boots but then has nothing to
+    # pkg_add: 7.6 failed here with cmake simply not found. The image builder
+    # currently offers 7.7 and 7.8.
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build and smoke test
+      - name: Build and test in an OpenBSD VM
         uses: vmactions/openbsd-vm@v1
         with:
-          release: '7.6'
+          release: '7.8'
           usesh: true
           prepare: |
-            pkg_add cmake ninja
+            pkg_add -I cmake ninja subversion
           run: |
-            set -eux
-            cmake --version
-            c++ --version
-            uname -a
-            cmake -S . -B build -G Ninja \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DCMAKE_POLICY_VERSION_MINIMUM=3.5
-            cmake --build build --parallel 4
-            build/bin/rexx -v
-            echo 'say .rexxinfo~version' > hello.rex
-            build/bin/rexx hello.rex
+            sh .github/ci-bsd.sh
+
+      - name: Check test results
+        if: always()
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE/.github/check-test-results.ps1" `
+              -ResultsFile "$env:GITHUB_WORKSPACE/testresults.txt" `
+              -KnownFailuresFile @(
+                  "$env:GITHUB_WORKSPACE/.github/known-test-failures/common.txt",
+                  "$env:GITHUB_WORKSPACE/.github/known-test-failures/openbsd.txt") `
+              -ExitCodeFile "$env:GITHUB_WORKSPACE/testexitcode.txt" `
+              -Platform "OpenBSD 7.8"
+          exit $LASTEXITCODE
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oorexx-testresults-openbsd
+          path: testresults.txt
+          if-no-files-found: warn

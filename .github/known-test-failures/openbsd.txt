@@ -1,0 +1,4 @@
+# OpenBSD-only expected failures. See common.txt for the shared ones and
+# README.md for what may go in here.
+#
+# Empty on purpose, filled in from an observed run rather than from guesses.
