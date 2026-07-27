@@ -145,6 +145,8 @@ Each ends with an independently testable deliverable and a commit. TDD throughou
 
   **A correction, because the record was wrong.** An earlier version of this plan recorded that "exponentiation must go low bit first", derived from a single knife-edge case (`123456789 ** -7` at DIGITS 3) that low-bit-first got right and high-bit-first got wrong. **That finding was false.** The real defect was the reciprocal; switching the loop order merely shifted where the intermediate roundings fell, and on that one case the two errors happened to cancel. With `dividePower` ported correctly, the interpreter's actual high-bit-first order is right and passes all 18,112 power cases.
 
+  The C++ loop's own text reads *multiply then square*, which is why tracing it by hand kept giving the wrong sequence. A standalone simulation of the literal `SIZEBITS`/`HIBIT`/`numBits--` mechanics settles it: the off-by-one in when `numBits` is decremented flips the effective order, so it executes *square then multiply* per remaining bit. For exponent 23 the sequence is `sq,sq,mul,sq,mul,sq,mul`, which the Rust reproduces exactly.
+
   The lesson is sharper than the original one. The differential harness reported zero divergences for a mechanism that did not exist — a fix can be confirmed by measurement and still be the wrong fix, when it perturbs the same rounding the real bug lives in. Reaching zero is necessary, not sufficient; the mechanism has to be traceable to the source.
 
 - **2.6 — Comparison,** numeric and strict, with `FUZZ`.
