@@ -52,3 +52,19 @@ fn the_base_is_truncated_to_digits_plus_one_before_the_computation() {
     // 123456789 truncates to 1.2e8 at DIGITS 1, so this is 1.44e16 -> 1E+16.
     assert_eq!(pow("123456789", "2", 1).unwrap(), "1E+16");
 }
+
+#[test]
+fn a_reciprocal_out_of_range_at_working_precision_is_not_an_overflow() {
+    // At working precision the reciprocal's last digit sits below the
+    // exponent floor; only the final rounding has to be representable.
+    // The general division would range-check the intermediate and fail.
+    assert_eq!(pow("730361.1e999999992", "-1", 2).unwrap(), "1.4E-999999998");
+}
+
+#[test]
+fn the_reciprocal_is_rounded_exactly_once() {
+    // The positive power's last working digits feed an unrounded quotient,
+    // which the tail rounds in a single step. Routing the reciprocal
+    // through the general division rounds twice and lands on ...547.
+    assert_eq!(pow("129720.468", "-23", 7).unwrap(), "2.516546E-118");
+}

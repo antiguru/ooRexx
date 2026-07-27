@@ -132,25 +132,21 @@ Each ends with an independently testable deliverable and a commit. TDD throughou
 
   **What was deliberately not done: classic algebraic property tests.** Most are simply false in Rexx arithmetic under rounding, as the interpreter confirms — at DIGITS 9, `(1e-9 + 1) + -1` is `0` while `1e-9 + (1 + -1)` is `1e-9`; `3 * (1/3)` is `0.999999999`; `(1/3) * 3` is not `1`. Only commutativity holds, and it is a far weaker assertion than the oracle already provides. With a reference implementation available, randomising the *inputs* is worth far more than weakening the *assertion*.
 
-- **2.5 — Power (`**`). IMPLEMENTED, with two known residual divergences — see below.** Zero divergences on 2,112 curated cases and on one 8,000-case random seed; **2 of 8,000 on another seed**, both negative powers near the exponent limit.
+- **2.5 — Power (`**`). DONE.** Zero divergences across all eight differential sets: 2,112 curated power cases, two 8,000-case random power seeds, and the 62,280 add/sub/mul/div cases that must not regress.
 
   Rules ported:
 
   1. **The exponent is rounded to `DIGITS` before being required to be whole.** `2 ** 2.5` is error 26 at DIGITS 9 but `8` at DIGITS 1, where 2.5 rounds to 3.
-  2. **An exponent too wide for `DIGITS` is error 26, not an overflow.** `2 ** 1e10` is 26 at DIGITS 9 (eleven digits needed) and 42 at DIGITS 15, where it is a usable whole number but the result is out of range.
-  3. **The base is truncated to `DIGITS + 1` first**, so `123456789 ** 2` at DIGITS 1 is `1E+16`, from 1.2e8 squared — not `2E+16` from the full base. Removing this truncation took the failures from 1 to 28.
-  4. **Zero has its own rules:** `0**0` is 1 (Rexx defines it), `0**n` is 0, and `0**-n` is error 42 rather than infinity.
+  2. **An exponent too wide for `DIGITS` is error 26, not an overflow.** `2 ** 1e10` is 26 at DIGITS 9 and 42 at DIGITS 15.
+  3. **The base is truncated to `DIGITS + 1` first.** Removing this took failures from 1 to 28.
+  4. **Zero has its own rules:** `0**0` is 1, `0**n` is 0, `0**-n` is error 42.
   5. **Working precision is `DIGITS + (digits in the exponent) + 1`.**
-  6. **Exponentiation goes low bit first.** This was worth one full case: high-bit-first is mathematically identical but lands its intermediate roundings differently, and on a knife-edge value that changes the last digit. `123456789 ** -7` at DIGITS 3 is `2.29E-57` one way and `2.30E-57` the other.
+  6. **The reciprocal for a negative power needs `dividePower`** (`NumberStringMath2.cpp:1059`), not the general division. It emits at most `work + 1` truncated quotient digits with **no rounding, no trailing-zero stripping and no range check** — the general path both double-rounded and range-checked an intermediate that is legitimately out of range until the final rounding pulls it back.
 
-  **The two residuals, both negative powers:**
+  **A correction, because the record was wrong.** An earlier version of this plan recorded that "exponentiation must go low bit first", derived from a single knife-edge case (`123456789 ** -7` at DIGITS 3) that low-bit-first got right and high-bit-first got wrong. **That finding was false.** The real defect was the reciprocal; switching the loop order merely shifted where the intermediate roundings fell, and on that one case the two errors happened to cancel. With `dividePower` ported correctly, the interpreter's actual high-bit-first order is right and passes all 18,112 power cases.
 
-  ```
-  2|730361.1e999999992|**|-1   oracle 1.4E-999999998   ours <E42>
-  7|129720.468|**|-23          oracle 2.516546E-118    ours 2.516547E-118
-  ```
+  The lesson is sharper than the original one. The differential harness reported zero divergences for a mechanism that did not exist — a fix can be confirmed by measurement and still be the wrong fix, when it perturbs the same rounding the real bug lives in. Reaching zero is necessary, not sufficient; the mechanism has to be traceable to the source.
 
-  The reciprocal is the suspect in both — it is computed as `1 / acc` through the general division, where the interpreter uses a dedicated `dividePower` (`NumberStringMath2.cpp:1059`). Raising the reciprocal's working precision does not fix either, so the difference is structural rather than accumulated error. **Port `dividePower` rather than reusing `div`** before considering this task closed.
 - **2.6 — Comparison,** numeric and strict, with `FUZZ`.
 - **2.7 — Formatting:** E-notation thresholds (both directions), `SCIENTIFIC` and `ENGINEERING`, `FORMAT()`, `TRUNC()`.
 - **2.8 — Errors:** 41, 42, 26 raised at the right boundaries, using the `rexx-inventory` message table rather than hand-written text.

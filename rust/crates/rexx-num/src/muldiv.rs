@@ -95,28 +95,6 @@ pub enum DivOp {
 
 impl Number {
     pub fn div(&self, other: &Number, digits: u32, op: DivOp) -> Result<Number, ArithError> {
-        self.div_inner(other, digits, op, true)
-    }
-
-    /// As `div`, but without the range check on the quotient. Used for the
-    /// reciprocal inside `**`, where the intermediate is carried at extra
-    /// precision and only the final result has to be representable.
-    pub(crate) fn div_unchecked(
-        &self,
-        other: &Number,
-        digits: u32,
-        op: DivOp,
-    ) -> Result<Number, ArithError> {
-        self.div_inner(other, digits, op, false)
-    }
-
-    fn div_inner(
-        &self,
-        other: &Number,
-        digits: u32,
-        op: DivOp,
-        range_check: bool,
-    ) -> Result<Number, ArithError> {
         if other.is_zero() {
             return Err(ArithError::DivideByZero);
         }
@@ -168,10 +146,7 @@ impl Number {
             // quotient of 1.0120 sits one power of ten lower than the 1.012
             // it prints as, and that is the difference between representable
             // and not.
-            let mut rounded = raw.round_to(digits);
-            if range_check {
-                rounded = rounded.check_range()?;
-            }
+            let mut rounded = raw.round_to(digits).check_range()?;
             // Division strips trailing zeros; `1 / 7.7` at DIGITS 3 is 0.13,
             // not 0.130. Addition and the remainder operators do the
             // opposite and keep them -- `1.50 + 0.50` is 2.00 and
@@ -260,7 +235,7 @@ fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Vec<u8>, Vec<u8>, i32) {
     (q, rem, shift)
 }
 
-fn strip_leading(v: &mut Vec<u8>) {
+pub(crate) fn strip_leading(v: &mut Vec<u8>) {
     let lead = v.iter().take_while(|d| **d == 0).count();
     let lead = lead.min(v.len().saturating_sub(1));
     v.drain(..lead);

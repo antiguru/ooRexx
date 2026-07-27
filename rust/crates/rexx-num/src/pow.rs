@@ -13,7 +13,8 @@
 //!
 //! Ported from `NumberString::power` (`NumberStringMath2.cpp:811`).
 
-use crate::{ArithError, DivOp, MAX_EXPONENT, Number};
+use crate::muldiv::strip_leading;
+use crate::{ArithError, MAX_EXPONENT, Number};
 
 impl Number {
     /// The value one.
@@ -94,27 +95,31 @@ impl Number {
         let extra = power.to_string().len() as u32;
         let work = digits + extra + 1;
 
-        // Square and multiply, low bit first. The order matters: it changes
-        // where the intermediate roundings fall, and on knife-edge cases
-        // that changes the last digit of the result.
-        let mut acc = Number::one();
-        let mut base = left.clone();
-        let mut p = power;
-        while p > 0 {
-            if p & 1 == 1 {
-                acc = acc.mul(&base, work)?;
-            }
-            p >>= 1;
-            if p > 0 {
-                base = base.mul(&base, work)?;
+        // Square and multiply, high bit first, exactly as the interpreter
+        // sequences it: the accumulator starts as the base itself, which
+        // consumes the power's leading 1-bit, and each remaining bit squares
+        // the accumulator and multiplies the base back in when set. The
+        // order matters: it changes where the intermediate roundings fall,
+        // and the reciprocal below exposes the accumulator's last working
+        // digits, not just the rounded result.
+        let mut acc = left.clone();
+        let top = 63 - power.leading_zeros();
+        for i in (0..top).rev() {
+            acc = acc.mul(&acc, work)?;
+            if (power >> i) & 1 == 1 {
+                acc = acc.mul(&left, work)?;
             }
         }
 
         if negative_power {
-            // Carried at extra precision and left unchecked: the reciprocal
-            // of a value near the exponent limit is itself out of range
-            // until the final rounding brings it back.
-            acc = Number::one().div_unchecked(&acc, work + 2, DivOp::Divide)?;
+            // The reciprocal has its own division, not the general one: it
+            // neither rounds nor range-checks its quotient. Both are
+            // observable -- the only rounding the reciprocal ever sees is the
+            // final one below, where going through `div` would round twice
+            // and flip a knife-edge last digit; and a reciprocal near the
+            // exponent limit is out of range at working precision until that
+            // same rounding brings it back.
+            acc = divide_power(&acc, work);
         }
 
         let mut result = acc.round_to(digits).check_range()?;
@@ -125,4 +130,118 @@ impl Number {
         }
         Ok(Number::assemble(result.negative, result.digits, result.exponent))
     }
+}
+
+/// The reciprocal `1 / accum` for a negative power, ported from
+/// `NumberString::dividePower` (`NumberStringMath2.cpp:1059`).
+///
+/// The interpreter keeps this separate from its general division, and the
+/// differences are observable: it long-divides 1 by the accumulator to at
+/// most `digits + 1` quotient digits and stops there, with no rounding, no
+/// trailing-zero stripping and no range check of its own -- all of that is
+/// left to `pow`'s tail.
+fn divide_power(accum: &Number, digits: u32) -> Number {
+    debug_assert!(!accum.is_zero(), "pow never inverts a zero accumulator");
+    let divisor = &accum.digits;
+    let n = divisor.len();
+
+    // The dividend is a 1 padded with zeros to the divisor's length.
+    let mut left: Vec<u8> = vec![0; n];
+    left[0] = 1;
+
+    // The expected exponent of the result's last digit; every extension of
+    // the dividend below moves it down one. Carried wide because the C++
+    // works in a 64-bit wholenumber_t.
+    let mut calc_exp = -(accum.exponent as i64) - n as i64 + 1;
+
+    // Digit guesses divide by the divisor's first two digits plus one, so a
+    // guess is either correct or errs low, never high.
+    let mut div_char = divisor[0] as i32 * 10;
+    if n > 1 {
+        div_char += divisor[1] as i32;
+    }
+    div_char += 1;
+
+    let mut result: Vec<u8> = Vec::new();
+    let mut this_digit: i32 = 0;
+
+    // The outer loop yields one quotient digit per pass; the inner loop
+    // builds that digit by accumulating guesses until the remainder drops
+    // below the divisor.
+    'outer: loop {
+        loop {
+            let multiplier;
+            if left.len() == n {
+                // Equal lengths: a direct comparison tells us where we are.
+                match left[..].cmp(&divisor[..]) {
+                    // The remainder is smaller: this digit is complete.
+                    std::cmp::Ordering::Less => break,
+                    // Exactly equal: the current digit is one too small.
+                    // Adjust it and the entire division is done.
+                    std::cmp::Ordering::Equal => {
+                        result.push((this_digit + 1) as u8);
+                        break 'outer;
+                    }
+                    std::cmp::Ordering::Greater => multiplier = left[0] as i32,
+                }
+            } else if left.len() > n {
+                // The remainder is longer, so it has at least two digits.
+                multiplier = left[0] as i32 * 10 + left[1] as i32;
+            } else {
+                break;
+            }
+
+            // A zero guess gets wrapped to 1.
+            let m = (multiplier * 10 / div_char).max(1);
+            this_digit += m;
+            subtract_multiple(&mut left, divisor, m);
+            strip_leading(&mut left);
+        }
+
+        // A non-zero digit always joins the result; zeros only follow a
+        // previous non-zero.
+        if !result.is_empty() || this_digit != 0 {
+            result.push(this_digit as u8);
+            this_digit = 0;
+            // Done once the remainder is zero or the result has grown to
+            // digits + 1, leaving one digit for the caller's rounding.
+            if left[0] == 0 || result.len() > digits as usize {
+                break;
+            }
+        }
+        // Reduced to exactly zero before the first significant digit.
+        if left.len() == 1 && left[0] == 0 {
+            break;
+        }
+        calc_exp -= 1;
+        left.push(0);
+    }
+
+    // An exponent beyond i32 cannot be in range anyway; saturate and let the
+    // caller's range check reject it.
+    let exponent = calc_exp.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+    Number { negative: accum.negative, digits: result, exponent }
+}
+
+/// `left -= m * divisor`, aligned at the low-order ends. The guess `m` is
+/// correct or low, never high, so the result cannot go negative. Ported from
+/// `NumberString::subtractDivisor` (`NumberStringMath2.cpp:224`).
+fn subtract_multiple(left: &mut [u8], divisor: &[u8], m: i32) {
+    let mut carry: i32 = 0;
+    for i in 0..left.len() {
+        let pos = left.len() - 1 - i;
+        let sub = divisor.len().checked_sub(i + 1).map_or(0, |k| divisor[k] as i32 * m);
+        let mut v = carry + left[pos] as i32 - sub;
+        if v < 0 {
+            // A single digit product can leave a deficit as large as 81, so
+            // the borrow out can span two positions.
+            v += 100;
+            carry = v / 10 - 10;
+            v %= 10;
+        } else {
+            carry = 0;
+        }
+        left[pos] = v as u8;
+    }
+    debug_assert_eq!(carry, 0, "an under-guess never drives the remainder negative");
 }
