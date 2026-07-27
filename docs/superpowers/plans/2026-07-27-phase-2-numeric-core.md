@@ -149,7 +149,16 @@ Each ends with an independently testable deliverable and a commit. TDD throughou
 
   The lesson is sharper than the original one. The differential harness reported zero divergences for a mechanism that did not exist — a fix can be confirmed by measurement and still be the wrong fix, when it perturbs the same rounding the real bug lives in. Reaching zero is necessary, not sufficient; the mechanism has to be traceable to the source.
 
-- **2.6 — Comparison,** numeric and strict, with `FUZZ`.
+- **2.6 — Comparison. DONE.** Zero divergences on the implementer's 46,270 cases and on an independent 32,368-case set built separately by the controller from a different value list.
+
+  What actually fires is `RexxString::comp` / `stringComp` / `primitiveStrictComp`, not the `NumberString` comparisons — operands reaching a comparison are plain parsed strings unless they came from prior arithmetic.
+
+  - **Numeric** (`=  <  >  <=  >=  \=  <>  ><`): branches on sign first, so two enormous opposite-signed operands are decided without computing a difference that would spuriously overflow. Same-sign operands reuse `Number::sub` at `DIGITS - FUZZ` precision.
+  - **Strict** (`==  \==  <<  >>  <<=  >>=`): plain byte comparison. Rust's slice ordering already implements `primitiveStrictComp`'s shared-prefix-then-length rule, so this needs no special handling.
+  - **Non-numeric operands fall back to string comparison rather than erroring** — strip leading blanks and tabs, byte-compare, blank-pad the shorter tail.
+  - `FUZZ` relaxes the numeric operators only, never the strict ones. It is not expressible in the `digits|a|op|b` harness format, so it was probed directly and pinned in a unit test.
+
+  **One deliberate deviation, flagged rather than buried:** the interpreter's digit-array fast path was not separately ported, on the argument that the subtraction branch subsumes it. That is the exact shape of reasoning this phase has punished five times, so it was checked with a boundary-focused batch and against the independent set. It holds so far; if a future divergence appears in comparison, this is the first place to look.
 - **2.7 — Formatting:** E-notation thresholds (both directions), `SCIENTIFIC` and `ENGINEERING`, `FORMAT()`, `TRUNC()`.
 - **2.8 — Errors:** 41, 42, 26 raised at the right boundaries, using the `rexx-inventory` message table rather than hand-written text.
 - **2.9 — Benchmark** `arith.rex` against `perf-baseline.md` (C++ 1.157 s). **Parity required** — this is the first phase under the parity gate.

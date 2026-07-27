@@ -20,8 +20,10 @@
 //! See `rust/corpus/num/` for the programs that pin it.
 
 mod addsub;
+mod compare;
 mod muldiv;
 mod pow;
+pub use compare::{compare, CompareOp};
 pub use muldiv::DivOp;
 mod settings;
 pub use settings::{Form, Settings, SettingsError};
