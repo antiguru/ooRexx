@@ -53,13 +53,20 @@ fn main() -> ExitCode {
     let mut rows = Vec::new();
     let (mut total_tests, mut total_extractable) = (0usize, 0usize);
     for group_path in &groups {
-        let source = match std::fs::read_to_string(group_path) {
-            Ok(source) => source,
+        // Some `.testGroup` files embed raw non-UTF-8 bytes inside string
+        // literals -- e.g. C2X.testGroup exercises the hex-conversion bif
+        // with literal high bytes. `extract` only looks for ASCII markers
+        // (`::method`, `self~`, ...), so a lossy decode is fine here: it
+        // never changes what those markers look like, only what an
+        // untouched string literal's non-ASCII payload reads as.
+        let bytes = match std::fs::read(group_path) {
+            Ok(bytes) => bytes,
             Err(e) => {
                 eprintln!("cannot read {}: {e}", group_path.display());
                 return ExitCode::from(2);
             }
         };
+        let source = String::from_utf8_lossy(&bytes);
         let group_name = group_path.file_stem().and_then(|s| s.to_str()).unwrap_or("group");
         let methods = extract(&source);
         let extractable: Vec<&TestMethod> = methods.iter().filter(|m| !m.uses_fixture).collect();

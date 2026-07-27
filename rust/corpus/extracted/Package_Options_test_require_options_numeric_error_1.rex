@@ -1,0 +1,70 @@
+/* extracted from Package_Options::test_require_options_numeric_error_1 */
+::routine main public
+  --  Symbol expected after the NUMERIC subdirective keyword.
+  self~expectSyntax(20.935)
+  pkg=.routine~new("package4options", "return .context~package ; ::options numeric")~call
+
+::class shim public
+::method assertEquals
+  use arg expected, actual
+  if expected \== actual then do
+    say "FAIL expected["expected"] actual["actual"]"
+    exit 1
+  end
+::method assertNotEquals
+  use arg expected, actual
+  if expected == actual then do
+    say "FAIL not-expected["expected"] actual["actual"]"
+    exit 1
+  end
+::method assertTrue
+  use arg condition
+  if \condition then do
+    say "FAIL expected true actual["condition"]"
+    exit 1
+  end
+::method assertFalse
+  use arg condition
+  if condition then do
+    say "FAIL expected false actual["condition"]"
+    exit 1
+  end
+::method assertNull
+  use arg actual
+  if actual \== .nil then do
+    say "FAIL expected nil actual["actual"]"
+    exit 1
+  end
+::method assertNotNull
+  use arg actual
+  if actual == .nil then do
+    say "FAIL expected non-nil actual nil"
+    exit 1
+  end
+::method assertSame
+  use arg expected, actual
+  if \(expected == actual) then do
+    say "FAIL expected["expected"] actual["actual"]"
+    exit 1
+  end
+::method assertNotSame
+  use arg expected, actual
+  if expected == actual then do
+    say "FAIL not-expected["expected"] actual["actual"]"
+    exit 1
+  end
+::method expectSyntax
+  use arg code
+  nop
+::method assertListEquals
+  use arg expected, actual
+  if expected \== actual then do
+    say "FAIL expected["expected"] actual["actual"]"
+    exit 1
+  end
+::method assertArrayEquals
+  use arg expected, actual
+  if expected \== actual then do
+    say "FAIL expected["expected"] actual["actual"]"
+    exit 1
+  end

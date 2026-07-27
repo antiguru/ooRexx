@@ -1,0 +1,75 @@
+/* extracted from METHOD::TestObjectToString01 */
+::routine main public
+  tester = .METHODTester~new
+  self~assertSame("abc", tester~TestObjectToString("abc"))
+  self~assertSame("", tester~TestObjectToString(""))
+  self~assertSame(1, tester~TestObjectToString(1))
+  self~assertSame(1.0, tester~TestObjectToString(1.0))
+  self~assertSame("a StringTable", tester~TestObjectToString(.stringtable~new))
+  self~assertSame("an Object", tester~TestObjectToString(.object~new))
+  self~assertSame("The NIL object", tester~TestObjectToString(.nil))
+
+::class shim public
+::method assertEquals
+  use arg expected, actual
+  if expected \== actual then do
+    say "FAIL expected["expected"] actual["actual"]"
+    exit 1
+  end
+::method assertNotEquals
+  use arg expected, actual
+  if expected == actual then do
+    say "FAIL not-expected["expected"] actual["actual"]"
+    exit 1
+  end
+::method assertTrue
+  use arg condition
+  if \condition then do
+    say "FAIL expected true actual["condition"]"
+    exit 1
+  end
+::method assertFalse
+  use arg condition
+  if condition then do
+    say "FAIL expected false actual["condition"]"
+    exit 1
+  end
+::method assertNull
+  use arg actual
+  if actual \== .nil then do
+    say "FAIL expected nil actual["actual"]"
+    exit 1
+  end
+::method assertNotNull
+  use arg actual
+  if actual == .nil then do
+    say "FAIL expected non-nil actual nil"
+    exit 1
+  end
+::method assertSame
+  use arg expected, actual
+  if \(expected == actual) then do
+    say "FAIL expected["expected"] actual["actual"]"
+    exit 1
+  end
+::method assertNotSame
+  use arg expected, actual
+  if expected == actual then do
+    say "FAIL not-expected["expected"] actual["actual"]"
+    exit 1
+  end
+::method expectSyntax
+  use arg code
+  nop
+::method assertListEquals
+  use arg expected, actual
+  if expected \== actual then do
+    say "FAIL expected["expected"] actual["actual"]"
+    exit 1
+  end
+::method assertArrayEquals
+  use arg expected, actual
+  if expected \== actual then do
+    say "FAIL expected["expected"] actual["actual"]"
+    exit 1
+  end
