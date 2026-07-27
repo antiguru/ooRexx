@@ -1374,7 +1374,7 @@ Three decisions closed in Phase 0 (D7, D8, D13), all by measurement rather than 
 
 **Why the generation field exists.** Slots are recycled through a free list (Task 1.2) and swept (Task 1.5). Without a generation, a handle held across a collection silently aliases whatever is allocated into that slot next — `Heap::get` returns `Some(wrong object)`. That is memory-safe and semantically exactly the wrong-object defect class this rewrite exists to eliminate, and it would land at the FFI boundary, which is the one place D5 advertises as the win. The generation makes a stale handle a lookup miss, which is what D5 actually claims.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 use rexx_core::{Decoded, ObjRef};
@@ -1418,12 +1418,12 @@ fn nil_is_distinct_from_every_heap_slot_and_every_integer() {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd rust && cargo test -p rexx-core`
 Expected: FAIL — crate does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `rust/crates/rexx-core/src/handle.rs`:
 ```rust
@@ -1510,12 +1510,12 @@ mod handle;
 pub use handle::{Decoded, ObjRef, GENERATION_MAX, SMALL_INT_MAX, SMALL_INT_MIN};
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-core`
 Expected: 5 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add rust
