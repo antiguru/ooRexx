@@ -459,3 +459,61 @@ fn trunc_rounds_to_current_digits_before_truncating_decimals() {
 fn trunc_defaults_places_to_zero() {
     assert_eq!(n("3.99").trunc(9, 0), trunc("3.99", 9, 0));
 }
+
+// ---- places/before beyond i32 range -----------------------------------
+//
+// `places` (TRUNC) and `before`/`after` (FORMAT) are `u32`, and the
+// interpreter genuinely accepts values past `i32::MAX` -- it just returns a
+// correspondingly huge string. These three each materialise a
+// multi-gigabyte `String` (the whole point is proving the arithmetic
+// doesn't panic/wrap at that scale), so they check only `.len()`, matching
+// `length(...)` on the interpreter side rather than the differential
+// harness, which the reviewer asked not to carry these magnitudes into.
+
+#[test]
+fn trunc_accepts_places_at_and_past_the_i32_negation_boundary() {
+    // `-(places as i32)` overflows in debug ("attempt to negate with
+    // overflow") and produces a `capacity overflow` panic in release once
+    // `places >= 2^31` (2_147_483_648) -- confirmed against the interpreter
+    // that this is a real, accepted input: `length(trunc(1, 2147483648))`
+    // is `2147483650` (the digit, the point, and 2_147_483_648 zeros).
+    assert_eq!(n("1").trunc(9, 2_147_483_648).len(), 2_147_483_650);
+}
+
+#[test]
+fn format_before_survives_the_full_u32_range() {
+    // `before as i32` wraps negative once `before >= 2^31`, which made
+    // `available < needed` spuriously true and raised `BeforeOversize` for
+    // an input the interpreter accepts outright: `length(format(1,
+    // 3000000000))` is `3000000000` -- the digit plus 2_999_999_999 leading
+    // spaces.
+    let result = n("1")
+        .format_with(9, Form::Scientific, Some(3_000_000_000), None, None, None)
+        .unwrap();
+    assert_eq!(result.len(), 3_000_000_000);
+}
+
+#[test]
+fn format_after_survives_the_full_u32_range() {
+    // `after` shares `round_to_places` with TRUNC's `places`, so it needed
+    // the same fix: `length(format(1,,2147483648))` on the interpreter is
+    // `2147483650`, the same shape as the TRUNC case above.
+    let result = n("1")
+        .format_with(9, Form::Scientific, None, Some(2_147_483_648), None, None)
+        .unwrap();
+    assert_eq!(result.len(), 2_147_483_650);
+}
+
+#[test]
+fn expp_already_used_no_i32_cast_to_begin_with() {
+    // Unlike `places`/`before`/`after`, `expp` never goes through `i32` --
+    // every place it's used is `as usize`/`as u32` (confirmed by inspection
+    // of `format.rs`, not just by this test). This is a cheap confirmation
+    // rather than a repro: a moderately large `expp` still correctly pads
+    // the exponent, with nothing here needing a multi-gigabyte allocation
+    // to prove it (an `expp` anywhere near `u32::MAX` would itself demand
+    // that many exponent digits, which is a real but uninteresting
+    // consequence of the field width being that wide, not a bug).
+    let result = fmt("1e10", 9, Form::Scientific, None, None, Some(20), None).unwrap();
+    assert_eq!(result, "1E+00000000000000000010");
+}

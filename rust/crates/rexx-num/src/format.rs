@@ -110,7 +110,7 @@ impl Number {
         let (eng_exp, rounded) = resolve_exponential_state(&n1, form, expt, after);
 
         match eng_exp {
-            None => render_integer_padded(&rounded, before),
+            None => render_integer_padded(&rounded, before, after),
             Some(exp) => {
                 if let Some(width) = expp {
                     let needed = exp.unsigned_abs().to_string().len() as u32;
@@ -121,7 +121,7 @@ impl Number {
                 // The exponent check comes before the `before` check -- an
                 // exponent that doesn't fit is reported even when `before`
                 // would have been wide enough for the mantissa.
-                let mantissa = render_integer_padded(&rounded, before)?;
+                let mantissa = render_integer_padded(&rounded, before, after)?;
 
                 if exp == 0 {
                     // A displayed exponent of exactly zero is never written
@@ -153,7 +153,7 @@ impl Number {
     pub fn trunc(&self, digits: u32, places: u32) -> String {
         let n = self.round_to(digits);
         let truncated = truncate_to_places(&n, places);
-        render_integer_padded(&truncated, None)
+        render_integer_padded(&truncated, None, Some(places))
             .expect("`before` is None, so the width check cannot fail")
     }
 }
@@ -266,15 +266,33 @@ fn resolve_exponential_state(
 /// (there is no `NUMERIC DIGITS 0`), whereas `places == 0` is an ordinary,
 /// meaningful cut for this crate's callers (`FORMAT(x, , 0)`), and must
 /// still round a `0.6` up to `1`.
+///
+/// When `n` already has at most `places` decimal digits, this returns `n`
+/// **unchanged** rather than padding it with the missing zeros -- `places`
+/// is a legitimate `u32` up to `u32::MAX` (the interpreter accepts
+/// `TRUNC(1, 2147483648)` and returns the ~2.1-billion-character result),
+/// and `Number::exponent` is `i32`, which cannot encode a decimal-place
+/// count anywhere near that. Padding is deferred entirely to
+/// `render_integer_padded`, which does that arithmetic in `u64`/`usize`
+/// against the original `places` value instead of trying to fold it into a
+/// `Number` that would have to represent it as an exponent.
 fn round_to_places(n: &Number, places: u32) -> Number {
-    let target_exponent = -(places as i32);
-    if n.exponent >= target_exponent {
-        // Fewer decimal digits than requested: extend with zeros. Appending
-        // a zero digit and dropping the exponent by one is value-preserving,
-        // the same trick the plain-form renderer relies on for exponent >= 0.
-        return pad_to_exponent(n, target_exponent);
+    // Widened to `i64` up front: `-(places as i32)` alone overflows once
+    // `places >= 2^31` (a `u32` value the interpreter accepts without
+    // complaint), so even deciding which branch to take must not go
+    // through `i32`.
+    let target_exponent_wide = -i64::from(places);
+    if i64::from(n.exponent) >= target_exponent_wide {
+        return n.clone();
     }
 
+    // Only reachable once `target_exponent_wide > n.exponent`. `n.exponent`
+    // is always within `+/-MAX_EXPONENT` (comfortably inside `i32`), and
+    // `target_exponent_wide <= 0` always (`places` is never negative), so
+    // it is squeezed into `(n.exponent, 0]` here -- which always fits `i32`.
+    // A `places` large enough to overflow can therefore never reach this
+    // branch; it always takes the early return above instead.
+    let target_exponent = target_exponent_wide as i32;
     let drop = (target_exponent - n.exponent) as usize;
     let len = n.digits.len();
     if drop > len {
@@ -329,12 +347,16 @@ fn round_to_places(n: &Number, places: u32) -> Number {
 }
 
 /// TRUNC's cut: same fixed decimal position as `round_to_places`, but drops
-/// the extra digits outright instead of deciding whether to carry.
+/// the extra digits outright instead of deciding whether to carry. Padding
+/// (when `n` already has at most `places` decimal digits) is deferred to
+/// `render_integer_padded` the same way and for the same reason -- see
+/// `round_to_places`'s doc comment.
 fn truncate_to_places(n: &Number, places: u32) -> Number {
-    let target_exponent = -(places as i32);
-    if n.exponent >= target_exponent {
-        return pad_to_exponent(n, target_exponent);
+    let target_exponent_wide = -i64::from(places);
+    if i64::from(n.exponent) >= target_exponent_wide {
+        return n.clone();
     }
+    let target_exponent = target_exponent_wide as i32;
     let drop = (target_exponent - n.exponent) as usize;
     let len = n.digits.len();
     if drop >= len {
@@ -356,26 +378,35 @@ fn truncate_to_places(n: &Number, places: u32) -> Number {
     Number::assemble(n.negative, n.digits[..keep].to_vec(), target_exponent)
 }
 
-/// Extends `n`'s digits with zeros so its exponent becomes `target_exponent`
-/// (which must be `>= n.exponent`), without changing its value.
-fn pad_to_exponent(n: &Number, target_exponent: i32) -> Number {
-    let pad = (n.exponent - target_exponent) as usize;
-    let mut digits = n.digits.clone();
-    digits.extend(std::iter::repeat_n(0u8, pad));
-    Number { negative: n.negative, digits, exponent: target_exponent }
-}
-
-/// Splits `n` into plain sign/integer/decimal text and, if `before` is
-/// supplied, pads or rejects it. Used both for genuinely plain numbers and,
+/// Splits `n` into plain sign/integer/decimal text, extends the decimal part
+/// to `after` places if requested, and, if `before` is supplied, pads or
+/// rejects the integer part. Used both for genuinely plain numbers and,
 /// unmodified, for an exponential mantissa -- reframing already arranges for
 /// the mantissa's own digit-count-plus-exponent to equal the number of
 /// integer digits it should display, so the same split and the same
 /// oversize check apply to both without knowing which one it is.
-fn render_integer_padded(n: &Number, before: Option<u32>) -> Result<String, FormatError> {
+///
+/// `after` is applied here against `n`'s *natural* decimal digits, rather
+/// than earlier by folding it into `n.exponent` (which is what
+/// `round_to_places`/`truncate_to_places` used to do): both `after`
+/// (`FORMAT`) and `places` (`TRUNC`) are legitimate up to `u32::MAX`, and the
+/// interpreter really does accept that (`TRUNC(1, 2147483648)` is a
+/// ~2.1-billion-character result) -- far more than `Number::exponent`'s
+/// `i32` could ever hold. Doing this arithmetic here, in `u64`/`usize`
+/// against the original value, instead of against a `Number` that would
+/// have had to encode it as an exponent, is what stays correct at that
+/// scale. By the time `n` gets here it has already been rounded/truncated
+/// down to at most `after` decimal digits if it had more, so `extra` below
+/// is only ever adding, never needing to trim.
+fn render_integer_padded(
+    n: &Number,
+    before: Option<u32>,
+    after: Option<u32>,
+) -> Result<String, FormatError> {
     let sign = if n.negative { "-" } else { "" };
     let d: String = n.digits.iter().map(|x| (b'0' + x) as char).collect();
 
-    let (int_part, dec_part) = if n.exponent >= 0 {
+    let (int_part, natural_dec) = if n.exponent >= 0 {
         (format!("{d}{}", "0".repeat(n.exponent as usize)), None)
     } else {
         let point = n.digits.len() as i32 + n.exponent;
@@ -386,17 +417,36 @@ fn render_integer_padded(n: &Number, before: Option<u32>) -> Result<String, Form
             ("0".to_string(), Some(format!("{}{d}", "0".repeat((-point) as usize))))
         }
     };
-    let needed = int_part.len() as i32;
+
+    let dec_part = match after {
+        None => natural_dec,
+        Some(0) => None,
+        Some(places) => {
+            let natural_len = natural_dec.as_deref().map_or(0u64, |s| s.len() as u64);
+            let extra = u64::from(places).saturating_sub(natural_len) as usize;
+            let mut s = natural_dec.unwrap_or_default();
+            s.push_str(&"0".repeat(extra));
+            Some(s)
+        }
+    };
+    let needed = int_part.len() as i64;
 
     let pad = match before {
         None => 0,
         Some(before) => {
+            // Widened to `i64`: `before` is a legitimate `u32` up to
+            // `u32::MAX` (the interpreter accepts `FORMAT(1, 3000000000)`
+            // and returns the three-billion-character result), and casting
+            // it to `i32` first can turn it negative, producing a spurious
+            // oversize error instead of the huge space-padding the
+            // interpreter actually shows.
+            //
             // The error text substitutes the requested `before` itself, not
             // the space actually available after the sign -- confirmed with
             // `format(-123.456, 3)`, which reports "too large for 3 spaces"
             // even though only 2 of those 3 are usable once the sign is set
             // aside.
-            let available = before as i32 - i32::from(n.negative);
+            let available = i64::from(before) - i64::from(n.negative);
             if available < needed {
                 return Err(FormatError::BeforeOversize);
             }
