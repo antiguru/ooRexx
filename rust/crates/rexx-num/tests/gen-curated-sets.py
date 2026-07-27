@@ -4,8 +4,17 @@
 The random sets come from `cargo run -p rexx-num --bin gen-cases -- <seed> <n>`,
 which is seeded and therefore reproducible on its own. These curated sets were
 originally built by ad-hoc scripts that lived only in a session scratchpad, so
-they are captured here — losing them costs a multi-minute oracle run each to
-rebuild, and the value lists encode which shapes actually find bugs.
+they are captured here — the value lists encode which shapes actually find
+bugs, and rebuilding them from nothing costs a multi-minute oracle run each.
+
+`fmt` and `fmt2` are RECONSTRUCTIONS, not byte-exact copies: they emit 1800
+and 6720 cases where the scratchpad originals had 1116 and 7080. The argument
+lists were re-derived rather than recovered, so the coverage overlaps heavily
+but is not identical. Both reconstructions were run against the oracle and
+sit at 0 divergences, so they are sound sets — they are simply not the same
+sets, and no claim should be made that a pass here reproduces a pass there.
+`fmt3` and `fmtedge` were written from this file and do reproduce byte for
+byte; that was checked with `diff`.
 
 Usage:  python3 gen-curated-sets.py <name> > cases.txt
         names: addsub addsub2 muldiv md2 pow cmp fmt fmt2
