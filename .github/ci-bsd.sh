@@ -20,9 +20,27 @@ cmake -S . -B build -G Ninja \
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 cmake --build build --parallel 4
 
+WS=`pwd`
+
 build/bin/rexx -v
 echo 'say .rexxinfo~version' > hello.rex
 build/bin/rexx hello.rex
+
+# How the interpreter is invoked matters on OpenBSD and nowhere else.
+# SysProcess::getExecutableFullPath() has no procfs to fall back on there, so it
+# reads argv[0] out of sysctl and then, deliberately, only accepts it if it is
+# absolute. Started any other way it gives up and .rexxInfo~executable is .nil,
+# which the test framework dereferences at startup:
+#
+#   Error 88.909: Argument 2 must have a string value.
+#   64 *-* executableLocation=filespec('location', .rexxInfo~executable)
+#
+# Both forms are printed rather than assumed, so the log says what each one
+# actually produced on this platform.
+echo "--- .rexxInfo~executable, started with an absolute path ---"
+"$WS/build/bin/rexx" -e 'say .rexxinfo~executable' || true
+echo "--- .rexxInfo~executable, found on PATH ---"
+( PATH="$WS/build/bin:$PATH"; export PATH; rexx -e 'say .rexxinfo~executable' ) || true
 
 svn checkout --non-interactive --trust-server-cert \
     https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest
@@ -30,20 +48,22 @@ svn checkout --non-interactive --trust-server-cert \
 # Run out of the build tree rather than an install, so the suite picks up the
 # interpreter, the runtime libraries and the compiled native API test binaries
 # together and the native API tests actually run.
-WS=`pwd`
 PATH="$WS/build/bin:$PATH"
 LD_LIBRARY_PATH="$WS/build/lib:$WS/build/bin:${LD_LIBRARY_PATH:-}"
 export PATH LD_LIBRARY_PATH
 
 cd ootest
-# The suite's exit code is recorded, not acted on. A non-zero code here is
-# expected whenever an environmental test fails, and telling those apart from
-# real ones is the host-side check step's job.
+# The output is teed rather than only redirected. The FreeBSD VM died partway
+# through a run once, and because the file only existed inside the VM the
+# copyback never happened and there was nothing at all to look at afterwards.
+# Going through the job log too means a VM that disappears still leaves the
+# evidence behind.
+#
+# The interpreter is named by absolute path for the reason given above. The
+# suite's exit code is recorded, not acted on: a non-zero code is expected
+# whenever an environmental test fails, and telling those apart from real
+# failures is the host-side check step's job.
 set +e
-rexx testOORexx.rex -s > "$WS/testresults.txt" 2>&1
-echo $? > "$WS/testexitcode.txt"
+{ "$WS/build/bin/rexx" testOORexx.rex -s; echo $? > "$WS/testexitcode.txt"; } 2>&1 \
+    | tee "$WS/testresults.txt"
 set -e
-
-# The full file goes back to the host as an artifact; this is just enough to
-# see what happened without downloading it.
-tail -n 40 "$WS/testresults.txt"
