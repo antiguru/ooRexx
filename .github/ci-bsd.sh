@@ -63,7 +63,14 @@ cd ootest
 # suite's exit code is recorded, not acted on: a non-zero code is expected
 # whenever an environmental test fails, and telling those apart from real
 # failures is the host-side check step's job.
+#
+# stdin comes from /dev/null because in a VM the suite's stdin is the ssh
+# session itself. The FreeBSD run died with the connection closed by the remote
+# host immediately after ADDRESS.testGroup, which starts child processes that
+# read stdin; a child consuming the session's stdin would end it exactly that
+# way. Handing the suite an stdin of its own removes that possibility, so if it
+# still dies there the cause is in the interpreter rather than in the plumbing.
 set +e
-{ "$WS/build/bin/rexx" testOORexx.rex -s; echo $? > "$WS/testexitcode.txt"; } 2>&1 \
+{ "$WS/build/bin/rexx" testOORexx.rex -s < /dev/null; echo $? > "$WS/testexitcode.txt"; } 2>&1 \
     | tee "$WS/testresults.txt"
 set -e
