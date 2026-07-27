@@ -8,7 +8,7 @@
 
 **Architecture:** A new Rust workspace under `rust/` alongside the untouched C++ tree, which serves as the executable oracle for the entire project. The Rust interpreter uses an **arena heap with tagged index handles** rather than raw pointers; this collapses the C++ implementation's 149 hand-written `live()` trace methods and its pervasive `ProtectedObject` root-pinning discipline into a single derived `Trace` impl and a ~5-entry root set. Everything else — the tree-walking execution model, the expression stack, the activity/guard concurrency semantics, the Rexx-source class library — is preserved deliberately, because it is observable behaviour.
 
-**Tech Stack:** Rust 1.96+ (2024 edition), no unsafe outside `rexx-api` and `rexx-sys`. `rustix`/`windows-sys` for platform calls. `criterion` for benchmarks. `quick-xml` for build-time message-catalogue generation. CMake stays for the C++ oracle build only. The existing SVN-hosted ooTest suite is the conformance gate; the existing `.github/known-test-failures/*.txt` baselines are the pass criteria.
+**Tech Stack:** Rust 1.96+ (2024 edition). `unsafe` is forbidden by default in every crate and admitted only per-site, encapsulated and justified in writing (see Global Constraints). `rustix`/`windows-sys` for platform calls. `criterion` for benchmarks. `quick-xml` for build-time message-catalogue generation. `chumsky` is a candidate above the token stream, pending the D10 spike. CMake stays for the C++ oracle build only. The existing SVN-hosted ooTest suite is the conformance gate; the existing `.github/known-test-failures/*.txt` baselines are the pass criteria.
 
 ---
 
@@ -17,7 +17,13 @@
 Every task's requirements implicitly include this section.
 
 - **Rust floor:** 1.96.1 (the toolchain present on this machine). Edition 2024. No nightly features.
-- **Unsafe:** forbidden (`#![forbid(unsafe_code)]`) in every crate except `rexx-api` (C ABI export surface) and `rexx-sys` (platform syscalls). Those two carry `#![deny(unsafe_op_in_unsafe_fn)]` and a `SAFETY:` comment on every block.
+- **Unsafe: `#![forbid(unsafe_code)]` is the default in every crate, including `rexx-api` and `rexx-sys`.** There is no blanket exemption. Relaxing it for a crate requires all four of the following, and the relaxation is scoped to a single dedicated module, never the crate root:
+  1. **Unavoidable.** A safe alternative was attempted and is recorded as failing — not merely judged unlikely. "`rustix` has no wrapper for this call" is unavoidable; "raw `libc` is faster" is not, absent a committed benchmark showing it. Prefer `rustix` and `windows-sys` over raw `libc` *specifically because* they move the unsafe behind an audited boundary.
+  2. **Encapsulated.** The `unsafe` lives in one module that exposes a fully safe API. Callers outside that module cannot reach an unsound state by any sequence of calls. If a caller must uphold an invariant, the API is wrong — fix the API rather than documenting the obligation.
+  3. **Justified in writing.** The module carries a `//!`-level block stating: what the invariant is, why the compiler cannot check it, what enforces it instead, and what breaks if it is violated. Every `unsafe` block carries a `SAFETY:` comment naming the specific precondition it discharges. The crate carries `#![deny(unsafe_op_in_unsafe_fn)]`.
+  4. **Reviewed as a decision, not a task.** Introducing a new unsafe module is a Section 1 decision block with an identifier, not something a task does in passing. It goes into this file before it goes into the code.
+  - Expect exactly two candidates over the whole project: the `extern "C"` entry points in `rexx-api`, where a C caller hands in pointers the compiler cannot validate, and any platform call in `rexx-sys` that `rustix`/`windows-sys` do not cover. Both are *candidates*, not exemptions — each site still clears all four bars. Under D5 the FFI surface is far smaller than it looks: `RexxObjectPtr` is an opaque handle validated by table lookup, so the entry points dereference almost nothing.
+  - **Every phase exit reports the unsafe-block count** (`grep -rc 'unsafe' rust/crates --include='*.rs'`). A count that grew without a corresponding decision block in Section 1 fails the gate.
 - **The C++ tree is read-only.** No file under `interpreter/`, `api/`, `common/`, `rexxapi/`, `extensions/` is modified by this project. It is the oracle. The only exception is `.github/workflows/` (adding Rust legs) and new files under `rust/` and `docs/`.
 - **`api/oorexxapi.h`, `api/rexx.h`, `api/rexxapidefs.h`, `api/oorexxerrors.h` are frozen.** Source compatibility is the contract: native extensions must recompile unchanged. ABI compatibility is explicitly *not* required — struct layouts and symbol addresses may change, but declarations, macro names, type names, and call semantics may not.
 - **Platform matrix:** Linux (ubuntu-24.04), macOS 15 arm64, Windows/MSVC, FreeBSD 14.2, OpenBSD 7.8. Every phase gate runs on all five. The known OpenBSD SIGSEGV in the current C++ baseline is pre-existing; it does not block Rust work but must not be *reproduced* by the Rust build.
@@ -101,18 +107,20 @@ The C++ implementation uses a segmented mark-sweep heap with an old-space/new-sp
 
 **Blocks:** Phase 5. **Coupled to D1.**
 
-**Question.** Reproduce the flattened-heap image, or bootstrap from source at every start?
+**Constraint (given).** An image is **not a requirement**. Nothing in the conformance contract obliges the Rust build to ship one — `rexx.img` is an implementation detail of the C++ startup path, not observable Rexx behaviour. It is available as an optimisation if it earns its keep, and for no other reason.
+
+**Question.** Does an image earn its keep, or does bootstrapping from source at every start suffice?
 
 The C++ build runs `rexximage` to flatten a bootstrapped heap into `rexx.img`, with **106 `flatten(Envelope*)` implementations**, proxy objects for un-flattenable state, and virtual-function-table repatching on restore (`RexxMemory.cpp:691`, `:1539`). The VFT repatching exists solely because C++ objects embed vtable pointers that are invalid in another process image. **Rust has no vtables to repatch** — under D1(a), heap objects are plain data in a `Vec` and references are indices, so an image is a serialization of a flat array with no pointer fixups at all.
 
 **Options.**
 
-- **(a) Drop the image.** Parse and execute `CoreClasses.orx` + `StreamClasses.orx` (5,203 lines of Rexx) at every startup. Deletes 106 `flatten` impls, `Envelope`, and the whole proxy mechanism. Viable only if startup stays fast.
-- **(b) Serialize the arena.** Under D1(a) this is close to a `memcpy` of `Vec<Slot>` plus a string table. Cheap to build, but adds a versioning and invalidation problem.
+- **(a) No image. DEFAULT — build this first, unconditionally.** Parse and execute `CoreClasses.orx` + `StreamClasses.orx` (5,203 lines of Rexx) at every startup. Nothing corresponding to the 106 `flatten` impls, `Envelope`, or the proxy mechanism ever gets written.
+- **(b) Serialize the arena, *if* (a) measures too slow.** Under D1(a) this is close to a `memcpy` of `Vec<Slot>` plus a string table — no pointer fixups, no per-class serialization code, no proxies. It costs a format version, a staleness check against the `.orx` sources, and a build step. Purely additive: it caches what (a) computes, so semantics cannot diverge between the two paths.
 
-**Evidence that settles this.** Phase 5 exit measures cold-start time for (a). Gate: **`rexx-rs -e "say 1"` startup ≤ the C++ `build/bin/rexx` startup**, measured with hyperfine. If (a) meets it, choose (a) — it is strictly less code. Startup time is a user-visible property of a scripting language; do not trade it away for elegance.
+**Evidence that settles this.** Phase 5 exit measures cold start for (a) with hyperfine against `build/bin/rexx`. **Ship (a) either way.** Build (b) only if (a) is slower than the C++ startup by a margin a user would notice — treat ~2× or a wall-clock delta above roughly 50 ms as the threshold, and record the actual numbers rather than the ratio. Startup is user-visible in a scripting language, which is why the measurement exists; it is not a reason to build a cache before knowing one is needed.
 
-**Cost of being wrong.** Moderate and recoverable. (b) can be added later without touching semantics.
+**Cost of being wrong.** Low, and this is the point. (a) is strictly less code and is a prerequisite for (b) anyway — (b) has nothing to serialize until (a) works. There is no ordering in which building (a) first is wasted effort, so the decision cannot be got wrong by starting.
 
 ### D3 — Concurrency model
 
@@ -159,7 +167,9 @@ Rexx numbers are strings; arithmetic is arbitrary-precision decimal under `NUMER
 
 **Blocks:** Phase 7.
 
-**Decision: `std` first, `rustix` + `windows-sys` for the gaps. Low uncertainty.**
+**Decision: `std` first, then `rustix` + `windows-sys`, and raw `libc` only where neither reaches. Low uncertainty.**
+
+The ordering is a safety decision, not a taste one: `rustix` wraps the syscalls this layer needs behind a safe API, so choosing it over raw `libc` discharges the Global Constraints unsafe bar by construction rather than by argument. A raw `libc` call in this crate needs its own justification block naming the `rustix` function that does not exist.
 
 The 15,293 LOC of `interpreter/platform/` is mostly things `std` covers. The genuine gaps, which need care because they are observable: the Rexx **stream model** (line vs binary access, `RESET`, explicit positioning, the `CHARIN`/`LINEIN` interaction, `StreamNative.cpp` is 3,765 lines), **`ADDRESS` command routing** to shells and subcom handlers, file-name and path semantics, and console/terminal behaviour. Treat the stream model as a subsystem in its own right, not as "file I/O".
 
@@ -197,6 +207,34 @@ Benchmark suite (Phase 0 Task 6) covers, at minimum: method dispatch, variable l
 1. A compound-variable memoisation prototype measured **−24% on stem-heavy workloads** and was never merged. Build memoisation into the Rust stem/compound-variable design from the start rather than porting the slow shape first and optimising later.
 2. The existing performance profile identifies where interpreter time actually goes. Read it before designing the execution loop; do not re-derive it.
 
+### D10 — Parser construction: combinators (`chumsky`) or hand-written recursive descent
+
+**Blocks:** Phase 3. **Couples to D2 — see below.**
+
+**Question.** Build the parser with `chumsky`, or write recursive descent by hand as the C++ does?
+
+The C++ splits this into `Scanner.cpp` (1,955), `Clause.cpp`, `Token.cpp`, `InstructionParser.cpp` (4,650), `LanguageParser.cpp` (4,398), and `DirectiveParser.cpp` (2,867).
+
+**What makes Rexx hostile to an off-the-shelf grammar.** These are not style objections; each one breaks a standard combinator setup in a specific way.
+
+1. **There are no reserved words.** `IF` is a keyword only in keyword position. `if = 5; say if` is a valid program. A token type of `Keyword(If)` produced by the lexer is therefore *wrong* — keyword-ness is decided by the parser from position, and the same characters must remain usable as a variable name. Expressible in `chumsky`, but it means matching on identifier text at each site rather than on token variants, which gives up much of the ergonomic win.
+2. **Clause splitting precedes parsing.** Clauses end at `;`, at end-of-line, or not at all if the line ends in a continuation comma. This is a pre-pass over the source, and the C++ structures it that way for good reason.
+3. **Tokenisation is idiosyncratic.** `/* */` nests; `--` runs to end of line; `'ff'x` and `'1010'b` are literals whose suffix binds to the preceding quote; `.` is a symbol constituent, so `a.b.c` is one compound-variable token, not three tokens and two operators; abuttal is the concatenation operator, so whitespace between two terms is semantically significant.
+4. **Error output is fixed by the oracle.** Conformance demands one specific error, with a specific number out of the 704, at a specific line and column. `chumsky`'s recovery and multi-error reporting — a large part of its value — is mostly unusable here, because emitting a second, better diagnostic is a conformance failure.
+5. **`INTERPRET` parses at runtime,** so parser throughput is on the execution path for some programs, not only at load.
+
+**Options.**
+
+- **(a) Hand-written scanner and clause splitter, `chumsky` above the token stream. RECOMMENDED as the starting position.** Points 1–3 all live below the token level, which is exactly where `chumsky` is weakest and where the C++ has already worked out the answers. Above that line — the expression grammar with its precedence levels, message-send chains (`~`, `~~`), function and array-reference forms, and the instruction bodies — is ordinary structured parsing where combinators earn their keep in clarity and in span tracking, which `chumsky` gives for free and which Phase 3's `SOURCELINE`/`TRACE`/error-position gate needs on every node.
+- **(b) Hand-written throughout,** mirroring the C++ structure. Lowest risk against the error-message gate, likely fastest, most code.
+- **(c) `chumsky` throughout, including lexing.** Fights points 1–3 the whole way.
+
+**The D2 coupling, which is the reason this decision is not merely aesthetic.** D2's default is to bootstrap by parsing `CoreClasses.orx` + `StreamClasses.orx` — 5,203 lines of Rexx — at *every* interpreter start. Parser throughput therefore sets cold-start time directly. A parser that is pleasant but 5× slower does not just miss a Phase 3 benchmark; it is what forces D2 into building an image cache that would otherwise never be needed. Measure parse throughput on `CoreClasses.orx` specifically, not on a synthetic input.
+
+**Evidence that settles this.** Phase 3 opens with a bounded spike: implement the expression grammar — precedence, abuttal concatenation, message sends, compound variables — twice, once with `chumsky` over a hand-written token stream and once by hand, against the same L0 corpus entries. Compare on three axes: lines of code, whether the exact error number and position can be produced at each failure site, and parse throughput on `CoreClasses.orx`. Timebox it; the expression grammar alone is enough signal, and doing all 36 instructions twice is not.
+
+**Cost of being wrong.** Low and contained. The parser's output is an AST consumed by Phase 4; the construction technique does not leak past that boundary, so this can be redone later without touching the executor. It is a decision block because getting it wrong wastes Phase 3, not because it is irreversible.
+
 ---
 
 ## 2. Phase roadmap
@@ -208,9 +246,9 @@ Gates are hard. A phase does not close until every exit criterion is demonstrate
 | 0 | Oracle & inventory | — | Differ runs C++ against itself with zero diffs on the corpus; benchmark baselines committed for all 5 platforms; error table and builtin inventory generated; L1 extraction fraction reported; D7 protocol stability answered | — |
 | 1 | Heap & object model | D1 open | Allocation throughput and full-GC pause within the C++ baseline CI; `Trace` derived, not hand-written; root set enumerable and documented. **D1 closes here.** | — |
 | 2 | Numeric core | D1 closed | Every extractable ooTest arithmetic assertion passes; ANSI X3.274 vectors pass; arithmetic benchmark at parity | L1 (arithmetic) |
-| 3 | Scanner & parser | D1 closed | Round-trips every `.rex` in `samples/` to an AST; `SOURCELINE`, error line/column reporting, and `TRACE` output formatting match the oracle byte-for-byte | L0 (syntax errors) |
+| 3 | Scanner & parser | D1 closed, D10 spiked | Round-trips every `.rex` in `samples/` to an AST; `SOURCELINE`, error line/column reporting, and `TRACE` output formatting match the oracle byte-for-byte; parse throughput on `CoreClasses.orx` recorded | L0 (syntax errors) |
 | 4 | Classic executor | 2, 3 | Non-OO Rexx runs: assignment, `DO` (all variants), `IF`, `SELECT`, `CALL`, `PARSE`, `SAY`, `SIGNAL`, conditions, and all **162 builtin functions** | L0 full corpus + L1 majority |
-| 5 | Object model | 4 | **`CoreClasses.orx` parses and executes**; 32 classes exist and respond; `::class`/`::method`/`::routine`/`::requires` work; startup-time gate decides D2 | L2 |
+| 5 | Object model | 4 | **`CoreClasses.orx` parses and executes**; 32 classes exist and respond; `::class`/`::method`/`::routine`/`::requires` work; cold start measured and recorded against C++ (D2) | L2 |
 | 6 | Concurrency | 5 | Activities, kernel lock, guard locks, `REPLY`, `GUARD`, message objects; ooTest concurrency groups pass; TSan (or `loom`) clean. **D3's frame-ownership constraint verified.** | L2 |
 | 7 | Streams & platform | 5 | `StreamClasses.orx` runs; stream model, `ADDRESS`, file system green on all 5 platforms | L2 |
 | 8 | Native API | 5, 7 | `testbinaries/` compile unchanged against frozen headers; native-API ooTest groups pass | L2 |
@@ -248,12 +286,16 @@ rust/
       src/behaviour.rs        #   behaviours + method dictionaries
     rexx-num/                 # Phase 2
     rexx-parse/               # Phase 3
+      src/scan.rs             #   hand-written: clause splitting, tokens, no reserved words
+      src/grammar.rs          #   chumsky or hand-written above the token stream (D10)
     rexx-exec/                # Phase 4
     rexx-classes/             # Phase 4-5
     rexx-lib/                 # Phase 5: loads CoreClasses.orx / StreamClasses.orx
     rexx-conc/                # Phase 6
-    rexx-sys/                 # Phase 7: platform (unsafe allowed)
-    rexx-api/                 # Phase 8: C ABI export surface (unsafe allowed)
+    rexx-sys/                 # Phase 7: platform. std -> rustix -> libc, in that order
+    rexx-api/                 # Phase 8: C ABI export surface
+      src/ffi.rs              #   the only module that may relax forbid(unsafe_code),
+                              #   and only after a Section 1 decision block says so
     rexx-cli/                 # Phase 9: rexx, rexxc, rxqueue, rxsubcom
 docs/superpowers/plans/       # this file + per-phase plans
 ```
@@ -1790,7 +1832,7 @@ Write `d1-decision.md` with both sets of numbers and the verdict:
 
 - **Allocation throughput within 1.5× of C++ and full-GC pause within 1.5×:** D1 closes as (a). Record it in Section 1 and proceed to Phase 2.
 - **Allocation between 1.5× and 3× slower:** the arena is probably fine but the `Body` enum is likely too wide (every slot costs `size_of::<Body>()`). Before rejecting D1(a), try boxing the large variants and re-measure. Record both numbers.
-- **Worse than 3× on either metric:** D1(a) is refuted. Do not proceed. Re-open D1, and evaluate the hybrid — `#[repr(C)]` inline headers with a side table for tracing — against option (c) with the unsafe confined to `rexx-core`.
+- **Worse than 3× on either metric:** D1(a) is refuted. Do not proceed. Re-open D1 and evaluate the hybrid — `#[repr(C)]` inline headers with a side table for tracing — first, since it may recover the loss while staying safe. Option (c) is the last resort and does not get a pass on the Global Constraints unsafe bar: a raw-pointer heap would have to clear all four bars for a module that, by its nature, cannot encapsulate its invariant behind a safe API. That it cannot clear bar 2 is itself the argument against it. If the measurement lands here, the honest options are the hybrid or stopping — not quietly relaxing the constraint.
 
 **Do not soften the gate to keep the schedule.** The whole argument for this rewrite is that it can be safe *and* fast; a Rust interpreter that is safe and slow is not worth 200k LOC of work, and finding that out at Phase 1 costs weeks instead of years.
 
@@ -1804,7 +1846,7 @@ git commit -m "Measure arena allocation and collection against the C++ heap, and
 ### Phase 1 exit gate
 
 - [ ] `cargo test -p rexx-core` green; `cargo clippy -- -D warnings` clean.
-- [ ] `#![forbid(unsafe_code)]` holds in `rexx-core`.
+- [ ] `#![forbid(unsafe_code)]` holds in `rexx-core`, and `grep -rc unsafe rust/crates --include='*.rs'` reports zero across the workspace.
 - [ ] `Body::trace` is a single exhaustive match with no wildcard arm.
 - [ ] The root set is documented and enumerable; no `ProtectedObject` analogue exists.
 - [ ] `d1-decision.md` committed with numbers, and D1 recorded in Section 1 of this file.
@@ -1821,17 +1863,17 @@ The generating procedure for each phase:
 2. **Enumerate the observable behaviours,** not the functions. For Phase 3 that is error messages with line and column, `SOURCELINE`, and `TRACE` output formatting — not "the scanner tokenises correctly".
 3. **Write the L0 corpus entries first.** Every behaviour in step 2 becomes a `.rex` program in `rust/corpus/` that the C++ oracle already passes. These are the phase's acceptance tests, written before any Rust.
 4. **Decompose into tasks of one testable deliverable each,** in dependency order, following the Task Structure in `superpowers:writing-plans`.
-5. **State the exit gate** as: corpus subset at zero divergences + L-rung reached + benchmark comparison against `perf-baseline.md`.
+5. **State the exit gate** as: corpus subset at zero divergences + L-rung reached + benchmark comparison against `perf-baseline.md` + the unsafe-block count, which must be zero or accounted for by a Section 1 decision block.
 6. **Name the upstream decisions** the phase depends on and confirm each is closed.
 
 **Phase-specific notes to carry forward:**
 
-- **Phase 3** must decide how source text is retained. `SOURCELINE`, error reporting, and `TRACE` all expose the original text, so the AST cannot discard it. Keep the program source as one string and have AST nodes hold byte ranges into it.
+- **Phase 3** opens with the D10 spike (parser construction), and must decide how source text is retained. `SOURCELINE`, error reporting, and `TRACE` all expose the original text, so the AST cannot discard it. Keep the program source as one string and have AST nodes hold byte ranges into it — which is also what makes `chumsky`'s span support directly usable if D10 lands on (a). Measure parse throughput on `CoreClasses.orx`, since under D2 that number *is* cold-start time.
 - **Phase 4** is where the execution model is fixed. Read the existing performance profile before designing the dispatch loop. The 162 builtins from Task 0.6 are the checklist; tick them off individually.
 - **Phase 5** is the project's inflection point. When `CoreClasses.orx` runs, 32 classes appear at once and the L2 rung becomes reachable. Budget for the fact that it will expose parser and executor gaps in bulk rather than one at a time.
 - **Phase 6** must hold D3's frame-ownership constraint: activities own their frames; cross-activity signalling goes through a channel or a polled atomic, never a foreign frame reference. Verify this by construction (no shared frame type exists) rather than by test.
 - **Phase 7**'s stream model is a subsystem, not file I/O. `StreamNative.cpp` is 3,765 lines and its positioning and line/character interaction rules are all observable.
-- **Phase 8** rebuilds `testbinaries/` unchanged against the frozen headers. If a header edit seems necessary, that is a Section 1 decision (D5 reopens), not a task.
+- **Phase 8** rebuilds `testbinaries/` unchanged against the frozen headers. If a header edit seems necessary, that is a Section 1 decision (D5 reopens), not a task. This is also the phase most likely to need the project's first `unsafe`: open a decision block for it *before* writing the `extern "C"` entry points, and design so that the unsafe is confined to converting caller-supplied pointers into validated handles at the boundary — everything past that boundary is safe Rust operating on `ObjRef`.
 
 ---
 
@@ -1867,7 +1909,9 @@ The generating procedure for each phase:
 
 **Spec coverage.** Every decision from the user's four answers is carried: clean-room reimplementation (Section 3 crate tree, C++ tree frozen in Global Constraints); source-compatible C API (D5, Phase 8); ooTest as gate (D8, the L-rungs, Phase 9); perf non-regression (D9, Task 0.7, every phase gate); agent-executable roadmap (Phases 0–1 at step granularity, Section 6 for the rest).
 
-**Placeholders.** None. Every code step carries real code; every gate carries a runnable command. Three numbers are deliberately unmeasured and each names the task that measures it: the L1 extractable fraction (Task 0.4), the RXAPI protocol answer (Task 0.8), and the D1 verdict (Task 1.8).
+**Placeholders.** None. Every code step carries real code; every gate carries a runnable command. Four things are deliberately unmeasured and each names the task or spike that measures it: the L1 extractable fraction (Task 0.4), the RXAPI protocol answer (Task 0.8), the D1 verdict (Task 1.8), and the D10 parser comparison (the Phase 3 opening spike).
+
+**Constraints added after the first draft, and where they landed.** The image is optional rather than obligatory — D2 now defaults to no image, builds one only on a measured startup miss, and records why that ordering cannot waste work. `unsafe` is forbidden by default everywhere with no blanket crate exemptions; the four-bar admission protocol is in Global Constraints, the unsafe-block count is a reportable item at every phase exit, and the D1 fallback to raw pointers is explicitly *not* granted a pass on it.
 
 **Type consistency.** `ObjRef`, `Decoded`, `Body`, `Object`, `BehaviourId`, `MethodId`, `Heap`, `RootSet`, `FrameId`, `CollectStats`, `Outcome`, `Interpreter`, `Divergence`, and `TestMethod` are each defined once and used with the same signature everywhere they appear.
 
