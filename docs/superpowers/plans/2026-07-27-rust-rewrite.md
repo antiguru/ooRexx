@@ -151,6 +151,12 @@ The C++ build runs `rexximage` to flatten a bootstrapped heap into `rexx.img`, w
 
 **The threshold is an absolute delta, not a ratio: build (b) only if (a) costs more than ~50 ms of wall clock over the C++ startup.** Ratio is a diagnostic, not the gate. An earlier draft said "2× or 50 ms", which fires on a 5 ms → 10 ms result that no user could perceive — and the "or" made the weaker condition win. Perception is absolute; report the ratio alongside, and treat a large ratio at a small delta as interesting rather than actionable.
 
+**The C++ number is now measured, and it makes this concrete.** `rexx bench-programs/startup.rex` — a one-line `say` — costs **median 5.1 ms** (min 3.3, mean 5.1, max 7.7; 50 runs after 10 warmups). That is what memory-mapping a prebuilt image buys.
+
+So the target for (a) is: **parse and execute 5,203 lines of `CoreClasses.orx` + `StreamClasses.orx` in under ~55 ms**, since 5.1 + 50 is the gate. That is roughly 100k lines/second of parse-and-bootstrap, sustained, on every start. Comfortably achievable for a competent parser and not remotely automatic — which is exactly why D10 measures parser throughput on `CoreClasses.orx` specifically rather than on synthetic input, and why a pleasant-but-slow parser is the thing most likely to force the image cache into existence.
+
+Note also that the ratio here will look terrible whatever happens — 5 ms against 50 ms is 10× — and that is precisely why the ratio is not the gate.
+
 **Note what the comparison is, so nobody games it.** The C++ side memory-maps a prebuilt image; the Rust side parses and executes 5,203 lines of Rexx. The comparison is *deliberately unfavourable to Rust*, and that is the point: the question is not "can Rust-without-image beat C++-with-image" — it usually cannot and need not — but "is Rust-without-image fast enough in absolute terms that a user does not notice". Framing the gate as a ratio invites building (b) to win a benchmark rather than to serve anyone.
 
 **Cost of being wrong.** Low, and this is the point. (a) is strictly less code and is a prerequisite for (b) anyway — (b) has nothing to serialize until (a) works. There is no ordering in which building (a) first is wasted effort, so the decision cannot be got wrong by starting.
@@ -1260,42 +1266,50 @@ git commit -m "Derive the builtin function inventory from the C++ parser table"
 **Interfaces:**
 - Produces: a criterion suite that times any interpreter binary on a fixed set of Rexx programs, plus a committed C++ baseline.
 
-- [ ] **Step 1: Write the benchmark programs**
+- [x] **Step 1: Write the benchmark programs**
 
 One per D9 dimension, each sized to run 0.5–2s under the C++ interpreter:
 `dispatch.rex` (tight method-send loop), `varlookup.rex` (simple variable read/write), `compound.rex` (stem and compound-variable access — **the −24% memo prototype's workload**), `strings.rex` (`SUBSTR`/`POS`/`CHANGESTR`/concatenation), `arith.rex` (decimal arithmetic across several `NUMERIC DIGITS`), `alloc.rex` (allocation churn to force collections), `startup.rex` (`say 1`, for cold-start timing).
 
-- [ ] **Step 2: Write the criterion harness**
+- [x] **Step 2: Write the criterion harness**
 
 `benches/interpreter.rs` takes the interpreter path from `REXX_BENCH_BINARY`, runs each program via `rexx_oracle::Interpreter::run`, and reports wall time per program. Assert nothing — this task only establishes the baseline.
 
-- [ ] **Step 3: Record the C++ baseline on Linux**
+- [x] **Step 3: Record the C++ baseline on Linux**
 
 Run:
 ```bash
 cd rust
-REXX_BENCH_BINARY=../build/bin/rexx cargo bench -p rexx-bench -- --save-baseline cpp-linux
+REXX_BENCH_BINARY="$PWD/../build/bin/rexx" \
+    cargo bench --offline -p rexx-bench --bench interpreter -- --save-baseline cpp-linux
 ```
 
-- [ ] **Step 4: Record cold start separately**
+**Two corrections to the obvious form of this command, both found by running it.** The binary path must be **absolute**: cargo runs a bench binary with the *crate's* manifest directory as cwd, not the invocation directory, so a relative `../build/bin/rexx` resolves against `rust/crates/rexx-bench/../build/bin/` and does not exist. This fails identically on every platform, so it is a plan bug rather than a local quirk. And `--bench interpreter` is required: without it, `--save-baseline` is forwarded to every test and bench binary in the package, including plain `#[test]` harnesses that reject it with "Unrecognized option".
 
-Run:
+Criterion's defaults are also wrong for programs this size — `sample_size = 100` and a 5 s measurement time would cost minutes per benchmark. Use `sample_size(10)` (criterion's floor), 500 ms warmup, and a 30 s measurement ceiling per group. Later phases adding Rust numbers to the same file must keep these settings or the comparison is meaningless.
+
+- [x] **Step 4: Record cold start separately**
+
+hyperfine is an external binary and is not available on every platform this gate must run on, so the workspace carries its own: `rexx-bench`'s `src/bin/rexx-time.rs`, which runs a command N times and reports min/median/mean.
+
 ```bash
-hyperfine --warmup 5 '../build/bin/rexx bench-programs/startup.rex'
+cargo run --offline -p rexx-bench --bin rexx-time -- \
+    --warmup 10 --runs 50 "$PWD/../build/bin/rexx" bench-programs/startup.rex
 ```
-Write the result into `perf-baseline.md`. This number is the D2 gate.
 
-- [ ] **Step 5: Record the baseline on the other four platforms**
+This number is the D2 gate. Use it rather than criterion's `startup` row — criterion goes through `Command::output()` pipe capture on every iteration, which is a real code path but a different one.
+
+- [x] **Step 5: Record the baseline on the other four platforms**
 
 Add a `bench` job to `.github/workflows/{unix,windows,bsd}.yml` that builds the C++ tree, runs the suite, and uploads `target/criterion` as an artifact. Do not gate CI on it yet — this run only produces numbers.
 
 **If OpenBSD cannot produce a baseline,** because of the open SIGSEGV in the current C++ build, record that in `perf-baseline.md` as a missing row with the failure output attached, and proceed. Benchmarks may well run on a build whose test suite crashes, so try first. What is not acceptable is a silently absent row: the Phase 0 gate below asks for five platforms, and "four plus a documented reason" passes while "four" does not.
 
-- [ ] **Step 6: Write the baseline report**
+- [x] **Step 6: Write the baseline report**
 
 `perf-baseline.md` records, per platform: each benchmark's point estimate and confidence interval, the toolchain versions, and the machine class. **Every later phase gate compares against this file.**
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add rust docs .github
@@ -2340,7 +2354,7 @@ The generating procedure for each phase:
 
 **Phase-specific notes to carry forward:**
 
-- **Phase 3** opens with the D10 spike (parser construction), then decides how source text is retained. D13 is already closed: the AST is plain owned Rust data inside one arena object per code body. `SOURCELINE`, error reporting, and `TRACE` all expose the original text, so the AST cannot discard it. Keep the program source as one string and have AST nodes hold byte ranges into it — which is also what makes `chumsky`'s span support directly usable if D10 lands on (a). Measure parse throughput on `CoreClasses.orx`, since under D2 that number *is* cold-start time.
+- **Phase 3** opens with the D10 spike (parser construction), then decides how source text is retained. The spike has a hard number to beat: C++ starts in 5.1 ms from a memory-mapped image, so under D2 the Rust parser must get through `CoreClasses.orx` fast enough to keep total cold start inside ~55 ms. D13 is already closed: the AST is plain owned Rust data inside one arena object per code body. `SOURCELINE`, error reporting, and `TRACE` all expose the original text, so the AST cannot discard it. Keep the program source as one string and have AST nodes hold byte ranges into it — which is also what makes `chumsky`'s span support directly usable if D10 lands on (a). Measure parse throughput on `CoreClasses.orx`, since under D2 that number *is* cold-start time.
 - **Phase 4** is where the execution model is fixed. Read the existing performance profile before designing the dispatch loop. The 81 builtins from Task 0.6 are the checklist; tick them off individually.
 - **Phase 5** is the project's inflection point. When `CoreClasses.orx` runs, 32 classes appear at once and the L2 rung becomes reachable. Budget for the fact that it will expose parser and executor gaps in bulk rather than one at a time.
 - **Phase 6** must hold D3's frame-ownership constraint: activities own their frames; cross-activity signalling goes through a channel or a polled atomic, never a foreign frame reference. Verify this by construction (no shared frame type exists) rather than by test.
