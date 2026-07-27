@@ -120,7 +120,13 @@ Each ends with an independently testable deliverable and a commit. TDD throughou
   - fast paths return one operand untouched: either side being zero, or
     `(adjustedLeftExp + leftLength) > (rightLength + digits)` and its mirror
 
-  **Open question for whoever resumes this.** Tracing those conditions by hand does *not* reproduce the `1e9 - 1` boundary — the test evaluates to `10 > 10`, false, so it should compute rather than discard. Either the stored exponent and digit count for a literal like `1e9` differ from the obvious model, or the discard happens further down in the addition proper. **Read the rest of `addSub` past line 700 and the `setupNumber` / `adjustPrecision` path before writing more code.** D4 says port this rather than re-derive it, and re-deriving is exactly what produced the wrong first attempt.
+  **Ground truth, established numerically.** `1e9 - 1` really does evaluate to `1000000000`, not `999999999`: computing it at `DIGITS 9`, then evaluating `r - 999999999` at `DIGITS 15`, yields `1`. So the smaller operand is genuinely discarded, and this is not a display artefact.
+
+  **The derivation failed, three times, and that is the finding.** The fast-path condition reads verbatim `(adjustedLeftExp + leftLength) > (rightLength + digits)` (`:642`). For `1e9 - 1` at `DIGITS 9` that is `(9 + 1) > (1 + 9)` — `10 > 10`, false — so no fast path should fire. The alignment-truncation block at `:713` gives `adjustedLeftDigits = (1 + 9) - 10 = 0` and `adjustedRightDigits = -9`, so it makes no adjustment either. Storage was checked rather than assumed: `1e9 + 0` displays `1E+9` (one significant digit) while `1000000000 + 0` displays `1.00000000E+9` (nine), so `1e9` is held as one digit at exponent 9, which is the model used above.
+
+  Something between `:790` and `:1060`, or in `subtractNumbers` at `:1062`, accounts for the difference. It was not found by reading.
+
+  **So stop deriving and transliterate.** D4 exists precisely for this: the C++ is a direct encoding of a standard, and three failed hand-derivations are strong evidence the rule is not reconstructible from its parts. Port `addSub` and `subtractNumbers` line by line — including the parts that look redundant — and let the 9,248-case harness confirm it. Do not write a cleaner algorithm that "should" be equivalent; that is exactly what produced the 1,574 failures.
 
   The harness to verify against is committed: `crates/rexx-num/tests/data-addsub-oracle.rex` produces the oracle side, `src/bin/addsub.rs` the Rust side, and the two are compared with `diff`.
 - **2.4 — Multiplication and division,** including `%` and `//` with their truncation and sign rules.
