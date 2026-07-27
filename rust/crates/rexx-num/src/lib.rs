@@ -19,6 +19,9 @@
 //! than taken from the standard; where they differ, the interpreter wins.
 //! See `rust/corpus/num/` for the programs that pin it.
 
+mod settings;
+pub use settings::{Form, Settings, SettingsError};
+
 /// Rexx's default `NUMERIC DIGITS`.
 pub const DEFAULT_DIGITS: u32 = 9;
 
