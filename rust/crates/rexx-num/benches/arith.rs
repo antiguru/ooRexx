@@ -85,7 +85,15 @@ fn arith(c: &mut Criterion) {
                 total = total.add(&b, 20).unwrap().add(&d, 20).unwrap();
             }
 
-            black_box(total.format(20))
+            // A timing comparison between two implementations is worth
+            // nothing unless they compute the same thing. `arith.rex` under
+            // `build/bin/rexx` prints exactly this, so a divergence here
+            // means the benchmark has stopped replaying the program it
+            // claims to and its number should not be compared with the C++
+            // baseline. The check costs one string compare per sample.
+            let result = total.format(20);
+            assert_eq!(result, "4629643519330627.7808", "benchmark no longer matches arith.rex");
+            black_box(result)
         })
     });
 
