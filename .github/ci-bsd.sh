@@ -15,6 +15,11 @@ set -eux
 cmake --version
 uname -a
 
+# The OpenBSD run segfaulted in the suite, and an exit status of 139 says only
+# that it happened, not where. Cores are enabled so the backtrace below has
+# something to work from, the same way the Windows job keeps crash dumps.
+ulimit -c unlimited || true
+
 cmake -S . -B build -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5
@@ -73,4 +78,30 @@ cd ootest
 set +e
 { "$WS/build/bin/rexx" testOORexx.rex -s < /dev/null; echo $? > "$WS/testexitcode.txt"; } 2>&1 \
     | tee "$WS/testresults.txt"
+set -e
+
+# Any core left behind gets a backtrace printed into the job log. The suite
+# starts child interpreters, so the core that matters may well not be the one
+# from the process that was started here, and the search is deliberately wide.
+# Nothing in here is allowed to fail the run: this is diagnosis, and a missing
+# debugger should not turn a crash into a different error.
+set +e
+cores=`find "$WS" /var/crash -name '*.core' -o -name 'core' 2>/dev/null | head -n 5`
+if [ -n "$cores" ]; then
+    debugger=`command -v egdb || command -v gdb`
+    for core in $cores; do
+        echo "================ core: $core"
+        file "$core" || true
+        if [ -n "$debugger" ]; then
+            "$debugger" -batch \
+                -ex 'bt full' \
+                -ex 'thread apply all bt' \
+                "$WS/build/bin/rexx" "$core" 2>&1 | head -n 200
+        else
+            echo "no gdb or egdb available to read it"
+        fi
+    done
+else
+    echo "no core files found"
+fi
 set -e

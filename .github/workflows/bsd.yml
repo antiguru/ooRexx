@@ -29,7 +29,7 @@ jobs:
           release: '14.2'
           usesh: true
           prepare: |
-            pkg install -y cmake ninja subversion
+            pkg install -y cmake ninja subversion gdb
           run: |
             sh .github/ci-bsd.sh
 
@@ -75,7 +75,7 @@ jobs:
           release: '7.8'
           usesh: true
           prepare: |
-            pkg_add -I cmake ninja subversion
+            pkg_add -I cmake ninja subversion gdb
           run: |
             sh .github/ci-bsd.sh
 
