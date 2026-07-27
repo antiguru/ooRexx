@@ -97,7 +97,32 @@ Each ends with an independently testable deliverable and a commit. TDD throughou
 
 - **2.1 — `Number` representation and parsing.** `Number { sign, exponent, digits: Vec<u8> }`, `Number::parse(&str) -> Option<Number>`, `Display`. Round-trips every literal form: integers, decimals, leading/trailing zeros, `1e5`, `1E+5`, surrounding whitespace, signs. **Exit:** parse-then-display is identity for canonical forms, and matches the oracle's canonicalisation for non-canonical ones.
 - **2.2 — Settings.** `Numeric { digits, fuzz, form }` with the exact defaults and limits above; `DIGITS()`, `FUZZ()`, `FORM()`.
-- **2.3 — Addition and subtraction,** with rounding at the `DIGITS` boundary. This is where round-half-up gets implemented and tested against `digits_rounding.rex`.
+- **2.3 — Addition and subtraction. IN PROGRESS — do not treat the current code as correct.**
+
+  A first implementation computes exactly and rounds at the end. That is wrong, and the differential harness says so: **1,574 divergences out of 9,248** cases across `DIGITS` 1, 3, 9 and 15.
+
+  The rule being missed is *operand discard by magnitude*. When one operand is far enough from the other, the interpreter returns the larger one unchanged rather than computing:
+
+  ```
+  1e8 - 1   = 99999999          computed exactly
+  1e9 - 1   = 1.00000000E+9     the 1 is discarded
+  1 + 1e-9  = 1.00000000        computed
+  1 + 1e-10 = 1                 the 1e-10 is discarded
+  123456789 + 0.1 = 123456789   discarded
+  12345678  + 0.1 = 12345678.1  computed
+  ```
+
+  The algorithm is `NumberString::addSub` (`interpreter/classes/NumberStringMath.cpp:574`), and it is explicit:
+
+  - working precision is `maxLength = digits + 1`
+  - operands longer than `digits` are truncated to `maxLength`, raising `LOSTDIGITS`
+  - `minExp = min(leftExp, rightExp)`; each operand gets an adjusted exponent relative to it
+  - fast paths return one operand untouched: either side being zero, or
+    `(adjustedLeftExp + leftLength) > (rightLength + digits)` and its mirror
+
+  **Open question for whoever resumes this.** Tracing those conditions by hand does *not* reproduce the `1e9 - 1` boundary — the test evaluates to `10 > 10`, false, so it should compute rather than discard. Either the stored exponent and digit count for a literal like `1e9` differ from the obvious model, or the discard happens further down in the addition proper. **Read the rest of `addSub` past line 700 and the `setupNumber` / `adjustPrecision` path before writing more code.** D4 says port this rather than re-derive it, and re-deriving is exactly what produced the wrong first attempt.
+
+  The harness to verify against is committed: `crates/rexx-num/tests/data-addsub-oracle.rex` produces the oracle side, `src/bin/addsub.rs` the Rust side, and the two are compared with `diff`.
 - **2.4 — Multiplication and division,** including `%` and `//` with their truncation and sign rules.
 - **2.5 — Power (`**`)**, integer exponents only, with error 26 for non-whole exponents.
 - **2.6 — Comparison,** numeric and strict, with `FUZZ`.

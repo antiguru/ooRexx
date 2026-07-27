@@ -19,6 +19,7 @@
 //! than taken from the standard; where they differ, the interpreter wins.
 //! See `rust/corpus/num/` for the programs that pin it.
 
+mod addsub;
 mod settings;
 pub use settings::{Form, Settings, SettingsError};
 
@@ -32,11 +33,11 @@ pub const DEFAULT_DIGITS: u32 = 9;
 /// to break conformance across most numeric output.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Number {
-    negative: bool,
+    pub(crate) negative: bool,
     /// Most significant first, each value 0..=9. Never empty. Has no leading
     /// zero unless the value is zero, in which case it is exactly `[0]`.
-    digits: Vec<u8>,
-    exponent: i32,
+    pub(crate) digits: Vec<u8>,
+    pub(crate) exponent: i32,
 }
 
 impl Number {
@@ -137,7 +138,7 @@ impl Number {
     }
 
     /// Strips leading zeros and collapses any zero to the canonical form.
-    fn assemble(negative: bool, mut digits: Vec<u8>, exponent: i32) -> Self {
+    pub(crate) fn assemble(negative: bool, mut digits: Vec<u8>, exponent: i32) -> Self {
         if digits.iter().all(|d| *d == 0) {
             return Number::zero();
         }
