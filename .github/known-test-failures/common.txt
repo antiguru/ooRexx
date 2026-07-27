@@ -4,6 +4,27 @@
 
 # ReadMe.first records these as failing whenever the suite's output is
 # redirected. A hosted runner has no console at all, so they cannot pass
-# anywhere in CI. Confirmed failing for this reason on both Windows and Linux.
+# anywhere in CI. Confirmed failing for this reason on Windows, Linux and macOS.
 CHAROUT.testGroup/TEST_STDOUT_START
 LINEOUT.testGroup/TEST_LINE_TRANSIENT
+
+# Timing tests that assert an *upper* bound on how long something took. A sleep
+# interval is a floor, not a ceiling; no sleep API promises to return promptly,
+# and a shared virtual machine cannot offer real-time scheduling. Observed:
+#
+#   macOS    SysSleep(1.333) took 1.360999, allowed 1.333 to 1.359
+#   macOS    SysSleep(1.333) took 1.403189, allowed 1.333 to 1.359
+#   macOS    SysSleep(0.016) took 0.14777,  allowed 0.016 to 0.042
+#   Windows  SysSleep(1.333) took 1.367,    allowed 1.312 to 1.363
+#
+# These started in the macOS list and moved here once Windows produced the same
+# failure, so this is two platforms observed rather than an assumption that it
+# would happen everywhere. They are flaky rather than deterministic: an entry
+# here permits a failure, it does not require one, so runs where the scheduler
+# behaves stay green.
+#
+# Worth raising upstream. A test that cannot pass on a busy machine is testing
+# the machine, not the interpreter, and the 0.016 case overshot its 26 ms
+# tolerance by more than 100 ms.
+SYSSLEEP.testGroup/TEST_SLEEP_CONCURRENT
+SYSSLEEP.testGroup/TEST_SLEEP_DURATION
