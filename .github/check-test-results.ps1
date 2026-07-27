@@ -122,7 +122,8 @@ if ($unexpected.Count -gt 0) {
     foreach ($r in $unexpected) { Add-Summary "- [$($r.Kind)] ``$($r.Id)``" }
     Add-Summary ''
     Add-Summary 'Fix the interpreter, or if this really is a property of the runner rather'
-    Add-Summary 'than of ooRexx, add it to .github/known-test-failures.txt with the reason.'
+    Add-Summary 'than of ooRexx, add it to the matching file under'
+    Add-Summary '.github/known-test-failures/ with the reason. See the README there.'
     exit 1
 }
 

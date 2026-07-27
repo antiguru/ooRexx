@@ -1,5 +1,20 @@
 # macOS-only expected failures. See common.txt for the shared ones and
 # README.md for what may go in here.
+
+# Both of these assert an *upper* bound on how long SysSleep took, and a shared
+# runner cannot honour one. Observed on macos-15 arm64:
 #
-# Empty on purpose, same reasoning as linux.txt: this gets filled in from an
-# observed run, not from guesses.
+#   SysSleep(1.333) took 1.360999 but should take between 1.333 and 1.359
+#   SysSleep(0.016) took 0.14777  but should take between 0.016 and 0.042
+#
+# Sleeping longer than requested is permitted by every sleep API; the interval
+# is a floor, not a ceiling. The second case overshoots a 26 ms tolerance by
+# 106 ms, which is ordinary scheduler jitter on a heavily shared VM. Neither
+# failure indicates anything about the interpreter.
+#
+# Listed for macOS only because that is where they have been seen. They did not
+# fail on the Linux or Windows runs, and being timing dependent they are flaky
+# rather than deterministic, so if they ever show up elsewhere they should be
+# added there too rather than moved into common.txt on the assumption they will.
+SYSSLEEP.testGroup/TEST_SLEEP_CONCURRENT
+SYSSLEEP.testGroup/TEST_SLEEP_DURATION
