@@ -924,7 +924,24 @@ git commit -m "Extract standalone assertions from ooTest groups and measure L1 c
 
 **The catalogue's shape, which decides the key.** `rexxmsg.xml` holds **56 `<Message>` majors and 648 `<SubMessage>` children**, 704 total. Identity is the pair `(Code, Subcode)`; `Code` alone repeats across every submessage of a major. There is also a separate `<MessageNumber>` that is neither the code nor contiguous — error 3.001 carries `MessageNumber` 200. A flat `&[(u32, &str)]` has no unique key and must not be used. Key on `(major, sub)`.
 
-Substitutions are markup, not `printf`: the text of 3.001 is `Failure during initialization: File <q><Sub position="1" name="filename"/></q> is unreadable.` The build script renders `<Sub position="N"/>` as `%N` and drops the `<q>` wrapper, recording that choice in a comment — `<q>` is quoting markup for the documentation build, and the interpreter's runtime output does not carry it.
+**Message text is markup, and the rendering rules are fixed by the oracle's own generator** — `interpreter/messages/RexxErrorMessages.xsl`, whose output is the checked-in `RexxErrorMessages.h`. Do not invent a rendering; copy this one:
+
+| Markup | Renders as | XSL |
+|---|---|---|
+| `<Sub position="N"/>` | `&N` | `:98–100` |
+| `<q>X</q>` | `"X"` — **literal double quotes, kept** | `:86–88` |
+| `<sq/>` | `'` | `:90–92` |
+| `<dq/>` | `"` | `:94–96` |
+
+`<q>` is emphatically **not** a documentation-only wrapper to be dropped. The generated header proves it (`RexxErrorMessages.h:62`):
+
+```
+MESSAGE(Error_Program_unreadable_name, "Failure during initialization: File \"&1\" is unreadable.")
+```
+
+There are **363 `<q>` occurrences** — nearly every message that names an operand — and 36 of them wrap literal text with no substitution at all (`Unmatched <q>/*</q> or quote.` → `Unmatched "/*" or quote.`). Dropping the wrapper would diverge from the oracle on those even where no substitution exists, and L0 would catch it as 363 separate failures.
+
+Keep the substitution marker as `&N` rather than translating to `%N`. The table is private to the Rust side and either would work, but matching the oracle byte-for-byte removes a transformation that could silently disagree, and makes the generated table directly diffable against `RexxErrorMessages.h`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -948,10 +965,20 @@ fn a_major_carries_its_own_text_with_no_substitutions() {
 }
 
 #[test]
-fn a_submessage_is_keyed_by_the_pair_and_renders_substitutions_as_percent_n() {
+fn a_submessage_is_keyed_by_the_pair_and_renders_markup_like_the_oracle() {
     let m = errors::lookup(3, 1).expect("error 3.001 exists");
     assert_eq!(m.number, 200, "MessageNumber is independent of the code");
-    assert_eq!(m.text, "Failure during initialization: File %1 is unreadable.");
+    // <q> keeps its quotes; <Sub position="1"/> becomes &1.
+    // Compare against RexxErrorMessages.h:62.
+    assert_eq!(m.text, "Failure during initialization: File \"&1\" is unreadable.");
+}
+
+#[test]
+fn q_markup_around_literal_text_still_renders_its_quotes() {
+    // 36 messages wrap literal text in <q> with no substitution at all.
+    // Dropping the wrapper would diverge from the oracle on every one.
+    let m = errors::lookup(6, 0).expect("the unmatched-quote error exists");
+    assert_eq!(m.text, "Unmatched \"/*\" or quote.");
 }
 
 #[test]
@@ -998,7 +1025,7 @@ pub static MESSAGES: &[Message] = &[
     Message { major: 3, sub: 0, number: 3, symbol: "Error_Program_unreadable",
               text: "Failure during initialization." },
     Message { major: 3, sub: 1, number: 200, symbol: "Error_Program_unreadable_name",
-              text: "Failure during initialization: File %1 is unreadable." },
+              text: "Failure during initialization: File \"&1\" is unreadable." },
     // ... one entry per message, majors and their submessages in document order
 ];
 
@@ -1007,7 +1034,9 @@ pub fn lookup(major: u16, sub: u16) -> Option<&'static Message> {
 }
 ```
 
-Text rendering rules, applied in this order: unwrap `<q>…</q>` to its contents; replace `<Sub position="N" …/>` with `%N`; unescape XML entities. A major with no `<Text>` of its own is an error in the catalogue, not something to paper over with an empty string — panic.
+Text rendering, applied in this order: replace `<q>X</q>` with `"X"`, `<sq/>` with `'`, `<dq/>` with `"`; replace `<Sub position="N" …/>` with `&N`; unescape XML entities last. The ordering is safe — only four texts contain entities (`&gt;`, `&lt;`, `&apos;`), none of which can form markup when unescaped, and there are no nested `<q>`. A major with no `<Text>` of its own is an error in the catalogue, not something to paper over with an empty string — panic.
+
+Cross-check the output against the checked-in `interpreter/messages/RexxErrorMessages.h`, which the oracle generates from the same XML through `RexxErrorMessages.xsl`. If the Rust table and that header disagree on any text, the Rust renderer is wrong.
 
 It must `println!("cargo::rerun-if-changed=../../../interpreter/messages/rexxmsg.xml");` and `panic!` if the file is missing, if the total is zero, or if any `(major, sub)` pair repeats. A silently empty or colliding table would let every later phase report false conformance.
 
@@ -1023,7 +1052,7 @@ pub mod errors {
 - [ ] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-inventory`
-Expected: 4 passed. If the count assertion fails with a number other than 704, the base commit moved — update the constant and note it.
+Expected: 5 passed. If the count assertion fails with a number other than 704, the base commit moved — update the constant and note it.
 
 - [ ] **Step 5: Commit**
 
@@ -1827,7 +1856,7 @@ Expected: FAIL — no method named `collect`.
 
 - [ ] **Step 3: Implement**
 
-Add to `Heap` a `marks: Vec<bool>`, and:
+Add a `marks: Vec<bool>` field to `Heap` **and initialise it in `Heap::new()`** — the struct and the constructor both, or this does not compile. Then:
 
 ```rust
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1887,10 +1916,39 @@ impl Heap {
 
 Note the two invariants the tests depend on and that are easy to drop: the sweep decrements `live`, and `marks` is resized on every collection because the heap grows between them.
 
+The retirement branch is not reachable from the public API — no test can allocate 2^30 times — so cover it with a unit test inside `src/heap.rs`, where the private fields are visible:
+
+```rust
+#[cfg(test)]
+mod retire_tests {
+    use super::*;
+    use crate::{Decoded, GENERATION_MAX};
+
+    #[test]
+    fn a_slot_at_generation_max_is_retired_not_reused() {
+        let mut heap = Heap::new();
+        let roots = RootSet::new();
+        let r = heap.alloc(Body::String("old".into()));
+        let Decoded::Heap { slot, .. } = r.decode() else { panic!("heap handle") };
+        if let Slot::Live { generation, .. } = &mut heap.slots[slot as usize] {
+            *generation = GENERATION_MAX;
+        }
+        let stale = ObjRef::heap(slot, GENERATION_MAX);
+        heap.collect(&roots);
+        let next = heap.alloc(Body::String("new".into()));
+        assert_eq!(heap.slot_capacity(), 2, "the retired slot must not be reused");
+        assert!(heap.get(stale).is_none(), "the stale handle still misses");
+        assert!(heap.get(next).is_some());
+    }
+}
+```
+
+One residual, worth knowing rather than fixing: `ObjRef::heap`'s `debug_assert!` on the generation compiles out in release, so a release-mode call with `generation == 2^30` would wrap into the slot bits silently. That is safe only as long as `collect`'s retirement branch remains the sole producer of generations, which it is. If a second producer ever appears, promote the `debug_assert!` to a real check.
+
 - [ ] **Step 4: Run to verify it passes**
 
-Run: `cd rust && cargo test -p rexx-core --test collect`
-Expected: 6 passed.
+Run: `cd rust && cargo test -p rexx-core`
+Expected: 6 integration tests in `collect` plus the `retire_tests` unit test, all passing.
 
 - [ ] **Step 5: Commit**
 
@@ -1980,7 +2038,7 @@ Expected: FAIL — `Body::WeakRef` does not exist.
 
 `Body::WeakRef(ObjRef)` traces to nothing. `collect` gains two post-mark passes **in the oracle's order**:
 
-1. **Clear weak references.** For every surviving `Body::WeakRef` whose target is unmarked, rewrite the target to `ObjRef::NIL`.
+1. **Clear weak references.** For every surviving `Body::WeakRef` whose target is unmarked, rewrite the target to `ObjRef::NIL`. "Unmarked" must include *unresolvable* — a target whose slot is already free, or whose generation has moved on, is dead, and a weak reference whose target died in an earlier cycle must still clear. Route the check through `resolve`, which answers all three cases at once.
 2. **Resurrect for `UNINIT`.** For every unmarked object with `has_uninit`, mark it and everything it reaches, and record it in `pending_uninit` — running `UNINIT` must not see a half-collected object graph.
 
 Then sweep. `has_uninit` is cleared when the caller reports the finalizer has run, so the next collection sweeps the object normally.
@@ -2189,6 +2247,6 @@ Four things are deliberately unmeasured and each names the task or spike that me
 
 **Type consistency.** `ObjRef`, `Decoded`, `Body`, `Object`, `BehaviourId`, `MethodId`, `Heap`, `Slot`, `RootSet`, `FrameId`, `CollectStats`, `Message`, `Outcome`, `Interpreter`, `Divergence`, and `TestMethod` are each defined once and used with the same signature everywhere they appear.
 
-**Corrections applied after external review, recorded so the same errors are not reintroduced.** The builtin count was 162 and is 81 — the original figure double-counted declarations against table entries, and the table is *not* alphabetical, so the sortedness assertion went too. `live()` is 148 and `flatten()` is 105, both counted as definitions in `.cpp`; the 106th `flatten` match is a commented-out line in `RexxCore.h`. Keyword instructions are 35. The error catalogue is 56 majors plus 648 submessages keyed by `(major, sub)`, not a flat code table, and substitutions are `<Sub position="N"/>` markup rather than `%N` in the source. Task 1.6's weak-reference and `UNINIT` passes were in the wrong order relative to `RexxMemory.cpp:415–433`. `ObjRef` gained a generation field because the original design let a stale handle alias a recycled slot, which would have falsified D5's central safety claim. D2 overstated its savings by ignoring that `rexxc` needs program flattening regardless.
+**Corrections applied after external review, recorded so the same errors are not reintroduced.** Message rendering had `<q>` markup dropped as documentation-only; the oracle's own generator renders `<q>X</q>` as `"X"` with the quotes kept (`RexxErrorMessages.xsl:86–88`, proven by `RexxErrorMessages.h:62`), across 363 occurrences, 36 of which wrap literal text and would have diverged even without substitutions. The substitution marker is `&N`, not `%N`. The builtin count was 162 and is 81 — the original figure double-counted declarations against table entries, and the table is *not* alphabetical, so the sortedness assertion went too. `live()` is 148 and `flatten()` is 105, both counted as definitions in `.cpp`; the 106th `flatten` match is a commented-out line in `RexxCore.h`. Keyword instructions are 35. The error catalogue is 56 majors plus 648 submessages keyed by `(major, sub)`, not a flat code table. Task 1.6's weak-reference and `UNINIT` passes were in the wrong order relative to `RexxMemory.cpp:415–433`. `ObjRef` gained a generation field because the original design let a stale handle alias a recycled slot, which would have falsified D5's central safety claim. D2 overstated its savings by ignoring that `rexxc` needs program flattening regardless.
 
 **Known soft spot.** Task 1.4's `RootSet` is standalone; Phase 4 must connect it to the real activation and expression stacks, and the borrow-checker shape of that connection — who owns `Heap` versus `RootSet` during evaluation — is not solved here. It is a Phase 4 design output, and the first task of Phase 4's plan should be a spike on exactly that question. Recording it as unsolved is deliberate: pretending otherwise would put a wrong answer into a plan that later phases build on.
