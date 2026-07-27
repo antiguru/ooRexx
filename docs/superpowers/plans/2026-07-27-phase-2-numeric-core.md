@@ -54,13 +54,13 @@ These are behaviours, not functions. Each is pinned by a corpus program that the
 
    So at `DIGITS 9` a value stays in plain form all the way down to `1e-18` but switches at `1e+9`. An implementation that picks one threshold for both directions is silently wrong across most numeric output. Pinned by `notation_thresholds.rex`.
 
-11. **Canonicalisation on arithmetic.** Trailing zeros *after* a decimal point are significant and preserved — `1.50 + 0` is `1.50`, and `1.50 + 0.50` is `2.00` — while leading zeros, a bare trailing point, a unary plus and surrounding whitespace are stripped. Zero is the exception and collapses completely: `-0`, `0.0` and `00.00` all become `0`. Pinned by `canonical_form.rex`.
-5. **`NUMERIC FUZZ`** — default 0; relaxes `=` comparison by that many digits, without affecting `==`.
-6. **Operators** — `+ - * / % // **` across sign combinations. Note `%` and `//` truncate toward zero and take the sign of the dividend.
-7. **Comparison** — `= == < > <= >= \= \== << >>`. Numeric comparison ignores leading zeros and format (`1 = 1.0` is true); strict comparison is bytewise (`1 == 1.0` is false).
-8. **`FORMAT()` and `TRUNC()`** — explicit placement of integer and decimal digits, and exponent control.
-9. **`DATATYPE()`** — `N` (number), `W` (whole number), and the default classification.
-10. **Error numbers, which are part of the contract**, verified against the oracle:
+5. **Canonicalisation on arithmetic.** Trailing zeros *after* a decimal point are significant and preserved — `1.50 + 0` is `1.50`, and `1.50 + 0.50` is `2.00` — while leading zeros, a bare trailing point, a unary plus and surrounding whitespace are stripped. Zero is the exception and collapses completely: `-0`, `0.0` and `00.00` all become `0`. Pinned by `canonical_form.rex`.
+6. **`NUMERIC FUZZ`** — default 0; relaxes `=` comparison by that many digits, without affecting `==`.
+7. **Operators** — `+ - * / % // **` across sign combinations. Note `%` and `//` truncate toward zero and take the sign of the dividend.
+8. **Comparison** — `= == < > <= >= \= \== << >>`. Numeric comparison ignores leading zeros and format (`1 = 1.0` is true); strict comparison is bytewise (`1 == 1.0` is false).
+9. **`FORMAT()` and `TRUNC()`** — explicit placement of integer and decimal digits, and exponent control.
+10. **`DATATYPE()`** — `N` (number), `W` (whole number), and the default classification.
+11. **Error numbers, which are part of the contract**, verified against the oracle:
     - **42** — arithmetic overflow/underflow, and division by zero (`1/0`, `1%0`, `1//0`, `1e999999999 * 10`)
     - **41** — bad arithmetic conversion (`'abc' + 1`)
     - **26** — invalid whole number where one is required (`2 ** 1e10`)
