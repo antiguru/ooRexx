@@ -259,7 +259,19 @@ So the suite cannot start — not "runs with some failures", cannot start — wi
 
 `SysFileExists` and `SysFileTree` are implemented in `interpreter/runtime/RexxUtilCommon.cpp` with platform halves in `interpreter/platform/{unix,windows}/SysRexxUtil.cpp`.
 
-**Decision: build the `Sys*` subset ooTest depends on as part of Phase 7, and the remainder in Phase 10.** The table above is the known minimum, not the whole subset — Phase 7's plan opens by re-grepping the full checked-out tree, since the group files themselves (not just the framework) may call more. Also confirm where `.File` comes from: it is not declared in `CoreClasses.orx`, so it is either native or lives in another `.orx`, and that answer decides which phase owns it.
+**The full suite is now checked out, and the surface is far wider than the framework's three functions.** 409 `.testGroup` files, 6,380 `::method test*` methods, 20 MB. Grepping all of it for `Sys*` yields **99 distinct identifiers**, of which roughly half are real routines — the remainder are documentation placeholders (`SysFileXXX`, `SysXxx`), deliberately-absent names (`SysDoesNotExist`), and false positives from the pattern (`System`, `SystemRoot`). Call-site counts for the busiest:
+
+| | | | |
+|---|---|---|---|
+| `SysFileTree` 100 | `SysFromUnicode` 57 | `SysFileExists` 57 | `SysFileDelete` 45 |
+| `SysIni` 43 | `SysToUnicode` 41 | `SysSleep` 41 | `SysSearchPath` 41 |
+| `SysTextScreenSize` 40 | `SysStemSort` 38 | `SysFileSearch` 35 | `SysIsFileDirectory` 32 |
+
+So this is a real subsystem's worth of work, not a handful of shims. It also spans several distinct capability groups that will not all land together: file system, Unicode conversion, terminal (`SysTextScreen*`), POSIX identity (`SysGetpwnam`, `SysGetgrgid`, `SysGeteuid`, …), extended attributes (`SysGetXattr` and friends), Windows INI and printers, and stem utilities.
+
+**One group crosses into D7.** The macrospace functions — `SysAddRexxMacro`, `SysDropRexxMacro`, `SysQueryRexxMacro`, `SysReorderRexxMacro`, `SysClearRexxMacroSpace`, `SysLoadRexxMacroSpace`, `SysSaveRexxMacroSpace` — are served by the **RXAPI daemon**, not by the interpreter. They therefore cannot work until D7 is executed, which puts their test groups squarely on the Phase 9 exclusion list. That the exclusion list was needed at all (see the Phase 9 gate) is confirmed here rather than assumed.
+
+**Decision: build the `Sys*` subset ooTest depends on as part of Phase 7, and the remainder in Phase 10.** Phase 7's plan opens by turning the grep above into a prioritised worklist ordered by call-site count, so the functions blocking the most test groups land first. `.File` is resolved: it **is** an environment class (`.file~id` returns `File` under ooRexx 5.3.0), so Phase 7 owns it alongside the file-system `Sys*` calls.
 
 **Note the platform asymmetry:** the Windows `SysRexxUtil.cpp` is twice the size of the unix one, so this is also where the Windows leg is most likely to fall behind.
 
@@ -370,7 +382,7 @@ Gates are hard. A phase does not close until every exit criterion is demonstrate
 
 Phases 6, 7, and 8 are independent of each other and may run in parallel once Phase 5 closes.
 
-**Why Phase 9's gate is L3-*core*, not L3.** The suite exercises things Phase 10 delivers — the extension test groups (`json`, `yaml`, `rxregexp`, and the rest), and the RXAPI-dependent features: external data queues, macrospace, and `rxsubcom` registration. Gating Phase 9 on the unqualified full suite would make it unevaluable until Phase 10 was already done. Phase 9's plan must therefore **enumerate the excluded groups explicitly, by name, in a committed file** (`docs/superpowers/plans/phase-9-exclusions.txt`), and Phase 10 deletes that file. An exclusion list that is not written down is indistinguishable from a suite that quietly does not run.
+**Why Phase 9's gate is L3-*core*, not L3.** The suite exercises things Phase 10 delivers — the extension test groups (`json`, `yaml`, `rxregexp`, and the rest), and the RXAPI-dependent features: external data queues, macrospace, and `rxsubcom` registration. This is confirmed rather than assumed: the checked-out suite calls the seven `Sys*RexxMacro*`/`Sys*RexxMacroSpace` routines, which the RXAPI daemon serves (see D11). Gating Phase 9 on the unqualified full suite would make it unevaluable until Phase 10 was already done. Phase 9's plan must therefore **enumerate the excluded groups explicitly, by name, in a committed file** (`docs/superpowers/plans/phase-9-exclusions.txt`), and Phase 10 deletes that file. An exclusion list that is not written down is indistinguishable from a suite that quietly does not run.
 
 **Rungs L1 and L2 assume D8 kept L1.** If Task 0.4 measured the extractable fraction below 40%, L1 does not exist and the Phase 2 and Phase 4 rows read L0 instead.
 
