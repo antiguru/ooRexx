@@ -102,7 +102,7 @@ Blocks are numbered in the order they were raised and ordered below by topic, so
 | **D13** | AST ownership | Phase 3 | **closed** — plain owned Rust data (2026-07-27) |
 | **D11** | RexxUtil / `Sys*` | Phase 7, and L2 | settled — subset in Phase 7, rest in Phase 10 |
 | **D12** | Security manager | Phases 5 and 7 | settled — split across both |
-| **D7** | RXAPI daemon | Phase 10 | open — Task 0.8 answers it |
+| **D7** | RXAPI daemon | Phase 10 | **closed** — bridge to the C++ rxapi (2026-07-27) |
 | **D8** | Conformance ladder | everything | open — Task 0.4 measures L1's viability |
 | **D9** | Performance gate | every phase exit | settled — two thresholds, see Global Constraints |
 | **D10** | Parser construction | Phase 3 | open — spike at the head of Phase 3 |
@@ -297,7 +297,18 @@ Assigning the whole thing to Phase 5, as an earlier draft of this plan did, is w
 
 **Decision: keep the C++ `rxapi` binary and speak its IPC protocol from Rust. RECOMMENDED.** It is a separate process behind a stable wire boundary — exactly the kind of thing that should not be on the critical path. The first working Rust `rexx` links no C++ but talks to a C++ `rxapi`.
 
-**Evidence needed before relying on this.** Phase 0 Task 7 must confirm the protocol is version-negotiated and stable across the `rexxapi/client` ↔ `rexxapi/server` boundary. If it turns out to be a raw struct dump with no versioning, this decision flips to "port it in Phase 10" and the schedule absorbs 12k LOC.
+**CLOSED — bridge confirmed.** Settled 2026-07-27; full analysis in `docs/superpowers/plans/rxapi-protocol.md`.
+
+The feared answer was half-right and turned out not to matter. It **is** a raw struct dump — `ServiceMessage::writeMessage` does `pipe.write((void *)this, sizeof(ServiceMessage), messageData, messageDataLength, …)` (`rexxapi/common/ServiceMessage.cpp:141–152`), with the pointer field on the wire being garbage that every receiver ignores. What makes it safe anyway:
+
+- **Layout is stable.** `sizeof(ServiceMessage)` is **600** and `sizeof(ServiceRegistrationData)` is **544**, independently confirmed here by compiling a probe against the real headers. All scalars sit at natural alignment with no interior padding, and there is no `long`, so LP64 and LLP64 agree.
+- **Skew fails cleanly rather than corrupting.** The rendezvous name embeds the version triple, the pointer width, and the username — `snprintf(path, len, "%s/.ooRexx-%d.%d.%d-%s-%s", …, ORX_VER, ORX_REL, ORX_MOD, "64"|"32", name)` (`SysCSStream.cpp:522–528`) — so a 32-bit build, a different release, or another user never finds the same socket. Transport is strictly host-local, so endianness cannot differ.
+- **There is a version handshake.** The server answers `CONNECTION_ACTIVE` with `parameter1 = REXXAPI_VERSION` (=100, `ServiceMessage.hpp:199`; set at `APIServer.cpp:243`) and the client throws a version-conflict `API_FAILURE` on mismatch (`LocalAPIManager.cpp:227`, `:258`). Client-side only — the server validates nothing — but that is the direction that matters here.
+- **Transport.** Unix: `AF_UNIX SOCK_STREAM` at `$XDG_RUNTIME_DIR/.ooRexx-5.3.0-64-<user>.service`. Windows: a local named pipe with `PIPE_REJECT_REMOTE_CLIENTS`. A TCP path exists in the source but nothing instantiates it.
+
+**What the Rust client must get right:** replicate both struct layouts with static assertions and exact enum discriminants; generate the rendezvous name byte-for-byte against the *target* rxapi's version — **the worst failure mode is a wrong name silently spawning a second, empty daemon rather than erroring**; perform the `CONNECTION_ACTIVE` handshake; and send `CLOSE_CONNECTION`/`PROCESS_CLEANUP` as the C++ client does. Accept that the bridge pins one rxapi release series, and re-validate the size probe on every version bump.
+
+Roughly 1–2k lines of Rust against 12k LOC of porting. The bridge wins clearly.
 
 ### D8 — Conformance ladder
 
@@ -1286,19 +1297,19 @@ git commit -m "Add the interpreter benchmark suite and record the C++ baseline"
 **Files:**
 - Create: `docs/superpowers/plans/rxapi-protocol.md`
 
-- [ ] **Step 1: Read the protocol definition**
+- [x] **Step 1: Read the protocol definition**
 
 Read `rexxapi/common/` (9 files) — specifically the request/reply message structs and any version field — plus how `rexxapi/client/` frames requests and `rexxapi/server/` dispatches them.
 
-- [ ] **Step 2: Answer three questions in writing**
+- [x] **Step 2: Answer three questions in writing**
 
 In `rxapi-protocol.md`: (1) Is there a protocol version field, and is a mismatch detected or ignored? (2) Are messages fixed-layout C structs, and if so are they sensitive to compiler padding, endianness, or pointer width? (3) What is the transport on each of the five platforms?
 
-- [ ] **Step 3: Record the D7 decision**
+- [x] **Step 3: Record the D7 decision**
 
 If the protocol is versioned and layout-portable, confirm D7 as "bridge to the C++ `rxapi`". If it is an unversioned struct dump, flip D7 to "port `rexxapi/` in Phase 10" and add 12k LOC to the Phase 10 estimate. Update Section 1's D7 block in this file with the answer and the evidence.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs

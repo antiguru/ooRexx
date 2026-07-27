@@ -73,7 +73,7 @@ fn main() -> ExitCode {
 
         for method in &extractable {
             let program = render(group_name, method);
-            let file_name = format!("{group_name}_{}.rex", method.name);
+            let file_name = format!("{group_name}_{}.rex", sanitize(&method.name));
             if let Err(e) = std::fs::write(out.join(&file_name), program) {
                 eprintln!("cannot write {}: {e}", out.join(&file_name).display());
                 return ExitCode::from(2);
@@ -109,6 +109,16 @@ fn main() -> ExitCode {
         groups.len()
     );
     ExitCode::SUCCESS
+}
+
+/// ooRexx allows a quoted `::method` name to contain arbitrary characters --
+/// the suite has `::method "test_/="` and `::method "test_//="`, testing the
+/// `/=` and `//=` operators -- so a name cannot be used verbatim as a path
+/// component. Anything outside `[A-Za-z0-9_-]` becomes `_`.
+fn sanitize(name: &str) -> String {
+    name.chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .collect()
 }
 
 fn percentage(part: usize, whole: usize) -> f64 {
