@@ -38,6 +38,22 @@ pub enum Body {
     Instance(Vec<(String, ObjRef)>),
 }
 
+impl Body {
+    /// Appends every object this one can reach.
+    ///
+    /// This single exhaustive match replaces the 148 hand-written `live()`
+    /// implementations in the C++ tree. It has no wildcard arm on purpose:
+    /// adding a `Body` variant must be a compile error here, not a runtime
+    /// use-after-free.
+    pub fn trace(&self, out: &mut Vec<ObjRef>) {
+        match self {
+            Body::String(_) => {}
+            Body::Array(items) => out.extend_from_slice(items),
+            Body::Instance(vars) => out.extend(vars.iter().map(|(_, v)| *v)),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Object {
     pub behaviour: BehaviourId,

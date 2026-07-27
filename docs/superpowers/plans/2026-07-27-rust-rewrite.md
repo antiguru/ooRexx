@@ -1736,7 +1736,7 @@ git commit -m "Add the arena heap with a free list and slot handles"
 - Consumes: `Body`, `ObjRef`.
 - Produces: `Body::trace(&self, out: &mut Vec<ObjRef>)`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 use rexx_core::{Body, ObjRef};
@@ -1765,12 +1765,12 @@ fn an_instance_reaches_its_variable_values_but_not_their_names() {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd rust && cargo test -p rexx-core --test trace`
 Expected: FAIL — no method named `trace`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```rust
 impl Body {
@@ -1790,12 +1790,12 @@ impl Body {
 }
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-core --test trace`
 Expected: 3 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add rust
