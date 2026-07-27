@@ -14,3 +14,6 @@ ootest/
 # 13-program L0 corpus turned the Phase 0 self-test into 24,000 interpreter
 # invocations and a two-minute timeout.
 rust/corpus-l1/
+
+# Subagent-driven-development scratch: ledgers, briefs, review packages.
+.superpowers/
