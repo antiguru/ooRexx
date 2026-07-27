@@ -41,6 +41,9 @@ impl Slot {
 pub struct CollectStats {
     pub swept: usize,
     pub live: usize,
+    /// Objects that were unreachable but define `UNINIT`. They have been kept
+    /// alive so the finalizer does not observe a half-collected graph.
+    pub pending_uninit: Vec<ObjRef>,
 }
 
 pub struct Heap {
@@ -80,6 +83,64 @@ impl Heap {
             work.extend(reached.iter().copied());
         }
 
+        // Pass 1: clear weak references whose target did not survive.
+        //
+        // This runs BEFORE the uninit resurrection below, matching the oracle
+        // -- MemoryObject::markObjects at RexxMemory.cpp:426-433 calls
+        // checkWeakReferences() then checkUninit(), and the comment at :422
+        // gives the reason: "so that the uninit list doesn't mark any of the
+        // weakly referenced items. We don't want an object placed on the
+        // uninit queue to end up strongly referenced later."
+        //
+        // Swapping these two passes is observable: a weak reference to an
+        // unreachable but uninit-pending object reads .nil under this order
+        // and reads the live object under the other one.
+        for slot in 0..self.slots.len() {
+            if !self.marks[slot] {
+                continue;
+            }
+            let Slot::Live { object, .. } = &self.slots[slot] else { continue };
+            let Body::WeakRef(target) = object.body else { continue };
+            // "Dead" includes unresolvable: a target whose slot was already
+            // freed, or whose generation has moved on, died in an earlier
+            // cycle and its reference must still clear.
+            let target_alive = self.resolve(target).is_some_and(|t| self.marks[t]);
+            if !target_alive {
+                let Slot::Live { object, .. } = &mut self.slots[slot] else { unreachable!() };
+                object.body = Body::WeakRef(ObjRef::NIL);
+            }
+        }
+
+        // Pass 2: resurrect unreachable objects that define UNINIT, marking
+        // everything they reach so the finalizer never sees a half-collected
+        // graph. They are reported, not swept; the caller clears has_uninit
+        // once the finalizer has run, and the next collection takes them.
+        let mut pending_uninit = Vec::new();
+        let mut resurrect: Vec<ObjRef> = Vec::new();
+        for slot in 0..self.slots.len() {
+            if self.marks[slot] {
+                continue;
+            }
+            let Slot::Live { object, generation } = &self.slots[slot] else { continue };
+            if object.has_uninit {
+                let r = ObjRef::heap(slot as u32, *generation);
+                pending_uninit.push(r);
+                resurrect.push(r);
+            }
+        }
+        while let Some(r) = resurrect.pop() {
+            let Some(slot) = self.resolve(r) else { continue };
+            if std::mem::replace(&mut self.marks[slot], true) {
+                continue;
+            }
+            let Slot::Live { object, .. } = &self.slots[slot] else {
+                unreachable!("resolve rejects free slots")
+            };
+            reached.clear();
+            object.body.trace(&mut reached);
+            resurrect.extend(reached.iter().copied());
+        }
+
         let mut swept = 0;
         for slot in 0..self.slots.len() {
             if self.marks[slot] || matches!(self.slots[slot], Slot::Free { .. }) {
@@ -100,7 +161,7 @@ impl Heap {
                 _ => Slot::Free { next: None, generation },
             };
         }
-        CollectStats { swept, live: self.live }
+        CollectStats { swept, live: self.live, pending_uninit }
     }
 
     pub fn alloc(&mut self, body: Body) -> ObjRef {
@@ -108,7 +169,7 @@ impl Heap {
     }
 
     pub fn alloc_with(&mut self, behaviour: BehaviourId, body: Body) -> ObjRef {
-        let object = Object { behaviour, body };
+        let object = Object { behaviour, body, has_uninit: false };
         self.live += 1;
         match self.free_head {
             Some(slot) => {

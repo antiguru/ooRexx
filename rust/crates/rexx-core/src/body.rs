@@ -36,6 +36,10 @@ pub enum Body {
     Array(Vec<ObjRef>),
     /// A user-defined object: its instance variables.
     Instance(Vec<(String, ObjRef)>),
+    /// A reference that does not keep its target alive. Traces to nothing --
+    /// that is the whole point -- and the collector rewrites the target to
+    /// `ObjRef::NIL` once it dies.
+    WeakRef(ObjRef),
 }
 
 impl Body {
@@ -50,6 +54,9 @@ impl Body {
             Body::String(_) => {}
             Body::Array(items) => out.extend_from_slice(items),
             Body::Instance(vars) => out.extend(vars.iter().map(|(_, v)| *v)),
+            // Deliberately reaches nothing: a weak reference must not keep
+            // its target alive.
+            Body::WeakRef(_) => {}
         }
     }
 }
@@ -58,4 +65,9 @@ impl Body {
 pub struct Object {
     pub behaviour: BehaviourId,
     pub body: Body,
+    /// Set when the object defines an `UNINIT` method. Such an object is
+    /// resurrected by the collector and reported through
+    /// `CollectStats::pending_uninit` rather than swept, and is cleared once
+    /// the caller reports the finalizer has run.
+    pub has_uninit: bool,
 }

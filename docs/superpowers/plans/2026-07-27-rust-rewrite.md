@@ -2128,7 +2128,7 @@ git commit -m "Collect unreachable objects with mark and sweep over the arena"
 
 Getting this backwards is observable: take a `WeakReference` whose target is unreachable but pending `UNINIT`. Clearing weak refs first — the oracle's order — reads `.nil`. Resurrecting first reads the live object. Both are defensible designs; only one is ooRexx.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 use rexx_core::{Body, Heap, RootSet};
@@ -2187,12 +2187,12 @@ fn a_weak_reference_to_an_uninit_pending_object_is_still_cleared() {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd rust && cargo test -p rexx-core --test uninit`
 Expected: FAIL — `Body::WeakRef` does not exist.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `Body::WeakRef(ObjRef)` traces to nothing. `collect` gains two post-mark passes **in the oracle's order**:
 
@@ -2203,12 +2203,12 @@ Then sweep. `has_uninit` is cleared when the caller reports the finalizer has ru
 
 Do not swap these for tidiness. Pass 2 marks objects; if it ran first, pass 1 would see those marks and leave the weak references pointing at objects the oracle would have cleared.
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-core --test uninit`
 Expected: 4 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add rust
