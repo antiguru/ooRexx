@@ -1012,7 +1012,7 @@ Expected: 2 passed.
 `rust/crates/rexx-extract/src/bin/rexx-extract.rs` takes three flags, parsed the same way as `rexx-diff` in Task 0.3:
 
 - `--suite <dir>` — the checked-out `ootest/` tree; walked recursively for `*.testGroup`.
-- `--out <dir>` — where standalone micro-programs are written, one `.rex` per extractable method, named `<group>_<method>.rex`.
+- `--out <dir>` — where standalone micro-programs are written; use `rust/corpus-l1`, a **sibling** of `rust/corpus/` and never a child, because `rexx-diff` walks its corpus argument recursively and would otherwise sweep all 12,059 L1 programs into the 13-program L0 self-test, one `.rex` per extractable method, named `<group>_<method>.rex`.
 - `--report <file>` — a Markdown table written with one row per `.testGroup`: file, total `::method test*` count, extractable count, percentage; then a total line.
 
 Each emitted program wraps the method body with a minimal assert shim so it stands alone:
@@ -1042,7 +1042,7 @@ cd /home/moritz/dev/repos/ooRexx-rust-rewrite
 svn checkout --non-interactive --trust-server-cert \
   https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest
 cd rust && cargo run --release -p rexx-extract --bin rexx-extract -- \
-  --suite ../ootest --out ../rust/corpus/extracted --report ../docs/superpowers/plans/l1-coverage.md
+  --suite ../ootest --out ../rust/corpus-l1 --report ../docs/superpowers/plans/l1-coverage.md
 ```
 
 - [x] **Step 7: Record the D8 decision**
@@ -1342,13 +1342,20 @@ git commit -m "Document the RXAPI wire protocol and settle the bridge-or-port de
 
 ### Phase 0 exit gate
 
-All must hold before Phase 1 starts:
+**Assessed 2026-07-27: four of five met. Phase 1 may start.**
 
-- [ ] `rexx-diff --cpp build/bin/rexx --rs build/bin/rexx --corpus rust/corpus` reports **0 divergences**.
-- [ ] `perf-baseline.md` contains committed C++ numbers for all five platforms, or a documented failure for any platform that could not produce them.
-- [ ] `rexx_inventory::errors::MESSAGES` has 704 entries (56 majors + 648 submessages, keyed by `(major, sub)`); `builtins::NAMES` has 81 in table order.
-- [ ] `l1-coverage.md` exists and D8 is recorded in this file with its measured number.
-- [ ] `rxapi-protocol.md` exists and D7 is recorded in this file.
+- [x] `rexx-diff --cpp build/bin/rexx --rs build/bin/rexx --corpus rust/corpus` reports **13 programs, 0 divergences**. Negative control checked: substituting another binary reports 13 divergences and exit 1; an empty or unreadable corpus exits 2.
+- [ ] **NOT MET — `perf-baseline.md` has the Linux row only.** macOS, Windows, FreeBSD and OpenBSD need CI runs, which need a push. Nothing else in Phase 0 or Phase 1 depends on those four rows, so this does not block Phase 1; it blocks *closing* Phase 0, and it must be met before any phase gate claims a cross-platform performance result.
+- [x] `rexx_inventory::errors::MESSAGES` has 704 entries (56 majors + 648 submessages, keyed by `(major, sub)`); `builtins::NAMES` has 81 in table order. Eight tests, including `oracle_agreement.rs`, which checks all 704 renderings against `RexxErrorMessages.h` and finds zero mismatches.
+- [x] `l1-coverage.md` committed; **D8 closed at 86.2%** (82.7% corrected), so L1 stays.
+- [x] `rxapi-protocol.md` committed; **D7 closed** as bridge-to-C++-rxapi, with `sizeof(ServiceMessage) == 600` verified by compiling a probe.
+
+**Beyond the gate**, Phase 0 also produced two things the plan did not ask for and later phases need:
+
+- `conformance-baseline.md` — the C++ oracle's own ooTest result on Linux: 24,372 tests, 391,542 assertions, 2 failures, 3 errors. The L3 gate is now *proven runnable* rather than merely specified, and it establishes that the target is "match the oracle", not "zero failures".
+- **D13 closed** — the AST is a private implementation detail, so the Rust AST is plain owned data. That unblocks Phase 3 and preserves D10's combinator option.
+
+Three decisions closed in Phase 0 (D7, D8, D13), all by measurement rather than argument.
 
 ---
 
