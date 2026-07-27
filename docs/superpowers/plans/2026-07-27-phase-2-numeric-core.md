@@ -97,38 +97,17 @@ Each ends with an independently testable deliverable and a commit. TDD throughou
 
 - **2.1 — `Number` representation and parsing.** `Number { sign, exponent, digits: Vec<u8> }`, `Number::parse(&str) -> Option<Number>`, `Display`. Round-trips every literal form: integers, decimals, leading/trailing zeros, `1e5`, `1E+5`, surrounding whitespace, signs. **Exit:** parse-then-display is identity for canonical forms, and matches the oracle's canonicalisation for non-canonical ones.
 - **2.2 — Settings.** `Numeric { digits, fuzz, form }` with the exact defaults and limits above; `DIGITS()`, `FUZZ()`, `FORM()`.
-- **2.3 — Addition and subtraction. IN PROGRESS — do not treat the current code as correct.**
+- **2.3 — Addition and subtraction. DONE.** Zero divergences on 9,248 cases (DIGITS 1/3/9/15) and, on an independently generated set with different values and DIGITS 2/4/6/7/11/20, zero on a further 8,112.
 
-  A first implementation computes exactly and rounds at the end. That is wrong, and the differential harness says so: **1,574 divergences out of 9,248** cases across `DIGITS` 1, 3, 9 and 15.
+  Four rules had to be ported rather than derived. The first attempt derived them and failed 1,574 of 9,248:
 
-  The rule being missed is *operand discard by magnitude*. When one operand is far enough from the other, the interpreter returns the larger one unchanged rather than computing:
+  1. **A borrow leaves a leading zero that counts toward the digit count, and rounding happens before it is stripped.** `1e9 - 1` produces the raw digits `0999999999` — ten of them — so at DIGITS 9 rounding discards a `9` and carries up to `1000000000`. At DIGITS 10 the same digits fit and the exact `999999999` survives. Stripping the zero first, which is the obvious thing to do, breaks every case of this shape.
+  2. **Addition emits a carry digit only when there is a carry.** An unconditional leading slot is a zero that rounding then keeps in preference to the real digits — `1 + 1` at DIGITS 1 comes out as `0`.
+  3. **Fast paths return one operand nearly untouched** (either operand zero, or a magnitude gap wide enough that the smaller cannot reach a kept digit). These are not an optimisation: routing `0 + 123456789` through the general path yields `0123456789`, which rounds to `123456790`.
+  4. **The alignment-adjustment block** (`NumberStringMath.cpp:713`) shortens the less significant operand when the pair spans more than `DIGITS + 1`. It changes which digit the rounding decision sees: without it, `12.3400 - 9.999999995` at DIGITS 3 gives `2.3` instead of `2.4`.
 
-  ```
-  1e8 - 1   = 99999999          computed exactly
-  1e9 - 1   = 1.00000000E+9     the 1 is discarded
-  1 + 1e-9  = 1.00000000        computed
-  1 + 1e-10 = 1                 the 1e-10 is discarded
-  123456789 + 0.1 = 123456789   discarded
-  12345678  + 0.1 = 12345678.1  computed
-  ```
+  Rule 1 was found by hand-tracing `subtractNumbers`, after three earlier attempts to derive the behaviour from the fast-path conditions failed — the conditions are a red herring for that case; the leading zero is the mechanism.
 
-  The algorithm is `NumberString::addSub` (`interpreter/classes/NumberStringMath.cpp:574`), and it is explicit:
-
-  - working precision is `maxLength = digits + 1`
-  - operands longer than `digits` are truncated to `maxLength`, raising `LOSTDIGITS`
-  - `minExp = min(leftExp, rightExp)`; each operand gets an adjusted exponent relative to it
-  - fast paths return one operand untouched: either side being zero, or
-    `(adjustedLeftExp + leftLength) > (rightLength + digits)` and its mirror
-
-  **Ground truth, established numerically.** `1e9 - 1` really does evaluate to `1000000000`, not `999999999`: computing it at `DIGITS 9`, then evaluating `r - 999999999` at `DIGITS 15`, yields `1`. So the smaller operand is genuinely discarded, and this is not a display artefact.
-
-  **The derivation failed, three times, and that is the finding.** The fast-path condition reads verbatim `(adjustedLeftExp + leftLength) > (rightLength + digits)` (`:642`). For `1e9 - 1` at `DIGITS 9` that is `(9 + 1) > (1 + 9)` — `10 > 10`, false — so no fast path should fire. The alignment-truncation block at `:713` gives `adjustedLeftDigits = (1 + 9) - 10 = 0` and `adjustedRightDigits = -9`, so it makes no adjustment either. Storage was checked rather than assumed: `1e9 + 0` displays `1E+9` (one significant digit) while `1000000000 + 0` displays `1.00000000E+9` (nine), so `1e9` is held as one digit at exponent 9, which is the model used above.
-
-  Something between `:790` and `:1060`, or in `subtractNumbers` at `:1062`, accounts for the difference. It was not found by reading.
-
-  **So stop deriving and transliterate.** D4 exists precisely for this: the C++ is a direct encoding of a standard, and three failed hand-derivations are strong evidence the rule is not reconstructible from its parts. Port `addSub` and `subtractNumbers` line by line — including the parts that look redundant — and let the 9,248-case harness confirm it. Do not write a cleaner algorithm that "should" be equivalent; that is exactly what produced the 1,574 failures.
-
-  The harness to verify against is committed: `crates/rexx-num/tests/data-addsub-oracle.rex` produces the oracle side, `src/bin/addsub.rs` the Rust side, and the two are compared with `diff`.
 - **2.4 — Multiplication and division,** including `%` and `//` with their truncation and sign rules.
 - **2.5 — Power (`**`)**, integer exponents only, with error 26 for non-whole exponents.
 - **2.6 — Comparison,** numeric and strict, with `FUZZ`.
