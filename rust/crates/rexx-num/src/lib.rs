@@ -298,7 +298,13 @@ impl Number {
         let sign = if n.negative { "-" } else { "" };
         let d: String = n.digits.iter().map(|x| (b'0' + x) as char).collect();
 
-        if adjusted >= digits as i32 || n.exponent <= -(2 * digits as i32 + 1) {
+        // Compared in i64: `digits` is a bare u32 here (not bounded by
+        // `Settings`, which is the caller most external code goes through),
+        // so `2 * digits` must not be narrowed back to i32 before the
+        // comparison -- that overflows past 1073741823 and, in release,
+        // silently picks the wrong display form.
+        let digits = digits as i64;
+        if adjusted as i64 >= digits || n.exponent as i64 <= -(2 * digits + 1) {
             let mantissa = if d.len() == 1 {
                 d
             } else {

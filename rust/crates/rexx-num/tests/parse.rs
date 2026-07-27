@@ -77,6 +77,18 @@ fn things_that_are_not_numbers_are_rejected() {
 }
 
 #[test]
+fn format_does_not_overflow_at_extreme_digits() {
+    // `digits` is a bare u32 here, not the `Settings`-bounded value the
+    // interpreter would ever pass, so `format` itself has to stay well
+    // defined for the whole range. `2 * digits` narrowed to i32 overflows
+    // above 1073741823 and, before this was fixed, panicked in debug and
+    // silently picked the wrong display form in release.
+    assert_eq!(Number::parse("1e-30").unwrap().format(2147483647), "0.000000000000000000000000000001");
+    assert_eq!(Number::parse("1e-30").unwrap().format(u32::MAX), "0.000000000000000000000000000001");
+    assert_eq!(Number::parse("123456789").unwrap().format(u32::MAX), "123456789");
+}
+
+#[test]
 fn the_negative_threshold_is_on_the_raw_exponent_not_the_adjusted_one() {
     // Same value, two spellings, two different display forms. 1e-18 has raw
     // exponent -18 and prints plain; 10e-19 has raw exponent -19 and prints

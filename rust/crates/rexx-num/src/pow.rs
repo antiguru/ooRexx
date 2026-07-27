@@ -38,7 +38,10 @@ impl Number {
         if self_.is_zero() {
             return Some(0);
         }
-        if self_.digits.len() as i32 + self_.exponent > digits as i32 {
+        // Compared in i64: `digits` narrowed to i32 wraps negative above
+        // i32::MAX, which would invert this comparison rather than panic --
+        // a silently wrong answer, in release and debug alike.
+        if self_.digits.len() as i64 + self_.exponent as i64 > digits as i64 {
             return None;
         }
         if self_.exponent < 0 {

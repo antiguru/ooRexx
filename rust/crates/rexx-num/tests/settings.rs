@@ -22,6 +22,20 @@ fn digits_must_be_a_positive_whole_number() {
 }
 
 #[test]
+fn digits_is_capped_at_max_exponent() {
+    let mut s = Settings::default();
+    assert!(s.set_digits_str("999999999").is_ok());
+    assert_eq!(s.digits(), 999_999_999);
+
+    let mut s = Settings::default();
+    assert_eq!(s.set_digits_str("1000000000"), Err(SettingsError::NotWholeNumber));
+    // Values that would not even fit a u32, let alone the cap, fail the
+    // same way rather than a different one.
+    assert_eq!(s.set_digits_str("2147483647"), Err(SettingsError::NotWholeNumber));
+    assert_eq!(s.set_digits_str("4294967296"), Err(SettingsError::NotWholeNumber));
+}
+
+#[test]
 fn fuzz_must_be_non_negative() {
     let mut s = Settings::default();
     assert_eq!(s.set_fuzz_str("-1"), Err(SettingsError::NotWholeNumber));

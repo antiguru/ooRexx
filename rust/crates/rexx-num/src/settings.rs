@@ -87,7 +87,7 @@ impl Settings {
 
     pub fn set_digits_str(&mut self, text: &str) -> Result<(), SettingsError> {
         let value = whole_number(text).ok_or(SettingsError::NotWholeNumber)?;
-        if value < 1 {
+        if value < 1 || value > crate::MAX_EXPONENT as i64 {
             return Err(SettingsError::NotWholeNumber);
         }
         let value = u32::try_from(value).map_err(|_| SettingsError::NotWholeNumber)?;
