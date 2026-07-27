@@ -106,8 +106,19 @@ for ($i = 0; $i -lt $lines.Count; $i++) {
     }
 }
 
-$unexpected = @($records | Where-Object { -not $known.ContainsKey($_.Id.ToLowerInvariant()) })
-$expected = @($records | Where-Object { $known.ContainsKey($_.Id.ToLowerInvariant()) })
+# An entry may name a single test, CLASS/TEST, or a whole group as CLASS/*.
+# The wildcard form is for a group that fails intermittently on a different test
+# each time, where listing test names would neither match reliably nor describe
+# the problem.
+function Test-Known([string] $id) {
+    $lower = $id.ToLowerInvariant()
+    if ($known.ContainsKey($lower)) { return $true }
+    $className = $lower.Split('/')[0]
+    return $known.ContainsKey("$className/*")
+}
+
+$unexpected = @($records | Where-Object { -not (Test-Known $_.Id) })
+$expected = @($records | Where-Object { Test-Known $_.Id })
 
 if ($expected.Count -gt 0) {
     Add-Summary "$($expected.Count) known environmental failure(s), ignored:"

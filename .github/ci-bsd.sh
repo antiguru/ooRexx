@@ -50,6 +50,30 @@ echo "--- .rexxInfo~executable, found on PATH ---"
 svn checkout --non-interactive --trust-server-cert \
     https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest
 
+# The VM logs in as root, and the suite is not meant to be run that way: its
+# ReadMe.first says so, and root defeats every test that asserts something
+# cannot be read, written or deleted, because root can do all three regardless
+# of the mode bits.
+#
+# Measured in a local OpenBSD VM, same build and same machine, root against an
+# ordinary user: File 2 failures against 0, Stream 1 against 0, SysFileXXX 4
+# against 0, ProcessInvocation 1 against 0. Nine failures that are entirely an
+# artefact of the login.
+#
+# So the suite runs as an unprivileged user, which is also what the Linux, macOS
+# and Windows runners do, and makes the platforms comparable rather than each
+# carrying its own private list of excuses.
+TESTUSER=oorexxtest
+case `uname -s` in
+FreeBSD) pw useradd -n "$TESTUSER" -m -s /bin/sh || true ;;
+*)       useradd -m -s /bin/sh "$TESTUSER" || true ;;
+esac
+
+# The build tree stays owned by root and is only read; the suite directory has
+# to be writable because the tests create files inside it.
+chmod -R a+rX "$WS/build"
+chown -R "$TESTUSER" ootest
+
 # Run out of the build tree rather than an install, so the suite picks up the
 # interpreter, the runtime libraries and the compiled native API test binaries
 # together and the native API tests actually run.
@@ -57,7 +81,12 @@ PATH="$WS/build/bin:$PATH"
 LD_LIBRARY_PATH="$WS/build/lib:$WS/build/bin:${LD_LIBRARY_PATH:-}"
 export PATH LD_LIBRARY_PATH
 
-cd ootest
+# These have to be writable by the test user, and are created here rather than
+# left for the redirection to make as root.
+: > "$WS/testresults.txt"
+: > "$WS/testexitcode.txt"
+chown "$TESTUSER" "$WS/testresults.txt" "$WS/testexitcode.txt"
+
 # The output is teed rather than only redirected. The FreeBSD VM died partway
 # through a run once, and because the file only existed inside the VM the
 # copyback never happened and there was nothing at all to look at afterwards.
@@ -75,9 +104,28 @@ cd ootest
 # read stdin; a child consuming the session's stdin would end it exactly that
 # way. Handing the suite an stdin of its own removes that possibility, so if it
 # still dies there the cause is in the interpreter rather than in the plumbing.
+#
+# su -l starts a login shell and discards the environment, so the paths have to
+# be set again on the far side. That goes in a script rather than inline in
+# su -c: quoting a command that itself contains quoted variable references is
+# how the first attempt ended up passing a literal $PATH through, which emptied
+# the search path and made the framework's own "id -u" fail with 127.
+#
+# The heredoc is unquoted so $WS expands as the file is written, while \$PATH
+# and \$? are left for the script to evaluate when it runs.
+cat > "$WS/run-suite.sh" <<SCRIPT
+#!/bin/sh
+cd "$WS/ootest" || exit 1
+PATH="$WS/build/bin:\$PATH"
+LD_LIBRARY_PATH="$WS/build/lib:$WS/build/bin"
+export PATH LD_LIBRARY_PATH
+"$WS/build/bin/rexx" testOORexx.rex -s < /dev/null
+echo \$? > "$WS/testexitcode.txt"
+SCRIPT
+chmod 755 "$WS/run-suite.sh"
+
 set +e
-{ "$WS/build/bin/rexx" testOORexx.rex -s < /dev/null; echo $? > "$WS/testexitcode.txt"; } 2>&1 \
-    | tee "$WS/testresults.txt"
+su -l "$TESTUSER" -c "$WS/run-suite.sh" 2>&1 | tee "$WS/testresults.txt"
 set -e
 
 # Any core left behind gets a backtrace printed into the job log. The suite
