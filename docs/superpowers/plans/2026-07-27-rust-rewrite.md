@@ -1932,7 +1932,7 @@ git commit -m "Add an explicit, enumerable GC root set"
 - Consumes: `Heap`, `RootSet`, `Body::trace`.
 - Produces: `Heap::collect(&mut self, roots: &RootSet) -> CollectStats`, `CollectStats { swept: usize, live: usize }`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 use rexx_core::{Body, Heap, RootSet};
@@ -2007,12 +2007,12 @@ fn a_handle_to_a_swept_object_does_not_alias_the_slots_next_occupant() {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd rust && cargo test -p rexx-core --test collect`
 Expected: FAIL — no method named `collect`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Add a `marks: Vec<bool>` field to `Heap` **and initialise it in `Heap::new()`** — the struct and the constructor both, or this does not compile. Then:
 
@@ -2103,12 +2103,12 @@ mod retire_tests {
 
 One residual, worth knowing rather than fixing: `ObjRef::heap`'s `debug_assert!` on the generation compiles out in release, so a release-mode call with `generation == 2^30` would wrap into the slot bits silently. That is safe only as long as `collect`'s retirement branch remains the sole producer of generations, which it is. If a second producer ever appears, promote the `debug_assert!` to a real check.
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-core`
 Expected: 6 integration tests in `collect` plus the `retire_tests` unit test, all passing.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add rust

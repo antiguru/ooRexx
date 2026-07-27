@@ -18,5 +18,5 @@ mod roots;
 
 pub use body::{BehaviourId, Body, Object};
 pub use handle::{Decoded, GENERATION_MAX, ObjRef, SMALL_INT_MAX, SMALL_INT_MIN};
-pub use heap::Heap;
+pub use heap::{CollectStats, Heap};
 pub use roots::{FrameId, RootSet};
