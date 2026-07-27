@@ -77,10 +77,7 @@ fn main() -> ExitCode {
         total_tests += total;
         total_extractable += extracted;
         let pct = percentage(extracted, total);
-        rows.push(format!(
-            "| {} | {total} | {extracted} | {pct:.1}% |",
-            group_path.display()
-        ));
+        rows.push(format!("| {} | {total} | {extracted} | {pct:.1}% |", group_path.display()));
     }
 
     let total_pct = percentage(total_extractable, total_tests);
@@ -111,23 +108,82 @@ fn percentage(part: usize, whole: usize) -> f64 {
     if whole == 0 { 0.0 } else { 100.0 * part as f64 / whole as f64 }
 }
 
+/// One `::method` per name in `rexx_extract::ASSERTIONS`'s intent -- the shim
+/// must define exactly the assertions the extractor is willing to recognise,
+/// or a method that used a recognised-but-undefined message would be marked
+/// extractable and then fail at runtime with "message not understood".
+const SHIM_METHODS: &str = r#"::method assertEquals
+  use arg expected, actual
+  if expected \== actual then do
+    say "FAIL expected["expected"] actual["actual"]"
+    exit 1
+  end
+::method assertNotEquals
+  use arg expected, actual
+  if expected == actual then do
+    say "FAIL not-expected["expected"] actual["actual"]"
+    exit 1
+  end
+::method assertTrue
+  use arg condition
+  if \condition then do
+    say "FAIL expected true actual["condition"]"
+    exit 1
+  end
+::method assertFalse
+  use arg condition
+  if condition then do
+    say "FAIL expected false actual["condition"]"
+    exit 1
+  end
+::method assertNull
+  use arg actual
+  if actual \== .nil then do
+    say "FAIL expected nil actual["actual"]"
+    exit 1
+  end
+::method assertNotNull
+  use arg actual
+  if actual == .nil then do
+    say "FAIL expected non-nil actual nil"
+    exit 1
+  end
+::method assertSame
+  use arg expected, actual
+  if \(expected == actual) then do
+    say "FAIL expected["expected"] actual["actual"]"
+    exit 1
+  end
+::method assertNotSame
+  use arg expected, actual
+  if expected == actual then do
+    say "FAIL not-expected["expected"] actual["actual"]"
+    exit 1
+  end
+::method expectSyntax
+  use arg code
+  nop
+::method assertListEquals
+  use arg expected, actual
+  if expected \== actual then do
+    say "FAIL expected["expected"] actual["actual"]"
+    exit 1
+  end
+::method assertArrayEquals
+  use arg expected, actual
+  if expected \== actual then do
+    say "FAIL expected["expected"] actual["actual"]"
+    exit 1
+  end
+"#;
+
 /// Wraps a test method's body in a minimal standalone program: a `main`
 /// routine running the body, plus a `shim` class defining exactly the
 /// assertion messages the extractor recognises.
 fn render(group_name: &str, method: &TestMethod) -> String {
     format!(
-        "/* extracted from {group_name}::{name} */\n\
-         ::routine main public\n\
-         {body}\n\
-         ::class shim public\n\
-         ::method assertEquals\n\
-         \x20 use arg expected, actual\n\
-         \x20 if expected \\== actual then do\n\
-         \x20   say \"FAIL expected[\"expected\"] actual[\"actual\"]\"\n\
-         \x20   exit 1\n\
-         \x20 end\n",
-        name = method.name,
-        body = method.body,
+        "/* extracted from {group_name}::{} */\n::routine main public\n{}\n::class shim public\n{}",
+        method.name, method.body, SHIM_METHODS
     )
 }
 

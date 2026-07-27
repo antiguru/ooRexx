@@ -22,8 +22,8 @@ cargo build --release
     --cpp ../build/bin/rexx --rs ../build/bin/rexx --corpus corpus
 ```
 
-Expect `12 programs, 0 divergences` and exit 0. Substituting any other binary
-for `--rs` should report 12 divergences and exit 1; that negative control is
+Expect `13 programs, 0 divergences` and exit 0. Substituting any other binary
+for `--rs` should report 13 divergences and exit 1; that negative control is
 what makes a zero meaningful.
 
 ## Current programs
@@ -42,6 +42,7 @@ what makes a zero meaningful.
 | `trace_output.rex` | `TRACE I` output formatting, which is observable |
 | `source_arg.rex` | `PARSE SOURCE`, `SOURCELINE()`, `ARG()` option forms |
 | `primitive_classes.rex` | `~id` of every class reachable as an environment symbol |
+| `whitespace_significant.rex` | `f(x)` vs `f (x)`, abuttal forms, and the empty-binary-literal trap |
 
 ## Two things this corpus learned the hard way
 
@@ -49,6 +50,12 @@ what makes a zero meaningful.
 string literal** — the `b` suffix binds to the preceding quote — and the
 program dies with error 15.4. `parse_template.rex` uses explicit `||` for
 exactly this reason.
+
+Worse, the same rule usually fails *silently*. `say a''b` looks like the
+classic idiom for blank-free concatenation but prints `x`, not `xy`: `''b` is
+an empty binary literal, so the line concatenates `a` with `""` and never
+reads `b`. This was written into `whitespace_significant.rex` as a comment
+asserting the wrong output, and only caught by running it.
 
 `.integer` is not an environment symbol; `Integer` is internal and unexposed.
 `.rexxinfo` is an *instance*, not a class, so it has no `~id`. Both were in
