@@ -1,0 +1,27 @@
+do i = 1 to 3
+  say "to" i
+end
+do i = 10 to 1 by -4
+  say "by" i
+end
+do 2
+  say "count"
+end
+i = 0
+do while i < 2
+  i = i + 1
+  say "while" i
+end
+i = 5
+do until i >= 7
+  i = i + 1
+  say "until" i
+end
+do i = 1 to 5
+  if i = 2 then iterate
+  if i = 4 then leave
+  say "ctl" i
+end
+do i over .array~of("x", "y")
+  say "over" i
+end

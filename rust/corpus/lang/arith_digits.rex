@@ -1,0 +1,13 @@
+numeric digits 9
+say 1/3
+numeric digits 20
+say 1/3
+say 2**100
+say 1e10 + 1
+numeric form engineering
+say 12345678901 * 1
+numeric form scientific
+say 12345678901 * 1
+say 0.1 + 0.2
+say 7 // 3
+say 7 % 3

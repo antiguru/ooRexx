@@ -661,7 +661,7 @@ git commit -m "Normalise interpreter output and diff two runs"
 - Consumes: `Interpreter`, `normalize`, `diff` from Tasks 0.1–0.2.
 - Produces: `rexx-diff --cpp <bin> --rs <bin> --corpus <dir>`, exit 0 on no divergence.
 
-- [ ] **Step 1: Write the seed corpus**
+- [x] **Step 1: Write the seed corpus**
 
 Twelve micro-programs, one observable feature each. `rust/corpus/lang/arith_digits.rex`:
 ```rexx
@@ -691,7 +691,7 @@ say "trapped" rc condition("C")
 
 Write nine more covering: `DO` variants, `SELECT`/`WHEN`, `CALL`/`PROCEDURE`/`EXPOSE`, stem and compound variables, `INTERPRET`, string builtins, `TRACE I` output, `SOURCELINE`/`ARG`, and `SAY` of every primitive class name. Each must produce deterministic output — no clock, no PID, no file system state.
 
-- [ ] **Step 2: Write the CLI**
+- [x] **Step 2: Write the CLI**
 
 `rust/crates/rexx-oracle/src/bin/rexx-diff.rs`:
 ```rust
@@ -717,6 +717,21 @@ fn main() -> ExitCode {
         eprintln!("usage: rexx-diff --cpp <bin> --rs <bin> --corpus <dir>");
         return ExitCode::from(2);
     };
+
+    // Canonicalise before use. Each program runs with its own directory as
+    // the child's cwd, and a relative binary path would then be resolved
+    // against *that* directory rather than ours -- so `--cpp ../build/bin/rexx`
+    // fails with a bare NotFound once the child cwd moves.
+    let absolute = |p: PathBuf, what: &str| match std::fs::canonicalize(&p) {
+        Ok(abs) => abs,
+        Err(e) => {
+            eprintln!("cannot resolve {what} {}: {e}", p.display());
+            std::process::exit(2);
+        }
+    };
+    let cpp = absolute(cpp, "--cpp");
+    let rs = absolute(rs, "--rs");
+    let corpus = absolute(corpus, "--corpus");
 
     let lib = |bin: &PathBuf| {
         bin.parent()
@@ -769,7 +784,7 @@ fn walk(dir: &std::path::Path) -> Vec<PathBuf> {
 }
 ```
 
-- [ ] **Step 3: Verify the differ finds zero divergences running C++ against itself**
+- [x] **Step 3: Verify the differ finds zero divergences running C++ against itself**
 
 Run:
 ```bash
@@ -781,7 +796,7 @@ Expected: `12 programs, 0 divergences`, exit 0.
 
 **This is the phase's central self-test.** A non-zero count here means the corpus is non-deterministic or normalisation is wrong — fix the corpus, never loosen normalisation to make it pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add rust

@@ -1,0 +1,6 @@
+trace i
+x = 1 + 1
+y = x * 3
+if y > 5 then say "big"
+trace off
+say "done" y
