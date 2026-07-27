@@ -542,7 +542,7 @@ git commit -m "Add a Rust workspace and an oracle runner for the C++ interpreter
 - Consumes: `Outcome`, `Interpreter` from Task 0.1.
 - Produces: `normalize(&Outcome, &Path) -> Outcome`, `diff(&Outcome, &Outcome) -> Option<Divergence>`, `Divergence`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 `rust/crates/rexx-oracle/tests/normalize.rs`:
 ```rust
@@ -571,12 +571,12 @@ fn crlf_is_folded_so_windows_and_unix_compare_equal() {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `cd rust && cargo test -p rexx-oracle`
 Expected: FAIL — `normalize` is not defined.
 
-- [ ] **Step 3: Implement normalisation**
+- [x] **Step 3: Implement normalisation**
 
 `rust/crates/rexx-oracle/src/normalize.rs`:
 ```rust
@@ -638,12 +638,12 @@ mod normalize;
 pub use normalize::{diff, normalize, Divergence};
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [x] **Step 4: Run to verify it passes**
 
 Run: `cd rust && cargo test -p rexx-oracle`
 Expected: 2 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add rust

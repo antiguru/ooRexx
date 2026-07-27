@@ -11,6 +11,9 @@
 
 //! Runs a Rexx program under an interpreter and captures its observable output.
 
+mod normalize;
+pub use normalize::{Divergence, diff, normalize};
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
