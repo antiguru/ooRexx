@@ -121,7 +121,9 @@ jobs:
         run: |
           & "$env:GITHUB_WORKSPACE\.github\check-test-results.ps1" `
               -ResultsFile "$env:GITHUB_WORKSPACE\testresults.txt" `
-              -KnownFailuresFile "$env:GITHUB_WORKSPACE\.github\known-test-failures.txt" `
+              -KnownFailuresFile @(
+                  "$env:GITHUB_WORKSPACE\.github\known-test-failures\common.txt",
+                  "$env:GITHUB_WORKSPACE\.github\known-test-failures\windows.txt") `
               -ExitCodeFile "$env:GITHUB_WORKSPACE\testexitcode.txt"
           exit $LASTEXITCODE
 

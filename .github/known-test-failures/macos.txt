@@ -1,0 +1,5 @@
+# macOS-only expected failures. See common.txt for the shared ones and
+# README.md for what may go in here.
+#
+# Empty on purpose, same reasoning as linux.txt: this gets filled in from an
+# observed run, not from guesses.

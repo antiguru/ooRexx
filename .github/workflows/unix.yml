@@ -1,0 +1,122 @@
+name: Linux and macOS
+
+# Same scoping as the Windows workflow: CI branches only, never master.
+on:
+  push:
+    branches:
+      - 'ci/**'
+  workflow_dispatch:
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      # One platform failing should not cancel the others: the whole point is
+      # to see which platforms differ.
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux (ubuntu-24.04)
+            os: ubuntu-24.04
+            known: linux
+          - name: macOS (macos-15, arm64)
+            os: macos-15
+            known: macos
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build and test prerequisites
+        shell: bash
+        # svn is needed for the test suite, which lives in a separate
+        # SourceForge repository. It is not present by default on either image:
+        # the macOS command line tools dropped it, and the Ubuntu image does not
+        # carry it.
+        run: |
+          set -eux
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends subversion
+          else
+            brew install subversion
+          fi
+
+      - name: Report toolchain
+        shell: bash
+        run: |
+          cmake --version
+          ${CXX:-c++} --version
+          svn --version --quiet
+          uname -a
+
+      - name: Configure
+        shell: bash
+        # CMAKE_POLICY_VERSION_MINIMUM is needed because cmake_minimum_required
+        # still asks for 2.8.12 here, which CMake 4 refuses outright. Homebrew
+        # in particular ships CMake 4.
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --parallel "$(getconf _NPROCESSORS_ONLN)"
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          set -eux
+          build/bin/rexx -v
+          echo 'say .rexxinfo~version' > hello.rex
+          build/bin/rexx hello.rex
+
+      - name: Check out the test suite
+        shell: bash
+        run: svn checkout --non-interactive --trust-server-cert https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest
+
+      - name: Run the test suite
+        shell: bash
+        # Run from the build tree rather than an install. Putting build/bin and
+        # build/lib on the loader path supplies the interpreter, the runtime
+        # libraries and the compiled native API test binaries at once, so the
+        # native API tests run instead of having to be excluded.
+        #
+        # The exit code is recorded, not acted on. Judging the run is the check
+        # step's job, since it can tell an environmental failure from a real one.
+        run: |
+          export PATH="$GITHUB_WORKSPACE/build/bin:$PATH"
+          export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/build/lib:$GITHUB_WORKSPACE/build/bin:${LD_LIBRARY_PATH:-}"
+          export DYLD_LIBRARY_PATH="$GITHUB_WORKSPACE/build/lib:$GITHUB_WORKSPACE/build/bin:${DYLD_LIBRARY_PATH:-}"
+          cd ootest
+          set +e
+          rexx testOORexx.rex -s > "$GITHUB_WORKSPACE/testresults.txt" 2>&1
+          echo $? > "$GITHUB_WORKSPACE/testexitcode.txt"
+          set -e
+          cat "$GITHUB_WORKSPACE/testresults.txt"
+
+      - name: Check test results
+        if: always()
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE/.github/check-test-results.ps1" `
+              -ResultsFile "$env:GITHUB_WORKSPACE/testresults.txt" `
+              -KnownFailuresFile @(
+                  "$env:GITHUB_WORKSPACE/.github/known-test-failures/common.txt",
+                  "$env:GITHUB_WORKSPACE/.github/known-test-failures/${{ matrix.known }}.txt") `
+              -ExitCodeFile "$env:GITHUB_WORKSPACE/testexitcode.txt" `
+              -Platform "${{ matrix.name }}"
+          exit $LASTEXITCODE
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oorexx-testresults-${{ matrix.known }}
+          path: testresults.txt
+          if-no-files-found: warn

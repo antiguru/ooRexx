@@ -1,18 +1,5 @@
-# Test failures that are expected when the ooRexx suite runs on a GitHub
-# Actions Windows runner, as CLASS/TEST, matched case insensitively.
-#
-# Everything here has to be a property of the runner rather than of the
-# interpreter. A test that fails because of an interpreter defect does not
-# belong in this file; it belongs in a bug report.
-#
-# Anything failing that is not listed fails the build, as does the suite
-# not reaching its summary at all, which is how an interpreter crash shows up.
-
-# ReadMe.first records these as failing whenever the suite's output is
-# redirected. CI has no console at all, so they cannot pass here. The same two
-# fail for the same reason on a redirected Linux run.
-CHAROUT.testGroup/TEST_STDOUT_START
-LINEOUT.testGroup/TEST_LINE_TRANSIENT
+# Windows-only expected failures. The ones shared with every other platform
+# are in common.txt; README.md says what may go in either.
 
 # No printer is installed on a hosted runner, so every one of these gets back
 # "no default printer" instead of the value it asserts.
