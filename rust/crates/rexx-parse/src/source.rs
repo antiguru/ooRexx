@@ -17,6 +17,8 @@
 //! literal containing a raw `FF FE` runs fine, `c2x` reports `FFFE`), so the
 //! retained source is `Vec<u8>` and lines are `&[u8]`, never `String`/`&str`.
 
+use std::ops::Range;
+
 /// The retained text of one Rexx program, indexed by physical line.
 ///
 /// Built once at construction; `line` and `line_of` are read-only lookups
@@ -111,6 +113,20 @@ impl ProgramSource {
         let index = n.checked_sub(1)?;
         let &(start, end) = self.lines.get(index)?;
         Some(&self.text[start..end])
+    }
+
+    /// The line's content range in the retained text, terminator excluded,
+    /// or `None` if `n` is 0 or past `line_count()`. `line(n)` returns
+    /// exactly `&text[line_span(n)?]`.
+    ///
+    /// This is what lets the scanner work on a line at a time and still
+    /// report absolute byte offsets: it adds the line's start to every
+    /// in-line offset. The terminator rules stay here, in one place, rather
+    /// than being re-derived from the source bytes by a second scanner.
+    pub fn line_span(&self, n: usize) -> Option<Range<usize>> {
+        let index = n.checked_sub(1)?;
+        let &(start, end) = self.lines.get(index)?;
+        Some(start..end)
     }
 
     /// The 1-based physical line containing byte offset `byte`.

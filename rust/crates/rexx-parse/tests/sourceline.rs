@@ -155,3 +155,23 @@ fn empty_source_has_no_lines() {
     assert_eq!(src.line(1), None);
     assert_eq!(src.line(0), None);
 }
+
+#[test]
+fn line_span_indexes_the_same_bytes_line_returns() {
+    // The scanner needs absolute offsets, so `line_span` must agree with
+    // `line` byte for byte, including for the CRLF and bare-CR cases the
+    // terminator rules cover.
+    let src = ProgramSource::new(b"say 1\r\nsay 22\rsay 333".to_vec());
+    assert_eq!(src.line_count(), 3);
+    for n in 1..=3 {
+        let span = src.line_span(n).expect("line exists");
+        assert_eq!(src.line(n).expect("line exists").len(), span.len());
+    }
+    assert_eq!(src.line_span(1), Some(0..5));
+    // Line 2 starts after CRLF, both bytes consumed as one terminator.
+    assert_eq!(src.line_span(2), Some(7..13));
+    // Line 3 starts after a bare CR.
+    assert_eq!(src.line_span(3), Some(14..21));
+    assert_eq!(src.line_span(0), None);
+    assert_eq!(src.line_span(4), None);
+}
