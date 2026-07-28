@@ -281,6 +281,11 @@ easy to get wrong:
 - quoted literals with doubled quotes, and the `'…'x` / `'…'b` suffixes
 - blanks as significant tokens (`TOKEN_BLANK`) — abuttal concatenation needs
   them, so they cannot be silently dropped
+- a comment **separates** tokens but produces **no blank**. Verified with
+  `a = 1; b = 2`: `say a/*c*/b` prints `12` while `say a b` prints `1 2`. So a
+  comment is not whitespace and not nothing — dropping it entirely glues the
+  tokens into one symbol, and emitting a blank for it inserts a space the
+  interpreter does not.
 
 - [ ] **Step 2: Write failing tests for each**
 
@@ -335,7 +340,9 @@ and one that does not raises a syntax error with a specific number and line.
 
 - [ ] **Step 1: Establish the rules from the C++**
 
-`interpreter/parser/Clause.cpp`. A clause ends at `;`, at end of line unless
+`Clause.cpp` is only 211 lines and holds the clause *data structure*; the
+splitting logic lives in `LanguageParser.cpp` (`nextClause`) and
+`Scanner.cpp`. Read those. A clause ends at `;`, at end of line unless
 continued, or at `:` for a label. The continuation comma and the `-` line
 continuation both suppress the end-of-line break.
 
