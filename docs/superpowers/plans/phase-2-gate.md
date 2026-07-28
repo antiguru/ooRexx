@@ -27,7 +27,7 @@ Also: there are now **twelve** programs, not eleven. `form_notation.rex` and
 
 To be precise about *why* this cannot be assessed: it is the missing Rust
 side, not a problem with the programs. All twelve run cleanly under
-`build/bin/rexx` today, as do the thirteen in `rust/corpus/lang/` — checked,
+`build/bin/rexx` today, as do the fourteen in `rust/corpus/lang/` — checked,
 not assumed. There is simply nothing to compare them against yet.
 
 **What was done instead.** Every behaviour those programs pin was verified
@@ -150,21 +150,22 @@ rests on:
 | `fmt3` | 12,136 | ENGINEERING form; before/after × expp/expt |
 | `fmtedge` | 640 | exponent extremes, non-numbers |
 | `fmtcarry` | 15,840 | the exponent check after a rounding carry |
-| **total** | **126,048** | |
+| `signblank` | 2,320 | blanks after a sign; 480 rows are error-41 |
+| **total** | **128,368** | |
 
 Every count above was regenerated and counted for this document rather than
 copied from a report. Plus randomised sets on unused seeds, and 180 targeted
 power-range cases at the exponent limits.
 
-All eleven are reproducible from
+All twelve are reproducible from
 `rust/crates/rexx-num/tests/gen-curated-sets.py`, which matters because the
 oracle captures themselves live in a session scratchpad and do not survive.
-Two of the eleven, `fmt` and `fmt2`, are reconstructions rather than byte-exact
+Two of the twelve, `fmt` and `fmt2`, are reconstructions rather than byte-exact
 copies of the sets originally used — that is recorded in the generator's own
 docstring, and both were re-run against the oracle at 0 before the claim was
 made.
 
-**Four defects were found *after* their tasks were first reported done**, all
+**Eight defects were found *after* their tasks were first reported done**, all
 by review or by corpus extension rather than by the tests written alongside
 the code:
 
@@ -174,6 +175,21 @@ the code:
 - the exponent-width check being *moved* rather than duplicated, so a rounding
   carry went unreported
 - `substitute` re-scanning text it had just injected
+- the `NUMERIC DIGITS` rule itself being wrong — a fixed cap where the
+  interpreter rounds the candidate at the DIGITS currently in force. This one
+  reached committed code because the *brief* specified it wrongly, from a probe
+  taken only at the default DIGITS 9 where a cap and the real rule coincide
+- `Number::parse` rejecting blanks between a sign and its digits, which
+  `"+ 3" + 0` accepts, plus `str::trim` treating LF/CR/VT/FF as blanks where
+  the interpreter's class is exactly space and tab
+- a third `u32`→`i32` narrowing in `muldiv`, missed by a sweep whose output was
+  piped through `head` and treated as complete
+- inexact division never terminating once DIGITS could reach 10¹⁸
+
+Note the last four were found *after* this document first claimed four. That
+is itself the finding: each round of review found defects the previous round's
+fixes introduced or exposed, and two of the last three fix rounds introduced a
+new defect while repairing an old one.
 
 ## The blind spot worth naming
 

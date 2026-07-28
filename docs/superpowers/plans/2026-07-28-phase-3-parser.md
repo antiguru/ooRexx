@@ -30,10 +30,16 @@ Measured, for scale and for locating reference behaviour:
 | `interpreter/parser/DirectiveParser.cpp` | 2,867 | `::class`, `::method` and the rest |
 | `interpreter/parser/Scanner.cpp` | 1,955 | tokens |
 | `interpreter/parser/ProgramSource.cpp` | 768 | source retention, `SOURCELINE` |
-| **total** | **17,483** | |
+| **these five** | **14,638** | |
+| the whole `interpreter/parser/` directory | 17,483 | including `Token.cpp`, `Clause.cpp`, `KeywordConstants.cpp` and headers |
 
 19 token classes (`Token.hpp`), 35 keyword→instruction mappings
 (`KeywordConstants.cpp`), 52 instruction classes, 17 expression classes.
+
+**The keyword tables are bigger than "35".** `InstructionParser.cpp` is 4,650
+lines mostly because of the *sub*-keyword tables, which the 35 figure hides:
+`subKeywords` 50, `subDirectives` 40, `parseOptions` 10, `conditionKeywords`
+12. Size Task 3.6 and Task 3.7 by those, not by the instruction count.
 
 ## The number this phase must beat
 
@@ -112,7 +118,15 @@ stem.i.j                       /* compound variable */
 f(g(h(x)))                     /* nested calls */
 -x ** 2                        /* prefix vs power binding */
 a = b = c                      /* comparison chaining */
+f(x)                           /* call */
+f (x)                          /* NOT a call -- abuttal of f and (x) */
+say a""b                       /* null-string abuttal */
 ```
+
+`f(x)` versus `f (x)` is the one the parent plan singles out as the combinator
+hazard, because a blank changes a function call into a concatenation. Verified
+they differ. Do not omit it — an earlier draft of this plan did, and it is
+precisely the case that separates the two D10 options.
 
 For each, capture the interpreter's answer with a driver that prints the
 evaluated result, so both spike implementations are checked against the same
@@ -136,6 +150,18 @@ The parent plan fixes these and no others:
    column.
 3. **Parse throughput on `CoreClasses.orx`** — not on synthetic input. Under
    D2 this number is cold-start time.
+
+- [ ] **Step 3b: Decide the AST's shape — tree or flat instruction chain**
+
+The spike builds an AST either way, so settle this while it is cheap. The C++
+links instructions into a **chain** (each node points to the next) rather than
+nesting them in a tree, and D13's text says "plain owned Rust data inside one
+arena object per code body" — the arena half of which an earlier draft of this
+plan dropped.
+
+The two shapes give Phase 4 different dispatch loops: a chain walks a `next`
+pointer, a tree recurses. Getting it wrong is not a parser fix, it is a Phase 4
+rewrite. Record the choice and the reason with the D10 decision.
 
 - [ ] **Step 4: Write `d10-decision.md`**
 
@@ -193,6 +219,10 @@ fn sourceline_returns_lines_without_terminators() {
     assert_eq!(src.line_count(), 2);
     assert_eq!(src.line(1), Some("say 1"));
     assert_eq!(src.line(2), Some("say 2"));
+    // Out of range is an ERROR in the interpreter, not an empty answer:
+    // sourceline(0) raises 40.14 and sourceline(99) raises 40.34. Verified.
+    // `line` returning None is how this crate reports that; Task 3.8 turns
+    // it into the right error number. Do not let it render as "".
     assert_eq!(src.line(3), None);
     assert_eq!(src.line(0), None);
 }
@@ -394,7 +424,29 @@ error. This is the Phase 2 method applied to structure.
 
 **Interfaces:**
 - Consumes: `Expr` from Task 3.5, clauses from Task 3.4.
-- Produces: `Instruction` in `ast.rs`, `parse_instruction(&Clause) -> Result<Instruction, ParseError>`.
+- Produces: `Instruction` in `ast.rs` and
+  `parse_instruction(&mut ClauseCursor) -> Result<Instruction, ParseError>`.
+
+**It takes a cursor, not a single clause.** `DO`/`END`, `IF`/`THEN`/`ELSE`,
+`SELECT`/`WHEN`/`OTHERWISE` and every `::method` body span many clauses, so a
+function handed one clause cannot parse any of them. `ClauseCursor` owns the
+clause list and a position; `parse_instruction` advances it.
+
+**Five clause types are not keyword-driven at all,** and one of them is the
+default. None of these appears in the 35:
+
+| clause shape | node | C++ class |
+|---|---|---|
+| second token is `=` | `Assignment` | `AssignmentInstruction` |
+| ends in `:` | `Label` | `LabelInstruction` |
+| starts with `~` or is a message send | `Message` | `MessageInstruction` |
+| a keyword from the 35 | the 35 nodes | `interpreter/instructions/` |
+| **anything else** | `Command` | `CommandInstruction` |
+
+`Command` is the fallback, and it is not exotic: a bare `"echo hi"` clause is
+a command dispatched through `ADDRESS`. Verified — `address system` then
+`"echo hello-from-command"` runs it and sets `rc`. Dispatch must try the
+others and fall through to `Command`, never fail.
 
 `KeywordConstants.cpp` has 36 keyword constants and 35 keyword→instruction
 mappings; `interpreter/instructions/` has 52 classes. **The table is not
@@ -448,9 +500,12 @@ its clause.
 
 Design the dispatch this way from the start. Retrofitting it after building a
 scanner that classifies keywords lexically means rewriting both the scanner
-and every instruction parser, and the corpus will not catch the mistake —
-`rust/corpus/lang/` contains no program that uses a keyword as a variable.
-Add one.
+and every instruction parser.
+
+`rust/corpus/lang/keyword_as_variable.rex` exercises it: all 35 as variables,
+keyword and variable spelled the same in one clause, `DO` and `SELECT` still
+working while their names hold values, a stem named `end.`, a compound tail
+spelled `if`, and `PARSE` while `parse` is a variable. It must pass.
 
 Write one test per family before implementing any of them, then work through
 the families in that order. Step 4 below is what proves nothing was skipped;
@@ -461,16 +516,50 @@ trust the extraction and fix the list.
 
 `DO` is the largest single instruction in the C++ and deserves its own commit.
 
-- [ ] **Step 4: Assert every keyword is reachable**
+Three sub-grammars inside this task are each bigger than a typical keyword and
+must not be folded in silently:
+
+- **`PARSE` templates.** `parse value X with a b +3 c` — positional patterns,
+  literal patterns, absolute and relative column offsets, `.` placeholders.
+  The `parseOptions` table has 10 entries (`ARG`, `LINEIN`, `PULL`, `SOURCE`,
+  `VALUE`, `VAR`, `VERSION`, …); the template grammar is separate from them and
+  is shared with `ARG` and `PULL`. Give it its own commit.
+- **`ADDRESS`**, including the `WITH` input/output redirection forms —
+  `CommandIOConfiguration.cpp` exists for exactly this and is not small.
+- **`SIGNAL` and labels.** `SIGNAL` names a label, so the parser must build a
+  label table for the code body; `LabelInstruction` is a real node type. A
+  label may also spell a keyword.
+
+The `subKeywords` table has 50 entries and `conditionKeywords` 12; between them
+and `parseOptions` they are most of `InstructionParser.cpp`'s 4,650 lines.
+
+- [ ] **Step 4: Assert every keyword is reachable — with a valid clause each**
+
+A bare keyword is mostly **not** a valid clause: `then`, `else`, `when`,
+`otherwise`, `end` and `procedure` alone are errors 8, 9, 10 and 20 in the
+interpreter, so a loop that parses each keyword by itself cannot pass. Pair
+each with a minimal clause that is legal, and check the resulting node type:
 
 ```rust
+const KEYWORD_CLAUSES: &[(&str, &str)] = &[
+    ("SAY",  "say 1"),
+    ("DO",   "do 1\nend"),
+    ("IF",   "if 1 then nop"),
+    ("NOP",  "nop"),
+    // ... one legal clause per keyword, all 35
+];
+
 #[test]
-fn every_keyword_parses_to_an_instruction() {
-    for kw in ALL_KEYWORDS {
-        assert!(parses_as_instruction(kw), "{kw} unhandled");
+fn every_keyword_reaches_its_instruction_node() {
+    assert_eq!(KEYWORD_CLAUSES.len(), 35, "a keyword lost its clause");
+    for (kw, src) in KEYWORD_CLAUSES {
+        assert!(parses_to_node_named(src, kw), "{kw} unhandled");
     }
 }
 ```
+
+The length assertion is the load-bearing half: it fails when a keyword is
+added to the extraction but nobody wrote a clause for it.
 
 - [ ] **Step 5: Commit**
 
@@ -485,9 +574,17 @@ fn every_keyword_parses_to_an_instruction() {
 **Interfaces:**
 - Produces: `Directive` in `ast.rs`, `parse_directive(&Clause) -> Result<Directive, ParseError>`.
 
-`DirectiveParser.cpp` is 2,867 lines. `::class`, `::method`, `::routine`,
-`::requires`, `::attribute`, `::constant`, `::options`, with their option
-keywords.
+`DirectiveParser.cpp` is 2,867 lines. There are **nine** top-level directives,
+not the seven an earlier draft listed: `::ANNOTATE`, `::ATTRIBUTE`, `::CLASS`,
+`::CONSTANT`, `::METHOD`, `::OPTIONS`, `::REQUIRES`, `::RESOURCE`, `::ROUTINE`.
+The other 36 `DIRECTIVE_*` constants are their option sub-keywords
+(`PUBLIC`, `GUARDED`, `ABSTRACT`, `INHERIT` and so on) — 40 of them per the
+`subDirectives` table, and that is where the file's bulk is.
+
+**`::RESOURCE` needs a scanner mode this plan otherwise has nowhere.** Its body
+is *raw text* up to a terminating `::END` — not tokenised, not clause-split.
+Task 3.3's scanner must be able to switch into a copy-until-delimiter mode and
+back. Discovering that here rather than in Task 3.3 is the point of listing it.
 
 This task matters more than its size suggests: `CoreClasses.orx` is almost
 entirely directives, so Task 3.10's throughput number depends on it.
@@ -534,10 +631,12 @@ fn a_program_with_directives_separates_them_from_instructions() {
 - [ ] **Step 2: Run it and watch it fail**
 - [ ] **Step 3: Implement the composition**
 
-The first `::` directive ends the main instruction stream. Confirm that against
-`build/bin/rexx` rather than assuming it — a trailing instruction after a
-directive is a syntax error with a specific number, and that number belongs in
-Task 3.8's table.
+The first `::` directive ends the main instruction stream. An instruction
+appearing *after* a directive is **not** an error — it joins that directive's
+body. Verified: a file of `say "main"` / `::routine r` / `return 2` /
+`say "after directive"` runs rc 0 and prints only `main`, because the trailing
+instruction became part of routine `r`. An earlier draft of this plan asserted
+it was a syntax error and told Task 3.8 to record a number that does not exist.
 
 - [ ] **Step 4: Parse all 14 L0 corpus programs through this entry point**
 - [ ] **Step 5: Commit**
@@ -560,24 +659,53 @@ Task 3.8's table.
 substitution *values*, render on demand. A rendered `String` cannot be
 un-spliced, and `condition('o')~additional` exposes the values separately.
 
-- [ ] **Step 1: Collect ground truth**
+- [ ] **Step 1: Collect ground truth — and note the obvious recipe does not work**
 
-For each syntax error the parser can raise, write a `.rex` that provokes it and
-record what `build/bin/rexx` prints — number, sub-number, line, column and text:
+`signal on syntax` **cannot** catch a syntax error in its own file. ooRexx
+parses the whole file before executing anything, so the trap is never
+installed. Verified: a file containing `signal on syntax name oops` and then
+`x = )` prints the error to **stderr** and exits rc 219; the handler never
+runs. An earlier draft of this plan specified exactly that broken recipe.
+
+Two routes that do work, with different trade-offs:
+
+```bash
+# (a) run the bad file, capture stderr. The only route that reports the
+#     file's own line number.
+build/bin/rexx bad.rex 2>&1; echo "rc=$?"
+```
 
 ```rexx
+/* (b) INTERPRET a fragment inside an installed trap. The trap fires and
+   condition('o')~code is available -- but POSITION is the line of the
+   INTERPRET instruction, not a position inside the fragment. */
 signal on syntax name oops
-/* the malformed construct */
+interpret "x = )"
 exit 0
-oops: say "rc=" rc; say condition('o')~message
+oops: say condition('o')~code; say condition('o')~position
 ```
+
+Use (a) for anything positional. Use (b) only when you want the condition
+object's fields.
 
 - [ ] **Step 2: Write the failing tests from those recordings**
 - [ ] **Step 3: Implement**
-- [ ] **Step 4: Verify position, not just number**
+- [ ] **Step 4: Verify what the oracle actually exposes — there is no column**
 
-Column numbers are the easiest thing to get subtly wrong and the least likely
-to be noticed. Test a construct whose error is mid-line, not at its start.
+The condition object carries exactly these, and none of them is a column:
+`PROPAGATED ERRORTEXT MESSAGE STACKFRAMES POSITION INSTRUCTION CODE RC
+CONDITION PACKAGE TRACEBACK PROGRAM ADDITIONAL DESCRIPTION`. `POSITION` is the
+**line**. Nothing on stderr carries a column either — ooRexx locates an error
+by *quoting the offending token* in the message text, not by offset.
+
+So verify **number, sub-number, line, and the substitution values**. The
+substitutions are where the token gets quoted, so they are what actually pins
+the location, and `ADDITIONAL` exposes them separately from the rendered text
+exactly as `rexx-num` already models.
+
+Keeping a column internally is still worth it for future tooling, but nothing
+in this phase can check it against the oracle, so nothing in this phase may
+gate on it.
 
 - [ ] **Step 5: Commit**
 
@@ -595,6 +723,11 @@ to be noticed. Test a construct whose error is mid-line, not at its start.
 Phase 3 owns the *formatting* of traced source, not the execution that
 triggers it. The AST must retain whatever `TRACE` displays; discovering later
 that it does not is a rework of every node type.
+
+Source spans alone are **not** sufficient. `TRACE` indents by nesting depth,
+so every instruction node needs its depth — or a parent link the executor can
+walk — recorded at parse time. A span tells you what text to print, not how
+far to indent it.
 
 - [ ] **Step 1: Capture `TRACE` output from the interpreter**
 
@@ -647,11 +780,17 @@ fits.
 
 ## Exit gate
 
-- [ ] All 14 `rust/corpus/lang/` programs parse without error, and every
-      construct in them appears in the AST — not merely "no error raised".
+- [ ] All 14 `rust/corpus/lang/` programs parse without error, **and** each one
+      round-trips: walking the AST in order and concatenating every node's
+      source span reproduces the original text with only comments and
+      inter-token blanks missing. "No error raised" is not enough — a parser
+      that silently drops a clause passes that and fails this.
 - [ ] `CoreClasses.orx` and `StreamClasses.orx` parse end to end.
 - [ ] For every syntax error the parser raises: number, sub-number, line and
-      column match `build/bin/rexx`, verified by provoking each one.
+      **substitution values** match `build/bin/rexx`, verified by provoking each
+      one by running a bad file and capturing stderr. Not column — the oracle
+      exposes none, and gating on something unobservable is the mistake Phase 2
+      made three times over.
 - [ ] `SOURCELINE(n)` matches the interpreter for every line of every corpus
       program, including the last line and a file without a trailing newline.
 - [ ] `TRACE` source text is reconstructible from the AST for
@@ -678,16 +817,20 @@ fits.
   from one dimension: integers only, then integers from varied starting states,
   before anyone tried a fraction. When probing the interpreter here, vary a
   dimension you have no reason to think matters.
-- **Do not sort the keyword table.** The C++ indexes it by position and it is
-  not alphabetical. This already cost time once, on the builtin table in
-  Phase 0.
+- **The keyword table is sorted, and that is deliberate.** `keywordInstructions[]`
+  is alphabetical and `resolveKeyword` (`KeywordConstants.cpp:417`) binary-searches
+  it; the instruction codes are stored explicitly in each entry, never implied by
+  position. This is the *opposite* of the builtin-function table in Phase 0,
+  which is positional and must not be sorted — an earlier draft of this plan
+  carried the Phase 0 warning across, and it does not transfer. Check which kind
+  of table you are looking at before assuming either.
 - **Keywords are not reserved.** `if = 2; say if` prints 2, and
   `if if = 2 then say if` parses with the same spelling as both keyword and
   variable. A symbol is a keyword only by position — first token of a clause
   that is not an assignment — so keyword recognition cannot live in the
   scanner. Getting this wrong is not a bug to fix later; it is a rewrite of
-  the scanner and every instruction parser. The L0 corpus contains no program
-  that exercises it, which is exactly why it would go unnoticed.
+  the scanner and every instruction parser. `corpus/lang/keyword_as_variable.rex`
+  exists to catch it; before it was written, nothing in the corpus did.
 - **The AST must not discard source.** `SOURCELINE`, error reporting and
   `TRACE` all expose original text. Nodes hold byte ranges into one retained
   `String`.
