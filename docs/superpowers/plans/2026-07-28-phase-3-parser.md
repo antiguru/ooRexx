@@ -134,8 +134,11 @@ ground truth rather than against each other.
 
 - [ ] **Step 2: Build both implementations**
 
-Same token stream, same AST output type. Timebox each; if one runs long, that
-is itself a result and should be recorded rather than pushed through.
+Same token stream, same AST output type. **Four hours each, hard.** If one runs
+over, stop and record that — "the combinator version did not reach a working
+expression grammar in four hours" is a legitimate and decisive result, and
+pushing through destroys the comparison by making the two attempts unequal in
+effort rather than in difficulty.
 
 - [ ] **Step 3: Measure the three axes**
 
@@ -267,6 +270,27 @@ expected values taken from Step 1's probe rather than from intuition.
   `scan(&ProgramSource) -> Result<Vec<Token>, ParseError>`. `TokenKind`
   mirrors the C++ 19 classes in `interpreter/parser/Token.hpp`.
 
+**`ParseError` is created here, not in Task 3.8.** Every task from this one on
+returns it, so define the minimum now — `{ code: u16, sub: u16, byte: usize,
+subs: Vec<String> }` — and let Task 3.8 *complete* it with the line
+resolution, the message table and the per-error numbers. A plan that defers
+the type to 3.8 leaves 3.3 through 3.7 unable to compile.
+
+**Later tasks need the token vector as well as the clause.** `Clause` holds a
+`Range<usize>` into this `Vec<Token>`, so a function given only a `Clause`
+cannot reach the tokens. Introduce the context struct here and thread it
+through:
+
+```rust
+pub(crate) struct ParseCtx<'a> {
+    pub source: &'a ProgramSource,
+    pub tokens: &'a [Token],
+}
+```
+
+Every `parse_*` in Tasks 3.5–3.7 takes `&ParseCtx` plus its own cursor. Naming
+it now avoids each task inventing a different way to reach the same two things.
+
 This is below the line where combinators help, so it is hand-written
 regardless of the D10 outcome.
 
@@ -318,10 +342,20 @@ Task 3.2 retains the text and the AST holds ranges into it.
 
 - [ ] **Step 5: Differential-test against the interpreter**
 
-Write a `.rex` driver that reads a program and reports what the interpreter
-makes of its structure, and compare on the 14 L0 corpus programs. Where no
-such introspection exists, fall back to: a program that scans correctly runs,
-and one that does not raises a syntax error with a specific number and line.
+There is **no** introspection that exposes a token stream. D13's research
+settled this: nothing in the language or the C API exposes an object below
+`Method`/`Routine`/`Package`, and source comes back as text. So this is the
+method, not a fallback:
+
+1. A program that scans correctly runs to completion under both.
+2. A program that does not raises the same error number, sub-number and line.
+3. Where scanning changes *meaning* rather than validity, compare **output**.
+   `say a/*c*/b` versus `say a b` is the model: both are valid, and only the
+   printed result distinguishes a scanner that emits a blank for a comment from
+   one that does not.
+
+Build cases of the third kind deliberately — they are the only ones that catch
+a scanner which is wrong but not broken.
 
 - [ ] **Step 6: Commit**
 
@@ -415,9 +449,17 @@ fn abuttal_concatenation_binds_tighter_than_plus() {
 
 A parse tree cannot be compared directly to the interpreter, so compare
 *results*: generate expressions over a small operand set, evaluate under
-`build/bin/rexx`, and evaluate the parsed AST with a throwaway evaluator that
-uses `rexx-num` for arithmetic. Any divergence is a precedence or associativity
-error. This is the Phase 2 method applied to structure.
+`build/bin/rexx`, and evaluate the parsed AST with a throwaway evaluator. Any
+divergence is a precedence or associativity error. This is the Phase 2 method
+applied to structure.
+
+**Bound the evaluator, or it becomes Phase 4.** It needs exactly: numeric
+literals, string literals, simple variables from a fixed table, the arithmetic
+and comparison operators via `rexx-num`, concatenation both explicit and
+abuttal, and parentheses. That is enough to catch every precedence and
+associativity error. It does **not** need message sends, function calls,
+compound variables or control flow — parse those, and assert on their tree
+shape directly instead of evaluating them.
 
 - [ ] **Step 5: Commit**
 
@@ -596,12 +638,45 @@ back. Discovering that here rather than in Task 3.3 is the point of listing it.
 This task matters more than its size suggests: `CoreClasses.orx` is almost
 entirely directives, so Task 3.10's throughput number depends on it.
 
-- [ ] **Step 1: Enumerate the directives and their options from the C++**
-- [ ] **Step 2: Write a failing test per directive**
-- [ ] **Step 3: Implement, commit per directive**
-- [ ] **Step 4: Parse `CoreClasses.orx` end to end without error**
+- [ ] **Step 1: Extract the directive and option tables**
 
-That file is the real acceptance test for this task.
+```bash
+grep -oE 'DIRECTIVE_[A-Z_]+' interpreter/parser/*.hpp | sed 's/.*://' | sort -u
+```
+
+45 constants come back. Nine are the top-level directives listed above; the
+other 36 are option sub-keywords. Split them by reading which table each
+appears in (`subDirectives` has 40 entries), and assert both counts in a test
+so a mis-extraction fails loudly rather than silently narrowing the task.
+
+- [ ] **Step 2: Write a failing test per top-level directive**
+
+Nine tests, each parsing a minimal legal instance:
+
+```rust
+#[test] fn routine_directive_parses() {
+    assert!(matches!(directive("::routine r\n  return 1\n"), Directive::Routine { .. }));
+}
+```
+
+- [ ] **Step 3: Implement `::RESOURCE` first**
+
+It is the one that changes the scanner, so it must not be last. Its body is raw
+text up to `::END`; verify the exact terminator and whether it is
+case-sensitive against `build/bin/rexx` before implementing, then add the
+scanner mode Task 3.3 left room for.
+
+- [ ] **Step 4: Implement the remaining eight, committing per directive**
+
+- [ ] **Step 5: Assert every option sub-keyword is reachable**
+
+Same shape as Task 3.6's Step 4: a table pairing each option with a legal
+directive that carries it, plus a length assertion against the extracted count.
+
+- [ ] **Step 6: Parse `CoreClasses.orx` end to end without error**
+
+That file is the real acceptance test for this task — it is almost entirely
+directives, and Task 3.10's throughput number depends on it.
 
 - [ ] **Step 5: Commit**
 
@@ -616,9 +691,18 @@ That file is the real acceptance test for this task.
 **Interfaces:**
 - Consumes: everything from Tasks 3.2–3.7.
 - Produces: `parse_program(text: String) -> Result<Program, ParseError>` and
-  `Program { source: ProgramSource, instructions: Vec<Instruction>, directives: Vec<Directive> }`.
-  This is the only entry point Phase 4 uses; everything else stays
+  `Program { source: ProgramSource, instructions: Vec<Instruction>, directives: Vec<Directive> }`,
+  **plus `parse_interpret(text: String) -> Result<Vec<Instruction>, ParseError>`**.
+  These two are the only entry points Phase 4 uses; everything else stays
   `pub(crate)` so the D10 choice cannot leak into the executor.
+
+`INTERPRET` parses a string at *runtime*, so the parser is not a build-time
+tool that runs once — Phase 4 calls back into it during execution. That second
+entry point differs from the first in three ways worth getting right now:
+directives are not permitted, labels are not permitted, and errors report
+against the `INTERPRET` instruction's own line rather than a position inside
+the fragment. The third is verifiable today: `interpret "x = )"` inside an
+installed trap gives `condition('o')~position` = the INTERPRET line.
 
 Until this task, the pieces are wired only by tests. It exists because a
 reviewer must be able to reject the composition independently of the parts.
@@ -743,6 +827,14 @@ exactly — the clause text, the leading marker, the indentation.
 
 - [ ] **Step 2: Write a failing test that reconstructs that text from the AST**
 - [ ] **Step 3: Implement, adjusting node spans if reconstruction is impossible**
+
+Acceptance: for every clause in `trace_output.rex`, the text reconstructed
+from the AST is **byte-identical** to the corresponding `>>>`/`>V>` line the
+interpreter prints, after stripping the marker and the leading indentation.
+If a clause cannot be reconstructed, widen that node's span until it can —
+and record which node needed it, because a node whose span does not cover its
+own source text is a defect that will surface again in error reporting.
+
 - [ ] **Step 4: Commit**
 
 ---
@@ -792,6 +884,11 @@ fits.
       source span reproduces the original text with only comments and
       inter-token blanks missing. "No error raised" is not enough — a parser
       that silently drops a clause passes that and fails this.
+- [ ] Every `Instruction` and `Expr` variant is constructed at least once
+      across those 14 programs, asserted by a test that enumerates the variants
+      rather than by inspection. Where a variant is unreachable from the
+      corpus, add a program that reaches it — an unconstructed variant is
+      untested code that Phase 4 will nonetheless dispatch on.
 - [ ] `CoreClasses.orx` and `StreamClasses.orx` parse end to end.
 - [ ] For every syntax error the parser raises: number, sub-number, line and
       **substitution values** match `build/bin/rexx`, verified by provoking each
