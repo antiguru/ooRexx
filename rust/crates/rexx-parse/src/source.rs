@@ -115,8 +115,14 @@ impl ProgramSource {
 
     /// The 1-based physical line containing byte offset `byte`.
     ///
-    /// A binary search over the line-start index built in `new`, not a
-    /// scan: error reporting calls this for every diagnostic.
+    /// A byte that sits on a line terminator belongs to the line that
+    /// terminator ends. A byte at or past the end of the retained text
+    /// clamps to the last line rather than failing, so a caller never has to
+    /// bounds-check an offset before reporting a diagnostic. An empty source
+    /// answers 1, which is the only case where the answer names a line that
+    /// `line` will not return.
+    ///
+    /// Total by construction, so it returns `usize` rather than `Option`.
     pub fn line_of(&self, byte: usize) -> usize {
         // `partition_point` counts the starts that are `<= byte`; because
         // starts are 0-based and strictly increasing, that count is exactly

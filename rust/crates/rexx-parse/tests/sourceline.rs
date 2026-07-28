@@ -63,6 +63,64 @@ fn crlf_pair_is_one_terminator_but_lone_cr_ends_a_line_on_its_own() {
     assert_eq!(src.line_count(), 2);
     assert_eq!(src.line(1), Some(&b"say 1"[..]));
     assert_eq!(src.line(2), Some(&b"say 2"[..]));
+
+    // Both halves of this test's name, in one place: the CRLF pair collapses
+    // to a single terminator, so the same two lines come out of a CRLF file.
+    // Asserting the CONTENT and not only the count, because a count alone
+    // cannot distinguish one terminator from two.
+    let crlf = ProgramSource::new(b"say 1\r\nsay 2\r\n".to_vec());
+    assert_eq!(crlf.line_count(), 2);
+    assert_eq!(crlf.line(1), Some(&b"say 1"[..]));
+    assert_eq!(crlf.line(2), Some(&b"say 2"[..]));
+
+    // And the asymmetry that a CRLF-only rule gets wrong: \n\r is TWO
+    // terminators, so an empty line sits between them. Oracle: sourceline()
+    // reports 3 for this shape where \r\n reports 2.
+    let lfcr = ProgramSource::new(b"a\n\rb\n".to_vec());
+    assert_eq!(lfcr.line_count(), 3);
+    assert_eq!(lfcr.line(1), Some(&b"a"[..]));
+    assert_eq!(lfcr.line(2), Some(&b""[..]));
+    assert_eq!(lfcr.line(3), Some(&b"b"[..]));
+}
+
+#[test]
+fn line_of_holds_at_terminators_at_the_end_and_on_an_empty_source() {
+    // The boundary class the brief flags as highest-risk, and the one an
+    // off-by-one here would propagate into every later task's spans.
+    let src = ProgramSource::new(b"ab\ncd\n".to_vec());
+
+    // A byte on a terminator belongs to the line that terminator ends.
+    assert_eq!(src.line_of(2), 1, "the \\n closing line 1");
+    assert_eq!(src.line_of(5), 2, "the \\n closing line 2");
+
+    // First and last content bytes of each line.
+    assert_eq!(src.line_of(0), 1);
+    assert_eq!(src.line_of(1), 1);
+    assert_eq!(src.line_of(3), 2);
+    assert_eq!(src.line_of(4), 2);
+
+    // Exactly len, and past it: clamp to the last line rather than panic.
+    // 6 is b"ab\ncd\n".len(); ProgramSource exposes no length accessor and
+    // this test has no business adding one.
+    assert_eq!(src.line_of(6), 2, "one past the last byte");
+    assert_eq!(src.line_of(usize::MAX), 2, "far past the end");
+
+    // An empty source has no lines, and line_of is still total.
+    let empty = ProgramSource::new(Vec::new());
+    assert_eq!(empty.line_count(), 0);
+    assert_eq!(empty.line_of(0), 1, "total even with nothing to point at");
+    assert_eq!(empty.line(1), None, "and line() disagrees, deliberately");
+}
+
+#[test]
+fn a_source_of_only_terminators_is_all_empty_lines() {
+    let src = ProgramSource::new(b"\n\n\n".to_vec());
+    assert_eq!(src.line_count(), 3);
+    for n in 1..=3 {
+        assert_eq!(src.line(n), Some(&b""[..]), "line {n}");
+    }
+    assert_eq!(src.line_of(0), 1);
+    assert_eq!(src.line_of(2), 3);
 }
 
 #[test]
