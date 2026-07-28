@@ -152,10 +152,13 @@ The parent plan fixes these and no others:
 1. **Lines of code** — the whole expression grammar, excluding the shared
    token stream.
 2. **Error fidelity** — at each failure site, can the exact interpreter error
-   number *and* position be produced? Test with deliberately malformed
-   expressions and compare against `build/bin/rexx`. This is the axis most
-   likely to decide it, because Phase 3's gate is error messages with line and
-   column.
+   number, sub-number and **line** be produced, along with the substitution
+   values the message quotes? Test with deliberately malformed expressions and
+   compare against `build/bin/rexx`. This is the axis most likely to decide it,
+   because it is what Phase 3's gate checks. There is **no column** anywhere in
+   the oracle — do not measure the spike on one, and note that ooRexx locates
+   an error by quoting the offending token, so the substitution values are what
+   actually pin the position.
 3. **Parse throughput on `CoreClasses.orx`** — not on synthetic input. Under
    D2 this number is cold-start time.
 
