@@ -16,4 +16,10 @@
 //! interpreter wins.
 
 mod source;
+mod token;
+
 pub use source::ProgramSource;
+pub use token::{
+    KeywordSet, Keywords, Operator, ParseCtx, ParseError, SymbolClass, SymbolId, SymbolTable, Tag,
+    Token, TokenCursor, TokenKind,
+};
