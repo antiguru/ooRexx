@@ -97,7 +97,7 @@ stop this becoming Phase 3 itself.
 
 - [ ] **Step 1: Extract the expression corpus**
 
-The L0 corpus at `rust/corpus/lang/` has 13 programs. Pull every distinct
+The L0 corpus at `rust/corpus/lang/` has 14 programs. Pull every distinct
 expression shape out of them plus these, which cover the forms that separate
 the two approaches:
 
@@ -284,7 +284,7 @@ Task 3.2 retains the text and the AST holds ranges into it.
 - [ ] **Step 5: Differential-test against the interpreter**
 
 Write a `.rex` driver that reads a program and reports what the interpreter
-makes of its structure, and compare on the 13 L0 corpus programs. Where no
+makes of its structure, and compare on the 14 L0 corpus programs. Where no
 such introspection exists, fall back to: a program that scans correctly runs,
 and one that does not raises a syntax error with a specific number and line.
 
@@ -423,10 +423,34 @@ draft of this plan invented an `ASSIGN` keyword that does not exist and missed
 4. settings (4) — `NUMERIC`, `ADDRESS`, `TRACE`, `OPTIONS`
 5. `NOP` (1)
 
-`LOOP` is ooRexx's own extension and shares most of `DO`'s body; assignment is
-*not* keyword-driven, which is why no `ASSIGN` appears — a clause whose second
-token is `=` is an assignment, and that rule lives in Task 3.6's dispatch
-rather than in this table.
+`LOOP` is ooRexx's own extension and shares most of `DO`'s body.
+
+**Keywords are not reserved words, and this is the single most important
+structural fact in this task.** Every one of the 35 is a legal variable name.
+Verified against `build/bin/rexx`:
+
+```rexx
+if = 2;  say if          /* prints 2 */
+do = 3;  say do          /* prints 3 */
+say = 4; say say         /* prints 4 */
+end = 5; say end         /* prints 5 */
+if if = 2 then say if    /* prints 2 -- keyword and variable in one clause */
+do i = 1 to 2; say do; end   /* DO still loops while `do` holds 3 */
+end. = 0; end.1 = 7      /* a stem named end. is fine too */
+```
+
+So a symbol is a keyword **only** by position: first token of a clause, and
+only when the clause is not an assignment. That is why no `ASSIGN` keyword
+exists — a clause whose second token is `=` is an assignment regardless of
+what its first token spells. Recognition therefore belongs in clause dispatch
+and must never live in the scanner, which cannot know a token's position in
+its clause.
+
+Design the dispatch this way from the start. Retrofitting it after building a
+scanner that classifies keywords lexically means rewriting both the scanner
+and every instruction parser, and the corpus will not catch the mistake —
+`rust/corpus/lang/` contains no program that uses a keyword as a variable.
+Add one.
 
 Write one test per family before implementing any of them, then work through
 the families in that order. Step 4 below is what proves nothing was skipped;
@@ -515,7 +539,7 @@ The first `::` directive ends the main instruction stream. Confirm that against
 directive is a syntax error with a specific number, and that number belongs in
 Task 3.8's table.
 
-- [ ] **Step 4: Parse all 13 L0 corpus programs through this entry point**
+- [ ] **Step 4: Parse all 14 L0 corpus programs through this entry point**
 - [ ] **Step 5: Commit**
 
 ---
@@ -623,7 +647,7 @@ fits.
 
 ## Exit gate
 
-- [ ] All 13 `rust/corpus/lang/` programs parse without error, and every
+- [ ] All 14 `rust/corpus/lang/` programs parse without error, and every
       construct in them appears in the AST — not merely "no error raised".
 - [ ] `CoreClasses.orx` and `StreamClasses.orx` parse end to end.
 - [ ] For every syntax error the parser raises: number, sub-number, line and
@@ -657,6 +681,13 @@ fits.
 - **Do not sort the keyword table.** The C++ indexes it by position and it is
   not alphabetical. This already cost time once, on the builtin table in
   Phase 0.
+- **Keywords are not reserved.** `if = 2; say if` prints 2, and
+  `if if = 2 then say if` parses with the same spelling as both keyword and
+  variable. A symbol is a keyword only by position — first token of a clause
+  that is not an assignment — so keyword recognition cannot live in the
+  scanner. Getting this wrong is not a bug to fix later; it is a rewrite of
+  the scanner and every instruction parser. The L0 corpus contains no program
+  that exercises it, which is exactly why it would go unnoticed.
 - **The AST must not discard source.** `SOURCELINE`, error reporting and
   `TRACE` all expose original text. Nodes hold byte ranges into one retained
   `String`.
