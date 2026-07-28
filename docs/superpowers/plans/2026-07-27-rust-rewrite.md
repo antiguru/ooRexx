@@ -100,6 +100,7 @@ Blocks are numbered in the order they were raised and ordered below by topic, so
 | **D5** | Native API surface | Phase 8 | settled by the user — source-compatible |
 | **D6** | Platform layer | Phase 7 | settled — `std` → `rustix` → `libc` |
 | **D13** | AST ownership | Phase 3 | **closed** — plain owned Rust data (2026-07-27) |
+| **D14** | String representation | Phase 4, constrains Phase 3 | **closed** — byte strings, UTF-8 arrives as operations (2026-07-28) |
 | **D11** | RexxUtil / `Sys*` | Phase 7, and L2 | settled — subset in Phase 7, rest in Phase 10 |
 | **D12** | Security manager | Phases 5 and 7 | settled — split across both |
 | **D7** | RXAPI daemon | Phase 10 | **closed** — bridge to the C++ rxapi (2026-07-27) |
@@ -246,6 +247,32 @@ And the native API is no different: `api/oorexxapi.h` declares `RexxMethodObject
 **Nothing in the language or the C API exposes an object below `Method`/`Routine`/`Package` granularity, and source is exposed as text, never as structure.** The AST is therefore a private implementation detail, and Rust is free to represent it as plain owned data. As a bonus, `Package~source` returning an `Array` of `String` confirms the source-retention approach Phase 3 already planned: keep the program text and hand out slices of it.
 
 **Cost of being wrong.** Would have been high — it is the representation the parser produces and the executor consumes, so Phases 3 and 4 both rest on it. Settled for the cost of two probe programs.
+
+### D14 — String representation, and keeping the UTF-8 door open
+
+**Blocks:** nothing yet. **Constrains** the object model Phase 4 builds, and Phase 3's `ProgramSource`.
+
+**Why this exists.** Moritz intends to move the language to proper UTF-8 handling soon after the rewrite works: character length and byte length as distinct functions, with checked conversion. This decision does **not** do that. It records what the implementation must avoid so that doing it later is a change of operations rather than a rewrite of the object model.
+
+**The constraint that shapes every option.** A Rexx string is an arbitrary byte sequence and must stay one. `'FFFE'x` is legal today, and so are `c2x`, `x2c`, `bitand` and binary stream I/O. Measured against the oracle: a source file containing a raw `FF FE` inside a literal runs, `c2x` returns `FFFE`, `length` returns 2. So a single UTF-8-*validated* string type cannot represent legal Rexx values. That is exactly why Python 3 needed a separate `bytes` type, not a preference for having two.
+
+**Consequence, and it is the useful part.** The single-type design Moritz wants is achievable, but it runs through the *operations* rather than the type: the value stays a byte string, and character semantics arrive as new operations plus explicit checked decode. Both length functions can then coexist without `'FF'x` becoming unrepresentable, and no second type is ever introduced.
+
+**Where the later fork sits, left open deliberately.** Whether `LENGTH` keeps byte semantics and a new BIF returns characters, or `LENGTH` becomes characters and a new BIF returns bytes, is a compatibility judgement rather than a representation one. The first breaks nothing and reads oddly; the second is the "proper" answer and changes the result of existing programs. Nothing below forecloses either.
+
+**Rules the implementation must follow, all cheap today:**
+
+- **A Rexx string value is a byte string** (`Box<[u8]>` or equivalent), never a Rust `String`. Rust `String` enforces UTF-8, which would reject legal values outright.
+- **Every index and length in the interpreter is a byte offset.** Byte offsets stay correct under both later models; character offsets are derived on demand. Phase 3 already does this for spans.
+- **Leave room for a lazily computed encoding tag on the string object** — at minimum "known valid UTF-8 / known invalid / not yet checked". This is the single thing that makes the later switch cheap, because checked conversion becomes O(1) after the first check instead of a rescan per operation. Do not compute it eagerly; most strings never need it.
+- **Do not put `&str` in any value-carrying signature.** `rexx-num`'s `compare` currently takes `&str` and its `string_order` helper is already byte-based underneath, so this is a signature change and not a rewrite. Recorded as Phase 2 debt (M5).
+- **Never name an internal accessor `length` ambiguously.** Byte length and character length must be distinguishable at every call site from the start, so that changing which one `LENGTH` maps to is a one-line change.
+
+**Audited 2026-07-28, and the tree is clean on all of this.** `rexx-core` has no Rexx string type yet, so the decisive representation choice is still unmade. In `rexx-num` the only `&str` on a value path is `compare`/`parse`, and `Number::parse` is sound as-is because a byte sequence that is not valid UTF-8 can never be a valid Rexx number and therefore maps to error 41 anyway. The 13 character-oriented call sites in the tree are all in message rendering over generated ASCII, not on value paths.
+
+**Not adopting `utf8proc`.** The interpreter vendors it for exactly one purpose: decoding the offending byte sequence so error 13.1 can print a whole character rather than one byte (`Scanner.cpp:49`, used once). Phase 3 does not reproduce parse-error text, so no equivalent is needed. Symbols cannot contain non-ASCII at all — `LanguageParser::characterTable` is zero for every byte `0x80`–`0xFF`, and `bäc = 2` is error 13.1 — so nothing in the scanner needs Unicode awareness either.
+
+**Cost of being wrong.** Low today, high if deferred: it is the representation every string BIF consumes. Settled by an audit rather than by a spike, because no code commits to the alternative yet.
 
 ### D11 — RexxUtil / `Sys*` functions
 
@@ -399,7 +426,7 @@ Gates are hard. A phase does not close until every exit criterion is demonstrate
 | 0 | Oracle & inventory | — | Differ runs C++ against itself with zero diffs on the corpus; benchmark baselines committed for all 5 platforms; error table and builtin inventory generated; L1 extraction fraction reported; D7 protocol stability answered | — |
 | 1 | Heap & object model | D1 open | Allocation throughput and full-GC pause within the C++ baseline CI; `Trace` derived, not hand-written; root set enumerable and documented. **D1 closes here.** | — |
 | 2 | Numeric core | D1 closed | Every extractable ooTest arithmetic assertion passes; ANSI X3.274 vectors pass; arithmetic benchmark at parity | L1 (arithmetic) |
-| 3 | Scanner & parser | D1 closed, D13 closed ✓, D10 spiked | Round-trips every `.rex` under `samples/` to an AST (301 files); `SOURCELINE`, error **line** reporting, and `TRACE`'s `*-*` source lines match the oracle byte-for-byte; parse throughput on `CoreClasses.orx` recorded | L0 (syntax errors) |
+| 3 | Scanner & parser | D1 closed, D13 closed ✓, D10 spiked | Round-trips every `.rex` under `samples/` to an AST (301 files); `SOURCELINE` and `TRACE`'s `*-*` source lines match the oracle byte-for-byte; parse errors give the oracle's **number and sub-number on a plausible line**, with message text and substitutions deliberately not reproduced (2026-07-28 scope decision); parse throughput on `CoreClasses.orx` recorded | L0 (syntax errors) |
 | 4 | Classic executor | 2, 3 | Non-OO Rexx runs: assignment, `DO` (all variants), `IF`, `SELECT`, `CALL`, `PARSE`, `SAY`, `SIGNAL`, conditions, and all **81 builtin functions** | L0 full corpus + L1 majority |
 | 5 | Object model | 4 | **`CoreClasses.orx` parses and executes**; 32 classes exist and respond; `::class`/`::method`/`::routine`/`::requires` work; security manager interception points in place (D12); cold start measured and recorded against C++ (D2) | L2 |
 | 6 | Concurrency | 5 | Activities, kernel lock, guard locks, `REPLY`, `GUARD`, message objects; ooTest concurrency groups pass; TSan (or `loom`) clean. **D3's frame-ownership constraint verified.** | L2 |
@@ -2365,7 +2392,7 @@ The generating procedure for each phase:
 
 **Phase-specific notes to carry forward:**
 
-- **Phase 3** opens with the D10 spike (parser construction), then decides how source text is retained. The spike has a hard number to beat: C++ starts in 5.1 ms from a memory-mapped image, so under D2 the Rust parser must get through `CoreClasses.orx` fast enough to keep total cold start inside ~55 ms. D13 is already closed: the AST is plain owned Rust data inside one arena object per code body. `SOURCELINE`, error reporting, and `TRACE` all expose the original text, so the AST cannot discard it. Keep the program source as one string and have AST nodes hold byte ranges into it — which is also what makes `chumsky`'s span support directly usable if D10 lands on (a). Measure parse throughput on `CoreClasses.orx`, since under D2 that number *is* cold-start time.
+- **Phase 3** opens with the D10 spike (parser construction), then decides how source text is retained. The spike has a hard number to beat: C++ starts in 5.1 ms from a memory-mapped image, so under D2 the Rust parser must get through `CoreClasses.orx` fast enough to keep total cold start inside ~55 ms. D13 is already closed: the AST is plain owned Rust data inside one arena object per code body. `SOURCELINE`, error reporting, and `TRACE` all expose the original text, so the AST cannot discard it. Keep the program source as one byte buffer -- not a Rust `String`, because a Rexx literal may hold bytes that are not valid UTF-8 (D14) -- and have AST nodes hold byte ranges into it — which is also what makes `chumsky`'s span support directly usable if D10 lands on (a). Measure parse throughput on `CoreClasses.orx`, since under D2 that number *is* cold-start time.
 - **Phase 4** is where the execution model is fixed. Read the existing performance profile before designing the dispatch loop. The 81 builtins from Task 0.6 are the checklist; tick them off individually.
 - **Phase 5** is the project's inflection point. When `CoreClasses.orx` runs, 32 classes appear at once and the L2 rung becomes reachable. Budget for the fact that it will expose parser and executor gaps in bulk rather than one at a time.
 - **Phase 6** must hold D3's frame-ownership constraint: activities own their frames; cross-activity signalling goes through a channel or a polled atomic, never a foreign frame reference. Verify this by construction (no shared frame type exists) rather than by test.
