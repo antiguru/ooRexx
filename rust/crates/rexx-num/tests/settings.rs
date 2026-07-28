@@ -11,10 +11,10 @@ fn the_defaults_are_the_ones_the_interpreter_starts_with() {
 #[test]
 fn digits_must_be_a_positive_whole_number() {
     let mut s = Settings::default();
-    assert!(matches!(s.set_digits_str("0"), Err(SettingsError::NotWholeNumber(_))));
-    assert!(matches!(s.set_digits_str("-1"), Err(SettingsError::NotWholeNumber(_))));
-    assert!(matches!(s.set_digits_str("1.5"), Err(SettingsError::NotWholeNumber(_))));
-    assert!(matches!(s.set_digits_str("abc"), Err(SettingsError::NotWholeNumber(_))));
+    assert!(matches!(s.set_digits_str("0"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(matches!(s.set_digits_str("-1"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(matches!(s.set_digits_str("1.5"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(matches!(s.set_digits_str("abc"), Err(SettingsError::DigitsNotWhole { .. })));
     assert!(s.set_digits_str("1").is_ok());
     // any expression yielding a whole number is fine, including 1e3
     assert!(s.set_digits_str("1e3").is_ok());
@@ -28,17 +28,17 @@ fn digits_is_capped_at_max_exponent() {
     assert_eq!(s.digits(), 999_999_999);
 
     let mut s = Settings::default();
-    assert!(matches!(s.set_digits_str("1000000000"), Err(SettingsError::NotWholeNumber(_))));
+    assert!(matches!(s.set_digits_str("1000000000"), Err(SettingsError::DigitsNotWhole { .. })));
     // Values that would not even fit a u32, let alone the cap, fail the
     // same way rather than a different one.
-    assert!(matches!(s.set_digits_str("2147483647"), Err(SettingsError::NotWholeNumber(_))));
-    assert!(matches!(s.set_digits_str("4294967296"), Err(SettingsError::NotWholeNumber(_))));
+    assert!(matches!(s.set_digits_str("2147483647"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(matches!(s.set_digits_str("4294967296"), Err(SettingsError::DigitsNotWhole { .. })));
 }
 
 #[test]
 fn fuzz_must_be_non_negative() {
     let mut s = Settings::default();
-    assert!(matches!(s.set_fuzz_str("-1"), Err(SettingsError::NotWholeNumber(_))));
+    assert!(matches!(s.set_fuzz_str("-1"), Err(SettingsError::FuzzNotWhole { .. })));
     assert!(s.set_fuzz_str("0").is_ok());
 }
 
@@ -46,10 +46,10 @@ fn fuzz_must_be_non_negative() {
 fn fuzz_must_stay_below_digits_whichever_of_the_two_is_being_set() {
     let mut s = Settings::default();
     s.set_digits_str("5").unwrap();
-    assert!(matches!(s.set_fuzz_str("5"), Err(SettingsError::FuzzNotBelowDigits(_))));
+    assert!(matches!(s.set_fuzz_str("5"), Err(SettingsError::FuzzNotBelowDigits { .. })));
     assert!(s.set_fuzz_str("4").is_ok());
     // and lowering digits to meet fuzz fails the same way
-    assert!(matches!(s.set_digits_str("4"), Err(SettingsError::FuzzNotBelowDigits(_))));
+    assert!(matches!(s.set_digits_str("4"), Err(SettingsError::FuzzNotBelowDigits { .. })));
 }
 
 #[test]
@@ -59,7 +59,7 @@ fn form_accepts_only_the_two_spellings_case_insensitively() {
     assert_eq!(s.form(), Form::Engineering);
     assert!(s.set_form_str("scientific").is_ok());
     assert_eq!(s.form(), Form::Scientific);
-    assert!(matches!(s.set_form_str("BOGUS"), Err(SettingsError::InvalidForm(_))));
+    assert!(matches!(s.set_form_str("BOGUS"), Err(SettingsError::InvalidForm { .. })));
 }
 
 #[test]
@@ -118,4 +118,32 @@ fn fuzz_not_below_digits_message_substitutes_the_pending_pair_not_the_stored_one
         err.message(),
         "Value of NUMERIC DIGITS (\"3\") must exceed value of NUMERIC FUZZ (\"5\")."
     );
+}
+
+// ---- additional(): the raw substitution values, in interpreter order ------
+
+#[test]
+fn additional_carries_the_raw_found_text_for_the_not_whole_errors() {
+    assert_eq!(Settings::default().set_digits_str("abc").unwrap_err().additional(), vec!["abc"]);
+    assert_eq!(Settings::default().set_fuzz_str("-1").unwrap_err().additional(), vec!["-1"]);
+    assert_eq!(
+        Settings::default().set_form_str("bogus form").unwrap_err().additional(),
+        vec!["bogus form"]
+    );
+}
+
+#[test]
+fn additional_carries_the_pending_digits_fuzz_pair_as_two_values() {
+    let mut s = Settings::default();
+    s.set_digits_str("5").unwrap();
+    assert_eq!(s.set_fuzz_str("10").unwrap_err().additional(), vec!["5", "10"]);
+}
+
+#[test]
+fn additional_and_message_agree_on_every_placeholder() {
+    // additional()'s values, substituted into message()'s own text, must
+    // reproduce message() exactly -- the two are not allowed to drift.
+    let err = Settings::default().set_digits_str("abc").unwrap_err();
+    let subs = err.additional();
+    assert!(err.message().contains(&subs[0]));
 }

@@ -41,28 +41,50 @@ pub const MIN_EXPONENT: i32 = -999_999_999;
 
 /// What arithmetic can fail with, carrying the interpreter's error numbers.
 ///
+/// Each variant carries its substitution *values*, typed naturally, rather
+/// than pre-rendered text: `message()` renders from the generated table on
+/// demand, and `additional()` exposes those same values in the interpreter's
+/// own order -- what `condition('o')~additional` would return for this
+/// failure. That is not a style choice: a Rexx program that reads
+/// `condition('o')~additional` directly needs the raw values back, and they
+/// cannot be recovered from spliced text once it has been joined into a
+/// sentence.
+///
 /// Originally two of these (`Overflow`, `NotWholeNumber`) were bare unit
 /// variants covering several distinct C++ sub-messages at once, because
 /// `muldiv.rs`/`pow.rs` were off limits when the message table was first
-/// wired up. Now that they are not, each raise site gets its own variant
-/// carrying its own confirmed text -- see `message`'s doc comment for the
-/// one case (`PowerOverflow`/`PowerExponentNotWhole`) that still cannot be
-/// made byte-exact, and why.
+/// wired up. Now every raise site has its own variant -- see `message`'s
+/// doc comment for the one case (`PowerOverflow`/`PowerExponentNotWhole`)
+/// whose *values* still cannot be made byte-exact, and why.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum ArithError {
-    /// Result exponent outside +/- MAX_EXPONENT, from `mul`/`div`/`add`/
-    /// `sub`/`pow`'s shared final range check (`check_range`, below). Error
-    /// 42.901 (over) or 42.902 (under).
-    Overflow(String),
+    /// Result exponent above `MAX_EXPONENT`, from `mul`/`div`/`add`/`sub`/
+    /// `pow`'s shared final range check (`check_range`, below). Error
+    /// 42.901; `additional()` is `[adjusted_exponent, "9"]`.
+    Overflow { adjusted_exponent: i32 },
+    /// Result exponent below `MIN_EXPONENT`, same call sites as `Overflow`.
+    /// Error 42.902; `additional()` is `[exponent, "9"]` -- the *raw*
+    /// exponent, not the adjusted one `Overflow` uses.
+    Underflow { exponent: i32 },
     /// Zero raised to a negative power: an underflow, not infinity. Error
     /// 42.903, no substitution. Raised only by `pow.rs`.
     ZeroToNegativePower,
     /// `**`'s own upfront magnitude check, refusing a hopeless computation
-    /// before attempting it. Error 42.001. Raised only by `pow.rs`.
-    PowerOverflow(String),
+    /// before attempting it. Error 42.001; `additional()` is `[base, "**",
+    /// exponent]`. Raised only by `pow.rs`.
+    PowerOverflow { base: Number, exponent: Number },
     /// A zero divisor, for `/`, `%`, or `//` alike. Error 42.003, no
     /// substitution.
     DivideByZero,
+    /// Three `checked_add`/`checked_sub` guards in `muldiv.rs`, believed
+    /// unreachable (both operand exponents are already bounded to
+    /// +/-`MAX_EXPONENT`, so their sum/difference cannot overflow `i32` in
+    /// practice). No substitution, because there is no valid exponent left
+    /// to report if this ever does fire -- that is the failure itself.
+    /// Falls back to the bare 42.000 text, which the interpreter itself
+    /// never emits (grepped: no `reportException` call uses bare
+    /// `Error_Overflow`).
+    ExponentComputationOverflow,
     /// `%`'s quotient needs more digits than DIGITS allows. Error 26.011,
     /// no substitution. Raised only by `muldiv.rs`'s `div`.
     IntegerDivideNotWhole,
@@ -70,34 +92,84 @@ pub enum ArithError {
     /// no substitution. Raised only by `muldiv.rs`'s `div`.
     RemainderNotWhole,
     /// `**`'s exponent, after rounding to DIGITS, is not a whole number.
-    /// Error 26.008. Raised only by `pow.rs`.
-    PowerExponentNotWhole(String),
+    /// Error 26.008; `additional()` is `[exponent]`. Raised only by
+    /// `pow.rs`.
+    PowerExponentNotWhole { exponent: Number },
 }
 
 impl ArithError {
     pub fn code(self) -> u16 {
         match self {
-            ArithError::Overflow(_)
+            ArithError::Overflow { .. }
+            | ArithError::Underflow { .. }
             | ArithError::ZeroToNegativePower
-            | ArithError::PowerOverflow(_)
-            | ArithError::DivideByZero => 42,
+            | ArithError::PowerOverflow { .. }
+            | ArithError::DivideByZero
+            | ArithError::ExponentComputationOverflow => 42,
             ArithError::IntegerDivideNotWhole
             | ArithError::RemainderNotWhole
-            | ArithError::PowerExponentNotWhole(_) => 26,
+            | ArithError::PowerExponentNotWhole { .. } => 26,
         }
     }
 
-    /// The interpreter's message text for this failure, each sub-message
-    /// verified against `build/bin/rexx`.
+    /// The `(major, sub)` pair identifying this failure's exact entry in
+    /// the generated message table -- `code()` only ever exposes `major`
+    /// (the interpreter number a trapped Rexx program sees in `RC`), so
+    /// `message`/`additional` need this to pick the right table row.
+    fn sub_code(&self) -> (u16, u16) {
+        match self {
+            ArithError::Overflow { .. } => (42, 901),
+            ArithError::Underflow { .. } => (42, 902),
+            ArithError::ZeroToNegativePower => (42, 903),
+            ArithError::PowerOverflow { .. } => (42, 1),
+            ArithError::DivideByZero => (42, 3),
+            ArithError::ExponentComputationOverflow => (42, 0),
+            ArithError::IntegerDivideNotWhole => (26, 11),
+            ArithError::RemainderNotWhole => (26, 12),
+            ArithError::PowerExponentNotWhole { .. } => (26, 8),
+        }
+    }
+
+    /// The substitution values in the interpreter's own order -- what
+    /// `condition('o')~additional` returns for this failure: `[5, 10]` for
+    /// a `FuzzNotBelowDigits`-shaped 33.001, `[]` (an *empty* array, not
+    /// absent) for a no-substitution message like `DivideByZero`.
+    ///
+    /// `PowerOverflow`/`PowerExponentNotWhole` render `base`/`exponent` at
+    /// their own full stored precision (`digits.len()` significant digits,
+    /// via `full_precision`) rather than this crate's usual 9-digit
+    /// default -- see `message`'s doc comment for why even that is not
+    /// exact in general.
+    pub fn additional(&self) -> Vec<String> {
+        match self {
+            ArithError::Overflow { adjusted_exponent } => {
+                vec![adjusted_exponent.to_string(), "9".to_string()]
+            }
+            ArithError::Underflow { exponent } => vec![exponent.to_string(), "9".to_string()],
+            ArithError::PowerOverflow { base, exponent } => {
+                vec![full_precision(base), "**".to_string(), full_precision(exponent)]
+            }
+            ArithError::PowerExponentNotWhole { exponent } => vec![full_precision(exponent)],
+            ArithError::ZeroToNegativePower
+            | ArithError::DivideByZero
+            | ArithError::ExponentComputationOverflow
+            | ArithError::IntegerDivideNotWhole
+            | ArithError::RemainderNotWhole => vec![],
+        }
+    }
+
+    /// The interpreter's message text for this failure, rendered from the
+    /// generated table on demand -- every sub-message verified against
+    /// `build/bin/rexx`.
     ///
     /// `DivideByZero` (42.003), `IntegerDivideNotWhole` (26.011),
     /// `RemainderNotWhole` (26.012), and `ZeroToNegativePower` (42.903) take
     /// no substitution and are exact: confirmed with `1 / 0`, `123456 % 2`
-    /// and `123456 // 2` at DIGITS 3, and `0 ** -1`.
-    ///
-    /// `Overflow`'s text is built where it is raised, in `check_range`
-    /// below, because both substitutions come from the out-of-range
-    /// `Number` itself and that is the only place that still has it.
+    /// and `123456 // 2` at DIGITS 3, and `0 ** -1`. `Overflow`/`Underflow`
+    /// are exact too -- confirmed with a mul overflow and a div underflow,
+    /// and separately that &2 stays the literal `"9"` at DIGITS 9, 15, and
+    /// 20 alike (`Numerics::DEFAULT_DIGITS` is a fixed C++ constant, not the
+    /// active `NUMERIC DIGITS`).
     ///
     /// `PowerOverflow` (42.001, "...detected at: \"BASE**EXP\".") and
     /// `PowerExponentNotWhole` (26.008, "...found \"EXP\".") substitute the
@@ -109,25 +181,31 @@ impl ArithError {
     /// reports the base at its full 18-digit original precision, not
     /// rounded to the active DIGITS. A `Number` has already discarded that
     /// original spelling by the time `pow.rs` sees it (`Number::parse`
-    /// normalises sign/digits/exponent and nothing else survives), and nothing
-    /// in this task's scope threads the source text through, so these two
-    /// render the base/exponent at full stored precision
-    /// (`digits.len()` significant digits, not the default 9) rather than
-    /// DIGITS-rounded -- closer than the alternative, but still provably
-    /// wrong whenever the original had a leading zero, no `+` after `E`, a
+    /// normalises sign/digits/exponent and nothing else survives), and
+    /// nothing in this crate's scope threads the source text through, so
+    /// `additional()` renders the base/exponent at full stored precision
+    /// instead -- closer than the 9-digit default, but still provably wrong
+    /// whenever the original had a leading zero, no `+` after `E`, a
     /// different exponent-marker case, or other spelling `Number` does not
-    /// preserve.
+    /// preserve. This is a limitation of the *value*, not just its text --
+    /// there is no exact `Number`/text to hand back through `additional()`
+    /// either, because the exact one was never kept.
     pub fn message(&self) -> String {
-        match self {
-            ArithError::Overflow(m) | ArithError::PowerOverflow(m) | ArithError::PowerExponentNotWhole(m) => {
-                m.clone()
-            }
-            ArithError::ZeroToNegativePower => error_text(42, 903, &[]),
-            ArithError::DivideByZero => error_text(42, 3, &[]),
-            ArithError::IntegerDivideNotWhole => error_text(26, 11, &[]),
-            ArithError::RemainderNotWhole => error_text(26, 12, &[]),
-        }
+        let (major, sub) = self.sub_code();
+        let subs = self.additional();
+        let refs: Vec<&str> = subs.iter().map(String::as_str).collect();
+        error_text(major, sub, &refs)
     }
+}
+
+/// Renders `n` using every digit it stores, rather than the `DEFAULT_DIGITS`
+/// (9) `Number::format`/`Display` uses. Only for `ArithError` substitutions
+/// that echo an operand back -- see `ArithError::message`'s doc comment for
+/// why even this cannot be byte-exact against the interpreter in general
+/// (it fixes needless rounding, not a `Number`'s already-lost original
+/// spelling: no `+` after `E`, leading zeros, and so on).
+fn full_precision(n: &Number) -> String {
+    n.format(n.digits.len() as u32)
 }
 
 /// Fills `&1`, `&2`, … placeholders in a generated-table message with
@@ -359,28 +437,25 @@ impl Number {
         self.adjusted_exponent() <= MAX_EXPONENT && self.exponent >= MIN_EXPONENT
     }
 
-    /// Fails with `Overflow` when an arithmetic result has run outside the
-    /// representable range, which the interpreter reports as error 42.
+    /// Fails with `Overflow`/`Underflow` when an arithmetic result has run
+    /// outside the representable range, which the interpreter reports as
+    /// error 42.
     ///
     /// Mirrors `NumberStringBase::checkOverflow` (`NumberStringClass.cpp:316`)
-    /// exactly, including its priority (the upper bound is checked first)
-    /// and one easy-to-miss detail: &2 in both 42.901 and 42.902 is always
-    /// the literal `"9"` -- `Numerics::DEFAULT_DIGITS`, a fixed compile-time
-    /// constant in the C++, not the active `NUMERIC DIGITS` setting.
-    /// Confirmed by provoking the same overflow at DIGITS 9 and DIGITS 15
-    /// and getting back identical text both times ("...exceeds 9 digits."
-    /// either way). &1 is the adjusted exponent for the overflow case
-    /// (42.901) but the *raw* exponent for underflow (42.902) -- confirmed
-    /// with a division that underflows, whose message substitutes the raw
-    /// exponent, not the adjusted one.
+    /// exactly, including its priority (the upper bound is checked first).
+    /// See `ArithError::Overflow`/`Underflow`'s doc comments for the &2 ==
+    /// `"9"` detail and the adjusted-vs-raw exponent distinction between the
+    /// two -- this only needs to pick the variant and hand it the one field
+    /// each carries; the message rendering that used to happen here now
+    /// happens on demand, in `ArithError::message`.
     pub(crate) fn check_range(self) -> Result<Self, ArithError> {
         if self.is_zero() || self.in_range() {
             return Ok(self);
         }
         if self.adjusted_exponent() > MAX_EXPONENT {
-            Err(ArithError::Overflow(error_text(42, 901, &[&self.adjusted_exponent().to_string(), "9"])))
+            Err(ArithError::Overflow { adjusted_exponent: self.adjusted_exponent() })
         } else {
-            Err(ArithError::Overflow(error_text(42, 902, &[&self.exponent.to_string(), "9"])))
+            Err(ArithError::Underflow { exponent: self.exponent })
         }
     }
 

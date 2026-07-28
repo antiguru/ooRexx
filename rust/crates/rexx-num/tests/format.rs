@@ -122,11 +122,11 @@ fn before_zero_always_errors_even_for_a_single_integer_digit() {
     // succeed.
     assert!(matches!(
         fmt("0", 9, Form::Scientific, Some(0), None, None, None),
-        Err(FormatError::BeforeOversize(_))
+        Err(FormatError::BeforeOversize { .. })
     ));
     assert!(matches!(
         fmt("0.5", 9, Form::Scientific, Some(0), None, None, None),
-        Err(FormatError::BeforeOversize(_))
+        Err(FormatError::BeforeOversize { .. })
     ));
 }
 
@@ -134,13 +134,13 @@ fn before_zero_always_errors_even_for_a_single_integer_digit() {
 fn before_too_narrow_for_the_integer_part_is_error_93() {
     assert!(matches!(
         fmt("123.456", 9, Form::Scientific, Some(2), None, None, None),
-        Err(FormatError::BeforeOversize(_))
+        Err(FormatError::BeforeOversize { .. })
     ));
-    assert_eq!(FormatError::BeforeOversize(String::new()).code(), 93);
+    assert_eq!(FormatError::BeforeOversize { value: n("0"), digits: 9, before: 1 }.code(), 93);
     // A negative number needs one extra slot for the sign.
     assert!(matches!(
         fmt("-123.456", 9, Form::Scientific, Some(3), None, None, None),
-        Err(FormatError::BeforeOversize(_))
+        Err(FormatError::BeforeOversize { .. })
     ));
     assert!(fmt("-123.456", 9, Form::Scientific, Some(4), None, None, None).is_ok());
 }
@@ -184,7 +184,7 @@ fn after_rounding_carry_can_grow_the_integer_part_before_before_is_checked() {
     assert_eq!(fmt("9.996", 9, Form::Scientific, Some(2), Some(2), None, None).unwrap(), "10.00");
     assert!(matches!(
         fmt("99.996", 9, Form::Scientific, Some(2), Some(2), None, None),
-        Err(FormatError::BeforeOversize(_))
+        Err(FormatError::BeforeOversize { .. })
     ));
     assert_eq!(fmt("99.996", 9, Form::Scientific, Some(3), Some(2), None, None).unwrap(), "100.00");
 }
@@ -297,12 +297,12 @@ fn expp_pads_the_exponent_with_leading_zeros() {
 fn expp_too_narrow_for_the_exponent_is_error_93() {
     assert!(matches!(
         fmt("1e10", 9, Form::Scientific, None, None, Some(1), None),
-        Err(FormatError::ExponentOversize(_))
+        Err(FormatError::ExponentOversize { .. })
     ));
-    assert_eq!(FormatError::ExponentOversize(String::new()).code(), 93);
+    assert_eq!(FormatError::ExponentOversize { mantissa: n("0"), width: 1 }.code(), 93);
     assert!(matches!(
         fmt("1e100", 9, Form::Scientific, None, None, Some(2), None),
-        Err(FormatError::ExponentOversize(_))
+        Err(FormatError::ExponentOversize { .. })
     ));
 }
 
@@ -313,7 +313,7 @@ fn exponent_oversize_is_reported_before_before_oversize() {
     // first, not merely that both would fail.
     assert!(matches!(
         fmt("1e100", 9, Form::Scientific, Some(1), None, Some(1), None),
-        Err(FormatError::ExponentOversize(_))
+        Err(FormatError::ExponentOversize { .. })
     ));
 }
 
@@ -339,7 +339,7 @@ fn expp_zero_forces_plain_form_no_matter_how_large() {
     assert_eq!(fmt("1e10", 9, Form::Scientific, Some(11), None, Some(0), None).unwrap(), "10000000000");
     assert!(matches!(
         fmt("1e10", 9, Form::Scientific, Some(1), None, Some(0), None),
-        Err(FormatError::BeforeOversize(_))
+        Err(FormatError::BeforeOversize { .. })
     ));
 }
 
@@ -361,7 +361,7 @@ fn before_oversize_in_exponential_form_reports_the_engineering_mantissa() {
     // -- so `before` needs to fit 3 digits, not the 1 SCIENTIFIC would need.
     assert!(matches!(
         fmt("1.2e11", 9, Form::Engineering, Some(2), None, None, None),
-        Err(FormatError::BeforeOversize(_))
+        Err(FormatError::BeforeOversize { .. })
     ));
     assert_eq!(fmt("1.2e11", 9, Form::Engineering, Some(3), None, None, None).unwrap(), "120E+9");
 }
@@ -460,6 +460,44 @@ fn exponent_oversize_can_be_triggered_for_the_first_time_by_a_post_carry_exponen
     let err =
         fmt("9999999999.6", 15, Form::Scientific, None, Some(0), Some(1), Some(10)).unwrap_err();
     assert_eq!(err.message(), "Exponent of \"1.000000000\" is too large for 1 spaces.");
+}
+
+// ---- additional(): the raw substitution values, in interpreter order ------
+
+#[test]
+fn additional_carries_the_before_oversize_value_and_width_as_two_entries() {
+    let err = fmt("-123.456", 9, Form::Scientific, Some(3), None, None, None).unwrap_err();
+    assert_eq!(err.additional(), vec!["-123.456", "3"]);
+}
+
+#[test]
+fn additional_carries_the_exponent_oversize_mantissa_and_width_as_two_entries() {
+    let err = fmt("1e10", 9, Form::Scientific, None, None, Some(1), None).unwrap_err();
+    assert_eq!(err.additional(), vec!["1", "1"]);
+}
+
+#[test]
+fn additional_matches_message_for_the_post_carry_case_too() {
+    // The regression case from above: `additional()`'s rendering must go
+    // through the same mid-computation (mathRound-style) carry as
+    // `message()`, not `resolve_exponential_state`'s trimmed one.
+    let err =
+        fmt("9999999999.6", 15, Form::Scientific, None, Some(0), Some(1), Some(10)).unwrap_err();
+    assert_eq!(err.additional(), vec!["1.000000000", "1"]);
+}
+
+#[test]
+fn additional_and_message_agree_on_every_placeholder() {
+    let cases: Vec<Result<String, FormatError>> = vec![
+        fmt("-123.456", 9, Form::Scientific, Some(3), None, None, None),
+        fmt("1e10", 9, Form::Scientific, None, None, Some(1), None),
+    ];
+    for result in cases {
+        let err = result.unwrap_err();
+        for sub in err.additional() {
+            assert!(err.message().contains(&sub), "{sub:?} missing from {:?}", err.message());
+        }
+    }
 }
 
 // ---- FORMAT: carry re-derives the exponential form -------------------------

@@ -24,18 +24,25 @@ pub enum Form {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum SettingsError {
-    /// Not a positive whole number (`DIGITS`), or negative (`FUZZ`). Carries
-    /// the interpreter's exact message text -- DIGITS and FUZZ get
-    /// different sub-messages for the same code (26.005 vs 26.006, confirmed
-    /// by provoking `NUMERIC DIGITS abc` and `NUMERIC FUZZ -1`), which the
-    /// shared variant name alone can't tell apart, so each raise site below
-    /// renders its own.
-    NotWholeNumber(String),
+    /// `DIGITS` was not a positive whole number. Error 26.005; `additional()`
+    /// is `[found]`. Confirmed with `NUMERIC DIGITS abc`.
+    DigitsNotWhole { found: String },
+    /// `FUZZ` was negative, or not a whole number -- the same code as
+    /// `DigitsNotWhole` (26) but a different sub-message (26.006 vs 26.005),
+    /// which is exactly why this is its own variant rather than one shared
+    /// `NotWholeNumber` with no way to tell the two apart. `additional()` is
+    /// `[found]`. Confirmed with `NUMERIC FUZZ -1`.
+    FuzzNotWhole { found: String },
     /// `FUZZ` would not be strictly less than `DIGITS`. Raised whichever of
-    /// the two is the one being set. Error 33.001.
-    FuzzNotBelowDigits(String),
-    /// A `FORM` that is neither `SCIENTIFIC` nor `ENGINEERING`. Error 25.011.
-    InvalidForm(String),
+    /// the two is the one being set. Error 33.001; `additional()` is
+    /// `[digits, fuzz]` -- the pending pair the setting would end up with
+    /// (the just-rejected candidate for whichever is being set, the
+    /// unchanged stored value for the other), not necessarily either's
+    /// current field on `self`.
+    FuzzNotBelowDigits { digits: u32, fuzz: u32 },
+    /// A `FORM` that is neither `SCIENTIFIC` nor `ENGINEERING`. Error 25.011;
+    /// `additional()` is `[found]`.
+    InvalidForm { found: String },
 }
 
 impl SettingsError {
@@ -43,19 +50,44 @@ impl SettingsError {
     /// implementation detail -- programs trap on them.
     pub fn code(&self) -> u16 {
         match self {
-            SettingsError::InvalidForm(_) => 25,
-            SettingsError::NotWholeNumber(_) => 26,
-            SettingsError::FuzzNotBelowDigits(_) => 33,
+            SettingsError::InvalidForm { .. } => 25,
+            SettingsError::DigitsNotWhole { .. } | SettingsError::FuzzNotWhole { .. } => 26,
+            SettingsError::FuzzNotBelowDigits { .. } => 33,
         }
     }
 
-    /// The interpreter's exact message text, substitutions already filled.
-    pub fn message(&self) -> &str {
+    /// The `(major, sub)` pair identifying this failure's exact table row --
+    /// see `ArithError::sub_code`'s doc comment for why `code()` alone
+    /// isn't enough.
+    fn sub_code(&self) -> (u16, u16) {
         match self {
-            SettingsError::NotWholeNumber(m)
-            | SettingsError::FuzzNotBelowDigits(m)
-            | SettingsError::InvalidForm(m) => m,
+            SettingsError::InvalidForm { .. } => (25, 11),
+            SettingsError::DigitsNotWhole { .. } => (26, 5),
+            SettingsError::FuzzNotWhole { .. } => (26, 6),
+            SettingsError::FuzzNotBelowDigits { .. } => (33, 1),
         }
+    }
+
+    /// The substitution values in the interpreter's own order -- what
+    /// `condition('o')~additional` would return for this failure.
+    pub fn additional(&self) -> Vec<String> {
+        match self {
+            SettingsError::DigitsNotWhole { found }
+            | SettingsError::FuzzNotWhole { found }
+            | SettingsError::InvalidForm { found } => vec![found.clone()],
+            SettingsError::FuzzNotBelowDigits { digits, fuzz } => {
+                vec![digits.to_string(), fuzz.to_string()]
+            }
+        }
+    }
+
+    /// The interpreter's message text, rendered from the generated table on
+    /// demand.
+    pub fn message(&self) -> String {
+        let (major, sub) = self.sub_code();
+        let subs = self.additional();
+        let refs: Vec<&str> = subs.iter().map(String::as_str).collect();
+        crate::error_text(major, sub, &refs)
     }
 }
 
@@ -100,33 +132,29 @@ impl Settings {
     }
 
     pub fn set_digits_str(&mut self, text: &str) -> Result<(), SettingsError> {
-        // 26.005 substitutes the raw text the caller passed, unmodified --
-        // confirmed with a lowercase variable (`x = "abc"`) that the
-        // interpreter echoes back without uppercasing it.
-        let not_whole = || SettingsError::NotWholeNumber(crate::error_text(26, 5, &[text]));
+        // `found` is the raw text the caller passed, unmodified -- confirmed
+        // with a lowercase variable (`x = "abc"`) that the interpreter
+        // echoes back without uppercasing it.
+        let not_whole = || SettingsError::DigitsNotWhole { found: text.to_string() };
         let value = whole_number(text).ok_or_else(not_whole)?;
         if value < 1 || value > crate::MAX_EXPONENT as i64 {
             return Err(not_whole());
         }
         let value = u32::try_from(value).map_err(|_| not_whole())?;
         if value <= self.fuzz {
-            // 33.001 substitutes the DIGITS/FUZZ pair the setting would end
-            // up with, not necessarily either's stored value: the candidate
-            // here (not yet committed to `self.digits`) and the unchanged
-            // `self.fuzz` -- confirmed with `NUMERIC FUZZ 5` then `NUMERIC
-            // DIGITS 3`, which reports "(\"3\") ... (\"5\")".
-            return Err(SettingsError::FuzzNotBelowDigits(crate::error_text(
-                33,
-                1,
-                &[&value.to_string(), &self.fuzz.to_string()],
-            )));
+            // The pending DIGITS/FUZZ pair, not necessarily either's stored
+            // value: the candidate here (not yet committed to `self.digits`)
+            // and the unchanged `self.fuzz` -- confirmed with `NUMERIC FUZZ
+            // 5` then `NUMERIC DIGITS 3`, which reports "(\"3\") ...
+            // (\"5\")".
+            return Err(SettingsError::FuzzNotBelowDigits { digits: value, fuzz: self.fuzz });
         }
         self.digits = value;
         Ok(())
     }
 
     pub fn set_fuzz_str(&mut self, text: &str) -> Result<(), SettingsError> {
-        let not_whole = || SettingsError::NotWholeNumber(crate::error_text(26, 6, &[text]));
+        let not_whole = || SettingsError::FuzzNotWhole { found: text.to_string() };
         let value = whole_number(text).ok_or_else(not_whole)?;
         if value < 0 {
             return Err(not_whole());
@@ -137,11 +165,7 @@ impl Settings {
             // unchanged `self.digits` and the rejected candidate fuzz --
             // confirmed with `NUMERIC DIGITS 5` then `NUMERIC FUZZ 10`,
             // which reports "(\"5\") ... (\"10\")".
-            return Err(SettingsError::FuzzNotBelowDigits(crate::error_text(
-                33,
-                1,
-                &[&self.digits.to_string(), &value.to_string()],
-            )));
+            return Err(SettingsError::FuzzNotBelowDigits { digits: self.digits, fuzz: value });
         }
         self.fuzz = value;
         Ok(())
@@ -153,8 +177,8 @@ impl Settings {
         self.form = match text.to_ascii_uppercase().as_str() {
             "SCIENTIFIC" => Form::Scientific,
             "ENGINEERING" => Form::Engineering,
-            // 25.011 substitutes the raw text too, same rule as 26.005/.006.
-            _ => return Err(SettingsError::InvalidForm(crate::error_text(25, 11, &[text]))),
+            // `found` substitutes the raw text too, same rule as DIGITS/FUZZ.
+            _ => return Err(SettingsError::InvalidForm { found: text.to_string() }),
         };
         Ok(())
     }

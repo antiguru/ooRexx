@@ -16,16 +16,6 @@
 use crate::muldiv::{strip_leading, subtract_multiple};
 use crate::{ArithError, MAX_EXPONENT, Number};
 
-/// Renders `n` using every digit it stores, rather than the `DEFAULT_DIGITS`
-/// (9) `Number::format`/`Display` uses. Only for `ArithError` substitutions
-/// that echo an operand back -- see `ArithError::message`'s doc comment for
-/// why even this cannot be byte-exact against the interpreter in general
-/// (it fixes needless rounding, not a `Number`'s already-lost original
-/// spelling: no `+` after `E`, leading zeros, and so on).
-fn full_precision(n: &Number) -> String {
-    n.format(n.digits.len() as u32)
-}
-
 impl Number {
     /// The value one.
     pub fn one() -> Number {
@@ -76,14 +66,13 @@ impl Number {
     }
 
     pub fn pow(&self, exponent: &Number, digits: u32) -> Result<Number, ArithError> {
-        // 26.008 substitutes the exponent as originally written, which this
-        // crate cannot reproduce exactly (see `ArithError::message`'s doc
-        // comment) -- `full_precision` is the closest approximation, using
-        // every digit `exponent` stores rather than this crate's usual
-        // 9-digit default.
+        // `additional()` renders 26.008's substitution from `exponent` at
+        // its own full precision, which is the closest this crate can get
+        // to the interpreter's "as originally written" text -- see
+        // `ArithError::message`'s doc comment.
         let power = exponent
             .as_whole(digits)
-            .ok_or_else(|| ArithError::PowerExponentNotWhole(crate::error_text(26, 8, &[&full_precision(exponent)])))?;
+            .ok_or_else(|| ArithError::PowerExponentNotWhole { exponent: exponent.clone() })?;
         let negative_power = power < 0;
         let power = power.unsigned_abs();
 
@@ -108,11 +97,7 @@ impl Number {
         // still reports the base at its full 18-digit precision).
         let magnitude = (left.adjusted_exponent().unsigned_abs() as u64).saturating_mul(power);
         if magnitude > MAX_EXPONENT as u64 {
-            return Err(ArithError::PowerOverflow(crate::error_text(
-                42,
-                1,
-                &[&full_precision(self), "**", &full_precision(exponent)],
-            )));
+            return Err(ArithError::PowerOverflow { base: self.clone(), exponent: exponent.clone() });
         }
 
         if power == 0 {
