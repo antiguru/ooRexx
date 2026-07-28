@@ -483,13 +483,26 @@ consequences worth stating: the field name reads as "offending byte" and is not
 one, and if Task 3.8 ever fills `subs` it needs the offending position as a
 **second** field, because 13.1 quotes `"ä" ('C3A4'X)` and 15.3 quotes `found "g"`.
 
-**Owed to Task 3.5.** `ParseCtx` and `TokenCursor` ship as `pub` rather than the
-`pub(crate)` stated below, because with no in-crate caller `pub(crate)` trips
-`dead_code` and gate criterion 8 runs clippy with `-D warnings`. Task 3.5 is the
-first in-crate caller and must narrow both. Narrowing also requires moving the
-four `TokenCursor` tests out of `tests/tokens.rs` into a `#[cfg(test)]` module
-inside `token.rs`; without that the narrowing does not compile and will simply be
-reverted.
+**A plan-wide contradiction, stated once here rather than rediscovered per task.**
+This plan declares `ParseCtx`, `TokenCursor`, `Clause` and `ClauseCursor` as
+`pub(crate)` while also naming `tests/tokens.rs`, `tests/clause.rs` and
+`tests/scanner.rs` as their test files. An integration test under `tests/` is a
+separate crate and **cannot see a `pub(crate)` item**, so as written those two
+instructions cannot both be satisfied. Two tasks have now hit this independently
+and resolved it the same way.
+
+The resolution: `pub(crate)` is the intended **end state**, and each item ships
+`pub` until an in-crate caller exists, because with no caller `pub(crate)` trips
+`dead_code` and gate criterion 8 runs clippy with `-D warnings`. Do not treat the
+`pub(crate)` in the code blocks below as a defect while the tests are where they
+are.
+
+**Owed to Task 3.5, and the list has grown.** Task 3.5 is the first in-crate
+caller, so it narrows **all four** items and moves their tests into `#[cfg(test)]`
+modules beside the code: the four `TokenCursor` tests out of `tests/tokens.rs`,
+and whatever in `tests/clause.rs` and `tests/scanner.rs` touches the other three.
+Narrowing without moving the tests does not compile and will simply be reverted,
+which is the whole reason this is written down rather than left as a preference.
 
 **`ParseError` is created here, not in Task 3.8.** Every task from this one on
 returns it, so define the minimum now — `{ code: u16, sub: u16, byte: usize,
@@ -1046,11 +1059,25 @@ the *end-of-clause token* (`LanguageParser.cpp:1072`). Verified against
 their semicolons**, and `here:` **with its colon**. An AST node's own extent
 carries neither, which is why `Clause::span` is a separate field.
 
-**(3) A label's `:` terminates the clause when tokens follow it.** `here: nop`
+**(3) A label's `:` terminates the clause, unconditionally.** `here: nop`
 is two clauses, `here:` and `nop`. In the C++ this is
 `trimClause(); reclaimClause();` at `InstructionParser.cpp:173–174`, driven from
 the instruction parser rather than from `nextClause`. Verified with `trace r`:
 `here: nop; say "two"` traces as three clauses, `here:` / `nop;` / `say "two"`.
+
+**Not "when tokens follow it" — that was this rule's earlier wording and it is
+wrong.** `labelNew` (`InstructionParser.cpp:2809`) sets the label's end to the
+colon whatever comes next, so the label clause's span stops at the colon *even
+when a `;` is the real terminator*. Measured: `here: ; nop` traces as `here:`
+then `nop`, not `here: ;`.
+
+That makes the `;` in `here: ; nop` belong to **no clause at all**, which is a
+second instance of the interstitial-byte pattern rule 4 produces, reached by a
+different route. It is also the case that proves rules 2 and 3 cannot share one
+mechanism: rule 2 puts a `;` inside the span when it is that clause's own
+terminator (`nop; say "x"` traces `nop;`), and rule 3 excludes it when a colon
+got there first. A single "include the terminator" rule gets one of the two
+wrong.
 
 **(4) `THEN`, `ELSE` and `OTHERWISE` end a clause mid-line.** Also driven from
 the instruction parser: `trimClause()` at `LanguageParser.cpp:1378`, `:1403`,
@@ -1060,6 +1087,14 @@ instruction that just ended narrows its own end separately — `RexxInstructionI
 sets its end to the **start offset** of the `THEN` token
 (`IfInstruction.cpp:58–66`), which is why the traced text is `if y > 5 ` with the
 trailing blank and stops before `then`.
+
+**Task 3.6 also owes error 47.1, `INTERPRET data must not contain labels`.**
+Measured: `interpret "here: nop"` gives rc 47 and the message
+`INTERPRET data must not contain labels; found "HERE".` Task 3.4's
+`split_clauses(&[Token])` cannot raise it, having no source kind, and it should
+not be given one: the C++ raises it at the point of label *recognition* from
+parser state (`isInterpret()`), which this task reproduces through
+`ParseCtx::source` and `SourceKind`, with no signature change anywhere.
 
 Because those are two independent adjustments, **some bytes end up in no clause
 at all**: in `if 1 = 1   then    say "a"` the condition keeps its three trailing
@@ -2286,7 +2321,14 @@ fits.
   `clause_span` alone cannot reproduce it. Measured: `say "x",` / newline /
   `    "y"` traces as `say "x","y"` — the comma is kept, the newline is removed,
   and the continuation line's four leading blanks are kept. So it is neither a
-  slice nor a simple trim-and-join. This is **out of scope for this phase's gate**,
+  slice nor a simple trim-and-join.
+
+  Task 3.4 measured the same thing from the span side and it is worth stating
+  precisely, because it tells Task 3.9 what to build: the clause's span
+  **contains** the line terminator (`say 1,` / `  + 2` gives span `0..12`), while
+  `trace r` drops it when joining the fragments. So Task 3.9 needs a
+  terminator-stripping join over the span, not `span_bytes` on its own.
+  `span_bytes` is still the right primitive; it is simply not the whole answer. This is **out of scope for this phase's gate**,
   verified: `trace_output.rex` and both Task 3.9 probes contain no continuations,
   so criterion 6 is unaffected. It is recorded because the note above would
   otherwise read as a general claim, and because whatever gates continued clauses
