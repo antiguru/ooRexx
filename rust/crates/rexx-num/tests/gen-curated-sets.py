@@ -119,6 +119,35 @@ def fmtedge():
             out += [f"{d}|TRUNC|{n}|{p}|||" for p in ["", "0", "1", "5", "20"]]
     return out
 
+def fmtcarry():
+    """The exponent-width check on the far side of a rounding carry.
+
+    `format(9.996E99,,0,2)` raises 93 in the interpreter: rounding to zero
+    decimals carries, the exponent goes from 99 to 100, and three digits no
+    longer fit the two-wide `expp` field. A version that checks the width
+    only *before* the carry answers `1E+100` instead, and 21,296 existing
+    FORMAT cases all missed it, because the successful-render path agrees at
+    the same boundary — only the error path diverges.
+
+    So this set is deliberately narrow: mantissas that carry into an extra
+    integer digit, at exponents just below a power-of-ten boundary where the
+    carry widens the exponent too, crossed with `expp` values on either side
+    of the width that results.
+    """
+    carriers = ["9.996", "9.9996", "9.99996", "9.5", "9.95", "9.999999999",
+                "8.996", "9999999999.6", "99999999.96", "9.996", "1.996"]
+    exps = ["", "E9", "E99", "E999", "E-9", "E-99", "E-999", "E10", "E100"]
+    out = []
+    for d in ["9", "15", "9E", "15E"]:
+        for c in carriers:
+            for e in exps:
+                n = c + e
+                for after in ["", "0", "1", "2"]:
+                    for expp in ["", "1", "2", "3", "4"]:
+                        out.append(f"{d}|FORMAT|{n}||{after}|{expp}|")
+                        out.append(f"{d}|FORMAT|{n}||{after}|{expp}|10")
+    return out
+
 SETS = {
     "addsub":  lambda: binary(ARITH_A, ["+","-"], [1,3,9,15]),
     "addsub2": lambda: binary(ARITH_B, ["+","-"], [2,4,6,7,11,20]),
@@ -131,6 +160,7 @@ SETS = {
                            ["","0","1","2","5"], ["","0","1","4"], ["","0","1","2","5","9"]),
     "fmt3":    fmt3,
     "fmtedge": fmtedge,
+    "fmtcarry": fmtcarry,
 }
 
 if __name__ == "__main__":
