@@ -24,8 +24,15 @@ pub const BINARY_VAR: &str = "REXX_BENCH_BINARY";
 /// One `.rex` file per D9 dimension, in report order. `startup` is listed
 /// first because it is the one program this suite is not sizing for
 /// 0.5-2s -- see `bench-programs/startup.rex`.
-pub static PROGRAMS: &[&str] =
-    &["startup", "dispatch", "varlookup", "compound", "strings", "arith", "alloc"];
+pub static PROGRAMS: &[&str] = &[
+    "startup",
+    "dispatch",
+    "varlookup",
+    "compound",
+    "strings",
+    "arith",
+    "alloc",
+];
 
 /// Resolves `REXX_BENCH_BINARY` into an `Interpreter`, deriving its library
 /// search path the same way `rexx-diff` does (`rexx-oracle/src/bin/rexx-diff.rs`):
@@ -40,7 +47,10 @@ pub fn interpreter_under_test() -> Interpreter {
         .parent()
         .map(|dir| vec![dir.to_path_buf(), dir.join("../lib")])
         .unwrap_or_default();
-    Interpreter { binary, library_paths }
+    Interpreter {
+        binary,
+        library_paths,
+    }
 }
 
 /// Directory holding the benchmark programs, resolved relative to this

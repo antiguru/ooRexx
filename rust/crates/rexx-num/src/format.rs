@@ -40,7 +40,11 @@ pub enum FormatError {
     /// and getting back the un-reframed "123456.789" instead, and separately
     /// by lowering DIGITS until rounding changes the value and seeing *that*
     /// show up rather than the original literal text.
-    BeforeOversize { value: Number, digits: u64, before: u32 },
+    BeforeOversize {
+        value: Number,
+        digits: u64,
+        before: u32,
+    },
     /// `expp` is too narrow to hold the exponent's digits. Error 93.941;
     /// `additional()` is `[render(mantissa), width]`, where `render` is a
     /// plain (no `before`/`after`) rendering of `mantissa` -- see the two
@@ -70,7 +74,11 @@ impl FormatError {
     /// `condition('o')~additional` would return for this failure.
     pub fn additional(&self) -> Vec<String> {
         match self {
-            FormatError::BeforeOversize { value, digits, before } => {
+            FormatError::BeforeOversize {
+                value,
+                digits,
+                before,
+            } => {
                 vec![value.format(*digits), before.to_string()]
             }
             FormatError::ExponentOversize { mantissa, width } => {
@@ -162,7 +170,10 @@ impl Number {
             // bare u64 past 2^63 must stay a huge trigger threshold, and
             // every adjusted exponent it is compared against is within
             // +/-`MAX_EXPONENT`, so saturation decides identically.
-            Some(expt.map(|e| e as i64).unwrap_or_else(|| i64::try_from(digits).unwrap_or(i64::MAX)))
+            Some(
+                expt.map(|e| e as i64)
+                    .unwrap_or_else(|| i64::try_from(digits).unwrap_or(i64::MAX)),
+            )
         };
 
         // The C++ side checks `expp` *twice*. The first check
@@ -191,7 +202,10 @@ impl Number {
             if let Some(exp0) = initial_eng_exp {
                 let needed = exp0.unsigned_abs().to_string().len() as u32;
                 if needed > width {
-                    return Err(FormatError::ExponentOversize { mantissa: reframe(&n1, exp0), width });
+                    return Err(FormatError::ExponentOversize {
+                        mantissa: reframe(&n1, exp0),
+                        width,
+                    });
                 }
             }
             // The C++ redoes the whole trigger/width check a *second* time,
@@ -209,7 +223,9 @@ impl Number {
             // `build/bin/rexx`; the first was this crate's own regression,
             // caught by review, not by any of the 21,296 cases the four
             // curated FORMAT sets already ran.
-            if let Some(err) = post_carry_exponent_error(&n1, initial_eng_exp, form, expt, after, width) {
+            if let Some(err) =
+                post_carry_exponent_error(&n1, initial_eng_exp, form, expt, after, width)
+            {
                 return Err(err);
             }
         }
@@ -240,7 +256,9 @@ impl Number {
                 }
                 let e_sign = if exp < 0 { '-' } else { '+' };
                 let exp_digits = match expp {
-                    Some(width) => format!("{:0width$}", exp.unsigned_abs(), width = width as usize),
+                    Some(width) => {
+                        format!("{:0width$}", exp.unsigned_abs(), width = width as usize)
+                    }
                     None => exp.unsigned_abs().to_string(),
                 };
                 Ok(format!("{mantissa}E{e_sign}{exp_digits}"))
@@ -279,7 +297,11 @@ fn group(form: Form, adjusted: i32) -> i32 {
 /// rounding has changed which `exp` is the right one, rather than patching a
 /// stale mantissa.
 fn reframe(n1: &Number, exp: i32) -> Number {
-    Number { negative: n1.negative, digits: n1.digits.clone(), exponent: n1.exponent - exp }
+    Number {
+        negative: n1.negative,
+        digits: n1.digits.clone(),
+        exponent: n1.exponent - exp,
+    }
 }
 
 fn adjusted(n: &Number) -> i32 {
@@ -451,7 +473,10 @@ fn post_carry_exponent_error(
     if needed <= width {
         return None;
     }
-    Some(FormatError::ExponentOversize { mantissa: reframe(&true_scale, exp2), width })
+    Some(FormatError::ExponentOversize {
+        mantissa: reframe(&true_scale, exp2),
+        width,
+    })
 }
 
 /// Rounds (half up) `n` to exactly `places` digits after the decimal point --
@@ -501,7 +526,11 @@ fn round_to_places(n: &Number, places: u32) -> Number {
         // confirmed against the interpreter). The sign is still dropped: a
         // value that rounds away to nothing has no sign left to show,
         // exactly as a whole-number underflow already does.
-        return Number { negative: false, digits: vec![0], exponent: target_exponent };
+        return Number {
+            negative: false,
+            digits: vec![0],
+            exponent: target_exponent,
+        };
     }
     let keep = len - drop;
     let mut kept: Vec<u8> = n.digits[..keep].to_vec();
@@ -536,7 +565,11 @@ fn round_to_places(n: &Number, places: u32) -> Number {
         // `0`, confirmed against the interpreter). A carry reaching this
         // point instead (`if i == 0` above) leaves `kept` non-empty, so it
         // takes the normal `assemble` path below.
-        return Number { negative: false, digits: vec![0], exponent: target_exponent };
+        return Number {
+            negative: false,
+            digits: vec![0],
+            exponent: target_exponent,
+        };
     }
     Number::assemble(n.negative, kept, target_exponent)
 }
@@ -560,7 +593,11 @@ fn truncate_to_places(n: &Number, places: u32) -> Number {
         // decimal-place count still shows (`TRUNC(0.000012345, 1)` is
         // `0.0`, not `0`), constructed directly rather than through
         // `assemble`, which would collapse it back to the canonical zero.
-        return Number { negative: false, digits: vec![0], exponent: target_exponent };
+        return Number {
+            negative: false,
+            digits: vec![0],
+            exponent: target_exponent,
+        };
     }
     let keep = len - drop;
     // `assemble` here only ever sees a genuinely nonzero leading digit
@@ -611,7 +648,10 @@ fn render_integer_padded(
             let point = point as usize;
             (d[..point].to_string(), Some(d[point..].to_string()))
         } else {
-            ("0".to_string(), Some(format!("{}{d}", "0".repeat((-point) as usize))))
+            (
+                "0".to_string(),
+                Some(format!("{}{d}", "0".repeat((-point) as usize))),
+            )
         }
     };
 
@@ -655,7 +695,9 @@ fn render_integer_padded(
         }
     };
 
-    let mut out = String::with_capacity(pad + sign.len() + int_part.len() + 1 + dec_part.as_ref().map_or(0, String::len));
+    let mut out = String::with_capacity(
+        pad + sign.len() + int_part.len() + 1 + dec_part.as_ref().map_or(0, String::len),
+    );
     out.push_str(&" ".repeat(pad));
     out.push_str(sign);
     out.push_str(&int_part);

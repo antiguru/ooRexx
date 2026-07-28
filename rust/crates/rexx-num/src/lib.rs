@@ -23,7 +23,7 @@ mod addsub;
 mod compare;
 mod muldiv;
 mod pow;
-pub use compare::{compare, CompareOp};
+pub use compare::{CompareOp, compare};
 pub use muldiv::DivOp;
 mod settings;
 pub use settings::{Form, Settings, SettingsError};
@@ -164,7 +164,11 @@ impl ArithError {
             }
             ArithError::Underflow { exponent } => vec![exponent.to_string(), "9".to_string()],
             ArithError::PowerOverflow { base, exponent } => {
-                vec![full_precision(base), "**".to_string(), full_precision(exponent)]
+                vec![
+                    full_precision(base),
+                    "**".to_string(),
+                    full_precision(exponent),
+                ]
             }
             ArithError::PowerExponentNotWhole { exponent } => vec![full_precision(exponent)],
             ArithError::ZeroToNegativePower
@@ -335,7 +339,11 @@ impl Number {
     /// The canonical zero. Every spelling of zero collapses to this: the
     /// oracle prints `0` for `-0`, `0.0` and `00.00` alike.
     pub fn zero() -> Self {
-        Number { negative: false, digits: vec![0], exponent: 0 }
+        Number {
+            negative: false,
+            digits: vec![0],
+            exponent: 0,
+        }
     }
 
     pub fn is_zero(&self) -> bool {
@@ -431,7 +439,9 @@ impl Number {
             let start = i;
             let mut value: i64 = 0;
             while i < bytes.len() && bytes[i].is_ascii_digit() {
-                value = value.saturating_mul(10).saturating_add((bytes[i] - b'0') as i64);
+                value = value
+                    .saturating_mul(10)
+                    .saturating_add((bytes[i] - b'0') as i64);
                 i += 1;
             }
             if i == start {
@@ -444,10 +454,9 @@ impl Number {
             // places are folded in, but the interpreter never gets that far.
             // Zero is exempt: `0e1000000996` is simply 0.
             written_exponent = Some(signed);
-            exponent = exponent.saturating_add(signed.clamp(
-                MIN_EXPONENT as i64 * 2,
-                MAX_EXPONENT as i64 * 2,
-            ) as i32);
+            exponent = exponent.saturating_add(
+                signed.clamp(MIN_EXPONENT as i64 * 2, MAX_EXPONENT as i64 * 2) as i32,
+            );
         }
 
         // Trailing blanks are legal; anything else after them is not.
@@ -504,9 +513,13 @@ impl Number {
             return Ok(self);
         }
         if self.adjusted_exponent() > MAX_EXPONENT {
-            Err(ArithError::Overflow { adjusted_exponent: self.adjusted_exponent() })
+            Err(ArithError::Overflow {
+                adjusted_exponent: self.adjusted_exponent(),
+            })
         } else {
-            Err(ArithError::Underflow { exponent: self.exponent })
+            Err(ArithError::Underflow {
+                exponent: self.exponent,
+            })
         }
     }
 
@@ -517,7 +530,11 @@ impl Number {
         }
         let lead = digits.iter().take_while(|d| **d == 0).count();
         digits.drain(..lead);
-        Number { negative, digits, exponent }
+        Number {
+            negative,
+            digits,
+            exponent,
+        }
     }
 
     /// The power of ten of the most significant digit. This is what the

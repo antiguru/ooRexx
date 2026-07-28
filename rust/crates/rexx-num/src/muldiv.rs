@@ -43,7 +43,10 @@ impl Number {
         // final rounding then looks at.
         let (kept, extra) = if product.len() > digits_usize {
             let keep = digits_usize + 1;
-            (product[..keep.min(product.len())].to_vec(), product.len() - keep)
+            (
+                product[..keep.min(product.len())].to_vec(),
+                product.len() - keep,
+            )
         } else {
             (product, 0)
         };
@@ -59,7 +62,11 @@ impl Number {
             .and_then(|e| e.checked_add(extra as i32))
             .ok_or(ArithError::ExponentComputationOverflow)?;
         let negative = left.negative != right.negative;
-        let raw = Number { negative, digits: kept, exponent };
+        let raw = Number {
+            negative,
+            digits: kept,
+            exponent,
+        };
         let rounded = raw.round_to(digits);
         Number::assemble(rounded.negative, rounded.digits, rounded.exponent).check_range()
     }
@@ -183,7 +190,9 @@ impl Number {
         if total_digits > FAST_BUFFER {
             let request = usize::try_from(total_digits.saturating_mul(3)).unwrap_or(usize::MAX);
             let mut probe: Vec<u8> = Vec::new();
-            probe.try_reserve_exact(request).map_err(|_| ArithError::SystemResources)?;
+            probe
+                .try_reserve_exact(request)
+                .map_err(|_| ArithError::SystemResources)?;
         }
 
         // Long-divide the digit strings, generating one more digit than
@@ -200,7 +209,11 @@ impl Number {
             .ok_or(ArithError::ExponentComputationOverflow)?;
 
         if op == DivOp::Divide {
-            let raw = Number { negative, digits: q, exponent: q_exp };
+            let raw = Number {
+                negative,
+                digits: q,
+                exponent: q_exp,
+            };
             // The range check goes after rounding but BEFORE the trailing
             // zeros come off. Those zeros are significant to the check: a
             // quotient of 1.0120 sits one power of ten lower than the 1.012
@@ -216,7 +229,8 @@ impl Number {
                 rounded.digits.pop();
                 rounded.exponent += 1;
             }
-            return Number::assemble(rounded.negative, rounded.digits, rounded.exponent).check_range();
+            return Number::assemble(rounded.negative, rounded.digits, rounded.exponent)
+                .check_range();
         }
 
         // For % and //, keep only the integer part of the quotient.
@@ -262,10 +276,8 @@ impl Number {
                 // this sum truncated the working precision for large
                 // `digits` -- the same class as the comparison fix above,
                 // on the arithmetic side.
-                let exact_extra = (left.digits.len()
-                    + right.digits.len()
-                    + int_digits.digits.len()
-                    + 10) as u64;
+                let exact_extra =
+                    (left.digits.len() + right.digits.len() + int_digits.digits.len() + 10) as u64;
                 let _ = rem;
                 let exact = digits.saturating_add(exact_extra);
                 let product = int_digits.mul(&right, exact)?;
@@ -381,7 +393,10 @@ pub(crate) fn subtract_multiple(left: &mut [u8], divisor: &[u8], m: i32) {
     let mut carry: i32 = 0;
     for i in 0..left.len() {
         let pos = left.len() - 1 - i;
-        let sub = divisor.len().checked_sub(i + 1).map_or(0, |k| divisor[k] as i32 * m);
+        let sub = divisor
+            .len()
+            .checked_sub(i + 1)
+            .map_or(0, |k| divisor[k] as i32 * m);
         let mut v = carry + left[pos] as i32 - sub;
         if v < 0 {
             // A single digit product can leave a deficit as large as 81, so
@@ -394,5 +409,8 @@ pub(crate) fn subtract_multiple(left: &mut [u8], divisor: &[u8], m: i32) {
         }
         left[pos] = v as u8;
     }
-    debug_assert_eq!(carry, 0, "an under-guess never drives the remainder negative");
+    debug_assert_eq!(
+        carry, 0,
+        "an under-guess never drives the remainder negative"
+    );
 }

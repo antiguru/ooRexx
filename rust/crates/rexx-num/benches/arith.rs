@@ -80,7 +80,11 @@ fn arith(c: &mut Criterion) {
 
                 // numeric digits 20
                 let c = i_num.div(&seven, 20, DivOp::Divide).unwrap();
-                let d = c.pow(&two, 20).unwrap().div(&five, 20, DivOp::Remainder).unwrap();
+                let d = c
+                    .pow(&two, 20)
+                    .unwrap()
+                    .div(&five, 20, DivOp::Remainder)
+                    .unwrap();
 
                 total = total.add(&b, 20).unwrap().add(&d, 20).unwrap();
             }
@@ -92,7 +96,10 @@ fn arith(c: &mut Criterion) {
             // claims to and its number should not be compared with the C++
             // baseline. The check costs one string compare per sample.
             let result = total.format(20);
-            assert_eq!(result, "4629643519330627.7808", "benchmark no longer matches arith.rex");
+            assert_eq!(
+                result, "4629643519330627.7808",
+                "benchmark no longer matches arith.rex"
+            );
             black_box(result)
         })
     });

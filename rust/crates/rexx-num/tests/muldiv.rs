@@ -7,7 +7,9 @@ fn mul(a: &str, b: &str, d: u64) -> String {
     n(a).mul(&n(b), d).unwrap().format(d)
 }
 fn div(a: &str, b: &str, d: u64, op: DivOp) -> Result<String, u16> {
-    n(a).div(&n(b), d, op).map(|r| r.format(d)).map_err(ArithError::code)
+    n(a).div(&n(b), d, op)
+        .map(|r| r.format(d))
+        .map_err(ArithError::code)
 }
 
 #[test]
@@ -33,7 +35,10 @@ fn division_strips_trailing_zeros_where_the_other_operators_keep_them() {
     assert_eq!(div("1", "7.7", 3, DivOp::Divide).unwrap(), "0.13");
     assert_eq!(div("1", "999999999", 3, DivOp::Divide).unwrap(), "1E-9");
     // the remainder keeps them
-    assert_eq!(div("100", "6.66666665", 3, DivOp::Remainder).unwrap(), "0.010");
+    assert_eq!(
+        div("100", "6.66666665", 3, DivOp::Remainder).unwrap(),
+        "0.010"
+    );
 }
 
 #[test]
@@ -82,7 +87,10 @@ fn a_digits_too_large_to_reserve_working_storage_for_is_error_5() {
     let max_legal = 999_999_999_999_999_999; // Numerics::MAX_WHOLENUMBER
     assert_eq!(div("4.0", "2", max_legal, DivOp::Divide), Err(5));
     assert_eq!(div("1", "7", max_legal, DivOp::Divide), Err(5));
-    assert_eq!(div("123456.0", "2", max_legal, DivOp::IntegerDivide), Err(5));
+    assert_eq!(
+        div("123456.0", "2", max_legal, DivOp::IntegerDivide),
+        Err(5)
+    );
     // A bare u64::MAX (not reachable through `Settings`) saturates into the
     // same reservation failure rather than wrapping any of the sums on the
     // way -- this exact call used to panic in debug ("attempt to add with
@@ -91,8 +99,14 @@ fn a_digits_too_large_to_reserve_working_storage_for_is_error_5() {
     // The `%`/`//` no-integer-part early returns sit before the
     // reservation, exactly as the C++ orders them, so these stay cheap
     // successes at the same DIGITS.
-    assert_eq!(div("0.001", "7", max_legal, DivOp::Remainder).unwrap(), "0.001");
-    assert_eq!(div("0.001", "7", max_legal, DivOp::IntegerDivide).unwrap(), "0");
+    assert_eq!(
+        div("0.001", "7", max_legal, DivOp::Remainder).unwrap(),
+        "0.001"
+    );
+    assert_eq!(
+        div("0.001", "7", max_legal, DivOp::IntegerDivide).unwrap(),
+        "0"
+    );
 }
 
 #[test]
@@ -102,18 +116,25 @@ fn a_digits_past_the_fast_buffer_still_divides_via_the_reservation_path() {
     // ever reject what cannot be allocated, not tax ordinary big-DIGITS
     // divisions.
     assert_eq!(div("1", "8", 24, DivOp::Divide).unwrap(), "0.125");
-    assert_eq!(div("1", "3", 24, DivOp::Divide).unwrap(), "0.333333333333333333333333");
+    assert_eq!(
+        div("1", "3", 24, DivOp::Divide).unwrap(),
+        "0.333333333333333333333333"
+    );
 }
 
 #[test]
 fn a_result_outside_the_representable_range_is_error_42() {
     assert_eq!(
-        n("1e999999999").mul(&n("1e999999999"), 9).map_err(ArithError::code),
+        n("1e999999999")
+            .mul(&n("1e999999999"), 9)
+            .map_err(ArithError::code),
         Err(42)
     );
     // and the operation must not panic on the way there
     assert_eq!(
-        n("9e999999999").mul(&n("9e999999999"), 9).map_err(ArithError::code),
+        n("9e999999999")
+            .mul(&n("9e999999999"), 9)
+            .map_err(ArithError::code),
         Err(42)
     );
 }

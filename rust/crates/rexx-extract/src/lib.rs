@@ -49,7 +49,11 @@ pub fn extract(source: &str) -> Vec<TestMethod> {
             if let Some((name, body)) = current.take() {
                 push_if_test(&mut out, name, body);
             }
-            let name = rest.split_whitespace().next().unwrap_or("").trim_matches('"');
+            let name = rest
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .trim_matches('"');
             current = Some((name.to_string(), Vec::new()));
         } else if trimmed.starts_with("::") {
             if let Some((name, body)) = current.take() {
@@ -67,7 +71,9 @@ pub fn extract(source: &str) -> Vec<TestMethod> {
 
 fn strip_directive<'a>(line: &'a str, directive: &str) -> Option<&'a str> {
     let lower = line.to_ascii_lowercase();
-    lower.starts_with(directive).then(|| line[directive.len()..].trim_start())
+    lower
+        .starts_with(directive)
+        .then(|| line[directive.len()..].trim_start())
 }
 
 fn push_if_test(out: &mut Vec<TestMethod>, name: String, body: Vec<&str>) {
@@ -75,7 +81,11 @@ fn push_if_test(out: &mut Vec<TestMethod>, name: String, body: Vec<&str>) {
         return;
     }
     let body = body.join("\n");
-    out.push(TestMethod { uses_fixture: touches_fixture(&body), name, body });
+    out.push(TestMethod {
+        uses_fixture: touches_fixture(&body),
+        name,
+        body,
+    });
 }
 
 fn touches_fixture(body: &str) -> bool {
@@ -83,8 +93,10 @@ fn touches_fixture(body: &str) -> bool {
     let mut rest = lower.as_str();
     while let Some(at) = rest.find("self~") {
         rest = &rest[at + "self~".len()..];
-        let message: String =
-            rest.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '.').collect();
+        let message: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '.')
+            .collect();
         if !ASSERTIONS.contains(&message.as_str()) {
             return true;
         }

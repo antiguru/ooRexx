@@ -44,7 +44,10 @@ pub enum Divergence {
 
 pub fn diff(cpp: &Outcome, rust: &Outcome) -> Option<Divergence> {
     if cpp.exit_code != rust.exit_code {
-        return Some(Divergence::ExitCode { cpp: cpp.exit_code, rust: rust.exit_code });
+        return Some(Divergence::ExitCode {
+            cpp: cpp.exit_code,
+            rust: rust.exit_code,
+        });
     }
     if cpp.stdout != rust.stdout {
         return Some(Divergence::Stdout {

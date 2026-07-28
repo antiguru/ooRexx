@@ -67,7 +67,10 @@ fn main() -> ExitCode {
             }
         };
         let source = String::from_utf8_lossy(&bytes);
-        let group_name = group_path.file_stem().and_then(|s| s.to_str()).unwrap_or("group");
+        let group_name = group_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("group");
         let methods = extract(&source);
         let extractable: Vec<&TestMethod> = methods.iter().filter(|m| !m.uses_fixture).collect();
 
@@ -84,7 +87,10 @@ fn main() -> ExitCode {
         total_tests += total;
         total_extractable += extracted;
         let pct = percentage(extracted, total);
-        rows.push(format!("| {} | {total} | {extracted} | {pct:.1}% |", group_path.display()));
+        rows.push(format!(
+            "| {} | {total} | {extracted} | {pct:.1}% |",
+            group_path.display()
+        ));
     }
 
     let total_pct = percentage(total_extractable, total_tests);
@@ -117,12 +123,22 @@ fn main() -> ExitCode {
 /// component. Anything outside `[A-Za-z0-9_-]` becomes `_`.
 fn sanitize(name: &str) -> String {
     name.chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' || c == '-' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
 fn percentage(part: usize, whole: usize) -> f64 {
-    if whole == 0 { 0.0 } else { 100.0 * part as f64 / whole as f64 }
+    if whole == 0 {
+        0.0
+    } else {
+        100.0 * part as f64 / whole as f64
+    }
 }
 
 /// One `::method` per name in `rexx_extract::ASSERTIONS`'s intent -- the shim

@@ -19,7 +19,10 @@ fn arg(s: &str) -> Option<u32> {
     if s.is_empty() {
         return None;
     }
-    Some(s.parse().unwrap_or_else(|_| panic!("malformed argument field {s:?}")))
+    Some(
+        s.parse()
+            .unwrap_or_else(|_| panic!("malformed argument field {s:?}")),
+    )
 }
 
 fn main() {
@@ -44,14 +47,7 @@ fn main() {
             Some(n) => match f[1] {
                 "TRUNC" => n.trunc(digits, arg(f[3]).unwrap_or(0)),
                 "FORMAT" => {
-                    match n.format_with(
-                        digits,
-                        form,
-                        arg(f[3]),
-                        arg(f[4]),
-                        arg(f[5]),
-                        arg(f[6]),
-                    ) {
+                    match n.format_with(digits, form, arg(f[3]), arg(f[4]), arg(f[5]), arg(f[6])) {
                         Ok(v) => v,
                         Err(e) => format!("<E{}>", FormatError::code(e)),
                     }

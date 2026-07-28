@@ -18,14 +18,8 @@ use crate::{Decoded, ObjRef};
 /// A slot carries its generation whether occupied or not, so that a handle
 /// minted before a sweep cannot read the slot's next occupant.
 enum Slot {
-    Free {
-        next: Option<u32>,
-        generation: u32,
-    },
-    Live {
-        object: Object,
-        generation: u32,
-    },
+    Free { next: Option<u32>, generation: u32 },
+    Live { object: Object, generation: u32 },
 }
 
 impl Slot {
@@ -55,7 +49,12 @@ pub struct Heap {
 
 impl Heap {
     pub fn new() -> Self {
-        Heap { slots: Vec::new(), free_head: None, live: 0, marks: Vec::new() }
+        Heap {
+            slots: Vec::new(),
+            free_head: None,
+            live: 0,
+            marks: Vec::new(),
+        }
     }
 
     pub fn slot_capacity(&self) -> usize {
@@ -71,7 +70,9 @@ impl Heap {
         let mut work: Vec<ObjRef> = roots.iter().collect();
         let mut reached = Vec::new();
         while let Some(r) = work.pop() {
-            let Some(slot) = self.resolve(r) else { continue };
+            let Some(slot) = self.resolve(r) else {
+                continue;
+            };
             if std::mem::replace(&mut self.marks[slot], true) {
                 continue; // already marked: this is what terminates cycles
             }
@@ -99,14 +100,20 @@ impl Heap {
             if !self.marks[slot] {
                 continue;
             }
-            let Slot::Live { object, .. } = &self.slots[slot] else { continue };
-            let Body::WeakRef(target) = object.body else { continue };
+            let Slot::Live { object, .. } = &self.slots[slot] else {
+                continue;
+            };
+            let Body::WeakRef(target) = object.body else {
+                continue;
+            };
             // "Dead" includes unresolvable: a target whose slot was already
             // freed, or whose generation has moved on, died in an earlier
             // cycle and its reference must still clear.
             let target_alive = self.resolve(target).is_some_and(|t| self.marks[t]);
             if !target_alive {
-                let Slot::Live { object, .. } = &mut self.slots[slot] else { unreachable!() };
+                let Slot::Live { object, .. } = &mut self.slots[slot] else {
+                    unreachable!()
+                };
                 object.body = Body::WeakRef(ObjRef::NIL);
             }
         }
@@ -121,7 +128,9 @@ impl Heap {
             if self.marks[slot] {
                 continue;
             }
-            let Slot::Live { object, generation } = &self.slots[slot] else { continue };
+            let Slot::Live { object, generation } = &self.slots[slot] else {
+                continue;
+            };
             if object.has_uninit {
                 let r = ObjRef::heap(slot as u32, *generation);
                 pending_uninit.push(r);
@@ -129,7 +138,9 @@ impl Heap {
             }
         }
         while let Some(r) = resurrect.pop() {
-            let Some(slot) = self.resolve(r) else { continue };
+            let Some(slot) = self.resolve(r) else {
+                continue;
+            };
             if std::mem::replace(&mut self.marks[slot], true) {
                 continue;
             }
@@ -154,14 +165,24 @@ impl Heap {
             // which is the whole reason the generation exists.
             self.slots[slot] = match generation.checked_add(1) {
                 Some(next) if next <= crate::GENERATION_MAX => {
-                    let free = Slot::Free { next: self.free_head, generation: next };
+                    let free = Slot::Free {
+                        next: self.free_head,
+                        generation: next,
+                    };
                     self.free_head = Some(slot as u32);
                     free
                 }
-                _ => Slot::Free { next: None, generation },
+                _ => Slot::Free {
+                    next: None,
+                    generation,
+                },
             };
         }
-        CollectStats { swept, live: self.live, pending_uninit }
+        CollectStats {
+            swept,
+            live: self.live,
+            pending_uninit,
+        }
     }
 
     pub fn alloc(&mut self, body: Body) -> ObjRef {
@@ -169,7 +190,11 @@ impl Heap {
     }
 
     pub fn alloc_with(&mut self, behaviour: BehaviourId, body: Body) -> ObjRef {
-        let object = Object { behaviour, body, has_uninit: false };
+        let object = Object {
+            behaviour,
+            body,
+            has_uninit: false,
+        };
         self.live += 1;
         match self.free_head {
             Some(slot) => {
@@ -182,7 +207,10 @@ impl Heap {
             }
             None => {
                 let slot = u32::try_from(self.slots.len()).expect("heap exceeds 2^32 slots");
-                self.slots.push(Slot::Live { object, generation: 0 });
+                self.slots.push(Slot::Live {
+                    object,
+                    generation: 0,
+                });
                 ObjRef::heap(slot, 0)
             }
         }
@@ -191,7 +219,9 @@ impl Heap {
     /// Resolves a handle, or `None` if it names no slot, a free slot, or a
     /// slot whose generation has moved on.
     fn resolve(&self, r: ObjRef) -> Option<usize> {
-        let Decoded::Heap { slot, generation } = r.decode() else { return None };
+        let Decoded::Heap { slot, generation } = r.decode() else {
+            return None;
+        };
         let entry = self.slots.get(slot as usize)?;
         (entry.generation() == generation && matches!(entry, Slot::Live { .. }))
             .then_some(slot as usize)
@@ -237,14 +267,20 @@ mod retire_tests {
         let mut heap = Heap::new();
         let roots = RootSet::new();
         let r = heap.alloc(Body::String("old".into()));
-        let Decoded::Heap { slot, .. } = r.decode() else { panic!("heap handle") };
+        let Decoded::Heap { slot, .. } = r.decode() else {
+            panic!("heap handle")
+        };
         if let Slot::Live { generation, .. } = &mut heap.slots[slot as usize] {
             *generation = GENERATION_MAX;
         }
         let stale = ObjRef::heap(slot, GENERATION_MAX);
         heap.collect(&roots);
         let next = heap.alloc(Body::String("new".into()));
-        assert_eq!(heap.slot_capacity(), 2, "the retired slot must not be reused");
+        assert_eq!(
+            heap.slot_capacity(),
+            2,
+            "the retired slot must not be reused"
+        );
         assert!(heap.get(stale).is_none(), "the stale handle still misses");
         assert!(heap.get(next).is_some());
     }

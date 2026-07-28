@@ -16,10 +16,16 @@ fn main() {
     println!("cargo::rerun-if-changed={MESSAGES_XML}");
     println!("cargo::rerun-if-changed={BUILTINS_CPP}");
     let out = PathBuf::from(std::env::var("OUT_DIR").expect("cargo sets OUT_DIR"));
-    std::fs::write(out.join("errors.rs"), generate_errors(Path::new(MESSAGES_XML)))
-        .expect("writing errors.rs");
-    std::fs::write(out.join("builtins.rs"), generate_builtins(Path::new(BUILTINS_CPP)))
-        .expect("writing builtins.rs");
+    std::fs::write(
+        out.join("errors.rs"),
+        generate_errors(Path::new(MESSAGES_XML)),
+    )
+    .expect("writing errors.rs");
+    std::fs::write(
+        out.join("builtins.rs"),
+        generate_builtins(Path::new(BUILTINS_CPP)),
+    )
+    .expect("writing builtins.rs");
 }
 
 // ---------------------------------------------------------------- messages --
@@ -210,7 +216,10 @@ fn generate_builtins(path: &Path) -> String {
     // 81 entries as of 8c880bdd. The floor catches a broken parse without
     // tripping on the real count; it is deliberately well below it.
     if names.len() < 50 {
-        panic!("only {} builtin names parsed -- the table format changed", names.len());
+        panic!(
+            "only {} builtin names parsed -- the table format changed",
+            names.len()
+        );
     }
 
     let mut out = String::from(

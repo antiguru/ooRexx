@@ -21,7 +21,10 @@ fn a_submessage_is_keyed_by_the_pair_and_renders_markup_like_the_oracle() {
     assert_eq!(m.number, 200, "MessageNumber is independent of the code");
     // <q> keeps its quotes; <Sub position="1"/> becomes &1.
     // Compare against RexxErrorMessages.h:62.
-    assert_eq!(m.text, "Failure during initialization: File \"&1\" is unreadable.");
+    assert_eq!(
+        m.text,
+        "Failure during initialization: File \"&1\" is unreadable."
+    );
 }
 
 #[test]

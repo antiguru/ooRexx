@@ -1,5 +1,5 @@
 //! Differential harness for + - * / % **, and the comparison operators.
-use rexx_num::{compare, ArithError, CompareOp, DivOp, Number};
+use rexx_num::{ArithError, CompareOp, DivOp, Number, compare};
 
 /// Maps a case-file operator token to a comparison, or `None` if it is one
 /// of the arithmetic operators instead. `\=`, `<>` and `><` all mean

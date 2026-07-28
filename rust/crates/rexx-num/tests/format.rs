@@ -34,8 +34,19 @@ fn format_form_scientific_matches_number_format_exactly() {
     // verified `Number::format`, so cross-check them across the interesting
     // magnitudes rather than trust they agree by construction.
     for spelling in [
-        "0", "1", "-1", "3.14159", "1e10", "1e-10", "10e-19", "1e-18", "123456789012",
-        "0.000000000012345678", "999999999", "1.50", "100.00",
+        "0",
+        "1",
+        "-1",
+        "3.14159",
+        "1e10",
+        "1e-10",
+        "10e-19",
+        "1e-18",
+        "123456789012",
+        "0.000000000012345678",
+        "999999999",
+        "1.50",
+        "100.00",
     ] {
         let num = n(spelling);
         for digits in [1, 3, 9] {
@@ -98,9 +109,18 @@ fn form_does_not_move_the_plain_versus_exponential_boundary() {
 
 #[test]
 fn one_arg_format_reproduces_the_default_display() {
-    assert_eq!(fmt("3.14159", 9, Form::Scientific, None, None, None, None).unwrap(), "3.14159");
-    assert_eq!(fmt("-3.14159", 9, Form::Scientific, None, None, None, None).unwrap(), "-3.14159");
-    assert_eq!(fmt("1.50", 9, Form::Scientific, None, None, None, None).unwrap(), "1.50");
+    assert_eq!(
+        fmt("3.14159", 9, Form::Scientific, None, None, None, None).unwrap(),
+        "3.14159"
+    );
+    assert_eq!(
+        fmt("-3.14159", 9, Form::Scientific, None, None, None, None).unwrap(),
+        "-3.14159"
+    );
+    assert_eq!(
+        fmt("1.50", 9, Form::Scientific, None, None, None, None).unwrap(),
+        "1.50"
+    );
     assert_eq!(
         fmt("1234567890123", 9, Form::Scientific, None, None, None, None).unwrap(),
         "1.23456789E+12"
@@ -109,11 +129,23 @@ fn one_arg_format_reproduces_the_default_display() {
 
 #[test]
 fn before_only_pads_or_rejects_the_integer_part() {
-    assert_eq!(fmt("3.14159", 9, Form::Scientific, Some(6), None, None, None).unwrap(), "     3.14159");
-    assert_eq!(fmt("-3.14159", 9, Form::Scientific, Some(6), None, None, None).unwrap(), "    -3.14159");
+    assert_eq!(
+        fmt("3.14159", 9, Form::Scientific, Some(6), None, None, None).unwrap(),
+        "     3.14159"
+    );
+    assert_eq!(
+        fmt("-3.14159", 9, Form::Scientific, Some(6), None, None, None).unwrap(),
+        "    -3.14159"
+    );
     // Exact fit: no padding at all.
-    assert_eq!(fmt("123.456", 9, Form::Scientific, Some(3), None, None, None).unwrap(), "123.456");
-    assert_eq!(fmt("-123.456", 9, Form::Scientific, Some(4), None, None, None).unwrap(), "-123.456");
+    assert_eq!(
+        fmt("123.456", 9, Form::Scientific, Some(3), None, None, None).unwrap(),
+        "123.456"
+    );
+    assert_eq!(
+        fmt("-123.456", 9, Form::Scientific, Some(4), None, None, None).unwrap(),
+        "-123.456"
+    );
 }
 
 #[test]
@@ -136,7 +168,15 @@ fn before_too_narrow_for_the_integer_part_is_error_93() {
         fmt("123.456", 9, Form::Scientific, Some(2), None, None, None),
         Err(FormatError::BeforeOversize { .. })
     ));
-    assert_eq!(FormatError::BeforeOversize { value: n("0"), digits: 9, before: 1 }.code(), 93);
+    assert_eq!(
+        FormatError::BeforeOversize {
+            value: n("0"),
+            digits: 9,
+            before: 1
+        }
+        .code(),
+        93
+    );
     // A negative number needs one extra slot for the sign.
     assert!(matches!(
         fmt("-123.456", 9, Form::Scientific, Some(3), None, None, None),
@@ -147,14 +187,35 @@ fn before_too_narrow_for_the_integer_part_is_error_93() {
 
 #[test]
 fn after_only_rounds_or_pads_the_decimal_part() {
-    assert_eq!(fmt("3.14159", 9, Form::Scientific, None, Some(2), None, None).unwrap(), "3.14");
-    assert_eq!(fmt("3.14159", 9, Form::Scientific, None, Some(0), None, None).unwrap(), "3");
-    assert_eq!(fmt("3", 9, Form::Scientific, None, Some(2), None, None).unwrap(), "3.00");
-    assert_eq!(fmt("3.1", 9, Form::Scientific, None, Some(5), None, None).unwrap(), "3.10000");
+    assert_eq!(
+        fmt("3.14159", 9, Form::Scientific, None, Some(2), None, None).unwrap(),
+        "3.14"
+    );
+    assert_eq!(
+        fmt("3.14159", 9, Form::Scientific, None, Some(0), None, None).unwrap(),
+        "3"
+    );
+    assert_eq!(
+        fmt("3", 9, Form::Scientific, None, Some(2), None, None).unwrap(),
+        "3.00"
+    );
+    assert_eq!(
+        fmt("3.1", 9, Form::Scientific, None, Some(5), None, None).unwrap(),
+        "3.10000"
+    );
     // Half-up rounding, not banker's rounding.
-    assert_eq!(fmt("3.145", 9, Form::Scientific, None, Some(2), None, None).unwrap(), "3.15");
-    assert_eq!(fmt("3.135", 9, Form::Scientific, None, Some(2), None, None).unwrap(), "3.14");
-    assert_eq!(fmt("-3.145", 9, Form::Scientific, None, Some(2), None, None).unwrap(), "-3.15");
+    assert_eq!(
+        fmt("3.145", 9, Form::Scientific, None, Some(2), None, None).unwrap(),
+        "3.15"
+    );
+    assert_eq!(
+        fmt("3.135", 9, Form::Scientific, None, Some(2), None, None).unwrap(),
+        "3.14"
+    );
+    assert_eq!(
+        fmt("-3.145", 9, Form::Scientific, None, Some(2), None, None).unwrap(),
+        "-3.15"
+    );
 }
 
 #[test]
@@ -163,9 +224,45 @@ fn after_rounding_underflow_still_shows_the_requested_decimal_places() {
     // decimal place, so `after` must still produce that many zeros rather
     // than collapsing to the bare canonical zero. Sign is dropped either
     // way, matching TRUNC.
-    assert_eq!(fmt("0.000012345", 5, Form::Scientific, None, Some(1), None, None).unwrap(), "0.0");
-    assert_eq!(fmt("-0.000012345", 5, Form::Scientific, None, Some(1), None, None).unwrap(), "0.0");
-    assert_eq!(fmt("0.000012345", 5, Form::Scientific, None, Some(0), None, None).unwrap(), "0");
+    assert_eq!(
+        fmt(
+            "0.000012345",
+            5,
+            Form::Scientific,
+            None,
+            Some(1),
+            None,
+            None
+        )
+        .unwrap(),
+        "0.0"
+    );
+    assert_eq!(
+        fmt(
+            "-0.000012345",
+            5,
+            Form::Scientific,
+            None,
+            Some(1),
+            None,
+            None
+        )
+        .unwrap(),
+        "0.0"
+    );
+    assert_eq!(
+        fmt(
+            "0.000012345",
+            5,
+            Form::Scientific,
+            None,
+            Some(0),
+            None,
+            None
+        )
+        .unwrap(),
+        "0"
+    );
     // A second, distinct underflow path: the cut lands *exactly* on the
     // last stored digit (no digits left over, but no leading-zero-overrun
     // either -- `drop == len`, not `drop > len`), and that digit rounds
@@ -173,27 +270,57 @@ fn after_rounding_underflow_still_shows_the_requested_decimal_places() {
     // run: an earlier version only guarded the `drop > len` case and still
     // funnelled this one through `Number::assemble`, which collapses an
     // empty digit vector to the canonical zero and loses `after`.
-    assert_eq!(fmt("0.001", 5, Form::Scientific, None, Some(2), None, None).unwrap(), "0.00");
-    assert_eq!(fmt("0.000012345", 5, Form::Scientific, None, Some(4), None, None).unwrap(), "0.0000");
+    assert_eq!(
+        fmt("0.001", 5, Form::Scientific, None, Some(2), None, None).unwrap(),
+        "0.00"
+    );
+    assert_eq!(
+        fmt(
+            "0.000012345",
+            5,
+            Form::Scientific,
+            None,
+            Some(4),
+            None,
+            None
+        )
+        .unwrap(),
+        "0.0000"
+    );
 }
 
 #[test]
 fn after_rounding_carry_can_grow_the_integer_part_before_before_is_checked() {
     // 9.996 rounded to 2 decimals is 10.00 -- the `before` check sees the
     // grown integer part, not the original.
-    assert_eq!(fmt("9.996", 9, Form::Scientific, Some(2), Some(2), None, None).unwrap(), "10.00");
+    assert_eq!(
+        fmt("9.996", 9, Form::Scientific, Some(2), Some(2), None, None).unwrap(),
+        "10.00"
+    );
     assert!(matches!(
         fmt("99.996", 9, Form::Scientific, Some(2), Some(2), None, None),
         Err(FormatError::BeforeOversize { .. })
     ));
-    assert_eq!(fmt("99.996", 9, Form::Scientific, Some(3), Some(2), None, None).unwrap(), "100.00");
+    assert_eq!(
+        fmt("99.996", 9, Form::Scientific, Some(3), Some(2), None, None).unwrap(),
+        "100.00"
+    );
 }
 
 #[test]
 fn zero_never_goes_exponential_but_still_takes_before_and_after() {
-    assert_eq!(fmt("0", 9, Form::Scientific, Some(5), None, None, None).unwrap(), "    0");
-    assert_eq!(fmt("0", 9, Form::Scientific, Some(5), Some(2), None, None).unwrap(), "    0.00");
-    assert_eq!(fmt("0", 9, Form::Scientific, None, None, None, Some(0)).unwrap(), "0");
+    assert_eq!(
+        fmt("0", 9, Form::Scientific, Some(5), None, None, None).unwrap(),
+        "    0"
+    );
+    assert_eq!(
+        fmt("0", 9, Form::Scientific, Some(5), Some(2), None, None).unwrap(),
+        "    0.00"
+    );
+    assert_eq!(
+        fmt("0", 9, Form::Scientific, None, None, None, Some(0)).unwrap(),
+        "0"
+    );
 }
 
 #[test]
@@ -205,9 +332,18 @@ fn zero_still_triggers_the_displayed_exponent_zero_padding_when_expt_is_zero() {
     // differential run: an earlier version special-cased zero to skip the
     // exponential machinery entirely, which is right for the *digits*
     // (zero never shows `E...`) but wrong for `expp`'s blank-padding.
-    assert_eq!(fmt("0", 9, Form::Scientific, None, None, Some(2), Some(0)).unwrap(), "0    ");
-    assert_eq!(fmt("0", 9, Form::Scientific, None, None, Some(4), Some(0)).unwrap(), "0      ");
-    assert_eq!(fmt("-0", 9, Form::Scientific, None, None, Some(2), Some(0)).unwrap(), "0    ");
+    assert_eq!(
+        fmt("0", 9, Form::Scientific, None, None, Some(2), Some(0)).unwrap(),
+        "0    "
+    );
+    assert_eq!(
+        fmt("0", 9, Form::Scientific, None, None, Some(4), Some(0)).unwrap(),
+        "0      "
+    );
+    assert_eq!(
+        fmt("-0", 9, Form::Scientific, None, None, Some(2), Some(0)).unwrap(),
+        "0    "
+    );
     assert_eq!(
         fmt("0", 1, Form::Scientific, Some(4), Some(2), Some(2), Some(0)).unwrap(),
         "   0.00    "
@@ -218,22 +354,40 @@ fn zero_still_triggers_the_displayed_exponent_zero_padding_when_expt_is_zero() {
 
 #[test]
 fn expt_moves_the_upper_exponential_trigger() {
-    assert_eq!(fmt("123456", 9, Form::Scientific, None, None, None, Some(6)).unwrap(), "123456");
-    assert_eq!(fmt("123456", 9, Form::Scientific, None, None, None, Some(5)).unwrap(), "1.23456E+5");
+    assert_eq!(
+        fmt("123456", 9, Form::Scientific, None, None, None, Some(6)).unwrap(),
+        "123456"
+    );
+    assert_eq!(
+        fmt("123456", 9, Form::Scientific, None, None, None, Some(5)).unwrap(),
+        "1.23456E+5"
+    );
     // Boundary is `>=`: adjusted exponent of 123456 is 5.
-    assert_eq!(fmt("99.6", 9, Form::Scientific, None, None, None, Some(1)).unwrap(), "9.96E+1");
+    assert_eq!(
+        fmt("99.6", 9, Form::Scientific, None, None, None, Some(1)).unwrap(),
+        "9.96E+1"
+    );
 }
 
 #[test]
 fn expt_moves_the_lower_exponential_trigger_only_for_fractional_values() {
     // 0.001234 has adjusted exponent -3 (fractional) and raw exponent -6.
-    assert_eq!(fmt("0.001234", 9, Form::Scientific, None, None, None, Some(3)).unwrap(), "0.001234");
-    assert_eq!(fmt("0.001234", 9, Form::Scientific, None, None, None, Some(2)).unwrap(), "1.234E-3");
+    assert_eq!(
+        fmt("0.001234", 9, Form::Scientific, None, None, None, Some(3)).unwrap(),
+        "0.001234"
+    );
+    assert_eq!(
+        fmt("0.001234", 9, Form::Scientific, None, None, None, Some(2)).unwrap(),
+        "1.234E-3"
+    );
     // The low-end trigger requires the adjusted exponent to be negative; a
     // value with a nonzero integer part is exempt from it even when it has
     // many more significant digits than `expt` -- 9.996996 has raw exponent
     // -6 (would trip the low-end rule if it applied) but stays plain.
-    assert_eq!(fmt("9.996996", 9, Form::Scientific, None, None, None, Some(1)).unwrap(), "9.996996");
+    assert_eq!(
+        fmt("9.996996", 9, Form::Scientific, None, None, None, Some(1)).unwrap(),
+        "9.996996"
+    );
 }
 
 #[test]
@@ -243,12 +397,21 @@ fn expt_zero_plugs_into_the_ordinary_trigger_like_any_other_value() {
     // exponent was already > 0. It is the ordinary `adjusted >= expt`
     // trigger with `expt` literally 0, which *does* fire whenever the
     // adjusted exponent is non-negative...
-    assert_eq!(fmt("123", 9, Form::Scientific, None, None, None, Some(0)).unwrap(), "1.23E+2");
-    assert_eq!(fmt("123456", 9, Form::Scientific, None, None, None, Some(0)).unwrap(), "1.23456E+5");
+    assert_eq!(
+        fmt("123", 9, Form::Scientific, None, None, None, Some(0)).unwrap(),
+        "1.23E+2"
+    );
+    assert_eq!(
+        fmt("123456", 9, Form::Scientific, None, None, None, Some(0)).unwrap(),
+        "1.23456E+5"
+    );
     // ...but when the adjusted exponent is exactly 0, the exponential path
     // is still taken internally, only nothing is left to display for it --
     // see `displayed_exponent_of_zero_is_never_written_as_e_plus_zero`.
-    assert_eq!(fmt("3.14159", 5, Form::Scientific, None, None, None, Some(0)).unwrap(), "3.1416");
+    assert_eq!(
+        fmt("3.14159", 5, Form::Scientific, None, None, None, Some(0)).unwrap(),
+        "3.1416"
+    );
 }
 
 #[test]
@@ -258,15 +421,27 @@ fn displayed_exponent_of_zero_is_never_written_as_e_plus_zero() {
     // displayed exponent of exactly 0 is suppressed rather than shown as
     // `E+0`. Without `expp`, it vanishes outright, so this is
     // indistinguishable from plain form.
-    assert_eq!(fmt("3.14159", 5, Form::Scientific, None, None, None, Some(0)).unwrap(), "3.1416");
+    assert_eq!(
+        fmt("3.14159", 5, Form::Scientific, None, None, None, Some(0)).unwrap(),
+        "3.1416"
+    );
     // With `expp` given, the field the exponent would have taken is
     // reserved as blanks (`expp` + 2 for `E+`/`E-`) instead of vanishing.
-    assert_eq!(fmt("3.14159", 5, Form::Scientific, None, None, Some(2), Some(0)).unwrap(), "3.1416    ");
-    assert_eq!(fmt("3.14159", 5, Form::Scientific, None, None, Some(4), Some(0)).unwrap(), "3.1416      ");
+    assert_eq!(
+        fmt("3.14159", 5, Form::Scientific, None, None, Some(2), Some(0)).unwrap(),
+        "3.1416    "
+    );
+    assert_eq!(
+        fmt("3.14159", 5, Form::Scientific, None, None, Some(4), Some(0)).unwrap(),
+        "3.1416      "
+    );
     // `expp` alone, with `expt` omitted (defaulting to DIGITS 5), never
     // triggers exponential form at all for this value (adjusted 0 < 5), so
     // there is no reserved field.
-    assert_eq!(fmt("3.14159", 5, Form::Scientific, None, None, Some(2), None).unwrap(), "3.1416");
+    assert_eq!(
+        fmt("3.14159", 5, Form::Scientific, None, None, Some(2), None).unwrap(),
+        "3.1416"
+    );
 }
 
 #[test]
@@ -277,20 +452,35 @@ fn engineering_grouping_can_also_produce_a_displayed_exponent_of_zero() {
     // against the interpreter at DIGITS 5, `expt` 1 (so both 99 and 150
     // trigger the exponential path via `adjusted >= expt`, but their
     // ENGINEERING-grouped exponent is 0 either way).
-    assert_eq!(fmt("99", 5, Form::Engineering, None, None, None, Some(1)).unwrap(), "99");
-    assert_eq!(fmt("150", 5, Form::Engineering, None, None, None, Some(1)).unwrap(), "150");
-    assert_eq!(fmt("99", 5, Form::Engineering, None, None, Some(2), Some(1)).unwrap(), "99    ");
+    assert_eq!(
+        fmt("99", 5, Form::Engineering, None, None, None, Some(1)).unwrap(),
+        "99"
+    );
+    assert_eq!(
+        fmt("150", 5, Form::Engineering, None, None, None, Some(1)).unwrap(),
+        "150"
+    );
+    assert_eq!(
+        fmt("99", 5, Form::Engineering, None, None, Some(2), Some(1)).unwrap(),
+        "99    "
+    );
     // The same value under SCIENTIFIC groups to exponent 1, not 0, so the
     // suffix is written normally -- the suppression is specific to the
     // *displayed* exponent being zero, not to `expt` or to ENGINEERING.
-    assert_eq!(fmt("99", 5, Form::Scientific, None, None, None, Some(1)).unwrap(), "9.9E+1");
+    assert_eq!(
+        fmt("99", 5, Form::Scientific, None, None, None, Some(1)).unwrap(),
+        "9.9E+1"
+    );
 }
 
 // ---- FORMAT: expp controls exponent width, and expp == 0 forces plain -----
 
 #[test]
 fn expp_pads_the_exponent_with_leading_zeros() {
-    assert_eq!(fmt("1e10", 9, Form::Scientific, None, None, Some(5), None).unwrap(), "1E+00010");
+    assert_eq!(
+        fmt("1e10", 9, Form::Scientific, None, None, Some(5), None).unwrap(),
+        "1E+00010"
+    );
 }
 
 #[test]
@@ -299,7 +489,14 @@ fn expp_too_narrow_for_the_exponent_is_error_93() {
         fmt("1e10", 9, Form::Scientific, None, None, Some(1), None),
         Err(FormatError::ExponentOversize { .. })
     ));
-    assert_eq!(FormatError::ExponentOversize { mantissa: n("0"), width: 1 }.code(), 93);
+    assert_eq!(
+        FormatError::ExponentOversize {
+            mantissa: n("0"),
+            width: 1
+        }
+        .code(),
+        93
+    );
     assert!(matches!(
         fmt("1e100", 9, Form::Scientific, None, None, Some(2), None),
         Err(FormatError::ExponentOversize { .. })
@@ -321,7 +518,10 @@ fn exponent_oversize_is_reported_before_before_oversize() {
 fn expp_zero_overrides_expt_zero() {
     // expp=0 (force plain) and expt=0 (force exponential) directly conflict;
     // expp wins, exactly as the doc comment on `format_with` says it should.
-    assert_eq!(fmt("123", 9, Form::Scientific, None, None, Some(0), Some(0)).unwrap(), "123");
+    assert_eq!(
+        fmt("123", 9, Form::Scientific, None, None, Some(0), Some(0)).unwrap(),
+        "123"
+    );
     assert_eq!(
         fmt("1e10", 9, Form::Scientific, None, None, Some(0), Some(0)).unwrap(),
         "10000000000"
@@ -330,13 +530,19 @@ fn expp_zero_overrides_expt_zero() {
 
 #[test]
 fn expp_zero_forces_plain_form_no_matter_how_large() {
-    assert_eq!(fmt("1e10", 9, Form::Scientific, None, None, Some(0), None).unwrap(), "10000000000");
+    assert_eq!(
+        fmt("1e10", 9, Form::Scientific, None, None, Some(0), None).unwrap(),
+        "10000000000"
+    );
     assert_eq!(
         fmt("1e100", 9, Form::Scientific, None, None, Some(0), None).unwrap(),
         "1".to_string() + &"0".repeat(100)
     );
     // The `before` check still applies, against the *plain* integer width.
-    assert_eq!(fmt("1e10", 9, Form::Scientific, Some(11), None, Some(0), None).unwrap(), "10000000000");
+    assert_eq!(
+        fmt("1e10", 9, Form::Scientific, Some(11), None, Some(0), None).unwrap(),
+        "10000000000"
+    );
     assert!(matches!(
         fmt("1e10", 9, Form::Scientific, Some(1), None, Some(0), None),
         Err(FormatError::BeforeOversize { .. })
@@ -347,10 +553,25 @@ fn expp_zero_forces_plain_form_no_matter_how_large() {
 
 #[test]
 fn before_and_after_apply_to_the_mantissa_in_exponential_form() {
-    assert_eq!(fmt("1e10", 9, Form::Scientific, Some(5), None, None, None).unwrap(), "    1E+10");
-    assert_eq!(fmt("1e10", 9, Form::Scientific, Some(5), Some(2), None, None).unwrap(), "    1.00E+10");
     assert_eq!(
-        fmt("123456789012345", 9, Form::Scientific, Some(20), Some(3), None, None).unwrap(),
+        fmt("1e10", 9, Form::Scientific, Some(5), None, None, None).unwrap(),
+        "    1E+10"
+    );
+    assert_eq!(
+        fmt("1e10", 9, Form::Scientific, Some(5), Some(2), None, None).unwrap(),
+        "    1.00E+10"
+    );
+    assert_eq!(
+        fmt(
+            "123456789012345",
+            9,
+            Form::Scientific,
+            Some(20),
+            Some(3),
+            None,
+            None
+        )
+        .unwrap(),
         "                   1.235E+14"
     );
 }
@@ -363,7 +584,10 @@ fn before_oversize_in_exponential_form_reports_the_engineering_mantissa() {
         fmt("1.2e11", 9, Form::Engineering, Some(2), None, None, None),
         Err(FormatError::BeforeOversize { .. })
     ));
-    assert_eq!(fmt("1.2e11", 9, Form::Engineering, Some(3), None, None, None).unwrap(), "120E+9");
+    assert_eq!(
+        fmt("1.2e11", 9, Form::Engineering, Some(3), None, None, None).unwrap(),
+        "120E+9"
+    );
 }
 
 // ---- FORMAT: error message text, each confirmed against `build/bin/rexx` --
@@ -371,21 +595,48 @@ fn before_oversize_in_exponential_form_reports_the_engineering_mantissa() {
 #[test]
 fn before_oversize_message_substitutes_n1_not_the_padded_mantissa() {
     let err = fmt("-123.456", 9, Form::Scientific, Some(3), None, None, None).unwrap_err();
-    assert_eq!(err.message(), "Integer part of \"-123.456\" is too large for 3 spaces.");
+    assert_eq!(
+        err.message(),
+        "Integer part of \"-123.456\" is too large for 3 spaces."
+    );
 }
 
 #[test]
 fn before_oversize_message_reflects_rounding_to_the_current_digits() {
     // No rounding needed at DIGITS 15: &1 is the plain literal.
-    let err = fmt("12345.6789", 15, Form::Scientific, Some(3), None, None, None).unwrap_err();
-    assert_eq!(err.message(), "Integer part of \"12345.6789\" is too large for 3 spaces.");
+    let err = fmt(
+        "12345.6789",
+        15,
+        Form::Scientific,
+        Some(3),
+        None,
+        None,
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(
+        err.message(),
+        "Integer part of \"12345.6789\" is too large for 3 spaces."
+    );
 
     // Lowering DIGITS to 5 forces rounding that changes the value, and *that*
     // rounded-and-reformatted value is what shows up, in its own SCIENTIFIC
     // rendering -- not the plain form the (forced-plain, via `expt=20`) call
     // itself would have produced.
-    let err = fmt("123456.789", 5, Form::Scientific, Some(3), None, None, Some(20)).unwrap_err();
-    assert_eq!(err.message(), "Integer part of \"1.2346E+5\" is too large for 3 spaces.");
+    let err = fmt(
+        "123456.789",
+        5,
+        Form::Scientific,
+        Some(3),
+        None,
+        None,
+        Some(20),
+    )
+    .unwrap_err();
+    assert_eq!(
+        err.message(),
+        "Integer part of \"1.2346E+5\" is too large for 3 spaces."
+    );
 }
 
 #[test]
@@ -393,8 +644,20 @@ fn before_oversize_message_in_exponential_form_still_shows_the_unreframed_number
     // Even when the mantissa `render_integer_padded` actually pads is the
     // ENGINEERING-reframed "123.456789", the message substitutes the
     // un-reframed n1 ("123456.789"), matching the plain-form case above.
-    let err = fmt("123456.789", 15, Form::Engineering, Some(1), None, Some(3), None).unwrap_err();
-    assert_eq!(err.message(), "Integer part of \"123456.789\" is too large for 1 spaces.");
+    let err = fmt(
+        "123456.789",
+        15,
+        Form::Engineering,
+        Some(1),
+        None,
+        Some(3),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(
+        err.message(),
+        "Integer part of \"123456.789\" is too large for 1 spaces."
+    );
 }
 
 #[test]
@@ -403,16 +666,42 @@ fn exponent_oversize_message_substitutes_the_mantissa_not_the_exponent_digits() 
     // "100") could be confused for the exponent leaking through; a
     // multi-digit mantissa rules that out.
     let err = fmt("1e10", 9, Form::Scientific, None, None, Some(1), None).unwrap_err();
-    assert_eq!(err.message(), "Exponent of \"1\" is too large for 1 spaces.");
+    assert_eq!(
+        err.message(),
+        "Exponent of \"1\" is too large for 1 spaces."
+    );
 
-    let err = fmt("123456789012.345", 9, Form::Scientific, None, None, Some(1), Some(0)).unwrap_err();
-    assert_eq!(err.message(), "Exponent of \"1.23456789\" is too large for 1 spaces.");
+    let err = fmt(
+        "123456789012.345",
+        9,
+        Form::Scientific,
+        None,
+        None,
+        Some(1),
+        Some(0),
+    )
+    .unwrap_err();
+    assert_eq!(
+        err.message(),
+        "Exponent of \"1.23456789\" is too large for 1 spaces."
+    );
 
     // `before`/`after` do not affect it: both apply only once this check has
     // passed.
-    let err =
-        fmt("123456789012.345", 9, Form::Scientific, Some(5), Some(2), Some(1), Some(0)).unwrap_err();
-    assert_eq!(err.message(), "Exponent of \"1.23456789\" is too large for 1 spaces.");
+    let err = fmt(
+        "123456789012.345",
+        9,
+        Form::Scientific,
+        Some(5),
+        Some(2),
+        Some(1),
+        Some(0),
+    )
+    .unwrap_err();
+    assert_eq!(
+        err.message(),
+        "Exponent of \"1.23456789\" is too large for 1 spaces."
+    );
 }
 
 #[test]
@@ -423,8 +712,20 @@ fn exponent_oversize_message_uses_the_pre_carry_exponent_not_the_final_one() {
     // computed (`NumberStringClass.cpp`'s `mathexp` check precedes the
     // decimals section), so it reports the number reframed at the pre-carry
     // exponent (20 -> "9.996"), not the post-carry one (21 -> "0.9996").
-    let err = fmt("9.996e20", 9, Form::Scientific, None, Some(0), Some(1), None).unwrap_err();
-    assert_eq!(err.message(), "Exponent of \"9.996\" is too large for 1 spaces.");
+    let err = fmt(
+        "9.996e20",
+        9,
+        Form::Scientific,
+        None,
+        Some(0),
+        Some(1),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(
+        err.message(),
+        "Exponent of \"9.996\" is too large for 1 spaces."
+    );
 }
 
 #[test]
@@ -439,8 +740,20 @@ fn exponent_oversize_is_still_reported_when_only_the_post_carry_exponent_overflo
     // `crates/rexx-num/tests/gen-curated-sets.py fmtcarry` (15,840 cases
     // built specifically for this, 0 divergences after the fix, 148 before
     // it).
-    let err = fmt("9.996e99", 9, Form::Scientific, None, Some(0), Some(2), None).unwrap_err();
-    assert_eq!(err.message(), "Exponent of \"1\" is too large for 2 spaces.");
+    let err = fmt(
+        "9.996e99",
+        9,
+        Form::Scientific,
+        None,
+        Some(0),
+        Some(2),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(
+        err.message(),
+        "Exponent of \"1\" is too large for 2 spaces."
+    );
 }
 
 #[test]
@@ -457,9 +770,20 @@ fn exponent_oversize_can_be_triggered_for_the_first_time_by_a_post_carry_exponen
     // digit count fixed): "1.000000000", not the trimmed "1"
     // `resolve_exponential_state`'s rounder would produce for the same
     // value.
-    let err =
-        fmt("9999999999.6", 15, Form::Scientific, None, Some(0), Some(1), Some(10)).unwrap_err();
-    assert_eq!(err.message(), "Exponent of \"1.000000000\" is too large for 1 spaces.");
+    let err = fmt(
+        "9999999999.6",
+        15,
+        Form::Scientific,
+        None,
+        Some(0),
+        Some(1),
+        Some(10),
+    )
+    .unwrap_err();
+    assert_eq!(
+        err.message(),
+        "Exponent of \"1.000000000\" is too large for 1 spaces."
+    );
 }
 
 // ---- additional(): the raw substitution values, in interpreter order ------
@@ -481,8 +805,16 @@ fn additional_matches_message_for_the_post_carry_case_too() {
     // The regression case from above: `additional()`'s rendering must go
     // through the same mid-computation (mathRound-style) carry as
     // `message()`, not `resolve_exponential_state`'s trimmed one.
-    let err =
-        fmt("9999999999.6", 15, Form::Scientific, None, Some(0), Some(1), Some(10)).unwrap_err();
+    let err = fmt(
+        "9999999999.6",
+        15,
+        Form::Scientific,
+        None,
+        Some(0),
+        Some(1),
+        Some(10),
+    )
+    .unwrap_err();
     assert_eq!(err.additional(), vec!["1.000000000", "1"]);
 }
 
@@ -495,7 +827,11 @@ fn additional_and_message_agree_on_every_placeholder() {
     for result in cases {
         let err = result.unwrap_err();
         for sub in err.additional() {
-            assert!(err.message().contains(&sub), "{sub:?} missing from {:?}", err.message());
+            assert!(
+                err.message().contains(&sub),
+                "{sub:?} missing from {:?}",
+                err.message()
+            );
         }
     }
 }
@@ -506,17 +842,38 @@ fn additional_and_message_agree_on_every_placeholder() {
 fn after_rounding_carry_can_bump_the_exponent_itself() {
     // 9.996E+20 rounded to 0 decimals is 1E+21, not 10E+20: SCIENTIFIC
     // tolerates only one integer digit, so the carry must move the exponent.
-    assert_eq!(fmt("9.996e20", 9, Form::Scientific, None, Some(0), None, None).unwrap(), "1E+21");
-    assert_eq!(fmt("9.996e20", 9, Form::Scientific, None, Some(1), None, None).unwrap(), "1.0E+21");
+    assert_eq!(
+        fmt("9.996e20", 9, Form::Scientific, None, Some(0), None, None).unwrap(),
+        "1E+21"
+    );
+    assert_eq!(
+        fmt("9.996e20", 9, Form::Scientific, None, Some(1), None, None).unwrap(),
+        "1.0E+21"
+    );
 }
 
 #[test]
 fn engineering_carry_stays_in_the_same_group_when_it_fits() {
     // 99.996E+20 rounded to 0 decimals carries to a 2-digit mantissa, which
     // still fits ENGINEERING's 1-3 digit budget at the same exponent.
-    assert_eq!(fmt("99.996e20", 9, Form::Engineering, None, Some(0), None, None).unwrap(), "10E+21");
+    assert_eq!(
+        fmt("99.996e20", 9, Form::Engineering, None, Some(0), None, None).unwrap(),
+        "10E+21"
+    );
     // 999.996E+20 carries through all three digits, still fitting the group.
-    assert_eq!(fmt("999.996e20", 9, Form::Engineering, None, Some(0), None, None).unwrap(), "100E+21");
+    assert_eq!(
+        fmt(
+            "999.996e20",
+            9,
+            Form::Engineering,
+            None,
+            Some(0),
+            None,
+            None
+        )
+        .unwrap(),
+        "100E+21"
+    );
 }
 
 #[test]
@@ -524,13 +881,34 @@ fn after_rounding_carry_can_cross_from_plain_into_exponential() {
     // At DIGITS 9 / expt 3, 999.9996 (adjusted exponent 2) is plain, but
     // rounding to 0 decimals carries it to 1000 (adjusted exponent 3), which
     // clears the expt-3 trigger -- so the *result* is exponential.
-    assert_eq!(fmt("999.9996", 9, Form::Scientific, None, None, None, Some(3)).unwrap(), "999.9996");
     assert_eq!(
-        fmt("999.9996", 9, Form::Scientific, None, Some(0), None, Some(3)).unwrap(),
+        fmt("999.9996", 9, Form::Scientific, None, None, None, Some(3)).unwrap(),
+        "999.9996"
+    );
+    assert_eq!(
+        fmt(
+            "999.9996",
+            9,
+            Form::Scientific,
+            None,
+            Some(0),
+            None,
+            Some(3)
+        )
+        .unwrap(),
         "1E+3"
     );
     assert_eq!(
-        fmt("999.9996", 9, Form::Engineering, None, Some(0), None, Some(3)).unwrap(),
+        fmt(
+            "999.9996",
+            9,
+            Form::Engineering,
+            None,
+            Some(0),
+            None,
+            Some(3)
+        )
+        .unwrap(),
         "1E+3"
     );
 }
@@ -657,7 +1035,10 @@ fn format_survives_a_bare_digits_at_the_top_of_u64() {
     // saturated-i64 `expt` doubles into an overflow -- a panic in debug,
     // a wrapped (and possibly wrong-form) comparison in release. Both the
     // plain and the exponential outcomes are pinned.
-    assert_eq!(form("1e-30", u64::MAX, Form::Scientific), "0.000000000000000000000000000001");
+    assert_eq!(
+        form("1e-30", u64::MAX, Form::Scientific),
+        "0.000000000000000000000000000001"
+    );
     assert_eq!(form("123456789", u64::MAX, Form::Engineering), "123456789");
     assert_eq!(trunc("3.9", u64::MAX, 2), "3.90");
 }

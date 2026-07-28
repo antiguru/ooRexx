@@ -4,7 +4,9 @@ fn n(s: &str) -> Number {
     Number::parse(s).unwrap()
 }
 fn pow(a: &str, b: &str, d: u64) -> Result<String, u16> {
-    n(a).pow(&n(b), d).map(|r| r.format(d)).map_err(ArithError::code)
+    n(a).pow(&n(b), d)
+        .map(|r| r.format(d))
+        .map_err(ArithError::code)
 }
 
 #[test]
@@ -58,7 +60,10 @@ fn a_reciprocal_out_of_range_at_working_precision_is_not_an_overflow() {
     // At working precision the reciprocal's last digit sits below the
     // exponent floor; only the final rounding has to be representable.
     // The general division would range-check the intermediate and fail.
-    assert_eq!(pow("730361.1e999999992", "-1", 2).unwrap(), "1.4E-999999998");
+    assert_eq!(
+        pow("730361.1e999999992", "-1", 2).unwrap(),
+        "1.4E-999999998"
+    );
 }
 
 #[test]

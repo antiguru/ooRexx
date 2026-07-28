@@ -11,16 +11,31 @@ fn the_defaults_are_the_ones_the_interpreter_starts_with() {
 #[test]
 fn digits_must_be_a_positive_whole_number() {
     let mut s = Settings::default();
-    assert!(matches!(s.set_digits_str("0"), Err(SettingsError::DigitsNotWhole { .. })));
-    assert!(matches!(s.set_digits_str("-1"), Err(SettingsError::DigitsNotWhole { .. })));
-    assert!(matches!(s.set_digits_str("1.5"), Err(SettingsError::DigitsNotWhole { .. })));
-    assert!(matches!(s.set_digits_str("abc"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(matches!(
+        s.set_digits_str("0"),
+        Err(SettingsError::DigitsNotWhole { .. })
+    ));
+    assert!(matches!(
+        s.set_digits_str("-1"),
+        Err(SettingsError::DigitsNotWhole { .. })
+    ));
+    assert!(matches!(
+        s.set_digits_str("1.5"),
+        Err(SettingsError::DigitsNotWhole { .. })
+    ));
+    assert!(matches!(
+        s.set_digits_str("abc"),
+        Err(SettingsError::DigitsNotWhole { .. })
+    ));
     assert!(s.set_digits_str("1").is_ok());
     // Any spelling of a whole number that fits the DIGITS in force works,
     // including exponential ones -- but each success moves the boundary the
     // *next* value is judged against: from the 1 just set, 1e3 is four
     // positions too wide, while from the default 9 it is fine.
-    assert!(matches!(s.set_digits_str("1e3"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(matches!(
+        s.set_digits_str("1e3"),
+        Err(SettingsError::DigitsNotWhole { .. })
+    ));
     let mut s = Settings::default();
     assert!(s.set_digits_str("1e3").is_ok());
     assert_eq!(s.digits(), 1000);
@@ -34,25 +49,40 @@ fn a_new_digits_value_must_fit_the_digits_currently_in_force() {
     // against `build/bin/rexx` from a *non-default* starting DIGITS.
     let mut s = Settings::default();
     s.set_digits_str("3").unwrap();
-    assert!(matches!(s.set_digits_str("1000"), Err(SettingsError::DigitsNotWhole { .. })));
-    assert!(matches!(s.set_digits_str("12345"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(matches!(
+        s.set_digits_str("1000"),
+        Err(SettingsError::DigitsNotWhole { .. })
+    ));
+    assert!(matches!(
+        s.set_digits_str("12345"),
+        Err(SettingsError::DigitsNotWhole { .. })
+    ));
     assert!(s.set_digits_str("999").is_ok());
 
     // Positions count, not significant digits: 10 is 1E1, one mantissa
     // digit, and still two positions wide.
     let mut s = Settings::default();
     s.set_digits_str("1").unwrap();
-    assert!(matches!(s.set_digits_str("10"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(matches!(
+        s.set_digits_str("10"),
+        Err(SettingsError::DigitsNotWhole { .. })
+    ));
     let mut s = Settings::default();
     s.set_digits_str("2").unwrap();
-    assert!(matches!(s.set_digits_str("1e2"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(matches!(
+        s.set_digits_str("1e2"),
+        Err(SettingsError::DigitsNotWhole { .. })
+    ));
 
     // At DIGITS 9 the boundary happens to sit at 999999999 -- fresh default
     // for each, because a successful set moves the boundary itself.
     let mut s = Settings::default();
     assert!(s.set_digits_str("999999999").is_ok());
     let mut s = Settings::default();
-    assert!(matches!(s.set_digits_str("1000000000"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(matches!(
+        s.set_digits_str("1000000000"),
+        Err(SettingsError::DigitsNotWhole { .. })
+    ));
 
     // ... but from DIGITS 10 the very same value is legal, which is what
     // separates the real rule from the fixed cap.
@@ -103,7 +133,10 @@ fn the_candidate_is_rounded_at_the_digits_in_force_before_the_check() {
     // positions at DIGITS 3.
     let mut s = Settings::default();
     s.set_digits_str("3").unwrap();
-    assert!(matches!(s.set_digits_str("999.6"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(matches!(
+        s.set_digits_str("999.6"),
+        Err(SettingsError::DigitsNotWhole { .. })
+    ));
     assert!(s.set_digits_str("999.4").is_ok()); // rounds down to 999
     assert_eq!(s.digits(), 999);
 
@@ -113,7 +146,10 @@ fn the_candidate_is_rounded_at_the_digits_in_force_before_the_check() {
     assert_eq!(s.digits(), 1);
     // A fraction that does not reduce to zero stays an error, rounded or not.
     let mut s = Settings::default();
-    assert!(matches!(s.set_digits_str("10.5"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(matches!(
+        s.set_digits_str("10.5"),
+        Err(SettingsError::DigitsNotWhole { .. })
+    ));
     assert!(s.set_digits_str("10.0").is_ok());
 }
 
@@ -125,10 +161,19 @@ fn fuzz_conversion_uses_the_digits_in_force_and_reports_26_006() {
     // against `build/bin/rexx`.
     let mut s = Settings::default();
     s.set_digits_str("3").unwrap();
-    assert!(matches!(s.set_fuzz_str("12345"), Err(SettingsError::FuzzNotWhole { .. })));
-    assert!(matches!(s.set_fuzz_str("1000"), Err(SettingsError::FuzzNotWhole { .. })));
+    assert!(matches!(
+        s.set_fuzz_str("12345"),
+        Err(SettingsError::FuzzNotWhole { .. })
+    ));
+    assert!(matches!(
+        s.set_fuzz_str("1000"),
+        Err(SettingsError::FuzzNotWhole { .. })
+    ));
     // A value that *does* convert but is not below DIGITS is the 33.001.
-    assert!(matches!(s.set_fuzz_str("12"), Err(SettingsError::FuzzNotBelowDigits { .. })));
+    assert!(matches!(
+        s.set_fuzz_str("12"),
+        Err(SettingsError::FuzzNotBelowDigits { .. })
+    ));
 
     // FUZZ spans the same widened range: digits - 1 at the very top.
     let mut s = Settings::default();
@@ -141,7 +186,10 @@ fn fuzz_conversion_uses_the_digits_in_force_and_reports_26_006() {
 #[test]
 fn fuzz_must_be_non_negative() {
     let mut s = Settings::default();
-    assert!(matches!(s.set_fuzz_str("-1"), Err(SettingsError::FuzzNotWhole { .. })));
+    assert!(matches!(
+        s.set_fuzz_str("-1"),
+        Err(SettingsError::FuzzNotWhole { .. })
+    ));
     assert!(s.set_fuzz_str("0").is_ok());
 }
 
@@ -149,10 +197,16 @@ fn fuzz_must_be_non_negative() {
 fn fuzz_must_stay_below_digits_whichever_of_the_two_is_being_set() {
     let mut s = Settings::default();
     s.set_digits_str("5").unwrap();
-    assert!(matches!(s.set_fuzz_str("5"), Err(SettingsError::FuzzNotBelowDigits { .. })));
+    assert!(matches!(
+        s.set_fuzz_str("5"),
+        Err(SettingsError::FuzzNotBelowDigits { .. })
+    ));
     assert!(s.set_fuzz_str("4").is_ok());
     // and lowering digits to meet fuzz fails the same way
-    assert!(matches!(s.set_digits_str("4"), Err(SettingsError::FuzzNotBelowDigits { .. })));
+    assert!(matches!(
+        s.set_digits_str("4"),
+        Err(SettingsError::FuzzNotBelowDigits { .. })
+    ));
 }
 
 #[test]
@@ -167,9 +221,19 @@ fn form_accepts_exactly_the_two_uppercase_spellings_and_nothing_else() {
     assert_eq!(s.form(), Form::Engineering);
     assert!(s.set_form_str("SCIENTIFIC").is_ok());
     assert_eq!(s.form(), Form::Scientific);
-    for rejected in ["scientific", "engineering", "Engineering", "ENG", " ENGINEERING", "BOGUS"] {
+    for rejected in [
+        "scientific",
+        "engineering",
+        "Engineering",
+        "ENG",
+        " ENGINEERING",
+        "BOGUS",
+    ] {
         assert!(
-            matches!(s.set_form_str(rejected), Err(SettingsError::InvalidForm { .. })),
+            matches!(
+                s.set_form_str(rejected),
+                Err(SettingsError::InvalidForm { .. })
+            ),
             "{rejected:?} must be error 25.011"
         );
     }
@@ -179,12 +243,27 @@ fn form_accepts_exactly_the_two_uppercase_spellings_and_nothing_else() {
 
 #[test]
 fn each_error_carries_the_interpreters_number() {
-    assert_eq!(Settings::default().set_digits_str("abc").unwrap_err().code(), 26);
-    assert_eq!(Settings::default().set_fuzz_str("-1").unwrap_err().code(), 26);
+    assert_eq!(
+        Settings::default()
+            .set_digits_str("abc")
+            .unwrap_err()
+            .code(),
+        26
+    );
+    assert_eq!(
+        Settings::default().set_fuzz_str("-1").unwrap_err().code(),
+        26
+    );
     let mut s = Settings::default();
     s.set_digits_str("5").unwrap();
     assert_eq!(s.set_fuzz_str("5").unwrap_err().code(), 33);
-    assert_eq!(Settings::default().set_form_str("BOGUS").unwrap_err().code(), 25);
+    assert_eq!(
+        Settings::default()
+            .set_form_str("BOGUS")
+            .unwrap_err()
+            .code(),
+        25
+    );
 }
 
 // ---- message text, each confirmed against `build/bin/rexx` ----------------
@@ -192,13 +271,19 @@ fn each_error_carries_the_interpreters_number() {
 #[test]
 fn digits_not_whole_number_message_is_26_005() {
     let err = Settings::default().set_digits_str("abc").unwrap_err();
-    assert_eq!(err.message(), "DIGITS value must be a positive whole number; found \"abc\".");
+    assert_eq!(
+        err.message(),
+        "DIGITS value must be a positive whole number; found \"abc\"."
+    );
 }
 
 #[test]
 fn fuzz_not_whole_number_message_is_26_006() {
     let err = Settings::default().set_fuzz_str("-1").unwrap_err();
-    assert_eq!(err.message(), "FUZZ value must be zero or a positive whole number; found \"-1\".");
+    assert_eq!(
+        err.message(),
+        "FUZZ value must be zero or a positive whole number; found \"-1\"."
+    );
 }
 
 #[test]
@@ -239,10 +324,25 @@ fn fuzz_not_below_digits_message_substitutes_the_pending_pair_not_the_stored_one
 
 #[test]
 fn additional_carries_the_raw_found_text_for_the_not_whole_errors() {
-    assert_eq!(Settings::default().set_digits_str("abc").unwrap_err().additional(), vec!["abc"]);
-    assert_eq!(Settings::default().set_fuzz_str("-1").unwrap_err().additional(), vec!["-1"]);
     assert_eq!(
-        Settings::default().set_form_str("bogus form").unwrap_err().additional(),
+        Settings::default()
+            .set_digits_str("abc")
+            .unwrap_err()
+            .additional(),
+        vec!["abc"]
+    );
+    assert_eq!(
+        Settings::default()
+            .set_fuzz_str("-1")
+            .unwrap_err()
+            .additional(),
+        vec!["-1"]
+    );
+    assert_eq!(
+        Settings::default()
+            .set_form_str("bogus form")
+            .unwrap_err()
+            .additional(),
         vec!["bogus form"]
     );
 }
@@ -251,7 +351,10 @@ fn additional_carries_the_raw_found_text_for_the_not_whole_errors() {
 fn additional_carries_the_pending_digits_fuzz_pair_as_two_values() {
     let mut s = Settings::default();
     s.set_digits_str("5").unwrap();
-    assert_eq!(s.set_fuzz_str("10").unwrap_err().additional(), vec!["5", "10"]);
+    assert_eq!(
+        s.set_fuzz_str("10").unwrap_err().additional(),
+        vec!["5", "10"]
+    );
 }
 
 #[test]

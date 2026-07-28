@@ -43,7 +43,11 @@ fn literal(rng: &mut Rng) -> String {
     for i in 0..len {
         // Bias the leading digit away from zero sometimes, but not always --
         // leading zeros are their own edge case.
-        let d = if i == 0 && rng.below(4) > 0 { 1 + rng.below(9) } else { rng.below(10) };
+        let d = if i == 0 && rng.below(4) > 0 {
+            1 + rng.below(9)
+        } else {
+            rng.below(10)
+        };
         let _ = write!(out, "{d}");
     }
     if rng.below(3) == 0 {

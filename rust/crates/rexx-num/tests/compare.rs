@@ -1,4 +1,4 @@
-use rexx_num::{compare, ArithError, CompareOp};
+use rexx_num::{ArithError, CompareOp, compare};
 
 fn cmp(a: &str, b: &str, digits: u64, fuzz: u64, op: CompareOp) -> bool {
     compare(a, b, digits, fuzz, op).unwrap()
@@ -139,7 +139,11 @@ fn numeric_fuzz_relaxes_the_numeric_operators_but_never_the_strict_ones() {
 
     // digits=9 fuzz=2 (working precision 7): now the 9-digit pairs also
     // truncate down to 8 digits, dropping their one differing digit too.
-    for (a, b) in [("123456789", "123456780"), ("-123456789", "-123456780"), ("1000000000", "1000000009")] {
+    for (a, b) in [
+        ("123456789", "123456780"),
+        ("-123456789", "-123456780"),
+        ("1000000000", "1000000009"),
+    ] {
         assert!(cmp(a, b, 9, 2, Equal), "{a} = {b} at fuzz 2");
     }
     assert!(!cmp("100", "100.001", 9, 2, Equal));

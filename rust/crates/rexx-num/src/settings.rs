@@ -115,7 +115,11 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { digits: crate::DEFAULT_DIGITS, fuzz: 0, form: Form::Scientific }
+        Settings {
+            digits: crate::DEFAULT_DIGITS,
+            fuzz: 0,
+            form: Form::Scientific,
+        }
     }
 }
 
@@ -244,7 +248,9 @@ impl Settings {
         // `found` is the raw text the caller passed, unmodified -- confirmed
         // with a lowercase variable (`x = "abc"`) that the interpreter
         // echoes back without uppercasing it.
-        let not_whole = || SettingsError::DigitsNotWhole { found: text.to_string() };
+        let not_whole = || SettingsError::DigitsNotWhole {
+            found: text.to_string(),
+        };
         // The candidate is judged against the DIGITS *currently in force*:
         // `numeric digits 1000000000` is 26.005 at DIGITS 9 and legal at
         // DIGITS 10. There is no fixed cap short of `MAX_WHOLENUMBER`.
@@ -258,14 +264,19 @@ impl Settings {
             // and the unchanged `self.fuzz` -- confirmed with `NUMERIC FUZZ
             // 5` then `NUMERIC DIGITS 3`, which reports "(\"3\") ...
             // (\"5\")".
-            return Err(SettingsError::FuzzNotBelowDigits { digits: value, fuzz: self.fuzz });
+            return Err(SettingsError::FuzzNotBelowDigits {
+                digits: value,
+                fuzz: self.fuzz,
+            });
         }
         self.digits = value;
         Ok(())
     }
 
     pub fn set_fuzz_str(&mut self, text: &str) -> Result<(), SettingsError> {
-        let not_whole = || SettingsError::FuzzNotWhole { found: text.to_string() };
+        let not_whole = || SettingsError::FuzzNotWhole {
+            found: text.to_string(),
+        };
         // Same conversion as DIGITS, against the same in-force DIGITS
         // setting -- so `numeric fuzz 12345` at DIGITS 3 is 26.006, not
         // 33.001: the conversion fails before the comparison below is ever
@@ -277,7 +288,10 @@ impl Settings {
             // unchanged `self.digits` and the rejected candidate fuzz --
             // confirmed with `NUMERIC DIGITS 5` then `NUMERIC FUZZ 10`,
             // which reports "(\"5\") ... (\"10\")".
-            return Err(SettingsError::FuzzNotBelowDigits { digits: self.digits, fuzz: value });
+            return Err(SettingsError::FuzzNotBelowDigits {
+                digits: self.digits,
+                fuzz: value,
+            });
         }
         self.fuzz = value;
         Ok(())
@@ -295,7 +309,11 @@ impl Settings {
             "SCIENTIFIC" => Form::Scientific,
             "ENGINEERING" => Form::Engineering,
             // `found` substitutes the raw text too, same rule as DIGITS/FUZZ.
-            _ => return Err(SettingsError::InvalidForm { found: text.to_string() }),
+            _ => {
+                return Err(SettingsError::InvalidForm {
+                    found: text.to_string(),
+                });
+            }
         };
         Ok(())
     }

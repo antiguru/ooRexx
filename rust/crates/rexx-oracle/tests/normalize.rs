@@ -17,7 +17,11 @@ fn absolute_program_paths_are_replaced_by_a_placeholder() {
 
 #[test]
 fn crlf_is_folded_so_windows_and_unix_compare_equal() {
-    let raw = Outcome { stdout: b"a\r\nb\r\n".to_vec(), stderr: Vec::new(), exit_code: 0 };
+    let raw = Outcome {
+        stdout: b"a\r\nb\r\n".to_vec(),
+        stderr: Vec::new(),
+        exit_code: 0,
+    };
     let got = normalize(&raw, Path::new("/tmp"));
     assert_eq!(String::from_utf8(got.stdout).unwrap(), "a\nb\n");
 }

@@ -55,7 +55,12 @@ impl CompareOp {
         use CompareOp::*;
         matches!(
             self,
-            StrictEqual | StrictNotEqual | StrictGreater | StrictLess | StrictGreaterEqual | StrictLessEqual
+            StrictEqual
+                | StrictNotEqual
+                | StrictGreater
+                | StrictLess
+                | StrictGreaterEqual
+                | StrictLessEqual
         )
     }
 
@@ -82,7 +87,13 @@ impl CompareOp {
 /// `digits` and `fuzz` are `NUMERIC DIGITS`/`NUMERIC FUZZ`; `fuzz` is ignored
 /// for the strict operators, exactly as `NumberString::strictComp` takes no
 /// fuzz parameter at all.
-pub fn compare(a: &str, b: &str, digits: u64, fuzz: u64, op: CompareOp) -> Result<bool, ArithError> {
+pub fn compare(
+    a: &str,
+    b: &str,
+    digits: u64,
+    fuzz: u64,
+    op: CompareOp,
+) -> Result<bool, ArithError> {
     if op.is_strict() {
         // `primitiveIsEqual`/`primitiveStrictComp` are both a plain
         // shorter-prefix-then-length compare, with no blank stripping in
@@ -129,7 +140,15 @@ pub fn compare(a: &str, b: &str, digits: u64, fuzz: u64, op: CompareOp) -> Resul
 /// would do) could. The interpreter never attempts that computation for
 /// opposite signs; this must not either.
 fn numeric_order(a: &Number, b: &Number, digits: u64, fuzz: u64) -> Result<Ordering, ArithError> {
-    let sign = |n: &Number| if n.is_zero() { 0 } else if n.negative { -1 } else { 1 };
+    let sign = |n: &Number| {
+        if n.is_zero() {
+            0
+        } else if n.negative {
+            -1
+        } else {
+            1
+        }
+    };
     let (sign_a, sign_b) = (sign(a), sign(b));
     if sign_a != sign_b {
         return Ok(sign_a.cmp(&sign_b));

@@ -12,9 +12,14 @@ fn allocation_returns_a_heap_handle_that_reads_back() {
 fn a_handle_from_a_stale_generation_does_not_read_the_slots_new_occupant() {
     let mut heap = Heap::new();
     let stale = heap.alloc(Body::String("gone".into()));
-    let Decoded::Heap { slot, generation } = stale.decode() else { panic!("heap handle") };
+    let Decoded::Heap { slot, generation } = stale.decode() else {
+        panic!("heap handle")
+    };
     let forged = ObjRef::heap(slot, generation + 1);
-    assert!(heap.get(forged).is_none(), "a generation mismatch is a miss, not an alias");
+    assert!(
+        heap.get(forged).is_none(),
+        "a generation mismatch is a miss, not an alias"
+    );
 }
 
 #[test]
@@ -28,7 +33,11 @@ fn small_integer_handles_are_not_in_the_heap() {
 fn arrays_hold_handles_to_other_objects() {
     let mut heap = Heap::new();
     let a = heap.alloc(Body::String("a".into()));
-    let arr = heap.alloc(Body::Array(vec![a, ObjRef::small_int(1).unwrap(), ObjRef::NIL]));
+    let arr = heap.alloc(Body::Array(vec![
+        a,
+        ObjRef::small_int(1).unwrap(),
+        ObjRef::NIL,
+    ]));
     let Some(Body::Array(items)) = heap.get(arr).map(|o| &o.body) else {
         panic!("expected an array")
     };

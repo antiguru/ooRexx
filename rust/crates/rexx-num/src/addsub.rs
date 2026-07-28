@@ -152,8 +152,16 @@ impl Number {
             }
         }
 
-        let left = Number { negative: left_negative, digits: left_digits, exponent: left_exp };
-        let right = Number { negative: right_negative, digits: right_digits, exponent: right_exp };
+        let left = Number {
+            negative: left_negative,
+            digits: left_digits,
+            exponent: left_exp,
+        };
+        let right = Number {
+            negative: right_negative,
+            digits: right_digits,
+            exponent: right_exp,
+        };
         let min_exp = left.exponent.min(right.exponent);
         let a = left.aligned_to(min_exp);
         let b = right.aligned_to(min_exp);
@@ -172,7 +180,11 @@ impl Number {
         // zero left by a borrow or an absent carry has to still be present
         // for `round_to` to count it. Normalising happens inside `round_to`,
         // after the rounding decision has been made.
-        let raw = Number { negative, digits: raw_digits, exponent: min_exp };
+        let raw = Number {
+            negative,
+            digits: raw_digits,
+            exponent: min_exp,
+        };
         let rounded = raw.round_to(digits);
         Number::assemble(rounded.negative, rounded.digits, rounded.exponent).check_range()
     }

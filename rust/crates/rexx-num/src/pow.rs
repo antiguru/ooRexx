@@ -52,7 +52,10 @@ impl Number {
         if self_.exponent < 0 {
             // Any digit past the decimal point makes it non-whole.
             let frac = (-self_.exponent) as usize;
-            if frac >= self_.digits.len() || self_.digits[self_.digits.len() - frac..].iter().any(|d| *d != 0)
+            if frac >= self_.digits.len()
+                || self_.digits[self_.digits.len() - frac..]
+                    .iter()
+                    .any(|d| *d != 0)
             {
                 return None;
             }
@@ -77,7 +80,9 @@ impl Number {
         // `ArithError::message`'s doc comment.
         let power = exponent
             .as_whole(digits)
-            .ok_or_else(|| ArithError::PowerExponentNotWhole { exponent: exponent.clone() })?;
+            .ok_or_else(|| ArithError::PowerExponentNotWhole {
+                exponent: exponent.clone(),
+            })?;
         let negative_power = power < 0;
         let power = power.unsigned_abs();
 
@@ -90,7 +95,11 @@ impl Number {
                 return Err(ArithError::ZeroToNegativePower);
             }
             // Rexx defines 0**0 as 1, though mathematically it is undefined.
-            return Ok(if power == 0 { Number::one() } else { Number::zero() });
+            return Ok(if power == 0 {
+                Number::one()
+            } else {
+                Number::zero()
+            });
         }
 
         // The magnitude of the result is knowable up front, so a hopeless
@@ -102,7 +111,10 @@ impl Number {
         // still reports the base at its full 18-digit precision).
         let magnitude = (left.adjusted_exponent().unsigned_abs() as u64).saturating_mul(power);
         if magnitude > MAX_EXPONENT as u64 {
-            return Err(ArithError::PowerOverflow { base: self.clone(), exponent: exponent.clone() });
+            return Err(ArithError::PowerOverflow {
+                base: self.clone(),
+                exponent: exponent.clone(),
+            });
         }
 
         if power == 0 {
@@ -149,7 +161,11 @@ impl Number {
             result.digits.pop();
             result.exponent += 1;
         }
-        Ok(Number::assemble(result.negative, result.digits, result.exponent))
+        Ok(Number::assemble(
+            result.negative,
+            result.digits,
+            result.exponent,
+        ))
     }
 }
 
@@ -244,5 +260,9 @@ fn divide_power(accum: &Number, digits: u64) -> Number {
     // An exponent beyond i32 cannot be in range anyway; saturate and let the
     // caller's range check reject it.
     let exponent = calc_exp.clamp(i32::MIN as i64, i32::MAX as i64) as i32;
-    Number { negative: accum.negative, digits: result, exponent }
+    Number {
+        negative: accum.negative,
+        digits: result,
+        exponent,
+    }
 }

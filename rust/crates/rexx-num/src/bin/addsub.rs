@@ -13,7 +13,11 @@ fn main() {
         let b = parts.next().unwrap();
         let out = match (Number::parse(a), Number::parse(b)) {
             (Some(x), Some(y)) => {
-                let r = if op == "+" { x.add(&y, digits) } else { x.sub(&y, digits) };
+                let r = if op == "+" {
+                    x.add(&y, digits)
+                } else {
+                    x.sub(&y, digits)
+                };
                 match r {
                     Ok(v) => v.format(digits),
                     Err(e) => format!("<E{}>", ArithError::code(e)),

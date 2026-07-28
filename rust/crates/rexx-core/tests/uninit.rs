@@ -8,7 +8,10 @@ fn an_object_with_uninit_is_reported_rather_than_swept_immediately() {
     heap.get_mut(obj).unwrap().has_uninit = true;
     let stats = heap.collect(&roots);
     assert_eq!(stats.pending_uninit, vec![obj]);
-    assert!(heap.get(obj).is_some(), "it must survive until UNINIT has run");
+    assert!(
+        heap.get(obj).is_some(),
+        "it must survive until UNINIT has run"
+    );
 }
 
 #[test]
@@ -19,7 +22,10 @@ fn a_weak_reference_does_not_keep_its_target_alive() {
     let weak = heap.alloc(Body::WeakRef(target));
     roots.add_global(".WEAK", weak);
     heap.collect(&roots);
-    assert!(heap.get(target).is_none(), "the target was only weakly held");
+    assert!(
+        heap.get(target).is_none(),
+        "the target was only weakly held"
+    );
 }
 
 #[test]
@@ -45,8 +51,15 @@ fn a_weak_reference_to_an_uninit_pending_object_is_still_cleared() {
     let weak = heap.alloc(Body::WeakRef(target));
     roots.add_global(".WEAK", weak);
     let stats = heap.collect(&roots);
-    assert_eq!(stats.pending_uninit, vec![target], "it is still queued for UNINIT");
-    assert!(heap.get(target).is_some(), "and still alive until UNINIT has run");
+    assert_eq!(
+        stats.pending_uninit,
+        vec![target],
+        "it is still queued for UNINIT"
+    );
+    assert!(
+        heap.get(target).is_some(),
+        "and still alive until UNINIT has run"
+    );
     assert!(
         matches!(heap.get(weak).map(|o| &o.body), Some(Body::WeakRef(r)) if *r == ObjRef::NIL),
         "but the weak reference was cleared before resurrection, as in the oracle"

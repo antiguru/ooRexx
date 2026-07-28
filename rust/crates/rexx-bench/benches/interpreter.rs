@@ -40,7 +40,11 @@ fn bench_interpreter(c: &mut Criterion) {
     for name in PROGRAMS {
         let program = program_path(name);
         group.bench_function(*name, |b| {
-            b.iter(|| interpreter.run(&program, &[], &cwd).expect("interpreter runs"));
+            b.iter(|| {
+                interpreter
+                    .run(&program, &[], &cwd)
+                    .expect("interpreter runs")
+            });
         });
     }
     group.finish();

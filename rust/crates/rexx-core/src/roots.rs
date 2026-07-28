@@ -29,7 +29,10 @@ pub struct RootSet {
 
 impl RootSet {
     pub fn new() -> Self {
-        RootSet { globals: Vec::new(), temps: Vec::new() }
+        RootSet {
+            globals: Vec::new(),
+            temps: Vec::new(),
+        }
     }
 
     pub fn add_global(&mut self, name: &str, value: ObjRef) {
@@ -52,7 +55,10 @@ impl RootSet {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = ObjRef> + '_ {
-        self.globals.iter().map(|(_, v)| *v).chain(self.temps.iter().copied())
+        self.globals
+            .iter()
+            .map(|(_, v)| *v)
+            .chain(self.temps.iter().copied())
     }
 }
 

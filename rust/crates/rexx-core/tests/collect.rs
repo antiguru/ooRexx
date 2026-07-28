@@ -40,7 +40,9 @@ fn reference_cycles_are_collected() {
     let roots = RootSet::new();
     let a = heap.alloc(Body::Array(vec![]));
     let b = heap.alloc(Body::Array(vec![a]));
-    let Some(obj) = heap.get_mut(a) else { panic!("a exists") };
+    let Some(obj) = heap.get_mut(a) else {
+        panic!("a exists")
+    };
     obj.body = Body::Array(vec![b]);
     let stats = heap.collect(&roots);
     assert_eq!(stats.swept, 2, "a cycle with no root must not survive");
@@ -53,7 +55,11 @@ fn swept_slots_are_reused_by_the_next_allocation() {
     heap.alloc(Body::String("x".into()));
     heap.collect(&roots);
     let reused = heap.alloc(Body::String("y".into()));
-    assert_eq!(heap.slot_capacity(), 1, "the freed slot was reused, not appended");
+    assert_eq!(
+        heap.slot_capacity(),
+        1,
+        "the freed slot was reused, not appended"
+    );
     assert!(heap.get(reused).is_some());
 }
 
@@ -65,6 +71,9 @@ fn a_handle_to_a_swept_object_does_not_alias_the_slots_next_occupant() {
     heap.collect(&roots);
     let reused = heap.alloc(Body::String("y".into()));
     assert_ne!(stale, reused, "reuse must bump the generation");
-    assert!(heap.get(stale).is_none(), "the stale handle reads as a miss");
+    assert!(
+        heap.get(stale).is_none(),
+        "the stale handle reads as a miss"
+    );
     assert!(matches!(heap.get(reused).map(|o| &o.body), Some(Body::String(t)) if t == "y"));
 }

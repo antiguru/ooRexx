@@ -22,12 +22,16 @@ const HEADER: &str = "../../../interpreter/messages/RexxErrorMessages.h";
 /// scanning the file), so the unescaper handles that and backslash itself and
 /// rejects anything else rather than silently mis-decoding it.
 fn oracle_messages() -> HashMap<String, String> {
-    let src = std::fs::read_to_string(HEADER)
-        .unwrap_or_else(|e| panic!("cannot read {HEADER}: {e}"));
+    let src =
+        std::fs::read_to_string(HEADER).unwrap_or_else(|e| panic!("cannot read {HEADER}: {e}"));
     let mut out = HashMap::new();
     for line in src.lines() {
-        let Some(rest) = line.trim_start().strip_prefix("MESSAGE(") else { continue };
-        let Some((symbol, rest)) = rest.split_once(',') else { continue };
+        let Some(rest) = line.trim_start().strip_prefix("MESSAGE(") else {
+            continue;
+        };
+        let Some((symbol, rest)) = rest.split_once(',') else {
+            continue;
+        };
         let symbol = symbol.trim();
         // `Table_end` is a sentinel terminating the C table, not a message.
         if symbol == "Table_end" {
@@ -56,18 +60,25 @@ fn oracle_messages() -> HashMap<String, String> {
 #[test]
 fn every_message_renders_exactly_as_the_oracle_renders_it() {
     let oracle = oracle_messages();
-    assert_eq!(oracle.len(), 704, "the oracle header lost or gained a message");
+    assert_eq!(
+        oracle.len(),
+        704,
+        "the oracle header lost or gained a message"
+    );
 
-    let ours: HashMap<&str, &str> =
-        errors::MESSAGES.iter().map(|m| (m.symbol, m.text)).collect();
+    let ours: HashMap<&str, &str> = errors::MESSAGES
+        .iter()
+        .map(|m| (m.symbol, m.text))
+        .collect();
     assert_eq!(ours.len(), 704, "symbols must be unique across the table");
 
     let mut mismatches = Vec::new();
     for (symbol, expected) in &oracle {
         match ours.get(symbol.as_str()) {
             None => mismatches.push(format!("{symbol}: missing from our table")),
-            Some(got) if got != expected => mismatches
-                .push(format!("{symbol}:\n  oracle: {expected:?}\n  ours:   {got:?}")),
+            Some(got) if got != expected => mismatches.push(format!(
+                "{symbol}:\n  oracle: {expected:?}\n  ours:   {got:?}"
+            )),
             Some(_) => {}
         }
     }
@@ -76,6 +87,11 @@ fn every_message_renders_exactly_as_the_oracle_renders_it() {
         "{} of {} messages disagree with the oracle:\n{}",
         mismatches.len(),
         oracle.len(),
-        mismatches.iter().take(10).cloned().collect::<Vec<_>>().join("\n")
+        mismatches
+            .iter()
+            .take(10)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
     );
 }

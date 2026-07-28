@@ -55,8 +55,14 @@ fn main() -> ExitCode {
             .map(|d| vec![d.to_path_buf(), d.join("../lib")])
             .unwrap_or_default()
     };
-    let reference = Interpreter { library_paths: lib(&cpp), binary: cpp };
-    let candidate = Interpreter { library_paths: lib(&rs), binary: rs };
+    let reference = Interpreter {
+        library_paths: lib(&cpp),
+        binary: cpp,
+    };
+    let candidate = Interpreter {
+        library_paths: lib(&rs),
+        binary: rs,
+    };
 
     let mut programs: Vec<PathBuf> = walk(&corpus);
     programs.sort();
@@ -70,15 +76,23 @@ fn main() -> ExitCode {
     let mut divergences = 0usize;
     for program in &programs {
         let cwd = program.parent().expect("corpus entries have a parent");
-        let a = reference.run(program, &[], cwd).expect("reference interpreter runs");
-        let b = candidate.run(program, &[], cwd).expect("candidate interpreter runs");
+        let a = reference
+            .run(program, &[], cwd)
+            .expect("reference interpreter runs");
+        let b = candidate
+            .run(program, &[], cwd)
+            .expect("candidate interpreter runs");
         if let Some(d) = diff(&normalize(&a, cwd), &normalize(&b, cwd)) {
             divergences += 1;
             println!("DIVERGENCE {}\n{d:#?}\n", program.display());
         }
     }
     println!("{} programs, {divergences} divergences", programs.len());
-    if divergences == 0 { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+    if divergences == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }
 
 fn walk(dir: &std::path::Path) -> Vec<PathBuf> {

@@ -33,7 +33,9 @@ pub struct BehaviourTable {
 
 impl BehaviourTable {
     pub fn new() -> Self {
-        BehaviourTable { entries: Vec::new() }
+        BehaviourTable {
+            entries: Vec::new(),
+        }
     }
 
     fn entry(&mut self, id: BehaviourId) -> &mut BehaviourEntry {
@@ -45,7 +47,9 @@ impl BehaviourTable {
     }
 
     pub fn define(&mut self, id: BehaviourId, name: &str, method: MethodId) {
-        self.entry(id).methods.insert(name.to_ascii_uppercase(), method);
+        self.entry(id)
+            .methods
+            .insert(name.to_ascii_uppercase(), method);
     }
 
     pub fn set_superclass(&mut self, id: BehaviourId, superclass: BehaviourId) {

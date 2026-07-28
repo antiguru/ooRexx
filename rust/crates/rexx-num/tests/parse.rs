@@ -54,7 +54,10 @@ fn exponential_form_is_used_past_the_measured_thresholds() {
     assert_eq!(Number::parse("1e8").unwrap().format(9), "100000000");
     assert_eq!(Number::parse("1e9").unwrap().format(9), "1E+9");
     // negative: adjusted exponent <= -(2 * DIGITS + 1)
-    assert_eq!(Number::parse("1e-18").unwrap().format(9), "0.000000000000000001");
+    assert_eq!(
+        Number::parse("1e-18").unwrap().format(9),
+        "0.000000000000000001"
+    );
     assert_eq!(Number::parse("1e-19").unwrap().format(9), "1E-19");
     // and the thresholds move with DIGITS
     assert_eq!(Number::parse("1e2").unwrap().format(3), "100");
@@ -65,13 +68,21 @@ fn exponential_form_is_used_past_the_measured_thresholds() {
 
 #[test]
 fn a_multi_digit_mantissa_keeps_its_point_in_exponential_form() {
-    assert_eq!(Number::parse("1234567890").unwrap().format(9), "1.23456789E+9");
-    assert_eq!(Number::parse("-1234567890").unwrap().format(9), "-1.23456789E+9");
+    assert_eq!(
+        Number::parse("1234567890").unwrap().format(9),
+        "1.23456789E+9"
+    );
+    assert_eq!(
+        Number::parse("-1234567890").unwrap().format(9),
+        "-1.23456789E+9"
+    );
 }
 
 #[test]
 fn things_that_are_not_numbers_are_rejected() {
-    for bad in ["abc", "", "   ", "1e", "1.2.3", "--1", "1 2", "+", "-", "e5", "1e+", "0x1f"] {
+    for bad in [
+        "abc", "", "   ", "1e", "1.2.3", "--1", "1 2", "+", "-", "e5", "1e+", "0x1f",
+    ] {
         assert!(Number::parse(bad).is_none(), "{bad:?} should not parse");
     }
 }
@@ -100,7 +111,9 @@ fn blanks_anywhere_else_are_still_rejected() {
     // The sign gap and the two ends are the only places: after the digits
     // start, a blank ends the number and anything further is junk. All
     // confirmed error 41 against `build/bin/rexx`.
-    for bad in ["+ 3 e2", "3 4", "3 e2", "3e 2", "3e+ 2", "+ - 3", "++ 3", "+ ", "- ."] {
+    for bad in [
+        "+ 3 e2", "3 4", "3 e2", "3e 2", "3e+ 2", "+ - 3", "++ 3", "+ ", "- .",
+    ] {
         assert!(Number::parse(bad).is_none(), "{bad:?} should not parse");
     }
 }
@@ -128,14 +141,28 @@ fn format_does_not_overflow_at_extreme_digits() {
     // silently picked the wrong display form in release; the u64 widening
     // adds the same hazard at 2^63, so the top of the new range is pinned
     // here too.
-    assert_eq!(Number::parse("1e-30").unwrap().format(2147483647), "0.000000000000000000000000000001");
+    assert_eq!(
+        Number::parse("1e-30").unwrap().format(2147483647),
+        "0.000000000000000000000000000001"
+    );
     assert_eq!(
         Number::parse("1e-30").unwrap().format(u64::from(u32::MAX)),
         "0.000000000000000000000000000001"
     );
-    assert_eq!(Number::parse("123456789").unwrap().format(u64::from(u32::MAX)), "123456789");
-    assert_eq!(Number::parse("1e-30").unwrap().format(u64::MAX), "0.000000000000000000000000000001");
-    assert_eq!(Number::parse("123456789").unwrap().format(u64::MAX), "123456789");
+    assert_eq!(
+        Number::parse("123456789")
+            .unwrap()
+            .format(u64::from(u32::MAX)),
+        "123456789"
+    );
+    assert_eq!(
+        Number::parse("1e-30").unwrap().format(u64::MAX),
+        "0.000000000000000000000000000001"
+    );
+    assert_eq!(
+        Number::parse("123456789").unwrap().format(u64::MAX),
+        "123456789"
+    );
 }
 
 #[test]
@@ -145,7 +172,10 @@ fn the_negative_threshold_is_on_the_raw_exponent_not_the_adjusted_one() {
     // exponential. A rule written in terms of the adjusted exponent gets both
     // of these wrong in the same direction, and a probe using only single
     // digit mantissas cannot tell the two rules apart.
-    assert_eq!(Number::parse("1e-18").unwrap().format(9), "0.000000000000000001");
+    assert_eq!(
+        Number::parse("1e-18").unwrap().format(9),
+        "0.000000000000000001"
+    );
     assert_eq!(Number::parse("10e-19").unwrap().format(9), "1.0E-18");
     assert_eq!(Number::parse("1.0e-18").unwrap().format(9), "1.0E-18");
     assert_eq!(Number::parse("123e-19").unwrap().format(9), "1.23E-17");
