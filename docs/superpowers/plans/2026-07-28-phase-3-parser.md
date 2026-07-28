@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `rexx-parse` — turn Rexx source text into an AST that Phase 4 can execute, with error messages, `SOURCELINE` and `TRACE` output matching the interpreter exactly.
+**Goal:** Build `rexx-parse` — turn Rexx source text into an AST that Phase 4 can execute, with error messages and `SOURCELINE` matching the interpreter exactly, and with clause source reconstructible so `TRACE`'s `*-*` lines can be produced. `TRACE`'s value lines are Phase 4's, deliberately — see Task 3.9.
 
 **Architecture:** A hand-written scanner and clause splitter feed a parser that produces plain owned Rust data (D13). The program source is retained as one `String`; every AST node holds a byte range into it, because `SOURCELINE`, error reporting and `TRACE` all expose original text. Whether the layer above the token stream uses `chumsky` combinators or hand-written recursive descent is decided by the Task 3.1 spike, not assumed here.
 
@@ -838,23 +838,41 @@ gate on it.
 
 ---
 
-## Task 3.9: `TRACE` output formatting
+## Task 3.9: `TRACE` source lines (`*-*` only)
 
 **Files:**
 - Modify: `rust/crates/rexx-parse/src/source.rs`
 - Test: `rust/crates/rexx-parse/tests/sourceline.rs`
 
 **Interfaces:**
-- Produces: the source-text slices `TRACE` needs per clause.
+- Produces: the source-text slice per clause that `TRACE`'s `*-*` line needs. Nothing else — no depth field, no value-trace hooks.
 
 Phase 3 owns the *formatting* of traced source, not the execution that
 triggers it. The AST must retain whatever `TRACE` displays; discovering later
 that it does not is a rework of every node type.
 
-Source spans alone are **not** sufficient. `TRACE` indents by nesting depth,
-so every instruction node needs its depth — or a parent link the executor can
-walk — recorded at parse time. A span tells you what text to print, not how
-far to indent it.
+`TRACE` indents by nesting depth, but **do not store a depth on each node.**
+Measured: indentation is static nesting within a code body plus one level per
+call frame, so the static half is derivable from the AST's own structure and
+the dynamic half is the executor's stack depth. Storing it would be an AST tax
+that buys nothing and has to be kept correct forever.
+
+Scope this task to `*-*` and stop. That marker is the *source* clause, so it
+costs nothing beyond the spans `SOURCELINE` and error reporting already need.
+
+**The value traces are deliberately out of scope for Phase 3, and for this
+plan.** `>L>`, `>O>`, `>V>`, `>>>` and `>=>` each carry an evaluated value, so
+they can only be produced by an executor. They are a real conformance item —
+`ootest/ooRexx/base/keyword/TRACE.testGroup` holds 239 expected trace-output
+lines — but committing to them shapes the executor, because emitting an event
+per evaluation step is what forbids constant folding, operation fusion and
+skipping intermediate materialisation.
+
+That tension belongs in a Phase 4 decision block, made deliberately, not
+inherited from a Phase 3 plan that had no business deciding it. The one thing
+Phase 3 owes Phase 4 is that the AST can *reconstruct* clause source; whether
+the executor emits per-operation values is Phase 4's call, and the natural
+answer is a separate traced path since `TRACE` is off by default.
 
 - [ ] **Step 1: Capture `TRACE` output from the interpreter**
 
@@ -959,8 +977,10 @@ fits.
       made three times over.
 - [ ] `SOURCELINE(n)` matches the interpreter for every line of every corpus
       program, including the last line and a file without a trailing newline.
-- [ ] `TRACE` source text is reconstructible from the AST for
-      `trace_output.rex`.
+- [ ] `TRACE`'s `*-*` source lines are reconstructible from the AST for
+      `trace_output.rex`. The value lines (`>L>`, `>O>`, `>V>`, `>>>`, `>=>`)
+      are explicitly **not** gated here — they need an executor, and
+      committing to them shapes Phase 4's optimisation choices.
 - [ ] Parse throughput on the 5,203 bootstrap lines is recorded against the
       ~55 ms cold-start budget, with a plain statement of whether it fits.
 - [ ] `cargo clippy --offline --workspace --all-targets -- -D warnings` clean;
