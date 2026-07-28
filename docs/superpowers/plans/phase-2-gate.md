@@ -50,12 +50,35 @@ follow.
 Same blocker: those are Rexx programs.
 
 **A route that would not need an interpreter**, not taken here and offered as
-an option: `rexx-extract` already pulls programs out of ooTest. Assertions
-shaped like `assertEquals(<literal>, <literal><op><literal>)` could be
-rewritten mechanically into differential cases and run through the existing
-harness. That would cover a real slice of this criterion at Phase 2 rather
-than deferring all of it. It is genuine scope, so it is written down rather
-than done.
+an option. It is now costed rather than hand-waved, because an unquantified
+option is not much of an option.
+
+`ootest/ooRexx/base/expressions/` holds 4,269 `assertSame` calls, and they are
+written in exactly the shape that converts:
+
+```rexx
+self~assertSame(999999999E99 + 0, 9.99999999E+107)
+self~assertSame(1.23456789012345E-13 + 0, 123.456789E-15)
+```
+
+2,528 of them match a plain `<operand> <operator> <operand>` form. Restricted
+to the arithmetic groups proper — ADDITION 304, SUBTRACTION 406,
+MULTIPLICATION 1,050, DIVISION 373, REMAINDER 297, EXPONENT 123 — that is
+**2,553 assertions**, which would drop straight into the existing
+`digits|a|op|b` harness.
+
+One wrinkle, and it is the reason this is real work rather than a one-liner:
+these files change `NUMERIC DIGITS` throughout, at settings from 1 to 100, so
+an extractor has to scan sequentially and carry the setting in force rather
+than pattern-matching assertions in isolation. Getting that wrong would
+silently produce cases that test the wrong precision and still pass, which is
+the worst possible outcome.
+
+The value is not the expected values — the oracle supplies those. It is the
+**operand pairs**, chosen by the interpreter's own authors as worth testing.
+CONCATENATION (388) and PRECEDENCE (1,226) are excluded: the first is not
+arithmetic, and the second tests multi-operator expressions that need a
+parser.
 
 ## 3. ANSI X3.274 vectors — CANNOT ASSESS
 
