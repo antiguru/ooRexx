@@ -266,8 +266,23 @@ git commit -m "Decide D10 with measurements"
   `ProgramSource::line(&self, n: usize) -> Option<&[u8]>` (1-based),
   `ProgramSource::line_count(&self) -> usize`,
   `ProgramSource::line_of(&self, byte: usize) -> usize` returning the 1-based
-  physical line containing that byte. Every later task uses `line_of` for error
-  reporting.
+  physical line containing that byte,
+  `ProgramSource::line_span(&self, n: usize) -> Option<Range<usize>>`, and
+  `ProgramSource::span_bytes(&self, span: Range<usize>) -> Option<&[u8]>`.
+  Every later task uses `line_of` for error reporting.
+
+  The last two were added during Tasks 3.3's implementation, because without them
+  the crate is unusable and the omission was a defect in this task's original
+  interface list. `line_span` is how the scanner works a line at a time and still
+  reports absolute offsets: it adds the line's start to every in-line offset, so
+  the terminator rules stay here in one place instead of being re-derived by a
+  second scanner. `span_bytes` is how a token or clause span becomes bytes again,
+  which Task 3.9 needs to reconstruct `TRACE` text.
+
+  **There is deliberately no whole-text accessor.** `span_bytes` returning
+  `Option` rather than panicking or clamping is also deliberate: a span from
+  anywhere other than the scanner may be out of range or assembled backwards, and
+  both must yield no bytes rather than a plausible wrong answer.
 
 Source retention comes first because everything else holds ranges into it.
 
@@ -398,11 +413,64 @@ expected values taken from Step 1's probe rather than from intuition.
 - Produces: `Token { kind: TokenKind, span: Range<usize> }`, where
   `TokenKind::Symbol` carries a `SymbolId` rather than text; `SymbolId`,
   `SymbolTable` and `Keywords`; `ParseCtx` and `TokenCursor`; and
-  `scan(&ProgramSource) -> Result<Scanned, ParseError>` where
-  `Scanned { tokens: Vec<Token>, symbols: SymbolTable, keywords: Keywords }`.
+  `scan(&ProgramSource, ScanMode) -> Result<Scanned, ParseError>` where
+  `Scanned { tokens: Vec<Token>, symbols: SymbolTable, keywords: Keywords,
+  resources: Vec<ResourceBody> }`.
   `scan` returns the table because it owns interning; it cannot borrow one it is
   still filling. `TokenKind` mirrors the C++ 19 classes in
   `interpreter/parser/Token.hpp`.
+
+  **Two of those differ from this task's first draft, both for measured reasons.**
+
+  `ScanMode` distinguishes a program from an `INTERPRET` fragment, because the
+  `#!` skip applies to a program's line 1 and **not** under `INTERPRET`
+  (`ProgramSource.cpp:594`, `interpretAdjust == 0`). Verified:
+  `interpret "#! nothing here"` raises 13.1 on `#` (`'23'X`), while the identical
+  text as line 1 of a file is accepted. It is a **parameter** rather than a second
+  `scan_interpret` entry point on purpose: the defect class here is silently
+  getting the default wrong, and a parameter cannot be omitted where a second
+  function can be left uncalled.
+
+  `resources` exists because a `::RESOURCE` body is **raw text and must never be
+  tokenised**. Verified: a body containing `'unmatched and /* unclosed` gives
+  `rexxc` rc 0 and `package~resources` returns it verbatim, so tokenising it
+  invents errors 6.2 and 6.1. Each entry is keyed by its `::` token index, which
+  equals the clause's first token index because a clause can never begin with a
+  `Blank`. Task 3.7 consumes it with one integer comparison.
+
+**A named deviation: eager scanning can report the wrong error NUMBER.** `scan`
+walks the whole program before parsing begins, while the interpreter interleaves
+scanning and parsing. So a scan error later in the file can mask a parse error
+earlier in it. Measured: `say )` on line 1 with `'unclosed` on line 3 gives the
+oracle 37.2 on line 1 and gives us 6.2 on line 3.
+
+This is **outside** the project's parse-error relaxation, which keeps the number
+and sub-number exact and relaxes only message text, substitutions and the
+position. It is accepted anyway, by the repo owner's decision, on the measured
+grounds that it does not occur on real input: **zero** mismatches across 2,470
+oracle scanner-class errors over `ootest/`, `samples/` and `corpus-l1`, because a
+program with two independent syntax errors is already broken.
+
+It does occur on **generated** input, at any clause boundary including a mid-line
+`;`, hitting **144 of 4,000** adversarial programs. **Task 3.8 must therefore
+exclude multi-error inputs from its error corpus**, or it will record our answer
+as the expected one and enshrine the deviation as a test.
+
+**`ParseError.byte` is the clause start, not the offending character.** Measured
+across 14 crafted cases and 2,426 fuzz hits: 6.1, 6.2, 13.1 and 15.3 all report
+the clause's line. That is faithful, and it matches error 36, whose main message
+carries the clause's line while its substitution carries the token's. Two
+consequences worth stating: the field name reads as "offending byte" and is not
+one, and if Task 3.8 ever fills `subs` it needs the offending position as a
+**second** field, because 13.1 quotes `"ä" ('C3A4'X)` and 15.3 quotes `found "g"`.
+
+**Owed to Task 3.5.** `ParseCtx` and `TokenCursor` ship as `pub` rather than the
+`pub(crate)` stated below, because with no in-crate caller `pub(crate)` trips
+`dead_code` and gate criterion 8 runs clippy with `-D warnings`. Task 3.5 is the
+first in-crate caller and must narrow both. Narrowing also requires moving the
+four `TokenCursor` tests out of `tests/tokens.rs` into a `#[cfg(test)]` module
+inside `token.rs`; without that the narrowing does not compile and will simply be
+reverted.
 
 **`ParseError` is created here, not in Task 3.8.** Every task from this one on
 returns it, so define the minimum now — `{ code: u16, sub: u16, byte: usize,
@@ -1648,7 +1716,9 @@ it was a syntax error and told Task 3.8 to record a number that does not exist.
 **The token vector and the `ParseCtx` do not outlive this function, and must not
 try to.** `ParseCtx` borrows the `ProgramSource`, the `Vec<Token>`, the
 `SymbolTable` and the `Keywords`, so the order is: build `ProgramSource`, `scan`
-it into a `Scanned`, build `ParseCtx` borrowing all four, `split_clauses`,
+it into a `Scanned` (passing `ScanMode::Program` here and `ScanMode::Interpret`
+from `parse_interpret`, which is the whole reason the mode is a parameter),
+build `ParseCtx` borrowing all four, `split_clauses`,
 `ClauseCursor::new`, parse everything, drop the context, then move the
 `ProgramSource` **and the `SymbolTable`** into `Program`. That works precisely
 because every span that survives is a **byte** range into the source rather than
@@ -1693,6 +1763,18 @@ substitution *values*, render on demand. A rendered `String` cannot be
 un-spliced, and `condition('o')~additional` exposes the values separately.
 
 - [ ] **Step 1: Collect ground truth — and note the obvious recipe does not work**
+
+**Exclude every input with more than one syntax error, and do it deliberately
+rather than by luck.** Task 3.3 scans eagerly while the interpreter interleaves
+scanning and parsing, so on a program containing both a scan error and an earlier
+parse error the two disagree on the error *number*: `say )` on line 1 with
+`'unclosed` on line 3 gives the oracle 37.2 line 1 and gives us 6.2 line 3. That
+is a recorded, accepted deviation (see Task 3.3), and it does not arise on real
+input — zero mismatches across 2,470 oracle scanner-class errors in `ootest/`,
+`samples/` and `corpus-l1`. It arises on *generated* input, at any clause boundary
+including a mid-line `;`, in 144 of 4,000 adversarial programs. If this step
+records our answer for such a file, it enshrines the deviation as an expected
+value and the gate stops being able to see it. One error per input.
 
 `signal on syntax` **cannot** catch a syntax error in its own file. ooRexx
 parses the whole file before executing anything, so the trap is never
