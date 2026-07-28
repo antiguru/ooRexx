@@ -258,6 +258,12 @@ And the native API is no different: `api/oorexxapi.h` declares `RexxMethodObject
 
 **Consequence, and it is the useful part.** The single-type design Moritz wants is achievable, but it runs through the *operations* rather than the type: the value stays a byte string, and character semantics arrive as new operations plus explicit checked decode. Both length functions can then coexist without `'FF'x` becoming unrepresentable, and no second type is ever introduced.
 
+**There is no conversion to design, and one probe settles why.** `x2c('C3A4') == 'ä'` is **1**. A source literal is not "text" that gets converted to bytes; it already *is* the bytes, identical to what `x2c` returns. So a scheme where `x2c` yields a byte string and `bitand` converts a generic string to one presupposes a text/bytes distinction the language does not have. Stream I/O is byte-transparent for the same reason: `FF FE C3A4 00 41` round-trips through `charout`/`charin` unchanged, embedded NUL included, at `length` 6.
+
+**So the real question is not when to convert but what character operations do on invalid UTF-8**, and it is a total-function question: raise, replace with U+FFFD, or fall back to one-character-per-byte. Left open; it is the substance of the later change and does not constrain anything today.
+
+**The rule must be fixed, never ambient.** Python 2's failure was not that conversion was implicit but that the encoding was *ambient* — locale-dependent, so identical programs failed on one machine and not another. Python 3 did not remove that, it relocated it to the I/O boundary, where `open()` still consults the locale. Byte strings plus byte-transparent I/O remove the failure mode outright, because reading a file involves no decode decision. Whatever the character operations later do, the encoding they assume is a constant of the language and validity is a determinable fact about a value, never a property of the environment.
+
 **Where the later fork sits, left open deliberately.** Whether `LENGTH` keeps byte semantics and a new BIF returns characters, or `LENGTH` becomes characters and a new BIF returns bytes, is a compatibility judgement rather than a representation one. The first breaks nothing and reads oddly; the second is the "proper" answer and changes the result of existing programs. Nothing below forecloses either.
 
 **Rules the implementation must follow, all cheap today:**
