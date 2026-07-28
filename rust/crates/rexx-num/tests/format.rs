@@ -120,28 +120,28 @@ fn before_only_pads_or_rejects_the_integer_part() {
 fn before_zero_always_errors_even_for_a_single_integer_digit() {
     // Zero itself still needs one digit of room; `before == 0` can never
     // succeed.
-    assert_eq!(
+    assert!(matches!(
         fmt("0", 9, Form::Scientific, Some(0), None, None, None),
-        Err(FormatError::BeforeOversize)
-    );
-    assert_eq!(
+        Err(FormatError::BeforeOversize(_))
+    ));
+    assert!(matches!(
         fmt("0.5", 9, Form::Scientific, Some(0), None, None, None),
-        Err(FormatError::BeforeOversize)
-    );
+        Err(FormatError::BeforeOversize(_))
+    ));
 }
 
 #[test]
 fn before_too_narrow_for_the_integer_part_is_error_93() {
-    assert_eq!(
+    assert!(matches!(
         fmt("123.456", 9, Form::Scientific, Some(2), None, None, None),
-        Err(FormatError::BeforeOversize)
-    );
-    assert_eq!(FormatError::BeforeOversize.code(), 93);
+        Err(FormatError::BeforeOversize(_))
+    ));
+    assert_eq!(FormatError::BeforeOversize(String::new()).code(), 93);
     // A negative number needs one extra slot for the sign.
-    assert_eq!(
+    assert!(matches!(
         fmt("-123.456", 9, Form::Scientific, Some(3), None, None, None),
-        Err(FormatError::BeforeOversize)
-    );
+        Err(FormatError::BeforeOversize(_))
+    ));
     assert!(fmt("-123.456", 9, Form::Scientific, Some(4), None, None, None).is_ok());
 }
 
@@ -182,10 +182,10 @@ fn after_rounding_carry_can_grow_the_integer_part_before_before_is_checked() {
     // 9.996 rounded to 2 decimals is 10.00 -- the `before` check sees the
     // grown integer part, not the original.
     assert_eq!(fmt("9.996", 9, Form::Scientific, Some(2), Some(2), None, None).unwrap(), "10.00");
-    assert_eq!(
+    assert!(matches!(
         fmt("99.996", 9, Form::Scientific, Some(2), Some(2), None, None),
-        Err(FormatError::BeforeOversize)
-    );
+        Err(FormatError::BeforeOversize(_))
+    ));
     assert_eq!(fmt("99.996", 9, Form::Scientific, Some(3), Some(2), None, None).unwrap(), "100.00");
 }
 
@@ -295,15 +295,15 @@ fn expp_pads_the_exponent_with_leading_zeros() {
 
 #[test]
 fn expp_too_narrow_for_the_exponent_is_error_93() {
-    assert_eq!(
+    assert!(matches!(
         fmt("1e10", 9, Form::Scientific, None, None, Some(1), None),
-        Err(FormatError::ExponentOversize)
-    );
-    assert_eq!(FormatError::ExponentOversize.code(), 93);
-    assert_eq!(
+        Err(FormatError::ExponentOversize(_))
+    ));
+    assert_eq!(FormatError::ExponentOversize(String::new()).code(), 93);
+    assert!(matches!(
         fmt("1e100", 9, Form::Scientific, None, None, Some(2), None),
-        Err(FormatError::ExponentOversize)
-    );
+        Err(FormatError::ExponentOversize(_))
+    ));
 }
 
 #[test]
@@ -311,10 +311,10 @@ fn exponent_oversize_is_reported_before_before_oversize() {
     // before=1 would be exactly enough for a one-digit mantissa, so this
     // only fails on the exponent -- confirming the exponent check runs
     // first, not merely that both would fail.
-    assert_eq!(
+    assert!(matches!(
         fmt("1e100", 9, Form::Scientific, Some(1), None, Some(1), None),
-        Err(FormatError::ExponentOversize)
-    );
+        Err(FormatError::ExponentOversize(_))
+    ));
 }
 
 #[test]
@@ -337,10 +337,10 @@ fn expp_zero_forces_plain_form_no_matter_how_large() {
     );
     // The `before` check still applies, against the *plain* integer width.
     assert_eq!(fmt("1e10", 9, Form::Scientific, Some(11), None, Some(0), None).unwrap(), "10000000000");
-    assert_eq!(
+    assert!(matches!(
         fmt("1e10", 9, Form::Scientific, Some(1), None, Some(0), None),
-        Err(FormatError::BeforeOversize)
-    );
+        Err(FormatError::BeforeOversize(_))
+    ));
 }
 
 // ---- FORMAT: before/after inside exponential (mantissa) form --------------
@@ -359,11 +359,72 @@ fn before_and_after_apply_to_the_mantissa_in_exponential_form() {
 fn before_oversize_in_exponential_form_reports_the_engineering_mantissa() {
     // 1.2E+11 in ENGINEERING is `120E+9` -- a 3-digit mantissa integer part
     // -- so `before` needs to fit 3 digits, not the 1 SCIENTIFIC would need.
-    assert_eq!(
+    assert!(matches!(
         fmt("1.2e11", 9, Form::Engineering, Some(2), None, None, None),
-        Err(FormatError::BeforeOversize)
-    );
+        Err(FormatError::BeforeOversize(_))
+    ));
     assert_eq!(fmt("1.2e11", 9, Form::Engineering, Some(3), None, None, None).unwrap(), "120E+9");
+}
+
+// ---- FORMAT: error message text, each confirmed against `build/bin/rexx` --
+
+#[test]
+fn before_oversize_message_substitutes_n1_not_the_padded_mantissa() {
+    let err = fmt("-123.456", 9, Form::Scientific, Some(3), None, None, None).unwrap_err();
+    assert_eq!(err.message(), "Integer part of \"-123.456\" is too large for 3 spaces.");
+}
+
+#[test]
+fn before_oversize_message_reflects_rounding_to_the_current_digits() {
+    // No rounding needed at DIGITS 15: &1 is the plain literal.
+    let err = fmt("12345.6789", 15, Form::Scientific, Some(3), None, None, None).unwrap_err();
+    assert_eq!(err.message(), "Integer part of \"12345.6789\" is too large for 3 spaces.");
+
+    // Lowering DIGITS to 5 forces rounding that changes the value, and *that*
+    // rounded-and-reformatted value is what shows up, in its own SCIENTIFIC
+    // rendering -- not the plain form the (forced-plain, via `expt=20`) call
+    // itself would have produced.
+    let err = fmt("123456.789", 5, Form::Scientific, Some(3), None, None, Some(20)).unwrap_err();
+    assert_eq!(err.message(), "Integer part of \"1.2346E+5\" is too large for 3 spaces.");
+}
+
+#[test]
+fn before_oversize_message_in_exponential_form_still_shows_the_unreframed_number() {
+    // Even when the mantissa `render_integer_padded` actually pads is the
+    // ENGINEERING-reframed "123.456789", the message substitutes the
+    // un-reframed n1 ("123456.789"), matching the plain-form case above.
+    let err = fmt("123456.789", 15, Form::Engineering, Some(1), None, Some(3), None).unwrap_err();
+    assert_eq!(err.message(), "Integer part of \"123456.789\" is too large for 1 spaces.");
+}
+
+#[test]
+fn exponent_oversize_message_substitutes_the_mantissa_not_the_exponent_digits() {
+    // A single-digit mantissa ("1") next to a single-digit exponent ("10" or
+    // "100") could be confused for the exponent leaking through; a
+    // multi-digit mantissa rules that out.
+    let err = fmt("1e10", 9, Form::Scientific, None, None, Some(1), None).unwrap_err();
+    assert_eq!(err.message(), "Exponent of \"1\" is too large for 1 spaces.");
+
+    let err = fmt("123456789012.345", 9, Form::Scientific, None, None, Some(1), Some(0)).unwrap_err();
+    assert_eq!(err.message(), "Exponent of \"1.23456789\" is too large for 1 spaces.");
+
+    // `before`/`after` do not affect it: both apply only once this check has
+    // passed.
+    let err =
+        fmt("123456789012.345", 9, Form::Scientific, Some(5), Some(2), Some(1), Some(0)).unwrap_err();
+    assert_eq!(err.message(), "Exponent of \"1.23456789\" is too large for 1 spaces.");
+}
+
+#[test]
+fn exponent_oversize_message_uses_the_pre_carry_exponent_not_the_final_one() {
+    // 9.996E+20 rounded to 0 decimals carries the exponent from 20 to 21 (see
+    // `after_rounding_carry_can_bump_the_exponent_itself`), but the
+    // interpreter's own oversize check runs *before* that carry is even
+    // computed (`NumberStringClass.cpp`'s `mathexp` check precedes the
+    // decimals section), so it reports the number reframed at the pre-carry
+    // exponent (20 -> "9.996"), not the post-carry one (21 -> "0.9996").
+    let err = fmt("9.996e20", 9, Form::Scientific, None, Some(0), Some(1), None).unwrap_err();
+    assert_eq!(err.message(), "Exponent of \"9.996\" is too large for 1 spaces.");
 }
 
 // ---- FORMAT: carry re-derives the exponential form -------------------------

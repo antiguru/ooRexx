@@ -57,6 +57,70 @@ impl ArithError {
             ArithError::NotWholeNumber => 26,
         }
     }
+
+    /// The interpreter's message text for this failure, each mapping
+    /// verified against `build/bin/rexx`.
+    ///
+    /// `DivideByZero` is raised from exactly one C++ site regardless of `/`,
+    /// `%`, or `//` (`NumberStringMath2.cpp:355`) and needs no substitution
+    /// -- confirmed with `1 / 0`: "Arithmetic overflow; divisor must not be
+    /// zero." (42.003).
+    ///
+    /// `Overflow` and `NotWholeNumber` each collapse more than one C++ call
+    /// site onto a single unit variant, and those sites disagree on the
+    /// sub-message: `NotWholeNumber` is 26.011 for `%`, 26.012 for `//`
+    /// (both confirmed, both text-only), or 26.008 for `**` (confirmed with
+    /// `2 ** 2.5`, substituting the exponent: "...found \"2.5\"."); `Overflow`
+    /// is 42.901/42.902 for the general range check `mul`/`div`/`pow` share
+    /// (confirmed with a mul overflow and a div underflow, each substituting
+    /// the adjusted exponent and the digits setting), 42.903 for zero raised
+    /// to a negative power (confirmed with `0 ** -1`, no substitution), or
+    /// 42.001 for `**`'s own upfront magnitude check (confirmed with `100 **
+    /// 999999999`, substituting the base, "**", and the exponent). Both
+    /// `muldiv.rs` and `pow.rs` are outside this task's file scope, and this
+    /// crate's `Result<_, ArithError>` boundary does not preserve which call
+    /// site raised the error -- recovering it from outside would mean
+    /// re-deriving those files' own internal magnitude/carry checks, which
+    /// is exactly the kind of arithmetic their comments warn is easy to get
+    /// subtly wrong. So both report the bare major-code text instead (42.000
+    /// / 26.000): the only text that is not wrong for any of the paths
+    /// sharing the variant. Neither bare form is ever raised directly by the
+    /// interpreter -- grepped the whole C++ tree for a `reportException`
+    /// call using bare `Error_Overflow` or `Error_Invalid_whole_number` and
+    /// found none -- so, unlike every other message in this crate, this one
+    /// cannot be confirmed against a live probe; it is the most honest text
+    /// available, not a verified one.
+    pub fn message(self) -> String {
+        match self {
+            ArithError::DivideByZero => error_text(42, 3, &[]),
+            ArithError::Overflow => error_text(42, 0, &[]),
+            ArithError::NotWholeNumber => error_text(26, 0, &[]),
+        }
+    }
+}
+
+/// Fills `&1`, `&2`, … placeholders in a generated-table message with
+/// `subs`, in the order the interpreter's own substitution positions use.
+/// `rexx-inventory`'s table keeps them literal -- see its build script's
+/// `<Sub position="N"/>` rendering rule -- so filling them in is this
+/// crate's job, not the generator's.
+pub(crate) fn substitute(text: &str, subs: &[&str]) -> String {
+    let mut out = text.to_string();
+    for (i, s) in subs.iter().enumerate() {
+        out = out.replace(&format!("&{}", i + 1), s);
+    }
+    out
+}
+
+/// Looks up `major.sub` in the generated message table and fills its
+/// placeholders from `subs`. Every `(major, sub)` this crate passes is a
+/// literal confirmed against `build/bin/rexx`; a lookup failure here would
+/// mean the table changed under a verified mapping, not something to
+/// recover from at runtime.
+pub(crate) fn error_text(major: u16, sub: u16, subs: &[&str]) -> String {
+    let m = rexx_inventory::errors::lookup(major, sub)
+        .unwrap_or_else(|| panic!("no interpreter message for {major}.{sub:03}"));
+    substitute(m.text, subs)
 }
 
 /// A decimal number: `digits * 10^exponent`, with a sign.

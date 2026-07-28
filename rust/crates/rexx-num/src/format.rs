@@ -23,20 +23,29 @@ use crate::{Form, Number};
 /// method`); the interpreter further distinguishes 93.941/93.942, but this
 /// crate follows `ArithError`'s lead and exposes only the number a trapped
 /// Rexx program actually sees in `RC`, using the variant itself to carry the
-/// finer distinction for Rust callers.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+/// finer distinction for Rust callers. Unlike `ArithError`, every raise site
+/// lives in this file, so each variant also carries the interpreter's fully
+/// rendered message text -- there is no ambiguity here to fall back from.
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum FormatError {
     /// `before` is too narrow for the integer part actually produced (which,
     /// in exponential form, means the mantissa's integer digits). Error
     /// 93.942.
-    BeforeOversize,
+    BeforeOversize(String),
     /// `expp` is too narrow to hold the exponent's digits. Error 93.941.
-    ExponentOversize,
+    ExponentOversize(String),
 }
 
 impl FormatError {
     pub fn code(self) -> u16 {
         93
+    }
+
+    /// The interpreter's exact message text, substitutions already filled.
+    pub fn message(&self) -> &str {
+        match self {
+            FormatError::BeforeOversize(m) | FormatError::ExponentOversize(m) => m,
+        }
     }
 }
 
@@ -95,6 +104,16 @@ impl Number {
         // 15-significant-digit literal at DIGITS 9: it always renders as if
         // it had been rounded to 9 digits first, however `expt` is set.
         let n1 = self.round_to(digits);
+        // What `BeforeOversize`'s message substitutes for &1, if it fires:
+        // `n1`'s own SCIENTIFIC-form rendering at `digits` -- *not* the
+        // reframed mantissa `render_integer_padded` actually pads, and not
+        // affected by which `form`/`expt` this call uses. Confirmed by
+        // provoking the exponential-mantissa case (ENGINEERING, before too
+        // narrow for a reframed "123.456789") and getting back the
+        // un-reframed "123456.789" instead, and separately by lowering
+        // DIGITS until rounding changes the value and seeing *that* show up
+        // rather than the original literal text.
+        let oversize_value = n1.format(digits);
 
         // `expp == 0` is not "no padding": it suppresses exponential form
         // altogether, so a number that would otherwise trigger it renders in
@@ -107,21 +126,45 @@ impl Number {
             Some(expt.map(|e| e as i64).unwrap_or(digits as i64))
         };
 
+        // The C++ side (`NumberStringClass.cpp:2021-2062`) checks `expp`
+        // against the exponent it derives from `this` alone, entirely
+        // before the section that later applies `after` and can carry --
+        // it has no notion yet of the value carry will eventually produce.
+        // So the check (and its substitution) needs its own, uncarried
+        // trigger/grouping computed the same way `resolve_exponential_state`
+        // computes its first guess, not the final, carry-resolved one that
+        // drives the successful-render path below. Confirmed by forcing a
+        // carry that bumps the exponent from 20 to 21 digits (`9.996E+20`
+        // rounded to 0 decimals) while `expp` is too narrow for either: the
+        // reported mantissa is `"9.996"` (reframed at the pre-carry 20), not
+        // `"0.9996"` (reframed at the post-carry 21).
+        let initial_eng_exp = expt.and_then(|expt| {
+            let a = adjusted(&n1);
+            let triggered = a as i64 >= expt || (a < 0 && (n1.exponent as i64).abs() > 2 * expt);
+            triggered.then(|| group(form, a))
+        });
+        if let (Some(exp0), Some(width)) = (initial_eng_exp, expp) {
+            let needed = exp0.unsigned_abs().to_string().len() as u32;
+            if needed > width {
+                let mantissa_text = render_integer_padded(&reframe(&n1, exp0), None, None, "")
+                    .expect("`before` is None, so the width check cannot fail");
+                return Err(FormatError::ExponentOversize(crate::error_text(
+                    93,
+                    941,
+                    &[&mantissa_text, &width.to_string()],
+                )));
+            }
+        }
+
         let (eng_exp, rounded) = resolve_exponential_state(&n1, form, expt, after);
 
         match eng_exp {
-            None => render_integer_padded(&rounded, before, after),
+            None => render_integer_padded(&rounded, before, after, &oversize_value),
             Some(exp) => {
-                if let Some(width) = expp {
-                    let needed = exp.unsigned_abs().to_string().len() as u32;
-                    if needed > width {
-                        return Err(FormatError::ExponentOversize);
-                    }
-                }
                 // The exponent check comes before the `before` check -- an
                 // exponent that doesn't fit is reported even when `before`
                 // would have been wide enough for the mantissa.
-                let mantissa = render_integer_padded(&rounded, before, after)?;
+                let mantissa = render_integer_padded(&rounded, before, after, &oversize_value)?;
 
                 if exp == 0 {
                     // A displayed exponent of exactly zero is never written
@@ -153,7 +196,9 @@ impl Number {
     pub fn trunc(&self, digits: u32, places: u32) -> String {
         let n = self.round_to(digits);
         let truncated = truncate_to_places(&n, places);
-        render_integer_padded(&truncated, None, Some(places))
+        // `before` is always `None` here, so the oversize check can never
+        // run and the substitution text is never read.
+        render_integer_padded(&truncated, None, Some(places), "")
             .expect("`before` is None, so the width check cannot fail")
     }
 }
@@ -402,6 +447,7 @@ fn render_integer_padded(
     n: &Number,
     before: Option<u32>,
     after: Option<u32>,
+    oversize_value: &str,
 ) -> Result<String, FormatError> {
     let sign = if n.negative { "-" } else { "" };
     let d: String = n.digits.iter().map(|x| (b'0' + x) as char).collect();
@@ -448,7 +494,11 @@ fn render_integer_padded(
             // aside.
             let available = i64::from(before) - i64::from(n.negative);
             if available < needed {
-                return Err(FormatError::BeforeOversize);
+                return Err(FormatError::BeforeOversize(crate::error_text(
+                    93,
+                    942,
+                    &[oversize_value, &before.to_string()],
+                )));
             }
             (available - needed) as usize
         }

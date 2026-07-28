@@ -5,6 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[dependencies]
+rexx-inventory = { path = "../rexx-inventory" }
+
 [dev-dependencies]
 criterion = "0.8.2"
 
