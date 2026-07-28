@@ -60,6 +60,14 @@ what makes a zero meaningful.
 | `canonical_form.rex` | trailing-zero preservation; zero collapsing |
 | `notation_thresholds.rex` | the E-notation boundaries, which use *different* exponents per side |
 
+### `expr/` — Phase 3, the expression grammar
+
+Not a `rexx-diff` corpus. `precedence.tsv` is a table of generated expressions
+with the value or error number `build/bin/rexx` gave for each, read by
+`rexx-parse`'s differential test so that `cargo test` needs no built C++
+interpreter. Its own header records how it was generated and what the columns
+mean.
+
 ## Things this corpus learned the hard way
 
 `say a"|"b` does not concatenate three values. `"|"b` is read as a **binary

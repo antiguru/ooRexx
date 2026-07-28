@@ -451,6 +451,9 @@ version = "0.1.0"
 [[package]]
 name = "rexx-parse"
 version = "0.1.0"
+dependencies = [
+ "rexx-num",
+]
 
 [[package]]
 name = "rustversion"

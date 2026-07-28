@@ -850,4 +850,6 @@ fn symbol_kind(id: SymbolId, class: SymbolClass) -> ExprKind {
 }
 
 #[cfg(test)]
+mod differential;
+#[cfg(test)]
 mod tests;
