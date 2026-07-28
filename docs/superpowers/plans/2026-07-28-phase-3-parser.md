@@ -701,7 +701,7 @@ scanner mode Task 3.3 left room for.
 
 - [ ] **Step 4: Implement the remaining eight, committing per directive**
 
-- [ ] **Step 5a: Assert every option sub-keyword is reachable**
+- [ ] **Step 5: Assert every option sub-keyword is reachable**
 
 Same shape as Task 3.6's Step 4: a table pairing each option with a legal
 directive that carries it, plus a length assertion against the extracted count.
@@ -713,7 +713,7 @@ directives — it is 8.3% — but because every method body in it sits inside on
 so nothing in the file parses until the directives do, and Task 3.10's
 throughput number depends on the whole file parsing.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ---
 
