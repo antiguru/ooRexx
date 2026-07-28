@@ -42,9 +42,9 @@ pub struct Clause {
     /// `Colon` for a label clause.
     pub tokens: Range<usize>,
     /// Byte range in the retained source: from the start of the first token to
-    /// the END of the terminating token. For an explicit `;` that puts the
-    /// semicolon inside the span; for an end of line it stops at the last byte
-    /// of the line's content, excluding the line terminator.
+    /// the END of the terminating token. An explicit `;` is therefore inside the
+    /// span. For an end of line the span stops at the last byte of the line's
+    /// content, excluding the line terminator.
     ///
     /// Measured against `build/bin/rexx` with `trace r`, which prints exactly
     /// these bytes: `nop;` traces with its semicolon, `here:` with its colon,
@@ -59,7 +59,7 @@ pub struct Clause {
 /// Splits `tokens` into clauses.
 ///
 /// A clause ends at a `;`, at an uncontinued line end, or at end of file, all
-/// three of which reach here as an `Eoc`; and a label's `:` ends a clause too.
+/// three of which reach here as an `Eoc`. A label's `:` ends a clause too.
 /// The `Eoc` and the `:` are terminators and belong to no clause's `tokens`,
 /// but both are inside the clause's `span`.
 ///

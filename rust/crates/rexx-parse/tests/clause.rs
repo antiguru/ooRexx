@@ -222,3 +222,30 @@ fn a_clause_holds_every_token_between_its_terminators() {
     );
     assert_eq!(shape(src, 1), [Tag::Symbol]);
 }
+
+#[test]
+fn an_unterminated_token_slice_ends_the_clause_at_its_last_token() {
+    // `scan` always terminates its output, so this shape cannot come from it.
+    // But `split_clauses` is public, so a caller can hand it one, and the
+    // documented fallback is to end the clause at the last token's own end
+    // rather than to panic or to drop the clause. Constructed directly because
+    // there is no way to make `scan` produce it.
+    let toks = tokens_of("nop");
+    assert_eq!(toks.last().map(|t| t.kind.tag()), Some(Tag::Eoc));
+
+    // The same tokens with the terminating Eoc removed.
+    let unterminated: Vec<Token> = toks[..toks.len() - 1].to_vec();
+    let split = split_clauses(&unterminated).expect("splits without error");
+    assert_eq!(split.len(), 1, "one clause, not zero and not two");
+
+    let last = unterminated.last().expect("a token remains");
+    assert_eq!(
+        split[0].span.end, last.span.end,
+        "span ends at the last token"
+    );
+    assert_eq!(
+        split[0].tokens,
+        0..unterminated.len(),
+        "and every token belongs to it, since none is a terminator"
+    );
+}
