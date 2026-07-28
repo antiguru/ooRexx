@@ -262,7 +262,8 @@ git commit -m "Decide D10 with measurements"
 - Test: `rust/crates/rexx-parse/tests/sourceline.rs`
 
 **Interfaces:**
-- Produces: `ProgramSource::new(text: Vec<u8>) -> ProgramSource`,
+- Produces: `ProgramSource::new(text: Vec<u8>, kind: SourceKind) -> ProgramSource`
+  and `pub enum SourceKind { Program, Interpret }`,
   `ProgramSource::line(&self, n: usize) -> Option<&[u8]>` (1-based),
   `ProgramSource::line_count(&self) -> usize`,
   `ProgramSource::line_of(&self, byte: usize) -> usize` returning the 1-based
@@ -352,7 +353,7 @@ invisible until `TRACE` is wired up in Task 3.9.
 ```rust
 #[test]
 fn sourceline_returns_lines_without_terminators() {
-    let src = ProgramSource::new(b"say 1\nsay 2\n".to_vec());
+    let src = ProgramSource::new(b"say 1\nsay 2\n".to_vec(), SourceKind::Program);
     assert_eq!(src.line_count(), 2);
     assert_eq!(src.line(1), Some("say 1"));
     assert_eq!(src.line(2), Some("say 2"));
@@ -366,7 +367,7 @@ fn sourceline_returns_lines_without_terminators() {
 
 #[test]
 fn line_of_is_one_based() {
-    let src = ProgramSource::new(b"say 1\nsay 2\n".to_vec());
+    let src = ProgramSource::new(b"say 1\nsay 2\n".to_vec(), SourceKind::Program);
     assert_eq!(src.line_of(0), 1);
     assert_eq!(src.line_of(4), 1);
     assert_eq!(src.line_of(6), 2);
@@ -377,7 +378,7 @@ fn source_may_hold_bytes_that_are_not_utf8() {
     // A Rexx literal may contain arbitrary bytes. Verified against the oracle:
     // a file holding a raw FF FE inside a literal runs, and c2x reports FFFE.
     // A String-typed source would refuse to construct here.
-    let src = ProgramSource::new(b"s = '\xff\xfe'\n".to_vec());
+    let src = ProgramSource::new(b"s = '\xff\xfe'\n".to_vec(), SourceKind::Program);
     assert_eq!(src.line(1), Some(&b"s = '\xff\xfe'"[..]));
     assert_eq!(src.line_count(), 1);
 }
@@ -413,7 +414,7 @@ expected values taken from Step 1's probe rather than from intuition.
 - Produces: `Token { kind: TokenKind, span: Range<usize> }`, where
   `TokenKind::Symbol` carries a `SymbolId` rather than text; `SymbolId`,
   `SymbolTable` and `Keywords`; `ParseCtx` and `TokenCursor`; and
-  `scan(&ProgramSource, ScanMode) -> Result<Scanned, ParseError>` where
+  `scan(&ProgramSource) -> Result<Scanned, ParseError>` where
   `Scanned { tokens: Vec<Token>, symbols: SymbolTable, keywords: Keywords,
   resources: Vec<ResourceBody> }`.
   `scan` returns the table because it owns interning; it cannot borrow one it is
@@ -422,14 +423,32 @@ expected values taken from Step 1's probe rather than from intuition.
 
   **Two of those differ from this task's first draft, both for measured reasons.**
 
-  `ScanMode` distinguishes a program from an `INTERPRET` fragment, because the
-  `#!` skip applies to a program's line 1 and **not** under `INTERPRET`
-  (`ProgramSource.cpp:594`, `interpretAdjust == 0`). Verified:
-  `interpret "#! nothing here"` raises 13.1 on `#` (`'23'X`), while the identical
-  text as line 1 of a file is accepted. It is a **parameter** rather than a second
-  `scan_interpret` entry point on purpose: the defect class here is silently
-  getting the default wrong, and a parameter cannot be omitted where a second
-  function can be left uncalled.
+  **The program-versus-interpret distinction lives on `ProgramSource`, not on the
+  scan.** `ProgramSource::new(text: Vec<u8>, kind: SourceKind)` takes it and
+  `scan` reads it back off the source, which is why `scan` needs no mode
+  parameter and why it is impossible to build a source one way and scan it the
+  other.
+
+  It belongs there because **all three** of `new`'s behaviours are program-only,
+  and an earlier draft of this task got that wrong by fixing only the first. An
+  `INTERPRET` argument is exactly **one physical line** — the oracle builds it as
+  `ArrayProgramSource` over a one-element array — so under `SourceKind::Interpret`
+  `new` does essentially nothing, and the offending bytes stay on that single line
+  for `characterTable` to reject like any other invalid character. No scanner
+  special-casing is needed. Measured, every case:
+
+  | under `INTERPRET` | result |
+  |---|---|
+  | `#! nothing here` | 13.1 on `#` (`'23'X`); as a *file's* line 1 it is accepted |
+  | a raw `0a`, `0d`, or `0d0a` | 13.1, the CRLF case naming `'0D'X` |
+  | a trailing `0a` | 13.1, so it is not a terminator either |
+  | a `1a` anywhere, including last | 13.1, so **Ctrl-Z is not truncation here** |
+  | `1a` inside a *literal* | survives as data: `interpret "say c2x('"||'1a'x||"')"` prints `1A` |
+  | `;` between clauses | still separates, so the fix must not be broader than this |
+  | `interpret ""` | accepted, as **one empty line**, where an empty *program* has none |
+
+  The last two rows are the guard against over-correcting: a fix that rejects
+  `;` or refuses an empty fragment has gone too far.
 
   `resources` exists because a `::RESOURCE` body is **raw text and must never be
   tokenised**. Verified: a body containing `'unmatched and /* unclosed` gives
@@ -1715,10 +1734,10 @@ it was a syntax error and told Task 3.8 to record a number that does not exist.
 
 **The token vector and the `ParseCtx` do not outlive this function, and must not
 try to.** `ParseCtx` borrows the `ProgramSource`, the `Vec<Token>`, the
-`SymbolTable` and the `Keywords`, so the order is: build `ProgramSource`, `scan`
-it into a `Scanned` (passing `ScanMode::Program` here and `ScanMode::Interpret`
-from `parse_interpret`, which is the whole reason the mode is a parameter),
-build `ParseCtx` borrowing all four, `split_clauses`,
+`SymbolTable` and the `Keywords`, so the order is: build `ProgramSource` (with
+`SourceKind::Program` here and `SourceKind::Interpret` from `parse_interpret` —
+that choice is made once, at construction, and `scan` reads it back), `scan`
+it into a `Scanned`, build `ParseCtx` borrowing all four, `split_clauses`,
 `ClauseCursor::new`, parse everything, drop the context, then move the
 `ProgramSource` **and the `SymbolTable`** into `Program`. That works precisely
 because every span that survives is a **byte** range into the source rather than
