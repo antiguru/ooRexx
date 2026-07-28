@@ -17,19 +17,21 @@
 use crate::{ArithError, Number};
 
 impl Number {
-    pub fn mul(&self, other: &Number, digits: u32) -> Result<Number, ArithError> {
+    pub fn mul(&self, other: &Number, digits: u64) -> Result<Number, ArithError> {
         // checkNumber truncates an over-long operand to DIGITS + 1 and does
         // NOT round it. Rounding operands here instead would turn
         // `2 * 1.5` at DIGITS 1 into `2 * 2` = 4, where the answer is 3.
-        let left = self.truncated_to(digits as usize + 1);
-        let right = other.truncated_to(digits as usize + 1);
+        let left = self.truncated_to(crate::working_length(digits));
+        let right = other.truncated_to(crate::working_length(digits));
 
         if left.is_zero() || right.is_zero() {
             return Ok(Number::zero());
         }
 
         let product = mul_magnitudes(&left.digits, &right.digits);
-        let digits_usize = digits as usize;
+        // Saturated: a bare `digits` past usize means "keep everything",
+        // which the length test below then decides.
+        let digits_usize = usize::try_from(digits).unwrap_or(usize::MAX);
 
         // Anything beyond DIGITS + 1 digits is dropped from the low end and
         // its count folded into the exponent; the extra digit is what the
@@ -97,7 +99,7 @@ pub enum DivOp {
 }
 
 impl Number {
-    pub fn div(&self, other: &Number, digits: u32, op: DivOp) -> Result<Number, ArithError> {
+    pub fn div(&self, other: &Number, digits: u64, op: DivOp) -> Result<Number, ArithError> {
         if other.is_zero() {
             return Err(ArithError::DivideByZero);
         }
@@ -105,8 +107,8 @@ impl Number {
             return Ok(Number::zero());
         }
 
-        let left = self.truncated_to(digits as usize + 1);
-        let right = other.truncated_to(digits as usize + 1);
+        let left = self.truncated_to(crate::working_length(digits));
+        let right = other.truncated_to(crate::working_length(digits));
         let negative = left.negative != right.negative;
 
         // The interpreter's estimate of where the quotient's first digit
@@ -133,7 +135,7 @@ impl Number {
 
         // Long-divide the digit strings, generating one more digit than
         // DIGITS so the final rounding has something to look at.
-        let want = digits as usize + 1;
+        let want = crate::working_length(digits);
         let (mut q, rem, shift) = long_divide(&left.digits, &right.digits, want);
 
         // value = q * 10^(left.exponent - right.exponent - shift). Same
@@ -174,7 +176,17 @@ impl Number {
             }
         }
         let int_digits = Number::assemble(negative, q, q_exp.max(0));
-        if !int_digits.is_zero() && int_digits.digits.len() as i32 + int_digits.exponent > digits as i32
+        // Compared in i64, with `digits` saturated into it rather than
+        // narrowed: `digits` is a bare unbounded u64 (and even the
+        // `Settings`-bounded value legitimately reaches 10^18 - 1 now), so
+        // an `as i32`/`as i64` narrowing wraps negative and makes every
+        // non-zero quotient look too wide -- the same silent-narrowing
+        // defect `format` and `as_whole` each fixed before this. Saturation
+        // is exact: the left side is a digit count plus an exponent,
+        // nowhere near i64::MAX.
+        let digits_i64 = i64::try_from(digits).unwrap_or(i64::MAX);
+        if !int_digits.is_zero()
+            && int_digits.digits.len() as i64 + i64::from(int_digits.exponent) > digits_i64
         {
             // Only `%`/`//` reach here (`Divide` already returned above),
             // and the interpreter reports each with its own, substitution-
@@ -193,12 +205,16 @@ impl Number {
                 // remainder = left - (left % right) * right. The intermediate
                 // must be computed at enough precision to be exact, or a large
                 // dividend loses the low digits that ARE the remainder.
-                let _ = rem;
-                let exact = (left.digits.len()
+                // Carried in u64, saturating: the old `as u32` narrowing of
+                // this sum truncated the working precision for large
+                // `digits` -- the same class as the comparison fix above,
+                // on the arithmetic side.
+                let exact_extra = (left.digits.len()
                     + right.digits.len()
                     + int_digits.digits.len()
-                    + digits as usize
-                    + 10) as u32;
+                    + 10) as u64;
+                let _ = rem;
+                let exact = digits.saturating_add(exact_extra);
                 let product = int_digits.mul(&right, exact)?;
                 let mut r = left.sub(&product, exact)?;
                 r.negative = self.negative && !r.is_zero();

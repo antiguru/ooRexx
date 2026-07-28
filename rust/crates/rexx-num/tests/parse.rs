@@ -78,14 +78,21 @@ fn things_that_are_not_numbers_are_rejected() {
 
 #[test]
 fn format_does_not_overflow_at_extreme_digits() {
-    // `digits` is a bare u32 here, not the `Settings`-bounded value the
+    // `digits` is a bare u64 here, not the `Settings`-bounded value the
     // interpreter would ever pass, so `format` itself has to stay well
     // defined for the whole range. `2 * digits` narrowed to i32 overflows
     // above 1073741823 and, before this was fixed, panicked in debug and
-    // silently picked the wrong display form in release.
+    // silently picked the wrong display form in release; the u64 widening
+    // adds the same hazard at 2^63, so the top of the new range is pinned
+    // here too.
     assert_eq!(Number::parse("1e-30").unwrap().format(2147483647), "0.000000000000000000000000000001");
-    assert_eq!(Number::parse("1e-30").unwrap().format(u32::MAX), "0.000000000000000000000000000001");
-    assert_eq!(Number::parse("123456789").unwrap().format(u32::MAX), "123456789");
+    assert_eq!(
+        Number::parse("1e-30").unwrap().format(u64::from(u32::MAX)),
+        "0.000000000000000000000000000001"
+    );
+    assert_eq!(Number::parse("123456789").unwrap().format(u64::from(u32::MAX)), "123456789");
+    assert_eq!(Number::parse("1e-30").unwrap().format(u64::MAX), "0.000000000000000000000000000001");
+    assert_eq!(Number::parse("123456789").unwrap().format(u64::MAX), "123456789");
 }
 
 #[test]

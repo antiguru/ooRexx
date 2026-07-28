@@ -42,11 +42,11 @@ impl Number {
         digits
     }
 
-    pub fn add(&self, other: &Number, digits: u32) -> Result<Number, ArithError> {
+    pub fn add(&self, other: &Number, digits: u64) -> Result<Number, ArithError> {
         self.add_signed(other, false, digits)
     }
 
-    pub fn sub(&self, other: &Number, digits: u32) -> Result<Number, ArithError> {
+    pub fn sub(&self, other: &Number, digits: u64) -> Result<Number, ArithError> {
         self.add_signed(other, true, digits)
     }
 
@@ -54,7 +54,7 @@ impl Number {
         &self,
         other: &Number,
         negate_other: bool,
-        digits: u32,
+        digits: u64,
     ) -> Result<Number, ArithError> {
         let left_negative = self.negative;
         let right_negative = other.negative != negate_other;
@@ -62,7 +62,7 @@ impl Number {
         // Operands longer than DIGITS are truncated to DIGITS + 1 working
         // digits first. (The interpreter also raises LOSTDIGITS here; that
         // condition belongs to Task 2.8.)
-        let max_length = digits as usize + 1;
+        let max_length = crate::working_length(digits);
         let left = self.truncated_to(max_length);
         let right = other.truncated_to(max_length);
 
@@ -71,7 +71,9 @@ impl Number {
         let adjusted_right_exp = (right.exponent - min_exp) as usize;
         let left_len = left.digits.len();
         let right_len = right.digits.len();
-        let digits_usize = digits as usize;
+        // Saturated for the fast-path sums below: `digits` is a bare u64,
+        // and `len + digits_usize` must compare large, not wrap.
+        let digits_usize = usize::try_from(digits).unwrap_or(usize::MAX);
 
         // Fast paths, ported from NumberString::addSub. Each returns one
         // operand essentially untouched, and they are not an optimisation:
@@ -83,11 +85,12 @@ impl Number {
             Some((&right, right_negative))
         } else if right.is_zero() {
             Some((&left, left_negative))
-        } else if adjusted_left_exp + left_len > right_len + digits_usize {
+        } else if adjusted_left_exp + left_len > right_len.saturating_add(digits_usize) {
             // The right number is too far below the left to reach any digit
-            // the result will keep.
+            // the result will keep. (`saturating_add`: the saturated
+            // `digits_usize` must stay "huge", not wrap back around small.)
             Some((&left, left_negative))
-        } else if adjusted_right_exp + right_len > left_len + digits_usize {
+        } else if adjusted_right_exp + right_len > left_len.saturating_add(digits_usize) {
             Some((&right, right_negative))
         } else {
             None
@@ -110,7 +113,11 @@ impl Number {
         let mut right_exp = right.exponent;
         let adjusted_left_exp = adjusted_left_exp as i64;
         let adjusted_right_exp = adjusted_right_exp as i64;
-        let max_len = max_length as i64;
+        // Saturated: `max_length` came from the bare `digits` and may sit at
+        // usize::MAX, which an `as i64` would fold to -1. i64::MAX keeps
+        // both `adjusted_*_digits` differences negative, exactly as a
+        // precision that large should -- nothing ever needs shortening.
+        let max_len = i64::try_from(max_length).unwrap_or(i64::MAX);
 
         let adjusted_left_digits = left_digits.len() as i64 + adjusted_left_exp - max_len;
         let adjusted_right_digits = right_digits.len() as i64 + adjusted_right_exp - max_len;

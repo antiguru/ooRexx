@@ -16,23 +16,126 @@ fn digits_must_be_a_positive_whole_number() {
     assert!(matches!(s.set_digits_str("1.5"), Err(SettingsError::DigitsNotWhole { .. })));
     assert!(matches!(s.set_digits_str("abc"), Err(SettingsError::DigitsNotWhole { .. })));
     assert!(s.set_digits_str("1").is_ok());
-    // any expression yielding a whole number is fine, including 1e3
+    // Any spelling of a whole number that fits the DIGITS in force works,
+    // including exponential ones -- but each success moves the boundary the
+    // *next* value is judged against: from the 1 just set, 1e3 is four
+    // positions too wide, while from the default 9 it is fine.
+    assert!(matches!(s.set_digits_str("1e3"), Err(SettingsError::DigitsNotWhole { .. })));
+    let mut s = Settings::default();
     assert!(s.set_digits_str("1e3").is_ok());
     assert_eq!(s.digits(), 1000);
 }
 
 #[test]
-fn digits_is_capped_at_max_exponent() {
+fn a_new_digits_value_must_fit_the_digits_currently_in_force() {
+    // The rule is relative, not a fixed cap -- indistinguishable from one
+    // when probed only from the default DIGITS 9, which is exactly how the
+    // fixed-cap version survived review. Every row here was confirmed
+    // against `build/bin/rexx` from a *non-default* starting DIGITS.
+    let mut s = Settings::default();
+    s.set_digits_str("3").unwrap();
+    assert!(matches!(s.set_digits_str("1000"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(matches!(s.set_digits_str("12345"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(s.set_digits_str("999").is_ok());
+
+    // Positions count, not significant digits: 10 is 1E1, one mantissa
+    // digit, and still two positions wide.
+    let mut s = Settings::default();
+    s.set_digits_str("1").unwrap();
+    assert!(matches!(s.set_digits_str("10"), Err(SettingsError::DigitsNotWhole { .. })));
+    let mut s = Settings::default();
+    s.set_digits_str("2").unwrap();
+    assert!(matches!(s.set_digits_str("1e2"), Err(SettingsError::DigitsNotWhole { .. })));
+
+    // At DIGITS 9 the boundary happens to sit at 999999999 -- fresh default
+    // for each, because a successful set moves the boundary itself.
     let mut s = Settings::default();
     assert!(s.set_digits_str("999999999").is_ok());
-    assert_eq!(s.digits(), 999_999_999);
-
     let mut s = Settings::default();
     assert!(matches!(s.set_digits_str("1000000000"), Err(SettingsError::DigitsNotWhole { .. })));
-    // Values that would not even fit a u32, let alone the cap, fail the
-    // same way rather than a different one.
-    assert!(matches!(s.set_digits_str("2147483647"), Err(SettingsError::DigitsNotWhole { .. })));
-    assert!(matches!(s.set_digits_str("4294967296"), Err(SettingsError::DigitsNotWhole { .. })));
+
+    // ... but from DIGITS 10 the very same value is legal, which is what
+    // separates the real rule from the fixed cap.
+    let mut s = Settings::default();
+    s.set_digits_str("10").unwrap();
+    assert!(s.set_digits_str("1000000000").is_ok());
+    assert_eq!(s.digits(), 1_000_000_000);
+}
+
+#[test]
+fn digits_ranges_over_the_full_u64_width_up_to_max_wholenumber() {
+    // From DIGITS 10, a value past u32 is legal -- the stored setting has to
+    // be wide enough to hold it (this is the row that forced the u64
+    // widening).
+    let mut s = Settings::default();
+    s.set_digits_str("10").unwrap();
+    assert!(s.set_digits_str("4294967296").is_ok());
+    assert_eq!(s.digits(), 4_294_967_296);
+
+    // The absolute ceiling is `Numerics::MAX_WHOLENUMBER`, 10^18 - 1:
+    // reachable exactly from DIGITS 18 ...
+    let mut s = Settings::default();
+    s.set_digits_str("18").unwrap();
+    assert!(s.set_digits_str("999999999999999999").is_ok());
+    assert_eq!(s.digits(), 999_999_999_999_999_999);
+
+    // ... and 10^18 stays out even from a DIGITS with room for 30 positions.
+    let mut s = Settings::default();
+    s.set_digits_str("30").unwrap();
+    assert!(matches!(
+        s.set_digits_str("1000000000000000000"),
+        Err(SettingsError::DigitsNotWhole { .. })
+    ));
+    assert!(s.set_digits_str("999999999999999999").is_ok());
+}
+
+#[test]
+fn the_candidate_is_rounded_at_the_digits_in_force_before_the_check() {
+    // The conversion is `requestUnsignedNumber` at the current DIGITS, so a
+    // fractional spelling that rounds clean is accepted -- all confirmed
+    // against `build/bin/rexx`.
+    let mut s = Settings::default();
+    s.set_digits_str("4").unwrap();
+    assert!(s.set_digits_str("999.9999").is_ok()); // carry through the nines
+    assert_eq!(s.digits(), 1000);
+
+    // The same carry one position wider fails: 999.6 rounds to 1000, four
+    // positions at DIGITS 3.
+    let mut s = Settings::default();
+    s.set_digits_str("3").unwrap();
+    assert!(matches!(s.set_digits_str("999.6"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(s.set_digits_str("999.4").is_ok()); // rounds down to 999
+    assert_eq!(s.digits(), 999);
+
+    // The carry can ripple up from entirely below the decimal point.
+    let mut s = Settings::default();
+    assert!(s.set_digits_str("0.99999999995").is_ok());
+    assert_eq!(s.digits(), 1);
+    // A fraction that does not reduce to zero stays an error, rounded or not.
+    let mut s = Settings::default();
+    assert!(matches!(s.set_digits_str("10.5"), Err(SettingsError::DigitsNotWhole { .. })));
+    assert!(s.set_digits_str("10.0").is_ok());
+}
+
+#[test]
+fn fuzz_conversion_uses_the_digits_in_force_and_reports_26_006() {
+    // `numeric fuzz 12345` at DIGITS 3 is 26.006 -- the conversion fails
+    // before the fuzz-below-digits comparison is reached, so 33.001 (what a
+    // conversion that wrongly succeeds would report) never fires. Confirmed
+    // against `build/bin/rexx`.
+    let mut s = Settings::default();
+    s.set_digits_str("3").unwrap();
+    assert!(matches!(s.set_fuzz_str("12345"), Err(SettingsError::FuzzNotWhole { .. })));
+    assert!(matches!(s.set_fuzz_str("1000"), Err(SettingsError::FuzzNotWhole { .. })));
+    // A value that *does* convert but is not below DIGITS is the 33.001.
+    assert!(matches!(s.set_fuzz_str("12"), Err(SettingsError::FuzzNotBelowDigits { .. })));
+
+    // FUZZ spans the same widened range: digits - 1 at the very top.
+    let mut s = Settings::default();
+    s.set_digits_str("18").unwrap();
+    s.set_digits_str("999999999999999999").unwrap();
+    assert!(s.set_fuzz_str("999999999999999998").is_ok());
+    assert_eq!(s.fuzz(), 999_999_999_999_999_998);
 }
 
 #[test]
@@ -53,13 +156,25 @@ fn fuzz_must_stay_below_digits_whichever_of_the_two_is_being_set() {
 }
 
 #[test]
-fn form_accepts_only_the_two_spellings_case_insensitively() {
+fn form_accepts_exactly_the_two_uppercase_spellings_and_nothing_else() {
+    // The runtime VALUE path -- what a `&str` setter models -- is
+    // case-sensitive, does not trim, and takes no abbreviations; only the
+    // source-keyword form looks case-insensitive, and only because the
+    // tokenizer uppercases it first. All confirmed against `build/bin/rexx`
+    // with `numeric form value '...'`.
     let mut s = Settings::default();
     assert!(s.set_form_str("ENGINEERING").is_ok());
     assert_eq!(s.form(), Form::Engineering);
-    assert!(s.set_form_str("scientific").is_ok());
+    assert!(s.set_form_str("SCIENTIFIC").is_ok());
     assert_eq!(s.form(), Form::Scientific);
-    assert!(matches!(s.set_form_str("BOGUS"), Err(SettingsError::InvalidForm { .. })));
+    for rejected in ["scientific", "engineering", "Engineering", "ENG", " ENGINEERING", "BOGUS"] {
+        assert!(
+            matches!(s.set_form_str(rejected), Err(SettingsError::InvalidForm { .. })),
+            "{rejected:?} must be error 25.011"
+        );
+    }
+    // The rejections above must not have moved the setting.
+    assert_eq!(s.form(), Form::Scientific);
 }
 
 #[test]

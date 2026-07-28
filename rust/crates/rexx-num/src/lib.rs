@@ -31,7 +31,11 @@ mod format;
 pub use format::FormatError;
 
 /// Rexx's default `NUMERIC DIGITS`.
-pub const DEFAULT_DIGITS: u32 = 9;
+///
+/// `u64` like every `digits` parameter in this crate: the legal range for a
+/// DIGITS setting runs to `Numerics::MAX_WHOLENUMBER` (10^18 - 1 on 64-bit,
+/// see `settings.rs`), which no narrower width holds.
+pub const DEFAULT_DIGITS: u64 = 9;
 
 /// The largest adjusted exponent a Rexx number may have. Beyond this a
 /// literal will not convert (error 41) and an arithmetic result overflows
@@ -205,7 +209,17 @@ impl ArithError {
 /// (it fixes needless rounding, not a `Number`'s already-lost original
 /// spelling: no `+` after `E`, leading zeros, and so on).
 fn full_precision(n: &Number) -> String {
-    n.format(n.digits.len() as u32)
+    n.format(n.digits.len() as u64)
+}
+
+/// The `digits + 1` working length every operator truncates its operands to,
+/// as a `usize` for slicing. Saturates instead of wrapping: `digits` is a
+/// bare `u64` at the public boundary, and a value near `u64::MAX` must mean
+/// "keep everything", not a wrapped-around tiny precision -- the same
+/// silent-narrowing class `format`, `as_whole` and `div` each had to fix
+/// individually.
+pub(crate) fn working_length(digits: u64) -> usize {
+    usize::try_from(digits.saturating_add(1)).unwrap_or(usize::MAX)
 }
 
 /// Fills `&1`, `&2`, … placeholders in a generated-table message with
@@ -480,8 +494,17 @@ impl Number {
     /// Rounding is an arithmetic operation, not a display one -- it happens at
     /// the `DIGITS` boundary when a result is produced. It is exposed here
     /// because every operator needs it.
-    pub fn round_to(&self, digits: u32) -> Self {
-        let keep = digits as usize;
+    ///
+    /// `digits == 0` is a deliberate no-op sentinel, not an accident: there
+    /// is no `NUMERIC DIGITS 0`, and the caller that produces a zero here --
+    /// `compare` with `digits == fuzz`, whose working precision is their
+    /// difference -- needs "no rounding at all" rather than "round to
+    /// nothing". Reachable from the public `compare(a, b, d, d, op)` entry
+    /// point, so the sentinel is load-bearing.
+    pub fn round_to(&self, digits: u64) -> Self {
+        // Saturated, not truncated: a bare `digits` past usize can only mean
+        // "keep everything", which the length test below then decides.
+        let keep = usize::try_from(digits).unwrap_or(usize::MAX);
         if keep == 0 || self.digits.len() <= keep || self.is_zero() {
             return self.clone();
         }
@@ -531,7 +554,7 @@ impl Number {
     ///
     /// Found by differentially testing 1,674 inputs against the interpreter;
     /// 78 disagreed, all of them here.
-    pub fn format(&self, digits: u32) -> String {
+    pub fn format(&self, digits: u64) -> String {
         let n = self.round_to(digits);
         if n.is_zero() {
             return "0".to_string();
@@ -540,13 +563,18 @@ impl Number {
         let sign = if n.negative { "-" } else { "" };
         let d: String = n.digits.iter().map(|x| (b'0' + x) as char).collect();
 
-        // Compared in i64: `digits` is a bare u32 here (not bounded by
-        // `Settings`, which is the caller most external code goes through),
-        // so `2 * digits` must not be narrowed back to i32 before the
-        // comparison -- that overflows past 1073741823 and, in release,
-        // silently picks the wrong display form.
-        let digits = digits as i64;
-        if adjusted as i64 >= digits || n.exponent as i64 <= -(2 * digits + 1) {
+        // Compared in i64, with `digits` *saturated* into it rather than
+        // narrowed: `digits` is a bare u64 here (not bounded by `Settings`,
+        // which is the caller most external code goes through), and both an
+        // i32 narrowing (the original defect, wrong past 2^31) and a u64 ->
+        // i64 `as` cast (wrong past 2^63) silently pick the wrong display
+        // form in release. Saturation is exact: the exponents this is
+        // compared against stay within +/-`MAX_EXPONENT`, so i64::MAX
+        // decides every comparison the true value would. The doubling then
+        // saturates too, for the same reason.
+        let digits = i64::try_from(digits).unwrap_or(i64::MAX);
+        let low_threshold = digits.saturating_mul(2).saturating_add(1);
+        if adjusted as i64 >= digits || n.exponent as i64 <= -low_threshold {
             let mantissa = if d.len() == 1 {
                 d
             } else {

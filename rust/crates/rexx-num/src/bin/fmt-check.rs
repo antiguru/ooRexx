@@ -31,7 +31,7 @@ fn main() {
             Some(rest) => (rest, Form::Engineering),
             None => (f[0], Form::Scientific),
         };
-        let digits: u32 = digits_field.parse().unwrap();
+        let digits: u64 = digits_field.parse().unwrap();
         let out = match Number::parse(f[2]) {
             // A value that is not a number reaches FORMAT and TRUNC as a bad
             // *argument*, which is error 93 -- not the 41 that a bad numeric

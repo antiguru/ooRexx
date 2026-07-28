@@ -5,14 +5,14 @@ fn n(s: &str) -> Number {
 }
 
 /// All arguments omitted, at the given `digits`/`form`.
-fn form(s: &str, digits: u32, form: Form) -> String {
+fn form(s: &str, digits: u64, form: Form) -> String {
     n(s).format_form(digits, form)
 }
 
 #[allow(clippy::too_many_arguments)]
 fn fmt(
     s: &str,
-    digits: u32,
+    digits: u64,
     form: Form,
     before: Option<u32>,
     after: Option<u32>,
@@ -22,7 +22,7 @@ fn fmt(
     n(s).format_with(digits, form, before, after, expp, expt)
 }
 
-fn trunc(s: &str, digits: u32, places: u32) -> String {
+fn trunc(s: &str, digits: u64, places: u32) -> String {
     n(s).trunc(digits, places)
 }
 
@@ -648,6 +648,18 @@ fn format_after_survives_the_full_u32_range() {
         .format_with(9, Form::Scientific, None, Some(2_147_483_648), None, None)
         .unwrap();
     assert_eq!(result.len(), 2_147_483_650);
+}
+
+#[test]
+fn format_survives_a_bare_digits_at_the_top_of_u64() {
+    // `digits` is a bare u64 since the DIGITS widening, and its default-expt
+    // role feeds the `2 * expt` low-end trigger: without saturation, a
+    // saturated-i64 `expt` doubles into an overflow -- a panic in debug,
+    // a wrapped (and possibly wrong-form) comparison in release. Both the
+    // plain and the exponential outcomes are pinned.
+    assert_eq!(form("1e-30", u64::MAX, Form::Scientific), "0.000000000000000000000000000001");
+    assert_eq!(form("123456789", u64::MAX, Form::Engineering), "123456789");
+    assert_eq!(trunc("3.9", u64::MAX, 2), "3.90");
 }
 
 #[test]

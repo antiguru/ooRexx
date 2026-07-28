@@ -1,6 +1,6 @@
 use rexx_num::{compare, ArithError, CompareOp};
 
-fn cmp(a: &str, b: &str, digits: u32, fuzz: u32, op: CompareOp) -> bool {
+fn cmp(a: &str, b: &str, digits: u64, fuzz: u64, op: CompareOp) -> bool {
     compare(a, b, digits, fuzz, op).unwrap()
 }
 

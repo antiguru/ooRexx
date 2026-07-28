@@ -3,7 +3,7 @@ use rexx_num::{ArithError, Number};
 fn n(s: &str) -> Number {
     Number::parse(s).unwrap()
 }
-fn pow(a: &str, b: &str, d: u32) -> Result<String, u16> {
+fn pow(a: &str, b: &str, d: u64) -> Result<String, u16> {
     n(a).pow(&n(b), d).map(|r| r.format(d)).map_err(ArithError::code)
 }
 
@@ -63,14 +63,16 @@ fn a_reciprocal_out_of_range_at_working_precision_is_not_an_overflow() {
 
 #[test]
 fn an_exponent_fits_within_digits_beyond_i32_max() {
-    // `digits` is a bare u32 parameter here, not the `Settings`-bounded
-    // value the interpreter would ever pass. Narrowing it to i32 for the
-    // "does the exponent fit within `digits`" check wraps negative above
-    // i32::MAX, which used to reject every exponent outright regardless of
-    // whether it actually fit. Zero as the base takes the cheap early-out
-    // in `pow`, so this stays fast even at these `digits` values.
+    // `digits` is a bare u64 parameter here, not the `Settings`-bounded
+    // value the interpreter would ever pass. Narrowing it for the "does the
+    // exponent fit within `digits`" check wraps negative above the signed
+    // maximum (i32 for the original defect, i64 for a careless u64 port),
+    // which used to reject every exponent outright regardless of whether it
+    // actually fit. Zero as the base takes the cheap early-out in `pow`, so
+    // this stays fast even at these `digits` values.
     assert_eq!(pow("0", "5", 3_000_000_000).unwrap(), "0");
-    assert_eq!(pow("0", "7", u32::MAX).unwrap(), "0");
+    assert_eq!(pow("0", "7", u64::from(u32::MAX)).unwrap(), "0");
+    assert_eq!(pow("0", "7", u64::MAX).unwrap(), "0");
 }
 
 #[test]

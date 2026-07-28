@@ -32,16 +32,21 @@ impl Number {
     /// `2 ** 1e10` is error 26 at DIGITS 9 -- ten thousand million needs
     /// eleven digits -- but succeeds at DIGITS 15, where it then fails with
     /// error 42 because the *result* is out of range.
-    fn as_whole(&self, digits: u32) -> Option<i64> {
+    fn as_whole(&self, digits: u64) -> Option<i64> {
         let rounded = self.round_to(digits);
         let self_ = &rounded;
         if self_.is_zero() {
             return Some(0);
         }
-        // Compared in i64: `digits` narrowed to i32 wraps negative above
-        // i32::MAX, which would invert this comparison rather than panic --
-        // a silently wrong answer, in release and debug alike.
-        if self_.digits.len() as i64 + self_.exponent as i64 > digits as i64 {
+        // Compared in i64, with `digits` saturated into it: a narrowing
+        // (`as i32` originally, `as i64` for a bare u64 now) wraps negative
+        // and inverts this comparison rather than panicking -- a silently
+        // wrong answer, in release and debug alike. Saturation is exact:
+        // the left side is a digit count plus an exponent, nowhere near
+        // i64::MAX.
+        if self_.digits.len() as i64 + self_.exponent as i64
+            > i64::try_from(digits).unwrap_or(i64::MAX)
+        {
             return None;
         }
         if self_.exponent < 0 {
@@ -65,7 +70,7 @@ impl Number {
         Some(if self_.negative { -value } else { value })
     }
 
-    pub fn pow(&self, exponent: &Number, digits: u32) -> Result<Number, ArithError> {
+    pub fn pow(&self, exponent: &Number, digits: u64) -> Result<Number, ArithError> {
         // `additional()` renders 26.008's substitution from `exponent` at
         // its own full precision, which is the closest this crate can get
         // to the interpreter's "as originally written" text -- see
@@ -76,7 +81,7 @@ impl Number {
         let negative_power = power < 0;
         let power = power.unsigned_abs();
 
-        let left = self.truncated_to(digits as usize + 1);
+        let left = self.truncated_to(crate::working_length(digits));
 
         if left.is_zero() {
             // Zero to a negative power is an underflow, not infinity. Error
@@ -106,9 +111,10 @@ impl Number {
 
         // Working precision is raised by the number of decimal digits in the
         // exponent, plus one, so the repeated squaring does not accumulate
-        // visible error.
-        let extra = power.to_string().len() as u32;
-        let work = digits + extra + 1;
+        // visible error. Saturating: `digits` is a bare u64, and precision
+        // must stay huge rather than wrap.
+        let extra = power.to_string().len() as u64;
+        let work = digits.saturating_add(extra + 1);
 
         // Square and multiply, high bit first, exactly as the interpreter
         // sequences it: the accumulator starts as the base itself, which
@@ -155,7 +161,7 @@ impl Number {
 /// most `digits + 1` quotient digits and stops there, with no rounding, no
 /// trailing-zero stripping and no range check of its own -- all of that is
 /// left to `pow`'s tail.
-fn divide_power(accum: &Number, digits: u32) -> Number {
+fn divide_power(accum: &Number, digits: u64) -> Number {
     debug_assert!(!accum.is_zero(), "pow never inverts a zero accumulator");
     let divisor = &accum.digits;
     let n = divisor.len();
@@ -220,7 +226,10 @@ fn divide_power(accum: &Number, digits: u32) -> Number {
             this_digit = 0;
             // Done once the remainder is zero or the result has grown to
             // digits + 1, leaving one digit for the caller's rounding.
-            if left[0] == 0 || result.len() > digits as usize {
+            // (Saturated rather than narrowed: wrapping a bare huge
+            // `digits` around to a tiny cap would silently truncate the
+            // quotient.)
+            if left[0] == 0 || result.len() > usize::try_from(digits).unwrap_or(usize::MAX) {
                 break;
             }
         }

@@ -28,7 +28,7 @@ fn main() {
     let text = std::fs::read_to_string(&path).expect("readable input file");
     for line in text.lines() {
         let mut parts = line.split('|');
-        let digits: u32 = parts.next().unwrap().parse().unwrap();
+        let digits: u64 = parts.next().unwrap().parse().unwrap();
         let a = parts.next().unwrap();
         let op = parts.next().unwrap();
         let b = parts.next().unwrap();

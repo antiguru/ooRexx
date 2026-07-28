@@ -40,7 +40,7 @@ pub enum FormatError {
     /// and getting back the un-reframed "123456.789" instead, and separately
     /// by lowering DIGITS until rounding changes the value and seeing *that*
     /// show up rather than the original literal text.
-    BeforeOversize { value: Number, digits: u32, before: u32 },
+    BeforeOversize { value: Number, digits: u64, before: u32 },
     /// `expp` is too narrow to hold the exponent's digits. Error 93.941;
     /// `additional()` is `[render(mantissa), width]`, where `render` is a
     /// plain (no `before`/`after`) rendering of `mantissa` -- see the two
@@ -96,7 +96,7 @@ impl Number {
     /// produces SCIENTIFIC; this is the form-aware entry point the brief
     /// asks for, implemented as the all-defaults case of [`Number::format_with`]
     /// so the two can never drift apart.
-    pub fn format_form(&self, digits: u32, form: Form) -> String {
+    pub fn format_form(&self, digits: u64, form: Form) -> String {
         self.format_with(digits, form, None, None, None, None)
             .expect("no `before`/`expp` supplied, so no width check can fail")
     }
@@ -132,7 +132,7 @@ impl Number {
     /// vanishing outright.
     pub fn format_with(
         &self,
-        digits: u32,
+        digits: u64,
         form: Form,
         before: Option<u32>,
         after: Option<u32>,
@@ -158,7 +158,11 @@ impl Number {
         let expt = if expp == Some(0) {
             None
         } else {
-            Some(expt.map(|e| e as i64).unwrap_or(digits as i64))
+            // The `digits` default is saturated into i64, not narrowed: a
+            // bare u64 past 2^63 must stay a huge trigger threshold, and
+            // every adjusted exponent it is compared against is within
+            // +/-`MAX_EXPONENT`, so saturation decides identically.
+            Some(expt.map(|e| e as i64).unwrap_or_else(|| i64::try_from(digits).unwrap_or(i64::MAX)))
         };
 
         // The C++ side checks `expp` *twice*. The first check
@@ -176,7 +180,11 @@ impl Number {
         // `"0.9996"` (reframed at the post-carry 21).
         let initial_eng_exp = expt.and_then(|expt| {
             let a = adjusted(&n1);
-            let triggered = a as i64 >= expt || (a < 0 && (n1.exponent as i64).abs() > 2 * expt);
+            // `saturating_mul`: `expt` may itself be the saturated-i64 form
+            // of a huge bare `digits` (see the default above), and doubling
+            // that must stay huge rather than wrap.
+            let triggered =
+                a as i64 >= expt || (a < 0 && (n1.exponent as i64).abs() > expt.saturating_mul(2));
             triggered.then(|| group(form, a))
         });
         if let Some(width) = expp {
@@ -243,7 +251,7 @@ impl Number {
     /// Implements `TRUNC(number, places)`. Truncates, does not round, and
     /// -- unlike `FORMAT` -- never produces exponential form: `TRUNC(1E10)`
     /// is the eleven-digit integer, not `1E+10`.
-    pub fn trunc(&self, digits: u32, places: u32) -> String {
+    pub fn trunc(&self, digits: u64, places: u32) -> String {
         let n = self.round_to(digits);
         let truncated = truncate_to_places(&n, places);
         // `before` is always `None` here, so the oversize check can never
@@ -315,7 +323,10 @@ fn resolve_exponential_state(
     // territory, never into it.
     let mut eng_exp = expt.and_then(|expt| {
         let a = adjusted(n1);
-        let triggered = a as i64 >= expt || (a < 0 && (n1.exponent as i64).abs() > 2 * expt);
+        // `saturating_mul` for the same reason as `format_with`'s first
+        // trigger: `expt` may be a saturated huge `digits` default.
+        let triggered =
+            a as i64 >= expt || (a < 0 && (n1.exponent as i64).abs() > expt.saturating_mul(2));
         triggered.then(|| group(form, a))
     });
 
@@ -416,7 +427,7 @@ fn post_carry_exponent_error(
     // -- is `mathRound`'s; `round_to_places` (used for the successful
     // render) grows the digit vector instead. See this function's doc
     // comment for why that difference matters here specifically.
-    let rounded = pre_round.round_to((len - excess) as u32);
+    let rounded = pre_round.round_to((len - excess) as u64);
     // Back to true scale: `rounded` is still relative to `eng_exp0`.
     let true_scale = Number {
         negative: rounded.negative,
@@ -427,8 +438,10 @@ fn post_carry_exponent_error(
     let triggered = eng_exp0.is_some()
         || matches!(
             expt,
+            // `saturating_mul` for the same reason as the other two
+            // triggers: `expt` may be a saturated huge `digits` default.
             Some(expt) if adjusted2 as i64 >= expt
-                || (adjusted2 < 0 && (true_scale.exponent as i64).abs() > 2 * expt)
+                || (adjusted2 < 0 && (true_scale.exponent as i64).abs() > expt.saturating_mul(2))
         );
     if !triggered {
         return None;
@@ -444,10 +457,10 @@ fn post_carry_exponent_error(
 /// Rounds (half up) `n` to exactly `places` digits after the decimal point --
 /// the cut FORMAT's `after` and TRUNC both make, just at a fixed decimal
 /// position rather than a fixed significant-digit count. `Number::round_to`
-/// cannot be reused here: its `digits == 0` is a documented no-op sentinel
-/// (there is no `NUMERIC DIGITS 0`), whereas `places == 0` is an ordinary,
-/// meaningful cut for this crate's callers (`FORMAT(x, , 0)`), and must
-/// still round a `0.6` up to `1`.
+/// cannot be reused here: its `digits == 0` is a no-op sentinel (see its own
+/// doc comment for why), whereas `places == 0` is an ordinary, meaningful
+/// cut for this crate's callers (`FORMAT(x, , 0)`), and must still round a
+/// `0.6` up to `1`.
 ///
 /// When `n` already has at most `places` decimal digits, this returns `n`
 /// **unchanged** rather than padding it with the missing zeros -- `places`
@@ -585,7 +598,7 @@ fn render_integer_padded(
     before: Option<u32>,
     after: Option<u32>,
     oversize_value: &Number,
-    oversize_digits: u32,
+    oversize_digits: u64,
 ) -> Result<String, FormatError> {
     let sign = if n.negative { "-" } else { "" };
     let d: String = n.digits.iter().map(|x| (b'0' + x) as char).collect();

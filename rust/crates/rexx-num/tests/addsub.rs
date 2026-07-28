@@ -1,13 +1,13 @@
 use rexx_num::Number;
 
-fn add(a: &str, b: &str, digits: u32) -> String {
+fn add(a: &str, b: &str, digits: u64) -> String {
     Number::parse(a)
         .unwrap()
         .add(&Number::parse(b).unwrap(), digits)
         .unwrap()
         .format(digits)
 }
-fn sub(a: &str, b: &str, digits: u32) -> String {
+fn sub(a: &str, b: &str, digits: u64) -> String {
     Number::parse(a)
         .unwrap()
         .sub(&Number::parse(b).unwrap(), digits)

@@ -3,10 +3,10 @@ use rexx_num::{ArithError, DivOp, Number};
 fn n(s: &str) -> Number {
     Number::parse(s).unwrap()
 }
-fn mul(a: &str, b: &str, d: u32) -> String {
+fn mul(a: &str, b: &str, d: u64) -> String {
     n(a).mul(&n(b), d).unwrap().format(d)
 }
-fn div(a: &str, b: &str, d: u32, op: DivOp) -> Result<String, u16> {
+fn div(a: &str, b: &str, d: u64, op: DivOp) -> Result<String, u16> {
     n(a).div(&n(b), d, op).map(|r| r.format(d)).map_err(ArithError::code)
 }
 
