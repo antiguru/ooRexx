@@ -16,6 +16,11 @@
 
 use crate::{ArithError, Number};
 
+/// `NumberString::FAST_BUFFER` (`NumberStringClass.hpp:414`): below this
+/// working size the C++ divides in stack buffers and can never fail an
+/// allocation, so the reservation probe in `div` is skipped the same way.
+const FAST_BUFFER: u64 = 48;
+
 impl Number {
     pub fn mul(&self, other: &Number, digits: u64) -> Result<Number, ArithError> {
         // checkNumber truncates an over-long operand to DIGITS + 1 and does
@@ -131,6 +136,32 @@ impl Number {
                     r
                 }
             });
+        }
+
+        // Division is the one operation whose working storage is sized by
+        // DIGITS itself rather than by its operands: `NumberString::Division`
+        // allocates `3 * ((digits + 1) * 2 + 1)` bytes up front, before the
+        // first quotient digit (`NumberStringMath2.cpp:401-417`), and a
+        // failed allocation is error 5, "System resources exhausted"
+        // (`RexxMemory.cpp:1266`). That allocation *is* the whole bound --
+        // there is no fixed threshold. Confirmed against `build/bin/rexx`:
+        // `4.0 / 2` and `123456.0 % 2` both fail with 5.0 at DIGITS
+        // 999999999999999999 even though their results are tiny, because the
+        // buffer is sized before anyone looks at the operands; `1 / 7`
+        // computes at DIGITS 1e10 but is 5.0 at 1e11 on the same machine
+        // (the boundary is what malloc will grant, so it moves with the
+        // machine). Mirrored here with a fallible reservation of the same
+        // request, so the same boundary falls out of the same cause -- and,
+        // like the C++ (`FAST_BUFFER`), only past a small-size cutoff, so
+        // ordinary divisions never pay for an allocation probe. This sits
+        // after the `calc_exp < 0` early returns above because the C++
+        // allocates after its equivalent ones: a `%`/`//` whose quotient
+        // has no integer part never reaches the allocation at all.
+        let total_digits = digits.saturating_add(1).saturating_mul(2).saturating_add(1);
+        if total_digits > FAST_BUFFER {
+            let request = usize::try_from(total_digits.saturating_mul(3)).unwrap_or(usize::MAX);
+            let mut probe: Vec<u8> = Vec::new();
+            probe.try_reserve_exact(request).map_err(|_| ArithError::SystemResources)?;
         }
 
         // Long-divide the digit strings, generating one more digit than
@@ -293,7 +324,12 @@ fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Vec<u8>, Vec<u8>, i32) {
         }
         if q.is_empty() && count == 0 {
             // Not yet reached the first significant quotient digit.
-            if i > n.len() + want + d.len() {
+            // Saturating: `want` is itself saturated (`working_length`), so
+            // this bound must stay huge rather than wrap -- producer-side
+            // saturation needs matching consumer-side arithmetic, or the
+            // sum overflows in debug at exactly the values the saturation
+            // was added for.
+            if i > n.len().saturating_add(want).saturating_add(d.len()) {
                 break;
             }
             continue;

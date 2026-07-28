@@ -69,6 +69,43 @@ fn a_quotient_too_wide_to_be_whole_is_error_26() {
 }
 
 #[test]
+fn a_digits_too_large_to_reserve_working_storage_for_is_error_5() {
+    // Division sizes its working storage from DIGITS alone --
+    // `3 * ((digits + 1) * 2 + 1)` bytes, requested before the first
+    // quotient digit -- so a huge DIGITS fails up front with error 5,
+    // however small the operands and quotient are. Confirmed against
+    // `build/bin/rexx` at DIGITS 999999999999999999: `4.0 / 2` and
+    // `123456.0 % 2` are both error 5 (rc 5, "System resources
+    // exhausted"), while `1 / 7` at DIGITS 1e9 instead computes and
+    // underflows (42.902) -- the boundary is what the allocator grants,
+    // and ~6e18 bytes is beyond any 64-bit machine.
+    let max_legal = 999_999_999_999_999_999; // Numerics::MAX_WHOLENUMBER
+    assert_eq!(div("4.0", "2", max_legal, DivOp::Divide), Err(5));
+    assert_eq!(div("1", "7", max_legal, DivOp::Divide), Err(5));
+    assert_eq!(div("123456.0", "2", max_legal, DivOp::IntegerDivide), Err(5));
+    // A bare u64::MAX (not reachable through `Settings`) saturates into the
+    // same reservation failure rather than wrapping any of the sums on the
+    // way -- this exact call used to panic in debug ("attempt to add with
+    // overflow") inside `long_divide`'s give-up bound.
+    assert_eq!(div("123456", "2", u64::MAX, DivOp::IntegerDivide), Err(5));
+    // The `%`/`//` no-integer-part early returns sit before the
+    // reservation, exactly as the C++ orders them, so these stay cheap
+    // successes at the same DIGITS.
+    assert_eq!(div("0.001", "7", max_legal, DivOp::Remainder).unwrap(), "0.001");
+    assert_eq!(div("0.001", "7", max_legal, DivOp::IntegerDivide).unwrap(), "0");
+}
+
+#[test]
+fn a_digits_past_the_fast_buffer_still_divides_via_the_reservation_path() {
+    // DIGITS 24 pushes the working size past FAST_BUFFER (48), so the
+    // reservation probe actually runs and succeeds -- the bound must only
+    // ever reject what cannot be allocated, not tax ordinary big-DIGITS
+    // divisions.
+    assert_eq!(div("1", "8", 24, DivOp::Divide).unwrap(), "0.125");
+    assert_eq!(div("1", "3", 24, DivOp::Divide).unwrap(), "0.333333333333333333333333");
+}
+
+#[test]
 fn a_result_outside_the_representable_range_is_error_42() {
     assert_eq!(
         n("1e999999999").mul(&n("1e999999999"), 9).map_err(ArithError::code),

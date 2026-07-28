@@ -148,6 +148,31 @@ def fmtcarry():
                         out.append(f"{d}|FORMAT|{n}||{after}|{expp}|10")
     return out
 
+SIGNBLANK_A = ["+ 3","- 3","+  3","-   3","  + 3  ","+ .5","- .5","+ 3.","+ 0","- 0",
+               "+ 1e2","- 1e-2","+ 12345678901","+\t3","\t+ 3\t","3\t","+ 3.14",
+               "+ 999999999","- 0.000001","+ 3 e2","3 4","+ - 3","++ 3","3e 2","3e+ 2",
+               "+ ","+","- .","+ abc"]
+
+def signblank():
+    """Blanks between a sign and its digits, and blank/tab edge handling.
+
+    `numberStringScan` (NumberStringClass.cpp:1289-1295) skips blanks and
+    tabs after a sign, so `'+ 3'` is the number 3 -- legal there, at either
+    end, and nowhere else. None of the other ten sets can see this: no
+    generator above emits a blank after a sign, which is how a parser that
+    rejected `'+ 3'` outright sat at 0 divergences across all 126,048 of
+    their cases. The invalid spellings (`'+ 3 e2'`, `'3 4'`, `'++ 3'`, a
+    bare or blank-followed sign) matter as much as the valid ones -- both
+    directions were wrong before the fix. `**` is deliberately absent from
+    the operator list: a non-numeric power operand raises through a
+    different path than the <E41> this harness models for the other
+    operators.
+    """
+    ops = ["+","-","*","/","%","//","=","==","<","<<"]
+    return [f"{d}|{a}|{op}|{b}"
+            for d in [3, 9] for a in SIGNBLANK_A for op in ops
+            for b in ["0","2","+ 2","- 1.5"]]
+
 SETS = {
     "addsub":  lambda: binary(ARITH_A, ["+","-"], [1,3,9,15]),
     "addsub2": lambda: binary(ARITH_B, ["+","-"], [2,4,6,7,11,20]),
@@ -161,6 +186,7 @@ SETS = {
     "fmt3":    fmt3,
     "fmtedge": fmtedge,
     "fmtcarry": fmtcarry,
+    "signblank": signblank,
 }
 
 if __name__ == "__main__":

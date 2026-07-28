@@ -144,6 +144,21 @@ fn power_exponent_not_whole_message_substitutes_the_original_exponent_not_the_ro
 }
 
 #[test]
+fn system_resources_message_is_the_bare_error_5_no_substitution() {
+    // Provoked with `numeric digits 999999999999999999; r = 4.0 / 2`, which
+    // reports rc 5. The message text is the table's own
+    // (`Error_System_resources`, message number 5): the *interpreter's*
+    // rendering for this one is visibly broken -- `condition('o')~message`
+    // came back as "The NIL object" -- so the rc and table text are the
+    // contract here, not what the interpreter happens to print.
+    let err = n("4.0").div(&n("2"), 999_999_999_999_999_999, DivOp::Divide).unwrap_err();
+    assert_eq!(err, ArithError::SystemResources);
+    assert_eq!(err.clone().code(), 5);
+    assert_eq!(err.additional(), Vec::<String>::new());
+    assert_eq!(err.message(), "System resources exhausted.");
+}
+
+#[test]
 fn code_still_matches_every_variant_after_the_split() {
     assert_eq!(n("1").div(&n("0"), 9, DivOp::Divide).unwrap_err().code(), 42);
     assert_eq!(n("9e999999999").mul(&n("9e999999999"), 9).unwrap_err().code(), 42);

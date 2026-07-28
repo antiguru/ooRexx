@@ -99,6 +99,13 @@ pub enum ArithError {
     /// Error 26.008; `additional()` is `[exponent]`. Raised only by
     /// `pow.rs`.
     PowerExponentNotWhole { exponent: Number },
+    /// Division's up-front working-storage reservation failed. Division is
+    /// the one operation whose buffers are sized by DIGITS itself rather
+    /// than by its operands, so a huge -- and, since the u64 widening,
+    /// perfectly legal -- DIGITS fails here before any arithmetic starts.
+    /// Error 5, no substitution; raised only by `muldiv.rs`'s `div`, whose
+    /// reservation site documents the interpreter mechanics this mirrors.
+    SystemResources,
 }
 
 impl ArithError {
@@ -113,6 +120,7 @@ impl ArithError {
             ArithError::IntegerDivideNotWhole
             | ArithError::RemainderNotWhole
             | ArithError::PowerExponentNotWhole { .. } => 26,
+            ArithError::SystemResources => 5,
         }
     }
 
@@ -131,6 +139,9 @@ impl ArithError {
             ArithError::IntegerDivideNotWhole => (26, 11),
             ArithError::RemainderNotWhole => (26, 12),
             ArithError::PowerExponentNotWhole { .. } => (26, 8),
+            // The bare major: `Error_System_resources` is message number 5
+            // itself, entered in the table as sub 0.
+            ArithError::SystemResources => (5, 0),
         }
     }
 
@@ -158,7 +169,8 @@ impl ArithError {
             | ArithError::DivideByZero
             | ArithError::ExponentComputationOverflow
             | ArithError::IntegerDivideNotWhole
-            | ArithError::RemainderNotWhole => vec![],
+            | ArithError::RemainderNotWhole
+            | ArithError::SystemResources => vec![],
         }
     }
 
@@ -330,29 +342,44 @@ impl Number {
 
     /// Parses a Rexx number, or `None` if the string is not one.
     ///
-    /// Accepts surrounding whitespace, an optional sign, digits with an
-    /// optional decimal point, and an optional exponent. Rejects everything
-    /// else -- notably a bare sign, a bare exponent marker, and hex literals,
-    /// which are strings in Rexx rather than numbers.
+    /// Accepts surrounding blanks, an optional sign (itself followed by
+    /// optional blanks), digits with an optional decimal point, and an
+    /// optional exponent. Rejects everything else -- notably a bare sign, a
+    /// bare exponent marker, and hex literals, which are strings in Rexx
+    /// rather than numbers.
+    ///
+    /// Blank handling mirrors `numberStringScan`
+    /// (`NumberStringClass.cpp:1264-1296`) exactly: a blank is a space or a
+    /// tab -- those two bytes, not Unicode whitespace -- and blanks are
+    /// legal at either end and between a sign and its first digit, nowhere
+    /// else. Confirmed against `build/bin/rexx`: `'+ 3'`, `'  +   3  '`,
+    /// `'+ .5'` and tab variants all convert, while `'+ 3 e2'`, `'3 4'`,
+    /// `'3e 2'` and a LF/VT/FF/CR anywhere are all error 41.
     pub fn parse(text: &str) -> Option<Self> {
-        let s = text.trim();
-        if s.is_empty() {
+        fn is_blank(byte: u8) -> bool {
+            byte == b' ' || byte == b'\t'
+        }
+        let bytes = text.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() && is_blank(bytes[i]) {
+            i += 1;
+        }
+        if i == bytes.len() {
             return None;
         }
-        let bytes = s.as_bytes();
-        let mut i = 0;
 
-        let negative = match bytes[i] {
-            b'+' => {
+        let signed = bytes[i] == b'+' || bytes[i] == b'-';
+        let negative = bytes[i] == b'-';
+        if signed {
+            i += 1;
+            // Blanks are allowed between the sign and the digits -- the sign
+            // branch of `numberStringScan` has its own skip loop. Without a
+            // sign there is nothing to skip: the leading skip above already
+            // ran, so a blank here is simply not part of a number.
+            while i < bytes.len() && is_blank(bytes[i]) {
                 i += 1;
-                false
             }
-            b'-' => {
-                i += 1;
-                true
-            }
-            _ => false,
-        };
+        }
 
         let mut digits: Vec<u8> = Vec::new();
         let mut seen_digit = false;
@@ -417,6 +444,10 @@ impl Number {
             ) as i32);
         }
 
+        // Trailing blanks are legal; anything else after them is not.
+        while i < bytes.len() && is_blank(bytes[i]) {
+            i += 1;
+        }
         if i != bytes.len() {
             return None; // trailing junk: "1.2.3", "1 2", "0x1f"
         }

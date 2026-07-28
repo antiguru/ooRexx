@@ -77,6 +77,49 @@ fn things_that_are_not_numbers_are_rejected() {
 }
 
 #[test]
+fn blanks_are_legal_between_a_sign_and_its_digits() {
+    // `numberStringScan` (NumberStringClass.cpp:1289-1295) skips blanks and
+    // tabs after a sign. All confirmed against `build/bin/rexx` via `v + 0`.
+    for (input, expected) in [
+        ("+ 3", "3"),
+        ("- 3", "-3"),
+        ("  +   3  ", "3"),
+        ("+ .5", "0.5"),
+        ("- .5", "-0.5"),
+        ("+ 3.", "3"),
+        ("+\t3", "3"),
+        ("\t+ 3\t", "3"),
+    ] {
+        let n = Number::parse(input).unwrap_or_else(|| panic!("{input:?} should parse"));
+        assert_eq!(&n.format(9), expected, "input {input:?}");
+    }
+}
+
+#[test]
+fn blanks_anywhere_else_are_still_rejected() {
+    // The sign gap and the two ends are the only places: after the digits
+    // start, a blank ends the number and anything further is junk. All
+    // confirmed error 41 against `build/bin/rexx`.
+    for bad in ["+ 3 e2", "3 4", "3 e2", "3e 2", "3e+ 2", "+ - 3", "++ 3", "+ ", "- ."] {
+        assert!(Number::parse(bad).is_none(), "{bad:?} should not parse");
+    }
+}
+
+#[test]
+fn only_space_and_tab_are_blanks_not_unicode_whitespace() {
+    // The interpreter's skip loops test for exactly ch_SPACE and ch_TAB;
+    // LF, VT, FF and CR around an otherwise fine number are all error 41
+    // (confirmed with '0a'x||'3' etc.). `str::trim`, which this parser
+    // used for its ends before the fix, silently accepts every one of
+    // these.
+    for bad in ["\n3", "3\n", "\x0b3", "\x0c3", "\r3", "+\n3"] {
+        assert!(Number::parse(bad).is_none(), "{bad:?} should not parse");
+    }
+    // ... while the two real blanks still trim.
+    assert_eq!(Number::parse(" \t 3 \t ").unwrap().format(9), "3");
+}
+
+#[test]
 fn format_does_not_overflow_at_extreme_digits() {
     // `digits` is a bare u64 here, not the `Settings`-bounded value the
     // interpreter would ever pass, so `format` itself has to stay well
