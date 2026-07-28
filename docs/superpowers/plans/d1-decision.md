@@ -68,3 +68,42 @@ Note that `heapshape.rex` builds its strings with `"e" || j` rather than a bare
 literal. A literal is a single interned object shared by all 1M slots, which
 collapses the graph to ~1,001 objects and reports a 0.6 ms pause. The first
 version of this measurement did exactly that and had to be redone.
+
+---
+
+## Phase 2 addendum — arithmetic at 1.22×, recorded as debt (2026-07-28)
+
+Phase 2's exit gate asks for **parity** on the `arith` benchmark. It is not
+met. The number is recorded here rather than in the phase plan because the
+cause is representation, which is D1's subject.
+
+| | mean | gap |
+|---|---|---|
+| C++ `interpreter/arith`, re-measured | 1.1546–1.1595 s | — |
+| Rust, as first written | 1.9666 s | 1.70× |
+| Rust, after the division rewrite | 1.4067 s | **1.22×** |
+
+The division rewrite (`ec5f5626`) replaced repeated-subtraction quotient
+digits with the estimating algorithm the interpreter itself uses, which was
+already in the tree from the `dividePower` port. That was worth −28.5% on its
+own because one function held 48.2% of the time.
+
+**What the remaining 1.22× is made of.** The profile after the rewrite is
+flat: `long_divide` 26.3%, `mul_magnitudes` 18.8%, and roughly 15% in
+`malloc`/`free`/`memmove`. No single function to fix. Closing an 18% gap from
+here means attacking the digit-per-`u8` representation and the fresh `Vec`
+per result — the same class of change this document already pre-registers for
+strings, and for the same reason: one allocation per value where the C++ has
+none.
+
+**Why stopping here is defensible, and where it is not.** The comparison
+flatters the Rust side. It times arithmetic alone against a C++ figure that
+includes parsing, dispatch and variable lookup, because at Phase 2 there is
+no Rust interpreter to measure — the parser is Phase 3 and dispatch is Phase
+4. So 1.22× is a **lower bound** on the real gap, and it will get worse, not
+better, once the Rust side starts paying those costs. Do not read this entry
+as "nearly at parity".
+
+**Re-measure at Phase 4**, alongside the string-representation question above.
+That is when a like-for-like comparison first exists, and it is already what
+this document schedules for the heap number.
