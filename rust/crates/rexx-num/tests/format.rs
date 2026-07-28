@@ -427,6 +427,41 @@ fn exponent_oversize_message_uses_the_pre_carry_exponent_not_the_final_one() {
     assert_eq!(err.message(), "Exponent of \"9.996\" is too large for 1 spaces.");
 }
 
+#[test]
+fn exponent_oversize_is_still_reported_when_only_the_post_carry_exponent_overflows_expp() {
+    // Regression: an earlier version of the pre-carry fix above dropped the
+    // interpreter's *second* exponent-width check entirely
+    // (`NumberStringClass.cpp:2126-2193`), which redoes the trigger/width
+    // check after the decimal-rounding carry the first check couldn't have
+    // known about. 9.996E+99's pre-carry exponent (99, two digits) fits
+    // `expp` 2, but rounding to 0 decimals carries it to 100 (three
+    // digits), which does not -- confirmed against the interpreter, and by
+    // `crates/rexx-num/tests/gen-curated-sets.py fmtcarry` (15,840 cases
+    // built specifically for this, 0 divergences after the fix, 148 before
+    // it).
+    let err = fmt("9.996e99", 9, Form::Scientific, None, Some(0), Some(2), None).unwrap_err();
+    assert_eq!(err.message(), "Exponent of \"1\" is too large for 2 spaces.");
+}
+
+#[test]
+fn exponent_oversize_can_be_triggered_for_the_first_time_by_a_post_carry_exponent() {
+    // A sharper version of the same regression: here the pre-carry state
+    // isn't exponential at all (adjusted exponent 9 does not clear `expt`
+    // 10), so the first check has nothing to check -- only the carry from
+    // rounding away the ".6" pushes the adjusted exponent to 10, which
+    // *does* trigger, for the first time, only at this second check.
+    // Confirmed against the interpreter. The substitution keeps the
+    // mid-computation trailing zeros from the interpreter's own rounding
+    // step (`mathRound`, which -- like `Number::round_to`, and unlike
+    // `round_to_places` -- carries by bumping the exponent and holding the
+    // digit count fixed): "1.000000000", not the trimmed "1"
+    // `resolve_exponential_state`'s rounder would produce for the same
+    // value.
+    let err =
+        fmt("9999999999.6", 15, Form::Scientific, None, Some(0), Some(1), Some(10)).unwrap_err();
+    assert_eq!(err.message(), "Exponent of \"1.000000000\" is too large for 1 spaces.");
+}
+
 // ---- FORMAT: carry re-derives the exponential form -------------------------
 
 #[test]

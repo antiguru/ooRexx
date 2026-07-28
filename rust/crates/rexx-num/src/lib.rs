@@ -135,12 +135,69 @@ impl ArithError {
 /// `rexx-inventory`'s table keeps them literal -- see its build script's
 /// `<Sub position="N"/>` rendering rule -- so filling them in is this
 /// crate's job, not the generator's.
+///
+/// A single left-to-right pass over `text`, copying `subs` in without ever
+/// re-scanning what was just copied. Doing this with `str::replace` per
+/// placeholder instead (as an earlier version did) re-scans the whole
+/// string on every call, so a substitution value that itself contains `&2`
+/// gets mangled by the very next replacement: `substitute("… &1 … &2",
+/// &["&2", "X"])` should read `"… &2 … X"`, but sequential replacement first
+/// turns `&1` into the literal text `&2`, then turns *both* the original
+/// `&2` and that just-inserted one into `X`. This crate's own arithmetic
+/// substitutions now echo operand text back (`ArithError`'s `PowerOverflow`/
+/// `PowerExponentNotWhole`), so this is not merely theoretical.
 pub(crate) fn substitute(text: &str, subs: &[&str]) -> String {
-    let mut out = text.to_string();
-    for (i, s) in subs.iter().enumerate() {
-        out = out.replace(&format!("&{}", i + 1), s);
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        if c != '&' {
+            out.push(c);
+            continue;
+        }
+        let digits_start = i + c.len_utf8();
+        let mut digits_end = digits_start;
+        while let Some(&(j, d)) = chars.peek() {
+            if !d.is_ascii_digit() {
+                break;
+            }
+            digits_end = j + d.len_utf8();
+            chars.next();
+        }
+        match text[digits_start..digits_end].parse::<usize>() {
+            Ok(n) if n >= 1 && n <= subs.len() => out.push_str(subs[n - 1]),
+            // No digits at all, or a position this call didn't supply a
+            // substitution for: pass the `&` and whatever digits followed
+            // it through unchanged rather than silently dropping them.
+            _ => {
+                out.push('&');
+                out.push_str(&text[digits_start..digits_end]);
+            }
+        }
     }
     out
+}
+
+#[cfg(test)]
+mod substitute_tests {
+    use super::substitute;
+
+    #[test]
+    fn fills_placeholders_in_order() {
+        assert_eq!(substitute("&1 and &2", &["a", "b"]), "a and b");
+    }
+
+    #[test]
+    fn a_substitution_value_shaped_like_a_placeholder_does_not_get_rewritten_again() {
+        // The bug a sequential `str::replace` implementation has: filling
+        // &1 with the literal text "&2" must not make the *original* &2
+        // placeholder -- or the newly-inserted "&2" -- collide.
+        assert_eq!(substitute("… &1 … &2", &["&2", "X"]), "… &2 … X");
+    }
+
+    #[test]
+    fn an_unsupplied_or_malformed_placeholder_passes_through_unchanged() {
+        assert_eq!(substitute("&1 &9 &", &["a"]), "a &9 &");
+    }
 }
 
 /// Looks up `major.sub` in the generated message table and fills its

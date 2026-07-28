@@ -126,33 +126,54 @@ impl Number {
             Some(expt.map(|e| e as i64).unwrap_or(digits as i64))
         };
 
-        // The C++ side (`NumberStringClass.cpp:2021-2062`) checks `expp`
-        // against the exponent it derives from `this` alone, entirely
-        // before the section that later applies `after` and can carry --
-        // it has no notion yet of the value carry will eventually produce.
-        // So the check (and its substitution) needs its own, uncarried
-        // trigger/grouping computed the same way `resolve_exponential_state`
-        // computes its first guess, not the final, carry-resolved one that
-        // drives the successful-render path below. Confirmed by forcing a
-        // carry that bumps the exponent from 20 to 21 digits (`9.996E+20`
-        // rounded to 0 decimals) while `expp` is too narrow for either: the
-        // reported mantissa is `"9.996"` (reframed at the pre-carry 20), not
+        // The C++ side checks `expp` *twice*. The first check
+        // (`NumberStringClass.cpp:2021-2062`) runs against the exponent it
+        // derives from `this` alone, before the section that applies
+        // `after` and can carry -- it has no notion yet of the value carry
+        // will eventually produce. So this first check (and its
+        // substitution) needs its own, uncarried trigger/grouping computed
+        // the same way `resolve_exponential_state` computes its first
+        // guess, not the final, carry-resolved one that drives the
+        // successful-render path below. Confirmed by forcing a carry that
+        // bumps the exponent from 20 to 21 digits (`9.996E+20` rounded to 0
+        // decimals) while `expp` is too narrow for either: the reported
+        // mantissa is `"9.996"` (reframed at the pre-carry 20), not
         // `"0.9996"` (reframed at the post-carry 21).
         let initial_eng_exp = expt.and_then(|expt| {
             let a = adjusted(&n1);
             let triggered = a as i64 >= expt || (a < 0 && (n1.exponent as i64).abs() > 2 * expt);
             triggered.then(|| group(form, a))
         });
-        if let (Some(exp0), Some(width)) = (initial_eng_exp, expp) {
-            let needed = exp0.unsigned_abs().to_string().len() as u32;
-            if needed > width {
-                let mantissa_text = render_integer_padded(&reframe(&n1, exp0), None, None, "")
-                    .expect("`before` is None, so the width check cannot fail");
-                return Err(FormatError::ExponentOversize(crate::error_text(
-                    93,
-                    941,
-                    &[&mantissa_text, &width.to_string()],
-                )));
+        if let Some(width) = expp {
+            if let Some(exp0) = initial_eng_exp {
+                let needed = exp0.unsigned_abs().to_string().len() as u32;
+                if needed > width {
+                    let mantissa_text = render_integer_padded(&reframe(&n1, exp0), None, None, "")
+                        .expect("`before` is None, so the width check cannot fail");
+                    return Err(FormatError::ExponentOversize(crate::error_text(
+                        93,
+                        941,
+                        &[&mantissa_text, &width.to_string()],
+                    )));
+                }
+            }
+            // The C++ redoes the whole trigger/width check a *second* time,
+            // right after the decimal-rounding carry that the first check
+            // couldn't have known about (`NumberStringClass.cpp:2126-2193`,
+            // a kludge the comment there attributes to [bugs:#1474]). Two
+            // shapes need it: a carry that grows an *already* -triggered
+            // exponent's digit count (`9.996E+99` rounded to 0 decimals at
+            // DIGITS 9, `expp` 2 -- pre-carry exponent 99 fits, post-carry
+            // 100 does not), and a carry that triggers exponential form for
+            // the first time on a value that started plain (`9999999999.6`
+            // at DIGITS 15, `expt` 10, `after` 0, `expp` 1 -- adjusted
+            // exponent 9 does not clear the trigger, but rounding away the
+            // ".6" carries it to 10, which does). Both confirmed against
+            // `build/bin/rexx`; the first was this crate's own regression,
+            // caught by review, not by any of the 21,296 cases the four
+            // curated FORMAT sets already ran.
+            if let Some(err) = post_carry_exponent_error(&n1, initial_eng_exp, form, expt, after, width) {
+                return Err(err);
             }
         }
 
@@ -302,6 +323,99 @@ fn resolve_exponential_state(
         None => framed,
     };
     (eng_exp, rounded)
+}
+
+/// Redoes the exponent-width trigger/check after the decimal-place cut
+/// `after` makes, the way `NumberStringClass.cpp:2126-2193` does right
+/// after its own rounding call (`mathRound`, `NumberStringMath.cpp:315`) --
+/// see the call site's doc comment for *why* a second check exists at all.
+/// Returns `None` when no cut is even possible (`after` omitted), when the
+/// number has no decimals to cut, or when nothing is actually dropped --
+/// the interpreter's own decimals section only reaches its redo under the
+/// same conditions.
+///
+/// This cannot reuse `resolve_exponential_state`'s already-carry-aware
+/// result for two reasons. First, its trigger check is a genuine *redo*,
+/// not a refinement: the interpreter recomputes `adjustedExponent` from
+/// scratch after rounding and, if the number was not already exponential,
+/// applies the ordinary upper-bound trigger fresh -- which
+/// `resolve_exponential_state` also does, so the two agree on *whether* and
+/// *at what exponent* the result ends up exponential (confirmed: this
+/// crate's existing carry tests, e.g.
+/// `after_rounding_carry_can_cross_from_plain_into_exponential`, were
+/// unaffected by this fix). Second, and this is what actually needs a
+/// separate path, the interpreter's rounding here (`mathRound`) carries
+/// by **bumping the exponent and holding the digit count fixed**, not by
+/// growing the digit count the way `round_to_places` (`resolve_exponential_
+/// state`'s rounder) does -- both land on the same *value*, so the
+/// successful-render path is unaffected either way, but they disagree on
+/// digit count, and this substitution echoes the mid-computation digit
+/// count verbatim. Confirmed against `build/bin/rexx`: `9999999999.6` at
+/// DIGITS 15, `after` 0, `expp` 1, `expt` 10 reports the mantissa as
+/// `"1.000000000"` (nine trailing zeros, matching `mathRound`/`Number::
+/// round_to`'s fixed-digit-count carry), not `resolve_exponential_state`'s
+/// trimmed `"1"`.
+fn post_carry_exponent_error(
+    n1: &Number,
+    eng_exp0: Option<i32>,
+    form: Form,
+    expt: Option<i64>,
+    after: Option<u32>,
+    width: u32,
+) -> Option<FormatError> {
+    let after = after?;
+    // The state `mathRound` actually rounds: reframed to mantissa scale by
+    // the first check's exponent if it triggered, `n1` itself (a no-op
+    // reframe) otherwise.
+    let pre_round = reframe(n1, eng_exp0.unwrap_or(0));
+    if pre_round.exponent >= 0 {
+        return None; // no decimal places to cut
+    }
+    let adjusted_decimals = -i64::from(pre_round.exponent);
+    if adjusted_decimals <= i64::from(after) {
+        return None; // `after` already covers every decimal place present
+    }
+    let excess = adjusted_decimals - i64::from(after);
+    let len = pre_round.digits.len() as i64;
+    if excess >= len {
+        // The interpreter's own "rounds away to a single digit or zero"
+        // branch (`NumberStringClass.cpp:2100-2118`), which does not redo
+        // the trigger/width check at all.
+        return None;
+    }
+    // `Number::round_to`'s carry -- bump the exponent, keep the digit count
+    // -- is `mathRound`'s; `round_to_places` (used for the successful
+    // render) grows the digit vector instead. See this function's doc
+    // comment for why that difference matters here specifically.
+    let rounded = pre_round.round_to((len - excess) as u32);
+    // Back to true scale: `rounded` is still relative to `eng_exp0`.
+    let true_scale = Number {
+        negative: rounded.negative,
+        digits: rounded.digits,
+        exponent: rounded.exponent + eng_exp0.unwrap_or(0),
+    };
+    let adjusted2 = adjusted(&true_scale);
+    let triggered = eng_exp0.is_some()
+        || matches!(
+            expt,
+            Some(expt) if adjusted2 as i64 >= expt
+                || (adjusted2 < 0 && (true_scale.exponent as i64).abs() > 2 * expt)
+        );
+    if !triggered {
+        return None;
+    }
+    let exp2 = group(form, adjusted2);
+    let needed = exp2.unsigned_abs().to_string().len() as u32;
+    if needed <= width {
+        return None;
+    }
+    let mantissa_text = render_integer_padded(&reframe(&true_scale, exp2), None, None, "")
+        .expect("`before` is None, so the width check cannot fail");
+    Some(FormatError::ExponentOversize(crate::error_text(
+        93,
+        941,
+        &[&mantissa_text, &width.to_string()],
+    )))
 }
 
 /// Rounds (half up) `n` to exactly `places` digits after the decimal point --
