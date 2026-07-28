@@ -497,12 +497,28 @@ The resolution: `pub(crate)` is the intended **end state**, and each item ships
 `pub(crate)` in the code blocks below as a defect while the tests are where they
 are.
 
-**Owed to Task 3.5, and the list has grown.** Task 3.5 is the first in-crate
-caller, so it narrows **all four** items and moves their tests into `#[cfg(test)]`
-modules beside the code: the four `TokenCursor` tests out of `tests/tokens.rs`,
-and whatever in `tests/clause.rs` and `tests/scanner.rs` touches the other three.
-Narrowing without moving the tests does not compile and will simply be reverted,
-which is the whole reason this is written down rather than left as a preference.
+**Done in Task 3.5, and here is what it actually cost.** Task 3.5 narrowed all
+four items and moved their tests into `#[cfg(test)]` modules beside the code. Two
+consequences the plan should carry rather than have each later task rediscover:
+
+* **A task's own `tests/<name>.rs` file may not be reachable.** `tests/expr.rs`
+  cannot exist, because `parse_expr` takes `&ParseCtx` and `&mut TokenCursor` and
+  an integration test cannot construct either once they are `pub(crate)`. Where a
+  Files list names `tests/<name>.rs` for something that touches a `pub(crate)`
+  type, the tests go in-crate and the Files list is what is wrong.
+* **Narrowing costs `#[allow(dead_code)]`**, because the library target compiles
+  with `cfg(test)` off and the items are then unused until a real caller lands.
+  `#[expect]` is unusable here: the lint fires in one of the two compilations and
+  not the other, so `expect` itself becomes an unfulfilled-expectation warning.
+  **Every such `allow` must name the task that deletes it**, and a task that
+  becomes a real caller must delete the ones it satisfies. An `allow` with no
+  named owner is permanent, which is the failure mode to avoid.
+
+**Weigh this before Task 3.6.** The narrowing ratchets: 3.6 and 3.7 will add more
+`allow`s before the last of them clears. The alternative is to leave items `pub`
+until every in-crate caller exists and narrow once, at the end. Task 3.5 took the
+per-task route and reported the cost honestly, so the data for choosing is in its
+report.
 
 **`ParseError` is created here, not in Task 3.8.** Every task from this one on
 returns it, so define the minimum now — `{ code: u16, sub: u16, byte: usize,
@@ -519,12 +535,21 @@ through:
 pub(crate) struct ParseCtx<'a> {
     pub source: &'a ProgramSource,
     pub tokens: &'a [Token],
-    /// Read-only by the time parsing starts: `scan` has already interned every
-    /// symbol in the program. Tasks 3.6 and 3.7 need it to compare a clause's
-    /// first symbol against the pre-interned keyword ids, and Task 3.6 needs it
-    /// to recover a label's spelling when it builds `Program::labels`.
+    /// Tasks 3.6 and 3.7 need it to compare a clause's first symbol against the
+    /// pre-interned keyword ids, and Task 3.6 needs it to recover a label's
+    /// spelling when it builds `Program::labels`.
     ///
     /// Not for error substitutions: this phase does not reproduce them.
+    ///
+    /// **Not fully read-only, which an earlier draft of this task claimed.**
+    /// Task 3.5 found two names the scanner never interned because they are not
+    /// symbol tokens: a message name written as a literal, `a~'length'`, which
+    /// resolves case-insensitively exactly as `a~length` does (measured, both
+    /// give 3), and the bracket form's implicit `[]`. Task 3.5 therefore stores
+    /// `ExprKind::Message::name` as `Box<[u8]>`, the one name in the tree that is
+    /// not a `SymbolId`, rather than widening this to `&mut` or reaching for
+    /// interior mutability. Interning at parse time remains possible, but it is a
+    /// change to this borrow and so a decision for whoever needs it.
     pub symbols: &'a SymbolTable,
     /// Every reserved *spelling* this parser recognises, pre-interned by `scan`
     /// before it reads any source, so their ids are fixed and every keyword
@@ -1087,6 +1112,19 @@ instruction that just ended narrows its own end separately — `RexxInstructionI
 sets its end to the **start offset** of the `THEN` token
 (`IfInstruction.cpp:58–66`), which is why the traced text is `if y > 5 ` with the
 trailing blank and stops before `then`.
+
+**Task 3.6 owes the empty-expression sub-numbers.** `parse_expr` cannot know them,
+because the sub-number depends on the instruction the expression sits in, not on
+the expression: an empty expression is **35.918** in an assignment and **35.929**
+in an `IF`, measured. Task 3.5 therefore reports a placeholder 35.1 from inside the
+grammar, which is a number the interpreter does not use there. Task 3.6 must call
+the expression parser and raise its own sub-number rather than pass 35.1 through.
+
+Related, and settled by measurement rather than by reading the C++: `parse_logical`
+returns `Result<Expr, _>` and not `Result<Option<Expr>, _>`, because
+`if , 1 = 1 then nop` is **35.929** — the oracle raises on an absent *first*
+element too. That makes `requiredLogicalExpression`'s own null check dead code in
+the C++, so do not port it.
 
 **Task 3.6 also owes error 47.1, `INTERPRET data must not contain labels`.**
 Measured: `interpret "here: nop"` gives rc 47 and the message

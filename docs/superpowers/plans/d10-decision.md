@@ -381,8 +381,20 @@ where the message has one.
 | `a~"b` | 6.3 |
 
 Two results that look like errors and are not, and that a parser will get wrong
-if it guesses: `x = a.` is a valid stem reference, and `x = f(,)` is a valid call
-with two omitted arguments.
+if it guesses: `x = a.` is a valid stem reference, and `x = f(,)` is a valid call.
+
+**Corrected by Task 3.5: `f(,)` passes ZERO arguments, not two.** Measured with
+`arg()` inside the callee: `f(,)` gives **0** and `f(1,)` gives **1**, because
+`parseArgList` returns `realcount` and pops trailing omitted arguments. An array
+literal does not: `parseFullSubExpression` returns `total`, so `(1,)` is a
+two-element array while `f(1,)` is a one-argument call. The same trailing comma
+means different things in the two forms, which is exactly the shape of thing a
+parser gets wrong by analogy.
+
+Note how the original error was made, because the instrument caused it: a first
+probe used `~items`, which counts non-nil elements and therefore cannot tell a
+two-element array with a hole from a one-element array. `~size` is the one that
+answers the question.
 `x = a b if` is also valid, because keywords are not reserved.
 `x = -` is 35.918 rather than 35.901, because the trailing `-` is a continuation
 and the expression is empty.
