@@ -7,11 +7,29 @@ scanner, is contradicted on every axis that was measured.**
 Measured 2026-07-28 on Linux, against `build/bin/rexx` for values and
 `build/bin/rexxc` for syntax errors.
 The spike wrote the expression grammar twice over one shared token stream, in
-`rust/crates/rexx-parse-spike/`, and was deleted once these numbers were
-recorded.
+`rust/crates/rexx-parse-spike/`.
 Both arms passed the same corpus: 59 expressions whose value the oracle prints,
 27 malformed expressions whose error the oracle reports, and 7 expressions the
 oracle accepts but the spike's evaluator cannot value.
+
+**Reproducing.**
+Task 3.1 Step 5 says to delete the spike crate, and this branch does not carry
+it, but deleting it outright would leave every number below with nothing behind
+it.
+The crate as it stood when these numbers were taken is preserved on the unmerged
+branch **`spike/d10`**, commit `afdd3b1b`, whose parent is the commit that added
+this document.
+From `rust/`:
+
+```sh
+cargo test --offline -p rexx-parse-spike            # 7 tests, both arms
+cargo run --offline --release -p rexx-parse-spike --example throughput
+```
+
+`git show spike/d10 --stat` lists the ten files.
+A patch of the same commit also sits at
+`.superpowers/sdd/2026-07-28-phase-3-parser/d10-spike.patch`, which is gitignored
+and therefore local to the machine that ran the spike.
 
 ## The four axes
 
@@ -19,7 +37,7 @@ oracle accepts but the spike's evaluator cannot value.
 |---|---|---|
 | Grammar lines of code | **277** | 336 (+21%) |
 | Error fidelity, 27 cases | **27/27** | 27/27, but only with a hand-written pre-pass (below) |
-| Grammar-layer throughput | **1.10–1.24 ms** | 9.6–10.6 ms (**8.6×** slower) |
+| Grammar-layer throughput | **1.08–1.15 ms** | 9.3–12.1 ms (median **8.3×** slower) |
 | Net new dependencies | **0** | 12 in this workspace, and a C compiler on the build path |
 
 Lines of code counts non-blank, non-comment lines outside the licence banner, in
@@ -103,24 +121,44 @@ A tab counts as one.
 
 ## Axis 3 in detail, and what it is not
 
+**Exactly what was run.** `rust/crates/rexx-parse-spike/examples/throughput.rs`,
+built with `--release`, over
+`interpreter/RexxClasses/CoreClasses.orx` (its default argument, and identical to
+`build/bin/CoreClasses.orx`), 7 whole invocations of the program, each doing 50
+timed passes per arm after one untimed warm pass:
+
+```sh
+cd rust && cargo run --offline --release -p rexx-parse-spike --example throughput
+```
+
 `CoreClasses.orx` is 4,193 lines, 3,268 of them non-blank.
 The spike parses expressions and not instructions, so it cannot parse the file;
 1,912 of those lines parse as expressions under both arms, 72,315 bytes, and the
 two arms disagreed on acceptance for **zero** lines.
-Those lines were then timed, 50 passes each, after one untimed warm pass.
+Only those 1,912 lines are timed, so both arms do identical work on identical
+input, and the lines neither arm accepts cost nothing.
 
-| | per pass | MB/s |
+| | per pass, 7 runs | MB/s |
 |---|---|---|
-| Shared scanner alone | 0.59–0.66 ms | 110–123 |
-| Hand, scanner included | 1.76–1.83 ms | 39–41 |
-| `chumsky`, parser built once | 9.6–10.6 ms | 6.8–7.6 |
-| `chumsky`, parser rebuilt per parse | 11.4–12.9 ms | 5.6–6.3 |
+| Shared scanner alone | 0.62–0.68 ms | 106–116 |
+| Hand, scanner included | 1.77–1.79 ms | 40–41 |
+| `chumsky`, parser built once | 9.3–12.1 ms | 6.0–7.7 |
+| `chumsky`, parser rebuilt per parse | 11.2–11.4 ms | 6.4 |
 
-Subtracting the shared scanner leaves the layer D10 is about: 1.10–1.24 ms
-against 9.6–10.6 ms, a ratio of **8.6×**.
-Rebuilding the combinator parser on every call costs only 1.1–1.2× on top of
-building it once, so the gap is the combinators themselves and not construction
-overhead.
+**What "grammar layer" excludes.** The shared scanner, which is one function
+called by both arms, is timed on its own and subtracted from each arm's figure.
+Nothing else is subtracted: both figures still include building the AST, and the
+combinator figure in the third row excludes only parser *construction*, which the
+fourth row prices separately.
+
+That leaves 1.08–1.15 ms for the hand-written arm against 9.3–12.1 ms for the
+combinators.
+Per-run ratios across the 7 runs were 8.2, 8.3, 8.3, 8.3, 8.7, 8.7 and 10.5, so
+the figure to quote is a **median of 8.3×**, not a single number.
+The hand-written arm is the stable one; the spread is entirely in the combinator
+measurement.
+Rebuilding the combinator parser on every call costs only 1.1× on top of building
+it once, so the gap is the combinators themselves and not construction overhead.
 
 **This is not the D2 cold-start number.** Under D2 that figure is the time to
 parse the whole file, and there is no instruction parser to measure yet.
@@ -222,13 +260,26 @@ same trade D1 already accepted for object handles.
 Settled by the spike and by reading the oracle's scanner.
 This is the part of the spike worth keeping, since the crate itself is gone.
 
-* Every token carries `(start_line, start_offset, end_line, end_offset)`.
-  Lines are 1-based, offsets are **0-based byte offsets within the token's own
-  physical line**, and errors 36.901 and 36.902 substitute `start_offset + 1`
-  and `start_line`.
-* The line reported is the token's own physical line, not the clause's first.
-  A comma continuation makes 36.901 say "line 3" for a clause whose trace header
-  says line 2.
+* Errors 36.901 and 36.902 need, for the offending token, the **1-based byte
+  offset within its own physical line** and that line's number.
+  The C++ stores both in every token, as `SourceLocation`'s `startLine` and
+  `startOffset` (`SourceLocation.hpp:52`), and substitutes `getOffset() + 1` and
+  `getLineNumber()`.
+  A Rust token does **not** need to store them: a whole-file byte offset plus a
+  binary search into the line index Task 3.2's `ProgramSource` already builds for
+  `SOURCELINE` yields the same pair, and the spike's own quadruple was a
+  convenience rather than a requirement.
+  Two things the derivation must get right.
+  It has to search on the **token's own** start offset and not the clause's,
+  because the line reported is the token's physical line: a comma continuation
+  makes 36.901 say "line 3" for a clause whose trace header says line 2.
+  And the line index has to place line starts after any `\r`, so that an in-line
+  offset on a CRLF file does not count the carriage return.
+  No token's text crosses a line break — a literal that tries to is error 6.2 or
+  6.3, and comments are not tokens — so a single start offset always lands inside
+  one line.
+* The offset is **bytes, not characters**, and a tab counts as one.
+  `x = "ää" || (a` reports position 15, where the `(` is the 13th character.
 * `Blank` is a token, emitted under the two-part rule quoted above.
   Nothing above the scanner may skip it.
 * Abuttal has **no** token.
@@ -327,5 +378,5 @@ and the expression is empty.
   than to close.
 
 The throughput gap will not change the answer on its own, but it is worth
-naming: under D2 the parse is cold-start time on every program run, so 8.6× in
+naming: under D2 the parse is cold-start time on every program run, so 8.3× in
 the grammar layer is a cost paid on every invocation, not once.
