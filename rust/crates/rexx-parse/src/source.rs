@@ -19,6 +19,27 @@
 
 use std::ops::Range;
 
+/// Where a `ProgramSource`'s text came from, which decides how it is divided
+/// into lines.
+///
+/// Every one of `ProgramSource::new`'s behaviours is program-only: splitting
+/// on CR and LF, truncating at a Ctrl-Z, and the `#!` first line the scanner
+/// skips. So this is a property of the source, fixed at construction, and not
+/// of a particular parse. Expressing it in one place is what makes it
+/// impossible to build a source one way and read it the other.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum SourceKind {
+    /// A whole program, from a file or a buffer
+    /// (`BufferProgramSource`).
+    Program,
+    /// The string an `INTERPRET` is about to run. Exactly one physical line:
+    /// the interpreter wraps the string in a one-element array
+    /// (`LanguageParser.cpp:450`, `new ArrayProgramSource(new_array(
+    /// interpretString), lineNumber)`), so nothing inside it can start a
+    /// second line.
+    Interpret,
+}
+
 /// The retained text of one Rexx program, indexed by physical line.
 ///
 /// Built once at construction; `line` and `line_of` are read-only lookups
@@ -26,26 +47,27 @@ use std::ops::Range;
 /// `line_of` on every diagnostic (see later tasks) and parse throughput is
 /// measured (Task 3.10).
 pub struct ProgramSource {
-    /// The program text. Truncated at the first Ctrl-Z (0x1A) byte, if any --
-    /// see `new` for why.
+    /// The program text. For a `Program`, truncated at the first Ctrl-Z (0x1A)
+    /// byte, if any -- see `new` for why.
     text: Vec<u8>,
     /// Byte range of each physical line's content, in order, with any line
     /// terminator excluded. Index 0 holds line 1 (`SOURCELINE` is 1-based).
     /// Starts are strictly increasing, which is what makes `line_of`'s
     /// binary search valid.
     lines: Vec<(usize, usize)>,
+    kind: SourceKind,
 }
 
 impl ProgramSource {
     /// Builds the line index for `text`.
     ///
-    /// A line ends at a `\r`, a `\n`, or end of input, whichever comes
-    /// first; a `\r` immediately followed by `\n` is one terminator (CRLF),
-    /// not two. This means a bare `\r` (no `\n`) ends a line on its own, and
-    /// a `\n` immediately followed by `\r` is two terminators, producing an
-    /// empty line between them -- both verified against `build/bin/rexx`
-    /// (`ProgramSource.cpp:387`-`441` scans for either byte and only
-    /// special-cases `\r` followed by `\n`).
+    /// For a `SourceKind::Program`, a line ends at a `\r`, a `\n`, or end of
+    /// input, whichever comes first; a `\r` immediately followed by `\n` is
+    /// one terminator (CRLF), not two. This means a bare `\r` (no `\n`) ends a
+    /// line on its own, and a `\n` immediately followed by `\r` is two
+    /// terminators, producing an empty line between them -- both verified
+    /// against `build/bin/rexx` (`ProgramSource.cpp:387`-`441` scans for
+    /// either byte and only special-cases `\r` followed by `\n`).
     ///
     /// The interpreter also treats a Ctrl-Z (0x1A) byte as an end-of-file
     /// mark, a legacy DOS/CP-M artifact: everything at and after the first
@@ -56,7 +78,29 @@ impl ProgramSource {
     /// `sourceline()` count; a comment left unclosed by the truncation
     /// raises the ordinary unmatched-comment error, confirming the bytes
     /// after 0x1A are never parsed at all.
-    pub fn new(mut text: Vec<u8>) -> Self {
+    ///
+    /// A `SourceKind::Interpret` gets neither rule. Its text is one line from
+    /// end to end, because `ArrayProgramSource` holds it as a single array
+    /// element, so a `\n`, a `\r` or a `0x1A` inside it is just a byte on that
+    /// line and the scanner rejects it as error 13.1 the way it rejects any
+    /// other character that cannot appear in a program. Measured, all five:
+    /// `interpret "say 1" || '0a'x || "say 2"` is error 13.1, and so are the
+    /// same with `'0d'x`, with `'0d0a'x`, with `'1a'x` in the middle and with
+    /// `'1a'x` at the very end. For contrast `interpret "say 1; say 2"` prints
+    /// 1 and 2, so a `;` still separates clauses, and
+    /// `interpret "say c2x('" || '1a'x || "')"` prints `1A`, so a Ctrl-Z
+    /// inside a literal survives as data.
+    ///
+    /// Empty text is one empty line under `Interpret` and no lines at all
+    /// under `Program`, because the interpreter's array always has its one
+    /// element. Both scan to no tokens, and measured, `interpret ""` is
+    /// accepted and the program runs on.
+    pub fn new(mut text: Vec<u8>, kind: SourceKind) -> Self {
+        if kind == SourceKind::Interpret {
+            let lines = vec![(0, text.len())];
+            return ProgramSource { text, lines, kind };
+        }
+
         let scan_len = text.iter().position(|&b| b == 0x1a).unwrap_or(text.len());
         text.truncate(scan_len);
         let len = text.len();
@@ -90,13 +134,21 @@ impl ProgramSource {
             }
         }
 
-        ProgramSource { text, lines }
+        ProgramSource { text, lines, kind }
+    }
+
+    /// What this source holds, which the scanner needs because a `#!` first
+    /// line is skipped in a program and is an invalid character in an
+    /// `INTERPRET`.
+    pub fn kind(&self) -> SourceKind {
+        self.kind
     }
 
     /// The number of physical lines, as `SOURCELINE()` with no argument
     /// reports it. A completely empty program has zero lines (verified via
     /// `ProgramSource.cpp:387`'s `while (bufferLength != 0)`, which never
-    /// runs for an empty buffer, so `lineCount` stays 0).
+    /// runs for an empty buffer, so `lineCount` stays 0). Empty `INTERPRET`
+    /// text still has its one line.
     pub fn line_count(&self) -> usize {
         self.lines.len()
     }

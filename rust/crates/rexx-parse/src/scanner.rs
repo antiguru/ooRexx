@@ -40,10 +40,10 @@
 
 use std::ops::Range;
 
-use crate::ProgramSource;
 use crate::token::{
     Keywords, Operator, ParseError, SymbolClass, SymbolId, SymbolTable, Tag, Token, TokenKind,
 };
+use crate::{ProgramSource, SourceKind};
 
 /// The longest symbol the interpreter accepts
 /// (`LanguageParser::MAX_SYMBOL_LENGTH`). Measured: a 250-character name
@@ -102,27 +102,18 @@ pub struct Scanned {
     pub resources: Vec<ResourceBody>,
 }
 
-/// What the text being scanned is, which the scanner needs because a `#!`
-/// first line is skipped in a program and is not skipped in an `INTERPRET`.
-///
-/// This is a parameter rather than a second entry point so that no caller can
-/// arrive at the wrong behaviour by leaving something out.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum ScanMode {
-    /// A whole program, from a file or a buffer.
-    Program,
-    /// The string an `INTERPRET` is about to run.
-    Interpret,
-}
-
 /// Tokenises `source`.
 ///
 /// A clause terminator is emitted for each `;`, each uncontinued line end and
 /// for end of file, with consecutive terminators collapsed.
-pub fn scan(source: &ProgramSource, mode: ScanMode) -> Result<Scanned, ParseError> {
+///
+/// Whether this is a program or `INTERPRET` text is `source.kind()`, decided
+/// when the source was built, so there is no way to construct one and scan it
+/// as the other.
+pub fn scan(source: &ProgramSource) -> Result<Scanned, ParseError> {
     let mut symbols = SymbolTable::default();
     let keywords = Keywords::new(&mut symbols);
-    let mut scanner = Scanner::new(source, symbols, mode);
+    let mut scanner = Scanner::new(source, symbols);
     scanner.run()?;
     Ok(Scanned {
         tokens: scanner.tokens,
@@ -161,8 +152,10 @@ fn is_symbol_char(byte: u8) -> bool {
 /// (`ProgramSource.cpp:594`) guards it with `interpretAdjust == 0`, and
 /// measured, `interpret "#! nothing here"` is error 13.1 on `#` ('23'X) while
 /// the identical text as line 1 of a file is accepted and the program runs on.
-fn first_line(source: &ProgramSource, mode: ScanMode) -> usize {
-    if mode == ScanMode::Program && source.line(1).is_some_and(|line| line.starts_with(b"#!")) {
+fn first_line(source: &ProgramSource) -> usize {
+    if source.kind() == SourceKind::Program
+        && source.line(1).is_some_and(|line| line.starts_with(b"#!"))
+    {
         2
     } else {
         1
@@ -243,7 +236,7 @@ struct Scanner<'a> {
 }
 
 impl<'a> Scanner<'a> {
-    fn new(source: &'a ProgramSource, mut symbols: SymbolTable, mode: ScanMode) -> Self {
+    fn new(source: &'a ProgramSource, mut symbols: SymbolTable) -> Self {
         let text_end = source.line_span(source.line_count()).map_or(0, |s| s.end);
         let resource_id = symbols.intern("RESOURCE");
         let end_id = symbols.intern("END");
@@ -264,7 +257,7 @@ impl<'a> Scanner<'a> {
             clause_started: false,
             clause_first: 0,
         };
-        scanner.position(first_line(source, mode), 0);
+        scanner.position(first_line(source), 0);
         scanner
     }
 

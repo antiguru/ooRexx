@@ -1,8 +1,8 @@
-use rexx_parse::ProgramSource;
+use rexx_parse::{ProgramSource, SourceKind};
 
 #[test]
 fn sourceline_returns_lines_without_terminators() {
-    let src = ProgramSource::new(b"say 1\nsay 2\n".to_vec());
+    let src = ProgramSource::new(b"say 1\nsay 2\n".to_vec(), SourceKind::Program);
     assert_eq!(src.line_count(), 2);
     assert_eq!(src.line(1), Some(&b"say 1"[..]));
     assert_eq!(src.line(2), Some(&b"say 2"[..]));
@@ -16,7 +16,7 @@ fn sourceline_returns_lines_without_terminators() {
 
 #[test]
 fn line_of_is_one_based() {
-    let src = ProgramSource::new(b"say 1\nsay 2\n".to_vec());
+    let src = ProgramSource::new(b"say 1\nsay 2\n".to_vec(), SourceKind::Program);
     assert_eq!(src.line_of(0), 1);
     assert_eq!(src.line_of(4), 1);
     assert_eq!(src.line_of(6), 2);
@@ -27,7 +27,7 @@ fn source_may_hold_bytes_that_are_not_utf8() {
     // A Rexx literal may contain arbitrary bytes. Verified against the oracle:
     // a file holding a raw FF FE inside a literal runs, and c2x reports FFFE.
     // A String-typed source would refuse to construct here.
-    let src = ProgramSource::new(b"s = '\xff\xfe'\n".to_vec());
+    let src = ProgramSource::new(b"s = '\xff\xfe'\n".to_vec(), SourceKind::Program);
     assert_eq!(src.line(1), Some(&b"s = '\xff\xfe'"[..]));
     assert_eq!(src.line_count(), 1);
 }
@@ -36,7 +36,7 @@ fn source_may_hold_bytes_that_are_not_utf8() {
 fn final_line_without_trailing_newline_still_counts() {
     // Verified: build/bin/rexx on this exact two-line, no-trailing-newline
     // file reports sourceline() == 2, and sourceline(1) has no newline in it.
-    let src = ProgramSource::new(b"say sourceline()\nsay 2".to_vec());
+    let src = ProgramSource::new(b"say sourceline()\nsay 2".to_vec(), SourceKind::Program);
     assert_eq!(src.line_count(), 2);
     assert_eq!(src.line(1), Some(&b"say sourceline()"[..]));
     assert_eq!(src.line(2), Some(&b"say 2"[..]));
@@ -46,7 +46,7 @@ fn final_line_without_trailing_newline_still_counts() {
 fn crlf_terminators_are_excluded_from_line_content() {
     // Verified against build/bin/rexx: a CRLF file's sourceline(n) contains
     // neither the \r nor the \n, and the line count matches an LF-only file.
-    let src = ProgramSource::new(b"say 1\r\nsay 2\r\n".to_vec());
+    let src = ProgramSource::new(b"say 1\r\nsay 2\r\n".to_vec(), SourceKind::Program);
     assert_eq!(src.line_count(), 2);
     assert_eq!(src.line(1), Some(&b"say 1"[..]));
     assert_eq!(src.line(2), Some(&b"say 2"[..]));
@@ -59,7 +59,7 @@ fn crlf_pair_is_one_terminator_but_lone_cr_ends_a_line_on_its_own() {
     // count and content, matching ProgramSource.cpp's line_delimiters scan,
     // which treats \r and \n as equally valid terminators and only pairs a
     // \r immediately followed by \n into a single CRLF terminator.
-    let src = ProgramSource::new(b"say 1\rsay 2\r".to_vec());
+    let src = ProgramSource::new(b"say 1\rsay 2\r".to_vec(), SourceKind::Program);
     assert_eq!(src.line_count(), 2);
     assert_eq!(src.line(1), Some(&b"say 1"[..]));
     assert_eq!(src.line(2), Some(&b"say 2"[..]));
@@ -68,7 +68,7 @@ fn crlf_pair_is_one_terminator_but_lone_cr_ends_a_line_on_its_own() {
     // to a single terminator, so the same two lines come out of a CRLF file.
     // Asserting the CONTENT and not only the count, because a count alone
     // cannot distinguish one terminator from two.
-    let crlf = ProgramSource::new(b"say 1\r\nsay 2\r\n".to_vec());
+    let crlf = ProgramSource::new(b"say 1\r\nsay 2\r\n".to_vec(), SourceKind::Program);
     assert_eq!(crlf.line_count(), 2);
     assert_eq!(crlf.line(1), Some(&b"say 1"[..]));
     assert_eq!(crlf.line(2), Some(&b"say 2"[..]));
@@ -76,7 +76,7 @@ fn crlf_pair_is_one_terminator_but_lone_cr_ends_a_line_on_its_own() {
     // And the asymmetry that a CRLF-only rule gets wrong: \n\r is TWO
     // terminators, so an empty line sits between them. Oracle: sourceline()
     // reports 3 for this shape where \r\n reports 2.
-    let lfcr = ProgramSource::new(b"a\n\rb\n".to_vec());
+    let lfcr = ProgramSource::new(b"a\n\rb\n".to_vec(), SourceKind::Program);
     assert_eq!(lfcr.line_count(), 3);
     assert_eq!(lfcr.line(1), Some(&b"a"[..]));
     assert_eq!(lfcr.line(2), Some(&b""[..]));
@@ -87,7 +87,7 @@ fn crlf_pair_is_one_terminator_but_lone_cr_ends_a_line_on_its_own() {
 fn line_of_holds_at_terminators_at_the_end_and_on_an_empty_source() {
     // The boundary class the brief flags as highest-risk, and the one an
     // off-by-one here would propagate into every later task's spans.
-    let src = ProgramSource::new(b"ab\ncd\n".to_vec());
+    let src = ProgramSource::new(b"ab\ncd\n".to_vec(), SourceKind::Program);
 
     // A byte on a terminator belongs to the line that terminator ends.
     assert_eq!(src.line_of(2), 1, "the \\n closing line 1");
@@ -106,7 +106,7 @@ fn line_of_holds_at_terminators_at_the_end_and_on_an_empty_source() {
     assert_eq!(src.line_of(usize::MAX), 2, "far past the end");
 
     // An empty source has no lines, and line_of is still total.
-    let empty = ProgramSource::new(Vec::new());
+    let empty = ProgramSource::new(Vec::new(), SourceKind::Program);
     assert_eq!(empty.line_count(), 0);
     assert_eq!(empty.line_of(0), 1, "total even with nothing to point at");
     assert_eq!(empty.line(1), None, "and line() disagrees, deliberately");
@@ -114,7 +114,7 @@ fn line_of_holds_at_terminators_at_the_end_and_on_an_empty_source() {
 
 #[test]
 fn a_source_of_only_terminators_is_all_empty_lines() {
-    let src = ProgramSource::new(b"\n\n\n".to_vec());
+    let src = ProgramSource::new(b"\n\n\n".to_vec(), SourceKind::Program);
     assert_eq!(src.line_count(), 3);
     for n in 1..=3 {
         assert_eq!(src.line(n), Some(&b""[..]), "line {n}");
@@ -128,7 +128,7 @@ fn lf_then_cr_is_two_terminators_producing_an_empty_line() {
     // Verified against build/bin/rexx: unlike CR-then-LF, LF-then-CR is NOT
     // collapsed into one terminator, so it produces an empty line between
     // the two real lines. sourceline() reported 3 for this exact layout.
-    let src = ProgramSource::new(b"say 1\n\rsay 2\n".to_vec());
+    let src = ProgramSource::new(b"say 1\n\rsay 2\n".to_vec(), SourceKind::Program);
     assert_eq!(src.line_count(), 3);
     assert_eq!(src.line(1), Some(&b"say 1"[..]));
     assert_eq!(src.line(2), Some(&b""[..]));
@@ -142,7 +142,10 @@ fn ctrl_z_truncates_the_source_including_a_partial_line() {
     // line scanning, even mid-line: sourceline() dropped from 3 to 1 for a
     // file with a mid-second-line 0x1A, and the truncated first line kept
     // exactly the bytes before the 0x1A.
-    let src = ProgramSource::new(b"say 1\nsay 2\x1a more\nsay 3\n".to_vec());
+    let src = ProgramSource::new(
+        b"say 1\nsay 2\x1a more\nsay 3\n".to_vec(),
+        SourceKind::Program,
+    );
     assert_eq!(src.line_count(), 2);
     assert_eq!(src.line(1), Some(&b"say 1"[..]));
     assert_eq!(src.line(2), Some(&b"say 2"[..]));
@@ -150,7 +153,7 @@ fn ctrl_z_truncates_the_source_including_a_partial_line() {
 
 #[test]
 fn empty_source_has_no_lines() {
-    let src = ProgramSource::new(Vec::new());
+    let src = ProgramSource::new(Vec::new(), SourceKind::Program);
     assert_eq!(src.line_count(), 0);
     assert_eq!(src.line(1), None);
     assert_eq!(src.line(0), None);
@@ -161,7 +164,7 @@ fn line_span_indexes_the_same_bytes_line_returns() {
     // The scanner needs absolute offsets, so `line_span` must agree with
     // `line` byte for byte, including for the CRLF and bare-CR cases the
     // terminator rules cover.
-    let src = ProgramSource::new(b"say 1\r\nsay 22\rsay 333".to_vec());
+    let src = ProgramSource::new(b"say 1\r\nsay 22\rsay 333".to_vec(), SourceKind::Program);
     assert_eq!(src.line_count(), 3);
     for n in 1..=3 {
         let span = src.line_span(n).expect("line exists");
@@ -174,4 +177,43 @@ fn line_span_indexes_the_same_bytes_line_returns() {
     assert_eq!(src.line_span(3), Some(14..21));
     assert_eq!(src.line_span(0), None);
     assert_eq!(src.line_span(4), None);
+}
+
+#[test]
+fn interpret_text_is_one_line_from_end_to_end() {
+    // `ArrayProgramSource` holds the interpret string as a single array
+    // element (`LanguageParser.cpp:450`), so neither of `new`'s program rules
+    // applies: nothing splits it and nothing truncates it. Measured against
+    // the oracle: `interpret "say 1" || '0a'x || "say 2"` is error 13.1 on the
+    // 0A byte, and so are the `'0d'x`, `'0d0a'x` and `'1a'x` versions, which
+    // can only happen if those bytes are still on the line.
+    let src = ProgramSource::new(b"say 1\n\rsay 2\x1amore".to_vec(), SourceKind::Interpret);
+    assert_eq!(src.kind(), SourceKind::Interpret);
+    assert_eq!(src.line_count(), 1);
+    assert_eq!(src.line(1), Some(&b"say 1\n\rsay 2\x1amore"[..]));
+    assert_eq!(src.line_span(1), Some(0..17));
+    assert_eq!(src.line(2), None);
+    // Every byte is on line 1, including the ones a program would have used as
+    // terminators.
+    for byte in 0..17 {
+        assert_eq!(src.line_of(byte), 1, "byte {byte}");
+    }
+    assert_eq!(src.span_bytes(6..12), Some(&b"\rsay 2"[..]));
+
+    // The identical bytes as a program split into three lines and truncate at
+    // the Ctrl-Z, which is what makes this a property of the source.
+    let program = ProgramSource::new(b"say 1\n\rsay 2\x1amore".to_vec(), SourceKind::Program);
+    assert_eq!(program.line_count(), 3);
+    assert_eq!(program.line(2), Some(&b""[..]));
+    assert_eq!(program.line(3), Some(&b"say 2"[..]));
+
+    // Empty interpret text still has its one line, where an empty program has
+    // none. Measured: `interpret ""` is accepted and the program runs on.
+    let empty = ProgramSource::new(Vec::new(), SourceKind::Interpret);
+    assert_eq!(empty.line_count(), 1);
+    assert_eq!(empty.line(1), Some(&b""[..]));
+    assert_eq!(
+        ProgramSource::new(Vec::new(), SourceKind::Program).line_count(),
+        0
+    );
 }

@@ -8,12 +8,13 @@
 //! result distinguishes them, as with `say a/*c*/b` against `say a b`.
 
 use rexx_parse::{
-    Operator, ProgramSource, ScanMode, Scanned, SymbolClass, SymbolId, Tag, Token, TokenKind, scan,
+    Operator, ProgramSource, Scanned, SourceKind, SymbolClass, SymbolId, Tag, Token, TokenKind,
+    scan,
 };
 
 fn scan_all(text: &str) -> Scanned {
-    let source = ProgramSource::new(text.as_bytes().to_vec());
-    scan(&source, ScanMode::Program).expect("scans without error")
+    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
+    scan(&source).expect("scans without error")
 }
 
 fn scan_ok(text: &str) -> Vec<Token> {
@@ -62,8 +63,8 @@ fn symbols(toks: &[Token]) -> Vec<(SymbolId, SymbolClass)> {
 
 /// Scans `text` expecting a refusal, and answers `(code, sub, line)`.
 fn scan_err(text: &str) -> (u16, u16, usize) {
-    let source = ProgramSource::new(text.as_bytes().to_vec());
-    let error = scan(&source, ScanMode::Program).expect_err("does not scan");
+    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
+    let error = scan(&source).expect_err("does not scan");
     (error.code, error.sub, source.line_of(error.byte))
 }
 
@@ -438,7 +439,7 @@ fn one_symbol_has_one_id_and_as_many_spans_as_occurrences() {
     // be sliced out of a line. Two of these three are not on line 1, which is
     // the case that matters: `spans[1]` starts at byte 12 while line 1 is 7
     // bytes long.
-    let source = ProgramSource::new(b"aBc = 1\nsay ABC\nsay aBc".to_vec());
+    let source = ProgramSource::new(b"aBc = 1\nsay ABC\nsay aBc".to_vec(), SourceKind::Program);
     let spellings: Vec<&[u8]> = spans
         .iter()
         .map(|span| source.span_bytes(span.clone()).expect("a scanner span"))
@@ -475,8 +476,8 @@ fn a_literals_value_is_decoded_rather_than_sliced() {
     assert_eq!(literal_text(&scan_ok("''")), "");
     // A literal may hold bytes that are not text at all, which is why the
     // value is bytes.
-    let source = ProgramSource::new(b"'\xff\xfe'".to_vec());
-    let toks = scan(&source, ScanMode::Program).expect("scans").tokens;
+    let source = ProgramSource::new(b"'\xff\xfe'".to_vec(), SourceKind::Program);
+    let toks = scan(&source).expect("scans").tokens;
     assert_eq!(literal_bytes(&toks, 0), b"\xff\xfe");
 }
 
@@ -553,8 +554,8 @@ fn a_shebang_line_is_skipped_by_the_scanner_but_kept_by_the_line_index() {
     // `samples/` open with `#!/usr/bin/env rexx`, which `rexxc` accepts. The
     // line stays visible to `sourceline`.
     let text = "#!/usr/bin/env rexx\nsay 1";
-    let source = ProgramSource::new(text.as_bytes().to_vec());
-    let toks = scan(&source, ScanMode::Program).expect("scans").tokens;
+    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
+    let toks = scan(&source).expect("scans").tokens;
     assert_eq!(
         kinds(&toks),
         [Tag::Symbol, Tag::Blank, Tag::Symbol, Tag::Eoc]
@@ -567,6 +568,76 @@ fn a_shebang_line_is_skipped_by_the_scanner_but_kept_by_the_line_index() {
     assert_eq!(scan_err("x = 1\ny = #"), (13, 1, 2));
 }
 
+/// Scans `text` as `INTERPRET` would see it, which is as one physical line.
+fn scan_interpret(text: &str) -> Result<Vec<Token>, (u16, u16)> {
+    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Interpret);
+    assert_eq!(source.line_count(), 1, "interpret text is one line");
+    match scan(&source) {
+        Ok(scanned) => Ok(scanned.tokens),
+        Err(error) => Err((error.code, error.sub)),
+    }
+}
+
+#[test]
+fn interpret_text_is_one_line_so_a_line_terminator_in_it_is_an_invalid_character() {
+    // The interpreter wraps the string in a one-element array
+    // (`LanguageParser.cpp:450`), so nothing inside it starts a second line.
+    // Measured, every one of these is error 13.1:
+    //   interpret "say 1" || '0a'x || "say 2"   =>  13.1, ('0A'X)
+    //   interpret "say 1" || '0d'x || "say 2"   =>  13.1, ('0D'X)
+    //   interpret "say 1" || '0d0a'x || "say 2" =>  13.1, ('0D'X)
+    //   interpret "say 1" || '1a'x || "say 2"   =>  13.1, ('1A'X)
+    //   interpret "say 1" || '1a'x              =>  13.1, ('1A'X)
+    // so a Ctrl-Z is neither a terminator nor an end-of-file mark here.
+    for text in [
+        "say 1\nsay 2",
+        "say 1\rsay 2",
+        "say 1\r\nsay 2",
+        "say 1\x1asay 2",
+        "say 1\x1a",
+        "say 1\n",
+    ] {
+        assert_eq!(scan_interpret(text), Err((13, 1)), "{text:?}");
+    }
+
+    // The same bytes as a program split and truncate as they always have, so
+    // this is a difference in the source and not in the scanner.
+    assert_eq!(kinds(&scan_ok("say 1\nsay 2")).len(), 8);
+    assert_eq!(kinds(&scan_ok("say 1\rsay 2")).len(), 8);
+    assert_eq!(
+        kinds(&scan_ok("say 1\x1asay 2")).len(),
+        4,
+        "truncated at 0x1A"
+    );
+    assert_eq!(kinds(&scan_ok("say 1\x1a")).len(), 4);
+}
+
+#[test]
+fn a_semicolon_still_separates_interpret_clauses() {
+    // This is the case that has to keep working while the four above start
+    // failing. Measured: `interpret "say 1; say 2"` prints 1 then 2.
+    assert_eq!(
+        scan_interpret("say 1; say 2").map(|t| kinds(&t)),
+        Ok(vec![
+            Tag::Symbol,
+            Tag::Blank,
+            Tag::Symbol,
+            Tag::Eoc,
+            Tag::Symbol,
+            Tag::Blank,
+            Tag::Symbol,
+            Tag::Eoc
+        ])
+    );
+    // And a Ctrl-Z inside a literal is data, not a terminator. Measured:
+    // `interpret "say c2x('" || '1a'x || "')"` prints 1A.
+    let toks = scan_interpret("say c2x('\x1a')").expect("scans");
+    assert_eq!(literal_bytes(&toks, 0), b"\x1a");
+    // Empty interpret text is accepted and yields no tokens. Measured:
+    // `interpret ""` runs and the program continues.
+    assert_eq!(scan_interpret("").map(|t| t.len()), Ok(0));
+}
+
 #[test]
 fn an_interpret_does_not_skip_a_shebang_line() {
     // `ArrayProgramSource::setup` (`ProgramSource.cpp:594`) guards the skip
@@ -576,33 +647,25 @@ fn an_interpret_does_not_skip_a_shebang_line() {
     // as line 1 of a file is accepted and `say "after"` on line 2 prints
     // `after`. Skipping unconditionally would silently accept an empty
     // program.
-    let text = "#! nothing here";
-    let source = ProgramSource::new(text.as_bytes().to_vec());
-    let error = scan(&source, ScanMode::Interpret).expect_err("does not scan");
-    assert_eq!((error.code, error.sub), (13, 1));
-    assert_eq!(source.line_of(error.byte), 1);
+    assert_eq!(scan_interpret("#! nothing here"), Err((13, 1)));
+    assert_eq!(scan_interpret("#!"), Err((13, 1)));
+    let source = ProgramSource::new(b"#! nothing here".to_vec(), SourceKind::Program);
     assert!(
-        scan(&source, ScanMode::Program)
-            .expect("scans")
-            .tokens
-            .is_empty(),
+        scan(&source).expect("scans").tokens.is_empty(),
         "as a program the whole thing is the skipped line"
     );
+    assert_eq!(source.kind(), SourceKind::Program);
 
-    // The two modes agree on everything else, including a `#` that is not at
-    // the start of line 1.
-    for text in ["say 1", "#!\nsay 1\nsay 2", "say 1\n#! not line one"] {
-        let source = ProgramSource::new(text.as_bytes().to_vec());
-        let program = scan(&source, ScanMode::Program);
-        let interpret = scan(&source, ScanMode::Interpret);
-        let same = match (&program, &interpret) {
-            (Ok(a), Ok(b)) => kinds(&a.tokens) == kinds(&b.tokens),
-            (Err(a), Err(b)) => a == b,
-            _ => false,
-        };
-        // The first of these three differs by construction; the other two must
-        // not.
-        assert_eq!(same, !text.starts_with("#!"), "{text:?}");
+    // The two kinds agree on everything that is neither a `#!` first line nor
+    // a byte only one of them can see.
+    for text in ["say 1", "x = 'abc", "say abs (2.5)", ";;;", "say a/*c*/b"] {
+        let program = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
+        let interpret = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Interpret);
+        match (scan(&program), scan(&interpret)) {
+            (Ok(a), Ok(b)) => assert_eq!(kinds(&a.tokens), kinds(&b.tokens), "{text:?}"),
+            (Err(a), Err(b)) => assert_eq!(a, b, "{text:?}"),
+            (a, b) => panic!("{text:?} disagrees: {a:?} against {b:?}"),
+        }
     }
 }
 
@@ -612,8 +675,8 @@ fn spans_stay_absolute_across_every_line_terminator() {
     // so a span's absolute offset has to skip a different number of bytes on
     // each line. This is the invariant `span_bytes` and `TRACE` both rest on.
     let text = "say 1\r\nsay 22\rsay 333";
-    let source = ProgramSource::new(text.as_bytes().to_vec());
-    let scanned = scan(&source, ScanMode::Program).expect("scans");
+    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
+    let scanned = scan(&source).expect("scans");
     let last: Vec<(usize, &[u8])> = scanned
         .tokens
         .iter()
@@ -640,8 +703,8 @@ fn spans_stay_absolute_across_every_line_terminator() {
     // between them, and an empty line yields no tokens, so the offsets after
     // it must still land.
     let text = "say 1\n\rsay 2";
-    let source = ProgramSource::new(text.as_bytes().to_vec());
-    let scanned = scan(&source, ScanMode::Program).expect("scans");
+    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
+    let scanned = scan(&source).expect("scans");
     let after: Vec<(usize, &[u8])> = scanned
         .tokens
         .iter()
@@ -701,8 +764,8 @@ fn a_resource_body_is_copied_verbatim_rather_than_scanned() {
     // A scanner that tokenised the body would raise 6.2 and 6.1.
     let text =
         "say 1\nexit\n::resource data\nthis is 'unmatched and /* unclosed\nline two\n::END\n";
-    let source = ProgramSource::new(text.as_bytes().to_vec());
-    let scanned = scan(&source, ScanMode::Program).expect("scans");
+    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
+    let scanned = scan(&source).expect("scans");
     assert_eq!(scanned.resources.len(), 1);
     let body = &scanned.resources[0];
     assert_eq!(scanned.tokens[body.directive].kind.tag(), Tag::DColon);
@@ -727,16 +790,16 @@ fn a_resource_end_marker_is_a_prefix_match_on_the_upcased_value() {
     // `STOP` line does, and the resource then holds one line. The marker came
     // from a symbol, so it is upcased; a literal marker would not be.
     let text = "say 1\nexit\n::resource d2 end stop\nstop is lowercase, no match\nSTOP\n";
-    let source = ProgramSource::new(text.as_bytes().to_vec());
-    let scanned = scan(&source, ScanMode::Program).expect("scans");
+    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
+    let scanned = scan(&source).expect("scans");
     assert_eq!(scanned.resources.len(), 1);
     assert_eq!(scanned.resources[0].lines.len(), 1);
 
     // Measured: with `end 'STOP'`, a line beginning `STOPPING?` ends it, so
     // the test is a prefix and not an equality.
     let prefix = "exit\n::resource d2 end 'STOP'\n::END is just data here\nSTOPPING? yes\n";
-    let source = ProgramSource::new(prefix.as_bytes().to_vec());
-    let scanned = scan(&source, ScanMode::Program).expect("scans");
+    let source = ProgramSource::new(prefix.as_bytes().to_vec(), SourceKind::Program);
+    let scanned = scan(&source).expect("scans");
     assert_eq!(scanned.resources[0].lines.len(), 1);
 
     // A malformed `::RESOURCE` is left alone: the interpreter rejects it in
@@ -762,8 +825,8 @@ fn a_ctrl_z_ends_the_program_before_the_scanner_sees_it() {
     // `ProgramSource` truncates there, so what follows cannot raise a scan
     // error. Measured: `say 1` then a line beginning with 0x1A followed by
     // `say 'unclosed` gets rc 0 from `rexxc`.
-    let source = ProgramSource::new(b"say 1\n\x1asay 'unclosed\n".to_vec());
-    let scanned = scan(&source, ScanMode::Program).expect("scans");
+    let source = ProgramSource::new(b"say 1\n\x1asay 'unclosed\n".to_vec(), SourceKind::Program);
+    let scanned = scan(&source).expect("scans");
     assert_eq!(
         kinds(&scanned.tokens),
         [Tag::Symbol, Tag::Blank, Tag::Symbol, Tag::Eoc]
@@ -840,14 +903,14 @@ fn the_alternative_logical_not_bytes_are_accepted() {
     // (`Scanner.cpp:1110`), which is why they are not error 13.1 the way
     // every other byte above 0x7F is.
     for byte in [0xAAu8, 0xACu8] {
-        let source = ProgramSource::new(vec![byte, b'a']);
-        let toks = scan(&source, ScanMode::Program).expect("scans").tokens;
+        let source = ProgramSource::new(vec![byte, b'a'], SourceKind::Program);
+        let toks = scan(&source).expect("scans").tokens;
         assert_eq!(kinds(&toks), [Tag::Operator, Tag::Symbol, Tag::Eoc]);
         assert_eq!(operators(&toks), [Operator::Backslash]);
     }
     // And the same three-way look-ahead applies.
-    let source = ProgramSource::new(b"a \xac= b".to_vec());
-    let toks = scan(&source, ScanMode::Program).expect("scans").tokens;
+    let source = ProgramSource::new(b"a \xac= b".to_vec(), SourceKind::Program);
+    let toks = scan(&source).expect("scans").tokens;
     assert_eq!(operators(&toks), [Operator::BackslashEqual]);
 }
 
@@ -859,8 +922,8 @@ fn every_token_span_lies_inside_the_source_and_is_ordered() {
     // a line continuation: the interpreter records it after stepping to the
     // next line, so it covers that line's first byte.
     let text = "say 'a',\n'b' || abs(2.5) -- tail\n/* c */ x = .5\n";
-    let source = ProgramSource::new(text.as_bytes().to_vec());
-    let scanned = scan(&source, ScanMode::Program).expect("scans");
+    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
+    let scanned = scan(&source).expect("scans");
     let end = text.len();
     let mut previous_start = 0;
     for token in &scanned.tokens {
@@ -905,9 +968,9 @@ fn scan_always_answers_with_tokens_or_an_error_number() {
     let mut count = 0;
     for_every_string(steering, 4, |bytes| {
         count += 1;
-        let source = ProgramSource::new(bytes.to_vec());
+        let source = ProgramSource::new(bytes.to_vec(), SourceKind::Program);
         // Either outcome is fine. Not panicking is the property.
-        let _ = scan(&source, ScanMode::Program);
+        let _ = scan(&source);
     });
     assert!(count > 50_000, "the sweep actually ran: {count}");
 
@@ -917,8 +980,8 @@ fn scan_always_answers_with_tokens_or_an_error_number() {
     let mut count = 0;
     for_every_string(punctuation, 3, |bytes| {
         count += 1;
-        let source = ProgramSource::new(bytes.to_vec());
-        let _ = scan(&source, ScanMode::Program);
+        let source = ProgramSource::new(bytes.to_vec(), SourceKind::Program);
+        let _ = scan(&source);
     });
     assert!(count > 8_000, "the sweep actually ran: {count}");
 
@@ -933,8 +996,8 @@ fn scan_always_answers_with_tokens_or_an_error_number() {
             text.extend_from_slice(bytes);
             text.push(b'\'');
             text.push(marker);
-            let source = ProgramSource::new(text);
-            let _ = scan(&source, ScanMode::Program);
+            let source = ProgramSource::new(text, SourceKind::Program);
+            let _ = scan(&source);
         }
     });
     assert!(count > 15_000, "the sweep actually ran: {count}");
@@ -945,8 +1008,8 @@ fn scan_always_answers_with_tokens_or_an_error_number() {
         for prefix in [&b""[..], b"'", b"/*", b"a", b"1e", b"'41'"] {
             let mut bytes = prefix.to_vec();
             bytes.push(byte);
-            let source = ProgramSource::new(bytes);
-            let _ = scan(&source, ScanMode::Program);
+            let source = ProgramSource::new(bytes, SourceKind::Program);
+            let _ = scan(&source);
         }
     }
 }
