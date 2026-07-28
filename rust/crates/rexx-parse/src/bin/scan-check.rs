@@ -41,11 +41,35 @@ fn main() {
                 );
                 if dump {
                     for token in &scanned.tokens {
+                        // A literal's value is printed in hex because it is
+                        // bytes, not text, and because `c2x` is what the
+                        // interpreter side of the comparison prints.
+                        let payload = match &token.kind {
+                            TokenKind::Symbol { id, class } => {
+                                format!("{} {class:?}", scanned.symbols.name(*id))
+                            }
+                            TokenKind::Literal { value } => {
+                                value.iter().map(|b| format!("{b:02X}")).collect()
+                            }
+                            TokenKind::Operator(op) | TokenKind::Assignment(op) => {
+                                format!("{op:?}")
+                            }
+                            _ => String::new(),
+                        };
                         println!(
-                            "  {:?} {:?} {:?}",
+                            "  line {} {:?} {:?} {payload}",
+                            source.line_of(token.span.start),
                             token.span,
                             token.kind.tag(),
-                            source.line_of(token.span.start)
+                        );
+                    }
+                    for body in &scanned.resources {
+                        // The line count is what `~items` reports on the
+                        // interpreter's side, so this is directly comparable.
+                        println!(
+                            "  resource at line {}: {} lines",
+                            source.line_of(scanned.tokens[body.directive].span.start),
+                            body.lines.len()
                         );
                     }
                 }

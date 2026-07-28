@@ -765,3 +765,80 @@ fn every_token_span_lies_inside_the_source_and_is_ordered() {
         previous_start = token.span.start;
     }
 }
+
+/// Every string over `alphabet` of length up to `max`, applied to `f`.
+fn for_every_string(alphabet: &[u8], max: usize, mut f: impl FnMut(&[u8])) {
+    let mut buffer = Vec::new();
+    fn walk(alphabet: &[u8], max: usize, buffer: &mut Vec<u8>, f: &mut impl FnMut(&[u8])) {
+        f(buffer);
+        if buffer.len() == max {
+            return;
+        }
+        for &byte in alphabet {
+            buffer.push(byte);
+            walk(alphabet, max, buffer, f);
+            buffer.pop();
+        }
+    }
+    walk(alphabet, max, &mut buffer, &mut f);
+}
+
+#[test]
+fn no_input_makes_the_scanner_panic() {
+    // The literal packers index by position and rely on their own validation
+    // pass having accounted for every character, so a mis-ported bound would
+    // be a panic rather than a wrong answer. `scan` must always answer, with
+    // tokens or with an error number.
+    //
+    // The alphabet is the characters that steer the scanner: both quotes, both
+    // literal markers, hex and non-hex digits, both whitespace kinds, both
+    // continuation characters, the comment delimiters, and a line end.
+    let steering = b"'\"xb4g10 \t-,/*\n";
+    let mut count = 0;
+    for_every_string(steering, 4, |bytes| {
+        count += 1;
+        let source = ProgramSource::new(bytes.to_vec());
+        // Either outcome is fine. Not panicking is the property.
+        let _ = scan(&source);
+    });
+    assert!(count > 50_000, "the sweep actually ran: {count}");
+
+    // And the same for the operator and punctuation characters, which drive
+    // the multi-character look-ahead.
+    let punctuation = b"=<>\\~:|&%+-*/[](),;.";
+    let mut count = 0;
+    for_every_string(punctuation, 3, |bytes| {
+        count += 1;
+        let source = ProgramSource::new(bytes.to_vec());
+        let _ = scan(&source);
+    });
+    assert!(count > 8_000, "the sweep actually ran: {count}");
+
+    // The packers only run on a complete literal, and a complete one is at
+    // least six characters, so they need their own sweep over the content.
+    let nibbles = b"4g1 \t0";
+    let mut count = 0;
+    for_every_string(nibbles, 5, |bytes| {
+        for marker in [b'x', b'b'] {
+            count += 1;
+            let mut text = vec![b'\''];
+            text.extend_from_slice(bytes);
+            text.push(b'\'');
+            text.push(marker);
+            let source = ProgramSource::new(text);
+            let _ = scan(&source);
+        }
+    });
+    assert!(count > 15_000, "the sweep actually ran: {count}");
+
+    // Arbitrary bytes, including the ones that are error 13.1 and the ones
+    // that are an alternative logical not.
+    for byte in 0u8..=255 {
+        for prefix in [&b""[..], b"'", b"/*", b"a", b"1e", b"'41'"] {
+            let mut bytes = prefix.to_vec();
+            bytes.push(byte);
+            let source = ProgramSource::new(bytes);
+            let _ = scan(&source);
+        }
+    }
+}
