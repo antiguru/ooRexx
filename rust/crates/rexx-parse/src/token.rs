@@ -76,6 +76,13 @@ pub struct SymbolId(u32);
 /// Interns upcased symbol spellings. Owned by `ProgramSource`'s parse, handed
 /// to `Program` so Phase 4 can resolve a `SymbolId` back to text for error
 /// messages and `SIGNAL`'s label lookup.
+///
+/// What this buys, measured with the scanner rather than estimated:
+/// `CoreClasses.orx` holds 8,118 symbol occurrences over 526 distinct upcased
+/// symbols, and `StreamClasses.orx` 2,121 over 273. So this replaces ten
+/// thousand short-string allocations with that many hash probes plus a few
+/// hundred `Box<str>`. It also turns keyword recognition and variable lookup
+/// into integer comparisons.
 #[derive(Default, Debug)]
 pub struct SymbolTable {
     by_name: HashMap<Box<str>, SymbolId>,

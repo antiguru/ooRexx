@@ -15,9 +15,11 @@
 //! rather than taken from the ANSI standard; where they differ, the
 //! interpreter wins.
 
+mod scanner;
 mod source;
 mod token;
 
+pub use scanner::{ResourceBody, Scanned, scan};
 pub use source::ProgramSource;
 pub use token::{
     KeywordSet, Keywords, Operator, ParseCtx, ParseError, SymbolClass, SymbolId, SymbolTable, Tag,
