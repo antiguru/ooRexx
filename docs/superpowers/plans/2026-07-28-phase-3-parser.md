@@ -58,7 +58,8 @@ rust/crates/rexx-parse/
         lib.rs          # public API: parse_program -> Program,
                         # parse_interpret -> Fragment, ParseError
         source.rs       # ProgramSource: the retained text, line index, SOURCELINE
-        token.rs        # Token, TokenKind, Span, ParseCtx, TokenCursor
+        token.rs        # Token, TokenKind, Span, ParseCtx, TokenCursor,
+                        # SymbolId, SymbolTable, Keywords
         scanner.rs      # source -> tokens; comments, continuations, literals
         clause.rs       # tokens -> clauses; the `;`/EOC and label rules,
                         # clause spans, ClauseCursor
@@ -328,9 +329,14 @@ expected values taken from Step 1's probe rather than from intuition.
 
 **Interfaces:**
 - Consumes: `ProgramSource` from Task 3.2.
-- Produces: `Token { kind: TokenKind, span: Range<usize> }`, and
-  `scan(&ProgramSource) -> Result<Vec<Token>, ParseError>`. `TokenKind`
-  mirrors the C++ 19 classes in `interpreter/parser/Token.hpp`.
+- Produces: `Token { kind: TokenKind, span: Range<usize> }`, where
+  `TokenKind::Symbol` carries a `SymbolId` rather than text; `SymbolId`,
+  `SymbolTable` and `Keywords`; `ParseCtx` and `TokenCursor`; and
+  `scan(&ProgramSource) -> Result<Scanned, ParseError>` where
+  `Scanned { tokens: Vec<Token>, symbols: SymbolTable, keywords: Keywords }`.
+  `scan` returns the table because it owns interning; it cannot borrow one it is
+  still filling. `TokenKind` mirrors the C++ 19 classes in
+  `interpreter/parser/Token.hpp`.
 
 **`ParseError` is created here, not in Task 3.8.** Every task from this one on
 returns it, so define the minimum now — `{ code: u16, sub: u16, byte: usize,
@@ -347,6 +353,16 @@ through:
 pub(crate) struct ParseCtx<'a> {
     pub source: &'a ProgramSource,
     pub tokens: &'a [Token],
+    /// Read-only by the time parsing starts: `scan` has already interned every
+    /// symbol in the program. Tasks 3.6 and 3.7 need it to compare a clause's
+    /// first symbol against the pre-interned keyword ids, and Task 3.8 needs it
+    /// to put a symbol's name in an error message's substitutions.
+    pub symbols: &'a SymbolTable,
+    /// The 35 keyword spellings and the sub-keywords, interned by `scan`
+    /// before it reads any source, so their ids are fixed and a keyword test
+    /// is an integer comparison. Keywords are NOT reserved words, so this is
+    /// only ever consulted positionally — see Task 3.6.
+    pub keywords: &'a Keywords,
 }
 ```
 
@@ -393,6 +409,113 @@ impl TokenCursor {
 
 Tasks 3.5–3.7 build one of these over the clause they are parsing, with
 `TokenCursor::new(clause.tokens.clone())`.
+
+**Symbols are interned here, and this is the one decision in this task that is
+not a port.** A `Symbol` token carries a `SymbolId`, not its text.
+
+```rust
+/// A symbol's identity: the upcased spelling, interned. Two symbols with the
+/// same `SymbolId` name the same variable, method or label.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct SymbolId(u32);
+
+/// Interns upcased symbol spellings. Owned by `ProgramSource`'s parse, handed
+/// to `Program` so Phase 4 can resolve a `SymbolId` back to text for error
+/// messages and `SIGNAL`'s label lookup.
+#[derive(Default, Debug)]
+pub struct SymbolTable {
+    by_name: std::collections::HashMap<Box<str>, SymbolId>,
+    names: Vec<Box<str>>,
+}
+
+impl SymbolTable {
+    /// Intern `text`, upcasing it. Returns the same id for every spelling that
+    /// differs only in case.
+    pub fn intern(&mut self, text: &str) -> SymbolId {
+        // Upcase only when the text is not already upper, so the common case
+        // in machine-generated and conventionally-written Rexx allocates
+        // nothing on lookup.
+        let upper: Box<str> = if text.bytes().any(|b| b.is_ascii_lowercase()) {
+            text.to_ascii_uppercase().into()
+        } else {
+            text.into()
+        };
+        if let Some(&id) = self.by_name.get(&upper) {
+            return id;
+        }
+        let id = SymbolId(u32::try_from(self.names.len()).expect("symbols fit u32"));
+        self.names.push(upper.clone());
+        self.by_name.insert(upper, id);
+        id
+    }
+
+    /// The upcased spelling. Panics on an id from a different table, which is
+    /// a parser bug rather than a source error.
+    pub fn name(&self, id: SymbolId) -> &str {
+        &self.names[id.0 as usize]
+    }
+
+    /// Look up an already-interned symbol **without upcasing and without
+    /// interning**. `None` means no symbol with that exact spelling exists.
+    ///
+    /// This exists for `SIGNAL VALUE`, whose label name is computed at run time
+    /// and matched literally. Verified: with a label spelled `target:`,
+    /// `signal value 'TARGET'` reaches it but `signal value 'target'` raises
+    /// error 16.1 quoting `"target"`, while the static `signal TaRgEt` reaches
+    /// it because the static form goes through `intern` and is therefore
+    /// case-insensitive. Do not upcase here or the two forms stop differing.
+    pub fn get(&self, exact_upper_name: &str) -> Option<SymbolId> {
+        self.by_name.get(exact_upper_name).copied()
+    }
+}
+```
+
+**Why upcased, and why the span still matters.** Rexx folds symbol case:
+verified, `abc = 1` then `say ABC` and `say aBc` both print 1, and
+`Mixed.Case = 5` then `say MIXED.CASE` prints 5. But the *source* spelling is
+observable and must survive: `sourceline(1)` returns `abc = 1`, and `trace r` on
+`aBc = 2` prints `aBc = 2`, not the upcased form. The C++ makes exactly this
+split — `Scanner.cpp:1492-1511` copies the symbol upcased into the token's value
+and calls `setUpperOnly()`, while `tokenLocation` keeps the source position.
+So interning the upcased spelling is faithful to the oracle, not a deviation
+from it.
+
+**This means `Token` keeps its `span` regardless.** The `SymbolId` is the
+*identity*; the `span` is the *occurrence*. `TRACE` and `SOURCELINE` read the
+span, name resolution reads the id, and neither substitutes for the other.
+
+**What this buys.** Symbol occurrences in the two bootstrap files outnumber
+distinct upcased symbols by roughly an order of magnitude, so this replaces
+about ten thousand short-string allocations with that many hash probes plus a
+few hundred `Box<str>`. It also turns keyword recognition and variable lookup
+into integer comparisons: pre-intern the 35 keyword spellings once and the
+positional check in Task 3.6 becomes a `SymbolId` equality test rather than a
+case-insensitive string compare.
+
+Deliberately not measured more precisely than "roughly an order of magnitude".
+Four crude counts over those files gave ratios from 10× to 16×, and they
+disagree because stripping `/* */` comments, `--` line comments and quoted
+literals correctly requires the very scanner this task builds. The first attempt
+reported `THE` as the most frequent symbol, which is the tell that it was
+counting English prose out of the licence header. Record the real ratio in the
+Step 5 report once the scanner exists, and treat any number quoted before then
+as an estimate.
+
+**Interning symbols is not hash-consing the AST, and the plan does not do the
+latter.** Two structurally identical subtrees at different source positions have
+different spans, so they are not equal terms and cannot share a node without
+moving spans into a side table keyed by the node identity that sharing destroys.
+Beyond that, a content hash per node would sit on the parse hot path, which is
+cold-start time under D2. A term graph is the right shape for an optimiser IR
+built *from* this AST, and that belongs to Phase 4 alongside the value-trace
+decision, which constrains folding and fusion anyway. Not this phase.
+
+Add to Step 2's tests: `abc`, `ABC` and `aBc` intern to one `SymbolId` while
+keeping three distinct spans; a symbol containing a compound tail
+(`stem.i.j`) interns as one symbol, matching the C++, which scans the whole
+dotted name as a single token and resolves the tail at run time; and
+`SymbolTable::name` round-trips to the upcased spelling, not the source
+spelling.
 
 **The significant-blank rule, stated once.** This is the rule that makes `f (x)`
 a concatenation and `f(x)` a call, so it is the deciding case for D10 and the
@@ -940,6 +1063,12 @@ This is the opposite of Phase 0's *builtin-function* table, which is positional
 and must not be reordered. Two drafts of this plan carried that warning across
 to this table, where it is wrong. Check which kind you are looking at.
 
+**Those two paragraphs describe the C++ and matter only for reading it and for
+the Step 1 extraction. Do not build a sorted string table in Rust.** Task 3.3
+pre-interns the keyword spellings before scanning, so `ParseCtx::keywords` holds
+their `SymbolId`s and recognition is an integer comparison against the clause's
+first token. There is nothing to sort and nothing to binary-search at parse time.
+
 - [ ] **Step 1: Extract the keyword list**
 
 ```bash
@@ -1218,14 +1347,20 @@ throughput number depends on the whole file parsing.
       pub source: ProgramSource,
       pub instructions: Vec<Instruction>,
       pub directives: Vec<Directive>,
-      pub labels: BTreeMap<String, usize>,
+      pub labels: BTreeMap<SymbolId, usize>,
+      /// Retained because a `SymbolId` is meaningless without it: Phase 4
+      /// resolves names for error substitutions and `SIGNAL`'s label lookup.
+      pub symbols: SymbolTable,
   }
 
   /// What `INTERPRET` produces. Carries its own source for the same reason
-  /// `Program` does: the instruction spans index it and nothing else.
+  /// `Program` does: the instruction spans index it and nothing else. It carries
+  /// its own `SymbolTable` for the same reason, and the ids in it are NOT
+  /// comparable with the enclosing `Program`'s — see Task 3.7b.
   pub struct Fragment {
       pub source: ProgramSource,
       pub instructions: Vec<Instruction>,
+      pub symbols: SymbolTable,
   }
   ```
 
@@ -1298,13 +1433,25 @@ instruction became part of routine `r`. An earlier draft of this plan asserted
 it was a syntax error and told Task 3.8 to record a number that does not exist.
 
 **The token vector and the `ParseCtx` do not outlive this function, and must not
-try to.** `ParseCtx` borrows the `ProgramSource` and the `Vec<Token>`, so the
-order is: build `ProgramSource`, `scan` it, build `ParseCtx` borrowing both,
-`split_clauses`, `ClauseCursor::new`, parse everything, drop the context, then
-move the `ProgramSource` into `Program`. That works precisely because every span
-that survives is a **byte** range into the source rather than a token index — so
-no `Instruction` or `Expr` may hold a token index. If one does, this composition
-does not compile, which is the correct outcome.
+try to.** `ParseCtx` borrows the `ProgramSource`, the `Vec<Token>`, the
+`SymbolTable` and the `Keywords`, so the order is: build `ProgramSource`, `scan`
+it into a `Scanned`, build `ParseCtx` borrowing all four, `split_clauses`,
+`ClauseCursor::new`, parse everything, drop the context, then move the
+`ProgramSource` **and the `SymbolTable`** into `Program`. That works precisely
+because every span that survives is a **byte** range into the source rather than
+a token index — so no `Instruction` or `Expr` may hold a token index. If one
+does, this composition does not compile, which is the correct outcome. A
+`SymbolId` is not a token index and may be retained.
+
+**A `Fragment`'s `SymbolId`s are not comparable with the enclosing `Program`'s.**
+`parse_interpret` builds its own `SymbolTable`, so id 7 in a fragment and id 7 in
+the program that ran the `INTERPRET` are unrelated. Phase 4 must resolve a
+fragment symbol through the fragment's own table, and if it ever needs to match a
+fragment name against a program variable it must go through the text with
+`Program::symbols.get(fragment.symbols.name(id))`. Sharing one table across
+`INTERPRET` calls would need `&mut` at execution time and is deliberately not
+done. Task 3.9 does not care, because `TRACE` reads spans and each carries its
+own source.
 
 - [ ] **Step 4: Parse every `rust/corpus/lang/` program through this entry point**
 
