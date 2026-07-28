@@ -40,61 +40,92 @@ pub const MAX_EXPONENT: i32 = 999_999_999;
 pub const MIN_EXPONENT: i32 = -999_999_999;
 
 /// What arithmetic can fail with, carrying the interpreter's error numbers.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+///
+/// Originally two of these (`Overflow`, `NotWholeNumber`) were bare unit
+/// variants covering several distinct C++ sub-messages at once, because
+/// `muldiv.rs`/`pow.rs` were off limits when the message table was first
+/// wired up. Now that they are not, each raise site gets its own variant
+/// carrying its own confirmed text -- see `message`'s doc comment for the
+/// one case (`PowerOverflow`/`PowerExponentNotWhole`) that still cannot be
+/// made byte-exact, and why.
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum ArithError {
-    /// Result exponent outside +/- MAX_EXPONENT. Error 42.
-    Overflow,
-    /// Error 42.
+    /// Result exponent outside +/- MAX_EXPONENT, from `mul`/`div`/`add`/
+    /// `sub`/`pow`'s shared final range check (`check_range`, below). Error
+    /// 42.901 (over) or 42.902 (under).
+    Overflow(String),
+    /// Zero raised to a negative power: an underflow, not infinity. Error
+    /// 42.903, no substitution. Raised only by `pow.rs`.
+    ZeroToNegativePower,
+    /// `**`'s own upfront magnitude check, refusing a hopeless computation
+    /// before attempting it. Error 42.001. Raised only by `pow.rs`.
+    PowerOverflow(String),
+    /// A zero divisor, for `/`, `%`, or `//` alike. Error 42.003, no
+    /// substitution.
     DivideByZero,
-    /// A `%` or `//` result too wide to be whole at this DIGITS. Error 26.
-    NotWholeNumber,
+    /// `%`'s quotient needs more digits than DIGITS allows. Error 26.011,
+    /// no substitution. Raised only by `muldiv.rs`'s `div`.
+    IntegerDivideNotWhole,
+    /// `//`'s quotient needs more digits than DIGITS allows. Error 26.012,
+    /// no substitution. Raised only by `muldiv.rs`'s `div`.
+    RemainderNotWhole,
+    /// `**`'s exponent, after rounding to DIGITS, is not a whole number.
+    /// Error 26.008. Raised only by `pow.rs`.
+    PowerExponentNotWhole(String),
 }
 
 impl ArithError {
     pub fn code(self) -> u16 {
         match self {
-            ArithError::Overflow | ArithError::DivideByZero => 42,
-            ArithError::NotWholeNumber => 26,
+            ArithError::Overflow(_)
+            | ArithError::ZeroToNegativePower
+            | ArithError::PowerOverflow(_)
+            | ArithError::DivideByZero => 42,
+            ArithError::IntegerDivideNotWhole
+            | ArithError::RemainderNotWhole
+            | ArithError::PowerExponentNotWhole(_) => 26,
         }
     }
 
-    /// The interpreter's message text for this failure, each mapping
+    /// The interpreter's message text for this failure, each sub-message
     /// verified against `build/bin/rexx`.
     ///
-    /// `DivideByZero` is raised from exactly one C++ site regardless of `/`,
-    /// `%`, or `//` (`NumberStringMath2.cpp:355`) and needs no substitution
-    /// -- confirmed with `1 / 0`: "Arithmetic overflow; divisor must not be
-    /// zero." (42.003).
+    /// `DivideByZero` (42.003), `IntegerDivideNotWhole` (26.011),
+    /// `RemainderNotWhole` (26.012), and `ZeroToNegativePower` (42.903) take
+    /// no substitution and are exact: confirmed with `1 / 0`, `123456 % 2`
+    /// and `123456 // 2` at DIGITS 3, and `0 ** -1`.
     ///
-    /// `Overflow` and `NotWholeNumber` each collapse more than one C++ call
-    /// site onto a single unit variant, and those sites disagree on the
-    /// sub-message: `NotWholeNumber` is 26.011 for `%`, 26.012 for `//`
-    /// (both confirmed, both text-only), or 26.008 for `**` (confirmed with
-    /// `2 ** 2.5`, substituting the exponent: "...found \"2.5\"."); `Overflow`
-    /// is 42.901/42.902 for the general range check `mul`/`div`/`pow` share
-    /// (confirmed with a mul overflow and a div underflow, each substituting
-    /// the adjusted exponent and the digits setting), 42.903 for zero raised
-    /// to a negative power (confirmed with `0 ** -1`, no substitution), or
-    /// 42.001 for `**`'s own upfront magnitude check (confirmed with `100 **
-    /// 999999999`, substituting the base, "**", and the exponent). Both
-    /// `muldiv.rs` and `pow.rs` are outside this task's file scope, and this
-    /// crate's `Result<_, ArithError>` boundary does not preserve which call
-    /// site raised the error -- recovering it from outside would mean
-    /// re-deriving those files' own internal magnitude/carry checks, which
-    /// is exactly the kind of arithmetic their comments warn is easy to get
-    /// subtly wrong. So both report the bare major-code text instead (42.000
-    /// / 26.000): the only text that is not wrong for any of the paths
-    /// sharing the variant. Neither bare form is ever raised directly by the
-    /// interpreter -- grepped the whole C++ tree for a `reportException`
-    /// call using bare `Error_Overflow` or `Error_Invalid_whole_number` and
-    /// found none -- so, unlike every other message in this crate, this one
-    /// cannot be confirmed against a live probe; it is the most honest text
-    /// available, not a verified one.
-    pub fn message(self) -> String {
+    /// `Overflow`'s text is built where it is raised, in `check_range`
+    /// below, because both substitutions come from the out-of-range
+    /// `Number` itself and that is the only place that still has it.
+    ///
+    /// `PowerOverflow` (42.001, "...detected at: \"BASE**EXP\".") and
+    /// `PowerExponentNotWhole` (26.008, "...found \"EXP\".") substitute the
+    /// base and/or exponent **as originally written in the Rexx source**,
+    /// not this crate's canonical rendering of them -- confirmed two ways:
+    /// `1e10 ** 200000000000` reports the base as `"1E10"` (no `+`, the
+    /// literal's own spelling) where this crate's `Number::format` would
+    /// print `"1E+10"`; and `123.456789012345678 ** 999999999` at DIGITS 15
+    /// reports the base at its full 18-digit original precision, not
+    /// rounded to the active DIGITS. A `Number` has already discarded that
+    /// original spelling by the time `pow.rs` sees it (`Number::parse`
+    /// normalises sign/digits/exponent and nothing else survives), and nothing
+    /// in this task's scope threads the source text through, so these two
+    /// render the base/exponent at full stored precision
+    /// (`digits.len()` significant digits, not the default 9) rather than
+    /// DIGITS-rounded -- closer than the alternative, but still provably
+    /// wrong whenever the original had a leading zero, no `+` after `E`, a
+    /// different exponent-marker case, or other spelling `Number` does not
+    /// preserve.
+    pub fn message(&self) -> String {
         match self {
+            ArithError::Overflow(m) | ArithError::PowerOverflow(m) | ArithError::PowerExponentNotWhole(m) => {
+                m.clone()
+            }
+            ArithError::ZeroToNegativePower => error_text(42, 903, &[]),
             ArithError::DivideByZero => error_text(42, 3, &[]),
-            ArithError::Overflow => error_text(42, 0, &[]),
-            ArithError::NotWholeNumber => error_text(26, 0, &[]),
+            ArithError::IntegerDivideNotWhole => error_text(26, 11, &[]),
+            ArithError::RemainderNotWhole => error_text(26, 12, &[]),
         }
     }
 }
@@ -273,11 +304,26 @@ impl Number {
 
     /// Fails with `Overflow` when an arithmetic result has run outside the
     /// representable range, which the interpreter reports as error 42.
+    ///
+    /// Mirrors `NumberStringBase::checkOverflow` (`NumberStringClass.cpp:316`)
+    /// exactly, including its priority (the upper bound is checked first)
+    /// and one easy-to-miss detail: &2 in both 42.901 and 42.902 is always
+    /// the literal `"9"` -- `Numerics::DEFAULT_DIGITS`, a fixed compile-time
+    /// constant in the C++, not the active `NUMERIC DIGITS` setting.
+    /// Confirmed by provoking the same overflow at DIGITS 9 and DIGITS 15
+    /// and getting back identical text both times ("...exceeds 9 digits."
+    /// either way). &1 is the adjusted exponent for the overflow case
+    /// (42.901) but the *raw* exponent for underflow (42.902) -- confirmed
+    /// with a division that underflows, whose message substitutes the raw
+    /// exponent, not the adjusted one.
     pub(crate) fn check_range(self) -> Result<Self, ArithError> {
         if self.is_zero() || self.in_range() {
-            Ok(self)
+            return Ok(self);
+        }
+        if self.adjusted_exponent() > MAX_EXPONENT {
+            Err(ArithError::Overflow(error_text(42, 901, &[&self.adjusted_exponent().to_string(), "9"])))
         } else {
-            Err(ArithError::Overflow)
+            Err(ArithError::Overflow(error_text(42, 902, &[&self.exponent.to_string(), "9"])))
         }
     }
 

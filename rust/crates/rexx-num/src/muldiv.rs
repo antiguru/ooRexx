@@ -42,12 +42,18 @@ impl Number {
         };
 
         // Checked, not wrapping: two operands near the exponent limit
-        // multiply to something well outside i32.
+        // multiply to something well outside i32. Both operand exponents
+        // are already bounded to +/-MAX_EXPONENT by `Number::parse`/
+        // `check_range`, so their sum plus a handful of shifted digits
+        // stays comfortably inside i32 -- this is believed unreachable in
+        // practice. If it ever does fire there is no valid exponent left to
+        // report (that is the failure itself), so this reports the bare
+        // major-code text rather than inventing a number for it.
         let exponent = left
             .exponent
             .checked_add(right.exponent)
             .and_then(|e| e.checked_add(extra as i32))
-            .ok_or(ArithError::Overflow)?;
+            .ok_or_else(|| ArithError::Overflow(crate::error_text(42, 0, &[])))?;
         let negative = left.negative != right.negative;
         let raw = Number { negative, digits: kept, exponent };
         let rounded = raw.round_to(digits);
@@ -107,12 +113,14 @@ impl Number {
         let negative = left.negative != right.negative;
 
         // The interpreter's estimate of where the quotient's first digit
-        // lands, from the operand exponents and lengths.
+        // lands, from the operand exponents and lengths. Same "believed
+        // unreachable, no valid exponent to report if it ever fires" case
+        // as `mul`'s guard above.
         let calc_exp = left
             .exponent
             .checked_sub(right.exponent)
             .and_then(|e| e.checked_add(left.digits.len() as i32 - right.digits.len() as i32))
-            .ok_or(ArithError::Overflow)?;
+            .ok_or_else(|| ArithError::Overflow(crate::error_text(42, 0, &[])))?;
 
         // A quotient below 1 has no integer part, so % is zero and // is the
         // left operand unchanged.
@@ -132,12 +140,13 @@ impl Number {
         let want = digits as usize + 1;
         let (mut q, rem, shift) = long_divide(&left.digits, &right.digits, want);
 
-        // value = q * 10^(left.exponent - right.exponent - shift)
+        // value = q * 10^(left.exponent - right.exponent - shift). Same
+        // "believed unreachable" guard as the two above.
         let q_exp = left
             .exponent
             .checked_sub(right.exponent)
             .and_then(|e| e.checked_sub(shift))
-            .ok_or(ArithError::Overflow)?;
+            .ok_or_else(|| ArithError::Overflow(crate::error_text(42, 0, &[])))?;
 
         if op == DivOp::Divide {
             let raw = Number { negative, digits: q, exponent: q_exp };
@@ -171,7 +180,15 @@ impl Number {
         let int_digits = Number::assemble(negative, q, q_exp.max(0));
         if !int_digits.is_zero() && int_digits.digits.len() as i32 + int_digits.exponent > digits as i32
         {
-            return Err(ArithError::NotWholeNumber);
+            // Only `%`/`//` reach here (`Divide` already returned above),
+            // and the interpreter reports each with its own, substitution-
+            // free text -- confirmed with `123456 % 2` and `123456 // 2`
+            // at DIGITS 3.
+            return Err(if op == DivOp::IntegerDivide {
+                ArithError::IntegerDivideNotWhole
+            } else {
+                ArithError::RemainderNotWhole
+            });
         }
 
         Ok(match op {

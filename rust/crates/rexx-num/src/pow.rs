@@ -16,6 +16,16 @@
 use crate::muldiv::{strip_leading, subtract_multiple};
 use crate::{ArithError, MAX_EXPONENT, Number};
 
+/// Renders `n` using every digit it stores, rather than the `DEFAULT_DIGITS`
+/// (9) `Number::format`/`Display` uses. Only for `ArithError` substitutions
+/// that echo an operand back -- see `ArithError::message`'s doc comment for
+/// why even this cannot be byte-exact against the interpreter in general
+/// (it fixes needless rounding, not a `Number`'s already-lost original
+/// spelling: no `+` after `E`, leading zeros, and so on).
+fn full_precision(n: &Number) -> String {
+    n.format(n.digits.len() as u32)
+}
+
 impl Number {
     /// The value one.
     pub fn one() -> Number {
@@ -66,26 +76,43 @@ impl Number {
     }
 
     pub fn pow(&self, exponent: &Number, digits: u32) -> Result<Number, ArithError> {
-        let power = exponent.as_whole(digits).ok_or(ArithError::NotWholeNumber)?;
+        // 26.008 substitutes the exponent as originally written, which this
+        // crate cannot reproduce exactly (see `ArithError::message`'s doc
+        // comment) -- `full_precision` is the closest approximation, using
+        // every digit `exponent` stores rather than this crate's usual
+        // 9-digit default.
+        let power = exponent
+            .as_whole(digits)
+            .ok_or_else(|| ArithError::PowerExponentNotWhole(crate::error_text(26, 8, &[&full_precision(exponent)])))?;
         let negative_power = power < 0;
         let power = power.unsigned_abs();
 
         let left = self.truncated_to(digits as usize + 1);
 
         if left.is_zero() {
-            // Zero to a negative power is an underflow, not infinity.
+            // Zero to a negative power is an underflow, not infinity. Error
+            // 42.903, no substitution -- confirmed with `0 ** -1`.
             if negative_power {
-                return Err(ArithError::Overflow);
+                return Err(ArithError::ZeroToNegativePower);
             }
             // Rexx defines 0**0 as 1, though mathematically it is undefined.
             return Ok(if power == 0 { Number::one() } else { Number::zero() });
         }
 
         // The magnitude of the result is knowable up front, so a hopeless
-        // computation is refused before it is attempted.
+        // computation is refused before it is attempted. Error 42.001,
+        // substituting the base, the literal "**", and the exponent --
+        // confirmed with `100 ** 999999999` and, to catch the base/exponent
+        // getting rounded to this crate's default precision instead of
+        // their own, `123456789012345678 ** 999999999` at DIGITS 15 (which
+        // still reports the base at its full 18-digit precision).
         let magnitude = (left.adjusted_exponent().unsigned_abs() as u64).saturating_mul(power);
         if magnitude > MAX_EXPONENT as u64 {
-            return Err(ArithError::Overflow);
+            return Err(ArithError::PowerOverflow(crate::error_text(
+                42,
+                1,
+                &[&full_precision(self), "**", &full_precision(exponent)],
+            )));
         }
 
         if power == 0 {
