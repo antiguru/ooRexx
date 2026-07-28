@@ -15,10 +15,12 @@
 //! rather than taken from the ANSI standard; where they differ, the
 //! interpreter wins.
 
+mod clause;
 mod scanner;
 mod source;
 mod token;
 
+pub use clause::{Clause, split_clauses};
 pub use scanner::{ResourceBody, Scanned, scan};
 pub use source::{ProgramSource, SourceKind};
 pub use token::{
