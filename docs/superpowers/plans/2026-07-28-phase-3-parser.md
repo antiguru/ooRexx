@@ -290,6 +290,27 @@ with `std::str::from_utf8(...).expect(...)` and say why in the expect message,
 because that invariant is the scanner's to maintain. Literal values stay raw
 bytes; see Task 3.3.
 
+**Two behaviours found while implementing this task, both in `ProgramSource.cpp`
+and both now implemented here.** They are recorded because every later task holds
+byte ranges into this text and must agree with it.
+
+* **A Ctrl-Z (`0x1A`) truncates the source**, before any line scanning, even
+  mid-line and mid-comment. Everything from that byte onward is discarded.
+  Verified two ways: `rexxc` accepts a file whose `x = )` sits after a `0x1A`, so
+  truncation happens before parsing; and `sourceline()` reports **2** for a
+  three-line file whose second line contains a `0x1A`, with `sourceline(2)`
+  returning only the text before it. So the retained text is not the file's bytes,
+  and no span may refer past the truncation point.
+* **`\r` and `\n` are independently valid terminators.** Measured with
+  `sourceline()`: a bare `\r` ends a line (count 2), `\r\n` collapses to **one**
+  terminator (count 2), and `\n\r` is **two** terminators producing an empty line
+  (count **3**). A rule that only special-cases CRLF is a near-miss that gets
+  `\n\r` wrong.
+
+Neither is a line-content question alone. Task 3.3's scanner and Task 3.4's rule 1
+both say "end of line", and that phrase means CR, LF, or CRLF-as-one here; "end of
+file" means the end of the *truncated* text.
+
 Rexx has **no Unicode string semantics** to reproduce here. `length('ää')` is 4,
 `substr(s,1,1)` yields the single byte `C3`, and `reverse` reverses bytes into
 invalid UTF-8 — all measured. The interpreter vendors `utf8proc` for exactly one
@@ -923,6 +944,13 @@ draft of this plan missed entirely:
 That is all `nextClause` splits on. The two continuations are already resolved by
 Task 3.3's scanner, so no `Eoc` reaches `split_clauses` at a continued line end
 and this task has no continuation rule of its own.
+
+"End of line" here means what Task 3.2 measured, not what it looks like: a bare
+`\r`, a bare `\n`, or `\r\n` as a single terminator, while `\n\r` is **two**
+terminators and yields an empty line between them. "End of file" means the end of
+the text Task 3.2 retained, which a Ctrl-Z (`0x1A`) may have truncated before this
+task ever sees it. Neither is this task's job to detect, and both are the reason
+it must not re-derive line boundaries from the source bytes itself.
 
 **(2) The clause span includes its terminator.** `nextClause` ends the clause
 with `location.setEnd(tokenLocation)` where `tokenLocation` is the location of
