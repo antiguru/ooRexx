@@ -40,6 +40,22 @@ and therefore local to the machine that ran the spike.
 | Grammar-layer throughput | **1.08–1.15 ms** | 9.3–12.1 ms (median **8.3×** slower) |
 | Net new dependencies | **0** | 12 in this workspace, and a C compiler on the build path |
 
+**Axis 2 has since been devalued, and the decision does not depend on it.** After
+this spike ran, parse errors were scoped down: match the error number and
+sub-number, drop byte-exact message text, drop error 36's position. The plan had
+billed error fidelity as the axis "most likely to decide it", and this document's
+strongest single argument was that error 36 is unreachable with `chumsky` 0.13.
+Both of those are now worth much less than when they were written.
+
+The verdict is unchanged, on the remaining axes alone. Throughput at a median
+8.3× is decisive by itself, because under D2 parse time *is* cold-start time
+against a ~55 ms budget. The dependency cost is independent of it and points the
+same way. Either would carry the decision without axis 2.
+
+This is recorded rather than quietly left because a later reader finding a
+decision resting on a criterion the project dropped a day afterwards would be
+right to distrust it.
+
 Lines of code counts non-blank, non-comment lines outside the licence banner, in
 the one file that holds each arm's grammar.
 The shared token stream (507 lines), the shared AST (138), the shared evaluator
@@ -260,16 +276,25 @@ same trade D1 already accepted for object handles.
 Settled by the spike and by reading the oracle's scanner.
 This is the part of the spike worth keeping, since the crate itself is gone.
 
-* Errors 36.901 and 36.902 need, for the offending token, the **1-based byte
+* **Superseded by a scope decision, and kept as background rather than as a
+  requirement.** Parse errors no longer have to reproduce the C++ 1:1: the agreed
+  line is to match the error number and sub-number, drop byte-exact message text,
+  and drop error 36's position substitution entirely. So nothing below is work
+  Task 3.3 owes. It is recorded because the measurement was taken and because the
+  claim it corrects — "there is no column anywhere in the oracle", which this
+  plan's earlier drafts asserted and three review rounds acted on — is false and
+  should not be re-asserted.
+
+  Errors 36.901 and 36.902 substitute, for the offending token, the **1-based byte
   offset within its own physical line** and that line's number.
   The C++ stores both in every token, as `SourceLocation`'s `startLine` and
   `startOffset` (`SourceLocation.hpp:52`), and substitutes `getOffset() + 1` and
   `getLineNumber()`.
-  A Rust token does **not** need to store them: a whole-file byte offset plus a
-  binary search into the line index Task 3.2's `ProgramSource` already builds for
-  `SOURCELINE` yields the same pair, and the spike's own quadruple was a
-  convenience rather than a requirement.
-  Two things the derivation must get right.
+  A Rust token would **not** need to store them if this were ever gated: a
+  whole-file byte offset plus a binary search into the line index Task 3.2's
+  `ProgramSource` already builds for `SOURCELINE` yields the same pair, and the
+  spike's own quadruple was a convenience rather than a requirement.
+  Two things such a derivation would have to get right.
   It has to search on the **token's own** start offset and not the clause's,
   because the line reported is the token's physical line: a comma continuation
   makes 36.901 say "line 3" for a clause whose trace header says line 2.

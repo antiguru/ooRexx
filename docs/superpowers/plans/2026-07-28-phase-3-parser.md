@@ -4,7 +4,7 @@
 
 **Goal:** Build `rexx-parse` — turn Rexx source text into an AST that Phase 4 can execute, with error messages and `SOURCELINE` matching the interpreter exactly, and with clause source reconstructible so `TRACE`'s `*-*` lines can be produced. `TRACE`'s value lines are Phase 4's, deliberately — see Task 3.9.
 
-**Architecture:** A hand-written scanner and clause splitter feed a parser that produces plain owned Rust data (D13). The program source is retained as one `String`; every AST node holds a byte range into it, because `SOURCELINE`, error reporting and `TRACE` all expose original text. `TRACE` needs one range the others do not: the **clause** span, which runs to the end of the clause's terminating token and which `THEN`/`ELSE`/`OTHERWISE` and a label's `:` can cut mid-line. Task 3.4 produces it, Task 3.6 splits it, every `Instruction` carries it. Whether the layer above the token stream uses `chumsky` combinators or hand-written recursive descent is decided by the Task 3.1 spike, not assumed here.
+**Architecture:** A hand-written scanner and clause splitter feed a parser that produces plain owned Rust data (D13). The program source is retained as one byte buffer (`Vec<u8>`, because a Rexx literal may hold bytes that are not valid UTF-8); every AST node holds a byte range into it, because `SOURCELINE`, error reporting and `TRACE` all expose original text. `TRACE` needs one range the others do not: the **clause** span, which runs to the end of the clause's terminating token and which `THEN`/`ELSE`/`OTHERWISE` and a label's `:` can cut mid-line. Task 3.4 produces it, Task 3.6 splits it, every `Instruction` carries it. Whether the layer above the token stream uses `chumsky` combinators or hand-written recursive descent is decided by the Task 3.1 spike, not assumed here.
 
 **Tech Stack:** Rust 2024, `rexx-num` (already built), optionally `chumsky` 0.13.0 (present in the offline registry cache). No other new dependencies.
 
@@ -12,7 +12,8 @@
 
 - Behaviour is defined by what `build/bin/rexx` does, **not** by the ANSI standard or the documentation. Where they disagree, the interpreter wins.
 - Zero `unsafe`. `unsafe_code = "forbid"` at `[workspace.lints.rust]`; every crate carries `[lints] workspace = true`.
-- Error numbers **and sub-numbers** are contract. Programs trap on them.
+- Error numbers **and sub-numbers** are contract, and for **parse-time** errors they are the *only* error property that is. A program can trap a parse error through `INTERPRET` and read the number: measured, `signal on syntax` around `interpret "x = )"` traps with rc 37.
+- **Parse errors are deliberately not reproduced 1:1.** Rendered message text and substitution values are *observable* — a trapped syntax error hands the program `ERRORTEXT`, `MESSAGE` and `ADDITIONAL` — so this is a recorded deviation from the oracle, not an unobservable difference. Specifically: error 36's byte-position substitution is not produced at all. Runtime errors are unaffected; `rexx-num`'s numbers, sub-numbers and message text stay byte-exact.
 - Every `cargo` command takes `--offline`.
 - `rexx-parse` depends on `rexx-num` and nothing else in the workspace. It must not depend on an executor.
 - The AST is plain owned Rust data **inside one arena object per code body** (D13, closed). Not garbage-collected, not reference-counted between nodes. The arena half matters: it is what lets nodes reference each other by index instead of by pointer.
@@ -171,11 +172,19 @@ belongs in the same document because it decides the same question.
    number, sub-number and **line** be produced, along with the substitution
    values the message quotes? Test with deliberately malformed expressions and
    compare against `build/bin/rexxc`, which gives the parse verdict without
-   executing the file. This is the axis most likely to decide it,
-   because it is what Phase 3's gate checks. There is **no column** anywhere in
-   the oracle — do not measure the spike on one, and note that ooRexx locates
-   an error by quoting the offending token, so the substitution values are what
-   actually pin the position.
+   executing the file.
+
+   **This axis has since been devalued and the D10 decision does not rest on
+   it.** Parse errors are no longer reproduced 1:1 — see the Global Constraints —
+   so measure the arms on whether each can produce the right *number and
+   sub-number* at each failure site, and stop there. Do not measure substitution
+   values, and do not measure a column. `d10-decision.md` records that the
+   verdict stands on throughput and dependency cost alone.
+
+   Note also, because an earlier draft of this task asserted the opposite: the
+   oracle *does* expose a byte position, in errors 36.901 and 36.902. We simply
+   do not reproduce it. ooRexx otherwise locates an error by quoting the
+   offending token.
 3. **Parse throughput on `CoreClasses.orx`** — not on synthetic input. Under
    D2 this number is cold-start time.
 4. **Dependency and portability cost.** `chumsky` 0.13.0 pulls **28 transitive
@@ -253,14 +262,40 @@ git commit -m "Decide D10 with measurements"
 - Test: `rust/crates/rexx-parse/tests/sourceline.rs`
 
 **Interfaces:**
-- Produces: `ProgramSource::new(text: String) -> ProgramSource`,
-  `ProgramSource::line(&self, n: usize) -> Option<&str>` (1-based),
+- Produces: `ProgramSource::new(text: Vec<u8>) -> ProgramSource`,
+  `ProgramSource::line(&self, n: usize) -> Option<&[u8]>` (1-based),
   `ProgramSource::line_count(&self) -> usize`,
-  `ProgramSource::position(&self, byte: usize) -> (usize, usize)` returning
-  1-based (line, column). Every later task uses `position` for error
+  `ProgramSource::line_of(&self, byte: usize) -> usize` returning the 1-based
+  physical line containing that byte. Every later task uses `line_of` for error
   reporting.
 
 Source retention comes first because everything else holds ranges into it.
+
+**The retained source is bytes, not a Rust `String`, and this is not a style
+choice.** A Rexx source file may contain arbitrary bytes that are not valid
+UTF-8. Measured: a file whose second byte sequence is a raw `FF FE` inside a
+literal runs fine, `c2x` gives `FFFE` and `length` gives 2, and invalid bytes in
+a comment are ignored as comment text. `String::from_utf8` would reject that
+file, so a `String`-typed source rejects legal programs. `Vec<u8>` in, `&[u8]`
+out, everywhere.
+
+`SOURCELINE` returns a Rexx string, which is a byte string, so `line` returning
+`&[u8]` is the faithful signature rather than a concession.
+
+This costs almost nothing above the scanner, because the one thing that *does*
+need `&str` is safe by construction: a symbol cannot contain a non-ASCII byte
+(`LanguageParser::characterTable` is zero for every byte 0x80-0xFF, and `bäc = 2`
+is error 13.1), so converting a symbol's bytes for interning cannot fail. Do it
+with `std::str::from_utf8(...).expect(...)` and say why in the expect message,
+because that invariant is the scanner's to maintain. Literal values stay raw
+bytes; see Task 3.3.
+
+Rexx has **no Unicode string semantics** to reproduce here. `length('ää')` is 4,
+`substr(s,1,1)` yields the single byte `C3`, and `reverse` reverses bytes into
+invalid UTF-8 — all measured. The interpreter vendors `utf8proc` for exactly one
+purpose, decoding the offending sequence so error 13.1 can print a whole
+character, and this phase does not reproduce parse-error text at all, so we need
+no equivalent.
 
 - [ ] **Step 1: Capture the interpreter's behaviour**
 
@@ -281,7 +316,7 @@ invisible until `TRACE` is wired up in Task 3.9.
 ```rust
 #[test]
 fn sourceline_returns_lines_without_terminators() {
-    let src = ProgramSource::new("say 1\nsay 2\n".to_string());
+    let src = ProgramSource::new(b"say 1\nsay 2\n".to_vec());
     assert_eq!(src.line_count(), 2);
     assert_eq!(src.line(1), Some("say 1"));
     assert_eq!(src.line(2), Some("say 2"));
@@ -294,11 +329,21 @@ fn sourceline_returns_lines_without_terminators() {
 }
 
 #[test]
-fn position_is_one_based_line_and_column() {
-    let src = ProgramSource::new("say 1\nsay 2\n".to_string());
-    assert_eq!(src.position(0), (1, 1));
-    assert_eq!(src.position(4), (1, 5));
-    assert_eq!(src.position(6), (2, 1));
+fn line_of_is_one_based() {
+    let src = ProgramSource::new(b"say 1\nsay 2\n".to_vec());
+    assert_eq!(src.line_of(0), 1);
+    assert_eq!(src.line_of(4), 1);
+    assert_eq!(src.line_of(6), 2);
+}
+
+#[test]
+fn source_may_hold_bytes_that_are_not_utf8() {
+    // A Rexx literal may contain arbitrary bytes. Verified against the oracle:
+    // a file holding a raw FF FE inside a literal runs, and c2x reports FFFE.
+    // A String-typed source would refuse to construct here.
+    let src = ProgramSource::new(b"s = '\xff\xfe'\n".to_vec());
+    assert_eq!(src.line(1), Some(&b"s = '\xff\xfe'"[..]));
+    assert_eq!(src.line_count(), 1);
 }
 ```
 
@@ -355,13 +400,15 @@ pub(crate) struct ParseCtx<'a> {
     pub tokens: &'a [Token],
     /// Read-only by the time parsing starts: `scan` has already interned every
     /// symbol in the program. Tasks 3.6 and 3.7 need it to compare a clause's
-    /// first symbol against the pre-interned keyword ids, and Task 3.8 needs it
-    /// to put a symbol's name in an error message's substitutions.
+    /// first symbol against the pre-interned keyword ids, and Task 3.6 needs it
+    /// to recover a label's spelling when it builds `Program::labels`.
+    ///
+    /// Not for error substitutions: this phase does not reproduce them.
     pub symbols: &'a SymbolTable,
-    /// The 35 keyword spellings and the sub-keywords, interned by `scan`
-    /// before it reads any source, so their ids are fixed and a keyword test
-    /// is an integer comparison. Keywords are NOT reserved words, so this is
-    /// only ever consulted positionally — see Task 3.6.
+    /// Every reserved *spelling* this parser recognises, pre-interned by `scan`
+    /// before it reads any source, so their ids are fixed and every keyword
+    /// test is an integer comparison. Keywords are NOT reserved words, so this
+    /// is only ever consulted positionally — see Task 3.6.
     pub keywords: &'a Keywords,
 }
 ```
@@ -431,21 +478,35 @@ pub struct SymbolTable {
 impl SymbolTable {
     /// Intern `text`, upcasing it. Returns the same id for every spelling that
     /// differs only in case.
+    ///
+    /// `to_ascii_uppercase` is byte-identical to the interpreter's
+    /// `translateChar` over everything this can receive, and the reason is
+    /// `LanguageParser::characterTable` (`Scanner.cpp:60`): it maps only `!`,
+    /// `.`, `0`-`9`, `?`, `A`-`Z`, `_` and `a`-`z`, and is **zero for every byte
+    /// from 0x80 to 0xFF**. A non-ASCII byte therefore cannot be part of a
+    /// symbol at all -- `bäc = 2` is a parse-time error 13.1, `Incorrect
+    /// character in program "ä" ('C3A4'X)`. This matters because Step 4 says a
+    /// UTF-8 byte sequence must survive a round trip through the scanner, which
+    /// is true of literals and comments and must not be read as licence to admit
+    /// non-ASCII into a symbol, where it would silently under-upcase.
     pub fn intern(&mut self, text: &str) -> SymbolId {
-        // Upcase only when the text is not already upper, so the common case
-        // in machine-generated and conventionally-written Rexx allocates
-        // nothing on lookup.
-        let upper: Box<str> = if text.bytes().any(|b| b.is_ascii_lowercase()) {
-            text.to_ascii_uppercase().into()
+        // Cow, not Box<str>, because `Box<str>: From<&str>` copies: building
+        // the key eagerly would allocate on the lookup path even when the
+        // symbol is already interned, which is the common case by an order of
+        // magnitude. Borrow when the text is already upper, allocate only to
+        // upcase, and allocate the owned key only on a genuine miss.
+        let key: std::borrow::Cow<'_, str> = if text.bytes().any(|b| b.is_ascii_lowercase()) {
+            std::borrow::Cow::Owned(text.to_ascii_uppercase())
         } else {
-            text.into()
+            std::borrow::Cow::Borrowed(text)
         };
-        if let Some(&id) = self.by_name.get(&upper) {
+        if let Some(&id) = self.by_name.get(key.as_ref()) {
             return id;
         }
         let id = SymbolId(u32::try_from(self.names.len()).expect("symbols fit u32"));
-        self.names.push(upper.clone());
-        self.by_name.insert(upper, id);
+        let owned: Box<str> = key.into_owned().into();
+        self.names.push(owned.clone());
+        self.by_name.insert(owned, id);
         id
     }
 
@@ -455,20 +516,100 @@ impl SymbolTable {
         &self.names[id.0 as usize]
     }
 
-    /// Look up an already-interned symbol **without upcasing and without
-    /// interning**. `None` means no symbol with that exact spelling exists.
+}
+```
+
+**`Keywords` covers all six tables, not just the 35.** It gets a definition here
+because an earlier draft named it in three places and specified it nowhere,
+leaving an implementer to invent the type.
+
+```rust
+/// The pre-interned spelling tables. Built by `scan` before it reads any
+/// source, so a keyword test never hashes a string.
+///
+/// One table per C++ table, with the counts the plan's inventory gives:
+/// 35 keyword instructions, 50 `subKeywords`, 12 `conditionKeywords`,
+/// 10 `parseOptions`, 9 `directives`, 40 `subDirectives`. They are separate
+/// because the same spelling means different things in different positions:
+/// `VALUE` is a `parseOptions` entry and a sub-keyword of several
+/// instructions, and nothing may conflate them.
+pub struct Keywords {
+    pub instructions: KeywordSet,
+    pub sub_keywords: KeywordSet,
+    pub conditions: KeywordSet,
+    pub parse_options: KeywordSet,
+    pub directives: KeywordSet,
+    pub sub_directives: KeywordSet,
+}
+
+/// One table: the interned spellings, in the order the C++ table lists them,
+/// so a hit yields that table's own index and the caller maps the index to its
+/// own enum.
+pub struct KeywordSet {
+    ids: Vec<SymbolId>,
+}
+
+impl KeywordSet {
+    /// The table index of `id`, or `None` if `id` is not in this set.
     ///
-    /// This exists for `SIGNAL VALUE`, whose label name is computed at run time
-    /// and matched literally. Verified: with a label spelled `target:`,
-    /// `signal value 'TARGET'` reaches it but `signal value 'target'` raises
-    /// error 16.1 quoting `"target"`, while the static `signal TaRgEt` reaches
-    /// it because the static form goes through `intern` and is therefore
-    /// case-insensitive. Do not upcase here or the two forms stop differing.
-    pub fn get(&self, exact_upper_name: &str) -> Option<SymbolId> {
-        self.by_name.get(exact_upper_name).copied()
+    /// Linear over at most 50 `SymbolId`s, which is a handful of `u32`
+    /// comparisons in cache and needs no ordering. Do NOT sort this and do not
+    /// binary-search it: an entry's position IS its meaning to the caller.
+    pub fn index_of(&self, id: SymbolId) -> Option<usize> {
+        self.ids.iter().position(|&k| k == id)
     }
 }
 ```
+
+Callers: Task 3.6 uses `instructions` for the positional first-token test and
+`sub_keywords`, `conditions` and `parse_options` inside individual instructions;
+Task 3.7 uses `directives` for the token after `::` and `sub_directives` for the
+rest of the directive. Task 3.7's resolution goes through this type, not through
+a string table.
+
+**Labels are NOT keyed by `SymbolId`, and this is the one place interning must
+not be used.** An earlier draft of this plan keyed `Program::labels` by
+`SymbolId` and was wrong in both directions.
+
+A label may be written as a symbol **or as a literal string**, and the C++ keys
+the table by the token's *value*: upcased for a symbol, verbatim for a literal
+(`InstructionParser.cpp:153` accepts `isSymbolOrLiteral()`, `labelNew` keys on
+`nameToken->value()` at `:2795-2799`). Both `SIGNAL` and `SIGNAL VALUE` then
+match that key by exact string equality. Measured, all six cases:
+
+| program | result |
+|---|---|
+| `'MiXeD': nop` under `rexxc` | rc 0, a literal label is legal |
+| label `'MiXeD':`, `signal value 'MiXeD'` | reaches it |
+| label `'MiXeD':`, `signal value 'MIXED'` | error 16.1, `Label "MIXED" not found` |
+| label `'MiXeD':`, `signal MiXeD` | error 16.1, `Label "MIXED" not found` |
+| label `mIxEd:`, `signal value 'MIXED'` | reaches it |
+| label `mIxEd:`, `signal value 'mIxEd'` | error 16.1 |
+
+So `Program::labels` is a `BTreeMap<Box<str>, usize>` keyed by the token value,
+and Task 3.6 Step 3 builds it by upcasing a symbol label and keeping a literal
+label's case exactly.
+
+**That makes `Literal` the asymmetric token kind, and it needs a decoded value
+rather than a span.** A literal's value is *not* a slice of its source bytes:
+`'it''s'` has the value `it's`, and the `'…'x` and `'…'b` suffixes convert to
+raw bytes. Step 4's "emit spans, never copied strings" is the right default and
+does not apply here. So `TokenKind::Literal` carries its decoded value, the span
+stays alongside for `TRACE` and `SOURCELINE` as with every other token, and the
+label key for a literal label is that decoded value. Interning the literal's
+value would be wrong for the same reason as above, since interning upcases. Interning the key would make `signal value 'MIXED'`
+succeed where the oracle raises 16.1, and `signal value 'MiXeD'` fail where the
+oracle succeeds.
+
+Nothing in this phase's gate would catch that: criterion 5 is parse-time and
+16.1 is raised at run time, so it would land straight in the interface Phase 4
+consumes. It is written down here because this is where the temptation lives.
+
+There is deliberately no `SymbolTable` lookup-by-name method. The earlier draft
+had one solely for this label lookup, which no longer goes through `SymbolId`,
+and adding an accessor with no caller would be speculative. Phase 4 may need
+name-to-id resolution for dynamically computed variable references; that phase
+can add it, together with the upcasing rules those forms actually follow.
 
 **Why upcased, and why the span still matters.** Rexx folds symbol case:
 verified, `abc = 1` then `say ABC` and `say aBc` both print 1, and
@@ -491,6 +632,13 @@ few hundred `Box<str>`. It also turns keyword recognition and variable lookup
 into integer comparisons: pre-intern the 35 keyword spellings once and the
 positional check in Task 3.6 becomes a `SymbolId` equality test rather than a
 case-insensitive string compare.
+
+**What it costs, netted off rather than left out.** Pre-interning the six tables
+happens per `SymbolTable`, and `parse_interpret` builds a fresh one per call, so
+an `INTERPRET` in a loop pays the whole keyword set every iteration and
+`Program::symbols` always carries names that never appear in the source.
+Negligible against criterion 8, which parses two files once, and stated because a
+"what this buys" paragraph with no cost line is not a measurement.
 
 Deliberately not measured more precisely than "roughly an order of magnitude".
 Four crude counts over those files gave ratios from 10× to 16×, and they
@@ -583,6 +731,29 @@ easy to get wrong:
   tokens into one symbol, and emitting a blank for it inserts a space the
   interpreter does not.
 
+**`TokenKind` needs a payload-free tag, because `Symbol` now carries a
+`SymbolId`.** Without it the tests below do not compile: an array literal
+`[TokenKind::Symbol, ...]` is an E0308, since `TokenKind::Symbol` is a
+constructor rather than a value once it has a field.
+
+```rust
+/// `TokenKind` without its payloads, for asserting token *shape*.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Tag {
+    Symbol, Literal, Operator, Blank, LeftParen, RightParen,
+    Comma, Colon, Eoc,
+    // ... one per TokenKind variant, mirroring the C++ 19 classes
+}
+
+impl TokenKind {
+    pub fn tag(&self) -> Tag { /* one arm per variant */ }
+}
+```
+
+The test helper is `fn kinds(toks: &[Token]) -> Vec<Tag>`, mapping
+`t.kind.tag()`. Assert shape with `Tag` and identity with the `SymbolId`
+separately, because a test that asserts both at once cannot say which failed.
+
 - [ ] **Step 2: Write failing tests for each**
 
 ```rust
@@ -591,7 +762,7 @@ fn block_comments_nest() {
     // `1` is a symbol in Rexx, and the blank between `say` and `1` is
     // significant: previous token is a symbol, next character starts a symbol.
     let toks = scan_ok("/* a /* b */ c */ say 1");
-    assert_eq!(kinds(&toks), [TokenKind::Symbol, TokenKind::Blank, TokenKind::Symbol, TokenKind::Eoc]);
+    assert_eq!(kinds(&toks), [Tag::Symbol, Tag::Blank, Tag::Symbol, Tag::Eoc]);
 }
 
 #[test]
@@ -601,12 +772,12 @@ fn double_dash_starts_a_line_comment_but_minus_does_not() {
     // No `Blank` in either. In "a -- b" the look-ahead past `a `'s blank finds
     // `-`, which starts neither a symbol, a literal, `(` nor `[`, so the blank
     // is discarded; then `--` truncates the line and yields the clause end.
-    assert_eq!(kinds(&scan_ok("a -- b")), [TokenKind::Symbol, TokenKind::Eoc]);
+    assert_eq!(kinds(&scan_ok("a -- b")), [Tag::Symbol, Tag::Eoc]);
     // In "a - b" the same look-ahead discards the first blank, and the blank
     // before `b` is insignificant because the previous token is an operator.
     assert_eq!(
         kinds(&scan_ok("a - b")),
-        [TokenKind::Symbol, TokenKind::Operator, TokenKind::Symbol, TokenKind::Eoc]
+        [Tag::Symbol, Tag::Operator, Tag::Symbol, Tag::Eoc]
     );
 }
 
@@ -616,13 +787,13 @@ fn a_significant_blank_needs_both_sides() {
     // a symbol or a literal, or be `(` or `[`.
     assert_eq!(
         kinds(&scan_ok("f (x)")),
-        [TokenKind::Symbol, TokenKind::Blank, TokenKind::LeftParen,
-         TokenKind::Symbol, TokenKind::RightParen, TokenKind::Eoc]
+        [Tag::Symbol, Tag::Blank, Tag::LeftParen,
+         Tag::Symbol, Tag::RightParen, Tag::Eoc]
     );
     assert_eq!(
         kinds(&scan_ok("f(x)")),
-        [TokenKind::Symbol, TokenKind::LeftParen,
-         TokenKind::Symbol, TokenKind::RightParen, TokenKind::Eoc]
+        [Tag::Symbol, Tag::LeftParen,
+         Tag::Symbol, Tag::RightParen, Tag::Eoc]
     );
 }
 
@@ -632,13 +803,13 @@ fn a_continuation_becomes_a_significant_blank() {
     //                 say "a"||-  /  "b" =>  ab      (previous token is `||`)
     assert_eq!(
         kinds(&scan_ok("say \"a\"-\n\"b\"")),
-        [TokenKind::Symbol, TokenKind::Blank, TokenKind::Literal,
-         TokenKind::Blank, TokenKind::Literal, TokenKind::Eoc]
+        [Tag::Symbol, Tag::Blank, Tag::Literal,
+         Tag::Blank, Tag::Literal, Tag::Eoc]
     );
     assert_eq!(
         kinds(&scan_ok("say \"a\"||-\n\"b\"")),
-        [TokenKind::Symbol, TokenKind::Blank, TokenKind::Literal,
-         TokenKind::Operator, TokenKind::Literal, TokenKind::Eoc]
+        [Tag::Symbol, Tag::Blank, Tag::Literal,
+         Tag::Operator, Tag::Literal, Tag::Eoc]
     );
 }
 
@@ -656,9 +827,14 @@ Work over bytes, not chars. Rexx source is byte-oriented: `'…'x` and `'…'b`
 literals are defined over bytes, and the interpreter never re-encodes source
 text, so a DBCS or UTF-8 byte sequence must survive a round trip through the
 scanner unchanged. Decoding to `char` would also make every span a character
-index, and `SOURCELINE` and `TRACE` slice the retained `String` by bytes. There
-are **no column numbers in error messages** — see Task 3.8 Step 4 and gate
-criterion 4 — so nothing about byte orientation follows from column counting.
+index, and `SOURCELINE` and `TRACE` slice the retained byte buffer directly.
+
+Byte orientation is decided by those three things and not by error messages, so
+do not reason about it from columns either way. For the record, since an earlier
+draft of this task got it backwards: errors 36.901 and 36.902 *do* carry a
+position and it is a **byte** offset, which agrees with byte orientation rather
+than arguing against it — but this phase does not reproduce that substitution at
+all. See Task 3.8 Step 4 and the Global Constraints.
 
 Emit spans, never copied strings — Task 3.2 retains the text and the AST holds
 ranges into it.
@@ -1288,9 +1464,15 @@ and yields a sub-keyword table four entries short.
 spellings appear as rows in both: `ATTRIBUTE`, `CLASS`, `CONSTANT`, `METHOD`,
 `ROUTINE`. So `::CLASS c SUBCLASS d` uses `CLASS` at the top level and
 `SUBCLASS` as an option, while `::METHOD m CLASS` uses `CLASS` as an option of
-`::METHOD`. Resolution is by position — the token after `::` looks up in
-`directives[]`, everything after it looks up in `subDirectives[]` — the same
-positional rule as Task 3.6's keywords, and for the same reason.
+`::METHOD`. Resolution is by position — the token after `::` resolves against
+`ctx.keywords.directives`, everything after it against
+`ctx.keywords.sub_directives` — the same positional rule as Task 3.6's keywords,
+and for the same reason.
+
+Those are `SymbolId` comparisons through `KeywordSet::index_of` (Task 3.3), not
+string lookups. `RexxToken::directives[]` and `subDirectives[]` are named in this
+task only to say which C++ rows the two sets are built from; do not build a
+string table in Rust, for the same reason Task 3.6 gives.
 
 - [ ] **Step 2: Write a failing test per top-level directive**
 
@@ -1340,16 +1522,19 @@ throughput number depends on the whole file parsing.
 - Produces:
 
   ```rust
-  pub fn parse_program(text: String) -> Result<Program, ParseError>;
-  pub fn parse_interpret(text: String) -> Result<Fragment, ParseError>;
+  pub fn parse_program(text: Vec<u8>) -> Result<Program, ParseError>;
+  pub fn parse_interpret(text: Vec<u8>) -> Result<Fragment, ParseError>;
 
   pub struct Program {
       pub source: ProgramSource,
       pub instructions: Vec<Instruction>,
       pub directives: Vec<Directive>,
-      pub labels: BTreeMap<SymbolId, usize>,
+      /// Keyed by the label token's VALUE, not by `SymbolId`: upcased for a
+      /// symbol label, verbatim for a literal one. See Task 3.3 for the six
+      /// measurements that force this and for why interning the key is wrong.
+      pub labels: BTreeMap<Box<str>, usize>,
       /// Retained because a `SymbolId` is meaningless without it: Phase 4
-      /// resolves names for error substitutions and `SIGNAL`'s label lookup.
+      /// resolves names back to text to report them.
       pub symbols: SymbolTable,
   }
 
@@ -1368,7 +1553,7 @@ throughput number depends on the whole file parsing.
   `pub(crate)` so the D10 choice cannot leak into the executor.
 
 **Both return types retain their own source, and that is not optional.** The
-architecture is "the program source is retained as one `String`; every AST node
+architecture is "the program source is retained as one byte buffer; every AST node
 holds a byte range into it". An earlier draft had `parse_interpret` take ownership
 of `text` and return only `Vec<Instruction>`, which leaves every span in the
 result indexing a `String` that no longer exists.
@@ -1415,10 +1600,10 @@ reviewer must be able to reject the composition independently of the parts.
 ```rust
 #[test]
 fn a_program_with_directives_separates_them_from_instructions() {
-    let p = parse_program("say 1\n::routine r\n  return 2\n".to_string()).unwrap();
+    let p = parse_program(b"say 1\n::routine r\n  return 2\n".to_vec()).unwrap();
     assert_eq!(p.instructions.len(), 1);
     assert_eq!(p.directives.len(), 1);
-    assert_eq!(p.source.line(1), Some("say 1"));
+    assert_eq!(p.source.line(1), Some(&b"say 1"[..]));
 }
 ```
 
@@ -1447,10 +1632,12 @@ does, this composition does not compile, which is the correct outcome. A
 `parse_interpret` builds its own `SymbolTable`, so id 7 in a fragment and id 7 in
 the program that ran the `INTERPRET` are unrelated. Phase 4 must resolve a
 fragment symbol through the fragment's own table, and if it ever needs to match a
-fragment name against a program variable it must go through the text with
-`Program::symbols.get(fragment.symbols.name(id))`. Sharing one table across
-`INTERPRET` calls would need `&mut` at execution time and is deliberately not
-done. Task 3.9 does not care, because `TRACE` reads spans and each carries its
+fragment name against a program variable it must go through the **text**:
+`fragment.symbols.name(id)` gives the upcased spelling, and Phase 4 compares that
+against whatever it is matching. There is deliberately no name-to-id lookup on
+`SymbolTable` for this — see Task 3.3 — so Phase 4 adds one if it needs it, with
+the semantics its own forms require. Sharing one table across `INTERPRET` calls
+would need `&mut` at execution time and is deliberately not done. Task 3.9 does not care, because `TRACE` reads spans and each carries its
 own source.
 
 - [ ] **Step 4: Parse every `rust/corpus/lang/` program through this entry point**
@@ -1530,22 +1717,40 @@ table.
 
 - [ ] **Step 2: Write the failing tests from those recordings**
 - [ ] **Step 3: Implement**
-- [ ] **Step 4: Verify what the oracle actually exposes — there is no column**
+- [ ] **Step 4: Verify what the oracle exposes, and what we deliberately do not reproduce**
 
-The condition object carries exactly these, and none of them is a column:
+The condition object carries exactly these:
 `PROPAGATED ERRORTEXT MESSAGE STACKFRAMES POSITION INSTRUCTION CODE RC
-CONDITION PACKAGE TRACEBACK PROGRAM ADDITIONAL DESCRIPTION`. `POSITION` is the
-**line**. Nothing on stderr carries a column either — ooRexx locates an error
-by *quoting the offending token* in the message text, not by offset.
+CONDITION PACKAGE TRACEBACK PROGRAM ADDITIONAL DESCRIPTION`. `POSITION` is a
+**line number**, and there is no column *field* among them. ooRexx normally
+locates an error by *quoting the offending token* in the message text rather
+than by offset.
 
-So verify **number, sub-number, line, and the substitution values**. The
-substitutions are where the token gets quoted, so they are what actually pins
-the location, and `ADDITIONAL` exposes them separately from the rendered text
-exactly as `rexx-num` already models.
+**But "there is no column anywhere in the oracle" is false, and earlier drafts
+of this plan asserted it.** Errors 36.901 and 36.902 substitute a position:
+`Left parenthesis "(" in position 5 on line 3`. It is a 1-based **byte** offset
+within the offending token's own physical line — `x = "ää" || (a` reports
+position 15 where the `(` is the 13th character — and its line can differ from
+the main message's, which reports the clause's start line. Three review rounds
+acted on the false version of this claim, so it is spelled out rather than
+quietly corrected.
 
-Keeping a column internally is still worth it for future tooling, but nothing
-in this phase can check it against the oracle, so nothing in this phase may
-gate on it.
+**What this phase gates: number and sub-number, on a plausible line. Nothing
+else.** Reproducing message text and substitution values 1:1 was dropped as a
+scope decision, and error 36's position is not produced at all. This is an
+*observable* deviation, not an unobservable one: a trapped syntax error hands
+the program `ERRORTEXT`, `MESSAGE` and `ADDITIONAL`, so a program reading those
+would see a difference. That is accepted.
+
+So this step's job is no longer a differential capture of substitutions. It is
+narrower: for each error the parser can raise, confirm the number and sub-number
+against `rexxc`, and confirm the generated message table has that row so the text
+comes out of the table rather than being hand-written. Do not build machinery to
+match spliced text, and do not track per-line byte offsets.
+
+Runtime errors are untouched by any of this. `rexx-num`'s numbers, sub-numbers,
+message text and `ADDITIONAL` values stay byte-exact, and this relaxation must
+not be read as licence to loosen them.
 
 - [ ] **Step 5: Commit**
 
@@ -1810,15 +2015,30 @@ fits.
       A Rust-side failure is therefore unambiguous, with no per-file expectation
       to curate.
 - [ ] `CoreClasses.orx` and `StreamClasses.orx` parse end to end.
-- [ ] For every **parse-time** error the parser raises: number, sub-number, line
-      and **substitution values** match the oracle. Number, sub-number and line
-      come from `build/bin/rexxc bad.rex 2>&1 1>/dev/null`, which prints
-      `Error N running … line L` and `Error N.S` and executes nothing. The
-      substitution values are spliced into that same text; where the error is also
-      reachable through `interpret`, cross-check them against
-      `condition('o')~additional`, which exposes them unspliced. Not column — the
-      oracle exposes none, and gating on something unobservable is the mistake
-      Phase 2 made three times over.
+- [ ] For every **parse-time** error the parser raises: the **number and
+      sub-number** match the oracle, on a **plausible line**. Both come from
+      `build/bin/rexxc bad.rex 2>&1 1>/dev/null`, which prints
+      `Error N running … line L` and `Error N.S` and executes nothing.
+
+      **Message text and substitution values are deliberately NOT gated**, per
+      the Global Constraints. Reproducing them 1:1 was dropped as a scope
+      decision: the generated message table makes the number nearly free, while
+      matching spliced text and every substitution is a large differential
+      exercise for a property no program branches on. Error 36's byte-position
+      substitution is not produced at all.
+
+      "Plausible line" rather than "the oracle's line" because the two can
+      legitimately differ and one line is not always the answer: error 36 puts
+      the clause's start line in the main message and the offending token's own
+      line in its substitution. Assert the line the oracle's main message gives
+      where the parser reports one line; do not build machinery to reproduce
+      both.
+
+      Note for anyone re-reading this criterion later: earlier drafts justified
+      dropping a column with "the oracle exposes none". That is **false** —
+      errors 36.901 and 36.902 substitute a 1-based byte offset within the
+      offending token's physical line. The reason we do not produce it is that we
+      chose not to, not that it does not exist.
 
       "Parse-time" is defined by `rexxc`, not by judgement: an input `rexxc`
       rejects is a parse error and belongs here; an input `rexxc` accepts is not,
@@ -1921,7 +2141,7 @@ fits.
   exists to catch it; before it was written, nothing in the corpus did.
 - **The AST must not discard source.** `SOURCELINE`, error reporting and
   `TRACE` all expose original text. Nodes hold byte ranges into one retained
-  `String`, and the retained `String` travels in the same struct as the nodes —
+  byte buffer, and that buffer travels in the same struct as the nodes —
   `Program` and `Fragment` both, which is why `parse_interpret` cannot return a
   bare `Vec<Instruction>`.
 - **A clause span is not a node span.** `Instruction::clause_span` runs to the end
