@@ -822,11 +822,12 @@ impl ClauseCursor {
 }
 ```
 
-Every `Instruction` carries the `span` of the clause it was built from, taken
-from the `Clause` that `next_clause` or `split_before` returned. That span, not
-the node's own extent, is what Task 3.9 reconstructs and what Task 3.7b retains.
-A `THEN` is its own `Instruction` with its own one-token span, exactly as
-`RexxInstructionThen` sets its location to the `THEN` token's
+**Every `Instruction` carries a `clause_span: Range<usize>`**, copied from the
+`Clause` that `next_clause` or `split_before` returned. Use that name, because
+Task 3.7b retains it and Task 3.9 reconstructs `*-*` lines from it, and neither
+of those implementers sees this task's brief. It is not the node's own extent: a
+`THEN` is its own `Instruction` whose `clause_span` covers just the `then` token,
+exactly as `RexxInstructionThen` sets its location to the `THEN` token's
 (`ThenInstruction.cpp:58-77`).
 
 **Five clause types are not keyword-driven at all,** and one of them is the
@@ -1172,8 +1173,8 @@ established, and those spans are what the `*-*` lines above are sliced from. So
 `Program` needs no separate clause list: the spans travel with the instructions,
 including the mid-line `then` that Task 3.6's `split_before` produces. Whichever
 of the two Task 3.1 Step 3b shapes wins, the invariant is the same — an
-instruction's clause span is a range into the `ProgramSource` sitting in the same
-struct.
+instruction's `clause_span` is a range into the `ProgramSource` sitting in the
+same struct.
 
 `INTERPRET` parses a string at *runtime*, so the parser is not a build-time
 tool that runs once — Phase 4 calls back into it during execution. That second
@@ -1324,8 +1325,8 @@ gate on it.
 - Test: `rust/crates/rexx-parse/tests/sourceline.rs`
 
 **Interfaces:**
-- Consumes: the per-instruction clause span produced by Tasks 3.4 and 3.6, and
-  the `ProgramSource` inside `Program`/`Fragment` from Task 3.7b.
+- Consumes: `Instruction::clause_span`, produced by Task 3.4 and split by
+  Task 3.6, and the `ProgramSource` inside `Program`/`Fragment` from Task 3.7b.
 - Produces: the source-text slice per clause that `TRACE`'s `*-*` line needs. Nothing else — no depth field, no value-trace hooks.
 
 `src/clause.rs` and `src/ast.rs` are in the Files list because Step 3 adjusts
@@ -1418,7 +1419,7 @@ text reconstructed from the AST is **byte-identical** to the corresponding
 **`*-*`** line the interpreter prints, after stripping the line number, the marker
 and the leading indentation — and **nothing else**. In particular a terminating
 `;` and a trailing blank before a `then` are part of the expected text, not
-whitespace to be trimmed. Reconstruct from the instruction's clause span, not from
+whitespace to be trimmed. Reconstruct from `Instruction::clause_span`, not from
 the node's own extent; the two differ exactly where this task is hardest.
 
 `*-*` is the *source* marker and is the only one Phase 3 can produce. Under
@@ -1644,11 +1645,11 @@ fits.
   `String`, and the retained `String` travels in the same struct as the nodes —
   `Program` and `Fragment` both, which is why `parse_interpret` cannot return a
   bare `Vec<Instruction>`.
-- **A clause span is not a node span.** The clause span runs to the end of the
-  terminating token, so `nop;` includes its `;` and `here:` includes its `:`,
-  while `if y > 5 then say "big"` is three clauses whose first ends at the `THEN`
-  token's start byte and therefore carries a trailing blank. `TRACE`'s `*-*` line
-  prints the clause span; error reporting and `SOURCELINE` use the retained source
-  directly. Task 3.4 produces these spans, Task 3.6 splits them, Task 3.7b retains
+- **A clause span is not a node span.** `Instruction::clause_span` runs to the end
+  of the clause's terminating token, so `nop;` includes its `;` and `here:`
+  includes its `:`, while `if y > 5 then say "big"` is three clauses whose first
+  ends at the `THEN` token's start byte and therefore carries a trailing blank.
+  `TRACE`'s `*-*` line prints `clause_span`; error reporting and `SOURCELINE` use
+  the retained source directly. Task 3.4 produces these spans, Task 3.6 splits them, Task 3.7b retains
   them and Task 3.9 checks them — a defect here surfaces four tasks downstream as
   a rework of every node type, which is why it is front-loaded.
