@@ -147,15 +147,84 @@ fn the_first_period_ends_the_stem_however_many_follow() {
 
 #[test]
 fn a_shape_renders_a_literal_and_a_constant_differently() {
-    // A rendering that could not tell `'2'` from `2` would make every shape
+    // A rendering that could not tell `"2"` from `2` would make every shape
     // assertion in `expr/tests.rs` weaker than it looks.
     let mut symbols = SymbolTable::default();
     let two = symbols.intern("2");
     let constant = Expr::new(ExprKind::Constant(two), 0..1);
     let literal = Expr::new(ExprKind::Literal(Box::from(&b"2"[..])), 0..3);
     assert_eq!(constant.shape(&symbols), "2");
-    assert_eq!(literal.shape(&symbols), "'2'");
+    assert_eq!(literal.shape(&symbols), "\"2\"");
     assert_ne!(constant.shape(&symbols), literal.shape(&symbols));
+}
+
+#[test]
+fn a_shape_renders_an_omitted_argument_unlike_any_variable() {
+    // `_` is a legal symbol character, so rendering an omitted argument as `_`
+    // made `f(_,1)` and `f(,1)` the same string, which is exactly the argument
+    // counting that `f(,)` against `f(1,)` exists to pin. Neither `<` nor `>`
+    // can start a rendered leaf, so `<omitted>` has no other source.
+    let mut symbols = SymbolTable::default();
+    let underscore = symbols.intern("_");
+    let one = symbols.intern("1");
+    let with_variable = Expr::new(
+        ExprKind::Call {
+            target: CallTarget::Literal(Box::from(&b"f"[..])),
+            args: vec![
+                Some(Expr::new(ExprKind::Variable(underscore), 2..3)),
+                Some(Expr::new(ExprKind::Constant(one), 4..5)),
+            ],
+        },
+        0..6,
+    );
+    let with_omission = Expr::new(
+        ExprKind::Call {
+            target: CallTarget::Literal(Box::from(&b"f"[..])),
+            args: vec![None, Some(Expr::new(ExprKind::Constant(one), 3..4))],
+        },
+        0..5,
+    );
+    assert_ne!(
+        with_variable.shape(&symbols),
+        with_omission.shape(&symbols),
+        "a variable named _ and an omitted argument must not render alike"
+    );
+}
+
+#[test]
+fn a_shape_quotes_a_message_name_so_a_blank_in_one_cannot_hide() {
+    // Unquoted, `a~"b c"` and `a~b(c)` both rendered `(msg~ A B C)`: the name
+    // held a blank in the first and an argument followed in the second. Both
+    // translate under `rexxc`, so this is a real pair and not a contrived one.
+    let mut symbols = SymbolTable::default();
+    let a = symbols.intern("a");
+    let c = symbols.intern("c");
+    let target = || Expr::new(ExprKind::Variable(a), 0..1);
+    let blank_in_name = Expr::new(
+        ExprKind::Message {
+            target: Box::new(target()),
+            name: Box::from(&b"B C"[..]),
+            super_class: None,
+            args: Vec::new(),
+            cascade: false,
+        },
+        0..7,
+    );
+    let name_then_argument = Expr::new(
+        ExprKind::Message {
+            target: Box::new(target()),
+            name: Box::from(&b"B"[..]),
+            super_class: None,
+            args: vec![Some(Expr::new(ExprKind::Variable(c), 4..5))],
+            cascade: false,
+        },
+        0..6,
+    );
+    assert_ne!(
+        blank_in_name.shape(&symbols),
+        name_then_argument.shape(&symbols),
+        "a blank inside a message name must not read as an argument boundary"
+    );
 }
 
 #[test]

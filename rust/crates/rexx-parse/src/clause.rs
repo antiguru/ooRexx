@@ -41,7 +41,7 @@ use crate::token::{ParseError, Tag, Token};
 /// names it.
 ///
 /// Task 3.6 is the first non-test reader of all three fields.
-#[allow(dead_code)]
+#[allow(dead_code)] // deleted by Task 3.6
 #[derive(Clone, Debug)]
 pub(crate) struct Clause {
     /// Index range into the `ParseCtx::tokens` slice, terminating token
@@ -79,7 +79,7 @@ pub(crate) struct Clause {
 /// input reaches an error return here: the terminator rules cannot fail, and
 /// the one label error the C++ raises, error 47.1 for a label in `INTERPRET`
 /// text, needs the source kind that this function is not given.
-#[allow(dead_code)]
+#[allow(dead_code)] // deleted by Task 3.6
 pub(crate) fn split_clauses(tokens: &[Token]) -> Result<Vec<Clause>, ParseError> {
     let mut clauses = Vec::new();
     let mut index = 0;

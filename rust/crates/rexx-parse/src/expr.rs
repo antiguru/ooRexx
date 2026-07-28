@@ -11,10 +11,14 @@
 
 //! The expression grammar: hand-written recursive descent, per D10.
 //!
-//! One function per `LanguageParser` method, keeping the same names, because
-//! the error sites have to line up: `parse_expression`,
-//! `parse_full_subexpression`, `parse_subexpression`, `parse_message_subterm`,
-//! `parse_subterm`, `parse_message`, `parse_arg_list`.
+//! One `Parser` method per `LanguageParser` method, so the error sites line up:
+//! `expression`, `full_subexpression`, `subexpression`, `message_subterm`,
+//! `subterm`, `message`, `collection_message`, `arg_list`, `logical`,
+//! `qualified_symbol` and `variable_reference_term` answer to
+//! `parseExpression`, `parseFullSubExpression`, `parseSubExpression`,
+//! `parseMessageSubterm`, `parseSubTerm`, `parseMessage`,
+//! `parseCollectionMessage`, `parseArgList`, `parseLogical`,
+//! `parseQualifiedSymbol` and `parseVariableReferenceTerm`.
 //!
 //! # Precedence, and why prefix operators are not in the table
 //!
@@ -25,7 +29,7 @@
 //! shape by recursing on the right at `prec + 1`.
 //!
 //! Prefix `+`, `-` and `\` appear nowhere in that table. They are parsed in
-//! `parse_message_subterm`, which recurses on *itself* for the operand, so a
+//! `message_subterm`, which recurses on *itself* for the operand, so a
 //! prefix operator swallows a whole message subterm before any dyadic operator
 //! is considered and can never lose a binding contest. That is why `-2 ** 2`
 //! is 4 where C and Python give -4, and it is a property of where the parse
@@ -92,7 +96,7 @@ pub(crate) struct Terminators(u32);
 
 // Tasks 3.6 and 3.7 pick a set per instruction. Only `EOC`, `RIGHT` and
 // `SQRIGHT` have a caller inside the grammar itself.
-#[allow(dead_code)]
+#[allow(dead_code)] // deleted by Task 3.7
 impl Terminators {
     /// End of clause. Carried for fidelity with `TERM_EOC` and never read:
     /// `RexxToken::isTerminator` returns true for an end of clause and for a
@@ -146,29 +150,36 @@ const SUBKEY_UNTIL: usize = 44;
 const SUBKEY_WHILE: usize = 48;
 const SUBKEY_WITH: usize = 49;
 
-/// Parses the rest of `cursor` as one required expression.
+/// Parses one required expression, stopping at `term`.
 ///
 /// Commas make an array-building list, as at the top level of an assignment's
-/// right-hand side, and only an end of clause terminates.
+/// right-hand side.
 ///
-/// An empty expression is error 35.1 here. The interpreter's own sub-number
-/// for a missing expression depends on the instruction that wanted one --
-/// measured, `r =` is 35.918 and `if then nop` is 35.929 -- so an instruction
-/// parser that needs its own number calls `parse_expression` and raises it
-/// itself.
-#[allow(dead_code)]
-pub(crate) fn parse_expr(ctx: &ParseCtx, cursor: &mut TokenCursor) -> Result<Expr, ParseError> {
+/// `missing` is the sub-number to raise when the expression turns out to be
+/// absent, and the caller supplies it because the interpreter's number depends
+/// on which instruction wanted the expression: measured, `r =` is 35.918 and
+/// `interpret` with nothing after it is 35.912. This mirrors
+/// `requiredExpression(terminators, error)` (`LanguageParser.hpp:228`), whose
+/// 18 call sites pass 5 distinct terminator sets and 13 distinct error codes,
+/// every one of them in the 35.9xx block.
+#[allow(dead_code)] // deleted by Task 3.6
+pub(crate) fn parse_expr(
+    ctx: &ParseCtx,
+    cursor: &mut TokenCursor,
+    term: Terminators,
+    missing: u16,
+) -> Result<Expr, ParseError> {
     let mut parser = Parser::new(ctx, cursor);
-    match parser.expression(Terminators::EOC)? {
+    match parser.expression(term)? {
         Some(expr) => Ok(expr),
-        None => Err(parser.error(35, 1)),
+        None => Err(parser.error(35, missing)),
     }
 }
 
 /// Parses an expression that may be absent, stopping at `term`.
 ///
 /// `LanguageParser::parseExpression` (`LanguageParser.cpp:2725`).
-#[allow(dead_code)]
+#[allow(dead_code)] // deleted by Task 3.6
 pub(crate) fn parse_expression(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -187,7 +198,7 @@ pub(crate) fn parse_expression(
 /// `if 1 = 1, then nop` are all 35.929. That makes the C++'s own
 /// `requiredLogicalExpression` null check (`LanguageParser.hpp:220`) dead code,
 /// which is why an instruction parser here gets no say in the number.
-#[allow(dead_code)]
+#[allow(dead_code)] // deleted by Task 3.6
 pub(crate) fn parse_logical(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -435,11 +446,13 @@ impl<'a, 'c> Parser<'a, 'c> {
                 // than a concatenation.
                 TokenKind::Operator(Operator::Backslash) => return Err(self.error(35, 1)),
                 TokenKind::Operator(op) => *op,
-                // Mirrors the C++'s TILDE, DTILDE and SQLEFT cases, which
-                // reattach the message to the term already parsed. Not
-                // reachable from here, because `message_subterm` drains the
-                // whole cascade before returning, but kept so the two files
-                // line up.
+                // The C++'s TILDE, DTILDE and SQLEFT cases, which reattach the
+                // message to the term already parsed. Reached whenever the left
+                // term did not come back through `message_subterm`'s own
+                // cascade loop, which is what a prefix `>` or `<` does:
+                // `variable_reference_term` returns straight to the caller, so
+                // the `~` in `>a~b` arrives here. Measured, `r = >a~b` and
+                // `r = >a[1]` both translate.
                 TokenKind::Tilde | TokenKind::DTilde | TokenKind::LeftBracket => {
                     left = self.cascade(left, term)?;
                     continue;
@@ -613,9 +626,16 @@ impl<'a, 'c> Parser<'a, 'c> {
         ))
     }
 
-    /// The `:superclass` override's term, which must be a variable or a dot
-    /// symbol (`isVariableOrDot`). Measured: `a~b:.nil` parses, `a~b:1` is
-    /// error 20.917.
+    /// The `:superclass` override's term, which must pass
+    /// `isVariableOrDot` (`Token.hpp:576`): a simple variable, a stem, a
+    /// compound variable or a dot symbol.
+    ///
+    /// A stem and a compound both parse here even though neither can name a
+    /// class usefully, and that is the interpreter's behaviour rather than an
+    /// oversight: measured with `rexxc`, `a~b:c.`, `a~b:c.d` and `a~b:c.d.e`
+    /// all translate, and `a~b:c.` then fails at *run* time with 88.914. The
+    /// gate must not be widened past those four classes, because `a~b:1`,
+    /// `a~b:1e5` and `a~b:.` are all error 20.917.
     fn super_class_term(&mut self, term: Terminators) -> Result<Expr, ParseError> {
         let Some(token) = self.peek() else {
             return Err(self.error(20, 917));
@@ -624,17 +644,22 @@ impl<'a, 'c> Parser<'a, 'c> {
             return Err(self.error(20, 917));
         }
         let span = token.span.clone();
-        let kind = match &token.kind {
-            TokenKind::Symbol {
-                id,
-                class: SymbolClass::Variable,
-            } => ExprKind::Variable(*id),
-            TokenKind::Symbol {
-                id,
-                class: SymbolClass::DotSymbol,
-            } => ExprKind::DotVariable(*id),
-            _ => return Err(self.error(20, 917)),
+        // `isVariableOrDot` reads only the subclass, so a literal token cannot
+        // pass it whatever it holds, and this match on `Symbol` is the same
+        // gate.
+        let TokenKind::Symbol { id, class } = &token.kind else {
+            return Err(self.error(20, 917));
         };
+        if !matches!(
+            class,
+            SymbolClass::Variable
+                | SymbolClass::Stem
+                | SymbolClass::Compound
+                | SymbolClass::DotSymbol
+        ) {
+            return Err(self.error(20, 917));
+        }
+        let kind = symbol_kind(*id, *class);
         self.advance();
         Ok(Expr::new(kind, span))
     }

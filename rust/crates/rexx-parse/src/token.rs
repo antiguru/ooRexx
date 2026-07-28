@@ -658,7 +658,7 @@ const SUB_DIRECTIVES: [&str; 40] = [
 pub(crate) struct ParseCtx<'a> {
     /// Task 3.6 reads this to recover a label's source spelling. The
     /// expression grammar needs only the tokens.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // deleted by Task 3.6
     pub(crate) source: &'a ProgramSource,
     pub(crate) tokens: &'a [Token],
     /// Read-only by the time parsing starts: `scan` has already interned every
@@ -685,6 +685,11 @@ pub(crate) struct ParseCtx<'a> {
 /// so an expression parser cannot walk off the end of its clause.
 ///
 /// Crate-internal, for the same reason as `ParseCtx`.
+///
+/// Forward only. The C++ consumes a token and calls `previousToken` to put it
+/// back; the grammar here peeks and only then consumes, so it never rewinds.
+/// A `back` method existed and was removed once the expression grammar showed
+/// it had no caller, and Tasks 3.6 and 3.7 are the same style.
 pub(crate) struct TokenCursor {
     /// Index range into `ParseCtx::tokens` that this cursor may visit.
     range: Range<usize>,
@@ -695,7 +700,7 @@ pub(crate) struct TokenCursor {
 impl TokenCursor {
     /// Task 3.6 builds one of these per clause, from `Clause::tokens`; the
     /// expression grammar is handed one already built.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // deleted by Task 3.6
     pub(crate) fn new(range: Range<usize>) -> Self {
         Self {
             pos: range.start,
@@ -715,21 +720,6 @@ impl TokenCursor {
         let i = self.peek()?;
         self.pos += 1;
         Some(i)
-    }
-
-    /// Step back one token. Panics if nothing has been yielded yet, because
-    /// that is a parser bug rather than a source error.
-    ///
-    /// No production caller yet, and possibly never: the expression grammar
-    /// peeks and only then consumes, where the C++ consumes and calls
-    /// `previousToken`. Task 3.6 or 3.7 either uses it or it should go.
-    #[allow(dead_code)]
-    pub(crate) fn back(&mut self) {
-        assert!(
-            self.pos > self.range.start,
-            "TokenCursor::back before start"
-        );
-        self.pos -= 1;
     }
 
     pub(crate) fn position(&self) -> usize {

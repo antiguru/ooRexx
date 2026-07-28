@@ -18,11 +18,19 @@
 // Phase 3 builds this crate bottom up, one layer per task, so a layer's entry
 // point has no non-test caller until the layer above it lands. `cargo clippy
 // --all-targets` compiles the library once with `cfg(test)` off, and there each
-// such item is dead. The `#[allow(dead_code)]` attributes below and in
-// `clause.rs`, `expr.rs` and `token.rs` mark exactly those items, each naming
-// the task that will call it and so delete the attribute. There is no
-// crate-wide allow, deliberately: a blanket one would also hide code that is
-// dead by mistake.
+// such item is dead.
+//
+// Eight dead-code allowances mark exactly those items, in `clause.rs`,
+// `expr.rs` and `token.rs`, and none in this file. Every one carries a trailing
+// `deleted by Task 3.N` on the attribute line itself, so the set is greppable
+// and each entry names the task that removes it. Do not spell the attribute out
+// anywhere but on an item, because that is what makes the grep exact.
+//
+// An expect attribute cannot be used instead: the lint fires in the library
+// compilation and not in the library-as-test one, so the expectation would be
+// unfulfilled in the second and that is a warning of its own. There is no
+// crate-wide allowance, deliberately, because a blanket one would also hide
+// code that is dead by mistake.
 
 mod ast;
 mod clause;

@@ -21,7 +21,9 @@ use super::{Terminators, parse_expr, parse_expression, parse_logical};
 /// which one it is exercising.
 #[derive(Copy, Clone)]
 pub(super) enum Entry {
-    /// `parse_expr`: the whole clause, required, end of clause only.
+    /// `parse_expr`: required, end of clause only. 918 stands in for the
+    /// sub-number an instruction parser passes, which for an assignment is
+    /// 35.918.
     Required,
     /// `parse_expression` with a terminator set.
     Optional(Terminators),
@@ -58,7 +60,7 @@ pub(super) fn parse(text: &str, entry: Entry) -> Result<(Expr, SymbolTable), Par
         };
         let mut cursor = TokenCursor::new(clauses[0].tokens.clone());
         match entry {
-            Entry::Required => parse_expr(&ctx, &mut cursor),
+            Entry::Required => parse_expr(&ctx, &mut cursor, Terminators::EOC, 918),
             Entry::Optional(term) => parse_expression(&ctx, &mut cursor, term)
                 .map(|e| e.expect("the test input is not an empty expression")),
             Entry::Logical(term) => parse_logical(&ctx, &mut cursor, term),
@@ -246,7 +248,7 @@ fn concatenation_is_left_associative_though_no_value_can_show_it() {
     // `token->precedence() <= second->precedence()`, and is asserted here
     // because a later change to the loop bound would otherwise go unnoticed.
     assert_eq!(shape("a b c"), "(blank (blank A B) C)");
-    assert_eq!(shape("'a' || 'b' || 'c'"), "(|| (|| 'a' 'b') 'c')");
+    assert_eq!(shape("'a' || 'b' || 'c'"), "(|| (|| \"a\" \"b\") \"c\")");
 }
 
 // ---------------------------------------------------------------------------
@@ -257,7 +259,7 @@ fn concatenation_is_left_associative_though_no_value_can_show_it() {
 fn a_prefix_operator_binds_looser_than_a_message_cascade() {
     // build/bin/rexx: `r = - "5"~length` => -1. Binding the prefix to the
     // literal first would be (-"5")~length, which is "-5"~length = 2.
-    assert_eq!(shape("- \"5\"~length"), "(u- (msg~ '5' LENGTH))");
+    assert_eq!(shape("- \"5\"~length"), "(u- (msg~ \"5\" \"LENGTH\"))");
 }
 
 #[test]
@@ -287,8 +289,8 @@ fn a_blank_before_a_parenthesis_makes_a_concatenation_not_a_call() {
     // build/bin/rexx: `r = abs ('2.5')` => `ABS 2.5`, with a blank, because
     // `abs` is an uninitialised variable whose value is its own name and the
     // blank is the operator. `r = abs('2.5')` => 2.5.
-    assert_eq!(shape("abs ('2.5')"), "(blank ABS '2.5')");
-    assert_eq!(shape("abs('2.5')"), "(call ABS '2.5')");
+    assert_eq!(shape("abs ('2.5')"), "(blank ABS \"2.5\")");
+    assert_eq!(shape("abs('2.5')"), "(call ABS \"2.5\")");
 }
 
 #[test]
@@ -344,8 +346,8 @@ fn a_call_name_from_a_literal_is_used_exactly_as_written() {
     // routine "abs"`, while `r = 'ABS'(-3)` => 3. So a literal call name is
     // not upcased and does not reach the builtin table unless it is already
     // upper case, where a symbol name was upcased by the scanner.
-    assert_eq!(shape("'abs'(-3)"), "(call 'abs' (u- 3))");
-    assert_eq!(shape("'ABS'(-3)"), "(call 'ABS' (u- 3))");
+    assert_eq!(shape("'abs'(-3)"), "(call \"abs\" (u- 3))");
+    assert_eq!(shape("'ABS'(-3)"), "(call \"ABS\" (u- 3))");
     assert_eq!(shape("abs(-3)"), "(call ABS (u- 3))");
 }
 
@@ -357,49 +359,86 @@ fn a_call_name_from_a_literal_is_used_exactly_as_written() {
 fn a_bracket_reference_is_the_bracket_message() {
     // build/bin/rexx: `r = "abc"[2]` and `r = "abc"~"[]"(2)` both => `b`, so
     // the two spellings are one operation and get one node.
-    assert_eq!(shape("\"abc\"[2]"), "(msg~ 'abc' [] 2)");
-    assert_eq!(shape("\"abc\"~\"[]\"(2)"), "(msg~ 'abc' [] 2)");
+    assert_eq!(shape("\"abc\"[2]"), "(msg~ \"abc\" \"[]\" 2)");
+    assert_eq!(shape("\"abc\"~\"[]\"(2)"), "(msg~ \"abc\" \"[]\" 2)");
 }
 
 #[test]
 fn a_message_name_is_upcased_whether_it_came_from_a_symbol_or_a_literal() {
     // build/bin/rexx: `r = "abc"~'length'`, `r = "abc"~'LENGTH'` and
     // `r = "abc"~"lEnGtH"` all => 3.
-    assert_eq!(shape("\"abc\"~'length'"), "(msg~ 'abc' LENGTH)");
-    assert_eq!(shape("\"abc\"~\"lEnGtH\""), "(msg~ 'abc' LENGTH)");
-    assert_eq!(shape("\"abc\"~length"), "(msg~ 'abc' LENGTH)");
+    assert_eq!(shape("\"abc\"~'length'"), "(msg~ \"abc\" \"LENGTH\")");
+    assert_eq!(shape("\"abc\"~\"lEnGtH\""), "(msg~ \"abc\" \"LENGTH\")");
+    assert_eq!(shape("\"abc\"~length"), "(msg~ \"abc\" \"LENGTH\")");
     // A blank on either side of the twiddle changes nothing, because the
     // scanner emits no blank token next to a `~`: `r = "abc" ~ length` => 3.
-    assert_eq!(shape("\"abc\" ~ length"), "(msg~ 'abc' LENGTH)");
+    assert_eq!(shape("\"abc\" ~ length"), "(msg~ \"abc\" \"LENGTH\")");
 }
 
 #[test]
 fn a_cascade_is_one_term_and_reads_left_to_right() {
     // build/bin/rexxc accepts `r = a~~b~c`. The shape is what puts `~~b`
     // inside `~c` rather than the other way round.
-    assert_eq!(shape("a~~b~c"), "(msg~ (msg~~ A B) C)");
+    assert_eq!(shape("a~~b~c"), "(msg~ (msg~~ A \"B\") \"C\")");
     // build/bin/rexx: `r = .array~of(1,2)~~append(9)~items` => 3.
     assert_eq!(
         shape(".array~of(1,2)~~append(9)~items"),
-        "(msg~ (msg~~ (msg~ env:.ARRAY OF 1 2) APPEND 9) ITEMS)"
+        "(msg~ (msg~~ (msg~ env:.ARRAY \"OF\" 1 2) \"APPEND\" 9) \"ITEMS\")"
     );
 }
 
 #[test]
 fn a_colon_after_a_message_name_is_a_superclass_override() {
-    // build/bin/rexxc: `r = a~b:.nil` parses, `r = a~b:1` is error 20.917,
-    // because the override must be a variable or a dot symbol.
-    assert_eq!(shape("a~b:.nil"), "(msg~ A B :env:.NIL)");
-    assert_eq!(shape("a~b:c(1)"), "(msg~ A B :C 1)");
+    // The gate is `isVariableOrDot` (`Token.hpp:576`), which is
+    // `VARIABLE | STEM | COMPOUND | DOTSYMBOL`, and it is wider than a class
+    // name has any use for. build/bin/rexxc translates all five of these:
+    //
+    //   r = a~b:.nil       rc=0
+    //   r = a~b:c          rc=0
+    //   r = a~b:c.         rc=0     (and then fails at run time, 88.914)
+    //   r = a~b:c.d        rc=0
+    //   r = a~b:c.d.e      rc=0
+    assert_eq!(shape("a~b:.nil"), "(msg~ A \"B\" :env:.NIL)");
+    assert_eq!(shape("a~b:c(1)"), "(msg~ A \"B\" :C 1)");
+    assert_eq!(shape("a~b:c."), "(msg~ A \"B\" :stem:C.)");
+    assert_eq!(shape("a~b:c.d"), "(msg~ A \"B\" :compound:C.[var:D])");
+    assert_eq!(
+        shape("a~b:c.d.e"),
+        "(msg~ A \"B\" :compound:C.[var:D,var:E])"
+    );
+
+    // And it must not be wider than those four classes. build/bin/rexxc:
+    //
+    //   r = a~b:1          Error 20.917
+    //   r = a~b:1e5        Error 20.917
+    //   r = a~b:.          Error 20.917    (a lone period is SYMBOL_DUMMY)
     assert_eq!(error("a~b:1"), (20, 917));
+    assert_eq!(error("a~b:1e5"), (20, 917));
+    assert_eq!(error("a~b:."), (20, 917));
+    // A literal cannot pass either, because `isVariableOrDot` reads only the
+    // symbol subclass and a literal token has none of the four.
+    assert_eq!(error("a~b:'c'"), (20, 917));
+}
+
+#[test]
+fn a_cascade_can_follow_a_variable_reference() {
+    // This is the one route to `binary_rest`'s message-operator arm:
+    // `variable_reference_term` returns straight to its caller rather than
+    // through `message_subterm`'s cascade loop, so the `~` arrives with the
+    // reference already on the left. build/bin/rexxc translates `r = >a~b`,
+    // `r = >a[1]`, `r = >a~b~c` and `r = >a.~b`, all rc=0.
+    assert_eq!(shape(">a~b"), "(msg~ (vref A) \"B\")");
+    assert_eq!(shape(">a[1]"), "(msg~ (vref A) \"[]\" 1)");
+    assert_eq!(shape(">a~b~c"), "(msg~ (msg~ (vref A) \"B\") \"C\")");
+    assert_eq!(shape(">a.~b"), "(msg~ (vref stem:A.) \"B\")");
 }
 
 #[test]
 fn only_a_parenthesis_abutted_to_a_message_name_is_an_argument_list() {
     // The blank before `(` is a token, so `a~m (1)` concatenates. Compare
     // `a~m(1)`, which passes 1.
-    assert_eq!(shape("a~m (1)"), "(blank (msg~ A M) 1)");
-    assert_eq!(shape("a~m(1)"), "(msg~ A M 1)");
+    assert_eq!(shape("a~m (1)"), "(blank (msg~ A \"M\") 1)");
+    assert_eq!(shape("a~m(1)"), "(msg~ A \"M\" 1)");
 }
 
 // ---------------------------------------------------------------------------
@@ -414,15 +453,15 @@ fn trailing_omitted_arguments_are_dropped_but_list_elements_are_kept() {
     assert_eq!(shape("t()"), "(call T)");
     assert_eq!(shape("t(,)"), "(call T)");
     assert_eq!(shape("t(1,)"), "(call T 1)");
-    assert_eq!(shape("t(,1)"), "(call T _ 1)");
+    assert_eq!(shape("t(,1)"), "(call T <omitted> 1)");
     assert_eq!(shape("t(1,2)"), "(call T 1 2)");
 
     // A parenthesised list keeps them: `(1,)~size` => 2, `(1,,)~size` => 3,
     // `(,)~size` => 2 and `(,1)~size` => 2.
-    assert_eq!(shape("(1,)"), "(list 1 _)");
-    assert_eq!(shape("(1,,)"), "(list 1 _ _)");
-    assert_eq!(shape("(,)"), "(list _ _)");
-    assert_eq!(shape("(,1)"), "(list _ 1)");
+    assert_eq!(shape("(1,)"), "(list 1 <omitted>)");
+    assert_eq!(shape("(1,,)"), "(list 1 <omitted> <omitted>)");
+    assert_eq!(shape("(,)"), "(list <omitted> <omitted>)");
+    assert_eq!(shape("(,1)"), "(list <omitted> 1)");
 }
 
 #[test]
@@ -440,8 +479,8 @@ fn calls_nest() {
     // build/bin/rexx: `r = f(g(h(2)))` fails with `Could not find routine
     // "H"`, so the innermost call was the first attempted.
     assert_eq!(shape("f(g(h(2)))"), "(call F (call G (call H 2)))");
-    assert_eq!(shape("a[1,2]"), "(msg~ A [] 1 2)");
-    assert_eq!(shape("a[]"), "(msg~ A [])");
+    assert_eq!(shape("a[1,2]"), "(msg~ A \"[]\" 1 2)");
+    assert_eq!(shape("a[]"), "(msg~ A \"[]\")");
 }
 
 // ---------------------------------------------------------------------------
@@ -626,11 +665,10 @@ fn three_inputs_that_look_like_errors_and_are_not() {
 }
 
 #[test]
-fn an_empty_required_expression_is_reported_by_the_caller_not_here() {
-    // `parse_expr` reports 35.1, and its doc comment says why: the
-    // interpreter's sub-number depends on the instruction that wanted the
-    // expression. Measured, `r =` is 35.918 and `if then nop` is 35.929, and
-    // neither number is knowable from here.
+fn an_empty_required_expression_raises_the_sub_number_the_caller_supplied() {
+    // The grammar never invents a number here, because the interpreter's
+    // depends on which instruction wanted the expression: measured, `r =` is
+    // 35.918 and `interpret` alone is 35.912. So the caller passes it.
     //
     // No source text reaches this, which is the point: `scan` never produces
     // an empty clause, so an empty expression only arises once an instruction
@@ -644,9 +682,12 @@ fn an_empty_required_expression_is_reported_by_the_caller_not_here() {
         symbols: &scanned.symbols,
         keywords: &scanned.keywords,
     };
-    let mut cursor = TokenCursor::new(1..1);
-    let err = parse_expr(&ctx, &mut cursor).expect_err("an empty expression is an error");
-    assert_eq!((err.code, err.sub), (35, 1));
+    for sub in [918, 912] {
+        let mut cursor = TokenCursor::new(1..1);
+        let err = parse_expr(&ctx, &mut cursor, Terminators::EOC, sub)
+            .expect_err("an empty expression is an error");
+        assert_eq!((err.code, err.sub), (35, sub));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -657,10 +698,16 @@ fn an_empty_required_expression_is_reported_by_the_caller_not_here() {
 fn a_nodes_span_covers_its_own_tokens_and_not_the_parentheses_around_them() {
     let text = "(a) + b";
     let (expr, _) = parse(text, Entry::Required).expect("parses");
-    // The `+` node runs from `a` to `b`, so it starts at 1 and not at 0: the
-    // parenthesis is not part of what built the node. Containment still
-    // holds, which is what the gate checks.
+    // A node's span runs from its leftmost token to its rightmost, and the
+    // `+` node's leftmost token is `a` rather than `(`, because
+    // `subterm` consumes the parentheses and returns the inner node
+    // unchanged. So the span starts at 1.
     assert_eq!(expr.span, 1..7);
+    // Slicing that span therefore yields unbalanced text, which is expected
+    // and not a defect: a span is the extent from one token's start to
+    // another's end, not a self-contained substring, and the same is true of a
+    // clause span that crosses a comma continuation. The property the gate
+    // checks is containment, and it holds: 1..7 contains both 1..2 and 6..7.
     assert_eq!(&text[expr.span.clone()], "a) + b");
     let ExprKind::Binary { left, right, .. } = &expr.kind else {
         panic!("expected a binary node, got {:?}", expr.kind);

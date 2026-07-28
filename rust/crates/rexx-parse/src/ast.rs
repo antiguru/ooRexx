@@ -47,7 +47,11 @@
 
 use std::ops::Range;
 
-use crate::token::{Operator, SymbolId, SymbolTable};
+use crate::token::{Operator, SymbolId};
+// Only `shape` needs the table, to turn a `SymbolId` back into a spelling, and
+// `shape` renders trees for test assertions.
+#[cfg(test)]
+use crate::token::SymbolTable;
 
 /// One expression node: what it is, and the source it came from.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -206,7 +210,7 @@ impl ExprKind {
     ///
     /// An omitted argument has no node and is skipped, so this yields fewer
     /// items than an argument list has positions.
-    pub fn for_each_child(&self, f: &mut impl FnMut(&Expr)) {
+    pub(crate) fn for_each_child(&self, f: &mut impl FnMut(&Expr)) {
         match self {
             ExprKind::Literal(_)
             | ExprKind::Constant(_)
@@ -293,10 +297,23 @@ impl Expr {
     /// A canonical rendering, for asserting tree shape in tests.
     ///
     /// Follows the D10 spike's `render`, so that the shapes recorded in
-    /// `d10-decision.md` still read the same way.
-    pub fn shape(&self, symbols: &SymbolTable) -> String {
+    /// `d10-decision.md` still read the same way, with two departures. Both
+    /// exist because a rendering that maps two different trees onto one string
+    /// silently weakens every assertion made with it.
+    ///
+    /// An omitted argument renders `<omitted>` and not `_`, because `_` is a
+    /// legal symbol character, so `f(_,1)` and `f(,1)` rendered alike. Neither
+    /// `<` nor `>` can start a rendered leaf, so `<omitted>` cannot be
+    /// produced any other way.
+    ///
+    /// A message name and a literal render through `{:?}`, quoted and escaped,
+    /// because a name is arbitrary bytes: unquoted, `a~"b c"` and `a~b(c)`
+    /// rendered alike, and `'a''b'` decodes to `a'b`, which an unescaped
+    /// `'...'` cannot render unambiguously either.
+    #[cfg(test)]
+    pub(crate) fn shape(&self, symbols: &SymbolTable) -> String {
         match &self.kind {
-            ExprKind::Literal(bytes) => format!("'{}'", String::from_utf8_lossy(bytes)),
+            ExprKind::Literal(bytes) => quoted(bytes),
             ExprKind::Constant(id) | ExprKind::Variable(id) => symbols.name(*id).to_string(),
             ExprKind::Stem(id) => format!("stem:{}", symbols.name(*id)),
             ExprKind::Compound(id) => {
@@ -331,9 +348,7 @@ impl Expr {
             ExprKind::Call { target, args } => {
                 let name = match target {
                     CallTarget::Symbol(id) => symbols.name(*id).to_string(),
-                    CallTarget::Literal(bytes) => {
-                        format!("'{}'", String::from_utf8_lossy(bytes))
-                    }
+                    CallTarget::Literal(bytes) => quoted(bytes),
                 };
                 format!("(call {name}{})", render_args(symbols, args))
             }
@@ -369,7 +384,7 @@ impl Expr {
                 format!(
                     "(msg{twiddle} {} {}{sup}{})",
                     target.shape(symbols),
-                    String::from_utf8_lossy(name),
+                    quoted(name),
                     render_args(symbols, args)
                 )
             }
@@ -388,6 +403,7 @@ impl Expr {
     }
 }
 
+#[cfg(test)]
 fn render_args(symbols: &SymbolTable, args: &[Option<Expr>]) -> String {
     let mut out = String::new();
     for arg in args {
@@ -395,10 +411,16 @@ fn render_args(symbols: &SymbolTable, args: &[Option<Expr>]) -> String {
         match arg {
             Some(e) => out.push_str(&e.shape(symbols)),
             // An omitted argument, which is a position with no expression.
-            None => out.push('_'),
+            None => out.push_str("<omitted>"),
         }
     }
     out
+}
+
+/// Bytes as a quoted, escaped string, so that no two byte strings render alike.
+#[cfg(test)]
+fn quoted(bytes: &[u8]) -> String {
+    format!("{:?}", String::from_utf8_lossy(bytes))
 }
 
 /// One tail element of a compound variable, borrowed from the interned name.
