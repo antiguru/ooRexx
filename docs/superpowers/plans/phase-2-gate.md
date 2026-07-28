@@ -25,10 +25,23 @@ and dispatch is Phase 4. Phase 2 delivers a library.
 Also: there are now **twelve** programs, not eleven. `form_notation.rex` and
 `format_trunc.rex` arrived with Tasks 2.6 and 2.7.
 
+To be precise about *why* this cannot be assessed: it is the missing Rust
+side, not a problem with the programs. All twelve run cleanly under
+`build/bin/rexx` today, as do the thirteen in `rust/corpus/lang/` — checked,
+not assumed. There is simply nothing to compare them against yet.
+
 **What was done instead.** Every behaviour those programs pin was verified
 directly against `build/bin/rexx` through the differential harness, at a
-volume no corpus program reaches — see criterion 4's table. The corpus
-programs remain valuable as an end-to-end check and should run at Phase 4.
+volume no corpus program reaches — see the table below. The corpus programs
+remain valuable as an end-to-end check and should run at Phase 4.
+
+They are not dead weight in the meantime: they are the recorded provenance for
+behaviour the code relies on, and three comments in `rexx-num` cite
+`form_notation.rex`, `settings.rex` and `format_trunc.rex` by name for exactly
+that reason. Three citations across twelve programs is thin, though — most of
+the corpus records behaviour that the code no longer points back to, which is
+worth tightening rather than leaving as a claim about provenance nobody can
+follow.
 
 ## 2. ooTest arithmetic assertions — CANNOT ASSESS
 
