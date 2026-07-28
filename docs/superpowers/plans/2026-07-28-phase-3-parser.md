@@ -198,17 +198,31 @@ The two shapes give Phase 4 different dispatch loops: a chain walks a `next`
 pointer, a tree recurses. Getting it wrong is not a parser fix, it is a Phase 4
 rewrite. Record the choice and the reason with the D10 decision.
 
-**One constraint binds the decision, whichever shape wins.** `THEN`, `ELSE` and
-`OTHERWISE` must remain instructions of their own, each carrying its own
-`clause_span`. They cannot be absorbed into a parent node. The oracle traces each
-as a separate `*-*` clause — `RexxInstructionThen` sets its location to the
-`THEN` token's own (`ThenInstruction.cpp:76`), and `trace r` on
-`if 1 = 1 then say "a"` prints three `*-*` lines for one source line. Gate
-criterion 6 gates on reconstructing each of them byte-identically, and Task 3.7b
-keeps no separate clause list, so an absorbed keyword would leave those bytes
-with nowhere to live. This is a constraint on the choice, not the choice itself,
-and it is stated here rather than nine tasks downstream because that is where it
-is cheap to honour.
+**One constraint binds the decision, whichever shape wins.** All five of `THEN`,
+`ELSE`, `OTHERWISE`, `END` and `WHEN` must remain instructions of their own, each
+carrying its own `clause_span`. **None of the five may be absorbed into a parent
+node**, however tempting that is under the tree outcome.
+
+The reason is that the oracle traces each as a separate `*-*` clause, so each
+needs somewhere to keep its own span, and Task 3.7b keeps no separate clause
+list — an absorbed keyword would leave those bytes with nowhere to live.
+Measured, all five: `RexxInstructionThen` sets its location to the `THEN` token's
+own (`ThenInstruction.cpp:76`), and `trace r` on `if 1 = 1 then say "a"` prints
+three `*-*` lines for one source line; `end` prints its own line; `otherwise`
+prints alone with no trailing blank; `when 0 = 1 ` prints with its trailing
+blanks.
+
+Two of the five are gated directly, and the other three are not, so do not look
+for all five in gate criterion 6: `THEN` appears via `trace_output.rex` and `END`
+via Task 3.9 Step 1's probe A. `ELSE`, `OTHERWISE` and `WHEN` fall outside
+criterion 6's three-file scope but are bound by the same rule, because Task 3.6
+Step 4 needs a node named for each of the 35 keywords and the `samples/`
+round-trip criterion parses all five in quantity.
+
+This is a constraint on the choice, not the choice itself, and it is stated here
+rather than nine tasks downstream because this is where it is cheap to honour.
+Task 3.1 is the first task executed, so a shape chosen without it is a shape that
+fails Task 3.6 Step 4 five tasks later.
 
 - [ ] **Step 4: Write `d10-decision.md`**
 
@@ -644,8 +658,15 @@ clause span and the next, which is exactly this.
 **This task implements rules 1, 2 and 3. Rule 4 is Task 3.6's**, and the split of
 work is not the C++'s: see the note after the tests for why rule 3 moves down a
 layer and rule 4 cannot. So `split_clauses` must produce clauses that Task 3.6's
-cursor can cut further — `tokens` is a range, `span` is derivable from any
-sub-range of it, and nothing in `Clause` is shared or interned.
+cursor can cut further — `tokens` is a range and nothing in `Clause` is shared or
+interned, so a sub-range is always constructible.
+
+**`span` is NOT derivable from a token sub-range**, and this is the one place it
+would be tempting to assume otherwise. The two move independently, per rule 4. On
+the worked example in Task 3.6, the `THEN` clause's tokens are `6..8` while its
+span stops at token 6's *end*: deriving the span from the token range would give
+`then ` with a trailing blank the oracle does not print. Carry `span` explicitly
+and let the caller set its end.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -1061,12 +1082,11 @@ added to the extraction but nobody wrote a clause for it.
 
 **All 35 rows are writable, including the five keyword clauses.** `THEN`,
 `ELSE`, `END`, `WHEN` and `OTHERWISE` each get a node of their own regardless of
-which shape Task 3.1 Step 3b chose, because Step 3b is constrained to keep
-`THEN`, `ELSE` and `OTHERWISE` as separate instructions carrying their own
-`clause_span` — see that step. `END` and `WHEN` follow the same rule for the
-same reason: the oracle traces each as its own `*-*` clause. Task 3.1 is the
-first task in this phase, so the shape is already known by the time you write
-this table; there is nothing to defer.
+which shape Task 3.1 Step 3b chose, because Step 3b is explicitly constrained to
+keep **all five** as separate instructions carrying their own `clause_span` — see
+that step, which names the same five and gives the measurement for each. Task 3.1
+is the first task in this phase, so the shape is already known by the time you
+write this table; there is nothing to defer.
 
 - [ ] **Step 5: Commit**
 
@@ -1424,13 +1444,16 @@ came free with those two, and Task 3.4 consequently had no rule producing them.
 
 **The value traces are deliberately out of scope for Phase 3, and for this
 plan.** **Every marker except `*-*`** carries an evaluated value, so all of them
-can only be produced by an executor. Do not enumerate them: the obvious list
-`>L> >O> >V> >>> >=>` is incomplete, and measured against
-`ootest/ooRexx/base/keyword/TRACE.testGroup` the file also contains `>K>`, `>I>`,
-`>A>`, `>M>`, `>F>`, `>E>`, `>R>`, `>N>`, `>C>` and `>P>` — fifteen distinct
-markers in all. `>K>` alone appears 33 times, and once in a two-line probe
-(`>K> "TO" => "2"` from `do i = 1 to 2`). "Everything except `*-*`" cannot go
-stale; a list can.
+can only be produced by an executor. Do not enumerate them, and this is the third
+attempt at that enumeration to be wrong. The obvious list `>L> >O> >V> >>> >=>`
+is incomplete; so is any list built by matching `>X>`, because two of the
+eighteen non-`*-*` prefixes are `<I<` and `+++`, and `>.>` defeats a
+`[A-Za-z=]` class just as `>>>` does. The authority is the interpreter's own
+table: **nineteen prefixes**, `*-*` plus eighteen
+(`RexxActivation.hpp:92-110`), and `TRACE.testGroup` exercises all nineteen.
+`>L>` leads at 58 occurrences and `>>>` follows at 49; `>K>` appears 33 times,
+once in a two-line probe (`>K> "TO" => "2"` from `do i = 1 to 2`).
+"Everything except `*-*`" cannot go stale; a list can, and did.
 
 They are a real conformance item — that testGroup is 1,338 lines with **135**
 lines carrying `*-*` and **243** carrying a value marker — but committing to them
@@ -1480,9 +1503,11 @@ here: nop; say "two"
 trace off
 ```
 
-Measured, probe A traces `nop;`, `do i = 1 to 2;` and `say i;` **with their
-semicolons** (the loop body indented one level, which acceptance strips), and
-probe B traces `here:` / `nop;` / `say "two"` as three clauses.
+Measured, probe A traces `nop;`, `do i = 1 to 2;`, `say i;` **with their
+semicolons** (the loop body indented one level, which acceptance strips) **and
+`end`**, which is a clause of its own and easy to leave off the list. Those four
+clauses produce more than four `*-*` lines, per the per-line acceptance above.
+Probe B traces `here:` / `nop;` / `say "two"` as three clauses.
 
 - [ ] **Step 2: Write a failing test that reconstructs that text from the AST**
 - [ ] **Step 3: Implement, adjusting *clause* spans if reconstruction is impossible**
@@ -1678,10 +1703,17 @@ fits.
       an evaluated value, so they need an executor, and committing to them shapes
       Phase 4's optimisation choices. The exclusion is phrased as "everything
       except `*-*`" rather than as a list because the list is longer than it
-      looks: `TRACE.testGroup` alone contains **fifteen** distinct value markers,
-      and the obvious five are not even the five most frequent. When counting
-      them, note that a character class of `[A-Za-z=]` silently misses `>>>`,
-      which is one of the fifteen and the second most frequent of all.
+      looks. The interpreter's prefix table has **nineteen** entries
+      (`RexxActivation.hpp:92-110`, strings in `RexxActivation.cpp`): `*-*` plus
+      eighteen others, and `TRACE.testGroup` exercises all nineteen. The obvious
+      five are not even the five most frequent.
+
+      **Count these from the table, never by matching a shape.** Three separate
+      attempts to count them by regex were wrong, each time because the pattern
+      excluded a marker it was looking for: `[A-Za-z=]` between two `>` misses
+      both `>>>` and `>.>`, and any `>…>` shape misses `<I<` and `+++` entirely.
+      Sixteen of the eighteen have the `>X>` shape, which is exactly why matching
+      on it looks like it works.
 
       **This narrows the parent plan's criterion, deliberately.** The parent asks
       for `TRACE`'s `*-*` source lines to match the oracle byte-for-byte,
@@ -1749,17 +1781,28 @@ fits.
   of the clause's terminating token, so `nop;` includes its `;` and `here:`
   includes its `:`, while `if y > 5 then say "big"` is three clauses whose first
   ends at the `THEN` token's start byte and therefore carries a trailing blank.
-  `TRACE`'s `*-*` line prints `clause_span`; error reporting and `SOURCELINE` use
-  the retained source directly. Task 3.4 produces these spans, Task 3.6 splits them, Task 3.7b retains
+  `TRACE`'s `*-*` line prints `clause_span` **for an unbroken clause**; error
+  reporting and `SOURCELINE` use the retained source directly. Task 3.4 produces
+  these spans, Task 3.6 splits them, Task 3.7b retains
   them and Task 3.9 checks them — a defect here surfaces four tasks downstream as
   a rework of every node type, which is why it is front-loaded.
+- **A continued clause's traced text is not a contiguous byte range**, so
+  `clause_span` alone cannot reproduce it. Measured: `say "x",` / newline /
+  `    "y"` traces as `say "x","y"` — the comma is kept, the newline is removed,
+  and the continuation line's four leading blanks are kept. So it is neither a
+  slice nor a simple trim-and-join. This is **out of scope for this phase's gate**,
+  verified: `trace_output.rex` and both Task 3.9 probes contain no continuations,
+  so criterion 6 is unaffected. It is recorded because the note above would
+  otherwise read as a general claim, and because whatever gates continued clauses
+  later needs a representation richer than one range.
 - **Clause spans do not tile the source.** The mid-line split makes two
   independent adjustments, so interstitial blanks belong to no clause: in
   `if 1 = 1   then    say "a"` the condition keeps three trailing blanks, `then`
   carries none, and the four blanks after `then` are in neither. Anything that
   assumes clause spans are a partition is wrong, which is why `split_before`
   takes an end byte and a restart token rather than one cut point.
-- **`THEN`, `ELSE` and `OTHERWISE` stay separate instructions** whichever AST
-  shape Task 3.1 Step 3b picks, because each is its own traced clause and there is
-  no other place to keep its span. That constraint is stated at Step 3b, not
-  discovered at Task 3.9.
+- **`THEN`, `ELSE`, `OTHERWISE`, `END` and `WHEN` stay separate instructions**
+  whichever AST shape Task 3.1 Step 3b picks, because each is its own traced
+  clause and there is no other place to keep its span. That constraint is stated
+  at Step 3b, not discovered at Task 3.9. Note that only the first three end a
+  clause *mid-line*, which is Task 3.4's rule 4 and a different property.
