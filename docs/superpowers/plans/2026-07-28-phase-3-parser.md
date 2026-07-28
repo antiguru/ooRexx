@@ -2319,9 +2319,18 @@ fits.
 
       ```bash
       # must print nothing
-      grep -rn 'allow(dead_code)' rust/crates/rexx-parse/src/ \
+      grep -rnE '^\s*#\[allow\(dead_code\)\]' rust/crates/rexx-parse/src/ \
         | grep -v 'Task 3\.[0-9]'
       ```
+
+      **The pattern is anchored to attribute syntax on purpose.** An unanchored
+      `allow(dead_code)` also matches the phrase inside a doc comment, and the
+      first version of this criterion did: it flagged an explanatory paragraph in
+      `lib.rs` as an ownerless attribute. The first fix for that was a rule
+      forbidding prose from spelling the attribute out, which is brittle — it is
+      enforced by nobody and any future comment silently reintroduces the false
+      positive. Anchoring makes the check correct whatever the prose says, so the
+      rule is unnecessary and is not imposed.
 
       These attributes exist because narrowing to `pub(crate)` leaves an item
       unused in the library target until a real caller lands, and `#[expect]`
