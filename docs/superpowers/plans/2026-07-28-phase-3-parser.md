@@ -15,7 +15,7 @@
 - Error numbers **and sub-numbers** are contract. Programs trap on them.
 - Every `cargo` command takes `--offline`.
 - `rexx-parse` depends on `rexx-num` and nothing else in the workspace. It must not depend on an executor.
-- The AST is plain owned Rust data (D13, closed). Not garbage-collected, not reference-counted between nodes.
+- The AST is plain owned Rust data **inside one arena object per code body** (D13, closed). Not garbage-collected, not reference-counted between nodes. The arena half matters: it is what lets nodes reference each other by index instead of by pointer.
 - The C++ tree is the oracle and is never modified.
 - No task may leave the differential sets from Phase 2 regressed; `rexx-num` is a dependency now.
 
@@ -55,16 +55,17 @@ synthetic input.
 ```
 rust/crates/rexx-parse/
     src/
-        lib.rs          # public API: parse_program, ParseError
+        lib.rs          # public API: parse_program, parse_interpret, ParseError
         source.rs       # ProgramSource: the retained text, line index, SOURCELINE
         token.rs        # Token, TokenKind, Span
         scanner.rs      # source -> tokens; comments, continuations, literals
         clause.rs       # tokens -> clauses; the `;`/EOC and label rules
         expr.rs         # expression grammar (construction per D10)
-        instruction.rs  # the 35 keyword instructions
-        directive.rs    # ::class, ::method, ::routine, ::requires, ::attribute
+        instruction.rs  # 35 keyword instructions + assignment/command/message/label
+        directive.rs    # the 9 directives: annotate attribute class constant
+                        # method options requires resource routine
         ast.rs          # the node types Phase 4 consumes
-        error.rs        # ParseError -> interpreter error number, sub-number, line, column
+        error.rs        # ParseError -> error number, sub-number, line, substitutions
     tests/
         scanner.rs  clause.rs  expr.rs  instruction.rs  directive.rs
         sourceline.rs  errors.rs
@@ -117,10 +118,14 @@ arr[i, j]                      /* array reference */
 stem.i.j                       /* compound variable */
 f(g(h(x)))                     /* nested calls */
 -x ** 2                        /* prefix vs power binding */
-a = b = c                      /* comparison chaining */
+a = b = c                      /* LEFT-associative. With a=2 b=2 c=1 this is
+                               1: (a=b)=c is (2=2)=1 is 1=1 is 1, where
+                               a=(b=c) would give 2=(2=1) is 2=0 is 0.
+                               All-equal operands cannot tell them apart. */
 f(x)                           /* call */
 f (x)                          /* NOT a call -- abuttal of f and (x) */
-say a""b                       /* null-string abuttal */
+say a""b                       /* NOT abuttal: ""b is an empty BINARY
+                               literal, so this prints just a */
 ```
 
 `f(x)` versus `f (x)` is the one the parent plan singles out as the combinator
@@ -305,6 +310,10 @@ easy to get wrong:
 - quoted literals with doubled quotes, and the `'…'x` / `'…'b` suffixes
 - blanks as significant tokens (`TOKEN_BLANK`) — abuttal concatenation needs
   them, so they cannot be silently dropped
+- a **raw-text mode** for `::RESOURCE`, whose body is copied verbatim up to a
+  terminating `::END` rather than tokenised. Task 3.7 needs it, but it is a
+  scanner capability and must be designed in here — retrofitting a mode switch
+  into a finished scanner four tasks later is the expensive order.
 - a comment **separates** tokens but produces **no blank**. Verified with
   `a = 1; b = 2`: `say a/*c*/b` prints `12` while `say a b` prints `1 2`. So a
   comment is not whitespace and not nothing — dropping it entirely glues the
@@ -488,7 +497,7 @@ default. None of these appears in the 35:
 |---|---|---|
 | second token is `=` | `Assignment` | `AssignmentInstruction` |
 | ends in `:` | `Label` | `LabelInstruction` |
-| starts with `~` or is a message send | `Message` | `MessageInstruction` |
+| a standalone message send, e.g. `q~append(1)` | `Message` | `MessageInstruction` |
 | a keyword from the 35 | the 35 nodes | `interpreter/instructions/` |
 | **anything else** | `Command` | `CommandInstruction` |
 
@@ -498,11 +507,16 @@ a command dispatched through `ADDRESS`. Verified — `address system` then
 others and fall through to `Command`, never fail.
 
 `KeywordConstants.cpp` has 36 keyword constants and 35 keyword→instruction
-mappings; `interpreter/instructions/` has 52 classes. **The table is not
-alphabetical and the C++ indexes it by position** — a lesson already paid for
-in Phase 0 with the builtin table. Do not sort it.
+mappings; `interpreter/instructions/` has 52 classes. **`keywordInstructions[]`
+is alphabetical and `resolveKeyword` (`KeywordConstants.cpp:417`) binary-searches
+it**; each entry stores its instruction code explicitly, so nothing depends on
+position. Sorting it is not merely safe, it is required.
 
-- [ ] **Step 1: Extract the keyword list, in source order**
+This is the opposite of Phase 0's *builtin-function* table, which is positional
+and must not be reordered. Two drafts of this plan carried that warning across
+to this table, where it is wrong. Check which kind you are looking at.
+
+- [ ] **Step 1: Extract the keyword list**
 
 ```bash
 grep -oE '"[A-Z]+", *KEYWORD_[A-Z_]+' interpreter/parser/KeywordConstants.cpp
@@ -584,9 +598,9 @@ and `parseOptions` they are most of `InstructionParser.cpp`'s 4,650 lines.
 
 - [ ] **Step 4: Assert every keyword is reachable — with a valid clause each**
 
-A bare keyword is mostly **not** a valid clause: `then`, `else`, `when`,
-`otherwise`, `end` and `procedure` alone are errors 8, 9, 10 and 20 in the
-interpreter, so a loop that parses each keyword by itself cannot pass. Pair
+A bare keyword is mostly **not** a valid clause. Measured: `then` is error 8,
+`when` is 9, `otherwise` is 10, `procedure` is 17 and `parse` is 20. A loop
+that parses each keyword by itself therefore cannot pass. Pair
 each with a minimal clause that is legal, and check the resulting node type:
 
 ```rust
@@ -610,6 +624,12 @@ fn every_keyword_reaches_its_instruction_node() {
 The length assertion is the load-bearing half: it fails when a keyword is
 added to the extraction but nobody wrote a clause for it.
 
+**Five of the 35 rows cannot be written until Task 3.1 Step 3b lands.**
+`THEN`, `ELSE`, `END`, `WHEN` and `OTHERWISE` only exist as nodes of their own
+under the flat instruction chain; under a tree they are absorbed into their
+parent and have no node to name. Write the other 30 first and fill these in
+once the AST shape is decided.
+
 - [ ] **Step 5: Commit**
 
 ---
@@ -621,7 +641,12 @@ added to the extraction but nobody wrote a clause for it.
 - Test: `rust/crates/rexx-parse/tests/directive.rs`
 
 **Interfaces:**
-- Produces: `Directive` in `ast.rs`, `parse_directive(&Clause) -> Result<Directive, ParseError>`.
+- Produces: `Directive` in `ast.rs`, and
+  `parse_directive(&ParseCtx, &mut ClauseCursor) -> Result<Directive, ParseError>`.
+
+Same reason as Task 3.6: a `::method` body spans many clauses, so a function
+handed one clause cannot parse it. An earlier draft of this plan fixed the
+signature in 3.6 and left 3.7 with the one that cannot work.
 
 `DirectiveParser.cpp` is 2,867 lines. There are **nine** top-level directives,
 not the seven an earlier draft listed: `::ANNOTATE`, `::ATTRIBUTE`, `::CLASS`,
@@ -635,8 +660,11 @@ is *raw text* up to a terminating `::END` — not tokenised, not clause-split.
 Task 3.3's scanner must be able to switch into a copy-until-delimiter mode and
 back. Discovering that here rather than in Task 3.3 is the point of listing it.
 
-This task matters more than its size suggests: `CoreClasses.orx` is almost
-entirely directives, so Task 3.10's throughput number depends on it.
+This task matters more than its size suggests, though not for the reason an
+earlier draft gave: only **347 of `CoreClasses.orx`'s 4,193 lines** start with
+`::`, 8.3%. The directives are a small fraction of the text but they frame all
+of it -- every method body is inside one -- so Task 3.10 cannot parse that file
+at all until this task works.
 
 - [ ] **Step 1: Extract the directive and option tables**
 
@@ -691,7 +719,8 @@ directives, and Task 3.10's throughput number depends on it.
 **Interfaces:**
 - Consumes: everything from Tasks 3.2–3.7.
 - Produces: `parse_program(text: String) -> Result<Program, ParseError>` and
-  `Program { source: ProgramSource, instructions: Vec<Instruction>, directives: Vec<Directive> }`,
+  `Program { source: ProgramSource, instructions: Vec<Instruction>,
+  directives: Vec<Directive>, labels: BTreeMap<String, usize> }`,
   **plus `parse_interpret(text: String) -> Result<Vec<Instruction>, ParseError>`**.
   These two are the only entry points Phase 4 uses; everything else stays
   `pub(crate)` so the D10 choice cannot leak into the executor.
@@ -734,7 +763,7 @@ it was a syntax error and told Task 3.8 to record a number that does not exist.
 
 ---
 
-## Task 3.8: Errors with line and column
+## Task 3.8: Errors with number, sub-number, line and substitutions
 
 **Files:**
 - Create: `rust/crates/rexx-parse/src/error.rs`
@@ -880,10 +909,14 @@ fits.
 ## Exit gate
 
 - [ ] All 14 `rust/corpus/lang/` programs parse without error, **and** each one
-      round-trips: walking the AST in order and concatenating every node's
-      source span reproduces the original text with only comments and
-      inter-token blanks missing. "No error raised" is not enough — a parser
-      that silently drops a clause passes that and fails this.
+      round-trips: concatenating the source spans of its **leaf** nodes, in
+      source order, reproduces the original text with only comments removed.
+      Leaf nodes specifically — spans nest, so summing every node's span
+      reproduces the text several times over and proves nothing. Blanks are
+      **not** excluded: a blank is what separates abuttal concatenation from a
+      function call, so a round-trip that ignores them is blind to the very
+      distinction it is best placed to catch. "No error raised" is not enough —
+      a parser that silently drops a clause passes that and fails this.
 - [ ] Every `Instruction` and `Expr` variant is constructed at least once
       across those 14 programs, asserted by a test that enumerates the variants
       rather than by inspection. Where a variant is unreachable from the
