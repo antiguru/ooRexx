@@ -37,15 +37,19 @@ pub struct ParseError {
     /// The sub-number, e.g. 1 for `Error 13.1`. Zero means the major error
     /// with no sub-code.
     pub sub: u16,
-    /// A byte offset into the retained source that identifies where the
-    /// error is reported.
+    /// The byte offset the error is *reported against*, which is the start of
+    /// the clause being translated and not the offending character. The name
+    /// reads like the latter; it is not.
     ///
-    /// The interpreter reports a syntax error against the *clause* being
-    /// translated, not against the offending character: measured, a clause
-    /// `say 1,` continued onto a line holding `'unclosed` reports error 6.2
-    /// on line 1, and the same holds for 6.1, 13.1 and 15.3. So a scanner
-    /// error carries the clause's start, and Task 3.8 resolves it with
-    /// `ProgramSource::line_of`.
+    /// The interpreter reports a syntax error against the clause: measured, a
+    /// clause `say 1,` continued onto a line holding `'unclosed` reports error
+    /// 6.2 on line 1, and the same holds for 6.1, 13.1 and 15.3. Task 3.8
+    /// resolves this with `ProgramSource::line_of`.
+    ///
+    /// If Task 3.8 ever fills `subs`, it will need the offending position as a
+    /// *second* field rather than by redefining this one, because several
+    /// messages quote the offending text while still being reported against
+    /// the clause: 13.1 quotes `"ä" ('C3A4'X)` and 15.3 quotes `found "g"`.
     pub byte: usize,
     /// The message substitution values.
     ///
@@ -144,12 +148,12 @@ impl SymbolTable {
 /// An operator's identity, mirroring the operator range of `TokenSubclass`
 /// (`Token.hpp:110`-`141`) in that order.
 ///
-/// Three of these are never scanned. `Abuttal` is synthesised by the parser
-/// where two terms sit side by side with nothing between them, `Blank` is the
-/// subclass the C++ gives `TOKEN_BLANK` and is carried by `TokenKind::Blank`
-/// here instead, and `Concatenate` is scanned (from `||`) but also
-/// synthesised. They are listed because a later task's precedence table is
-/// indexed by this enum and needs all three.
+/// Two of these are never scanned: `Abuttal`, which the parser synthesises
+/// where two terms sit side by side with nothing between them, and `Blank`,
+/// which is the subclass the C++ gives `TOKEN_BLANK` and which
+/// `TokenKind::Blank` carries here instead. `Concatenate` is both, scanned
+/// from `||` and synthesised. All three are listed because a later task's
+/// precedence table is indexed by this enum.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Operator {
     Plus,

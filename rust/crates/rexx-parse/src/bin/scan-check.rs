@@ -6,7 +6,7 @@
 //! writes to stderr. `rexxc` also rejects programs this scanner accepts,
 //! because it goes on to parse them; a difference is only a scanner difference
 //! when the error number is one the scanner raises at all.
-use rexx_parse::{ProgramSource, TokenKind, scan};
+use rexx_parse::{ProgramSource, ScanMode, TokenKind, scan};
 
 fn main() {
     let mut args = std::env::args().skip(1).peekable();
@@ -16,10 +16,18 @@ fn main() {
     if dump {
         args.next();
     }
+    // With --interpret, scan each file the way INTERPRET scans its argument,
+    // which differs in that a `#!` first line is not skipped.
+    let mode = if args.peek().map(String::as_str) == Some("--interpret") {
+        args.next();
+        ScanMode::Interpret
+    } else {
+        ScanMode::Program
+    };
     for path in args {
         let bytes = std::fs::read(&path).expect("readable input file");
         let source = ProgramSource::new(bytes);
-        match scan(&source) {
+        match scan(&source, mode) {
             Ok(scanned) => {
                 // Symbol occurrences against distinct symbols is the ratio
                 // interning trades allocations for, so the harness reports it.

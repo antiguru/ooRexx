@@ -60,6 +60,15 @@ const DEFAULT_RESOURCE_END: &[u8] = b"::END";
 /// holding `this is 'unmatched and /* unclosed` gets rc 0 from `rexxc`, so a
 /// scanner that tokenised it would invent errors 6.2 and 6.1 that the
 /// interpreter does not raise.
+///
+/// The scanner establishes only the body's extent, which is all it has to do
+/// to avoid tokenising it. A directive parser still owes the rest of
+/// `resourceDirective` (`DirectiveParser.cpp:2266`): keying the package's
+/// resource table by the *upcased* name even though the end marker is not
+/// upcased when it comes from a literal, rejecting a duplicate name with
+/// `Error_Translation_duplicate_resource`, and rejecting a malformed
+/// directive, which is error 25.926 and is why a malformed one leaves no
+/// `ResourceBody` here at all.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ResourceBody {
     /// Index in `Scanned::tokens` of the `::` that opened the directive
@@ -76,6 +85,15 @@ pub struct ResourceBody {
 /// it is still filling.
 #[derive(Debug)]
 pub struct Scanned {
+    /// Every token, in source order.
+    ///
+    /// Three invariants a clause splitter may rely on. No two clause
+    /// terminators are adjacent, and none is first, so every `Eoc` closes a
+    /// clause that holds at least one token. If there is any token at all the
+    /// last one is an `Eoc`, because end of file terminates the final clause.
+    /// A program with no clauses, whether empty, all blank lines, all
+    /// comments or only semicolons, produces no tokens at all rather than a
+    /// lone terminator.
     pub tokens: Vec<Token>,
     pub symbols: SymbolTable,
     pub keywords: Keywords,
@@ -84,14 +102,27 @@ pub struct Scanned {
     pub resources: Vec<ResourceBody>,
 }
 
+/// What the text being scanned is, which the scanner needs because a `#!`
+/// first line is skipped in a program and is not skipped in an `INTERPRET`.
+///
+/// This is a parameter rather than a second entry point so that no caller can
+/// arrive at the wrong behaviour by leaving something out.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum ScanMode {
+    /// A whole program, from a file or a buffer.
+    Program,
+    /// The string an `INTERPRET` is about to run.
+    Interpret,
+}
+
 /// Tokenises `source`.
 ///
 /// A clause terminator is emitted for each `;`, each uncontinued line end and
 /// for end of file, with consecutive terminators collapsed.
-pub fn scan(source: &ProgramSource) -> Result<Scanned, ParseError> {
+pub fn scan(source: &ProgramSource, mode: ScanMode) -> Result<Scanned, ParseError> {
     let mut symbols = SymbolTable::default();
     let keywords = Keywords::new(&mut symbols);
-    let mut scanner = Scanner::new(source, symbols);
+    let mut scanner = Scanner::new(source, symbols, mode);
     scanner.run()?;
     Ok(Scanned {
         tokens: scanner.tokens,
@@ -101,25 +132,21 @@ pub fn scan(source: &ProgramSource) -> Result<Scanned, ParseError> {
     })
 }
 
-/// `characterTable` (`Scanner.cpp:60`) for the non-EBCDIC build: the upcased
-/// byte for anything that may appear in a symbol, and 0 otherwise.
+/// `LanguageParser::isSymbolCharacter` (`LanguageParser.hpp:415`): whether
+/// `byte` may appear in a symbol.
 ///
-/// Zero for every byte from 0x80 to 0xFF, which is why a symbol is always
-/// ASCII and why upcasing it can never be more than `to_ascii_uppercase`.
-fn translate_char(byte: u8) -> u8 {
-    match byte {
-        b'!' | b'.' | b'?' | b'_' | b'0'..=b'9' | b'A'..=b'Z' => byte,
-        b'a'..=b'z' => byte.to_ascii_uppercase(),
-        _ => 0,
-    }
-}
-
-/// `LanguageParser::isSymbolCharacter` (`LanguageParser.hpp:415`).
+/// The C++ reads this out of `characterTable` (`Scanner.cpp:60`), whose
+/// non-zero entry for a byte is that byte *upcased*. Nothing here needs the
+/// upcased value, because `SymbolTable::intern` upcases what it is given and
+/// `to_ascii_uppercase` agrees with the table over every byte the table
+/// admits. The table is zero for every byte from 0x80 to 0xFF, which is why a
+/// symbol is always ASCII.
 fn is_symbol_char(byte: u8) -> bool {
-    translate_char(byte) != 0
+    matches!(byte,
+        b'!' | b'.' | b'?' | b'_' | b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z')
 }
 
-/// The line scanning starts on: 2 when the program opens with a `#!` line,
+/// The line scanning starts on: 2 when a program opens with a `#!` line,
 /// 1 otherwise.
 ///
 /// `BufferProgramSource::buildDescriptors` (`ProgramSource.cpp:448`) sets
@@ -129,8 +156,13 @@ fn is_symbol_char(byte: u8) -> bool {
 /// by differential testing: 494 of 790 files under `ootest/` and `samples/`
 /// open with `#!/usr/bin/env rexx`, and without this every one of them is
 /// error 13.1 on line 1 here and rc 0 under `rexxc`.
-fn first_line(source: &ProgramSource) -> usize {
-    if source.line(1).is_some_and(|line| line.starts_with(b"#!")) {
+///
+/// An `INTERPRET` does not get the skip. `ArrayProgramSource::setup`
+/// (`ProgramSource.cpp:594`) guards it with `interpretAdjust == 0`, and
+/// measured, `interpret "#! nothing here"` is error 13.1 on `#` ('23'X) while
+/// the identical text as line 1 of a file is accepted and the program runs on.
+fn first_line(source: &ProgramSource, mode: ScanMode) -> usize {
+    if mode == ScanMode::Program && source.line(1).is_some_and(|line| line.starts_with(b"#!")) {
         2
     } else {
         1
@@ -211,9 +243,8 @@ struct Scanner<'a> {
 }
 
 impl<'a> Scanner<'a> {
-    fn new(source: &'a ProgramSource, symbols: SymbolTable) -> Self {
+    fn new(source: &'a ProgramSource, mut symbols: SymbolTable, mode: ScanMode) -> Self {
         let text_end = source.line_span(source.line_count()).map_or(0, |s| s.end);
-        let mut symbols = symbols;
         let resource_id = symbols.intern("RESOURCE");
         let end_id = symbols.intern("END");
         let mut scanner = Scanner {
@@ -233,7 +264,7 @@ impl<'a> Scanner<'a> {
             clause_started: false,
             clause_first: 0,
         };
-        scanner.position(first_line(source), 0);
+        scanner.position(first_line(source, mode), 0);
         scanner
     }
 
@@ -945,15 +976,30 @@ impl<'a> Scanner<'a> {
     /// lines that follow are ordinary Rexx there too.
     fn scan_resource_if_directive(&mut self) -> Result<(), ParseError> {
         let eoc = self.tokens.len() - 1;
-        // `nextReal` skips blanks, and `::RESOURCE DATA` has a significant
-        // blank in it, so the shape has to be matched over the real tokens.
-        let real: Vec<usize> = (self.clause_first..eoc)
-            .filter(|&i| self.tokens[i].kind.tag() != Tag::Blank)
-            .collect();
-        if real.len() != 3 && real.len() != 5 {
+        // This runs for every clause in the program, so it tests the cheapest
+        // discriminator first and allocates nothing for the overwhelming
+        // majority that are not directives. A clause's first token is never a
+        // blank, because a blank at a clause start is not significant.
+        if self.tokens[self.clause_first].kind.tag() != Tag::DColon {
             return Ok(());
         }
-        if self.tokens[real[0]].kind.tag() != Tag::DColon {
+
+        // `nextReal` skips blanks, and `::RESOURCE DATA` has a significant
+        // blank in it, so the shape has to be matched over the real tokens.
+        // Either shape has at most five, so this needs no growth.
+        let mut real = [0usize; 5];
+        let mut count = 0;
+        for index in self.clause_first..eoc {
+            if self.tokens[index].kind.tag() == Tag::Blank {
+                continue;
+            }
+            if count == real.len() {
+                return Ok(());
+            }
+            real[count] = index;
+            count += 1;
+        }
+        if count != 3 && count != 5 {
             return Ok(());
         }
         match self.tokens[real[1]].kind {
@@ -965,7 +1011,7 @@ impl<'a> Scanner<'a> {
             return Ok(());
         }
 
-        let marker = if real.len() == 5 {
+        let marker = if count == 5 {
             // The only sub-keyword a `::RESOURCE` accepts is `END`, and it
             // must be a symbol rather than a literal.
             match self.tokens[real[3]].kind {

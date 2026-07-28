@@ -115,6 +115,23 @@ impl ProgramSource {
         Some(&self.text[start..end])
     }
 
+    /// The bytes a token or clause span covers, or `None` if the span runs
+    /// past the end of the retained text or backwards.
+    ///
+    /// Spans are absolute offsets into the whole text, not offsets within a
+    /// line, so a caller cannot slice them out of `line`: a span may sit on
+    /// any line, and a clause's span crosses lines whenever the clause is
+    /// continued. This is the accessor that turns one back into bytes, and it
+    /// is deliberately the *only* way out: a whole-text getter would let a
+    /// caller re-derive line boundaries from the bytes, which is exactly what
+    /// the terminator rules above exist to prevent.
+    ///
+    /// Every span the scanner produces is in range. `None` is for a span that
+    /// came from somewhere else.
+    pub fn span_bytes(&self, span: Range<usize>) -> Option<&[u8]> {
+        self.text.get(span)
+    }
+
     /// The line's content range in the retained text, terminator excluded,
     /// or `None` if `n` is 0 or past `line_count()`. `line(n)` returns
     /// exactly `&text[line_span(n)?]`.

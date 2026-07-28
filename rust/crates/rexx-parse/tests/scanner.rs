@@ -8,12 +8,12 @@
 //! result distinguishes them, as with `say a/*c*/b` against `say a b`.
 
 use rexx_parse::{
-    Operator, ProgramSource, Scanned, SymbolClass, SymbolId, Tag, Token, TokenKind, scan,
+    Operator, ProgramSource, ScanMode, Scanned, SymbolClass, SymbolId, Tag, Token, TokenKind, scan,
 };
 
 fn scan_all(text: &str) -> Scanned {
     let source = ProgramSource::new(text.as_bytes().to_vec());
-    scan(&source).expect("scans without error")
+    scan(&source, ScanMode::Program).expect("scans without error")
 }
 
 fn scan_ok(text: &str) -> Vec<Token> {
@@ -63,7 +63,7 @@ fn symbols(toks: &[Token]) -> Vec<(SymbolId, SymbolClass)> {
 /// Scans `text` expecting a refusal, and answers `(code, sub, line)`.
 fn scan_err(text: &str) -> (u16, u16, usize) {
     let source = ProgramSource::new(text.as_bytes().to_vec());
-    let error = scan(&source).expect_err("does not scan");
+    let error = scan(&source, ScanMode::Program).expect_err("does not scan");
     (error.code, error.sub, source.line_of(error.byte))
 }
 
@@ -432,9 +432,26 @@ fn one_symbol_has_one_id_and_as_many_spans_as_occurrences() {
         .map(|t| t.span.clone())
         .collect();
     assert_eq!(spans, [0..3, 12..15, 20..23]);
-    // The span, not the id, is what recovers the source spelling.
+
+    // The span, not the id, is what recovers the source spelling, and it does
+    // so through `span_bytes`, because a span is an absolute offset and cannot
+    // be sliced out of a line. Two of these three are not on line 1, which is
+    // the case that matters: `spans[1]` starts at byte 12 while line 1 is 7
+    // bytes long.
     let source = ProgramSource::new(b"aBc = 1\nsay ABC\nsay aBc".to_vec());
-    assert_eq!(&source.line(1).unwrap()[spans[0].clone()], b"aBc");
+    let spellings: Vec<&[u8]> = spans
+        .iter()
+        .map(|span| source.span_bytes(span.clone()).expect("a scanner span"))
+        .collect();
+    assert_eq!(spellings, [&b"aBc"[..], &b"ABC"[..], &b"aBc"[..]]);
+    assert_eq!(source.line_of(spans[1].start), 2);
+    assert_eq!(source.line_of(spans[2].start), 3);
+    // A span from anywhere else may be out of range, and then there are no
+    // bytes rather than a panic or a silently clamped answer.
+    assert_eq!(source.span_bytes(0..24), None);
+    // Including one a caller assembled from two offsets the wrong way round.
+    let (start, end) = (3usize, 1usize);
+    assert_eq!(source.span_bytes(start..end), None);
 }
 
 #[test]
@@ -459,7 +476,7 @@ fn a_literals_value_is_decoded_rather_than_sliced() {
     // A literal may hold bytes that are not text at all, which is why the
     // value is bytes.
     let source = ProgramSource::new(b"'\xff\xfe'".to_vec());
-    let toks = scan(&source).expect("scans").tokens;
+    let toks = scan(&source, ScanMode::Program).expect("scans").tokens;
     assert_eq!(literal_bytes(&toks, 0), b"\xff\xfe");
 }
 
@@ -537,7 +554,7 @@ fn a_shebang_line_is_skipped_by_the_scanner_but_kept_by_the_line_index() {
     // line stays visible to `sourceline`.
     let text = "#!/usr/bin/env rexx\nsay 1";
     let source = ProgramSource::new(text.as_bytes().to_vec());
-    let toks = scan(&source).expect("scans").tokens;
+    let toks = scan(&source, ScanMode::Program).expect("scans").tokens;
     assert_eq!(
         kinds(&toks),
         [Tag::Symbol, Tag::Blank, Tag::Symbol, Tag::Eoc]
@@ -548,6 +565,97 @@ fn a_shebang_line_is_skipped_by_the_scanner_but_kept_by_the_line_index() {
     // Only `#!` at the very start counts. `#` is not a program character, so
     // measured, `x = 1` then `y = #` is error 13.1 on line 2.
     assert_eq!(scan_err("x = 1\ny = #"), (13, 1, 2));
+}
+
+#[test]
+fn an_interpret_does_not_skip_a_shebang_line() {
+    // `ArrayProgramSource::setup` (`ProgramSource.cpp:594`) guards the skip
+    // with `interpretAdjust == 0`. Measured both directions:
+    // `interpret "#! nothing here"` is error 13 with
+    // `Incorrect character in program "#" ('23'X)`, while the identical text
+    // as line 1 of a file is accepted and `say "after"` on line 2 prints
+    // `after`. Skipping unconditionally would silently accept an empty
+    // program.
+    let text = "#! nothing here";
+    let source = ProgramSource::new(text.as_bytes().to_vec());
+    let error = scan(&source, ScanMode::Interpret).expect_err("does not scan");
+    assert_eq!((error.code, error.sub), (13, 1));
+    assert_eq!(source.line_of(error.byte), 1);
+    assert!(
+        scan(&source, ScanMode::Program)
+            .expect("scans")
+            .tokens
+            .is_empty(),
+        "as a program the whole thing is the skipped line"
+    );
+
+    // The two modes agree on everything else, including a `#` that is not at
+    // the start of line 1.
+    for text in ["say 1", "#!\nsay 1\nsay 2", "say 1\n#! not line one"] {
+        let source = ProgramSource::new(text.as_bytes().to_vec());
+        let program = scan(&source, ScanMode::Program);
+        let interpret = scan(&source, ScanMode::Interpret);
+        let same = match (&program, &interpret) {
+            (Ok(a), Ok(b)) => kinds(&a.tokens) == kinds(&b.tokens),
+            (Err(a), Err(b)) => a == b,
+            _ => false,
+        };
+        // The first of these three differs by construction; the other two must
+        // not.
+        assert_eq!(same, !text.starts_with("#!"), "{text:?}");
+    }
+}
+
+#[test]
+fn spans_stay_absolute_across_every_line_terminator() {
+    // `ProgramSource` resolves CRLF as one terminator and a bare CR as one,
+    // so a span's absolute offset has to skip a different number of bytes on
+    // each line. This is the invariant `span_bytes` and `TRACE` both rest on.
+    let text = "say 1\r\nsay 22\rsay 333";
+    let source = ProgramSource::new(text.as_bytes().to_vec());
+    let scanned = scan(&source, ScanMode::Program).expect("scans");
+    let last: Vec<(usize, &[u8])> = scanned
+        .tokens
+        .iter()
+        .filter(|t| t.kind.tag() == Tag::Symbol)
+        .map(|t| {
+            (
+                source.line_of(t.span.start),
+                source.span_bytes(t.span.clone()).expect("a scanner span"),
+            )
+        })
+        .collect();
+    assert_eq!(
+        last,
+        [
+            (1, &b"say"[..]),
+            (1, &b"1"[..]),
+            (2, &b"say"[..]),
+            (2, &b"22"[..]),
+            (3, &b"say"[..]),
+            (3, &b"333"[..]),
+        ]
+    );
+    // A `\n` followed by a `\r` is two terminators with an empty line
+    // between them, and an empty line yields no tokens, so the offsets after
+    // it must still land.
+    let text = "say 1\n\rsay 2";
+    let source = ProgramSource::new(text.as_bytes().to_vec());
+    let scanned = scan(&source, ScanMode::Program).expect("scans");
+    let after: Vec<(usize, &[u8])> = scanned
+        .tokens
+        .iter()
+        .filter(|t| t.kind.tag() == Tag::Symbol)
+        .skip(2)
+        .map(|t| {
+            (
+                source.line_of(t.span.start),
+                source.span_bytes(t.span.clone()).expect("a scanner span"),
+            )
+        })
+        .collect();
+    // Line 2 is the empty one, so the second clause is on line 3.
+    assert_eq!(after, [(3, &b"say"[..]), (3, &b"2"[..])]);
 }
 
 #[test]
@@ -594,7 +702,7 @@ fn a_resource_body_is_copied_verbatim_rather_than_scanned() {
     let text =
         "say 1\nexit\n::resource data\nthis is 'unmatched and /* unclosed\nline two\n::END\n";
     let source = ProgramSource::new(text.as_bytes().to_vec());
-    let scanned = scan(&source).expect("scans");
+    let scanned = scan(&source, ScanMode::Program).expect("scans");
     assert_eq!(scanned.resources.len(), 1);
     let body = &scanned.resources[0];
     assert_eq!(scanned.tokens[body.directive].kind.tag(), Tag::DColon);
@@ -620,7 +728,7 @@ fn a_resource_end_marker_is_a_prefix_match_on_the_upcased_value() {
     // from a symbol, so it is upcased; a literal marker would not be.
     let text = "say 1\nexit\n::resource d2 end stop\nstop is lowercase, no match\nSTOP\n";
     let source = ProgramSource::new(text.as_bytes().to_vec());
-    let scanned = scan(&source).expect("scans");
+    let scanned = scan(&source, ScanMode::Program).expect("scans");
     assert_eq!(scanned.resources.len(), 1);
     assert_eq!(scanned.resources[0].lines.len(), 1);
 
@@ -628,7 +736,7 @@ fn a_resource_end_marker_is_a_prefix_match_on_the_upcased_value() {
     // the test is a prefix and not an equality.
     let prefix = "exit\n::resource d2 end 'STOP'\n::END is just data here\nSTOPPING? yes\n";
     let source = ProgramSource::new(prefix.as_bytes().to_vec());
-    let scanned = scan(&source).expect("scans");
+    let scanned = scan(&source, ScanMode::Program).expect("scans");
     assert_eq!(scanned.resources[0].lines.len(), 1);
 
     // A malformed `::RESOURCE` is left alone: the interpreter rejects it in
@@ -655,7 +763,7 @@ fn a_ctrl_z_ends_the_program_before_the_scanner_sees_it() {
     // error. Measured: `say 1` then a line beginning with 0x1A followed by
     // `say 'unclosed` gets rc 0 from `rexxc`.
     let source = ProgramSource::new(b"say 1\n\x1asay 'unclosed\n".to_vec());
-    let scanned = scan(&source).expect("scans");
+    let scanned = scan(&source, ScanMode::Program).expect("scans");
     assert_eq!(
         kinds(&scanned.tokens),
         [Tag::Symbol, Tag::Blank, Tag::Symbol, Tag::Eoc]
@@ -733,13 +841,13 @@ fn the_alternative_logical_not_bytes_are_accepted() {
     // every other byte above 0x7F is.
     for byte in [0xAAu8, 0xACu8] {
         let source = ProgramSource::new(vec![byte, b'a']);
-        let toks = scan(&source).expect("scans").tokens;
+        let toks = scan(&source, ScanMode::Program).expect("scans").tokens;
         assert_eq!(kinds(&toks), [Tag::Operator, Tag::Symbol, Tag::Eoc]);
         assert_eq!(operators(&toks), [Operator::Backslash]);
     }
     // And the same three-way look-ahead applies.
     let source = ProgramSource::new(b"a \xac= b".to_vec());
-    let toks = scan(&source).expect("scans").tokens;
+    let toks = scan(&source, ScanMode::Program).expect("scans").tokens;
     assert_eq!(operators(&toks), [Operator::BackslashEqual]);
 }
 
@@ -752,7 +860,7 @@ fn every_token_span_lies_inside_the_source_and_is_ordered() {
     // next line, so it covers that line's first byte.
     let text = "say 'a',\n'b' || abs(2.5) -- tail\n/* c */ x = .5\n";
     let source = ProgramSource::new(text.as_bytes().to_vec());
-    let scanned = scan(&source).expect("scans");
+    let scanned = scan(&source, ScanMode::Program).expect("scans");
     let end = text.len();
     let mut previous_start = 0;
     for token in &scanned.tokens {
@@ -784,7 +892,7 @@ fn for_every_string(alphabet: &[u8], max: usize, mut f: impl FnMut(&[u8])) {
 }
 
 #[test]
-fn no_input_makes_the_scanner_panic() {
+fn scan_always_answers_with_tokens_or_an_error_number() {
     // The literal packers index by position and rely on their own validation
     // pass having accounted for every character, so a mis-ported bound would
     // be a panic rather than a wrong answer. `scan` must always answer, with
@@ -799,7 +907,7 @@ fn no_input_makes_the_scanner_panic() {
         count += 1;
         let source = ProgramSource::new(bytes.to_vec());
         // Either outcome is fine. Not panicking is the property.
-        let _ = scan(&source);
+        let _ = scan(&source, ScanMode::Program);
     });
     assert!(count > 50_000, "the sweep actually ran: {count}");
 
@@ -810,7 +918,7 @@ fn no_input_makes_the_scanner_panic() {
     for_every_string(punctuation, 3, |bytes| {
         count += 1;
         let source = ProgramSource::new(bytes.to_vec());
-        let _ = scan(&source);
+        let _ = scan(&source, ScanMode::Program);
     });
     assert!(count > 8_000, "the sweep actually ran: {count}");
 
@@ -826,7 +934,7 @@ fn no_input_makes_the_scanner_panic() {
             text.push(b'\'');
             text.push(marker);
             let source = ProgramSource::new(text);
-            let _ = scan(&source);
+            let _ = scan(&source, ScanMode::Program);
         }
     });
     assert!(count > 15_000, "the sweep actually ran: {count}");
@@ -838,7 +946,7 @@ fn no_input_makes_the_scanner_panic() {
             let mut bytes = prefix.to_vec();
             bytes.push(byte);
             let source = ProgramSource::new(bytes);
-            let _ = scan(&source);
+            let _ = scan(&source, ScanMode::Program);
         }
     }
 }
