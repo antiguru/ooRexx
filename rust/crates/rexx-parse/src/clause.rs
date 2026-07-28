@@ -35,12 +35,19 @@ use crate::token::{ParseError, Tag, Token};
 /// other. An instruction that ends mid-clause moves the *next* clause's token
 /// range forward while narrowing its own `span` end, and the two adjustments
 /// are separate, so bytes between them belong to no clause at all.
+///
+/// Crate-internal: a clause is scaffolding for building instructions, and its
+/// span is copied into the instruction it produces, so nothing above the parser
+/// names it.
+///
+/// Task 3.6 is the first non-test reader of all three fields.
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
-pub struct Clause {
+pub(crate) struct Clause {
     /// Index range into the `ParseCtx::tokens` slice, terminating token
     /// excluded. That terminator is an `Eoc` for an ordinary clause and a
     /// `Colon` for a label clause.
-    pub tokens: Range<usize>,
+    pub(crate) tokens: Range<usize>,
     /// Byte range in the retained source: from the start of the first token to
     /// the END of the terminating token. An explicit `;` is therefore inside the
     /// span. For an end of line the span stops at the last byte of the line's
@@ -51,9 +58,9 @@ pub struct Clause {
     /// `say 1 ;` with the blank before the semicolon, `say 1;   ` *without* the
     /// blanks after it, and `say 1 -- trailing comment` with the whole comment,
     /// because there the terminator is the line end rather than the `--`.
-    pub span: Range<usize>,
+    pub(crate) span: Range<usize>,
     /// The label's own token range, when the clause is `name:`.
-    pub label: Option<Range<usize>>,
+    pub(crate) label: Option<Range<usize>>,
 }
 
 /// Splits `tokens` into clauses.
@@ -72,7 +79,8 @@ pub struct Clause {
 /// input reaches an error return here: the terminator rules cannot fail, and
 /// the one label error the C++ raises, error 47.1 for a label in `INTERPRET`
 /// text, needs the source kind that this function is not given.
-pub fn split_clauses(tokens: &[Token]) -> Result<Vec<Clause>, ParseError> {
+#[allow(dead_code)]
+pub(crate) fn split_clauses(tokens: &[Token]) -> Result<Vec<Clause>, ParseError> {
     let mut clauses = Vec::new();
     let mut index = 0;
 
@@ -125,3 +133,6 @@ pub fn split_clauses(tokens: &[Token]) -> Result<Vec<Clause>, ParseError> {
 
     Ok(clauses)
 }
+
+#[cfg(test)]
+mod tests;

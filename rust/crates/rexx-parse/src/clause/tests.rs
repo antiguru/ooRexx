@@ -4,8 +4,14 @@
 //! span, so every span expectation here was read off the interpreter rather
 //! than reasoned about. A loop re-traces its body per iteration, so the number
 //! of `*-*` lines is not the number of clauses and no test here counts them.
+//!
+//! In-crate rather than under `tests/`, because `Clause` and `split_clauses`
+//! are `pub(crate)` and an integration test is a separate crate.
 
-use rexx_parse::{Clause, ProgramSource, SourceKind, Tag, Token, TokenKind, scan, split_clauses};
+use crate::token::TokenKind;
+use crate::{ProgramSource, SourceKind, Tag, Token, scan};
+
+use super::{Clause, split_clauses};
 
 fn tokens_of(text: &str) -> Vec<Token> {
     let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
@@ -226,7 +232,7 @@ fn a_clause_holds_every_token_between_its_terminators() {
 #[test]
 fn an_unterminated_token_slice_ends_the_clause_at_its_last_token() {
     // `scan` always terminates its output, so this shape cannot come from it.
-    // But `split_clauses` is public, so a caller can hand it one, and the
+    // But `split_clauses` takes a bare slice, so a caller can hand it one, and the
     // documented fallback is to end the clause at the last token's own end
     // rather than to panic or to drop the clause. Constructed directly because
     // there is no way to make `scan` produce it.

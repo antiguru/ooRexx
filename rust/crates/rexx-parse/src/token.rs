@@ -190,6 +190,55 @@ pub enum Operator {
     Backslash,
 }
 
+impl Operator {
+    /// The canonical source spelling.
+    ///
+    /// Canonical because two spellings can scan to one operator: `\`, `0xAA`
+    /// and `0xAC` all give `Backslash`, so this returns the ASCII one rather
+    /// than the source bytes. Recover the source bytes from the token's span
+    /// where the distinction matters.
+    ///
+    /// `Abuttal` has no spelling at all and gives the empty string, because
+    /// the parser synthesises it where two terms sit side by side with nothing
+    /// between them.
+    pub fn spelling(self) -> &'static str {
+        match self {
+            Operator::Plus => "+",
+            Operator::Subtract => "-",
+            Operator::Multiply => "*",
+            Operator::Divide => "/",
+            Operator::IntDiv => "%",
+            Operator::Remainder => "//",
+            Operator::Power => "**",
+            Operator::Abuttal => "",
+            Operator::Concatenate => "||",
+            Operator::Blank => " ",
+            Operator::Equal => "=",
+            Operator::BackslashEqual => "\\=",
+            Operator::GreaterThan => ">",
+            Operator::BackslashGreaterThan => "\\>",
+            Operator::LessThan => "<",
+            Operator::BackslashLessThan => "\\<",
+            Operator::GreaterThanEqual => ">=",
+            Operator::LessThanEqual => "<=",
+            Operator::StrictEqual => "==",
+            Operator::StrictBackslashEqual => "\\==",
+            Operator::StrictGreaterThan => ">>",
+            Operator::StrictBackslashGreaterThan => "\\>>",
+            Operator::StrictLessThan => "<<",
+            Operator::StrictBackslashLessThan => "\\<<",
+            Operator::StrictGreaterThanEqual => ">>=",
+            Operator::StrictLessThanEqual => "<<=",
+            Operator::LessThanGreaterThan => "<>",
+            Operator::GreaterThanLessThan => "><",
+            Operator::And => "&",
+            Operator::Or => "|",
+            Operator::Xor => "&&",
+            Operator::Backslash => "\\",
+        }
+    }
+}
+
 /// What kind of thing a symbol names, from `scanSymbol`'s classification
 /// (`Scanner.cpp:1527`-`1593`).
 ///
@@ -603,26 +652,40 @@ const SUB_DIRECTIVES: [&str; 40] = [
 /// A `Clause` holds a range into the token vector, so a function given only a
 /// clause cannot reach the tokens; this bundles them with the two tables that
 /// every instruction and directive parser consults.
-pub struct ParseCtx<'a> {
-    pub source: &'a ProgramSource,
-    pub tokens: &'a [Token],
+///
+/// Crate-internal: nothing above the parser names it. Phase 4 consumes the
+/// AST, not the token stream it was built from.
+pub(crate) struct ParseCtx<'a> {
+    /// Task 3.6 reads this to recover a label's source spelling. The
+    /// expression grammar needs only the tokens.
+    #[allow(dead_code)]
+    pub(crate) source: &'a ProgramSource,
+    pub(crate) tokens: &'a [Token],
     /// Read-only by the time parsing starts: `scan` has already interned every
     /// symbol in the program. Tasks 3.6 and 3.7 need it to compare a clause's
     /// first symbol against the pre-interned keyword ids, and Task 3.6 needs it
     /// to recover a label's spelling when it builds `Program::labels`.
     ///
     /// Not for error substitutions: this phase does not reproduce them.
-    pub symbols: &'a SymbolTable,
+    ///
+    /// Read-only is not quite enough for the expression grammar, and Task 3.5
+    /// worked around it rather than widening this: a message name taken from a
+    /// literal, as in `a~'length'`, has to be upcased and would have to be
+    /// interned, and `scan` never saw it as a symbol. `ExprKind::Message`
+    /// therefore carries bytes where every other name carries a `SymbolId`.
+    pub(crate) symbols: &'a SymbolTable,
     /// Every reserved *spelling* this parser recognises, pre-interned by `scan`
     /// before it reads any source, so their ids are fixed and every keyword
     /// test is an integer comparison. Keywords are NOT reserved words, so this
     /// is only ever consulted positionally.
-    pub keywords: &'a Keywords,
+    pub(crate) keywords: &'a Keywords,
 }
 
 /// A position inside one clause's token range, not inside the whole vector,
 /// so an expression parser cannot walk off the end of its clause.
-pub struct TokenCursor {
+///
+/// Crate-internal, for the same reason as `ParseCtx`.
+pub(crate) struct TokenCursor {
     /// Index range into `ParseCtx::tokens` that this cursor may visit.
     range: Range<usize>,
     /// Next index to yield; always inside `range` or equal to `range.end`.
@@ -630,7 +693,10 @@ pub struct TokenCursor {
 }
 
 impl TokenCursor {
-    pub fn new(range: Range<usize>) -> Self {
+    /// Task 3.6 builds one of these per clause, from `Clause::tokens`; the
+    /// expression grammar is handed one already built.
+    #[allow(dead_code)]
+    pub(crate) fn new(range: Range<usize>) -> Self {
         Self {
             pos: range.start,
             range,
@@ -638,14 +704,14 @@ impl TokenCursor {
     }
 
     /// Index of the next token, or None at the end of the range.
-    pub fn peek(&self) -> Option<usize> {
+    pub(crate) fn peek(&self) -> Option<usize> {
         (self.pos < self.range.end).then_some(self.pos)
     }
 
     /// Yield the next token index and step past it. Deliberately not called
     /// `next`: `clippy::should_implement_trait` fires on an inherent `next`
     /// with this signature, and the phase gate runs clippy with `-D warnings`.
-    pub fn advance(&mut self) -> Option<usize> {
+    pub(crate) fn advance(&mut self) -> Option<usize> {
         let i = self.peek()?;
         self.pos += 1;
         Some(i)
@@ -653,7 +719,12 @@ impl TokenCursor {
 
     /// Step back one token. Panics if nothing has been yielded yet, because
     /// that is a parser bug rather than a source error.
-    pub fn back(&mut self) {
+    ///
+    /// No production caller yet, and possibly never: the expression grammar
+    /// peeks and only then consumes, where the C++ consumes and calls
+    /// `previousToken`. Task 3.6 or 3.7 either uses it or it should go.
+    #[allow(dead_code)]
+    pub(crate) fn back(&mut self) {
         assert!(
             self.pos > self.range.start,
             "TokenCursor::back before start"
@@ -661,7 +732,19 @@ impl TokenCursor {
         self.pos -= 1;
     }
 
-    pub fn position(&self) -> usize {
+    pub(crate) fn position(&self) -> usize {
         self.pos
     }
+
+    /// Index of the first token this cursor may visit, whatever it has already
+    /// yielded.
+    ///
+    /// A cursor is built from one clause's token range, so this is the clause's
+    /// first token, which is what a parse error is reported against.
+    pub(crate) fn start(&self) -> usize {
+        self.range.start
+    }
 }
+
+#[cfg(test)]
+mod tests;
