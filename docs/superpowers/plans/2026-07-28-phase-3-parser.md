@@ -514,11 +514,24 @@ consequences the plan should carry rather than have each later task rediscover:
   becomes a real caller must delete the ones it satisfies. An `allow` with no
   named owner is permanent, which is the failure mode to avoid.
 
-**Weigh this before Task 3.6.** The narrowing ratchets: 3.6 and 3.7 will add more
-`allow`s before the last of them clears. The alternative is to leave items `pub`
-until every in-crate caller exists and narrow once, at the end. Task 3.5 took the
-per-task route and reported the cost honestly, so the data for choosing is in its
-report.
+**Settled after Task 3.5: keep the per-task narrowing.** Deferring to one pass at
+the end does not avoid the test migration, it enlarges it — 3.6's and 3.7's
+instruction tests would all have to move too — and lands it inside the phase's
+biggest wiring change. It would also leave `ParseCtx` and `TokenCursor` publicly
+reachable for four more tasks with nothing to stop a dependency forming on them.
+
+**The owner rule is mechanical, not prose.** Put the owner in a trailing comment on
+the attribute line itself:
+
+```rust
+#[allow(dead_code)] // deleted by Task 3.6
+```
+
+Task 3.5 proved why this matters: its report tabulated an owner for every
+attribute, the code named one for only five of nine, and the table is not the code.
+A paragraph above the item does not survive. **Gate criterion 8 therefore also
+asserts that every `allow(dead_code)` line in `rexx-parse` matches `Task 3\.\d`**,
+which is greppable and auditable.
 
 **`ParseError` is created here, not in Task 3.8.** Every task from this one on
 returns it, so define the minimum now — `{ code: u16, sub: u16, byte: usize,
@@ -1113,12 +1126,16 @@ sets its end to the **start offset** of the `THEN` token
 (`IfInstruction.cpp:58–66`), which is why the traced text is `if y > 5 ` with the
 trailing blank and stops before `then`.
 
-**Task 3.6 owes the empty-expression sub-numbers.** `parse_expr` cannot know them,
-because the sub-number depends on the instruction the expression sits in, not on
-the expression: an empty expression is **35.918** in an assignment and **35.929**
-in an `IF`, measured. Task 3.5 therefore reports a placeholder 35.1 from inside the
-grammar, which is a number the interpreter does not use there. Task 3.6 must call
-the expression parser and raise its own sub-number rather than pass 35.1 through.
+**The empty-expression sub-number is a parameter, not a placeholder.** It depends
+on the instruction the expression sits in rather than on the expression: an empty
+expression is **35.918** in an assignment and **35.929** in an `IF`, measured. The
+expression grammar therefore mirrors the C++'s `requiredExpression(terminators,
+error)` and takes the sub-number from its caller, so Task 3.6 supplies the right
+one and the grammar never invents a number the interpreter does not use.
+
+An earlier draft had the grammar emit a placeholder 35.1 and left Task 3.6 owing a
+replacement. Passing it in is strictly better: it removes the wrong number instead
+of scheduling its removal.
 
 Related, and settled by measurement rather than by reading the C++: `parse_logical`
 returns `Result<Expr, _>` and not `Result<Option<Expr>, _>`, because
@@ -2297,6 +2314,22 @@ fits.
       ~55 ms cold-start budget, with a plain statement of whether it fits.
 - [ ] `cargo clippy --offline --workspace --all-targets -- -D warnings` clean;
       zero `unsafe`.
+- [ ] **Every `allow(dead_code)` in `rexx-parse` names the task that deletes it**,
+      as a trailing comment on the attribute line:
+
+      ```bash
+      # must print nothing
+      grep -rn 'allow(dead_code)' rust/crates/rexx-parse/src/ \
+        | grep -v 'Task 3\.[0-9]'
+      ```
+
+      These attributes exist because narrowing to `pub(crate)` leaves an item
+      unused in the library target until a real caller lands, and `#[expect]`
+      cannot be used since the lint fires in one of the two compilations and not
+      the other. They are meant to be temporary, so each must say who removes it.
+      An `allow` with no named owner is permanent, and Task 3.5 showed prose above
+      the item does not hold: its report tabulated an owner for all nine while the
+      code named one for five.
 - [ ] Phase 2's twelve differential sets still at 0 — 128,368 cases.
 
 ## Notes carried in
