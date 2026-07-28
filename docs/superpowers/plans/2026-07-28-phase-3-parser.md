@@ -198,6 +198,18 @@ The two shapes give Phase 4 different dispatch loops: a chain walks a `next`
 pointer, a tree recurses. Getting it wrong is not a parser fix, it is a Phase 4
 rewrite. Record the choice and the reason with the D10 decision.
 
+**One constraint binds the decision, whichever shape wins.** `THEN`, `ELSE` and
+`OTHERWISE` must remain instructions of their own, each carrying its own
+`clause_span`. They cannot be absorbed into a parent node. The oracle traces each
+as a separate `*-*` clause — `RexxInstructionThen` sets its location to the
+`THEN` token's own (`ThenInstruction.cpp:76`), and `trace r` on
+`if 1 = 1 then say "a"` prints three `*-*` lines for one source line. Gate
+criterion 6 gates on reconstructing each of them byte-identically, and Task 3.7b
+keeps no separate clause list, so an absorbed keyword would leave those bytes
+with nowhere to live. This is a constraint on the choice, not the choice itself,
+and it is stated here rather than nine tasks downstream because that is where it
+is cheap to honour.
+
 - [ ] **Step 4: Write `d10-decision.md`**
 
 Record the three measurements, the dependency cost from axis 4, which stop
@@ -395,8 +407,12 @@ consequences the rest of this plan depends on:
   a continued line end, so it has no continuation rule to implement.
 
 **The `Eoc` model, stated once**, because two of the tests below depend on it.
-`scan` emits one `Eoc` at each clause terminator: an explicit `;`, or an end of
-line that is not continued. It **never emits two `Eoc` in a row** and never
+`scan` emits one `Eoc` at each clause terminator: an explicit `;`, an end of
+line that is not continued, or **end of file**. The third matters and is easy to
+miss: every Step 2 test below passes a string with no trailing newline and
+expects a final `Eoc`, and Task 3.4's rule 1 lists all three terminators. A model
+with only the first two contradicts the tests directly beneath it.
+It **never emits two `Eoc` in a row** and never
 emits a trailing `Eoc` for an empty final clause, which is what makes a blank
 line or a stray `;;` produce no clause at all. This mirrors the effect of
 `nextClause`'s null-clause skipping (`LanguageParser.cpp:1009`) without
@@ -617,6 +633,14 @@ sets its end to the **start offset** of the `THEN` token
 (`IfInstruction.cpp:58–66`), which is why the traced text is `if y > 5 ` with the
 trailing blank and stops before `then`.
 
+Because those are two independent adjustments, **some bytes end up in no clause
+at all**: in `if 1 = 1   then    say "a"` the condition keeps its three trailing
+blanks, `then` carries none on either side, and `say "a"` starts at `say`, so the
+four blanks after `then` belong to neither neighbour. Task 3.6's `split_before`
+therefore takes an end byte and a restart token separately rather than one cut
+point. Gate criterion 1's property 2 already permits whitespace between one
+clause span and the next, which is exactly this.
+
 **This task implements rules 1, 2 and 3. Rule 4 is Task 3.6's**, and the split of
 work is not the C++'s: see the note after the tests for why rule 3 moves down a
 layer and rule 4 cannot. So `split_clauses` must produce clauses that Task 3.6's
@@ -772,8 +796,9 @@ pub(crate) struct ClauseCursor {
     clauses: Vec<Clause>,
     /// Next index in `clauses`, used only when `pending` is None.
     pos: usize,
-    /// The remainder of a clause that `split_before` cut in two. Yielded ahead
-    /// of `clauses[pos]`.
+    /// The remainder of a clause that `split_before` ended early. Yielded ahead
+    /// of `clauses[pos]`. Not necessarily contiguous with the clause it was
+    /// split from: see `split_before`.
     pending: Option<Clause>,
 }
 
@@ -797,30 +822,66 @@ impl ClauseCursor {
         Some(c)
     }
 
-    /// End the current clause immediately before token index `at`, and
-    /// re-present tokens `at..` as the next clause.
+    /// End the current clause at byte `end_at`, and re-present tokens `at..`
+    /// as the next clause starting at token `at`'s own start byte.
     ///
-    /// Returns the clause the caller just finished, whose `span` ends at the
-    /// START byte of token `at` — so `if y > 5 then` yields `if y > 5 ` with
-    /// the trailing blank, matching `RexxInstructionIf`
-    /// (`IfInstruction.cpp:58-66`). The remainder keeps the original
-    /// terminating byte, so its span still includes any `;`.
+    /// **This is not a partition, and that is the whole point.** The oracle
+    /// makes two independent adjustments with a gap between them, so bytes
+    /// between `end_at` and the next clause's start belong to NO clause. Two
+    /// positions are required; a single cut point cannot reproduce the
+    /// interpreter, and one that tried would be wrong on one side or the other.
     ///
-    /// Panics if `at` is outside the current clause's token range, which is a
-    /// parser bug rather than a source error.
-    pub fn split_before(&mut self, ctx: &ParseCtx, at: usize) -> Clause {
+    /// Callers pass `end_at` as follows:
+    ///
+    /// * `IF`/`WHEN` pass the `THEN` token's **start** byte, so the condition
+    ///   clause keeps its trailing blanks. `RexxInstructionIf` does
+    ///   `setEnd(...)` from the `THEN` token's start
+    ///   (`IfInstruction.cpp:58-66`).
+    /// * `THEN`/`ELSE`/`OTHERWISE` pass their own keyword token's **end** byte,
+    ///   so the keyword clause carries no blank on either side.
+    ///   `RexxInstructionThen` takes the token's whole location
+    ///   (`ThenInstruction.cpp:76`). `RexxClause::trim` (`Clause.cpp:138`)
+    ///   moves only the start, which is why the two ends move separately.
+    ///
+    /// Measured, for `if 1 = 1   then    say "a"` under `trace r`: the
+    /// condition clause keeps all THREE trailing blanks, `then` carries none on
+    /// either side despite four following it, and `say "a"` starts at `say`
+    /// with zero leading blanks. Three spans, two gaps.
+    ///
+    /// Panics if `at` is outside the current clause's token range, or if
+    /// `end_at` is outside the current clause's byte span. Both are parser
+    /// bugs rather than source errors.
+    pub fn split_before(&mut self, ctx: &ParseCtx, at: usize, end_at: usize) -> Clause {
         let cur = self.next_clause().expect("split_before with no current clause");
         assert!(cur.tokens.contains(&at), "split_before outside the clause");
-        let cut = ctx.tokens[at].span.start;
+        assert!(
+            cur.span.contains(&end_at) || end_at == cur.span.end,
+            "split_before end byte outside the clause"
+        );
         self.pending = Some(Clause {
             tokens: at..cur.tokens.end,
-            span: cut..cur.span.end,
+            span: ctx.tokens[at].span.start..cur.span.end,
             label: None,
         });
-        Clause { tokens: cur.tokens.start..at, span: cur.span.start..cut, label: cur.label }
+        Clause { tokens: cur.tokens.start..at, span: cur.span.start..end_at, label: cur.label }
     }
 }
 ```
+
+The two call shapes, so no implementer has to derive them. For
+`if 6 > 5 then say "big"` the tokens are `[0]if [1]Blank [2]6 [3]> [4]5
+[5]Blank [6]then [7]Blank [8]say [9]Blank [10]"big" [11]Eoc`:
+
+```rust
+// Parsing the IF: end the condition clause at the THEN token's start.
+let cond = cursor.split_before(ctx, 6, ctx.tokens[6].span.start);
+// Parsing the THEN: end it at the THEN token's own end.
+let then = cursor.split_before(ctx, 8, ctx.tokens[6].span.end);
+```
+
+The blank at token 7 lands in neither clause.
+That is legal: gate criterion 1's property 2 permits whitespace between one
+clause span and the next, and this is exactly that case.
 
 **Every `Instruction` carries a `clause_span: Range<usize>`**, copied from the
 `Clause` that `next_clause` or `split_before` returned. Use that name, because
@@ -828,7 +889,9 @@ Task 3.7b retains it and Task 3.9 reconstructs `*-*` lines from it, and neither
 of those implementers sees this task's brief. It is not the node's own extent: a
 `THEN` is its own `Instruction` whose `clause_span` covers just the `then` token,
 exactly as `RexxInstructionThen` sets its location to the `THEN` token's
-(`ThenInstruction.cpp:58-77`).
+(`ThenInstruction.cpp:76`). That is consistent with "copied from what
+`split_before` returned" only because `split_before` takes an explicit end byte
+rather than deriving one, which is why it has two positions and not one.
 
 **Five clause types are not keyword-driven at all,** and one of them is the
 default. None of these appears in the 35:
@@ -996,11 +1059,14 @@ fn every_keyword_reaches_its_instruction_node() {
 The length assertion is the load-bearing half: it fails when a keyword is
 added to the extraction but nobody wrote a clause for it.
 
-**Five of the 35 rows cannot be written until Task 3.1 Step 3b lands.**
-`THEN`, `ELSE`, `END`, `WHEN` and `OTHERWISE` only exist as nodes of their own
-under the flat instruction chain; under a tree they are absorbed into their
-parent and have no node to name. Write the other 30 first and fill these in
-once the AST shape is decided.
+**All 35 rows are writable, including the five keyword clauses.** `THEN`,
+`ELSE`, `END`, `WHEN` and `OTHERWISE` each get a node of their own regardless of
+which shape Task 3.1 Step 3b chose, because Step 3b is constrained to keep
+`THEN`, `ELSE` and `OTHERWISE` as separate instructions carrying their own
+`clause_span` — see that step. `END` and `WHEN` follow the same rule for the
+same reason: the oracle traces each as its own `*-*` clause. Task 3.1 is the
+first task in this phase, so the shape is already known by the time you write
+this table; there is nothing to defer.
 
 - [ ] **Step 5: Commit**
 
@@ -1321,16 +1387,23 @@ gate on it.
 ## Task 3.9: `TRACE` source lines (`*-*` only)
 
 **Files:**
-- Modify: `rust/crates/rexx-parse/src/source.rs`, `src/clause.rs`, `src/ast.rs`
+- Modify: `rust/crates/rexx-parse/src/source.rs`, `src/clause.rs`, `src/ast.rs`,
+  `src/instruction.rs`
 - Test: `rust/crates/rexx-parse/tests/sourceline.rs`
 
 **Interfaces:**
-- Consumes: `Instruction::clause_span`, produced by Task 3.4 and split by
-  Task 3.6, and the `ProgramSource` inside `Program`/`Fragment` from Task 3.7b.
+- Consumes: `Instruction::clause_span`, introduced in Task 3.6 and set from the
+  `Clause::span` that Task 3.4 produces, and the `ProgramSource` inside
+  `Program`/`Fragment` from Task 3.7b. Do not go looking for `clause_span` in
+  Task 3.4; what Task 3.4 produces is `Clause::span`.
 - Produces: the source-text slice per clause that `TRACE`'s `*-*` line needs. Nothing else — no depth field, no value-trace hooks.
 
-`src/clause.rs` and `src/ast.rs` are in the Files list because Step 3 adjusts
-spans, and a span this task finds wrong is a span Task 3.4 or Task 3.6 produced.
+`src/clause.rs`, `src/ast.rs` and `src/instruction.rs` are in the Files list
+because Step 3 adjusts spans, and a span this task finds wrong is a span Task 3.4
+or Task 3.6 produced. `src/instruction.rs` specifically, because the end byte a
+`THEN`/`ELSE`/`OTHERWISE` clause stops at is chosen by the instruction parser
+when it calls `split_before`, so a wrong end byte is repaired there and nowhere
+else.
 The AST must retain whatever `TRACE` displays; discovering later that it does not
 is a rework of every node type.
 
@@ -1414,13 +1487,20 @@ probe B traces `here:` / `nop;` / `say "two"` as three clauses.
 - [ ] **Step 2: Write a failing test that reconstructs that text from the AST**
 - [ ] **Step 3: Implement, adjusting *clause* spans if reconstruction is impossible**
 
-Acceptance: for every clause in `trace_output.rex` and in both Step 1 probes, the
-text reconstructed from the AST is **byte-identical** to the corresponding
-**`*-*`** line the interpreter prints, after stripping the line number, the marker
-and the leading indentation — and **nothing else**. In particular a terminating
-`;` and a trailing blank before a `then` are part of the expected text, not
+Acceptance: for every `*-*` line the interpreter prints for `trace_output.rex`
+and for both Step 1 probes, the text reconstructed from the clause that line came
+from is **byte-identical** to it, after stripping the line number, the marker and
+the leading indentation — and **nothing else**. In particular a terminating `;`
+and a trailing blank before a `then` are part of the expected text, not
 whitespace to be trimmed. Reconstruct from `Instruction::clause_span`, not from
 the node's own extent; the two differ exactly where this task is hardest.
+
+**This is a per-line comparison, not a comparison of two sequences**, and the
+distinction is not pedantic. `trace r` re-traces a loop body once per iteration,
+so the `*-*` lines outnumber the clauses. Measured: a `do i = 1 to 2` loop over
+one `say` prints **seven** `*-*` lines for **three** clauses, because the header,
+body and `end` repeat per iteration and the header prints once more for the
+exit test. Asserting equal counts would fail on any program containing a loop.
 
 `*-*` is the *source* marker and is the only one Phase 3 can produce. Under
 `trace i` the interpreter also emits value markers, and every one of those carries
@@ -1494,14 +1574,22 @@ fits.
 
       1. **Expressions nest.** Every `Expr` node's span contains the spans of its
          operands.
-      2. **Instructions are ordered.** Consecutive instruction spans are in source
-         order and do not overlap, and the only bytes between one instruction's
-         span and the next are whitespace, comments and `,`/`-` continuations.
+      2. **Instructions are ordered.** Consecutive `Instruction::clause_span`s are
+         in source order and do not overlap, and the only bytes between one
+         clause span and the next are whitespace, comments and `,`/`-`
+         continuations.
 
       Property 1 is stated for expressions and property 2 for instructions on
       purpose, because Task 3.1 Step 3b may make instructions a flat chain rather
       than a tree, in which case they are siblings and containment does not apply
-      to them. The criterion holds either way.
+      to them.
+
+      Property 2 is stated over `clause_span` and **not** over node extents, and
+      that is what makes it shape-independent. A node extent under the tree
+      outcome contains its children: a `Do`'s extent covers its whole body, so
+      consecutive node extents overlap on every loop in the corpus and the
+      property would fail there. A `clause_span` is per-clause under both
+      outcomes, so the criterion holds either way only in this form.
 
       Tiling rather than concatenation, because concatenation cannot work.
       Expression spans nest, so summing all of them reproduces the text several
@@ -1591,7 +1679,19 @@ fits.
       Phase 4's optimisation choices. The exclusion is phrased as "everything
       except `*-*`" rather than as a list because the list is longer than it
       looks: `TRACE.testGroup` alone contains **fifteen** distinct value markers,
-      and the obvious five are not even the five most frequent.
+      and the obvious five are not even the five most frequent. When counting
+      them, note that a character class of `[A-Za-z=]` silently misses `>>>`,
+      which is one of the fifteen and the second most frequent of all.
+
+      **This narrows the parent plan's criterion, deliberately.** The parent asks
+      for `TRACE`'s `*-*` source lines to match the oracle byte-for-byte,
+      unscoped; this criterion scopes that to `trace_output.rex` plus Task 3.9
+      Step 1's two probes. Recorded here rather than left implicit, because a
+      phase plan that narrows its parent's gate must say so — the principle round
+      4 established when it caught the `samples/` criterion going missing. The
+      narrowing is sound: three files chosen to cover every clause-splitting rule
+      buy more than reconstructing every clause of all 301 samples, and the
+      `samples/` round-trip criterion already covers breadth.
 - [ ] Parse throughput on the 5,203 bootstrap lines is recorded against the
       ~55 ms cold-start budget, with a plain statement of whether it fits.
 - [ ] `cargo clippy --offline --workspace --all-targets -- -D warnings` clean;
@@ -1653,3 +1753,13 @@ fits.
   the retained source directly. Task 3.4 produces these spans, Task 3.6 splits them, Task 3.7b retains
   them and Task 3.9 checks them — a defect here surfaces four tasks downstream as
   a rework of every node type, which is why it is front-loaded.
+- **Clause spans do not tile the source.** The mid-line split makes two
+  independent adjustments, so interstitial blanks belong to no clause: in
+  `if 1 = 1   then    say "a"` the condition keeps three trailing blanks, `then`
+  carries none, and the four blanks after `then` are in neither. Anything that
+  assumes clause spans are a partition is wrong, which is why `split_before`
+  takes an end byte and a restart token rather than one cut point.
+- **`THEN`, `ELSE` and `OTHERWISE` stay separate instructions** whichever AST
+  shape Task 3.1 Step 3b picks, because each is its own traced clause and there is
+  no other place to keep its span. That constraint is stated at Step 3b, not
+  discovered at Task 3.9.
