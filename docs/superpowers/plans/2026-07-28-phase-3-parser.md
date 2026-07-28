@@ -423,7 +423,7 @@ fn a_colon_makes_a_label_clause() {
 
 **Interfaces:**
 - Consumes: clauses from Task 3.4.
-- Produces: `Expr` in `ast.rs`, and `parse_expr(&[Token]) -> Result<Expr, ParseError>`.
+- Produces: `Expr` in `ast.rs`, and `parse_expr(&ParseCtx, &mut TokenCursor) -> Result<Expr, ParseError>`.
 
 Built the way Task 3.1 decided. The spike's implementation is a reference, not
 a starting point — it was timeboxed and is not production code.
@@ -486,7 +486,7 @@ shape directly instead of evaluating them.
 **Interfaces:**
 - Consumes: `Expr` from Task 3.5, clauses from Task 3.4.
 - Produces: `Instruction` in `ast.rs` and
-  `parse_instruction(&mut ClauseCursor) -> Result<Instruction, ParseError>`.
+  `parse_instruction(&ParseCtx, &mut ClauseCursor) -> Result<Instruction, ParseError>`.
 
 **It takes a cursor, not a single clause.** `DO`/`END`, `IF`/`THEN`/`ELSE`,
 `SELECT`/`WHEN`/`OTHERWISE` and every `::method` body span many clauses, so a
@@ -601,9 +601,11 @@ and `parseOptions` they are most of `InstructionParser.cpp`'s 4,650 lines.
 
 - [ ] **Step 4: Assert every keyword is reachable — with a valid clause each**
 
-A bare keyword is mostly **not** a valid clause. Measured: `then` is error 8,
-`when` is 9, `otherwise` is 10, `procedure` is 17 and `parse` is 20. A loop
-that parses each keyword by itself therefore cannot pass. Pair
+A bare keyword is mostly **not** a valid clause. All seven measured against
+`build/bin/rexx`: `then` 8, `else` 8, `when` 9, `otherwise` 9, `end` 10,
+`procedure` 17, `parse` 20. A loop that parses each keyword by itself
+therefore cannot pass. (Two earlier drafts got these wrong in two different
+ways -- take them from a run, not from this paragraph.) Pair
 each with a minimal clause that is legal, and check the resulting node type:
 
 ```rust
@@ -699,15 +701,17 @@ scanner mode Task 3.3 left room for.
 
 - [ ] **Step 4: Implement the remaining eight, committing per directive**
 
-- [ ] **Step 5: Assert every option sub-keyword is reachable**
+- [ ] **Step 5a: Assert every option sub-keyword is reachable**
 
 Same shape as Task 3.6's Step 4: a table pairing each option with a legal
 directive that carries it, plus a length assertion against the extracted count.
 
 - [ ] **Step 6: Parse `CoreClasses.orx` end to end without error**
 
-That file is the real acceptance test for this task — it is almost entirely
-directives, and Task 3.10's throughput number depends on it.
+That file is the real acceptance test for this task. Not because it is mostly
+directives — it is 8.3% — but because every method body in it sits inside one,
+so nothing in the file parses until the directives do, and Task 3.10's
+throughput number depends on the whole file parsing.
 
 - [ ] **Step 5: Commit**
 
@@ -774,7 +778,7 @@ it was a syntax error and told Task 3.8 to record a number that does not exist.
 
 **Interfaces:**
 - Consumes: `ProgramSource::position` from Task 3.2, `rexx-inventory`'s message table.
-- Produces: `ParseError { code: u16, sub: u16, line: usize, column: usize, subs: Vec<String> }`
+- Produces: the completed `ParseError { code: u16, sub: u16, byte: usize, subs: Vec<String> }` — the same shape Task 3.3 defined, no field added or removed —
   with `message(&self) -> String` rendered from the generated table.
 
 **This is the phase's gate, not a finishing touch.** Model it on
@@ -861,8 +865,24 @@ exactly — the clause text, the leading marker, the indentation.
 - [ ] **Step 3: Implement, adjusting node spans if reconstruction is impossible**
 
 Acceptance: for every clause in `trace_output.rex`, the text reconstructed
-from the AST is **byte-identical** to the corresponding `>>>`/`>V>` line the
-interpreter prints, after stripping the marker and the leading indentation.
+from the AST is **byte-identical** to the corresponding **`*-*`** line the
+interpreter prints, after stripping the line number, the marker and the
+leading indentation.
+
+`*-*` is the *source* marker and is the only one Phase 3 can produce. Under
+`trace i` the interpreter also emits `>L>`, `>O>`, `>>>`, `>=>` and `>V>`, and
+every one of those carries an evaluated **value**, which requires execution:
+
+```
+     2 *-* x = 1 + 1      <- source. This is Phase 3's business.
+       >L>   "1"          <- value. Phase 4's.
+       >O>   "+" => "2"   <- value.
+       >>>   "2"          <- value.
+```
+
+An earlier draft named `>>>`/`>V>` here, which would have made this task and
+gate criterion 6 need an interpreter -- reintroducing the exact Phase 2 failure
+into the one criterion that was already clean.
 If a clause cannot be reconstructed, widen that node's span until it can —
 and record which node needed it, because a node whose span does not cover its
 own source text is a defect that will surface again in error reporting.
@@ -912,14 +932,20 @@ fits.
 ## Exit gate
 
 - [ ] All 14 `rust/corpus/lang/` programs parse without error, **and** each one
-      round-trips: concatenating the source spans of its **leaf** nodes, in
-      source order, reproduces the original text with only comments removed.
-      Leaf nodes specifically — spans nest, so summing every node's span
-      reproduces the text several times over and proves nothing. Blanks are
-      **not** excluded: a blank is what separates abuttal concatenation from a
-      function call, so a round-trip that ignores them is blind to the very
-      distinction it is best placed to catch. "No error raised" is not enough —
-      a parser that silently drops a clause passes that and fails this.
+      **tiles**: every node's span contains its children's spans, and the
+      top-level nodes' spans cover the source in order, without gaps or
+      overlaps, from the first non-comment byte to the last.
+
+      Tiling rather than concatenation, because concatenation cannot work.
+      Spans nest, so summing all of them reproduces the text several times
+      over; summing only leaf spans loses the text that belongs to interior
+      nodes — the blank in `a b` *is* the abuttal operator, so leaf spans give
+      `ab` where the source has `a b`. Leading indentation, blank lines and the
+      `,`/`-` continuations belong to no node at all.
+
+      Tiling still catches what this criterion is for: a dropped clause leaves
+      a gap, and a mis-nested one breaks containment. "No error raised" catches
+      neither.
 - [ ] Every `Instruction` and `Expr` variant is constructed at least once
       across those 14 programs, asserted by a test that enumerates the variants
       rather than by inspection. Where a variant is unreachable from the
