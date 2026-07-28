@@ -158,7 +158,7 @@ def signblank():
 
     `numberStringScan` (NumberStringClass.cpp:1289-1295) skips blanks and
     tabs after a sign, so `'+ 3'` is the number 3 -- legal there, at either
-    end, and nowhere else. None of the other ten sets can see this: no
+    end, and nowhere else. None of the other eleven sets can see this: no
     generator above emits a blank after a sign, which is how a parser that
     rejected `'+ 3'` outright sat at 0 divergences across all 126,048 of
     their cases. The invalid spellings (`'+ 3 e2'`, `'3 4'`, `'++ 3'`, a

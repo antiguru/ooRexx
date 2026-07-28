@@ -138,8 +138,8 @@ impl Number {
             });
         }
 
-        // Division is the one operation whose working storage is sized by
-        // DIGITS itself rather than by its operands: `NumberString::Division`
+        // Division's working storage is sized by DIGITS itself rather than by
+        // its operands: `NumberString::Division`
         // allocates `3 * ((digits + 1) * 2 + 1)` bytes up front, before the
         // first quotient digit (`NumberStringMath2.cpp:401-417`), and a
         // failed allocation is error 5, "System resources exhausted"
@@ -157,6 +157,28 @@ impl Number {
         // after the `calc_exp < 0` early returns above because the C++
         // allocates after its equivalent ones: a `%`/`//` whose quotient
         // has no integer part never reaches the allocation at all.
+        //
+        // Division is NOT the only operation the interpreter sizes this way.
+        // `addSub` requests `2D+1` (`NumberStringMath.cpp:808`), `Multiply`
+        // `2(D+1)+1` (`NumberStringMath2.cpp:146`), and power `2(2(D+e+1)+1)`
+        // with `e` the exponent's digit count (`NumberStringMath2.cpp:902`),
+        // all past the same `FAST_BUFFER` cutoff. Those three have no
+        // reservation here, so `+`, `-`, `*` and `**` return a result where
+        // the interpreter raises error 5. That is a recorded deviation rather
+        // than an oversight: error 5 is resource exhaustion, the boundary is
+        // whatever malloc grants and so is machine-dependent, and in the
+        // middle of the range the interpreter is OOM-killed rather than
+        // raising 5 at all. `phase-2-gate.md` carries the reasoning.
+        // Reproducing it would have to mirror the per-operation request sizes
+        // above and the zero-operand short-circuits that precede them,
+        // because the oracle accepts `'2.0'+0` at the same DIGITS that makes
+        // `'2.0'+3` fail.
+        //
+        // A reservation must NOT go inside `sub` or `mul` themselves:
+        // `compare` calls `sub`, the `%`/`//` remainder tail calls both at
+        // inflated precision, and the oracle's comparison at max DIGITS
+        // succeeds because `NumberString::comp`'s fast path never allocates
+        // by DIGITS. Any future fix belongs at the operator entry points.
         let total_digits = digits.saturating_add(1).saturating_mul(2).saturating_add(1);
         if total_digits > FAST_BUFFER {
             let request = usize::try_from(total_digits.saturating_mul(3)).unwrap_or(usize::MAX);

@@ -191,6 +191,64 @@ is itself the finding: each round of review found defects the previous round's
 fixes introduced or exposed, and two of the last three fix rounds introduced a
 new defect while repairing an old one.
 
+## A recorded deviation: error 5 at very large DIGITS
+
+Found by the re-review of `7f664aa7`, the phase's final fix round.
+That review had failed to complete three times for infrastructure reasons and
+the phase was closed without it; it has now run, and this is its one Critical.
+
+At a legal but enormous `NUMERIC DIGITS`, reached by stepping 9 to 18 to
+999999999999999999, the interpreter raises error 5 for all seven arithmetic
+operators.
+`rexx-num` raises it for `/`, `%` and `//`, and returns a result for `+`, `-`,
+`*` and `**`.
+Measured, at DIGITS 999999999999999999, `'2.0'` against `3`:
+
+| operator | oracle | `rexx-num` |
+|---|---|---|
+| `+` `-` `*` `**` | error 5 | `5.0` `-1.0` `6.0` `8` |
+| `/` `%` `//` | error 5 | error 5 |
+
+The cause is that the interpreter sizes working storage from DIGITS in four
+places, not one: `addSub` requests `2D+1`
+(`NumberStringMath.cpp:808`), `Multiply` `2(D+1)+1`
+(`NumberStringMath2.cpp:146`), power `2(2(D+e+1)+1)`
+(`NumberStringMath2.cpp:902`), and `Division` `3(2(D+1)+1)`.
+Only the last has a matching reservation in the Rust crate.
+
+**This is deliberately not being fixed, and the reasoning is the point.**
+Error 5 is "System resources exhausted", which is an artifact of the C++
+allocation strategy rather than a language semantic.
+The boundary is whatever `malloc` grants, so it moves with the machine, and in
+the middle of the range the interpreter does not raise error 5 at all: it is
+OOM-killed.
+That happened on this machine while bisecting for the threshold, which is
+itself the strongest evidence that the behaviour is not a stable contract worth
+porting.
+Matching it byte-for-byte would mean reproducing four per-operation request
+sizes plus the zero-operand short-circuits that precede them, because the
+oracle accepts `'2.0'+0` at the same DIGITS where `'2.0'+3` fails.
+
+Three facts worth keeping, because they are counter-intuitive and cost real
+effort to establish:
+
+* A zero operand short-circuits before any allocation, so `'2.0'+0`, `'2.0'*0`
+  and `'2.0'**0` all succeed where `'2.0'+3`, `'2.0'*1` and `'2.0'**1` fail.
+* `2+3` succeeds where `'2'+3` fails, because an all-literal expression is
+  folded before the `NUMERIC DIGITS` change takes effect and so never sees the
+  large setting.
+* Everything is fine at DIGITS 1000, so no realistic program reaches this.
+
+A reservation must not be placed inside `sub` or `mul` themselves.
+`compare` calls `sub`, and the `%`/`//` remainder tail calls both at inflated
+precision, while the oracle's comparison at maximum DIGITS succeeds because
+`NumberString::comp`'s fast path never allocates by DIGITS.
+Any future fix belongs at the operator entry points.
+
+No differential set can see this: all twelve cap at DIGITS 20, so the
+128,368-case zero stands and is simply blind here.
+That is the same error-boundary blind spot named below, in a second guise.
+
 ## The blind spot worth naming
 
 The corpus samples values and arguments. Until `fmtcarry`, **nothing targeted

@@ -99,12 +99,14 @@ pub enum ArithError {
     /// Error 26.008; `additional()` is `[exponent]`. Raised only by
     /// `pow.rs`.
     PowerExponentNotWhole { exponent: Number },
-    /// Division's up-front working-storage reservation failed. Division is
-    /// the one operation whose buffers are sized by DIGITS itself rather
-    /// than by its operands, so a huge -- and, since the u64 widening,
-    /// perfectly legal -- DIGITS fails here before any arithmetic starts.
-    /// Error 5, no substitution; raised only by `muldiv.rs`'s `div`, whose
-    /// reservation site documents the interpreter mechanics this mirrors.
+    /// An up-front working-storage reservation sized by DIGITS failed, so a
+    /// huge -- and, since the u64 widening, perfectly legal -- DIGITS fails
+    /// here before any arithmetic starts. Error 5, no substitution.
+    ///
+    /// Currently raised only by `muldiv.rs`'s `div`, whose reservation site
+    /// documents the interpreter mechanics this mirrors. `+`, `-`, `*` and
+    /// `**` allocate by DIGITS in the interpreter too and do NOT raise this
+    /// yet; that gap is a recorded deviation, see `phase-2-gate.md`.
     SystemResources,
 }
 
@@ -348,8 +350,12 @@ impl Number {
     /// bare exponent marker, and hex literals, which are strings in Rexx
     /// rather than numbers.
     ///
-    /// Blank handling mirrors `numberStringScan`
-    /// (`NumberStringClass.cpp:1264-1296`) exactly: a blank is a space or a
+    /// Blank handling mirrors `NumberString::parseNumber`, the state machine
+    /// at `NumberStringClass.cpp:2586` validated by `NumberStringBuilder::
+    /// finish` at `:2519`, which is the conversion that governs arithmetic
+    /// operands. (`numberStringScan` at `:1264-1296` agrees on every
+    /// blank-bearing shape, but it is a separate validity pre-check and so is
+    /// the wrong reference for this port.) A blank is a space or a
     /// tab -- those two bytes, not Unicode whitespace -- and blanks are
     /// legal at either end and between a sign and its first digit, nowhere
     /// else. Confirmed against `build/bin/rexx`: `'+ 3'`, `'  +   3  '`,
