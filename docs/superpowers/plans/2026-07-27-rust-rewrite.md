@@ -373,7 +373,7 @@ The C++ splits this into `Scanner.cpp` (1,955), `Clause.cpp`, `Token.cpp`, `Inst
 
 4. **The literal-suffix rule bites harder than it looks, because it usually does not fail loudly.** `'ff'x` and `'1010'b` are literals whose suffix binds to the *preceding* quote. The visible consequence is that `say a"|"b` dies with error 15.4 — `"|"b` is an invalid binary string. The dangerous consequence is that `say a''b`, which reads as the classic Rexx idiom for blank-free concatenation, **prints `x` rather than `xy`**: `''b` is an *empty binary literal*, so the line concatenates `a` with `""` and never reads `b` at all. No error, just a different program. Both were hit for real while building this project's seed corpus, the second one inside a comment that confidently described the wrong behaviour.
 5. **The rest of tokenisation is idiosyncratic too.** `/* */` comments nest (`Scanner.cpp:200–250`, tracked with an explicit nesting level); `--` runs to end of line; `.` is a symbol constituent, so `a.b.c` is one compound-variable token rather than three tokens and two operators, while a *leading* `.` means environment lookup (`.array`, `.nil`).
-4. **Error output is fixed by the oracle.** Conformance demands one specific error, with a specific number out of the 704, at a specific line and column. `chumsky`'s recovery and multi-error reporting — a large part of its value — is mostly unusable here, because emitting a second, better diagnostic is a conformance failure.
+4. **Error output is fixed by the oracle.** Conformance demands one specific error, with a specific number out of the 704, a specific sub-number, a specific **line**, and the specific substitution values the message quotes. There is no column: `POSITION` on the condition object is the line, and stderr carries no offset, because ooRexx locates an error by quoting the offending token instead. `chumsky`'s recovery and multi-error reporting — a large part of its value — is mostly unusable here, because emitting a second, better diagnostic is a conformance failure.
 5. **`INTERPRET` parses at runtime,** so parser throughput is on the execution path for some programs, not only at load.
 
 **Options.**
@@ -399,7 +399,7 @@ Gates are hard. A phase does not close until every exit criterion is demonstrate
 | 0 | Oracle & inventory | — | Differ runs C++ against itself with zero diffs on the corpus; benchmark baselines committed for all 5 platforms; error table and builtin inventory generated; L1 extraction fraction reported; D7 protocol stability answered | — |
 | 1 | Heap & object model | D1 open | Allocation throughput and full-GC pause within the C++ baseline CI; `Trace` derived, not hand-written; root set enumerable and documented. **D1 closes here.** | — |
 | 2 | Numeric core | D1 closed | Every extractable ooTest arithmetic assertion passes; ANSI X3.274 vectors pass; arithmetic benchmark at parity | L1 (arithmetic) |
-| 3 | Scanner & parser | D1 closed, D13 closed ✓, D10 spiked | Round-trips every `.rex` in `samples/` to an AST; `SOURCELINE`, error line/column reporting, and `TRACE` output formatting match the oracle byte-for-byte; parse throughput on `CoreClasses.orx` recorded | L0 (syntax errors) |
+| 3 | Scanner & parser | D1 closed, D13 closed ✓, D10 spiked | Round-trips every `.rex` under `samples/` to an AST (301 files); `SOURCELINE`, error **line** reporting, and `TRACE`'s `*-*` source lines match the oracle byte-for-byte; parse throughput on `CoreClasses.orx` recorded | L0 (syntax errors) |
 | 4 | Classic executor | 2, 3 | Non-OO Rexx runs: assignment, `DO` (all variants), `IF`, `SELECT`, `CALL`, `PARSE`, `SAY`, `SIGNAL`, conditions, and all **81 builtin functions** | L0 full corpus + L1 majority |
 | 5 | Object model | 4 | **`CoreClasses.orx` parses and executes**; 32 classes exist and respond; `::class`/`::method`/`::routine`/`::requires` work; security manager interception points in place (D12); cold start measured and recorded against C++ (D2) | L2 |
 | 6 | Concurrency | 5 | Activities, kernel lock, guard locks, `REPLY`, `GUARD`, message objects; ooTest concurrency groups pass; TSan (or `loom`) clean. **D3's frame-ownership constraint verified.** | L2 |
@@ -2357,7 +2357,7 @@ Each subsequent phase gets its own plan file at `docs/superpowers/plans/YYYY-MM-
 The generating procedure for each phase:
 
 1. **Read the C++ it replaces.** Name the exact files and line counts. The phase plan opens with that inventory.
-2. **Enumerate the observable behaviours,** not the functions. For Phase 3 that is error messages with line and column, `SOURCELINE`, and `TRACE` output formatting — not "the scanner tokenises correctly".
+2. **Enumerate the observable behaviours,** not the functions. For Phase 3 that is error messages with number, sub-number, **line** and substitution values, `SOURCELINE`, and `TRACE`'s `*-*` source lines — not "the scanner tokenises correctly". There is **no column** anywhere in the oracle: the condition object exposes `POSITION`, which is the line, and stderr carries no offset either, because ooRexx locates an error by quoting the offending token. Do not gate any phase on a column.
 3. **Write the L0 corpus entries first.** Every behaviour in step 2 becomes a `.rex` program in `rust/corpus/` that the C++ oracle already passes. These are the phase's acceptance tests, written before any Rust.
 4. **Decompose into tasks of one testable deliverable each,** in dependency order, following the Task Structure in `superpowers:writing-plans`.
 5. **State the exit gate** as: corpus subset at zero divergences + L-rung reached + benchmark comparison against `perf-baseline.md` + the unsafe-block count, which must be zero or accounted for by a Section 1 decision block.
@@ -2399,7 +2399,7 @@ The generating procedure for each phase:
 
 **Differential fuzzing as a gate** — generating random Rexx programs and diffing the two interpreters. Not selected. It would find numeric and `PARSE` edge cases that a hand-written corpus misses, and if the L0 corpus proves too thin in Phase 4, this is the first thing to add.
 
-**Corpus replay over the 301 `samples/` programs as a primary gate** — not selected as a gate, but the samples remain the natural expansion of the L0 corpus once Phase 4 is under way. Many touch the file system or the console and need harnessing before they are deterministic.
+**Corpus replay — *executing* the 301 `samples/` programs — as a primary gate** — not selected as a gate, but the samples remain the natural expansion of the L0 corpus once Phase 4 is under way. Many touch the file system or the console and need harnessing before they are deterministic. This does **not** apply to *parsing* them, which needs no harnessing at all and *is* a Phase 3 gate criterion: all 301 pass `build/bin/rexxc` today, so the expected answer for every one is "parses" and the oracle half is one shell loop.
 
 **A general decimal crate for `NUMERIC`** — see D4. The ANSI Rexx rules differ from IEEE decimal in ways that are individually small and collectively fatal to conformance.
 
