@@ -720,6 +720,30 @@ impl TokenCursor {
         Some(i)
     }
 
+    /// `nextReal` without consuming: index of the next token that is not a
+    /// blank.
+    ///
+    /// `None` is the C++'s `TOKEN_EOC`. A clause's terminating token is outside
+    /// the range this cursor was built from, so running out of range is exactly
+    /// `isEndOfClause()`.
+    ///
+    /// `tokens` must be the slice the range indexes, which is
+    /// `ParseCtx::tokens`.
+    pub(crate) fn peek_real(&self, tokens: &[Token]) -> Option<usize> {
+        let mut i = self.peek()?;
+        while i < self.range.end && tokens[i].kind.tag() == Tag::Blank {
+            i += 1;
+        }
+        (i < self.range.end).then_some(i)
+    }
+
+    /// `nextReal`: the next token that is not a blank, consumed.
+    pub(crate) fn advance_real(&mut self, tokens: &[Token]) -> Option<usize> {
+        let i = self.peek_real(tokens)?;
+        self.pos = i + 1;
+        Some(i)
+    }
+
     pub(crate) fn position(&self) -> usize {
         self.pos
     }

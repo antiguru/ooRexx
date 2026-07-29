@@ -48,6 +48,7 @@ use crate::ast::{
     Use, UseTarget, VariableRef,
 };
 use crate::clause::{Clause, ClauseCursor, PendingThen, split_clauses};
+use crate::convert::{check_trace_setting, whole_number};
 use crate::expr::{
     Terminators, need_variable, parse_arg_list, parse_constant_expression, parse_expr,
     parse_expression, parse_logical, parse_message_term, parse_paren_expression,
@@ -354,11 +355,7 @@ impl<'a> Inst<'a> {
     /// terminating token is outside `Clause::tokens`, so running out of tokens
     /// is exactly `isEndOfClause()`.
     fn peek_real_index(&self) -> Option<usize> {
-        let mut i = self.cursor.peek()?;
-        while i < self.clause.tokens.end && self.ctx.tokens[i].kind.tag() == Tag::Blank {
-            i += 1;
-        }
-        (i < self.clause.tokens.end).then_some(i)
+        self.cursor.peek_real(self.ctx.tokens)
     }
 
     /// `nextReal` without consuming.
@@ -397,8 +394,7 @@ impl<'a> Inst<'a> {
 
     /// `nextReal`: the next token that is not a blank, consumed.
     fn next_real(&mut self) -> Option<&'a Token> {
-        let i = self.peek_real_index()?;
-        self.seek(i + 1);
+        let i = self.cursor.advance_real(self.ctx.tokens)?;
         Some(&self.ctx.tokens[i])
     }
 
@@ -1554,7 +1550,7 @@ impl<'a> Inst<'a> {
                 // `Error_Invalid_data_trace`, measured as 21.906 for
                 // `trace 5 x` and for `trace r x`.
                 self.required_end(21, 906)?;
-                match whole_number(&value) {
+                match whole_number(&value, TRACE_DIGITS) {
                     Some(skip) => Ok(Trace::Skip(skip)),
                     None => {
                         check_trace_setting(&value).map_err(|_| self.error(24, 1))?;
@@ -1577,7 +1573,7 @@ impl<'a> Inst<'a> {
                 let value = self.value_of(number);
                 self.required_end(21, 906)?;
                 // `Error_Invalid_whole_number_trace`, 26.7.
-                let Some(skip) = whole_number(&value) else {
+                let Some(skip) = whole_number(&value, TRACE_DIGITS) else {
                     return Err(self.error(26, 7));
                 };
                 Ok(Trace::Skip(if negate { -skip } else { skip }))
@@ -2621,125 +2617,6 @@ fn need_variable_class(class: SymbolClass, byte: usize) -> Result<(), ParseError
 /// unless a `::OPTIONS DIGITS` directive changed it. That directive belongs to
 /// the directive parser, so the default is what applies here.
 const TRACE_DIGITS: usize = 9;
-
-/// The value of `text` as a whole number, or `None` if it is not one.
-///
-/// `RexxString::requestNumber(result, digits)`: the text must be a Rexx number
-/// whose value is an integer expressible in at most `digits` digits. Measured
-/// against `build/bin/rexxc` through `TRACE`, which is the only caller in this
-/// module and whose fallback makes the boundary visible: `trace 1e2` is rc 0
-/// and means 100, `trace 123456789` is rc 0, `trace 1234567890` is Error 24.1
-/// at ten digits, `trace 1e20` is 24.1 because the value needs 21, and
-/// `trace 1.5` and `trace 1e-2` are 24.1 because neither is whole.
-fn whole_number(text: &[u8]) -> Option<i64> {
-    let mut rest = text;
-    let mut negative = false;
-    if let Some((&sign, tail)) = rest.split_first()
-        && (sign == b'+' || sign == b'-')
-    {
-        negative = sign == b'-';
-        rest = tail;
-    }
-    let integer_len = rest
-        .iter()
-        .position(|b| !b.is_ascii_digit())
-        .unwrap_or(rest.len());
-    let integer = &rest[..integer_len];
-    rest = &rest[integer_len..];
-    let mut fraction: &[u8] = b"";
-    if rest.first() == Some(&b'.') {
-        rest = &rest[1..];
-        let len = rest
-            .iter()
-            .position(|b| !b.is_ascii_digit())
-            .unwrap_or(rest.len());
-        fraction = &rest[..len];
-        rest = &rest[len..];
-    }
-    if integer.is_empty() && fraction.is_empty() {
-        return None;
-    }
-    let mut exponent: i64 = 0;
-    if matches!(rest.first(), Some(b'e' | b'E')) {
-        rest = &rest[1..];
-        let mut exponent_negative = false;
-        if let Some((&sign, tail)) = rest.split_first()
-            && (sign == b'+' || sign == b'-')
-        {
-            exponent_negative = sign == b'-';
-            rest = tail;
-        }
-        if rest.is_empty() || !rest.iter().all(|b| b.is_ascii_digit()) {
-            return None;
-        }
-        let digits = std::str::from_utf8(rest).ok()?;
-        exponent = digits.parse::<i64>().ok()?;
-        if exponent_negative {
-            exponent = -exponent;
-        }
-        rest = b"";
-    }
-    if !rest.is_empty() {
-        return None;
-    }
-
-    // The mantissa's digits, with the decimal point folded into the exponent.
-    let mut mantissa: Vec<u8> = Vec::with_capacity(integer.len() + fraction.len());
-    mantissa.extend_from_slice(integer);
-    mantissa.extend_from_slice(fraction);
-    exponent -= i64::try_from(fraction.len()).ok()?;
-    let first = mantissa.iter().position(|&b| b != b'0');
-    let Some(first) = first else {
-        // Every digit is a zero, so the value is zero however the exponent
-        // reads.
-        return Some(0);
-    };
-    mantissa.drain(..first);
-    // A negative exponent is only whole if the digits it would move past the
-    // point are all zeros.
-    while exponent < 0 {
-        if mantissa.last() != Some(&b'0') {
-            return None;
-        }
-        mantissa.pop();
-        exponent += 1;
-    }
-    let width = mantissa.len() + usize::try_from(exponent).ok()?;
-    if width > TRACE_DIGITS {
-        return None;
-    }
-    let mut value: i64 = 0;
-    for &digit in &mantissa {
-        value = value
-            .checked_mul(10)?
-            .checked_add(i64::from(digit - b'0'))?;
-    }
-    for _ in 0..exponent {
-        value = value.checked_mul(10)?;
-    }
-    Some(if negative { -value } else { value })
-}
-
-/// Whether `text` is a usable `TRACE` option string.
-///
-/// `TraceSetting::parseTraceSetting` (`TraceSetting.cpp:135`) reads any number
-/// of leading `?` toggles and then exactly ONE more character, ignoring
-/// everything after it, which is why `trace results` works: only the `R`
-/// matters. An empty string is the normal setting. Measured: `trace r`,
-/// `trace ?r`, `trace ??r`, `trace results` and `trace ''` are all rc 0, while
-/// `trace zzz` is Error 24.1.
-fn check_trace_setting(text: &[u8]) -> Result<(), ()> {
-    for &byte in text {
-        if byte == b'?' {
-            continue;
-        }
-        return match byte.to_ascii_uppercase() {
-            b'A' | b'C' | b'L' | b'E' | b'F' | b'N' | b'O' | b'R' | b'I' => Ok(()),
-            _ => Err(()),
-        };
-    }
-    Ok(())
-}
 
 #[cfg(test)]
 mod tests;

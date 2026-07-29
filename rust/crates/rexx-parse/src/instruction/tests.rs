@@ -1503,6 +1503,13 @@ fn the_trace_number_gate_is_exactly_the_oracles() {
     assert_eq!(err("trace 1e-2"), (24, 1));
     // An unknown option letter. Measured: 24.1.
     assert_eq!(err("trace zzz"), (24, 1));
+    // A number with blanks around it is still a number, which Task 3.6 got
+    // wrong: the conversion did not strip them, so this raised 24.1 where the
+    // oracle takes it as a skip count. Measured, `trace " 9 "` is rc 0 and
+    // `trace "9 5"` is 24.1, so the blanks may surround the number and not sit
+    // inside it.
+    assert_eq!(setting_shape("trace ' 9 '"), "skip 9");
+    assert_eq!(err("trace '9 5'"), (24, 1));
     // Every letter the setting parser knows, which is the other direction of
     // the same gate. Measured: all rc 0.
     for letter in ["a", "c", "l", "e", "f", "n", "o", "r", "i"] {
