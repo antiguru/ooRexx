@@ -1968,38 +1968,72 @@ fn a_label_after_an_if_is_rejected_by_the_label_guard() {
 }
 
 #[test]
-fn a_missing_then_is_reported_against_the_if_and_not_the_offender() {
-    // `syntaxError(Error_Then_expected_if, instruction)` takes the
-    // INSTRUCTION's location, so the byte is the IF's clause start and not the
-    // clause that should have held the THEN. Measured, moving the IF while the
-    // offender stays put moves the report with the IF:
-    //   nop / if 1 = 1 / nop / nop / nop        -> 18.1 on line 2
-    //   nop / nop / nop / if 1 = 1 / nop        -> 18.1 on line 4
-    // and for the WHEN spelling the report is on the WHEN's line, not the
-    // following clause's.
-    let source = "nop\nif 1 = 1\nnop\nnop\nnop";
-    let error = parse(source).expect_err("a missing THEN is an error");
-    assert_eq!((error.code, error.sub), (18, 1));
-    let program = ProgramSource::new(source.as_bytes().to_vec(), SourceKind::Program);
-    assert_eq!(program.line_of(error.byte), 2, "reported against the IF");
-
-    let source = "nop\nnop\nnop\nif 1 = 1\nnop";
-    let error = parse(source).expect_err("a missing THEN is an error");
-    let program = ProgramSource::new(source.as_bytes().to_vec(), SourceKind::Program);
-    assert_eq!(program.line_of(error.byte), 4, "reported against the IF");
-
-    let source = "select\nwhen 1 = 1\nnop\nend";
-    let error = parse(source).expect_err("a missing THEN is an error");
-    assert_eq!((error.code, error.sub), (18, 2));
-    let program = ProgramSource::new(source.as_bytes().to_vec(), SourceKind::Program);
-    assert_eq!(program.line_of(error.byte), 2, "reported against the WHEN");
-
-    // And at the end of the body, where there is no offending clause at all.
-    let source = "nop\nnop\nif 1 = 1";
-    let error = parse(source).expect_err("a missing THEN is an error");
-    assert_eq!((error.code, error.sub), (18, 1));
-    let program = ProgramSource::new(source.as_bytes().to_vec(), SourceKind::Program);
-    assert_eq!(program.line_of(error.byte), 3, "reported against the IF");
+fn a_missing_then_is_reported_on_the_offending_clauses_line() {
+    // A missing-THEN error carries TWO independent positions, and only a source
+    // with blank lines between the IF and the offending clause can tell them
+    // apart -- with the two adjacent, moving one moves the other and both
+    // readings fit. The discriminating case:
+    //
+    //     1  nop
+    //     2  if 1 = 1
+    //     3
+    //     4
+    //     5  nop
+    //        Error 18 running ... line 5:  THEN expected.
+    //        Error 18.1:  IF instruction on line 2 requires matching THEN ...
+    //
+    // The line the error is REPORTED on is the offending clause's. The IF's is
+    // a message substitution, which this phase does not reproduce, so
+    // `ParseError::byte` is the offender's. All six rows measured:
+    //
+    //   | program                                    | main | substitution |
+    //   |--------------------------------------------|------|--------------|
+    //   | nop / if(2) / nop(3)                       |   3  |      2       |
+    //   | nop / nop / nop / if(4) / nop(5)           |   5  |      4       |
+    //   | nop / if(2) / blank / blank / nop(5)       |   5  |      2       |
+    //   | select / when(2) / nop(3) / end            |   3  |      2       |
+    //   | select / when(2) / blanks / nop(5) / end   |   5  |      2       |
+    //   | nop / nop / if(3), no offender             |   3  |      3       |
+    //   | nop / if(2..3 continued), no offender      |   2  |      2       |
+    //   | nop / if(2..3 continued) / nop(4)          |   4  |      2       |
+    //
+    // The no-offender rows are the only ones where the two coincide, and they
+    // are why the IF's byte is kept at all: there is no offending clause to
+    // report against. The continued-IF row narrows it further, to the clause's
+    // START rather than anywhere else inside it.
+    for (source, sub, line) in [
+        ("nop\nif 1 = 1\nnop\n", 1, 3),
+        ("nop\nnop\nnop\nif 1 = 1\nnop\n", 1, 5),
+        // The discriminating row. With the byte taken from the IF this is 2.
+        ("nop\nif 1 = 1\n\n\nnop\n", 1, 5),
+        ("select\nwhen 1 = 1\nnop\nend\n", 2, 3),
+        ("select\nwhen 1 = 1\n\n\nnop\nend\n", 2, 5),
+        // No offending clause at all, so the IF's own byte is the right one.
+        ("nop\nnop\nif 1 = 1\n", 1, 3),
+        // A CONTINUED IF, which pins WHICH byte of that clause is used: the
+        // clause spans lines 2 and 3, and with no offender the reported line is
+        // its START. Measured, `nop` / `if 1 = 1,` / `   1 = 1` reports
+        // `line 2` with `on line 2` as the substitution, so the clause's end is
+        // wrong and only its start is right. Without this row a mutation that
+        // used `clause_span.end` survived.
+        ("nop\nif 1 = 1,\n   1 = 1\n", 1, 2),
+        // And the same clause with an offender, where the offender wins again:
+        // measured, main line 4 and `on line 2` as the substitution.
+        ("nop\nif 1 = 1,\n   1 = 1\nnop\n", 1, 4),
+    ] {
+        let error = parse(source).expect_err("a missing THEN is an error");
+        assert_eq!(
+            (error.code, error.sub),
+            (18, sub),
+            "{source:?} gave the wrong number"
+        );
+        let program = ProgramSource::new(source.as_bytes().to_vec(), SourceKind::Program);
+        assert_eq!(
+            program.line_of(error.byte),
+            line,
+            "{source:?} was reported on the wrong line"
+        );
+    }
 }
 
 #[test]

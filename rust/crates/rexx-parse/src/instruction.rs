@@ -242,7 +242,9 @@ pub(crate) fn parse_instructions(ctx: &ParseCtx) -> Result<Vec<Instruction>, Par
     }
     // An IF or WHEN whose THEN never arrived, because the body ended first.
     // `translateBlock` raises this from the failed `nextClause()`
-    // (`LanguageParser.cpp:1341`).
+    // (`LanguageParser.cpp:1341`). This is the one shape with no offending
+    // clause to report against, so the IF's own byte is the reported one:
+    // measured, `nop` / `nop` / `if 1 = 1` reports line 3.
     if let Some((which, byte)) = cursor.take_expected_then() {
         return Err(ParseError::new(18, missing_then_sub(which), byte));
     }
@@ -294,11 +296,17 @@ pub(crate) fn parse_instruction(
         // nothing would fail, and then the program would start being
         // ACCEPTED, with the label silently discarded.
         if parser.clause.label.is_some() || parser.first_keyword() != Some(KW_THEN) {
-            // Reported against the IF or WHEN rather than against this
-            // clause: `syntaxError(..., instruction)` takes the instruction's
-            // location. Measured, `nop` / `if 1 = 1` / `nop` reports 18.1 on
-            // line 2, which is the IF's line and not the offender's.
-            return Err(ParseError::new(18, missing_then_sub(which), byte));
+            // Reported against THIS clause, the offending one, and not against
+            // the IF. The error carries both positions and only a source with
+            // blank lines between them can tell which is which: measured,
+            // `nop` / `if 1 = 1` / blank / blank / `nop` reports
+            // `line 5: THEN expected` with `IF instruction on line 2` as a
+            // substitution. This phase reproduces the reported line and not
+            // the substitutions, so `byte` -- the IF's -- is deliberately
+            // unused here. It is used where there is no offending clause, in
+            // `parse_instructions`.
+            let _ = byte;
+            return Err(parser.error(18, missing_then_sub(which)));
         }
         let end_at = parser.keyword_end();
         parser.next_real();

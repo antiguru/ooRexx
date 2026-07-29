@@ -165,16 +165,35 @@ pub(crate) struct ClauseCursor {
     /// was split from: see `split_before`.
     pending: Option<Clause>,
     /// Set when the clause just parsed was an `IF` or `WHEN` whose `THEN` has
-    /// not been seen yet, with the byte its clause started at. Read and cleared
-    /// by the next clause's parse.
+    /// not been seen yet, with the byte its own clause started at. Read and
+    /// cleared by the next clause's parse.
     ///
-    /// The byte is carried because the missing-`THEN` error is reported against
-    /// the `IF`, not against the clause that should have held the `THEN`:
-    /// `syntaxError(Error_Then_expected_if, instruction)` takes the
-    /// INSTRUCTION's location (`LanguageParser.cpp:1341`). Measured, with the
-    /// two clauses four lines apart: `nop` / `if 1 = 1` / `nop` / `nop` / `nop`
-    /// reports 18.1 on line 2, and moving the `IF` to line 4 moves the report
-    /// to line 4.
+    /// # This byte is the SUBSTITUTION value, not the reported line
+    ///
+    /// A missing-`THEN` error carries two independent positions, and only a
+    /// source with blank lines between the `IF` and the offending clause can
+    /// tell them apart, because otherwise moving one moves the other:
+    ///
+    /// ```text
+    /// 1  nop
+    /// 2  if 1 = 1
+    /// 3
+    /// 4
+    /// 5  nop
+    ///    Error 18 running ... line 5:  THEN expected.
+    ///    Error 18.1:  IF instruction on line 2 requires matching THEN clause.
+    /// ```
+    ///
+    /// The line the error is REPORTED on is 5, the offending clause's, and this
+    /// byte is the 2: `syntaxError(Error_Then_expected_if, instruction)` passes
+    /// the instruction so that its line can be substituted INTO the message.
+    /// This phase does not reproduce substitutions, so `ParseError::byte` is
+    /// the offending clause's and not this one.
+    ///
+    /// It is stored anyway because of the one case where there is no offending
+    /// clause at all: an `IF` at the end of a code body, where the two
+    /// positions coincide. Measured, and `nop` / `nop` / `if 1 = 1` reports
+    /// line 3 in both fields.
     pending_then: Option<(PendingThen, usize)>,
 }
 
@@ -206,8 +225,10 @@ impl ClauseCursor {
     /// Record that the clause just parsed was an `IF` or `WHEN` whose `THEN`
     /// is still to come, whether on this line or the next.
     ///
-    /// `byte` is that instruction's own clause start, which is where a missing
-    /// `THEN` is reported.
+    /// `byte` is that instruction's own clause start. It is the missing-`THEN`
+    /// message's substitution value rather than the line the error is reported
+    /// on, and is used only when there is no offending clause to report
+    /// against. See the field's documentation.
     pub(crate) fn expect_then(&mut self, which: PendingThen, byte: usize) {
         self.pending_then = Some((which, byte));
     }
