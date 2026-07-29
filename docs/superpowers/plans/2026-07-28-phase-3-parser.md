@@ -1132,15 +1132,23 @@ bit of block state. Everything needing the full control stack is 3.7b's, named h
 so it cannot fall through the crack between the two tasks:
 
 * **The misplaced-block errors**, all raised in `translateBlock`
-  (`LanguageParser.cpp:1176`) and none in `nextInstruction`: 7.2 for a non-`WHEN`
-  in a `SELECT`, 8.2 for an `ELSE` with no `THEN`, 9.2 for an `OTHERWISE` with no
+  (`LanguageParser.cpp:1176`) and none in `nextInstruction`: **7.1** for a `SELECT`
+  with no `WHEN` at all (measured: `select`/`end` is 7.1, and so is
+  `select case 1`/`otherwise nop`/`end`), 7.2 for a non-`WHEN` in a `SELECT`, 8.2 for an `ELSE` with no `THEN`, 9.2 for an `OTHERWISE` with no
   `SELECT`, 10.1 for an `END` with no `DO`, 14.3, and the stack-dependent parts of
   18.1/18.2. Task 3.6 raises 8.1 for a bare `then` and the one-bit 18.1/18.2 only.
 * **The misplaced-label errors**, and `EXPOSE`/`USE LOCAL` must-be-first
   (99.907/99.910), which read `lastInstruction`.
-* **99.913.** `guard on when 1` in a method is 99.913, while the same method with
-  `expose a` and `guard on when a` is rc 0, so it reads the method's whole `EXPOSE`
-  list. It looks local and is not.
+* **99.913, and an earlier draft of this list described it wrongly twice.** It is
+  **not** method-specific and **not** a `translateBlock` error. Measured:
+  `guard on when 1` is 99.913 in the **main program**, with no method and no
+  `EXPOSE` anywhere; `expose a` with `guard on when b` is **also** 99.913; and
+  `expose a` with `guard on when a` is **rc 0**. It is raised in `guardNew`, a
+  `nextInstruction` constructor, and the rule is that the `GUARD` expression must
+  reference at least one variable that is exposed at that point. So the owner is
+  whoever builds the **per-body exposed-variable table**, not whoever ports
+  `translateBlock`. Deferring it out of Task 3.6 is still right, because 3.6 has no
+  such table.
 * **The chain indices.** `Instruction` deliberately has no `next` and no jump
   targets, because in a `Vec` the chain is index order and no jump target is
   computable without the stack. 3.7b adds them when it can populate them.
@@ -1950,12 +1958,31 @@ symbolic name.
 Task 3.6 asserted 20.909 for `end 1` and was wrong, so assert against the oracle
 rather than against the shape of the rule.
 
-- [ ] **Step 4: The must-be-first and context-reading checks**
+- [ ] **Step 4: The must-be-first checks, and the per-body exposed-variable table**
 
 `EXPOSE` and `USE LOCAL` must be the first instruction (99.907/99.910), read from
-`lastInstruction`. And **99.913, which looks local and is not**: `guard on when 1`
-in a method is 99.913, while the same method with `expose a` and `guard on when a`
-is **rc 0**, so it reads the method's whole `EXPOSE` list.
+`lastInstruction`. Those two are `translateBlock`'s.
+
+**99.913 is not, and an earlier draft of this step said otherwise.** It is raised in
+`guardNew`, a `nextInstruction` constructor, so it is not a block error and not
+method-specific. Measured, all three:
+
+| program | result |
+|---|---|
+| `guard on when 1` in the **main program**, no method anywhere | **99.913** |
+| `::method m` / `expose a` / `guard on when b` | **99.913** |
+| `::method m` / `expose a` / `guard on when a` | **rc 0** |
+
+So the rule is that a `GUARD` expression must reference **at least one variable that
+is exposed at that point**, and what this step actually owes is the **per-body
+exposed-variable table** that the check consults. Task 3.6 deferred it for exactly
+that reason: it has no such table.
+
+That also means the check logically belongs at instruction-construction time rather
+than at block-assembly time. Either revisit the `Guard` instructions once the table
+exists, or state plainly in the report why doing it at assembly time is equivalent.
+Do not describe it as a block-structure error, which is how this went wrong the
+first time.
 
 - [ ] **Step 5: Finish `SELECT CASE`'s `WHEN` — two changes, not one**
 
