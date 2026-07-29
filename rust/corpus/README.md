@@ -68,6 +68,16 @@ with the value or error number `build/bin/rexx` gave for each, read by
 interpreter. Its own header records how it was generated and what the columns
 mean.
 
+### `errors/` — Phase 3, the parse-error gate
+
+Not a `rexx-diff` corpus either.
+`parse-errors.tsv` holds one row per program with the answer `build/bin/rexxc` gave for it: `ok` when it translates, and the major number, sub-number and reported line when it does not.
+`rexx-parse`'s `tests/errors.rs` reads it and checks both directions, so a parser that rejected nothing and one that rejected everything both fail.
+
+Nothing in the file is our parser's own answer.
+That is the point: a row records only what the oracle said, so a divergence shows up as a test failure rather than as an expected value.
+The header records how the rows were collected and what the escaping means.
+
 ## Things this corpus learned the hard way
 
 `say a"|"b` does not concatenate three values. `"|"b` is read as a **binary
