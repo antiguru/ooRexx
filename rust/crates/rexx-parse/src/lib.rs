@@ -23,8 +23,9 @@
 // Eight dead-code allowances mark exactly those items, in `clause.rs`,
 // `expr.rs` and `token.rs`, and none in this file. Every one carries a trailing
 // `deleted by Task 3.N` on the attribute line itself, so the set is greppable
-// and each entry names the task that removes it. Do not spell the attribute out
-// anywhere but on an item, because that is what makes the grep exact.
+// and each entry names the task that removes it. The phase gate's grep is
+// anchored to attribute syntax, so naming the lint in prose like this is fine
+// and no rule against it applies.
 //
 // An expect attribute cannot be used instead: the lint fires in the library
 // compilation and not in the library-as-test one, so the expectation would be
