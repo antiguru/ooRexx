@@ -1949,12 +1949,49 @@ written.
 - Modify: `rust/crates/rexx-parse/src/ast.rs`, `src/lib.rs`
 
 **Interfaces:**
-- Consumes: the `Vec<Instruction>` and `Vec<Directive>` that Task 3.7b assembles,
-  plus `ParseCtx` for `SourceKind` and spans.
-- Produces: the same instructions with their chain and jump indices filled in, and
-  the block-structure errors. `Instruction` gains its `next` and jump-target
-  fields **here**, because this is the first task that can populate them — Task 3.6
-  deliberately omitted them rather than ship fields nothing sets.
+- Consumes: `ParseCtx`, and the clause cursor.
+- Produces: `block::translate_block`, the block-structure errors, and jump-target
+  fields on `If`, `When` and `Else`.
+
+**This is a driver, not a post-pass, and an earlier draft of this section said
+otherwise.** `translate_block` owns the clause loop and replaces
+`instruction::parse_instructions` as the thing that walks it, with
+`parse_instruction` taking the block state — `top_block_kind`, `is_exposed`,
+`last_is_first`, and the `expose`/`auto_expose`/`local_variable` mutators.
+
+The reason is that the block state is needed **while parsing**, not after it.
+`whenNew` (`InstructionParser.cpp:2708`) calls `topBlockInstruction()` to decide
+*whether the `WHEN` parses at all* (error 9.1) and *which grammar it uses*
+(`requiredLogicalExpression` versus `parseCaseWhenList`). `guardNew` (`:2646`) reads
+the exposed table, and `exposeNew`/`useLocalNew` (`:2315`/`:2349`) read
+`lastInstruction`. None of that is recoverable from a finished `Vec<Instruction>`.
+This is also what the C++ does: `translateBlock` **is** the loop.
+
+**No `next` field.** Every path into the chain appends through `addClause` — all four
+that could reorder were traced, including `flushControl`'s `ELSE` and `IFTHEN`
+branches, the control/non-control split, and the `WHEN`-then-`THEN` pair. So index
+order already *is* the chain and a `next` field would restate it, exactly as
+`ast.rs:470` argues. Add jump targets only.
+
+**Do not materialise the synthetic `EndIf` nodes**, even though `endIfNew` builds a
+real executable one that jumps (`EndIf.cpp:132`) and carries `else_end`. Measured:
+the oracle traces **no** `*-*` line for an `EndIf` — `if 1 = 1 then say "y"` traces
+exactly `if 1 = 1` / `then` / `say "y"` and then the following source line, with or
+without an `ELSE`. So a materialised node would be an `Instruction` with no source
+clause, which breaks **two** gate criteria rather than merely looking untidy:
+criterion 1's property 2 is stated over `clause_span`s being ordered and
+non-overlapping, and criterion 6 reconstructs one `*-*` line per clause. Put the
+targets on `If`/`When`/`Else` instead and keep `instructions` one node per source
+clause. Nothing is lost, because `else_end` is exactly a jump index, and Phase 4 may
+build whatever executable shape it likes — D13 makes the AST a private
+implementation detail.
+
+**Directive bodies are stored, not discarded.** `body: bool` on `Method`,
+`Attribute` and `Routine` becomes `body: Option<CodeBody>` with
+`CodeBody { instructions, labels }`. This task has to assemble each body anyway,
+because 99.907 and the exposed table are per-body, and discarding assembled work for
+a later task to redo is waste. The asymmetry with `Program` is honest: a directive
+body genuinely is a code body.
 
 **Ordering, and one gate consequence.** 3.7b accepts every valid program without
 this task, because a flat `Vec` in index order is already the chain. What it cannot
@@ -1970,7 +2007,26 @@ the instructions live in a `Vec`.
 
 - [ ] **Step 2: Record the oracle's answer for all 13 errors before implementing**
 
-The thirteen, from `translateBlock` itself: `Error_Incomplete_do_else`,
+**Twenty distinct errors are in scope and eighteen are reachable, not thirteen.**
+Task 3.7c's pre-flight enumerated the call-outs and found the list below misses
+**14.1, 14.2, 14.5 and 14.901** (the remaining `blockError` arms — note 14.901 is a
+three-digit sub under 14), **10.2 and 10.4** (the label-mismatch variants), and
+**9.1** and **7.1**, which are raised in `matchEnd` and `whenNew` rather than in
+`translateBlock` itself. That last pair is the file-scoping exposure warned about
+above, arriving exactly as predicted.
+
+**10.5 and 10.6 are unreachable and are deliberately not implemented.**
+`Error_Unexpected_end_then` and `Error_Unexpected_end_else` need the `END` switch to
+see `IFTHEN`/`WHENTHEN`/`ELSE`, but `flushControl` rewrites the first two to
+`ENDTHEN`/`ENDWHEN` and pops `ELSE` before that switch runs. Six probes across both
+shapes — same-line and separate-line `if..then`/`end` and `when..then`/`end`,
+`else end`, and a nested `do` variant — all give **10.1**. Those six probes are the
+evidence and belong in the report, because Task 3.6 kept an arm "for fidelity"
+expecting it dead and `do i over x for 1 to 2` turned out to be the oracle's own
+answer (49.2). The difference here is measurement rather than reading, and a future
+reader who finds a reachable path needs to know which assumption broke.
+
+The thirteen named in `translateBlock` itself: `Error_Incomplete_do_else`,
 `Error_Incomplete_do_then`, `Error_Then_expected_if`, `Error_Then_expected_when`,
 `Error_Unexpected_end_else`, `Error_Unexpected_end_nodo`,
 `Error_Unexpected_end_then`, `Error_Unexpected_label_do`,
@@ -2000,6 +2056,11 @@ each from the oracle rather than deriving it from the shape of the rule.
 
 `EXPOSE` and `USE LOCAL` must be the first instruction (99.907/99.910), read from
 `lastInstruction`. Those two are `translateBlock`'s.
+
+**99.907 is not method-specific either.** Measured: `nop` / `expose a` in the **main
+program** is 99.907. That is the third such correction in this phase after 99.913 and
+99.914's neighbour, so treat any claim in this plan that an error is method-specific
+as unverified until measured.
 
 **99.913 is not, and an earlier draft of this step said otherwise.** It is raised in
 `guardNew`, a `nextInstruction` constructor, so it is not a block error and not
