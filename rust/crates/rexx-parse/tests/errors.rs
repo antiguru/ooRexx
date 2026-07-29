@@ -13,11 +13,17 @@
 //! number, sub-number and line it reports, all against `build/bin/rexxc`.
 //!
 //! Two directions, because either alone is satisfiable without meaning
-//! anything. **Soundness**: every program the oracle rejects as a translation
-//! error, this parser rejects with the same number and sub-number on the same
-//! line. **Completeness**: every program the oracle accepts, this parser
-//! accepts -- a parser that rejected nothing would pass the first half and fail
-//! the second, and one that rejected everything the reverse.
+//! anything. **Soundness**: every program the oracle refuses to TRANSLATE, this
+//! parser rejects with the same number and sub-number on the same line.
+//! **Completeness**: every program the oracle translates, this parser accepts,
+//! and so is every program it rejects for a reason that is not a translation
+//! error. A parser that rejected nothing would pass the first half and fail the
+//! second, and one that rejected everything the reverse.
+//!
+//! Which of those a row is, is a **field in the corpus** and not something
+//! derived from the error number here. See the corpus header for why: the two
+//! install-time classes are 98.903 and 90.999, so a `98.9xx` prefix rule would
+//! have covered half of them and read as correct.
 //!
 //! The oracle's answers are baked into `rust/corpus/errors/parse-errors.tsv`
 //! rather than recomputed, the same way `corpus/expr/precedence.tsv` bakes in
@@ -30,14 +36,42 @@
 //! real files instead, because all 303 of them are in the tree already and all
 //! 303 get rc 0 from `rexxc` (measured), so there is no per-file expectation to
 //! curate.
+//!
+//! # What the corpus cannot reach, and what covers it instead
+//!
+//! Every corpus program is `SourceKind::Program`, because `rexxc` compiles files
+//! and cannot be pointed at an `INTERPRET` string. The `INTERPRET`-only errors
+//! are therefore measured through the condition object instead, and
+//! `the_interpret_only_errors_match_the_condition_objects_own_code` holds those
+//! measurements.
+//!
+//! One input is deliberately absent rather than unreachable: an input holding
+//! *two* errors, where eager scanning reports the later one. `Task 3.3` records
+//! that deviation and `the_eager_scan_deviation_still_deviates` pins it, outside
+//! the corpus, because a corpus row for it would enshrine our answer as the
+//! expected one.
 
 use std::path::{Path, PathBuf};
 
-use rexx_parse::{ParseError, ProgramSource, SourceKind, parse_program};
+use rexx_parse::{ParseError, ProgramSource, SourceKind, parse_interpret, parse_program};
+
+/// What kind of answer the oracle gave, as the corpus records it.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+enum Class {
+    /// `rexxc` refused to translate. This parser must reproduce the number, the
+    /// sub-number and the line.
+    Translation,
+    /// `rexxc` rejected it after translating it, while installing the package.
+    /// This parser must accept it.
+    Install,
+    /// `rexxc` answered rc 0.
+    Accepted,
+}
 
 /// One row of the corpus: a program and what the oracle answered for it.
 struct Case {
     program: Vec<u8>,
+    class: Class,
     /// `None` when `rexxc` answered rc 0, meaning the program translates.
     error: Option<(u16, u16)>,
     /// The line the oracle's main message named. `None` for an accepted
@@ -97,27 +131,36 @@ fn cases() -> Vec<Case> {
     let mut cases = Vec::new();
     for (index, line) in text.lines().enumerate() {
         let row = index + 1;
-        if line.starts_with('#') || line.starts_with("expect\t") {
+        if line.starts_with('#') || line.starts_with("class\t") {
             continue;
         }
-        let mut fields = line.split('\t');
-        let expect = fields
-            .next()
-            .unwrap_or_else(|| panic!("row {row}: no expect"));
-        let at = fields
-            .next()
-            .unwrap_or_else(|| panic!("row {row}: no line"));
-        let program = fields
-            .next()
-            .unwrap_or_else(|| panic!("row {row}: no program"));
-        assert!(
-            fields.next().is_none(),
-            "row {row}: a program field must not contain a tab; \\t is the escape"
-        );
+        let mut fields = line.splitn(4, '\t');
+        let mut field = |what: &str| {
+            fields
+                .next()
+                .unwrap_or_else(|| panic!("row {row}: no {what} field"))
+                .to_string()
+        };
+        let class = field("class");
+        let expect = field("expect");
+        let at = field("line");
+        let program = field("program");
+        let class = match class.as_str() {
+            "translation" => Class::Translation,
+            "install" => Class::Install,
+            "-" => Class::Accepted,
+            other => panic!("row {row}: {other:?} is not a class"),
+        };
         let error = if expect == "ok" {
+            assert_eq!(class, Class::Accepted, "row {row}: rc 0 is not a rejection");
             assert_eq!(at, "-", "row {row}: an accepted program has no line");
             None
         } else {
+            assert_ne!(
+                class,
+                Class::Accepted,
+                "row {row}: a rejection needs a class"
+            );
             let (code, sub) = expect
                 .split_once('.')
                 .unwrap_or_else(|| panic!("row {row}: {expect:?} is not major.sub"));
@@ -130,7 +173,8 @@ fn cases() -> Vec<Case> {
             .is_some()
             .then(|| at.parse().unwrap_or_else(|e| panic!("row {row}: {e}")));
         cases.push(Case {
-            program: unescape(program, row),
+            program: unescape(&program, row),
+            class,
             error,
             line,
             row,
@@ -143,59 +187,52 @@ fn parse(program: &[u8]) -> Result<(), ParseError> {
     parse_program(program.to_vec()).map(|_| ())
 }
 
-/// The name of every deviation this phase records, so that a case landing in
-/// one is visibly a deviation rather than quietly a pass.
+/// Whether `text` holds an `&`-and-digit substitution placeholder.
 ///
-/// Both are in the plan's exit gate. Neither is a bug to be fixed here: the
-/// tests further down pin each in both directions, and any case that stops
-/// deviating fails the count assertions.
-#[derive(PartialEq, Eq, Debug)]
-enum Deviation {
-    /// A label clause spelled `then:` or `when:`. Task 3.4 splits the label's
-    /// colon off, so nothing is left that can produce the oracle's 35.1 and the
-    /// missing-THEN check fires instead. Both reject; the number differs.
-    LabelColonInsteadOfBadExpression,
-    /// The oracle rejects it, but not with a *translation* error: the directive
-    /// translated and then failed to bind to something outside the program.
-    /// This parser must accept it, because loading a library is not parsing.
-    NotATranslationError,
+/// A second implementation of `error.rs`'s own check, deliberately: a test that
+/// called the code under test to decide what "unfilled" means would pass however
+/// that code was broken.
+fn holds_placeholder(text: &str) -> bool {
+    text.char_indices().any(|(at, c)| {
+        c == '&'
+            && text[at + 1..]
+                .chars()
+                .next()
+                .is_some_and(|next| next.is_ascii_digit())
+    })
 }
 
-/// Which deviation, if any, explains `(ours, oracle)`.
-///
-/// A rule rather than a list of programs, so a new program of the same shape is
-/// classified instead of failing, while a new *shape* still fails. The counts
-/// asserted below are what stops the rules from silently absorbing more than
-/// the nine and two cases they were written for.
-fn deviation(ours: Option<(u16, u16)>, oracle: Option<(u16, u16)>) -> Option<Deviation> {
-    match (ours, oracle) {
-        // 98.9xx is `Execution error`, raised when a `::ROUTINE`/`::METHOD`
-        // with `EXTERNAL "LIBRARY x"` cannot load `x`; 90.999 is `External name
-        // not found`, the same failure for the `REGISTERED` spelling. Both come
-        // from installing the directive after translation finished, which is why
-        // `rexxc` reports them at all and why they are not this parser's to
-        // raise.
-        (None, Some((98 | 90, _))) => Some(Deviation::NotATranslationError),
-        (Some((18, 1 | 2)), Some((35, 1))) => Some(Deviation::LabelColonInsteadOfBadExpression),
-        _ => None,
-    }
-}
+// ---- the corpus decoder, asserted before anything relies on it ----
 
 #[test]
-fn the_corpus_escaping_round_trips_every_byte_it_can_carry() {
+fn the_corpus_escaping_decodes_every_escape_the_format_defines() {
     // The escaping is the whole reason a program with newlines, a tab and a
     // non-UTF-8 byte fits on one line of a text file, so it is asserted directly
-    // rather than only through whether the corpus happens to pass. Every escape
-    // the format defines appears here, and so does a byte that needs none.
+    // rather than only through whether the corpus happens to pass.
     assert_eq!(
         unescape(r"a\tb\nc\\d\r\xc3\xa4e", 0),
         b"a\tb\nc\\d\r\xc3\xa4e".to_vec()
     );
-    assert_eq!(unescape("", 0), Vec::<u8>::new());
+}
+
+#[test]
+fn the_corpus_escaping_leaves_an_unescaped_program_alone() {
     assert_eq!(unescape("say 1", 0), b"say 1".to_vec());
-    // A backslash pair is one backslash and does not swallow what follows it: a
-    // decoder that dropped the doubling would read `\\n` as a newline.
+}
+
+#[test]
+fn the_corpus_escaping_decodes_an_empty_field_to_no_bytes() {
+    assert_eq!(unescape("", 0), Vec::<u8>::new());
+}
+
+#[test]
+fn a_doubled_backslash_does_not_swallow_the_byte_after_it() {
+    // A decoder that dropped the doubling would read `\\n` as a newline.
     assert_eq!(unescape(r"\\n", 0), b"\\n".to_vec());
+}
+
+#[test]
+fn the_hex_escape_reaches_both_ends_of_the_byte_range() {
     assert_eq!(unescape(r"\x00\xff", 0), vec![0x00, 0xff]);
 }
 
@@ -206,33 +243,55 @@ fn the_gates_own_placeholder_check_finds_a_placeholder() {
     // that is exactly what a mutation of it must not get away with.
     assert!(holds_placeholder("found &1."));
     assert!(holds_placeholder("&9"));
+}
+
+#[test]
+fn the_gates_own_placeholder_check_scans_past_a_bare_ampersand() {
     assert!(holds_placeholder("A & B &2"));
+}
+
+#[test]
+fn the_gates_own_placeholder_check_rejects_text_with_no_placeholder() {
     assert!(!holds_placeholder("A & B"));
     assert!(!holds_placeholder("Invalid subkeyword found."));
     assert!(!holds_placeholder(""));
 }
 
+// ---- the corpus file's own shape ----
+
 #[test]
-fn the_corpus_file_is_shaped_the_way_the_tests_below_assume() {
+fn the_corpus_holds_at_least_the_rows_it_was_measured_with() {
     let cases = cases();
-    // A floor rather than an exact count, because the corpus may grow; a file
-    // that silently emptied would make every loop below vacuously pass.
+    // Floors rather than exact counts, because the corpus may grow. A file that
+    // silently emptied would make every loop below vacuously pass.
     assert!(
-        cases.len() >= 1002,
-        "expected at least 1002 corpus rows, found {}",
+        cases.len() >= 1010,
+        "expected at least 1010 corpus rows, found {}",
         cases.len()
     );
-    let errors = cases.iter().filter(|c| c.error.is_some()).count();
-    let accepted = cases.len() - errors;
+    let translation = cases
+        .iter()
+        .filter(|c| c.class == Class::Translation)
+        .count();
+    let install = cases.iter().filter(|c| c.class == Class::Install).count();
+    let accepted = cases.iter().filter(|c| c.class == Class::Accepted).count();
     assert!(
-        errors >= 558,
-        "expected at least 558 rejected programs, found {errors}"
+        translation >= 557,
+        "expected at least 557 translation errors, found {translation}"
     );
     assert!(
         accepted >= 444,
         "expected at least 444 accepted programs, found {accepted}"
     );
-    // Duplicate rows would inflate every count without adding a case.
+    // Exact, and the only count here that is: every install-time row is one of
+    // nine hand-classified programs. A tenth has to be argued, not absorbed.
+    assert_eq!(install, 9, "the install-time classification grew");
+}
+
+#[test]
+fn no_corpus_program_appears_twice() {
+    // A duplicate row would inflate every count without adding a case.
+    let cases = cases();
     let mut programs: Vec<&[u8]> = cases.iter().map(|c| c.program.as_slice()).collect();
     programs.sort_unstable();
     let before = programs.len();
@@ -242,7 +301,11 @@ fn the_corpus_file_is_shaped_the_way_the_tests_below_assume() {
         programs.len(),
         "the corpus holds a duplicate program"
     );
-    // Every rejected row names a line, and it is a line the program has.
+}
+
+#[test]
+fn every_recorded_line_is_a_line_its_program_has() {
+    let cases = cases();
     for case in &cases {
         let Some(line) = case.line else { continue };
         let source = ProgramSource::new(case.program.clone(), SourceKind::Program);
@@ -255,15 +318,20 @@ fn the_corpus_file_is_shaped_the_way_the_tests_below_assume() {
     }
 }
 
+// ---- soundness ----
+
 #[test]
-fn every_program_the_oracle_rejects_this_parser_rejects_with_the_same_number() {
+fn every_program_the_oracle_refuses_to_translate_this_parser_rejects_the_same_way() {
     let cases = cases();
     let mut wrong = Vec::new();
     let mut checked = 0;
     for case in &cases {
-        let Some(expected) = case.error else { continue };
+        if case.class != Class::Translation {
+            continue;
+        }
+        let expected = case.error.expect("a translation error has a number");
         let ours = parse(&case.program).err().map(|e| (e.code, e.sub));
-        if deviation(ours, Some(expected)).is_some() {
+        if label_colon_deviation(ours, expected) {
             continue;
         }
         checked += 1;
@@ -287,18 +355,65 @@ fn every_program_the_oracle_rejects_this_parser_rejects_with_the_same_number() {
         wrong.join("\n")
     );
     assert!(
-        checked >= 547,
-        "only {checked} rejections were checked; the deviation rules are absorbing cases"
+        checked >= 555,
+        "only {checked} rejections were checked; the deviation rule is absorbing cases"
     );
 }
 
 #[test]
-fn every_program_the_oracle_accepts_this_parser_accepts() {
+fn the_reported_line_matches_the_oracles_main_message() {
+    let cases = cases();
+    let mut wrong = Vec::new();
+    for case in &cases {
+        if case.class != Class::Translation {
+            continue;
+        }
+        let expected = case.error.expect("a translation error has a number");
+        let Err(error) = parse(&case.program) else {
+            continue;
+        };
+        if (error.code, error.sub) != expected {
+            continue;
+        }
+        let source = ProgramSource::new(case.program.clone(), SourceKind::Program);
+        let ours = error.line(&source);
+        let theirs = case.line.expect("a translation error has a line");
+        if ours != theirs {
+            wrong.push(format!(
+                "row {}: error {}.{} reported on line {ours}, oracle says {theirs}",
+                case.row, expected.0, expected.1
+            ));
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn the_line_check_sees_more_than_one_line_convention() {
+    // Line 1 is the answer for most of the corpus, so a check that only saw
+    // one-line programs would pass without discriminating between the three
+    // conventions the oracle uses. Count the rows reported past line 1.
+    let cases = cases();
+    let past_first_line = cases
+        .iter()
+        .filter(|c| c.class == Class::Translation && c.line.is_some_and(|line| line > 1))
+        .count();
+    assert!(
+        past_first_line >= 140,
+        "only {past_first_line} corpus errors are reported past line 1, so the \
+         line check is not discriminating between line conventions"
+    );
+}
+
+// ---- completeness ----
+
+#[test]
+fn every_program_the_oracle_translates_this_parser_accepts() {
     let cases = cases();
     let mut wrong = Vec::new();
     let mut checked = 0;
     for case in &cases {
-        if case.error.is_some() {
+        if case.class != Class::Accepted {
             continue;
         }
         checked += 1;
@@ -314,60 +429,65 @@ fn every_program_the_oracle_accepts_this_parser_accepts() {
 }
 
 #[test]
-fn the_reported_line_matches_the_oracles_main_message() {
+fn a_rejection_that_is_not_a_translation_error_is_accepted() {
+    // The oracle rejects all nine of these and none of the nine is a translation
+    // error: the directive parsed, and then the interpreter could not bind it to
+    // a library or to a registered routine. The classification is the corpus's,
+    // per row, so this loop reads it rather than inferring it from 98 or 90.
     let cases = cases();
     let mut wrong = Vec::new();
-    // Line 1 is the answer for most of the corpus, so a check that only saw
-    // one-line programs would pass without discriminating. Count the rows that
-    // report past line 1 and require enough of them.
-    let mut past_first_line = 0;
+    let mut checked = 0;
     for case in &cases {
-        let Some(expected) = case.error else { continue };
-        let Err(error) = parse(&case.program) else {
-            continue;
-        };
-        if (error.code, error.sub) != expected {
+        if case.class != Class::Install {
             continue;
         }
-        let source = ProgramSource::new(case.program.clone(), SourceKind::Program);
-        let ours = error.line(&source);
-        let Some(theirs) = case.line else { continue };
-        if theirs > 1 {
-            past_first_line += 1;
-        }
-        if ours != theirs {
+        checked += 1;
+        if let Err(e) = parse(&case.program) {
             wrong.push(format!(
-                "row {}: error {}.{} reported on line {ours}, oracle says {theirs}",
-                case.row, expected.0, expected.1
+                "row {}: {:?} is not a translation error but was rejected with {e}",
+                case.row,
+                String::from_utf8_lossy(&case.program)
             ));
         }
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
-    assert!(
-        past_first_line >= 100,
-        "only {past_first_line} corpus errors are reported past line 1, so this \
-         check is not discriminating between line conventions"
+    assert_eq!(
+        checked, 9,
+        "the install-time rows are not all being checked"
     );
 }
 
+// ---- what the messages read like ----
+
 #[test]
-fn every_error_the_corpus_raises_renders_a_message_a_user_can_read() {
+fn every_error_the_corpus_raises_renders_a_non_empty_message() {
     let cases = cases();
     let mut checked = 0;
     for case in &cases {
-        if case.error.is_none() {
-            continue;
-        }
         let Err(error) = parse(&case.program) else {
             continue;
         };
         checked += 1;
+        assert!(
+            !error.message().is_empty(),
+            "row {}: empty message",
+            case.row
+        );
+    }
+    assert!(checked >= 557, "only {checked} messages were rendered");
+}
+
+#[test]
+fn no_message_the_corpus_raises_holds_an_unfilled_substitution() {
+    // The one property the scope decision does not relax: whatever the message
+    // says, it must not say `&1`. An unfilled placeholder reaching a user would
+    // be worse than the generic text that replaces it.
+    let cases = cases();
+    for case in &cases {
+        let Err(error) = parse(&case.program) else {
+            continue;
+        };
         let message = error.message();
-        assert!(!message.is_empty(), "row {}: empty message", case.row);
-        // The one property the scope decision does not relax: whatever the
-        // message says, it must not say `&1`. An unfilled placeholder reaching a
-        // user would be worse than the generic text that replaces it. Any
-        // position, not just the three the table happens to use today.
         assert!(
             !holds_placeholder(&message),
             "row {}: {}.{} renders {message:?}",
@@ -376,112 +496,223 @@ fn every_error_the_corpus_raises_renders_a_message_a_user_can_read() {
             error.sub
         );
     }
-    assert!(checked >= 549, "only {checked} messages were rendered");
 }
 
-/// Whether `text` holds an `&`-and-digit substitution placeholder.
+// ---- the recorded deviations, each pinned in both directions ----
+
+/// Whether `(ours, oracle)` is the recorded label-colon deviation.
 ///
-/// A second implementation of `error.rs`'s own check, deliberately: a test that
-/// called the code under test to decide what "unfilled" means would pass however
-/// that code was broken.
-fn holds_placeholder(text: &str) -> bool {
-    text.char_indices().any(|(at, c)| {
-        c == '&'
-            && text[at + 1..]
-                .chars()
-                .next()
-                .is_some_and(|next| next.is_ascii_digit())
-    })
+/// A rule rather than a list of programs, so a new program of the same shape is
+/// classified instead of failing, while a new *shape* still fails. The count
+/// asserted below is what stops it from silently absorbing more than the two
+/// cases it was written for.
+fn label_colon_deviation(ours: Option<(u16, u16)>, oracle: (u16, u16)) -> bool {
+    matches!((ours, oracle), (Some((18, 1 | 2)), (35, 1)))
 }
-
-// ---- the two recorded deviations, both directions each ----
 
 #[test]
-fn a_then_or_when_label_is_a_missing_then_here_and_a_bad_expression_there() {
+fn a_then_label_is_a_missing_then_here_and_a_bad_expression_there() {
     // Structural, not a near miss: Task 3.4 splits `then:` into a label, so the
-    // clause the oracle finds an invalid expression in does not exist by the
-    // time the grammar runs. Both reject, which is the part that matters.
+    // clause the oracle finds an invalid expression in does not exist by the time
+    // the grammar runs. Both reject, which is the part that matters.
     //
     // Measured, `if 1 = 1` then `then: nop`:
     //     Error 35 running <file> line 2:  Invalid expression.
     //     Error 35.1:  Incorrect expression detected at ":".
     let error = parse(b"if 1 = 1\nthen: nop").expect_err("both reject it");
     assert_eq!((error.code, error.sub), (18, 1));
-    // And the WHEN spelling, which the oracle also answers 35.1 for.
+}
+
+#[test]
+fn a_when_label_is_a_missing_then_here_and_a_bad_expression_there() {
+    // The WHEN spelling, which the oracle also answers 35.1 for, measured the
+    // same way against `select` / `when 1 = 1` / `then: nop` / `end`.
     let error = parse(b"select\nwhen 1 = 1\nthen: nop\nend").expect_err("both reject it");
     assert_eq!((error.code, error.sub), (18, 2));
-    // The other direction of the rule: 18.1 against any other oracle number is
-    // NOT this deviation and must not be waved through.
-    assert_eq!(
-        deviation(Some((18, 1)), Some((35, 1))),
-        Some(Deviation::LabelColonInsteadOfBadExpression)
-    );
-    assert_eq!(deviation(Some((18, 1)), Some((18, 1))), None);
-    assert_eq!(deviation(Some((18, 1)), Some((35, 901))), None);
-    assert_eq!(deviation(Some((18, 3)), Some((35, 1))), None);
 }
 
 #[test]
-fn a_load_failure_is_not_a_parse_error_and_the_program_is_accepted() {
-    // `rexxc` rejects all nine of these, and none of the nine is a translation
-    // error: the directive parsed, and then the interpreter could not find the
-    // library or the registered routine. Measured for the first,
-    //     Error 98 running <file> line 1:  Execution error.
-    //     Error 98.903:  Unable to load library "x".
-    // and for the last,
-    //     Error 90 running <file> line 1:  External name not found.
-    //     Error 90.999:  Unable to find external routine "R".
-    for program in [
-        &b"::routine r external \"LIBRARY x\"\n"[..],
-        &b"::method m external \"LIBRARY foo\"\n"[..],
-        &b"::routine r external \"registered x\"\n"[..],
-    ] {
-        parse(program).unwrap_or_else(|e| {
-            panic!(
-                "{:?} is not a translation error but was rejected with {e}",
-                String::from_utf8_lossy(program)
-            )
-        });
-    }
-    // The rule's other direction: only a 98 or 90 from the oracle excuses our
-    // accepting a program, and only when we accepted it.
-    assert_eq!(
-        deviation(None, Some((98, 903))),
-        Some(Deviation::NotATranslationError)
-    );
-    assert_eq!(
-        deviation(None, Some((90, 999))),
-        Some(Deviation::NotATranslationError)
-    );
-    assert_eq!(deviation(None, Some((35, 1))), None);
-    assert_eq!(deviation(None, Some((99, 903))), None);
-    assert_eq!(deviation(Some((98, 903)), Some((98, 903))), None);
+fn the_label_colon_rule_fires_for_the_pair_it_was_written_for() {
+    assert!(label_colon_deviation(Some((18, 1)), (35, 1)));
+    assert!(label_colon_deviation(Some((18, 2)), (35, 1)));
 }
 
 #[test]
-fn each_deviation_covers_the_number_of_corpus_cases_it_was_written_for() {
-    // The rules above are shapes, so without this they could grow to cover a
-    // real regression. Exact counts, not floors: a tenth load failure or a third
-    // label-colon case has to be looked at and this line re-argued.
+fn the_label_colon_rule_does_not_fire_for_a_near_miss() {
+    // The other direction, which is what keeps the rule from waving through a
+    // real regression that happens to involve 18.x or 35.x.
+    assert!(!label_colon_deviation(Some((18, 1)), (18, 1)));
+    assert!(!label_colon_deviation(Some((18, 1)), (35, 901)));
+    assert!(!label_colon_deviation(Some((18, 3)), (35, 1)));
+    assert!(!label_colon_deviation(None, (35, 1)));
+}
+
+#[test]
+fn the_label_colon_rule_covers_exactly_the_two_corpus_rows_it_was_written_for() {
     let cases = cases();
-    let mut counts = (0, 0);
+    let count = cases
+        .iter()
+        .filter(|case| {
+            case.class == Class::Translation
+                && label_colon_deviation(
+                    parse(&case.program).err().map(|e| (e.code, e.sub)),
+                    case.error.expect("a translation error has a number"),
+                )
+        })
+        .count();
+    assert_eq!(count, 2, "the label-colon deviation grew");
+}
+
+#[test]
+fn the_eager_scan_deviation_still_deviates() {
+    // Task 3.3's recorded deviation, and the only one with no corpus row: this
+    // input holds TWO errors, and a row for it would record our answer as the
+    // expected one and stop the gate being able to see it.
+    //
+    // Measured, `say )` on line 1 and `'unclosed` on line 3:
+    //     1 *-* say )
+    //     Error 37 running <file> line 1:  Unexpected ",", ")", or "]".
+    //     Error 37.2:  Unmatched ")" in expression.
+    // The interpreter interleaves scanning and parsing and so reports the FIRST
+    // error. Task 3.3 scans the whole program up front, so the later scan error
+    // is raised before the earlier parse error is ever reached.
+    let program = b"say )\n\n'unclosed\n";
+    let source = ProgramSource::new(program.to_vec(), SourceKind::Program);
+    let error = parse_program(program.to_vec()).expect_err("both reject it");
+    assert_eq!(
+        (error.code, error.sub),
+        (6, 2),
+        "ours is the unterminated-literal scan error"
+    );
+    assert_eq!(
+        error.line(&source),
+        3,
+        "reported against the literal's clause"
+    );
+}
+
+#[test]
+fn the_eager_scan_deviation_needs_both_errors_to_appear() {
+    // The other direction: neither half alone deviates, so the deviation is the
+    // masking and not either error. `say )` on its own is the oracle's own 37.2
+    // on line 1, and the unterminated literal on its own is 6.2 on its own line.
+    let error = parse_program(b"say )\n".to_vec()).expect_err("a stray paren is an error");
+    assert_eq!((error.code, error.sub), (37, 2));
+    let program = b"nop\n\n'unclosed\n";
+    let source = ProgramSource::new(program.to_vec(), SourceKind::Program);
+    let error = parse_program(program.to_vec()).expect_err("an open literal is an error");
+    assert_eq!((error.code, error.sub), (6, 2));
+    assert_eq!(error.line(&source), 3);
+}
+
+#[test]
+fn no_corpus_row_holds_the_eager_scan_shape() {
+    // The exclusion, asserted rather than assumed: no corpus program may both
+    // fail to scan and hold an earlier parse error. Truncating at the failing
+    // clause's own byte leaves every complete clause before it, so if that prefix
+    // does not parse either, the program has two errors and does not belong here.
+    let cases = cases();
+    let scanner_classes = [6u16, 13, 15, 30];
+    let mut offenders = Vec::new();
     for case in &cases {
-        let ours = parse(&case.program).err().map(|e| (e.code, e.sub));
-        match deviation(ours, case.error) {
-            Some(Deviation::NotATranslationError) => counts.0 += 1,
-            Some(Deviation::LabelColonInsteadOfBadExpression) => counts.1 += 1,
-            None => {}
+        let Err(error) = parse(&case.program) else {
+            continue;
+        };
+        let scanner_class =
+            scanner_classes.contains(&error.code) || (error.code, error.sub) == (99, 943);
+        if !scanner_class {
+            continue;
+        }
+        if parse(&case.program[..error.byte]).is_err() {
+            offenders.push(case.row);
         }
     }
-    assert_eq!(counts, (9, 2), "(not-a-translation-error, label-colon)");
+    assert!(
+        offenders.is_empty(),
+        "rows holding a scan error that masks an earlier parse error: {offenders:?}"
+    );
+}
+
+// ---- INTERPRET, which the corpus structurally cannot hold ----
+
+#[test]
+fn the_interpret_only_errors_match_the_condition_objects_own_code() {
+    // `rexxc` compiles a FILE, so there is no way to point it at an `INTERPRET`
+    // string. A `signal on syntax` trap around an `interpret` is what exposes
+    // these, and `condition('o')~code` is the number. Measured under
+    // `build/bin/rexx`, all seven, one file each:
+    //
+    //     interpret "expose a"       -> code=99.908  errortext=Translation error.
+    //     interpret "guard on"       -> code=99.912  errortext=Translation error.
+    //     interpret "use local a"    -> code=99.915  errortext=Translation error.
+    //     interpret "forward to 1"   -> code=99.923  errortext=Translation error.
+    //     interpret "reply 1"        -> code=99.924  errortext=Translation error.
+    //     interpret "::routine r"    -> code=99.914  errortext=Translation error.
+    //     interpret "x: nop"         -> code=47.1    errortext=Unexpected label.
+    //
+    // `condition('o')~position` is 2 for every one of them, the line of the
+    // `INTERPRET` instruction itself and not a position inside the fragment,
+    // which is why no line is asserted here.
+    let cases: &[(&str, (u16, u16))] = &[
+        ("expose a", (99, 908)),
+        ("guard on", (99, 912)),
+        ("use local a", (99, 915)),
+        ("forward to 1", (99, 923)),
+        ("reply 1", (99, 924)),
+        ("::routine r", (99, 914)),
+        ("x: nop", (47, 1)),
+    ];
+    let mut wrong = Vec::new();
+    for (fragment, expected) in cases {
+        match parse_interpret(fragment.as_bytes().to_vec()) {
+            Ok(_) => wrong.push(format!("{fragment:?} parsed, expected {expected:?}")),
+            Err(e) if (e.code, e.sub) != *expected => {
+                wrong.push(format!("{fragment:?}: expected {expected:?}, got {e}"));
+            }
+            Err(_) => {}
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
+fn an_interpret_error_with_no_substitution_renders_the_condition_objects_message() {
+    // 99.908's sub-message takes no substitution, so `message()` returns it, and
+    // it is byte-identical to what the trapped program reads out of
+    // `condition('o')~message`. Measured:
+    //     code=99.908  message=INTERPRET data must not contain EXPOSE.
+    let error = parse_interpret(b"expose a".to_vec()).expect_err("EXPOSE is rejected");
+    assert_eq!(error.message(), "INTERPRET data must not contain EXPOSE.");
+}
+
+#[test]
+fn an_interpret_error_with_a_substitution_renders_the_condition_objects_errortext() {
+    // 47.1's sub-message substitutes the label, so `message()` falls back to the
+    // major -- which is byte-identical to `condition('o')~errortext`, the other
+    // field the condition object carries. Measured:
+    //     code=47.1  errortext=Unexpected label.
+    //                message=INTERPRET data must not contain labels; found "X".
+    //                additional=X
+    // That `additional` is the value Phase 4 owes and this phase does not carry.
+    let error = parse_interpret(b"x: nop".to_vec()).expect_err("a label is rejected");
+    assert_eq!(error.message(), "Unexpected label.");
+}
+
+#[test]
+fn an_interpret_fragment_that_is_legal_is_still_accepted() {
+    // The other direction, so the test above cannot pass by rejecting every
+    // fragment: `interpret "say 1"` runs, and `expose`/`guard` are rejected for
+    // being INTERPRET-specific rather than for being unparseable.
+    parse_interpret(b"say 1".to_vec()).expect("a plain SAY interprets");
+    parse_interpret(b"a = 1; say a".to_vec()).expect("two clauses interpret");
 }
 
 // ---- completeness over the files that are in the tree already ----
 
 /// Every `.rex` file under `samples/`, found with a recursive walk.
 ///
-/// Not a glob: `samples/*.rex` is only the 36 top-level files, and the
-/// criterion is over all 301.
+/// Not a glob: `samples/*.rex` is only the 36 top-level files, and the criterion
+/// is over all 301.
 fn sample_programs() -> Vec<PathBuf> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../samples");
     let mut found = Vec::new();

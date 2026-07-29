@@ -71,12 +71,16 @@ mean.
 ### `errors/` — Phase 3, the parse-error gate
 
 Not a `rexx-diff` corpus either.
-`parse-errors.tsv` holds one row per program with the answer `build/bin/rexxc` gave for it: `ok` when it translates, and the major number, sub-number and reported line when it does not.
+`parse-errors.tsv` holds one row per program with the answer `build/bin/rexxc` gave for it: the major number, sub-number and reported line when it refused, and `ok` when it translated.
 `rexx-parse`'s `tests/errors.rs` reads it and checks both directions, so a parser that rejected nothing and one that rejected everything both fail.
+
+The `class` field is the one worth knowing about.
+It says whether the oracle refused to *translate* the program or rejected it later, while installing the package, and that is recorded per row rather than derived from the error number.
+The two install-time classes are `98.903` and `90.999`, so a rule keyed on a `98.9xx` prefix would have covered half of them and read as correct.
 
 Nothing in the file is our parser's own answer.
 That is the point: a row records only what the oracle said, so a divergence shows up as a test failure rather than as an expected value.
-The header records how the rows were collected and what the escaping means.
+The header records how the rows were collected, what each class means, and what the escaping covers.
 
 ## Things this corpus learned the hard way
 
