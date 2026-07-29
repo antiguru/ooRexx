@@ -1896,6 +1896,79 @@ rather than hard-coding a number.
 
 ---
 
+## Task 3.7c: Block structure and the control stack
+
+**Added after Task 3.6, because 3.7b was quietly absorbing a second task.** 3.7b is
+139 lines of composition; `translateBlock` (`LanguageParser.cpp:1176`) is **509
+lines raising 13 distinct errors**, measured. Folding one into the other would have
+made a small, independently reviewable task into the largest in the phase and hidden
+the block work inside a step called "implement the composition".
+
+**Files:**
+- Create: `rust/crates/rexx-parse/src/block.rs`
+- Modify: `rust/crates/rexx-parse/src/ast.rs`, `src/lib.rs`
+
+**Interfaces:**
+- Consumes: the `Vec<Instruction>` and `Vec<Directive>` that Task 3.7b assembles,
+  plus `ParseCtx` for `SourceKind` and spans.
+- Produces: the same instructions with their chain and jump indices filled in, and
+  the block-structure errors. `Instruction` gains its `next` and jump-target
+  fields **here**, because this is the first task that can populate them — Task 3.6
+  deliberately omitted them rather than ship fields nothing sets.
+
+**Ordering, and one gate consequence.** 3.7b accepts every valid program without
+this task, because a flat `Vec` in index order is already the chain. What it cannot
+do is *reject* an invalid block structure, so **gate criterion 4 cannot be fully met
+until this task lands**. Criterion 2's `samples/` round-trip only needs valid files
+and is unaffected.
+
+- [ ] **Step 1: Port the control stack**
+
+`pushDo`/`popDo`/`topDo`/`topDoType`/`topBlockInstruction`
+(`LanguageParser.hpp:306-312`). A stack of instruction indices, not of nodes, since
+the instructions live in a `Vec`.
+
+- [ ] **Step 2: Record the oracle's answer for all 13 errors before implementing**
+
+The thirteen, from `translateBlock` itself: `Error_Incomplete_do_else`,
+`Error_Incomplete_do_then`, `Error_Then_expected_if`, `Error_Then_expected_when`,
+`Error_Unexpected_end_else`, `Error_Unexpected_end_nodo`,
+`Error_Unexpected_end_then`, `Error_Unexpected_label_do`,
+`Error_Unexpected_label_if`, `Error_Unexpected_label_select`,
+`Error_Unexpected_then_else`, `Error_Unexpected_when_otherwise`,
+`Error_When_expected_whenotherwise`.
+
+Capture number and sub-number for each from `build/bin/rexxc` with a minimal
+program, and put the raw output in the report. Do not infer a sub-number from the
+symbolic name.
+
+- [ ] **Step 3: `END` matching**
+
+`END` takes an optional block name, and **the name may be any symbol**:
+`isSymbol()` is class-agnostic, so a number is legal. Measured: `end 1` and
+`end loop` both **parse** and give **10.3**, a *matching* error. A first test in
+Task 3.6 asserted 20.909 for `end 1` and was wrong, so assert against the oracle
+rather than against the shape of the rule.
+
+- [ ] **Step 4: The must-be-first and context-reading checks**
+
+`EXPOSE` and `USE LOCAL` must be the first instruction (99.907/99.910), read from
+`lastInstruction`. And **99.913, which looks local and is not**: `guard on when 1`
+in a method is 99.913, while the same method with `expose a` and `guard on when a`
+is **rc 0**, so it reads the method's whole `EXPOSE` list.
+
+- [ ] **Step 5: Finish `SELECT CASE`'s `WHEN` — two changes, not one**
+
+Task 3.6 threaded the sub-number, so **35.934** is one argument at one call site.
+The second change is the node: `parseCaseWhenList` builds a **list of case values**
+where `parseLogical` builds an **AND**, so `when a, b then` inside `select case`
+currently has the wrong shape. Single-expression `WHEN`s are identical either way,
+which is why this is easy to miss and why it needs its own test.
+
+- [ ] **Step 6: Commit**
+
+---
+
 ## Task 3.8: Errors with number, sub-number, line and substitutions
 
 **Files:**
@@ -2293,6 +2366,11 @@ fits.
       line in its substitution. Assert the line the oracle's main message gives
       where the parser reports one line; do not build machinery to reproduce
       both.
+
+      **This criterion cannot be met before Task 3.7c.** The 13 block-structure
+      errors are rejections that only the control stack can perform, so until 3.7c
+      lands the parser accepts programs the oracle rejects. Task 3.7b accepts every
+      *valid* program without it, so criterion 2 is unaffected; this one is not.
 
       Note for anyone re-reading this criterion later: earlier drafts justified
       dropping a column with "the oracle exposes none". That is **false** —
