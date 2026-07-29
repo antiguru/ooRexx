@@ -1041,11 +1041,12 @@ pub enum Trace {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Directive {
     pub kind: DirectiveKind,
-    /// Byte range in the retained source: the directive clause. A directive is
-    /// never traced, so unlike `Instruction::clause_span` nothing echoes these
-    /// bytes; they are kept because `ClassDirective`, `RequiresDirective` and
-    /// `ConstantDirective` all retain their clause for the location an install
-    /// -time error is reported against.
+    /// Byte range in the retained source: the directive clause.
+    ///
+    /// A directive is never traced, so unlike `Instruction::clause_span` nothing
+    /// echoes these bytes. They are kept because `ClassDirective`,
+    /// `RequiresDirective` and `ConstantDirective` all retain their clause for
+    /// the location an install-time error is reported against.
     pub clause_span: Range<usize>,
 }
 
@@ -1151,8 +1152,22 @@ pub struct ExternalSpec {
     pub registered: bool,
     /// The library name, as written after the first word.
     pub library: Box<[u8]>,
-    /// The entry point, when the specification named a third word. `None`
-    /// means the directive's own name supplies it.
+    /// The entry point, when the specification named a third word.
+    ///
+    /// `None` is the absence of a third word and NOT a default, because the
+    /// default is three different names depending on what asked for it, and only
+    /// the asker knows which:
+    ///
+    /// * A `::ROUTINE` uses the routine's own name AS WRITTEN, case included
+    ///   (`DirectiveParser.cpp:2664`).
+    /// * A `::METHOD` uses the method's UPCASED lookup name
+    ///   (`DirectiveParser.cpp:1406`).
+    /// * A `::METHOD ATTRIBUTE` or `::ATTRIBUTE` uses that upcased name with
+    ///   `GET` or `SET` appended, one method each
+    ///   (`DirectiveParser.cpp:1678`-`1679`).
+    ///
+    /// Resolving those is the caller's, along with loading the library, so
+    /// filling one in here would be picking one of the three arbitrarily.
     pub entry: Option<Box<[u8]>>,
 }
 
