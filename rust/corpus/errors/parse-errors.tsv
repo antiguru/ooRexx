@@ -13,6 +13,13 @@
 # build/bin/rexxc was run on each and its answer recorded. The instrumentation
 # was reverted and the tree verified clean.
 #
+# The last seven rows were added afterwards, and separately, because mutation
+# testing found two error paths that no row reached: 99.916 raised on a clause
+# that is not a directive at all (five rows, one per directive kind that cannot
+# carry a body), and 20.923 raised for a namespace-qualified symbol with no name
+# after the colon (two rows, one per arm of the check). Each was measured with
+# rexxc the same way as the rest.
+#
 # Nothing here is our parser's own answer. A row records only what the oracle
 # said, so a divergence shows up as a test failure rather than as an expected
 # value.
@@ -1012,3 +1019,10 @@ ok	-	if 1 = 1   then    say "a"
 35.1	1	r = a [1]\n
 35.1	1	r = a[1] [2]\n
 35.1	1	r = a += 1\n
+99.916	2	::class c\nnop\n
+99.916	2	::options digits 9\nnop\n
+99.916	2	::requires "nosuch"\nnop\n
+99.916	2	::annotate package k 1\nnop\n
+99.916	4	::resource d\nbody\n::END\nnop\n
+20.923	1	r = a:\n
+20.923	1	r = (a:)\n

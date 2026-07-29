@@ -149,6 +149,12 @@ fn the_reported_line_is_the_line_the_clause_byte_sits_on() {
     assert_eq!(ParseError::new(35, 1, 0).line(&source), 1);
     assert_eq!(ParseError::new(35, 1, 6).line(&source), 2);
     assert_eq!(ParseError::new(35, 1, 12).line(&source), 3);
+    // A byte ON a terminator belongs to the line that terminator ends, not to
+    // the next one. Byte 5 is line 1's `\n`. This is the only assertion here that
+    // an off-by-one in either direction cannot also satisfy, because every other
+    // byte above sits well inside its line.
+    assert_eq!(ParseError::new(35, 1, 5).line(&source), 1);
+    assert_eq!(ParseError::new(35, 1, 11).line(&source), 2);
     // The last line's terminator belongs to the last line, and a byte past the
     // end clamps rather than panicking -- `line_of`'s contract, restated here
     // because a diagnostic must never be the thing that crashes.

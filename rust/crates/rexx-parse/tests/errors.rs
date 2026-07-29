@@ -182,20 +182,51 @@ fn deviation(ours: Option<(u16, u16)>, oracle: Option<(u16, u16)>) -> Option<Dev
 }
 
 #[test]
+fn the_corpus_escaping_round_trips_every_byte_it_can_carry() {
+    // The escaping is the whole reason a program with newlines, a tab and a
+    // non-UTF-8 byte fits on one line of a text file, so it is asserted directly
+    // rather than only through whether the corpus happens to pass. Every escape
+    // the format defines appears here, and so does a byte that needs none.
+    assert_eq!(
+        unescape(r"a\tb\nc\\d\r\xc3\xa4e", 0),
+        b"a\tb\nc\\d\r\xc3\xa4e".to_vec()
+    );
+    assert_eq!(unescape("", 0), Vec::<u8>::new());
+    assert_eq!(unescape("say 1", 0), b"say 1".to_vec());
+    // A backslash pair is one backslash and does not swallow what follows it: a
+    // decoder that dropped the doubling would read `\\n` as a newline.
+    assert_eq!(unescape(r"\\n", 0), b"\\n".to_vec());
+    assert_eq!(unescape(r"\x00\xff", 0), vec![0x00, 0xff]);
+}
+
+#[test]
+fn the_gates_own_placeholder_check_finds_a_placeholder() {
+    // Asserted for the same reason `error.rs` asserts its own copy: a check that
+    // silently never fired would make the message assertion below vacuous, and
+    // that is exactly what a mutation of it must not get away with.
+    assert!(holds_placeholder("found &1."));
+    assert!(holds_placeholder("&9"));
+    assert!(holds_placeholder("A & B &2"));
+    assert!(!holds_placeholder("A & B"));
+    assert!(!holds_placeholder("Invalid subkeyword found."));
+    assert!(!holds_placeholder(""));
+}
+
+#[test]
 fn the_corpus_file_is_shaped_the_way_the_tests_below_assume() {
     let cases = cases();
     // A floor rather than an exact count, because the corpus may grow; a file
     // that silently emptied would make every loop below vacuously pass.
     assert!(
-        cases.len() >= 995,
-        "expected at least 995 corpus rows, found {}",
+        cases.len() >= 1002,
+        "expected at least 1002 corpus rows, found {}",
         cases.len()
     );
     let errors = cases.iter().filter(|c| c.error.is_some()).count();
     let accepted = cases.len() - errors;
     assert!(
-        errors >= 551,
-        "expected at least 551 rejected programs, found {errors}"
+        errors >= 558,
+        "expected at least 558 rejected programs, found {errors}"
     );
     assert!(
         accepted >= 444,
@@ -256,7 +287,7 @@ fn every_program_the_oracle_rejects_this_parser_rejects_with_the_same_number() {
         wrong.join("\n")
     );
     assert!(
-        checked >= 540,
+        checked >= 547,
         "only {checked} rejections were checked; the deviation rules are absorbing cases"
     );
 }
@@ -345,7 +376,7 @@ fn every_error_the_corpus_raises_renders_a_message_a_user_can_read() {
             error.sub
         );
     }
-    assert!(checked >= 542, "only {checked} messages were rendered");
+    assert!(checked >= 549, "only {checked} messages were rendered");
 }
 
 /// Whether `text` holds an `&`-and-digit substitution placeholder.
