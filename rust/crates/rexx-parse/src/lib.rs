@@ -20,12 +20,18 @@
 // --all-targets` compiles the library once with `cfg(test)` off, and there each
 // such item is dead.
 //
-// Eight dead-code allowances mark exactly those items, in `clause.rs`,
-// `expr.rs` and `token.rs`, and none in this file. Every one carries a trailing
+// Three dead-code allowances mark exactly those items, in `directive.rs` and
+// `instruction.rs`, and none in this file. Every one carries a trailing
 // `deleted by Task 3.N` on the attribute line itself, so the set is greppable
 // and each entry names the task that removes it. The phase gate's grep is
 // anchored to attribute syntax, so naming the lint in prose like this is fine
 // and no rule against it applies.
+//
+// The count and the file list both shrink as the layers land, because becoming a
+// real caller is what removes an allowance. Task 3.7 removed the last one in
+// `expr.rs` that way, and the one item there no caller reached, `Terminators::with`,
+// carries `cfg(test)` instead: it is test-only rather than not-yet-called, and
+// those are different contracts.
 //
 // An expect attribute cannot be used instead: the lint fires in the library
 // compilation and not in the library-as-test one, so the expectation would be

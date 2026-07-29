@@ -96,7 +96,6 @@ pub(crate) struct Terminators(u32);
 
 // Tasks 3.6 and 3.7 pick a set per instruction. Only `EOC`, `RIGHT` and
 // `SQRIGHT` have a caller inside the grammar itself.
-#[allow(dead_code)] // deleted by Task 3.7
 impl Terminators {
     /// End of clause. Carried for fidelity with `TERM_EOC` and never read:
     /// `RexxToken::isTerminator` returns true for an end of clause and for a
@@ -134,6 +133,12 @@ impl Terminators {
 
     /// The union of two sets. Every real set is a named constant, so this
     /// exists only for the test that builds one the C++ never would.
+    ///
+    /// `cfg(test)` states that contract rather than leaving a dead-code
+    /// allowance to state it. Task 3.7 removed the allowance by becoming a real
+    /// caller of the rest of this block, and this method was the one item no
+    /// caller reached.
+    #[cfg(test)]
     pub(super) const fn with(self, flag: Terminators) -> Terminators {
         Terminators(self.0 | flag.0)
     }
