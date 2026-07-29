@@ -2652,7 +2652,18 @@ what it excludes, and do not draw the conclusion the data cannot support.
       buy more than reconstructing every clause of all 301 samples, and the
       `samples/` round-trip criterion already covers breadth.
 - [ ] Parse throughput on the 5,203 bootstrap lines is recorded against the
-      ~55 ms cold-start budget, with a plain statement of whether it fits.
+      ~55 ms cold-start budget, with a plain statement of **what share of that
+      budget parsing accounts for and what is still unmeasured**.
+
+      **Not "whether it fits", which is what this line asked for until Task 3.10
+      measured it.** Parsing is one component of cold start beside bootstrap
+      execution, heap setup and class construction, and none of those three
+      exists yet, so no fits-or-not answer is available at the end of Phase 3.
+      Asking for one is the same overreach D10 was corrected for, and this line
+      survived a sweep that fixed six other copies because it phrases the claim
+      as a conclusion to draw rather than as the words "cold-start time". A
+      criterion can restate a corrected claim in vocabulary the correction's own
+      grep does not match.
 - [ ] `cargo clippy --offline --workspace --all-targets -- -D warnings` clean;
       zero `unsafe`.
 - [ ] **Every `allow(dead_code)` in `rexx-parse` names the task that deletes it**,
