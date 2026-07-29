@@ -220,3 +220,18 @@ impl ProgramSource {
             .max(1)
     }
 }
+
+impl std::fmt::Debug for ProgramSource {
+    /// Reports the shape rather than the text.
+    ///
+    /// A derived `Debug` would dump the whole program into every failing
+    /// assertion that mentions a `ProgramSource`, which is what made the type
+    /// undebuggable in practice rather than merely underived.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProgramSource")
+            .field("kind", &self.kind)
+            .field("lines", &self.lines.len())
+            .field("bytes", &self.text.len())
+            .finish()
+    }
+}

@@ -86,6 +86,7 @@ use crate::token::ParseCtx;
 /// a `SELECT` -- because that needs the control stack Task 3.7c builds. A flat
 /// `Vec` in index order is already the right chain for everything this task
 /// checks; 3.7c adds the jump-target fields once it can populate them.
+#[derive(Debug)]
 pub struct Program {
     pub source: ProgramSource,
     /// The main code body's instructions, in source order. Ends where the
@@ -134,6 +135,7 @@ pub struct Program {
 /// No `directives` and no `labels` fields: neither is legal inside
 /// `INTERPRET` text (errors 99.914 and 47.1 respectively), so a `Fragment`
 /// that exists at all has neither.
+#[derive(Debug)]
 pub struct Fragment {
     pub source: ProgramSource,
     pub instructions: Vec<Instruction>,
