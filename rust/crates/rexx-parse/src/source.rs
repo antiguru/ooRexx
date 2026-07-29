@@ -17,6 +17,7 @@
 //! literal containing a raw `FF FE` runs fine, `c2x` reports `FFFE`), so the
 //! retained source is `Vec<u8>` and lines are `&[u8]`, never `String`/`&str`.
 
+use std::borrow::Cow;
 use std::ops::Range;
 
 /// Where a `ProgramSource`'s text came from, which decides how it is divided
@@ -182,6 +183,52 @@ impl ProgramSource {
     /// came from somewhere else.
     pub fn span_bytes(&self, span: Range<usize>) -> Option<&[u8]> {
         self.text.get(span)
+    }
+
+    /// The bytes a clause span covers with the line terminators inside the
+    /// span removed, which is the text `TRACE` prints on a `*-*` line: a
+    /// continued clause's fragments are joined by dropping the terminator
+    /// between them and keeping every other byte, including the continuation
+    /// line's leading blanks and a terminating `;`.
+    ///
+    /// Ported from `ProgramSource::extract` (`ProgramSource.cpp:153`), whose
+    /// multi-line branch concatenates `getStringLine` results, and those are
+    /// line content with terminators excluded. Measured under `trace r`:
+    /// `say "x",` continued as `    "y"` traces as `say "x",    "y"`, and the
+    /// CRLF spelling of the same file traces the identical text.
+    ///
+    /// Borrowed when the span sits on one line, which every uncontinued
+    /// clause does; owned only when there is a terminator to drop. `None`
+    /// exactly when `span_bytes` answers `None`: a span that runs past the
+    /// end of the retained text or backwards.
+    pub fn join_span(&self, span: Range<usize>) -> Option<Cow<'_, [u8]>> {
+        let bytes = self.text.get(span.clone())?;
+        if let Some(line) = self.line_span(self.line_of(span.start))
+            && line.start <= span.start
+            && span.end <= line.end
+        {
+            return Some(Cow::Borrowed(bytes));
+        }
+        // A trim cannot do this: the bytes to drop are the terminators in the
+        // MIDDLE of the span, one per continuation, and everything around
+        // them stays. So the join walks the line index and keeps each line's
+        // intersection with the span, which is also what keeps the terminator
+        // rules (CRLF is one terminator, LF-CR is two) in this module instead
+        // of re-derived from the bytes by a second scanner.
+        let mut joined = Vec::new();
+        let mut n = self.line_of(span.start);
+        while let Some(line) = self.line_span(n) {
+            if line.start >= span.end {
+                break;
+            }
+            let start = line.start.max(span.start);
+            let end = line.end.min(span.end);
+            if start < end {
+                joined.extend_from_slice(&self.text[start..end]);
+            }
+            n += 1;
+        }
+        Some(Cow::Owned(joined))
     }
 
     /// The line's content range in the retained text, terminator excluded,

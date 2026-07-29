@@ -1,4 +1,6 @@
-use rexx_parse::{ProgramSource, SourceKind};
+use std::borrow::Cow;
+
+use rexx_parse::{ProgramSource, SourceKind, parse_interpret, parse_program};
 
 #[test]
 fn sourceline_returns_lines_without_terminators() {
@@ -177,6 +179,205 @@ fn line_span_indexes_the_same_bytes_line_returns() {
     assert_eq!(src.line_span(3), Some(14..21));
     assert_eq!(src.line_span(0), None);
     assert_eq!(src.line_span(4), None);
+}
+
+// ---------------------------------------------------------------------------
+// Reconstructing the text TRACE prints on a `*-*` line, from
+// `Instruction::clause_span` and the retained source. Reconstruction and line
+// lookup are the same concern from two directions, so both live in this file.
+//
+// Every expected string below is measured: `( ulimit -v 1048576;
+// build/bin/rexx FILE ) | cat -A`, captured 2026-07-28. The `*-*` text is the
+// oracle's line after stripping the line number, the marker and the leading
+// indentation, and NOTHING else: a trailing blank before a `then` and a
+// terminating `;` are part of the text.
+// ---------------------------------------------------------------------------
+
+/// One measured `*-*` line: the source line number the interpreter printed,
+/// the instruction the line came from, and the stripped text.
+type TracedLine = (usize, usize, &'static [u8]);
+
+/// Checks every measured `*-*` line against the clause it came from.
+///
+/// Per-line rather than sequence equality: `trace r` re-traces a loop body
+/// once per iteration, so the `*-*` lines outnumber the clauses and a count
+/// assertion would fail on any program containing a loop.
+fn assert_traced(text: &[u8], traced: &[TracedLine]) {
+    let program = parse_program(text.to_vec()).expect("the probe parses");
+    for &(line, index, expected) in traced {
+        let span = program.instructions[index].clause_span.clone();
+        let got = program
+            .source
+            .join_span(span.clone())
+            .expect("a clause span indexes the retained source");
+        assert_eq!(
+            got.as_ref(),
+            expected,
+            "instruction {index} (span {span:?}): reconstructed {:?}, oracle printed {:?}",
+            String::from_utf8_lossy(got.as_ref()),
+            String::from_utf8_lossy(expected),
+        );
+        assert_eq!(
+            program.source.line_of(span.start),
+            line,
+            "instruction {index}: a *-* line carries the clause's FIRST line number"
+        );
+    }
+}
+
+#[test]
+fn trace_output_rex_reconstructs_every_traced_line() {
+    // Measured on the corpus file itself. It sets `trace i`, so the raw
+    // capture also carries value-marker lines (>L>, >V>, >O>, >>>, >=>) and
+    // the program's own output; those need an executor and are Phase 4's,
+    // so only the six *-* lines appear here. Source line 4 is three
+    // clauses: the condition KEEPS its trailing blank and stops before
+    // `then`, `then` is a clause of its own, and the THEN arm is the third.
+    let text = include_bytes!("../../../corpus/lang/trace_output.rex");
+    assert_traced(
+        text,
+        &[
+            (2, 1, b"x = 1 + 1"),
+            (3, 2, b"y = x * 3"),
+            (4, 3, b"if y > 5 "),
+            (4, 4, b"then"),
+            (4, 5, b"say \"big\""),
+            (5, 6, b"trace off"),
+        ],
+    );
+}
+
+#[test]
+fn probe_a_keeps_semicolons_and_end_is_its_own_clause() {
+    // Scratch probe A from the task brief. Nine *-* lines for six
+    // instructions: the loop's header, body and END repeat per iteration
+    // and the header prints once more for the exit test, which is why the
+    // triples below repeat instruction indices.
+    let text = b"/* probe A: terminators are inside the clause span */\ntrace r\nnop;\ndo i = 1 to 2; say i; end\ntrace off\n";
+    assert_traced(
+        text,
+        &[
+            (3, 1, b"nop;"),
+            (4, 2, b"do i = 1 to 2;"),
+            (4, 3, b"say i;"),
+            (4, 4, b"end"),
+            (4, 2, b"do i = 1 to 2;"),
+            (4, 3, b"say i;"),
+            (4, 4, b"end"),
+            (4, 2, b"do i = 1 to 2;"),
+            (5, 5, b"trace off"),
+        ],
+    );
+}
+
+#[test]
+fn probe_b_traces_a_label_with_its_colon() {
+    // Scratch probe B from the task brief: `here:` / `nop;` / `say "two"`
+    // are three clauses on one source line.
+    let text = b"/* probe B: a label is its own clause, colon included */\ntrace r\nhere: nop; say \"two\"\ntrace off\n";
+    assert_traced(
+        text,
+        &[
+            (3, 1, b"here:"),
+            (3, 2, b"nop;"),
+            (3, 3, b"say \"two\""),
+            (4, 4, b"trace off"),
+        ],
+    );
+}
+
+#[test]
+fn a_continued_clause_joins_without_its_terminator() {
+    // Scratch probe C: the comma kept, the newline dropped, the
+    // continuation line's four leading blanks kept, and the *-* line number
+    // is the clause's FIRST line.
+    let text = b"/* probe C: continuation join */\ntrace r\nsay \"x\",\n    \"y\"\ntrace off\n";
+    assert_traced(
+        text,
+        &[(3, 1, b"say \"x\",    \"y\""), (5, 2, b"trace off")],
+    );
+
+    // The trap the task brief names: `span_bytes` alone is WRONG here,
+    // because the clause span still CONTAINS the terminator it joins out.
+    let program = parse_program(text.to_vec()).unwrap();
+    let span = program.instructions[1].clause_span.clone();
+    assert_eq!(
+        program.source.span_bytes(span).unwrap(),
+        b"say \"x\",\n    \"y\""
+    );
+}
+
+#[test]
+fn a_continued_clause_span_contains_the_terminator_it_joins_out() {
+    // The brief's second continuation measurement: `say 1,` / `  + 2`
+    // traces as `say 1,  + 2` (probe D) and, parsed on its own, has clause
+    // span 0..12 with the newline at byte 6 inside it.
+    let text = b"say 1,\n  + 2";
+    let program = parse_program(text.to_vec()).unwrap();
+    let span = program.instructions[0].clause_span.clone();
+    assert_eq!(span, 0..12);
+    assert_eq!(
+        program.source.span_bytes(span.clone()).unwrap(),
+        b"say 1,\n  + 2"
+    );
+    assert_eq!(
+        program.source.join_span(span).unwrap().as_ref(),
+        b"say 1,  + 2"
+    );
+}
+
+#[test]
+fn a_crlf_continuation_drops_both_terminator_bytes() {
+    // Scratch probe E, the CRLF spelling of probe C: the oracle traces the
+    // identical joined text, so the join drops the whole two-byte pair.
+    let text = b"trace r\r\nsay \"x\",\r\n    \"y\"\r\ntrace off\r\n";
+    assert_traced(
+        text,
+        &[(2, 1, b"say \"x\",    \"y\""), (4, 2, b"trace off")],
+    );
+}
+
+#[test]
+fn interpret_fragment_clauses_reconstruct_too() {
+    // Scratch probe F: `trace r` around `interpret 'nop; say 1'` traces the
+    // interpreted clauses as `nop;` and `say 1`, from the fragment's own
+    // one-line text. The line number the oracle prints is the INTERPRET
+    // instruction's own, which is the caller's to resolve, so only the text
+    // is checked here.
+    let fragment = parse_interpret(b"nop; say 1".to_vec()).expect("the fragment parses");
+    let texts: Vec<_> = fragment
+        .instructions
+        .iter()
+        .map(|i| {
+            fragment
+                .source
+                .join_span(i.clause_span.clone())
+                .expect("a clause span indexes the fragment text")
+        })
+        .collect();
+    assert_eq!(texts, [&b"nop;"[..], &b"say 1"[..]]);
+}
+
+#[test]
+fn join_span_borrows_on_one_line_and_agrees_with_span_bytes_about_none() {
+    let src = ProgramSource::new(b"say 1\nsay 2,\n 3\n".to_vec(), SourceKind::Program);
+    // An uncontinued clause sits on one line, and the join is then exactly
+    // `span_bytes`, borrowed rather than copied.
+    match src.join_span(0..5) {
+        Some(Cow::Borrowed(bytes)) => assert_eq!(bytes, b"say 1"),
+        other => panic!("expected a borrowed single-line join, got {other:?}"),
+    }
+    // A span crossing a terminator joins owned.
+    match src.join_span(6..15) {
+        Some(Cow::Owned(bytes)) => assert_eq!(bytes, b"say 2, 3"),
+        other => panic!("expected an owned multi-line join, got {other:?}"),
+    }
+    // `None` exactly when `span_bytes` answers `None`.
+    assert_eq!(src.join_span(0..999), None);
+    assert_eq!(src.span_bytes(0..999), None);
+    // An INTERPRET source is one line end to end, so nothing ever joins.
+    let interp = ProgramSource::new(b"say 1; say 2".to_vec(), SourceKind::Interpret);
+    assert!(matches!(interp.join_span(0..12), Some(Cow::Borrowed(_))));
 }
 
 #[test]
