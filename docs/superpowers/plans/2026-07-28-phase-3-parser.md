@@ -1944,7 +1944,8 @@ The thirteen, from `translateBlock` itself: `Error_Incomplete_do_else`,
 `Error_Unexpected_end_then`, `Error_Unexpected_label_do`,
 `Error_Unexpected_label_if`, `Error_Unexpected_label_select`,
 `Error_Unexpected_then_else`, `Error_Unexpected_when_otherwise`,
-`Error_When_expected_whenotherwise`.
+`Error_When_expected_whenotherwise`. **10.7** belongs on this list too, being the
+mismatch number when an `END` fails to close a `SELECT` rather than a `DO`.
 
 Capture number and sub-number for each from `build/bin/rexxc` with a minimal
 program, and put the raw output in the report. Do not infer a sub-number from the
@@ -1953,10 +1954,15 @@ symbolic name.
 - [ ] **Step 3: `END` matching**
 
 `END` takes an optional block name, and **the name may be any symbol**:
-`isSymbol()` is class-agnostic, so a number is legal. Measured: `end 1` and
-`end loop` both **parse** and give **10.3**, a *matching* error. A first test in
-Task 3.6 asserted 20.909 for `end 1` and was wrong, so assert against the oracle
-rather than against the shape of the rule.
+`isSymbol()` is class-agnostic, so a number is legal. Measured: `end 1`,
+`end loop`, `end a.` and `end a.1` all **parse**, while `end a b` is 21.909 and is
+raised in Task 3.6 already.
+
+**The mismatch number depends on what the `END` failed to close**, so do not assume
+one: `do` / `nop` / `end 1` is **10.3**, and `select` / `when 1=1 then nop` /
+`end 1` is **10.7**. Both measured. An earlier draft of this step said 10.3 flatly,
+and a first test in Task 3.6 asserted 20.909 for `end 1` and was wrong, so capture
+each from the oracle rather than deriving it from the shape of the rule.
 
 - [ ] **Step 4: The must-be-first checks, and the per-body exposed-variable table**
 
