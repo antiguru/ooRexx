@@ -1031,5 +1031,389 @@ pub enum Trace {
     Value(Expr),
 }
 
+/// One `::` directive, and the clause it was built from.
+///
+/// Shaped like `Instruction` on purpose, because both are one clause in and one
+/// node out. A directive is not part of any instruction chain: `translate`
+/// drains the instructions first and then loops over directives
+/// (`LanguageParser.cpp:735`), so a directive has no index into the chain and
+/// nothing jumps to one.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Directive {
+    pub kind: DirectiveKind,
+    /// Byte range in the retained source: the directive clause. A directive is
+    /// never traced, so unlike `Instruction::clause_span` nothing echoes these
+    /// bytes; they are kept because `ClassDirective`, `RequiresDirective` and
+    /// `ConstantDirective` all retain their clause for the location an install
+    /// -time error is reported against.
+    pub clause_span: Range<usize>,
+}
+
+/// One directive form, one variant per row of `RexxToken::directives[]`
+/// (`KeywordConstants.cpp:52`-`63`).
+///
+/// There are nine rows and nine variants. `DIRECTIVE_LIBRARY` is a
+/// `DirectiveKeyword` enum member with no row in that table and so no variant
+/// here: a library is `::REQUIRES name LIBRARY`, which `requiresDirective`
+/// turns into a `LibraryDirective` at the end
+/// (`DirectiveParser.cpp:2857`-`2860`), and it is never a directive keyword of
+/// its own.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum DirectiveKind {
+    Annotate(Box<Annotate>),
+    Attribute(Box<AttributeDirective>),
+    Class(Box<ClassDirective>),
+    Constant(Box<ConstantDirective>),
+    Method(Box<MethodDirective>),
+    /// `::OPTIONS`, whose options may repeat and whose order is observable, so
+    /// this is a list and not a struct of fields. Measured with
+    /// `build/bin/rexx`: `::options digits 12` then `::options digits 5` makes
+    /// `digits()` report 5, and the two directives swapped make it report 12,
+    /// so a later option overrides an earlier one.
+    Options(Vec<PackageOption>),
+    Requires(Box<Requires>),
+    Resource(Box<Resource>),
+    Routine(Box<RoutineDirective>),
+}
+
+impl DirectiveKind {
+    /// The directive keyword that introduced this node.
+    ///
+    /// The spelling is the one in `directives[]`, so this is what a test
+    /// asserts a keyword reached its node by.
+    pub fn keyword(&self) -> &'static str {
+        match self {
+            DirectiveKind::Annotate(_) => "ANNOTATE",
+            DirectiveKind::Attribute(_) => "ATTRIBUTE",
+            DirectiveKind::Class(_) => "CLASS",
+            DirectiveKind::Constant(_) => "CONSTANT",
+            DirectiveKind::Method(_) => "METHOD",
+            DirectiveKind::Options(_) => "OPTIONS",
+            DirectiveKind::Requires(_) => "REQUIRES",
+            DirectiveKind::Resource(_) => "RESOURCE",
+            DirectiveKind::Routine(_) => "ROUTINE",
+        }
+    }
+}
+
+/// A method's or routine's access scope.
+///
+/// `Default` is a value and not the absence of one: the C++ keeps
+/// `DEFAULT_ACCESS_SCOPE` distinct from `PUBLIC_SCOPE` precisely so that a
+/// SECOND access keyword is an error, which is why `::METHOD m PUBLIC PUBLIC`
+/// and `::METHOD m PUBLIC PRIVATE` are both 25.902.
+///
+/// `::CLASS` and `::ROUTINE` admit only `Public` and `Private`. `Package` is
+/// reachable on `::METHOD` and `::ATTRIBUTE` alone.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub enum Access {
+    #[default]
+    Default,
+    Private,
+    Public,
+    Package,
+}
+
+/// Whether a method runs with the object's method protection.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub enum Protection {
+    #[default]
+    Default,
+    Protected,
+    Unprotected,
+}
+
+/// Whether a method takes the object's guard lock.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub enum GuardOption {
+    #[default]
+    Default,
+    Guarded,
+    Unguarded,
+}
+
+/// A decoded `EXTERNAL` specification.
+///
+/// `decodeExternalMethod` (`DirectiveParser.cpp:1403`) and the routine form
+/// (`DirectiveParser.cpp:2649`-`2749`) split the string into blank-delimited
+/// words and upcase the first, then require two or three words whose first is
+/// `LIBRARY`. A routine also accepts `REGISTERED`. Anything else is 99.917,
+/// which is a parse error, so the decode happens here and not at install time.
+///
+/// Resolving the library is NOT done here and cannot be: measured,
+/// `::METHOD m EXTERNAL "LIBRARY nosuch"` is `Error 98.903 Unable to load
+/// library "nosuch"` at rc 158, a run-time failure of a program that parsed.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ExternalSpec {
+    /// True for the `REGISTERED` spelling, which only `::ROUTINE` accepts and
+    /// which resolves an old-style external function instead of a library
+    /// entry point.
+    pub registered: bool,
+    /// The library name, as written after the first word.
+    pub library: Box<[u8]>,
+    /// The entry point, when the specification named a third word. `None`
+    /// means the directive's own name supplies it.
+    pub entry: Option<Box<[u8]>>,
+}
+
+/// A `::CLASS` directive.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ClassDirective {
+    /// The name as written. The class is also exported under the upcased
+    /// spelling, which is what a duplicate is detected on, but that is the
+    /// accumulator's business and not this node's.
+    pub name: Box<[u8]>,
+    /// `PUBLIC` or `PRIVATE`. `Package` never appears: measured,
+    /// `::CLASS c PACKAGE` is 25.901.
+    pub access: Access,
+    pub abstract_: bool,
+    /// `SUBCLASS c` and `MIXINCLASS c`, which fill the same slot in the C++
+    /// (`setMixinClass` sets the subclass too), which is why a directive
+    /// carrying both is 25.901 whichever order they come in.
+    pub subclass: Option<ClassRef>,
+    /// True when the subclass came from `MIXINCLASS`.
+    pub mixin: bool,
+    pub metaclass: Option<ClassRef>,
+    /// `INHERIT a b c`, which consumes every remaining token of the clause.
+    pub inherit: Vec<ClassRef>,
+}
+
+/// A class reference on a `::CLASS` directive: the argument of `SUBCLASS`,
+/// `MIXINCLASS`, `METACLASS`, or one entry of `INHERIT`.
+///
+/// `parseClassReference` (`DirectiveParser.cpp:287`).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ClassRef {
+    /// `ns:name`, restricted to the symbol spelling. A literal cannot carry a
+    /// namespace: `parseClassReference` returns immediately for one.
+    pub namespace: Option<SymbolId>,
+    /// Upcased for both spellings. A symbol arrives upcased from the scanner
+    /// and a literal is upcased here, because `parseClassReference` calls
+    /// `token->upperValue()` for the literal form.
+    pub name: Box<[u8]>,
+}
+
+/// A `::METHOD` directive.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct MethodDirective {
+    /// The name as written, which is the method object's own name. The lookup
+    /// name is its upcased spelling, and the two differ observably for
+    /// `::METHOD "abc"`.
+    pub name: Box<[u8]>,
+    /// `CLASS`, making this a class method rather than an instance method.
+    pub class_method: bool,
+    /// `ATTRIBUTE`, which generates a getter and a setter pair.
+    pub attribute: bool,
+    pub abstract_: bool,
+    pub access: Access,
+    pub protection: Protection,
+    pub guard: GuardOption,
+    pub external: Option<ExternalSpec>,
+    /// `DELEGATE property`, forwarding every message to that property's value.
+    /// A symbol only: measured, `::METHOD m DELEGATE "p"` is 20.926.
+    pub delegate: Option<SymbolId>,
+    /// Whether the clauses after this directive are this method's code body.
+    ///
+    /// False for every option that generates the method itself, and then a
+    /// following non-directive clause is an error with its own number: 99.946
+    /// for `DELEGATE`, 99.934 for `ATTRIBUTE`, 99.933 for `ABSTRACT` and
+    /// 99.936 for `EXTERNAL`. Those are raised while parsing this directive,
+    /// so a `false` here has already been checked against what follows.
+    pub body: bool,
+}
+
+/// A `::ATTRIBUTE` directive.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct AttributeDirective {
+    /// The name as written, which also names the instance variable the
+    /// generated methods read and write.
+    pub name: Box<[u8]>,
+    pub style: AttributeStyle,
+    pub class_method: bool,
+    pub abstract_: bool,
+    pub access: Access,
+    pub protection: Protection,
+    pub guard: GuardOption,
+    pub external: Option<ExternalSpec>,
+    pub delegate: Option<SymbolId>,
+    /// Whether the clauses after this directive are this attribute method's
+    /// code body.
+    ///
+    /// Only `GET` or `SET` with no generating option can have one, and there
+    /// the C++ asks `hasBody()` (`DirectiveParser.cpp:1773`) rather than
+    /// deciding from the options: with a body the method is written in Rexx,
+    /// without one it is generated. So this field is the one place a directive
+    /// parse depends on the clause that FOLLOWS it.
+    pub body: bool,
+}
+
+/// Which of the attribute method pair a `::ATTRIBUTE` directive defines.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub enum AttributeStyle {
+    /// Neither `GET` nor `SET`, so both methods are generated and no body may
+    /// follow.
+    #[default]
+    Both,
+    Get,
+    Set,
+}
+
+/// A `::CONSTANT` directive.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ConstantDirective {
+    pub name: Box<[u8]>,
+    pub value: ConstantValue,
+}
+
+/// What a `::CONSTANT` directive's value is.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum ConstantValue {
+    /// No value at all, whose value is the constant's own name AS WRITTEN and
+    /// not upcased (`value = name` at `DirectiveParser.cpp:1875`).
+    Name,
+    /// A literal, a symbol, or a signed constant symbol, taken as text. The
+    /// signed form is concatenated exactly as the C++ concatenates it, so
+    /// `::CONSTANT c - 5` yields `-5` with the blank dropped.
+    Text(Box<[u8]>),
+    /// `(expr)`, which is evaluated when the package is installed rather than
+    /// now.
+    Expression(Expr),
+}
+
+/// A `::ANNOTATE` directive.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Annotate {
+    pub target: AnnotationTarget,
+    /// The `symbol value` pairs, in order. An `::ANNOTATE` may carry none.
+    pub annotations: Vec<Annotation>,
+}
+
+/// What a `::ANNOTATE` directive annotates.
+///
+/// Every name is upcased, because `annotateDirective` looks each one up with
+/// `commonString(token->upperValue())`. Each target must already exist, which
+/// needs the accumulated package and is not checked here.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum AnnotationTarget {
+    Package,
+    Class(Box<[u8]>),
+    Routine(Box<[u8]>),
+    Method(Box<[u8]>),
+    /// The getter name. The C++ annotates whichever of the getter/setter pair
+    /// exists (`processAttributeAnnotations`), so the setter name is derived
+    /// rather than stored.
+    Attribute(Box<[u8]>),
+    Constant(Box<[u8]>),
+}
+
+/// One `name value` pair of a `::ANNOTATE` directive.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Annotation {
+    /// The name, which must be a symbol: measured, `::ANNOTATE PACKAGE "a" 1`
+    /// is 20.919.
+    pub name: SymbolId,
+    /// The value as text, with the same three forms a `::CONSTANT` value has
+    /// minus the parenthesised one, which is not accepted here.
+    pub value: Box<[u8]>,
+}
+
+/// One option of a `::OPTIONS` directive.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum PackageOption {
+    /// `DIGITS n`, always at least 1.
+    Digits(usize),
+    Fuzz(usize),
+    Form(OptionsForm),
+    /// A validated `TRACE` option string, kept as written for the same reason
+    /// `Trace::Setting` keeps one.
+    Trace(Box<[u8]>),
+    /// One of the seven conditions that can be raised as a SYNTAX error
+    /// instead of as a condition. `syntax` is true for the `SYNTAX` spelling
+    /// and false for `CONDITION`.
+    Condition {
+        which: ConditionOption,
+        syntax: bool,
+    },
+    /// `PROLOG` and `NOPROLOG`, true for the first.
+    Prolog(bool),
+    /// `NUMERIC INHERIT` and `NUMERIC NOINHERIT`, true for the first.
+    NumericInherit(bool),
+}
+
+/// `::OPTIONS FORM`'s two settings.
+///
+/// Kept apart from `NumericSetting` because that enum's `FormValue` and
+/// `FormDefault` have no `::OPTIONS` spelling: measured,
+/// `::OPTIONS FORM VALUE` is 25.11.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum OptionsForm {
+    Scientific,
+    Engineering,
+}
+
+/// Which condition a `::OPTIONS` condition option selects.
+///
+/// `All` is a spelling and not a set, because it is a row of
+/// `subDirectives[]` in its own right and it sets the other six at once.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum ConditionOption {
+    All,
+    Error,
+    Failure,
+    LostDigits,
+    NoString,
+    NotReady,
+    NoValue,
+}
+
+/// A `::REQUIRES` directive.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Requires {
+    /// The name as written, so `::REQUIRES "Mixed.cls"` keeps its case while
+    /// the symbol spelling arrives upcased.
+    pub name: Box<[u8]>,
+    /// `LIBRARY`, which makes this a native library rather than a package
+    /// file. Never true together with a namespace: measured,
+    /// `::REQUIRES x LIBRARY NAMESPACE ns` is 25.904 whichever order the two
+    /// come in.
+    pub library: bool,
+    /// `NAMESPACE ns`. A symbol only, so always upcased, and never `REXX`:
+    /// measured, `::REQUIRES "x" NAMESPACE REXX` is 99.944.
+    pub namespace: Option<SymbolId>,
+}
+
+/// A `::RESOURCE` directive and its verbatim body.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Resource {
+    /// The name as written. The package's resource table is keyed by the
+    /// upcased spelling.
+    pub name: Box<[u8]>,
+    /// The line that ends the body, `::END` unless the directive named
+    /// another. Compared against the source verbatim, so a lower-case `::end`
+    /// does NOT end a body that expects `::END`.
+    pub end_marker: Box<[u8]>,
+    /// Byte range of each body line in the retained source, line terminators
+    /// and the marker line excluded.
+    ///
+    /// Ranges rather than text, because the body is a slice of the retained
+    /// source and copying it would duplicate the whole of a large resource.
+    pub lines: Vec<Range<usize>>,
+}
+
+/// A `::ROUTINE` directive.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct RoutineDirective {
+    /// The name as written and NOT upcased, because a quoted routine name is
+    /// looked up case-sensitively (`DirectiveParser.cpp:2575`).
+    pub name: Box<[u8]>,
+    /// `PUBLIC` or `PRIVATE`. `Package` never appears: measured,
+    /// `::ROUTINE r PACKAGE` is 25.903.
+    pub access: Access,
+    pub external: Option<ExternalSpec>,
+    /// Whether the clauses after this directive are this routine's code body,
+    /// which is every routine that is not external.
+    pub body: bool,
+}
+
 #[cfg(test)]
 mod tests;

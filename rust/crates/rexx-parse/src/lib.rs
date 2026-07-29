@@ -43,10 +43,14 @@ mod source;
 mod token;
 
 pub use ast::{
-    Address, AddressIo, Call, CallTarget, ConditionTrap, ControlExpr, Controlled, Expr, ExprKind,
-    Forward, Guard, Instruction, InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting,
-    OutputOption, Parse, ParseSource, ParseTrigger, PrefixOp, Raise, RaiseResult, Redirection,
-    Signal, Tail, Trace, TriggerKind, Use, UseTarget, VariableRef, compound_parts,
+    Access, Address, AddressIo, Annotate, Annotation, AnnotationTarget, AttributeDirective,
+    AttributeStyle, Call, CallTarget, ClassDirective, ClassRef, ConditionOption, ConditionTrap,
+    ConstantDirective, ConstantValue, ControlExpr, Controlled, Directive, DirectiveKind, Expr,
+    ExprKind, ExternalSpec, Forward, Guard, GuardOption, Instruction, InstructionKind, Loop,
+    LoopConditional, LoopKind, MethodDirective, NumericSetting, OptionsForm, OutputOption,
+    PackageOption, Parse, ParseSource, ParseTrigger, PrefixOp, Protection, Raise, RaiseResult,
+    Redirection, Requires, Resource, RoutineDirective, Signal, Tail, Trace, TriggerKind, Use,
+    UseTarget, VariableRef, compound_parts,
 };
 pub use scanner::{ResourceBody, Scanned, scan};
 pub use source::{ProgramSource, SourceKind};
