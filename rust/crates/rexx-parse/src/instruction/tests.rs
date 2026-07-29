@@ -15,10 +15,12 @@ use crate::token::{Keywords, ParseCtx, ParseError, SymbolTable};
 use crate::{ProgramSource, SourceKind, scan};
 
 use super::{
-    KW_DO, KW_DROP, KW_ELSE, KW_END, KW_EXPOSE, KW_IF, KW_ITERATE, KW_LEAVE, KW_LOOP, KW_NOP,
-    KW_OTHERWISE, KW_PUSH, KW_QUEUE, KW_SAY, KW_SELECT, KW_THEN, KW_WHEN, SUB_BY, SUB_CASE,
-    SUB_COUNTER, SUB_FOR, SUB_FOREVER, SUB_INDEX, SUB_ITEM, SUB_LABEL, SUB_OVER, SUB_TO, SUB_UNTIL,
-    SUB_WHILE, SUB_WITH, parse_instructions,
+    KW_ARG, KW_DO, KW_DROP, KW_ELSE, KW_END, KW_EXPOSE, KW_IF, KW_ITERATE, KW_LEAVE, KW_LOOP,
+    KW_NOP, KW_OTHERWISE, KW_PARSE, KW_PULL, KW_PUSH, KW_QUEUE, KW_SAY, KW_SELECT, KW_THEN,
+    KW_WHEN, POPT_ARG, POPT_CASELESS, POPT_LINEIN, POPT_LOWER, POPT_PULL, POPT_SOURCE, POPT_UPPER,
+    POPT_VALUE, POPT_VAR, POPT_VERSION, SUB_BY, SUB_CASE, SUB_COUNTER, SUB_FOR, SUB_FOREVER,
+    SUB_INDEX, SUB_ITEM, SUB_LABEL, SUB_OVER, SUB_TO, SUB_UNTIL, SUB_WHILE, SUB_WITH,
+    parse_instructions,
 };
 
 /// Parses `text` as a whole program and returns every instruction, with the
@@ -99,6 +101,7 @@ fn keyword_indices_still_name_their_own_spellings() {
         "the keyword instruction table is not 35 entries"
     );
     for (index, spelling) in [
+        (KW_ARG, "ARG"),
         (KW_DO, "DO"),
         (KW_DROP, "DROP"),
         (KW_ELSE, "ELSE"),
@@ -110,6 +113,8 @@ fn keyword_indices_still_name_their_own_spellings() {
         (KW_LOOP, "LOOP"),
         (KW_NOP, "NOP"),
         (KW_OTHERWISE, "OTHERWISE"),
+        (KW_PARSE, "PARSE"),
+        (KW_PULL, "PULL"),
         (KW_PUSH, "PUSH"),
         (KW_QUEUE, "QUEUE"),
         (KW_SAY, "SAY"),
@@ -142,6 +147,27 @@ fn keyword_indices_still_name_their_own_spellings() {
             keywords.sub_keywords.index_of(symbols.intern(spelling)),
             Some(index),
             "sub-keyword {spelling} is not at index {index}"
+        );
+    }
+    // The parse options are a table of their own. `ARG`, `PULL` and `VALUE`
+    // appear in both tables at different indices, so conflating them would
+    // silently make `PARSE VALUE` mean something else.
+    for (index, spelling) in [
+        (POPT_ARG, "ARG"),
+        (POPT_CASELESS, "CASELESS"),
+        (POPT_LINEIN, "LINEIN"),
+        (POPT_LOWER, "LOWER"),
+        (POPT_PULL, "PULL"),
+        (POPT_SOURCE, "SOURCE"),
+        (POPT_UPPER, "UPPER"),
+        (POPT_VALUE, "VALUE"),
+        (POPT_VAR, "VAR"),
+        (POPT_VERSION, "VERSION"),
+    ] {
+        assert_eq!(
+            keywords.parse_options.index_of(symbols.intern(spelling)),
+            Some(index),
+            "parse option {spelling} is not at index {index}"
         );
     }
 }
@@ -720,4 +746,186 @@ fn expose_is_rejected_inside_interpret() {
     // The other direction: the same text as a program is accepted, so the gate
     // is the source kind. Measured: `expose a` alone is rc 0 under rexxc.
     assert_eq!(names(&ok("expose a")), ["EXPOSE"]);
+}
+
+// ---- PARSE, ARG and PULL, and the template grammar ----
+
+/// A one-line rendering of a `PARSE` instruction: its source, its options and
+/// its template, so a test can pin the whole shape.
+fn parse_shape(text: &str) -> String {
+    let (instructions, symbols) =
+        parse_kind(text, SourceKind::Program).unwrap_or_else(|e| panic!("{text:?}: {e:?}"));
+    let body = match &instructions[0].kind {
+        InstructionKind::Parse(body) | InstructionKind::Arg(body) | InstructionKind::Pull(body) => {
+            body
+        }
+        other => panic!("{text:?} is not a PARSE: {other:?}"),
+    };
+    let source = match &body.source {
+        crate::ast::ParseSource::Arg => "arg".to_string(),
+        crate::ast::ParseSource::LineIn => "linein".to_string(),
+        crate::ast::ParseSource::Pull => "pull".to_string(),
+        crate::ast::ParseSource::Source => "source".to_string(),
+        crate::ast::ParseSource::Version => "version".to_string(),
+        crate::ast::ParseSource::Var(id) => format!("var:{}", symbols.name(*id)),
+        crate::ast::ParseSource::Value(None) => "value:-".to_string(),
+        crate::ast::ParseSource::Value(Some(e)) => format!("value:{}", e.shape(&symbols)),
+    };
+    let mut flags = String::new();
+    if body.upper {
+        flags.push('U');
+    }
+    if body.lower {
+        flags.push('L');
+    }
+    if body.caseless {
+        flags.push('C');
+    }
+    let mut out = format!("{source}[{flags}]");
+    for entry in &body.template {
+        let Some(trigger) = entry else {
+            out.push_str(" |");
+            continue;
+        };
+        let kind = match trigger.kind {
+            crate::ast::TriggerKind::End => "end",
+            crate::ast::TriggerKind::Plus => "+",
+            crate::ast::TriggerKind::Minus => "-",
+            crate::ast::TriggerKind::Absolute => "=",
+            crate::ast::TriggerKind::MinusLength => "<",
+            crate::ast::TriggerKind::PlusLength => ">",
+            crate::ast::TriggerKind::String => "str",
+            crate::ast::TriggerKind::Mixed => "mix",
+        };
+        out.push_str(&format!(" {kind}"));
+        if let Some(value) = &trigger.value {
+            out.push_str(&format!("({})", value.shape(&symbols)));
+        }
+        for target in &trigger.targets {
+            match target {
+                Some(e) => out.push_str(&format!(" ->{}", e.shape(&symbols))),
+                None => out.push_str(" ->."),
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn every_parse_source_reaches_its_own_variant() {
+    // Measured with rexxc, all rc 0.
+    assert_eq!(parse_shape("parse arg a"), "arg[] end ->A");
+    assert_eq!(parse_shape("parse pull a"), "pull[] end ->A");
+    assert_eq!(parse_shape("parse linein a"), "linein[] end ->A");
+    assert_eq!(parse_shape("parse source a"), "source[] end ->A");
+    assert_eq!(parse_shape("parse version a"), "version[] end ->A");
+    assert_eq!(parse_shape("parse var v a b"), "var:V[] end ->A ->B");
+    assert_eq!(
+        parse_shape("parse value \"a b\" with a b"),
+        "value:\"a b\"[] end ->A ->B"
+    );
+    // The VALUE expression is optional and defaults to the null string.
+    // Measured: `parse value with a` is rc 0.
+    assert_eq!(parse_shape("parse value with a"), "value:-[] end ->A");
+    // The short forms imply UPPER and take no options.
+    assert_eq!(parse_shape("arg a"), "arg[U] end ->A");
+    assert_eq!(parse_shape("pull a"), "pull[U] end ->A");
+}
+
+#[test]
+fn the_parse_options_are_recognised_once_each() {
+    // Measured: rc 0 for each of these.
+    assert_eq!(parse_shape("parse upper arg a"), "arg[U] end ->A");
+    assert_eq!(parse_shape("parse lower caseless arg a"), "arg[LC] end ->A");
+    // A repeated option is not an option any more, it is an unknown source.
+    // Measured: `parse upper upper arg a` and `parse caseless caseless arg a`
+    // are both rc 231, Error 25.12.
+    assert_eq!(err("parse upper upper arg a"), (25, 12));
+    assert_eq!(err("parse caseless caseless arg a"), (25, 12));
+    // UPPER and LOWER exclude each other for the same reason.
+    assert_eq!(err("parse upper lower arg a"), (25, 12));
+}
+
+#[test]
+fn parse_rejects_an_unknown_or_missing_source() {
+    // Measured: `parse foo a` is 25.12, `parse "x" a` and bare `parse` are
+    // both 20.903.
+    assert_eq!(err("parse foo a"), (25, 12));
+    assert_eq!(err("parse \"x\" a"), (20, 903));
+    assert_eq!(err("parse"), (20, 903));
+    // PARSE VAR needs a variable. Measured: `parse var` is 20.904 and
+    // `parse var 1 a` is 31.2.
+    assert_eq!(err("parse var"), (20, 904));
+    assert_eq!(err("parse var 1 a"), (31, 2));
+    // PARSE VALUE needs its WITH. Measured: `parse value "x" a` is 38.3.
+    assert_eq!(err("parse value \"x\" a"), (38, 3));
+}
+
+#[test]
+fn every_template_trigger_reaches_its_own_kind() {
+    // Measured with rexxc, all rc 0.
+    // The variables BEFORE a trigger are the ones it assigns, which is why
+    // `+(3)` carries A and B and the trailing END trigger carries only C.
+    assert_eq!(
+        parse_shape("parse arg a b +3 c"),
+        "arg[] +(3) ->A ->B end ->C"
+    );
+    assert_eq!(parse_shape("parse arg 1 a"), "arg[] =(1) end ->A");
+    assert_eq!(parse_shape("parse arg =5 a"), "arg[] =(5) end ->A");
+    assert_eq!(parse_shape("parse arg -2 a"), "arg[] -(2) end ->A");
+    assert_eq!(parse_shape("parse arg <2 a"), "arg[] <(2) end ->A");
+    assert_eq!(parse_shape("parse arg >2 a"), "arg[] >(2) end ->A");
+    assert_eq!(parse_shape("parse arg +(x) a"), "arg[] +(X) end ->A");
+    assert_eq!(
+        parse_shape("parse arg \"lit\" a"),
+        "arg[] str(\"lit\") end ->A"
+    );
+    assert_eq!(parse_shape("parse arg (e) a"), "arg[] str(E) end ->A");
+    // CASELESS switches the string triggers to the mixed-case comparison.
+    assert_eq!(
+        parse_shape("parse caseless arg \"lit\" a"),
+        "arg[C] mix(\"lit\") end ->A"
+    );
+    // A lone period consumes a field and assigns nothing.
+    assert_eq!(parse_shape("parse arg . a"), "arg[] end ->. ->A");
+    // A comma starts the next parse string, and shows up as its own entry.
+    assert_eq!(parse_shape("parse arg a, b"), "arg[] end ->A | end ->B");
+    // A target may be a compound variable or a message term. Measured, both
+    // rc 0.
+    assert_eq!(
+        parse_shape("parse arg a.b"),
+        "arg[] end ->compound:A.[var:B]"
+    );
+    assert_eq!(parse_shape("parse arg q~x"), "arg[] end ->(msg~ Q \"X\")");
+}
+
+#[test]
+fn a_template_with_no_variables_after_its_last_trigger_gets_no_end_trigger() {
+    // `variableCount > 0` gates the trailing END trigger, so a template ending
+    // in a trigger has nothing after it. Measured: rc 0.
+    assert_eq!(parse_shape("parse arg a +3"), "arg[] +(3) ->A");
+    assert_eq!(parse_shape("parse arg +3"), "arg[] +(3)");
+}
+
+#[test]
+fn a_trigger_position_may_not_be_a_variable() {
+    // The gate `parseNew` applies with `token->isVariable()`. Measured:
+    // `parse arg +x a` is 38.2 and `parse arg +"x"` is 38.2, while
+    // `parse arg +(x) a` is rc 0, which is the other direction.
+    assert_eq!(err("parse arg +x a"), (38, 2));
+    assert_eq!(err("parse arg +a. a"), (38, 2));
+    assert_eq!(err("parse arg +\"x\""), (38, 2));
+    // Missing entirely. Measured: `parse arg +` is 38.901.
+    assert_eq!(err("parse arg +"), (38, 901));
+    // An empty parenthesised position. Measured: `parse arg +()` is 35.931.
+    assert_eq!(err("parse arg +()"), (35, 931));
+}
+
+#[test]
+fn an_unusable_template_token_is_38_1() {
+    // Measured: `parse arg *3` is rc 218, Error 38.1.
+    assert_eq!(err("parse arg *3"), (38, 1));
+    // A dot symbol is not a variable, so it fails the target gate rather than
+    // the trigger one. Measured: `parse arg .a` is 31.3.
+    assert_eq!(err("parse arg .a"), (31, 3));
 }

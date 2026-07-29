@@ -732,6 +732,17 @@ impl TokenCursor {
     pub(crate) fn start(&self) -> usize {
         self.range.start
     }
+
+    /// One past the last token index this cursor may visit.
+    ///
+    /// With `start` and `position`, this is enough to build a second cursor
+    /// over the same clause at the same place, which is how a parse that may
+    /// have to be abandoned is run: on a cursor the caller is willing to
+    /// discard. That is the forward-only replacement for the C++'s
+    /// `markPosition`/`resetPosition` pair, and it is why there is no `back`.
+    pub(crate) fn end(&self) -> usize {
+        self.range.end
+    }
 }
 
 #[cfg(test)]

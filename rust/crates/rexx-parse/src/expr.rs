@@ -342,14 +342,22 @@ pub(crate) fn parse_variable_or_message_term(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
 ) -> Result<Option<Expr>, ParseError> {
-    let mut parser = Parser::new(ctx, cursor);
-    if let Some(term) = parser.message_term()? {
+    // The message-term attempt runs on a cursor of its own, because it may
+    // consume tokens and come back empty and the fallback below has to see the
+    // first token again. The C++ resets its position for the same reason.
+    let mut trial = TokenCursor::new(cursor.start()..cursor.end());
+    while trial.position() < cursor.position() {
+        trial.advance();
+    }
+    if let Some(term) = Parser::new(ctx, &mut trial).message_term()? {
+        *cursor = trial;
         // The C++ converts the message into an assignment message here. That
         // rewrite belongs to whoever executes it: the name it would append
         // `=` to is `ExprKind::Message::name`, and the instruction node
         // already records that this term is an assignment target.
         return Ok(Some(term));
     }
+    let mut parser = Parser::new(ctx, cursor);
     parser.skip_blanks();
     let Some(token) = parser.peek() else {
         return Ok(None);
