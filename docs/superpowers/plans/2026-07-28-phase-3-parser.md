@@ -1126,6 +1126,44 @@ sets its end to the **start offset** of the `THEN` token
 (`IfInstruction.cpp:58–66`), which is why the traced text is `if y > 5 ` with the
 trailing blank and stops before `then`.
 
+**Owed to Task 3.7b, and this list is the whole of `translateBlock`'s job.** Task
+3.6 owns per-clause parsing and the rule-4 splits, with `ClauseCursor` carrying one
+bit of block state. Everything needing the full control stack is 3.7b's, named here
+so it cannot fall through the crack between the two tasks:
+
+* **The misplaced-block errors**, all raised in `translateBlock`
+  (`LanguageParser.cpp:1176`) and none in `nextInstruction`: 7.2 for a non-`WHEN`
+  in a `SELECT`, 8.2 for an `ELSE` with no `THEN`, 9.2 for an `OTHERWISE` with no
+  `SELECT`, 10.1 for an `END` with no `DO`, 14.3, and the stack-dependent parts of
+  18.1/18.2. Task 3.6 raises 8.1 for a bare `then` and the one-bit 18.1/18.2 only.
+* **The misplaced-label errors**, and `EXPOSE`/`USE LOCAL` must-be-first
+  (99.907/99.910), which read `lastInstruction`.
+* **99.913.** `guard on when 1` in a method is 99.913, while the same method with
+  `expose a` and `guard on when a` is rc 0, so it reads the method's whole `EXPOSE`
+  list. It looks local and is not.
+* **The chain indices.** `Instruction` deliberately has no `next` and no jump
+  targets, because in a `Vec` the chain is index order and no jump target is
+  computable without the stack. 3.7b adds them when it can populate them.
+* **`SELECT CASE`'s `WHEN` needs two changes, not one.** The sub-number is already
+  threaded, so 35.934 is one argument at one call site. But `parseCaseWhenList`
+  builds a **list of case values** where `parseLogical` builds an **AND**, so
+  `when a, b then` inside `select case` currently gets the wrong node shape as
+  well. Single-expression `WHEN`s are identical, which is why this is easy to miss.
+* **`end 1` and `end loop` PARSE**, and are **10.3** — a *matching* error, not a
+  parse error, because `isSymbol()` is class-agnostic and a number is a legal block
+  name. Whoever writes the matching code needs this; a first test here asserted
+  20.909 and was wrong.
+
+**A named deviation, of the same class as the accepted eager-scan one.**
+`if 1 = 1` followed by `then: nop` is **35.1** in the oracle and **18.1** here.
+Both reject, and only an already-invalid program is affected. The cause is
+structural: the C++ still holds the label and its colon in one clause at that
+point, so a label spelled `THEN` becomes the `THEN` and the leftover `:` fails,
+whereas Task 3.4 has already split the colon off and left nothing that can fail.
+Repairing it means undoing that split, which is verified across a million clauses,
+or hard-coding 35.1 without the path that produces it. Neither is worth it. The
+bare case, `then: nop` alone, is **rc 0** in both.
+
 **The empty-expression sub-number is a parameter, not a placeholder.** It depends
 on the instruction the expression sits in rather than on the expression: an empty
 expression is **35.918** in an assignment and **35.929** in an `IF`, measured. The
@@ -1154,7 +1192,9 @@ parser state (`isInterpret()`), which this task reproduces through
 Because those are two independent adjustments, **some bytes end up in no clause
 at all**: in `if 1 = 1   then    say "a"` the condition keeps its three trailing
 blanks, `then` carries none on either side, and `say "a"` starts at `say`, so the
-four blanks after `then` belong to neither neighbour. Task 3.6's `split_before`
+four blanks after `then` belong to neither neighbour. Three spans and **one** gap,
+bytes 15..19: the condition's end and `then`'s start coincide, so only the second
+boundary leaves bytes behind. Task 3.6's `split_before`
 therefore takes an end byte and a restart token separately rather than one cut
 point. Gate criterion 1's property 2 already permits whitespace between one
 clause span and the next, which is exactly this.
@@ -1371,7 +1411,7 @@ impl ClauseCursor {
     /// Measured, for `if 1 = 1   then    say "a"` under `trace r`: the
     /// condition clause keeps all THREE trailing blanks, `then` carries none on
     /// either side despite four following it, and `say "a"` starts at `say`
-    /// with zero leading blanks. Three spans, two gaps.
+    /// with zero leading blanks. Three spans and one gap, bytes 15..19.
     ///
     /// Panics if `at` is outside the current clause's token range, or if
     /// `end_at` is outside the current clause's byte span. Both are parser
@@ -1418,8 +1458,9 @@ exactly as `RexxInstructionThen` sets its location to the `THEN` token's
 `split_before` returned" only because `split_before` takes an explicit end byte
 rather than deriving one, which is why it has two positions and not one.
 
-**Five clause types are not keyword-driven at all,** and one of them is the
-default. None of these appears in the 35:
+**Four clause types are not keyword-driven at all,** and one of them is the
+default. None of these appears in the 35, and the table's fourth row is the
+keyword-driven case itself rather than a fifth keyword-less one:
 
 | clause shape | node | C++ class |
 |---|---|---|
