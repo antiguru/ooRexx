@@ -11,7 +11,7 @@
 
 //! Every number here was captured from `build/bin/rexxc`, one minimal program
 //! per error, before any of this was written. Twenty distinct errors are in
-//! scope and eighteen are reachable; the two that are not have their own test
+//! scope and eighteen are reachable. The two that are not have their own test
 //! recording what the oracle answers instead.
 //!
 //! # Why so many sources carry blank lines

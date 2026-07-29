@@ -802,9 +802,9 @@ pub(crate) fn translate_block(
             }
         }
 
-        // A control instruction joins the chain at once; anything else but an
-        // ELSE goes through `flushControl`, which may close a branch first. An
-        // ELSE is added by its own arm below.
+        // A control instruction joins the chain at once. Anything else but an
+        // ELSE goes through `flushControl`, which may close a branch first, and
+        // an ELSE is added by its own arm below.
         let index = if is_else {
             None
         } else if control {
