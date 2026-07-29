@@ -746,7 +746,7 @@ match that key by exact string equality. Measured, all six cases:
 | label `mIxEd:`, `signal value 'MIXED'` | reaches it |
 | label `mIxEd:`, `signal value 'mIxEd'` | error 16.1 |
 
-So `Program::labels` is a `BTreeMap<Box<str>, usize>` keyed by the token value,
+So `Program::labels` is a `BTreeMap<Box<[u8]>, usize>` keyed by the token value,
 and Task 3.6 Step 3 builds it by upcasing a symbol label and keeping a literal
 label's case exactly.
 
@@ -1796,7 +1796,19 @@ throughput number depends on the whole file parsing.
       /// Keyed by the label token's VALUE, not by `SymbolId`: upcased for a
       /// symbol label, verbatim for a literal one. See Task 3.3 for the six
       /// measurements that force this and for why interning the key is wrong.
-      pub labels: BTreeMap<Box<str>, usize>,
+      ///
+      /// `Box<[u8]>` and not `Box<str>`: a literal label may hold bytes that are
+      /// not valid UTF-8. Measured, a label spelled `'<0xFF>':` is reachable by
+      /// `signal value`. This is the third place in this plan where an interface
+      /// was written over `str` despite D14's rule that a Rexx string is a byte
+      /// string, after `ProgramSource` and `line`.
+      ///
+      /// **First occurrence wins.** Two identical labels in one program is legal
+      /// (rc 0) and `SIGNAL` reaches the first, measured. So build the map with
+      /// `entry(key).or_insert(index)` rather than a plain insert, which would
+      /// point `SIGNAL` at the wrong instruction on every duplicate. Nothing in
+      /// this phase's gate would catch that, because it is a runtime behaviour.
+      pub labels: BTreeMap<Box<[u8]>, usize>,
       /// Retained because a `SymbolId` is meaningless without it: Phase 4
       /// resolves names back to text to report them.
       pub symbols: SymbolTable,
