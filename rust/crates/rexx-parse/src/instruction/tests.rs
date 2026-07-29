@@ -16,17 +16,18 @@ use crate::{ProgramSource, SourceKind, scan};
 
 use super::{
     COND_ANY, COND_ERROR, COND_FAILURE, COND_HALT, COND_LOSTDIGITS, COND_NOMETHOD, COND_NOSTRING,
-    COND_NOTREADY, COND_NOVALUE, COND_PROPAGATE, COND_SYNTAX, COND_USER, KW_ARG, KW_CALL, KW_DO,
-    KW_DROP, KW_ELSE, KW_END, KW_EXIT, KW_EXPOSE, KW_FORWARD, KW_GUARD, KW_IF, KW_INTERPRET,
-    KW_ITERATE, KW_LEAVE, KW_LOOP, KW_NOP, KW_NUMERIC, KW_OPTIONS, KW_OTHERWISE, KW_PARSE,
-    KW_PROCEDURE, KW_PULL, KW_PUSH, KW_QUEUE, KW_RAISE, KW_REPLY, KW_RETURN, KW_SAY, KW_SELECT,
-    KW_SIGNAL, KW_THEN, KW_TRACE, KW_USE, KW_WHEN, POPT_ARG, POPT_CASELESS, POPT_LINEIN,
+    COND_NOTREADY, COND_NOVALUE, COND_PROPAGATE, COND_SYNTAX, COND_USER, KW_ADDRESS, KW_ARG,
+    KW_CALL, KW_DO, KW_DROP, KW_ELSE, KW_END, KW_EXIT, KW_EXPOSE, KW_FORWARD, KW_GUARD, KW_IF,
+    KW_INTERPRET, KW_ITERATE, KW_LEAVE, KW_LOOP, KW_NOP, KW_NUMERIC, KW_OPTIONS, KW_OTHERWISE,
+    KW_PARSE, KW_PROCEDURE, KW_PULL, KW_PUSH, KW_QUEUE, KW_RAISE, KW_REPLY, KW_RETURN, KW_SAY,
+    KW_SELECT, KW_SIGNAL, KW_THEN, KW_TRACE, KW_USE, KW_WHEN, POPT_ARG, POPT_CASELESS, POPT_LINEIN,
     POPT_LOWER, POPT_PULL, POPT_SOURCE, POPT_UPPER, POPT_VALUE, POPT_VAR, POPT_VERSION,
-    SUB_ADDITIONAL, SUB_ARG, SUB_ARGUMENTS, SUB_ARRAY, SUB_BY, SUB_CASE, SUB_CLASS, SUB_CONTINUE,
-    SUB_COUNTER, SUB_DESCRIPTION, SUB_DIGITS, SUB_ENGINEERING, SUB_EXIT, SUB_EXPOSE, SUB_FOR,
-    SUB_FOREVER, SUB_FORM, SUB_FUZZ, SUB_INDEX, SUB_ITEM, SUB_LABEL, SUB_LOCAL, SUB_MESSAGE,
-    SUB_NAME, SUB_OFF, SUB_ON, SUB_OVER, SUB_RETURN, SUB_SCIENTIFIC, SUB_STRICT, SUB_TO, SUB_UNTIL,
-    SUB_VALUE, SUB_WHEN, SUB_WHILE, SUB_WITH, parse_instructions,
+    SUB_ADDITIONAL, SUB_APPEND, SUB_ARG, SUB_ARGUMENTS, SUB_ARRAY, SUB_BY, SUB_CASE, SUB_CLASS,
+    SUB_CONTINUE, SUB_COUNTER, SUB_DESCRIPTION, SUB_DIGITS, SUB_ENGINEERING, SUB_ERROR, SUB_EXIT,
+    SUB_EXPOSE, SUB_FOR, SUB_FOREVER, SUB_FORM, SUB_FUZZ, SUB_INDEX, SUB_INPUT, SUB_ITEM,
+    SUB_LABEL, SUB_LOCAL, SUB_MESSAGE, SUB_NAME, SUB_NORMAL, SUB_OFF, SUB_ON, SUB_OUTPUT, SUB_OVER,
+    SUB_REPLACE, SUB_RETURN, SUB_SCIENTIFIC, SUB_STEM, SUB_STREAM, SUB_STRICT, SUB_TO, SUB_UNTIL,
+    SUB_USING, SUB_VALUE, SUB_WHEN, SUB_WHILE, SUB_WITH, parse_instructions,
 };
 
 /// Parses `text` as a whole program and returns every instruction, with the
@@ -107,6 +108,7 @@ fn keyword_indices_still_name_their_own_spellings() {
         "the keyword instruction table is not 35 entries"
     );
     for (index, spelling) in [
+        (KW_ADDRESS, "ADDRESS"),
         (KW_ARG, "ARG"),
         (KW_CALL, "CALL"),
         (KW_DO, "DO"),
@@ -150,6 +152,7 @@ fn keyword_indices_still_name_their_own_spellings() {
     }
     for (index, spelling) in [
         (SUB_ADDITIONAL, "ADDITIONAL"),
+        (SUB_APPEND, "APPEND"),
         (SUB_ARG, "ARG"),
         (SUB_ARGUMENTS, "ARGUMENTS"),
         (SUB_ARRAY, "ARRAY"),
@@ -161,6 +164,7 @@ fn keyword_indices_still_name_their_own_spellings() {
         (SUB_DESCRIPTION, "DESCRIPTION"),
         (SUB_DIGITS, "DIGITS"),
         (SUB_ENGINEERING, "ENGINEERING"),
+        (SUB_ERROR, "ERROR"),
         (SUB_EXIT, "EXIT"),
         (SUB_EXPOSE, "EXPOSE"),
         (SUB_FOR, "FOR"),
@@ -168,19 +172,26 @@ fn keyword_indices_still_name_their_own_spellings() {
         (SUB_FORM, "FORM"),
         (SUB_FUZZ, "FUZZ"),
         (SUB_INDEX, "INDEX"),
+        (SUB_INPUT, "INPUT"),
         (SUB_ITEM, "ITEM"),
         (SUB_LABEL, "LABEL"),
         (SUB_LOCAL, "LOCAL"),
         (SUB_MESSAGE, "MESSAGE"),
         (SUB_NAME, "NAME"),
+        (SUB_NORMAL, "NORMAL"),
         (SUB_OFF, "OFF"),
         (SUB_ON, "ON"),
+        (SUB_OUTPUT, "OUTPUT"),
         (SUB_OVER, "OVER"),
+        (SUB_REPLACE, "REPLACE"),
         (SUB_RETURN, "RETURN"),
         (SUB_SCIENTIFIC, "SCIENTIFIC"),
+        (SUB_STEM, "STEM"),
+        (SUB_STREAM, "STREAM"),
         (SUB_STRICT, "STRICT"),
         (SUB_TO, "TO"),
         (SUB_UNTIL, "UNTIL"),
+        (SUB_USING, "USING"),
         (SUB_VALUE, "VALUE"),
         (SUB_WHEN, "WHEN"),
         (SUB_WHILE, "WHILE"),
@@ -1500,4 +1511,165 @@ fn trace_rejects_what_the_oracle_rejects() {
     assert_eq!(err("trace r x"), (21, 906));
     assert_eq!(err("trace -a"), (26, 7));
     assert_eq!(err("trace value"), (35, 916));
+}
+
+// ---- ADDRESS, including the WITH redirections ----
+
+/// A rendering of the first instruction when it is an `ADDRESS`.
+fn address_shape(text: &str) -> String {
+    let (instructions, symbols) =
+        parse_kind(text, SourceKind::Program).unwrap_or_else(|e| panic!("{text:?}: {e:?}"));
+    let InstructionKind::Address(address) = &instructions[0].kind else {
+        panic!("{text:?} is not an ADDRESS: {:?}", instructions[0].kind);
+    };
+    let mut out = String::new();
+    match &address.environment {
+        Some(env) => out.push_str(&format!("env:{}", String::from_utf8_lossy(env))),
+        None => out.push_str("env:-"),
+    }
+    if let Some(dynamic) = &address.dynamic {
+        out.push_str(&format!(" dyn:{}", dynamic.shape(&symbols)));
+    }
+    if let Some(command) = &address.command {
+        out.push_str(&format!(" cmd:{}", command.shape(&symbols)));
+    }
+    if let Some(io) = &address.io {
+        let show = |r: &crate::ast::Redirection| match r {
+            crate::ast::Redirection::Default => "-".to_string(),
+            crate::ast::Redirection::Normal => "normal".to_string(),
+            crate::ast::Redirection::Stem(id) => format!("stem:{}", symbols.name(*id)),
+            crate::ast::Redirection::Stream(e) => format!("stream:{}", e.shape(&symbols)),
+            crate::ast::Redirection::Using(e) => format!("using:{}", e.shape(&symbols)),
+        };
+        let option = |o: &crate::ast::OutputOption| match o {
+            crate::ast::OutputOption::Default => "",
+            crate::ast::OutputOption::Replace => "replace/",
+            crate::ast::OutputOption::Append => "append/",
+        };
+        out.push_str(&format!(
+            " io[in={} out={}{} err={}{}]",
+            show(&io.input),
+            option(&io.output_option),
+            show(&io.output),
+            option(&io.error_option),
+            show(&io.error),
+        ));
+    }
+    out
+}
+
+#[test]
+fn every_address_form_reaches_its_own_fields() {
+    // Measured with rexxc, all rc 0.
+    assert_eq!(address_shape("address"), "env:-");
+    assert_eq!(address_shape("address system"), "env:SYSTEM");
+    assert_eq!(
+        address_shape("address system \"cmd\""),
+        "env:SYSTEM cmd:\"cmd\""
+    );
+    // A literal environment keeps its own bytes, where a symbol is upcased.
+    assert_eq!(
+        address_shape("address \"sys\" \"cmd\""),
+        "env:sys cmd:\"cmd\""
+    );
+    assert_eq!(address_shape("address value 1"), "env:- dyn:1");
+    // An implicit ADDRESS VALUE, where what follows is neither symbol nor
+    // literal.
+    assert_eq!(address_shape("address (e)"), "env:- dyn:E");
+    // `Error_Invalid_expression_address`, measured as 35.914 for both
+    // `address value` and `address value with input normal`.
+    assert_eq!(err("address value"), (35, 914));
+    assert_eq!(err("address value with input normal"), (35, 914));
+}
+
+#[test]
+fn every_redirection_target_reaches_its_own_variant() {
+    // Measured with rexxc, all rc 0.
+    assert_eq!(
+        address_shape("address system with input stem a."),
+        "env:SYSTEM io[in=stem:A. out=- err=-]"
+    );
+    assert_eq!(
+        address_shape("address system with output stream \"f\""),
+        "env:SYSTEM io[in=- out=stream:\"f\" err=-]"
+    );
+    assert_eq!(
+        address_shape("address system with error using (x)"),
+        "env:SYSTEM io[in=- out=- err=using:X]"
+    );
+    assert_eq!(
+        address_shape("address system with input normal"),
+        "env:SYSTEM io[in=normal out=- err=-]"
+    );
+    assert_eq!(
+        address_shape("address system with output append stream \"f\""),
+        "env:SYSTEM io[in=- out=append/stream:\"f\" err=-]"
+    );
+    assert_eq!(
+        address_shape("address system with output replace stream \"f\""),
+        "env:SYSTEM io[in=- out=replace/stream:\"f\" err=-]"
+    );
+    assert_eq!(
+        address_shape("address system with output normal error normal"),
+        "env:SYSTEM io[in=- out=normal err=normal]"
+    );
+    // A command and a redirection together, and both dynamic forms with one.
+    assert_eq!(
+        address_shape("address system \"cmd\" with input normal"),
+        "env:SYSTEM cmd:\"cmd\" io[in=normal out=- err=-]"
+    );
+    assert_eq!(
+        address_shape("address value 1 with input normal"),
+        "env:- dyn:1 io[in=normal out=- err=-]"
+    );
+    assert_eq!(
+        address_shape("address (e) with input normal"),
+        "env:- dyn:E io[in=normal out=- err=-]"
+    );
+}
+
+#[test]
+fn a_redirection_target_is_a_constant_expression_not_an_expression() {
+    // `parseConstantExpression` takes a literal, a constant symbol or a
+    // parenthesised expression, so a bare variable is 35.1. Measured, both
+    // directions: `with error using x` is rc 221 Error 35.1 while
+    // `with error using (x)` is rc 0.
+    assert_eq!(err("address system with error using x"), (35, 1));
+    assert_eq!(
+        address_shape("address system with error using (x)"),
+        "env:SYSTEM io[in=- out=- err=using:X]"
+    );
+    // A STEM target must be a stem symbol, not a variable. Measured:
+    // `with input stem a` is 20.932 where `stem a.` is rc 0.
+    assert_eq!(err("address system with input stem a"), (20, 932));
+    // `Error_Invalid_expression_missing_general`, measured as 35.935.
+    assert_eq!(err("address system with input stream"), (35, 935));
+}
+
+#[test]
+fn address_with_rejects_what_the_oracle_rejects() {
+    // Measured, each: `address system with` is 20.933,
+    // `with foo` and `with 1` and `with using x` are 25.934,
+    // `with input` and `with input foo` and `with output append` are 25.933,
+    // and a repeated stream is 25.930.
+    assert_eq!(err("address system with"), (20, 933));
+    assert_eq!(err("address system with foo"), (25, 934));
+    assert_eq!(err("address system with 1"), (25, 934));
+    assert_eq!(err("address system with using x"), (25, 934));
+    assert_eq!(err("address system with input"), (25, 933));
+    assert_eq!(err("address system with input foo"), (25, 933));
+    assert_eq!(err("address system with output append"), (25, 933));
+    assert_eq!(
+        err("address system with input normal input normal"),
+        (25, 930)
+    );
+    // The other two duplicate numbers, which differ per stream.
+    assert_eq!(
+        err("address system with output normal output normal"),
+        (25, 931)
+    );
+    assert_eq!(
+        err("address system with error normal error normal"),
+        (25, 932)
+    );
 }
