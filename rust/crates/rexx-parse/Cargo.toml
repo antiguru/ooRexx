@@ -19,5 +19,12 @@ rexx-num = { path = "../rexx-num" }
 # hand-copied into this crate.
 rexx-inventory = { path = "../rexx-inventory" }
 
+[dev-dependencies]
+criterion = "0.8.2"
+
+[[bench]]
+name = "parse"
+harness = false
+
 [lints]
 workspace = true

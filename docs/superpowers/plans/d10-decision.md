@@ -182,6 +182,61 @@ It is a like-for-like comparison of the two arms on real input, which is what
 the axis was for, and it must be re-measured as a whole-file parse when Task
 3.11 exists.
 
+### Task 3.10's later, different measurement: the shipped parser
+
+The number above is the spike's, and the spike is gone.
+This is the shipped `rexx-parse` crate, `parse_program`, over whole files,
+recorded here because it sits next to the spike's numbers and a later reader
+should not confuse the two.
+
+**Measured 2026-07-29, on the same Linux machine as the rest of this document**
+(`AMD RYZEN AI MAX+ 395`, `rustc 1.96.1`), `cargo bench --offline -p rexx-parse
+--bench parse`, criterion 0.8.2, `sample_size(10)`, 500 ms warm-up, 30 s
+measurement ceiling -- matching `rexx-bench`'s and `rexx-num`'s benchmarks, so
+the number is comparable with `perf-baseline.md`.
+
+| File | Lines | Bytes | Time per parse | Throughput |
+|---|---|---|---|---|
+| `interpreter/RexxClasses/CoreClasses.orx` | 4,193 | 141,049 | 2.619–2.636 ms | 51.0–51.4 MiB/s |
+| `interpreter/RexxClasses/StreamClasses.orx` | 1,010 | 37,603 | 651.75–659.11 µs | 54.4–55.0 MiB/s |
+
+Two runs of the full benchmark suite agreed within criterion's own noise band
+(criterion reported "no change in performance detected" against the first run
+as baseline), so the ranges above are the union of both runs rather than one
+run's confidence interval.
+
+**The clone.** `parse_program` takes `Vec<u8>` by value, because `Program`
+retains the buffer for every node's span. Each sample needs its own owned
+copy, and `rust/crates/rexx-parse/benches/parse.rs` uses criterion's
+`iter_batched` to clone the file's bytes in an untimed setup closure, so only
+`parse_program` itself is inside the timed region. This is deliberate: the
+interpreter's own cold-start path reads a file once and parses it once, never
+cloning, so charging a clone to this benchmark would overstate the cost it is
+trying to isolate.
+
+**The assertion.** For both files, most of the content lives inside `::METHOD`,
+`::ATTRIBUTE` and `::ROUTINE` bodies, not the main body -- measured,
+`CoreClasses.orx`'s main body holds 41 instructions against 2,390 nested inside
+its 347 directives' bodies (`StreamClasses.orx`: 7 main, 153 directives, 610
+nested). The benchmark asserts all three counts every sample, reusing the
+numbers `src/directive/tests.rs`'s `core_classes_parses` and
+`the_other_shipped_packages_parse` already pin, so a parser that silently
+stopped early -- after the main body, or after building directives without
+their bodies -- cannot post a passing number.
+
+**What this number is and is not.** It is `parse_program`'s cost alone, over
+the two files the Rust build parses at every interpreter start under D2. It is
+**not** cold-start time: bootstrap execution, heap setup and class construction
+are not measured anywhere yet, and D10's own history is why this document says
+so explicitly rather than leaving it to be inferred -- this document previously
+had to be corrected for claiming parser throughput "sets cold-start time
+directly," and a milliseconds-small parse number inviting the same
+inference by omission would repeat that mistake. The honest statement is: of
+the ~55 ms cold-start budget, parsing `CoreClasses.orx` and `StreamClasses.orx`
+together costs 3.27–3.30 ms combined (2.619–2.636 ms plus 651.75–659.11 µs) on
+this machine, in this build profile. Nothing here says whether the other
+components fit, because none of them has been measured.
+
 ## Axis 4, the dependency cost
 
 Recorded rather than re-derived, per the task.
