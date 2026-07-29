@@ -10,7 +10,7 @@
 //! `parse_instruction` are all `pub(crate)` and an integration test is a
 //! separate crate.
 
-use crate::ast::{Instruction, InstructionKind};
+use crate::ast::{ExprKind, Instruction, InstructionKind};
 use crate::block::translate_block;
 use crate::clause::{ClauseCursor, split_clauses};
 use crate::token::{Keywords, ParseCtx, ParseError, SymbolTable};
@@ -2069,17 +2069,55 @@ fn a_missing_then_is_reported_on_the_offending_clauses_line() {
 }
 
 #[test]
-fn a_when_inside_select_case_still_gets_the_interim_35_929() {
-    // AN INTERIM STATE, PINNED SO THAT CHANGING IT IS DELIBERATE.
-    //
-    // The control stack now exists, so the WHEN knows which SELECT it is in and
-    // rejects one that is in no SELECT at all. What it does not yet do is pick
-    // `parseCaseWhenList` over `parseLogical` from that answer. Measured, both
-    // directions: inside `select case 1` an empty WHEN element is 35.934, and
-    // inside a plain `select` it is 35.929. This parser gives 35.929 for both.
-    assert_eq!(err("select case 1\nwhen , 1 = 1 then nop\nend"), (35, 929));
-    assert_eq!(err("select case 1\nwhen then nop\nend"), (35, 929));
-    // The plain SELECT spelling, which is already right and must stay right.
+fn a_when_picks_its_grammar_from_the_enclosing_select() {
+    // The enclosing block chooses between `parseCaseWhenList` and
+    // `parseLogical`, and the missing-element error is what makes the choice
+    // visible. Measured all four: inside `select case 1` an empty element is
+    // 35.934, inside a plain `select` it is 35.929.
+    assert_eq!(err("select case 1\nwhen , 1 = 1 then nop\nend"), (35, 934));
+    assert_eq!(err("select case 1\nwhen then nop\nend"), (35, 934));
+    assert_eq!(err("select case 1\nwhen 1 = 1, then nop\nend"), (35, 934));
     assert_eq!(err("select\nwhen , 1 = 1 then nop\nend"), (35, 929));
     assert_eq!(err("select\nwhen then nop\nend"), (35, 929));
+    assert_eq!(err("select\nwhen 1 = 1, then nop\nend"), (35, 929));
+}
+
+#[test]
+fn a_when_inside_select_case_builds_a_value_list_not_an_and() {
+    // The second half of the same choice, and the half a sub-number cannot
+    // show: a single-element WHEN is identical under both grammars, so only a
+    // comma list separates them. Proven at RUN time rather than from the parse,
+    // because both spellings parse: measured, `select case 2` /
+    // `when 1, 2 then say "hit"` prints `hit`, while plain `select` /
+    // `when 1, 2` is Error 34.6 with `found "2"`, since 2 is not a logical
+    // value. A list of case values and an AND of conditions.
+    let case = ok("select case 2\nwhen 1, 2 then nop\nend");
+    match &case[1].kind {
+        InstructionKind::WhenCase { values, .. } => assert_eq!(values.len(), 2),
+        other => panic!("expected a case WHEN, got {other:?}"),
+    }
+    // One element still builds a list, because `parseCaseWhenList` never
+    // collapses where `parseLogical` does.
+    let one = ok("select case 2\nwhen 1 then nop\nend");
+    match &one[1].kind {
+        InstructionKind::WhenCase { values, .. } => assert_eq!(values.len(), 1),
+        other => panic!("expected a case WHEN, got {other:?}"),
+    }
+    // The plain spelling, whose two-element form is one AND expression and
+    // whose one-element form is that element bare.
+    let plain = ok("select\nwhen 1, 2 then nop\nend");
+    match &plain[1].kind {
+        InstructionKind::When { condition, .. } => match &condition.kind {
+            ExprKind::Logical(parts) => assert_eq!(parts.len(), 2),
+            other => panic!("expected a logical list, got {other:?}"),
+        },
+        other => panic!("expected a plain WHEN, got {other:?}"),
+    }
+    let plain_one = ok("select\nwhen 1 then nop\nend");
+    match &plain_one[1].kind {
+        InstructionKind::When { condition, .. } => {
+            assert!(!matches!(condition.kind, ExprKind::Logical(_)));
+        }
+        other => panic!("expected a plain WHEN, got {other:?}"),
+    }
 }

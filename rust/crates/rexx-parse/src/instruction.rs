@@ -51,8 +51,8 @@ use crate::block::{Block, EnclosingSelect};
 use crate::clause::{Clause, ClauseCursor, PendingThen};
 use crate::convert::{check_trace_setting, whole_number};
 use crate::expr::{
-    Terminators, need_variable, parse_arg_list, parse_constant_expression, parse_expr,
-    parse_expression, parse_logical, parse_message_term, parse_paren_expression,
+    Terminators, need_variable, parse_arg_list, parse_case_when_list, parse_constant_expression,
+    parse_expr, parse_expression, parse_logical, parse_message_term, parse_paren_expression,
     parse_variable_or_message_term, symbol_kind,
 };
 use crate::source::SourceKind;
@@ -2589,16 +2589,22 @@ impl<'a> Inst<'a> {
                 condition: self.logical(Terminators::IF, 929)?,
                 false_target: None,
             },
-            // `whenNew` asks the control stack whether a SELECT is open at
-            // all, which decides whether the clause is legal.
+            // `whenNew` asks the control stack which SELECT it is in, and the
+            // answer decides three things: whether the clause is legal, which
+            // grammar it follows, and which instruction class it becomes.
             PendingThen::When => match block.enclosing_select() {
                 // `Error_Unexpected_when_when`. Measured for a `WHEN` with
                 // nothing open at all and for one inside a `DO` that is itself
                 // inside a `SELECT`, which is 9.1 too because the `DO` stops the
                 // search, and for one after an `OTHERWISE`.
                 EnclosingSelect::None => return Err(self.error(9, 1)),
-                EnclosingSelect::Plain | EnclosingSelect::Case => InstructionKind::When {
+                EnclosingSelect::Plain => InstructionKind::When {
                     condition: self.logical(Terminators::IF, 929)?,
+                    false_target: None,
+                    exit: None,
+                },
+                EnclosingSelect::Case => InstructionKind::WhenCase {
+                    values: parse_case_when_list(self.ctx, &mut self.cursor, Terminators::IF)?,
                     false_target: None,
                     exit: None,
                 },

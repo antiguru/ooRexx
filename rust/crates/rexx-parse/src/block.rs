@@ -328,7 +328,8 @@ impl Block {
     fn set_false_target(&mut self, index: usize, target: usize) {
         match &mut self.instructions[index].kind {
             InstructionKind::If { false_target, .. }
-            | InstructionKind::When { false_target, .. } => *false_target = Some(target),
+            | InstructionKind::When { false_target, .. }
+            | InstructionKind::WhenCase { false_target, .. } => *false_target = Some(target),
             other => panic!("a THEN frame's parent is an IF or a WHEN, not {other:?}"),
         }
     }
@@ -553,7 +554,7 @@ impl Block {
         // SELECT, so every WHEN resumes after the END.
         for when in whens {
             match &mut self.instructions[when].kind {
-                InstructionKind::When { exit, .. } => {
+                InstructionKind::When { exit, .. } | InstructionKind::WhenCase { exit, .. } => {
                     *exit = Some(end + 1);
                 }
                 other => panic!("a SELECT's when list holds WHENs, not {other:?}"),
@@ -638,6 +639,9 @@ impl Block {
                 InstructionKind::If { false_target, .. } => (Some(false_target), None),
                 InstructionKind::Else { then_exit } => (Some(then_exit), None),
                 InstructionKind::When {
+                    false_target, exit, ..
+                }
+                | InstructionKind::WhenCase {
                     false_target, exit, ..
                 } => (Some(false_target), Some(exit)),
                 _ => (None, None),
@@ -776,7 +780,10 @@ pub(crate) fn translate_block(
         let byte = instruction.clause_span.start;
         let opened = opens(&instruction.kind);
         let is_else = matches!(instruction.kind, InstructionKind::Else { .. });
-        let is_when = matches!(instruction.kind, InstructionKind::When { .. });
+        let is_when = matches!(
+            instruction.kind,
+            InstructionKind::When { .. } | InstructionKind::WhenCase { .. }
+        );
         let is_end = matches!(instruction.kind, InstructionKind::End { .. });
         let is_otherwise = matches!(instruction.kind, InstructionKind::Otherwise);
         let is_if = matches!(instruction.kind, InstructionKind::If { .. });

@@ -682,6 +682,21 @@ pub enum InstructionKind {
         /// `whens` never collected.
         exit: Option<usize>,
     },
+    /// A `WHEN` inside `SELECT CASE`: `RexxInstructionCaseWhen`, a different
+    /// class from `RexxInstructionIf` because the clause means something else.
+    ///
+    /// `parseCaseWhenList` (`LanguageParser.cpp:3168`) builds a LIST of values
+    /// to compare against the `SELECT`'s own expression where `parseLogical`
+    /// builds an AND of conditions. Measured at run time, which is the only
+    /// place the two differ for a single-element list: `select case 2` /
+    /// `when 1, 2 then say "hit"` prints `hit`, while plain `select` /
+    /// `when 1, 2` is error 34.6 `found "2"` because 2 is not a logical value.
+    WhenCase {
+        /// At least one, and none may be omitted: an empty element is 35.934.
+        values: Vec<Expr>,
+        false_target: Option<usize>,
+        exit: Option<usize>,
+    },
     Otherwise,
     Leave {
         name: Option<SymbolId>,
@@ -774,7 +789,11 @@ impl InstructionKind {
             InstructionKind::Then => "THEN",
             InstructionKind::Else { .. } => "ELSE",
             InstructionKind::Select { .. } => "SELECT",
-            InstructionKind::When { .. } => "WHEN",
+            // Both spellings are the WHEN keyword. They are separate variants
+            // because they are separate instruction classes in the C++ and the
+            // clause means something else in each, not because the keyword
+            // differs.
+            InstructionKind::When { .. } | InstructionKind::WhenCase { .. } => "WHEN",
             InstructionKind::Otherwise => "OTHERWISE",
             InstructionKind::Leave { .. } => "LEAVE",
             InstructionKind::Iterate { .. } => "ITERATE",

@@ -218,6 +218,23 @@ pub(crate) fn parse_logical(
     Parser::new(ctx, cursor).logical(term, missing)
 }
 
+/// Parses a `WHEN`'s clause inside `SELECT CASE`: one or more values to compare
+/// against the `SELECT`'s own expression.
+///
+/// `LanguageParser::parseCaseWhenList` (`LanguageParser.cpp:3168`). Where
+/// `parse_logical` collapses a one-element list to that element and a longer one
+/// to an AND, this keeps the list, because the elements are values rather than
+/// conditions. A missing element is 35.934 where the logical form's is 35.929,
+/// and both were measured: `select case 1` / `when 1, then nop` is 35.934, plain
+/// `select` / `when 1 = 1, then nop` is 35.929.
+pub(crate) fn parse_case_when_list(
+    ctx: &ParseCtx,
+    cursor: &mut TokenCursor,
+    term: Terminators,
+) -> Result<Vec<Expr>, ParseError> {
+    Parser::new(ctx, cursor).comma_list(term, 934)
+}
+
 /// Parses an argument list up to `closer`, which is consumed.
 ///
 /// `LanguageParser::parseArgList` (`LanguageParser.cpp:3083`). `None` for
