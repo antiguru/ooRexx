@@ -47,16 +47,34 @@ billed error fidelity as the axis "most likely to decide it", and this document'
 strongest single argument was that error 36 is unreachable with `chumsky` 0.13.
 Both of those are now worth much less than when they were written.
 
-The verdict is unchanged, on the remaining axes alone. Throughput at a median
-8.3× is decisive by itself, because under D2 parsing happens at every
-interpreter start and so sits inside the ~55 ms cold-start budget alongside
-bootstrap execution, heap setup and class construction. It is a component of
-that budget, not the whole of it: this paragraph said parse time *is*
-cold-start time, which is the same overreach the document corrects two sections
-below, and Task 3.10 measured the shipped parser at about 3.29 ms for both
-files. An 8.3× multiplier on a component that size is what carries the axis.
-The dependency cost is independent of it and points the same way. Either would
-carry the decision without axis 2.
+The verdict is unchanged, on the remaining axes alone, but the two remaining
+axes are not equally strong and an earlier revision of this paragraph implied
+they were.
+
+**Axis 4, the dependency cost, stands on its own and is not an inference.**
+Zero net new dependencies against twelve plus a C compiler on the build path,
+on a project that gates every phase on five platforms including OpenBSD, is a
+measured fact that needs no extrapolation. It carries the decision by itself.
+
+**Axis 3, throughput, points the same way, and its magnitude is not
+established.** The 8.3× is real but narrow: it was measured on the spike's
+**expression grammar layer alone**, over the 1,912 of `CoreClasses.orx`'s 4,193
+lines that parse as expressions, with the shared scanner explicitly subtracted
+and the instruction and directive layers never written. Task 3.10's 3.29 ms is
+a different measurement of different work: the whole shipped parser, scanning
+and clause splitting and 500 directives and some 3,000 nested instructions.
+Multiplying the one ratio onto the other number would conflate them, and the
+product, roughly 24 ms of extra parse time, would in any case be weighed
+against a ~55 ms budget whose other components are all unmeasured. Whether that
+is decisive depends on what bootstrap execution, heap setup and class
+construction cost, and nobody knows yet.
+
+Two earlier revisions of this paragraph got this wrong in opposite directions.
+The first claimed parse time *is* cold-start time, which is the overreach the
+document corrects two sections below. The correction removed that premise and
+left the conclusion it had supported standing, so the paragraph asserted
+throughput was "decisive by itself" with nothing behind it. Removing a false
+premise does not license keeping the confident sentence it was holding up.
 
 This is recorded rather than quietly left because a later reader finding a
 decision resting on a criterion the project dropped a day afterwards would be
@@ -120,8 +138,13 @@ no_backtrack' src/*.rs` over the crate source finds nothing.
 There is therefore no lever to keep the inner error, and the error type's
 `merge` is not called at all, because chumsky has already discarded the loser.
 
-This is the axis Phase 3's gate checks, and error numbers **and sub-numbers** are
-contract, so it is decisive on its own.
+This was written while error numbers and sub-numbers were contract on a
+byte-exact reproduction, and it said the axis was decisive on its own.
+**It is not, and the devaluation at the top of this document governs.** Error 36
+is still unreachable with `chumsky` 0.13 and the analysis below still holds; what
+changed is that the project stopped gating on error 36's position at all, so an
+argument built on it decides nothing now. Left in place because the mechanism is
+worth knowing if combinators are ever reconsidered.
 
 ### Errors 36.901 and 36.902 do contain a position, and it is a byte offset
 
