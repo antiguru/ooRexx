@@ -63,7 +63,7 @@ pub(super) fn parse(text: &str, entry: Entry) -> Result<(Expr, SymbolTable), Par
             Entry::Required => parse_expr(&ctx, &mut cursor, Terminators::EOC, 918),
             Entry::Optional(term) => parse_expression(&ctx, &mut cursor, term)
                 .map(|e| e.expect("the test input is not an empty expression")),
-            Entry::Logical(term) => parse_logical(&ctx, &mut cursor, term),
+            Entry::Logical(term) => parse_logical(&ctx, &mut cursor, term, 929),
         }
     };
     result.map(|expr| (expr, scanned.symbols))

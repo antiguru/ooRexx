@@ -656,9 +656,8 @@ const SUB_DIRECTIVES: [&str; 40] = [
 /// Crate-internal: nothing above the parser names it. Phase 4 consumes the
 /// AST, not the token stream it was built from.
 pub(crate) struct ParseCtx<'a> {
-    /// Task 3.6 reads this to recover a label's source spelling. The
-    /// expression grammar needs only the tokens.
-    #[allow(dead_code)] // deleted by Task 3.6
+    /// Read by the instruction parser for `SourceKind`, which decides whether
+    /// a label is error 47.1. The expression grammar needs only the tokens.
     pub(crate) source: &'a ProgramSource,
     pub(crate) tokens: &'a [Token],
     /// Read-only by the time parsing starts: `scan` has already interned every
@@ -698,9 +697,8 @@ pub(crate) struct TokenCursor {
 }
 
 impl TokenCursor {
-    /// Task 3.6 builds one of these per clause, from `Clause::tokens`; the
-    /// expression grammar is handed one already built.
-    #[allow(dead_code)] // deleted by Task 3.6
+    /// The instruction parser builds one of these per clause, from
+    /// `Clause::tokens`; the expression grammar is handed one already built.
     pub(crate) fn new(range: Range<usize>) -> Self {
         Self {
             pos: range.start,

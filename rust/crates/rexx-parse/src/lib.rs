@@ -36,11 +36,17 @@
 mod ast;
 mod clause;
 mod expr;
+mod instruction;
 mod scanner;
 mod source;
 mod token;
 
-pub use ast::{CallTarget, Expr, ExprKind, PrefixOp, Tail, compound_parts};
+pub use ast::{
+    Address, AddressIo, Call, CallTarget, ConditionTrap, ControlExpr, Controlled, Expr, ExprKind,
+    Forward, Guard, Instruction, InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting,
+    OutputOption, Parse, ParseSource, ParseTrigger, PrefixOp, Raise, RaiseResult, Redirection,
+    Signal, Tail, Trace, TriggerKind, Use, UseTarget, VariableRef, compound_parts,
+};
 pub use scanner::{ResourceBody, Scanned, scan};
 pub use source::{ProgramSource, SourceKind};
 pub use token::{

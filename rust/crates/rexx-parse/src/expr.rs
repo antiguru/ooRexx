@@ -162,7 +162,6 @@ const SUBKEY_WITH: usize = 49;
 /// `requiredExpression(terminators, error)` (`LanguageParser.hpp:228`), whose
 /// 18 call sites pass 5 distinct terminator sets and 13 distinct error codes,
 /// every one of them in the 35.9xx block.
-#[allow(dead_code)] // deleted by Task 3.6
 pub(crate) fn parse_expr(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -179,7 +178,6 @@ pub(crate) fn parse_expr(
 /// Parses an expression that may be absent, stopping at `term`.
 ///
 /// `LanguageParser::parseExpression` (`LanguageParser.cpp:2725`).
-#[allow(dead_code)] // deleted by Task 3.6
 pub(crate) fn parse_expression(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -197,14 +195,200 @@ pub(crate) fn parse_expression(
 /// absent expression. Measured: `if then nop`, `if , 1 = 1 then nop` and
 /// `if 1 = 1, then nop` are all 35.929. That makes the C++'s own
 /// `requiredLogicalExpression` null check (`LanguageParser.hpp:220`) dead code,
-/// which is why an instruction parser here gets no say in the number.
-#[allow(dead_code)] // deleted by Task 3.6
+/// which is why the C++ never varies the number.
+///
+/// `missing` is threaded anyway, because one caller needs a different number
+/// and cannot get it today: `whenNew` parses a `WHEN` inside a `SELECT CASE`
+/// with `parseCaseWhenList`, whose empty-element error is 35.934 rather than
+/// 35.929, and choosing between the two needs the enclosing block. Measured,
+/// both directions: `select case 1` with `when , then nop` is 35.934, and
+/// plain `select` with the same `WHEN` is 35.929. Every caller here passes
+/// 929; the `SELECT CASE` case becomes one argument at one call site.
 pub(crate) fn parse_logical(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
     term: Terminators,
+    missing: u16,
 ) -> Result<Expr, ParseError> {
-    Parser::new(ctx, cursor).logical(term)
+    Parser::new(ctx, cursor).logical(term, missing)
+}
+
+/// Parses one subexpression, where a comma terminates rather than building a
+/// list.
+///
+/// `LanguageParser::parseSubExpression` (`LanguageParser.cpp:2812`). Used
+/// where the caller interprets the commas itself.
+#[allow(dead_code)] // deleted by Task 3.6
+pub(crate) fn parse_subexpression(
+    ctx: &ParseCtx,
+    cursor: &mut TokenCursor,
+    term: Terminators,
+) -> Result<Option<Expr>, ParseError> {
+    Parser::new(ctx, cursor).subexpression(term)
+}
+
+/// Parses an argument list up to `closer`, which is consumed.
+///
+/// `LanguageParser::parseArgList` (`LanguageParser.cpp:3083`). `None` for
+/// `closer` is the `TERM_EOC` form, where the list runs to the end of the
+/// clause and there is no bracket to match: `CALL f a, b` uses it.
+#[allow(dead_code)] // deleted by Task 3.6
+pub(crate) fn parse_arg_list(
+    ctx: &ParseCtx,
+    cursor: &mut TokenCursor,
+    closer: Option<Tag>,
+) -> Result<Vec<Option<Expr>>, ParseError> {
+    Parser::new(ctx, cursor).arg_list(closer)
+}
+
+/// Parses the expression inside a `(`, whose `(` is already consumed, and
+/// consumes the `)`.
+///
+/// `LanguageParser::parenExpression` (`LanguageParser.cpp:3465`). A comma does
+/// NOT build a list here, unlike `parse_constant_expression`'s parenthesised
+/// form: `parenExpression` calls `parseSubExpression` where
+/// `parseConstantExpression` calls `parseFullSubExpression`.
+#[allow(dead_code)] // deleted by Task 3.6
+pub(crate) fn parse_paren_expression(
+    ctx: &ParseCtx,
+    cursor: &mut TokenCursor,
+) -> Result<Option<Expr>, ParseError> {
+    let mut parser = Parser::new(ctx, cursor);
+    let inner = parser.subexpression(Terminators::RIGHT)?;
+    if parser.peek_tag() != Some(Tag::RightParen) {
+        return Err(parser.unmatched(false));
+    }
+    parser.advance();
+    Ok(inner)
+}
+
+/// Parses the restricted expression form that `RAISE`, `FORWARD`, `USE ARG`
+/// defaults and `ADDRESS ... WITH` accept.
+///
+/// `LanguageParser::parseConstantExpression` (`LanguageParser.cpp:3400`): a
+/// literal, a constant symbol, or a parenthesised expression, and nothing
+/// else. `None` means the clause ended, which every caller turns into its own
+/// error; anything present that is not one of the three is 35.1.
+#[allow(dead_code)] // deleted by Task 3.6
+pub(crate) fn parse_constant_expression(
+    ctx: &ParseCtx,
+    cursor: &mut TokenCursor,
+) -> Result<Option<Expr>, ParseError> {
+    let mut parser = Parser::new(ctx, cursor);
+    parser.skip_blanks();
+    let Some(token) = parser.peek() else {
+        return Ok(None);
+    };
+    let span = token.span.clone();
+    match &token.kind {
+        TokenKind::Literal { value } => {
+            let value = value.clone();
+            parser.advance();
+            Ok(Some(Expr::new(ExprKind::Literal(value), span)))
+        }
+        // `isConstant`: a symbol that is not a variable, a stem or a
+        // compound, so a number, a lone period, or a dot symbol.
+        TokenKind::Symbol { id, class }
+            if !matches!(
+                class,
+                SymbolClass::Variable | SymbolClass::Stem | SymbolClass::Compound
+            ) =>
+        {
+            let kind = symbol_kind(*id, *class);
+            parser.advance();
+            Ok(Some(Expr::new(kind, span)))
+        }
+        TokenKind::LeftParen => {
+            parser.advance();
+            // A comma list is allowed in here, which is why this is
+            // `parseFullSubExpression` and not `parseSubExpression`.
+            let inner = parser.full_subexpression(Terminators::RIGHT)?;
+            if parser.peek_tag() != Some(Tag::RightParen) {
+                return Err(parser.unmatched(false));
+            }
+            parser.advance();
+            Ok(inner)
+        }
+        _ => Err(parser.error(35, 1)),
+    }
+}
+
+/// Parses a term that is a message send, or reports that the clause does not
+/// start with one.
+///
+/// `LanguageParser::parseMessageTerm` (`LanguageParser.cpp:3500`). A term with
+/// no `~`, `~~` or `[` applied to it is NOT a message term, so `"echo hi"` and
+/// `f(1)` both come back `None` and are commands.
+///
+/// **On `Ok(None)` this may have consumed tokens, so the caller must discard
+/// `cursor`.** The C++ marks its position and resets it; nothing rewinds here,
+/// so a caller parses the trial on a cursor it is willing to throw away and
+/// keeps it only when a term comes back.
+pub(crate) fn parse_message_term(
+    ctx: &ParseCtx,
+    cursor: &mut TokenCursor,
+) -> Result<Option<Expr>, ParseError> {
+    Parser::new(ctx, cursor).message_term()
+}
+
+/// Parses a `PARSE` or `USE ARG` assignment target: a message term, or a
+/// variable.
+///
+/// `LanguageParser::parseVariableOrMessageTerm` (`LanguageParser.cpp:3455`).
+/// Carries the same discard contract as `parse_message_term`, and for the same
+/// reason.
+#[allow(dead_code)] // deleted by Task 3.6
+pub(crate) fn parse_variable_or_message_term(
+    ctx: &ParseCtx,
+    cursor: &mut TokenCursor,
+) -> Result<Option<Expr>, ParseError> {
+    let mut parser = Parser::new(ctx, cursor);
+    if let Some(term) = parser.message_term()? {
+        // The C++ converts the message into an assignment message here. That
+        // rewrite belongs to whoever executes it: the name it would append
+        // `=` to is `ExprKind::Message::name`, and the instruction node
+        // already records that this term is an assignment target.
+        return Ok(Some(term));
+    }
+    parser.skip_blanks();
+    let Some(token) = parser.peek() else {
+        return Ok(None);
+    };
+    let span = token.span.clone();
+    let TokenKind::Symbol { id, class } = &token.kind else {
+        return Ok(None);
+    };
+    let (id, class) = (*id, *class);
+    need_variable(ctx, id, class, parser.clause_byte)?;
+    parser.advance();
+    Ok(Some(Expr::new(symbol_kind(id, class), span)))
+}
+
+/// Raises the error a non-variable symbol gets where a variable was required.
+///
+/// `LanguageParser::needVariable` (`LanguageParser.cpp:3555`): a stem and a
+/// compound both pass, and the error number depends on the spelling rather
+/// than on the class, because the C++ tests the first character.
+pub(crate) fn need_variable(
+    ctx: &ParseCtx,
+    id: SymbolId,
+    class: SymbolClass,
+    byte: usize,
+) -> Result<(), ParseError> {
+    if matches!(
+        class,
+        SymbolClass::Variable | SymbolClass::Stem | SymbolClass::Compound
+    ) {
+        return Ok(());
+    }
+    // `Error_Invalid_variable_period` is 31.3 and
+    // `Error_Invalid_variable_number` is 31.2.
+    let sub = if ctx.symbols.name(id).starts_with('.') {
+        3
+    } else {
+        2
+    };
+    Err(ParseError::new(31, sub, byte))
 }
 
 /// One expression parse in progress.
@@ -371,13 +555,13 @@ impl<'a, 'c> Parser<'a, 'c> {
     }
 
     /// `parseLogical` (`LanguageParser.cpp:4264`).
-    fn logical(&mut self, term: Terminators) -> Result<Expr, ParseError> {
+    fn logical(&mut self, term: Terminators, missing: u16) -> Result<Expr, ParseError> {
         self.skip_blanks();
         let from = self.cursor.position();
         let mut parts: Vec<Expr> = Vec::new();
         loop {
             let Some(part) = self.subexpression(term)? else {
-                return Err(self.error(35, 929));
+                return Err(self.error(35, missing));
             };
             parts.push(part);
             if self.peek_tag() == Some(Tag::Comma) {
@@ -549,7 +733,7 @@ impl<'a, 'c> Parser<'a, 'c> {
     /// `parseCollectionMessage` (`LanguageParser.cpp:3309`): `target[args]`,
     /// which is the `[]` message.
     fn collection_message(&mut self, target: Expr, from: usize) -> Result<Expr, ParseError> {
-        let args = self.arg_list(Tag::RightBracket)?;
+        let args = self.arg_list(Some(Tag::RightBracket))?;
         let extent = self.extent(from);
         Ok(Expr::new(
             ExprKind::Message {
@@ -608,7 +792,7 @@ impl<'a, 'c> Parser<'a, 'c> {
         // because the blank before `(` is a token.
         let args = if self.peek_tag() == Some(Tag::LeftParen) {
             self.advance();
-            self.arg_list(Tag::RightParen)?
+            self.arg_list(Some(Tag::RightParen))?
         } else {
             Vec::new()
         };
@@ -699,17 +883,19 @@ impl<'a, 'c> Parser<'a, 'c> {
     /// up to `closer`, which is consumed.
     ///
     /// A closed `(` or `[` construct disambiguates by itself, so the caller's
-    /// terminators are dropped and only the closer is looked for.
+    /// terminators are dropped and only the closer is looked for. `None` is
+    /// the `TERM_EOC` form, which has no bracket to match and runs to the end
+    /// of the clause: `CALL f a, b` and `SIGNAL`'s argument lists use it.
     ///
     /// Trailing omitted arguments are dropped, which is not cosmetic:
     /// measured with a routine that reports `arg()`, `f(,)` passes 0
     /// arguments, `f(1,)` passes 1 and `f(,1)` passes 2.
-    fn arg_list(&mut self, closer: Tag) -> Result<Vec<Option<Expr>>, ParseError> {
-        let bracket = closer == Tag::RightBracket;
-        let term = if bracket {
-            Terminators::SQRIGHT
-        } else {
-            Terminators::RIGHT
+    fn arg_list(&mut self, closer: Option<Tag>) -> Result<Vec<Option<Expr>>, ParseError> {
+        let bracket = closer == Some(Tag::RightBracket);
+        let term = match closer {
+            Some(Tag::RightBracket) => Terminators::SQRIGHT,
+            Some(_) => Terminators::RIGHT,
+            None => Terminators::EOC,
         };
         // Skips the blank a `CALL` keyword leaves before its first argument.
         self.skip_blanks();
@@ -727,12 +913,74 @@ impl<'a, 'c> Parser<'a, 'c> {
             }
             break;
         }
-        if self.peek_tag() != Some(closer) {
-            return Err(self.unmatched(bracket));
+        if let Some(closer) = closer {
+            if self.peek_tag() != Some(closer) {
+                return Err(self.unmatched(bracket));
+            }
+            self.advance();
         }
-        self.advance();
         args.truncate(real);
         Ok(args)
+    }
+
+    /// `parseMessageTerm` (`LanguageParser.cpp:3500`): a subterm with at least
+    /// one `~`, `~~` or `[` applied to it.
+    ///
+    /// `None` when the clause does not start with one, which is the common
+    /// case: every keyword instruction and every command reaches here first.
+    /// Nothing is rewound on `None`, see `parse_message_term`.
+    fn message_term(&mut self) -> Result<Option<Expr>, ParseError> {
+        let Some(token) = self.peek() else {
+            return Ok(None);
+        };
+        if self.is_terminator(Some(token), Terminators::EOC) {
+            return Ok(None);
+        }
+        // The C++'s fast path, and it exists to avoid allocating a variable
+        // slot for every keyword instruction name in every code block. It is
+        // reproduced because it also decides the answer: a simple variable
+        // followed by neither a message operator nor a `(` is rejected here
+        // rather than parsed and thrown away.
+        if matches!(
+            &token.kind,
+            TokenKind::Symbol {
+                class: SymbolClass::Variable,
+                ..
+            }
+        ) {
+            let next = self.ctx.tokens.get(self.cursor.position() + 1);
+            let follows = next.map(|token| token.kind.tag());
+            if !matches!(
+                follows,
+                Some(Tag::Tilde | Tag::DTilde | Tag::LeftBracket | Tag::LeftParen)
+            ) {
+                return Ok(None);
+            }
+        }
+        let Some(start) = self.subterm(Terminators::EOC)? else {
+            return Ok(None);
+        };
+        // Only a term that actually took a message is one. `f(1)` parses as a
+        // call here and then comes back `None`, which is why a bare `f(1)`
+        // clause is a command.
+        let mut applied = false;
+        let mut target = start;
+        loop {
+            let from = self.cursor.position();
+            match self.peek_tag() {
+                Some(Tag::LeftBracket) => {
+                    self.advance();
+                    target = self.collection_message(target, from)?;
+                }
+                Some(tag @ (Tag::Tilde | Tag::DTilde)) => {
+                    self.advance();
+                    target = self.message(target, tag == Tag::DTilde, from, Terminators::EOC)?;
+                }
+                _ => break,
+            }
+            applied = true;
+        }
+        Ok(applied.then_some(target))
     }
 
     /// `parseSubTerm` (`LanguageParser.cpp:3757`): the atoms.
@@ -769,7 +1017,7 @@ impl<'a, 'c> Parser<'a, 'c> {
                 match self.peek_tag() {
                     Some(Tag::LeftParen) => {
                         self.advance();
-                        let args = self.arg_list(Tag::RightParen)?;
+                        let args = self.arg_list(Some(Tag::RightParen))?;
                         let extent = self.extent(from);
                         Ok(Some(Expr::new(
                             ExprKind::Call {
@@ -791,7 +1039,7 @@ impl<'a, 'c> Parser<'a, 'c> {
                 self.advance();
                 if self.peek_tag() == Some(Tag::LeftParen) {
                     self.advance();
-                    let args = self.arg_list(Tag::RightParen)?;
+                    let args = self.arg_list(Some(Tag::RightParen))?;
                     let extent = self.extent(from);
                     return Ok(Some(Expr::new(
                         ExprKind::Call {
@@ -841,7 +1089,7 @@ impl<'a, 'c> Parser<'a, 'c> {
         // Only an immediately following parenthesis makes this a call.
         if self.peek_tag() == Some(Tag::LeftParen) {
             self.advance();
-            let args = self.arg_list(Tag::RightParen)?;
+            let args = self.arg_list(Some(Tag::RightParen))?;
             let extent = self.extent(from);
             return Ok(Expr::new(
                 ExprKind::QualifiedCall {
@@ -864,7 +1112,7 @@ impl<'a, 'c> Parser<'a, 'c> {
 ///
 /// `addText` (`LanguageParser.cpp:2333`) treats `SYMBOL_DUMMY` and
 /// `SYMBOL_CONSTANT` alike: both are values rather than variables.
-fn symbol_kind(id: SymbolId, class: SymbolClass) -> ExprKind {
+pub(crate) fn symbol_kind(id: SymbolId, class: SymbolClass) -> ExprKind {
     match class {
         SymbolClass::Dummy | SymbolClass::Constant => ExprKind::Constant(id),
         SymbolClass::Variable => ExprKind::Variable(id),

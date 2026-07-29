@@ -9,10 +9,11 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The expression tree.
+//! The expression tree and the instruction nodes.
 //!
-//! One variant per expression class under `interpreter/expression/`, with the
-//! collapses noted at each site.
+//! One variant per expression class under `interpreter/expression/`, and one
+//! `InstructionKind` variant per instruction keyword, with the collapses noted
+//! at each site.
 //!
 //! # Why a tree of owned children, where instructions are a flat chain
 //!
@@ -462,6 +463,565 @@ pub fn compound_parts(name: &str) -> (&str, Vec<Tail<'_>>) {
         })
         .collect();
     (stem, tails)
+}
+
+/// One instruction, and the clause `TRACE` prints for it.
+///
+/// # Why there is no `next` and no jump target
+///
+/// Task 3.1 Step 3b settled a flat chain in one arena per code body, with
+/// nesting held as indices rather than as child nodes. In a `Vec` the chain
+/// itself is index order, so a `next` field would restate it. The jump targets
+/// -- where an `IF` goes when its condition is false, which block an `END`
+/// closes -- are not computable from one clause: they need the control stack
+/// that walks the whole body, and the task that owns that stack adds them.
+/// A field nothing sets reads as a contract, so none is declared here.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Instruction {
+    pub kind: InstructionKind,
+    /// Byte range in the retained source: the clause this instruction was
+    /// built from, which is what `TRACE` echoes on its `*-*` line.
+    ///
+    /// Not the extent of the node's own tokens. A `THEN` covers just the
+    /// `then` keyword (`ThenInstruction.cpp:76`), and an `IF` stops at the
+    /// START of whatever token ended its condition, so the bytes between two
+    /// instructions' spans can belong to neither. See `ClauseCursor::split_before`.
+    pub clause_span: Range<usize>,
+}
+
+/// One instruction form: the 35 keyword instructions, plus the four clause
+/// shapes that no keyword introduces.
+///
+/// Two keywords that share a C++ implementation class still get a variant
+/// each, because they are distinct `InstructionKeyword` values there and the
+/// spelling is observable: `LEAVE`/`ITERATE` share `RexxInstructionLeave`,
+/// `PUSH`/`QUEUE` share `RexxInstructionQueue`, `PARSE`/`ARG`/`PULL` share
+/// `RexxInstructionParse`, and `DO`/`LOOP` share every loop class.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum InstructionKind {
+    // ---- the four clause shapes with no keyword ----
+    /// `name = expr`, and also `name (op)= expr`, whose right-hand side is
+    /// already the expanded `name op expr` tree (`assignmentOpNew`).
+    Assignment {
+        target: SymbolId,
+        value: Expr,
+    },
+    /// `name:`, and also `"name":`. Task 3.4 already ended the clause at the
+    /// colon.
+    ///
+    /// Bytes rather than a `SymbolId` because a literal label was never seen
+    /// as a symbol, so it is not in the read-only symbol table, and both
+    /// spellings reach `addLabel` through the same `token->value()`.
+    Label {
+        name: Box<[u8]>,
+    },
+    /// A standalone message send, `q~append(1)`, and the message-assignment
+    /// forms `q[1] = 2` and `q[1] += 2`.
+    ///
+    /// `term` is always an `ExprKind::Message`, whose `cascade` flag carries
+    /// the `~~` distinction that the C++ spells as a second instruction type.
+    Message {
+        term: Expr,
+        /// The right-hand side when this is an assignment form. For the
+        /// `(op)=` spelling this is already the expanded tree.
+        value: Option<Expr>,
+    },
+    /// Anything else: a clause that is an expression is a command, dispatched
+    /// through the current `ADDRESS`.
+    Command {
+        expression: Option<Expr>,
+    },
+
+    // ---- control flow (11) ----
+    Do(Box<Loop>),
+    Loop(Box<Loop>),
+    If {
+        condition: Expr,
+    },
+    Then,
+    Else,
+    Select {
+        label: Option<SymbolId>,
+        /// `SELECT CASE expr`, a different instruction class in the C++.
+        case: Option<Expr>,
+    },
+    When {
+        condition: Expr,
+    },
+    Otherwise,
+    Leave {
+        name: Option<SymbolId>,
+    },
+    Iterate {
+        name: Option<SymbolId>,
+    },
+    End {
+        name: Option<SymbolId>,
+    },
+
+    // ---- data (8) ----
+    Drop {
+        variables: Vec<VariableRef>,
+    },
+    Expose {
+        variables: Vec<VariableRef>,
+    },
+    Parse(Box<Parse>),
+    Arg(Box<Parse>),
+    Pull(Box<Parse>),
+    Push {
+        expression: Option<Expr>,
+    },
+    Queue {
+        expression: Option<Expr>,
+    },
+    Say {
+        expression: Option<Expr>,
+    },
+
+    // ---- procedure (11) ----
+    Call(Box<Call>),
+    Return {
+        expression: Option<Expr>,
+    },
+    Procedure {
+        variables: Vec<VariableRef>,
+    },
+    Signal(Box<Signal>),
+    Exit {
+        expression: Option<Expr>,
+    },
+    Interpret {
+        expression: Expr,
+    },
+    Guard(Box<Guard>),
+    Reply {
+        expression: Option<Expr>,
+    },
+    Forward(Box<Forward>),
+    Raise(Box<Raise>),
+    Use(Box<Use>),
+
+    // ---- settings (4) ----
+    Numeric {
+        setting: NumericSetting,
+        expression: Option<Expr>,
+    },
+    Address(Box<Address>),
+    Trace(Trace),
+    Options {
+        expression: Expr,
+    },
+
+    // ---- and NOP ----
+    Nop,
+}
+
+impl InstructionKind {
+    /// The instruction keyword that introduced this node, or `None` for the
+    /// four clause shapes that no keyword introduces.
+    ///
+    /// The spelling is the one in `keywordInstructions[]`, so this is what a
+    /// test asserts a keyword reached its node by.
+    pub fn keyword(&self) -> Option<&'static str> {
+        Some(match self {
+            InstructionKind::Assignment { .. }
+            | InstructionKind::Label { .. }
+            | InstructionKind::Message { .. }
+            | InstructionKind::Command { .. } => return None,
+            InstructionKind::Do(_) => "DO",
+            InstructionKind::Loop(_) => "LOOP",
+            InstructionKind::If { .. } => "IF",
+            InstructionKind::Then => "THEN",
+            InstructionKind::Else => "ELSE",
+            InstructionKind::Select { .. } => "SELECT",
+            InstructionKind::When { .. } => "WHEN",
+            InstructionKind::Otherwise => "OTHERWISE",
+            InstructionKind::Leave { .. } => "LEAVE",
+            InstructionKind::Iterate { .. } => "ITERATE",
+            InstructionKind::End { .. } => "END",
+            InstructionKind::Drop { .. } => "DROP",
+            InstructionKind::Expose { .. } => "EXPOSE",
+            InstructionKind::Parse(_) => "PARSE",
+            InstructionKind::Arg(_) => "ARG",
+            InstructionKind::Pull(_) => "PULL",
+            InstructionKind::Push { .. } => "PUSH",
+            InstructionKind::Queue { .. } => "QUEUE",
+            InstructionKind::Say { .. } => "SAY",
+            InstructionKind::Call(_) => "CALL",
+            InstructionKind::Return { .. } => "RETURN",
+            InstructionKind::Procedure { .. } => "PROCEDURE",
+            InstructionKind::Signal(_) => "SIGNAL",
+            InstructionKind::Exit { .. } => "EXIT",
+            InstructionKind::Interpret { .. } => "INTERPRET",
+            InstructionKind::Guard(_) => "GUARD",
+            InstructionKind::Reply { .. } => "REPLY",
+            InstructionKind::Forward(_) => "FORWARD",
+            InstructionKind::Raise(_) => "RAISE",
+            InstructionKind::Use(_) => "USE",
+            InstructionKind::Numeric { .. } => "NUMERIC",
+            InstructionKind::Address(_) => "ADDRESS",
+            InstructionKind::Trace(_) => "TRACE",
+            InstructionKind::Options { .. } => "OPTIONS",
+            InstructionKind::Nop => "NOP",
+        })
+    }
+}
+
+/// One name in a `DROP`, `EXPOSE`, `PROCEDURE EXPOSE` or `USE LOCAL` list.
+///
+/// `processVariableList` (`InstructionParser.cpp:4469`) admits both spellings
+/// and wraps the second in a `RexxVariableReference`.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum VariableRef {
+    /// A name written out: a simple variable, a stem, or a compound. Which
+    /// of the three follows from the spelling, as it does for `ExprKind`.
+    Direct(SymbolId),
+    /// `(name)`, where the *value* of `name` names the variable to act on.
+    Indirect(SymbolId),
+}
+
+/// A `DO` or `LOOP` header.
+///
+/// One struct for both keywords and for all 23 of the C++'s loop instruction
+/// classes, because those classes differ only in which of these fields are
+/// present: `createLoop` fills the same `ControlledLoop`, `OverLoop`,
+/// `WithLoop`, `ForLoop` and `WhileUntilLoop` structs and then picks a class
+/// from which ones came back non-null.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Loop {
+    /// `DO LABEL name`. For a controlled or `OVER` loop with no `LABEL`, the
+    /// control variable's name becomes the label, exactly as
+    /// `newControlledLoop` does.
+    pub label: Option<SymbolId>,
+    /// `DO COUNTER name`.
+    pub counter: Option<SymbolId>,
+    pub kind: LoopKind,
+    /// A trailing `WHILE` or `UNTIL`. Never both: `parseLoopConditional`
+    /// requires the end of the clause after the one it parsed.
+    pub conditional: Option<LoopConditional>,
+}
+
+/// Which loop a `DO` or `LOOP` header is.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum LoopKind {
+    /// `DO` alone: a block, not a loop. `LOOP` alone is `Forever` instead.
+    Simple,
+    /// `DO FOREVER`, and `LOOP` with no control at all.
+    Forever,
+    /// `DO expr`, repeated that many times.
+    Count(Option<Expr>),
+    /// `DO i = 1 TO 9 BY 2 FOR 3`.
+    Controlled(Box<Controlled>),
+    /// `DO name OVER expr`.
+    Over {
+        control: SymbolId,
+        target: Expr,
+        for_count: Option<Expr>,
+    },
+    /// `DO WITH INDEX i ITEM v OVER expr`. At least one of the two variables
+    /// is present (`Error_Invalid_do_with_no_control` otherwise).
+    With {
+        index: Option<SymbolId>,
+        item: Option<SymbolId>,
+        target: Expr,
+        for_count: Option<Expr>,
+    },
+}
+
+/// The control expressions of `DO i = initial TO t BY b FOR f`.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Controlled {
+    pub control: SymbolId,
+    pub initial: Expr,
+    pub to: Option<Expr>,
+    pub by: Option<Expr>,
+    pub for_count: Option<Expr>,
+    /// The order the three keyword expressions were written in, which is the
+    /// order they are evaluated in (`control.expressions[keyslot++]`).
+    /// Evaluation order is observable, because an expression can have side
+    /// effects, so it is recorded rather than fixed.
+    pub order: Vec<ControlExpr>,
+}
+
+/// One entry of a controlled loop's evaluation order.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum ControlExpr {
+    To,
+    By,
+    For,
+}
+
+/// A `WHILE` or `UNTIL` on a loop.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct LoopConditional {
+    /// True for `UNTIL`, which is tested after the body rather than before.
+    pub until: bool,
+    pub condition: Expr,
+}
+
+/// A `PARSE`, `ARG` or `PULL` instruction.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Parse {
+    pub source: ParseSource,
+    /// `PARSE UPPER`, and implied by the `ARG` and `PULL` spellings.
+    pub upper: bool,
+    pub lower: bool,
+    pub caseless: bool,
+    /// The templates. `None` is the comma fence between one template and the
+    /// next, which the C++ pushes as a null entry.
+    pub template: Vec<Option<ParseTrigger>>,
+}
+
+/// Where a `PARSE` gets its string.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum ParseSource {
+    Arg,
+    LineIn,
+    Pull,
+    Source,
+    Version,
+    Var(SymbolId),
+    /// `PARSE VALUE expr WITH`. The expression is optional and defaults to
+    /// the null string.
+    Value(Option<Expr>),
+}
+
+/// One template trigger and the variables it assigns.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ParseTrigger {
+    pub kind: TriggerKind,
+    /// The pattern or column: a literal, a numeric symbol, or a
+    /// parenthesised expression. Absent for `TriggerKind::End`.
+    pub value: Option<Expr>,
+    /// The targets assigned when this trigger fires. `None` is a `.`
+    /// placeholder, which consumes a field and assigns nothing.
+    pub targets: Vec<Option<Expr>>,
+}
+
+/// What a `PARSE` template trigger matches on.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum TriggerKind {
+    /// The implicit trigger that assigns whatever is left.
+    End,
+    /// `+n`, relative forward.
+    Plus,
+    /// `-n`, relative backward.
+    Minus,
+    /// `=n` and a bare numeric symbol, both absolute.
+    Absolute,
+    /// `<n`.
+    MinusLength,
+    /// `>n`.
+    PlusLength,
+    /// A literal or `(expr)` pattern.
+    String,
+    /// The same, under `PARSE CASELESS`.
+    Mixed,
+}
+
+/// A `CALL` instruction, in all four of its forms.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Call {
+    /// `CALL name arg, arg`. `literal` is true for `CALL "name"`, which
+    /// bypasses the internal label search.
+    Named {
+        name: Box<[u8]>,
+        literal: bool,
+        args: Vec<Option<Expr>>,
+    },
+    /// `CALL (expr) arg`, whose target is only known at run time.
+    Dynamic {
+        target: Expr,
+        args: Vec<Option<Expr>>,
+    },
+    /// `CALL ns:name arg`, restricted to public routines of that namespace.
+    Qualified {
+        namespace: SymbolId,
+        name: SymbolId,
+        args: Vec<Option<Expr>>,
+    },
+    /// `CALL ON cond NAME label` and `CALL OFF cond`.
+    Trap(ConditionTrap),
+}
+
+/// A `SIGNAL` instruction, in all three of its forms.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Signal {
+    /// `SIGNAL label` and `SIGNAL "label"`.
+    Label(Box<[u8]>),
+    /// `SIGNAL VALUE expr`, and the implicit form where the target is not a
+    /// symbol or a literal.
+    Value(Expr),
+    /// `SIGNAL ON cond NAME label` and `SIGNAL OFF cond`.
+    Trap(ConditionTrap),
+}
+
+/// The shared shape of `CALL ON`/`OFF` and `SIGNAL ON`/`OFF`.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ConditionTrap {
+    pub on: bool,
+    /// The condition name, `USER name` spelled out for a user condition
+    /// exactly as `commonString(name->concatToCstring("USER "))` builds it.
+    pub condition: Box<[u8]>,
+    /// The label to trap to. `None` for the `OFF` form, which is how the
+    /// C++ distinguishes them too.
+    pub label: Option<Box<[u8]>>,
+}
+
+/// A `GUARD ON`/`OFF` instruction.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Guard {
+    pub on: bool,
+    /// `GUARD ON WHEN expr`.
+    pub condition: Option<Expr>,
+}
+
+/// A `FORWARD` instruction's options, all of them optional.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub struct Forward {
+    pub to: Option<Expr>,
+    pub message: Option<Expr>,
+    pub class: Option<Expr>,
+    /// `FORWARD ARGUMENTS expr`, mutually exclusive with `array`.
+    pub arguments: Option<Expr>,
+    /// `FORWARD ARRAY (a, b)`.
+    pub array: Option<Vec<Option<Expr>>>,
+    pub continue_: bool,
+}
+
+/// A `RAISE` instruction.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Raise {
+    /// The condition name, with `USER ` prefixed for a user condition.
+    pub condition: Box<[u8]>,
+    pub propagate: bool,
+    /// The argument `ERROR`, `FAILURE` and `SYNTAX` take.
+    pub rc: Option<Expr>,
+    pub description: Option<Expr>,
+    /// `ADDITIONAL expr`, mutually exclusive with `array`.
+    pub additional: Option<Expr>,
+    pub array: Option<Vec<Option<Expr>>>,
+    /// `RETURN expr` or `EXIT expr`, whose value is optional either way.
+    pub result: Option<RaiseResult>,
+}
+
+/// `RAISE ... RETURN expr` versus `RAISE ... EXIT expr`.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct RaiseResult {
+    pub exit: bool,
+    pub value: Option<Expr>,
+}
+
+/// A `USE ARG`, `USE STRICT ARG` or `USE LOCAL` instruction.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Use {
+    Arg {
+        strict: bool,
+        /// True when the list ended with `...`, which stops argument-count
+        /// checking at that point.
+        allow_optionals: bool,
+        /// An omitted position, written as a bare comma, is `None`.
+        targets: Vec<Option<UseTarget>>,
+    },
+    Local {
+        variables: Vec<VariableRef>,
+    },
+}
+
+/// One target of a `USE ARG` list.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct UseTarget {
+    /// A variable or a message term (`parseVariableOrMessageTerm`).
+    pub target: Expr,
+    /// `USE ARG a = 1`, a constant expression. Never present with `alias`.
+    pub default: Option<Expr>,
+    /// `USE ARG >a`, which aliases the caller's variable rather than copying.
+    /// `<` is the same thing (`isOperator(OPERATOR_LESSTHAN)`).
+    pub alias: bool,
+}
+
+/// An `ADDRESS` instruction.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub struct Address {
+    /// `ADDRESS env`, the constant target. A symbol contributes its upcased
+    /// spelling and a literal its bytes, which is what `token->value()`
+    /// yields for each.
+    pub environment: Option<Box<[u8]>>,
+    /// `ADDRESS VALUE expr`, and the implicit form where the target is
+    /// neither a symbol nor a literal.
+    pub dynamic: Option<Expr>,
+    /// `ADDRESS env command`.
+    pub command: Option<Expr>,
+    /// The `WITH` redirections. Absent means the plain `RexxInstructionAddress`
+    /// rather than `RexxInstructionAddressWith`.
+    pub io: Option<Box<AddressIo>>,
+}
+
+/// `ADDRESS ... WITH` input and output redirection.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub struct AddressIo {
+    pub input: Redirection,
+    pub output: Redirection,
+    pub error: Redirection,
+    pub output_option: OutputOption,
+    pub error_option: OutputOption,
+}
+
+/// Where one of the three command streams goes.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub enum Redirection {
+    /// Not mentioned at all.
+    #[default]
+    Default,
+    /// `NORMAL`, which resets this stream to the default.
+    Normal,
+    /// `STEM name.`.
+    Stem(SymbolId),
+    /// `STREAM expr`, a constant expression naming a file.
+    Stream(Expr),
+    /// `USING expr`, an object decided at run time.
+    Using(Expr),
+}
+
+/// `APPEND` or `REPLACE` on an output redirection.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub enum OutputOption {
+    #[default]
+    Default,
+    Replace,
+    Append,
+}
+
+/// Which setting a `NUMERIC` instruction changes.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum NumericSetting {
+    Digits,
+    Fuzz,
+    /// `NUMERIC FORM` alone, which resets to the package default.
+    FormDefault,
+    FormScientific,
+    FormEngineering,
+    /// `NUMERIC FORM VALUE expr`, and the implicit form where what follows
+    /// `FORM` is not a symbol.
+    FormValue,
+}
+
+/// A `TRACE` instruction, in its four forms.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Trace {
+    /// `TRACE` alone: the default setting.
+    Default,
+    /// A validated option string, kept as written. Only its leading `?`s and
+    /// first other character mean anything (`TraceSetting.cpp:135`), and the
+    /// rest is retained because the setting is echoed back by `TRACE()`.
+    Setting(Box<[u8]>),
+    /// A whole number, which skips that many debug pauses. Negative for the
+    /// `TRACE -n` spelling.
+    Skip(i64),
+    /// `TRACE VALUE expr`, and the implicit form where what follows is not a
+    /// symbol, a literal, or a signed number.
+    Value(Expr),
 }
 
 #[cfg(test)]
