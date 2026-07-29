@@ -578,10 +578,19 @@ fn a_when_that_is_another_whens_then_instruction_is_never_added_to_the_select() 
     // the SELECT is the immediate top of the stack, and by the second WHEN it is
     // not, so the SELECT collects one WHEN and the second gets no exit at all.
     // Reproducing the quirk is what transliterating rather than tidying buys.
+    // `select`(0) `when`(1) `then`(2) `when`(3) `then`(4) `nop`(5) `end`(6).
     let program = ok("select\nwhen 1 = 1 then\nwhen 2 = 2 then nop\nend\n");
     match &program.instructions[0].kind {
         InstructionKind::Select { whens, .. } => assert_eq!(whens, &[1]),
         other => panic!("expected a SELECT, got {other:?}"),
+    }
+    // The first WHEN's branch is closed by the arrival of the second, which is
+    // what makes a WHEN go through `flushControl` rather than joining the chain
+    // directly the way a control instruction does. Treating a WHEN as control
+    // instead leaves this branch open until the END and moves the target to 6.
+    match &program.instructions[1].kind {
+        InstructionKind::When { false_target, .. } => assert_eq!(*false_target, Some(4)),
+        other => panic!("expected the first WHEN, got {other:?}"),
     }
     match &program.instructions[3].kind {
         InstructionKind::When { exit, .. } => assert_eq!(*exit, None),
@@ -591,19 +600,33 @@ fn a_when_that_is_another_whens_then_instruction_is_never_added_to_the_select() 
 
 #[test]
 fn a_block_and_its_end_point_at_each_other() {
-    let program = ok("do\nnop\nend\nnop\n");
-    assert_eq!(names(&program), ["DO", "NOP", "END", "NOP"]);
-    match &program.instructions[0].kind {
-        InstructionKind::Do(body) => assert_eq!(body.end, Some(2)),
+    // `nop`(0) `do`(1) `nop`(2) `end`(3) `nop`(4). The DO is deliberately NOT
+    // the first instruction: with the block at index 0 every assertion here
+    // would still hold if the index were hard-wired to zero.
+    let program = ok("nop\ndo\nnop\nend\nnop\n");
+    assert_eq!(names(&program), ["NOP", "DO", "NOP", "END", "NOP"]);
+    match &program.instructions[1].kind {
+        InstructionKind::Do(body) => assert_eq!(body.end, Some(3)),
         other => panic!("expected a DO, got {other:?}"),
     }
-    match &program.instructions[2].kind {
+    match &program.instructions[3].kind {
         InstructionKind::End { closes, .. } => {
             let closes = closes.expect("a matched END knows what it closed");
-            assert_eq!(closes.block, 0);
+            assert_eq!(closes.block, 1);
             assert_eq!(closes.style, EndStyle::Do);
         }
         other => panic!("expected an END, got {other:?}"),
+    }
+    // And a nested pair, so the inner END is matched against the inner block
+    // rather than the outer one. `do`(0) `do`(1) `nop`(2) `end`(3) `end`(4).
+    let nested = ok("do\ndo\nnop\nend\nend\n");
+    for (end, block) in [(3, 1), (4, 0)] {
+        match &nested.instructions[end].kind {
+            InstructionKind::End { closes, .. } => {
+                assert_eq!(closes.expect("matched").block, block, "END at {end}");
+            }
+            other => panic!("expected an END, got {other:?}"),
+        }
     }
 }
 
