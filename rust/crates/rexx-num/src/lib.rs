@@ -43,6 +43,15 @@ pub const DEFAULT_DIGITS: u64 = 9;
 pub const MAX_EXPONENT: i32 = 999_999_999;
 pub const MIN_EXPONENT: i32 = -999_999_999;
 
+/// The precision an argument is converted to a machine integer under, and the
+/// width of that integer in decimal digits.
+///
+/// `Numerics::ARGUMENT_DIGITS` (`Numerics.hpp:90`), 18 on a 64-bit build and 9
+/// on a 32-bit one. The platform dependence is observable and so is reproduced:
+/// measured on a 64-bit build, `::OPTIONS DIGITS 123456789012345678` is rc 0
+/// and `1234567890123456789` is Error 26.5, so the boundary sits at eighteen.
+pub const ARGUMENT_DIGITS: usize = 18;
+
 /// What arithmetic can fail with, carrying the interpreter's error numbers.
 ///
 /// Each variant carries its substitution *values*, typed naturally, rather
@@ -228,6 +237,44 @@ impl ArithError {
 /// spelling: no `+` after `E`, leading zeros, and so on).
 fn full_precision(n: &Number) -> String {
     n.format(n.digits.len() as u64)
+}
+
+/// `Numerics::maxValueForDigits` (`Numerics.hpp:160`): `10^digits - 1`, capped
+/// at the platform's integer width.
+fn max_value_for_digits(digits: usize) -> i64 {
+    let capped = digits.min(ARGUMENT_DIGITS);
+    let mut max: i64 = 0;
+    for _ in 0..capped {
+        max = max * 10 + 9;
+    }
+    max
+}
+
+/// `NumberString::createUnsignedValue` (`NumberStringClass.cpp:788`): the first
+/// `length` digits, plus a carry, scaled by `10^exponent`.
+///
+/// Every overflow path returns `None`, which is the C++'s `false`. The width
+/// pre-check is against `ARGUMENT_DIGITS` and not against the caller's
+/// precision, which is what the C++ tests, and it is an early-out rather than
+/// the deciding check: the `> max` test below rejects everything it would.
+fn unsigned_value(digits: &[u8], length: i64, carry: bool, exponent: i64, max: i64) -> Option<i64> {
+    if exponent + length > i64::try_from(ARGUMENT_DIGITS).ok()? {
+        return None;
+    }
+    let mut number: i64 = 0;
+    for &digit in digits.iter().take(usize::try_from(length).ok()?) {
+        number = number.checked_mul(10)?.checked_add(i64::from(digit))?;
+    }
+    if carry {
+        number = number.checked_add(1)?;
+    }
+    for _ in 0..exponent {
+        number = number.checked_mul(10)?;
+    }
+    if number > max {
+        return None;
+    }
+    Some(number)
 }
 
 /// The `digits + 1` working length every operator truncates its operands to,
@@ -547,6 +594,117 @@ impl Number {
     ///
     /// Rounding is an arithmetic operation, not a display one -- it happens at
     /// the `DIGITS` boundary when a result is produced. It is exposed here
+    /// The value as a machine integer under `digits` precision, or `None` if it
+    /// has none.
+    ///
+    /// `NumberString::numberValue` (`NumberStringClass.cpp:588`), which is what
+    /// `RexxString::requestNumber` forwards to. The number is ROUNDED to
+    /// `digits` significant digits first and only then asked whether it is an
+    /// integer, so a fraction can survive the conversion. That is the part a
+    /// caller writing its own will get wrong, and one did. Measured through
+    /// `TRACE`, whose fallback to an option string makes each step visible:
+    ///
+    /// * `trace 999999999.4` is rc 0, a skip count of 999999999, because ten
+    ///   digits truncate to nine and the dropped `4` does not round up.
+    /// * `trace "1.0000000001"` is rc 0 and means 1: eleven digits truncate to
+    ///   nine and every surviving decimal is a zero.
+    /// * `trace "0.9999999999"` is rc 0 and means 1: the dropped digit rounds
+    ///   up, and a carry over all-nine decimals leaves 1.
+    /// * `trace "999999999.6"` is Error 24.1, because that carry makes the value
+    ///   ten digits wide.
+    /// * `trace "99999999.6"` is 24.1, because nine digits do not exceed the
+    ///   precision, so nothing is rounded and the `6` simply is not whole.
+    ///
+    /// The width limit is on the VALUE and not on the text. Measured:
+    /// `trace 1e8` is rc 0 and `trace 1e9` is 24.1, because the second needs ten
+    /// digits though its text holds two.
+    ///
+    /// `digits` is the caller's precision, and callers really do differ:
+    /// `TRACE` converts under the parse-time `NUMERIC DIGITS` while
+    /// `::OPTIONS DIGITS` converts under `ARGUMENT_DIGITS`.
+    ///
+    /// This does not duplicate `round_to`, though it rounds. `round_to` returns
+    /// a `Number` and keeps arbitrary precision; this asks the separate question
+    /// of whether the rounded value is an integer a machine word holds, and
+    /// `checkIntegerDigits`'s carry rule is what makes the two different: it
+    /// tests the surviving decimals against `9` rather than against `0` when the
+    /// rounding carried.
+    pub fn whole_value(&self, digits: usize) -> Option<i64> {
+        // `isZero()`: every spelling of zero converts to zero whatever the
+        // exponent says.
+        if self.is_zero() {
+            return Some(0);
+        }
+        let sign: i64 = if self.negative { -1 } else { 1 };
+        let max = max_value_for_digits(digits);
+        let precision = i64::try_from(digits).ok()?;
+        let mut length = i64::try_from(self.digits.len()).ok()?;
+        let mut exponent = i64::from(self.exponent);
+
+        // The common case: no more digits than the precision, and nothing after
+        // the decimal point.
+        if length <= precision && exponent >= 0 {
+            return Some(unsigned_value(&self.digits, length, false, exponent, max)? * sign);
+        }
+
+        // `checkIntegerDigits` (`NumberStringClass.cpp:937`). Round to the
+        // precision, then require every surviving decimal to be a zero, or a
+        // nine when the rounding carried.
+        let mut carry = false;
+        if length > precision {
+            exponent += length - precision;
+            length = precision;
+            if self.digits[digits] >= 5 {
+                carry = true;
+            }
+        }
+        if exponent < 0 {
+            let mut decimal_pos = -exponent;
+            let mut compare = 0u8;
+            if carry {
+                // A carry adds one to the right-most digit, so a decimal
+                // position beyond the digits means at least one padding zero,
+                // and no carry can turn that into an integer.
+                if decimal_pos > length {
+                    return None;
+                }
+                compare = 9;
+            }
+            let data: &[u8] = if decimal_pos >= length {
+                // The decimal point sits left of every digit, so all of them are
+                // decimals.
+                decimal_pos = length;
+                &self.digits
+            } else {
+                &self.digits[usize::try_from(length + exponent).ok()?..]
+            };
+            for &digit in data.iter().take(usize::try_from(decimal_pos).ok()?) {
+                if digit != compare {
+                    return None;
+                }
+            }
+        }
+
+        // The point now sits left of the first digit, so the value is whatever
+        // the carry contributed and nothing else. The C++ does NOT apply the
+        // sign here, and that is reproduced rather than corrected: `numberValue`
+        // returns `carry ? 1 : 0` with no `* numberSign`. It is unobservable
+        // through the only caller that can reach it, because a numeric `TRACE`
+        // is rejected at RUN time with error 24.901, "Numeric TRACE requests are
+        // valid only from interactive debugging", whatever value the parse
+        // produced.
+        if -exponent >= length {
+            return Some(i64::from(carry));
+        }
+
+        let converted = if exponent < 0 {
+            unsigned_value(&self.digits, length + exponent, carry, 0, max)?
+        } else {
+            unsigned_value(&self.digits, length, carry, exponent, max)?
+        };
+        Some(converted * sign)
+    }
+
     /// because every operator needs it.
     ///
     /// `digits == 0` is a deliberate no-op sentinel, not an accident: there
