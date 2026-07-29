@@ -77,16 +77,46 @@ fn the_conversion_rounds_to_the_precision_before_asking_if_it_is_whole() {
         Some(999_999_999_999_999_999)
     );
     assert_eq!(whole("1.0000000000000000001", ARGUMENT_DIGITS), Some(1));
-    // And the carry rule itself, which is what makes this different from
-    // `round_to`: the surviving decimals are compared against 9 and not 0, so
-    // what matters is the NINE kept digits, not the dropped ones. Measured:
-    // `trace "0.99999999999"` and `"0.99999999989"` are rc 0 because their first
-    // nine digits are all nines, while `"0.99999999899"` is 24.1 because the
-    // ninth is an 8, and `"0.4999999999"` is 24.1 because nothing carries.
+    // THE CARRY RULE, IN WORDS, because the values alone do not state it and an
+    // earlier version of this comment stated it wrongly.
+    //
+    // The digits have two separate jobs and it is easy to give them one. The
+    // FIRST DROPPED digit -- the tenth, under nine digits -- decides only whether
+    // there is a carry, and nothing else: `checkIntegerDigits` sets `carry` from
+    // `numberDigits[numDigits] >= 5`. The NINE KEPT digits then decide whether the
+    // value is a whole number, and what they must equal depends on that carry:
+    // every surviving decimal must be a `0` normally, but a `9` when the carry
+    // set, because only an all-nines tail can absorb the +1 and leave zeros.
+    //
+    // So the dropped digit never appears in the wholeness test, and the kept
+    // digits never decide whether there is a carry. The decisive pair is two
+    // inputs with IDENTICAL kept digits and different dropped ones, which come out
+    // opposite ways. Measured:
+    //
+    //   trace "0.9999999994"   24.1   dropped 4, no carry, so kept nines must be
+    //                                 zeros and are not
+    //   trace "0.99999999999"  rc 0   dropped 9, carry, so kept nines must be
+    //                                 nines and are
+    //
+    // and the other direction, a carry that cannot help because a kept digit is
+    // not a nine:
+    //
+    //   trace "0.99999999899"  24.1   dropped 9, carry, ninth kept digit is 8
+    //   trace "0.4999999999"   24.1   dropped 9, carry, FIRST kept digit is 4.
+    //                                 The carry does happen here. An earlier
+    //                                 comment said it did not, which was the
+    //                                 wrong rule attached to the right value.
+    //
+    // And the no-carry branch reaching a whole number at all, so the `compare == 0`
+    // arm is covered in both directions too:
+    //
+    //   trace "1.0000000004"   rc 0   dropped 0, no carry, kept decimals all zero
     assert_eq!(whole("0.99999999999", TRACE_DIGITS), Some(1));
     assert_eq!(whole("0.99999999989", TRACE_DIGITS), Some(1));
+    assert_eq!(whole("0.9999999994", TRACE_DIGITS), None);
     assert_eq!(whole("0.99999999899", TRACE_DIGITS), None);
     assert_eq!(whole("0.4999999999", TRACE_DIGITS), None);
+    assert_eq!(whole("1.0000000004", TRACE_DIGITS), Some(1));
 }
 
 /// The precision is the caller's, and the two callers really do differ.

@@ -626,9 +626,18 @@ impl Number {
     /// This does not duplicate `round_to`, though it rounds. `round_to` returns
     /// a `Number` and keeps arbitrary precision; this asks the separate question
     /// of whether the rounded value is an integer a machine word holds, and
-    /// `checkIntegerDigits`'s carry rule is what makes the two different: it
-    /// tests the surviving decimals against `9` rather than against `0` when the
-    /// rounding carried.
+    /// `checkIntegerDigits`'s carry rule is what makes the two different.
+    ///
+    /// That rule gives the digits two separate jobs, and it is easy to give them
+    /// one. The FIRST DROPPED digit decides only whether there is a carry, and
+    /// nothing else. The KEPT digits then decide whether the value is whole, and
+    /// what they must equal depends on that carry: every surviving decimal must be
+    /// a `0` normally but a `9` when the carry set, because only an all-nines tail
+    /// can absorb the +1 and leave zeros. So the dropped digit never appears in
+    /// the wholeness test and the kept digits never decide the carry. Measured,
+    /// with identical kept digits and different dropped ones coming out opposite
+    /// ways: `trace "0.9999999994"` is 24.1 and `trace "0.99999999999"` is rc 0.
+    /// `tests/whole.rs` carries the rest of the pairs.
     pub fn whole_value(&self, digits: usize) -> Option<i64> {
         // `isZero()`: every spelling of zero converts to zero whatever the
         // exponent says.
