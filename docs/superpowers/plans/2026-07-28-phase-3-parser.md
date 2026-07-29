@@ -2474,42 +2474,62 @@ fits.
       A Rust-side failure is therefore unambiguous, with no per-file expectation
       to curate.
 - [ ] `CoreClasses.orx` and `StreamClasses.orx` parse end to end.
-- [ ] For every **parse-time** error the parser raises: the **number and
-      sub-number** match the oracle, on a **plausible line**. Both come from
-      `build/bin/rexxc bad.rex 2>&1 1>/dev/null`, which prints
-      `Error N running … line L` and `Error N.S` and executes nothing.
+- [ ] **Parse errors, in both directions, over a named corpus.** Rewritten after
+      Task 3.7c's audit found the earlier wording unmeetable *as written* rather
+      than unmet in substance — see the note at the end for what was wrong with it.
 
-      **Message text and substitution values are deliberately NOT gated**, per
-      the Global Constraints. Reproducing them 1:1 was dropped as a scope
-      decision: the generated message table makes the number nearly free, while
-      matching spliced text and every substitution is a large differential
-      exercise for a property no program branches on. Error 36's byte-position
-      substitution is not produced at all.
+      **Soundness.** For every input in the parser's **error corpus** — the
+      programs the crate's own tests assert an error on, currently **385**,
+      extractable by instrumenting the `ok`/`err` test helpers — the **number and
+      sub-number** match `build/bin/rexxc` on a **plausible line**. Message text
+      and substitution values are **not** gated. Recorded exceptions, each with a
+      test pinning both directions:
 
-      "Plausible line" rather than "the oracle's line" because the two can
-      legitimately differ and one line is not always the answer: error 36 puts
-      the clause's start line in the main message and the offending token's own
-      line in its substitution. Assert the line the oracle's main message gives
-      where the parser reports one line; do not build machinery to reproduce
-      both.
+      * `if 1 = 1` / `then: nop` and its `WHEN` spelling: **18.1/18.2** here,
+        **35.1** in the oracle. Both reject. Structural, because Task 3.4 splits
+        the label's colon off and leaves nothing that can fail. Reason in Task
+        3.6's report.
+      * Eager scanning can mask an earlier parse error with a later scan error,
+        giving a different **number**: `say )` on line 1 with `'unclosed` on line 3
+        is 37.2 line 1 in the oracle and 6.2 line 3 here. Zero occurrences across
+        2,470 real-corpus errors; 144 of 4,000 adversarial inputs. **Multi-error
+        inputs are excluded from the error corpus** for this reason.
 
-      **This criterion cannot be met before Task 3.7c.** The 13 block-structure
-      errors are rejections that only the control stack can perform, so until 3.7c
-      lands the parser accepts programs the oracle rejects. Task 3.7b accepts every
-      *valid* program without it, so criterion 2 is unaffected; this one is not.
+      **Completeness.** For every input in that corpus, plus the **301
+      `samples/`** files, `CoreClasses.orx` and `StreamClasses.orx`, the parser
+      **accepts exactly what `rexxc` accepts**. Exception: a rejection that is not
+      a *translation* error is not a parse error and must be **accepted** —
+      `98.9xx` load failures such as `::ROUTINE ... EXTERNAL "LIBRARY x"`,
+      currently two inputs.
 
-      Note for anyone re-reading this criterion later: earlier drafts justified
-      dropping a column with "the oracle exposes none". That is **false** —
-      errors 36.901 and 36.902 substitute a 1-based byte offset within the
-      offending token's physical line. The reason we do not produce it is that we
-      chose not to, not that it does not exist.
+      **"Parse-time" means `rexxc` rejects it AND the failure is a translation
+      error.** That second clause is the part an earlier draft lacked. Bare
+      `procedure` (17.1), bare `leave` (28.1) and `x = 1/0` (42.3) all get rc 0
+      from `rexxc` and are Phase 4's, and this parser must accept them.
 
-      "Parse-time" is defined by `rexxc`, not by judgement: an input `rexxc`
-      rejects is a parse error and belongs here; an input `rexxc` accepts is not,
-      even if `rexx` fails on it. Bare `procedure` (17.1), bare `leave` (28.1) and
-      `x = 1/0` (42.3) all get rc 0 from `rexxc` and are therefore Phase 4's, and
-      **this parser must accept them**. Without that line the comparison set is
-      undefined and an implementer can build a runtime check in the wrong phase.
+      **"Plausible line" rather than "the oracle's line"**, because one line is not
+      always the answer and the oracle uses at least three conventions in adjacent
+      errors: 7.1 reports the `SELECT`'s own line, 7.2 the offending clause's, and
+      10.x the `END`'s — all measured. Error 36 puts the clause's start line in the
+      main message and the offending token's line in a substitution. Assert the
+      line the oracle's **main message** gives; do not build machinery to reproduce
+      substitution lines.
+
+      **Why the earlier wording could not be ticked**, recorded so the mistake is
+      not repeated. It said "for every parse-time error the parser raises", which
+      is a **soundness condition only** — a parser that accepted every input would
+      satisfy it vacuously, having raised no errors to check. The property intended
+      was that the parser rejects what the oracle rejects, which is *completeness*
+      and was never stated. It also quantified over a set nobody had enumerated,
+      and defined "parse-time" as "`rexxc` rejects it", which mis-classifies
+      `98.9xx` load failures as parse errors. Phase 2 failed three of five criteria
+      by writing them against a capability the phase never had; this is the same
+      trap in a subtler form, a criterion satisfiable without meaning anything.
+
+      Also note, since earlier drafts asserted the opposite: errors 36.901 and
+      36.902 **do** substitute a 1-based byte offset within the offending token's
+      physical line. We do not produce it because we chose not to, not because it
+      does not exist.
 - [ ] `SOURCELINE(n)` matches the interpreter for every line of every corpus
       program, including the last line and a file without a trailing newline.
       Oracle side via a **separate driver** so the files under test are not
