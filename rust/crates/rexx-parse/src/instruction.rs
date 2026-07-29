@@ -42,13 +42,15 @@
 use std::ops::Range;
 
 use crate::ast::{
-    Call, ConditionTrap, ControlExpr, Controlled, Expr, Instruction, InstructionKind, Loop,
-    LoopConditional, LoopKind, Parse, ParseSource, ParseTrigger, Signal, TriggerKind, VariableRef,
+    Call, ConditionTrap, ControlExpr, Controlled, Expr, Forward, Guard, Instruction,
+    InstructionKind, Loop, LoopConditional, LoopKind, Parse, ParseSource, ParseTrigger, Raise,
+    RaiseResult, Signal, TriggerKind, Use, UseTarget, VariableRef,
 };
 use crate::clause::{Clause, ClauseCursor, PendingThen, split_clauses};
 use crate::expr::{
-    Terminators, need_variable, parse_arg_list, parse_expr, parse_expression, parse_logical,
-    parse_message_term, parse_paren_expression, parse_variable_or_message_term, symbol_kind,
+    Terminators, need_variable, parse_arg_list, parse_constant_expression, parse_expr,
+    parse_expression, parse_logical, parse_message_term, parse_paren_expression,
+    parse_variable_or_message_term, symbol_kind,
 };
 use crate::source::SourceKind;
 use crate::token::{
@@ -65,28 +67,43 @@ const KW_DO: usize = 3;
 const KW_DROP: usize = 4;
 const KW_ELSE: usize = 5;
 const KW_END: usize = 6;
+const KW_EXIT: usize = 7;
 const KW_EXPOSE: usize = 8;
+const KW_FORWARD: usize = 9;
+const KW_GUARD: usize = 10;
 const KW_IF: usize = 11;
+const KW_INTERPRET: usize = 12;
 const KW_ITERATE: usize = 13;
 const KW_LEAVE: usize = 14;
 const KW_LOOP: usize = 15;
 const KW_NOP: usize = 16;
 const KW_OTHERWISE: usize = 19;
+const KW_OPTIONS: usize = 18;
 const KW_PARSE: usize = 20;
+const KW_PROCEDURE: usize = 21;
 const KW_PULL: usize = 22;
 const KW_PUSH: usize = 23;
 const KW_QUEUE: usize = 24;
+const KW_RAISE: usize = 25;
+const KW_REPLY: usize = 26;
+const KW_RETURN: usize = 27;
 const KW_SAY: usize = 28;
 const KW_SELECT: usize = 29;
 const KW_SIGNAL: usize = 30;
 const KW_THEN: usize = 31;
+const KW_USE: usize = 33;
 const KW_WHEN: usize = 34;
 
 // Positions in the `CONDITIONS` table. `CALL ON` accepts a strict subset of
 // what `SIGNAL ON` does, so both lists are spelled out at their use sites.
+const COND_ANY: usize = 0;
+const COND_ERROR: usize = 1;
+const COND_FAILURE: usize = 2;
+const COND_HALT: usize = 3;
 const COND_LOSTDIGITS: usize = 4;
 const COND_NOMETHOD: usize = 5;
 const COND_NOSTRING: usize = 6;
+const COND_NOTREADY: usize = 7;
 const COND_NOVALUE: usize = 8;
 const COND_PROPAGATE: usize = 9;
 const COND_SYNTAX: usize = 10;
@@ -108,21 +125,35 @@ const POPT_VERSION: usize = 9;
 
 // Positions in the `SUB_KEYWORDS` table, pinned the same way by
 // `tests::keyword_indices_still_name_their_own_spellings`.
+const SUB_ADDITIONAL: usize = 0;
+const SUB_ARG: usize = 2;
+const SUB_ARGUMENTS: usize = 3;
+const SUB_ARRAY: usize = 4;
 const SUB_BY: usize = 5;
 const SUB_CASE: usize = 6;
+const SUB_CLASS: usize = 7;
+const SUB_CONTINUE: usize = 8;
 const SUB_COUNTER: usize = 9;
+const SUB_DESCRIPTION: usize = 10;
+const SUB_EXIT: usize = 14;
+const SUB_EXPOSE: usize = 15;
 const SUB_FOR: usize = 17;
 const SUB_FOREVER: usize = 18;
 const SUB_INDEX: usize = 21;
 const SUB_ITEM: usize = 24;
 const SUB_LABEL: usize = 25;
+const SUB_LOCAL: usize = 26;
+const SUB_MESSAGE: usize = 27;
 const SUB_NAME: usize = 28;
 const SUB_OFF: usize = 31;
 const SUB_ON: usize = 32;
 const SUB_OVER: usize = 34;
+const SUB_RETURN: usize = 36;
+const SUB_STRICT: usize = 40;
 const SUB_TO: usize = 42;
 const SUB_UNTIL: usize = 44;
 const SUB_VALUE: usize = 46;
+const SUB_WHEN: usize = 47;
 const SUB_WHILE: usize = 48;
 const SUB_WITH: usize = 49;
 
@@ -697,6 +728,76 @@ impl<'a> Inst<'a> {
                 let body = self.parse_instruction_body(Some(ParseSource::Pull))?;
                 Ok(self.finish(cursor, InstructionKind::Pull(Box::new(body))))
             }
+            // The four instructions that are an optional expression and
+            // nothing else, plus the two that require one.
+            KW_RETURN => {
+                self.next_real();
+                let expression = self.opt_expr(Terminators::EOC)?;
+                Ok(self.finish(cursor, InstructionKind::Return { expression }))
+            }
+            KW_EXIT => {
+                self.next_real();
+                let expression = self.opt_expr(Terminators::EOC)?;
+                Ok(self.finish(cursor, InstructionKind::Exit { expression }))
+            }
+            KW_REPLY => {
+                self.next_real();
+                // Measured at run time: `interpret "reply 1"` is Error 99.924.
+                if self.ctx.source.kind() == SourceKind::Interpret {
+                    return Err(self.error(99, 924));
+                }
+                let expression = self.opt_expr(Terminators::EOC)?;
+                Ok(self.finish(cursor, InstructionKind::Reply { expression }))
+            }
+            KW_INTERPRET => {
+                self.next_real();
+                // `Error_Invalid_expression_interpret`, measured as 35.912.
+                let expression = self.expr(Terminators::EOC, 912)?;
+                Ok(self.finish(cursor, InstructionKind::Interpret { expression }))
+            }
+            KW_OPTIONS => {
+                self.next_real();
+                // `Error_Invalid_expression_options`, measured as 35.913.
+                let expression = self.expr(Terminators::EOC, 913)?;
+                Ok(self.finish(cursor, InstructionKind::Options { expression }))
+            }
+            KW_PROCEDURE => {
+                self.next_real();
+                // `procedureNew`: only `EXPOSE` may follow, and the same error
+                // covers a non-symbol because both are 25.17. Measured:
+                // `procedure foo` is rc 231, Error 25.17.
+                let variables = match self.peek_real() {
+                    None => Vec::new(),
+                    Some(token) => {
+                        if self.sub_keyword(token) != Some(SUB_EXPOSE) {
+                            return Err(self.error(25, 17));
+                        }
+                        self.next_real();
+                        self.variable_list(902)?
+                    }
+                };
+                Ok(self.finish(cursor, InstructionKind::Procedure { variables }))
+            }
+            KW_GUARD => {
+                self.next_real();
+                let guard = self.guard()?;
+                Ok(self.finish(cursor, InstructionKind::Guard(Box::new(guard))))
+            }
+            KW_FORWARD => {
+                self.next_real();
+                let forward = self.forward()?;
+                Ok(self.finish(cursor, InstructionKind::Forward(Box::new(forward))))
+            }
+            KW_RAISE => {
+                self.next_real();
+                let raise = self.raise()?;
+                Ok(self.finish(cursor, InstructionKind::Raise(Box::new(raise))))
+            }
+            KW_USE => {
+                self.next_real();
+                let use_ = self.use_instruction()?;
+                Ok(self.finish(cursor, InstructionKind::Use(Box::new(use_))))
+            }
             KW_CALL => {
                 self.next_real();
                 let call = self.call()?;
@@ -1131,6 +1232,391 @@ impl<'a> Inst<'a> {
         Ok(Some(LoopConditional { until, condition }))
     }
 
+    /// `guardNew` (`InstructionParser.cpp:2578`).
+    ///
+    /// The check that a `GUARD ON WHEN` expression touches at least one object
+    /// variable (`Error_Translation_guard_expose`, 99.913) is NOT made here.
+    /// It reads the `EXPOSE` list of the whole method, which is state across
+    /// clauses, so it belongs with the chain assembler. Measured, both
+    /// directions: `guard on when 1` in a method is 99.913, while the same
+    /// method with `expose a` and `guard on when a` is rc 0.
+    fn guard(&mut self) -> Result<Guard, ParseError> {
+        // Measured at run time: `interpret "guard on"` is Error 99.912.
+        if self.ctx.source.kind() == SourceKind::Interpret {
+            return Err(self.error(99, 912));
+        }
+        // `Error_Invalid_subkeyword_guard`, measured as 25.913 for a bare
+        // `guard` and for `guard foo`.
+        let Some(token) = self.next_real() else {
+            return Err(self.error(25, 913));
+        };
+        let on = match self.sub_keyword(token) {
+            Some(SUB_ON) => true,
+            Some(SUB_OFF) => false,
+            _ => return Err(self.error(25, 913)),
+        };
+        let condition = match self.next_real() {
+            None => None,
+            Some(token) => {
+                // `Error_Invalid_subkeyword_guard_on`, measured as 25.912 for
+                // `guard on foo` and for `guard on 1`.
+                if self.sub_keyword(token) != Some(SUB_WHEN) {
+                    return Err(self.error(25, 912));
+                }
+                // `Error_Invalid_expression_guard` is 35.921, and like every
+                // other logical list the empty case is 35.929 first.
+                Some(self.logical(Terminators::EOC, 929)?)
+            }
+        };
+        Ok(Guard { on, condition })
+    }
+
+    /// `forwardNew` (`InstructionParser.cpp:2427`): six options in any order,
+    /// each at most once.
+    fn forward(&mut self) -> Result<Forward, ParseError> {
+        // Measured at run time: `interpret "forward to 1"` is Error 99.923.
+        if self.ctx.source.kind() == SourceKind::Interpret {
+            return Err(self.error(99, 923));
+        }
+        let mut forward = Forward::default();
+        while let Some(token) = self.next_real() {
+            // `Error_Invalid_subkeyword_forward_option`, measured as 25.916.
+            if token.kind.tag() != Tag::Symbol {
+                return Err(self.error(25, 916));
+            }
+            match self.sub_keyword(token) {
+                // `Error_Invalid_subkeyword_to` is 25.917 and
+                // `Error_Invalid_expression_forward_to` is 35.925. Measured:
+                // `forward to 1 to 2` is 25.917 and `forward to` is 35.925.
+                Some(SUB_TO) => self.forward_option(&mut forward.to, 917, 925)?,
+                Some(SUB_CLASS) => self.forward_option(&mut forward.class, 921, 928)?,
+                Some(SUB_MESSAGE) => self.forward_option(&mut forward.message, 922, 927)?,
+                // ARGUMENTS and ARRAY exclude each other and share one error,
+                // `Error_Invalid_subkeyword_arguments`, 25.918.
+                Some(SUB_ARGUMENTS) => {
+                    if forward.arguments.is_some() || forward.array.is_some() {
+                        return Err(self.error(25, 918));
+                    }
+                    let Some(value) = parse_constant_expression(self.ctx, &mut self.cursor)? else {
+                        return Err(self.error(35, 926));
+                    };
+                    forward.arguments = Some(value);
+                }
+                Some(SUB_ARRAY) => {
+                    if forward.arguments.is_some() || forward.array.is_some() {
+                        return Err(self.error(25, 918));
+                    }
+                    // `Error_Invalid_expression_raise_list`, shared with
+                    // RAISE ARRAY. Measured: `forward array 1` is 35.924.
+                    let open = self
+                        .next_real()
+                        .filter(|token| token.kind.tag() == Tag::LeftParen);
+                    if open.is_none() {
+                        return Err(self.error(35, 924));
+                    }
+                    forward.array = Some(self.arg_list(Some(Tag::RightParen))?);
+                }
+                // `Error_Invalid_subkeyword_continue`, measured as 25.919.
+                Some(SUB_CONTINUE) => {
+                    if forward.continue_ {
+                        return Err(self.error(25, 919));
+                    }
+                    forward.continue_ = true;
+                }
+                _ => return Err(self.error(25, 916)),
+            }
+        }
+        Ok(forward)
+    }
+
+    /// One `FORWARD` option that takes a constant expression.
+    ///
+    /// `duplicate` is the sub-number of error 25 for a repeat and `missing`
+    /// that of error 35 for an absent expression.
+    fn forward_option(
+        &mut self,
+        slot: &mut Option<Expr>,
+        duplicate: u16,
+        missing: u16,
+    ) -> Result<(), ParseError> {
+        if slot.is_some() {
+            return Err(self.error(25, duplicate));
+        }
+        match parse_constant_expression(self.ctx, &mut self.cursor)? {
+            Some(value) => {
+                *slot = Some(value);
+                Ok(())
+            }
+            None => Err(self.error(35, missing)),
+        }
+    }
+
+    /// `raiseNew` (`InstructionParser.cpp:3512`): a condition name, then five
+    /// options.
+    fn raise(&mut self) -> Result<Raise, ParseError> {
+        // `Error_Symbol_expected_raise`, measured as 20.914 for a bare
+        // `raise`.
+        let Some(token) = self.next_real() else {
+            return Err(self.error(20, 914));
+        };
+        let TokenKind::Symbol { id, .. } = token.kind else {
+            return Err(self.error(20, 914));
+        };
+        let which = self.ctx.keywords.conditions.index_of(id);
+        let mut raise = Raise {
+            condition: self.value_of(token),
+            propagate: false,
+            rc: None,
+            description: None,
+            additional: None,
+            array: None,
+            result: None,
+        };
+        match which {
+            // These three take a value after the condition name. SYNTAX also
+            // needs run-time work, which the flag records there and the node
+            // shape records here.
+            Some(COND_FAILURE | COND_ERROR | COND_SYNTAX) => {
+                let Some(value) = parse_constant_expression(self.ctx, &mut self.cursor)? else {
+                    // Measured: `raise syntax` with no value is 35.1.
+                    return Err(self.error(35, 1));
+                };
+                raise.rc = Some(value);
+            }
+            Some(COND_USER) => {
+                // `Error_Symbol_expected_user`, measured as 20.915.
+                let Some(name) = self.next_real() else {
+                    return Err(self.error(20, 915));
+                };
+                let TokenKind::Symbol { .. } = name.kind else {
+                    return Err(self.error(20, 915));
+                };
+                let mut composed = b"USER ".to_vec();
+                composed.extend_from_slice(&self.value_of(name));
+                raise.condition = composed.into_boxed_slice();
+            }
+            Some(COND_PROPAGATE) => raise.propagate = true,
+            Some(
+                COND_HALT | COND_NOMETHOD | COND_NOSTRING | COND_NOTREADY | COND_NOVALUE
+                | COND_LOSTDIGITS,
+            ) => {}
+            // `Error_Invalid_subkeyword_raise`. ANY reaches here, because
+            // nothing can be raised for every condition at once: measured,
+            // `raise any` is rc 231, Error 25.906, as is `raise foo`.
+            _ => return Err(self.error(25, 906)),
+        }
+
+        while let Some(token) = self.next_real() {
+            // `Error_Invalid_subkeyword_raiseoption`, measured as 25.907.
+            if token.kind.tag() != Tag::Symbol {
+                return Err(self.error(25, 907));
+            }
+            match self.sub_keyword(token) {
+                // `Error_Invalid_subkeyword_description` is 25.908 and
+                // `Error_Invalid_expression_raise_description` is 35.922.
+                Some(SUB_DESCRIPTION) => {
+                    self.forward_option(&mut raise.description, 908, 922)?;
+                }
+                // ADDITIONAL and ARRAY exclude each other and share 25.909.
+                Some(SUB_ADDITIONAL) => {
+                    if raise.additional.is_some() || raise.array.is_some() {
+                        return Err(self.error(25, 909));
+                    }
+                    let Some(value) = parse_constant_expression(self.ctx, &mut self.cursor)? else {
+                        return Err(self.error(35, 923));
+                    };
+                    raise.additional = Some(value);
+                }
+                Some(SUB_ARRAY) => {
+                    if raise.additional.is_some() || raise.array.is_some() {
+                        return Err(self.error(25, 909));
+                    }
+                    let open = self
+                        .next_real()
+                        .filter(|token| token.kind.tag() == Tag::LeftParen);
+                    if open.is_none() {
+                        return Err(self.error(35, 924));
+                    }
+                    raise.array = Some(self.arg_list(Some(Tag::RightParen))?);
+                }
+                // RETURN and EXIT exclude each other, share
+                // `Error_Invalid_subkeyword_result` (25.911), and both take an
+                // OPTIONAL value: measured, `raise error 1 return` is rc 0.
+                Some(index @ (SUB_RETURN | SUB_EXIT)) => {
+                    if raise.result.is_some() {
+                        return Err(self.error(25, 911));
+                    }
+                    let value = parse_constant_expression(self.ctx, &mut self.cursor)?;
+                    raise.result = Some(RaiseResult {
+                        exit: index == SUB_EXIT,
+                        value,
+                    });
+                }
+                _ => return Err(self.error(25, 907)),
+            }
+        }
+        Ok(raise)
+    }
+
+    /// `useNew` (`InstructionParser.cpp:4267`) and `useLocalNew` (`:2349`).
+    fn use_instruction(&mut self) -> Result<Use, ParseError> {
+        let first = self.peek_real();
+        if first.and_then(|token| self.sub_keyword(token)) == Some(SUB_LOCAL) {
+            self.next_real();
+            return self.use_local();
+        }
+        let strict = first.and_then(|token| self.sub_keyword(token)) == Some(SUB_STRICT);
+        if strict {
+            self.next_real();
+        }
+        // `Error_Invalid_subkeyword_use` is 25.905 and `_use_strict` is
+        // 25.929. Measured: `use foo` is 25.905 and `use strict foo` is 25.929.
+        let arg = self
+            .next_real()
+            .filter(|token| self.sub_keyword(token) == Some(SUB_ARG));
+        if arg.is_none() {
+            return Err(self.error(25, if strict { 929 } else { 905 }));
+        }
+        let mut targets: Vec<Option<UseTarget>> = Vec::new();
+        let mut allow_optionals = false;
+        while let Some(index) = self.peek_real_index() {
+            let token = &self.ctx.tokens[index];
+            // A bare comma is an omitted position, which keeps the argument
+            // numbering right.
+            if token.kind.tag() == Tag::Comma {
+                self.seek(index + 1);
+                targets.push(None);
+                continue;
+            }
+            // `...` ends the list and stops argument-count checking.
+            // `Error_Translation_use_arg_ellipsis`, measured as 99.930 for
+            // `use arg ..., a`.
+            if token.kind.tag() == Tag::Symbol && &*self.value_of(token) == b"..." {
+                self.seek(index + 1);
+                allow_optionals = true;
+                if !self.at_end() {
+                    return Err(self.error(99, 930));
+                }
+                break;
+            }
+            // `>a` and `<a` alias the caller's variable instead of copying it.
+            if matches!(
+                token.kind,
+                TokenKind::Operator(Operator::GreaterThan | Operator::LessThan)
+            ) {
+                self.seek(index + 1);
+                // `Error_Symbol_expected_after_use_arg_reference`, measured as
+                // 20.931 for `use arg >a.b`, because a compound cannot be
+                // aliased.
+                let Some(name) = self.next_real() else {
+                    return Err(self.error(20, 931));
+                };
+                let TokenKind::Symbol { id, class } = name.kind else {
+                    return Err(self.error(20, 931));
+                };
+                if !matches!(class, SymbolClass::Variable | SymbolClass::Stem) {
+                    return Err(self.error(20, 931));
+                }
+                targets.push(Some(UseTarget {
+                    target: Expr::new(symbol_kind(id, class), name.span.clone()),
+                    default: None,
+                    alias: true,
+                }));
+                match self.next_real() {
+                    None => break,
+                    Some(next) if next.kind.tag() == Tag::Comma => continue,
+                    // `Error_Translation_use_arg_reference_no_default`,
+                    // measured as 99.950 for `use arg >a = 1`.
+                    Some(next) if matches!(next.kind, TokenKind::Operator(Operator::Equal)) => {
+                        return Err(self.error(99, 950));
+                    }
+                    // `Error_Variable_reference_use`, measured as 46.902.
+                    Some(_) => return Err(self.error(46, 902)),
+                }
+            }
+            // A variable or a message term. Measured: `use arg q~x` is rc 0.
+            let mut trial = self.trial_from(index);
+            let target = match parse_variable_or_message_term(self.ctx, &mut trial)? {
+                Some(target) => {
+                    self.cursor = trial;
+                    target
+                }
+                // `Error_Variable_expected_USE`, 89.1.
+                None => return Err(self.error(89, 1)),
+            };
+            let mut default = None;
+            match self.next_real() {
+                None => {
+                    targets.push(Some(UseTarget {
+                        target,
+                        default,
+                        alias: false,
+                    }));
+                    break;
+                }
+                Some(next) if next.kind.tag() == Tag::Comma => {}
+                Some(next) if matches!(next.kind, TokenKind::Operator(Operator::Equal)) => {
+                    // `Error_Invalid_expression_use_arg_default`, measured as
+                    // 35.930 for `use arg a = `.
+                    let Some(value) = parse_constant_expression(self.ctx, &mut self.cursor)? else {
+                        return Err(self.error(35, 930));
+                    };
+                    default = Some(value);
+                    match self.next_real() {
+                        None => {
+                            targets.push(Some(UseTarget {
+                                target,
+                                default,
+                                alias: false,
+                            }));
+                            break;
+                        }
+                        Some(next) if next.kind.tag() == Tag::Comma => {}
+                        Some(_) => return Err(self.error(35, 930)),
+                    }
+                }
+                // `use arg a b` is 46.902, not a two-variable list.
+                Some(_) => return Err(self.error(46, 902)),
+            }
+            targets.push(Some(UseTarget {
+                target,
+                default,
+                alias: false,
+            }));
+        }
+        Ok(Use::Arg {
+            strict,
+            allow_optionals,
+            targets,
+        })
+    }
+
+    /// `useLocalNew` (`InstructionParser.cpp:2349`).
+    ///
+    /// Close to `processVariableList` but not the same: there is no `(name)`
+    /// form, a compound gets its own error, and the list may be empty.
+    fn use_local(&mut self) -> Result<Use, ParseError> {
+        // Measured at run time: `interpret "use local a"` is Error 99.915.
+        if self.ctx.source.kind() == SourceKind::Interpret {
+            return Err(self.error(99, 915));
+        }
+        let mut variables = Vec::new();
+        while let Some(token) = self.next_real() {
+            // `Error_Symbol_expected_use_local`, 20.927.
+            let TokenKind::Symbol { id, class } = token.kind else {
+                return Err(self.error(20, 927));
+            };
+            need_variable_class(class, self.clause_byte)?;
+            // `Error_Translation_use_local_compound`, measured as 99.948 for
+            // `use local a.b`: only a simple variable or a stem can be local.
+            if class == SymbolClass::Compound {
+                return Err(self.error(99, 948));
+            }
+            variables.push(VariableRef::Direct(id));
+        }
+        Ok(Use::Local { variables })
+    }
+
     /// `callNew` (`InstructionParser.cpp:1147`) and the three constructors
     /// above it, which are four distinct instruction objects in the C++.
     fn call(&mut self) -> Result<Call, ParseError> {
@@ -1275,6 +1761,9 @@ impl<'a> Inst<'a> {
         let rejected = match condition {
             None => true,
             Some(COND_PROPAGATE) => true,
+            // ANY is accepted by both, which is easy to assume otherwise:
+            // measured, `call on any` and `signal on any` are both rc 0.
+            Some(COND_ANY) => false,
             // Measured: `call on syntax` and `call on novalue` are 25.1, where
             // `signal on syntax` is rc 0.
             Some(COND_SYNTAX | COND_NOVALUE | COND_LOSTDIGITS | COND_NOMETHOD | COND_NOSTRING) => {

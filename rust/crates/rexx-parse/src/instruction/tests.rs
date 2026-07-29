@@ -15,12 +15,17 @@ use crate::token::{Keywords, ParseCtx, ParseError, SymbolTable};
 use crate::{ProgramSource, SourceKind, scan};
 
 use super::{
-    KW_ARG, KW_CALL, KW_DO, KW_DROP, KW_ELSE, KW_END, KW_EXPOSE, KW_IF, KW_ITERATE, KW_LEAVE,
-    KW_LOOP, KW_NOP, KW_OTHERWISE, KW_PARSE, KW_PULL, KW_PUSH, KW_QUEUE, KW_SAY, KW_SELECT,
-    KW_SIGNAL, KW_THEN, KW_WHEN, POPT_ARG, POPT_CASELESS, POPT_LINEIN, POPT_LOWER, POPT_PULL,
-    POPT_SOURCE, POPT_UPPER, POPT_VALUE, POPT_VAR, POPT_VERSION, SUB_BY, SUB_CASE, SUB_COUNTER,
-    SUB_FOR, SUB_FOREVER, SUB_INDEX, SUB_ITEM, SUB_LABEL, SUB_NAME, SUB_OFF, SUB_ON, SUB_OVER,
-    SUB_TO, SUB_UNTIL, SUB_VALUE, SUB_WHILE, SUB_WITH, parse_instructions,
+    COND_ANY, COND_ERROR, COND_FAILURE, COND_HALT, COND_LOSTDIGITS, COND_NOMETHOD, COND_NOSTRING,
+    COND_NOTREADY, COND_NOVALUE, COND_PROPAGATE, COND_SYNTAX, COND_USER, KW_ARG, KW_CALL, KW_DO,
+    KW_DROP, KW_ELSE, KW_END, KW_EXIT, KW_EXPOSE, KW_FORWARD, KW_GUARD, KW_IF, KW_INTERPRET,
+    KW_ITERATE, KW_LEAVE, KW_LOOP, KW_NOP, KW_OPTIONS, KW_OTHERWISE, KW_PARSE, KW_PROCEDURE,
+    KW_PULL, KW_PUSH, KW_QUEUE, KW_RAISE, KW_REPLY, KW_RETURN, KW_SAY, KW_SELECT, KW_SIGNAL,
+    KW_THEN, KW_USE, KW_WHEN, POPT_ARG, POPT_CASELESS, POPT_LINEIN, POPT_LOWER, POPT_PULL,
+    POPT_SOURCE, POPT_UPPER, POPT_VALUE, POPT_VAR, POPT_VERSION, SUB_ADDITIONAL, SUB_ARG,
+    SUB_ARGUMENTS, SUB_ARRAY, SUB_BY, SUB_CASE, SUB_CLASS, SUB_CONTINUE, SUB_COUNTER,
+    SUB_DESCRIPTION, SUB_EXIT, SUB_EXPOSE, SUB_FOR, SUB_FOREVER, SUB_INDEX, SUB_ITEM, SUB_LABEL,
+    SUB_LOCAL, SUB_MESSAGE, SUB_NAME, SUB_OFF, SUB_ON, SUB_OVER, SUB_RETURN, SUB_STRICT, SUB_TO,
+    SUB_UNTIL, SUB_VALUE, SUB_WHEN, SUB_WHILE, SUB_WITH, parse_instructions,
 };
 
 /// Parses `text` as a whole program and returns every instruction, with the
@@ -107,21 +112,31 @@ fn keyword_indices_still_name_their_own_spellings() {
         (KW_DROP, "DROP"),
         (KW_ELSE, "ELSE"),
         (KW_END, "END"),
+        (KW_EXIT, "EXIT"),
         (KW_EXPOSE, "EXPOSE"),
+        (KW_FORWARD, "FORWARD"),
+        (KW_GUARD, "GUARD"),
         (KW_IF, "IF"),
+        (KW_INTERPRET, "INTERPRET"),
         (KW_ITERATE, "ITERATE"),
         (KW_LEAVE, "LEAVE"),
         (KW_LOOP, "LOOP"),
         (KW_NOP, "NOP"),
+        (KW_OPTIONS, "OPTIONS"),
         (KW_OTHERWISE, "OTHERWISE"),
         (KW_PARSE, "PARSE"),
+        (KW_PROCEDURE, "PROCEDURE"),
         (KW_PULL, "PULL"),
         (KW_PUSH, "PUSH"),
         (KW_QUEUE, "QUEUE"),
+        (KW_RAISE, "RAISE"),
+        (KW_REPLY, "REPLY"),
+        (KW_RETURN, "RETURN"),
         (KW_SAY, "SAY"),
         (KW_SELECT, "SELECT"),
         (KW_SIGNAL, "SIGNAL"),
         (KW_THEN, "THEN"),
+        (KW_USE, "USE"),
         (KW_WHEN, "WHEN"),
     ] {
         assert_eq!(
@@ -131,21 +146,35 @@ fn keyword_indices_still_name_their_own_spellings() {
         );
     }
     for (index, spelling) in [
+        (SUB_ADDITIONAL, "ADDITIONAL"),
+        (SUB_ARG, "ARG"),
+        (SUB_ARGUMENTS, "ARGUMENTS"),
+        (SUB_ARRAY, "ARRAY"),
         (SUB_BY, "BY"),
         (SUB_CASE, "CASE"),
+        (SUB_CLASS, "CLASS"),
+        (SUB_CONTINUE, "CONTINUE"),
         (SUB_COUNTER, "COUNTER"),
+        (SUB_DESCRIPTION, "DESCRIPTION"),
+        (SUB_EXIT, "EXIT"),
+        (SUB_EXPOSE, "EXPOSE"),
         (SUB_FOR, "FOR"),
         (SUB_FOREVER, "FOREVER"),
         (SUB_INDEX, "INDEX"),
         (SUB_ITEM, "ITEM"),
         (SUB_LABEL, "LABEL"),
+        (SUB_LOCAL, "LOCAL"),
+        (SUB_MESSAGE, "MESSAGE"),
         (SUB_NAME, "NAME"),
         (SUB_OFF, "OFF"),
         (SUB_ON, "ON"),
         (SUB_OVER, "OVER"),
+        (SUB_RETURN, "RETURN"),
+        (SUB_STRICT, "STRICT"),
         (SUB_TO, "TO"),
         (SUB_UNTIL, "UNTIL"),
         (SUB_VALUE, "VALUE"),
+        (SUB_WHEN, "WHEN"),
         (SUB_WHILE, "WHILE"),
         (SUB_WITH, "WITH"),
     ] {
@@ -155,9 +184,10 @@ fn keyword_indices_still_name_their_own_spellings() {
             "sub-keyword {spelling} is not at index {index}"
         );
     }
-    // The parse options are a table of their own. `ARG`, `PULL` and `VALUE`
-    // appear in both tables at different indices, so conflating them would
-    // silently make `PARSE VALUE` mean something else.
+    // The parse options and the condition names are tables of their own.
+    // `ARG`, `PULL` and `VALUE` sit in both the sub-keyword and the parse-option
+    // table at different indices, so conflating them would silently make
+    // `PARSE VALUE` mean something else.
     for (index, spelling) in [
         (POPT_ARG, "ARG"),
         (POPT_CASELESS, "CASELESS"),
@@ -174,6 +204,26 @@ fn keyword_indices_still_name_their_own_spellings() {
             keywords.parse_options.index_of(symbols.intern(spelling)),
             Some(index),
             "parse option {spelling} is not at index {index}"
+        );
+    }
+    for (index, spelling) in [
+        (COND_ANY, "ANY"),
+        (COND_ERROR, "ERROR"),
+        (COND_FAILURE, "FAILURE"),
+        (COND_HALT, "HALT"),
+        (COND_LOSTDIGITS, "LOSTDIGITS"),
+        (COND_NOMETHOD, "NOMETHOD"),
+        (COND_NOSTRING, "NOSTRING"),
+        (COND_NOTREADY, "NOTREADY"),
+        (COND_NOVALUE, "NOVALUE"),
+        (COND_PROPAGATE, "PROPAGATE"),
+        (COND_SYNTAX, "SYNTAX"),
+        (COND_USER, "USER"),
+    ] {
+        assert_eq!(
+            keywords.conditions.index_of(symbols.intern(spelling)),
+            Some(index),
+            "condition {spelling} is not at index {index}"
         );
     }
 }
@@ -1100,4 +1150,219 @@ fn every_signal_form_reaches_its_own_variant() {
     assert_eq!(err("signal 1+1"), (21, 905));
     // `Error_Symbol_or_string_signal`, measured as 19.4.
     assert_eq!(err("signal"), (19, 4));
+}
+
+// ---- the rest of the procedure family ----
+
+#[test]
+fn the_expression_only_instructions_take_what_they_take() {
+    // Measured with rexxc, all rc 0.
+    assert_eq!(names(&ok("return")), ["RETURN"]);
+    assert_eq!(names(&ok("return 1")), ["RETURN"]);
+    assert_eq!(names(&ok("exit")), ["EXIT"]);
+    assert_eq!(names(&ok("exit 1")), ["EXIT"]);
+    assert_eq!(names(&ok("reply")), ["REPLY"]);
+    assert_eq!(names(&ok("interpret \"x\"")), ["INTERPRET"]);
+    assert_eq!(names(&ok("options \"x\"")), ["OPTIONS"]);
+    // INTERPRET and OPTIONS require theirs, and name their own sub-numbers.
+    // Measured: `interpret` is 35.912 and `options` is 35.913.
+    assert_eq!(err("interpret"), (35, 912));
+    assert_eq!(err("options"), (35, 913));
+}
+
+#[test]
+fn the_interpret_only_rejections_come_from_the_source_kind() {
+    // All four are measured at RUN time, because rexxc never parses the
+    // string: `interpret "reply 1"` is 99.924, `"forward to 1"` is 99.923,
+    // `"guard on"` is 99.912 and `"use local a"` is 99.915.
+    for (text, expected) in [
+        ("reply 1", (99, 924)),
+        ("forward to 1", (99, 923)),
+        ("guard on", (99, 912)),
+        ("use local a", (99, 915)),
+        ("expose a", (99, 908)),
+    ] {
+        let got = match parse_kind(text, SourceKind::Interpret) {
+            Ok(_) => panic!("{text:?} must be rejected inside INTERPRET"),
+            Err(e) => (e.code, e.sub),
+        };
+        assert_eq!(got, expected, "{text:?} inside INTERPRET");
+        // The other direction: every one of them is legal in a program.
+        assert!(parse(text).is_ok(), "{text:?} as a program");
+    }
+}
+
+#[test]
+fn procedure_takes_only_expose() {
+    // `procedure` alone parses, which is the Step 4 table's point: measured,
+    // rc 0 under rexxc and Error 17.1 only at run time.
+    assert_eq!(names(&ok("procedure")), ["PROCEDURE"]);
+    assert_eq!(variable_list("procedure expose a"), ["A"]);
+    // Measured: `procedure foo` is 25.17 and `procedure expose` is 20.902.
+    assert_eq!(err("procedure foo"), (25, 17));
+    assert_eq!(err("procedure expose"), (20, 902));
+}
+
+#[test]
+fn guard_takes_on_or_off_and_an_optional_when() {
+    // Measured with rexxc inside a method, all rc 0.
+    assert_eq!(names(&ok("guard on")), ["GUARD"]);
+    assert_eq!(names(&ok("guard off")), ["GUARD"]);
+    assert_eq!(names(&ok("guard on when 1")), ["GUARD"]);
+    // Measured: bare `guard` and `guard foo` are 25.913, while `guard on foo`
+    // and `guard on 1` are 25.912 -- a different number for the second
+    // keyword.
+    assert_eq!(err("guard"), (25, 913));
+    assert_eq!(err("guard foo"), (25, 913));
+    assert_eq!(err("guard 1"), (25, 913));
+    assert_eq!(err("guard on foo"), (25, 912));
+    assert_eq!(err("guard on 1"), (25, 912));
+}
+
+#[test]
+fn every_forward_option_is_accepted_once() {
+    // Measured with rexxc inside a method, all rc 0.
+    assert_eq!(names(&ok("forward")), ["FORWARD"]);
+    assert_eq!(names(&ok("forward to 1")), ["FORWARD"]);
+    assert_eq!(
+        names(&ok("forward message \"x\" class .a arguments (1) continue")),
+        ["FORWARD"]
+    );
+    assert_eq!(names(&ok("forward array (1,2)")), ["FORWARD"]);
+    // Measured, each: `forward to 1 to 2` is 25.917, `forward to` is 35.925,
+    // `forward array 1` is 35.924, `forward arguments (1) array (2)` is
+    // 25.918, `forward foo` is 25.916 and `forward continue continue` is
+    // 25.919.
+    assert_eq!(err("forward to 1 to 2"), (25, 917));
+    assert_eq!(err("forward to"), (35, 925));
+    assert_eq!(err("forward array 1"), (35, 924));
+    assert_eq!(err("forward arguments (1) array (2)"), (25, 918));
+    assert_eq!(err("forward foo"), (25, 916));
+    assert_eq!(err("forward continue continue"), (25, 919));
+    assert_eq!(err("forward 1"), (25, 916));
+}
+
+#[test]
+fn raise_accepts_its_conditions_and_rejects_any() {
+    // Measured with rexxc, all rc 0.
+    for text in [
+        "raise syntax 1",
+        "raise error 1",
+        "raise failure 1",
+        "raise halt",
+        "raise novalue",
+        "raise propagate",
+        "raise user x",
+        "raise error 1 description \"d\" additional (1)",
+        "raise error 1 array (1,2)",
+        "raise error 1 return",
+        "raise error 1 return 2",
+    ] {
+        assert_eq!(names(&ok(text)), ["RAISE"], "{text:?}");
+    }
+    // ANY is a condition name everywhere else and is NOT raisable: measured,
+    // `raise any` is rc 231, Error 25.906, the same as `raise foo`.
+    assert_eq!(err("raise any"), (25, 906));
+    assert_eq!(err("raise foo"), (25, 906));
+    // Measured: bare `raise` is 20.914, `raise user` is 20.915,
+    // `raise syntax` with no value is 35.1,
+    // `raise error 1 additional (1) array (2)` is 25.909,
+    // `raise error 1 return 2 exit 3` is 25.911 and
+    // `raise error 1 foo` is 25.907.
+    assert_eq!(err("raise"), (20, 914));
+    assert_eq!(err("raise user"), (20, 915));
+    assert_eq!(err("raise syntax"), (35, 1));
+    assert_eq!(err("raise error 1 additional (1) array (2)"), (25, 909));
+    assert_eq!(err("raise error 1 return 2 exit 3"), (25, 911));
+    assert_eq!(err("raise error 1 foo"), (25, 907));
+}
+
+/// A rendering of the first instruction when it is a `USE`.
+fn use_shape(text: &str) -> String {
+    let (instructions, symbols) =
+        parse_kind(text, SourceKind::Program).unwrap_or_else(|e| panic!("{text:?}: {e:?}"));
+    match &instructions[0].kind {
+        InstructionKind::Use(u) => match &**u {
+            crate::ast::Use::Local { variables } => {
+                let names: Vec<&str> = variables
+                    .iter()
+                    .map(|v| match v {
+                        crate::ast::VariableRef::Direct(id) => symbols.name(*id),
+                        crate::ast::VariableRef::Indirect(_) => "(?)",
+                    })
+                    .collect();
+                format!("local {}", names.join(" "))
+            }
+            crate::ast::Use::Arg {
+                strict,
+                allow_optionals,
+                targets,
+            } => {
+                let mut out = String::from(if *strict { "strict arg" } else { "arg" });
+                for target in targets {
+                    match target {
+                        None => out.push_str(" -"),
+                        Some(t) => {
+                            out.push(' ');
+                            if t.alias {
+                                out.push('>');
+                            }
+                            out.push_str(&t.target.shape(&symbols));
+                            if let Some(d) = &t.default {
+                                out.push_str(&format!("={}", d.shape(&symbols)));
+                            }
+                        }
+                    }
+                }
+                if *allow_optionals {
+                    out.push_str(" ...");
+                }
+                out
+            }
+        },
+        other => panic!("{text:?} is not a USE: {other:?}"),
+    }
+}
+
+#[test]
+fn every_use_arg_form_reaches_its_own_shape() {
+    // Measured with rexxc, all rc 0.
+    assert_eq!(use_shape("use arg a"), "arg A");
+    assert_eq!(use_shape("use arg a, b"), "arg A B");
+    assert_eq!(use_shape("use arg , b"), "arg - B");
+    assert_eq!(use_shape("use strict arg a"), "strict arg A");
+    assert_eq!(use_shape("use arg a = 1"), "arg A=1");
+    assert_eq!(use_shape("use strict arg a, b = 2"), "strict arg A B=2");
+    assert_eq!(use_shape("use arg a, ..."), "arg A ...");
+    assert_eq!(use_shape("use arg >a"), "arg >A");
+    assert_eq!(use_shape("use arg <a."), "arg >stem:A.");
+    assert_eq!(use_shape("use arg >a, b"), "arg >A B");
+    assert_eq!(use_shape("use arg q~x"), "arg (msg~ Q \"X\")");
+    assert_eq!(use_shape("use arg a.b"), "arg compound:A.[var:B]");
+    // An empty list is legal. Measured: `use arg` alone is rc 0.
+    assert_eq!(use_shape("use arg"), "arg");
+    assert_eq!(use_shape("use local a"), "local A");
+    assert_eq!(use_shape("use local"), "local ");
+}
+
+#[test]
+fn use_arg_rejects_what_the_oracle_rejects() {
+    // Measured, each of these: `use foo` is 25.905, `use strict foo` is
+    // 25.929, `use arg ..., a` is 99.930, `use arg >a = 1` is 99.950,
+    // `use arg >a.b` is 20.931, `use arg a b` is 46.902, `use arg a = ` is
+    // 35.930 and `use arg 1` is 31.2.
+    assert_eq!(err("use foo"), (25, 905));
+    assert_eq!(err("use strict foo"), (25, 929));
+    assert_eq!(err("use arg ..., a"), (99, 930));
+    assert_eq!(err("use arg >a = 1"), (99, 950));
+    assert_eq!(err("use arg >a.b"), (20, 931));
+    assert_eq!(err("use arg a b"), (46, 902));
+    assert_eq!(err("use arg a ="), (35, 930));
+    assert_eq!(err("use arg 1"), (31, 2));
+    // USE LOCAL has its own list rules: measured, `use local 1` is 31.2,
+    // `use local .a` is 31.3 and `use local a.b` is 99.948, because only a
+    // simple variable or a stem can be local.
+    assert_eq!(err("use local 1"), (31, 2));
+    assert_eq!(err("use local .a"), (31, 3));
+    assert_eq!(err("use local a.b"), (99, 948));
 }
