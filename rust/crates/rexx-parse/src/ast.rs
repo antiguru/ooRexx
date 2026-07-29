@@ -502,8 +502,15 @@ pub enum InstructionKind {
     // ---- the four clause shapes with no keyword ----
     /// `name = expr`, and also `name (op)= expr`, whose right-hand side is
     /// already the expanded `name op expr` tree (`assignmentOpNew`).
+    ///
+    /// `target` is what `addVariable` builds, so its kind is always
+    /// `Variable`, `Stem` or `Compound`: `needVariable` rejects every other
+    /// class before this node exists. It is an `Expr` rather than a bare
+    /// `SymbolId` so that the class is carried the way every other variable
+    /// reference in this tree carries it, and so that the target keeps its own
+    /// span.
     Assignment {
-        target: SymbolId,
+        target: Expr,
         value: Expr,
     },
     /// `name:`, and also `"name":`. Task 3.4 already ended the clause at the

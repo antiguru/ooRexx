@@ -397,11 +397,18 @@ fn else_and_otherwise_parse_nothing() {
 #[test]
 fn end_takes_an_optional_name_and_nothing_else() {
     assert_eq!(names(&ok("select\nend")), ["SELECT", "END"]);
-    // `isSymbol()` is class-agnostic, so a number is a legal block name as far
-    // as the parser is concerned: measured, `select` / `end 1` is Error 10.3, a
-    // block-MATCHING error, not a parse error. A literal is not a symbol and
-    // is rejected here: `select` / `end "x"` is Error 20.909.
-    assert_eq!(names(&ok("select\nend 1")), ["SELECT", "END"]);
+    // `isSymbol()` is class-agnostic, so a number, a stem and a compound are
+    // all legal block names as far as the parser is concerned. Measured, and
+    // every one is a block-MATCHING error rather than a parse error, with the
+    // number chosen by what the END failed to close: `do` / `end 1`,
+    // `end loop` and `end a.` are Error 10.3, and the same three under a
+    // `select` are Error 10.7.
+    for name in ["1", "loop", "a.", "a.1"] {
+        let text = format!("select\nend {name}");
+        assert_eq!(names(&ok(&text)), ["SELECT", "END"], "{text:?}");
+    }
+    // A literal is not a symbol at all and IS rejected here: measured,
+    // `select` / `end "x"` is Error 20.909.
     assert_eq!(err("select\nend \"x\""), (20, 909));
     // Anything after the name is 21.909. Measured: `do` / `end a b` is rc 235,
     // Error 21.909.
@@ -1224,9 +1231,14 @@ fn procedure_takes_only_expose() {
 
 #[test]
 fn guard_takes_on_or_off_and_an_optional_when() {
-    // Measured with rexxc inside a method, all rc 0.
+    // Measured with rexxc: `guard on` and `guard off` are rc 0.
     assert_eq!(names(&ok("guard on")), ["GUARD"]);
     assert_eq!(names(&ok("guard off")), ["GUARD"]);
+    // `guard on when a` with `a` exposed is rc 0.
+    assert_eq!(names(&ok("expose a\nguard on when a"))[1], "GUARD");
+    // `guard on when 1` PARSES here and is Error 99.913 in the oracle, which
+    // is the deferred exposed-variable check and not a syntax difference. It
+    // is asserted rather than left out, so the deviation is visible.
     assert_eq!(names(&ok("guard on when 1")), ["GUARD"]);
     // Measured: bare `guard` and `guard foo` are 25.913, while `guard on foo`
     // and `guard on 1` are 25.912 -- a different number for the second
@@ -1759,78 +1771,107 @@ fn every_keyword_reaches_its_instruction_node() {
 
 /// The corpus programs that hold no `::` directive, so the whole file is one
 /// code body and a short parse would be a failure rather than a boundary.
-const CORPUS: &[(&str, &str)] = &[
+///
+/// The third field is the instruction count, pinned. A count is what makes the
+/// test below an assertion rather than a restatement of the parse, and the
+/// instruction total is NOT the clause total, because rule 4 splits a clause
+/// into as many as three. A change in either the splitting or the dispatch
+/// moves it.
+const CORPUS: &[(&str, &str, usize)] = &[
     (
         "keyword_as_variable",
         include_str!("../../../../corpus/lang/keyword_as_variable.rex"),
+        46,
     ),
     (
         "do_variants",
         include_str!("../../../../corpus/lang/do_variants.rex"),
+        31,
     ),
     (
         "select_when",
         include_str!("../../../../corpus/lang/select_when.rex"),
+        25,
     ),
     (
         "parse_template",
         include_str!("../../../../corpus/lang/parse_template.rex"),
+        12,
     ),
     (
         "condition_syntax",
         include_str!("../../../../corpus/lang/condition_syntax.rex"),
+        4,
     ),
     (
         "call_procedure",
         include_str!("../../../../corpus/lang/call_procedure.rex"),
+        24,
     ),
     (
         "stem_compound",
         include_str!("../../../../corpus/lang/stem_compound.rex"),
+        18,
     ),
     (
         "interpret_dynamic",
         include_str!("../../../../corpus/lang/interpret_dynamic.rex"),
+        8,
     ),
     (
         "arith_digits",
         include_str!("../../../../corpus/lang/arith_digits.rex"),
+        13,
     ),
     (
         "trace_output",
         include_str!("../../../../corpus/lang/trace_output.rex"),
+        8,
     ),
     (
         "source_arg",
         include_str!("../../../../corpus/lang/source_arg.rex"),
+        13,
     ),
     (
         "string_builtins",
         include_str!("../../../../corpus/lang/string_builtins.rex"),
+        21,
     ),
     (
         "primitive_classes",
         include_str!("../../../../corpus/lang/primitive_classes.rex"),
+        31,
     ),
 ];
 
 #[test]
 fn the_corpus_programs_parse() {
-    for (name, source) in CORPUS {
+    for (name, source, expected) in CORPUS {
         let instructions = parse(source)
             .unwrap_or_else(|e| panic!("corpus/lang/{name}.rex failed to parse: {e:?}"));
-        // A parse that stopped at the first clause would still be `Ok`, so the
-        // count is checked against the clause count rather than against zero.
-        let program = ProgramSource::new(source.as_bytes().to_vec(), SourceKind::Program);
-        let scanned = scan(&program).expect("the corpus scans");
-        let clauses = crate::clause::split_clauses(&scanned.tokens).expect("the corpus splits");
-        assert!(
-            instructions.len() >= clauses.len(),
-            "corpus/lang/{name}.rex: {} instructions from {} clauses, so the \
-             parse stopped early",
+        // The pinned count. The first version of this asserted
+        // `>= clauses.len()`, which asserted almost nothing: the loop yields at
+        // least one instruction per clause by construction and only stops early
+        // at a `::`, which these files do not hold.
+        assert_eq!(
             instructions.len(),
-            clauses.len()
+            *expected,
+            "corpus/lang/{name}.rex parsed to a different number of instructions"
         );
+        // And the spans are in order and in range, so a mis-split cannot pass
+        // by producing the right COUNT of wrong nodes.
+        let mut previous = 0;
+        for instruction in &instructions {
+            assert!(
+                instruction.clause_span.start >= previous
+                    && instruction.clause_span.start <= instruction.clause_span.end
+                    && instruction.clause_span.end <= source.len(),
+                "corpus/lang/{name}.rex: span {:?} is out of order or out of range",
+                instruction.clause_span
+            );
+            previous = instruction.clause_span.start;
+        }
     }
 }
 
@@ -1840,6 +1881,7 @@ fn the_keyword_as_variable_corpus_parses_every_keyword_as_a_variable() {
     // names, runs a DO loop and a SELECT while their names hold values, uses a
     // stem named `end.`, a compound tail spelled `if`, and PARSE while `parse`
     // is a variable.
+    assert_eq!(CORPUS[0].0, "keyword_as_variable");
     let source = CORPUS[0].1;
     let instructions = ok(source);
     let produced = names(&instructions);
@@ -1890,4 +1932,94 @@ fn select_rejects_a_non_keyword_after_its_label() {
     // Measured: `select label a "x"` is rc 231, Error 25.923, because a
     // literal cannot be the CASE keyword and nothing else may follow.
     assert_eq!(err("select label a \"x\"\nend"), (25, 923));
+}
+
+// ---- the guards that only a test keeps alive ----
+
+#[test]
+fn a_label_after_an_if_is_rejected_by_the_label_guard() {
+    // The one deviation this task records, and the only test that keeps the
+    // guard alive. `parse_instruction` excludes a label clause from being the
+    // THEN of a pending IF, because Task 3.4 has already split the colon off
+    // and the C++'s own failure path -- carry on into the leftover `:` -- no
+    // longer exists here.
+    //
+    // Measured, both spellings: `if 1 = 1` / `then: nop` is rc 221, Error
+    // 35.1, and `select` / `when 1 = 1` / `then: nop` / `end` is 35.1 too.
+    // Here they are 18.1 and 18.2. Both reject, and the numbers differ.
+    //
+    // Delete the `label.is_some()` half of that guard and these two lines are
+    // the only thing that fails: the program then parses as THEN followed by
+    // NOP with the label silently discarded, which the oracle rejects. The
+    // deviation is ACCEPTED only because both sides reject, so an untested
+    // guard would turn it into a wrongly accepted program with nothing saying
+    // so.
+    assert_eq!(err("if 1 = 1\nthen: nop"), (18, 1));
+    assert_eq!(err("select\nwhen 1 = 1\nthen: nop\nend"), (18, 2));
+    // The other direction, three ways. A label spelled THEN standing alone is
+    // a label, because the label test precedes every keyword test: measured,
+    // `then: nop` is rc 0. An ordinary label in the same position is the same
+    // 18.1/18.2, so the guard is not doing anything a label could avoid. And
+    // a real THEN is still a THEN.
+    assert_eq!(names(&ok("then: nop")), ["<label>", "NOP"]);
+    assert_eq!(err("if 1 = 1\nlab: nop"), (18, 1));
+    assert_eq!(err("select\nwhen 1 = 1\nlab: nop\nend"), (18, 2));
+    assert_eq!(names(&ok("if 1 = 1\nthen nop")), ["IF", "THEN", "NOP"]);
+}
+
+#[test]
+fn a_missing_then_is_reported_against_the_if_and_not_the_offender() {
+    // `syntaxError(Error_Then_expected_if, instruction)` takes the
+    // INSTRUCTION's location, so the byte is the IF's clause start and not the
+    // clause that should have held the THEN. Measured, moving the IF while the
+    // offender stays put moves the report with the IF:
+    //   nop / if 1 = 1 / nop / nop / nop        -> 18.1 on line 2
+    //   nop / nop / nop / if 1 = 1 / nop        -> 18.1 on line 4
+    // and for the WHEN spelling the report is on the WHEN's line, not the
+    // following clause's.
+    let source = "nop\nif 1 = 1\nnop\nnop\nnop";
+    let error = parse(source).expect_err("a missing THEN is an error");
+    assert_eq!((error.code, error.sub), (18, 1));
+    let program = ProgramSource::new(source.as_bytes().to_vec(), SourceKind::Program);
+    assert_eq!(program.line_of(error.byte), 2, "reported against the IF");
+
+    let source = "nop\nnop\nnop\nif 1 = 1\nnop";
+    let error = parse(source).expect_err("a missing THEN is an error");
+    let program = ProgramSource::new(source.as_bytes().to_vec(), SourceKind::Program);
+    assert_eq!(program.line_of(error.byte), 4, "reported against the IF");
+
+    let source = "select\nwhen 1 = 1\nnop\nend";
+    let error = parse(source).expect_err("a missing THEN is an error");
+    assert_eq!((error.code, error.sub), (18, 2));
+    let program = ProgramSource::new(source.as_bytes().to_vec(), SourceKind::Program);
+    assert_eq!(program.line_of(error.byte), 2, "reported against the WHEN");
+
+    // And at the end of the body, where there is no offending clause at all.
+    let source = "nop\nnop\nif 1 = 1";
+    let error = parse(source).expect_err("a missing THEN is an error");
+    assert_eq!((error.code, error.sub), (18, 1));
+    let program = ProgramSource::new(source.as_bytes().to_vec(), SourceKind::Program);
+    assert_eq!(program.line_of(error.byte), 3, "reported against the IF");
+}
+
+#[test]
+fn a_when_inside_select_case_still_gets_the_interim_35_929() {
+    // AN INTERIM STATE, PINNED SO THAT CHANGING IT IS DELIBERATE.
+    //
+    // The oracle picks `parseCaseWhenList` over `parseLogical` from the
+    // enclosing block, which needs the control stack this task does not build.
+    // Measured, both directions: inside `select case 1` an empty WHEN element
+    // is Error 35.934, and inside a plain `select` it is 35.929. This parser
+    // gives 35.929 for both.
+    //
+    // Task 3.7c must change TWO things when it gains the stack, not one: the
+    // sub-number argument in `if_instruction`, AND the `When` node's shape,
+    // because `parseCaseWhenList` builds a list of case values where
+    // `parseLogical` builds an AND. A single-expression WHEN is identical
+    // under both, so only a comma list shows the second difference.
+    assert_eq!(err("select case 1\nwhen , 1 = 1 then nop\nend"), (35, 929));
+    assert_eq!(err("select case 1\nwhen then nop\nend"), (35, 929));
+    // The plain SELECT spelling, which is already right and must stay right.
+    assert_eq!(err("select\nwhen , 1 = 1 then nop\nend"), (35, 929));
+    assert_eq!(err("select\nwhen then nop\nend"), (35, 929));
 }

@@ -132,7 +132,7 @@ pub(crate) fn split_clauses(tokens: &[Token]) -> Result<Vec<Clause>, ParseError>
     Ok(clauses)
 }
 
-/// Which instruction is still waiting for its `THEN`.
+/// Which instruction is still waiting for its `THEN`, and where it is.
 ///
 /// This is the whole of the control stack that the instruction parser keeps,
 /// and it exists because `THEN` is the one keyword whose legality the C++
@@ -165,8 +165,17 @@ pub(crate) struct ClauseCursor {
     /// was split from: see `split_before`.
     pending: Option<Clause>,
     /// Set when the clause just parsed was an `IF` or `WHEN` whose `THEN` has
-    /// not been seen yet. Read and cleared by the next clause's parse.
-    pending_then: Option<PendingThen>,
+    /// not been seen yet, with the byte its clause started at. Read and cleared
+    /// by the next clause's parse.
+    ///
+    /// The byte is carried because the missing-`THEN` error is reported against
+    /// the `IF`, not against the clause that should have held the `THEN`:
+    /// `syntaxError(Error_Then_expected_if, instruction)` takes the
+    /// INSTRUCTION's location (`LanguageParser.cpp:1341`). Measured, with the
+    /// two clauses four lines apart: `nop` / `if 1 = 1` / `nop` / `nop` / `nop`
+    /// reports 18.1 on line 2, and moving the `IF` to line 4 moves the report
+    /// to line 4.
+    pending_then: Option<(PendingThen, usize)>,
 }
 
 impl ClauseCursor {
@@ -196,15 +205,18 @@ impl ClauseCursor {
 
     /// Record that the clause just parsed was an `IF` or `WHEN` whose `THEN`
     /// is still to come, whether on this line or the next.
-    pub(crate) fn expect_then(&mut self, which: PendingThen) {
-        self.pending_then = Some(which);
+    ///
+    /// `byte` is that instruction's own clause start, which is where a missing
+    /// `THEN` is reported.
+    pub(crate) fn expect_then(&mut self, which: PendingThen, byte: usize) {
+        self.pending_then = Some((which, byte));
     }
 
     /// Whether a `THEN` is expected next, clearing the expectation.
     ///
     /// Called once per clause parsed, so that the expectation lasts exactly
     /// one clause: that is what makes a `THEN` anywhere else error 8.1.
-    pub(crate) fn take_expected_then(&mut self) -> Option<PendingThen> {
+    pub(crate) fn take_expected_then(&mut self) -> Option<(PendingThen, usize)> {
         self.pending_then.take()
     }
 
@@ -214,7 +226,7 @@ impl ClauseCursor {
     /// **This is not a partition, and that is the whole point.** The oracle
     /// makes two independent adjustments with a gap between them, so bytes
     /// between `end_at` and the next clause's start belong to NO clause. Two
-    /// positions are required; a single cut point cannot reproduce the
+    /// positions are required. A single cut point cannot reproduce the
     /// interpreter, and one that tried would be wrong on one side or the other.
     ///
     /// Callers pass `end_at` as follows:

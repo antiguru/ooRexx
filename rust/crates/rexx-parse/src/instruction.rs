@@ -80,8 +80,8 @@ const KW_LEAVE: usize = 14;
 const KW_LOOP: usize = 15;
 const KW_NOP: usize = 16;
 const KW_NUMERIC: usize = 17;
-const KW_OTHERWISE: usize = 19;
 const KW_OPTIONS: usize = 18;
+const KW_OTHERWISE: usize = 19;
 const KW_PARSE: usize = 20;
 const KW_PROCEDURE: usize = 21;
 const KW_PULL: usize = 22;
@@ -146,9 +146,9 @@ const SUB_ERROR: usize = 13;
 const SUB_EXIT: usize = 14;
 const SUB_EXPOSE: usize = 15;
 const SUB_FOR: usize = 17;
+const SUB_FOREVER: usize = 18;
 const SUB_FORM: usize = 19;
 const SUB_FUZZ: usize = 20;
-const SUB_FOREVER: usize = 18;
 const SUB_INDEX: usize = 21;
 const SUB_INPUT: usize = 23;
 const SUB_ITEM: usize = 24;
@@ -197,14 +197,19 @@ const UNREACHABLE_SWITCH: (u16, u16) = (49, 2);
 /// This is a loop, not `translateBlock`. It builds no control stack, so it
 /// wires nothing together and raises none of the errors that need to know
 /// which block is open. The task that assembles the instruction chain owes all
-/// of the following, and every one is a `translateBlock` error in the C++
-/// rather than a `nextInstruction` one:
+/// of the following. Every one but the last two is a `translateBlock` error in
+/// the C++ rather than a `nextInstruction` one:
 ///
-/// * 7.2, an instruction other than `WHEN`/`OTHERWISE`/`END` inside a `SELECT`.
+/// * 7.1 and 7.2, a `SELECT` with no `WHEN` at all and an instruction other
+///   than `WHEN`/`OTHERWISE`/`END` inside one. Measured: `select` / `end` is
+///   7.1, `select case 1` / `otherwise nop` / `end` is 7.1, and
+///   `select` / `nop` / `end` is 7.2.
 /// * 8.2, an `ELSE` with no `THEN` above it.
 /// * 9.1 and 9.2, a `WHEN` or `OTHERWISE` outside a `SELECT`.
-/// * 10.1, 10.2 and 10.3, an `END` with no block, or one closing a `THEN` or
-///   an `ELSE`.
+/// * 10.1, 10.2, 10.3 and 10.7, an `END` with no block, one closing a `THEN`
+///   or an `ELSE`, and one naming a block that is not the open one. The last
+///   two differ by what the `END` failed to close: measured, `do` / `end 1` is
+///   10.3 and `select` / `end 1` is 10.7.
 /// * 14.x, an unclosed `DO`, `SELECT`, `THEN` or `ELSE` at the end of a body.
 /// * The misplaced-label errors, which depend on the open block.
 /// * 99.907 and 99.910, `EXPOSE` and `USE LOCAL` not being the first
@@ -212,8 +217,16 @@ const UNREACHABLE_SWITCH: (u16, u16) = (49, 2);
 /// * The chain indices themselves: which instruction an `IF` skips to, which
 ///   block an `END` closes, which `SELECT` a `WHEN` belongs to.
 /// * 35.934 in place of 35.929 for a `WHEN` inside `SELECT CASE`, whose parse
-///   needs the enclosing block to pick `parseCaseWhenList`. The hook is
-///   threaded already: the sub-number is an argument at one call site.
+///   needs the enclosing block to pick `parseCaseWhenList`. TWO things change,
+///   not one: that sub-number, and the `When` node's shape, because
+///   `parseCaseWhenList` builds a list of case values where `parseLogical`
+///   builds an AND. `tests::a_when_inside_select_case_still_gets_the_interim_35_929`
+///   pins the interim state so the change is deliberate. Raised in `whenNew`,
+///   not in `translateBlock`.
+/// * 99.913, a `GUARD ON WHEN` expression that references no variable exposed
+///   at that point. Raised in `guardNew`, not in `translateBlock`, but it needs
+///   a per-body set of exposed variables that this task does not keep. The
+///   measurements are on `guard`.
 ///
 /// 18.1 and 18.2 are raised here and in `parse_instruction`, because the one
 /// bit of state they need is the one bit this module carries.
@@ -229,9 +242,8 @@ pub(crate) fn parse_instructions(ctx: &ParseCtx) -> Result<Vec<Instruction>, Par
     }
     // An IF or WHEN whose THEN never arrived, because the body ended first.
     // `translateBlock` raises this from the failed `nextClause()`
-    // (`LanguageParser.cpp:1341`), against the IF's own location.
-    if let Some(which) = cursor.take_expected_then() {
-        let byte = out.last().map_or(0, |last| last.clause_span.start);
+    // (`LanguageParser.cpp:1341`).
+    if let Some((which, byte)) = cursor.take_expected_then() {
         return Err(ParseError::new(18, missing_then_sub(which), byte));
     }
     Ok(out)
@@ -267,15 +279,26 @@ pub(crate) fn parse_instruction(
     // comes ahead of the label and assignment tests rather than inside the
     // keyword dispatch: measured, `if 1 = 1` followed by `then = 7` is an
     // error rather than an assignment.
-    if let Some(which) = cursor.take_expected_then() {
+    if let Some((which, byte)) = cursor.take_expected_then() {
         // A label clause is excluded, which is the one place this diverges
         // from the C++. There the label is still one clause with whatever
         // follows the colon, so a label spelled THEN becomes the THEN and the
-        // leftover `:` then fails with 35.1; Task 3.4 has already split the
-        // colon off here, leaving nothing that can fail. Both reject
-        // `if 1 = 1` followed by `then: nop`; the number differs.
+        // leftover `:` then fails with 35.1. Task 3.4 has already split the
+        // colon off here, leaving nothing that can fail, so the missing-THEN
+        // error fires instead. Both reject `if 1 = 1` followed by
+        // `then: nop`, measured 35.1 for both the IF and the WHEN spelling,
+        // and only the number differs.
+        //
+        // `tests::a_label_after_an_if_is_rejected_by_the_label_guard` pins
+        // both spellings. Without that test the guard could be deleted and
+        // nothing would fail, and then the program would start being
+        // ACCEPTED, with the label silently discarded.
         if parser.clause.label.is_some() || parser.first_keyword() != Some(KW_THEN) {
-            return Err(parser.error(18, missing_then_sub(which)));
+            // Reported against the IF or WHEN rather than against this
+            // clause: `syntaxError(..., instruction)` takes the instruction's
+            // location. Measured, `nop` / `if 1 = 1` / `nop` reports 18.1 on
+            // line 2, which is the IF's line and not the offender's.
+            return Err(ParseError::new(18, missing_then_sub(which), byte));
         }
         let end_at = parser.keyword_end();
         parser.next_real();
@@ -380,7 +403,7 @@ impl<'a> Inst<'a> {
 
     /// Steps the cursor to token index `to`.
     ///
-    /// The C++ would `resetPosition` backwards; nothing here ever does, so
+    /// The C++ would `resetPosition` backwards. Nothing here ever does, so
     /// this only moves forward and there is no `TokenCursor::back` to call.
     fn seek(&mut self, to: usize) {
         while self.cursor.position() < to {
@@ -416,7 +439,7 @@ impl<'a> Inst<'a> {
     }
 
     /// `requiredEndOfClause`: nothing may follow.
-    fn required_end(&mut self, code: u16, sub: u16) -> Result<(), ParseError> {
+    fn required_end(&self, code: u16, sub: u16) -> Result<(), ParseError> {
         if self.at_end() {
             return Ok(());
         }
@@ -584,11 +607,12 @@ impl<'a> Inst<'a> {
         // `assignmentOpNew` expands `a += b` into `a = a + b` at parse time,
         // building the binary node itself, so there is one instruction form
         // and not two.
+        let target = Expr::new(symbol_kind(id, class), target_span);
         let value = match op {
             None => value,
-            Some(op) => Expr::binary(op, Expr::new(symbol_kind(id, class), target_span), value),
+            Some(op) => Expr::binary(op, target.clone(), value),
         };
-        Ok(Some(InstructionKind::Assignment { target: id, value }))
+        Ok(Some(InstructionKind::Assignment { target, value }))
     }
 
     /// The four message-term forms (`InstructionParser.cpp:207`-`250`).
@@ -880,6 +904,16 @@ impl<'a> Inst<'a> {
     }
 
     /// `endNew` (`InstructionParser.cpp:2246`): an optional block name.
+    ///
+    /// The gate is `isSymbol()`, which is class-agnostic, so a number, a stem
+    /// and a compound are all legal block names as far as the parser is
+    /// concerned. Do not add a class check here. Measured, and all four are
+    /// block-MATCHING errors rather than parse errors, with the number chosen
+    /// by what the END failed to close: `do` / `end 1`, `end loop` and
+    /// `end a.` are Error 10.3, and the same three under a `select` are
+    /// Error 10.7. Only a token that is not a symbol at all is rejected here,
+    /// `end "x"` with 20.909, and only extra tokens after the name, `end a b`
+    /// with 21.909.
     fn end_name(&mut self) -> Result<Option<SymbolId>, ParseError> {
         let Some(token) = self.next_real() else {
             return Ok(None);
@@ -1551,12 +1585,17 @@ impl<'a> Inst<'a> {
 
     /// `guardNew` (`InstructionParser.cpp:2578`).
     ///
-    /// The check that a `GUARD ON WHEN` expression touches at least one object
-    /// variable (`Error_Translation_guard_expose`, 99.913) is NOT made here.
-    /// It reads the `EXPOSE` list of the whole method, which is state across
-    /// clauses, so it belongs with the chain assembler. Measured, both
-    /// directions: `guard on when 1` in a method is 99.913, while the same
-    /// method with `expose a` and `guard on when a` is rc 0.
+    /// The check behind `Error_Translation_guard_expose`, 99.913, is NOT made
+    /// here. The rule is that the `WHEN` expression must reference at least one
+    /// variable EXPOSED AT THAT POINT, and nothing weaker: measured, all three,
+    /// `guard on when 1` is 99.913 in the main program with no method and no
+    /// `EXPOSE` anywhere, `expose a` then `guard on when b` is 99.913 as well,
+    /// and only `expose a` then `guard on when a` is rc 0.
+    ///
+    /// So it is not a `translateBlock` check and not a method-only one --
+    /// `guardNew` raises it itself, from the variable set `setGuard`/`getGuard`
+    /// captured while the expression was parsed. It is deferred anyway, because
+    /// that set is per code body and this task holds no per-body state.
     fn guard(&mut self) -> Result<Guard, ParseError> {
         // Measured at run time: `interpret "guard on"` is Error 99.912.
         if self.ctx.source.kind() == SourceKind::Interpret {
@@ -2541,8 +2580,9 @@ impl<'a> Inst<'a> {
             PendingThen::If => InstructionKind::If { condition },
             PendingThen::When => InstructionKind::When { condition },
         };
+        let byte = self.clause_byte;
         let instruction = self.finish_split(cursor, kind, end_at);
-        cursor.expect_then(which);
+        cursor.expect_then(which, byte);
         Ok(instruction)
     }
 }

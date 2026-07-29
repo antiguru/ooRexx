@@ -252,7 +252,7 @@ pub(crate) fn parse_paren_expression(
 /// `LanguageParser::parseConstantExpression` (`LanguageParser.cpp:3400`): a
 /// literal, a constant symbol, or a parenthesised expression, and nothing
 /// else. `None` means the clause ended, which every caller turns into its own
-/// error; anything present that is not one of the three is 35.1.
+/// error. Anything present that is not one of the three is 35.1.
 pub(crate) fn parse_constant_expression(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -304,9 +304,9 @@ pub(crate) fn parse_constant_expression(
 /// `f(1)` both come back `None` and are commands.
 ///
 /// **On `Ok(None)` this may have consumed tokens, so the caller must discard
-/// `cursor`.** The C++ marks its position and resets it; nothing rewinds here,
-/// so a caller parses the trial on a cursor it is willing to throw away and
-/// keeps it only when a term comes back.
+/// `cursor`.** The C++ marks its position and resets it. Nothing rewinds
+/// here, so a caller parses the trial on a cursor it is willing to throw away
+/// and keeps it only when a term comes back.
 pub(crate) fn parse_message_term(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
