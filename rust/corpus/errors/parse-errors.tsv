@@ -38,6 +38,14 @@
 # tests/program.rs. Then build/bin/rexxc was run on each and its answer recorded.
 # The instrumentation was reverted and the tree verified clean.
 #
+# The seven `error(...)` assertions of src/expr/tests.rs that sit outside its own
+# case table, and the three `logical_error(...)` ones as the `if <condition>`
+# programs they were measured as, were transcribed in a later pass: a diff of
+# every error pair any test file asserts against every pair the gate covers found
+# 20.917 and 20.930 asserted and ungated. That diff is the check that "every test
+# file" is really every test file, rather than a claim about which files were
+# read.
+#
 # Two rows were added separately, `r = a:` and `r = (a:)`, because mutation
 # testing found that error 20.923 had no coverage anywhere in the crate -- not
 # one row and not one assertion. Five more, the `::class c` / `nop` family, were
@@ -1062,3 +1070,13 @@ translation	99.916	2	::requires "x"\nsay "trailing"\n
 translation	99.916	2	::annotate package a 1\nsay "trailing"\n
 translation	99.916	5	::resource d\nsome\ndata\n::END\nsay "trailing"\n
 translation	99.938	2	::constant c\nsay "trailing"\n
+translation	20.917	1	r = a~b:1\n
+translation	20.917	1	r = a~b:1e5\n
+translation	20.917	1	r = a~b:.\n
+translation	20.917	1	r = a~b:'c'\n
+translation	20.930	1	r = >a.b\n
+translation	20.930	1	r = >1\n
+translation	20.930	1	r = >"x"\n
+translation	35.929	1	if then nop\n
+translation	35.929	1	if , 1 = 1 then nop\n
+translation	35.929	1	if 1 = 1, then nop\n

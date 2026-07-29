@@ -46,8 +46,8 @@
 //! had to either fill it or remove it. It removed it, and the measurement is
 //! the argument.
 //!
-//! Of the **200** distinct `(major, sub)` pairs the crate's own tests reach,
-//! **92** have a substitution in their sub-message. They need three kinds of
+//! Of the **202** distinct `(major, sub)` pairs the crate's own tests reach,
+//! **93** have a substitution in their sub-message. They need three kinds of
 //! value:
 //! the offending token's text (about sixty of them, the `found "&1"` family),
 //! the line of the construct that is still open (7.1, 7.2, 10.002-10.007,
@@ -81,9 +81,9 @@ impl ParseError {
     /// Never contains an unfilled `&1`-style substitution placeholder, which is
     /// what decides between the two rows the table holds for an error like
     /// `7.1`: the sub-message when the sub-message needs no substitution, and
-    /// the major's own text when it does. **92 of the 200** distinct errors the
-    /// crate's own tests reach fall on the second branch -- 193 pairs from the
-    /// 557 translation-error rows of `corpus/errors/parse-errors.tsv` plus the
+    /// the major's own text when it does. **93 of the 202** distinct errors the
+    /// crate's own tests reach fall on the second branch -- 195 pairs from the
+    /// 567 translation-error rows of `corpus/errors/parse-errors.tsv` plus the
     /// seven `INTERPRET`-only pairs, which no corpus row can hold.
     ///
     /// The major's text is always available and always complete. Measured over

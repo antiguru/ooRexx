@@ -265,8 +265,8 @@ fn the_corpus_holds_at_least_the_rows_it_was_measured_with() {
     // Floors rather than exact counts, because the corpus may grow. A file that
     // silently emptied would make every loop below vacuously pass.
     assert!(
-        cases.len() >= 1010,
-        "expected at least 1010 corpus rows, found {}",
+        cases.len() >= 1020,
+        "expected at least 1020 corpus rows, found {}",
         cases.len()
     );
     let translation = cases
@@ -276,8 +276,8 @@ fn the_corpus_holds_at_least_the_rows_it_was_measured_with() {
     let install = cases.iter().filter(|c| c.class == Class::Install).count();
     let accepted = cases.iter().filter(|c| c.class == Class::Accepted).count();
     assert!(
-        translation >= 557,
-        "expected at least 557 translation errors, found {translation}"
+        translation >= 567,
+        "expected at least 567 translation errors, found {translation}"
     );
     assert!(
         accepted >= 444,
@@ -355,7 +355,7 @@ fn every_program_the_oracle_refuses_to_translate_this_parser_rejects_the_same_wa
         wrong.join("\n")
     );
     assert!(
-        checked >= 555,
+        checked >= 565,
         "only {checked} rejections were checked; the deviation rule is absorbing cases"
     );
 }
@@ -474,7 +474,7 @@ fn every_error_the_corpus_raises_renders_a_non_empty_message() {
             case.row
         );
     }
-    assert!(checked >= 557, "only {checked} messages were rendered");
+    assert!(checked >= 567, "only {checked} messages were rendered");
 }
 
 #[test]
