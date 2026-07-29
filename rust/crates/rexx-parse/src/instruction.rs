@@ -2636,12 +2636,21 @@ impl<'a> Inst<'a> {
             }
             ExprKind::Compound(id) => {
                 let name = self.ctx.symbols.name(*id);
-                let (stem, tails) = compound_parts(name);
-                block.is_exposed(stem.as_bytes())
-                    || tails.iter().any(|tail| match tail {
-                        Tail::Variable(piece) => block.is_exposed(piece.as_bytes()),
-                        Tail::Constant(_) => false,
-                    })
+                // A compound contributes NOTHING if this exact spelling was
+                // already referenced earlier in the body: `addCompound` returns
+                // the cached retriever before it reaches the calls that would
+                // capture. Measured, and it is the earlier reference that
+                // disqualifies the later guard, not the other way round.
+                if block.compound_is_cached(name.as_bytes()) {
+                    false
+                } else {
+                    let (stem, tails) = compound_parts(name);
+                    block.is_exposed(stem.as_bytes())
+                        || tails.iter().any(|tail| match tail {
+                            Tail::Variable(piece) => block.is_exposed(piece.as_bytes()),
+                            Tail::Constant(_) => false,
+                        })
+                }
             }
             _ => false,
         };

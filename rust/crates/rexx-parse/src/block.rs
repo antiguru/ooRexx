@@ -44,12 +44,15 @@
 //! which is the C++'s `RexxInstructionEndIf`. See `Instruction` for why that
 //! marker is not a node here.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ast::{CodeBody, EndStyle, EndTarget, Instruction, InstructionKind, LoopKind};
+use crate::ast::{
+    Call, CodeBody, EndStyle, EndTarget, Expr, ExprKind, Instruction, InstructionKind, LoopKind,
+    ParseSource, Redirection, Signal, Trace, Use, VariableRef,
+};
 use crate::clause::ClauseCursor;
 use crate::instruction::{missing_then_sub, parse_instruction};
-use crate::token::{ParseCtx, ParseError, SymbolId, Tag};
+use crate::token::{ParseCtx, ParseError, SymbolId, SymbolTable, Tag};
 
 /// What a control-stack frame stands for: the `InstructionKeyword` values that
 /// `pushDo` can put on the stack, and nothing else.
@@ -148,7 +151,10 @@ pub(crate) enum EnclosingSelect {
 
 /// One code body being assembled: the chain, the control stack, and the
 /// per-body tables that `nextInstruction` reads.
-pub(crate) struct Block {
+pub(crate) struct Block<'a> {
+    /// Held so that a variable slot's `SymbolId` can be resolved to the name
+    /// `referenced` is keyed by.
+    symbols: &'a SymbolTable,
     /// The chain, in `addClause` order, which is why index order is the chain.
     instructions: Vec<Instruction>,
     labels: BTreeMap<Box<[u8]>, usize>,
@@ -170,11 +176,24 @@ pub(crate) struct Block {
     /// five the C++ seeds (`autoExpose`, `LanguageParser.cpp:2232`). `None`
     /// until a `USE LOCAL`.
     local: Option<Vec<Box<[u8]>>>,
+    /// Every variable name referenced by an instruction already in the chain,
+    /// which is the part of `variables` (`LanguageParser.hpp:502`) that is
+    /// observable from here.
+    ///
+    /// It exists for one reason: `addCompound` (`LanguageParser.cpp:2124`)
+    /// returns early on a cache hit, BEFORE reaching the `addStem` and
+    /// `addSimpleVariable` calls that would capture a guard variable, where
+    /// `addSimpleVariable` and `addStem` themselves capture unconditionally and
+    /// say so in a comment. So a compound reference feeds a `GUARD ... WHEN`
+    /// only the first time that exact spelling appears in the body. See
+    /// `compound_is_cached`.
+    referenced: BTreeSet<Box<[u8]>>,
 }
 
-impl Block {
-    fn new() -> Self {
+impl<'a> Block<'a> {
+    fn new(symbols: &'a SymbolTable) -> Self {
         Block {
+            symbols,
             instructions: Vec::new(),
             labels: BTreeMap::new(),
             // `pushDo(instruction)` on the dummy first instruction, which is
@@ -188,6 +207,7 @@ impl Block {
             pending_then: None,
             exposed: None,
             local: None,
+            referenced: BTreeSet::new(),
         }
     }
 
@@ -233,6 +253,27 @@ impl Block {
             return !local.iter().any(|n| n.as_ref() == name);
         }
         false
+    }
+
+    /// Whether a compound variable of this exact spelling has already been
+    /// referenced by an instruction in this body, which makes `addCompound`
+    /// return it from the cache and capture nothing.
+    ///
+    /// Measured, and the direction is the surprising one: an EARLIER reference
+    /// makes a LATER guard illegal. `::method m` / `expose a.` /
+    /// `guard on when a.1` is rc 0, and inserting `say a.1` between the two is
+    /// 99.913. Seventeen shapes measured, including that two guards on one
+    /// compound reject the second, that the reverse order is accepted, that a
+    /// simple variable and a stem are unaffected because their own `addVariable`
+    /// paths capture unconditionally, and that the cache is per body.
+    ///
+    /// Almost certainly an upstream defect rather than a design: the comment on
+    /// the capture call in `addSimpleVariable` (`LanguageParser.cpp:2069`) says
+    /// "we need to always perform the capturing test", and `addCompound`'s early
+    /// return defeats exactly that. The oracle defines behaviour, so it is
+    /// reproduced.
+    pub(crate) fn compound_is_cached(&self, name: &[u8]) -> bool {
+        self.referenced.contains(name)
     }
 
     /// `expose` (`LanguageParser.cpp:2218`), called for each symbol an `EXPOSE`
@@ -303,6 +344,17 @@ impl Block {
         if let InstructionKind::Label { name } = &instruction.kind {
             self.labels.entry(name.clone()).or_insert(index);
         }
+        // Registered here rather than during the parse, so that an instruction
+        // never sees its own references. That is what a `GUARD` needs: the
+        // C++'s cache is consulted as each reference is built, and within one
+        // clause the only reference that could precede the guard expression is
+        // in the guard expression itself, where the first occurrence captures
+        // and a later duplicate is a no-op on a set. Measured:
+        // `guard on when a.1 & a.1` is rc 0.
+        let symbols = self.symbols;
+        for_each_variable_name(&instruction, symbols, &mut |name| {
+            self.referenced.insert(Box::from(name.as_bytes()));
+        });
         self.instructions.push(instruction);
         index
     }
@@ -672,6 +724,247 @@ impl Block {
     }
 }
 
+/// Calls `f` with the name of every variable REFERENCE in `instruction`.
+///
+/// This is which slots reach `addVariable` in the C++, and it is not simply
+/// "every symbol": a block name, a loop or `SELECT` label, a routine name, an
+/// `ADDRESS` environment and a condition trap's label are all symbols that name
+/// something other than a variable, and none of them touches the cache.
+/// Measured, both directions, twenty shapes: `do label a.1` / `end a.1`,
+/// `leave a.1`, `iterate a.1`, `select label a.1`, `signal a.1`, `call a.1`,
+/// `address a.1` and `signal on syntax name a.1` all leave a later
+/// `guard on when a.1` legal, while `drop a.1`, `expose a.1`,
+/// `procedure expose a.1`, `parse var a.1 x`, `parse value 1 with a.1`,
+/// `use arg a.1`, `do a.1 = 1 to 2`, `numeric digits a.1`, `interpret a.1`,
+/// a bare `a.1` command and `a.1~string` all make it 99.913.
+///
+/// The order names arrive in does not matter, because the caller keeps a set and
+/// consults it only for instructions already in the chain.
+///
+/// Every name is reported, not only compound ones. A simple variable and a stem
+/// capture unconditionally whatever the cache holds, so their entries are never
+/// read, and a compound spelling can only ever match another compound spelling.
+/// Classifying a bare `SymbolId` here would mean re-deriving the scanner's rule
+/// for `SymbolClass::Compound` in a second place.
+///
+/// The `match` is exhaustive on purpose: a new `InstructionKind` fails to
+/// compile here rather than silently contributing nothing.
+fn for_each_variable_name(
+    instruction: &Instruction,
+    symbols: &SymbolTable,
+    f: &mut impl FnMut(&str),
+) {
+    match &instruction.kind {
+        InstructionKind::Assignment { target, value } => {
+            visit_expr(target, symbols, f);
+            visit_expr(value, symbols, f);
+        }
+        InstructionKind::Message { term, value } => {
+            visit_expr(term, symbols, f);
+            visit_opt(value, symbols, f);
+        }
+        InstructionKind::Command { expression }
+        | InstructionKind::Push { expression }
+        | InstructionKind::Queue { expression }
+        | InstructionKind::Say { expression }
+        | InstructionKind::Return { expression }
+        | InstructionKind::Exit { expression }
+        | InstructionKind::Reply { expression } => visit_opt(expression, symbols, f),
+        InstructionKind::Interpret { expression } | InstructionKind::Options { expression } => {
+            visit_expr(expression, symbols, f);
+        }
+        InstructionKind::If { condition, .. } | InstructionKind::When { condition, .. } => {
+            visit_expr(condition, symbols, f);
+        }
+        InstructionKind::WhenCase { values, .. } => {
+            for value in values {
+                visit_expr(value, symbols, f);
+            }
+        }
+        InstructionKind::Do(body) | InstructionKind::Loop(body) => {
+            // `label` is deliberately absent: a loop label names the block, not
+            // a variable. `counter` and every control variable are variables.
+            visit_slot(body.counter, symbols, f);
+            match &body.kind {
+                LoopKind::Simple | LoopKind::Forever => {}
+                LoopKind::Count(count) => visit_opt(count, symbols, f),
+                LoopKind::Controlled(controlled) => {
+                    visit_slot(Some(controlled.control), symbols, f);
+                    visit_expr(&controlled.initial, symbols, f);
+                    visit_opt(&controlled.to, symbols, f);
+                    visit_opt(&controlled.by, symbols, f);
+                    visit_opt(&controlled.for_count, symbols, f);
+                }
+                LoopKind::Over {
+                    control,
+                    target,
+                    for_count,
+                } => {
+                    visit_slot(Some(*control), symbols, f);
+                    visit_expr(target, symbols, f);
+                    visit_opt(for_count, symbols, f);
+                }
+                LoopKind::With {
+                    index,
+                    item,
+                    target,
+                    for_count,
+                } => {
+                    visit_slot(*index, symbols, f);
+                    visit_slot(*item, symbols, f);
+                    visit_expr(target, symbols, f);
+                    visit_opt(for_count, symbols, f);
+                }
+            }
+            if let Some(conditional) = &body.conditional {
+                visit_expr(&conditional.condition, symbols, f);
+            }
+        }
+        InstructionKind::Drop { variables }
+        | InstructionKind::Expose { variables }
+        | InstructionKind::Procedure { variables } => visit_refs(variables, symbols, f),
+        InstructionKind::Parse(body) | InstructionKind::Arg(body) | InstructionKind::Pull(body) => {
+            match &body.source {
+                ParseSource::Var(id) => visit_slot(Some(*id), symbols, f),
+                ParseSource::Value(value) => visit_opt(value, symbols, f),
+                ParseSource::Arg
+                | ParseSource::LineIn
+                | ParseSource::Pull
+                | ParseSource::Source
+                | ParseSource::Version => {}
+            }
+            for trigger in body.template.iter().flatten() {
+                visit_opt(&trigger.value, symbols, f);
+                visit_list(&trigger.targets, symbols, f);
+            }
+        }
+        InstructionKind::Call(call) => match call.as_ref() {
+            // A routine name is not a variable, whichever spelling it took.
+            Call::Named { args, .. } | Call::Qualified { args, .. } => visit_list(args, symbols, f),
+            Call::Dynamic { target, args } => {
+                visit_expr(target, symbols, f);
+                visit_list(args, symbols, f);
+            }
+            Call::Trap(_) => {}
+        },
+        InstructionKind::Signal(signal) => match signal.as_ref() {
+            // A label, and a trap's label, name instructions rather than
+            // variables. `SIGNAL VALUE` evaluates an expression.
+            Signal::Label(_) | Signal::Trap(_) => {}
+            Signal::Value(value) => visit_expr(value, symbols, f),
+        },
+        InstructionKind::Guard(guard) => visit_opt(&guard.condition, symbols, f),
+        InstructionKind::Forward(forward) => {
+            visit_opt(&forward.to, symbols, f);
+            visit_opt(&forward.message, symbols, f);
+            visit_opt(&forward.class, symbols, f);
+            visit_opt(&forward.arguments, symbols, f);
+            if let Some(array) = &forward.array {
+                visit_list(array, symbols, f);
+            }
+        }
+        InstructionKind::Raise(raise) => {
+            visit_opt(&raise.rc, symbols, f);
+            visit_opt(&raise.description, symbols, f);
+            visit_opt(&raise.additional, symbols, f);
+            if let Some(array) = &raise.array {
+                visit_list(array, symbols, f);
+            }
+            if let Some(result) = &raise.result {
+                visit_opt(&result.value, symbols, f);
+            }
+        }
+        InstructionKind::Use(use_) => match use_.as_ref() {
+            Use::Arg { targets, .. } => {
+                for target in targets.iter().flatten() {
+                    visit_expr(&target.target, symbols, f);
+                    visit_opt(&target.default, symbols, f);
+                }
+            }
+            Use::Local { variables } => visit_refs(variables, symbols, f),
+        },
+        InstructionKind::Numeric { expression, .. } => visit_opt(expression, symbols, f),
+        InstructionKind::Address(address) => {
+            // `environment` is a name rather than a variable.
+            visit_opt(&address.dynamic, symbols, f);
+            visit_opt(&address.command, symbols, f);
+            if let Some(io) = &address.io {
+                for redirection in [&io.input, &io.output, &io.error] {
+                    match redirection {
+                        Redirection::Stem(id) => visit_slot(Some(*id), symbols, f),
+                        Redirection::Stream(value) | Redirection::Using(value) => {
+                            visit_expr(value, symbols, f)
+                        }
+                        Redirection::Default | Redirection::Normal => {}
+                    }
+                }
+            }
+        }
+        InstructionKind::Trace(trace) => match trace {
+            Trace::Value(value) => visit_expr(value, symbols, f),
+            Trace::Default | Trace::Setting(_) | Trace::Skip(_) => {}
+        },
+        // No variable reference of any kind. A block name on an `END`, `LEAVE`,
+        // `ITERATE` or `SELECT` names a block, and a label names itself.
+        InstructionKind::Label { .. }
+        | InstructionKind::Then
+        | InstructionKind::Else { .. }
+        | InstructionKind::Otherwise
+        | InstructionKind::Leave { .. }
+        | InstructionKind::Iterate { .. }
+        | InstructionKind::End { .. }
+        | InstructionKind::Nop => {}
+        InstructionKind::Select { case, .. } => visit_opt(case, symbols, f),
+    }
+}
+
+/// `for_each_variable_in_expr` for an optional expression.
+fn visit_opt(expr: &Option<Expr>, symbols: &SymbolTable, f: &mut impl FnMut(&str)) {
+    if let Some(expr) = expr {
+        visit_expr(expr, symbols, f);
+    }
+}
+
+/// `for_each_variable_in_expr` over an argument list, whose omitted positions
+/// hold no node.
+fn visit_list(args: &[Option<Expr>], symbols: &SymbolTable, f: &mut impl FnMut(&str)) {
+    for arg in args.iter().flatten() {
+        visit_expr(arg, symbols, f);
+    }
+}
+
+/// A bare variable slot, which is a name and not an expression.
+fn visit_slot(id: Option<SymbolId>, symbols: &SymbolTable, f: &mut impl FnMut(&str)) {
+    if let Some(id) = id {
+        f(symbols.name(id));
+    }
+}
+
+/// A `DROP`, `EXPOSE`, `PROCEDURE EXPOSE` or `USE LOCAL` list. Both spellings
+/// reach `addVariable`, the indirect one through the symbol inside the
+/// parentheses.
+fn visit_refs(variables: &[VariableRef], symbols: &SymbolTable, f: &mut impl FnMut(&str)) {
+    for variable in variables {
+        let (VariableRef::Direct(id) | VariableRef::Indirect(id)) = variable;
+        f(symbols.name(*id));
+    }
+}
+
+/// Calls `f` with the name of every variable reference in one expression.
+///
+/// A constant, a `.name` environment symbol and a literal are not variables and
+/// reach neither `addSimpleVariable` nor `addStem`, so none is reported.
+fn visit_expr(expr: &Expr, symbols: &SymbolTable, f: &mut impl FnMut(&str)) {
+    match &expr.kind {
+        ExprKind::Variable(id) | ExprKind::Stem(id) | ExprKind::Compound(id) => {
+            f(symbols.name(*id));
+        }
+        _ => {}
+    }
+    expr.kind
+        .for_each_child(&mut |child| visit_expr(child, symbols, f));
+}
+
 /// Which stack frame a block instruction opens.
 ///
 /// An `OTHERWISE` is a block too, but it is pushed by its own arm of the switch
@@ -713,7 +1006,7 @@ pub(crate) fn translate_block(
     ctx: &ParseCtx,
     cursor: &mut ClauseCursor,
 ) -> Result<CodeBody, ParseError> {
-    let mut block = Block::new();
+    let mut block = Block::new(ctx.symbols);
 
     loop {
         // Consume label clauses, which are not instructions and take no part in

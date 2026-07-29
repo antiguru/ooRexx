@@ -157,7 +157,7 @@ fn an_end_closing_a_then_or_an_else_is_also_10_1() {
     // THE EVIDENCE FOR OMITTING TWO OF THE THIRTEEN.
     //
     // The C++ has `Error_Unexpected_end_then` (10.5) and
-    // `Error_Unexpected_end_else` (10.6) for exactly these shapes, and neither
+    // `Error_Unexpected_end_else` (10.6) for exactly these shapes, and neither is
     // is reachable: `flushControl` rewrites a THEN frame into a branch-end frame
     // and pops an ELSE before the END arm of the switch runs, so the type it
     // tests can never be IFTHEN, WHENTHEN or ELSE. Every one of these six was
@@ -399,6 +399,108 @@ fn use_local_inverts_the_exposure_rule_and_seeds_five_names() {
         err("::method m\nuse local a\nguard on when self\n"),
         (99, 913)
     );
+}
+
+/// The compound cache, which is the one place a LATER guard is decided by an
+/// EARLIER instruction.
+///
+/// `addCompound` (`LanguageParser.cpp:2124`) returns the cached retriever before
+/// it reaches the `addStem` and `addSimpleVariable` calls that capture a guard
+/// variable, so a compound feeds a `GUARD ... WHEN` only the first time that
+/// exact spelling appears in the body. `addSimpleVariable` and `addStem` capture
+/// unconditionally and their comments say why, which is what makes this look like
+/// an upstream defect rather than a rule. Every row measured.
+#[test]
+fn a_compound_feeds_a_guard_only_on_its_first_reference_in_the_body() {
+    // The pair that shows it, and the direction is the surprising one: inserting
+    // a reference BEFORE the guard is what makes the guard illegal.
+    ok("::method m\nexpose a.\nguard on when a.1\n");
+    assert_eq!(
+        err("::method m\nexpose a.\nsay a.1\nguard on when a.1\n"),
+        (99, 913)
+    );
+    // The reverse order is fine, because the guard gets there first.
+    ok("::method m\nexpose a.\nguard on when a.1\nsay a.1\n");
+    // So two guards on one compound reject the second.
+    assert_eq!(
+        err("::method m\nexpose a.\nguard on when a.1\nguard on when a.1\n"),
+        (99, 913)
+    );
+    // But one guard naming the same compound twice is fine: the first occurrence
+    // captures and a repeat is a no-op on a set.
+    ok("::method m\nexpose a.\nguard on when a.1 & a.1\n");
+    // A simple variable and a stem are unaffected, because their own
+    // `addVariable` paths capture whatever the cache holds.
+    ok("::method m\nexpose a\nsay a\nguard on when a\n");
+    ok("::method m\nexpose a.\nsay a.\nguard on when a.\n");
+    // A stem reference does not cache the COMPOUND spelling, so a compound guard
+    // after one is still live.
+    ok("::method m\nexpose a.\nsay a.\nguard on when a.1\n");
+    // A different compound spelling is a different cache entry.
+    ok("::method m\nexpose a.\nsay a.2\nguard on when a.1\n");
+    // A variable tail behaves the same way.
+    ok("::method m\nexpose i\nguard on when a.i\n");
+    assert_eq!(
+        err("::method m\nexpose i\nsay a.i\nguard on when a.i\n"),
+        (99, 913)
+    );
+    // One killed compound does not kill a live one beside it.
+    ok("::method m\nexpose a. b.\nsay a.1\nguard on when a.1 & b.1\n");
+    // USE LOCAL exposure is decided the same way, so the cache applies there too.
+    ok("::method m\nuse local x\nguard on when a.1\n");
+    assert_eq!(
+        err("::method m\nuse local x\nsay a.1\nguard on when a.1\n"),
+        (99, 913)
+    );
+    // The cache is per body, so a reference in one method leaves another's guard
+    // alone. This is the row that would fail if the registry outlived a body.
+    ok("::method m\nexpose a.\nsay a.1\n::method n\nexpose a.\nguard on when a.1\n");
+}
+
+/// Which slots the cache is fed from, which is narrower than "every symbol".
+///
+/// A block name, a loop or `SELECT` label, a routine name, an `ADDRESS`
+/// environment and a condition trap's label all name something other than a
+/// variable, and none reaches `addVariable`. Both directions measured, and this
+/// is the distinction a scan of the clause's tokens could not make, because
+/// `end a.1` and `drop a.1` spell the symbol identically.
+#[test]
+fn only_a_variable_slot_feeds_the_compound_cache() {
+    // Name slots: the guard stays legal.
+    for source in [
+        "::method m\nexpose a.\ndo label a.1\nnop\nend a.1\nguard on when a.1\n",
+        "::method m\nexpose a.\ndo label a.1\nleave a.1\nend a.1\nguard on when a.1\n",
+        "::method m\nexpose a.\ndo label a.1\niterate a.1\nend a.1\nguard on when a.1\n",
+        "::method m\nexpose a.\nselect label a.1\nwhen 1 = 1 then nop\nend a.1\nguard on when a.1\n",
+        "::method m\nexpose a.\nsignal a.1\nguard on when a.1\n",
+        "::method m\nexpose a.\ncall a.1\nguard on when a.1\n",
+        "::method m\nexpose a.\naddress a.1\nguard on when a.1\n",
+        "::method m\nexpose a.\nsignal on syntax name a.1\nguard on when a.1\n",
+    ] {
+        ok(source);
+    }
+    // Variable slots: the guard is killed.
+    for source in [
+        "::method m\nexpose a.\ndrop a.1\nguard on when a.1\n",
+        "::method m\nexpose a.1\nguard on when a.1\n",
+        "expose a.\nprocedure expose a.1\nguard on when a.1\n",
+        "::method m\nexpose a.\nparse var a.1 x\nguard on when a.1\n",
+        "::method m\nexpose a.\nparse value 1 with a.1\nguard on when a.1\n",
+        "::method m\nexpose a.\nuse arg a.1\nguard on when a.1\n",
+        "::method m\nexpose a.\ndo a.1 = 1 to 2\nnop\nend\nguard on when a.1\n",
+        "::method m\nexpose a.\nnumeric digits a.1\nguard on when a.1\n",
+        "::method m\nexpose a.\ninterpret a.1\nguard on when a.1\n",
+        "::method m\nexpose a.\na.1 = 1\nguard on when a.1\n",
+        "::method m\nexpose a.\nif a.1 = 1 then nop\nguard on when a.1\n",
+        "::method m\nexpose a.\na.1\nguard on when a.1\n",
+        "::method m\nexpose a.\na.1~string\nguard on when a.1\n",
+        // The `(name)` indirect spelling reaches `addVariable` through the symbol
+        // inside the parentheses, so it feeds the cache too. Measured 99.913,
+        // which is why `visit_refs` handles both `VariableRef` variants.
+        "::method m\nexpose a.\ndrop (a.1)\nguard on when a.1\n",
+    ] {
+        assert_eq!(err(source), (99, 913), "{source:?}");
+    }
 }
 
 #[test]
