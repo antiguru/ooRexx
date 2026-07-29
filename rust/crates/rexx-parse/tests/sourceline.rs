@@ -202,7 +202,17 @@ type TracedLine = (usize, usize, &'static [u8]);
 /// Per-line rather than sequence equality: `trace r` re-traces a loop body
 /// once per iteration, so the `*-*` lines outnumber the clauses and a count
 /// assertion would fail on any program containing a loop.
+///
+/// Completeness is the CALLER's obligation. Nothing here can know the oracle
+/// transcript, so a list that omits a `*-*` line still passes. The
+/// transcripts these lists were checked against, one per probe and
+/// unfiltered, live in
+/// `.superpowers/sdd/2026-07-28-phase-3-parser/task-3.9-report.md`.
 fn assert_traced(text: &[u8], traced: &[TracedLine]) {
+    assert!(
+        !traced.is_empty(),
+        "an empty expectation list checks nothing"
+    );
     let program = parse_program(text.to_vec()).expect("the probe parses");
     for &(line, index, expected) in traced {
         let span = program.instructions[index].clause_span.clone();
@@ -228,11 +238,14 @@ fn assert_traced(text: &[u8], traced: &[TracedLine]) {
 #[test]
 fn trace_output_rex_reconstructs_every_traced_line() {
     // Measured on the corpus file itself. It sets `trace i`, so the raw
-    // capture also carries value-marker lines (>L>, >V>, >O>, >>>, >=>) and
-    // the program's own output; those need an executor and are Phase 4's,
-    // so only the six *-* lines appear here. Source line 4 is three
-    // clauses: the condition KEEPS its trailing blank and stops before
-    // `then`, `then` is a clause of its own, and the THEN arm is the third.
+    // capture also carries value-marker lines and the program's own output.
+    // Those need an executor and are Phase 4's, so only the six *-* lines
+    // appear here. (The markers THIS file happens to emit are >L>, >V>,
+    // >O>, >>> and >=>. That is not the set: the authority is "everything
+    // except *-*", eighteen prefixes, and enumerating them has gone wrong
+    // three times in this phase.) Source line 4 is three clauses: the
+    // condition KEEPS its trailing blank and stops before `then`, `then` is
+    // a clause of its own, and the THEN arm is the third.
     let text = include_bytes!("../../../corpus/lang/trace_output.rex");
     assert_traced(
         text,
@@ -282,6 +295,71 @@ fn probe_b_traces_a_label_with_its_colon() {
             (3, 2, b"nop;"),
             (3, 3, b"say \"two\""),
             (4, 4, b"trace off"),
+        ],
+    );
+}
+
+#[test]
+fn probe_g_an_else_arm_continues_like_any_other_clause() {
+    // Scratch probe G, measured 2026-07-29: the untaken THEN branch is not
+    // traced, `else` carries no blank on either side, and the ELSE arm's
+    // continuation keeps its four blanks like any other.
+    let text = b"trace r\nif 1 = 2 then nop\nelse say 1,\n    2\ntrace off\n";
+    assert_traced(
+        text,
+        &[
+            (2, 1, b"if 1 = 2 "),
+            (3, 4, b"else"),
+            (3, 5, b"say 1,    2"),
+            (5, 6, b"trace off"),
+        ],
+    );
+}
+
+#[test]
+fn probe_h_an_otherwise_arm_continues_like_any_other_clause() {
+    // Scratch probe H, measured 2026-07-29, the SELECT equivalent of probe
+    // G. The WHEN condition keeps its trailing blank the way an IF's does,
+    // `otherwise` carries no blank on either side, and the arm's
+    // continuation joins with its four blanks kept.
+    let text =
+        b"trace r\nselect\n  when 1 = 2 then nop\n  otherwise say 1,\n    2\nend\ntrace off\n";
+    assert_traced(
+        text,
+        &[
+            (2, 1, b"select"),
+            (3, 2, b"when 1 = 2 "),
+            (4, 5, b"otherwise"),
+            (4, 6, b"say 1,    2"),
+            (6, 7, b"end"),
+            (7, 8, b"trace off"),
+        ],
+    );
+}
+
+#[test]
+fn probe_i_a_three_fragment_continuation_drops_every_terminator() {
+    // Scratch probe I, measured 2026-07-29: two continuations in one
+    // clause, so the join drops two terminators and keeps both
+    // continuation lines' leading blanks. Every other probe joins exactly
+    // two fragments, and this is the one that makes the join loop more
+    // than once.
+    let text = b"trace r\nsay 1,\n  2,\n    3\ntrace off\n";
+    assert_traced(text, &[(2, 1, b"say 1,  2,    3"), (5, 2, b"trace off")]);
+}
+
+#[test]
+fn probe_j_a_multi_label_clause_is_one_clause_per_label() {
+    // Scratch probe J, measured 2026-07-29: `a: b: nop` traces as three
+    // clauses on one source line, each label with its own colon.
+    let text = b"trace r\na: b: nop\ntrace off\n";
+    assert_traced(
+        text,
+        &[
+            (2, 1, b"a:"),
+            (2, 2, b"b:"),
+            (2, 3, b"nop"),
+            (3, 4, b"trace off"),
         ],
     );
 }
@@ -378,6 +456,13 @@ fn join_span_borrows_on_one_line_and_agrees_with_span_bytes_about_none() {
     // An INTERPRET source is one line end to end, so nothing ever joins.
     let interp = ProgramSource::new(b"say 1; say 2".to_vec(), SourceKind::Interpret);
     assert!(matches!(interp.join_span(0..12), Some(Cow::Borrowed(_))));
+    // An empty span borrows even on a source with no lines at all, which
+    // keeps the contract exact: owned means a terminator was dropped.
+    let empty = ProgramSource::new(Vec::new(), SourceKind::Program);
+    match empty.join_span(0..0) {
+        Some(Cow::Borrowed(bytes)) => assert_eq!(bytes, b""),
+        other => panic!("expected a borrowed empty join, got {other:?}"),
+    }
 }
 
 #[test]

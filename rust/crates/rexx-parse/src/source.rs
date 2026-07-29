@@ -197,12 +197,20 @@ impl ProgramSource {
     /// `say "x",` continued as `    "y"` traces as `say "x",    "y"`, and the
     /// CRLF spelling of the same file traces the identical text.
     ///
-    /// Borrowed when the span sits on one line, which every uncontinued
-    /// clause does; owned only when there is a terminator to drop. `None`
-    /// exactly when `span_bytes` answers `None`: a span that runs past the
-    /// end of the retained text or backwards.
+    /// Borrowed exactly when the span contains no terminator byte, which is
+    /// every uncontinued clause's span and every empty span. Owned exactly
+    /// when the join dropped something. `None` exactly when `span_bytes`
+    /// answers `None`: a span that runs past the end of the retained text or
+    /// backwards.
     pub fn join_span(&self, span: Range<usize>) -> Option<Cow<'_, [u8]>> {
         let bytes = self.text.get(span.clone())?;
+        // An empty span has nothing to drop. It is also the only span a
+        // zero-line source can produce, and there the line walk below has no
+        // line to visit and would answer an owned empty, breaking the
+        // borrowed/owned contract above.
+        if bytes.is_empty() {
+            return Some(Cow::Borrowed(bytes));
+        }
         if let Some(line) = self.line_span(self.line_of(span.start))
             && line.start <= span.start
             && span.end <= line.end
