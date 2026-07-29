@@ -2263,8 +2263,10 @@ to reach the bytes invites re-deriving line boundaries that `ProgramSource` owns
 **`span_bytes` alone is not the answer, and this is the trap in this task.** A
 continued clause's span **contains** the line terminator while `trace r` **drops** it
 when joining the fragments. Measured: `say "x",` / newline / `    "y"` traces as
-`say "x","y"` — the comma kept, the newline removed, and the continuation line's four
-leading blanks kept. Separately, `say 1,` / `  + 2` has span `0..12`, terminator
+`say "x",    "y"` — the comma kept, the newline removed, and the continuation line's
+four leading blanks kept, which is why the join is not a trim. An earlier draft of this
+task displayed `say "x","y"` here, contradicting its own next clause; the measured
+value is the one above. Separately, `say 1,` / `  + 2` has span `0..12`, terminator
 included. So this task needs a **terminator-stripping join** over the span, not a raw
 slice. It is neither a slice nor a simple trim: the bytes to drop are the terminators
 *inside* the span, and nothing else.
@@ -2322,8 +2324,10 @@ answer is a separate traced path since `TRACE` is off by default.
 - [ ] **Step 1: Capture `TRACE` output from the interpreter**
 
 Run `rust/corpus/lang/trace_output.rex` under `build/bin/rexx` and record it
-through `cat -A`, so trailing blanks are visible. They matter: the file's own
-output is
+through `cat -A`, so trailing blanks are visible. That file sets `trace i`, not
+`trace r`, so the real capture also carries value-marker lines and the program's own
+output; the block below is the `*-*` lines only, which is all this task reconstructs.
+The trailing blanks matter:
 
 ```
      2 *-* x = 1 + 1$
@@ -2730,9 +2734,9 @@ what it excludes, and do not draw the conclusion the data cannot support.
   a rework of every node type, which is why it is front-loaded.
 - **A continued clause's traced text is not a contiguous byte range**, so
   `clause_span` alone cannot reproduce it. Measured: `say "x",` / newline /
-  `    "y"` traces as `say "x","y"` — the comma is kept, the newline is removed,
-  and the continuation line's four leading blanks are kept. So it is neither a
-  slice nor a simple trim-and-join.
+  `    "y"` traces as `say "x",    "y"` — the comma is kept, the newline is
+  removed, and the continuation line's four leading blanks are kept. So it is
+  neither a slice nor a simple trim-and-join.
 
   Task 3.4 measured the same thing from the span side and it is worth stating
   precisely, because it tells Task 3.9 what to build: the clause's span
