@@ -39,7 +39,7 @@
 //!
 //! A directive's *body* is not parsed here. `::METHOD` and `::ROUTINE` hand a
 //! body to `translateBlock`, which is the task that assembles the instruction
-//! chain; this module only decides whether a body belongs to the directive and
+//! chain. This module only decides whether a body belongs to the directive and
 //! records that in the node. The one thing it does look at is the clause that
 //! FOLLOWS, and only through `checkDirective` and `hasBody`, which need nothing
 //! but that clause's first token.
