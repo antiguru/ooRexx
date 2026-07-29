@@ -1869,3 +1869,25 @@ fn the_keyword_as_variable_corpus_parses_every_keyword_as_a_variable() {
         );
     }
 }
+
+#[test]
+fn the_loop_grammars_unreachable_switch_is_reachable_after_all() {
+    // `for_and_conditional` parses a DO OVER's FOR count with TERM_CONTROL,
+    // which stops at TO and BY, and then has no case for them. The C++ is in
+    // exactly the same position and raises `Error_Interpretation_switch`.
+    // Measured: `do i over x for 1 to 2` is rc 207, Error 49.2 -- so the arm
+    // this port kept "for fidelity" is the oracle's own answer.
+    assert_eq!(err("do i over x for 1 to 2\nend"), (49, 2));
+    // The neighbouring cases that do NOT reach it, because their terminator
+    // sets do not include the keyword. Measured, both rc 0: the trailing words
+    // become part of the expression by blank concatenation.
+    assert_eq!(loop_shape("do i = 1 to 2 over x\nend"), "@controlled[t]");
+    assert_eq!(loop_shape("do with index i over x to 2\nend"), "with[i]");
+}
+
+#[test]
+fn select_rejects_a_non_keyword_after_its_label() {
+    // Measured: `select label a "x"` is rc 231, Error 25.923, because a
+    // literal cannot be the CASE keyword and nothing else may follow.
+    assert_eq!(err("select label a \"x\"\nend"), (25, 923));
+}
