@@ -41,24 +41,28 @@
 
 use std::ops::Range;
 
-use crate::ast::{Expr, Instruction, InstructionKind};
+use crate::ast::{
+    ControlExpr, Controlled, Expr, Instruction, InstructionKind, Loop, LoopConditional, LoopKind,
+};
 use crate::clause::{Clause, ClauseCursor, PendingThen, split_clauses};
 use crate::expr::{
     Terminators, need_variable, parse_expr, parse_expression, parse_logical, parse_message_term,
     symbol_kind,
 };
 use crate::source::SourceKind;
-use crate::token::{Operator, ParseCtx, ParseError, Tag, Token, TokenCursor, TokenKind};
+use crate::token::{Operator, ParseCtx, ParseError, SymbolId, Tag, Token, TokenCursor, TokenKind};
 
 // Positions in the `INSTRUCTIONS` table, which `KeywordSet::index_of`
 // returns. An entry's position is its meaning, so these are indices and not
 // spellings, and `tests::keyword_indices_still_name_their_own_spellings` pins
 // every one against the table.
+const KW_DO: usize = 3;
 const KW_ELSE: usize = 5;
 const KW_END: usize = 6;
 const KW_IF: usize = 11;
 const KW_ITERATE: usize = 13;
 const KW_LEAVE: usize = 14;
+const KW_LOOP: usize = 15;
 const KW_NOP: usize = 16;
 const KW_OTHERWISE: usize = 19;
 const KW_SELECT: usize = 29;
@@ -66,9 +70,31 @@ const KW_THEN: usize = 31;
 const KW_WHEN: usize = 34;
 
 // Positions in the `SUB_KEYWORDS` table, pinned the same way by
-// `tests::sub_keyword_indices_still_name_their_own_spellings`.
+// `tests::keyword_indices_still_name_their_own_spellings`.
+const SUB_BY: usize = 5;
 const SUB_CASE: usize = 6;
+const SUB_COUNTER: usize = 9;
+const SUB_FOR: usize = 17;
+const SUB_FOREVER: usize = 18;
+const SUB_INDEX: usize = 21;
+const SUB_ITEM: usize = 24;
 const SUB_LABEL: usize = 25;
+const SUB_OVER: usize = 34;
+const SUB_TO: usize = 42;
+const SUB_UNTIL: usize = 44;
+const SUB_WHILE: usize = 48;
+const SUB_WITH: usize = 49;
+
+/// The error the C++ raises where its own `switch` has no case left.
+///
+/// `reportException(Error_Interpretation_switch, ...)` appears at five points
+/// inside the loop grammar, each after an expression whose terminator set
+/// admits only the keywords the switch already handles, so none is reachable.
+/// They are reproduced as the same error rather than as a panic, because a
+/// panic on source input would be worse than an odd number, and left in place
+/// rather than dropped so that a future change to a terminator set surfaces
+/// here instead of silently taking a wrong branch.
+const UNREACHABLE_SWITCH: (u16, u16) = (49, 2);
 
 /// Parses every instruction of one code body.
 ///
@@ -217,6 +243,35 @@ impl<'a> Inst<'a> {
     /// `nextReal` without consuming.
     fn peek_real(&self) -> Option<&'a Token> {
         self.peek_real_index().map(|i| &self.ctx.tokens[i])
+    }
+
+    /// Index of the `n`th token that is not a blank, counting the next one as
+    /// zero, without consuming.
+    ///
+    /// This is the whole of what `markPosition`/`resetPosition` bought the C++
+    /// in `createLoop`: it looks two real tokens ahead to tell `DO name = expr`
+    /// from `DO name OVER expr` from `DO expr`, then consumes according to what
+    /// it found.
+    fn nth_real_index(&self, n: usize) -> Option<usize> {
+        let mut i = self.cursor.peek()?;
+        let mut seen = 0;
+        loop {
+            while i < self.clause.tokens.end && self.ctx.tokens[i].kind.tag() == Tag::Blank {
+                i += 1;
+            }
+            if i >= self.clause.tokens.end {
+                return None;
+            }
+            if seen == n {
+                return Some(i);
+            }
+            seen += 1;
+            i += 1;
+        }
+    }
+
+    fn nth_real(&self, n: usize) -> Option<&'a Token> {
+        self.nth_real_index(n).map(|i| &self.ctx.tokens[i])
     }
 
     /// `nextReal`: the next token that is not a blank, consumed.
@@ -526,6 +581,19 @@ impl<'a> Inst<'a> {
                 let name = self.end_name()?;
                 Ok(self.finish(cursor, InstructionKind::End { name }))
             }
+            // `createLoop(false)` and `createLoop(true)`. Bare `DO` is a
+            // block and bare `LOOP` is `LOOP FOREVER`, which is the only
+            // difference between the two keywords.
+            KW_DO => {
+                self.next_real();
+                let body = self.create_loop(false)?;
+                Ok(self.finish(cursor, InstructionKind::Do(Box::new(body))))
+            }
+            KW_LOOP => {
+                self.next_real();
+                let body = self.create_loop(true)?;
+                Ok(self.finish(cursor, InstructionKind::Loop(Box::new(body))))
+            }
             KW_SELECT => {
                 self.next_real();
                 let kind = self.select()?;
@@ -557,7 +625,7 @@ impl<'a> Inst<'a> {
     }
 
     /// `endNew` (`InstructionParser.cpp:2246`): an optional block name.
-    fn end_name(&mut self) -> Result<Option<crate::token::SymbolId>, ParseError> {
+    fn end_name(&mut self) -> Result<Option<SymbolId>, ParseError> {
         let Some(token) = self.next_real() else {
             return Ok(None);
         };
@@ -568,12 +636,394 @@ impl<'a> Inst<'a> {
         Ok(Some(id))
     }
 
+    /// `createLoop` (`InstructionParser.cpp:1994`), for both `DO` and `LOOP`.
+    ///
+    /// The two keywords share every form and differ in one place: bare `DO` is
+    /// a block and bare `LOOP` is `LOOP FOREVER`.
+    fn create_loop(&mut self, is_loop: bool) -> Result<Loop, ParseError> {
+        let mut label = None;
+        let mut counter = None;
+
+        // `LABEL name` and `COUNTER name` come first, in either order, and each
+        // only once. The loop stops on anything else, including a second
+        // occurrence of one already seen, which is how `do label a label b`
+        // becomes a DO whose count expression is `label b`.
+        while let Some(token) = self.peek_real() {
+            if token.kind.tag() != Tag::Symbol {
+                break;
+            }
+            let which = match self.sub_keyword(token) {
+                Some(SUB_LABEL) if label.is_none() => SUB_LABEL,
+                Some(SUB_COUNTER) if counter.is_none() => SUB_COUNTER,
+                _ => break,
+            };
+            let name = self.nth_real(1);
+            match name.map(|token| &token.kind) {
+                Some(TokenKind::Symbol { id, class }) => {
+                    let (id, class) = (*id, *class);
+                    if which == SUB_LABEL {
+                        label = Some(id);
+                    } else {
+                        need_variable(self.ctx, id, class, self.clause_byte)?;
+                        counter = Some(id);
+                    }
+                    let consumed = self.nth_real_index(1).expect("just matched it");
+                    self.seek(consumed + 1);
+                    if label.is_some() && counter.is_some() {
+                        break;
+                    }
+                }
+                // `do label = 1 to 2` is a controlled loop over a variable
+                // named LABEL, not a labelled loop. Any `=` triggers this,
+                // even one that is part of a larger operator, which is why
+                // `==` is an expression error rather than a controlled loop.
+                Some(TokenKind::Operator(Operator::Equal)) => {
+                    let control = self.controlled(label, counter, token)?;
+                    return Ok(control);
+                }
+                Some(TokenKind::Operator(Operator::StrictEqual)) => {
+                    return Err(self.error(35, 1));
+                }
+                // `Error_Symbol_expected_LABEL` is 20.918 and
+                // `Error_Symbol_expected_counter` is 20.934.
+                _ => {
+                    return Err(self.error(20, if which == SUB_LABEL { 918 } else { 934 }));
+                }
+            }
+        }
+
+        // Just the keyword and its options.
+        if self.at_end() {
+            if is_loop {
+                return self.plain_loop(label, counter, LoopKind::Forever);
+            }
+            // `newSimpleDo` takes no counter, because a block does not iterate.
+            if counter.is_some() {
+                return Err(self.error(27, 905));
+            }
+            return Ok(Loop {
+                label,
+                counter,
+                kind: LoopKind::Simple,
+                conditional: None,
+            });
+        }
+
+        let Some(first) = self.peek_real() else {
+            unreachable!("at_end was just false")
+        };
+        if first.kind.tag() != Tag::Symbol {
+            // `DO expr` where the expression does not start with a symbol.
+            return self.count_loop(label, counter);
+        }
+        let second = self.nth_real(1);
+        match second.map(|token| &token.kind) {
+            Some(TokenKind::Operator(Operator::StrictEqual)) => Err(self.error(35, 1)),
+            Some(TokenKind::Operator(Operator::Equal)) => self.controlled(label, counter, first),
+            _ => {
+                // `DO name OVER expr`. This test comes BEFORE the WITH one, so
+                // `do with over x` is a DO OVER whose control variable is named
+                // WITH: measured, rc 0 under rexxc.
+                if second.and_then(|token| self.sub_keyword(token)) == Some(SUB_OVER) {
+                    return self.do_over(label, counter, first);
+                }
+                if self.sub_keyword(first) == Some(SUB_WITH)
+                    && matches!(
+                        second.and_then(|token| self.sub_keyword(token)),
+                        Some(SUB_INDEX | SUB_ITEM)
+                    )
+                {
+                    // Step past WITH; the INDEX or ITEM keyword starts the
+                    // options.
+                    self.next_real();
+                    return self.do_with(label, counter);
+                }
+                match self.sub_keyword(first) {
+                    Some(SUB_FOREVER) => {
+                        self.next_real();
+                        // `Error_Invalid_do_forever` is 27.901, and it is the
+                        // one reachable use of `parseLoopConditional`'s error
+                        // argument: measured, `do forever x` is rc 229.
+                        self.plain_loop(label, counter, LoopKind::Forever)
+                    }
+                    // `DO WHILE` and `DO UNTIL` are a FOREVER loop with the
+                    // conditional attached, which is what `newLoopWhile` and
+                    // `newLoopUntil` build.
+                    Some(SUB_WHILE | SUB_UNTIL) => {
+                        self.plain_loop(label, counter, LoopKind::Forever)
+                    }
+                    // Not a loop keyword, so this is `DO expr`.
+                    _ => self.count_loop(label, counter),
+                }
+            }
+        }
+    }
+
+    /// `DO FOREVER`, `DO WHILE` and `DO UNTIL`, which differ only in the
+    /// conditional that follows.
+    ///
+    /// `parseForeverLoop` (`InstructionParser.cpp:1860`) and the two `createLoop`
+    /// arms below it all reach `parseLoopConditional` with the cursor on the
+    /// keyword, so one function covers the three.
+    fn plain_loop(
+        &mut self,
+        label: Option<SymbolId>,
+        counter: Option<SymbolId>,
+        kind: LoopKind,
+    ) -> Result<Loop, ParseError> {
+        let conditional = self.loop_conditional((27, 901))?;
+        Ok(Loop {
+            label,
+            counter,
+            kind,
+            conditional,
+        })
+    }
+
+    /// `parseCountLoop` (`InstructionParser.cpp:1916`): `DO expr`, with an
+    /// optional trailing conditional.
+    fn count_loop(
+        &mut self,
+        label: Option<SymbolId>,
+        counter: Option<SymbolId>,
+    ) -> Result<Loop, ParseError> {
+        let count = self.opt_expr(Terminators::COND)?;
+        let conditional = self.loop_conditional(UNREACHABLE_SWITCH)?;
+        Ok(Loop {
+            label,
+            counter,
+            kind: LoopKind::Count(count),
+            conditional,
+        })
+    }
+
+    /// `newControlledLoop` (`InstructionParser.cpp:1265`):
+    /// `DO i = initial TO t BY b FOR f`.
+    ///
+    /// The cursor is on the control variable and the `=` follows it. The three
+    /// keyword expressions may come in any order and each only once, and the
+    /// order is recorded because it is the evaluation order.
+    fn controlled(
+        &mut self,
+        label: Option<SymbolId>,
+        counter: Option<SymbolId>,
+        name: &Token,
+    ) -> Result<Loop, ParseError> {
+        let TokenKind::Symbol { id, class } = name.kind else {
+            unreachable!("a controlled loop's control token is a symbol")
+        };
+        need_variable(self.ctx, id, class, self.clause_byte)?;
+        // Step past the control variable and the `=`.
+        let equals = self.nth_real_index(1).expect("the `=` that got us here");
+        self.seek(equals + 1);
+
+        let initial = self.expr(Terminators::CONTROL, 904)?;
+        let mut control = Controlled {
+            control: id,
+            initial,
+            to: None,
+            by: None,
+            for_count: None,
+            order: Vec::new(),
+        };
+        let mut conditional = None;
+        while let Some(token) = self.peek_real() {
+            let (slot, missing, entry) = match self.sub_keyword(token) {
+                Some(SUB_BY) => (&mut control.by, 905, ControlExpr::By),
+                Some(SUB_TO) => (&mut control.to, 906, ControlExpr::To),
+                Some(SUB_FOR) => (&mut control.for_count, 907, ControlExpr::For),
+                Some(SUB_WHILE | SUB_UNTIL) => {
+                    // `parseLoopConditional` allows nothing after itself, so
+                    // this ends the clause.
+                    conditional = self.loop_conditional(UNREACHABLE_SWITCH)?;
+                    break;
+                }
+                _ => return Err(self.error(UNREACHABLE_SWITCH.0, UNREACHABLE_SWITCH.1)),
+            };
+            if slot.is_some() {
+                // `Error_Invalid_do_duplicate`. Measured: `do i = 1 to 3 to 4`
+                // is rc 229, Error 27.902.
+                return Err(self.error(27, 902));
+            }
+            self.next_real();
+            let value = self.expr(Terminators::CONTROL, missing)?;
+            match entry {
+                ControlExpr::By => control.by = Some(value),
+                ControlExpr::To => control.to = Some(value),
+                ControlExpr::For => control.for_count = Some(value),
+            }
+            control.order.push(entry);
+        }
+        Ok(Loop {
+            // With no LABEL clause the control variable's name is the loop's
+            // name, which is what `LEAVE i` matches against.
+            label: label.or(Some(id)),
+            counter,
+            kind: LoopKind::Controlled(Box::new(control)),
+            conditional,
+        })
+    }
+
+    /// `newDoOverLoop` (`InstructionParser.cpp:1432`): `DO name OVER expr`,
+    /// with an optional `FOR` and an optional conditional.
+    fn do_over(
+        &mut self,
+        label: Option<SymbolId>,
+        counter: Option<SymbolId>,
+        name: &Token,
+    ) -> Result<Loop, ParseError> {
+        let TokenKind::Symbol { id, class } = name.kind else {
+            unreachable!("a DO OVER control token is a symbol")
+        };
+        need_variable(self.ctx, id, class, self.clause_byte)?;
+        // Step past the control variable and the OVER keyword.
+        let over = self.nth_real_index(1).expect("the OVER that got us here");
+        self.seek(over + 1);
+        let target = self.expr(Terminators::OVER, 911)?;
+        let (for_count, conditional) = self.for_and_conditional()?;
+        Ok(Loop {
+            label: label.or(Some(id)),
+            counter,
+            kind: LoopKind::Over {
+                control: id,
+                target,
+                for_count,
+            },
+            conditional,
+        })
+    }
+
+    /// `newDoWithLoop` (`InstructionParser.cpp:1582`):
+    /// `DO WITH INDEX i ITEM v OVER expr`.
+    ///
+    /// The cursor is on the `INDEX` or `ITEM` keyword, the `WITH` having been
+    /// stepped past. At least one of the two variables is required and `OVER`
+    /// must follow both.
+    fn do_with(
+        &mut self,
+        label: Option<SymbolId>,
+        counter: Option<SymbolId>,
+    ) -> Result<Loop, ParseError> {
+        let mut index = None;
+        let mut item = None;
+        while let Some(token) = self.peek_real() {
+            if token.kind.tag() != Tag::Symbol {
+                break;
+            }
+            let slot = match self.sub_keyword(token) {
+                Some(SUB_INDEX) => &mut index,
+                Some(SUB_ITEM) => &mut item,
+                _ => break,
+            };
+            if slot.is_some() {
+                return Err(self.error(27, 902));
+            }
+            self.next_real();
+            // `requiredVariable` then `addVariable`, so a non-symbol is
+            // 20.929 and a symbol that is not a variable is `needVariable`'s
+            // own number: measured, `do with index 1 over x` is 31.2 and
+            // `do with index .a over x` is 31.3.
+            let Some(name) = self.next_real() else {
+                return Err(self.error(20, 929));
+            };
+            let TokenKind::Symbol { id, class } = name.kind else {
+                return Err(self.error(20, 929));
+            };
+            need_variable(self.ctx, id, class, self.clause_byte)?;
+            match self.sub_keyword(token) {
+                Some(SUB_INDEX) => index = Some(id),
+                _ => item = Some(id),
+            }
+        }
+        if index.is_none() && item.is_none() {
+            // `Error_Invalid_do_with_no_control`. Unreachable through
+            // `createLoop`, which only comes here when the token after WITH is
+            // INDEX or ITEM, and kept because `newDoWithLoop` checks it.
+            return Err(self.error(27, 903));
+        }
+        // `Error_Invalid_do_with_no_over`. Measured: `do with index i x` is
+        // rc 229, Error 27.904.
+        let over = self
+            .peek_real()
+            .filter(|token| token.kind.tag() == Tag::Symbol);
+        if over.and_then(|token| self.sub_keyword(token)) != Some(SUB_OVER) {
+            return Err(self.error(27, 904));
+        }
+        self.next_real();
+        let target = self.expr(Terminators::OVER, 911)?;
+        let (for_count, conditional) = self.for_and_conditional()?;
+        Ok(Loop {
+            label,
+            counter,
+            kind: LoopKind::With {
+                index,
+                item,
+                target,
+                for_count,
+            },
+            conditional,
+        })
+    }
+
+    /// The `FOR n` and `WHILE`/`UNTIL` tail that `DO OVER` and `DO WITH`
+    /// share.
+    fn for_and_conditional(
+        &mut self,
+    ) -> Result<(Option<Expr>, Option<LoopConditional>), ParseError> {
+        let mut for_count = None;
+        let mut conditional = None;
+        while let Some(token) = self.peek_real() {
+            match self.sub_keyword(token) {
+                Some(SUB_FOR) => {
+                    if for_count.is_some() {
+                        return Err(self.error(27, 902));
+                    }
+                    self.next_real();
+                    for_count = Some(self.expr(Terminators::CONTROL, 907)?);
+                }
+                Some(SUB_WHILE | SUB_UNTIL) => {
+                    conditional = self.loop_conditional(UNREACHABLE_SWITCH)?;
+                    break;
+                }
+                _ => return Err(self.error(UNREACHABLE_SWITCH.0, UNREACHABLE_SWITCH.1)),
+            }
+        }
+        Ok((for_count, conditional))
+    }
+
+    /// `parseLoopConditional` (`InstructionParser.cpp:4600`): an optional
+    /// trailing `WHILE` or `UNTIL`, and nothing after it.
+    ///
+    /// `unexpected` is the error for a token that is neither, which the C++
+    /// passes per caller: 27.901 from `parseForeverLoop` and `Error_None`
+    /// everywhere else, where the terminator set makes it unreachable.
+    fn loop_conditional(
+        &mut self,
+        unexpected: (u16, u16),
+    ) -> Result<Option<LoopConditional>, ParseError> {
+        let Some(token) = self.next_real() else {
+            return Ok(None);
+        };
+        let until = match self.sub_keyword(token) {
+            Some(SUB_WHILE) => false,
+            Some(SUB_UNTIL) => true,
+            _ => return Err(self.error(unexpected.0, unexpected.1)),
+        };
+        // `Error_Invalid_expression_while` is 35.908 and
+        // `Error_Invalid_expression_until` is 35.909.
+        let condition = self.logical(Terminators::COND, if until { 909 } else { 908 })?;
+        // `Error_Invalid_do_whileuntil`. Measured:
+        // `do i = 1 to 3 while 1 until 2` is rc 229, Error 27.1.
+        self.required_end(27, 1)?;
+        Ok(Some(LoopConditional { until, condition }))
+    }
+
     /// `LEAVE`'s and `ITERATE`'s optional block name.
     ///
     /// The two sub-numbers differ only in which keyword is named:
     /// `Error_Symbol_expected_leave` is 20.907 and `Error_Invalid_data_leave`
     /// is 21.907, against 20.908 and 21.908 for `ITERATE`.
-    fn block_name(&mut self, sub: u16) -> Result<Option<crate::token::SymbolId>, ParseError> {
+    fn block_name(&mut self, sub: u16) -> Result<Option<SymbolId>, ParseError> {
         let Some(token) = self.next_real() else {
             return Ok(None);
         };

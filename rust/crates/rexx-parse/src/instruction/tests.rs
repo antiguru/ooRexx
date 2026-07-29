@@ -15,8 +15,9 @@ use crate::token::{Keywords, ParseCtx, ParseError, SymbolTable};
 use crate::{ProgramSource, SourceKind, scan};
 
 use super::{
-    KW_ELSE, KW_END, KW_IF, KW_ITERATE, KW_LEAVE, KW_NOP, KW_OTHERWISE, KW_SELECT, KW_THEN,
-    KW_WHEN, SUB_CASE, SUB_LABEL, parse_instructions,
+    KW_DO, KW_ELSE, KW_END, KW_IF, KW_ITERATE, KW_LEAVE, KW_LOOP, KW_NOP, KW_OTHERWISE, KW_SELECT,
+    KW_THEN, KW_WHEN, SUB_BY, SUB_CASE, SUB_COUNTER, SUB_FOR, SUB_FOREVER, SUB_INDEX, SUB_ITEM,
+    SUB_LABEL, SUB_OVER, SUB_TO, SUB_UNTIL, SUB_WHILE, SUB_WITH, parse_instructions,
 };
 
 /// Parses `text` as a whole program and returns every instruction, with the
@@ -97,11 +98,13 @@ fn keyword_indices_still_name_their_own_spellings() {
         "the keyword instruction table is not 35 entries"
     );
     for (index, spelling) in [
+        (KW_DO, "DO"),
         (KW_ELSE, "ELSE"),
         (KW_END, "END"),
         (KW_IF, "IF"),
         (KW_ITERATE, "ITERATE"),
         (KW_LEAVE, "LEAVE"),
+        (KW_LOOP, "LOOP"),
         (KW_NOP, "NOP"),
         (KW_OTHERWISE, "OTHERWISE"),
         (KW_SELECT, "SELECT"),
@@ -114,7 +117,21 @@ fn keyword_indices_still_name_their_own_spellings() {
             "keyword {spelling} is not at index {index}"
         );
     }
-    for (index, spelling) in [(SUB_CASE, "CASE"), (SUB_LABEL, "LABEL")] {
+    for (index, spelling) in [
+        (SUB_BY, "BY"),
+        (SUB_CASE, "CASE"),
+        (SUB_COUNTER, "COUNTER"),
+        (SUB_FOR, "FOR"),
+        (SUB_FOREVER, "FOREVER"),
+        (SUB_INDEX, "INDEX"),
+        (SUB_ITEM, "ITEM"),
+        (SUB_LABEL, "LABEL"),
+        (SUB_OVER, "OVER"),
+        (SUB_TO, "TO"),
+        (SUB_UNTIL, "UNTIL"),
+        (SUB_WHILE, "WHILE"),
+        (SUB_WITH, "WITH"),
+    ] {
         assert_eq!(
             keywords.sub_keywords.index_of(symbols.intern(spelling)),
             Some(index),
@@ -408,4 +425,198 @@ fn leave_and_iterate_name_their_own_errors() {
     assert_eq!(err("leave a b"), (21, 907));
     assert_eq!(err("iterate \"x\""), (20, 908));
     assert_eq!(err("iterate a b"), (21, 908));
+}
+
+// ---- DO and LOOP ----
+
+/// The loop header of the first instruction of `text`, which must be a `DO` or
+/// a `LOOP`.
+fn loop_of(text: &str) -> crate::ast::Loop {
+    match &ok(text)[0].kind {
+        InstructionKind::Do(body) | InstructionKind::Loop(body) => (**body).clone(),
+        other => panic!("{text:?} is not a loop: {other:?}"),
+    }
+}
+
+/// A one-word name for a loop's shape, so a test can say which of the six the
+/// parse produced without spelling out its expressions.
+fn loop_shape(text: &str) -> String {
+    let body = loop_of(text);
+    let kind = match &body.kind {
+        crate::ast::LoopKind::Simple => "simple".to_string(),
+        crate::ast::LoopKind::Forever => "forever".to_string(),
+        crate::ast::LoopKind::Count(None) => "count(-)".to_string(),
+        crate::ast::LoopKind::Count(Some(_)) => "count".to_string(),
+        crate::ast::LoopKind::Controlled(control) => {
+            let mut parts = String::new();
+            for entry in &control.order {
+                parts.push(match entry {
+                    crate::ast::ControlExpr::To => 't',
+                    crate::ast::ControlExpr::By => 'b',
+                    crate::ast::ControlExpr::For => 'f',
+                });
+            }
+            format!("controlled[{parts}]")
+        }
+        crate::ast::LoopKind::Over { for_count, .. } => {
+            format!("over{}", if for_count.is_some() { "+for" } else { "" })
+        }
+        crate::ast::LoopKind::With {
+            index,
+            item,
+            for_count,
+            ..
+        } => format!(
+            "with[{}{}]{}",
+            if index.is_some() { "i" } else { "" },
+            if item.is_some() { "v" } else { "" },
+            if for_count.is_some() { "+for" } else { "" }
+        ),
+    };
+    let tail = match &body.conditional {
+        None => "",
+        Some(c) if c.until => "+until",
+        Some(_) => "+while",
+    };
+    let label = if body.label.is_some() { "@" } else { "" };
+    let counter = if body.counter.is_some() { "#" } else { "" };
+    format!("{label}{counter}{kind}{tail}")
+}
+
+#[test]
+fn bare_do_is_a_block_and_bare_loop_is_forever() {
+    // The one difference between the two keywords. Both rc 0 under rexxc.
+    assert_eq!(loop_shape("do\nend"), "simple");
+    assert_eq!(loop_shape("loop\nend"), "forever");
+    assert_eq!(names(&ok("do\nend")), ["DO", "END"]);
+    assert_eq!(names(&ok("loop\nend")), ["LOOP", "END"]);
+}
+
+#[test]
+fn every_loop_form_reaches_its_own_shape() {
+    // Each of these was checked with rexxc, all rc 0.
+    assert_eq!(loop_shape("do 3\nend"), "count");
+    assert_eq!(loop_shape("do forever\nend"), "forever");
+    assert_eq!(loop_shape("do while 1\nend"), "forever+while");
+    assert_eq!(loop_shape("do until 1\nend"), "forever+until");
+    // A controlled loop takes the control variable's name as its label when no
+    // LABEL clause gave one, which is what `LEAVE i` matches.
+    assert_eq!(loop_shape("do i = 1 to 3\nend"), "@controlled[t]");
+    assert_eq!(
+        loop_shape("do i = 1 to 3 by 2 for 4\nend"),
+        "@controlled[tbf]"
+    );
+    assert_eq!(loop_shape("do i over x\nend"), "@over");
+    assert_eq!(
+        loop_shape("do i over x for 2 while 1\nend"),
+        "@over+for+while"
+    );
+    assert_eq!(loop_shape("do with index i over x\nend"), "with[i]");
+    assert_eq!(loop_shape("do with item v over x\nend"), "with[v]");
+    assert_eq!(
+        loop_shape("do with index i item v over x for 2\nend"),
+        "with[iv]+for"
+    );
+    assert_eq!(loop_shape("do label a\nend a"), "@simple");
+    assert_eq!(loop_shape("loop counter c\nend"), "#forever");
+    assert_eq!(loop_shape("do counter c 3\nend"), "#count");
+    assert_eq!(loop_shape("do label a counter c 3\nend a"), "@#count");
+}
+
+#[test]
+fn the_order_of_a_controlled_loops_keywords_is_the_order_written() {
+    // Evaluation order is observable, because a control expression can have
+    // side effects, so it is recorded rather than normalised.
+    assert_eq!(loop_shape("do i = 1 by 2 to 3\nend"), "@controlled[bt]");
+    assert_eq!(
+        loop_shape("do i = 1 for 4 to 3 by 2\nend"),
+        "@controlled[ftb]"
+    );
+}
+
+#[test]
+fn over_is_tested_before_with_so_a_variable_may_be_named_with() {
+    // `do with over x` is a DO OVER whose control variable is WITH, because
+    // `createLoop` tests `second == OVER` before it tests `first == WITH`.
+    // Measured: rc 0 under rexxc, and the shape is `over`, not `with`.
+    assert_eq!(loop_shape("do with over x\nend"), "@over");
+}
+
+#[test]
+fn a_loop_control_variable_must_be_a_variable() {
+    // `addVariable` calls `needVariable`, so the number comes from the
+    // SPELLING. Measured: `do 1 = 1 to 2` is 31.2 and `do .5 = 1 to 2` is
+    // 31.3, where `drop .5` is 31.2 from the class-based test instead.
+    assert_eq!(err("do 1 = 1 to 2\nend"), (31, 2));
+    assert_eq!(err("do .5 = 1 to 2\nend"), (31, 3));
+    assert_eq!(err("do .a = 1 to 2\nend"), (31, 3));
+    assert_eq!(err("do 1 over x\nend"), (31, 2));
+    assert_eq!(err("do with index 1 over x\nend"), (31, 2));
+    assert_eq!(err("do with index .a over x\nend"), (31, 3));
+    // The other direction: a stem and a compound are legal control variables.
+    assert_eq!(loop_shape("do a. = 1 to 2\nend"), "@controlled[t]");
+    assert_eq!(loop_shape("do a.b = 1 to 2\nend"), "@controlled[t]");
+}
+
+#[test]
+fn a_duplicated_loop_keyword_is_27_902() {
+    // Measured with rexxc: rc 229, Error 27.902.
+    assert_eq!(err("do i = 1 to 3 to 4\nend"), (27, 902));
+    assert_eq!(err("do i = 1 by 2 by 3\nend"), (27, 902));
+    assert_eq!(err("do i over x for 1 for 2\nend"), (27, 902));
+    // The other direction: one of each is fine.
+    assert_eq!(loop_shape("do i = 1 to 3 by 2\nend"), "@controlled[tb]");
+}
+
+#[test]
+fn a_loop_takes_at_most_one_conditional() {
+    // `Error_Invalid_do_whileuntil`. Measured:
+    // `do i = 1 to 3 while 1 until 2` is rc 229, Error 27.1.
+    assert_eq!(err("do i = 1 to 3 while 1 until 2\nend"), (27, 1));
+    assert_eq!(err("do while 1 until 2\nend"), (27, 1));
+    // The other direction, and it is not obvious: `while 1 x` is ACCEPTED,
+    // because the conditional absorbs `1 x` as a blank concatenation before
+    // the end-of-clause check runs. Measured: rc 0.
+    assert_eq!(
+        loop_shape("do i = 1 to 3 while 1 x\nend"),
+        "@controlled[t]+while"
+    );
+}
+
+#[test]
+fn do_forever_allows_only_a_conditional_after_it() {
+    // The one reachable use of `parseLoopConditional`'s error argument.
+    // Measured: `do forever x` is rc 229, Error 27.901.
+    assert_eq!(err("do forever x\nend"), (27, 901));
+    assert_eq!(loop_shape("do forever while 1\nend"), "forever+while");
+}
+
+#[test]
+fn do_with_requires_over_after_its_variables() {
+    // Measured: `do with index i x` is rc 229, Error 27.904.
+    assert_eq!(err("do with index i x\nend"), (27, 904));
+    assert_eq!(err("do with item v item w over x\nend"), (27, 902));
+}
+
+#[test]
+fn a_simple_do_may_not_have_a_counter() {
+    // Measured: `do counter c` is rc 229, Error 27.905, while
+    // `loop counter c` is rc 0 because a LOOP always iterates.
+    assert_eq!(err("do counter c\nend"), (27, 905));
+    assert_eq!(loop_shape("loop counter c\nend"), "#forever");
+}
+
+#[test]
+fn label_and_counter_names_must_be_symbols() {
+    // Measured: `do label` is 20.918 and `do counter "x" 3` is 20.934.
+    assert_eq!(err("do label\nend"), (20, 918));
+    assert_eq!(err("do counter \"x\" 3\nend"), (20, 934));
+}
+
+#[test]
+fn a_repeated_label_keyword_becomes_the_count_expression() {
+    // `do label a label b` is accepted, because the second LABEL ends the
+    // option loop and becomes `DO expr` with the expression `label b`.
+    // Measured: rc 0 under rexxc.
+    assert_eq!(loop_shape("do label a label b\nend"), "@count");
 }
