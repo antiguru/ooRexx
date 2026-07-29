@@ -2254,9 +2254,26 @@ not be read as licence to loosen them.
   Task 3.4; what Task 3.4 produces is `Clause::span`.
 - Produces: the source-text slice per clause that `TRACE`'s `*-*` line needs. Nothing else — no depth field, no value-trace hooks.
 
+**The two accessors you need already exist, and a third is forbidden.**
+`ProgramSource::span_bytes(Range<usize>) -> Option<&[u8]>` turns a span into bytes,
+and `line_span(n) -> Option<Range<usize>>` gives a line's content range. Both landed
+in Task 3.3. There is deliberately **no** whole-text accessor, because a second way
+to reach the bytes invites re-deriving line boundaries that `ProgramSource` owns.
+
+**`span_bytes` alone is not the answer, and this is the trap in this task.** A
+continued clause's span **contains** the line terminator while `trace r` **drops** it
+when joining the fragments. Measured: `say "x",` / newline / `    "y"` traces as
+`say "x","y"` — the comma kept, the newline removed, and the continuation line's four
+leading blanks kept. Separately, `say 1,` / `  + 2` has span `0..12`, terminator
+included. So this task needs a **terminator-stripping join** over the span, not a raw
+slice. It is neither a slice nor a simple trim: the bytes to drop are the terminators
+*inside* the span, and nothing else.
+
 `src/clause.rs`, `src/ast.rs` and `src/instruction.rs` are in the Files list
 because Step 3 adjusts spans, and a span this task finds wrong is a span Task 3.4
-or Task 3.6 produced. `src/instruction.rs` specifically, because the end byte a
+or Task 3.6 produced. `src/source.rs` is listed only in case the join belongs
+beside `span_bytes`; it needs no new accessor, and adding one is a finding to
+report rather than a licence. `src/instruction.rs` specifically, because the end byte a
 `THEN`/`ELSE`/`OTHERWISE` clause stops at is chosen by the instruction parser
 when it calls `split_before`, so a wrong end byte is repaired there and nowhere
 else.
@@ -2421,8 +2438,15 @@ stops early cannot post a good number.
 - [ ] **Step 4: Record the number against the cold-start budget**
 
 C++ cold start is 5.1 ms from a memory-mapped image; the budget is ~55 ms
-total. Write the measurement into `d10-decision.md` and say plainly whether it
-fits.
+total. Write the measurement into `d10-decision.md` and say plainly whether it fits.
+
+**Report parse time as a component of cold start, not as cold start.** Under D2 the
+Rust build parses these 5,203 lines at every interpreter start, so parse time is *in*
+the budget — but bootstrap execution, heap setup and class construction are also in
+it, and none is measured yet. The parent plan already had to correct D10 for claiming
+parser throughput "sets cold-start time directly". So a 1 ms parse does **not** mean
+the budget fits; it means one component of it costs 1 ms. State the number, state
+what it excludes, and do not draw the conclusion the data cannot support.
 
 - [ ] **Step 5: Commit**
 
