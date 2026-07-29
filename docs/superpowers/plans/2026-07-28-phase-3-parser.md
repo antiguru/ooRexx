@@ -1922,6 +1922,16 @@ lines raising 13 distinct errors**, measured. Folding one into the other would h
 made a small, independently reviewable task into the largest in the phase and hidden
 the block work inside a step called "implement the composition".
 
+**A brief that names a file must also name what that file calls out to.** Task 3.7
+missed error 99.925 at four call sites because its `syntaxError` lives in
+`LanguageParser.cpp` while the task was scoped to `DirectiveParser.cpp`'s 2,867
+lines. Scoping a task to a file scopes its blind spot to the same boundary. **This
+task inherits exactly that exposure**: `translateBlock` is in `LanguageParser.cpp`,
+but the errors it raises and the state it reads reach into `InstructionParser.cpp`
+and the instruction classes. Enumerate the call-outs before implementing, and treat
+any `syntaxError` reachable from `translateBlock` as in scope wherever it is
+written.
+
 **Files:**
 - Create: `rust/crates/rexx-parse/src/block.rs`
 - Modify: `rust/crates/rexx-parse/src/ast.rs`, `src/lib.rs`
