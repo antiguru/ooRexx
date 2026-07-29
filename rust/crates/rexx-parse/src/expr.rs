@@ -213,26 +213,11 @@ pub(crate) fn parse_logical(
     Parser::new(ctx, cursor).logical(term, missing)
 }
 
-/// Parses one subexpression, where a comma terminates rather than building a
-/// list.
-///
-/// `LanguageParser::parseSubExpression` (`LanguageParser.cpp:2812`). Used
-/// where the caller interprets the commas itself.
-#[allow(dead_code)] // deleted by Task 3.6
-pub(crate) fn parse_subexpression(
-    ctx: &ParseCtx,
-    cursor: &mut TokenCursor,
-    term: Terminators,
-) -> Result<Option<Expr>, ParseError> {
-    Parser::new(ctx, cursor).subexpression(term)
-}
-
 /// Parses an argument list up to `closer`, which is consumed.
 ///
 /// `LanguageParser::parseArgList` (`LanguageParser.cpp:3083`). `None` for
 /// `closer` is the `TERM_EOC` form, where the list runs to the end of the
 /// clause and there is no bracket to match: `CALL f a, b` uses it.
-#[allow(dead_code)] // deleted by Task 3.6
 pub(crate) fn parse_arg_list(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -248,7 +233,6 @@ pub(crate) fn parse_arg_list(
 /// NOT build a list here, unlike `parse_constant_expression`'s parenthesised
 /// form: `parenExpression` calls `parseSubExpression` where
 /// `parseConstantExpression` calls `parseFullSubExpression`.
-#[allow(dead_code)] // deleted by Task 3.6
 pub(crate) fn parse_paren_expression(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -269,7 +253,6 @@ pub(crate) fn parse_paren_expression(
 /// literal, a constant symbol, or a parenthesised expression, and nothing
 /// else. `None` means the clause ended, which every caller turns into its own
 /// error; anything present that is not one of the three is 35.1.
-#[allow(dead_code)] // deleted by Task 3.6
 pub(crate) fn parse_constant_expression(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,
@@ -337,7 +320,6 @@ pub(crate) fn parse_message_term(
 /// `LanguageParser::parseVariableOrMessageTerm` (`LanguageParser.cpp:3455`).
 /// Carries the same discard contract as `parse_message_term`, and for the same
 /// reason.
-#[allow(dead_code)] // deleted by Task 3.6
 pub(crate) fn parse_variable_or_message_term(
     ctx: &ParseCtx,
     cursor: &mut TokenCursor,

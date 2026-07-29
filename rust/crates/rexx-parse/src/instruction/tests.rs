@@ -1673,3 +1673,199 @@ fn address_with_rejects_what_the_oracle_rejects() {
         (25, 932)
     );
 }
+
+// ---- Step 4: every keyword reaches its own instruction node ----
+
+/// One legal clause per keyword, and the node it must produce.
+///
+/// Every entry was run through `build/bin/rexxc` and is rc 0. The three that
+/// look wrong are not: measured, `procedure`, `leave` and `iterate` all parse
+/// standing alone and fail only at run time, with Error 17.1, 28.1 and 28.2,
+/// from `RexxActivation.cpp:1250`, `:1214` and `:1161`. They are deliberately
+/// NOT wrapped in a routine or a loop to make them legal, because standing
+/// alone IS the behaviour under test: a parser that rejected them would
+/// diverge on every program holding an unreachable LEAVE.
+const KEYWORD_CLAUSES: &[(&str, &str)] = &[
+    ("ADDRESS", "address system"),
+    ("ARG", "arg a"),
+    ("CALL", "call f"),
+    ("DO", "do 1\nend"),
+    ("DROP", "drop a"),
+    ("ELSE", "if 1 then nop\nelse nop"),
+    ("END", "do 1\nend"),
+    ("EXIT", "exit"),
+    ("EXPOSE", "expose a"),
+    ("FORWARD", "forward"),
+    ("GUARD", "guard on"),
+    ("IF", "if 1 then nop"),
+    ("INTERPRET", "interpret \"nop\""),
+    ("ITERATE", "iterate"),
+    ("LEAVE", "leave"),
+    ("LOOP", "loop\nend"),
+    ("NOP", "nop"),
+    ("NUMERIC", "numeric digits"),
+    ("OPTIONS", "options \"x\""),
+    ("OTHERWISE", "select\nwhen 1 then nop\notherwise nop\nend"),
+    ("PARSE", "parse arg a"),
+    ("PROCEDURE", "procedure"),
+    ("PULL", "pull a"),
+    ("PUSH", "push 1"),
+    ("QUEUE", "queue 1"),
+    ("RAISE", "raise halt"),
+    ("REPLY", "reply"),
+    ("RETURN", "return"),
+    ("SAY", "say 1"),
+    ("SELECT", "select\nwhen 1 then nop\nend"),
+    ("SIGNAL", "signal lab\nlab: nop"),
+    ("THEN", "if 1 then nop"),
+    ("TRACE", "trace r"),
+    ("USE", "use arg a"),
+    ("WHEN", "select\nwhen 1 then nop\nend"),
+];
+
+#[test]
+fn every_keyword_reaches_its_instruction_node() {
+    // The length assertion is the load-bearing half: it fails when a keyword is
+    // added to the table and nobody wrote a clause for it.
+    assert_eq!(KEYWORD_CLAUSES.len(), 35, "a keyword lost its clause");
+    let mut symbols = SymbolTable::default();
+    let keywords = Keywords::new(&mut symbols);
+    assert_eq!(keywords.instructions.len(), KEYWORD_CLAUSES.len());
+    for (keyword, source) in KEYWORD_CLAUSES {
+        let produced = names(&ok(source));
+        assert!(
+            produced.contains(keyword),
+            "{keyword} is not among {produced:?} for {source:?}"
+        );
+    }
+    // Every keyword in the table appears exactly once as a row's keyword, so
+    // no row silently covers two and none is missing.
+    let mut listed: Vec<&str> = KEYWORD_CLAUSES.iter().map(|(k, _)| *k).collect();
+    listed.sort_unstable();
+    listed.dedup();
+    assert_eq!(listed.len(), 35, "a keyword is named twice");
+    for keyword in &listed {
+        assert!(
+            keywords
+                .instructions
+                .index_of(symbols.intern(keyword))
+                .is_some(),
+            "{keyword} is not an instruction keyword"
+        );
+    }
+}
+
+// ---- the corpus ----
+
+/// The corpus programs that hold no `::` directive, so the whole file is one
+/// code body and a short parse would be a failure rather than a boundary.
+const CORPUS: &[(&str, &str)] = &[
+    (
+        "keyword_as_variable",
+        include_str!("../../../../corpus/lang/keyword_as_variable.rex"),
+    ),
+    (
+        "do_variants",
+        include_str!("../../../../corpus/lang/do_variants.rex"),
+    ),
+    (
+        "select_when",
+        include_str!("../../../../corpus/lang/select_when.rex"),
+    ),
+    (
+        "parse_template",
+        include_str!("../../../../corpus/lang/parse_template.rex"),
+    ),
+    (
+        "condition_syntax",
+        include_str!("../../../../corpus/lang/condition_syntax.rex"),
+    ),
+    (
+        "call_procedure",
+        include_str!("../../../../corpus/lang/call_procedure.rex"),
+    ),
+    (
+        "stem_compound",
+        include_str!("../../../../corpus/lang/stem_compound.rex"),
+    ),
+    (
+        "interpret_dynamic",
+        include_str!("../../../../corpus/lang/interpret_dynamic.rex"),
+    ),
+    (
+        "arith_digits",
+        include_str!("../../../../corpus/lang/arith_digits.rex"),
+    ),
+    (
+        "trace_output",
+        include_str!("../../../../corpus/lang/trace_output.rex"),
+    ),
+    (
+        "source_arg",
+        include_str!("../../../../corpus/lang/source_arg.rex"),
+    ),
+    (
+        "string_builtins",
+        include_str!("../../../../corpus/lang/string_builtins.rex"),
+    ),
+    (
+        "primitive_classes",
+        include_str!("../../../../corpus/lang/primitive_classes.rex"),
+    ),
+];
+
+#[test]
+fn the_corpus_programs_parse() {
+    for (name, source) in CORPUS {
+        let instructions = parse(source)
+            .unwrap_or_else(|e| panic!("corpus/lang/{name}.rex failed to parse: {e:?}"));
+        // A parse that stopped at the first clause would still be `Ok`, so the
+        // count is checked against the clause count rather than against zero.
+        let program = ProgramSource::new(source.as_bytes().to_vec(), SourceKind::Program);
+        let scanned = scan(&program).expect("the corpus scans");
+        let clauses = crate::clause::split_clauses(&scanned.tokens).expect("the corpus splits");
+        assert!(
+            instructions.len() >= clauses.len(),
+            "corpus/lang/{name}.rex: {} instructions from {} clauses, so the \
+             parse stopped early",
+            instructions.len(),
+            clauses.len()
+        );
+    }
+}
+
+#[test]
+fn the_keyword_as_variable_corpus_parses_every_keyword_as_a_variable() {
+    // The program this whole dispatch exists for. It assigns to 16 keyword
+    // names, runs a DO loop and a SELECT while their names hold values, uses a
+    // stem named `end.`, a compound tail spelled `if`, and PARSE while `parse`
+    // is a variable.
+    let source = CORPUS[0].1;
+    let instructions = ok(source);
+    let produced = names(&instructions);
+    // Nineteen assignments: fifteen keyword names at the top, then `end.`,
+    // `end.1`, `stem.` and `stem.if`. Every one must be an assignment rather
+    // than a keyword instruction.
+    assert_eq!(
+        produced.iter().filter(|n| **n == "<assign>").count(),
+        19,
+        "an assignment to a keyword name was read as a keyword: {produced:?}"
+    );
+    // And the keywords used AS keywords in the same file are still keywords.
+    for keyword in [
+        "DO",
+        "SELECT",
+        "WHEN",
+        "OTHERWISE",
+        "IF",
+        "THEN",
+        "ELSE",
+        "PARSE",
+        "SAY",
+    ] {
+        assert!(
+            produced.contains(&keyword),
+            "{keyword} did not survive as a keyword: {produced:?}"
+        );
+    }
+}
