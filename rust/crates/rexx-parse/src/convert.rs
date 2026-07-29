@@ -31,6 +31,17 @@ struct Number {
     exponent: i64,
 }
 
+/// Whether `text` is a Rexx number at all, without asking what its value is.
+///
+/// `RexxString::numberString() != OREF_NULL`, which is the test the
+/// `::CONSTANT` and `::ANNOTATE` signed forms make on the sign concatenated
+/// with the symbol that followed it. Measured against `build/bin/rexxc`:
+/// `::CONSTANT c -.5`, `-1e2` and `-5.` are all rc 0 while `-5x` and `-1e` are
+/// Error 19.916, so a constant symbol is not necessarily a number.
+pub(crate) fn is_number(text: &[u8]) -> bool {
+    scan_number(text).is_some()
+}
+
 /// The value of `text` as a whole number, or `None` if it is not one.
 ///
 /// `RexxString::requestNumber(result, digits)`: the text must be a Rexx number

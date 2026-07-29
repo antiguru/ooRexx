@@ -92,6 +92,34 @@ fn a_negative_whole_number_keeps_its_sign() {
     assert_eq!(whole_number(b"-1e2", TRACE_DIGITS), Some(-100));
 }
 
+/// `is_number` accepts every number, whole or not, and rejects everything
+/// else. Measured through `::CONSTANT`, whose signed form makes the
+/// distinction visible.
+#[test]
+fn is_number_accepts_a_fraction_where_whole_number_does_not() {
+    // Measured: `::constant c -.5`, `-1e2` and `-5.` are all rc 0.
+    assert!(is_number(b"-.5"));
+    assert!(is_number(b"-1e2"));
+    assert!(is_number(b"-5."));
+    assert_eq!(whole_number(b"-.5", ARGUMENT_DIGITS), None);
+    // Measured: `::constant c -5x` and `-1e` are both Error 19.916.
+    assert!(!is_number(b"-5x"));
+    assert!(!is_number(b"-1e"));
+    assert!(!is_number(b""));
+    assert!(!is_number(b"."));
+}
+
+/// A number too wide for any precision is still a number, which is why
+/// `is_number` must not go through `whole_number`.
+#[test]
+fn is_number_does_not_impose_a_digit_limit() {
+    assert!(is_number(b"1234567890123456789012345678901234567890"));
+    assert_eq!(
+        whole_number(b"1234567890123456789012345678901234567890", ARGUMENT_DIGITS),
+        None
+    );
+}
+
 #[test]
 fn a_trace_setting_is_any_number_of_question_marks_and_one_letter() {
     // Measured: all rc 0.

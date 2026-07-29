@@ -22,6 +22,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 
 use crate::ProgramSource;
+use crate::scanner::ResourceBody;
 
 /// A parse-time error, identified the way the interpreter identifies it: a
 /// major number and a sub-number, as in `13.1` or `99.943`.
@@ -678,6 +679,14 @@ pub(crate) struct ParseCtx<'a> {
     /// test is an integer comparison. Keywords are NOT reserved words, so this
     /// is only ever consulted positionally.
     pub(crate) keywords: &'a Keywords,
+    /// The `::RESOURCE` bodies `scan` copied out, keyed by the index of the
+    /// `::` token that opened each directive.
+    ///
+    /// Here rather than passed to the directive parser as an argument, because a
+    /// resource body is scan output that a `parse_*` function consults and that
+    /// is exactly what this struct bundles. Empty for almost every program: only
+    /// `::RESOURCE` fills it.
+    pub(crate) resources: &'a [ResourceBody],
 }
 
 /// A position inside one clause's token range, not inside the whole vector,

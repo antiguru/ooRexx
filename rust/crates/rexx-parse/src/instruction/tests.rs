@@ -41,6 +41,7 @@ fn parse_kind(text: &str, kind: SourceKind) -> Result<(Vec<Instruction>, SymbolT
             tokens: &scanned.tokens,
             symbols: &scanned.symbols,
             keywords: &scanned.keywords,
+            resources: &scanned.resources,
         };
         parse_instructions(&ctx)
     };

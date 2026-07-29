@@ -36,6 +36,7 @@
 mod ast;
 mod clause;
 mod convert;
+mod directive;
 mod expr;
 mod instruction;
 mod scanner;
