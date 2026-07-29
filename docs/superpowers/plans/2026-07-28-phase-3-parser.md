@@ -19,6 +19,7 @@
 - The AST is plain owned Rust data **inside one arena object per code body** (D13, closed). Not garbage-collected, not reference-counted between nodes. The arena half matters: it is what lets nodes reference each other by index instead of by pointer.
 - The C++ tree is the oracle and is never modified.
 - No task may leave the differential sets from Phase 2 regressed; `rexx-num` is a dependency now.
+- **Word-size-dependent limits are hard-coded to the 64-bit value and that is a recorded exposure, not an oversight.** `ARGUMENT_DIGITS` is 18, and the boundary is *observable*: `::options digits 123456789012345678` is rc 0 while nineteen digits is **26.5**, both measured. A differential run against a 32-bit build of the oracle would therefore disagree with this build. Phase 3's gate runs on one platform so nothing here catches it, but `ci/platforms` builds five, so whoever wires the Rust tree into CI needs to know. This is unlike the scanner's `INTEGER_CONSTANT` limit, which Task 3.3 skipped precisely because it is *not* observable.
 
 ## What is being replaced
 
@@ -1724,7 +1725,16 @@ spellings appear as rows in both: `ATTRIBUTE`, `CLASS`, `CONSTANT`, `METHOD`,
 and for the same reason.
 
 Those are `SymbolId` comparisons through `KeywordSet::index_of` (Task 3.3), not
-string lookups. `RexxToken::directives[]` and `subDirectives[]` are named in this
+string lookups.
+
+**The positional rule has two real exceptions, and they are not cosmetic.**
+`::OPTIONS FORM` and `::OPTIONS NUMERIC` resolve their *argument* against
+`subKeywords[]`, not `subDirectives[]` — that is what `token->subKeyword()` does at
+`DirectiveParser.cpp:1007` and `:1339`. `NOINHERIT`, `SCIENTIFIC` and `ENGINEERING`
+are rows of `subKeywords[]` alone, and `SYNTAX` is the reverse, so resolving those
+two against `subDirectives[]` would **reject legal input and accept illegal input**.
+Measured: `::options numeric noinherit` is **rc 0**, and `::options numeric syntax`
+is **25.935**. `RexxToken::directives[]` and `subDirectives[]` are named in this
 task only to say which C++ rows the two sets are built from; do not build a
 string table in Rust, for the same reason Task 3.6 gives.
 
