@@ -2504,9 +2504,20 @@ fits.
       than unmet in substance — see the note at the end for what was wrong with it.
 
       **Soundness.** For every input in the parser's **error corpus** — the
-      programs the crate's own tests assert an error on, currently **385**,
-      extractable by instrumenting the `ok`/`err` test helpers — the **number and
-      sub-number** match `build/bin/rexxc` on a **plausible line**. Message text
+      programs the crate's own tests assert an error on, **across every test file
+      and not a named subset** — the **number and sub-number** match
+      `build/bin/rexxc` on a **plausible line**. Extract it by instrumenting the
+      `ok`/`err` helpers, and **report the count** rather than asserting a fixed
+      one: it was 385 when this was written and 492 when Task 3.8 measured it,
+      because `block/tests.rs` postdates the earlier count.
+
+      **Naming a subset of the test files makes this blind, and the first draft
+      did.** It named `instruction`, `directive` and `block` — which between them
+      assert **zero** scanner-class errors (6.x, 13.1, 15.x, 30.1, 99.943) and zero
+      expression classes (37.x, 36.90x, 35.901, 19.909), while `tests/scanner.rs`
+      alone holds 22. So the corpus could not observe the eager-scan deviation this
+      very criterion tells it to watch for. Include the scanner and expression
+      tables. Message text
       and substitution values are **not** gated. Recorded exceptions, each with a
       test pinning both directions:
 
@@ -2522,10 +2533,16 @@ fits.
 
       **Completeness.** For every input in that corpus, plus the **301
       `samples/`** files, `CoreClasses.orx` and `StreamClasses.orx`, the parser
-      **accepts exactly what `rexxc` accepts**. Exception: a rejection that is not
-      a *translation* error is not a parse error and must be **accepted** —
-      `98.9xx` load failures such as `::ROUTINE ... EXTERNAL "LIBRARY x"`,
-      currently two inputs.
+      **accepts exactly what `rexxc` accepts**.
+
+      Exception: a rejection that is not a *translation* error is not a parse error
+      and must be **accepted**. Measured by Task 3.8 as **nine inputs in two
+      classes**, not the two in one class an earlier draft claimed: seven
+      **98.903** `Unable to load library` (`::ROUTINE ... EXTERNAL "LIBRARY x"`) and
+      two **90.999** `Unable to find external routine` (the `EXTERNAL "REGISTERED
+      x"` spelling). Note **90.999 is not a `98.9xx` code**, so define the exception
+      by *not being a translation error* rather than by a code prefix — the prefix
+      was how the earlier draft missed a whole class.
 
       **"Parse-time" means `rexxc` rejects it AND the failure is a translation
       error.** That second clause is the part an earlier draft lacked. Bare
