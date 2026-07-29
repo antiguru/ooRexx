@@ -1,0 +1,14 @@
+count 13
+parse source src
+parse var src sys mode .
+say sys mode
+say sourceline(1)
+say sourceline()
+say arg()
+say arg(1, "o")
+call sub "given"
+exit 0
+sub:
+  say arg(1)
+  say arg(1, "e")
+  return

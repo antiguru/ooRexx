@@ -1,0 +1,14 @@
+count 13
+do v = 1 to 4
+  select
+    when v = 1 then say "one"
+    when v = 2 then say "two"
+    when v > 3 then say "big"
+    otherwise say "other"
+  end
+end
+select case 2
+  when 1 then say "c1"
+  when 2 then say "c2"
+  otherwise say "cn"
+end

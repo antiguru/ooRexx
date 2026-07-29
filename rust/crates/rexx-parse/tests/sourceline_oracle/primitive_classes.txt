@@ -1,0 +1,34 @@
+count 33
+/* Note: .integer is not an environment symbol -- Integer is internal and not
+   exposed. .rexxinfo is an instance rather than a class, so it has no ~id. */
+say .array~id
+say .string~id
+say .directory~id
+say .stringtable~id
+say .identitytable~id
+say .table~id
+say .stem~id
+say .queue~id
+say .list~id
+say .set~id
+say .bag~id
+say .relation~id
+say .method~id
+say .routine~id
+say .package~id
+say .supplier~id
+say .message~id
+say .pointer~id
+say .buffer~id
+say .mutablebuffer~id
+say .comparable~id
+say .orderable~id
+say .monitor~id
+say .stackframe~id
+say .file~id
+say .object~id
+say .class~id
+say "1"~class~id
+say (1+1)~class~id
+say .nil~string
+say .true .false
