@@ -31,11 +31,12 @@
 //! error and neither is raised here.
 
 use crate::ast::{
-    Access, AnnotationTarget, AttributeStyle, CodeBody, ConditionOption, ConstantValue, Directive,
+    Access, AnnotationTarget, AttributeStyle, ConditionOption, ConstantValue, Directive,
     DirectiveKind, ExternalSpec, GuardOption, OptionsForm, PackageOption, Protection,
 };
 use crate::block::translate_block;
 use crate::clause::{ClauseCursor, split_clauses};
+use crate::directive_body;
 use crate::token::{Keywords, ParseCtx, ParseError, SymbolTable};
 use crate::{ProgramSource, SourceKind, scan};
 
@@ -82,15 +83,15 @@ fn parse_with_symbols(
         while failure.is_none() && cursor.peek().is_some() {
             match parse_directive(&ctx, &mut cursor) {
                 Ok(mut directive) => {
-                    let wants_body = match &directive.kind {
-                        DirectiveKind::Method(m) => m.body.is_some(),
-                        DirectiveKind::Attribute(a) => a.body.is_some(),
-                        DirectiveKind::Routine(r) => r.body.is_some(),
-                        _ => false,
-                    };
-                    if wants_body {
+                    // The same dispatch the public entry point uses, rather than
+                    // a copy of it, so a directive kind that gains a body cannot
+                    // be handled one way here and another way there.
+                    if directive_body(&mut directive.kind).is_some() {
                         match translate_block(&ctx, &mut cursor) {
-                            Ok(body) => set_body(&mut directive.kind, body),
+                            Ok(body) => {
+                                *directive_body(&mut directive.kind)
+                                    .expect("just checked there is a slot") = body;
+                            }
                             Err(e) => failure = Some(e),
                         }
                     }
@@ -105,16 +106,6 @@ fn parse_with_symbols(
         }
     };
     result.map(|directives| (directives, scanned.symbols))
-}
-
-/// Installs an assembled body into whichever directive kind can hold one.
-fn set_body(kind: &mut DirectiveKind, body: CodeBody) {
-    match kind {
-        DirectiveKind::Method(m) => m.body = Some(body),
-        DirectiveKind::Attribute(a) => a.body = Some(body),
-        DirectiveKind::Routine(r) => r.body = Some(body),
-        other => panic!("{other:?} cannot hold a body"),
-    }
 }
 
 fn parse(text: &str) -> Result<Vec<Directive>, ParseError> {

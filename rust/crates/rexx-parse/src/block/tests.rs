@@ -158,10 +158,17 @@ fn an_end_closing_a_then_or_an_else_is_also_10_1() {
     //
     // The C++ has `Error_Unexpected_end_then` (10.5) and
     // `Error_Unexpected_end_else` (10.6) for exactly these shapes, and neither is
-    // is reachable: `flushControl` rewrites a THEN frame into a branch-end frame
-    // and pops an ELSE before the END arm of the switch runs, so the type it
-    // tests can never be IFTHEN, WHENTHEN or ELSE. Every one of these six was
-    // measured and every one answers 10.1.
+    // reachable. The reason is structural: an END has `isControl() == false` and
+    // its type is not `KEYWORD_ELSE`, so `flushControl` always runs before the
+    // END arm of the switch, and `flushControl` cannot leave `ELSE`, `IFTHEN` or
+    // `WHENTHEN` on top -- it pops an ELSE outright and rewrites a THEN into a
+    // branch-end marker. So the type those two arms test for cannot be present
+    // when they are reached.
+    //
+    // 24 probes agree, six here and eighteen more covering nested IF/ELSE, a
+    // named `end a`, `if 1 = 1 then; end`, a WHEN-as-THEN followed by an END, an
+    // OTHERWISE holding a dangling THEN, and each shape inside a `::method`.
+    // Every one answers 10.1.
     //
     // What would overturn this: any source where `rexxc` prints 10.5 or 10.6. If
     // one is found, the two arms belong in `match_end` beside the 10.1 default,
@@ -280,7 +287,17 @@ fn a_then_or_else_with_nothing_after_it_is_14_3_or_14_4() {
     // A directive ends the body just as end of file does, so the same shapes
     // give the same numbers with a `::` clause after them. Measured all three.
     assert_eq!(err("nop\n\nif 1 = 1 then\n\n::routine r\n"), (14, 3));
-    assert_eq!(err("nop\n\nif 1 = 1\n\n::routine r\n"), (18, 1));
+    // 18.1 with a directive ending the body is reported against the DIRECTIVE's
+    // line, not the IF's, because `nextClause()` succeeded on the `::` clause and
+    // moved `clauseLocation` there. Measured: line 5 reported, line 3
+    // substituted. At plain end of file the two coincide, which is the row
+    // below.
+    assert_eq!(err_at("nop\n\nif 1 = 1\n\n::routine r\nnop\n"), (18, 1, 5));
+    assert_eq!(
+        err_at("nop\n\nselect\n\nwhen 1 = 1\n\n::routine r\nnop\n"),
+        (18, 2, 7)
+    );
+    assert_eq!(err_at("nop\n\nnop\n\nif 1 = 1\n"), (18, 1, 5));
     assert_eq!(err("nop\n\ndo\n\n::routine r\n"), (14, 1));
 }
 

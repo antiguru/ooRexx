@@ -485,6 +485,13 @@ impl<'a> Block<'a> {
             // holding the THEN and this reports against the THEN instruction,
             // whose span is that keyword: measured, `if 1 = 1` / blank / `then`
             // at end of file reports line 5 and substitutes line 3.
+            //
+            // That equality is not free. It holds because Task 3.4 splits a
+            // `THEN` off into a clause of its own, so the THEN instruction's
+            // span starts where the clause the C++ reports against starts. A
+            // change that stopped splitting there would break it silently, which
+            // is what `a_then_or_else_with_nothing_after_it_is_14_3_or_14_4`
+            // pins with the blank-line spelling.
             Control::IfThen | Control::WhenThen => 3,
             // `Error_Incomplete_do_else`.
             Control::Else => 4,
@@ -651,11 +658,19 @@ impl<'a> Block<'a> {
     fn match_end(&mut self, end: usize, end_byte: usize) -> Result<(), ParseError> {
         let frame = self.pop();
         if !frame.kind.is_block() {
-            // The C++ has two more specific numbers here, for an END closing a
-            // THEN and one closing an ELSE, and neither is reachable:
-            // `flushControl` has already turned a THEN frame into a branch-end
-            // frame and popped an ELSE by the time this runs. Six probes over
-            // both shapes all measure 10.1. `Error_Unexpected_end_nodo`.
+            // The C++ has two more specific numbers here, `Error_Unexpected_end_then`
+            // for an END closing a THEN and `Error_Unexpected_end_else` for one
+            // closing an ELSE, and neither is reachable. The argument is
+            // structural rather than empirical: an END has `isControl() == false`
+            // and its type is not `KEYWORD_ELSE`, so `flushControl` ALWAYS runs
+            // before this switch, and `flushControl` cannot return with `ELSE`,
+            // `IFTHEN` or `WHENTHEN` on top -- it pops an ELSE outright and
+            // rewrites a THEN into a branch-end marker. The type this arm tests
+            // for therefore cannot be present.
+            //
+            // 24 probes agree, across both shapes on one line and on separate
+            // lines, nested in a DO, with a named END, and inside a method. Every
+            // one answers 10.1. `Error_Unexpected_end_nodo`.
             return Err(ParseError::new(10, 1, end_byte));
         }
         // An END on an OTHERWISE really closes the SELECT behind it.
@@ -708,7 +723,11 @@ impl<'a> Block<'a> {
 
     fn finish(mut self) -> CodeBody {
         self.resolve_targets();
-        debug_assert!(
+        // `assert!` rather than `debug_assert!`: this is the only thing standing
+        // between a release consumer and a `None` that the field's contract says
+        // cannot occur, and `resolve_targets` has just walked the same list, so
+        // the cost is not worth trading the guarantee for.
+        assert!(
             self.instructions.iter().all(|i| match &i.kind {
                 InstructionKind::Do(body) | InstructionKind::Loop(body) => body.end.is_some(),
                 InstructionKind::Select { end, .. } => end.is_some(),
@@ -984,15 +1003,20 @@ fn opens(kind: &InstructionKind) -> Option<Control> {
 /// `isControl()`: whether the instruction joins the chain immediately instead of
 /// going through `flushControl`.
 ///
-/// True for every block instruction and additionally for a bare `IF`
-/// (`IfInstruction.hpp:64`), but NOT for a `WHEN`, whose own comment there says
-/// a `WHEN` is part of its `SELECT` rather than a control type of its own.
+/// True for every `DO`/`LOOP` and `SELECT`, which derive from
+/// `RexxBlockInstruction` (`RexxInstruction.hpp:139`), and additionally for a
+/// bare `IF` (`IfInstruction.hpp:64`). NOT for a `WHEN`, whose own comment there
+/// says a `WHEN` is part of its `SELECT` rather than a control type of its own,
+/// and NOT for an `OTHERWISE`, which overrides only `isBlock`
+/// (`OtherwiseInstruction.hpp:55`) and derives from `RexxInstruction` rather than
+/// from `RexxBlockInstruction`, so it inherits `isControl() == false`.
+///
+/// An `OTHERWISE` therefore goes through `flushControl`, and that is invisible:
+/// the branch-end frames have already been popped by the time it is reached, so
+/// the `SELECT` is on top and `flushControl` only appends. It is spelled the
+/// C++'s way anyway, because a comment claiming otherwise would be wrong.
 fn is_control(kind: &InstructionKind) -> bool {
-    opens(kind).is_some()
-        || matches!(
-            kind,
-            InstructionKind::If { .. } | InstructionKind::Otherwise
-        )
+    opens(kind).is_some() || matches!(kind, InstructionKind::If { .. })
 }
 
 /// Assembles one code body, from the clause the cursor is sitting on up to the
@@ -1030,10 +1054,17 @@ pub(crate) fn translate_block(
         }
 
         let Some(instruction) = pending else {
-            // End of the body. An IF or WHEN whose THEN never arrived is
-            // reported here, where there is no offending clause to report
-            // against: measured, `nop` / `nop` / `if 1 = 1` reports line 3.
+            // End of the body with an IF or WHEN whose THEN never arrived.
+            //
+            // A directive can end a body as well as end of file can, and the two
+            // report differently. `nextClause()` succeeds on the `::` clause, so
+            // `clauseLocation` moves to it and that is the reported line, with
+            // the IF's line only substituted. At end of file nothing moves and
+            // the two coincide. Measured both: `nop` / blank / `if 1 = 1` /
+            // blank / `::routine r` reports line 5 and substitutes line 3, while
+            // `nop` / blank / `nop` / blank / `if 1 = 1` reports line 5 for both.
             if let Some((which, byte)) = cursor.take_expected_then() {
+                let byte = cursor.peek().map_or(byte, |clause| clause.span.start);
                 return Err(ParseError::new(18, missing_then_sub(which), byte));
             }
             // Close out any finished branch, then everything opened must be

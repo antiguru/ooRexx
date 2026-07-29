@@ -274,7 +274,7 @@ fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
 /// `None` for a directive shape that can never have a body, and also for one
 /// that can but does not: an external `::ROUTINE`, say. See each field's own
 /// doc comment in `ast.rs` for which is which.
-fn directive_body(kind: &mut DirectiveKind) -> Option<&mut CodeBody> {
+pub(crate) fn directive_body(kind: &mut DirectiveKind) -> Option<&mut CodeBody> {
     match kind {
         DirectiveKind::Method(method) => method.body.as_mut(),
         DirectiveKind::Attribute(attribute) => attribute.body.as_mut(),
