@@ -1204,9 +1204,11 @@ fn the_expression_only_instructions_take_what_they_take() {
 
 #[test]
 fn the_interpret_only_rejections_come_from_the_source_kind() {
-    // All four are measured at RUN time, because rexxc never parses the
+    // All five are measured at RUN time, because rexxc never parses the
     // string: `interpret "reply 1"` is 99.924, `"forward to 1"` is 99.923,
-    // `"guard on"` is 99.912 and `"use local a"` is 99.915.
+    // `"guard on"` is 99.912, `"use local a"` is 99.915 and `"expose a"` is
+    // 99.908. `tests/errors.rs` re-measures every one through the condition
+    // object and records the raw output.
     for (text, expected) in [
         ("reply 1", (99, 924)),
         ("forward to 1", (99, 923)),

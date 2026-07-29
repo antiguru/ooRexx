@@ -24,17 +24,27 @@ use super::has_placeholder;
 
 #[test]
 fn a_sub_message_that_needs_no_substitution_is_the_message() {
-    // `rexxc` on `nop\nelse nop\n` prints
+    // `build/bin/rexxc` on a file holding `nop` then `else nop` prints, verbatim:
+    //     2 *-* else nop
     //     Error 8 running <file> line 2:  Unexpected THEN or ELSE.
-    //     Error 8.2:  ELSE has no corresponding IF.
+    //     Error 8.2:  ELSE has no corresponding THEN clause.
     // so the sub-message is the specific one and needs nothing filled in.
     assert_eq!(
         ParseError::new(8, 2, 0).message(),
         "ELSE has no corresponding THEN clause."
     );
-    // 13.001 is the scanner's, and its sub-message DOES substitute, so the
-    // contrast is in the next test rather than here. 10.001 is another that
-    // does not.
+}
+
+#[test]
+fn a_second_sub_message_that_needs_no_substitution_is_also_the_message() {
+    // A separate test rather than a second assertion above, because a shared
+    // `#[test]` hid a wrong expectation twice in this task: the first assertion
+    // fails, the run stops, and the second is never evaluated.
+    //
+    // `rexxc` on `nop` then a blank line then `end` prints, verbatim:
+    //     3 *-* end
+    //     Error 10 running <file> line 3:  Unexpected or unmatched END.
+    //     Error 10.1:  END has no corresponding DO, LOOP, or SELECT.
     assert_eq!(
         ParseError::new(10, 1, 0).message(),
         "END has no corresponding DO, LOOP, or SELECT."
@@ -42,26 +52,41 @@ fn a_sub_message_that_needs_no_substitution_is_the_message() {
 }
 
 #[test]
-fn a_sub_message_that_would_substitute_falls_back_to_the_majors_text() {
-    // `rexxc` on `::class c junk` prints
+fn a_sub_message_that_would_substitute_a_token_falls_back_to_the_majors_text() {
+    // `rexxc` on `::class c junk` prints, verbatim:
+    //     1 *-* ::class c junk
     //     Error 25 running <file> line 1:  Invalid subkeyword found.
     //     Error 25.901:  Unknown keyword on ::CLASS directive; found "JUNK".
     // The sub-message's `&1` is the offending token, which this phase does not
-    // carry, so the major's own line is what comes out -- and it is exactly what
-    // the oracle's first line says.
+    // carry, so the major's own line is what comes out -- and it is byte for byte
+    // what the oracle's first line says.
     assert_eq!(
         ParseError::new(25, 901, 0).message(),
         "Invalid subkeyword found."
     );
-    // The open-construct-line family goes the same way. `rexxc` prints
+}
+
+#[test]
+fn a_sub_message_that_would_substitute_a_line_falls_back_to_the_majors_text() {
+    // The open-construct-line family. `rexxc` on `nop`, blank, `select`, blank,
+    // `end` prints, verbatim:
+    //     3 *-* select
     //     Error 7 running <file> line 3:  WHEN or OTHERWISE expected.
     //     Error 7.1:  SELECT on line 3 requires WHEN.
     assert_eq!(
         ParseError::new(7, 1, 0).message(),
         "WHEN or OTHERWISE expected."
     );
-    // And the one substitution this phase is told not to produce at all:
-    // 36.901's `&1` is a byte offset within a line.
+}
+
+#[test]
+fn the_one_substitution_this_phase_will_not_produce_falls_back_too() {
+    // 36.901's `&1` is a byte offset within a line, which the brief rules out.
+    // `rexxc` on `r = (a` prints, verbatim:
+    //     1 *-* r = (a
+    //     Error 36 running <file> line 1:  Unmatched "(" or "[" in expression.
+    //     Error 36.901:  Left parenthesis "(" in position 5 on line 1 requires a
+    //     corresponding right parenthesis ")".
     assert_eq!(
         ParseError::new(36, 901, 0).message(),
         r#"Unmatched "(" or "[" in expression."#
@@ -79,8 +104,8 @@ fn no_message_the_parser_can_produce_holds_a_placeholder() {
             continue;
         }
         let error = ParseError::new(message.major, message.sub, 0);
-        // A major with no sub-0 row would panic in `message`, and none of the
-        // majors in the table lacks one; that is asserted separately below.
+        // A major with no sub-0 row would panic in `message`. None of the majors
+        // in the table lacks one, which is asserted separately below.
         assert!(
             !has_placeholder(&error.message()),
             "{}.{:03} renders {:?}",
@@ -93,8 +118,8 @@ fn no_message_the_parser_can_produce_holds_a_placeholder() {
 
 /// The majors whose own sub-0 text substitutes, so the fallback cannot make
 /// them placeholder-free. There is exactly one, and it is not a translation
-/// error, so nothing this crate raises reaches the exception -- the test below
-/// is what keeps that true.
+/// error, so nothing this crate raises reaches the exception. The test below is
+/// what keeps that true.
 const MAJORS_THAT_SUBSTITUTE: &[u16] = &[101];
 
 #[test]
@@ -127,37 +152,58 @@ fn every_major_in_the_table_has_a_sub_zero_row_to_fall_back_to() {
 }
 
 #[test]
-fn the_placeholder_test_reads_a_digit_and_not_a_bare_ampersand() {
+fn the_placeholder_test_finds_a_digit_after_the_ampersand() {
     assert!(has_placeholder("found &1."));
     assert!(has_placeholder("&12 and &2"));
     assert!(has_placeholder("trailing &9"));
-    // A `&` with nothing fillable after it is text, not a template. No table
-    // row is spelled this way today, which is why the property is asserted on
-    // the function rather than only through the table.
+}
+
+#[test]
+fn the_placeholder_test_ignores_an_ampersand_with_nothing_fillable_after_it() {
+    // A `&` with no digit after it is text, not a template. No table row is
+    // spelled this way today, which is why the property is asserted on the
+    // function rather than only through the table.
     assert!(!has_placeholder("A & B"));
     assert!(!has_placeholder("&"));
     assert!(!has_placeholder("&x"));
     assert!(!has_placeholder(""));
-    // Two ampersands where only the second is a placeholder: the scan must not
-    // stop at the first.
+}
+
+#[test]
+fn the_placeholder_test_does_not_stop_at_the_first_ampersand() {
     assert!(has_placeholder("A & B &2"));
+}
+
+/// Three lines of five bytes each plus a terminator, so line 1 is bytes 0-4,
+/// its `\n` is byte 5, line 2 is bytes 6-10 with its `\n` at 11, and line 3 is
+/// bytes 12-16 with its `\n` at 17.
+fn three_lines() -> ProgramSource {
+    ProgramSource::new(b"say 1\nsay 2\nsay 3\n".to_vec(), SourceKind::Program)
 }
 
 #[test]
 fn the_reported_line_is_the_line_the_clause_byte_sits_on() {
-    let source = ProgramSource::new(b"say 1\nsay 2\nsay 3\n".to_vec(), SourceKind::Program);
+    let source = three_lines();
     assert_eq!(ParseError::new(35, 1, 0).line(&source), 1);
     assert_eq!(ParseError::new(35, 1, 6).line(&source), 2);
     assert_eq!(ParseError::new(35, 1, 12).line(&source), 3);
-    // A byte ON a terminator belongs to the line that terminator ends, not to
-    // the next one. Byte 5 is line 1's `\n`. This is the only assertion here that
-    // an off-by-one in either direction cannot also satisfy, because every other
-    // byte above sits well inside its line.
+}
+
+#[test]
+fn a_byte_on_a_terminator_belongs_to_the_line_that_terminator_ends() {
+    // The only assertion in this file that an off-by-one in either direction
+    // cannot also satisfy: every byte in the test above sits well inside its
+    // line, so `line_of(byte + 1)` answers all three of them correctly.
+    let source = three_lines();
     assert_eq!(ParseError::new(35, 1, 5).line(&source), 1);
     assert_eq!(ParseError::new(35, 1, 11).line(&source), 2);
-    // The last line's terminator belongs to the last line, and a byte past the
-    // end clamps rather than panicking -- `line_of`'s contract, restated here
-    // because a diagnostic must never be the thing that crashes.
+}
+
+#[test]
+fn a_byte_past_the_end_clamps_to_the_last_line() {
+    // `line_of`'s contract, restated here because a diagnostic must never be the
+    // thing that crashes.
+    let source = three_lines();
     assert_eq!(ParseError::new(35, 1, 17).line(&source), 3);
     assert_eq!(ParseError::new(35, 1, 999).line(&source), 3);
 }
@@ -168,8 +214,13 @@ fn display_names_the_number_the_sub_number_and_the_message() {
         ParseError::new(8, 2, 0).to_string(),
         "8.2: ELSE has no corresponding THEN clause."
     );
-    // Not zero-padded: `8.2` is how the interpreter prints it, even though the
-    // table stores the sub as 2 and its own XML spells it 002.
+}
+
+#[test]
+fn display_does_not_zero_pad_a_three_digit_sub_number() {
+    // `25.901` is how the interpreter prints it, even though the table stores the
+    // sub as 901 and its own XML spells it 901 inside a `<Subcode>` that pads
+    // two-digit ones to three.
     assert_eq!(
         ParseError::new(25, 901, 0).to_string(),
         "25.901: Invalid subkeyword found."

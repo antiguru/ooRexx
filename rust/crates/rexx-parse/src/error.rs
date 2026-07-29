@@ -46,8 +46,9 @@
 //! had to either fill it or remove it. It removed it, and the measurement is
 //! the argument.
 //!
-//! Of the **181** distinct `(major, sub)` pairs the error corpus raises, **82**
-//! have a substitution in their sub-message. They need three kinds of value:
+//! Of the **200** distinct `(major, sub)` pairs the crate's own tests reach,
+//! **92** have a substitution in their sub-message. They need three kinds of
+//! value:
 //! the offending token's text (about sixty of them, the `found "&1"` family),
 //! the line of the construct that is still open (7.1, 7.2, 10.002-10.007,
 //! 14.x, 18.1, 18.2), and a keyword's own spelling (19.925, 20.929, 25.927,
@@ -59,12 +60,14 @@
 //! hundred raise sites are not, so every one would have to name its own
 //! offender. And this phase does not gate substitution values, which means all
 //! two hundred would land unverified under a gate that cannot see them wrong. A
-//! value that looks right and is wrong is worse than one that is absent, so the
+//! value that looks right and is wrong is worse than one that is absent. The
 //! field went.
 //!
 //! What is owed, and to whom: Phase 4 has to answer `condition('o')~additional`
 //! for a trapped syntax error, and that is where the values become observable
-//! from Rexx rather than only from a message. It will need them for real, with a
+//! from Rexx rather than only from a message. Measured through a `signal on
+//! syntax` trap, `interpret "x: nop"` hands the program `additional=X` where this
+//! phase would hand it nothing. Phase 4 will need them for real, with a
 //! differential test per substitution, and `token.rs`'s note on `byte` still
 //! records the second field that job needs.
 
@@ -78,8 +81,10 @@ impl ParseError {
     /// Never contains an unfilled `&1`-style substitution placeholder, which is
     /// what decides between the two rows the table holds for an error like
     /// `7.1`: the sub-message when the sub-message needs no substitution, and
-    /// the major's own text when it does. 82 of the 181 distinct errors the
-    /// corpus raises fall on the second branch.
+    /// the major's own text when it does. **92 of the 200** distinct errors the
+    /// crate's own tests reach fall on the second branch -- 193 pairs from the
+    /// 557 translation-error rows of `corpus/errors/parse-errors.tsv` plus the
+    /// seven `INTERPRET`-only pairs, which no corpus row can hold.
     ///
     /// The major's text is always available and always complete. Measured over
     /// the whole generated table: of its 704 rows exactly one with sub 0 carries
