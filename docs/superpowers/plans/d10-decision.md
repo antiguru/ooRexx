@@ -48,9 +48,15 @@ strongest single argument was that error 36 is unreachable with `chumsky` 0.13.
 Both of those are now worth much less than when they were written.
 
 The verdict is unchanged, on the remaining axes alone. Throughput at a median
-8.3× is decisive by itself, because under D2 parse time *is* cold-start time
-against a ~55 ms budget. The dependency cost is independent of it and points the
-same way. Either would carry the decision without axis 2.
+8.3× is decisive by itself, because under D2 parsing happens at every
+interpreter start and so sits inside the ~55 ms cold-start budget alongside
+bootstrap execution, heap setup and class construction. It is a component of
+that budget, not the whole of it: this paragraph said parse time *is*
+cold-start time, which is the same overreach the document corrects two sections
+below, and Task 3.10 measured the shipped parser at about 3.29 ms for both
+files. An 8.3× multiplier on a component that size is what carries the axis.
+The dependency cost is independent of it and points the same way. Either would
+carry the decision without axis 2.
 
 This is recorded rather than quietly left because a later reader finding a
 decision resting on a criterion the project dropped a day afterwards would be
@@ -497,5 +503,6 @@ and the expression is empty.
   than to close.
 
 The throughput gap will not change the answer on its own, but it is worth
-naming: under D2 the parse is cold-start time on every program run, so 8.3× in
-the grammar layer is a cost paid on every invocation, not once.
+naming: under D2 the parse runs at every program start and so sits inside cold
+start, which makes 8.3× in the grammar layer a cost paid on every invocation
+rather than once.

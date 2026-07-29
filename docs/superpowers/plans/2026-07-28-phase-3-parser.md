@@ -49,8 +49,10 @@ C++ cold start is **5.1 ms** from a memory-mapped image (`perf-baseline.md`).
 Under D2 the Rust build parses `CoreClasses.orx` (4,193 lines) and
 `StreamClasses.orx` (1,010 lines) — **5,203 lines** — at every interpreter
 start. Total cold start must stay inside **~55 ms**, so parse throughput on
-those two files *is* cold-start time. Measure on them specifically, never on
-synthetic input.
+those two files is a **component** of cold start, and the only component Phase 3
+can measure: bootstrap execution, heap setup and class construction are in the
+same budget and none of them exists yet. Measure on those two files
+specifically, never on synthetic input.
 
 ## File structure
 
@@ -187,7 +189,8 @@ belongs in the same document because it decides the same question.
    do not reproduce it. ooRexx otherwise locates an error by quoting the
    offending token.
 3. **Parse throughput on `CoreClasses.orx`** — not on synthetic input. Under
-   D2 this number is cold-start time.
+   D2 this number is a component of cold start, paid at every interpreter
+   start, and it is not the whole of cold start.
 4. **Dependency and portability cost.** `chumsky` 0.13.0 pulls **28 transitive
    packages**; the hand-written arm pulls **zero**. `chumsky`'s `default`
    feature set is `["std", "stacker"]`, and `stacker` depends on `psm`, which
@@ -814,7 +817,7 @@ latter.** Two structurally identical subtrees at different source positions have
 different spans, so they are not equal terms and cannot share a node without
 moving spans into a side table keyed by the node identity that sharing destroys.
 Beyond that, a content hash per node would sit on the parse hot path, which is
-cold-start time under D2. A term graph is the right shape for an optimiser IR
+on the cold-start path under D2. A term graph is the right shape for an optimiser IR
 built *from* this AST, and that belongs to Phase 4 alongside the value-trace
 decision, which constrains folding and fusion anyway. Not this phase.
 
