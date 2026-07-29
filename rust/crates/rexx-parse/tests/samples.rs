@@ -17,9 +17,10 @@
 //! answer for every file is "parses", there is no per-file expectation to
 //! curate, and any `Err` here is a real divergence from the oracle.
 //!
-//! Files are read as bytes, never as strings, because several samples are not
-//! valid UTF-8 (`samples/windows/rexutils/drives.rex` is ISO-8859, measured
-//! with `file`), and a Rexx literal may hold any byte at all.
+//! Files are read as bytes, never as strings, because two samples are not
+//! valid UTF-8 (`samples/windows/rexutils/drives.rex` and oodialog's
+//! `comboBoxToolTip.rex` are ISO-8859, measured with `file` and confirmed
+//! with `iconv`), and a Rexx literal may hold any byte at all.
 
 use std::path::{Path, PathBuf};
 
