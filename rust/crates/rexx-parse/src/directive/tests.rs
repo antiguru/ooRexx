@@ -1324,6 +1324,81 @@ fn a_clause_that_is_not_a_directive_and_a_directive_that_is_not_known() {
     assert_eq!(err("nop\n:junk\n"), (35, 1));
 }
 
+/// `getRetriever`'s name check, 99.925, at all four of its call sites.
+///
+/// It is a purely local check on the name's own text, and it is easy to miss
+/// because the `syntaxError` lives in `LanguageParser.cpp` rather than in the
+/// 2,867 lines of `DirectiveParser.cpp`. Both directions, and the controls that
+/// say where the check is NOT applied.
+#[test]
+fn an_attribute_name_must_be_a_variable_name() {
+    // The three kinds a variable name can be, all rc 0.
+    ok("::attribute a\n");
+    ok("::attribute a.\n");
+    ok("::attribute a.b\n");
+    ok("::attribute \"aB\"\n");
+    // And the kinds it cannot be. Measured: all 99.925.
+    for text in [
+        "::attribute 3\n",
+        "::attribute .a\n",
+        "::attribute \"3\"\n",
+        "::attribute \"a b\"\n",
+        "::attribute \"a-b\"\n",
+        "::attribute \"1e+5\"\n",
+        "::attribute 3 get\n",
+        "::attribute 3 abstract\n",
+    ] {
+        assert_eq!(err(text), (99, 925), "{text:?}");
+    }
+    // `scanSymbol` looks for an exponent before giving up, so a sign after an
+    // `E` survives and the compound test is reached anyway. Measured: rc 0.
+    ok("::attribute \"a.e+5\"\n");
+    // The length bound. Measured: 250 bytes is rc 0 and 251 is 99.925.
+    let name = "a".repeat(250);
+    ok(&format!("::attribute \"{name}\"\n"));
+    let name = "a".repeat(251);
+    assert_eq!(err(&format!("::attribute \"{name}\"\n")), (99, 925));
+
+    // A DELEGATE target is checked too, on both directives.
+    assert_eq!(err("::method m delegate 5\n"), (99, 925));
+    assert_eq!(err("::method m delegate .p\n"), (99, 925));
+    assert_eq!(err("::attribute a delegate 5\n"), (99, 925));
+    assert_eq!(err("::attribute a get delegate 5\n"), (99, 925));
+    ok("::method m delegate p\n");
+    ok("::attribute a delegate p.\n");
+
+    // A plain `::METHOD` name is NOT checked, which is the control that says
+    // this is the attribute rule and not a name rule. Measured: rc 0.
+    ok("::method 3\n  return 1\n");
+    ok("::method .a\n  return 1\n");
+    // With ATTRIBUTE it is checked, but only where the accessor pair is
+    // generated. Measured: `::method 3 attribute` is 99.925, while the same with
+    // ABSTRACT is rc 0 and with EXTERNAL reaches 98.903, a library-load failure
+    // past the parse.
+    assert_eq!(err("::method 3 attribute\n"), (99, 925));
+    assert_eq!(err("::method .a attribute\n"), (99, 925));
+    ok("::method 3 attribute abstract\n");
+    ok("::method 3 attribute external \"LIBRARY x\"\n");
+}
+
+/// Where the name check sits relative to the body check, which differs per shape
+/// and is only visible when the two disagree.
+#[test]
+fn the_name_check_happens_where_each_shape_does_it() {
+    // `::ATTRIBUTE` checks the name before everything. Measured: 99.925 on
+    // line 1, not 99.937 on line 2.
+    assert_eq!(err("::attribute 3\n  return 1\n"), (99, 925));
+    assert_eq!(err("::attribute 3 external \"LIBRARY x\"\n"), (99, 925));
+    // `::METHOD DELEGATE` too. Measured: 99.925 on line 1, not 99.946.
+    assert_eq!(err("::method m delegate 5\n  return 1\n"), (99, 925));
+    // `::METHOD ATTRIBUTE` is the other way round. Measured: 99.934 on line 2.
+    assert_eq!(err("::method 3 attribute\n  return 1\n"), (99, 934));
+    // And so is `::ATTRIBUTE`'s BOTH style for its DELEGATE target, where
+    // GET/SET is not. Measured: 99.937 on line 2 against 99.925 on line 1.
+    assert_eq!(err("::attribute a delegate 5\n  return 1\n"), (99, 937));
+    assert_eq!(err("::attribute a get delegate 5\n  return 1\n"), (99, 925));
+}
+
 #[test]
 fn a_directive_spans_its_own_clause() {
     // The span is the clause, so an explicit `;` is inside it and the blanks
@@ -1407,12 +1482,52 @@ fn core_classes_parses() {
 /// uses: 7 `::CLASS`, 139 `::METHOD`, 5 `::ATTRIBUTE` and 2 `::CONSTANT`.
 #[test]
 fn the_other_shipped_packages_parse() {
-    const PACKAGES: &[(&str, &str)] = &[(
+    /// How many of each directive a package holds, in the order
+    /// `::CLASS`, `::METHOD`, `::ATTRIBUTE`, `::CONSTANT`.
+    struct Counts {
+        classes: usize,
+        methods: usize,
+        attributes: usize,
+        constants: usize,
+    }
+
+    // Asserted rather than described: an earlier version of this test carried
+    // these numbers in its doc comment and asserted only that the list was
+    // non-empty.
+    const PACKAGES: &[(&str, &str, Counts)] = &[(
         "StreamClasses.orx",
         include_str!("../../../../../interpreter/RexxClasses/StreamClasses.orx"),
+        Counts {
+            classes: 7,
+            methods: 139,
+            attributes: 5,
+            constants: 2,
+        },
     )];
-    for (name, source) in PACKAGES {
+    for (name, source, expected) in PACKAGES {
         let directives = parse(source).unwrap_or_else(|e| panic!("{name} failed to parse: {e:?}"));
-        assert!(!directives.is_empty(), "{name} produced no directives");
+        let mut classes = 0;
+        let mut methods = 0;
+        let mut attributes = 0;
+        let mut constants = 0;
+        for directive in &directives {
+            match directive.kind.keyword() {
+                "CLASS" => classes += 1,
+                "METHOD" => methods += 1,
+                "ATTRIBUTE" => attributes += 1,
+                "CONSTANT" => constants += 1,
+                other => panic!("{name} holds a {other} directive"),
+            }
+        }
+        assert_eq!(
+            (classes, methods, attributes, constants),
+            (
+                expected.classes,
+                expected.methods,
+                expected.attributes,
+                expected.constants
+            ),
+            "{name} decomposed differently"
+        );
     }
 }

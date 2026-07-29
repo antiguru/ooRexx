@@ -48,7 +48,7 @@ use crate::{ProgramSource, SourceKind};
 /// The longest symbol the interpreter accepts
 /// (`LanguageParser::MAX_SYMBOL_LENGTH`). Measured: a 250-character name
 /// works, 251 raises error 30.1.
-const MAX_SYMBOL_LENGTH: usize = 250;
+pub(crate) const MAX_SYMBOL_LENGTH: usize = 250;
 
 /// The end marker a `::RESOURCE` directive uses when it names none
 /// (`GlobalNames::DEFAULT_RESOURCE_END`).
@@ -132,7 +132,7 @@ pub fn scan(source: &ProgramSource) -> Result<Scanned, ParseError> {
 /// `to_ascii_uppercase` agrees with the table over every byte the table
 /// admits. The table is zero for every byte from 0x80 to 0xFF, which is why a
 /// symbol is always ASCII.
-fn is_symbol_char(byte: u8) -> bool {
+pub(crate) fn is_symbol_char(byte: u8) -> bool {
     matches!(byte,
         b'!' | b'.' | b'?' | b'_' | b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z')
 }
