@@ -352,6 +352,12 @@ fn probe_i_a_three_fragment_continuation_drops_every_terminator() {
 fn probe_j_a_multi_label_clause_is_one_clause_per_label() {
     // Scratch probe J, measured 2026-07-29: `a: b: nop` traces as three
     // clauses on one source line, each label with its own colon.
+    //
+    // This one pins span extraction, not the join. None of its three spans
+    // holds a terminator, so `span_bytes` alone already answers correctly
+    // and a `join_span` replaced by `span_bytes` leaves this test green.
+    // Measured: defeating the join reddens G, H and I but not J, so the
+    // four probes added here give three tests of the join, not four.
     let text = b"trace r\na: b: nop\ntrace off\n";
     assert_traced(
         text,
