@@ -46,6 +46,7 @@
 //! `Variable` node built from one symbol token must not claim a range holding
 //! anything else, or the source spelling recovered from it would be wrong.
 
+use std::collections::BTreeMap;
 use std::ops::Range;
 
 use crate::token::{Operator, SymbolId};
@@ -465,17 +466,96 @@ pub fn compound_parts(name: &str) -> (&str, Vec<Tail<'_>>) {
     (stem, tails)
 }
 
+/// One code body: an instruction chain and the labels declared in it.
+///
+/// One of these per `translateBlock` call: the main program has one, and each
+/// `::METHOD`, `::ATTRIBUTE` and `::ROUTINE` that carries a body has its own.
+/// A label is local to the body that declares it, which is why the table lives
+/// here rather than once per program.
+///
+/// Every index stored anywhere inside -- a jump target, the block an `END`
+/// closes, a `labels` value -- indexes `instructions` of THIS body. An index
+/// from one body is meaningless in another.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub struct CodeBody {
+    /// In source order, which is also the execution chain: control falls from
+    /// each instruction to the next index unless a jump target says otherwise.
+    ///
+    /// There is no `next` field because there is nothing for one to say. Every
+    /// instruction enters the chain through the port of `addClause`
+    /// (`LanguageParser.cpp:2544`), which only ever appends, so index order is
+    /// the chain exactly.
+    pub instructions: Vec<Instruction>,
+    /// Keyed by the label token's VALUE, not by `SymbolId`: upcased for a
+    /// symbol label, verbatim for a literal one. The first occurrence of a
+    /// duplicated label wins.
+    pub labels: BTreeMap<Box<[u8]>, usize>,
+}
+
+/// Which closure action an `END` performs: `EndBlockType`
+/// (`RexxInstruction.hpp:107`), as `getEndStyle` and
+/// `RexxInstructionSelect::matchEnd` set it.
+///
+/// The C++ enum also holds `LABELED_SELECT_BLOCK`, which nothing sets: a
+/// `SELECT`'s own `getEndStyle` (`SelectInstruction.hpp:76`) returns
+/// `SELECT_BLOCK` whether it is labelled or not, and `matchEnd` overrides only
+/// the two `OTHERWISE` cases. There is no variant for it here.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum EndStyle {
+    /// A `DO` with no control expression and no `LABEL`.
+    Do,
+    /// A `DO` with no control expression but with a `LABEL`.
+    LabeledDo,
+    /// Every other `DO`/`LOOP` form, labelled or not: `getEndStyle`
+    /// (`DoInstruction.hpp:105`) answers `LOOP_BLOCK` for all of them, so the
+    /// label makes no difference here where it does for the block form.
+    Loop,
+    /// A `SELECT` with no `OTHERWISE`, labelled or not. Reaching this `END` at
+    /// run time is error 7.3, because every `WHEN` was false.
+    Select,
+    /// A `SELECT` with an `OTHERWISE` and no `LABEL`.
+    Otherwise,
+    /// A `SELECT` with an `OTHERWISE` and a `LABEL`.
+    LabeledOtherwise,
+}
+
+/// What an `END` turned out to close, and how.
+///
+/// The two travel together because neither is decided until the `END` is
+/// matched, and neither is meaningful without the other.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct EndTarget {
+    /// The block instruction this `END` closes: a `Do`, a `Loop` or a
+    /// `Select`. Never the `Otherwise`, even when `style` says the `SELECT` had
+    /// one: `translateBlock` pops the `OTHERWISE` and matches the `END` against
+    /// the `SELECT` behind it (`LanguageParser.cpp:1530`).
+    pub block: usize,
+    pub style: EndStyle,
+}
+
 /// One instruction, and the clause `TRACE` prints for it.
 ///
-/// # Why there is no `next` and no jump target
+/// # Why there is no `next`
 ///
 /// Task 3.1 Step 3b settled a flat chain in one arena per code body, with
 /// nesting held as indices rather than as child nodes. In a `Vec` the chain
 /// itself is index order, so a `next` field would restate it. The jump targets
 /// -- where an `IF` goes when its condition is false, which block an `END`
 /// closes -- are not computable from one clause: they need the control stack
-/// that walks the whole body, and the task that owns that stack adds them.
-/// A field nothing sets reads as a contract, so none is declared here.
+/// that walks the whole body, and they live on the kinds that jump.
+///
+/// # Why there is no node for the synthetic end of a branch
+///
+/// The C++ chain holds `RexxInstructionEndIf` markers that `endIfNew` builds
+/// out of nothing, one at the end of every `THEN` and `ELSE` branch. They are
+/// not reproduced. Measured with `trace r`, `if 1 = 1 then say "y"` followed by
+/// `say "after"` traces exactly three `*-*` lines for the `IF` clause and then
+/// the next line's, so no marker is ever echoed and nothing observable is lost.
+/// Reproducing them would put an `Instruction` with no source clause into
+/// `instructions`, which two gate criteria are stated over: source-ordered
+/// non-overlapping `clause_span`s, and one `*-*` line per clause. A jump index
+/// on the instruction that jumps carries the same information with neither
+/// exception.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Instruction {
     pub kind: InstructionKind,
@@ -539,21 +619,68 @@ pub enum InstructionKind {
         expression: Option<Expr>,
     },
 
-    // ---- control flow (11) ----
+    // ---- control flow (12) ----
     Do(Box<Loop>),
     Loop(Box<Loop>),
     If {
         condition: Expr,
+        /// Where control goes when `condition` is false: the `ELSE` when there
+        /// is one, otherwise the instruction after the `THEN` branch. `None` is
+        /// the end of this body.
+        ///
+        /// `RexxInstructionIf::else_location->nextInstruction`
+        /// (`IfInstruction.cpp:147`). The C++ target is the synthetic marker
+        /// that closes the `THEN` branch, and control resumes at the
+        /// instruction after it, so this is that instruction directly.
+        false_target: Option<usize>,
     },
     Then,
-    Else,
+    Else {
+        /// Where control goes when the `THEN` branch finished, which is the
+        /// instruction after the `ELSE` branch. `None` is the end of this body.
+        ///
+        /// Stored on the `ELSE` because there is nothing to skip without one:
+        /// a `THEN` branch with no `ELSE` falls straight through, which is the
+        /// C++'s null `else_end` (`EndIf.cpp:154`). `RexxInstructionElse` does
+        /// not read it either -- executing an `ELSE` only traces
+        /// (`ElseInstruction.cpp:113`) -- it forwards the target to the marker
+        /// that closes the `THEN` branch (`:145`), and this field is where that
+        /// forwarding lands.
+        then_exit: Option<usize>,
+    },
     Select {
         label: Option<SymbolId>,
         /// `SELECT CASE expr`, a different instruction class in the C++.
         case: Option<Expr>,
+        /// The `WHEN` instructions this `SELECT` collected, in source order.
+        ///
+        /// `RexxInstructionSelect::whenList`, filled by `addWhen`. Only a
+        /// `WHEN` whose immediate enclosing block is this `SELECT` is here, and
+        /// that is narrower than "every `WHEN` between here and the `END`":
+        /// measured rc 0, `select` / `when 1 = 1 then` / `when 2 = 2 then nop` /
+        /// `end` is accepted and the second `WHEN` is the first one's `THEN`
+        /// instruction, so it is never added (`LanguageParser.cpp:1319`).
+        whens: Vec<usize>,
+        otherwise: Option<usize>,
+        /// The `END` that closes this `SELECT`.
+        ///
+        /// `None` only while the body is still being assembled: an unclosed
+        /// `SELECT` is error 14.2, so a body that parsed has this set.
+        end: Option<usize>,
     },
     When {
         condition: Expr,
+        /// Where control goes when `condition` is false: the next `WHEN`, the
+        /// `OTHERWISE`, or the enclosing `SELECT`'s `END`.
+        false_target: Option<usize>,
+        /// Where control goes when this `WHEN`'s branch finished, which is the
+        /// instruction after the enclosing `SELECT`'s `END`, because one true
+        /// `WHEN` ends the whole `SELECT`. `None` is the end of this body.
+        ///
+        /// `fixWhen` (`SelectInstruction.cpp:222`) sets it, so it is the same
+        /// value for every `WHEN` of one `SELECT`, and `None` for a `WHEN` that
+        /// `whens` never collected.
+        exit: Option<usize>,
     },
     Otherwise,
     Leave {
@@ -564,6 +691,11 @@ pub enum InstructionKind {
     },
     End {
         name: Option<SymbolId>,
+        /// What this `END` closes, and how.
+        ///
+        /// `None` only while the body is still being assembled: an `END` with
+        /// no open block is error 10.1, so a body that parsed has this set.
+        closes: Option<EndTarget>,
     },
 
     // ---- data (8) ----
@@ -640,7 +772,7 @@ impl InstructionKind {
             InstructionKind::Loop(_) => "LOOP",
             InstructionKind::If { .. } => "IF",
             InstructionKind::Then => "THEN",
-            InstructionKind::Else => "ELSE",
+            InstructionKind::Else { .. } => "ELSE",
             InstructionKind::Select { .. } => "SELECT",
             InstructionKind::When { .. } => "WHEN",
             InstructionKind::Otherwise => "OTHERWISE",
@@ -707,6 +839,11 @@ pub struct Loop {
     /// A trailing `WHILE` or `UNTIL`. Never both: `parseLoopConditional`
     /// requires the end of the clause after the one it parsed.
     pub conditional: Option<LoopConditional>,
+    /// The `END` that closes this block.
+    ///
+    /// `None` only while the body is still being assembled: an unclosed block
+    /// is error 14.1 or 14.5, so a body that parsed has this set.
+    pub end: Option<usize>,
 }
 
 /// Which loop a `DO` or `LOOP` header is.
@@ -1227,14 +1364,18 @@ pub struct MethodDirective {
     /// `DELEGATE property`, forwarding every message to that property's value.
     /// A symbol only: measured, `::METHOD m DELEGATE "p"` is 20.926.
     pub delegate: Option<SymbolId>,
-    /// Whether the clauses after this directive are this method's code body.
+    /// This method's code body: the clauses after this directive, assembled.
     ///
-    /// False for every option that generates the method itself, and then a
+    /// `None` for every option that generates the method itself, and then a
     /// following non-directive clause is an error with its own number: 99.946
     /// for `DELEGATE`, 99.934 for `ATTRIBUTE`, 99.933 for `ABSTRACT` and
     /// 99.936 for `EXTERNAL`. Those are raised while parsing this directive,
-    /// so a `false` here has already been checked against what follows.
-    pub body: bool,
+    /// so a `None` here has already been checked against what follows.
+    ///
+    /// The directive parser decides only whether a body belongs here and leaves
+    /// an empty `CodeBody`, which is also the right answer for a body with no
+    /// clauses in it. The block assembler fills it.
+    pub body: Option<CodeBody>,
 }
 
 /// A `::ATTRIBUTE` directive.
@@ -1251,15 +1392,15 @@ pub struct AttributeDirective {
     pub guard: GuardOption,
     pub external: Option<ExternalSpec>,
     pub delegate: Option<SymbolId>,
-    /// Whether the clauses after this directive are this attribute method's
-    /// code body.
+    /// This attribute method's code body: the clauses after this directive,
+    /// assembled.
     ///
     /// Only `GET` or `SET` with no generating option can have one, and there
     /// the C++ asks `hasBody()` (`DirectiveParser.cpp:1773`) rather than
     /// deciding from the options: with a body the method is written in Rexx,
-    /// without one it is generated. So this field is the one place a directive
-    /// parse depends on the clause that FOLLOWS it.
-    pub body: bool,
+    /// without one it is generated. So whether this is `Some` is the one place
+    /// a directive parse depends on the clause that FOLLOWS it.
+    pub body: Option<CodeBody>,
 }
 
 /// Which of the attribute method pair a `::ATTRIBUTE` directive defines.
@@ -1425,9 +1566,9 @@ pub struct RoutineDirective {
     /// `::ROUTINE r PACKAGE` is 25.903.
     pub access: Access,
     pub external: Option<ExternalSpec>,
-    /// Whether the clauses after this directive are this routine's code body,
-    /// which is every routine that is not external.
-    pub body: bool,
+    /// This routine's code body: the clauses after this directive, assembled.
+    /// `Some` for every routine that is not external.
+    pub body: Option<CodeBody>,
 }
 
 #[cfg(test)]

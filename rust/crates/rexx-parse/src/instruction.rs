@@ -42,11 +42,12 @@
 use std::ops::Range;
 
 use crate::ast::{
-    Address, AddressIo, Call, ConditionTrap, ControlExpr, Controlled, Expr, Forward, Guard,
-    Instruction, InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, OutputOption,
-    Parse, ParseSource, ParseTrigger, Raise, RaiseResult, Redirection, Signal, Trace, TriggerKind,
-    Use, UseTarget, VariableRef,
+    Address, AddressIo, Call, ConditionTrap, ControlExpr, Controlled, Expr, ExprKind, Forward,
+    Guard, Instruction, InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting,
+    OutputOption, Parse, ParseSource, ParseTrigger, Raise, RaiseResult, Redirection, Signal, Tail,
+    Trace, TriggerKind, Use, UseTarget, VariableRef, compound_parts,
 };
+use crate::block::{Block, EnclosingSelect};
 use crate::clause::{Clause, ClauseCursor, PendingThen};
 use crate::convert::{check_trace_setting, whole_number};
 use crate::expr::{
@@ -187,85 +188,15 @@ const SUB_WITH: usize = 49;
 /// here instead of silently taking a wrong branch.
 const UNREACHABLE_SWITCH: (u16, u16) = (49, 2);
 
-/// Parses every instruction of one code body, from wherever `cursor` is
-/// positioned.
-///
-/// Stops at the end of `cursor`'s clause list or at a `::` clause, which
-/// starts a directive and ends the body exactly as `nextInstruction`
-/// returning null does (`InstructionParser.cpp:129`-`135`), leaving `cursor`
-/// sitting on that clause (or exhausted). That is what lets Task 3.7b reuse
-/// this same function for a directive's body: it hands this the one shared
-/// `ClauseCursor` a second time, already advanced past the directive clause
-/// itself, and picks the loop back up wherever this leaves it. Measured that
-/// a body really does get this grammar's full validation even though the
-/// task that owns the body's own chain has not run yet: `::routine r` /
-/// `if 1 = 1` at end of file is 18.1, the same as at the top level, and
-/// `::routine r` / `say )` is 37.2.
-///
-/// # What this does NOT do, and what owes it
-///
-/// This is a loop, not `translateBlock`. It builds no control stack, so it
-/// wires nothing together and raises none of the errors that need to know
-/// which block is open. The task that assembles the instruction chain owes all
-/// of the following. Every one but the last two is a `translateBlock` error in
-/// the C++ rather than a `nextInstruction` one:
-///
-/// * 7.1 and 7.2, a `SELECT` with no `WHEN` at all and an instruction other
-///   than `WHEN`/`OTHERWISE`/`END` inside one. Measured: `select` / `end` is
-///   7.1, `select case 1` / `otherwise nop` / `end` is 7.1, and
-///   `select` / `nop` / `end` is 7.2.
-/// * 8.2, an `ELSE` with no `THEN` above it.
-/// * 9.1 and 9.2, a `WHEN` or `OTHERWISE` outside a `SELECT`.
-/// * 10.1, 10.2, 10.3 and 10.7, an `END` with no block, one closing a `THEN`
-///   or an `ELSE`, and one naming a block that is not the open one. The last
-///   two differ by what the `END` failed to close: measured, `do` / `end 1` is
-///   10.3 and `select` / `end 1` is 10.7.
-/// * 14.x, an unclosed `DO`, `SELECT`, `THEN` or `ELSE` at the end of a body.
-/// * The misplaced-label errors, which depend on the open block.
-/// * 99.907 and 99.910, `EXPOSE` and `USE LOCAL` not being the first
-///   instruction, which read `lastInstruction`.
-/// * The chain indices themselves: which instruction an `IF` skips to, which
-///   block an `END` closes, which `SELECT` a `WHEN` belongs to.
-/// * 35.934 in place of 35.929 for a `WHEN` inside `SELECT CASE`, whose parse
-///   needs the enclosing block to pick `parseCaseWhenList`. TWO things change,
-///   not one: that sub-number, and the `When` node's shape, because
-///   `parseCaseWhenList` builds a list of case values where `parseLogical`
-///   builds an AND. `tests::a_when_inside_select_case_still_gets_the_interim_35_929`
-///   pins the interim state so the change is deliberate. Raised in `whenNew`,
-///   not in `translateBlock`.
-/// * 99.913, a `GUARD ON WHEN` expression that references no variable exposed
-///   at that point. Raised in `guardNew`, not in `translateBlock`, but it needs
-///   a per-body set of exposed variables that this task does not keep. The
-///   measurements are on `guard`.
-///
-/// 18.1 and 18.2 are raised here and in `parse_instruction`, because the one
-/// bit of state they need is the one bit this module carries.
-pub(crate) fn parse_instructions(
-    ctx: &ParseCtx,
-    cursor: &mut ClauseCursor,
-) -> Result<Vec<Instruction>, ParseError> {
-    let mut out: Vec<Instruction> = Vec::new();
-    while let Some(clause) = cursor.peek() {
-        if ctx.tokens[clause.tokens.start].kind.tag() == Tag::DColon {
-            break;
-        }
-        out.push(parse_instruction(ctx, cursor)?);
-    }
-    // An IF or WHEN whose THEN never arrived, because the body ended first.
-    // `translateBlock` raises this from the failed `nextClause()`
-    // (`LanguageParser.cpp:1341`). This is the one shape with no offending
-    // clause to report against, so the IF's own byte is the reported one:
-    // measured, `nop` / `nop` / `if 1 = 1` reports line 3.
-    if let Some((which, byte)) = cursor.take_expected_then() {
-        return Err(ParseError::new(18, missing_then_sub(which), byte));
-    }
-    Ok(out)
-}
-
 /// The sub-number of the missing-`THEN` error, which names the instruction
 /// that wanted it: `Error_Then_expected_if` is 18.1 and
 /// `Error_Then_expected_when` is 18.2.
-fn missing_then_sub(which: PendingThen) -> u16 {
+///
+/// Raised in two places, and `block::translate_block` owns the second: here
+/// when a clause that is not a `THEN` follows the `IF`, and there when the body
+/// ends before any clause does, which is the one shape with no offending clause
+/// to report against.
+pub(crate) fn missing_then_sub(which: PendingThen) -> u16 {
     match which {
         PendingThen::If => 1,
         PendingThen::When => 2,
@@ -274,11 +205,19 @@ fn missing_then_sub(which: PendingThen) -> u16 {
 
 /// Parses the clause the cursor is sitting on, advancing it.
 ///
+/// `block` is the body being assembled, which four constructors read: `whenNew`
+/// asks it which `SELECT` is open, `guardNew` asks it which variables are
+/// exposed, and `exposeNew` and `useLocalNew` ask it whether anything precedes
+/// them. The last three also write to it. Nothing here pushes or pops the
+/// control stack: that is `block::translate_block`'s, which is also this
+/// function's only caller.
+///
 /// Panics on an exhausted cursor and on a clause whose first token is `::`,
-/// neither of which is an instruction. `parse_instructions` filters both.
+/// neither of which is an instruction. `translate_block` filters both.
 pub(crate) fn parse_instruction(
     ctx: &ParseCtx,
     cursor: &mut ClauseCursor,
+    block: &mut Block,
 ) -> Result<Instruction, ParseError> {
     let clause = cursor
         .peek()
@@ -314,7 +253,7 @@ pub(crate) fn parse_instruction(
             // substitution. This phase reproduces the reported line and not
             // the substitutions, so `byte` -- the IF's -- is deliberately
             // unused here. It is used where there is no offending clause, in
-            // `parse_instructions`.
+            // `translate_block`.
             let _ = byte;
             return Err(parser.error(18, missing_then_sub(which)));
         }
@@ -323,7 +262,7 @@ pub(crate) fn parse_instruction(
         return Ok(parser.finish_split(cursor, InstructionKind::Then, end_at));
     }
 
-    parser.dispatch(cursor)
+    parser.dispatch(cursor, block)
 }
 
 /// One clause's parse in progress.
@@ -548,7 +487,11 @@ impl<'a> Inst<'a> {
 
     /// `nextInstruction`'s progression: label, assignment, message term,
     /// keyword, command.
-    fn dispatch(mut self, cursor: &mut ClauseCursor) -> Result<Instruction, ParseError> {
+    fn dispatch(
+        mut self,
+        cursor: &mut ClauseCursor,
+        block: &mut Block,
+    ) -> Result<Instruction, ParseError> {
         if let Some(label) = self.clause.label.clone() {
             let kind = self.label(label)?;
             return Ok(self.finish(cursor, kind));
@@ -560,7 +503,7 @@ impl<'a> Inst<'a> {
             return Ok(self.finish(cursor, kind));
         }
         match self.first_keyword() {
-            Some(index) => self.keyword(cursor, index),
+            Some(index) => self.keyword(cursor, index, block),
             // Not a keyword, so the whole clause is a command.
             None => self.command(cursor),
         }
@@ -684,6 +627,7 @@ impl<'a> Inst<'a> {
         mut self,
         cursor: &mut ClauseCursor,
         index: usize,
+        block: &mut Block,
     ) -> Result<Instruction, ParseError> {
         let keyword_end = self.keyword_end();
         match index {
@@ -695,18 +639,22 @@ impl<'a> Inst<'a> {
             }
             KW_IF => {
                 self.next_real();
-                self.if_instruction(cursor, PendingThen::If)
+                self.if_instruction(cursor, PendingThen::If, block)
             }
             KW_WHEN => {
                 self.next_real();
-                self.if_instruction(cursor, PendingThen::When)
+                self.if_instruction(cursor, PendingThen::When, block)
             }
             // `elseNew` and `otherwiseNew` parse nothing at all. Both take
             // their location from the keyword token and let `translateBlock`
             // trim whatever shares the line.
             KW_ELSE => {
                 self.next_real();
-                Ok(self.finish_split(cursor, InstructionKind::Else, keyword_end))
+                Ok(self.finish_split(
+                    cursor,
+                    InstructionKind::Else { then_exit: None },
+                    keyword_end,
+                ))
             }
             KW_OTHERWISE => {
                 self.next_real();
@@ -715,7 +663,7 @@ impl<'a> Inst<'a> {
             KW_END => {
                 self.next_real();
                 let name = self.end_name()?;
-                Ok(self.finish(cursor, InstructionKind::End { name }))
+                Ok(self.finish(cursor, InstructionKind::End { name, closes: None }))
             }
             // `createLoop(false)` and `createLoop(true)`. Bare `DO` is a
             // block and bare `LOOP` is `LOOP FOREVER`, which is the only
@@ -762,7 +710,22 @@ impl<'a> Inst<'a> {
                 if self.ctx.source.kind() == SourceKind::Interpret {
                     return Err(self.error(99, 908));
                 }
+                // `Error_Translation_expose`: nothing may precede an EXPOSE,
+                // not even a label, because a label would give SIGNAL or CALL a
+                // target that skips it. Not method-specific, which was measured
+                // rather than assumed: `nop` / `expose a` in the MAIN program is
+                // 99.907 too.
+                if !block.at_body_start() {
+                    return Err(self.error(99, 907));
+                }
                 let variables = self.variable_list(902)?;
+                for name in &variables {
+                    // Only the direct spelling is exposed for the GUARD check.
+                    // Measured: `expose (a)` / `guard on when a` is 99.913.
+                    if let VariableRef::Direct(id) = name {
+                        block.expose(Box::from(self.ctx.symbols.name(*id).as_bytes()));
+                    }
+                }
                 Ok(self.finish(cursor, InstructionKind::Expose { variables }))
             }
             // `parseNew(SUBKEY_NONE)`, `parseNew(SUBKEY_ARG)` and
@@ -835,7 +798,7 @@ impl<'a> Inst<'a> {
             }
             KW_GUARD => {
                 self.next_real();
-                let guard = self.guard()?;
+                let guard = self.guard(block)?;
                 Ok(self.finish(cursor, InstructionKind::Guard(Box::new(guard))))
             }
             KW_FORWARD => {
@@ -850,7 +813,7 @@ impl<'a> Inst<'a> {
             }
             KW_USE => {
                 self.next_real();
-                let use_ = self.use_instruction()?;
+                let use_ = self.use_instruction(block)?;
                 Ok(self.finish(cursor, InstructionKind::Use(Box::new(use_))))
             }
             KW_ADDRESS => {
@@ -1008,6 +971,7 @@ impl<'a> Inst<'a> {
                 counter,
                 kind: LoopKind::Simple,
                 conditional: None,
+                end: None,
             });
         }
 
@@ -1079,6 +1043,7 @@ impl<'a> Inst<'a> {
             counter,
             kind,
             conditional,
+            end: None,
         })
     }
 
@@ -1096,6 +1061,7 @@ impl<'a> Inst<'a> {
             counter,
             kind: LoopKind::Count(count),
             conditional,
+            end: None,
         })
     }
 
@@ -1163,6 +1129,7 @@ impl<'a> Inst<'a> {
             counter,
             kind: LoopKind::Controlled(Box::new(control)),
             conditional,
+            end: None,
         })
     }
 
@@ -1192,6 +1159,7 @@ impl<'a> Inst<'a> {
                 for_count,
             },
             conditional,
+            end: None,
         })
     }
 
@@ -1264,6 +1232,7 @@ impl<'a> Inst<'a> {
                 for_count,
             },
             conditional,
+            end: None,
         })
     }
 
@@ -1609,7 +1578,7 @@ impl<'a> Inst<'a> {
     /// `guardNew` raises it itself, from the variable set `setGuard`/`getGuard`
     /// captured while the expression was parsed. It is deferred anyway, because
     /// that set is per code body and this task holds no per-body state.
-    fn guard(&mut self) -> Result<Guard, ParseError> {
+    fn guard(&mut self, block: &Block) -> Result<Guard, ParseError> {
         // Measured at run time: `interpret "guard on"` is Error 99.912.
         if self.ctx.source.kind() == SourceKind::Interpret {
             return Err(self.error(99, 912));
@@ -1634,7 +1603,26 @@ impl<'a> Inst<'a> {
                 }
                 // `Error_Invalid_expression_guard` is 35.921, and like every
                 // other logical list the empty case is 35.929 first.
-                Some(self.logical(Terminators::EOC, 929)?)
+                let condition = self.logical(Terminators::EOC, 929)?;
+                // `Error_Translation_guard_expose`: a GUARD expression that
+                // names no exposed variable can never be woken again, so it is
+                // rejected. The C++ collects the names as it evaluates the
+                // expression, through `captureGuardVariable` on the
+                // `addSimpleVariable` and `addStem` paths
+                // (`LanguageParser.cpp:2071`, `:2108`), then counts what it
+                // captured. Walking the finished tree is equivalent because
+                // capture is unconditional over the whole expression and those
+                // two paths are reached for exactly the variable references in
+                // it.
+                //
+                // Applies to GUARD OFF WHEN as well as GUARD ON WHEN, and in the
+                // main program as well as in a method. Both measured:
+                // `::method m` / `guard off when a` is 99.913, and
+                // `guard on when 1` with no method anywhere is 99.913.
+                if !self.guard_exposes(&condition, block) {
+                    return Err(self.error(99, 913));
+                }
+                Some(condition)
             }
         };
         Ok(Guard { on, condition })
@@ -1828,11 +1816,11 @@ impl<'a> Inst<'a> {
     }
 
     /// `useNew` (`InstructionParser.cpp:4267`) and `useLocalNew` (`:2349`).
-    fn use_instruction(&mut self) -> Result<Use, ParseError> {
+    fn use_instruction(&mut self, block: &mut Block) -> Result<Use, ParseError> {
         let first = self.peek_real();
         if first.and_then(|token| self.sub_keyword(token)) == Some(SUB_LOCAL) {
             self.next_real();
-            return self.use_local();
+            return self.use_local(block);
         }
         let strict = first.and_then(|token| self.sub_keyword(token)) == Some(SUB_STRICT);
         if strict {
@@ -1964,11 +1952,19 @@ impl<'a> Inst<'a> {
     ///
     /// Close to `processVariableList` but not the same: there is no `(name)`
     /// form, a compound gets its own error, and the list may be empty.
-    fn use_local(&mut self) -> Result<Use, ParseError> {
+    fn use_local(&mut self, block: &mut Block) -> Result<Use, ParseError> {
         // Measured at run time: `interpret "use local a"` is Error 99.915.
         if self.ctx.source.kind() == SourceKind::Interpret {
             return Err(self.error(99, 915));
         }
+        // `Error_Translation_use_local`, the same placement rule as EXPOSE and
+        // for the same reason.
+        if !block.at_body_start() {
+            return Err(self.error(99, 910));
+        }
+        // `autoExpose()` comes before the list is read, so the five special
+        // names are local even in a `USE LOCAL` with no names of its own.
+        block.auto_expose();
         let mut variables = Vec::new();
         while let Some(token) = self.next_real() {
             // `Error_Symbol_expected_use_local`, 20.927.
@@ -1981,6 +1977,7 @@ impl<'a> Inst<'a> {
             if class == SymbolClass::Compound {
                 return Err(self.error(99, 948));
             }
+            block.local_variable(Box::from(self.ctx.symbols.name(id).as_bytes()));
             variables.push(VariableRef::Direct(id));
         }
         Ok(Use::Local { variables })
@@ -2535,7 +2532,7 @@ impl<'a> Inst<'a> {
                 label = Some(id);
                 match self.peek_real() {
                     Some(next) => token = next,
-                    None => return Ok(InstructionKind::Select { label, case }),
+                    None => return Ok(select_node(label, case)),
                 }
             }
             if token.kind.tag() == Tag::Symbol {
@@ -2548,7 +2545,7 @@ impl<'a> Inst<'a> {
             // Nothing else may follow either option.
             self.required_end(25, 923)?;
         }
-        Ok(InstructionKind::Select { label, case })
+        Ok(select_node(label, case))
     }
 
     /// `RexxToken::value`: the upcased spelling of a symbol, or a literal's
@@ -2582,21 +2579,88 @@ impl<'a> Inst<'a> {
         mut self,
         cursor: &mut ClauseCursor,
         which: PendingThen,
+        block: &Block,
     ) -> Result<Instruction, ParseError> {
         // 929 is `Error_Invalid_expression_logical_list`, which `parseLogical`
         // raises before `requiredLogicalExpression`'s own 35.902 or 35.903 can
-        // be reached. A `WHEN` inside `SELECT CASE` needs 35.934 here instead,
-        // and that is the one argument the control stack will change.
-        let condition = self.logical(Terminators::IF, 929)?;
-        let end_at = self.condition_end();
+        // be reached.
         let kind = match which {
-            PendingThen::If => InstructionKind::If { condition },
-            PendingThen::When => InstructionKind::When { condition },
+            PendingThen::If => InstructionKind::If {
+                condition: self.logical(Terminators::IF, 929)?,
+                false_target: None,
+            },
+            // `whenNew` asks the control stack whether a SELECT is open at
+            // all, which decides whether the clause is legal.
+            PendingThen::When => match block.enclosing_select() {
+                // `Error_Unexpected_when_when`. Measured for a `WHEN` with
+                // nothing open at all and for one inside a `DO` that is itself
+                // inside a `SELECT`, which is 9.1 too because the `DO` stops the
+                // search, and for one after an `OTHERWISE`.
+                EnclosingSelect::None => return Err(self.error(9, 1)),
+                EnclosingSelect::Plain | EnclosingSelect::Case => InstructionKind::When {
+                    condition: self.logical(Terminators::IF, 929)?,
+                    false_target: None,
+                    exit: None,
+                },
+            },
         };
+        let end_at = self.condition_end();
         let byte = self.clause_byte;
         let instruction = self.finish_split(cursor, kind, end_at);
         cursor.expect_then(which, byte);
         Ok(instruction)
+    }
+
+    /// Whether `condition` names at least one variable exposed at this point,
+    /// which is what `GUARD ... WHEN` requires.
+    ///
+    /// Reproduces which references the C++ captures, and the set is narrower
+    /// than "every symbol in the expression": a constant, a `.name` environment
+    /// symbol and a literal are not variables and reach neither
+    /// `addSimpleVariable` nor `addStem`. A compound contributes its STEM, with
+    /// the trailing period, and each tail piece that is a variable rather than a
+    /// constant, which is what `addCompound` (`LanguageParser.cpp:2153`) looks
+    /// up. Measured both ways: `expose a.` / `guard on when a.1` is rc 0 while
+    /// `expose a` / `guard on when a.1` is 99.913, because the stem of `A.1` is
+    /// `A.` and not `A`.
+    fn guard_exposes(&self, condition: &Expr, block: &Block) -> bool {
+        let exposed = match &condition.kind {
+            ExprKind::Variable(id) | ExprKind::Stem(id) => {
+                block.is_exposed(self.ctx.symbols.name(*id).as_bytes())
+            }
+            ExprKind::Compound(id) => {
+                let name = self.ctx.symbols.name(*id);
+                let (stem, tails) = compound_parts(name);
+                block.is_exposed(stem.as_bytes())
+                    || tails.iter().any(|tail| match tail {
+                        Tail::Variable(piece) => block.is_exposed(piece.as_bytes()),
+                        Tail::Constant(_) => false,
+                    })
+            }
+            _ => false,
+        };
+        if exposed {
+            return true;
+        }
+        let mut found = false;
+        condition.kind.for_each_child(&mut |child| {
+            found = found || self.guard_exposes(child, block);
+        });
+        found
+    }
+}
+
+/// A `SELECT` with nothing wired to it yet.
+///
+/// The `WHEN` list, the `OTHERWISE` and the `END` are all found later, by the
+/// assembler, so they are empty here rather than being guessed at.
+fn select_node(label: Option<SymbolId>, case: Option<Expr>) -> InstructionKind {
+    InstructionKind::Select {
+        label,
+        case,
+        whens: Vec::new(),
+        otherwise: None,
+        end: None,
     }
 }
 

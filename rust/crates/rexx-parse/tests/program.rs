@@ -112,7 +112,7 @@ fn a_method_directives_body_is_recognised_and_consumed() {
     let p = parse_program(b"::class c\n::method m\nreturn 5\n".to_vec()).unwrap();
     assert_eq!(p.directives.len(), 2);
     match &p.directives[1].kind {
-        DirectiveKind::Method(m) => assert!(m.body),
+        DirectiveKind::Method(m) => assert!(m.body.is_some()),
         other => panic!("expected a method directive, got {other:?}"),
     }
 }
@@ -122,7 +122,7 @@ fn an_attribute_directives_body_is_recognised_and_consumed() {
     let p = parse_program(b"::class c\n::attribute a get\nreturn 5\n".to_vec()).unwrap();
     assert_eq!(p.directives.len(), 2);
     match &p.directives[1].kind {
-        DirectiveKind::Attribute(a) => assert!(a.body),
+        DirectiveKind::Attribute(a) => assert!(a.body.is_some()),
         other => panic!("expected an attribute directive, got {other:?}"),
     }
 }
@@ -135,7 +135,7 @@ fn two_body_directives_in_a_row_each_get_their_own_body() {
     assert_eq!(p.directives.len(), 2);
     for directive in &p.directives {
         match &directive.kind {
-            DirectiveKind::Routine(r) => assert!(r.body),
+            DirectiveKind::Routine(r) => assert!(r.body.is_some()),
             other => panic!("expected a routine directive, got {other:?}"),
         }
     }

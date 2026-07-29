@@ -11,6 +11,7 @@
 //! separate crate.
 
 use crate::ast::{Instruction, InstructionKind};
+use crate::block::translate_block;
 use crate::clause::{ClauseCursor, split_clauses};
 use crate::token::{Keywords, ParseCtx, ParseError, SymbolTable};
 use crate::{ProgramSource, SourceKind, scan};
@@ -28,7 +29,7 @@ use super::{
     SUB_EXPOSE, SUB_FOR, SUB_FOREVER, SUB_FORM, SUB_FUZZ, SUB_INDEX, SUB_INPUT, SUB_ITEM,
     SUB_LABEL, SUB_LOCAL, SUB_MESSAGE, SUB_NAME, SUB_NORMAL, SUB_OFF, SUB_ON, SUB_OUTPUT, SUB_OVER,
     SUB_REPLACE, SUB_RETURN, SUB_SCIENTIFIC, SUB_STEM, SUB_STREAM, SUB_STRICT, SUB_TO, SUB_UNTIL,
-    SUB_USING, SUB_VALUE, SUB_WHEN, SUB_WHILE, SUB_WITH, parse_instructions,
+    SUB_USING, SUB_VALUE, SUB_WHEN, SUB_WHILE, SUB_WITH,
 };
 
 /// Parses `text` as a whole program and returns every instruction, with the
@@ -44,11 +45,13 @@ fn parse_kind(text: &str, kind: SourceKind) -> Result<(Vec<Instruction>, SymbolT
             keywords: &scanned.keywords,
             resources: &scanned.resources,
         };
-        // `parse_instructions` takes the cursor from Task 3.7b on, so this
-        // builds the one this whole test file needs: a fresh split over the
-        // full token vector, exactly what the old caller-internal cursor did.
+        // A fresh split over the full token vector, then one code body. Going
+        // through `translate_block` rather than a bare loop means these tests
+        // see the block-structure validation too, which is why several of them
+        // wrap their clause in a `DO` or a `SELECT`: an instruction that is only
+        // legal inside a block has to be presented inside one.
         let mut cursor = ClauseCursor::new(split_clauses(ctx.tokens).expect("split never fails"));
-        parse_instructions(&ctx, &mut cursor)
+        translate_block(&ctx, &mut cursor).map(|body| body.instructions)
     };
     result.map(|instructions| (instructions, scanned.symbols))
 }
@@ -402,23 +405,20 @@ fn else_and_otherwise_parse_nothing() {
 
 #[test]
 fn end_takes_an_optional_name_and_nothing_else() {
-    assert_eq!(names(&ok("select\nend")), ["SELECT", "END"]);
+    assert_eq!(names(&ok("do\nend")), ["DO", "END"]);
     // `isSymbol()` is class-agnostic, so a number, a stem and a compound are
-    // all legal block names as far as the parser is concerned. Measured, and
-    // every one is a block-MATCHING error rather than a parse error, with the
-    // number chosen by what the END failed to close: `do` / `end 1`,
-    // `end loop` and `end a.` are Error 10.3, and the same three under a
-    // `select` are Error 10.7.
+    // all legal block names, both on the LABEL and on the END. Measured rc 0
+    // for each pairing.
     for name in ["1", "loop", "a.", "a.1"] {
-        let text = format!("select\nend {name}");
-        assert_eq!(names(&ok(&text)), ["SELECT", "END"], "{text:?}");
+        let text = format!("do label {name}\nnop\nend {name}");
+        assert_eq!(names(&ok(&text)), ["DO", "NOP", "END"], "{text:?}");
     }
-    // A literal is not a symbol at all and IS rejected here: measured,
-    // `select` / `end "x"` is Error 20.909.
-    assert_eq!(err("select\nend \"x\""), (20, 909));
-    // Anything after the name is 21.909. Measured: `do` / `end a b` is rc 235,
-    // Error 21.909.
-    assert_eq!(err("select\nend a b"), (21, 909));
+    // A literal is not a symbol at all and IS rejected here, before any block
+    // matching: measured, `do` / `nop` / `end "x"` is Error 20.909.
+    assert_eq!(err("do\nnop\nend \"x\""), (20, 909));
+    // Anything after the name is 21.909. Measured: `do` / `nop` / `end a b` is
+    // rc 235, Error 21.909.
+    assert_eq!(err("do\nnop\nend a b"), (21, 909));
 }
 
 #[test]
@@ -1242,10 +1242,9 @@ fn guard_takes_on_or_off_and_an_optional_when() {
     assert_eq!(names(&ok("guard off")), ["GUARD"]);
     // `guard on when a` with `a` exposed is rc 0.
     assert_eq!(names(&ok("expose a\nguard on when a"))[1], "GUARD");
-    // `guard on when 1` PARSES here and is Error 99.913 in the oracle, which
-    // is the deferred exposed-variable check and not a syntax difference. It
-    // is asserted rather than left out, so the deviation is visible.
-    assert_eq!(names(&ok("guard on when 1")), ["GUARD"]);
+    // `guard on when 1` names no variable at all, so nothing it names can be
+    // exposed. Measured 99.913, in the main program with no method anywhere.
+    assert_eq!(err("guard on when 1"), (99, 913));
     // Measured: bare `guard` and `guard foo` are 25.913, while `guard on foo`
     // and `guard on 1` are 25.912 -- a different number for the second
     // keyword.
@@ -2073,17 +2072,11 @@ fn a_missing_then_is_reported_on_the_offending_clauses_line() {
 fn a_when_inside_select_case_still_gets_the_interim_35_929() {
     // AN INTERIM STATE, PINNED SO THAT CHANGING IT IS DELIBERATE.
     //
-    // The oracle picks `parseCaseWhenList` over `parseLogical` from the
-    // enclosing block, which needs the control stack this task does not build.
-    // Measured, both directions: inside `select case 1` an empty WHEN element
-    // is Error 35.934, and inside a plain `select` it is 35.929. This parser
-    // gives 35.929 for both.
-    //
-    // Task 3.7c must change TWO things when it gains the stack, not one: the
-    // sub-number argument in `if_instruction`, AND the `When` node's shape,
-    // because `parseCaseWhenList` builds a list of case values where
-    // `parseLogical` builds an AND. A single-expression WHEN is identical
-    // under both, so only a comma list shows the second difference.
+    // The control stack now exists, so the WHEN knows which SELECT it is in and
+    // rejects one that is in no SELECT at all. What it does not yet do is pick
+    // `parseCaseWhenList` over `parseLogical` from that answer. Measured, both
+    // directions: inside `select case 1` an empty WHEN element is 35.934, and
+    // inside a plain `select` it is 35.929. This parser gives 35.929 for both.
     assert_eq!(err("select case 1\nwhen , 1 = 1 then nop\nend"), (35, 929));
     assert_eq!(err("select case 1\nwhen then nop\nend"), (35, 929));
     // The plain SELECT spelling, which is already right and must stay right.

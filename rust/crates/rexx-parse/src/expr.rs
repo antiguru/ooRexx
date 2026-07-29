@@ -551,8 +551,26 @@ impl<'a, 'c> Parser<'a, 'c> {
 
     /// `parseLogical` (`LanguageParser.cpp:4264`).
     fn logical(&mut self, term: Terminators, missing: u16) -> Result<Expr, ParseError> {
+        let from = {
+            self.skip_blanks();
+            self.cursor.position()
+        };
+        let mut parts = self.comma_list(term, missing)?;
+        if parts.len() == 1 {
+            return Ok(parts.pop().expect("just checked the length"));
+        }
+        let extent = self.extent(from);
+        Ok(Expr::new(ExprKind::Logical(parts), extent))
+    }
+
+    /// The comma-separated loop that `parseLogical` (`LanguageParser.cpp:4264`)
+    /// and `parseCaseWhenList` (`:3168`) share.
+    ///
+    /// The two functions are the same loop with two differences: the error a
+    /// missing element raises, and what is built from the result. Neither
+    /// tolerates an omitted element, unlike an argument list.
+    fn comma_list(&mut self, term: Terminators, missing: u16) -> Result<Vec<Expr>, ParseError> {
         self.skip_blanks();
-        let from = self.cursor.position();
         let mut parts: Vec<Expr> = Vec::new();
         loop {
             let Some(part) = self.subexpression(term)? else {
@@ -565,11 +583,7 @@ impl<'a, 'c> Parser<'a, 'c> {
                 break;
             }
         }
-        if parts.len() == 1 {
-            return Ok(parts.pop().expect("just checked the length"));
-        }
-        let extent = self.extent(from);
-        Ok(Expr::new(ExprKind::Logical(parts), extent))
+        Ok(parts)
     }
 
     /// `parseSubExpression` (`LanguageParser.cpp:2812`): a term, then dyadic

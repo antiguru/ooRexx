@@ -31,12 +31,12 @@
 //! error and neither is raised here.
 
 use crate::ast::{
-    Access, AnnotationTarget, AttributeStyle, ConditionOption, ConstantValue, Directive,
+    Access, AnnotationTarget, AttributeStyle, CodeBody, ConditionOption, ConstantValue, Directive,
     DirectiveKind, ExternalSpec, GuardOption, OptionsForm, PackageOption, Protection,
 };
+use crate::block::translate_block;
 use crate::clause::{ClauseCursor, split_clauses};
-use crate::instruction::parse_instruction;
-use crate::token::{Keywords, ParseCtx, ParseError, SymbolTable, Tag};
+use crate::token::{Keywords, ParseCtx, ParseError, SymbolTable};
 use crate::{ProgramSource, SourceKind, scan};
 
 use super::{
@@ -52,14 +52,13 @@ use super::{
     SUBKEY_NOINHERIT, SUBKEY_SCIENTIFIC, parse_directive,
 };
 
-/// Parses `text` whole, the way `translate` does: every `::` clause through
-/// `parse_directive` and every other clause through the instruction grammar.
+/// Parses `text` whole, the way `translate` does: one code body, then every `::`
+/// clause through `parse_directive` with that directive's own body after it.
 ///
-/// This stands in for the public entry point, which is a later task's. It builds
-/// no control stack, so it raises none of the block-structure errors and
-/// discards the instructions it parses: the directives are what is asserted
-/// here. What it does do is drive `parse_directive` over every `::` clause of a
-/// real file, which is what makes the `CoreClasses.orx` test possible.
+/// The same composition the public entry point uses, minus building a `Program`,
+/// because the directives are what is asserted here. Driving `parse_directive`
+/// over every `::` clause of a real file is what makes the `CoreClasses.orx`
+/// test possible.
 fn parse_with_symbols(
     text: &str,
     kind: SourceKind,
@@ -77,16 +76,27 @@ fn parse_with_symbols(
         let mut cursor = ClauseCursor::new(split_clauses(ctx.tokens)?);
         let mut directives = Vec::new();
         let mut failure = None;
-        while let Some(clause) = cursor.peek() {
-            let is_directive = ctx.tokens[clause.tokens.start].kind.tag() == Tag::DColon;
-            let outcome = if is_directive {
-                parse_directive(&ctx, &mut cursor).map(|d| directives.push(d))
-            } else {
-                parse_instruction(&ctx, &mut cursor).map(|_| ())
-            };
-            if let Err(e) = outcome {
-                failure = Some(e);
-                break;
+        if let Err(e) = translate_block(&ctx, &mut cursor) {
+            failure = Some(e);
+        }
+        while failure.is_none() && cursor.peek().is_some() {
+            match parse_directive(&ctx, &mut cursor) {
+                Ok(mut directive) => {
+                    let wants_body = match &directive.kind {
+                        DirectiveKind::Method(m) => m.body.is_some(),
+                        DirectiveKind::Attribute(a) => a.body.is_some(),
+                        DirectiveKind::Routine(r) => r.body.is_some(),
+                        _ => false,
+                    };
+                    if wants_body {
+                        match translate_block(&ctx, &mut cursor) {
+                            Ok(body) => set_body(&mut directive.kind, body),
+                            Err(e) => failure = Some(e),
+                        }
+                    }
+                    directives.push(directive);
+                }
+                Err(e) => failure = Some(e),
             }
         }
         match failure {
@@ -95,6 +105,16 @@ fn parse_with_symbols(
         }
     };
     result.map(|directives| (directives, scanned.symbols))
+}
+
+/// Installs an assembled body into whichever directive kind can hold one.
+fn set_body(kind: &mut DirectiveKind, body: CodeBody) {
+    match kind {
+        DirectiveKind::Method(m) => m.body = Some(body),
+        DirectiveKind::Attribute(a) => a.body = Some(body),
+        DirectiveKind::Routine(r) => r.body = Some(body),
+        other => panic!("{other:?} cannot hold a body"),
+    }
 }
 
 fn parse(text: &str) -> Result<Vec<Directive>, ParseError> {
@@ -183,7 +203,7 @@ fn shape(directive: &Directive, symbols: &SymbolTable, text: &str) -> String {
             if let Some(delegate) = method.delegate {
                 out.push(format!("delegate {}", symbols.name(delegate)));
             }
-            if method.body {
+            if method.body.is_some() {
                 out.push("body".into());
             }
         }
@@ -210,7 +230,7 @@ fn shape(directive: &Directive, symbols: &SymbolTable, text: &str) -> String {
             if let Some(delegate) = attribute.delegate {
                 out.push(format!("delegate {}", symbols.name(delegate)));
             }
-            if attribute.body {
+            if attribute.body.is_some() {
                 out.push("body".into());
             }
         }
@@ -290,7 +310,7 @@ fn shape(directive: &Directive, symbols: &SymbolTable, text: &str) -> String {
             out.push(format!("routine {}", string(&routine.name)));
             push_access(&mut out, routine.access);
             push_external(&mut out, routine.external.as_ref());
-            if routine.body {
+            if routine.body.is_some() {
                 out.push("body".into());
             }
         }

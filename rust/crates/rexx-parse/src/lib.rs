@@ -31,7 +31,10 @@
 // test-only rather than not-yet-called, and those are different contracts.
 // Task 3.7b removed the last three, in `directive.rs`'s `parse_directive` and
 // `instruction.rs`'s `parse_instructions` and `parse_instruction`, by becoming
-// their caller below. None remain.
+// their caller below. None remain. Task 3.7c added `block.rs` with a non-test
+// caller from the start, and `parse_instructions` no longer exists: assembling
+// a body is `translate_block`'s, and it is the only caller of
+// `parse_instruction`.
 //
 // An expect attribute cannot be used instead of allow: the lint fires in the
 // library compilation and not in the library-as-test one, so the expectation
@@ -40,6 +43,7 @@
 // hide code that is dead by mistake.
 
 mod ast;
+mod block;
 mod clause;
 mod convert;
 mod directive;
@@ -51,13 +55,13 @@ mod token;
 
 pub use ast::{
     Access, Address, AddressIo, Annotate, Annotation, AnnotationTarget, AttributeDirective,
-    AttributeStyle, Call, CallTarget, ClassDirective, ClassRef, ConditionOption, ConditionTrap,
-    ConstantDirective, ConstantValue, ControlExpr, Controlled, Directive, DirectiveKind, Expr,
-    ExprKind, ExternalSpec, Forward, Guard, GuardOption, Instruction, InstructionKind, Loop,
-    LoopConditional, LoopKind, MethodDirective, NumericSetting, OptionsForm, OutputOption,
-    PackageOption, Parse, ParseSource, ParseTrigger, PrefixOp, Protection, Raise, RaiseResult,
-    Redirection, Requires, Resource, RoutineDirective, Signal, Tail, Trace, TriggerKind, Use,
-    UseTarget, VariableRef, compound_parts,
+    AttributeStyle, Call, CallTarget, ClassDirective, ClassRef, CodeBody, ConditionOption,
+    ConditionTrap, ConstantDirective, ConstantValue, ControlExpr, Controlled, Directive,
+    DirectiveKind, EndStyle, EndTarget, Expr, ExprKind, ExternalSpec, Forward, Guard, GuardOption,
+    Instruction, InstructionKind, Loop, LoopConditional, LoopKind, MethodDirective, NumericSetting,
+    OptionsForm, OutputOption, PackageOption, Parse, ParseSource, ParseTrigger, PrefixOp,
+    Protection, Raise, RaiseResult, Redirection, Requires, Resource, RoutineDirective, Signal,
+    Tail, Trace, TriggerKind, Use, UseTarget, VariableRef, compound_parts,
 };
 pub use scanner::{ResourceBody, Scanned, scan};
 pub use source::{ProgramSource, SourceKind};
@@ -68,34 +72,34 @@ pub use token::{
 
 use std::collections::BTreeMap;
 
+use crate::block::translate_block;
 use crate::clause::{ClauseCursor, split_clauses};
 use crate::directive::parse_directive;
-use crate::instruction::parse_instructions;
 use crate::token::ParseCtx;
 
 /// A whole program: everything `translate` produces from one source buffer
-/// (`LanguageParser.cpp:735`-`765`), before block structure is assembled.
+/// (`LanguageParser.cpp:735`-`765`).
 ///
 /// `source` and `symbols` travel with the nodes rather than being handed back
 /// separately, because every node's span is a *byte* range into `source` and
 /// every `SymbolId` is meaningless without `symbols` -- Phase 4 resolves a name
 /// back to text through it to report errors and to implement `SIGNAL VALUE`.
 ///
-/// Accepts every valid program. It does **not** yet reject invalid block
-/// structure -- an unclosed `DO`, an `END` with nothing open, a `WHEN` outside
-/// a `SELECT` -- because that needs the control stack Task 3.7c builds. A flat
-/// `Vec` in index order is already the right chain for everything this task
-/// checks; 3.7c adds the jump-target fields once it can populate them.
+/// Accepts every valid program and rejects invalid block structure: an unclosed
+/// `DO`, an `END` with nothing open, a `WHEN` outside a `SELECT`. The main
+/// body's own fields are spelled out here rather than held as a `CodeBody`,
+/// which is what a directive's body is, because they are this type's public
+/// surface and predate it.
 #[derive(Debug)]
 pub struct Program {
     pub source: ProgramSource,
-    /// The main code body's instructions, in source order. Ends where the
-    /// first `::` directive clause begins; an instruction after that point is
-    /// not here at all, because it belongs to that directive's body instead
-    /// and Task 3.7b does not yet keep a body's own chain anywhere -- see
-    /// `directives`.
+    /// The main code body's instructions, in source order, which is also the
+    /// execution chain. Ends where the first `::` directive clause begins; an
+    /// instruction after that point is not here at all, because it belongs to
+    /// that directive's own body -- see `directives`.
     pub instructions: Vec<Instruction>,
-    /// The `::` directives, in source order.
+    /// The `::` directives, in source order, each carrying its own assembled
+    /// body.
     pub directives: Vec<Directive>,
     /// Keyed by the label token's VALUE, not by `SymbolId`: upcased for a
     /// symbol label, verbatim for a literal one. `Box<[u8]>` rather than
@@ -105,13 +109,12 @@ pub struct Program {
     /// `build/bin/rexx`. Interning the key would be wrong in both directions;
     /// see Task 3.3's six measurements.
     ///
-    /// Built from `instructions` alone, covering only the main body: a label
-    /// is local to the code body that declares it, the same way a
-    /// directive's own body will get its own table once Task 3.7c parses one.
-    /// The first occurrence of a duplicated label wins -- measured, two labels
-    /// spelled `a:` in one program is accepted and `signal a` reaches the
-    /// first -- so this is built with "insert if absent", never an
-    /// unconditional overwrite.
+    /// The main body's own labels and no others: a label is local to the code
+    /// body that declares it, and a directive's body has its own table in its
+    /// own `CodeBody`. The first occurrence of a duplicated label wins --
+    /// measured, two labels spelled `a:` in one program is accepted and
+    /// `signal a` reaches the first -- so this is built with "insert if
+    /// absent", never an unconditional overwrite.
     pub labels: BTreeMap<Box<[u8]>, usize>,
     /// Retained because a `SymbolId` is meaningless without it: Phase 4
     /// resolves names back to text to report them.
@@ -150,12 +153,11 @@ pub struct Fragment {
 pub fn parse_program(text: Vec<u8>) -> Result<Program, ParseError> {
     let source = ProgramSource::new(text, SourceKind::Program);
     let parsed = parse(&source)?;
-    let labels = build_labels(&parsed.instructions);
     Ok(Program {
         source,
-        instructions: parsed.instructions,
+        instructions: parsed.main.instructions,
         directives: parsed.directives,
-        labels,
+        labels: parsed.main.labels,
         symbols: parsed.symbols,
     })
 }
@@ -180,14 +182,15 @@ pub fn parse_interpret(text: Vec<u8>) -> Result<Fragment, ParseError> {
     );
     Ok(Fragment {
         source,
-        instructions: parsed.instructions,
+        instructions: parsed.main.instructions,
         symbols: parsed.symbols,
     })
 }
 
 /// What one parse produces, before it is split into `Program` or `Fragment`.
 struct Parsed {
-    instructions: Vec<Instruction>,
+    /// The main code body. A directive's body is inside the directive.
+    main: CodeBody,
     directives: Vec<Directive>,
     symbols: SymbolTable,
 }
@@ -205,7 +208,7 @@ struct Parsed {
 /// compile, which would be the correct outcome rather than something to work
 /// around.
 ///
-/// One `ClauseCursor`, built once. `parse_instructions` already stops at the
+/// One `ClauseCursor`, built once. `translate_block` already stops at the
 /// first `::` clause and leaves the cursor sitting there, so the directive
 /// loop below picks up exactly where it left off -- no second `split_clauses`
 /// call and no re-deriving where the main body ended from a fresh one.
@@ -220,7 +223,7 @@ fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
     };
 
     let mut cursor = ClauseCursor::new(split_clauses(ctx.tokens)?);
-    let instructions = parse_instructions(&ctx, &mut cursor)?;
+    let main = translate_block(&ctx, &mut cursor)?;
 
     // `translate` raises 99.914 exactly here, once, before `nextDirective` is
     // ever called (`LanguageParser.cpp:1113`-`1120`): `INTERPRET` text may not
@@ -236,66 +239,56 @@ fn parse(source: &ProgramSource) -> Result<Parsed, ParseError> {
 
     let mut directives = Vec::new();
     while cursor.peek().is_some() {
-        let directive = parse_directive(&ctx, &mut cursor)?;
+        let mut directive = parse_directive(&ctx, &mut cursor)?;
         // Only `::METHOD`/`::ATTRIBUTE`/`::ROUTINE` can carry a body, and each
         // already rejects one with its own specific error when its OWN shape
         // does not allow it (`::CONSTANT`'s body is 99.938, for one). Every
-        // other directive kind never sets a body flag at all, and a clause
-        // trailing one of those needs no special case here: the NEXT
-        // iteration's `parse_directive` call sees a clause that does not
-        // start with `::` and raises 99.916 on its own -- measured for all
-        // five kinds that can never have a body (`::CLASS`, `::OPTIONS`,
-        // `::REQUIRES`, `::ANNOTATE`, `::RESOURCE`).
-        let has_body = directive_has_body(&directive.kind);
-        directives.push(directive);
-        if has_body {
-            // Parsed and discarded. Every clause of the body still gets this
-            // grammar's full validation -- measured, `::routine r` / `if 1 =
-            // 1` at end of file is 18.1 and `::routine r` / `say )` is 37.2,
-            // same as at the top level -- but there is nowhere to keep the
-            // result yet: assembling a body's own chain, with its control
-            // stack and its `END` matching, is Task 3.7c's job, and
-            // `RoutineDirective`/`MethodDirective`/`AttributeDirective` carry
-            // no field for it until that task adds one.
-            parse_instructions(&ctx, &mut cursor)?;
+        // other directive kind never sets a body at all, and a clause trailing
+        // one of those needs no special case here: the NEXT iteration's
+        // `parse_directive` call sees a clause that does not start with `::` and
+        // raises 99.916 on its own -- measured for all five kinds that can never
+        // have a body (`::CLASS`, `::OPTIONS`, `::REQUIRES`, `::ANNOTATE`,
+        // `::RESOURCE`).
+        //
+        // A body gets its own `translate_block` call, which is what makes it a
+        // code body rather than a continuation of the one before: its own
+        // control stack, so a `DO` may not be closed across the directive; its
+        // own label table; and its own `EXPOSE` placement rule, so a body's
+        // first instruction may be an `EXPOSE` even though the main program
+        // already had one. Measured, all three.
+        if let Some(slot) = directive_body(&mut directive.kind) {
+            *slot = translate_block(&ctx, &mut cursor)?;
         }
+        directives.push(directive);
     }
 
     Ok(Parsed {
-        instructions,
+        main,
         directives,
         symbols: scanned.symbols,
     })
 }
 
-/// Whether `kind` introduces a body of its own instructions: `true` only for
-/// the three directive shapes that carry their own `body` flag, per their own
-/// doc comments in `ast.rs`.
-fn directive_has_body(kind: &DirectiveKind) -> bool {
+/// The body slot of a directive that carries one, for the assembler to fill.
+///
+/// `None` for a directive shape that can never have a body, and also for one
+/// that can but does not: an external `::ROUTINE`, say. See each field's own
+/// doc comment in `ast.rs` for which is which.
+fn directive_body(kind: &mut DirectiveKind) -> Option<&mut CodeBody> {
     match kind {
-        DirectiveKind::Method(method) => method.body,
-        DirectiveKind::Attribute(attribute) => attribute.body,
-        DirectiveKind::Routine(routine) => routine.body,
+        DirectiveKind::Method(method) => method.body.as_mut(),
+        DirectiveKind::Attribute(attribute) => attribute.body.as_mut(),
+        DirectiveKind::Routine(routine) => routine.body.as_mut(),
         DirectiveKind::Annotate(_)
         | DirectiveKind::Class(_)
         | DirectiveKind::Constant(_)
         | DirectiveKind::Options(_)
         | DirectiveKind::Requires(_)
-        | DirectiveKind::Resource(_) => false,
+        | DirectiveKind::Resource(_) => None,
     }
 }
 
-/// Builds `Program::labels` from the main body's own instructions.
-///
-/// First occurrence wins: measured, two labels spelled `a:` in one program is
-/// accepted by `build/bin/rexx` and `signal a` reaches the first, not the
-/// second, so this is `entry().or_insert()` and never a plain overwrite.
-fn build_labels(instructions: &[Instruction]) -> BTreeMap<Box<[u8]>, usize> {
-    let mut labels = BTreeMap::new();
-    for (index, instruction) in instructions.iter().enumerate() {
-        if let InstructionKind::Label { name } = &instruction.kind {
-            labels.entry(name.clone()).or_insert(index);
-        }
-    }
-    labels
-}
+// The label table used to be built here, in a pass over the finished
+// instruction list. It is built by `Block::add_clause` now, which is where
+// `addLabel` sits in the C++, because a body's labels have to be its own and
+// only the assembler knows where one body ends and the next begins.

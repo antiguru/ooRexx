@@ -76,9 +76,9 @@
 
 use crate::ast::{
     Access, Annotate, Annotation, AnnotationTarget, AttributeDirective, AttributeStyle,
-    ClassDirective, ClassRef, ConditionOption, ConstantDirective, ConstantValue, Directive,
-    DirectiveKind, Expr, ExternalSpec, GuardOption, MethodDirective, OptionsForm, PackageOption,
-    Protection, Requires, Resource, RoutineDirective,
+    ClassDirective, ClassRef, CodeBody, ConditionOption, ConstantDirective, ConstantValue,
+    Directive, DirectiveKind, Expr, ExternalSpec, GuardOption, MethodDirective, OptionsForm,
+    PackageOption, Protection, Requires, Resource, RoutineDirective,
 };
 use crate::clause::{Clause, ClauseCursor};
 use crate::convert::{ARGUMENT_DIGITS, check_trace_setting, is_number, whole_number};
@@ -539,7 +539,7 @@ impl<'a> Dir<'a> {
             guard: GuardOption::Default,
             external: None,
             delegate: None,
-            body: false,
+            body: None,
         };
         // The EXTERNAL string is kept undecoded until the shape is known,
         // because the shapes decode it at different points and the error order
@@ -624,7 +624,7 @@ impl<'a> Dir<'a> {
         } else if method.abstract_ {
             self.check_directive(cursor, 99, 933)?;
         } else if external.is_none() {
-            method.body = true;
+            method.body = Some(CodeBody::default());
         } else {
             method.external = self.decode_external(external.as_deref(), false)?;
             self.check_directive(cursor, 99, 936)?;
@@ -645,7 +645,7 @@ impl<'a> Dir<'a> {
             guard: GuardOption::Default,
             external: None,
             delegate: None,
-            body: false,
+            body: None,
         };
         let mut external: Option<Box<[u8]>> = None;
         while let Some(token) = self.next_real() {
@@ -739,7 +739,7 @@ impl<'a> Dir<'a> {
                     self.require_variable_name(self.ctx.symbols.name(delegate).as_bytes())?;
                     self.check_directive(cursor, 99, 947)?;
                 } else {
-                    attribute.body = self.has_body(cursor);
+                    attribute.body = self.has_body(cursor).then(CodeBody::default);
                 }
             }
         }
@@ -1178,7 +1178,7 @@ impl<'a> Dir<'a> {
             name,
             access: Access::Default,
             external: None,
-            body: false,
+            body: None,
         };
         let mut external: Option<Box<[u8]>> = None;
         while let Some(token) = self.next_real() {
@@ -1213,7 +1213,7 @@ impl<'a> Dir<'a> {
                 // `Error_Translation_external_routine`.
                 self.check_directive(cursor, 99, 939)?;
             }
-            None => routine.body = true,
+            None => routine.body = Some(CodeBody::default()),
         }
         Ok(DirectiveKind::Routine(Box::new(routine)))
     }
