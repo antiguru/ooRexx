@@ -15,12 +15,12 @@ use crate::token::{Keywords, ParseCtx, ParseError, SymbolTable};
 use crate::{ProgramSource, SourceKind, scan};
 
 use super::{
-    KW_ARG, KW_DO, KW_DROP, KW_ELSE, KW_END, KW_EXPOSE, KW_IF, KW_ITERATE, KW_LEAVE, KW_LOOP,
-    KW_NOP, KW_OTHERWISE, KW_PARSE, KW_PULL, KW_PUSH, KW_QUEUE, KW_SAY, KW_SELECT, KW_THEN,
-    KW_WHEN, POPT_ARG, POPT_CASELESS, POPT_LINEIN, POPT_LOWER, POPT_PULL, POPT_SOURCE, POPT_UPPER,
-    POPT_VALUE, POPT_VAR, POPT_VERSION, SUB_BY, SUB_CASE, SUB_COUNTER, SUB_FOR, SUB_FOREVER,
-    SUB_INDEX, SUB_ITEM, SUB_LABEL, SUB_OVER, SUB_TO, SUB_UNTIL, SUB_WHILE, SUB_WITH,
-    parse_instructions,
+    KW_ARG, KW_CALL, KW_DO, KW_DROP, KW_ELSE, KW_END, KW_EXPOSE, KW_IF, KW_ITERATE, KW_LEAVE,
+    KW_LOOP, KW_NOP, KW_OTHERWISE, KW_PARSE, KW_PULL, KW_PUSH, KW_QUEUE, KW_SAY, KW_SELECT,
+    KW_SIGNAL, KW_THEN, KW_WHEN, POPT_ARG, POPT_CASELESS, POPT_LINEIN, POPT_LOWER, POPT_PULL,
+    POPT_SOURCE, POPT_UPPER, POPT_VALUE, POPT_VAR, POPT_VERSION, SUB_BY, SUB_CASE, SUB_COUNTER,
+    SUB_FOR, SUB_FOREVER, SUB_INDEX, SUB_ITEM, SUB_LABEL, SUB_NAME, SUB_OFF, SUB_ON, SUB_OVER,
+    SUB_TO, SUB_UNTIL, SUB_VALUE, SUB_WHILE, SUB_WITH, parse_instructions,
 };
 
 /// Parses `text` as a whole program and returns every instruction, with the
@@ -102,6 +102,7 @@ fn keyword_indices_still_name_their_own_spellings() {
     );
     for (index, spelling) in [
         (KW_ARG, "ARG"),
+        (KW_CALL, "CALL"),
         (KW_DO, "DO"),
         (KW_DROP, "DROP"),
         (KW_ELSE, "ELSE"),
@@ -119,6 +120,7 @@ fn keyword_indices_still_name_their_own_spellings() {
         (KW_QUEUE, "QUEUE"),
         (KW_SAY, "SAY"),
         (KW_SELECT, "SELECT"),
+        (KW_SIGNAL, "SIGNAL"),
         (KW_THEN, "THEN"),
         (KW_WHEN, "WHEN"),
     ] {
@@ -137,9 +139,13 @@ fn keyword_indices_still_name_their_own_spellings() {
         (SUB_INDEX, "INDEX"),
         (SUB_ITEM, "ITEM"),
         (SUB_LABEL, "LABEL"),
+        (SUB_NAME, "NAME"),
+        (SUB_OFF, "OFF"),
+        (SUB_ON, "ON"),
         (SUB_OVER, "OVER"),
         (SUB_TO, "TO"),
         (SUB_UNTIL, "UNTIL"),
+        (SUB_VALUE, "VALUE"),
         (SUB_WHILE, "WHILE"),
         (SUB_WITH, "WITH"),
     ] {
@@ -928,4 +934,170 @@ fn an_unusable_template_token_is_38_1() {
     // A dot symbol is not a variable, so it fails the target gate rather than
     // the trigger one. Measured: `parse arg .a` is 31.3.
     assert_eq!(err("parse arg .a"), (31, 3));
+}
+
+// ---- CALL and SIGNAL, including the condition traps ----
+
+/// A rendering of the first instruction when it is a `CALL` or a `SIGNAL`.
+fn call_shape(text: &str) -> String {
+    let (instructions, symbols) =
+        parse_kind(text, SourceKind::Program).unwrap_or_else(|e| panic!("{text:?}: {e:?}"));
+    let bytes = |b: &[u8]| String::from_utf8_lossy(b).to_string();
+    let trap = |t: &crate::ast::ConditionTrap| {
+        format!(
+            "{} {}{}",
+            if t.on { "on" } else { "off" },
+            bytes(&t.condition),
+            match &t.label {
+                Some(l) => format!(" ->{}", bytes(l)),
+                None => String::new(),
+            }
+        )
+    };
+    match &instructions[0].kind {
+        InstructionKind::Call(call) => match &**call {
+            crate::ast::Call::Named {
+                name,
+                literal,
+                args,
+            } => format!(
+                "call{} {}({})",
+                if *literal { "-lit" } else { "" },
+                bytes(name),
+                args.len()
+            ),
+            crate::ast::Call::Dynamic { target, args } => {
+                format!("call-dyn {}({})", target.shape(&symbols), args.len())
+            }
+            crate::ast::Call::Qualified {
+                namespace,
+                name,
+                args,
+            } => format!(
+                "call-ns {}:{}({})",
+                symbols.name(*namespace),
+                symbols.name(*name),
+                args.len()
+            ),
+            crate::ast::Call::Trap(t) => format!("call-trap {}", trap(t)),
+        },
+        InstructionKind::Signal(signal) => match &**signal {
+            crate::ast::Signal::Label(name) => format!("signal {}", bytes(name)),
+            crate::ast::Signal::Value(e) => format!("signal-value {}", e.shape(&symbols)),
+            crate::ast::Signal::Trap(t) => format!("signal-trap {}", trap(t)),
+        },
+        other => panic!("{text:?} is not a CALL or SIGNAL: {other:?}"),
+    }
+}
+
+#[test]
+fn every_call_form_reaches_its_own_variant() {
+    // Measured with rexxc, all rc 0.
+    assert_eq!(call_shape("call f"), "call F(0)");
+    assert_eq!(call_shape("call f 1, 2"), "call F(2)");
+    // A literal target keeps its case and never resolves to an internal label.
+    assert_eq!(call_shape("call \"f\" 1"), "call-lit f(1)");
+    assert_eq!(call_shape("call (e) 1"), "call-dyn E(1)");
+    assert_eq!(call_shape("call ns:name 1"), "call-ns NS:NAME(1)");
+    // A number is a symbol, so it is a legal call target name. Measured: rc 0.
+    assert_eq!(call_shape("call 1"), "call 1(0)");
+}
+
+#[test]
+fn call_rejects_a_target_that_is_neither_symbol_literal_nor_paren() {
+    // `Error_Symbol_or_string_call`. Measured: bare `call` is rc 237, 19.2.
+    assert_eq!(err("call"), (19, 2));
+    // Measured: `call +1` and `call ,1` are both rc 237, Error 19.2.
+    assert_eq!(err("call +1"), (19, 2));
+    assert_eq!(err("call ,1"), (19, 2));
+    // But `call ~x` is rc 0 and is NOT a CALL at all: the message-term test
+    // runs before keyword dispatch, so this is the message `CALL~X`.
+    assert_eq!(names(&ok("call ~x")), ["<message>"]);
+    // `Error_Symbol_expected_qualified_call`, measured as 20.922.
+    assert_eq!(err("call ns:"), (20, 922));
+}
+
+#[test]
+fn call_on_accepts_fewer_conditions_than_signal_on() {
+    // The difference is the whole reason the two share one function with a
+    // flag. Measured with rexxc: `call on syntax` and `call on novalue` are
+    // rc 231 Error 25.1, while `signal on syntax` is rc 0.
+    assert_eq!(err("call on syntax"), (25, 1));
+    assert_eq!(err("call on novalue"), (25, 1));
+    assert_eq!(err("call on lostdigits"), (25, 1));
+    assert_eq!(err("call on nomethod"), (25, 1));
+    assert_eq!(err("call on nostring"), (25, 1));
+    assert_eq!(
+        call_shape("signal on syntax\nsyntax: nop"),
+        "signal-trap on SYNTAX ->SYNTAX"
+    );
+    assert_eq!(
+        call_shape("signal on novalue\nnovalue: nop"),
+        "signal-trap on NOVALUE ->NOVALUE"
+    );
+    // Both accept ANY, ERROR, FAILURE, HALT and NOTREADY. Measured: rc 0.
+    assert_eq!(
+        call_shape("call on any\nany: return"),
+        "call-trap on ANY ->ANY"
+    );
+    assert_eq!(
+        call_shape("call on error\nerror: return"),
+        "call-trap on ERROR ->ERROR"
+    );
+    // Neither accepts PROPAGATE. Measured: `signal on propagate` is 25.3.
+    assert_eq!(err("signal on propagate"), (25, 3));
+    assert_eq!(err("call on propagate"), (25, 1));
+    assert_eq!(err("call on foo"), (25, 1));
+}
+
+#[test]
+fn a_user_condition_carries_its_composed_name() {
+    // `USER name` is the condition's own name, built by
+    // `concatToCstring("USER ")`. Measured: rc 0.
+    assert_eq!(
+        call_shape("call on user x\nx: return"),
+        "call-trap on USER X ->X"
+    );
+    // `Error_Symbol_expected_user`, measured as 20.915.
+    assert_eq!(err("call on user"), (20, 915));
+    assert_eq!(err("call on user \"x\""), (20, 915));
+}
+
+#[test]
+fn the_on_form_takes_a_name_override_and_the_off_form_takes_nothing() {
+    // Measured: rc 0.
+    assert_eq!(
+        call_shape("call on error name lab\nlab: return"),
+        "call-trap on ERROR ->LAB"
+    );
+    assert_eq!(call_shape("call off error"), "call-trap off ERROR");
+    // Measured, each of these: `call on error name` is 19.3,
+    // `call on error name lab x` is 21.903, `call off error x` is 21.904,
+    // and the sub-keyword must be NAME.
+    assert_eq!(err("call on error name"), (19, 3));
+    assert_eq!(err("call on error name lab x"), (21, 903));
+    assert_eq!(err("call off error x"), (21, 904));
+    assert_eq!(err("call on error label lab"), (25, 914));
+    // SIGNAL's own sub-keyword error is a different number.
+    assert_eq!(err("signal on error label lab"), (25, 915));
+    assert_eq!(err("signal on error name lab x"), (21, 903));
+    // Missing the ON/OFF condition entirely.
+    assert_eq!(err("call on"), (20, 911));
+    assert_eq!(err("call off"), (20, 912));
+}
+
+#[test]
+fn every_signal_form_reaches_its_own_variant() {
+    // Measured with rexxc, all rc 0.
+    assert_eq!(call_shape("signal lab\nlab: nop"), "signal LAB");
+    assert_eq!(call_shape("signal \"lab\"\nlab: nop"), "signal lab");
+    assert_eq!(call_shape("signal value 1"), "signal-value 1");
+    // An implicit SIGNAL VALUE, where the target is not a symbol or literal.
+    assert_eq!(call_shape("signal (e)"), "signal-value E");
+    // A label name must be the whole clause, and a number IS a symbol, so
+    // `signal 1+1` is not an expression. Measured, both rc 235, Error 21.905.
+    assert_eq!(err("signal lab x"), (21, 905));
+    assert_eq!(err("signal 1+1"), (21, 905));
+    // `Error_Symbol_or_string_signal`, measured as 19.4.
+    assert_eq!(err("signal"), (19, 4));
 }

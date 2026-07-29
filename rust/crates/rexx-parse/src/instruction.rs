@@ -42,13 +42,13 @@
 use std::ops::Range;
 
 use crate::ast::{
-    ControlExpr, Controlled, Expr, Instruction, InstructionKind, Loop, LoopConditional, LoopKind,
-    Parse, ParseSource, ParseTrigger, TriggerKind, VariableRef,
+    Call, ConditionTrap, ControlExpr, Controlled, Expr, Instruction, InstructionKind, Loop,
+    LoopConditional, LoopKind, Parse, ParseSource, ParseTrigger, Signal, TriggerKind, VariableRef,
 };
 use crate::clause::{Clause, ClauseCursor, PendingThen, split_clauses};
 use crate::expr::{
-    Terminators, need_variable, parse_expr, parse_expression, parse_logical, parse_message_term,
-    parse_paren_expression, parse_variable_or_message_term, symbol_kind,
+    Terminators, need_variable, parse_arg_list, parse_expr, parse_expression, parse_logical,
+    parse_message_term, parse_paren_expression, parse_variable_or_message_term, symbol_kind,
 };
 use crate::source::SourceKind;
 use crate::token::{
@@ -60,6 +60,7 @@ use crate::token::{
 // spellings, and `tests::keyword_indices_still_name_their_own_spellings` pins
 // every one against the table.
 const KW_ARG: usize = 1;
+const KW_CALL: usize = 2;
 const KW_DO: usize = 3;
 const KW_DROP: usize = 4;
 const KW_ELSE: usize = 5;
@@ -77,8 +78,19 @@ const KW_PUSH: usize = 23;
 const KW_QUEUE: usize = 24;
 const KW_SAY: usize = 28;
 const KW_SELECT: usize = 29;
+const KW_SIGNAL: usize = 30;
 const KW_THEN: usize = 31;
 const KW_WHEN: usize = 34;
+
+// Positions in the `CONDITIONS` table. `CALL ON` accepts a strict subset of
+// what `SIGNAL ON` does, so both lists are spelled out at their use sites.
+const COND_LOSTDIGITS: usize = 4;
+const COND_NOMETHOD: usize = 5;
+const COND_NOSTRING: usize = 6;
+const COND_NOVALUE: usize = 8;
+const COND_PROPAGATE: usize = 9;
+const COND_SYNTAX: usize = 10;
+const COND_USER: usize = 11;
 
 // Positions in the `PARSE_OPTIONS` table. `VALUE`, `ARG` and `PULL` appear in
 // `SUB_KEYWORDS` as well, at different indices and meaning different things,
@@ -104,9 +116,13 @@ const SUB_FOREVER: usize = 18;
 const SUB_INDEX: usize = 21;
 const SUB_ITEM: usize = 24;
 const SUB_LABEL: usize = 25;
+const SUB_NAME: usize = 28;
+const SUB_OFF: usize = 31;
+const SUB_ON: usize = 32;
 const SUB_OVER: usize = 34;
 const SUB_TO: usize = 42;
 const SUB_UNTIL: usize = 44;
+const SUB_VALUE: usize = 46;
 const SUB_WHILE: usize = 48;
 const SUB_WITH: usize = 49;
 
@@ -681,6 +697,16 @@ impl<'a> Inst<'a> {
                 let body = self.parse_instruction_body(Some(ParseSource::Pull))?;
                 Ok(self.finish(cursor, InstructionKind::Pull(Box::new(body))))
             }
+            KW_CALL => {
+                self.next_real();
+                let call = self.call()?;
+                Ok(self.finish(cursor, InstructionKind::Call(Box::new(call))))
+            }
+            KW_SIGNAL => {
+                self.next_real();
+                let signal = self.signal()?;
+                Ok(self.finish(cursor, InstructionKind::Signal(Box::new(signal))))
+            }
             KW_SELECT => {
                 self.next_real();
                 let kind = self.select()?;
@@ -1105,6 +1131,226 @@ impl<'a> Inst<'a> {
         Ok(Some(LoopConditional { until, condition }))
     }
 
+    /// `callNew` (`InstructionParser.cpp:1147`) and the three constructors
+    /// above it, which are four distinct instruction objects in the C++.
+    fn call(&mut self) -> Result<Call, ParseError> {
+        // `Error_Symbol_or_string_call`, measured as 19.2 for a bare `call`.
+        let Some(token) = self.next_real() else {
+            return Err(self.error(19, 2));
+        };
+        match &token.kind {
+            TokenKind::Symbol { id, .. } => {
+                // `CALL ns:name`. The colon is looked for with `nextToken`, so
+                // no blank may sit before it, and none can: a blank is only a
+                // token when a symbol, a literal, `(` or `[` follows it.
+                if self.peek_token(0).map(|token| token.kind.tag()) == Some(Tag::Colon) {
+                    self.cursor.advance();
+                    // `Error_Symbol_expected_qualified_call`, measured as
+                    // 20.922 for `call ns:`.
+                    let Some(name) = self.next_real() else {
+                        return Err(self.error(20, 922));
+                    };
+                    let TokenKind::Symbol { id: name, .. } = name.kind else {
+                        return Err(self.error(20, 922));
+                    };
+                    let args = self.arg_list(None)?;
+                    return Ok(Call::Qualified {
+                        namespace: *id,
+                        name,
+                        args,
+                    });
+                }
+                match self.ctx.keywords.sub_keywords.index_of(*id) {
+                    Some(index @ (SUB_ON | SUB_OFF)) => {
+                        Ok(Call::Trap(self.condition_trap(index == SUB_ON, true)?))
+                    }
+                    _ => {
+                        let name = self.value_of(token);
+                        let args = self.arg_list(None)?;
+                        Ok(Call::Named {
+                            name,
+                            literal: false,
+                            args,
+                        })
+                    }
+                }
+            }
+            // `CALL "name"` never resolves to an internal label, which is what
+            // `noInternal` records.
+            TokenKind::Literal { value } => {
+                let name = value.clone();
+                let args = self.arg_list(None)?;
+                Ok(Call::Named {
+                    name,
+                    literal: true,
+                    args,
+                })
+            }
+            // `CALL (expr) args`, whose target is only known at run time.
+            TokenKind::LeftParen => {
+                let Some(target) = parse_paren_expression(self.ctx, &mut self.cursor)? else {
+                    // `Error_Invalid_expression_call`.
+                    return Err(self.error(35, 932));
+                };
+                let args = self.arg_list(None)?;
+                Ok(Call::Dynamic { target, args })
+            }
+            _ => Err(self.error(19, 2)),
+        }
+    }
+
+    /// `signalNew` (`InstructionParser.cpp:4035`) and the two constructors
+    /// above it.
+    fn signal(&mut self) -> Result<Signal, ParseError> {
+        // `Error_Symbol_or_string_signal`, measured as 19.4 for a bare
+        // `signal`.
+        let Some(index) = self.peek_real_index() else {
+            return Err(self.error(19, 4));
+        };
+        let token = &self.ctx.tokens[index];
+        match &token.kind {
+            TokenKind::Symbol { id, .. } => {
+                self.seek(index + 1);
+                match self.ctx.keywords.sub_keywords.index_of(*id) {
+                    Some(index @ (SUB_ON | SUB_OFF)) => {
+                        Ok(Signal::Trap(self.condition_trap(index == SUB_ON, false)?))
+                    }
+                    // `SIGNAL VALUE expr`.
+                    Some(SUB_VALUE) => self.dynamic_signal(),
+                    _ => {
+                        let name = self.value_of(token);
+                        // `Error_Invalid_data_signal`. Measured: `signal lab x`
+                        // and `signal 1+1` are both rc 235, Error 21.905,
+                        // because a number is a symbol and so a label name.
+                        self.required_end(21, 905)?;
+                        Ok(Signal::Label(name))
+                    }
+                }
+            }
+            TokenKind::Literal { value } => {
+                let name = value.clone();
+                self.seek(index + 1);
+                self.required_end(21, 905)?;
+                Ok(Signal::Label(name))
+            }
+            // Anything else is an implicit `SIGNAL VALUE`, with the token left
+            // in place for the expression. Measured: `signal (e)` is rc 0.
+            _ => self.dynamic_signal(),
+        }
+    }
+
+    /// `dynamicSignalNew` (`InstructionParser.cpp:3899`).
+    fn dynamic_signal(&mut self) -> Result<Signal, ParseError> {
+        // `Error_Invalid_expression_signal`.
+        let target = self.expr(Terminators::EOC, 915)?;
+        Ok(Signal::Value(target))
+    }
+
+    /// `callOnNew` (`InstructionParser.cpp:961`) and `signalOnNew` (`:3925`),
+    /// which differ only in which conditions they accept and in four error
+    /// numbers.
+    ///
+    /// `is_call` selects those: `CALL ON` accepts a strict subset of the
+    /// conditions, because a call trap cannot resume from the conditions that
+    /// have no continuation point.
+    fn condition_trap(&mut self, on: bool, is_call: bool) -> Result<ConditionTrap, ParseError> {
+        // `Error_Symbol_expected_on` is 20.911 and `Error_Symbol_expected_off`
+        // is 20.912. Measured: `call on` is 20.911 and `call off` is 20.912.
+        let missing = if on { 911 } else { 912 };
+        let Some(token) = self.next_real() else {
+            return Err(self.error(20, missing));
+        };
+        let TokenKind::Symbol { id, .. } = token.kind else {
+            return Err(self.error(20, missing));
+        };
+        let condition = self.ctx.keywords.conditions.index_of(id);
+        // `Error_Invalid_subkeyword_callon` is 25.1 and `_calloff` 25.2;
+        // `_signalon` is 25.3 and `_signaloff` 25.4.
+        let bad = match (is_call, on) {
+            (true, true) => 1,
+            (true, false) => 2,
+            (false, true) => 3,
+            (false, false) => 4,
+        };
+        let rejected = match condition {
+            None => true,
+            Some(COND_PROPAGATE) => true,
+            // Measured: `call on syntax` and `call on novalue` are 25.1, where
+            // `signal on syntax` is rc 0.
+            Some(COND_SYNTAX | COND_NOVALUE | COND_LOSTDIGITS | COND_NOMETHOD | COND_NOSTRING) => {
+                is_call
+            }
+            _ => false,
+        };
+        if rejected {
+            return Err(self.error(25, bad));
+        }
+        let mut label;
+        let condition_name;
+        if condition == Some(COND_USER) {
+            // `Error_Symbol_expected_user`, measured as 20.915 for
+            // `call on user`.
+            let Some(name) = self.next_real() else {
+                return Err(self.error(20, 915));
+            };
+            let TokenKind::Symbol { .. } = name.kind else {
+                return Err(self.error(20, 915));
+            };
+            let name = self.value_of(name);
+            // The condition's own name is `USER name`, built the way
+            // `concatToCstring("USER ")` builds it.
+            let mut composed = b"USER ".to_vec();
+            composed.extend_from_slice(&name);
+            condition_name = composed.into_boxed_slice();
+            label = Some(name);
+        } else {
+            let name = self.value_of(token);
+            condition_name = name.clone();
+            label = Some(name);
+        }
+
+        if on {
+            if let Some(token) = self.next_real() {
+                // `Error_Invalid_subkeyword_callonname` is 25.914 and
+                // `_signalonname` is 25.915.
+                let name_sub = if is_call { 914 } else { 915 };
+                if self.sub_keyword(token) != Some(SUB_NAME) {
+                    return Err(self.error(25, name_sub));
+                }
+                // `Error_Symbol_or_string_name`, measured as 19.3 for
+                // `call on error name`.
+                let Some(target) = self.next_real() else {
+                    return Err(self.error(19, 3));
+                };
+                if !matches!(target.kind.tag(), Tag::Symbol | Tag::Literal) {
+                    return Err(self.error(19, 3));
+                }
+                label = Some(self.value_of(target));
+                // `Error_Invalid_data_name`, measured as 21.903.
+                self.required_end(21, 903)?;
+            }
+        } else {
+            // The OFF form has no label at all, which is how the C++ tells the
+            // two apart at run time.
+            label = None;
+            // `Error_Invalid_data_condition`, measured as 21.904 for
+            // `call off error x`.
+            self.required_end(21, 904)?;
+        }
+
+        Ok(ConditionTrap {
+            on,
+            condition: condition_name,
+            label,
+        })
+    }
+
+    /// `parseArgList` with no bracket to match, which is the form every
+    /// instruction uses.
+    fn arg_list(&mut self, closer: Option<Tag>) -> Result<Vec<Option<Expr>>, ParseError> {
+        parse_arg_list(self.ctx, &mut self.cursor, closer)
+    }
+
     /// `parseNew` (`InstructionParser.cpp:3102`), shared by `PARSE`, `ARG` and
     /// `PULL`.
     ///
@@ -1445,6 +1691,19 @@ impl<'a> Inst<'a> {
             self.required_end(25, 923)?;
         }
         Ok(InstructionKind::Select { label, case })
+    }
+
+    /// `RexxToken::value`: the upcased spelling of a symbol, or a literal's
+    /// decoded bytes.
+    ///
+    /// Panics on any other token, which no caller passes: every one has
+    /// already tested `isSymbol` or `isSymbolOrLiteral`.
+    fn value_of(&self, token: &Token) -> Box<[u8]> {
+        match &token.kind {
+            TokenKind::Symbol { id, .. } => Box::from(self.ctx.symbols.name(*id).as_bytes()),
+            TokenKind::Literal { value } => value.clone(),
+            other => panic!("value_of on {other:?}"),
+        }
     }
 
     /// `RexxToken::subKeyword` (`KeywordConstants.cpp:495`).
