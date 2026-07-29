@@ -117,6 +117,12 @@ fn err(text: &str) -> (u16, u16) {
     }
 }
 
+/// The byte `text`'s error is reported against, which Task 3.8 turns into a
+/// line number.
+fn err_byte(text: &str) -> usize {
+    parse(text).expect_err("an error was expected").byte
+}
+
 fn keywords_of(directives: &[Directive]) -> Vec<&'static str> {
     directives.iter().map(|d| d.kind.keyword()).collect()
 }
@@ -1287,6 +1293,10 @@ fn a_resource_carries_its_body_verbatim() {
     // Rejections. Measured, each.
     assert_eq!(err("::resource\n"), (19, 920));
     assert_eq!(err("::resource d junk\nbody\n::END\n"), (25, 926));
+    // A sub-directive that IS in the table but is not END, which is the other
+    // half of the same gate: a test using only an unknown symbol passes with a
+    // check that merely requires a sub-directive. Measured: 25.926.
+    assert_eq!(err("::resource d public x\nbody\n::END\n"), (25, 926));
     assert_eq!(err("::resource d \"end\" x\nbody\n::END\n"), (25, 926));
     assert_eq!(err("::resource d end\nbody\n::END\n"), (19, 921));
     assert_eq!(err("::resource d end \"x\" extra\nbody\nx\n"), (21, 914));
@@ -1325,6 +1335,37 @@ fn a_directive_spans_its_own_clause() {
         .map(|d| &text[d.clause_span.clone()])
         .collect();
     assert_eq!(spans, vec!["::class c;", "::class d   "]);
+}
+
+/// A `checkDirective` error is reported against the OFFENDING clause and every
+/// other directive error against the directive's own clause. Two positions, and
+/// only a source with blank lines between them can tell them apart.
+#[test]
+fn a_body_error_is_reported_against_the_body_and_not_the_directive() {
+    // `checkDirective` saves `clauseLocation` and restores it only AFTER the
+    // error, so `nextClause()` has already moved it. The oracle prints the
+    // WHOLE message, and it names line 5:
+    //
+    //   5 *-* return 1
+    //   Error 99 running ... line 5:  Translation error.
+    //   Error 99.933:  Abstract methods cannot have a method body.
+    //
+    // The blank lines are what make the two positions distinguishable: without
+    // them the directive's byte and the body's byte sit on adjacent lines and
+    // moving one moves the other.
+    let text = "::method m abstract\n\n\n\n  return 1\n";
+    assert_eq!(err(text), (99, 933));
+    let offender = text.find("  return").expect("the body clause is there");
+    assert_eq!(
+        err_byte(text),
+        offender + 2,
+        "reported against the directive rather than the body"
+    );
+    // And the directive's own errors go the other way, against the directive's
+    // first byte. Measured: `::method m junk` on line 5 reports line 5.
+    let text = "::class c\n\n\n\n::method m junk\n";
+    assert_eq!(err(text), (25, 902));
+    assert_eq!(err_byte(text), text.find("::method").expect("line 5"));
 }
 
 /// `CoreClasses.orx` is the acceptance test for this task: 347 of its 4,193
