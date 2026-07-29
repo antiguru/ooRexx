@@ -66,9 +66,13 @@
 //!   Those are run-time failures of a program that parsed: measured,
 //!   `::METHOD m EXTERNAL "LIBRARY nosuch"` is rc 158, not a parse error.
 //! * 99.916 for a non-directive clause where a directive was due, which is what
-//!   the next call to `nextDirective` raises, and 99.915 for a directive inside
-//!   `INTERPRET` text, which `translate` raises before any directive is parsed
-//!   (`LanguageParser.cpp:762`).
+//!   the next call to `nextDirective` raises, and **99.914** (not 99.915, which
+//!   is `Error_Translation_use_local_interpret` and unrelated) for a directive
+//!   inside `INTERPRET` text. `translate` raises 99.914 once, before any
+//!   directive is parsed (`LanguageParser.cpp:1119`), rather than per directive:
+//!   measured with `interpret "::routine r"` inside an installed trap,
+//!   `condition('o')~code` is `99.914` and the message is "INTERPRET data must
+//!   not contain directive instructions."
 
 use crate::ast::{
     Access, Annotate, Annotation, AnnotationTarget, AttributeDirective, AttributeStyle,
@@ -166,7 +170,6 @@ const DEFAULT_RESOURCE_END: &[u8] = b"::END";
 ///
 /// Panics on an exhausted cursor, which is `noClauseAvailable()` and is the
 /// caller's loop condition rather than an error.
-#[allow(dead_code)] // deleted by Task 3.7b
 pub(crate) fn parse_directive(
     ctx: &ParseCtx,
     cursor: &mut ClauseCursor,

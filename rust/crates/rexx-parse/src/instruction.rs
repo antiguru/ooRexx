@@ -47,7 +47,7 @@ use crate::ast::{
     Parse, ParseSource, ParseTrigger, Raise, RaiseResult, Redirection, Signal, Trace, TriggerKind,
     Use, UseTarget, VariableRef,
 };
-use crate::clause::{Clause, ClauseCursor, PendingThen, split_clauses};
+use crate::clause::{Clause, ClauseCursor, PendingThen};
 use crate::convert::{check_trace_setting, whole_number};
 use crate::expr::{
     Terminators, need_variable, parse_arg_list, parse_constant_expression, parse_expr,
@@ -187,11 +187,20 @@ const SUB_WITH: usize = 49;
 /// here instead of silently taking a wrong branch.
 const UNREACHABLE_SWITCH: (u16, u16) = (49, 2);
 
-/// Parses every instruction of one code body.
+/// Parses every instruction of one code body, from wherever `cursor` is
+/// positioned.
 ///
-/// Stops at the end of the token vector or at a `::` clause, which starts a
-/// directive and ends the body exactly as `nextInstruction` returning null
-/// does (`InstructionParser.cpp:129`-`135`).
+/// Stops at the end of `cursor`'s clause list or at a `::` clause, which
+/// starts a directive and ends the body exactly as `nextInstruction`
+/// returning null does (`InstructionParser.cpp:129`-`135`), leaving `cursor`
+/// sitting on that clause (or exhausted). That is what lets Task 3.7b reuse
+/// this same function for a directive's body: it hands this the one shared
+/// `ClauseCursor` a second time, already advanced past the directive clause
+/// itself, and picks the loop back up wherever this leaves it. Measured that
+/// a body really does get this grammar's full validation even though the
+/// task that owns the body's own chain has not run yet: `::routine r` /
+/// `if 1 = 1` at end of file is 18.1, the same as at the top level, and
+/// `::routine r` / `say )` is 37.2.
 ///
 /// # What this does NOT do, and what owes it
 ///
@@ -231,15 +240,16 @@ const UNREACHABLE_SWITCH: (u16, u16) = (49, 2);
 ///
 /// 18.1 and 18.2 are raised here and in `parse_instruction`, because the one
 /// bit of state they need is the one bit this module carries.
-#[allow(dead_code)] // deleted by Task 3.7b
-pub(crate) fn parse_instructions(ctx: &ParseCtx) -> Result<Vec<Instruction>, ParseError> {
-    let mut cursor = ClauseCursor::new(split_clauses(ctx.tokens)?);
+pub(crate) fn parse_instructions(
+    ctx: &ParseCtx,
+    cursor: &mut ClauseCursor,
+) -> Result<Vec<Instruction>, ParseError> {
     let mut out: Vec<Instruction> = Vec::new();
     while let Some(clause) = cursor.peek() {
         if ctx.tokens[clause.tokens.start].kind.tag() == Tag::DColon {
             break;
         }
-        out.push(parse_instruction(ctx, &mut cursor)?);
+        out.push(parse_instruction(ctx, cursor)?);
     }
     // An IF or WHEN whose THEN never arrived, because the body ended first.
     // `translateBlock` raises this from the failed `nextClause()`
@@ -266,7 +276,6 @@ fn missing_then_sub(which: PendingThen) -> u16 {
 ///
 /// Panics on an exhausted cursor and on a clause whose first token is `::`,
 /// neither of which is an instruction. `parse_instructions` filters both.
-#[allow(dead_code)] // deleted by Task 3.7b
 pub(crate) fn parse_instruction(
     ctx: &ParseCtx,
     cursor: &mut ClauseCursor,

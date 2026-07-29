@@ -11,6 +11,7 @@
 //! separate crate.
 
 use crate::ast::{Instruction, InstructionKind};
+use crate::clause::{ClauseCursor, split_clauses};
 use crate::token::{Keywords, ParseCtx, ParseError, SymbolTable};
 use crate::{ProgramSource, SourceKind, scan};
 
@@ -43,7 +44,11 @@ fn parse_kind(text: &str, kind: SourceKind) -> Result<(Vec<Instruction>, SymbolT
             keywords: &scanned.keywords,
             resources: &scanned.resources,
         };
-        parse_instructions(&ctx)
+        // `parse_instructions` takes the cursor from Task 3.7b on, so this
+        // builds the one this whole test file needs: a fresh split over the
+        // full token vector, exactly what the old caller-internal cursor did.
+        let mut cursor = ClauseCursor::new(split_clauses(ctx.tokens).expect("split never fails"));
+        parse_instructions(&ctx, &mut cursor)
     };
     result.map(|instructions| (instructions, scanned.symbols))
 }
