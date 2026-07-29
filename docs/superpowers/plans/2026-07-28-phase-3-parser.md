@@ -2095,23 +2095,48 @@ which is why this is easy to miss and why it needs its own test.
 
 ---
 
-## Task 3.8: Errors with number, sub-number, line and substitutions
+## Task 3.8: Errors with number, sub-number and line
 
 **Files:**
 - Create: `rust/crates/rexx-parse/src/error.rs`
 - Test: `rust/crates/rexx-parse/tests/errors.rs`
 
 **Interfaces:**
-- Consumes: `ProgramSource::position` from Task 3.2, `rexx-inventory`'s message table.
+- Consumes: `ProgramSource::line_of` from Task 3.2 — note the method is `line_of`,
+  not the `position` an earlier draft named, because there is no column — and
+  `rexx-inventory`'s message table.
 - Produces: the completed `ParseError { code: u16, sub: u16, byte: usize, subs: Vec<String> }` — the same shape Task 3.3 defined, no field added or removed —
   with `message(&self) -> String` rendered from the generated table.
 
-**This is the phase's gate, not a finishing touch.** Model it on
-`rexx-num`'s error work, which is already done and reviewed: carry the
-substitution *values*, render on demand. A rendered `String` cannot be
-un-spliced, and `condition('o')~additional` exposes the values separately.
+**This is the phase's gate, not a finishing touch.** Model it on `rexx-num`'s error
+work, which is already done and reviewed: carry the substitution *values* and render
+on demand, because a rendered `String` cannot be un-spliced.
+
+**But read the scope carefully, because it changed after this task was written.**
+Byte-exact message text and substitution values are **not gated** — that was a
+deliberate decision, and error 36's byte-position substitution is not produced at
+all. What is gated is the number and the sub-number on a plausible line, in **both
+directions**, over the corpus criterion 4 now names.
+
+That leaves a question this task must settle rather than inherit: **`ParseError.subs`
+exists and is never populated.** Every construction site passes an empty vector. A
+field nothing sets reads as a contract, which is the reason Task 3.6 and Task 3.7b
+were told not to ship `next` and the jump targets before they could fill them. So
+either fill `subs` where the parser already has the values — which makes `message()`
+render readable text and costs little, since the table is generated — or remove it and
+render without splicing. **Do not leave it empty and unremoved.** Producing a message
+was never dropped; only differentially testing its text was.
 
 - [ ] **Step 1: Collect ground truth — and note the obvious recipe does not work**
+
+**The corpus is defined by criterion 4 now, not by this step.** Build both sets it
+names: the **soundness** set, being every program the crate's own tests assert an error
+on (currently 385, extractable by instrumenting the `ok`/`err` helpers in
+`instruction/tests.rs`, `directive/tests.rs` and `block/tests.rs`), and the
+**completeness** set, being that corpus plus the 301 `samples/` files and both
+bootstrap files. Report both counts. Criterion 4 was rewritten after this task's text
+was drafted, because the earlier wording was a soundness condition only and a parser
+that accepted everything would have satisfied it vacuously.
 
 **Exclude every input with more than one syntax error, and do it deliberately
 rather than by luck.** Task 3.3 scans eagerly while the interpreter interleaves
