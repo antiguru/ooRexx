@@ -18,14 +18,15 @@ use super::{
     COND_ANY, COND_ERROR, COND_FAILURE, COND_HALT, COND_LOSTDIGITS, COND_NOMETHOD, COND_NOSTRING,
     COND_NOTREADY, COND_NOVALUE, COND_PROPAGATE, COND_SYNTAX, COND_USER, KW_ARG, KW_CALL, KW_DO,
     KW_DROP, KW_ELSE, KW_END, KW_EXIT, KW_EXPOSE, KW_FORWARD, KW_GUARD, KW_IF, KW_INTERPRET,
-    KW_ITERATE, KW_LEAVE, KW_LOOP, KW_NOP, KW_OPTIONS, KW_OTHERWISE, KW_PARSE, KW_PROCEDURE,
-    KW_PULL, KW_PUSH, KW_QUEUE, KW_RAISE, KW_REPLY, KW_RETURN, KW_SAY, KW_SELECT, KW_SIGNAL,
-    KW_THEN, KW_USE, KW_WHEN, POPT_ARG, POPT_CASELESS, POPT_LINEIN, POPT_LOWER, POPT_PULL,
-    POPT_SOURCE, POPT_UPPER, POPT_VALUE, POPT_VAR, POPT_VERSION, SUB_ADDITIONAL, SUB_ARG,
-    SUB_ARGUMENTS, SUB_ARRAY, SUB_BY, SUB_CASE, SUB_CLASS, SUB_CONTINUE, SUB_COUNTER,
-    SUB_DESCRIPTION, SUB_EXIT, SUB_EXPOSE, SUB_FOR, SUB_FOREVER, SUB_INDEX, SUB_ITEM, SUB_LABEL,
-    SUB_LOCAL, SUB_MESSAGE, SUB_NAME, SUB_OFF, SUB_ON, SUB_OVER, SUB_RETURN, SUB_STRICT, SUB_TO,
-    SUB_UNTIL, SUB_VALUE, SUB_WHEN, SUB_WHILE, SUB_WITH, parse_instructions,
+    KW_ITERATE, KW_LEAVE, KW_LOOP, KW_NOP, KW_NUMERIC, KW_OPTIONS, KW_OTHERWISE, KW_PARSE,
+    KW_PROCEDURE, KW_PULL, KW_PUSH, KW_QUEUE, KW_RAISE, KW_REPLY, KW_RETURN, KW_SAY, KW_SELECT,
+    KW_SIGNAL, KW_THEN, KW_TRACE, KW_USE, KW_WHEN, POPT_ARG, POPT_CASELESS, POPT_LINEIN,
+    POPT_LOWER, POPT_PULL, POPT_SOURCE, POPT_UPPER, POPT_VALUE, POPT_VAR, POPT_VERSION,
+    SUB_ADDITIONAL, SUB_ARG, SUB_ARGUMENTS, SUB_ARRAY, SUB_BY, SUB_CASE, SUB_CLASS, SUB_CONTINUE,
+    SUB_COUNTER, SUB_DESCRIPTION, SUB_DIGITS, SUB_ENGINEERING, SUB_EXIT, SUB_EXPOSE, SUB_FOR,
+    SUB_FOREVER, SUB_FORM, SUB_FUZZ, SUB_INDEX, SUB_ITEM, SUB_LABEL, SUB_LOCAL, SUB_MESSAGE,
+    SUB_NAME, SUB_OFF, SUB_ON, SUB_OVER, SUB_RETURN, SUB_SCIENTIFIC, SUB_STRICT, SUB_TO, SUB_UNTIL,
+    SUB_VALUE, SUB_WHEN, SUB_WHILE, SUB_WITH, parse_instructions,
 };
 
 /// Parses `text` as a whole program and returns every instruction, with the
@@ -122,6 +123,7 @@ fn keyword_indices_still_name_their_own_spellings() {
         (KW_LEAVE, "LEAVE"),
         (KW_LOOP, "LOOP"),
         (KW_NOP, "NOP"),
+        (KW_NUMERIC, "NUMERIC"),
         (KW_OPTIONS, "OPTIONS"),
         (KW_OTHERWISE, "OTHERWISE"),
         (KW_PARSE, "PARSE"),
@@ -136,6 +138,7 @@ fn keyword_indices_still_name_their_own_spellings() {
         (KW_SELECT, "SELECT"),
         (KW_SIGNAL, "SIGNAL"),
         (KW_THEN, "THEN"),
+        (KW_TRACE, "TRACE"),
         (KW_USE, "USE"),
         (KW_WHEN, "WHEN"),
     ] {
@@ -156,10 +159,14 @@ fn keyword_indices_still_name_their_own_spellings() {
         (SUB_CONTINUE, "CONTINUE"),
         (SUB_COUNTER, "COUNTER"),
         (SUB_DESCRIPTION, "DESCRIPTION"),
+        (SUB_DIGITS, "DIGITS"),
+        (SUB_ENGINEERING, "ENGINEERING"),
         (SUB_EXIT, "EXIT"),
         (SUB_EXPOSE, "EXPOSE"),
         (SUB_FOR, "FOR"),
         (SUB_FOREVER, "FOREVER"),
+        (SUB_FORM, "FORM"),
+        (SUB_FUZZ, "FUZZ"),
         (SUB_INDEX, "INDEX"),
         (SUB_ITEM, "ITEM"),
         (SUB_LABEL, "LABEL"),
@@ -170,6 +177,7 @@ fn keyword_indices_still_name_their_own_spellings() {
         (SUB_ON, "ON"),
         (SUB_OVER, "OVER"),
         (SUB_RETURN, "RETURN"),
+        (SUB_SCIENTIFIC, "SCIENTIFIC"),
         (SUB_STRICT, "STRICT"),
         (SUB_TO, "TO"),
         (SUB_UNTIL, "UNTIL"),
@@ -185,9 +193,9 @@ fn keyword_indices_still_name_their_own_spellings() {
         );
     }
     // The parse options and the condition names are tables of their own.
-    // `ARG`, `PULL` and `VALUE` sit in both the sub-keyword and the parse-option
-    // table at different indices, so conflating them would silently make
-    // `PARSE VALUE` mean something else.
+    // `ARG`, `PULL` and `VALUE` sit in both the sub-keyword and the
+    // parse-option table at different indices, so conflating the two would
+    // silently make `PARSE VALUE` mean something else.
     for (index, spelling) in [
         (POPT_ARG, "ARG"),
         (POPT_CASELESS, "CASELESS"),
@@ -1365,4 +1373,131 @@ fn use_arg_rejects_what_the_oracle_rejects() {
     assert_eq!(err("use local 1"), (31, 2));
     assert_eq!(err("use local .a"), (31, 3));
     assert_eq!(err("use local a.b"), (99, 948));
+}
+
+// ---- the settings family: NUMERIC and TRACE ----
+
+/// A rendering of the first instruction when it is a `NUMERIC` or a `TRACE`.
+fn setting_shape(text: &str) -> String {
+    let (instructions, symbols) =
+        parse_kind(text, SourceKind::Program).unwrap_or_else(|e| panic!("{text:?}: {e:?}"));
+    match &instructions[0].kind {
+        InstructionKind::Numeric {
+            setting,
+            expression,
+        } => {
+            let what = match setting {
+                crate::ast::NumericSetting::Digits => "digits",
+                crate::ast::NumericSetting::Fuzz => "fuzz",
+                crate::ast::NumericSetting::FormDefault => "form-default",
+                crate::ast::NumericSetting::FormScientific => "form-scientific",
+                crate::ast::NumericSetting::FormEngineering => "form-engineering",
+                crate::ast::NumericSetting::FormValue => "form-value",
+            };
+            match expression {
+                Some(e) => format!("{what} {}", e.shape(&symbols)),
+                None => what.to_string(),
+            }
+        }
+        InstructionKind::Trace(trace) => match trace {
+            crate::ast::Trace::Default => "default".to_string(),
+            crate::ast::Trace::Setting(s) => {
+                format!("setting {}", String::from_utf8_lossy(s))
+            }
+            crate::ast::Trace::Skip(n) => format!("skip {n}"),
+            crate::ast::Trace::Value(e) => format!("value {}", e.shape(&symbols)),
+        },
+        other => panic!("{text:?} is not a NUMERIC or TRACE: {other:?}"),
+    }
+}
+
+#[test]
+fn every_numeric_form_reaches_its_own_setting() {
+    // Measured with rexxc, all rc 0.
+    assert_eq!(setting_shape("numeric digits"), "digits");
+    assert_eq!(setting_shape("numeric digits 5"), "digits 5");
+    assert_eq!(setting_shape("numeric fuzz 1"), "fuzz 1");
+    assert_eq!(setting_shape("numeric form"), "form-default");
+    assert_eq!(setting_shape("numeric form scientific"), "form-scientific");
+    assert_eq!(
+        setting_shape("numeric form engineering"),
+        "form-engineering"
+    );
+    assert_eq!(setting_shape("numeric form value 1"), "form-value 1");
+    // An implicit FORM VALUE, where what follows FORM is not a symbol.
+    assert_eq!(setting_shape("numeric form (e)"), "form-value E");
+}
+
+#[test]
+fn numeric_rejects_what_the_oracle_rejects() {
+    // Measured: bare `numeric` and `numeric "x"` are 20.905, `numeric foo` is
+    // 25.15, `numeric form foo` is 25.11 and `numeric form scientific x` is
+    // 21.911.
+    assert_eq!(err("numeric"), (20, 905));
+    assert_eq!(err("numeric \"x\""), (20, 905));
+    assert_eq!(err("numeric foo"), (25, 15));
+    assert_eq!(err("numeric form foo"), (25, 11));
+    assert_eq!(err("numeric form scientific x"), (21, 911));
+}
+
+#[test]
+fn every_trace_form_reaches_its_own_variant() {
+    // Measured with rexxc, all rc 0.
+    assert_eq!(setting_shape("trace"), "default");
+    assert_eq!(setting_shape("trace r"), "setting R");
+    assert_eq!(setting_shape("trace ?r"), "setting ?R");
+    assert_eq!(setting_shape("trace ??r"), "setting ??R");
+    // Only the first non-`?` character means anything, which is why the long
+    // spellings work at all.
+    assert_eq!(setting_shape("trace results"), "setting RESULTS");
+    assert_eq!(setting_shape("trace \"?r\""), "setting ?r");
+    assert_eq!(setting_shape("trace ''"), "setting ");
+    assert_eq!(setting_shape("trace 5"), "skip 5");
+    assert_eq!(setting_shape("trace -5"), "skip -5");
+    assert_eq!(setting_shape("trace +5"), "skip 5");
+    assert_eq!(setting_shape("trace - 5"), "skip -5");
+    assert_eq!(setting_shape("trace -\"5\""), "skip -5");
+    assert_eq!(setting_shape("trace 0"), "skip 0");
+    assert_eq!(setting_shape("trace value 1"), "value 1");
+    assert_eq!(setting_shape("trace (e)"), "value E");
+}
+
+#[test]
+fn the_trace_number_gate_is_exactly_the_oracles() {
+    // The number test runs BEFORE the option test, so a numeric-looking
+    // setting is a skip count and everything else is an option string. Both
+    // directions of the boundary are measured against rexxc.
+    //
+    // Whole and within nine digits, so a skip count:
+    assert_eq!(setting_shape("trace 1e2"), "skip 100");
+    assert_eq!(setting_shape("trace 123456789"), "skip 123456789");
+    // Not whole, or wider than nine digits, so not a number -- and then not a
+    // valid option either, because it starts with a digit. Measured: all four
+    // are rc 232, Error 24.1.
+    assert_eq!(err("trace 1234567890"), (24, 1));
+    assert_eq!(err("trace 1e20"), (24, 1));
+    assert_eq!(err("trace 1.5"), (24, 1));
+    assert_eq!(err("trace 1e-2"), (24, 1));
+    // An unknown option letter. Measured: 24.1.
+    assert_eq!(err("trace zzz"), (24, 1));
+    // Every letter the setting parser knows, which is the other direction of
+    // the same gate. Measured: all rc 0.
+    for letter in ["a", "c", "l", "e", "f", "n", "o", "r", "i"] {
+        let text = format!("trace {letter}");
+        assert_eq!(
+            setting_shape(&text),
+            format!("setting {}", letter.to_uppercase()),
+            "{text:?}"
+        );
+    }
+}
+
+#[test]
+fn trace_rejects_what_the_oracle_rejects() {
+    // Measured: `trace 5 x` and `trace r x` are 21.906, `trace -a` is 26.7 and
+    // `trace value` is 35.916.
+    assert_eq!(err("trace 5 x"), (21, 906));
+    assert_eq!(err("trace r x"), (21, 906));
+    assert_eq!(err("trace -a"), (26, 7));
+    assert_eq!(err("trace value"), (35, 916));
 }

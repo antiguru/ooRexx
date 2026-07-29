@@ -43,8 +43,8 @@ use std::ops::Range;
 
 use crate::ast::{
     Call, ConditionTrap, ControlExpr, Controlled, Expr, Forward, Guard, Instruction,
-    InstructionKind, Loop, LoopConditional, LoopKind, Parse, ParseSource, ParseTrigger, Raise,
-    RaiseResult, Signal, TriggerKind, Use, UseTarget, VariableRef,
+    InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, Parse, ParseSource,
+    ParseTrigger, Raise, RaiseResult, Signal, Trace, TriggerKind, Use, UseTarget, VariableRef,
 };
 use crate::clause::{Clause, ClauseCursor, PendingThen, split_clauses};
 use crate::expr::{
@@ -77,6 +77,7 @@ const KW_ITERATE: usize = 13;
 const KW_LEAVE: usize = 14;
 const KW_LOOP: usize = 15;
 const KW_NOP: usize = 16;
+const KW_NUMERIC: usize = 17;
 const KW_OTHERWISE: usize = 19;
 const KW_OPTIONS: usize = 18;
 const KW_PARSE: usize = 20;
@@ -91,6 +92,7 @@ const KW_SAY: usize = 28;
 const KW_SELECT: usize = 29;
 const KW_SIGNAL: usize = 30;
 const KW_THEN: usize = 31;
+const KW_TRACE: usize = 32;
 const KW_USE: usize = 33;
 const KW_WHEN: usize = 34;
 
@@ -135,9 +137,13 @@ const SUB_CLASS: usize = 7;
 const SUB_CONTINUE: usize = 8;
 const SUB_COUNTER: usize = 9;
 const SUB_DESCRIPTION: usize = 10;
+const SUB_DIGITS: usize = 11;
+const SUB_ENGINEERING: usize = 12;
 const SUB_EXIT: usize = 14;
 const SUB_EXPOSE: usize = 15;
 const SUB_FOR: usize = 17;
+const SUB_FORM: usize = 19;
+const SUB_FUZZ: usize = 20;
 const SUB_FOREVER: usize = 18;
 const SUB_INDEX: usize = 21;
 const SUB_ITEM: usize = 24;
@@ -149,6 +155,7 @@ const SUB_OFF: usize = 31;
 const SUB_ON: usize = 32;
 const SUB_OVER: usize = 34;
 const SUB_RETURN: usize = 36;
+const SUB_SCIENTIFIC: usize = 37;
 const SUB_STRICT: usize = 40;
 const SUB_TO: usize = 42;
 const SUB_UNTIL: usize = 44;
@@ -798,6 +805,22 @@ impl<'a> Inst<'a> {
                 let use_ = self.use_instruction()?;
                 Ok(self.finish(cursor, InstructionKind::Use(Box::new(use_))))
             }
+            KW_NUMERIC => {
+                self.next_real();
+                let (setting, expression) = self.numeric()?;
+                Ok(self.finish(
+                    cursor,
+                    InstructionKind::Numeric {
+                        setting,
+                        expression,
+                    },
+                ))
+            }
+            KW_TRACE => {
+                self.next_real();
+                let trace = self.trace()?;
+                Ok(self.finish(cursor, InstructionKind::Trace(trace)))
+            }
             KW_CALL => {
                 self.next_real();
                 let call = self.call()?;
@@ -1230,6 +1253,118 @@ impl<'a> Inst<'a> {
         // `do i = 1 to 3 while 1 until 2` is rc 229, Error 27.1.
         self.required_end(27, 1)?;
         Ok(Some(LoopConditional { until, condition }))
+    }
+
+    /// `numericNew` (`InstructionParser.cpp:2959`).
+    fn numeric(&mut self) -> Result<(NumericSetting, Option<Expr>), ParseError> {
+        // `Error_Symbol_expected_numeric`, measured as 20.905 for a bare
+        // `numeric` and for `numeric "x"`.
+        let Some(token) = self.next_real() else {
+            return Err(self.error(20, 905));
+        };
+        if token.kind.tag() != Tag::Symbol {
+            return Err(self.error(20, 905));
+        }
+        match self.sub_keyword(token) {
+            Some(SUB_DIGITS) => Ok((NumericSetting::Digits, self.opt_expr(Terminators::EOC)?)),
+            Some(SUB_FUZZ) => Ok((NumericSetting::Fuzz, self.opt_expr(Terminators::EOC)?)),
+            Some(SUB_FORM) => {
+                let Some(index) = self.peek_real_index() else {
+                    // `NUMERIC FORM` alone resets to the package default.
+                    return Ok((NumericSetting::FormDefault, None));
+                };
+                let token = &self.ctx.tokens[index];
+                if token.kind.tag() != Tag::Symbol {
+                    // An implicit `NUMERIC FORM VALUE`, with the token left in
+                    // place. Measured: `numeric form (e)` is rc 0.
+                    return Ok((NumericSetting::FormValue, self.opt_expr(Terminators::EOC)?));
+                }
+                self.seek(index + 1);
+                match self.sub_keyword(token) {
+                    // `Error_Invalid_data_form`, measured as 21.911 for
+                    // `numeric form scientific x`.
+                    Some(SUB_SCIENTIFIC) => {
+                        self.required_end(21, 911)?;
+                        Ok((NumericSetting::FormScientific, None))
+                    }
+                    Some(SUB_ENGINEERING) => {
+                        self.required_end(21, 911)?;
+                        Ok((NumericSetting::FormEngineering, None))
+                    }
+                    // `Error_Invalid_expression_form`, 35.917.
+                    Some(SUB_VALUE) => Ok((
+                        NumericSetting::FormValue,
+                        Some(self.expr(Terminators::EOC, 917)?),
+                    )),
+                    // `Error_Invalid_subkeyword_form`, measured as 25.11 for
+                    // `numeric form foo`.
+                    _ => Err(self.error(25, 11)),
+                }
+            }
+            // `Error_Invalid_subkeyword_numeric`, measured as 25.15 for
+            // `numeric foo`.
+            _ => Err(self.error(25, 15)),
+        }
+    }
+
+    /// `traceNew` (`InstructionParser.cpp:4124`), in its four forms.
+    ///
+    /// The order of the tests is what decides the shape: a symbol or a literal
+    /// is a whole number if it can be, an option string otherwise, and only a
+    /// token that is neither -- nor a signed number -- becomes an expression.
+    fn trace(&mut self) -> Result<Trace, ParseError> {
+        let Some(index) = self.peek_real_index() else {
+            return Ok(Trace::Default);
+        };
+        let token = &self.ctx.tokens[index];
+        match &token.kind {
+            TokenKind::Symbol { .. } | TokenKind::Literal { .. } => {
+                // `TRACE VALUE expr` is the one symbol that is not a setting.
+                if self.sub_keyword(token) == Some(SUB_VALUE) {
+                    self.seek(index + 1);
+                    // `Error_Invalid_expression_trace`, measured as 35.916.
+                    return Ok(Trace::Value(self.expr(Terminators::EOC, 916)?));
+                }
+                self.seek(index + 1);
+                let value = self.value_of(token);
+                // `Error_Invalid_data_trace`, measured as 21.906 for
+                // `trace 5 x` and for `trace r x`.
+                self.required_end(21, 906)?;
+                match whole_number(&value) {
+                    Some(skip) => Ok(Trace::Skip(skip)),
+                    None => {
+                        check_trace_setting(&value).map_err(|_| self.error(24, 1))?;
+                        Ok(Trace::Setting(value))
+                    }
+                }
+            }
+            // `TRACE -n` and `TRACE +n`, the skip forms with a sign.
+            TokenKind::Operator(op @ (Operator::Subtract | Operator::Plus)) => {
+                let negate = *op == Operator::Subtract;
+                self.seek(index + 1);
+                // Measured: `trace -a` is rc 230, Error 26.7, so the number
+                // test happens after the end-of-clause test.
+                let Some(number) = self.next_real() else {
+                    return Err(self.error(35, 1));
+                };
+                if !matches!(number.kind.tag(), Tag::Symbol | Tag::Literal) {
+                    return Err(self.error(35, 1));
+                }
+                let value = self.value_of(number);
+                self.required_end(21, 906)?;
+                // `Error_Invalid_whole_number_trace`, 26.7.
+                let Some(skip) = whole_number(&value) else {
+                    return Err(self.error(26, 7));
+                };
+                Ok(Trace::Skip(if negate { -skip } else { skip }))
+            }
+            // An implicit `TRACE VALUE`, with the token left in place.
+            // Measured: `trace (e)` is rc 0.
+            _ => match self.opt_expr(Terminators::EOC)? {
+                Some(expression) => Ok(Trace::Value(expression)),
+                None => Ok(Trace::Default),
+            },
+        }
     }
 
     /// `guardNew` (`InstructionParser.cpp:2578`).
@@ -2247,6 +2382,133 @@ fn need_variable_class(class: SymbolClass, byte: usize) -> Result<(), ParseError
         // `Error_Invalid_variable_period`.
         SymbolClass::Dummy | SymbolClass::DotSymbol => Err(ParseError::new(31, 3, byte)),
     }
+}
+
+/// The number of digits a `TRACE` skip count is converted under.
+///
+/// `traceNew` calls `requestNumber(debug_skip, number_digits())`, and
+/// `number_digits()` is the parse-time `NUMERIC DIGITS`, which is the default
+/// unless a `::OPTIONS DIGITS` directive changed it. That directive belongs to
+/// the directive parser, so the default is what applies here.
+const TRACE_DIGITS: usize = 9;
+
+/// The value of `text` as a whole number, or `None` if it is not one.
+///
+/// `RexxString::requestNumber(result, digits)`: the text must be a Rexx number
+/// whose value is an integer expressible in at most `digits` digits. Measured
+/// against `build/bin/rexxc` through `TRACE`, which is the only caller in this
+/// module and whose fallback makes the boundary visible: `trace 1e2` is rc 0
+/// and means 100, `trace 123456789` is rc 0, `trace 1234567890` is Error 24.1
+/// at ten digits, `trace 1e20` is 24.1 because the value needs 21, and
+/// `trace 1.5` and `trace 1e-2` are 24.1 because neither is whole.
+fn whole_number(text: &[u8]) -> Option<i64> {
+    let mut rest = text;
+    let mut negative = false;
+    if let Some((&sign, tail)) = rest.split_first()
+        && (sign == b'+' || sign == b'-')
+    {
+        negative = sign == b'-';
+        rest = tail;
+    }
+    let integer_len = rest
+        .iter()
+        .position(|b| !b.is_ascii_digit())
+        .unwrap_or(rest.len());
+    let integer = &rest[..integer_len];
+    rest = &rest[integer_len..];
+    let mut fraction: &[u8] = b"";
+    if rest.first() == Some(&b'.') {
+        rest = &rest[1..];
+        let len = rest
+            .iter()
+            .position(|b| !b.is_ascii_digit())
+            .unwrap_or(rest.len());
+        fraction = &rest[..len];
+        rest = &rest[len..];
+    }
+    if integer.is_empty() && fraction.is_empty() {
+        return None;
+    }
+    let mut exponent: i64 = 0;
+    if matches!(rest.first(), Some(b'e' | b'E')) {
+        rest = &rest[1..];
+        let mut exponent_negative = false;
+        if let Some((&sign, tail)) = rest.split_first()
+            && (sign == b'+' || sign == b'-')
+        {
+            exponent_negative = sign == b'-';
+            rest = tail;
+        }
+        if rest.is_empty() || !rest.iter().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        let digits = std::str::from_utf8(rest).ok()?;
+        exponent = digits.parse::<i64>().ok()?;
+        if exponent_negative {
+            exponent = -exponent;
+        }
+        rest = b"";
+    }
+    if !rest.is_empty() {
+        return None;
+    }
+
+    // The mantissa's digits, with the decimal point folded into the exponent.
+    let mut mantissa: Vec<u8> = Vec::with_capacity(integer.len() + fraction.len());
+    mantissa.extend_from_slice(integer);
+    mantissa.extend_from_slice(fraction);
+    exponent -= i64::try_from(fraction.len()).ok()?;
+    let first = mantissa.iter().position(|&b| b != b'0');
+    let Some(first) = first else {
+        // Every digit is a zero, so the value is zero however the exponent
+        // reads.
+        return Some(0);
+    };
+    mantissa.drain(..first);
+    // A negative exponent is only whole if the digits it would move past the
+    // point are all zeros.
+    while exponent < 0 {
+        if mantissa.last() != Some(&b'0') {
+            return None;
+        }
+        mantissa.pop();
+        exponent += 1;
+    }
+    let width = mantissa.len() + usize::try_from(exponent).ok()?;
+    if width > TRACE_DIGITS {
+        return None;
+    }
+    let mut value: i64 = 0;
+    for &digit in &mantissa {
+        value = value
+            .checked_mul(10)?
+            .checked_add(i64::from(digit - b'0'))?;
+    }
+    for _ in 0..exponent {
+        value = value.checked_mul(10)?;
+    }
+    Some(if negative { -value } else { value })
+}
+
+/// Whether `text` is a usable `TRACE` option string.
+///
+/// `TraceSetting::parseTraceSetting` (`TraceSetting.cpp:135`) reads any number
+/// of leading `?` toggles and then exactly ONE more character, ignoring
+/// everything after it, which is why `trace results` works: only the `R`
+/// matters. An empty string is the normal setting. Measured: `trace r`,
+/// `trace ?r`, `trace ??r`, `trace results` and `trace ''` are all rc 0, while
+/// `trace zzz` is Error 24.1.
+fn check_trace_setting(text: &[u8]) -> Result<(), ()> {
+    for &byte in text {
+        if byte == b'?' {
+            continue;
+        }
+        return match byte.to_ascii_uppercase() {
+            b'A' | b'C' | b'L' | b'E' | b'F' | b'N' | b'O' | b'R' | b'I' => Ok(()),
+            _ => Err(()),
+        };
+    }
+    Ok(())
 }
 
 #[cfg(test)]
