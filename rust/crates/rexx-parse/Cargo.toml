@@ -5,9 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
-[dev-dependencies]
-# Only the throwaway evaluator in `src/expr/differential.rs` uses this. The
-# expression grammar itself does no arithmetic.
+[dependencies]
+# `convert.rs` consults `Number::parse` for number ACCEPTANCE, so that "is this
+# text a Rexx number" has exactly one implementation in the workspace. The C++
+# layers it the same way: `LanguageParser` calls `RexxString::numberString()`
+# rather than implementing number syntax itself. The throwaway evaluator in
+# `src/expr/differential.rs` uses the arithmetic as well; the grammars do no
+# arithmetic of their own.
 rexx-num = { path = "../rexx-num" }
 
 [lints]

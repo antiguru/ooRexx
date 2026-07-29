@@ -56,9 +56,12 @@
 //!   under a `::CLASS` is rc 0.
 //! * 99.905, a `::METHOD ... CLASS` with no `::CLASS` above it.
 //! * 99.945, a `::ANNOTATE` naming a target that does not exist yet.
-//! * 33.1, a `::OPTIONS FUZZ` that is not less than the package's `DIGITS`.
-//!   Measured, `::options fuzz 9` alone is 33.1 because the default `DIGITS` is
-//!   9, and it is a `reportException` rather than a `syntaxError`.
+//! * 33.1, a `DIGITS` and `FUZZ` pair where the first does not exceed the
+//!   second. Both directions raise it and neither is checkable from one
+//!   directive: measured, `::options fuzz 9` alone is 33.1 against the default
+//!   `DIGITS` of 9, `::options digits 3 fuzz 5` is 33.1 on the FUZZ, and
+//!   `::options fuzz 5 digits 3` is 33.1 on the DIGITS. It is a
+//!   `reportException` rather than a `syntaxError`.
 //! * 98.903 and 90.998/90.999, resolving an `EXTERNAL` library or entry point.
 //!   Those are run-time failures of a program that parsed: measured,
 //!   `::METHOD m EXTERNAL "LIBRARY nosuch"` is rc 158, not a parse error.
@@ -74,8 +77,9 @@ use crate::ast::{
     Protection, Requires, Resource, RoutineDirective,
 };
 use crate::clause::{Clause, ClauseCursor};
-use crate::convert::{check_trace_setting, is_number, whole_number};
+use crate::convert::{ARGUMENT_DIGITS, check_trace_setting, is_number, whole_number};
 use crate::expr::{Terminators, parse_expr};
+use crate::scanner::{MAX_SYMBOL_LENGTH, is_symbol_char};
 use crate::token::{
     Operator, ParseCtx, ParseError, SymbolClass, SymbolId, Tag, Token, TokenCursor, TokenKind,
 };
@@ -146,15 +150,6 @@ const SUBKEY_ENGINEERING: usize = 12;
 const SUBKEY_INHERIT: usize = 22;
 const SUBKEY_NOINHERIT: usize = 29;
 const SUBKEY_SCIENTIFIC: usize = 37;
-
-/// The precision `::OPTIONS DIGITS` and `::OPTIONS FUZZ` convert under.
-///
-/// `Numerics::ARGUMENT_DIGITS` (`Numerics.hpp:90`), 18 on a 64-bit build and 9
-/// on a 32-bit one. The platform dependence is reproduced here, unlike the
-/// scanner's `INTEGER_CONSTANT` flag, because this one is observable: measured
-/// on this 64-bit build, `::options digits 123456789012345678` is rc 0 and
-/// `1234567890123456789` is Error 26.5, so the boundary sits at eighteen.
-const ARGUMENT_DIGITS: usize = 18;
 
 /// The marker that ends a `::RESOURCE` body when the directive names none.
 ///
@@ -286,9 +281,12 @@ impl<'a> Dir<'a> {
 
     /// `RexxToken::upperValue()`: like `value_of`, but a literal is upcased too.
     ///
-    /// ASCII-only, which is exactly `SymbolTable::intern`'s rule and is safe for
-    /// the same reason: a symbol cannot hold a non-ASCII byte at all. A literal
-    /// can, and there this under-upcases the way `RexxString::upper` does.
+    /// ASCII-only, and that is exact rather than approximate: `RexxString::upper`
+    /// upcases through `Utilities::toUpper`, which is
+    /// `isLower(c) ? c & ~0x20 : c` with `isLower` spelled `c >= 'a' && c <= 'z'`
+    /// (`common/Utilities.hpp:52`). So a non-ASCII byte in a literal is left
+    /// alone by the interpreter too, and `make_ascii_uppercase` matches it byte
+    /// for byte.
     fn upper_value_of(&self, token: &Token) -> Box<[u8]> {
         let mut value = self.value_of(token).into_vec();
         value.make_ascii_uppercase();
@@ -331,6 +329,22 @@ impl<'a> Dir<'a> {
             Some(TokenKind::Literal { value }) => Ok(value.clone()),
             _ => Err(self.error(code, sub)),
         }
+    }
+
+    /// `getRetriever` (`LanguageParser.cpp:2507`): a name that an attribute
+    /// method will read and write must be a variable name.
+    ///
+    /// `Error_Translation_invalid_attribute`, 99.925. This is a purely local
+    /// check on the name's own text, so it belongs here and not to the caller.
+    /// Measured: `::ATTRIBUTE 3`, `::ATTRIBUTE .a` and `::METHOD m DELEGATE 5`
+    /// are all 99.925, while `::ATTRIBUTE a.`, `::ATTRIBUTE a.b` and
+    /// `::METHOD 3` are rc 0, so the rule admits a stem and a compound and is
+    /// not applied to a plain method name at all.
+    fn require_variable_name(&self, name: &[u8]) -> Result<(), ParseError> {
+        if is_variable_name(name) {
+            return Ok(());
+        }
+        Err(self.error(99, 925))
     }
 
     // ---- what follows the directive ----
@@ -585,11 +599,25 @@ impl<'a> Dir<'a> {
         // ATTRIBUTE combines with each of EXTERNAL and ABSTRACT, and DELEGATE
         // combines with ATTRIBUTE. Measured, `::method m delegate p attribute`
         // and `::method m attribute abstract` are both rc 0.
-        if method.delegate.is_some() {
+        if let Some(delegate) = method.delegate {
+            // `getRetriever(delegateName)` runs BEFORE `checkDirective` here
+            // (`DirectiveParser.cpp:831`-`834`). Measured:
+            // `::method m delegate 5` with a body is 99.925 on line 1, not
+            // 99.946 on line 2.
+            self.require_variable_name(self.ctx.symbols.name(delegate).as_bytes())?;
             self.check_directive(cursor, 99, 946)?;
         } else if method.attribute {
             self.check_directive(cursor, 99, 934)?;
             method.external = self.decode_external(external.as_deref(), false)?;
+            // And here it runs AFTER, and only in the sub-branch that generates
+            // the accessor pair (`DirectiveParser.cpp:892`). Measured:
+            // `::method 3 attribute` with a body is 99.934 on line 2, while
+            // `::method 3 attribute abstract` and
+            // `::method 3 attribute external "LIBRARY x"` never reach the check
+            // at all and are rc 0 and 98.903.
+            if external.is_none() && !method.abstract_ {
+                self.require_variable_name(&method.name)?;
+            }
         } else if method.abstract_ {
             self.check_directive(cursor, 99, 933)?;
         } else if external.is_none() {
@@ -675,6 +703,13 @@ impl<'a> Dir<'a> {
             }
         }
 
+        // `getRetriever(name)` runs before the style switch and so before every
+        // body check (`DirectiveParser.cpp:1656`, whose own comment says it is
+        // deliberately first "so errors get diagnosed on the correct line").
+        // Measured: `::attribute 3` with a body is 99.925 on line 1, not 99.937
+        // on line 2, and `::attribute 3 external "LIBRARY x"` is 99.925 too.
+        self.require_variable_name(&attribute.name)?;
+
         // Every shape here checks the body BEFORE decoding the external
         // string, unlike `::METHOD`'s plain external shape. Measured:
         // `::attribute a get external "junk"` with a body is 99.935 on line 2,
@@ -683,13 +718,22 @@ impl<'a> Dir<'a> {
             // Both methods are generated, so a body can never belong here.
             AttributeStyle::Both => {
                 self.check_directive(cursor, 99, 937)?;
+                // The delegate's own name check, which for this style comes
+                // AFTER the body check where for GET/SET it comes before.
+                // Measured: `::attribute a delegate 5` with a body is 99.937 on
+                // line 2, and `::attribute a get delegate 5` with a body is
+                // 99.925 on line 1.
+                if let Some(delegate) = attribute.delegate {
+                    self.require_variable_name(self.ctx.symbols.name(delegate).as_bytes())?;
+                }
             }
             AttributeStyle::Get | AttributeStyle::Set => {
                 if external.is_some() {
                     self.check_directive(cursor, 99, 935)?;
                 } else if attribute.abstract_ {
                     self.check_directive(cursor, 99, 940)?;
-                } else if attribute.delegate.is_some() {
+                } else if let Some(delegate) = attribute.delegate {
+                    self.require_variable_name(self.ctx.symbols.name(delegate).as_bytes())?;
                     self.check_directive(cursor, 99, 947)?;
                 } else {
                     attribute.body = self.has_body(cursor);
@@ -717,8 +761,12 @@ impl<'a> Dir<'a> {
             return Ok(None);
         };
         // `words()` splits on blanks and upcases the FIRST word only, which is
-        // why the library name keeps its case. Measured: tabs separate words
-        // too, and `"  library   x  "` resolves the library `x`.
+        // why the library name keeps its case. A blank is a space or a tab and
+        // nothing else: `words` goes through `subWords`, which drives
+        // `RexxString::WordIterator`, whose `skipBlanks` and `skipNonBlanks`
+        // both test `*scan != ' ' && *scan != '\t'` (`StringClass.hpp:155` and
+        // `:178`). Measured: tabs do separate words, and `"  library   x  "`
+        // resolves the library `x`.
         let words: Vec<&[u8]> = spec
             .split(|&byte| byte == b' ' || byte == b'\t')
             .filter(|word| !word.is_empty())
@@ -1093,10 +1141,18 @@ impl<'a> Dir<'a> {
             self.required_end(21, 914)?;
         }
 
-        // Every shape `scan` copies a body for is a shape that reaches here
-        // with no error, and every shape it skips raises one of the four errors
-        // above, so a body is always present by now. `scan` also owns the
-        // missing-marker error, 99.943, which fails the whole scan.
+        // A body is always present by now, and the invariant is stated on both
+        // sides rather than only there. `scan_resource_if_directive`
+        // (`scanner.rs:970`) copies a body exactly when the clause holds three or
+        // five real tokens, the second is the symbol `RESOURCE`, the third is a
+        // symbol or a literal, and for five the fourth is the symbol `END` and
+        // the fifth a symbol or a literal. Those are precisely the four
+        // conditions the code above has just enforced, in the same order:
+        // `require_name` for the name, `SUBDIR_END` for the keyword,
+        // `require_name` for the marker, and `required_end` to rule out a sixth
+        // token. Any clause failing one of them left this function through an
+        // error and never reached here. `scan` also owns the missing-marker
+        // error, 99.943, which fails the whole scan before any directive parses.
         let body = self
             .ctx
             .resources
@@ -1158,6 +1214,55 @@ impl<'a> Dir<'a> {
         }
         Ok(DirectiveKind::Routine(Box::new(routine)))
     }
+}
+
+/// Whether `name` spells a variable: a simple name, a stem, or a compound.
+///
+/// `LanguageParser::scanSymbol(RexxString *)` (`Scanner.cpp:1650`) sorts a
+/// string into seven kinds and `getRetriever` accepts exactly three of them,
+/// `STRING_NAME`, `STRING_STEM` and `STRING_COMPOUND_NAME`. All three share one
+/// test, which is why this is a predicate rather than a classification: the name
+/// must be 1 to `MAX_SYMBOL_LENGTH` bytes, must hold only symbol characters, and
+/// must not start with a `.` or a digit, because a name that does is a number or
+/// a literal symbol instead. Measured: a 250-byte name is rc 0 and a 251-byte
+/// one is 99.925.
+///
+/// The one wrinkle is real and reproduced. A `+` or `-` is admitted when it sits
+/// after an `E` and is followed only by digits, because `scanSymbol` looks for an
+/// exponent before giving up, and then the compound test is reached anyway. So
+/// `::ATTRIBUTE "a.e+5"` is rc 0 while `::ATTRIBUTE "a-b"` and
+/// `::ATTRIBUTE "1e+5"` are 99.925.
+fn is_variable_name(name: &[u8]) -> bool {
+    if name.is_empty() || name.len() > MAX_SYMBOL_LENGTH {
+        return false;
+    }
+    let mut scan = 0;
+    while scan < name.len() && is_symbol_char(name[scan]) {
+        scan += 1;
+    }
+    if scan < name.len() {
+        // A non-symbol character stops the walk. The only one that can still
+        // leave a name is an exponent's sign: not last, preceded by an `E`, and
+        // followed by digits alone.
+        //
+        // `scan == 0` is guarded here where the C++ is not: it reads
+        // `*(scan - 1)` unconditionally, which is one byte before the string
+        // data. A name starting with a sign is not a variable under any reading,
+        // so rejecting it needs no measurement.
+        if scan + 1 >= name.len() || scan == 0 {
+            return false;
+        }
+        if name[scan] != b'-' && name[scan] != b'+' {
+            return false;
+        }
+        if !name[scan - 1].eq_ignore_ascii_case(&b'E') {
+            return false;
+        }
+        if !name[scan + 1..].iter().all(u8::is_ascii_digit) {
+            return false;
+        }
+    }
+    !(name[0] == b'.' || name[0].is_ascii_digit())
 }
 
 #[cfg(test)]

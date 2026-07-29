@@ -1511,6 +1511,26 @@ fn the_trace_number_gate_is_exactly_the_oracles() {
     // inside it.
     assert_eq!(setting_shape("trace ' 9 '"), "skip 9");
     assert_eq!(err("trace '9 5'"), (24, 1));
+    // And a blank between the sign and the digits, which the first fix still got
+    // wrong because its probe used `"- 9"` -- an input that fails for a second
+    // reason under `::OPTIONS DIGITS` and so could not see the sign rule.
+    // Measured through TRACE, where there is no second reason: `trace "+ 9"` and
+    // `trace "- 9"` are both rc 0.
+    assert_eq!(setting_shape("trace '+ 9'"), "skip 9");
+    assert_eq!(setting_shape("trace '- 9'"), "skip -9");
+    assert_eq!(err("trace '+ - 9'"), (24, 1));
+    // The conversion ROUNDS to NUMERIC DIGITS before asking whether the result
+    // is whole, so a fraction can survive it. Measured: the first three are
+    // rc 0 and the last two are 24.1.
+    assert_eq!(setting_shape("trace '999999999.4'"), "skip 999999999");
+    assert_eq!(setting_shape("trace '1.0000000001'"), "skip 1");
+    assert_eq!(setting_shape("trace '0.9999999999'"), "skip 1");
+    assert_eq!(err("trace '999999999.6'"), (24, 1));
+    assert_eq!(err("trace '99999999.6'"), (24, 1));
+    // And the width limit is on the VALUE, not the text. Measured: `trace 1e8`
+    // is rc 0 and `trace 1e9` is 24.1 at ten digits.
+    assert_eq!(setting_shape("trace 1e8"), "skip 100000000");
+    assert_eq!(err("trace 1e9"), (24, 1));
     // Every letter the setting parser knows, which is the other direction of
     // the same gate. Measured: all rc 0.
     for letter in ["a", "c", "l", "e", "f", "n", "o", "r", "i"] {
