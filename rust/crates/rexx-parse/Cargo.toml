@@ -14,5 +14,10 @@ license.workspace = true
 # arithmetic of their own.
 rexx-num = { path = "../rexx-num" }
 
+# `error.rs` renders a `ParseError`'s message from the message table the build
+# script derives from `interpreter/messages/rexxmsg.xml`, so no message text is
+# hand-copied into this crate.
+rexx-inventory = { path = "../rexx-inventory" }
+
 [lints]
 workspace = true

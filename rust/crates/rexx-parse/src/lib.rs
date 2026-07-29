@@ -47,6 +47,7 @@ mod block;
 mod clause;
 mod convert;
 mod directive;
+mod error;
 mod expr;
 mod instruction;
 mod scanner;

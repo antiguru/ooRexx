@@ -30,6 +30,11 @@ use crate::scanner::ResourceBody;
 /// Minimal on purpose. The message table, the substitution values and the
 /// mapping from `byte` to a reported line belong to Task 3.8; every task
 /// from the scanner on returns this type, so it exists now.
+///
+/// `message` and `line` are in `error.rs`. There is no substitution-value
+/// field: Task 3.8 removed the empty `subs` it had been given rather than
+/// half-filling it, and `error.rs`'s module note records the measurement that
+/// decided it.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ParseError {
     /// The major error number, e.g. 13 for `Error 13: Invalid character in
@@ -51,25 +56,17 @@ pub struct ParseError {
     /// *second* field rather than by redefining this one, because several
     /// messages quote the offending text while still being reported against
     /// the clause: 13.1 quotes `"ä" ('C3A4'X)` and 15.3 quotes `found "g"`.
-    pub byte: usize,
-    /// The message substitution values.
     ///
-    /// Always empty in this phase. Parse errors are not reproduced 1:1 here:
-    /// the number and sub-number are gated, the message text and its
-    /// substitutions are deliberately not. Task 3.8 owns filling this.
-    pub subs: Vec<String>,
+    /// Task 3.8 did not fill it, so that second field does not exist either.
+    /// Whoever adds substitution values still owes it, and the paragraph above
+    /// still says why.
+    pub byte: usize,
 }
 
 impl ParseError {
-    /// An error with no substitutions, which is every error this phase
-    /// raises.
+    /// An error reported against the clause starting at `byte`.
     pub fn new(code: u16, sub: u16, byte: usize) -> Self {
-        ParseError {
-            code,
-            sub,
-            byte,
-            subs: Vec::new(),
-        }
+        ParseError { code, sub, byte }
     }
 }
 
