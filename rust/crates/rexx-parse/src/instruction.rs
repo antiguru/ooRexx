@@ -43,6 +43,7 @@ use std::ops::Range;
 
 use crate::ast::{
     ControlExpr, Controlled, Expr, Instruction, InstructionKind, Loop, LoopConditional, LoopKind,
+    VariableRef,
 };
 use crate::clause::{Clause, ClauseCursor, PendingThen, split_clauses};
 use crate::expr::{
@@ -50,21 +51,28 @@ use crate::expr::{
     symbol_kind,
 };
 use crate::source::SourceKind;
-use crate::token::{Operator, ParseCtx, ParseError, SymbolId, Tag, Token, TokenCursor, TokenKind};
+use crate::token::{
+    Operator, ParseCtx, ParseError, SymbolClass, SymbolId, Tag, Token, TokenCursor, TokenKind,
+};
 
 // Positions in the `INSTRUCTIONS` table, which `KeywordSet::index_of`
 // returns. An entry's position is its meaning, so these are indices and not
 // spellings, and `tests::keyword_indices_still_name_their_own_spellings` pins
 // every one against the table.
 const KW_DO: usize = 3;
+const KW_DROP: usize = 4;
 const KW_ELSE: usize = 5;
 const KW_END: usize = 6;
+const KW_EXPOSE: usize = 8;
 const KW_IF: usize = 11;
 const KW_ITERATE: usize = 13;
 const KW_LEAVE: usize = 14;
 const KW_LOOP: usize = 15;
 const KW_NOP: usize = 16;
 const KW_OTHERWISE: usize = 19;
+const KW_PUSH: usize = 23;
+const KW_QUEUE: usize = 24;
+const KW_SAY: usize = 28;
 const KW_SELECT: usize = 29;
 const KW_THEN: usize = 31;
 const KW_WHEN: usize = 34;
@@ -594,6 +602,41 @@ impl<'a> Inst<'a> {
                 let body = self.create_loop(true)?;
                 Ok(self.finish(cursor, InstructionKind::Loop(Box::new(body))))
             }
+            // `sayNew`, `pushNew` and `queueNew` are the same two lines: an
+            // optional expression to the end of the clause. PUSH and QUEUE
+            // share `RexxInstructionQueue` and differ only in the instruction
+            // type, which is why they are separate variants here.
+            KW_SAY => {
+                self.next_real();
+                let expression = self.opt_expr(Terminators::EOC)?;
+                Ok(self.finish(cursor, InstructionKind::Say { expression }))
+            }
+            KW_PUSH => {
+                self.next_real();
+                let expression = self.opt_expr(Terminators::EOC)?;
+                Ok(self.finish(cursor, InstructionKind::Push { expression }))
+            }
+            KW_QUEUE => {
+                self.next_real();
+                let expression = self.opt_expr(Terminators::EOC)?;
+                Ok(self.finish(cursor, InstructionKind::Queue { expression }))
+            }
+            KW_DROP => {
+                self.next_real();
+                let variables = self.variable_list(901)?;
+                Ok(self.finish(cursor, InstructionKind::Drop { variables }))
+            }
+            KW_EXPOSE => {
+                self.next_real();
+                // `exposeNew` rejects this inside INTERPRET. Measured at run
+                // time, because rexxc never parses the string:
+                // `interpret "expose a"` is rc 157, Error 99.908.
+                if self.ctx.source.kind() == SourceKind::Interpret {
+                    return Err(self.error(99, 908));
+                }
+                let variables = self.variable_list(902)?;
+                Ok(self.finish(cursor, InstructionKind::Expose { variables }))
+            }
             KW_SELECT => {
                 self.next_real();
                 let kind = self.select()?;
@@ -1018,6 +1061,55 @@ impl<'a> Inst<'a> {
         Ok(Some(LoopConditional { until, condition }))
     }
 
+    /// `processVariableList` (`InstructionParser.cpp:4469`), shared by `DROP`,
+    /// `EXPOSE` and `PROCEDURE EXPOSE`.
+    ///
+    /// `missing` is the sub-number of error 20 for a token that cannot be a
+    /// variable and for an empty list, which names the instruction:
+    /// `Error_Symbol_expected_drop` is 20.901 and
+    /// `Error_Symbol_expected_expose` is 20.902.
+    fn variable_list(&mut self, missing: u16) -> Result<Vec<VariableRef>, ParseError> {
+        let mut out = Vec::new();
+        while let Some(token) = self.next_real() {
+            match &token.kind {
+                TokenKind::Symbol { id, class } => {
+                    // The CLASS test, not the spelling test. Measured, and the
+                    // two disagree: `drop .5` is 31.2 from here while
+                    // `drop (.5)` is 31.3 from `addVariable`'s `needVariable`.
+                    need_variable_class(*class, self.clause_byte)?;
+                    out.push(VariableRef::Direct(*id));
+                }
+                // `(name)`, whose value names the variable. This path goes
+                // through `addVariable`, so its error numbers come from the
+                // spelling and not from the class.
+                TokenKind::LeftParen => {
+                    let Some(inner) = self.next_real() else {
+                        return Err(self.error(20, 906));
+                    };
+                    let TokenKind::Symbol { id, class } = inner.kind else {
+                        return Err(self.error(20, 906));
+                    };
+                    need_variable(self.ctx, id, class, self.clause_byte)?;
+                    out.push(VariableRef::Indirect(id));
+                    match self.next_real() {
+                        // `Error_Variable_reference_missing`, measured as
+                        // 46.901 for `drop (v`.
+                        None => return Err(self.error(46, 901)),
+                        Some(close) if close.kind.tag() == Tag::RightParen => {}
+                        // `Error_Variable_reference_extra`, 46.1 for
+                        // `drop (v x`.
+                        Some(_) => return Err(self.error(46, 1)),
+                    }
+                }
+                _ => return Err(self.error(20, missing)),
+            }
+        }
+        if out.is_empty() {
+            return Err(self.error(20, missing));
+        }
+        Ok(out)
+    }
+
     /// `LEAVE`'s and `ITERATE`'s optional block name.
     ///
     /// The two sub-numbers differ only in which keyword is named:
@@ -1105,6 +1197,25 @@ impl<'a> Inst<'a> {
         let instruction = self.finish_split(cursor, kind, end_at);
         cursor.expect_then(which);
         Ok(instruction)
+    }
+}
+
+/// Raises the error a non-variable symbol gets in a `DROP`, `EXPOSE`,
+/// `PROCEDURE EXPOSE` or `USE LOCAL` list.
+///
+/// `processVariableList` (`InstructionParser.cpp:4487`-`4496`) tests the
+/// symbol's CLASS where `needVariable` tests its spelling, and the two
+/// disagree on a constant that starts with a period. Measured, both
+/// directions: `drop .5` is 31.2 from here, `drop (.5)` is 31.3 from
+/// `addVariable`, and `do .5 = 1 to 2` is 31.3 as well. Reproduced as two
+/// functions rather than merged into one.
+fn need_variable_class(class: SymbolClass, byte: usize) -> Result<(), ParseError> {
+    match class {
+        SymbolClass::Variable | SymbolClass::Stem | SymbolClass::Compound => Ok(()),
+        // `Error_Invalid_variable_number`.
+        SymbolClass::Constant => Err(ParseError::new(31, 2, byte)),
+        // `Error_Invalid_variable_period`.
+        SymbolClass::Dummy | SymbolClass::DotSymbol => Err(ParseError::new(31, 3, byte)),
     }
 }
 

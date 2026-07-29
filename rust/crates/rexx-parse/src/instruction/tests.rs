@@ -15,9 +15,10 @@ use crate::token::{Keywords, ParseCtx, ParseError, SymbolTable};
 use crate::{ProgramSource, SourceKind, scan};
 
 use super::{
-    KW_DO, KW_ELSE, KW_END, KW_IF, KW_ITERATE, KW_LEAVE, KW_LOOP, KW_NOP, KW_OTHERWISE, KW_SELECT,
-    KW_THEN, KW_WHEN, SUB_BY, SUB_CASE, SUB_COUNTER, SUB_FOR, SUB_FOREVER, SUB_INDEX, SUB_ITEM,
-    SUB_LABEL, SUB_OVER, SUB_TO, SUB_UNTIL, SUB_WHILE, SUB_WITH, parse_instructions,
+    KW_DO, KW_DROP, KW_ELSE, KW_END, KW_EXPOSE, KW_IF, KW_ITERATE, KW_LEAVE, KW_LOOP, KW_NOP,
+    KW_OTHERWISE, KW_PUSH, KW_QUEUE, KW_SAY, KW_SELECT, KW_THEN, KW_WHEN, SUB_BY, SUB_CASE,
+    SUB_COUNTER, SUB_FOR, SUB_FOREVER, SUB_INDEX, SUB_ITEM, SUB_LABEL, SUB_OVER, SUB_TO, SUB_UNTIL,
+    SUB_WHILE, SUB_WITH, parse_instructions,
 };
 
 /// Parses `text` as a whole program and returns every instruction, with the
@@ -99,14 +100,19 @@ fn keyword_indices_still_name_their_own_spellings() {
     );
     for (index, spelling) in [
         (KW_DO, "DO"),
+        (KW_DROP, "DROP"),
         (KW_ELSE, "ELSE"),
         (KW_END, "END"),
+        (KW_EXPOSE, "EXPOSE"),
         (KW_IF, "IF"),
         (KW_ITERATE, "ITERATE"),
         (KW_LEAVE, "LEAVE"),
         (KW_LOOP, "LOOP"),
         (KW_NOP, "NOP"),
         (KW_OTHERWISE, "OTHERWISE"),
+        (KW_PUSH, "PUSH"),
+        (KW_QUEUE, "QUEUE"),
+        (KW_SAY, "SAY"),
         (KW_SELECT, "SELECT"),
         (KW_THEN, "THEN"),
         (KW_WHEN, "WHEN"),
@@ -619,4 +625,99 @@ fn a_repeated_label_keyword_becomes_the_count_expression() {
     // option loop and becomes `DO expr` with the expression `label b`.
     // Measured: rc 0 under rexxc.
     assert_eq!(loop_shape("do label a label b\nend"), "@count");
+}
+
+// ---- the data family: DROP, EXPOSE, SAY, PUSH, QUEUE ----
+
+/// The names in the first instruction's variable list, `(name)` marked with
+/// parentheses so the two forms cannot be confused.
+fn variable_list(text: &str) -> Vec<String> {
+    let (instructions, symbols) =
+        parse_kind(text, SourceKind::Program).unwrap_or_else(|e| panic!("{text:?}: {e:?}"));
+    let list = match &instructions[0].kind {
+        InstructionKind::Drop { variables }
+        | InstructionKind::Expose { variables }
+        | InstructionKind::Procedure { variables } => variables,
+        other => panic!("{text:?} has no variable list: {other:?}"),
+    };
+    list.iter()
+        .map(|v| match v {
+            crate::ast::VariableRef::Direct(id) => symbols.name(*id).to_string(),
+            crate::ast::VariableRef::Indirect(id) => format!("({})", symbols.name(*id)),
+        })
+        .collect()
+}
+
+#[test]
+fn say_push_and_queue_take_an_optional_expression() {
+    // Measured with rexxc, all rc 0.
+    assert_eq!(names(&ok("say")), ["SAY"]);
+    assert_eq!(names(&ok("say 1 2")), ["SAY"]);
+    assert_eq!(names(&ok("push")), ["PUSH"]);
+    assert_eq!(names(&ok("push 1")), ["PUSH"]);
+    assert_eq!(names(&ok("queue")), ["QUEUE"]);
+    // The trial parse must not eat the keyword: `say(1)` parses a call, finds
+    // no message applied and is discarded. Measured: rc 0.
+    assert_eq!(names(&ok("say(1)")), ["SAY"]);
+    // The other direction of that gate: with a message applied it IS a message
+    // instruction, keyword spelling or not.
+    assert_eq!(names(&ok("say~length")), ["<message>"]);
+}
+
+#[test]
+fn drop_and_expose_take_both_variable_spellings() {
+    // Measured with rexxc, all rc 0.
+    assert_eq!(variable_list("drop a b c."), ["A", "B", "C."]);
+    assert_eq!(variable_list("drop (v)"), ["(V)"]);
+    assert_eq!(variable_list("drop a (v) b"), ["A", "(V)", "B"]);
+    assert_eq!(variable_list("expose a b"), ["A", "B"]);
+}
+
+#[test]
+fn an_empty_variable_list_names_its_own_instruction() {
+    // Measured: `drop` is 20.901 and `expose` inside a method is 20.902, the
+    // two sub-numbers being the only difference between the two instructions.
+    assert_eq!(err("drop"), (20, 901));
+    assert_eq!(err("drop \"x\""), (20, 901));
+    assert_eq!(err("expose"), (20, 902));
+    assert_eq!(err("expose \"x\""), (20, 902));
+}
+
+#[test]
+fn the_two_variable_gates_disagree_and_both_are_reproduced() {
+    // The direct form tests the symbol's CLASS and the `(name)` form tests its
+    // SPELLING, so a constant beginning with a period gets a different number
+    // in each. Measured: `drop .5` is 31.2, `drop (.5)` is 31.3.
+    assert_eq!(err("drop .5"), (31, 2));
+    assert_eq!(err("drop (.5)"), (31, 3));
+    // The rest of both gates, measured: a plain number is 31.2 either way and
+    // a dot symbol is 31.3 either way.
+    assert_eq!(err("drop 5"), (31, 2));
+    assert_eq!(err("drop (1)"), (31, 2));
+    assert_eq!(err("drop ."), (31, 3));
+    assert_eq!(err("drop (.a)"), (31, 3));
+}
+
+#[test]
+fn an_indirect_variable_reference_must_be_closed() {
+    // Measured: `drop (` is 20.906, `drop (v` is 46.901 and `drop (v x` is
+    // 46.1.
+    assert_eq!(err("drop ("), (20, 906));
+    assert_eq!(err("drop (v"), (46, 901));
+    assert_eq!(err("drop (v x"), (46, 1));
+}
+
+#[test]
+fn expose_is_rejected_inside_interpret() {
+    // `exposeNew` calls `isInterpret()` first. Measured at RUN time, because
+    // rexxc never parses an INTERPRET string: `interpret "expose a"` is
+    // rc 157, Error 99.908.
+    let (code, sub) = match parse_kind("expose a", SourceKind::Interpret) {
+        Ok(_) => panic!("EXPOSE inside INTERPRET must be rejected"),
+        Err(e) => (e.code, e.sub),
+    };
+    assert_eq!((code, sub), (99, 908));
+    // The other direction: the same text as a program is accepted, so the gate
+    // is the source kind. Measured: `expose a` alone is rc 0 under rexxc.
+    assert_eq!(names(&ok("expose a")), ["EXPOSE"]);
 }
