@@ -2442,7 +2442,10 @@ stops early cannot post a good number.
 - [ ] **Step 4: Record the number against the cold-start budget**
 
 C++ cold start is 5.1 ms from a memory-mapped image; the budget is ~55 ms
-total. Write the measurement into `d10-decision.md` and say plainly whether it fits.
+total. Write the measurement into `d10-decision.md` and say plainly what share of
+that budget parsing accounts for, and what is still unmeasured. An earlier draft
+of this step said "say plainly whether it fits", which contradicts the correction
+two paragraphs below and asks for exactly the conclusion the data cannot support.
 
 **Report parse time as a component of cold start, not as cold start.** Under D2 the
 Rust build parses these 5,203 lines at every interpreter start, so parse time is *in*

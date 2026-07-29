@@ -179,8 +179,11 @@ it once, so the gap is the combinators themselves and not construction overhead.
 **This is not the D2 cold-start number.** Under D2 that figure is the time to
 parse the whole file, and there is no instruction parser to measure yet.
 It is a like-for-like comparison of the two arms on real input, which is what
-the axis was for, and it must be re-measured as a whole-file parse when Task
-3.11 exists.
+the axis was for, and it had to be re-measured as a whole-file parse once a
+whole-file parser existed.
+Task 3.10 is that re-measurement and the next section is where it landed.
+This paragraph named a Task 3.11 that the plan never had; the phase's twelve
+tasks end at 3.10.
 
 ### Task 3.10's later, different measurement: the shipped parser
 
