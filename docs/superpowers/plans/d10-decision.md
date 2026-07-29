@@ -195,8 +195,10 @@ should not confuse the two.
 **Measured 2026-07-29, on the same Linux machine as the rest of this document**
 (`AMD RYZEN AI MAX+ 395`, `rustc 1.96.1`), `cargo bench --offline -p rexx-parse
 --bench parse`, criterion 0.8.2, `sample_size(10)`, 500 ms warm-up, 30 s
-measurement ceiling -- matching `rexx-bench`'s and `rexx-num`'s benchmarks, so
-the number is comparable with `perf-baseline.md`.
+measurement ceiling -- matching `rexx-bench`'s and `rexx-num`'s benchmark
+settings, so the methodology is comparable. `perf-baseline.md` carries no row
+for `rexx-parse` or either `.orx` file, so nothing here is checked against a
+value recorded there.
 
 | File | Lines | Bytes | Time per parse | Throughput |
 |---|---|---|---|---|
@@ -211,21 +213,43 @@ run's confidence interval.
 **The clone.** `parse_program` takes `Vec<u8>` by value, because `Program`
 retains the buffer for every node's span. Each sample needs its own owned
 copy, and `rust/crates/rexx-parse/benches/parse.rs` uses criterion's
-`iter_batched` to clone the file's bytes in an untimed setup closure, so only
-`parse_program` itself is inside the timed region. This is deliberate: the
-interpreter's own cold-start path reads a file once and parses it once, never
-cloning, so charging a clone to this benchmark would overstate the cost it is
-trying to isolate.
+`iter_batched` to clone the file's bytes in an untimed setup closure, so the
+timed region holds `parse_program` plus the cheap node-count check below, not
+the clone. Measured separately, the clone costs about 1 us on the
+141,049-byte file, under 0.1% of the parse -- small enough that including it
+would barely move the number. It is excluded anyway, on principle rather than
+because it would distort the result: the interpreter's own cold-start path
+reads a file once and parses it once, and never pays for a clone at all.
 
 **The assertion.** For both files, most of the content lives inside `::METHOD`,
 `::ATTRIBUTE` and `::ROUTINE` bodies, not the main body -- measured,
 `CoreClasses.orx`'s main body holds 41 instructions against 2,390 nested inside
 its 347 directives' bodies (`StreamClasses.orx`: 7 main, 153 directives, 610
-nested). The benchmark asserts all three counts every sample, reusing the
-numbers `src/directive/tests.rs`'s `core_classes_parses` and
-`the_other_shipped_packages_parse` already pin, so a parser that silently
+nested). The benchmark asserts all three counts every sample, so a parser that
 stopped early -- after the main body, or after building directives without
 their bodies -- cannot post a passing number.
+
+Their provenance is not uniform, and stating it as if it were would overclaim.
+`src/directive/tests.rs`'s `core_classes_parses` independently pins
+`directives.len() == 347` for `CoreClasses.orx`, and
+`the_other_shipped_packages_parse` pins `StreamClasses.orx`'s per-kind counts
+(7/139/5/2), which sum to the 153 used here, though 153 itself is never
+written there. The main-body and nested-instruction counts (41/7 and
+2390/610) have no acceptance test anywhere in the tree: Task 3.10 measured
+them for the first time and hardcoded them as the benchmark's own change
+detector, not as an independently pinned value.
+
+**What the triple does not observe.** All three counts are flat lengths, and
+`If`, `Do` and `Select` carry target indices into these vectors rather than
+owning nested vectors, so dropping any clause anywhere changes a count -- the
+property that makes the triple worth asserting. It is blind to three things a
+count cannot see: corrupted control-flow wiring (a jump index pointing at the
+wrong instruction, every count unchanged), a body-boundary bug that moves a
+clause from one directive's body into the adjacent one (the sum across
+directives still holds), and anything inside an `Expr`. That limit is shared
+with `directive/tests.rs`'s own acceptance tests, not introduced by this
+benchmark, and it is recorded rather than closed: a benchmark is the wrong
+place to grow a structural checksum.
 
 **What this number is and is not.** It is `parse_program`'s cost alone, over
 the two files the Rust build parses at every interpreter start under D2. It is
