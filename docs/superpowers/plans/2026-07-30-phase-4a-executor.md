@@ -353,7 +353,13 @@ Do this **after Task 3b**, not beside it: both touch `rexx-parse` and 3b's itera
 - Test: `rust/crates/rexx-exec/tests/value.rs`
 
 **Interfaces:**
-- Produces: `Value` constructors and accessors on `Interp` — `text(&mut self, &[u8]) -> ObjRef`, `number(&mut self, Number) -> ObjRef` (which applies the `SmallInt` admissibility rule), `to_text(&mut self, ObjRef) -> Cow<'_, [u8]>`, `to_number(&mut self, ObjRef) -> Result<Number, NotNumeric>`.
+- Produces: `Value` constructors and accessors on `Interp` — `text(&mut self, &[u8]) -> ObjRef`, **`number(&mut self, Number, created_digits: u32, created_form: Form) -> ObjRef`** (which applies the `SmallInt` admissibility rule), `to_text(&mut self, ObjRef) -> Cow<'_, [u8]>`, `to_number(&mut self, ObjRef) -> Result<Number, NotNumeric>`.
+
+**`number` takes the digits and form explicitly, and that is the design rather than a convenience.** D15's whole point is that a value captures the pair in force *at the operation that produced it*, so the operation supplies them. Three consequences worth knowing before you start: the value model needs no ambient `Settings`, so there is nothing to seed before an activation exists; when Task 6 puts `Settings` on the `Activation`, nothing here changes; and `to_text` formats through the value's own captured pair, never the current one, which is the rule this task exists to enforce.
+
+**Test with a `#[cfg(test)] mod tests` inside `src/value.rs`, not an integration test**, so `Interp` stays private and no public surface is widened for testing. Task 3's review landed exactly this lesson from the other direction: choosing an integration test there is what forced a public entry point.
+
+**Do not build any expression evaluation.** An earlier draft of this task sketched its tests as `interp.eval_str("1 / 3")`, which does not exist and cannot without pulling Task 6's activation and Task 7's arithmetic forward — throwaway scaffolding Task 7 would then have to unwind. Construct the `Number` directly through `rexx-num`, which Phase 2 already tested, and let this task own only what happens to it afterwards. The transcripts below remain the source of truth: they are oracle-measured facts about **rendering**, which is this task's subject.
 
 **Why:** every later task manipulates values through these four functions, and the two rules they enforce are the ones the oracle makes observable everywhere.
 
