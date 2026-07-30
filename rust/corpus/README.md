@@ -196,3 +196,35 @@ the team lead's human partner with this repro; it is deliberately not built
 into a corpus program, because the corpus's one rule is byte-identical
 output between the two interpreters under test, and a memory-safe Rust
 reimplementation neither can nor should reproduce a C++ segfault.
+
+**Editing a `corpus/lang/*.rex` file invalidates its `sourceline_oracle`
+expectation, even if you only touched a comment or a blank line.**
+`rust/crates/rexx-parse/tests/sourceline_oracle/<name>.txt` records the
+oracle's line count and every one of its lines by position, so any edit that
+changes the file's line count desyncs that index against the program —
+behaviour does not need to change for the expectation to go stale, only the
+line numbering does. This bit precisely because it looked safe: a fix to
+`leave_nested_outer.rex`'s header comment ran byte-identically, same stdout,
+same stderr, same exit code, across two runs, which is every check a careful
+edit would think to make, and the only thing that moved was the line count.
+The only tell is `cargo test -p rexx-parse` failing a `sourceline`-named
+test, or, cheaper, `wc -l` on the `.rex` file disagreeing with the `count`
+on the first line of its `.txt`.
+
+Regenerate with the driver named in `sourceline_oracle.rs`'s own module
+comment: save it to a scratch file as `srclines.rex`, then from the
+repository root,
+
+```bash
+for f in rust/corpus/lang/*.rex; do
+  name=$(basename "$f" .rex)
+  out=$( ( ulimit -v 1048576; build/bin/rexx SCRATCH/srclines.rex "$f" ) \
+          2>/dev/null | grep '^%SRCG%' )
+  count=$(printf '%s\n' "$out" | sed -n 's/^%SRCG%COUNT //p')
+  { echo "count $count"; printf '%s\n' "$out" | sed -n 's/^%SRCG%L//p'; } \
+    > rust/crates/rexx-parse/tests/sourceline_oracle/$name.txt
+done
+```
+
+Regenerating for every file in the loop is cheap and idempotent, so do that
+rather than hand-picking which files you think you changed.
