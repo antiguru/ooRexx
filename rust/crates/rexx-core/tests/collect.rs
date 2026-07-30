@@ -1,4 +1,4 @@
-use rexx_core::{BehaviourId, Body, Heap, RootSet};
+use rexx_core::{BehaviourId, Body, Heap, ObjRef, RootSet};
 use std::collections::HashMap;
 
 #[test]
@@ -194,4 +194,126 @@ fn popping_a_frame_that_is_not_the_top_one_panics() {
     let outer = roots.push_slots(1);
     let _inner = roots.push_slots(1);
     roots.pop_slots(outer);
+}
+
+/// A cleared slot reads as unset, and that is **distinguishable from a slot
+/// holding `.nil`** -- which is why `ObjRef::NIL` cannot encode "unset" and
+/// this operation has to exist at all.
+///
+/// Measured on `build/bin/rexx`, and the third line is the one that settles
+/// it:
+///
+/// ```text
+/// a = 5     ; drop a ; say a   ->  A                 (unset: the derived name)
+/// x = .nil            ; say x  ->  The NIL object    (`.nil` is a value)
+/// y = .nil  ; drop y  ; say y  ->  Y                 (unset again, not NIL)
+/// ```
+///
+/// A variable holding `.nil` and a dropped variable render differently, so a
+/// single `ObjRef` slot has no spare value to mean "no value". D16 rejected
+/// storing slots in `temps` for exactly this reason and the same argument
+/// reaches `set_slot`.
+#[test]
+fn a_cleared_slot_is_unset_and_differs_from_one_holding_nil() {
+    let mut heap = Heap::new();
+    let mut roots = RootSet::new();
+    let frame = roots.push_slots(2);
+
+    let five = heap.alloc(Body::Text {
+        bytes: b"5".to_vec(),
+        num: None,
+    });
+    roots.set_slot(frame, 0, five);
+    roots.set_slot(frame, 1, ObjRef::NIL);
+
+    assert_eq!(roots.slot(frame, 0), Some(five));
+    assert_eq!(
+        roots.slot(frame, 1),
+        Some(ObjRef::NIL),
+        "a variable assigned .nil holds a value"
+    );
+
+    roots.clear_slot(frame, 0);
+    roots.clear_slot(frame, 1);
+
+    assert_eq!(roots.slot(frame, 0), None, "drop a leaves the slot unset");
+    assert_eq!(
+        roots.slot(frame, 1),
+        None,
+        "drop y on a .nil-holding variable leaves it unset, not holding NIL"
+    );
+}
+
+/// Clearing a slot stops it being a root, so the value it held becomes
+/// collectable.
+///
+/// This is the half the operation exists for and the half a naive wrapper
+/// gets wrong. A `clear_slot` that only changed what `slot` returns, while
+/// `iter` went on yielding the old value, would keep the object alive with
+/// nothing pointing at it and nothing failing: the damage would surface as a
+/// heap that does not shrink, at whatever unrelated moment a collection
+/// finally lands.
+#[test]
+fn a_cleared_slot_stops_being_a_root() {
+    let mut heap = Heap::new();
+    let mut roots = RootSet::new();
+    let frame = roots.push_slots(1);
+
+    let v = heap.alloc(Body::Text {
+        bytes: b"dropped".to_vec(),
+        num: None,
+    });
+    roots.set_slot(frame, 0, v);
+
+    let stats = heap.collect(&roots);
+    assert_eq!(stats.swept, 0, "a slot still holding the value is a root");
+    assert!(heap.get(v).is_some());
+
+    roots.clear_slot(frame, 0);
+
+    let stats = heap.collect(&roots);
+    assert_eq!(stats.swept, 1, "a cleared slot must stop rooting its value");
+    assert!(
+        heap.get(v).is_none(),
+        "the dropped value should be gone, not merely unreachable through slot()"
+    );
+}
+
+/// Growth never hands out a cleared slot's index, and that is a requirement
+/// rather than an accident of `grow_slots` appending.
+///
+/// A cleared slot still *belongs to its name*: the plan maps an upcased name
+/// to an index once, and `DROP a` only empties `A`'s slot rather than
+/// retiring it, so `a = 1` afterwards must land back in the same place.
+/// Recycling that index for the next name growth allocates would alias two
+/// variables onto one slot, and the symptom would be one variable's
+/// assignment silently changing another's value.
+///
+/// `pop_slots` needs no equivalent: it truncates the whole frame, so a
+/// cleared slot leaves with its frame and cannot be observed afterwards.
+#[test]
+fn growth_does_not_recycle_a_cleared_slot() {
+    let mut heap = Heap::new();
+    let mut roots = RootSet::new();
+    let frame = roots.push_slots(1);
+
+    let v = heap.alloc(Body::Text {
+        bytes: b"a".to_vec(),
+        num: None,
+    });
+    roots.set_slot(frame, 0, v);
+    roots.clear_slot(frame, 0);
+
+    let grown = roots.grow_slots(frame);
+    assert_eq!(grown, 1, "growth appends rather than reusing the cleared 0");
+
+    // The cleared slot is still addressable and still its own name's, so a
+    // later assignment to that name lands where the plan says it should.
+    roots.set_slot(frame, 0, v);
+    assert_eq!(roots.slot(frame, 0), Some(v));
+    assert_eq!(
+        roots.slot(frame, grown),
+        None,
+        "growth yields an unset slot"
+    );
 }

@@ -112,6 +112,49 @@ impl RootSet {
         self.slots[frame.start + index] = Some(value);
     }
 
+    /// Returns slot `index` within `frame` to the unset state, which is what
+    /// `DROP` on a simple variable does.
+    ///
+    /// **A separate operation rather than `set_slot` taking an
+    /// `Option<ObjRef>`**, and the choice is about call sites rather than
+    /// about this file. `DROP` is a construct the language has, so a caller
+    /// that spells it `clear_slot(frame, i)` says what it means, while
+    /// `set_slot(frame, i, None)` reads at a glance like a caller that forgot
+    /// to compute a value. The read side already carries the `Option` shape,
+    /// since `slot` returns one, so nothing is hidden by keeping the common
+    /// write monomorphic. It also leaves every existing `set_slot` call
+    /// untouched, where the alternative was a mechanical `Some(...)` wrap
+    /// across the crate for no gain.
+    ///
+    /// The other half of the operation is that a cleared slot **stops being a
+    /// root**, which `iter` gets right because it filters on the `Option` and
+    /// this writes `None` rather than some in-band marker. That is the half
+    /// worth stating: a clearing operation that only changed what `slot`
+    /// answers, while `iter` went on yielding the old value, would keep an
+    /// unreachable object alive with nothing failing until a collection
+    /// happened to land later, somewhere unrelated.
+    ///
+    /// `ObjRef::NIL` cannot stand in for the unset state, which is the reason
+    /// this exists at all. Measured on `build/bin/rexx`:
+    ///
+    /// ```text
+    /// a = 5     ; drop a ; say a   ->  A                 (unset: derived name)
+    /// x = .nil            ; say x  ->  The NIL object    (`.nil` is a value)
+    /// y = .nil  ; drop y  ; say y  ->  Y                 (unset, not NIL)
+    /// ```
+    ///
+    /// The third line settles it: a variable holding `.nil` and a dropped one
+    /// render differently, so a bare `ObjRef` slot has no spare value left to
+    /// mean "no value". D16 rejected storing slots in `temps` on the same
+    /// argument.
+    ///
+    /// Clearing a slot that is already unset is a no-op rather than an error,
+    /// because `DROP` on a never-assigned variable is legal Rexx and does
+    /// nothing.
+    pub fn clear_slot(&mut self, frame: SlotFrame, index: usize) {
+        self.slots[frame.start + index] = None;
+    }
+
     /// Grows `frame` by one slot for a name its plan never saw -- `DROP (v)`
     /// naming its target at run time, measured: `v = 'X'; x = 1; drop (v);
     /// say x` prints `X`, so a name resolving to no existing slot must be
