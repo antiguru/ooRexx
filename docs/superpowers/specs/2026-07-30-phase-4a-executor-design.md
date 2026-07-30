@@ -2,7 +2,11 @@
 
 **Goal:** run a classic Rexx program that has no procedures, no `PARSE` and no builtin calls, byte-for-byte as the oracle runs it, and fix the execution model while doing it.
 
-**Status:** design approved 2026-07-30.
+**Status:** revision 2, 2026-07-30.
+Revision 1 was reviewed by two independent agents and did not survive: 16 Critical, 16 Important and 7 Minor findings, plus two wrong claims.
+Every measured transcript below was re-run for this revision.
+The findings that changed the design are named at the point they changed it, because a spec that hides its own corrections invites the same mistake twice.
+
 This document is the spec for Phase 4a alone.
 Phases 4b and 4c get their own spec and plan, and this document defines their boundaries so that nothing falls between them.
 
@@ -12,135 +16,217 @@ Phase 4 in the parent plan (`docs/superpowers/plans/2026-07-27-rust-rewrite.md`,
 That is larger than Phases 0 to 3 combined, so it is split into three sub-phases.
 Each produces software that runs, and each closes against its own named corpus.
 
-This document specifies 4a in full, states the 4b and 4c boundaries, and records the four Phase 4 decisions taken now because they constrain the dispatch loop's design.
-
 ## What phases 1 to 3 hand over
 
-Exact interfaces, verified against the tree at commit `9f68662a`.
+Verified against the tree at commit `9f68662a`.
+Three of these are not settled interfaces but things 4a must change, and they are marked.
 
 From `rexx-core` (628 lines of `src`):
 
-* `ObjRef`, a tagged 64-bit handle: `Decoded::Heap { slot: u32, generation: u32 }`, `Decoded::SmallInt(i64)` in `SMALL_INT_MIN..=SMALL_INT_MAX` (plus or minus 2^61), `Decoded::Nil`.
-* `Heap` with `alloc(Body) -> ObjRef`, `alloc_with(BehaviourId, Body)`, `get(ObjRef) -> Option<&Object>`, `get_mut(ObjRef) -> Option<&mut Object>`, `collect(&RootSet) -> CollectStats`, `live_count()`.
+* `ObjRef`, a tagged 64-bit handle: `Decoded::Heap { slot: u32, generation: u32 }`, `Decoded::SmallInt(i64)`, `Decoded::Nil`.
+  The inline integer range is asymmetric: `SMALL_INT_MIN` is `-(2^61)` and `SMALL_INT_MAX` is `2^61 - 1`.
+* `Heap` with `alloc(Body) -> ObjRef`, `alloc_with(BehaviourId, Body)`, `get`, `get_mut`, `collect(&RootSet) -> CollectStats`, `live_count()`.
 * `Body`, currently `String(String) | Array(Vec<ObjRef>) | Instance(Vec<(String, ObjRef)>) | WeakRef(ObjRef)`, with an exhaustive `trace` and no wildcard arm.
-* `RootSet` with `add_global`, `push_frame() -> FrameId`, `pop_frame(FrameId)`, `push_temp(ObjRef)`, `iter()`.
-* `BehaviourTable` with `define`, `set_superclass`, `lookup(BehaviourId, &str) -> Option<MethodId>`, and `BehaviourId::{STRING, ARRAY, OBJECT}`.
+  **4a changes this enum**, which means 4a edits `rexx-core`; see D15.
+* `RootSet` holds exactly `globals: Vec<(String, ObjRef)>` and `temps: Vec<ObjRef>`, and `iter()` yields those two.
+  **There is no place in it for an activation's variables**; see D16.
+* `BehaviourTable` with `define`, `set_superclass`, `lookup`, and `BehaviourId::{STRING, ARRAY, OBJECT}`.
 
 From `rexx-num`:
 
 * `Number::parse(&str) -> Option<Number>`, `format(u64) -> String`, `round_to`, `whole_value(usize) -> Option<i64>`, `is_zero`, `zero`, `one`.
 * `add`, `sub`, `mul`, `div(.., DivOp)`, `pow`, each `(&self, &Number, digits: u64) -> Result<Number, ArithError>`.
-* `compare(.., CompareOp)`.
+* `compare` is a **free function** over string operands taking both `digits` and `fuzz`, not a method on `Number`.
 * `Settings` with `digits()`, `fuzz()`, `form()`, `set_digits_str`, `set_fuzz_str`, `set_form_str`.
 * `ArithError` and `FormatError`, each with `code()`, `additional()`, `message()`.
 
 From `rexx-parse`:
 
 * `parse_program(Vec<u8>) -> Result<Program, ParseError>` and `parse_interpret(Vec<u8>) -> Result<Fragment, ParseError>`.
-* `Program { source: ProgramSource, instructions: Vec<Instruction>, directives: Vec<Directive>, labels: BTreeMap<Box<[u8]>, usize>, symbols: SymbolTable }`.
-* `CodeBody { instructions, labels }`, one per directive body.
+* `Program { source, instructions, directives, labels, symbols }` and `Fragment { source, instructions, symbols }`.
+* `CodeBody { instructions, labels }` exists **only per directive body**.
+  The main program body is not a `CodeBody`, and `Fragment` has no label table at all.
+  **4a changes this**; see "The borrow shape".
 * Instruction lists are flat and source-ordered, and every jump target is a `usize` index into the same body's `instructions`.
 * Every node carries a byte range into the retained source.
-* `compound_parts(&str) -> (&str, Vec<Tail>)`, where `Tail::Constant` is a piece that stands for itself and `Tail::Variable` is a piece whose value supplies it.
+  Phase 3's gate records that the containment property is vacuous by construction, because `Expr::new` widens a node's span over its children, so a span can be too wide and no parser test can tell.
+* `compound_parts(&str) -> (&str, Vec<Tail>)`, with `Tail::Constant` standing for itself and `Tail::Variable` supplying its value.
 
-Three handovers from Phase 3 bind this phase and are addressed below: `resolveCalls` (`LanguageParser.cpp:1690`) is deliberately not ported, `TRACE`'s value lines are Phase 4's, and nothing in Phase 3 observes AST shape.
+Phase 3's four handovers bind this phase: `resolveCalls` (`LanguageParser.cpp:1690`) is not ported, `TRACE`'s value lines are Phase 4's, `Message` names want an intern table, and nothing in Phase 3 observes AST shape.
 
 ## The split
 
 | | Deliverable | Closes against |
 |---|---|---|
-| 4a | Value model, variables, expression evaluation, control flow. `Assignment`, `Say`, `Nop`, `Do`/`Loop` in every variant, `If`/`Then`/`Else`, `Select` including `SELECT CASE`, `When`, `WhenCase`, `Otherwise`, `Leave`, `Iterate`, `End`, `Drop`, `Numeric`, `Trace`, `Exit`. | A named L0 subset plus the `base/expressions` L1 groups |
+| 4a | Value model, variables, expression evaluation, control flow. `Assignment`, `Label` (a traced no-op), `Say`, `Nop`, `Do`/`Loop` in every variant, `If`/`Then`/`Else`, `Select` including `SELECT CASE`, `When`, `WhenCase`, `Otherwise`, `Leave`, `Iterate`, `End`, `Drop`, `Numeric`, `Trace`, `Exit`. | A named L0 subset plus a table-driven `base/expressions` harness |
 | 4b | `Call`, `Return`, `Procedure`, `Use`, `Signal` in all three forms, condition traps, `Raise`, `Interpret`, `Push`, `Queue`, and the in-process queue. Routine resolution, which is handover 1. | The `base/keyword` L1 groups |
-| 4c | `Parse`, `Arg`, `Pull`, and the 66 in-scope builtins, ticked off one at a time. | The `base/bif` L1 groups, 66 rows |
+| 4c | `Parse`, `Arg`, `Pull`, the `Address` instruction's environment-name tracking, and the 66 in-scope builtins, ticked off one at a time. | The `base/bif` L1 groups, 66 rows |
 
 The parent plan's Phase 4 row closes when 4c closes.
-`Message`, `Command`, `Address`, `Guard`, `Reply`, `Forward`, `Options` and every directive are outside all three: see "Out of scope" below.
+
+Explicitly assigned elsewhere, so that no instruction is merely absent: `Expose` and `Options` are Phase 5's, since neither is reachable outside a method or a package context; `Message`, `Guard`, `Reply`, `Forward`, every directive, and environment symbols beyond `.nil`, `.true` and `.false` are Phase 5's; `Command` dispatch and the rest of `Address` are Phase 7's under D18.
+`Label` is 4a's rather than 4b's even though nothing jumps to one in 4a, because a label is a traced no-op that any program may contain, and making it fail loudly would silently exclude every labelled program from the gate's subset.
 
 ## Decisions
 
-These are new decision blocks for section 1 of the parent plan, numbered after D14.
+New decision blocks for section 1 of the parent plan, numbered after D14.
 
 ### D15 value representation
 
-**Decided: mirror the oracle's dual representation.**
+**Decided: mirror the oracle's representation, including where a rendering comes from.**
 
-Rexx makes the difference between a value that came from text and a value that came from arithmetic observable.
-Measured with `build/bin/rexx`:
+Rexx makes the difference between a value that came from text and a value that came from arithmetic observable:
 
 ```
-x = '007'   ;  say x      -> 007
-            ;  say x + 0  ->   7
+x = '007'   ;  say x  ->  007        ;  say x + 0  ->  7
 ```
 
-A single canonical representation cannot produce both without carrying the original spelling anyway, so the representation carries it:
+Revision 1 got the second half of this wrong in a way that would have produced wrong output everywhere.
+**A number's rendering is fixed when the number is created, under the `NUMERIC DIGITS` in force at that moment, and never afterwards.**
+Measured:
 
-* `Body::Text { bytes: Vec<u8>, num: Option<Box<Number>> }` for a value whose identity is its bytes.
-  The `num` cache fills on first arithmetic use, through `Heap::get_mut`.
-* `Body::Num { value: Number, text: Option<Vec<u8>> }` for a value whose identity is its number.
-  The `text` cache fills on first string use, formatted under the `NUMERIC` settings in force *at formatting time*, which is why it is a cache of a rendering and not a second source of truth.
-* `ObjRef::SmallInt` for a whole result that fits, using the tagging Phase 1 already built.
-  Formatting still goes through `Number`'s rules, because `numeric digits 3` makes `1234 + 0` print `1.23E+3`.
+```
+numeric digits 9 ; y = 1 / 3
+numeric digits 3 ; say y            ->  0.333333333      (not 0.333)
+                   z = 1 / 3 ; say z ->  0.333
 
-`Body::String(String)` is deleted.
-It holds a UTF-8 Rust `String`, and D14 closed on byte strings: `reverse('ää')` yields invalid UTF-8 in the oracle, so a value that cannot hold arbitrary bytes cannot hold a Rexx string.
-Phase 1 built it before D14 closed.
+numeric digits 9 ; x = 1e10 + 0 ; say x  ->  1E+10
+numeric digits 20; say x                 ->  1E+10        (unchanged, forever)
+                   y2 = 1e10 + 0 ; say y2 ->  10000000000
+```
 
-**Cost of being wrong:** contained.
-The variants are private to `rexx-exec`'s value module behind constructor and accessor functions; a later phase can add a third representation without touching the instruction loop.
+`x` and `y2` are the same numeric value and render differently, permanently.
+The oracle stores this on the value as `NumberStringBase::createdDigits`.
+So the representation is:
 
-### D16 variable pool and slot assignment
+* `Body::Text { bytes: Vec<u8>, num: Option<Result<Box<Number>, NotNumeric>> }` for a value whose identity is its bytes.
+  The cache is tri-state on purpose: `None` is "not yet asked", and the two `Result` arms distinguish "is this number" from "is not a number", so a non-numeric string does not re-run `from_utf8` and `Number::parse` on every comparison.
+  **The cache holds the exact parse and is never rounded at fill time.**
+  Rounding belongs to the operation, which is why the cache is safe across a settings change: measured, `x = '1.234567890123456789'` gives `1.2346` under `DIGITS 5` and `1.234567890123456789` under `DIGITS 20`, from the same stored parse.
+* `Body::Num { value: Number, created_digits: u32, text: Option<Vec<u8>> }` for a value whose identity is its number.
+  `text` is formatted with `created_digits`, so it caches a pure function of the object and **is never invalidated**.
+  Revision 1's rule, "invalidated on any settings change", produces exactly the divergence it claimed to prevent.
+* `ObjRef::SmallInt`, admissible only when the exact result is whole, inside the tag's range, **and** its decimal digit count is at most the `DIGITS` in force at that operation. It renders as plain decimal, which under that condition is correct by construction.
+  The narrow condition is not fussiness. Measured under `numeric digits 1`:
 
-**Decided: a per-`CodeBody` resolution pass, computed on first execution and cached on the body.**
+  ```
+  x = 15 + 0 ;  say x   ->  2E+1
+  say x + 6             ->  3E+1      /* x is 20, so 26 -> 3E+1 */
+  say 15 + 6            ->  2E+1      /* 21 -> 2E+1 */
+  ```
 
-Variable lookup is 8.1% of runtime on the realistic mixed benchmark and 32.2% on stem-heavy code (perf profile, 2026-07-25).
-The oracle's answer is integer slots assigned at parse time (`RexxLocalVariables`, 602 lines).
-Phase 3's AST carries `SymbolId` and no slots, deliberately, so the assignment moves to first execution:
+  An implementation that keeps `SmallInt(15)` because 15 "fits the tag" answers `2E+1` for `x + 6`.
+  And two `SmallInt`-shaped results can differ observably: `a = 20 + 0` at `DIGITS 9` renders `20`, `b = 15 + 0` at `DIGITS 1` renders `2E+1`, `a = b` is 1 and `a == b` is 0.
+* `Decoded::Nil` is a value with no bytes. Measured, `say .nil` prints `The NIL object`, so string conversion special-cases it and every accessor branches on `decode()` before assuming a heap object. `.true` and `.false` need no representation at all: they are the one-byte strings `1` and `0`, and `.true == 1` is 1.
 
-* Walk the body once, collect every referenced `SymbolId`, assign dense slot indices.
-* Decompose every `ExprKind::Compound` through `compound_parts` and record a slot index for each `Tail::Variable` piece.
-  This is not only speed: `compound_parts` returns text, and the tail pieces were never interned, so *something* has to map them to variables and the plan is the only place that sees the body as a whole.
-* Record the label table (Phase 3 already built it) and, in 4b, the resolved call targets, which is where handover 1 is discharged.
+`Body::String(String)` is deleted: it holds a UTF-8 Rust `String`, and D14 closed on byte strings, so it cannot hold `reverse('ää')`.
 
-An activation is then `Vec<Option<ObjRef>>` of exactly the plan's length.
+**Where these variants live, and what that costs.**
+Revision 1 claimed the variants were "private to `rexx-exec`'s value module" and the cost of being wrong "contained".
+Both were false: `Body` is `pub enum Body` in `rexx-core`, and its `trace` is the exhaustive match Phase 1's whole GC-safety argument rests on.
+So 4a amends `rexx-core`:
 
-The rejected alternatives: a `HashMap<SymbolId, ObjRef>` per activation hashes on the measured hot path and allocates a map per call; a `Vec` indexed by `SymbolId` directly makes a small routine in a large file pay for every symbol in the file.
+* Three variants added, `Body::trace` extended for `Stem`'s reachable values, `Body::String` removed along with the `heap.rs` tests that construct it.
+* **`rexx-core` gains a dependency on `rexx-num`**, because `Body::Text` holds a `Number`. That edge did not exist and points the object model at the arithmetic core.
+* Together with D16's root-set change, this is **one amendment task against `rexx-core`**, not two discovered ones.
+
+**Cost of being wrong,** stated on the right axis: the constructors and accessors in `rexx-exec::value` are the only callers, so a third representation is a change to that module plus one arm of `Body::trace`. It is not free, and the instruction loop is not what it would disturb.
+
+### D15a stems
+
+Stems are part of the value model and got four things wrong in revision 1, so they are stated separately.
+All four are measured:
+
+```
+u. = 'd' ; u.1 = 'one' ; drop u.1
+say u.1               ->  U.1     /* uninitialised, NOT the default */
+say u.2               ->  d       /* the default still applies      */
+
+a. = 1    ; b. = a. ; a.1 = 2       ; say b.1  ->  2      /* one shared object */
+r. = 'rd' ; u  = r. ; drop r.       ; say u    ->  rd     /* old object intact */
+s. = 'def'; t  = s. ; s. = 'other'  ; say t    ->  def    /* old object intact */
+
+say q.                ->  Q.      /* no default: own name, with the period */
+t2 = q. ; say t2      ->  Q.      /* still, once aliased into a variable   */
+w. = 'wd' ; say w.    ->  wd
+
+i = 'abc' ; v.i = 'val' ; say v.i / v.ABC  ->  val / V.ABC
+```
+
+Therefore `Body::Stem { name: Box<[u8]>, default: Option<ObjRef>, tails: HashMap<Vec<u8>, Option<ObjRef>> }`:
+
+* The **tombstone** is the `Option` inside the map. A dropped tail is present-and-`None`, which does not take the default; an absent key does.
+* The **name** is on the object, because a Stem aliased into a simple variable still renders `Q.` and the reference site supplies no name there.
+* `stem. = expr` and `drop stem.` **replace** the Stem object and rebind the variable; they do not mutate in place. A tail assignment does mutate. Both are observable through the aliasing above, so an implementer who deep-copies `b. = a.` answers 1 where the oracle answers 2.
+* Tail keys are the tail variable's **value verbatim, case-sensitively**. Revision 1's `b = 2, c = 1` example cannot discriminate this; `i = 'abc'` can.
+
+A hash map, where the oracle has a balanced BST whose `memcmp` is 21.6% of stem-heavy runtime and is called only from `CompoundVariableTable::findEntry` (545 lines). This is the one place the rewrite is expected to beat the oracle rather than match it.
+
+### D16 variables, slots, and where the collector finds them
+
+**Decided: a per-body resolution plan keyed by upcased name, cached on `Interp`, with the activation's slot vector allowed to grow, and the slots reachable from an extended `RootSet`.**
+
+Variable lookup is 8.1% of runtime on the realistic mixed benchmark and 32.2% on stem-heavy code (perf profile, 2026-07-25); the oracle's answer is integer slots assigned at parse time (`RexxLocalVariables`, 602 lines).
+Phase 3's AST carries `SymbolId` and no slots, so assignment moves to first execution. Four corrections to revision 1:
+
+* **Keyed by upcased name, not `SymbolId`.** One `HashMap<Box<[u8]>, usize>` per plan, through which both a `SymbolId` and a compound's tail pieces resolve. Tail pieces must land on the *same* slot as a same-named variable elsewhere in the body: measured, `b = 2; say a.b` gives `A.2`, and after `a.2 = 'hit'`, `say a.b` gives `hit`. An implementer who gives tail pieces their own slots gets `A.B`.
+* **The vector grows.** `DROP (v)` is in 4a's list and names its target at run time: measured, `v = 'X'; x = 1; drop (v); say x` prints `X`. A name that resolves to no existing slot allocates one, so an activation starts at the plan's length rather than being exactly it.
+* **Cached on `Interp`, not on the body.** `Rc<Program>` gives shared immutable access, so nothing can be written into a `CodeBody` reached through one; revision 1's two central decisions contradicted each other. The cache is `plans: HashMap<BodyKey, Rc<Plan>>` on `Interp`, keyed by a program id assigned at load plus a body index, never by a raw pointer that a dropped `Rc` could let be reused.
+* **The collector must be able to see the slots.** `RootSet` is globals plus temps and `collect` takes nothing else, so as specified in revision 1 the first collection swept every local. Storing slots in `temps` does not work, because `push_temp` interleaves during evaluation and `Option<ObjRef>` has no encoding in a `Vec<ObjRef>`: `ObjRef::NIL` cannot mean "unassigned", since `x = .nil` is legal 4a and `.nil` is a value. So `RootSet` gains slot frames, `push_slots` and `pop_slots`, keeping `collect`'s signature. This is part of D15's single `rexx-core` amendment task.
+
+An uninitialised read yields the derived name, and it does so **distinguishably**: the read returns the value together with an "was unset" signal, because `SIGNAL ON NOVALUE` in 4b changes what an uninitialised read does and the read path is 4a's. Retrofitting a raise into the hottest path later is the thing this sentence exists to prevent, and the Phase 4 gate program uses `signal on novalue`. `DROP` restores the unset state.
 
 ### D17 trace granularity
 
 **Decided: the dispatch loop emits a trace event per evaluation step from the start, and 4a formats the value lines.**
 
 `RexxActivation.hpp:90`-`110` enumerates 19 prefixes, `TRACE_PREFIX_CLAUSE` at `:92` through `TRACE_PREFIX_INVOCATION_EXIT` at `:110`.
-Everything except the clause prefix carries an evaluated value.
-Phase 3 ships the clause prefix, the `*-*` source line, and nothing else.
+Everything except the clause prefix carries an evaluated value; Phase 3 ships the clause prefix and nothing else.
+Emitting an event per evaluation step forbids constant folding and expression fusion, which is accepted: the profile puts dispatch at 38.9% and allocation at 26% of realistic runtime, so folding was never where the time is, and the alternative is designing the dispatch loop twice.
 
-Emitting an event per evaluation step forbids constant folding and expression fusion.
-That is accepted, on two grounds: the profile puts dispatch at 38.9% of realistic runtime and allocation at 26%, so folding was never where the time is, and the alternative is designing the dispatch loop twice.
-`TRACE.testGroup` holds 239 expected trace-output lines, which is what the decision buys.
+**Trace goes to stderr.** Measured, with `trace r` the `*-*` and `>>>` lines are on stderr while `SAY` is on stdout. Because they are separate descriptors their relative interleaving is not observable, so two independently buffered sinks are safe.
 
-The value lines need each subexpression's *source text*, which is affordable only because Phase 3 retained spans on every node.
-The C++ sites are `traceValue` (`RexxActivation.cpp:3728`) and `traceOperatorValue` (`:3852`).
+What the decision buys, counted rather than inherited: revision 1 repeated the parent plan's figure of 239 expected trace-output lines in `TRACE.testGroup`, which matches no counting method. Anchoring the resource-block scan to `^[[:space:]]*::resource` — an unanchored match trips on a comment at `:161` that mentions the directive and swallows 51 lines of method code — gives **34 resource blocks and 342 lines of expected trace output, of which 128 are `*-*` clause lines and 214 carry a value or marker prefix**. Those lines are collected by 4b and 4c, not 4a, because an ooTest group is not runnable at all as extracted (see "L1, and why it is table-driven"). The parent plan's `:2412` carries the same wrong figure and is corrected with it.
 
 ### D18 command dispatch is not Phase 4's
 
-**Decided: the `ADDRESS` instruction tracks the environment name so that the `ADDRESS()` builtin reports it, and actual command dispatch, `RC` setting, and the `ERROR` and `FAILURE` conditions land in Phase 7 with the platform layer.**
+**Decided: command dispatch, `RC` setting, and the `ERROR` and `FAILURE` conditions land in Phase 7 with the platform layer.**
+The `Address` instruction's environment-name tracking is **4c's**, alongside the `ADDRESS()` builtin that reports it, and both are needed by the Phase 4 gate program.
+A command clause fails loudly until Phase 7.
 
-A command clause raises the not-implemented failure described under "Failing loudly" until then.
-Phase 7 owns it because dispatch needs the platform layer, and `ADDRESS ... WITH` redirection needs the stream model that Phase 7 builds.
+`ADDRESS()` is a *partial* exclusion, not an in-scope builtin: measured, `say address()` with no `ADDRESS` instruction prints `sh`, a platform-supplied default from the layer this decision defers.
+
+### D19 dispatch shape and recursion depth
+
+**Decided: expression evaluation is natively recursive on a dedicated interpreter thread with an explicitly sized stack, guarded by a depth counter; the instruction loop is one Rust frame per Rexx activation.**
+
+The oracle has measured capabilities here that a naive recursive evaluator cannot match: it evaluates `x = 1+1+…+1` with **100,000 terms** and prints `100000`, and `say ((((…1…))))` with **20,000 nested parentheses**, both exit 0.
+A `fn eval` recursive over a left-deep `Binary` chain uses one Rust frame per term, and the failure mode is a native stack overflow, which aborts with no message and no exit code: precisely the outcome the failing-loudly rule most wants to exclude.
+
+So: `rexx-run` runs the interpreter on a thread whose stack size is set explicitly and recorded, chosen so that the oracle's measured depths pass with margin; `eval` carries a depth counter that raises a Rexx condition before the stack can be exhausted; and the corpus contains a program at a depth the oracle handles, so the boundary is measured rather than discovered as a crash.
+
+Activation depth is decided here and paid in 4b: measured, unbounded `CALL` recursion gives `Error 11.1`, "Insufficient control stack space", at rc 245 — a reportable condition, not a crash. One Rust frame per activation with an explicit counter produces it; a flat loop over the activation stack would too, and the choice is stated now because D17's own argument is that the dispatch loop should not be designed twice.
+
+**Phase 3's parser has the same exposure and it is unverified**: dyadic parsing is a precedence loop, but nested parentheses recurse. Whether `rexx-parse` survives 20,000 of them is a check in 4a's plan, not an assumption here.
 
 ## Architecture
 
-### The borrow shape, and the spike that proves it
+### The borrow shape
 
-The parent plan (line 2472) records this as the phase's one unsolved question: who owns `Heap` versus `RootSet` during evaluation.
+`Interp` owns `Heap`, `RootSet`, the activation stack, the settings, the plan cache, the trace sink and the output sink, and **does not own the AST**.
+Programs are held as `Rc<Program>`.
 
-The answer is that `Interp` owns `Heap`, `RootSet`, the activation stack, the settings, the trace sink and the output sink, and **does not own the AST**.
-Programs are held as `Rc<Program>`; an activation holds its own `Rc` clone.
-Evaluation is therefore `fn eval(&mut self, body: &CodeBody, expr: &Expr) -> Result<ObjRef, Raised>`, where the `&Expr` borrow derives from an `Rc` the caller cloned out first, so it does not conflict with `&mut self`.
+The discipline is one sentence, and it is the whole answer to the parent plan's named soft spot: **the instruction loop clones the `Rc` into a local on entry, and every `&CodeBody` and `&Expr` derives from that local.**
+An activation's own `Rc` is a liveness anchor and is never borrowed through — borrowing `&self.activations.last().unwrap().program.…` and then calling `self.eval(…)` is an `E0502`, and that is the version revision 1's adjacent sentence pointed at.
 
-If the AST lived inside `Interp`, every evaluation step would need `&self.program` and `&mut self` at once and nothing would compile.
+Under that discipline the shape holds for an `INTERPRET` fragment created mid-instruction, for a `DO` control expression re-evaluated per iteration, and for 4b's body-calls-body case, where each Rust frame clones its own `Rc` into its own local.
 
-**Task 1 of the plan is a spike that proves this shape end to end**, including the case that motivates the `Rc`: an `INTERPRET` fragment is parsed at run time, its instructions execute inside the activation that made it, and its `Rc<Fragment>` must outlive the instruction.
-The spike is written and kept, not written and thrown away: it is the first thing a later phase reads when it wants to know why the shape is what it is.
+**One `rexx-parse` change is required and is a task, not an assumption.**
+`fn eval(&mut self, body: &CodeBody, expr: &Expr)` cannot be called for the body 4a actually runs: `Program` holds `instructions` and `labels` as sibling fields, `CodeBody` exists only per directive body, and `Fragment` has no labels at all — while the Task 1 spike runs a `Fragment`. `Program` gains `pub main: CodeBody` and `Fragment` gains `pub body: CodeBody`, preserving the existing derives. Whether an `INTERPRET` fragment may contain a label decides whether that label table is always empty, and is measured in the task rather than assumed.
+
+**Task 1 is a spike that proves the shape end to end** — including a fragment whose `Rc` outlives the instruction that made it, and the variable pool, since a spike that avoids the pool proves less than it claims. It is kept, with the failing version in a comment, because the next phase to touch this will want to know which version does not compile.
+
+`Rc` is not `Send`, and Phase 6 is in the plan: it either converts every `Rc<Program>` to `Arc` (mechanical but pervasive) or gives each thread its own package arena. Recorded here because discovering it in Phase 6 costs a sweep of `rexx-exec`.
 
 ### Crate layout
 
@@ -150,71 +236,36 @@ One new crate, `rexx-exec`, depending on `rexx-core`, `rexx-num`, `rexx-parse`.
 rexx-exec/
   src/value.rs        the value model, conversions, string and number identity
   src/stem.rs         stems and compound tail resolution
-  src/plan.rs         the per-CodeBody resolution pass (D16)
+  src/plan.rs         the per-body resolution pass (D16)
   src/activation.rs   one frame: slots, block stack, pc, settings
   src/eval.rs         expression evaluation and the operators
   src/run.rs          the instruction loop, control flow, DO block state
   src/trace.rs        trace events and prefix formatting (D17)
-  src/error.rs        Raised and its condition payload
+  src/error.rs        Raised, the condition payload, and the message catalogue
   src/lib.rs          Interp, and the public entry point
   src/bin/rexx-run.rs the runner the differential tests drive
 ```
 
-One file per concept, as elsewhere in the workspace.
-`run.rs` is the one at risk of growing past what fits in context; if it passes roughly 800 lines, the loop splits from the per-instruction handlers rather than growing further.
-
-## The value model
-
-### Text and number identity
-
-Conversions are total functions with explicit failure:
-
-* Text to number: `std::str::from_utf8` then `Number::parse`.
-  A byte string that is not valid UTF-8 cannot be a Rexx number, since a number's characters are ASCII by definition, so the two failures collapse into one and neither is a panic.
-* Number to text: `Number::format(digits)` under the settings in force at that moment.
-* `SmallInt` to text: through `Number`, not through `i64::to_string`, because `NUMERIC DIGITS` can force exponential form.
-
-Every value is an `ObjRef`.
-The `RootSet` temps stack is pushed before any allocation that could collect while an intermediate is live, which is the discipline `RootSet` was built for.
-
-### Stems and compound variables
-
-`Body::Stem { default: Option<ObjRef>, tails: HashMap<Vec<u8>, ObjRef> }`, with a new `BehaviourId::STEM`.
-
-A hash map, where the oracle has a balanced BST whose `memcmp` alone is 21.6% of stem-heavy runtime and is called only from `CompoundVariableTable::findEntry` (545 lines).
-This is the one place where the rewrite is expected to beat the oracle rather than match it.
-
-The semantics are measured, not assumed.
-Probed with `build/bin/rexx` on 2026-07-30:
-
-```
-a. = 'd'  ;  a.1 = 'one'  ;  say a.1 a.2   -> one d
-a. = 'reset'             ;  say a.1 a.2   -> reset reset
-drop a.                  ;  say a.1       -> A.1
-b.3 = 'x'  ;  drop b.    ;  say b.3       -> B.3
-c.1 = 'keep'; drop c.1   ;  say c.1       -> C.1
-say novar                                 -> NOVAR
-```
-
-So: assigning to the stem replaces the whole collection and sets the default for every tail.
-`DROP` of the stem clears the map and the default together, returning tails to uninitialised.
-An uninitialised compound yields its derived name, which is the upcased stem plus the resolved tail values.
-An uninitialised simple variable yields its own upcased spelling.
-
-Tail resolution follows Phase 3's measurement: with `b = 2` and `c = 1`, `a.b.c` names `A.2.1`, so a `Tail::Variable` piece contributes its variable's *value* and the stem contributes its own name.
+One file per concept, as elsewhere in the workspace, each readable in one sitting; `run.rs` is the one at risk, and the split when it comes is the loop from the per-instruction handlers.
 
 ## Expression evaluation
 
-Recursive over `Expr`.
-The tree already carries precedence and associativity, so evaluation never reconsiders either.
+Recursive over `Expr`, subject to D19. The tree already carries precedence and associativity, so evaluation never reconsiders either.
 
-* `Binary`: arithmetic through `rexx-num` under the current settings; comparison in two families, the numeric or string comparison operators and the strict byte comparisons `==` and `\==`; `Abuttal`, `Blank` and `||` concatenate bytes.
-* `Prefix`: `+`, `-`, `\`.
-* `Logical`: an AND of its parts, and a part that is not `0` or `1` raises 34.x at run time, which is where a plain `WHEN a, b` differs from `SELECT CASE`.
-* `Literal`, `Constant`: the bytes the parser decoded, which for a `Constant` is the upcased spelling, so `say 1e5` prints `1E5`.
-* `Variable`, `Stem`, `Compound`: through the plan's slots.
-* `DotVariable`: `.nil`, `.true` and `.false` only in 4a; every other environment symbol is Phase 5's and fails loudly.
-* `Call`, `QualifiedCall`, `Message`, `ClassResolver`, `List`, `VariableReference`: not 4a's, and each fails loudly.
+The operators are enumerated by name, because revision 1's two-family description lost eight of them and an implementer had nowhere to put three more:
+
+* **Arithmetic**: `+ - * / % // **`, through `rexx-num` under the current settings.
+* **Numeric-or-string comparison**: `= \= <> >< > < >= <= \> \<`, where `<>` and `><` are `\=` aliases.
+* **Strict comparison**: `== \== >> << >>= <<= \>> \<<`. These are not merely "byte" comparisons: there is no padding and the shorter string is less. Measured, `'10' >> '9'` is 0 while `'10' > '9'` is 1; `'a' << 'a '` is 1 while `'a' = 'a '` is 1 and `'a' == 'a '` is 0.
+* **Logical**: `& | &&`, each with its own 34.x logical-value check on both operands.
+* **Concatenation**: `Abuttal`, `Blank`, `||`, over bytes.
+
+`Operator::Backslash` cannot appear in a `Binary` node and is correctly absent.
+
+The rest of the tree: `Prefix` is `+ - \`; `Literal` and `Constant` are the bytes the parser decoded, so `say 1e5` prints `1E5`; `Variable`, `Stem` and `Compound` go through the plan's slots; `Logical` is the comma list in a condition and is an AND of its parts, each checked for 0 or 1; `DotVariable` is `.nil`, `.true` and `.false` only.
+`Call`, `QualifiedCall`, `Message`, `ClassResolver`, `List` and `VariableReference` are not 4a's and fail loudly.
+
+A `WhenCase` value is compared with the `SELECT`'s expression using `==`, not `=`. Measured: `select case '007'` with `when 7` does not match.
 
 ## Control flow
 
@@ -225,150 +276,127 @@ enum Flow { Next, Goto(usize), Exit(Option<ObjRef>) }
 A program counter walks the body's `instructions`; each step answers `Flow` or raises.
 Loop state is a per-activation `Vec<Block>` holding the control variable's slot, the `to`, `by` and `for` values, the iteration counter, the block's label and its `end` index.
 `LEAVE` and `ITERATE` unwind that stack to the matching label and jump.
-4b adds `Return` and `Signal` variants.
+Evaluation order inside a controlled loop is `Controlled::order`, which Phase 3 recorded because an expression can have side effects.
 
-Evaluation order inside a controlled loop is the order the keywords were written in, which Phase 3 recorded in `Controlled::order` precisely because an expression can have side effects.
+## Errors, and the reporting subsystem
 
-**This is where handover 4 lands.**
-Nothing in Phase 3 observes AST shape, so a control-flow target wired to the wrong index passes every parser test.
-4a's corpus therefore carries the shapes that expose it: nested `DO` with `LEAVE` naming an outer label, `ITERATE` from inside a `SELECT` within a loop, `IF`/`ELSE` chains where the false target and the then-exit differ, and a `SELECT` whose `WHEN` branches all fall to the same exit.
+`Result<T, Raised>`, where `Raised` carries the condition name, the number and sub-number, and the substitution values.
+4a's raisers are arithmetic, a `SELECT` reaching its `END` with no `WHEN` taken (7.3), the logical-value checks (34.x), and the `DO` control conversions.
+No trapping: `SIGNAL ON` is 4b's.
 
-## Conditions and errors in 4a
+Criterion 1 compares stderr and the exit code byte for byte, so "terminates with the oracle's message" is a subsystem and is named as its own task. Measured:
 
-`Result<T, Raised>`, where `Raised` carries the condition name, the error number and sub-number, and the substitution values.
+```
+     3 *-* end
+Error 7 running /abs/path/vB.rex line 3:  WHEN or OTHERWISE expected.
+Error 7.3:  All WHEN expressions of SELECT are false; OTHERWISE expected.
+rc=249
+```
 
-4a's raisers are arithmetic (`ArithError` already supplies number and additional values), a `SELECT` that reaches its `END` with no `WHEN` taken (7.3), the logical-value check (34.x), and the `DO` control conversions.
-No trapping: `SIGNAL ON` is 4b's, so in 4a a raise terminates the program with the oracle's message on stderr and the oracle's exit code.
+That is a clause echo **with trace off**, a major-number line carrying the absolute path and line number, a sub-number line with substitutions, two spaces after each colon, and `exit code = 256 - major`. A second measured case: 34.1 gives rc 222. The task delivers a message catalogue for 4a's four raiser families with major and sub-number text, the two-line format, the clause echo, and the exit-code rule, with oracle-captured expectations. Only arithmetic's text exists today.
 
 ### Failing loudly
 
-Every feature that 4a does not implement fails in a way that cannot be mistaken for parity: a distinct process exit code and a message naming the construct and the sub-phase that owns it, never a plausible Rexx condition.
+Every feature 4a does not implement fails distinguishably: a dedicated process exit code and a message naming the construct and the sub-phase that owns it, never a plausible Rexx condition.
+If an unimplemented builtin raised 43.1, a differential run would show what looks like a resolution bug, and a program expecting 43.1 would *pass*.
+**An implementation gap must never be able to produce a passing test**, and criterion 5 below is what enforces it — in revision 1 this rule was prose that no criterion tested, while 4a's out-of-scope surface is larger than its in-scope surface.
 
-The reason is specific.
-If an unimplemented builtin raised 43.1, "could not find routine", a differential run against the oracle would show a divergence that reads like a resolution bug, and a program that happened to expect 43.1 would *pass*.
-An implementation gap must never be able to produce a passing test.
+## Output and trace sinks
 
-## Trace
-
-`Interp` holds the current setting and a sink.
-`eval` calls the sink per evaluation step; the sink drops the event unless the setting selects it.
-4a formats the prefixes its own expressions and instructions produce; the invocation prefixes belong to 4b, which is what introduces invocations.
-
-## Output
-
-`SAY` writes to a sink on `Interp`, defaulting to stdout, with no line-length handling beyond the oracle's.
-This is not the Phase 7 stream model and does not pretend to be: `.output` as an object, redirection, and the stream classes are Phase 7's.
-The sink exists so that a test can capture output without a subprocess.
+`SAY` writes to a sink on `Interp`, defaulting to stdout. The trace sink defaults to **stderr**. Neither is the Phase 7 stream model: `.output` as an object, redirection and the stream classes are Phase 7's, and the sinks exist so a test can capture output without a subprocess.
 
 ## Testing
 
 ### L0 differential corpus
 
-`rust/corpus/` programs run under `rexx-run` and under `build/bin/rexx`, compared through `rexx-oracle`'s `normalize` and `diff`.
+`rust/corpus/` programs run under `rexx-run` and under `build/bin/rexx`, compared through `rexx-oracle`'s `normalize` and `diff`, which compares exit code, then stdout, then stderr, byte for byte.
+`normalize` masks exactly two things — CRLF folding and the cwd string — so criterion 1's zero is blind to line-ending differences and to a path that equals the cwd. Stated so the zero is read with its scope; the inherited rule that a self-test divergence means the corpus is at fault and never `normalize` still holds.
 
-4a implements no builtins, so it cannot run every existing corpus program.
-Its gate therefore quantifies over a **named subset, listed in `rust/corpus/phase-4a.txt`**, containing the programs that use only 4a features, plus new programs written for this phase.
-4b and 4c each add their own list file rather than editing this one, so that what a sub-phase unblocked stays visible.
-The count is *reported* by the harness, not asserted in the criterion, because counts rot: Phase 3 had one criterion whose hard-coded number moved twice.
+**4a must write most of its own corpus, and the inherited one is measured, not assumed.**
+Of the 28 programs in `rust/corpus/`, 10 use only 4a features, and **none of the 10 contains a `LEAVE` or an `ITERATE`**; seven are numeric, so the set largely re-tests `rexx-num` through a new front end. The entire `DO`-variant coverage is in `do_variants.rex`, excluded by a single line, `do i over .array~of("x", "y")`. No single addition rescues this: the five programs one feature away each miss a *different* feature.
+So 4a writes roughly 12 to 15 programs, listed in its plan, starting with a 4a-only cut of `do_variants.rex`, and covering the control-flow shapes in criterion 1, `LEAVE`/`ITERATE` by label, whole-stem versus tail `DROP` including the tombstone, `EXIT` with an expression, the created-digits transcripts from D15, the stem-aliasing transcripts from D15a, an expression at a depth the oracle handles, and one witness program per trace prefix.
 
-Two rules carry over from `corpus/README.md` and are not relaxed: a corpus program must be deterministic, so no `TIME()` and no `DATE()`, and when the self-test with the same binary on both sides reports a divergence the corpus is at fault, never `normalize`.
+The comparison runs as a `cargo test` with the oracle's expected output committed the way `tests/sourceline_oracle/` does it, so `cargo test` alone is the gate and a script regenerates the expectations. That applies to the trace expectations too.
 
-The comparison runs as a `cargo test`, with the oracle's expected output committed the way `tests/sourceline_oracle/` does it, so that `cargo test` alone is the gate and a script regenerates the expectations.
-A criterion enforced only by a script nobody runs is not enforced.
+### L1, and why it is table-driven
 
-### L1 extracted assertions
+`rexx-extract` renders each test method as `::routine main public` plus a `::class shim public`, so **an extracted program's main body is empty and it executes nothing at all** — verified under the oracle itself: a file in exactly that shape with a `say` in the routine produces no output and exits 0. Even if the routine were driven, `self~assertSame(…)` has no `self` inside a routine. Nothing in the project rests on this: Phase 2's gate recorded its L1 criterion as CANNOT ASSESS rather than claiming a pass.
 
-`rexx-extract` turns `.testGroup` methods into standalone programs; `ootest/` holds 409 groups and 12,176 extractable assertions.
-4a's target is `ootest/ooRexx/base/expressions` (11 groups).
-The extracted programs that need 4b or 4c features are listed, with the sub-phase that unblocks each, rather than silently skipped.
+Revision 1's criterion 2 quantified over "extracted assertions that need only 4a features", which is therefore the **empty set**, satisfiable by declaring all of `base/expressions` blocked. It is replaced by the route Phase 2's gate already costed: extract the assertions as **data**, not programs.
+
+`ootest/ooRexx/base/expressions/` holds 4,269 `assertSame` calls, of which 2,528 match a plain `<operand> <operator> <operand>` shape. 4a adds an extraction mode emitting one row per assertion: the expression text, the expected value, and the `NUMERIC DIGITS` in force. That setting changes throughout those files, from 1 to 100, so the extractor **scans sequentially and carries the setting**, rather than matching assertions in isolation — getting that wrong silently tests the wrong precision and still passes, which is the worst available outcome. The harness evaluates each row's expression through `rexx-exec` and compares to the expected value, needing no directives, no message sends and no builtins.
 
 ### What the tests cannot see
 
-Stated so that the gate is not read as stronger than it is:
+* **Intra-expression evaluation order** is invisible unless a side effect exposes it, and 4a has none inside an expression except trace output. Trace-output tests are the only observation of it, which is a second reason D17 lands here.
+* **A too-wide `Expr` span** cannot be falsified by any Phase 3 test, because `Expr::new` widens by construction. Trace value lines print a subexpression's source text and are the first consumer that can falsify it; a mismatch there is a Phase 3 defect, not a formatting bug.
+* **Two of Phase 3's three shape blind spots stay unobserved here.** A clause moved across a body boundary is unobservable in 4a by construction, since 4a runs one body and every directive is out of scope; it belongs to Phase 5. Argument attachment inside `Call`, `QualifiedCall`, `Message`, `List` and `VariableReference` is exercised by 4b and 4c, not 4a, which evaluates only `Logical` of the six. Revision 1 claimed handover 4 "lands here"; it lands here only for control-flow targets.
+* **GC correctness under pressure** is invisible unless a collection happens at the right moment, which is what criterion 4 exists for.
 
-* An `Expr` evaluated in the wrong order with the same result is invisible unless a side effect exposes it, and 4a has no side effects inside an expression except `TRACE` output.
-  Trace-output tests are therefore the only observation of intra-expression evaluation order, which is a second reason D17 lands in 4a.
-* The value model's cache behaviour is invisible to the corpus: a stale `num` cache and a correct one differ only in speed, unless the cache is stale *across* a `NUMERIC` change, which is exactly the case the unit tests must construct deliberately.
-* Nothing here measures GC correctness under pressure.
-  A missing `push_temp` shows up as a collected live value only when a collection happens at the right moment, so 4a runs its corpus a second time with a stress mode that collects on every allocation.
+Revision 1 also listed a stale value cache across a `NUMERIC` change as a blind spot. With created-digits on the value there is no such state, and without it the corpus catches it on the first `say` after a `NUMERIC` change — it was misclassified as invisible when it is loud.
 
 ## 4a exit gate
 
-Each criterion names the set it quantifies over, and each can fail.
+Each criterion names the set it quantifies over, each can fail, and no criterion's anti-vacuity requirement lives in prose beside it.
 
-1. The named L0 subset runs with zero divergences, and the harness reports the program count.
-   The negative control holds: substituting any other binary for `rexx-run` reports divergences on every program, so a zero is meaningful.
-2. Every extracted `base/expressions` assertion that needs only 4a features passes, and the ones that do not are listed with the sub-phase that unblocks them.
-3. `trace r` and `trace i` output for a committed set of programs matches the oracle byte for byte, including the value lines.
-4. The corpus passes again under collect-on-every-allocation.
-5. Zero `unsafe`, `clippy -D warnings` clean, `cargo fmt` clean.
-6. The borrow-shape spike is committed with its findings written down.
-
-Criterion 3 is the one that would be easiest to write vacuously.
-"Trace output matches" over a program set with no value lines in it would pass while observing nothing, so the committed set must contain at least one program per prefix that 4a can emit, and the criterion says so by naming the prefixes rather than counting the lines.
+1. **The named L0 subset in `rust/corpus/phase-4a.txt` runs with zero divergences**, the harness reporting the program count rather than the criterion asserting it, and the subset satisfies a coverage property: every `InstructionKind`, `LoopKind` and `Trace` variant in 4a's scope, and every `Operator` listed above, is constructed by at least one program in it, asserted by a macro-generated enumerating test with no wildcard arm, in the shape Phase 3's criterion 2 used so that a new variant is a compile error rather than a silent gap.
+   The subset must include: nested `DO` with `LEAVE` naming an outer label; `ITERATE` from inside a `SELECT` within a loop; `IF`/`ELSE` chains where the false target and the then-exit differ; a `SELECT` whose `WHEN` bodies are several instructions long with visible side effects, so that a wrong exit lands inside a later `WHEN`'s body; and `when 1 = 1 then` followed by `when 2 = 2 then nop`, where the second `WHEN` is the first's `THEN` instruction and is never collected into `whens`.
+   Revision 1 asked instead for a `SELECT` whose `WHEN`s all share an exit, which is true by construction — `fixWhen` gives every `WHEN` of one `SELECT` the same exit — so no test could have failed it.
+2. **The `base/expressions` assertion table passes**, every row evaluated, the count reported. A row whose operands need 4b or 4c is listed with the sub-phase that unblocks it, and the extractor's sequential `NUMERIC DIGITS` tracking has its own test against a file that changes the setting mid-way.
+3. **Trace output matches the oracle byte for byte on stderr**, over a committed table mapping **each of the 19 prefixes at `RexxActivation.hpp:90`-`110`** to either a witness program or the sub-phase that first emits it, with the harness failing when a 4a row has no witness. The prefix list is enumerated from the oracle's table, not from what the implementation turns out to emit, because "one program per prefix 4a can emit" is a set the implementation chooses and the failure it cannot see is 4a emitting nothing where the oracle emits something. Measured reachable from pure-4a code: `*-*`, `>>>`, `>=>`, `>L>`, `>V>`, `>O>`, `>K>`, `>C>`, and a prefix-operator line.
+4. **The named L0 subset passes again under collect-on-every-allocation.**
+5. **Every `InstructionKind` and `ExprKind` variant either executes or fails loudly**: an enumerating test with no wildcard arm asserts that each variant is in 4a's named set or produces the not-implemented exit code with a message naming the owning sub-phase. One criterion closes a surface larger than 4a's own and cannot rot.
+6. **A mutation control**, replacing "substituting any other binary reports divergences on every program", which `/bin/true` satisfies and which demonstrates only that the harness notices *absent* output. A committed list of one-line mutations to `rexx-exec`, each of which the subset must catch, mapped onto the handed-over blind spots: off-by-one on `If::false_target`; off-by-one on `When::exit`; `Loop::end` off by one; `Controlled::order` evaluated in fixed To/By/For order; `Abuttal` treated as `Blank`; `=` treated as `==`; `LEAVE` unwinding one block too few; and formatting with the current digits instead of the created digits.
+7. **Zero `unsafe`, `clippy -D warnings` clean, `cargo fmt` clean**, and the Task 1 spike committed with its findings written down.
 
 ## Phase 4 gate items decided now
 
 ### The exclusions file
 
-`docs/superpowers/plans/phase-4-exclusions.txt`, one row per excluded builtin: the name, what is excluded, the phase that delivers it, and the failure it produces meanwhile.
-Phase 7 and Phase 10 delete their own rows.
+`docs/superpowers/plans/phase-4-exclusions.txt`, one row per exclusion: the name, what is excluded, the phase that delivers it, and the failure it produces meanwhile.
 
-Fifteen of the 81 entries in `builtinTable[]` (`BuiltinFunctions.cpp:3042`) are excluded, leaving 66 in scope for 4c:
+The gate asserts the **set**, not a count: the excluded rows are exactly the fifteen names below plus the three partial rows, and adding a row is a plan amendment rather than a file edit — otherwise the file is an artifact of the phase being gated and any builtin that turns out hard can be excluded by editing it. The harness reports "66 in scope, three of them partial" as a derived number.
+
+Fifteen whole exclusions from the 81 entries in `builtinTable[]` (`BuiltinFunctions.cpp:3042`):
 
 * Phase 7, streams and platform: `CHARIN`, `CHAROUT`, `CHARS`, `LINEIN`, `LINEOUT`, `LINES`, `STREAM`, `QUALIFY`, `USERID`, `SETLOCAL`, `ENDLOCAL`.
 * Phase 10, RXAPI: `RXQUEUE`, `RXFUNCADD`, `RXFUNCDROP`, `RXFUNCQUERY`.
 
-Two partial rows, because a whole-builtin exclusion would overstate the gap:
+Three partial rows, because a whole-builtin exclusion would overstate the gap:
 
-* `VALUE`'s external-selector form, which reads a pool such as `ENVIRONMENT`, is Phase 7's; the variable-access form is 4c's.
-* `QUEUED` is in scope, because 4b builds the in-process queue; only the external named queues that `RXQUEUE` reaches are Phase 10's.
+* `VALUE`'s external-selector form, which reads a pool such as `ENVIRONMENT`: Phase 7. The variable-access form is 4c's.
+* `ADDRESS()`'s platform default: Phase 7 supplies it, measured as `sh`. Reporting an environment set by an `ADDRESS` instruction is 4c's.
+* `QUEUED` is in scope against 4b's in-process queue, and cross-process sharing with the oracle's rxapi-backed session queue will never match, so the row records that a differential run of `QUEUED` is single-program only.
 
-Phase 4's gate then reads "66 of 81, and the excluded set is exactly this file", which is falsifiable in both directions.
-Without the file, "all 81" is a criterion the phase ordering cannot satisfy, which is how Phase 2 came to fail three of five.
+Without this file, "all 81" is a criterion the phase ordering cannot satisfy, which is how Phase 2 came to fail three of five.
 
 ### The rexxcps gate
 
-`samples/rexxcps.rex` is the end-of-4c gate.
-It measures clauses per second over a mix reconstructed from an analysis of 2.5 million lines of trace output, and it deliberately issues no commands, using an `RC=expression` and `PARSE` sequence instead, so it does not need the dispatch that D18 excludes.
-Its dependencies are `parse var`, `parse version`, `parse value`, `parse upper`, `parse source`, `trace value`, `trace off`, `time('R')`, one internal `call subroutine`, and `signal on novalue`: all inside Phase 4, nothing from Phase 5 or later.
+`samples/rexxcps.rex` is the end-of-4c gate. It reconstructs a clause mix from an analysis of 2.5 million lines of trace output and deliberately issues no commands, using an `RC=expression` and `PARSE` sequence instead.
 
-Measured under the oracle on this machine on 2026-07-30: 16,608,454 clauses per second, 1.83 s wall, exit 0.
-"Clauses" is the program's own nominal count rather than a measured tally, so the figure is meaningful only as a ratio between two interpreters running the identical program.
+Its dependencies, read from all 198 lines rather than sampled: `parse var`, `parse version`, `parse value`, `parse upper`, `parse source`, `trace value`, `trace off`, `signal on novalue`, one internal `call subroutine` and therefore a `Label`, the `call time 'R'` call-to-builtin form, **`address value` together with the `ADDRESS()` builtin** (line 143 is `trace value trace(); address value address()`), and eight builtins: `TIME`, `SUBSTR`, `FORMAT`, `WORD`, `TRACE`, `LENGTH`, `LEFT`, `ADDRESS`. Nothing from Phase 5 or later.
+The `address value address()` line makes **D18's decision to keep tracking the environment name load-bearing for the gate program**, which is why that tracking is assigned to 4c above rather than left unowned.
+
+Measured under the oracle on this machine on 2026-07-30: 16,608,454 clauses per second, 1.83 s wall, exit 0, reproduced within 1% on a second run. "Clauses" is the program's own nominal count rather than a measured tally, so the figure is meaningful only as a ratio between two interpreters running the identical program.
 
 Four criteria:
 
-1. **Correctness before speed.** The 1000-clause mix carries `say 'Failed<n>'` guards throughout. The run completes, exits 0, and prints no `Failed` line.
-2. **The cps ratio**, both interpreters, same machine, same session. Above 1.5x fails the gate; between parity and 1.5x is recorded as debt, which is the shape Phase 1 used, because the alternative is a sound design stalling a phase over 10%.
+1. **Correctness before speed**, and not by string match. rexxcps's full stdout must equal the oracle's after masking the timing fields, which the external cross-check below needs anyway. "Prints no `Failed` line" is kept as a redundant check, not as the criterion: it is satisfied by printing nothing, so an executor that silently skipped clauses would pass it, exit 0, and report a *better* cps.
+2. **The cps ratio**, both interpreters, same machine, same session, with the formula written out because cps is higher-is-better while every other ratio in this project is a time: `ratio = oracle_cps / rust_cps`. Above 1.5 fails; between 1.0 and 1.5 is recorded as debt, the shape Phase 1 used, because the alternative is a sound design stalling a phase over 10%; at or below 1.0 passes.
 3. **An external cross-check.** rexxcps times itself with `TIME('R')`, our own builtin, so a defect there flatters the number and the benchmark cannot detect it. Wall-clock both runs externally and require the two ratios to agree within 10%.
-4. **The baseline is measured at gate time**, not reused. `perf-baseline.md` has no rexxcps row and its figures come from a different day; cps is machine and load specific.
+4. **The baseline is measured at gate time**, not reused: `perf-baseline.md` has no rexxcps row and its figures come from a different day.
 
-rexxcps is not a corpus program.
-Its output carries timings, and the corpus rule is determinism, so it gets its own comparison rather than a loosened `normalize`.
-It adds to the seven `bench-programs/` dimensions and replaces none: one mixed number can be met while `compound.rex` regresses.
+rexxcps is not a corpus program — its output carries timings and the corpus rule is determinism — so it gets its own comparison rather than a loosened `normalize`. It adds to the seven `bench-programs/` dimensions (eight files, of which `heapshape.rex` is D1's GC harness) and replaces none.
 
 ### The two carried debts
 
-The parent plan requires both to be re-measured at Phase 4, on equal footing, which neither earlier phase could do:
-
-* D1's GC pause, 1.45x (26.5 ms against 18.2 ms), inside Phase 1's viability threshold but outside the parity gate that applies from Phase 2 on.
-* Phase 2's arithmetic, 1.22x, and that figure is a lower bound: it timed Rust arithmetic alone against a C++ number that included parse and dispatch.
-
-Both re-measurements belong to 4c, since both need a whole program to run.
-
-## Out of scope for 4a
-
-Named with the owner, so that nothing is merely absent:
-
-* `Call`, `Return`, `Procedure`, `Use`, `Signal`, `Raise`, `Interpret`, `Push`, `Queue`, condition trapping: 4b.
-* `Parse`, `Arg`, `Pull`, the 66 builtins: 4c.
-* `Message` sends, `Guard`, `Reply`, `Forward`, every directive, environment symbols beyond `.nil`, `.true` and `.false`, and the 32 classes: Phase 5.
-* `Command` dispatch, `Address` beyond tracking the environment name, the stream model: Phase 7 (D18).
-* Concurrency, `REPLY`'s threading semantics: Phase 6.
+Both re-measured at 4c, on equal footing, which neither earlier phase could do: D1's GC pause at 1.45x (26.5 ms against 18.2 ms), and Phase 2's arithmetic at 1.22x, itself a lower bound because it timed Rust arithmetic against a C++ number that included parse and dispatch.
 
 ## Risks
 
-* **The `Rc<Program>` shape may not survive 4b.** A routine call from body A into body B, with both alive, is the case 4a does not exercise. The spike covers `INTERPRET` because that is the awkward case available now; if 4b finds the shape insufficient, the fix is an arena of packages rather than per-program `Rc`, and the change is confined to how bodies are reached.
-* **The value model's two caches can desync from the settings.** A `text` cache formatted under `DIGITS 9` is wrong after `NUMERIC DIGITS 3`. The rule is that `Body::Num`'s text cache is invalidated on any settings change, and the test for it must construct that sequence deliberately, since no corpus program will stumble into it.
-* **Trace output is the widest surface in 4a and the least specified.** 239 expected lines exist for the whole of `TRACE`, but the oracle's exact spacing and the interaction between value lines and the clause line are measured, not documented. Budget for the oracle being the only specification.
-* **4a cannot run most of the existing corpus**, because it has no builtins. That is why its gate names a subset, and the risk is that the subset is chosen to be easy. The mitigation is that the subset is committed as a file and 4b and 4c grow it, so a program left out has to be left out in writing.
+* **`rexx-core` is amended by a phase whose handover section calls it settled.** D15's variants, `Body::trace`, the `rexx-core -> rexx-num` edge and D16's slot frames are one task; if it grows past that, the phase has found a Phase 1 design problem rather than an integration detail, and that is a plan amendment.
+* **The `Rc<Program>` shape is proven only for 4a's cases.** 4b's body-calls-body case is free under per-frame recursion; what is not free is the flat-loop variant, where the local must be re-derived at every frame transition. D19 chooses per-frame, so this risk is closed by a decision rather than deferred, and reopening D19 reopens it.
+* **The error-reporting subsystem is the largest unbudgeted item.** Two catalogues, exact spacing, the clause echo and the exit-code rule, for four raiser families. If it does not fit, the honest move is to state that 4a's subset contains no raising program and move the raisers to 4b — not to leave "Conditions and errors in 4a" reading as delivered.
+* **Trace output is the widest surface in 4a and the least documented.** 342 expected lines exist for the whole of `TRACE` and none of them is 4a-runnable, so the oracle is the only specification and every witness program is written against it.
+* **`TRACE ?` requests interactive debug**, which pauses and reads stdin. 4a implements the instruction that can request it and the gate tests two non-interactive settings, so the plan measures what the oracle does with `?` and no tty, and 4a either reproduces that or fails loudly. Silently ignoring `?` is the exact shape the failing-loudly rule exists to prevent.
+* **`corpus/README.md` hard-codes "24 programs"**, the count-rot this spec warns about, in the document it inherits its two corpus rules from. 4a fixes it to report rather than assert while it is adding programs.
