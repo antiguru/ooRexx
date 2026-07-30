@@ -10,13 +10,38 @@ bottom for the exact command.
 
 ## Result
 
+**Re-measured 2026-07-30 with a corrected extractor. The original figures on
+this page were wrong, and this section records both.**
+
 ```
-409 groups, 14122 test methods, 12176 extractable (86.2%)
+409 groups, 24581 test methods, 22251 extractable (90.5%)
 ```
 
-**86.2% ≥ 40% — comfortably clears the D8 threshold the plan sets for L1
-viability.** (This report only measures and records the number; per
-instructions, the D8 ladder decision itself is left to the main session.)
+Recorded here until 2026-07-30, and superseded: `409 groups, 14122 test
+methods, 12176 extractable (86.2%)`.
+
+**90.5% clears the D8 threshold of 40% comfortably, and by a wider margin than
+the figure it replaces**, so D8's decision to keep the L1 rung stands and is
+better supported than before.
+
+### Why the first measurement was wrong
+
+`rexx-extract`'s method scanner stripped only **double-quoted** method names,
+so every `::method 'name'` was invisible to it. That is 8,888 test methods
+across 122 of the 409 group files, and the run therefore missed **10,459 of
+24,581 test methods, 43% of the suite**, silently: an unseen method is not a
+method reported as unextractable, it is a method absent from both columns.
+
+Found on 2026-07-30 by Phase 4a's assertion-table task, not by anything
+looking for it. Its extractor asserted `rows + dropped == calls` as an
+invariant, and that invariant panicked on the first real run. A percentage
+cannot notice a missing population; a conservation law can.
+
+Two consequences worth stating rather than leaving to be inferred. The
+corrected fraction is **higher**, not lower, so nothing downstream of D8 needs
+revisiting on the merits. And every per-file row below was regenerated, so the
+old table's numbers for the 122 affected files were all understated -- the
+worked example is `MULTIPLICATION.testGroup`, recorded as 143 and actually 151.
 
 | File | Total | Extractable | Percentage |
 |---|---|---|---|
@@ -27,11 +52,11 @@ instructions, the D8 ladder decision itself is left to the main session.)
 | ../ootest/misc/Simplest.testGroup | 2 | 2 | 100.0% |
 | ../ootest/misc/template.testGroup | 2 | 2 | 100.0% |
 | ../ootest/misc/templateAPI.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/API/classic/CLASSIC.testGroup | 9 | 7 | 77.8% |
-| ../ootest/ooRexx/API/oo/CONVERSION.testGroup | 0 | 0 | 0.0% |
-| ../ootest/ooRexx/API/oo/FUNCTION.testGroup | 57 | 49 | 86.0% |
+| ../ootest/ooRexx/API/classic/CLASSIC.testGroup | 72 | 68 | 94.4% |
+| ../ootest/ooRexx/API/oo/CONVERSION.testGroup | 97 | 96 | 99.0% |
+| ../ootest/ooRexx/API/oo/FUNCTION.testGroup | 158 | 149 | 94.3% |
 | ../ootest/ooRexx/API/oo/INVOCATION.testGroup | 55 | 0 | 0.0% |
-| ../ootest/ooRexx/API/oo/METHOD.testGroup | 124 | 120 | 96.8% |
+| ../ootest/ooRexx/API/oo/METHOD.testGroup | 320 | 315 | 98.4% |
 | ../ootest/ooRexx/API/oo/ProcessInvocation.testGroup | 54 | 0 | 0.0% |
 | ../ootest/ooRexx/API/oo/ProcessRexxStart.testGroup | 20 | 0 | 0.0% |
 | ../ootest/ooRexx/API/oo/RexxStart.testGroup | 20 | 0 | 0.0% |
@@ -52,66 +77,66 @@ instructions, the D8 ladder decision itself is left to the main session.)
 | ../ootest/ooRexx/base/bif/CHANGESTR.testGroup | 9 | 9 | 100.0% |
 | ../ootest/ooRexx/base/bif/CHARIN.testGroup | 13 | 4 | 30.8% |
 | ../ootest/ooRexx/base/bif/CHAROUT.testGroup | 39 | 2 | 5.1% |
-| ../ootest/ooRexx/base/bif/CHARS.testGroup | 10 | 2 | 20.0% |
+| ../ootest/ooRexx/base/bif/CHARS.testGroup | 12 | 3 | 25.0% |
 | ../ootest/ooRexx/base/bif/COMPARE.testGroup | 166 | 166 | 100.0% |
 | ../ootest/ooRexx/base/bif/CONDITION.testGroup | 14 | 10 | 71.4% |
-| ../ootest/ooRexx/base/bif/COPIES.testGroup | 2 | 2 | 100.0% |
+| ../ootest/ooRexx/base/bif/COPIES.testGroup | 622 | 622 | 100.0% |
 | ../ootest/ooRexx/base/bif/COUNTSTR.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/bif/D2C.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/D2X.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/DATATYPE.testGroup | 7 | 7 | 100.0% |
-| ../ootest/ooRexx/base/bif/DATE.testGroup | 27 | 19 | 70.4% |
-| ../ootest/ooRexx/base/bif/DELSTR.testGroup | 11 | 11 | 100.0% |
-| ../ootest/ooRexx/base/bif/DELWORD.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/DIGITS.testGroup | 1 | 1 | 100.0% |
+| ../ootest/ooRexx/base/bif/D2C.testGroup | 43 | 43 | 100.0% |
+| ../ootest/ooRexx/base/bif/D2X.testGroup | 49 | 49 | 100.0% |
+| ../ootest/ooRexx/base/bif/DATATYPE.testGroup | 17 | 16 | 94.1% |
+| ../ootest/ooRexx/base/bif/DATE.testGroup | 57 | 49 | 86.0% |
+| ../ootest/ooRexx/base/bif/DELSTR.testGroup | 71 | 71 | 100.0% |
+| ../ootest/ooRexx/base/bif/DELWORD.testGroup | 45 | 45 | 100.0% |
+| ../ootest/ooRexx/base/bif/DIGITS.testGroup | 19 | 19 | 100.0% |
 | ../ootest/ooRexx/base/bif/ERRORTEXT.testGroup | 1 | 1 | 100.0% |
 | ../ootest/ooRexx/base/bif/FILESPEC.testGroup | 12 | 12 | 100.0% |
 | ../ootest/ooRexx/base/bif/FORM.testGroup | 1 | 1 | 100.0% |
 | ../ootest/ooRexx/base/bif/FORMAT.testGroup | 767 | 767 | 100.0% |
 | ../ootest/ooRexx/base/bif/FUZZ.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/GC.testGroup | 0 | 0 | 0.0% |
-| ../ootest/ooRexx/base/bif/INSERT.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/LASTPOS.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/bif/LEFT.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/LENGTH.testGroup | 1 | 1 | 100.0% |
+| ../ootest/ooRexx/base/bif/GC.testGroup | 5 | 5 | 100.0% |
+| ../ootest/ooRexx/base/bif/INSERT.testGroup | 144 | 144 | 100.0% |
+| ../ootest/ooRexx/base/bif/LASTPOS.testGroup | 183 | 183 | 100.0% |
+| ../ootest/ooRexx/base/bif/LEFT.testGroup | 41 | 41 | 100.0% |
+| ../ootest/ooRexx/base/bif/LENGTH.testGroup | 32 | 32 | 100.0% |
 | ../ootest/ooRexx/base/bif/LINEIN.testGroup | 4 | 0 | 0.0% |
 | ../ootest/ooRexx/base/bif/LINEOUT.testGroup | 17 | 3 | 17.6% |
 | ../ootest/ooRexx/base/bif/LINES.testGroup | 18 | 15 | 83.3% |
 | ../ootest/ooRexx/base/bif/LOWER.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/MAX.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/MIN.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/OVERLAY.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/POS.testGroup | 5 | 5 | 100.0% |
+| ../ootest/ooRexx/base/bif/MAX.testGroup | 13 | 13 | 100.0% |
+| ../ootest/ooRexx/base/bif/MIN.testGroup | 9 | 9 | 100.0% |
+| ../ootest/ooRexx/base/bif/OVERLAY.testGroup | 59 | 59 | 100.0% |
+| ../ootest/ooRexx/base/bif/POS.testGroup | 103 | 103 | 100.0% |
 | ../ootest/ooRexx/base/bif/QUALIFY.testGroup | 19 | 19 | 100.0% |
-| ../ootest/ooRexx/base/bif/QUEUED.testGroup | 0 | 0 | 0.0% |
+| ../ootest/ooRexx/base/bif/QUEUED.testGroup | 8 | 8 | 100.0% |
 | ../ootest/ooRexx/base/bif/RANDOM.testGroup | 11 | 10 | 90.9% |
-| ../ootest/ooRexx/base/bif/REVERSE.testGroup | 2 | 2 | 100.0% |
-| ../ootest/ooRexx/base/bif/RIGHT.testGroup | 1 | 1 | 100.0% |
+| ../ootest/ooRexx/base/bif/REVERSE.testGroup | 25 | 25 | 100.0% |
+| ../ootest/ooRexx/base/bif/RIGHT.testGroup | 51 | 51 | 100.0% |
 | ../ootest/ooRexx/base/bif/RXQUEUE.testGroup | 18 | 11 | 61.1% |
-| ../ootest/ooRexx/base/bif/SIGN.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/SOURCELINE.testGroup | 4 | 4 | 100.0% |
-| ../ootest/ooRexx/base/bif/SPACE.testGroup | 1 | 1 | 100.0% |
+| ../ootest/ooRexx/base/bif/SIGN.testGroup | 48 | 48 | 100.0% |
+| ../ootest/ooRexx/base/bif/SOURCELINE.testGroup | 11 | 11 | 100.0% |
+| ../ootest/ooRexx/base/bif/SPACE.testGroup | 71 | 71 | 100.0% |
 | ../ootest/ooRexx/base/bif/STREAM.testGroup | 40 | 21 | 52.5% |
-| ../ootest/ooRexx/base/bif/STRIP.testGroup | 2 | 2 | 100.0% |
-| ../ootest/ooRexx/base/bif/SUBSTR.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/SUBWORD.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/SYMBOL.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/TIME.testGroup | 286 | 278 | 97.2% |
-| ../ootest/ooRexx/base/bif/TRANSLATE.testGroup | 9 | 9 | 100.0% |
-| ../ootest/ooRexx/base/bif/TRUNC.testGroup | 1 | 1 | 100.0% |
+| ../ootest/ooRexx/base/bif/STRIP.testGroup | 109 | 109 | 100.0% |
+| ../ootest/ooRexx/base/bif/SUBSTR.testGroup | 91 | 91 | 100.0% |
+| ../ootest/ooRexx/base/bif/SUBWORD.testGroup | 154 | 154 | 100.0% |
+| ../ootest/ooRexx/base/bif/SYMBOL.testGroup | 29 | 29 | 100.0% |
+| ../ootest/ooRexx/base/bif/TIME.testGroup | 306 | 298 | 97.4% |
+| ../ootest/ooRexx/base/bif/TRANSLATE.testGroup | 29 | 29 | 100.0% |
+| ../ootest/ooRexx/base/bif/TRUNC.testGroup | 42 | 42 | 100.0% |
 | ../ootest/ooRexx/base/bif/UPPER.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/VALUE.testGroup | 1 | 1 | 100.0% |
+| ../ootest/ooRexx/base/bif/VALUE.testGroup | 53 | 53 | 100.0% |
 | ../ootest/ooRexx/base/bif/VAR.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/VERIFY.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/bif/WORD.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/WORDINDEX.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/WORDLENGTH.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/WORDPOS.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/WORDS.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/X2B.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/X2C.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/bif/X2D.testGroup | 2 | 2 | 100.0% |
-| ../ootest/ooRexx/base/bif/XRANGE.testGroup | 21 | 14 | 66.7% |
+| ../ootest/ooRexx/base/bif/VERIFY.testGroup | 100 | 100 | 100.0% |
+| ../ootest/ooRexx/base/bif/WORD.testGroup | 73 | 73 | 100.0% |
+| ../ootest/ooRexx/base/bif/WORDINDEX.testGroup | 74 | 74 | 100.0% |
+| ../ootest/ooRexx/base/bif/WORDLENGTH.testGroup | 73 | 73 | 100.0% |
+| ../ootest/ooRexx/base/bif/WORDPOS.testGroup | 193 | 193 | 100.0% |
+| ../ootest/ooRexx/base/bif/WORDS.testGroup | 42 | 42 | 100.0% |
+| ../ootest/ooRexx/base/bif/X2B.testGroup | 69 | 69 | 100.0% |
+| ../ootest/ooRexx/base/bif/X2C.testGroup | 51 | 51 | 100.0% |
+| ../ootest/ooRexx/base/bif/X2D.testGroup | 73 | 73 | 100.0% |
+| ../ootest/ooRexx/base/bif/XRANGE.testGroup | 51 | 44 | 86.3% |
 | ../ootest/ooRexx/base/class/Alarm.testGroup | 6 | 5 | 83.3% |
 | ../ootest/ooRexx/base/class/Array.testGroup | 141 | 124 | 87.9% |
 | ../ootest/ooRexx/base/class/Bag.testGroup | 34 | 34 | 100.0% |
@@ -120,7 +145,7 @@ instructions, the D8 ladder decision itself is left to the main session.)
 | ../ootest/ooRexx/base/class/CollectionMethods.testGroup | 10 | 1 | 10.0% |
 | ../ootest/ooRexx/base/class/CollectionSetlikeMethods.testGroup | 9 | 4 | 44.4% |
 | ../ootest/ooRexx/base/class/Comparator.testGroup | 8 | 8 | 100.0% |
-| ../ootest/ooRexx/base/class/DateTime.testGroup | 22 | 8 | 36.4% |
+| ../ootest/ooRexx/base/class/DateTime.testGroup | 66 | 52 | 78.8% |
 | ../ootest/ooRexx/base/class/Directory.testGroup | 55 | 55 | 100.0% |
 | ../ootest/ooRexx/base/class/EventSemaphore.testGroup | 9 | 8 | 88.9% |
 | ../ootest/ooRexx/base/class/File.testGroup | 64 | 48 | 75.0% |
@@ -131,50 +156,50 @@ instructions, the D8 ladder decision itself is left to the main session.)
 | ../ootest/ooRexx/base/class/MethodArgs.testGroup | 10 | 0 | 0.0% |
 | ../ootest/ooRexx/base/class/Monitor.testGroup | 7 | 7 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/append.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/brackets.testGroup | 0 | 0 | 0.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/brackets.testGroup | 16 | 16 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/caselessChangestr.testGroup | 13 | 13 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/caselessContains.testGroup | 38 | 38 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/caselessContains.testGroup | 43 | 43 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/caselessContainsWord.testGroup | 22 | 22 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/caselessCountstr.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/caselessLastpos.testGroup | 5 | 5 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/caselessLastpos.testGroup | 180 | 180 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/caselessMatch.testGroup | 12 | 12 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/caselessMatchChar.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/caselessPos.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/caselessWordPos.testGroup | 1 | 1 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/caselessPos.testGroup | 95 | 95 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/caselessWordPos.testGroup | 191 | 191 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/changestr.testGroup | 15 | 15 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/contains.testGroup | 25 | 25 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/contains.testGroup | 29 | 29 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/containsWord.testGroup | 22 | 22 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/countstr.testGroup | 5 | 5 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/delStr.testGroup | 11 | 11 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/delete.testGroup | 11 | 11 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/delword.testGroup | 1 | 1 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/delword.testGroup | 44 | 44 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/getbuffersize.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/insert.testGroup | 8 | 8 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/lastpos.testGroup | 9 | 9 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/length.testGroup | 0 | 0 | 0.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/insert.testGroup | 268 | 268 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/lastpos.testGroup | 187 | 187 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/length.testGroup | 27 | 27 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/lower.testGroup | 1 | 1 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/match.testGroup | 12 | 12 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/matchChar.testGroup | 5 | 5 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/new.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/overlay.testGroup | 8 | 8 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/pos.testGroup | 9 | 9 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/replaceAt.testGroup | 0 | 0 | 0.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/overlay.testGroup | 65 | 65 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/pos.testGroup | 107 | 107 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/replaceAt.testGroup | 17 | 17 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/setText.testGroup | 4 | 3 | 75.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/setbuffersize.testGroup | 6 | 6 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/space.testGroup | 0 | 0 | 0.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/space.testGroup | 239 | 239 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/string.testGroup | 2 | 2 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/subWord.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/subWords.testGroup | 1 | 0 | 0.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/subWord.testGroup | 146 | 146 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/subWords.testGroup | 149 | 33 | 22.1% |
 | ../ootest/ooRexx/base/class/MutableBuffer/subchar.testGroup | 6 | 6 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/substr.testGroup | 9 | 9 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/translate.testGroup | 9 | 9 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/substr.testGroup | 97 | 97 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/translate.testGroup | 28 | 28 | 100.0% |
 | ../ootest/ooRexx/base/class/MutableBuffer/upper.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/verify.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/word.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/wordindex.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/wordlength.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/wordpos.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/MutableBuffer/words.testGroup | 1 | 1 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/verify.testGroup | 97 | 97 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/word.testGroup | 71 | 71 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/wordindex.testGroup | 72 | 72 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/wordlength.testGroup | 70 | 70 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/wordpos.testGroup | 190 | 190 | 100.0% |
+| ../ootest/ooRexx/base/class/MutableBuffer/words.testGroup | 41 | 41 | 100.0% |
 | ../ootest/ooRexx/base/class/MutexSemaphore.testGroup | 8 | 7 | 87.5% |
 | ../ootest/ooRexx/base/class/Object.testGroup | 164 | 157 | 95.7% |
 | ../ootest/ooRexx/base/class/Orderable.testGroup | 15 | 13 | 86.7% |
@@ -203,23 +228,23 @@ instructions, the D8 ladder decision itself is left to the main session.)
 | ../ootest/ooRexx/base/class/String/bitand.testGroup | 102 | 102 | 100.0% |
 | ../ootest/ooRexx/base/class/String/bitor.testGroup | 124 | 124 | 100.0% |
 | ../ootest/ooRexx/base/class/String/bitxor.testGroup | 136 | 136 | 100.0% |
-| ../ootest/ooRexx/base/class/String/brackets.testGroup | 1 | 1 | 100.0% |
+| ../ootest/ooRexx/base/class/String/brackets.testGroup | 100 | 100 | 100.0% |
 | ../ootest/ooRexx/base/class/String/c2d.testGroup | 106 | 106 | 100.0% |
 | ../ootest/ooRexx/base/class/String/c2x.testGroup | 34 | 34 | 100.0% |
 | ../ootest/ooRexx/base/class/String/caselessAbbrev.testGroup | 119 | 119 | 100.0% |
 | ../ootest/ooRexx/base/class/String/caselessChangestr.testGroup | 8 | 8 | 100.0% |
 | ../ootest/ooRexx/base/class/String/caselessCompare.testGroup | 161 | 161 | 100.0% |
 | ../ootest/ooRexx/base/class/String/caselessCompareTo.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/caselessContains.testGroup | 17 | 17 | 100.0% |
-| ../ootest/ooRexx/base/class/String/caselessContainsWord.testGroup | 2 | 2 | 100.0% |
+| ../ootest/ooRexx/base/class/String/caselessContains.testGroup | 117 | 117 | 100.0% |
+| ../ootest/ooRexx/base/class/String/caselessContainsWord.testGroup | 386 | 386 | 100.0% |
 | ../ootest/ooRexx/base/class/String/caselessCountstr.testGroup | 1 | 1 | 100.0% |
 | ../ootest/ooRexx/base/class/String/caselessEquals.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/caselessLastpos.testGroup | 5 | 5 | 100.0% |
+| ../ootest/ooRexx/base/class/String/caselessLastpos.testGroup | 183 | 183 | 100.0% |
 | ../ootest/ooRexx/base/class/String/caselessMatch.testGroup | 12 | 12 | 100.0% |
 | ../ootest/ooRexx/base/class/String/caselessMatchChar.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/class/String/caselessPos.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/class/String/caselessWordPos.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/ceiling.testGroup | 0 | 0 | 0.0% |
+| ../ootest/ooRexx/base/class/String/caselessPos.testGroup | 103 | 103 | 100.0% |
+| ../ootest/ooRexx/base/class/String/caselessWordPos.testGroup | 193 | 193 | 100.0% |
+| ../ootest/ooRexx/base/class/String/ceiling.testGroup | 7 | 7 | 100.0% |
 | ../ootest/ooRexx/base/class/String/center.testGroup | 85 | 85 | 100.0% |
 | ../ootest/ooRexx/base/class/String/centre.testGroup | 85 | 85 | 100.0% |
 | ../ootest/ooRexx/base/class/String/changestr.testGroup | 10 | 10 | 100.0% |
@@ -227,64 +252,64 @@ instructions, the D8 ladder decision itself is left to the main session.)
 | ../ootest/ooRexx/base/class/String/compareTo.testGroup | 1 | 1 | 100.0% |
 | ../ootest/ooRexx/base/class/String/comparisonOperators.testGroup | 4 | 3 | 75.0% |
 | ../ootest/ooRexx/base/class/String/concatenationOperators.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/contains.testGroup | 15 | 15 | 100.0% |
-| ../ootest/ooRexx/base/class/String/containsWord.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/copies.testGroup | 2 | 2 | 100.0% |
+| ../ootest/ooRexx/base/class/String/contains.testGroup | 115 | 115 | 100.0% |
+| ../ootest/ooRexx/base/class/String/containsWord.testGroup | 193 | 193 | 100.0% |
+| ../ootest/ooRexx/base/class/String/copies.testGroup | 552 | 552 | 100.0% |
 | ../ootest/ooRexx/base/class/String/countstr.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/class/String/d2c.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/d2x.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/datatype.testGroup | 8 | 8 | 100.0% |
-| ../ootest/ooRexx/base/class/String/delstr.testGroup | 10 | 10 | 100.0% |
-| ../ootest/ooRexx/base/class/String/delword.testGroup | 1 | 1 | 100.0% |
+| ../ootest/ooRexx/base/class/String/d2c.testGroup | 43 | 43 | 100.0% |
+| ../ootest/ooRexx/base/class/String/d2x.testGroup | 49 | 49 | 100.0% |
+| ../ootest/ooRexx/base/class/String/datatype.testGroup | 18 | 17 | 94.4% |
+| ../ootest/ooRexx/base/class/String/delstr.testGroup | 70 | 70 | 100.0% |
+| ../ootest/ooRexx/base/class/String/delword.testGroup | 45 | 45 | 100.0% |
 | ../ootest/ooRexx/base/class/String/encode_decodeBase64.testGroup | 24 | 15 | 62.5% |
 | ../ootest/ooRexx/base/class/String/endsWith.testGroup | 4 | 4 | 100.0% |
 | ../ootest/ooRexx/base/class/String/equals.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/floor.testGroup | 0 | 0 | 0.0% |
+| ../ootest/ooRexx/base/class/String/floor.testGroup | 7 | 7 | 100.0% |
 | ../ootest/ooRexx/base/class/String/format.testGroup | 771 | 771 | 100.0% |
 | ../ootest/ooRexx/base/class/String/iif.testGroup | 11 | 10 | 90.9% |
-| ../ootest/ooRexx/base/class/String/insert.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/lastpos.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/class/String/left.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/length.testGroup | 0 | 0 | 0.0% |
+| ../ootest/ooRexx/base/class/String/insert.testGroup | 144 | 144 | 100.0% |
+| ../ootest/ooRexx/base/class/String/lastpos.testGroup | 183 | 183 | 100.0% |
+| ../ootest/ooRexx/base/class/String/left.testGroup | 41 | 41 | 100.0% |
+| ../ootest/ooRexx/base/class/String/length.testGroup | 33 | 33 | 100.0% |
 | ../ootest/ooRexx/base/class/String/logicalOperators.testGroup | 1 | 1 | 100.0% |
 | ../ootest/ooRexx/base/class/String/lower.testGroup | 1 | 1 | 100.0% |
 | ../ootest/ooRexx/base/class/String/makearray.testGroup | 1 | 1 | 100.0% |
 | ../ootest/ooRexx/base/class/String/makestring.testGroup | 1 | 1 | 100.0% |
 | ../ootest/ooRexx/base/class/String/match.testGroup | 12 | 12 | 100.0% |
 | ../ootest/ooRexx/base/class/String/matchChar.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/class/String/max.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/min.testGroup | 1 | 1 | 100.0% |
+| ../ootest/ooRexx/base/class/String/max.testGroup | 14 | 14 | 100.0% |
+| ../ootest/ooRexx/base/class/String/min.testGroup | 10 | 10 | 100.0% |
 | ../ootest/ooRexx/base/class/String/modulo.testGroup | 14 | 14 | 100.0% |
 | ../ootest/ooRexx/base/class/String/new.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/overlay.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/pos.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/class/String/replaceat.testGroup | 0 | 0 | 0.0% |
-| ../ootest/ooRexx/base/class/String/reverse.testGroup | 2 | 2 | 100.0% |
-| ../ootest/ooRexx/base/class/String/right.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/round.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/sign.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/space.testGroup | 9 | 9 | 100.0% |
+| ../ootest/ooRexx/base/class/String/overlay.testGroup | 58 | 58 | 100.0% |
+| ../ootest/ooRexx/base/class/String/pos.testGroup | 103 | 103 | 100.0% |
+| ../ootest/ooRexx/base/class/String/replaceat.testGroup | 17 | 17 | 100.0% |
+| ../ootest/ooRexx/base/class/String/reverse.testGroup | 24 | 24 | 100.0% |
+| ../ootest/ooRexx/base/class/String/right.testGroup | 51 | 51 | 100.0% |
+| ../ootest/ooRexx/base/class/String/round.testGroup | 8 | 8 | 100.0% |
+| ../ootest/ooRexx/base/class/String/sign.testGroup | 48 | 48 | 100.0% |
+| ../ootest/ooRexx/base/class/String/space.testGroup | 242 | 242 | 100.0% |
 | ../ootest/ooRexx/base/class/String/startsWith.testGroup | 4 | 4 | 100.0% |
-| ../ootest/ooRexx/base/class/String/strip.testGroup | 2 | 2 | 100.0% |
-| ../ootest/ooRexx/base/class/String/subWords.testGroup | 11 | 10 | 90.9% |
+| ../ootest/ooRexx/base/class/String/strip.testGroup | 108 | 108 | 100.0% |
+| ../ootest/ooRexx/base/class/String/subWords.testGroup | 131 | 22 | 16.8% |
 | ../ootest/ooRexx/base/class/String/subchar.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/substr.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/subword.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/translate.testGroup | 9 | 9 | 100.0% |
-| ../ootest/ooRexx/base/class/String/trunc.testGroup | 1 | 1 | 100.0% |
+| ../ootest/ooRexx/base/class/String/substr.testGroup | 91 | 91 | 100.0% |
+| ../ootest/ooRexx/base/class/String/subword.testGroup | 125 | 125 | 100.0% |
+| ../ootest/ooRexx/base/class/String/translate.testGroup | 29 | 29 | 100.0% |
+| ../ootest/ooRexx/base/class/String/trunc.testGroup | 42 | 42 | 100.0% |
 | ../ootest/ooRexx/base/class/String/upper.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/verify.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/class/String/word.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/wordindex.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/wordlength.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/wordpos.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/words.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/x2b.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/x2c.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/class/String/x2d.testGroup | 1 | 1 | 100.0% |
+| ../ootest/ooRexx/base/class/String/verify.testGroup | 100 | 100 | 100.0% |
+| ../ootest/ooRexx/base/class/String/word.testGroup | 73 | 73 | 100.0% |
+| ../ootest/ooRexx/base/class/String/wordindex.testGroup | 74 | 74 | 100.0% |
+| ../ootest/ooRexx/base/class/String/wordlength.testGroup | 73 | 73 | 100.0% |
+| ../ootest/ooRexx/base/class/String/wordpos.testGroup | 193 | 193 | 100.0% |
+| ../ootest/ooRexx/base/class/String/words.testGroup | 42 | 42 | 100.0% |
+| ../ootest/ooRexx/base/class/String/x2b.testGroup | 69 | 69 | 100.0% |
+| ../ootest/ooRexx/base/class/String/x2c.testGroup | 51 | 51 | 100.0% |
+| ../ootest/ooRexx/base/class/String/x2d.testGroup | 68 | 68 | 100.0% |
 | ../ootest/ooRexx/base/class/Table.testGroup | 44 | 44 | 100.0% |
 | ../ootest/ooRexx/base/class/Ticker.testGroup | 30 | 29 | 96.7% |
-| ../ootest/ooRexx/base/class/TimeSpan.testGroup | 4 | 4 | 100.0% |
+| ../ootest/ooRexx/base/class/TimeSpan.testGroup | 46 | 46 | 100.0% |
 | ../ootest/ooRexx/base/class/Validate.testGroup | 101 | 101 | 100.0% |
 | ../ootest/ooRexx/base/class/WeakReference.testGroup | 2 | 2 | 100.0% |
 | ../ootest/ooRexx/base/class/collections/array.testGroup | 41 | 40 | 97.6% |
@@ -310,8 +335,8 @@ instructions, the D8 ladder decision itself is left to the main session.)
 | ../ootest/ooRexx/base/expressions/DIVISION.testGroup | 313 | 313 | 100.0% |
 | ../ootest/ooRexx/base/expressions/EXPONENT.testGroup | 97 | 97 | 100.0% |
 | ../ootest/ooRexx/base/expressions/Literals.testGroup | 43 | 2 | 4.7% |
-| ../ootest/ooRexx/base/expressions/MULTIPLICATION.testGroup | 143 | 143 | 100.0% |
-| ../ootest/ooRexx/base/expressions/PRECEDENCE.testGroup | 1365 | 1365 | 100.0% |
+| ../ootest/ooRexx/base/expressions/MULTIPLICATION.testGroup | 151 | 151 | 100.0% |
+| ../ootest/ooRexx/base/expressions/PRECEDENCE.testGroup | 1366 | 1366 | 100.0% |
 | ../ootest/ooRexx/base/expressions/REMAINDER.testGroup | 293 | 293 | 100.0% |
 | ../ootest/ooRexx/base/expressions/SPECIAL.testGroup | 96 | 96 | 100.0% |
 | ../ootest/ooRexx/base/expressions/SUBTRACTION.testGroup | 300 | 300 | 100.0% |
@@ -332,9 +357,9 @@ instructions, the D8 ladder decision itself is left to the main session.)
 | ../ootest/ooRexx/base/keyword/ITERATE.testGroup | 31 | 31 | 100.0% |
 | ../ootest/ooRexx/base/keyword/LABEL.testGroup | 42 | 1 | 2.4% |
 | ../ootest/ooRexx/base/keyword/LEAVE.testGroup | 23 | 23 | 100.0% |
-| ../ootest/ooRexx/base/keyword/LOOP.testGroup | 20 | 17 | 85.0% |
+| ../ootest/ooRexx/base/keyword/LOOP.testGroup | 21 | 18 | 85.7% |
 | ../ootest/ooRexx/base/keyword/LOSTDIGITS.testGroup | 11 | 0 | 0.0% |
-| ../ootest/ooRexx/base/keyword/LabelOption.testGroup | 7 | 4 | 57.1% |
+| ../ootest/ooRexx/base/keyword/LabelOption.testGroup | 8 | 5 | 62.5% |
 | ../ootest/ooRexx/base/keyword/LoopControlled.testGroup | 60 | 8 | 13.3% |
 | ../ootest/ooRexx/base/keyword/LoopOther.testGroup | 28 | 17 | 60.7% |
 | ../ootest/ooRexx/base/keyword/LoopOver.testGroup | 36 | 6 | 16.7% |
@@ -347,7 +372,7 @@ instructions, the D8 ladder decision itself is left to the main session.)
 | ../ootest/ooRexx/base/keyword/SAY.testGroup | 2 | 1 | 50.0% |
 | ../ootest/ooRexx/base/keyword/SELECT.testGroup | 44 | 28 | 63.6% |
 | ../ootest/ooRexx/base/keyword/SIGNAL.testGroup | 33 | 11 | 33.3% |
-| ../ootest/ooRexx/base/keyword/SelectCase.testGroup | 12 | 7 | 58.3% |
+| ../ootest/ooRexx/base/keyword/SelectCase.testGroup | 19 | 8 | 42.1% |
 | ../ootest/ooRexx/base/keyword/ShortCircuitAnd.testGroup | 6 | 6 | 100.0% |
 | ../ootest/ooRexx/base/keyword/TRACE.testGroup | 57 | 16 | 28.1% |
 | ../ootest/ooRexx/base/keyword/TRACE_TraceObject.testGroup | 11 | 7 | 63.6% |
@@ -366,19 +391,19 @@ instructions, the D8 ladder decision itself is left to the main session.)
 | ../ootest/ooRexx/base/rexxutil/SysStemCopy.testGroup | 12 | 0 | 0.0% |
 | ../ootest/ooRexx/base/rexxutil/SysStemDelete.testGroup | 5 | 2 | 40.0% |
 | ../ootest/ooRexx/base/rexxutil/SysStemInsert.testGroup | 5 | 5 | 100.0% |
-| ../ootest/ooRexx/base/rexxutil/SysStemSort.testGroup | 16 | 13 | 81.2% |
+| ../ootest/ooRexx/base/rexxutil/SysStemSort.testGroup | 18 | 13 | 72.2% |
 | ../ootest/ooRexx/base/rexxutil/platform/unix/SysGetMessage.testGroup | 11 | 3 | 27.3% |
 | ../ootest/ooRexx/base/rexxutil/platform/unix/tilde.testGroup | 1 | 1 | 100.0% |
-| ../ootest/ooRexx/base/rexxutil/platform/windows/SysBootDrive.testGroup | 0 | 0 | 0.0% |
-| ../ootest/ooRexx/base/rexxutil/platform/windows/SysCurPos.testGroup | 4 | 4 | 100.0% |
-| ../ootest/ooRexx/base/rexxutil/platform/windows/SysCurState.testGroup | 0 | 0 | 0.0% |
+| ../ootest/ooRexx/base/rexxutil/platform/windows/SysBootDrive.testGroup | 2 | 2 | 100.0% |
+| ../ootest/ooRexx/base/rexxutil/platform/windows/SysCurPos.testGroup | 6 | 6 | 100.0% |
+| ../ootest/ooRexx/base/rexxutil/platform/windows/SysCurState.testGroup | 3 | 3 | 100.0% |
 | ../ootest/ooRexx/base/rexxutil/platform/windows/SysDrive.testGroup | 7 | 4 | 57.1% |
-| ../ootest/ooRexx/base/rexxutil/platform/windows/SysDriveMap.testGroup | 0 | 0 | 0.0% |
-| ../ootest/ooRexx/base/rexxutil/platform/windows/SysFileTree.testGroup | 2 | 2 | 100.0% |
+| ../ootest/ooRexx/base/rexxutil/platform/windows/SysDriveMap.testGroup | 7 | 7 | 100.0% |
+| ../ootest/ooRexx/base/rexxutil/platform/windows/SysFileTree.testGroup | 13 | 13 | 100.0% |
 | ../ootest/ooRexx/base/rexxutil/platform/windows/SysGetXxxPathName.testGroup | 9 | 9 | 100.0% |
 | ../ootest/ooRexx/base/rexxutil/platform/windows/SysIni.testGroup | 16 | 1 | 6.2% |
-| ../ootest/ooRexx/base/rexxutil/platform/windows/SysIsFileDirectory.testGroup | 0 | 0 | 0.0% |
-| ../ootest/ooRexx/base/rexxutil/platform/windows/SysSystemDirectory.testGroup | 0 | 0 | 0.0% |
+| ../ootest/ooRexx/base/rexxutil/platform/windows/SysIsFileDirectory.testGroup | 6 | 6 | 100.0% |
+| ../ootest/ooRexx/base/rexxutil/platform/windows/SysSystemDirectory.testGroup | 2 | 2 | 100.0% |
 | ../ootest/ooRexx/base/rexxutil/platform/windows/SysTextScreenRead.testGroup | 10 | 3 | 30.0% |
 | ../ootest/ooRexx/base/rexxutil/platform/windows/SysTextScreenSize.testGroup | 21 | 15 | 71.4% |
 | ../ootest/ooRexx/base/rexxutil/platform/windows/SysUnicode.testGroup | 43 | 43 | 100.0% |
@@ -398,17 +423,17 @@ instructions, the D8 ladder decision itself is left to the main session.)
 | ../ootest/ooRexx/extensions/json/json.testGroup | 33 | 28 | 84.8% |
 | ../ootest/ooRexx/extensions/json/json_02.testGroup | 227 | 183 | 80.6% |
 | ../ootest/ooRexx/extensions/platform/unix/ncurses/ncurses.testGroup | 1 | 0 | 0.0% |
-| ../ootest/ooRexx/extensions/platform/unix/rxunixsys/SysUnix.testGroup | 16 | 4 | 25.0% |
+| ../ootest/ooRexx/extensions/platform/unix/rxunixsys/SysUnix.testGroup | 30 | 15 | 50.0% |
 | ../ootest/ooRexx/extensions/platform/windows/ole/ExcelQuickTest.testGroup | 2 | 2 | 100.0% |
-| ../ootest/ooRexx/extensions/platform/windows/ole/OLEObject.testGroup | 0 | 0 | 0.0% |
+| ../ootest/ooRexx/extensions/platform/windows/ole/OLEObject.testGroup | 2 | 1 | 50.0% |
 | ../ootest/ooRexx/extensions/platform/windows/ole/OLEVariant.testGroup | 54 | 54 | 100.0% |
-| ../ootest/ooRexx/extensions/platform/windows/ole/Printers.testGroup | 0 | 0 | 0.0% |
-| ../ootest/ooRexx/extensions/platform/windows/ole/RexxProcess.testGroup | 0 | 0 | 0.0% |
+| ../ootest/ooRexx/extensions/platform/windows/ole/Printers.testGroup | 2 | 2 | 100.0% |
+| ../ootest/ooRexx/extensions/platform/windows/ole/RexxProcess.testGroup | 1 | 1 | 100.0% |
 | ../ootest/ooRexx/extensions/platform/windows/ole/SpecialFolders.testGroup | 1 | 0 | 0.0% |
 | ../ootest/ooRexx/extensions/platform/windows/oodialog/Basic.testGroup | 5 | 0 | 0.0% |
-| ../ootest/ooRexx/extensions/platform/windows/rxwinsys/Clipboard.testGroup | 0 | 0 | 0.0% |
+| ../ootest/ooRexx/extensions/platform/windows/rxwinsys/Clipboard.testGroup | 13 | 13 | 100.0% |
 | ../ootest/ooRexx/extensions/platform/windows/rxwinsys/WindowsEventLog.testGroup | 50 | 46 | 92.0% |
-| ../ootest/ooRexx/extensions/rxmath/RxMath.testGroup | 4 | 4 | 100.0% |
+| ../ootest/ooRexx/extensions/rxmath/RxMath.testGroup | 289 | 148 | 51.2% |
 | ../ootest/ooRexx/extensions/rxregexp/rxregexp.testGroup | 33 | 20 | 60.6% |
 | ../ootest/ooRexx/extensions/rxsock/socketClass.testGroup | 23 | 14 | 60.9% |
 | ../ootest/ooRexx/extensions/yaml/yaml.testGroup | 50 | 50 | 100.0% |
@@ -429,7 +454,8 @@ instructions, the D8 ladder decision itself is left to the main session.)
 | ../ootest/ooRexx/utilities/rxapi.testGroup | 1 | 1 | 100.0% |
 | ../ootest/ooRexx/utilities/rxqueue/rxQueue.testGroup | 9 | 6 | 66.7% |
 | ../ootest/ooRexx/utilities/rxsubcom/rxsubcom.testGroup | 13 | 0 | 0.0% |
-| **Total** | **14122** | **12176** | **86.2%** |
+| **Total** | **24581** | **22251** | **90.5%** |
+
 
 ## Two real bugs the full run found (fixed in `rexx-extract`)
 
