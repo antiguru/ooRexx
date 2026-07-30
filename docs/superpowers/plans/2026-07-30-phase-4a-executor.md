@@ -344,6 +344,32 @@ Do this **after Task 3b**, not beside it: both touch `rexx-parse` and 3b's itera
 
 ---
 
+### Task 3d: The nested-call recursion, which reaches the sized path
+
+**Spec:** D19. **Files:** `rust/crates/rexx-parse/src/expr.rs`, `tests/deep.rs`, `examples/depth_probe.rs`.
+
+**Why this and not the prefix-chain gap:** Task 3c deferred two unguarded recursions as equals. They are not. Nested calls, `f(f(f(…)))`, descend through `arg_list` rather than the grouping-paren arm `MAX_PAREN_DEPTH` guards, and Task 3c's review measured the oracle's side of it:
+
+| depth | oracle | ours, default 2 MiB | ours, sized 512 MiB |
+|---|---|---|---|
+| 10,000 | parses, rc 213 (43.1 at run time) | abort | parses |
+| 39,900 | **rc 245, Error 11.1** | abort | parses |
+| 50,001 | rc 245, 11.1 | abort | parses, counter does not apply |
+| 92,187 | rc 245, 11.1 | abort | **abort, rc 134, no message** |
+
+So above roughly 92,000 the **sized** path — the one the executor actually runs on — aborts silently where the oracle reports a condition. That is the precise failure D19 exists to remove, and it is reachable today.
+
+- [ ] **Step 1: Bisect our sized-path cliff and the oracle's**, unpiped, checking the build's exit status before trusting any number. Two figures in this phase were wrong because a pipe swallowed a failed build and the bisection measured a stale binary.
+- [ ] **Step 2: Write the failing test** — a nesting deep enough to abort on the sized path today, asserting 11.1 instead.
+- [ ] **Step 3: Count the `arg_list` descent**, sharing one depth budget with `MAX_PAREN_DEPTH` if a shared counter is defensible, or a second counter if the recursions genuinely differ. Say which and why.
+- [ ] **Step 4: Fold in Task 3c's two corrections**, both from its review. The default-thread cliff is **331/332**, not the 337/338 stated in four places — the counter's own field and check cost about six levels, so the fix made the unprotected case slightly worse, and one of those four places is a test whose job is to document the gap accurately. And "nested calls are shallower than plain parens" is **backwards** in both the report and `depth_probe.rs`: measured like-for-like on one binary, parens are 331 and calls are 349. The priority it argued for is still right, since calls are the shallowest *unguarded* recursion; only the comparison is wrong.
+- [ ] **Step 5: Two minors from the same review.** `parse_constant_expression`'s own `(` is uncounted, so `RAISE`, `FORWARD`, `USE ARG` and `ADDRESS WITH` effectively get 50,001 — harmless, worth a clause. And the paren test covers only the sized path, so nothing would notice `MAX_PAREN_DEPTH` being raised above the native cliff; a plain const comparison pins it.
+- [ ] **Step 6: Verify and commit.** `cargo test -p rexx-parse --no-fail-fast`, clippy unpiped, and the whole workspace.
+
+**Do not attempt a stack-aware counter.** Task 3c's review costed it: a remaining-stack query has no safe stable API, and a per-frame byte estimate is a class of number this phase has got wrong twice in one day. The long-term answer is a documented minimum stack or a sized entry point in `rexx-parse` itself.
+
+---
+
 ### Task 4: The value model
 
 **Spec:** D15 in full, including every transcript.
