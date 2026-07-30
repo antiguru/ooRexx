@@ -159,3 +159,39 @@ fn a_slot_frame_grows_for_a_name_the_plan_never_saw() {
     let index = roots.grow_slots(frame);
     assert_eq!(index, 1);
 }
+
+/// `grow_slots` must panic rather than silently grow a frame that is not on
+/// top, because a silent wrong answer here is a variable landing in another
+/// routine's pool. The check is deliberately **4a-only**: measured, `sub:
+/// procedure expose zzz` with `zzz = 5` set in the callee makes the
+/// *caller* print 9 after `return`, so 4b's `PROCEDURE EXPOSE` needs a
+/// callee to write into its caller's (non-top) frame, which today's
+/// top-frame-only rule forbids outright. 4b must find and remove this
+/// panic deliberately when it relaxes the rule, not discover a silent
+/// allowance it never decided to make -- so the `expected` string pins the
+/// "4a invariant" wording itself: if the message stops naming that, this
+/// test should break and point back here.
+#[test]
+#[should_panic(expected = "4a invariant")]
+fn growing_a_frame_that_is_not_the_top_one_panics() {
+    let mut roots = RootSet::new();
+    let outer = roots.push_slots(1);
+    let _inner = roots.push_slots(1);
+    roots.grow_slots(outer);
+}
+
+/// `pop_slots` out of order is a different defect than `grow_slots`'s, and
+/// is not the 4a-only invariant above: activation frames must nest like any
+/// stack's call and return do, in 4a or 4b alike, independent of however
+/// 4b ends up resolving `PROCEDURE EXPOSE`. This guards against popping the
+/// outer of two open frames while the inner one is still live, which would
+/// truncate `slots` out from under the inner frame's still-live locals
+/// instead of panicking where the mistake was actually made.
+#[test]
+#[should_panic(expected = "pop_slots on a frame that is not the top one")]
+fn popping_a_frame_that_is_not_the_top_one_panics() {
+    let mut roots = RootSet::new();
+    let outer = roots.push_slots(1);
+    let _inner = roots.push_slots(1);
+    roots.pop_slots(outer);
+}
