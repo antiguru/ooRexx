@@ -274,25 +274,37 @@ git commit -m "Spike the executor's borrow shape: Interp owns everything but the
 
 **Why:** D19 flagged this as a check rather than an assumption, and Phase 4a's corpus confirmed it at a tenth of the guessed depth. `rust/corpus/lang/deep_nested_expr.rex`, a 3000-term `1 + 1 + ...` chain that the oracle evaluates without complaint, makes `cargo test -p rexx-parse --test program` abort with a stack overflow.
 
-**Parsing is not what overflows** — measure before you fix. `expr.rs` parses dyadic operators with a precedence loop, and the executor's `rexx-run`, which runs on a 512 MiB thread, parses the same file happily. What overflows on a default 2 MiB test thread is the **compiler-generated recursive drop** of a 3000-deep `Box<Expr>` chain: `rexx-parse` has no `impl Drop` at all.
+**`rexx-parse` has three separate recursions with three very different cliffs**, measured on a default 2 MiB stack:
+
+| recursion | cliff | fix |
+|---|---|---|
+| `block.rs::visit_expr`, a hand-written walk called from `add_clause` per clause | **2,450 terms** | iterative, this task |
+| compiler drop glue for a `Box<Expr>` chain | ~10,000-20,000 | iterative, this task |
+| `parse_subterm`'s parenthesis descent | ~85,000 debug, sized thread | a counter raising 11.1, Task 3c |
+
+The first is what blocks the corpus test: it runs *during* parsing, so `parse_program` aborts before a `Program` value exists for anyone to drop.
+
+**An earlier draft of this task asserted the drop glue was the cause. It was wrong**, and the way it was caught is the method to reuse: `mem::forget` on the parsed result left the cliff exactly where it was, building the same tree without the parser showed `Drop` surviving six to eight times deeper, and a gdb backtrace named `visit_expr` directly. The original evidence — a stack overflow, plus the spike's 512 MiB thread parsing the file fine — is consistent with *any* deep-recursion hypothesis and therefore distinguishes none of them.
 
 This is not cosmetic. A stack overflow aborts the process with no message and no exit code, which is the one outcome D19's "failing loudly" rule most wants to exclude, and it is reachable from ordinary user code that the oracle handles.
 
-- [ ] **Step 1: Find the actual cliff before changing anything.** Parse expressions of increasing term count on a default-stack thread and record where it aborts. Report the number; the corpus program's 3000 is a datum, not the boundary.
+- [ ] **Step 1: Find the actual cliff, and which recursion owns it, before changing anything.** Measured: 2,449 terms parse and 2,450 abort. Separating the candidates is the work — `mem::forget` the result to take `Drop` out of the picture and see whether the cliff moves, build the same tree without the parser to measure `Drop` alone, and get a backtrace. Keep `examples/depth_probe.rs`, the instrument that settles it, and commit it with a doc comment recording the three cliffs as of today.
 
-- [ ] **Step 2: Write the failing test** — parse an expression deep enough to abort today, on a normal test thread, and drop the result. Then also assert the case the oracle handles: 100,000 terms.
+- [ ] **Step 2: Make `block.rs::visit_expr` iterative.** This is the recursion that blocks the corpus test, and it runs *during* parsing, so `parse_program` aborts before a `Program` exists to drop. It populates a `referenced` name set per clause that `GUARD` and exposed-variable handling read, so **preserve exactly which nodes it visits** — a walk collecting a different set is a behaviour change wearing a refactor's clothes. If iteration changes visit order, establish whether order is observable rather than assuming.
 
-- [ ] **Step 3: Implement an iterative `Drop` for `Expr`.** The standard shape: take each child out with `std::mem::replace` into a worklist and drain it, so unwinding is a loop rather than a recursion. `Expr` owns children through `Box` and `Vec`, so every child-holding variant participates. Do not change the tree's shape and do not add `unsafe`.
+- [ ] **Step 3: Write the failing test** — parse an expression deep enough to abort today, on a normal test thread, and drop the result. Then also assert the case the oracle handles: 100,000 terms.
 
-- [ ] **Step 4: Check the neighbours.** `PartialEq`, `Debug` and any other derive that walks children recursively has the same exposure. Say in the report which of them you tested at depth and which you did not, rather than leaving the boundary to be inferred.
+- [ ] **Step 4: Implement an iterative `Drop` for `Expr`.** The standard shape: take each child out with `std::mem::replace` into a worklist and drain it, so unwinding is a loop rather than a recursion. `Expr` owns children through `Box` and `Vec`, so every child-holding variant participates. Do not change the tree's shape and do not add `unsafe`.
 
-- [ ] **Step 5: Verify** — `cargo test -p rexx-parse`, `cargo test --workspace`, clippy clean, and the workspace suite green on a default stack with the 3000-term corpus program present.
+- [ ] **Step 5: Check the neighbours.** `PartialEq`, `Debug` and any other derive that walks children recursively has the same exposure. Say in the report which of them you tested at depth and which you did not, rather than leaving the boundary to be inferred.
 
-- [ ] **Step 6: Commit.**
+- [ ] **Step 6: Verify with `--no-fail-fast`**, and report all three affected binaries by name: `program.rs::the_corpus_exercises_at_least_one_directive_with_a_body`, `tiling.rs::every_corpus_program_tiles`, `variants.rs::every_variant_is_constructed_by_the_corpus_and_samples`. Cargo stops at the first failing binary by default and that has produced a false green here before. The suite must be green on a default stack with the 3000-term corpus program present and unmodified.
+
+- [ ] **Step 7: Commit.**
 
 ```bash
 git add rust/crates/rexx-parse
-git commit -m "Drop a deep expression tree iteratively, not by recursion"
+git commit -m "Walk and drop a deep expression tree iteratively, not by recursion"
 ```
 
 ---
