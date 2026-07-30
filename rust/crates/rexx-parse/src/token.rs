@@ -75,6 +75,47 @@ impl ParseError {
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct SymbolId(u32);
 
+impl SymbolId {
+    /// This id as an index into the `SymbolTable` that interned it: **dense,
+    /// zero-based, and assigned in interning order**, so `n` distinct symbols
+    /// occupy exactly `0..n` and `SymbolTable::len` is the length a caller
+    /// needs to size a `Vec`.
+    ///
+    /// Exists so a per-body table can be a `Vec` indexed by id rather than a
+    /// `HashMap<SymbolId, _>`. Variable lookup is 8.1% of runtime on the mixed
+    /// benchmark and 32.2% on stem-heavy code (D16), and hashing an integer to
+    /// reach a slot that an array index already reaches is the kind of cost
+    /// that is invisible in a profile spread across every variable read.
+    ///
+    /// This reveals no invariant that was not already public: `intern` assigns
+    /// `SymbolId(names.len())` before pushing, and `name` indexes `names` by
+    /// this value directly, so the density guarantee was already load-bearing
+    /// on a public path. `symbol_ids_are_dense_and_zero_based` pins it.
+    ///
+    /// # An id belongs to one table, and misusing it is quiet
+    ///
+    /// The value means nothing against a different `SymbolTable`, and the two
+    /// ways that goes wrong are worth telling apart, because only one of them
+    /// is loud:
+    ///
+    /// * If the value is out of the other table's range, indexing panics, and
+    ///   so does `name`.
+    /// * **If it is in range, you get a different symbol and no complaint at
+    ///   all.** That is the case to design against, and this accessor makes it
+    ///   easier to reach, since a raw `usize` can be carried anywhere a
+    ///   `SymbolId` could not.
+    ///
+    /// The concrete way to hit it in this crate: a `Fragment` carries **its
+    /// own** `SymbolTable`, built fresh by every `parse_interpret` call, so id
+    /// 7 in a fragment and id 7 in the program whose `INTERPRET` produced it
+    /// name unrelated symbols. Anything resolving a fragment's names against
+    /// an enclosing body has to go through the text, `fragment.symbols
+    /// .name(id)`, never through the number.
+    pub fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
 /// Interns upcased symbol spellings. Owned by `ProgramSource`'s parse, handed
 /// to `Program` so Phase 4 can resolve a `SymbolId` back to text for error
 /// messages and `SIGNAL`'s label lookup.
