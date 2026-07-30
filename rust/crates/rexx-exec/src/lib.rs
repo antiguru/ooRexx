@@ -29,8 +29,8 @@
 
 use rexx_core::{BehaviourId, Body, Heap, ObjRef, RootSet, SlotFrame};
 use rexx_parse::{
-    CodeBody, Expr, ExprKind, Fragment, Instruction, InstructionKind, Operator, ParseError, Program,
-    SymbolId, SymbolTable, parse_interpret, parse_program,
+    CodeBody, Expr, ExprKind, Fragment, Instruction, InstructionKind, Operator, ParseError,
+    Program, SymbolId, SymbolTable, parse_interpret, parse_program,
 };
 use std::collections::HashMap;
 use std::rc::Rc;

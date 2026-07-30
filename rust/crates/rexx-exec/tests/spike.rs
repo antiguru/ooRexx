@@ -188,7 +188,10 @@ fn records_the_stack_cost_of_one_eval_frame() {
 
     let outcome = run_program(program);
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
-    assert_eq!(outcome.stdout, b"a\n", "the oracle prints a for this program");
+    assert_eq!(
+        outcome.stdout, b"a\n",
+        "the oracle prints a for this program"
+    );
 
     assert_eq!(
         outcome.stack.max_depth, TERMS,
