@@ -18,7 +18,10 @@ fn an_object_with_uninit_is_reported_rather_than_swept_immediately() {
 fn a_weak_reference_does_not_keep_its_target_alive() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let target = heap.alloc(Body::Text { bytes: b"target".to_vec(), num: None });
+    let target = heap.alloc(Body::Text {
+        bytes: b"target".to_vec(),
+        num: None,
+    });
     let weak = heap.alloc(Body::WeakRef(target));
     roots.add_global(".WEAK", weak);
     heap.collect(&roots);
@@ -32,7 +35,10 @@ fn a_weak_reference_does_not_keep_its_target_alive() {
 fn a_cleared_weak_reference_reads_as_nil() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let target = heap.alloc(Body::Text { bytes: b"target".to_vec(), num: None });
+    let target = heap.alloc(Body::Text {
+        bytes: b"target".to_vec(),
+        num: None,
+    });
     let weak = heap.alloc(Body::WeakRef(target));
     roots.add_global(".WEAK", weak);
     heap.collect(&roots);

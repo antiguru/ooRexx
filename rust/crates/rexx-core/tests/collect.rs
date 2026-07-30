@@ -5,7 +5,10 @@ use std::collections::HashMap;
 fn unreachable_objects_are_swept() {
     let mut heap = Heap::new();
     let roots = RootSet::new();
-    heap.alloc(Body::Text { bytes: b"garbage".to_vec(), num: None });
+    heap.alloc(Body::Text {
+        bytes: b"garbage".to_vec(),
+        num: None,
+    });
     let stats = heap.collect(&roots);
     assert_eq!(stats.swept, 1);
     assert_eq!(heap.live_count(), 0);
@@ -15,9 +18,15 @@ fn unreachable_objects_are_swept() {
 fn objects_reachable_from_a_root_survive() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let kept = heap.alloc(Body::Text { bytes: b"kept".to_vec(), num: None });
+    let kept = heap.alloc(Body::Text {
+        bytes: b"kept".to_vec(),
+        num: None,
+    });
     roots.add_global(".KEPT", kept);
-    heap.alloc(Body::Text { bytes: b"dropped".to_vec(), num: None });
+    heap.alloc(Body::Text {
+        bytes: b"dropped".to_vec(),
+        num: None,
+    });
     let stats = heap.collect(&roots);
     assert_eq!(stats.swept, 1);
     assert_eq!(stats.live, 1);
@@ -28,7 +37,10 @@ fn objects_reachable_from_a_root_survive() {
 fn transitively_reachable_objects_survive() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let leaf = heap.alloc(Body::Text { bytes: b"leaf".to_vec(), num: None });
+    let leaf = heap.alloc(Body::Text {
+        bytes: b"leaf".to_vec(),
+        num: None,
+    });
     let holder = heap.alloc(Body::Array(vec![leaf]));
     roots.add_global(".HOLDER", holder);
     heap.collect(&roots);
@@ -53,9 +65,15 @@ fn reference_cycles_are_collected() {
 fn swept_slots_are_reused_by_the_next_allocation() {
     let mut heap = Heap::new();
     let roots = RootSet::new();
-    heap.alloc(Body::Text { bytes: b"x".to_vec(), num: None });
+    heap.alloc(Body::Text {
+        bytes: b"x".to_vec(),
+        num: None,
+    });
     heap.collect(&roots);
-    let reused = heap.alloc(Body::Text { bytes: b"y".to_vec(), num: None });
+    let reused = heap.alloc(Body::Text {
+        bytes: b"y".to_vec(),
+        num: None,
+    });
     assert_eq!(
         heap.slot_capacity(),
         1,
@@ -68,9 +86,15 @@ fn swept_slots_are_reused_by_the_next_allocation() {
 fn a_handle_to_a_swept_object_does_not_alias_the_slots_next_occupant() {
     let mut heap = Heap::new();
     let roots = RootSet::new();
-    let stale = heap.alloc(Body::Text { bytes: b"x".to_vec(), num: None });
+    let stale = heap.alloc(Body::Text {
+        bytes: b"x".to_vec(),
+        num: None,
+    });
     heap.collect(&roots);
-    let reused = heap.alloc(Body::Text { bytes: b"y".to_vec(), num: None });
+    let reused = heap.alloc(Body::Text {
+        bytes: b"y".to_vec(),
+        num: None,
+    });
     assert_ne!(stale, reused, "reuse must bump the generation");
     assert!(
         heap.get(stale).is_none(),
@@ -85,17 +109,26 @@ fn a_handle_to_a_swept_object_does_not_alias_the_slots_next_occupant() {
 fn a_stems_tails_and_default_are_traced() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
-    let tail = heap.alloc(Body::Text { bytes: b"kept".to_vec(), num: None });
-    let default = heap.alloc(Body::Text { bytes: b"dflt".to_vec(), num: None });
+    let tail = heap.alloc(Body::Text {
+        bytes: b"kept".to_vec(),
+        num: None,
+    });
+    let default = heap.alloc(Body::Text {
+        bytes: b"dflt".to_vec(),
+        num: None,
+    });
     let mut tails = HashMap::new();
     tails.insert(b"1".to_vec(), Some(tail));
     // A tombstone: present, and reaching nothing.
     tails.insert(b"2".to_vec(), None);
-    let stem = heap.alloc_with(BehaviourId::STEM, Body::Stem {
-        name: b"A.".to_vec().into_boxed_slice(),
-        default: Some(default),
-        tails,
-    });
+    let stem = heap.alloc_with(
+        BehaviourId::STEM,
+        Body::Stem {
+            name: b"A.".to_vec().into_boxed_slice(),
+            default: Some(default),
+            tails,
+        },
+    );
     roots.add_global("a.", stem);
     heap.collect(&roots);
     assert!(heap.get(tail).is_some(), "a live tail was swept");
@@ -107,7 +140,10 @@ fn slot_frames_keep_locals_alive_and_release_them_on_pop() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
     let frame = roots.push_slots(2);
-    let v = heap.alloc(Body::Text { bytes: b"local".to_vec(), num: None });
+    let v = heap.alloc(Body::Text {
+        bytes: b"local".to_vec(),
+        num: None,
+    });
     roots.set_slot(frame, 0, v);
     heap.collect(&roots);
     assert!(heap.get(v).is_some(), "a live local was swept");
