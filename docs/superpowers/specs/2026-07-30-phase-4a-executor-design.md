@@ -481,6 +481,8 @@ Three partial rows, because a whole-builtin exclusion would overstate the gap:
 
 Without this file, "all 81" is a criterion the phase ordering cannot satisfy, which is how Phase 2 came to fail three of five.
 
+Writing the file surfaced a **third status** the spec had not anticipated, and the file carries it as its own section: a **known gap** is a measured divergence with **no owner assigned** — neither work a later phase owes nor a difference anyone chose. Today that is prefix-operator chains, the still-recursive `Debug`/`PartialEq`/`Clone` derives, and the fact that a depth counter protects a sized caller only. Filing those as exclusions would imply someone owes them; filing them as deviations would imply someone chose them. Both would be false, and the second would be worse, since a deviation is meant to be permanent.
+
 The file carries a **second section for semantic deviations**, which are not exclusions and must not be filed as ones. It holds two rows: `DO OVER` on a stem does not reproduce the oracle's traversal order (D15a), with the corpus consequence that no program may contain it; and 4a raises 11.1 at its evaluation-depth limit where the oracle crashes with no condition at all (D19). **The set assertion covers this section too**, so adding a deviation is a plan amendment rather than a file edit. A deviation is permanent and therefore strictly worse than an exclusion, which is assigned work: pinning the weaker thing and leaving the stronger one editable by the phase being gated would be backwards. A deviation is a permanent difference chosen on purpose; an exclusion is work assigned to a later phase. Filing one as the other is how a deviation stops being reviewed.
 
 ### The rexxcps gate
