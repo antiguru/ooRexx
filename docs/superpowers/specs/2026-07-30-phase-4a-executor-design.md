@@ -279,7 +279,17 @@ So, and each of these three numbers is chosen and recorded rather than left to b
 
 Activation depth is decided here and paid in 4b: measured, unbounded `CALL` recursion gives `Error 11.1`, "Insufficient control stack space", at rc 245 — a reportable condition, not a crash. One Rust frame per activation with an explicit counter produces it; a flat loop over the activation stack would too, and the choice is stated now because D17's own argument is that the dispatch loop should not be designed twice.
 
-**Phase 3's parser has the same exposure and it is unverified**: dyadic parsing is a precedence loop, but nested parentheses recurse. Whether `rexx-parse` survives 20,000 of them is a check in 4a's plan, not an assumption here.
+**Phase 3's parser has the same exposure, and it is now measured: three recursions, three cliffs, on a default 2 MiB stack.**
+
+| recursion | cliff | kind of fix |
+|---|---|---|
+| `block.rs::visit_expr`, a hand-written walk run per clause from `add_clause` | **2,450 terms** | iterative, Task 3b |
+| the compiler's drop glue for a `Box<Expr>` chain | ~10,000-20,000 | iterative, Task 3b |
+| `parse_subterm`'s parenthesis descent | ~85,000 debug on the sized thread | a counter raising 11.1, Task 3c |
+
+Only the third is what this section originally anticipated. The first runs *during* parsing, so `parse_program` aborts before a `Program` exists for anyone to drop, and it is the shallowest by a wide margin — a 3,000-term expression, which the oracle evaluates without difficulty, is already past it.
+
+The diagnosis matters as much as the numbers. An earlier draft asserted the drop glue was the cause, on the strength of a stack overflow plus the fact that a 512 MiB thread parsed the same file fine. That evidence fits every deep-recursion hypothesis and separates none of them. What separated them: `mem::forget` on the parsed result left the cliff unmoved, ruling out `Drop`; building the same tree without the parser showed `Drop` surviving six to eight times deeper; and a backtrace named the frame. Prefer an experiment that can distinguish the candidates over one that merely agrees with the favourite.
 
 ## Architecture
 
