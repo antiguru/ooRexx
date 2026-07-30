@@ -415,7 +415,9 @@ git commit -m "Stems: tombstones, aliasing, and a name the object carries itself
 
 **Interfaces:**
 - Produces: `Plan { slots: HashMap<Box<[u8]>, usize>, len: usize }`, `build_plan(&CodeBody, &SymbolTable) -> Plan`, and on `Interp` a cache keyed by `(program_id, body_index)` where the loader assigns `program_id`.
-- `Activation { plan: Rc<Plan>, frame: SlotFrame, blocks: Vec<Block>, pc: usize, settings: Settings, program: Rc<Program> }`.
+- `Activation { plan: Rc<Plan>, extra: HashMap<Box<[u8]>, usize>, frame: SlotFrame, blocks: Vec<Block>, pc: usize, settings: Settings, program: Rc<Program> }`.
+
+**`extra` is not optional and Task 3 already proved why.** The plan is an `Rc`, shared and immutable, built by an upfront pass that never saw a name introduced at run time — and such names exist in 4a: `DROP (v)` names its target at run time, and an interpreted fragment's bindings are visible to the enclosing body's own later clauses (measured: `interpret "newvar = 7"` then `say newvar + 1` prints 8). Resolution is `plan.slot_of(name).or_else(|| extra.get(name))`; allocation writes `extra` and calls `grow_slots`. Task 3 built this; you are inheriting its shape, not inventing one.
 
 - [ ] **Step 1: Write the failing tests**
 
