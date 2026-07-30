@@ -705,9 +705,21 @@ Re-run each row yourself and put the table in the report; two accounts of this f
 
 Its limit is bounded on **both** sides: at least 100,000, the oracle's largest measured passing depth, and below what Task 3's stack size and per-frame cost allow. An upper bound alone is satisfied by a limit of 20,000, which diverges on every program between there and 100,000.
 
-**Task 3 measured these and the answer is not the one this plan first recorded, so inherit the corrected numbers.** The interpreter thread is **512 MiB**. `eval` costs 784 bytes per level in debug, but **`eval` is not what binds the stack**: the phases are sequential and each unwinds before the next, so the parsed tree's `Drop` binds at **~850 bytes per level**. Bisected to ±5,000 on debug `rexx-run`, all three shapes — parse+drop, parse+plan+drop, and parse+plan+eval+drop — survive **629,687** levels and fail at **634,375**, identically. Neither `eval` nor `Plan::note` moves the cliff at all, which is a stronger result than "eval does not move it".
+**Task 3 measured these and the answer is not the one this plan first recorded, so inherit the corrected numbers.** The interpreter thread is **512 MiB**. **`eval` binds the stack, at ~783 bytes per level, with roughly 685,000 survivable levels in debug.** Measured on the current tree and independently confirmed: 600,000 and 684,000 levels pass, 700,000 aborts at rc 134.
 
-The honest budget is therefore **~860 bytes per level and ~620,000 levels in debug** — conservative against the measured 853 and 629,687, and not the ~670,000 that sizing against 784 alone suggests. An earlier draft of this section said ~820; that figure came from a 100,000-wide bracket and was an artifact of it, which is the argument for quoting the bisected cliff rather than a per-level number derived from a coarse one.
+| what runs | deepest surviving | bytes/level |
+|---|---|---|
+| parse and drop only | no cliff below 4,000,000 | under 134 |
+| parse, plan and drop | 3,354,442 | ~160 |
+| all four, including `eval` | 684,618 | **~783** |
+
+`Plan::note` is now the crate's own remaining recursion at ~160 bytes per level, and is a candidate for the same worklist treatment if anything ever needs it.
+
+**This number has moved twice in a day, and the reason is worth more than the number.** It was first recorded as ~820, then corrected to ~850 by a finer bisection, and both are now void — because Task 3b made three tree walks iterative and thereby *removed the recursions those measurements were measuring*. A measurement of the code is only valid for the code it measured. **Re-run the bisection when you implement this**, and treat the table above as the shape of the answer rather than the answer.
+
+Two lessons recorded alongside it. The ~820 figure was wrong in a way visible without re-measuring: its table had parse-and-drop costing *less* per level than parse-plan-and-drop, so adding a phase appeared to make each level cheaper, which no model of sequential phases produces — incoherence in a table is a finding even before you check the arithmetic. And `eval` binding again at ~783 is now the strongest of the three figures, because an independent in-`eval` probe reported 784 and the external bisection agrees to 0.2 per cent, which is two methods rather than one.
+
+**The recommendation of 100,000 is unchanged; only its justification moved**, and the headroom is now about 6.5x rather than 6x.
 
 **Set the limit at exactly 100,000, raising 11.1 for anything deeper**, and mind the off-by-one: a 100,000-term expression *reaches* depth 100,000, so the check must fire **above** 100,000 rather than at it, or the one depth the oracle is known to survive becomes the first one we refuse. Higher limits reproduce nothing that exists and only widen the window where we succeed while the oracle SIGSEGVs.
 
