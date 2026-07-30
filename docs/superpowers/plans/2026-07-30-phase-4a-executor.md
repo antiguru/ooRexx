@@ -179,7 +179,9 @@ Delete `Body::String` and update `heap.rs`'s `retire_tests`, which construct it.
 
 - [ ] **Step 4: Implement slot frames**
 
-Only the **top** frame ever grows, which holds under D19's one-Rust-frame-per-activation dispatch and for `INTERPRET`, which runs inside the activation that created it. Assert it: `grow_slots` on a frame that is not the top one is a panic with a message saying so, because a silent wrong answer here is a variable that lands in another routine's pool.
+Only the **top** frame ever grows **in 4a**, which has one frame, and for `INTERPRET`, which runs inside the activation that created it. Assert it: `grow_slots` on a frame that is not the top one is a panic with a message saying so, because a silent wrong answer here is a variable that lands in another routine's pool.
+
+Write in the doc comment that this is a **4a invariant and not a general one**, and why: measured, `sub: procedure expose zzz` makes a callee write into its caller's pool while the callee's frame is on top, so 4b either grows a non-top frame or binds exposed names to caller slots at call time. A panic that a later sub-phase must remove is the right shape here; a silent allowance it would inherit is not.
 
 `iter()` must yield globals, temps **and** every assigned slot, so `collect`'s signature does not change.
 
@@ -496,16 +498,19 @@ git commit -m "Evaluate terms, arithmetic and concatenation"
 - [ ] **Step 1: Write the failing tests, from the measured line**
 
 ```
-'a' = 'a '  -> 1     '' = ' '   -> 1     'abc' < 'abd' -> 1     'b' > 'a ' -> 1
-'01' = '1'  -> 1     ' 1 ' = 1  -> 1     'a' = 1       -> 0     '01' == '1' -> 0
-'10' >> '9' -> 0     '10' > '9' -> 1     'a' << 'a '   -> 1
+' a' = 'a'  -> 1     '09'x'a' = 'a' -> 1     'a' = 'a'||'09'x -> 1
+'a' = 'a '  -> 1     'a b' = 'a  b' -> 0     '' = ' '         -> 1
+'01' = '1'  -> 1     ' 1 ' = 1      -> 1     'a' = 1          -> 0
+'10' >> '9' -> 0     '10' > '9'     -> 1     'a' << 'a '      -> 1     '01' == '1' -> 0
 ```
+
+The first row is the one that matters. An earlier draft of this plan said the string rule was "blank-pad the shorter on the right", which is wrong, and no test in the second and third rows can tell the two rules apart.
 
 - [ ] **Step 2: Run to watch them fail**
 
 - [ ] **Step 3: Implement all four families**
 
-* Numeric-or-string `= \= <> >< > < >= <= \> \<`: numeric through `rexx-num`'s free `compare` under the current `DIGITS` and `FUZZ` when **both** operands are numeric, otherwise a string comparison with the shorter blank-padded on the right.
+* Numeric-or-string `= \= <> >< > < >= <= \> \<`: **call `rexx-num`'s free `compare` and do not write a string comparison at all.** It is the whole algorithm, string fallback included — `string_order` at `rust/crates/rexx-num/src/compare.rs:173`, ported from `RexxString::stringComp` (`StringClass.cpp:795`), which strips leading blanks *and tabs*, compares the shared prefix, and decides a leftover tail against a space. Writing a second one here means writing a divergent one.
 * Strict `== \== >> << >>= <<= \>> \<<`: no padding, shorter is less.
 * Logical `& | &&`: a logical value is **exactly** the one-character string `0` or `1`. Measured, `' 1 '`, `'01'`, `'1.0'` and `''` are each error 34.
 * `ExprKind::Logical`, the comma list, is an AND of its parts under the same check.
@@ -594,9 +599,13 @@ Control expressions are evaluated in `Controlled::order`, which Phase 3 recorded
 
 Confirmed already: `do i = 'x' to 3` and `do i = 1 to 'y'` are both **41.1**. Reported but unconfirmed: **26.2** and **26.3** for non-whole control values. And `do i = 1 by 0 to 3` **loops forever and raises nothing**, which is behaviour to reproduce rather than an error to catalogue. Enumerate the family against the oracle and put the table in the report.
 
-- [ ] **Step 3: Implement**, including the depth counter D19 requires, with its limit derived from Task 3's measured per-frame cost and stack size.
+- [ ] **Step 3: Implement**, including the depth counter D19 requires.
 
-- [ ] **Step 4: Verify** — plus an expression at a depth the oracle handles comfortably. Do **not** put a program near the oracle's 200,000-term cliff in the corpus: 100,000 terms pass and 200,000 exits 139, so what a near-cliff program measures is a C++ stack size, not a language rule.
+Its limit is bounded on **both** sides: at least 100,000, the oracle's largest measured passing depth, and below what Task 3's stack size and per-frame cost allow. Record all three numbers in the report — an upper bound alone is satisfied by a limit of 20,000, which diverges on every program between there and 100,000.
+
+- [ ] **Step 4: Verify** — plus an expression at a depth the oracle handles comfortably, and a **unit test that reaches the 11.1 raise**, since no differential program can cross our limit without also crossing the oracle's cliff, and without that test the depth path is untested by construction.
+
+The oracle's cliff is between **100,000 and 150,000** terms, not at 200,000: 100,000 prints its answer, and both 150,000 and 200,000 exit 139. A corpus rule phrased against 200,000 would admit a 150,000-term program that SIGSEGVs.
 
 - [ ] **Step 5: Commit**
 
@@ -618,7 +627,11 @@ git commit -m "Every DO and LOOP variant, with the block stack LEAVE unwinds"
 
 **Why:** criterion 1 compares stderr and the exit code byte for byte, so "terminates with the oracle's message" is a subsystem, not a sentence.
 
-- [ ] **Step 1: Capture the oracle's exact output for each of 4a's raiser families**
+- [ ] **Step 1: Enumerate the raiser families against the oracle before writing anything**
+
+The list is open, not closed, and an earlier draft of this plan named four families and missed two. Confirmed so far: arithmetic; 7.3; the logical-value checks, which are **six** sub-numbers — 34.1 `IF`, 34.2 `WHEN`, 34.3 `WHILE`, 34.4 `UNTIL`, 34.6 the comma list, 34.901 for `&`/`|`/`\`; the `NUMERIC` instruction's **26.5**, **26.6** and **33.1**, where major 33 is a family the earlier draft did not have at all; the `DO` control conversions (41.1 confirmed, 26.2 and 26.3 reported and unconfirmed); and `do i over .nil`, which is **98.913** at rc 158 from two constructs both in 4a's scope. Walk 4a's instruction and expression surface for raisers rather than trusting this list, and put the table in the report.
+
+- [ ] **Step 2: Capture the oracle's exact output for each family**
 
 Measured for 7.3, and this is the format to reproduce exactly, two spaces after each colon:
 
@@ -711,11 +724,19 @@ Start with a 4a-only cut of `do_variants.rex`, which is excluded today by the si
 
 Those files change the setting throughout, from 1 to 100, so the extractor **scans sequentially and carries the setting**. Getting this wrong silently tests the wrong precision and still passes, which is the worst available outcome, so it gets its own test against a file that changes the setting mid-way.
 
-- [ ] **Step 2: Include the `PRECEDENCE` (1,226) and `CONCATENATION` (388) groups.** Phase 2 excluded them because it had no parser; 4a has one, and those 1,614 assertions are the ones most relevant to an evaluator.
+- [ ] **Step 2: Include `PRECEDENCE` (1,226), which is self-contained literal arithmetic.** Phase 2 excluded it because it had no parser; 4a has one.
 
-- [ ] **Step 3: Compare byte for byte, never numerically** — a numeric comparison would hide the entire created-digits and created-form story across thousands of rows.
+- [ ] **Step 3: `CONCATENATION` (388) needs a prelude, and adding it naively passes while testing nothing**
 
-- [ ] **Step 4: Report the row count and list rows blocked on 4b or 4c** with the sub-phase that unblocks each.
+Every assertion in that group references variables `a` through `g` assigned at the top of its test method. A row of (expression, expected, digits) cannot carry them, and the failure is **silent**: with `a`..`g` unset, `(a==a) (b==a) … (g==a)` evaluates to `1 0 0 0 0 0 0`, which is exactly the expected value, because an uninitialised variable yields its own distinct name. The group would report a clean pass over the one group that carries NULs and blanks.
+
+So a row carries the method's **assignment prelude**, and any assertion whose prelude cannot be represented is listed as blocked rather than quietly included.
+
+- [ ] **Step 4: Compare byte for byte, never numerically** — a numeric comparison would hide the entire created-digits and created-form story across thousands of rows.
+
+- [ ] **Step 5: Prove the table can fail.** Perturb an expected value and confirm that row fails. A table that cannot fail is exactly the defect this criterion already had once, when it quantified over extracted programs that executed nothing.
+
+- [ ] **Step 6: Report the row count and list rows blocked on 4b or 4c** with the sub-phase that unblocks each.
 
 - [ ] **Step 5: Commit.**
 
