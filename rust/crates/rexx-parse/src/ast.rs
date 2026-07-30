@@ -479,7 +479,11 @@ pub fn compound_parts(name: &str) -> (&str, Vec<Tail<'_>>) {
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct CodeBody {
     /// In source order, which is also the execution chain: control falls from
-    /// each instruction to the next index unless a jump target says otherwise.
+    /// each instruction to the next index unless a jump target says
+    /// otherwise. Ends where the first `::` directive clause begins or the
+    /// source ends -- `translate_block` stops there and leaves the cursor
+    /// sitting on it for the caller, so an instruction after that point
+    /// belongs to the next code body, never this one.
     ///
     /// There is no `next` field because there is nothing for one to say. Every
     /// instruction enters the chain through the port of `addClause`
@@ -487,8 +491,15 @@ pub struct CodeBody {
     /// the chain exactly.
     pub instructions: Vec<Instruction>,
     /// Keyed by the label token's VALUE, not by `SymbolId`: upcased for a
-    /// symbol label, verbatim for a literal one. The first occurrence of a
-    /// duplicated label wins.
+    /// symbol label, verbatim for a literal one. `Box<[u8]>` rather than
+    /// `Box<str>`, because a literal label is not required to be valid UTF-8
+    /// any more than any other literal is -- measured, a label spelled with a
+    /// raw non-UTF-8 byte is a legal `SIGNAL VALUE` target under
+    /// `build/bin/rexx`. Interning the key would be wrong in both directions;
+    /// see Task 3.3's six measurements. The first occurrence of a duplicated
+    /// label wins -- measured, two labels spelled `a:` in one program is
+    /// accepted and `signal a` reaches the first -- so this is built with
+    /// "insert if absent", never an unconditional overwrite.
     pub labels: BTreeMap<Box<[u8]>, usize>,
 }
 

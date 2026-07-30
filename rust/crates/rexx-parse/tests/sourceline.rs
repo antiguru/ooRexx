@@ -215,7 +215,7 @@ fn assert_traced(text: &[u8], traced: &[TracedLine]) {
     );
     let program = parse_program(text.to_vec()).expect("the probe parses");
     for &(line, index, expected) in traced {
-        let span = program.instructions[index].clause_span.clone();
+        let span = program.main.instructions[index].clause_span.clone();
         let got = program
             .source
             .join_span(span.clone())
@@ -384,7 +384,7 @@ fn a_continued_clause_joins_without_its_terminator() {
     // The trap the task brief names: `span_bytes` alone is WRONG here,
     // because the clause span still CONTAINS the terminator it joins out.
     let program = parse_program(text.to_vec()).unwrap();
-    let span = program.instructions[1].clause_span.clone();
+    let span = program.main.instructions[1].clause_span.clone();
     assert_eq!(
         program.source.span_bytes(span).unwrap(),
         b"say \"x\",\n    \"y\""
@@ -398,7 +398,7 @@ fn a_continued_clause_span_contains_the_terminator_it_joins_out() {
     // span 0..12 with the newline at byte 6 inside it.
     let text = b"say 1,\n  + 2";
     let program = parse_program(text.to_vec()).unwrap();
-    let span = program.instructions[0].clause_span.clone();
+    let span = program.main.instructions[0].clause_span.clone();
     assert_eq!(span, 0..12);
     assert_eq!(
         program.source.span_bytes(span.clone()).unwrap(),
@@ -430,6 +430,7 @@ fn interpret_fragment_clauses_reconstruct_too() {
     // is checked here.
     let fragment = parse_interpret(b"nop; say 1".to_vec()).expect("the fragment parses");
     let texts: Vec<_> = fragment
+        .body
         .instructions
         .iter()
         .map(|i| {

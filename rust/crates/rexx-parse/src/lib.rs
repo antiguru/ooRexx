@@ -71,8 +71,6 @@ pub use token::{
     TokenKind,
 };
 
-use std::collections::BTreeMap;
-
 use crate::block::translate_block;
 use crate::clause::{ClauseCursor, split_clauses};
 use crate::directive::parse_directive;
@@ -88,35 +86,19 @@ use crate::token::ParseCtx;
 ///
 /// Accepts every valid program and rejects invalid block structure: an unclosed
 /// `DO`, an `END` with nothing open, a `WHEN` outside a `SELECT`. The main
-/// body's own fields are spelled out here rather than held as a `CodeBody`,
-/// which is what a directive's body is, because they are this type's public
-/// surface and predate it.
+/// body is held as a `CodeBody`, the same type a directive's body has, so an
+/// evaluator can borrow one `&CodeBody` for whichever body it is running
+/// rather than cloning `instructions` and `labels` out of two sibling fields
+/// -- see `CodeBody`'s own doc for what each of those fields means.
 #[derive(Debug)]
 pub struct Program {
     pub source: ProgramSource,
-    /// The main code body's instructions, in source order, which is also the
-    /// execution chain. Ends where the first `::` directive clause begins; an
-    /// instruction after that point is not here at all, because it belongs to
-    /// that directive's own body -- see `directives`.
-    pub instructions: Vec<Instruction>,
+    /// The main code body. A directive's own body is a `CodeBody` too, held
+    /// inside `directives` rather than here.
+    pub main: CodeBody,
     /// The `::` directives, in source order, each carrying its own assembled
     /// body.
     pub directives: Vec<Directive>,
-    /// Keyed by the label token's VALUE, not by `SymbolId`: upcased for a
-    /// symbol label, verbatim for a literal one. `Box<[u8]>` rather than
-    /// `Box<str>`, because a literal label is not required to be valid UTF-8
-    /// any more than any other literal is -- measured, a label spelled with a
-    /// raw non-UTF-8 byte is a legal `SIGNAL VALUE` target under
-    /// `build/bin/rexx`. Interning the key would be wrong in both directions;
-    /// see Task 3.3's six measurements.
-    ///
-    /// The main body's own labels and no others: a label is local to the code
-    /// body that declares it, and a directive's body has its own table in its
-    /// own `CodeBody`. The first occurrence of a duplicated label wins --
-    /// measured, two labels spelled `a:` in one program is accepted and
-    /// `signal a` reaches the first -- so this is built with "insert if
-    /// absent", never an unconditional overwrite.
-    pub labels: BTreeMap<Box<[u8]>, usize>,
     /// Retained because a `SymbolId` is meaningless without it: Phase 4
     /// resolves names back to text to report them.
     pub symbols: SymbolTable,
@@ -136,13 +118,20 @@ pub struct Program {
 /// .name(id)`, because there is deliberately no name-to-id lookup on
 /// `SymbolTable`.
 ///
-/// No `directives` and no `labels` fields: neither is legal inside
-/// `INTERPRET` text (errors 99.914 and 47.1 respectively), so a `Fragment`
-/// that exists at all has neither.
+/// No `directives` field: a directive is not legal inside `INTERPRET` text
+/// (error 99.914), and `parse` raises that before a `Fragment` is ever built.
+/// `body` does carry a `labels` map, because every `CodeBody` has one, but it
+/// is always empty here: a label is not legal inside `INTERPRET` text either,
+/// already enforced with error 47.1 where `parse_instruction` builds a
+/// `Label` node, so nothing ever populates it. Measured directly (Task 1),
+/// both the label-alone and the label-as-a-`SIGNAL`-target shapes: `signal on
+/// syntax` around `interpret "lab: nop"` and around `interpret "signal lab;
+/// lab: nop"` both give `condition('o')~code` `47.1`, "INTERPRET data must not
+/// contain labels; found "LAB"."
 #[derive(Debug)]
 pub struct Fragment {
     pub source: ProgramSource,
-    pub instructions: Vec<Instruction>,
+    pub body: CodeBody,
     pub symbols: SymbolTable,
 }
 
@@ -156,9 +145,8 @@ pub fn parse_program(text: Vec<u8>) -> Result<Program, ParseError> {
     let parsed = parse(&source)?;
     Ok(Program {
         source,
-        instructions: parsed.main.instructions,
+        main: parsed.main,
         directives: parsed.directives,
-        labels: parsed.main.labels,
         symbols: parsed.symbols,
     })
 }
@@ -181,9 +169,16 @@ pub fn parse_interpret(text: Vec<u8>) -> Result<Fragment, ParseError> {
         parsed.directives.is_empty(),
         "INTERPRET text cannot carry a directive: `parse` raises 99.914 first"
     );
+    // Measured in Task 1: a label inside `INTERPRET` text is 47.1, already
+    // enforced where `parse_instruction` builds a `Label` node, so this map is
+    // always empty rather than load-bearing.
+    debug_assert!(
+        parsed.main.labels.is_empty(),
+        "INTERPRET text cannot carry a label: `parse_instruction` raises 47.1 first"
+    );
     Ok(Fragment {
         source,
-        instructions: parsed.main.instructions,
+        body: parsed.main,
         symbols: parsed.symbols,
     })
 }

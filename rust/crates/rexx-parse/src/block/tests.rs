@@ -56,6 +56,7 @@ fn err_at(text: &str) -> (u16, u16, usize) {
 /// The keyword of each instruction of the main body.
 fn names(program: &Program) -> Vec<&'static str> {
     program
+        .main
         .instructions
         .iter()
         .map(|i| i.kind.keyword().unwrap_or("<other>"))
@@ -547,7 +548,7 @@ fn an_if_with_no_else_skips_to_the_instruction_after_its_branch() {
     // `nop`(0) `if`(1) `then`(2) `say`(3) `nop`(4).
     let program = ok("nop\nif 1 = 1 then say 1\nnop\n");
     assert_eq!(names(&program), ["NOP", "IF", "THEN", "SAY", "NOP"]);
-    match &program.instructions[1].kind {
+    match &program.main.instructions[1].kind {
         InstructionKind::If { false_target, .. } => assert_eq!(*false_target, Some(4)),
         other => panic!("expected an IF, got {other:?}"),
     }
@@ -559,7 +560,7 @@ fn an_if_at_the_end_of_a_body_has_no_false_target() {
     // target is `None` rather than an index one past the end.
     let program = ok("if 1 = 1 then say 1\n");
     assert_eq!(names(&program), ["IF", "THEN", "SAY"]);
-    match &program.instructions[0].kind {
+    match &program.main.instructions[0].kind {
         InstructionKind::If { false_target, .. } => assert_eq!(*false_target, None),
         other => panic!("expected an IF, got {other:?}"),
     }
@@ -571,11 +572,11 @@ fn an_if_with_an_else_sends_its_false_path_to_the_else() {
     // goes to the ELSE, and the true path resumes after the ELSE's branch.
     let program = ok("if 1 = 1 then say 1\nelse say 2\nnop\n");
     assert_eq!(names(&program), ["IF", "THEN", "SAY", "ELSE", "SAY", "NOP"]);
-    match &program.instructions[0].kind {
+    match &program.main.instructions[0].kind {
         InstructionKind::If { false_target, .. } => assert_eq!(*false_target, Some(3)),
         other => panic!("expected an IF, got {other:?}"),
     }
-    match &program.instructions[3].kind {
+    match &program.main.instructions[3].kind {
         InstructionKind::Else { then_exit } => assert_eq!(*then_exit, Some(5)),
         other => panic!("expected an ELSE, got {other:?}"),
     }
@@ -591,15 +592,15 @@ fn a_dangling_else_binds_to_the_inner_if() {
         names(&program),
         ["IF", "THEN", "IF", "THEN", "SAY", "ELSE", "SAY", "NOP"]
     );
-    match &program.instructions[2].kind {
+    match &program.main.instructions[2].kind {
         InstructionKind::If { false_target, .. } => assert_eq!(*false_target, Some(5)),
         other => panic!("expected the inner IF, got {other:?}"),
     }
-    match &program.instructions[0].kind {
+    match &program.main.instructions[0].kind {
         InstructionKind::If { false_target, .. } => assert_eq!(*false_target, Some(7)),
         other => panic!("expected the outer IF, got {other:?}"),
     }
-    match &program.instructions[5].kind {
+    match &program.main.instructions[5].kind {
         InstructionKind::Else { then_exit } => assert_eq!(*then_exit, Some(7)),
         other => panic!("expected an ELSE, got {other:?}"),
     }
@@ -616,7 +617,7 @@ fn an_else_branch_that_is_a_block_ends_at_its_own_end() {
         names(&program),
         ["IF", "THEN", "SAY", "ELSE", "DO", "SAY", "END", "NOP"]
     );
-    match &program.instructions[3].kind {
+    match &program.main.instructions[3].kind {
         InstructionKind::Else { then_exit } => assert_eq!(*then_exit, Some(7)),
         other => panic!("expected an ELSE, got {other:?}"),
     }
@@ -633,7 +634,7 @@ fn a_whens_false_path_is_the_next_when_and_its_exit_is_past_the_end() {
             "SELECT", "WHEN", "THEN", "SAY", "WHEN", "THEN", "SAY", "END", "NOP"
         ]
     );
-    match &program.instructions[1].kind {
+    match &program.main.instructions[1].kind {
         InstructionKind::When {
             false_target, exit, ..
         } => {
@@ -644,7 +645,7 @@ fn a_whens_false_path_is_the_next_when_and_its_exit_is_past_the_end() {
     }
     // The last WHEN falls through to the END when it is false, and leaves past
     // the END when it is true.
-    match &program.instructions[4].kind {
+    match &program.main.instructions[4].kind {
         InstructionKind::When {
             false_target, exit, ..
         } => {
@@ -654,7 +655,7 @@ fn a_whens_false_path_is_the_next_when_and_its_exit_is_past_the_end() {
         other => panic!("expected the second WHEN, got {other:?}"),
     }
     // And the SELECT knows all of it.
-    match &program.instructions[0].kind {
+    match &program.main.instructions[0].kind {
         InstructionKind::Select {
             whens,
             otherwise,
@@ -677,11 +678,11 @@ fn a_whens_false_path_is_the_otherwise_when_there_is_one() {
         names(&program),
         ["SELECT", "WHEN", "THEN", "SAY", "OTHERWISE", "SAY", "END"]
     );
-    match &program.instructions[1].kind {
+    match &program.main.instructions[1].kind {
         InstructionKind::When { false_target, .. } => assert_eq!(*false_target, Some(4)),
         other => panic!("expected a WHEN, got {other:?}"),
     }
-    match &program.instructions[0].kind {
+    match &program.main.instructions[0].kind {
         InstructionKind::Select { otherwise, end, .. } => {
             assert_eq!(*otherwise, Some(4));
             assert_eq!(*end, Some(6));
@@ -699,7 +700,7 @@ fn a_when_that_is_another_whens_then_instruction_is_never_added_to_the_select() 
     // Reproducing the quirk is what transliterating rather than tidying buys.
     // `select`(0) `when`(1) `then`(2) `when`(3) `then`(4) `nop`(5) `end`(6).
     let program = ok("select\nwhen 1 = 1 then\nwhen 2 = 2 then nop\nend\n");
-    match &program.instructions[0].kind {
+    match &program.main.instructions[0].kind {
         InstructionKind::Select { whens, .. } => assert_eq!(whens, &[1]),
         other => panic!("expected a SELECT, got {other:?}"),
     }
@@ -707,11 +708,11 @@ fn a_when_that_is_another_whens_then_instruction_is_never_added_to_the_select() 
     // what makes a WHEN go through `flushControl` rather than joining the chain
     // directly the way a control instruction does. Treating a WHEN as control
     // instead leaves this branch open until the END and moves the target to 6.
-    match &program.instructions[1].kind {
+    match &program.main.instructions[1].kind {
         InstructionKind::When { false_target, .. } => assert_eq!(*false_target, Some(4)),
         other => panic!("expected the first WHEN, got {other:?}"),
     }
-    match &program.instructions[3].kind {
+    match &program.main.instructions[3].kind {
         InstructionKind::When { exit, .. } => assert_eq!(*exit, None),
         other => panic!("expected the second WHEN, got {other:?}"),
     }
@@ -724,11 +725,11 @@ fn a_block_and_its_end_point_at_each_other() {
     // would still hold if the index were hard-wired to zero.
     let program = ok("nop\ndo\nnop\nend\nnop\n");
     assert_eq!(names(&program), ["NOP", "DO", "NOP", "END", "NOP"]);
-    match &program.instructions[1].kind {
+    match &program.main.instructions[1].kind {
         InstructionKind::Do(body) => assert_eq!(body.end, Some(3)),
         other => panic!("expected a DO, got {other:?}"),
     }
-    match &program.instructions[3].kind {
+    match &program.main.instructions[3].kind {
         InstructionKind::End { closes, .. } => {
             let closes = closes.expect("a matched END knows what it closed");
             assert_eq!(closes.block, 1);
@@ -740,7 +741,7 @@ fn a_block_and_its_end_point_at_each_other() {
     // rather than the outer one. `do`(0) `do`(1) `nop`(2) `end`(3) `end`(4).
     let nested = ok("do\ndo\nnop\nend\nend\n");
     for (end, block) in [(3, 1), (4, 0)] {
-        match &nested.instructions[end].kind {
+        match &nested.main.instructions[end].kind {
             InstructionKind::End { closes, .. } => {
                 assert_eq!(closes.expect("matched").block, block, "END at {end}");
             }
@@ -779,6 +780,7 @@ fn the_end_style_follows_the_block_it_closed() {
     ] {
         let program = ok(source);
         let end = program
+            .main
             .instructions
             .iter()
             .find_map(|i| match &i.kind {
@@ -796,7 +798,7 @@ fn an_end_on_an_otherwise_closes_the_select_behind_it() {
     // The END closes the SELECT and not the OTHERWISE, even though the OTHERWISE
     // was on top of the stack.
     let program = ok("select\nwhen 1 = 1 then nop\notherwise nop\nend\n");
-    match &program.instructions[6].kind {
+    match &program.main.instructions[6].kind {
         InstructionKind::End { closes, .. } => {
             let closes = closes.expect("a matched END knows what it closed");
             assert_eq!(closes.block, 0);
@@ -813,7 +815,7 @@ fn a_block_inside_a_then_still_completes_the_pending_branch() {
     // `flushControl` call at the end of the END arm is for.
     let program = ok("if 1 = 1 then do\nsay 1\nend\nnop\n");
     assert_eq!(names(&program), ["IF", "THEN", "DO", "SAY", "END", "NOP"]);
-    match &program.instructions[0].kind {
+    match &program.main.instructions[0].kind {
         InstructionKind::If { false_target, .. } => assert_eq!(*false_target, Some(5)),
         other => panic!("expected an IF, got {other:?}"),
     }
@@ -825,7 +827,7 @@ fn a_block_inside_a_then_still_completes_the_pending_branch() {
 fn each_body_keeps_its_own_label_table() {
     let program = ok("top:\nnop\n::routine r\ntop:\nnop\n");
     // The main body's own label, at index 0 of the main body.
-    assert_eq!(program.labels.get(b"TOP".as_slice()), Some(&0));
+    assert_eq!(program.main.labels.get(b"TOP".as_slice()), Some(&0));
     match &program.directives[0].kind {
         DirectiveKind::Routine(routine) => {
             let body = routine.body.as_ref().expect("a routine body");
@@ -844,7 +846,7 @@ fn a_duplicated_label_keeps_the_first() {
     // Measured, and accepted: two labels spelled `a:` is rc 0 and `signal a`
     // reaches the first.
     let program = ok("a:\nnop\na:\nnop\n");
-    assert_eq!(program.labels.get(b"A".as_slice()), Some(&0));
+    assert_eq!(program.main.labels.get(b"A".as_slice()), Some(&0));
 }
 
 // ---- directive bodies get their own control stack ----

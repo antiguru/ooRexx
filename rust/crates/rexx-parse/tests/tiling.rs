@@ -294,6 +294,7 @@ fn tiling_errors(text: &[u8], spans: &[Range<usize>], errors: &mut Vec<String>) 
 /// then each directive's own clause followed by its body's instructions.
 fn clause_spans(p: &Program) -> Vec<Range<usize>> {
     let mut spans: Vec<Range<usize>> = p
+        .main
         .instructions
         .iter()
         .map(|i| i.clause_span.clone())

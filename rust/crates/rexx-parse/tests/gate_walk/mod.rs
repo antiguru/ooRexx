@@ -320,7 +320,7 @@ pub fn expr_of_directive(kind: &DirectiveKind) -> Option<&Expr> {
 /// Calls `visit` on every instruction of the program: the main body's, then
 /// each directive body's, in source order.
 pub fn each_instruction<'a>(p: &'a Program, visit: &mut impl FnMut(&'a Instruction)) {
-    for i in &p.instructions {
+    for i in &p.main.instructions {
         visit(i);
     }
     for d in &p.directives {

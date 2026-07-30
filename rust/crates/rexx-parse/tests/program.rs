@@ -25,7 +25,7 @@ fn err<T>(result: Result<T, ParseError>) -> (u16, u16) {
 #[test]
 fn a_program_with_directives_separates_them_from_instructions() {
     let p = parse_program(b"say 1\n::routine r\n  return 2\n".to_vec()).unwrap();
-    assert_eq!(p.instructions.len(), 1);
+    assert_eq!(p.main.instructions.len(), 1);
     assert_eq!(p.directives.len(), 1);
     assert_eq!(p.source.line(1), Some(&b"say 1"[..]));
 }
@@ -35,14 +35,14 @@ fn a_program_with_directives_separates_them_from_instructions() {
 #[test]
 fn a_program_with_no_directives_has_an_empty_directive_list() {
     let p = parse_program(b"say 1\nsay 2\n".to_vec()).unwrap();
-    assert_eq!(p.instructions.len(), 2);
+    assert_eq!(p.main.instructions.len(), 2);
     assert!(p.directives.is_empty());
 }
 
 #[test]
 fn a_program_with_no_main_instructions_starts_directly_with_a_directive() {
     let p = parse_program(b"::routine r\nreturn 1\n".to_vec()).unwrap();
-    assert!(p.instructions.is_empty());
+    assert!(p.main.instructions.is_empty());
     assert_eq!(p.directives.len(), 1);
 }
 
@@ -63,7 +63,7 @@ say "after directive"
     )
     .unwrap();
     assert_eq!(
-        p.instructions.len(),
+        p.main.instructions.len(),
         1,
         "only the main `say` is a main instruction"
     );
@@ -175,7 +175,7 @@ fn a_constant_directives_own_body_check_still_wins_over_the_generic_one() {
     assert_eq!(err(result), (99, 938));
 }
 
-// ---- Program::labels ----
+// ---- Program::main.labels ----
 
 fn label_at(instructions: &[rexx_parse::Instruction], index: usize) -> &[u8] {
     match &instructions[index].kind {
@@ -187,10 +187,10 @@ fn label_at(instructions: &[rexx_parse::Instruction], index: usize) -> &[u8] {
 #[test]
 fn a_symbol_label_is_keyed_by_its_upcased_spelling() {
     let p = parse_program(b"mIxEd: nop\n".to_vec()).unwrap();
-    assert_eq!(p.labels.get(&b"MIXED"[..]).copied(), Some(0));
-    assert_eq!(label_at(&p.instructions, 0), b"MIXED");
+    assert_eq!(p.main.labels.get(&b"MIXED"[..]).copied(), Some(0));
+    assert_eq!(label_at(&p.main.instructions, 0), b"MIXED");
     // Neither the source spelling nor a different case reaches it as a key.
-    assert!(!p.labels.contains_key(&b"mIxEd"[..]));
+    assert!(!p.main.labels.contains_key(&b"mIxEd"[..]));
 }
 
 /// A literal label is keyed by its bytes VERBATIM, case preserved, unlike a
@@ -201,9 +201,9 @@ fn a_symbol_label_is_keyed_by_its_upcased_spelling() {
 #[test]
 fn a_literal_label_is_keyed_by_its_exact_bytes() {
     let p = parse_program(b"'MiXeD': nop\n".to_vec()).unwrap();
-    assert_eq!(p.labels.get(&b"MiXeD"[..]).copied(), Some(0));
-    assert!(!p.labels.contains_key(&b"MIXED"[..]));
-    assert_eq!(label_at(&p.instructions, 0), b"MiXeD");
+    assert_eq!(p.main.labels.get(&b"MiXeD"[..]).copied(), Some(0));
+    assert!(!p.main.labels.contains_key(&b"MIXED"[..]));
+    assert_eq!(label_at(&p.main.instructions, 0), b"MiXeD");
 }
 
 /// A label's bytes need not be valid UTF-8, so the key type must not be
@@ -218,7 +218,7 @@ fn a_label_may_hold_bytes_that_are_not_valid_utf8() {
     text.extend_from_slice(b"': nop\n");
     let p = parse_program(text).unwrap();
     let key: &[u8] = &[0xFF];
-    assert_eq!(p.labels.get(key).copied(), Some(0));
+    assert_eq!(p.main.labels.get(key).copied(), Some(0));
 }
 
 /// Two labels with the same key: the FIRST occurrence wins. Measured against
@@ -232,24 +232,24 @@ fn a_duplicate_label_keeps_the_first_occurrence_not_the_last() {
     let p = parse_program(b"signal a\nsay \"unreachable\"\na: nop\na: nop\n".to_vec()).unwrap();
     // Instructions, in order: Signal(0), Command "unreachable"(1),
     // Label "A"(2), Nop(3), Label "A"(4), Nop(5).
-    assert_eq!(p.instructions.len(), 6);
-    assert_eq!(label_at(&p.instructions, 2), b"A");
-    assert_eq!(label_at(&p.instructions, 4), b"A");
+    assert_eq!(p.main.instructions.len(), 6);
+    assert_eq!(label_at(&p.main.instructions, 2), b"A");
+    assert_eq!(label_at(&p.main.instructions, 4), b"A");
     assert_eq!(
-        p.labels.get(&b"A"[..]).copied(),
+        p.main.labels.get(&b"A"[..]).copied(),
         Some(2),
         "the map must keep the FIRST label's index, not the second"
     );
 }
 
-/// A label inside a directive's body is not in `Program::labels` at all: that
-/// map is built from the main body's instructions only, because a label is
-/// local to the code body that declares it (the same reason each directive
+/// A label inside a directive's body is not in `Program::main.labels` at all:
+/// that map is built from the main body's instructions only, because a label
+/// is local to the code body that declares it (the same reason each directive
 /// body will get its own table once Task 3.7c parses one).
 #[test]
 fn a_label_inside_a_directive_body_is_not_in_the_programs_own_label_map() {
     let p = parse_program(b"::routine r\na: nop\n".to_vec()).unwrap();
-    assert!(p.labels.is_empty());
+    assert!(p.main.labels.is_empty());
 }
 
 // ---- parse_interpret: directives and labels are both rejected ----
@@ -276,12 +276,15 @@ fn interpret_rejects_a_label_with_47_1() {
 }
 
 /// The negative direction: ordinary `INTERPRET` text with neither a label nor
-/// a directive parses fine and gets no `directives`/`labels` fields at all
-/// (`Fragment` declares neither).
+/// a directive parses fine. `Fragment` declares no `directives` field at all,
+/// and its `body.labels` map, which exists because every `CodeBody` has one,
+/// comes back empty rather than merely unused: nothing inside `INTERPRET`
+/// text can ever populate it, per the two tests just above.
 #[test]
 fn interpret_accepts_ordinary_text_with_no_directive_and_no_label() {
     let f = parse_interpret(b"say 1; say 2".to_vec()).unwrap();
-    assert_eq!(f.instructions.len(), 2);
+    assert_eq!(f.body.instructions.len(), 2);
+    assert!(f.body.labels.is_empty());
     assert_eq!(f.source.line(1), Some(&b"say 1; say 2"[..]));
 }
 
@@ -310,8 +313,8 @@ fn assigned_symbol(instruction: &rexx_parse::Instruction) -> rexx_parse::SymbolI
 fn a_fragments_symbol_table_is_its_own_not_shared_across_calls() {
     let f1 = parse_interpret(b"a = 1".to_vec()).unwrap();
     let f2 = parse_interpret(b"b = 2".to_vec()).unwrap();
-    let a_id = assigned_symbol(&f1.instructions[0]);
-    let b_id = assigned_symbol(&f2.instructions[0]);
+    let a_id = assigned_symbol(&f1.body.instructions[0]);
+    let b_id = assigned_symbol(&f2.body.instructions[0]);
     assert_eq!(f1.symbols.name(a_id), "A");
     assert_eq!(f2.symbols.name(b_id), "B");
     // `f1`'s table has no entry for `B` at all, and vice versa: querying the
