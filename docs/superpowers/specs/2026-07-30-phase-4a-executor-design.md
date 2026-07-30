@@ -2,8 +2,9 @@
 
 **Goal:** run a classic Rexx program that has no procedures, no `PARSE` and no builtin calls, byte-for-byte as the oracle runs it, and fix the execution model while doing it.
 
-**Status:** revision 2, 2026-07-30.
+**Status:** revision 3, 2026-07-30.
 Revision 1 was reviewed by two independent agents and did not survive: 16 Critical, 16 Important and 7 Minor findings, plus two wrong claims.
+Revision 2 fixed all of them and introduced six new Critical findings of its own, which is this project's measured base rate for fix rounds: `NUMERIC FORM` is captured at creation exactly as `DIGITS` is and revision 2 fixed only `DIGITS`; a hash-mapped stem cannot reproduce `DO OVER`'s traversal order; the coverage criterion added to close a blindness finding demanded a witness for a loop form that needs Phase 5; D19's interpreter thread could not be handed an `!Send` program; its stack-sizing rule pointed at the side that *creates* a divergence; and its two variable-pool bullets, written for two different prior findings, could not both hold.
 Every measured transcript below was re-run for this revision.
 The findings that changed the design are named at the point they changed it, because a spec that hides its own corrections invites the same mistake twice.
 
@@ -34,7 +35,8 @@ From `rexx-core` (628 lines of `src`):
 
 From `rexx-num`:
 
-* `Number::parse(&str) -> Option<Number>`, `format(u64) -> String`, `round_to`, `whole_value(usize) -> Option<i64>`, `is_zero`, `zero`, `one`.
+* `Number::parse(&str) -> Option<Number>`, `format(u64) -> String`, **`format_form(digits, Form) -> String`**, `format_with`, `trunc`, `round_to`, `whole_value(usize) -> Option<i64>`, `is_zero`, `zero`, `one`.
+  `format_form` is the one D15 needs; listing only `format(u64)` in revision 2 is what steered its rendering rule into capturing half the state.
 * `add`, `sub`, `mul`, `div(.., DivOp)`, `pow`, each `(&self, &Number, digits: u64) -> Result<Number, ArithError>`.
 * `compare` is a **free function** over string operands taking both `digits` and `fuzz`, not a method on `Number`.
 * `Settings` with `digits()`, `fuzz()`, `form()`, `set_digits_str`, `set_fuzz_str`, `set_form_str`.
@@ -64,7 +66,7 @@ Phase 3's four handovers bind this phase: `resolveCalls` (`LanguageParser.cpp:16
 
 The parent plan's Phase 4 row closes when 4c closes.
 
-Explicitly assigned elsewhere, so that no instruction is merely absent: `Expose` and `Options` are Phase 5's, since neither is reachable outside a method or a package context; `Message`, `Guard`, `Reply`, `Forward`, every directive, and environment symbols beyond `.nil`, `.true` and `.false` are Phase 5's; `Command` dispatch and the rest of `Address` are Phase 7's under D18.
+Explicitly assigned elsewhere, so that no instruction is merely absent: **`LoopKind::With` is Phase 5's**, because `DO WITH ... OVER` sends `SUPPLIER` to its target and nothing in 4a answers a message — measured, `do with index i item v over 'abc'` is `Error 97.1`, "Object \"abc\" does not understand message \"SUPPLIER\"", rc 159; `Expose` and `Options` are Phase 5's, since neither is reachable outside a method or a package context; `Message`, `Guard`, `Reply`, `Forward`, every directive, and environment symbols beyond `.nil`, `.true` and `.false` are Phase 5's; `Command` dispatch and the rest of `Address` are Phase 7's under D18.
 `Label` is 4a's rather than 4b's even though nothing jumps to one in 4a, because a label is a traced no-op that any program may contain, and making it fail loudly would silently exclude every labelled program from the gate's subset.
 
 ## Decisions
@@ -103,10 +105,20 @@ So the representation is:
   The cache is tri-state on purpose: `None` is "not yet asked", and the two `Result` arms distinguish "is this number" from "is not a number", so a non-numeric string does not re-run `from_utf8` and `Number::parse` on every comparison.
   **The cache holds the exact parse and is never rounded at fill time.**
   Rounding belongs to the operation, which is why the cache is safe across a settings change: measured, `x = '1.234567890123456789'` gives `1.2346` under `DIGITS 5` and `1.234567890123456789` under `DIGITS 20`, from the same stored parse.
-* `Body::Num { value: Number, created_digits: u32, text: Option<Vec<u8>> }` for a value whose identity is its number.
-  `text` is formatted with `created_digits`, so it caches a pure function of the object and **is never invalidated**.
+* `Body::Num { value: Number, created_digits: u32, created_form: Form, text: Option<Vec<u8>> }` for a value whose identity is its number.
+  `text` is formatted with `format_form(created_digits, created_form)`, so it caches a pure function of the object and **is never invalidated**.
   Revision 1's rule, "invalidated on any settings change", produces exactly the divergence it claimed to prevent.
+  `NUMERIC FORM` is captured at creation exactly as `DIGITS` is, which revision 2 missed while fixing `DIGITS`: the same bug, one field over. Measured:
+
+  ```
+  numeric form engineering ; x = 1e10 + 0 ; say x  ->  10E+9
+  numeric form scientific  ;               say x  ->  10E+9      (unchanged)
+                             y = 1e10 + 0 ; say y  ->  1E+10
+  ```
+
+  An implementation formatting with `settings.form()` prints `1E+10` for `x`.
 * `ObjRef::SmallInt`, admissible only when the exact result is whole, inside the tag's range, **and** its decimal digit count is at most the `DIGITS` in force at that operation. It renders as plain decimal, which under that condition is correct by construction.
+  It is form-independent: under the digit-count condition the rendering carries no exponent, so `engineering` and `scientific` agree and no `created_form` is needed on the tag.
   The narrow condition is not fussiness. Measured under `numeric digits 1`:
 
   ```
@@ -162,6 +174,19 @@ Therefore `Body::Stem { name: Box<[u8]>, default: Option<ObjRef>, tails: HashMap
 
 A hash map, where the oracle has a balanced BST whose `memcmp` is 21.6% of stem-heavy runtime and is called only from `CompoundVariableTable::findEntry` (545 lines). This is the one place the rewrite is expected to beat the oracle rather than match it.
 
+**And the hash costs one observable behaviour, which is a deviation and not a detail.**
+`DO i OVER stem.` walks the tails in the oracle's tree order. Measured, inserting `1, 2, 3, 10, ZZ, B`:
+
+```
+do i over a.   ->   1 B 3 2 ZZ 10
+```
+
+That is neither insertion order, nor ascending, nor descending, nor byte order — a `BTreeMap` gives `1 10 2 3 B ZZ` — it is `CompoundVariableTable`'s tree shape.
+Reproducing it means reproducing the tree, which is the whole cost the hash map exists to avoid.
+**Decision: stem iteration order is not reproduced, and is recorded as a deviation** beside the parse-error-text deviation, on the ground that ANSI leaves `DO OVER` order over a stem implementation-defined.
+Two consequences that must be written down rather than discovered: no corpus program may contain `DO OVER` on a stem, even though the oracle's order is deterministic and the corpus rule is only determinism; and criterion 1's `LoopKind::Over` witness is therefore a non-stem target, which is legal — measured, a string and a number each iterate once yielding themselves.
+This is a semantic deviation chosen for performance, so it is the kind of call to reverse deliberately rather than by drift: reversing it means porting the tree and giving up the one measured win over the oracle.
+
 ### D16 variables, slots, and where the collector finds them
 
 **Decided: a per-body resolution plan keyed by upcased name, cached on `Interp`, with the activation's slot vector allowed to grow, and the slots reachable from an extended `RootSet`.**
@@ -170,9 +195,13 @@ Variable lookup is 8.1% of runtime on the realistic mixed benchmark and 32.2% on
 Phase 3's AST carries `SymbolId` and no slots, so assignment moves to first execution. Four corrections to revision 1:
 
 * **Keyed by upcased name, not `SymbolId`.** One `HashMap<Box<[u8]>, usize>` per plan, through which both a `SymbolId` and a compound's tail pieces resolve. Tail pieces must land on the *same* slot as a same-named variable elsewhere in the body: measured, `b = 2; say a.b` gives `A.2`, and after `a.2 = 'hit'`, `say a.b` gives `hit`. An implementer who gives tail pieces their own slots gets `A.B`.
-* **The vector grows.** `DROP (v)` is in 4a's list and names its target at run time: measured, `v = 'X'; x = 1; drop (v); say x` prints `X`. A name that resolves to no existing slot allocates one, so an activation starts at the plan's length rather than being exactly it.
+* **The slot frame grows.** `DROP (v)` is in 4a's list and names its target at run time: measured, `v = 'X'; x = 1; drop (v); say x` prints `X`. A name that resolves to no existing slot allocates one, so a frame starts at the plan's length rather than being exactly it, and the growth happens in the storage the next bullet places in `RootSet`.
 * **Cached on `Interp`, not on the body.** `Rc<Program>` gives shared immutable access, so nothing can be written into a `CodeBody` reached through one; revision 1's two central decisions contradicted each other. The cache is `plans: HashMap<BodyKey, Rc<Plan>>` on `Interp`, keyed by a program id assigned at load plus a body index, never by a raw pointer that a dropped `Rc` could let be reused.
-* **The collector must be able to see the slots.** `RootSet` is globals plus temps and `collect` takes nothing else, so as specified in revision 1 the first collection swept every local. Storing slots in `temps` does not work, because `push_temp` interleaves during evaluation and `Option<ObjRef>` has no encoding in a `Vec<ObjRef>`: `ObjRef::NIL` cannot mean "unassigned", since `x = .nil` is legal 4a and `.nil` is a value. So `RootSet` gains slot frames, `push_slots` and `pop_slots`, keeping `collect`'s signature. This is part of D15's single `rexx-core` amendment task.
+* **`RootSet` owns the slot storage**, and this is where two of revision 2's bullets contradicted each other: a growable slot vector living in the activation cannot also be a borrowed slice handed to `RootSet` at frame entry, because the slice would neither see later growth nor survive the `&mut self` calls evaluation makes.
+  So the storage moves: `RootSet` gains slot frames through `push_slots`/`pop_slots`, an activation holds a frame handle rather than its own `Vec`, and `collect`'s signature is unchanged, so `iter()` still yields everything.
+  The invariant that makes a growable frame safe is that **only the top frame ever grows** — true under D19's per-frame recursion, and true for `INTERPRET`, which runs inside the activation that created it.
+  Storing slots in `temps` instead does not work: `push_temp` interleaves during evaluation, and `Option<ObjRef>` has no encoding in a `Vec<ObjRef>` because `ObjRef::NIL` cannot mean "unassigned" when `x = .nil` is legal 4a and `.nil` is a value.
+  This is part of D15's single `rexx-core` amendment task.
 
 An uninitialised read yields the derived name, and it does so **distinguishably**: the read returns the value together with an "was unset" signal, because `SIGNAL ON NOVALUE` in 4b changes what an uninitialised read does and the read path is 4a's. Retrofitting a raise into the hottest path later is the thing this sentence exists to prevent, and the Phase 4 gate program uses `signal on novalue`. `DROP` restores the unset state.
 
@@ -203,7 +232,14 @@ A command clause fails loudly until Phase 7.
 The oracle has measured capabilities here that a naive recursive evaluator cannot match: it evaluates `x = 1+1+…+1` with **100,000 terms** and prints `100000`, and `say ((((…1…))))` with **20,000 nested parentheses**, both exit 0.
 A `fn eval` recursive over a left-deep `Binary` chain uses one Rust frame per term, and the failure mode is a native stack overflow, which aborts with no message and no exit code: precisely the outcome the failing-loudly rule most wants to exclude.
 
-So: `rexx-run` runs the interpreter on a thread whose stack size is set explicitly and recorded, chosen so that the oracle's measured depths pass with margin; `eval` carries a depth counter that raises a Rexx condition before the stack can be exhausted; and the corpus contains a program at a depth the oracle handles, so the boundary is measured rather than discovered as a crash.
+**The bound is two-sided, which revision 2 got wrong by treating 100,000 as a capability rather than as the largest depth anyone had tried.** Measured: 100,000 terms prints `100000` and exits 0; **200,000 terms exits 139**, a SIGSEGV. So a generously sized stack is a *divergence*: `rexx-run` succeeding at 200,000 where the oracle dies is an exit-code difference criterion 1 reports as a failure.
+
+So, and each of these three numbers is chosen and recorded rather than left to be inferred:
+
+* `rexx-run` runs the interpreter on a thread with an explicit stack size. **That thread owns everything from `parse_program` onward** — bytes in, an outcome out — because `Rc<Program>` is `!Send` and a program parsed on the main thread cannot be handed across, which would be a compile error on day one. The same applies to the capturable output and trace sinks.
+* `eval` carries a depth counter with a stated limit, chosen below what the thread's stack can survive, and the two are derived from each other by measuring the per-frame cost rather than guessed.
+* At the limit 4a raises `11.1`, "Insufficient control stack space", which is a **chosen deviation and stated as one**: the oracle raises nothing here, it crashes, so no number is the reproducing answer and 11.1 is the closest condition the language has.
+* The corpus carries an expression deep enough to exercise the path and well below both cliffs; a program near the oracle's 200,000-term cliff is excluded, because what it measures is a C++ stack size and not a language rule.
 
 Activation depth is decided here and paid in 4b: measured, unbounded `CALL` recursion gives `Error 11.1`, "Insufficient control stack space", at rc 245 — a reportable condition, not a crash. One Rust frame per activation with an explicit counter produces it; a flat loop over the activation stack would too, and the choice is stated now because D17's own argument is that the dispatch loop should not be designed twice.
 
@@ -226,7 +262,7 @@ Under that discipline the shape holds for an `INTERPRET` fragment created mid-in
 
 **Task 1 is a spike that proves the shape end to end** — including a fragment whose `Rc` outlives the instruction that made it, and the variable pool, since a spike that avoids the pool proves less than it claims. It is kept, with the failing version in a comment, because the next phase to touch this will want to know which version does not compile.
 
-`Rc` is not `Send`, and Phase 6 is in the plan: it either converts every `Rc<Program>` to `Arc` (mechanical but pervasive) or gives each thread its own package arena. Recorded here because discovering it in Phase 6 costs a sweep of `rexx-exec`.
+`Rc` is not `Send`, which bites **twice and at different times**. Immediately, it constrains D19: the interpreter thread must own the parse, because nothing can hand it an `Rc<Program>`. Later, in Phase 6, it means either converting every `Rc<Program>` to `Arc` (mechanical but pervasive) or giving each thread its own package arena. Revision 2 recorded only the Phase 6 half, which is why the paragraph that should have caught D19's compile error pointed at the wrong phase.
 
 ### Crate layout
 
@@ -295,9 +331,12 @@ rc=249
 
 That is a clause echo **with trace off**, a major-number line carrying the absolute path and line number, a sub-number line with substitutions, two spaces after each colon, and `exit code = 256 - major`. A second measured case: 34.1 gives rc 222. The task delivers a message catalogue for 4a's four raiser families with major and sub-number text, the two-line format, the clause echo, and the exit-code rule, with oracle-captured expectations. Only arithmetic's text exists today.
 
+The `DO` control family is the one nobody had measured. Confirmed here: `do i = 'x' to 3` and `do i = 1 to 'y'` both give **41.1**. Reported by review but not reproduced by me: **26.2** and **26.3** for non-whole control values, so the task enumerates the family against the oracle rather than trusting either account. And `do i = 1 by 0 to 3` **loops forever and raises nothing**, which is a behaviour to reproduce rather than an error to catalogue — my own first probe of it printed `Error 4.1`, which was `timeout` being converted to HALT and not the program doing anything.
+
 ### Failing loudly
 
 Every feature 4a does not implement fails distinguishably: a dedicated process exit code and a message naming the construct and the sub-phase that owns it, never a plausible Rexx condition.
+That code must sit **outside the band a Rexx error can produce**, which is `256 - major` for majors 3 to 99, so 157 to 253 — a not-implemented code of 245 would be indistinguishable from error 11. The chosen code is recorded in the plan and the harness treats it as a hard failure whatever the oracle did.
 If an unimplemented builtin raised 43.1, a differential run would show what looks like a resolution bug, and a program expecting 43.1 would *pass*.
 **An implementation gap must never be able to produce a passing test**, and criterion 5 below is what enforces it — in revision 1 this rule was prose that no criterion tested, while 4a's out-of-scope surface is larger than its in-scope surface.
 
@@ -339,14 +378,18 @@ Revision 1 also listed a stale value cache across a `NUMERIC` change as a blind 
 
 Each criterion names the set it quantifies over, each can fail, and no criterion's anti-vacuity requirement lives in prose beside it.
 
-1. **The named L0 subset in `rust/corpus/phase-4a.txt` runs with zero divergences**, the harness reporting the program count rather than the criterion asserting it, and the subset satisfies a coverage property: every `InstructionKind`, `LoopKind` and `Trace` variant in 4a's scope, and every `Operator` listed above, is constructed by at least one program in it, asserted by a macro-generated enumerating test with no wildcard arm, in the shape Phase 3's criterion 2 used so that a new variant is a compile error rather than a silent gap.
+1. **The named L0 subset in `rust/corpus/phase-4a.txt` runs with zero divergences**, the harness reporting the program count rather than the criterion asserting it, and the subset satisfies a coverage property: every `InstructionKind`, `ExprKind`, `LoopKind`, `PrefixOp`, `EndStyle` and `Trace` variant in 4a's scope, and every `Operator` listed above, is constructed by at least one program in it, asserted by a macro-generated enumerating test with no wildcard arm, in the shape Phase 3's criterion 2 used so that a new variant is a compile error rather than a silent gap.
+   The enumeration lists every variant, so a variant outside 4a carries the phase that owns it instead of a witness, and the test fails on a variant that carries neither. Without that arm the criterion demands a witness for `LoopKind::With`, which needs `SUPPLIER` and therefore Phase 5, and the criterion added to fix a blindness finding would itself have been unsatisfiable. `EndStyle` has never been gated by any phase.
    The subset must include: nested `DO` with `LEAVE` naming an outer label; `ITERATE` from inside a `SELECT` within a loop; `IF`/`ELSE` chains where the false target and the then-exit differ; a `SELECT` whose `WHEN` bodies are several instructions long with visible side effects, so that a wrong exit lands inside a later `WHEN`'s body; and `when 1 = 1 then` followed by `when 2 = 2 then nop`, where the second `WHEN` is the first's `THEN` instruction and is never collected into `whens`.
    Revision 1 asked instead for a `SELECT` whose `WHEN`s all share an exit, which is true by construction — `fixWhen` gives every `WHEN` of one `SELECT` the same exit — so no test could have failed it.
-2. **The `base/expressions` assertion table passes**, every row evaluated, the count reported. A row whose operands need 4b or 4c is listed with the sub-phase that unblocks it, and the extractor's sequential `NUMERIC DIGITS` tracking has its own test against a file that changes the setting mid-way.
+2. **The `base/expressions` assertion table passes**, every row evaluated, the count reported, and **each row compared byte for byte against the expected value, never numerically** — a numeric comparison would hide the entire created-digits and created-form story across thousands of rows, which is the defect class D15 exists to prevent.
+   A row whose operands need 4b or 4c is listed with the sub-phase that unblocks it, and the extractor's sequential `NUMERIC DIGITS` tracking has its own test against a file that changes the setting mid-way.
+   The table covers every assertion whose expression 4a can parse and evaluate, **including the PRECEDENCE (1,226) and CONCATENATION (388) groups**. Phase 2's costing excluded those and restricted itself to plain `<operand> <operator> <operand>` triples because Phase 2 had no parser; 4a has one, so the restriction is obsolete and those 1,614 assertions are the ones most relevant to an evaluator.
 3. **Trace output matches the oracle byte for byte on stderr**, over a committed table mapping **each of the 19 prefixes at `RexxActivation.hpp:90`-`110`** to either a witness program or the sub-phase that first emits it, with the harness failing when a 4a row has no witness. The prefix list is enumerated from the oracle's table, not from what the implementation turns out to emit, because "one program per prefix 4a can emit" is a set the implementation chooses and the failure it cannot see is 4a emitting nothing where the oracle emits something. Measured reachable from pure-4a code: `*-*`, `>>>`, `>=>`, `>L>`, `>V>`, `>O>`, `>K>`, `>C>`, and a prefix-operator line.
 4. **The named L0 subset passes again under collect-on-every-allocation.**
 5. **Every `InstructionKind` and `ExprKind` variant either executes or fails loudly**: an enumerating test with no wildcard arm asserts that each variant is in 4a's named set or produces the not-implemented exit code with a message naming the owning sub-phase. One criterion closes a surface larger than 4a's own and cannot rot.
-6. **A mutation control**, replacing "substituting any other binary reports divergences on every program", which `/bin/true` satisfies and which demonstrates only that the harness notices *absent* output. A committed list of one-line mutations to `rexx-exec`, each of which the subset must catch, mapped onto the handed-over blind spots: off-by-one on `If::false_target`; off-by-one on `When::exit`; `Loop::end` off by one; `Controlled::order` evaluated in fixed To/By/For order; `Abuttal` treated as `Blank`; `=` treated as `==`; `LEAVE` unwinding one block too few; and formatting with the current digits instead of the created digits.
+6. **A mutation control**, replacing "substituting any other binary reports divergences on every program", which `/bin/true` satisfies and which demonstrates only that the harness notices *absent* output. A committed list of one-line mutations to `rexx-exec`, each of which the subset must catch, mapped onto the handed-over blind spots: off-by-one on `If::false_target`; off-by-one on `When::exit`; `Loop::end` off by one; `Controlled::order` evaluated in fixed To/By/For order; `Abuttal` treated as `Blank`; `=` treated as `==`; `LEAVE` unwinding one block too few; formatting with the current digits instead of the created digits; and formatting with the current form instead of the created form.
+   The mechanism is the mutation script this project already uses, carrying its **exit-non-zero-on-an-unapplied-pattern guard** — that guard fired in four separate Phase 3 tasks, and without it a pattern that has gone stale reports coverage that does not exist. This is the one criterion a `cargo test` cannot be, since it edits the source it tests, so the gate records the script's output and the plan says so rather than leaving it to look like the others.
 7. **Zero `unsafe`, `clippy -D warnings` clean, `cargo fmt` clean**, and the Task 1 spike committed with its findings written down.
 
 ## Phase 4 gate items decided now
@@ -369,6 +412,8 @@ Three partial rows, because a whole-builtin exclusion would overstate the gap:
 * `QUEUED` is in scope against 4b's in-process queue, and cross-process sharing with the oracle's rxapi-backed session queue will never match, so the row records that a differential run of `QUEUED` is single-program only.
 
 Without this file, "all 81" is a criterion the phase ordering cannot satisfy, which is how Phase 2 came to fail three of five.
+
+The file carries a **second section for semantic deviations**, which are not exclusions and must not be filed as ones: today it holds one row, `DO OVER` on a stem does not reproduce the oracle's traversal order (D15a), with the corpus consequence that no program may contain it. A deviation is a permanent difference chosen on purpose; an exclusion is work assigned to a later phase. Filing one as the other is how a deviation stops being reviewed.
 
 ### The rexxcps gate
 
