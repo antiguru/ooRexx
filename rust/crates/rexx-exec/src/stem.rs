@@ -341,13 +341,9 @@ mod tests {
             &program.symbols,
         );
         let frame = interp.roots.push_slots(plan.len());
-        interp.activations.push(Activation {
-            program: Rc::clone(&program),
-            plan,
-            extra: HashMap::new(),
-            frame,
-            pc: 0,
-        });
+        interp
+            .activations
+            .push(Activation::new(Rc::clone(&program), plan, frame));
         program
     }
 

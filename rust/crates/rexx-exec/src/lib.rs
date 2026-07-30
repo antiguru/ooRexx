@@ -27,7 +27,7 @@
 //! `activation.rs`, `eval.rs`, `run.rs`, and the rest); nothing here is meant
 //! to survive as it stands except the borrow discipline itself.
 
-use rexx_core::{Heap, ObjRef, RootSet, SlotFrame};
+use rexx_core::{Heap, ObjRef, RootSet};
 use rexx_parse::{
     CodeBody, Expr, ExprKind, Fragment, Instruction, InstructionKind, Operator, ParseError,
     PrefixOp, Program, SymbolId, SymbolTable, parse_interpret, parse_program,
@@ -43,6 +43,16 @@ mod value;
 // Stems and compound variables (D15a): tail resolution, the tombstone rule,
 // and the "replace the object, mutate a tail in place" split.
 mod stem;
+
+// The per-body resolution plan (D16): `Plan`, `BodyKey`, `ProgramId`, the
+// plan cache, and the full name-resolution order (plan, then `extra`, then
+// growth).
+mod plan;
+use plan::{BodyKey, Plan, ProgramId};
+
+// One activation: everything about the frame currently executing (D16).
+mod activation;
+use activation::Activation;
 
 /// The exit code for a construct Phase 4a does not implement.
 ///
@@ -375,173 +385,6 @@ fn form_name(kind: &ExprKind) -> String {
     name.to_string()
 }
 
-/// A loaded program's identity.
-///
-/// A small integer the loader hands out, never a pointer: D16 requires that
-/// the plan cache's key cannot be reused by a different program, and an
-/// address can be, once an `Rc` drops and the allocator reuses the block.
-/// `Interp::programs` holds an `Rc` for every id it has issued, so an id
-/// outlives every plan keyed against it by construction.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-struct ProgramId(usize);
-
-/// Which code body of which loaded program a cached plan belongs to (D16).
-///
-/// There is deliberately **no fragment arm**, and that is a finding rather
-/// than an omission. D16 says a fragment's plan is keyed by `(enclosing body,
-/// fragment id)`, but a fragment is re-parsed on every execution of its
-/// `INTERPRET` and its text can differ per iteration, so a "fragment id" can
-/// only be a counter handed out per parse. Every lookup against such a key
-/// misses and every insert stays forever, so `do 1000000; interpret s; end`
-/// would accumulate a million plans that are each read zero times. The
-/// durable part of a fragment's resolution is not its plan but the
-/// name-to-slot bindings it adds to the enclosing activation, and those live
-/// on `Activation::extra`. So a fragment plan is built, used, and dropped with
-/// the fragment. See `Interp::fragment_plan`.
-#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-struct BodyKey {
-    program: ProgramId,
-    /// `None` is the program's main body. 4b is the first to need
-    /// `Some(index)` for `directives[index]`'s body.
-    directive: Option<usize>,
-}
-
-/// One body's variable-resolution plan, built by one upfront pass at first
-/// execution (D16).
-///
-/// Two views of the same assignment. `names` is the map D16 specifies, keyed
-/// by upcased name, and it is what a name resolved at *run time* goes through:
-/// `DROP (v)`, and a fragment's names. `by_symbol` is what evaluation goes
-/// through, so the hot path is a lookup by the id the AST already carries
-/// rather than a byte-string hash.
-///
-/// `by_symbol` is a `HashMap` and D16's shape wants an array index. It cannot
-/// be one yet: `rexx_parse::SymbolId` is a newtype over a private `u32` with
-/// no accessor, so nothing outside `rexx-parse` can turn one into a `Vec`
-/// index. Task 6 either adds that accessor or keeps the hash; recorded here
-/// so the choice is made rather than inherited.
-#[derive(Debug, Default)]
-struct Plan {
-    names: HashMap<Box<[u8]>, usize>,
-    by_symbol: HashMap<SymbolId, usize>,
-}
-
-impl Plan {
-    /// Walks `body` once and returns a finished table (D16: "built by one
-    /// upfront pass", not populated lazily one name at a time).
-    fn build(body: &CodeBody, symbols: &SymbolTable) -> Plan {
-        let mut plan = Plan::default();
-        for instruction in &body.instructions {
-            match &instruction.kind {
-                InstructionKind::Assignment { target, value } => {
-                    plan.note(target, symbols);
-                    plan.note(value, symbols);
-                }
-                InstructionKind::Say {
-                    expression: Some(expression),
-                } => plan.note(expression, symbols),
-                InstructionKind::Interpret { expression } => plan.note(expression, symbols),
-                // Every other instruction fails loudly before evaluation ever
-                // reaches it, so a variable inside one can never be read and
-                // needs no slot. Task 6 makes this pass exhaustive over
-                // `InstructionKind`, which is the point at which the omission
-                // would start to matter.
-                _ => {}
-            }
-        }
-        plan
-    }
-
-    /// Assigns slots to every variable `expr` names, in source order.
-    ///
-    /// Recursive, and that recursion is on the interpreter thread's stack
-    /// budget alongside `eval`'s: a left-deep 100,000-term expression is
-    /// walked here as deeply as it is later evaluated.
-    fn note(&mut self, expr: &Expr, symbols: &SymbolTable) {
-        match &expr.kind {
-            ExprKind::Variable(id) => self.bind(*id, symbols.name(*id).as_bytes()),
-            ExprKind::Prefix { operand, .. } => self.note(operand, symbols),
-            ExprKind::Binary { left, right, .. } => {
-                self.note(left, symbols);
-                self.note(right, symbols);
-            }
-            // A literal and a constant name no variable; every remaining form
-            // fails loudly in `eval` before its names could be read. Task 6
-            // covers `Stem`, `Compound` and the rest, where D16's rule that a
-            // tail piece lands on the *same* slot as a same-named variable is
-            // what `names` exists for.
-            _ => {}
-        }
-    }
-
-    /// Binds `name` to a slot, and `id` to the same one.
-    ///
-    /// Both views are updated together because they are one assignment seen
-    /// two ways: a second symbol spelling the same name must land on the slot
-    /// the first one got, which is why the slot number comes from `names` and
-    /// never from `by_symbol`'s length.
-    fn bind(&mut self, id: SymbolId, name: &[u8]) {
-        let next = self.names.len();
-        let slot = *self.names.entry(name.into()).or_insert(next);
-        self.by_symbol.insert(id, slot);
-    }
-
-    fn len(&self) -> usize {
-        self.names.len()
-    }
-}
-
-/// One activation: everything about the frame currently executing.
-///
-/// `Settings` is per activation and not one field on `Interp` (measured, in
-/// the design's "The borrow shape"), so 4b's frame carries its own. 4a has one
-/// frame, and the spike has no `NUMERIC` instruction, so there is nothing to
-/// carry yet and the field arrives with Task 9.
-struct Activation {
-    /// The program this frame is running.
-    ///
-    /// **A liveness anchor, and never borrowed through.** Nothing takes
-    /// `&self.activations.last().program.…` and then calls a `&mut self`
-    /// method: that is the `E0502` written out in `run_activation`. This field
-    /// exists so that the `Rc` the instruction loop clones into its local has
-    /// something to be cloned from, and so that a frame keeps its program
-    /// alive independently of `Interp::programs`.
-    ///
-    /// **It records the program and not the body, and `run_activation` fills
-    /// that gap by hardcoding `&program.main`.** True for every activation 4a
-    /// can build, since 4a has one and it runs the main body. False the moment
-    /// 4b calls a `::routine`: that activation's body is
-    /// `directives[i]`'s, and without a field saying so it would re-run
-    /// `main` instead, silently and with the right program. The missing field
-    /// is a body selector beside this one, the same thing `BodyKey::directive`
-    /// already carries for the plan cache, and adding it is 4b's rather than
-    /// speculative scaffolding here.
-    program: Rc<Program>,
-    plan: Rc<Plan>,
-    /// Names bound after `plan` was built, and the reason this field exists is
-    /// the whole answer to "does a fragment's plan work against the enclosing
-    /// plan's name map".
-    ///
-    /// It does for reads, and it cannot for writes. A fragment that introduces
-    /// a name the enclosing body never mentions has to bind that name to a
-    /// slot, and the binding has to outlive the fragment. Measured on the
-    /// oracle:
-    ///
-    /// ```text
-    /// interpret "zork = 42"      /* ZORK is in no instruction of this body */
-    /// interpret "say zork"       /* prints 42 */
-    /// ```
-    ///
-    /// The enclosing `plan` is an `Rc` the activation holds a clone of, so it
-    /// is not uniquely owned and cannot be extended; `RootSet::grow_slots`
-    /// hands out the *slot* but records no *name* for it. This map is where
-    /// the name goes. `DROP (v)` has the identical hole, so this is not a
-    /// fragment-only mechanism.
-    extra: HashMap<Box<[u8]>, usize>,
-    frame: SlotFrame,
-    pc: usize,
-}
-
 /// The code a step is executing, all of it borrowed from the caller's local
 /// `Rc` and none of it from `self`.
 ///
@@ -693,13 +536,8 @@ impl Interp {
         );
 
         let frame = self.roots.push_slots(plan.len());
-        self.activations.push(Activation {
-            program: Rc::clone(&program),
-            plan,
-            extra: HashMap::new(),
-            frame,
-            pc: 0,
-        });
+        self.activations
+            .push(Activation::new(Rc::clone(&program), plan, frame));
 
         let exit = self.run_activation();
 
@@ -710,26 +548,8 @@ impl Interp {
         exit
     }
 
-    /// The plan for one body, from the cache or built and cached (D16:
-    /// "cached on `Interp`, not on the body", because an `Rc<Program>` gives
-    /// shared immutable access and nothing can be written into a `CodeBody`
-    /// reached through one).
-    fn plan_for(&mut self, key: BodyKey, body: &CodeBody, symbols: &SymbolTable) -> Rc<Plan> {
-        if let Some(plan) = self.plans.get(&key) {
-            return Rc::clone(plan);
-        }
-        let plan = Rc::new(Plan::build(body, symbols));
-        self.plans.insert(key, Rc::clone(&plan));
-        plan
-    }
-
-    fn activation(&self) -> &Activation {
-        self.activations.last().expect("a live activation")
-    }
-
-    fn activation_mut(&mut self) -> &mut Activation {
-        self.activations.last_mut().expect("a live activation")
-    }
+    // `plan_for` and `activation`/`activation_mut` live in `plan.rs`/
+    // `activation.rs` (Task 6), beside the types they operate on.
 
     // ---- the instruction loop, which is what this spike is for ----
 
@@ -962,7 +782,12 @@ impl Interp {
 
             InstructionKind::Assignment { target, value } => {
                 // `addVariable` builds only `Variable`, `Stem` or `Compound`
-                // here; the spike takes the first and Task 5 takes the others.
+                // here; the spike takes the first. Task 5 built the
+                // `stem_assign`/`stem_set` library the other two need, but
+                // not the dispatch itself: recognising a `Stem`/`Compound`
+                // target and calling into it is Task 9's (the instruction
+                // loop), which needs `eval_node` to evaluate those forms as
+                // an expression first, and that is Task 7's.
                 let ExprKind::Variable(id) = &target.kind else {
                     return Err(Loud::expression(&target.kind));
                 };
@@ -1064,69 +889,8 @@ impl Interp {
         Ok(Flow::Next)
     }
 
-    /// Resolves a fragment's own `SymbolId`s to slots in the **enclosing**
-    /// frame.
-    ///
-    /// This is D16's "its plan is built against the enclosing plan's name map"
-    /// and it goes through `slot_of`, which is that name map plus the two
-    /// things D16 does not mention: the activation's `extra` bindings, and
-    /// growth for a name nobody has bound yet. A fragment's ids are its own,
-    /// and `parse_interpret` builds a fresh `SymbolTable` every call, so id 7
-    /// in the fragment and id 7 in the program name unrelated symbols -- the
-    /// join has to be through the text, `fragment.symbols.name(id)`, and this
-    /// is the only place that matters.
-    ///
-    /// The result is returned rather than cached, for the reason `BodyKey`
-    /// gives.
-    fn fragment_plan(&mut self, fragment: &Fragment) -> HashMap<SymbolId, usize> {
-        // The same upfront pass, run against the fragment's own body, which
-        // numbers its names 0..n in walk order. Those numbers are local to the
-        // fragment and mean nothing to the enclosing frame; the loop below is
-        // what translates them.
-        let local = Plan::build(&fragment.body, &fragment.symbols);
-
-        // Walk order, recovered from the local numbering rather than from
-        // iterating the map, because a `HashMap`'s order varies run to run and
-        // the enclosing frame's slots would then be allocated in a different
-        // order each time. Nothing observable depends on that order today,
-        // which is the reason to fix it now rather than after something does.
-        let mut by_local: Vec<&[u8]> = vec![b""; local.len()];
-        for (name, slot) in &local.names {
-            by_local[*slot] = name;
-        }
-        let enclosing: Vec<usize> = by_local.iter().map(|name| self.slot_of(name)).collect();
-
-        local
-            .by_symbol
-            .iter()
-            .map(|(id, local_slot)| (*id, enclosing[*local_slot]))
-            .collect()
-    }
-
-    // ---- the variable pool ----
-
-    /// The slot `name` resolves to in the current frame, allocating one if it
-    /// resolves to none.
-    ///
-    /// Three sources in order, and the third is the one D16 leaves out. The
-    /// plan's name map is the upfront pass's answer. `extra` is every binding
-    /// made since, which is where a fragment's new names and `DROP (v)`'s
-    /// run-time target land. Growth is what happens when neither has it:
-    /// `RootSet::grow_slots` extends the frame, and the name is recorded
-    /// **here**, because the plan is an `Rc` and cannot be extended.
-    fn slot_of(&mut self, name: &[u8]) -> usize {
-        let activation = self.activation();
-        if let Some(slot) = activation.plan.names.get(name) {
-            return *slot;
-        }
-        if let Some(slot) = activation.extra.get(name) {
-            return *slot;
-        }
-        let frame = activation.frame;
-        let slot = self.roots.grow_slots(frame);
-        self.activation_mut().extra.insert(name.into(), slot);
-        slot
-    }
+    // `fragment_plan` and `slot_of` live in `plan.rs` (Task 6), beside
+    // `Plan` itself.
 
     /// Reads a variable, by the slot the plan already resolved its id to.
     ///
