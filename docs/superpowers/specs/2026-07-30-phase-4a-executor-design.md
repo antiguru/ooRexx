@@ -2,7 +2,8 @@
 
 **Goal:** run a classic Rexx program that has no procedures, no `PARSE` and no builtin calls, byte-for-byte as the oracle runs it, and fix the execution model while doing it.
 
-**Status:** revision 3, 2026-07-30.
+**Status:** revision 4, 2026-07-30.
+Revision 4 came from a fresh reader with no prior context, asked only whether the document stands on its own. It found two things three correctness passes had not: the ordinary comparison algorithm (`=`, `>`, `<`) was **absent entirely**, while its strict sibling was spelled out in three examples, and `Settings` was owned by `Interp` in one section and by each activation in another. Both are now measured and stated, along with the logical-value rule, multi-level tail keys, when a plan is built, and where the message catalogue comes from.
 Revision 1 was reviewed by two independent agents and did not survive: 16 Critical, 16 Important and 7 Minor findings, plus two wrong claims.
 Revision 2 fixed all of them and introduced six new Critical findings of its own, which is this project's measured base rate for fix rounds: `NUMERIC FORM` is captured at creation exactly as `DIGITS` is and revision 2 fixed only `DIGITS`; a hash-mapped stem cannot reproduce `DO OVER`'s traversal order; the coverage criterion added to close a blindness finding demanded a witness for a loop form that needs Phase 5; D19's interpreter thread could not be handed an `!Send` program; its stack-sizing rule pointed at the side that *creates* a divergence; and its two variable-pool bullets, written for two different prior findings, could not both hold.
 Every measured transcript below was re-run for this revision.
@@ -119,6 +120,7 @@ So the representation is:
   An implementation formatting with `settings.form()` prints `1E+10` for `x`.
 * `ObjRef::SmallInt`, admissible only when the exact result is whole, inside the tag's range, **and** its decimal digit count is at most the `DIGITS` in force at that operation. It renders as plain decimal, which under that condition is correct by construction.
   It is form-independent: under the digit-count condition the rendering carries no exponent, so `engineering` and `scientific` agree and no `created_form` is needed on the tag.
+  **The admissibility check happens once, when the value is created, and is never re-derived from the current settings** — the same "fixed at creation" rule as `Body::Num`, stated rather than left to be inferred by analogy, because the tag visibly has no room to store what it was checked against.
   The narrow condition is not fussiness. Measured under `numeric digits 1`:
 
   ```
@@ -171,6 +173,8 @@ Therefore `Body::Stem { name: Box<[u8]>, default: Option<ObjRef>, tails: HashMap
 * The **name** is on the object, because a Stem aliased into a simple variable still renders `Q.` and the reference site supplies no name there.
 * `stem. = expr` and `drop stem.` **replace** the Stem object and rebind the variable; they do not mutate in place. A tail assignment does mutate. Both are observable through the aliasing above, so an implementer who deep-copies `b. = a.` answers 1 where the oracle answers 2.
 * Tail keys are the tail variable's **value verbatim, case-sensitively**. Revision 1's `b = 2, c = 1` example cannot discriminate this; `i = 'abc'` can.
+  Note the deliberate asymmetry with D16, which keys variable *names* by their upcased spelling: a name is upcased, a tail value is not, and the two rules sit in different decision blocks precisely because they are easy to swap.
+* A **multi-level tail** resolves each piece and joins the results with a period, which is the one key the map holds. Measured: with `i = 1` and `j = 2`, `a.i.j` and `a.1.2` are the same variable, and with `k = 'A'`, `b.k.k` is `b.A.A`.
 
 A hash map, where the oracle has a balanced BST whose `memcmp` is 21.6% of stem-heavy runtime and is called only from `CompoundVariableTable::findEntry` (545 lines). This is the one place the rewrite is expected to beat the oracle rather than match it.
 
@@ -183,7 +187,7 @@ do i over a.   ->   1 B 3 2 ZZ 10
 
 That is neither insertion order, nor ascending, nor descending, nor byte order — a `BTreeMap` gives `1 10 2 3 B ZZ` — it is `CompoundVariableTable`'s tree shape.
 Reproducing it means reproducing the tree, which is the whole cost the hash map exists to avoid.
-**Decision: stem iteration order is not reproduced, and is recorded as a deviation** beside the parse-error-text deviation, on the ground that ANSI leaves `DO OVER` order over a stem implementation-defined.
+**Decision: stem iteration order is not reproduced, and is recorded as a deviation** beside the parse-error-text deviation. The justification is measured rather than an appeal to ANSI leaving the order implementation-defined, since this is the project's first trade of an oracle behaviour for speed. Counted across the tree: `DO OVER` on a stem appears **0 times in ooTest**, **0 times in `CoreClasses.orx` and `StreamClasses.orx`**, and **6 times in `samples/`, all of them under `samples/windows/oodialog/`** — against 492, 16 and 154 uses of `DO OVER` overall. Of the six, five assign or clear each tail and are order-independent; one, `registry.rex`'s `do i over keys.; say keys.i`, has order-observable output, and it is a Windows-only GUI sample that no gate runs. (A first count said two ooTest sites; both were my regex matching the numeric literals in `do number over 1.2, -0.003`, which is a list and not a stem.)
 Two consequences that must be written down rather than discovered: no corpus program may contain `DO OVER` on a stem, even though the oracle's order is deterministic and the corpus rule is only determinism; and criterion 1's `LoopKind::Over` witness is therefore a non-stem target, which is legal — measured, a string and a number each iterate once yielding themselves.
 This is a semantic deviation chosen for performance, so it is the kind of call to reverse deliberately rather than by drift: reversing it means porting the tree and giving up the one measured win over the oracle.
 
@@ -196,7 +200,9 @@ Phase 3's AST carries `SymbolId` and no slots, so assignment moves to first exec
 
 * **Keyed by upcased name, not `SymbolId`.** One `HashMap<Box<[u8]>, usize>` per plan, through which both a `SymbolId` and a compound's tail pieces resolve. Tail pieces must land on the *same* slot as a same-named variable elsewhere in the body: measured, `b = 2; say a.b` gives `A.2`, and after `a.2 = 'hit'`, `say a.b` gives `hit`. An implementer who gives tail pieces their own slots gets `A.B`.
 * **The slot frame grows.** `DROP (v)` is in 4a's list and names its target at run time: measured, `v = 'X'; x = 1; drop (v); say x` prints `X`. A name that resolves to no existing slot allocates one, so a frame starts at the plan's length rather than being exactly it, and the growth happens in the storage the next bullet places in `RootSet`.
-* **Cached on `Interp`, not on the body.** `Rc<Program>` gives shared immutable access, so nothing can be written into a `CodeBody` reached through one; revision 1's two central decisions contradicted each other. The cache is `plans: HashMap<BodyKey, Rc<Plan>>` on `Interp`, keyed by a program id assigned at load plus a body index, never by a raw pointer that a dropped `Rc` could let be reused.
+* **Built by one upfront pass, at first execution.** The pass walks the body's AST once and returns a finished table; it is not populated lazily one name at a time. Revision 3 supported both readings in different sentences, and they are different algorithms — a lazy design threads a "seen this name?" check through every site that touches a variable. Run-time growth (the `DROP (v)` case below) is the *exception* to a finished table, not the normal path.
+* **Cached on `Interp`, not on the body.** `Rc<Program>` gives shared immutable access, so nothing can be written into a `CodeBody` reached through one; revision 1's two central decisions contradicted each other. The cache is `plans: HashMap<BodyKey, Rc<Plan>>` on `Interp`, keyed by a **program id that `Interp`'s loader assigns when it calls `parse_program`** — held in the map's value alongside the `Rc`, never a raw pointer that a dropped `Rc` could let be reused — plus a body index.
+  `Interp` drives the lookup at activation entry and hands the resulting `Rc<Plan>` to the new frame, so `run.rs` never reaches into the cache and `plan.rs` exposes only "build a plan for this body".
 * **`RootSet` owns the slot storage**, and this is where two of revision 2's bullets contradicted each other: a growable slot vector living in the activation cannot also be a borrowed slice handed to `RootSet` at frame entry, because the slice would neither see later growth nor survive the `&mut self` calls evaluation makes.
   So the storage moves: `RootSet` gains slot frames through `push_slots`/`pop_slots`, an activation holds a frame handle rather than its own `Vec`, and `collect`'s signature is unchanged, so `iter()` still yields everything.
   The invariant that makes a growable frame safe is that **only the top frame ever grows** — true under D19's per-frame recursion, and true for `INTERPRET`, which runs inside the activation that created it.
@@ -249,7 +255,9 @@ Activation depth is decided here and paid in 4b: measured, unbounded `CALL` recu
 
 ### The borrow shape
 
-`Interp` owns `Heap`, `RootSet`, the activation stack, the settings, the plan cache, the trace sink and the output sink, and **does not own the AST**.
+`Interp` owns `Heap`, `RootSet`, the activation stack, the plan cache, the trace sink and the output sink, and **does not own the AST**.
+
+**`Settings` is per activation, not one field on `Interp`.** Revision 3 said both, in two sections that never met. Measured: with `numeric digits 7`, an internal `call sub` sees 7, sets its own to 3, and after `return` the caller still reports 7. So a frame carries its own `Settings`, inherited from its caller at call time, and a `NUMERIC` instruction mutates only the current frame's. 4a has one frame, which is exactly why this must be written down now rather than discovered by 4b.
 Programs are held as `Rc<Program>`.
 
 The discipline is one sentence, and it is the whole answer to the parent plan's named soft spot: **the instruction loop clones the `Rc` into a local on entry, and every `&CodeBody` and `&Expr` derives from that local.**
@@ -260,20 +268,24 @@ Under that discipline the shape holds for an `INTERPRET` fragment created mid-in
 **One `rexx-parse` change is required and is a task, not an assumption.**
 `fn eval(&mut self, body: &CodeBody, expr: &Expr)` cannot be called for the body 4a actually runs: `Program` holds `instructions` and `labels` as sibling fields, `CodeBody` exists only per directive body, and `Fragment` has no labels at all — while the Task 1 spike runs a `Fragment`. `Program` gains `pub main: CodeBody` and `Fragment` gains `pub body: CodeBody`, preserving the existing derives. Whether an `INTERPRET` fragment may contain a label decides whether that label table is always empty, and is measured in the task rather than assumed.
 
-**Task 1 is a spike that proves the shape end to end** — including a fragment whose `Rc` outlives the instruction that made it, and the variable pool, since a spike that avoids the pool proves less than it claims. It is kept, with the failing version in a comment, because the next phase to touch this will want to know which version does not compile.
+**Task 1 is a spike that proves the shape end to end** — including a fragment whose `Rc` outlives the instruction that made it, and the variable pool, since a spike that avoids the pool proves less than it claims.
+To be explicit, because the split table assigns `Interpret` to 4b and this reads like a contradiction otherwise: **4a builds the fragment-execution machinery and 4b builds the `INTERPRET` instruction on top of it.** The spike runs a fragment because that is the case that stresses the lifetime, not because 4a implements the keyword — an `INTERPRET` clause in a 4a program still fails loudly. It is kept, with the failing version in a comment, because the next phase to touch this will want to know which version does not compile.
 
 `Rc` is not `Send`, which bites **twice and at different times**. Immediately, it constrains D19: the interpreter thread must own the parse, because nothing can hand it an `Rc<Program>`. Later, in Phase 6, it means either converting every `Rc<Program>` to `Arc` (mechanical but pervasive) or giving each thread its own package arena. Revision 2 recorded only the Phase 6 half, which is why the paragraph that should have caught D19's compile error pointed at the wrong phase.
 
 ### Crate layout
 
-One new crate, `rexx-exec`, depending on `rexx-core`, `rexx-num`, `rexx-parse`.
+One new crate, `rexx-exec`, depending on `rexx-core`, `rexx-num`, `rexx-parse` and **`rexx-inventory`**.
+
+That fourth dependency is the one revision 3 missed while giving `error.rs` a message catalogue to build. Phase 0 already generates `errors.rs` from `rexxmsg.xml`, **704 messages**, and it is the source for 7.3, the 34.x family and the `DO` control numbers; arithmetic's text comes from `rexx-num`'s `ArithError::message()` and needs nothing. Hand-transcribing text the tree already generates would be writing what exists.
 
 ```
 rexx-exec/
   src/value.rs        the value model, conversions, string and number identity
   src/stem.rs         stems and compound tail resolution
   src/plan.rs         the per-body resolution pass (D16)
-  src/activation.rs   one frame: slots, block stack, pc, settings
+  src/activation.rs   one frame: a RootSet slot-frame handle over Option<ObjRef>
+                      entries, block stack, pc, its own Settings, its Rc<Plan>
   src/eval.rs         expression evaluation and the operators
   src/run.rs          the instruction loop, control flow, DO block state
   src/trace.rs        trace events and prefix formatting (D17)
@@ -292,8 +304,17 @@ The operators are enumerated by name, because revision 1's two-family descriptio
 
 * **Arithmetic**: `+ - * / % // **`, through `rexx-num` under the current settings.
 * **Numeric-or-string comparison**: `= \= <> >< > < >= <= \> \<`, where `<>` and `><` are `\=` aliases.
+  The algorithm, which revision 3 left out entirely while spelling out its strict sibling in three examples: **if both operands are numeric, compare numerically** under the current `DIGITS` and `FUZZ`, through `rexx-num`'s free `compare`, which takes both; **otherwise compare as strings with the shorter blank-padded on the right**. Measured:
+
+  ```
+  'a' = 'a '  -> 1      '' = ' '   -> 1      'abc' < 'abd' -> 1     'b' > 'a ' -> 1
+  '01' = '1'  -> 1      ' 1 ' = 1  -> 1      'a' = 1       -> 0     '01' == '1' -> 0
+  ```
+
+  `'a' = 1` is 0 because one side is not numeric, so it is a string comparison; `' 1 ' = 1` is 1 because both are.
 * **Strict comparison**: `== \== >> << >>= <<= \>> \<<`. These are not merely "byte" comparisons: there is no padding and the shorter string is less. Measured, `'10' >> '9'` is 0 while `'10' > '9'` is 1; `'a' << 'a '` is 1 while `'a' = 'a '` is 1 and `'a' == 'a '` is 0.
 * **Logical**: `& | &&`, each with its own 34.x logical-value check on both operands.
+  A logical value is **exactly the one-character string `0` or `1`**, with no coercion whatever. Measured with `if x then`: `'1'` is accepted, while `' 1 '`, `'01'`, `'1.0'` and `''` are each error 34. The same rule governs `IF`, `WHEN`, `DO WHILE`/`UNTIL` and `ExprKind::Logical`.
 * **Concatenation**: `Abuttal`, `Blank`, `||`, over bytes.
 
 `Operator::Backslash` cannot appear in a `Binary` node and is correctly absent.
