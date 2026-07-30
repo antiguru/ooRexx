@@ -1280,9 +1280,14 @@ impl<'a> Inst<'a> {
             Some(SUB_UNTIL) => true,
             _ => return Err(self.error(unexpected.0, unexpected.1)),
         };
-        // `Error_Invalid_expression_while` is 35.908 and
-        // `Error_Invalid_expression_until` is 35.909.
-        let condition = self.logical(Terminators::COND, if until { 909 } else { 908 })?;
+        // 929 is `Error_Invalid_expression_logical_list`, for the same reason the
+        // `IF` arm passes it: `parseLogical` raises it itself as soon as a
+        // sub-expression comes back null, so `requiredLogicalExpression`'s
+        // per-caller `Error_Invalid_expression_while` (35.908) and
+        // `Error_Invalid_expression_until` (35.909) are unreachable for every
+        // caller. Measured: `do while` then `end` and `do until` then `end` both
+        // give `Error 35.929` under `rexxc`, not 908 or 909.
+        let condition = self.logical(Terminators::COND, 929)?;
         // `Error_Invalid_do_whileuntil`. Measured:
         // `do i = 1 to 3 while 1 until 2` is rc 229, Error 27.1.
         self.required_end(27, 1)?;

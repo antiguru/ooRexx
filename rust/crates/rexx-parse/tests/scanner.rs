@@ -550,9 +550,11 @@ fn a_clause_terminator_is_emitted_once_however_the_clause_ends() {
 
 #[test]
 fn a_shebang_line_is_skipped_by_the_scanner_but_kept_by_the_line_index() {
-    // Found by differential testing: 494 of 790 files under `ootest/` and
-    // `samples/` open with `#!/usr/bin/env rexx`, which `rexxc` accepts. The
-    // line stays visible to `sourceline`.
+    // Found by differential testing: of the 790 files under `ootest/` and
+    // `samples/`, 492 open with a `#!` line and 446 of those use the
+    // `#!/usr/bin/env rexx` spelling exactly, which `rexxc` accepts. The line
+    // stays visible to `sourceline`. The skip is on `#!` and not on the
+    // spelling, so both counts matter.
     let text = "#!/usr/bin/env rexx\nsay 1";
     let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
     let toks = scan(&source).expect("scans").tokens;

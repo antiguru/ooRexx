@@ -1221,7 +1221,7 @@ impl<'a> Dir<'a> {
 
 /// Whether `name` spells a variable: a simple name, a stem, or a compound.
 ///
-/// `LanguageParser::scanSymbol(RexxString *)` (`Scanner.cpp:1650`) sorts a
+/// `LanguageParser::scanSymbol(RexxString *)` (`Scanner.cpp:1792`) sorts a
 /// string into seven kinds and `getRetriever` accepts exactly three of them,
 /// `STRING_NAME`, `STRING_STEM` and `STRING_COMPOUND_NAME`. All three share one
 /// test, which is why this is a predicate rather than a classification: the name

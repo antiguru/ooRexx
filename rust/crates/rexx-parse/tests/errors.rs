@@ -61,8 +61,12 @@ enum Class {
     /// `rexxc` refused to translate. This parser must reproduce the number, the
     /// sub-number and the line.
     Translation,
-    /// `rexxc` rejected it after translating it, while installing the package.
-    /// This parser must accept it.
+    /// `rexxc` rejected it for something outside the program text, a library or
+    /// an external routine it could not bind. This parser must accept it.
+    ///
+    /// Not "after translating it": both codes fire mid-translation, and `rexxc`
+    /// has no install step yet reports them. See the corpus header for the raise
+    /// sites and the measurement.
     Install,
     /// `rexxc` answered rc 0.
     Accepted,
@@ -431,9 +435,12 @@ fn every_program_the_oracle_translates_this_parser_accepts() {
 #[test]
 fn a_rejection_that_is_not_a_translation_error_is_accepted() {
     // The oracle rejects all nine of these and none of the nine is a translation
-    // error: the directive parsed, and then the interpreter could not bind it to
-    // a library or to a registered routine. The classification is the corpus's,
-    // per row, so this loop reads it rather than inferring it from 98 or 90.
+    // error: the failure is that a library or a registered routine could not be
+    // bound, which depends on the machine and never on the program text. It is
+    // NOT that the directive parsed and the interpreter then failed to bind it:
+    // both codes are raised from inside the parser, and `rexxc`, which never
+    // installs anything, reports them. The classification is the corpus's, per
+    // row, so this loop reads it rather than inferring it from 98 or 90.
     let cases = cases();
     let mut wrong = Vec::new();
     let mut checked = 0;

@@ -141,12 +141,17 @@ pub(crate) fn is_symbol_char(byte: u8) -> bool {
 /// 1 otherwise.
 ///
 /// `BufferProgramSource::buildDescriptors` (`ProgramSource.cpp:448`) sets
-/// `firstLine` and `LanguageParser::translate` positions there
-/// (`LanguageParser.cpp:764`). The line is skipped by the parser but kept by
+/// `firstLine` and `LanguageParser::initializeForParsing` positions there
+/// (`LanguageParser.cpp:751`, at its `getFirstLine` call on `:764`). An earlier
+/// revision named `translate` for `:764`, which is a different function, at
+/// `:1093`. The line is skipped by the parser but kept by
 /// `SOURCELINE`, so this belongs to the scan and not to the line index. Found
-/// by differential testing: 494 of 790 files under `ootest/` and `samples/`
-/// open with `#!/usr/bin/env rexx`, and without this every one of them is
-/// error 13.1 on line 1 here and rc 0 under `rexxc`.
+/// by differential testing: of the 790 files under `ootest/` and `samples/`,
+/// 492 open with a `#!` line and 446 of those use the `#!/usr/bin/env rexx`
+/// spelling exactly, the rest being `#!@OOREXX_SHEBANG_PROGRAM@` and
+/// `#!/usr/bin/rexx`. Without this, every one of them is error 13.1 on line 1
+/// here and rc 0 under `rexxc`. Re-measured 2026-07-30; an earlier revision
+/// said 494 with the exact spelling, which matches neither count.
 ///
 /// An `INTERPRET` does not get the skip. `ArrayProgramSource::setup`
 /// (`ProgramSource.cpp:594`) guards it with `interpretAdjust == 0`, and

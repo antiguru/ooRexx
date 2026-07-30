@@ -20,11 +20,17 @@ fn a_cursor_visits_only_its_own_range() {
     ];
     let mut cursor = TokenCursor::new(1..3);
     assert_eq!(cursor.peek(), Some(1));
-    assert_eq!(cursor.advance(), Some(1));
-    assert_eq!(cursor.advance(), Some(2));
+    let mut visited = Vec::new();
+    while let Some(i) = cursor.advance() {
+        visited.push(tokens[i].kind.tag());
+    }
+    // The cursor yields indices and never reads the token array, so the check
+    // that matters is that its indices SELECT the intended tokens: the two
+    // inside the range and neither Eoc. An earlier revision ended with
+    // `assert_eq!(tokens[2].kind.tag(), Tag::RightParen)`, which compares the
+    // array literal with itself and was the only use of `tokens` at all.
+    assert_eq!(visited, [Tag::LeftParen, Tag::RightParen]);
     // The trailing Eoc at index 3 is outside the clause and unreachable.
-    assert_eq!(cursor.advance(), None);
     assert_eq!(cursor.peek(), None);
     assert_eq!(cursor.position(), 3);
-    assert_eq!(tokens[2].kind.tag(), Tag::RightParen);
 }

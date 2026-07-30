@@ -689,6 +689,27 @@ fn a_duplicated_loop_keyword_is_27_902() {
 }
 
 #[test]
+fn an_empty_loop_conditional_is_the_logical_list_error_not_the_per_keyword_one() {
+    // `requiredLogicalExpression` carries a per-caller sub-number, 35.908 for
+    // WHILE and 35.909 for UNTIL, and both are dead: `parseLogical` raises
+    // `Error_Invalid_expression_logical_list` itself as soon as a sub-expression
+    // comes back null, so no caller reaches its own number. Measured under
+    // `rexxc`, both spellings:
+    //
+    //   Error 35 running FILE line 1:  Invalid expression.
+    //   Error 35.929:  Missing expression in logical expression list.
+    //
+    // Pinned because nothing pinned it before, which is how this shipped as
+    // 908/909 through a green suite while the IF arm two thousand lines away
+    // had the rule right and said why.
+    assert_eq!(err("do while\nend"), (35, 929));
+    assert_eq!(err("do until\nend"), (35, 929));
+    // The controlled forms reach the same site, so they answer the same way.
+    assert_eq!(err("do i = 1 to 3 while\nend"), (35, 929));
+    assert_eq!(err("do i = 1 to 3 until\nend"), (35, 929));
+}
+
+#[test]
 fn a_loop_takes_at_most_one_conditional() {
     // `Error_Invalid_do_whileuntil`. Measured:
     // `do i = 1 to 3 while 1 until 2` is rc 229, Error 27.1.

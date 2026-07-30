@@ -7,9 +7,9 @@
 #
 #   translation  rexxc refused to TRANSLATE the program. This parser must
 #                reject it with the same major, sub and line.
-#   install      rexxc rejected it, but after translation finished, while
-#                installing the package: it could not bind the program to
-#                something outside it. This parser must ACCEPT it, because
+#   install      rexxc rejected it, but for something outside the program
+#                text: it could not bind the program to a library or an
+#                external routine. This parser must ACCEPT it, because
 #                loading a library is not parsing. Nine rows, all of them a
 #                ::ROUTINE or ::METHOD with EXTERNAL "LIBRARY x" or
 #                EXTERNAL "REGISTERED x". Two error classes, 98.903 and
@@ -17,10 +17,30 @@
 #                which is exactly why this is a field and not a rule.
 #                Evidence for the classification, per row: the message names
 #                the library or the routine it could not find, never anything
-#                about the program text. Confirmed in the C++ tree at
-#                LibraryDirective::install, reached from
-#                PackageClass::processInstall, which runs from a called stub
-#                and therefore after translation is complete.
+#                about the program text, so the failure depends on the machine
+#                and never on the source. A clean-room parser cannot reproduce
+#                it and must not try.
+#
+#                BOTH CODES FIRE DURING TRANSLATION, NOT AFTER IT. An earlier
+#                revision of this header claimed they came from
+#                LibraryDirective::install by way of PackageClass::processInstall,
+#                running from a called stub and therefore after translation was
+#                complete. That is wrong three times over: none of the nine rows
+#                is a ::REQUIRES, which is the only path through
+#                LibraryDirective::install; the real sites are inside the parser,
+#                90.999 from syntaxError in routineDirective
+#                (parser/DirectiveParser.cpp:2688 and :2732) and 98.903 from
+#                reportException in PackageManager::getLibrary
+#                (package/PackageManager.cpp:214), reached at parse time via
+#                resolveRoutine and via LanguageParser::createNativeMethod; and
+#                rexxc has no install step at all, yet reports both. Measured:
+#                `nop` then `::routine r external "LIBRARY x"` gives 98.903 on
+#                line 2 with rc 158, and `::routine r external "registered x"`
+#                gives 90.999 on line 1, both from rexxc alone. The decision to
+#                accept these nine rows is unchanged and rests on the
+#                machine-dependence above; only the mechanism was misdescribed,
+#                and it mattered because Phase 4 could have built an
+#                install-time error ordering on it.
 #   -            rexxc answered rc 0. The program translates.
 #
 # `expect` is `ok` for an accepted program and `major.sub` otherwise. `line` is
