@@ -261,7 +261,9 @@ A `fn eval` recursive over a left-deep `Binary` chain uses one Rust frame per te
 | 85,000 parens | rc 245 | rc 0 |
 | 90,000 parens | rc 245 | **rc 134, SIGABRT, no message** |
 
-So on parens we diverge in **both** directions: we succeed from 40,000 to 85,000 where the oracle raises `Insufficient control stack space`, and we abort past 90,000 where the oracle still raises. A flat 100,000-term chain, by contrast, the oracle evaluates and only dies at 150,000, with no condition at all.
+So on parens we diverged in **both** directions: succeeding from 40,000 to 85,000 where the oracle raises `Insufficient control stack space`, and aborting past 90,000 where the oracle still raises.
+
+**That table is as of Task 3c's dispatch, and Task 3c and 3d closed most of it.** `MAX_EXPR_DEPTH` now raises 11.1 at 50,000 for parens and calls on one shared budget, so the divergence band is 40,000 to 50,000 rather than 40,000 to 85,000, under a fifth as wide, and nothing aborts: 50,001 parens and 100,000 parens both raise 11.1 cleanly. Read every row below as "before the counter existed", and see `phase-4-exclusions.txt` for what remains. A flat 100,000-term chain, by contrast, the oracle evaluates and only dies at 150,000, with no condition at all.
 
 Three consequences. The parenthesis recursion is in **`rexx-parse`**, not in `eval`, so D19's counter cannot see it and `parse_program` aborts before the executor exists. Because the oracle answers deep parens with the very 11.1 this design already names, a counter in the parser's subexpression recursion is **parity rather than a deviation** — unlike the evaluation-depth limit, where the oracle crashes and 11.1 is a chosen answer. And the corpus rule, written against the 100,000-term cliff, does not cover a paren cliff at 39,000.
 
@@ -279,13 +281,14 @@ So, and each of these three numbers is chosen and recorded rather than left to b
 
 Activation depth is decided here and paid in 4b: measured, unbounded `CALL` recursion gives `Error 11.1`, "Insufficient control stack space", at rc 245 — a reportable condition, not a crash. One Rust frame per activation with an explicit counter produces it; a flat loop over the activation stack would too, and the choice is stated now because D17's own argument is that the dispatch loop should not be designed twice.
 
-**Phase 3's parser has the same exposure, and it is now measured: three recursions, three cliffs, on a default 2 MiB stack.**
+**Phase 3's parser has the same exposure, and it is now measured: four recursions, on a default 2 MiB stack.** Three are guarded or fixed; prefix-operator chains are not, and are recorded as a known gap.
 
 | recursion | cliff | kind of fix |
 |---|---|---|
 | `block.rs::visit_expr`, a hand-written walk run per clause from `add_clause` | **2,450 terms** | iterative, Task 3b |
 | the compiler's drop glue for a `Box<Expr>` chain | ~10,000-20,000 | iterative, Task 3b |
-| `parse_subterm`'s parenthesis descent | ~85,000 debug on the sized thread | a counter raising 11.1, Task 3c |
+| `subterm`'s parenthesis descent | 88,800 sized, bisected | a shared counter raising 11.1, Tasks 3c and 3d |
+| `arg_list`'s nested-call descent | 91,948 sized, bisected | the same shared counter, Task 3d |
 
 Only the third is what this section originally anticipated. The first runs *during* parsing, so `parse_program` aborts before a `Program` exists for anyone to drop, and it is the shallowest by a wide margin — a 3,000-term expression, which the oracle evaluates without difficulty, is already past it.
 
@@ -306,7 +309,7 @@ An activation's own `Rc` is a liveness anchor and is never borrowed through — 
 Under that discipline the shape holds for an `INTERPRET` fragment created mid-instruction, for a `DO` control expression re-evaluated per iteration, and for 4b's body-calls-body case, where each Rust frame clones its own `Rc` into its own local.
 
 **One `rexx-parse` change is required and is a task, not an assumption.**
-`fn eval(&mut self, body: &CodeBody, expr: &Expr)` cannot be called for the body 4a actually runs: `Program` holds `instructions` and `labels` as sibling fields, `CodeBody` exists only per directive body, and `Fragment` has no labels at all — while the Task 1 spike runs a `Fragment`. `Program` gains `pub main: CodeBody` and `Fragment` gains `pub body: CodeBody`, preserving the existing derives. Whether an `INTERPRET` fragment may contain a label decides whether that label table is always empty, and is measured in the task rather than assumed.
+`fn eval(&mut self, body: &CodeBody, expr: &Expr)` cannot be called for the body 4a actually runs: `Program` holds `instructions` and `labels` as sibling fields, `CodeBody` exists only per directive body, and `Fragment` has no labels at all — while Task 3's spike runs a `Fragment`. `Program` gains `pub main: CodeBody` and `Fragment` gains `pub body: CodeBody`, preserving the existing derives. Whether an `INTERPRET` fragment may contain a label decides whether that label table is always empty, and is measured in the task rather than assumed.
 
 **Task 1 is a spike that proves the shape end to end** — including a fragment whose `Rc` outlives the instruction that made it, and the variable pool, since a spike that avoids the pool proves less than it claims.
 To be explicit, because the split table assigns `Interpret` to 4b and this reads like a contradiction otherwise: **4a builds the fragment-execution machinery and 4b builds the `INTERPRET` instruction on top of it.** The spike runs a fragment because that is the case that stresses the lifetime, not because 4a implements the keyword — an `INTERPRET` clause in a 4a program still fails loudly. It is kept, with the failing version in a comment, because the next phase to touch this will want to know which version does not compile.
@@ -458,7 +461,7 @@ Each criterion names the set it quantifies over, each can fail, and no criterion
 5. **Every `InstructionKind` and `ExprKind` variant either executes or fails loudly**: an enumerating test with no wildcard arm asserts that each variant is in 4a's named set or produces the not-implemented exit code with a message naming the owning sub-phase. One criterion closes a surface larger than 4a's own and cannot rot.
 6. **A mutation control**, replacing "substituting any other binary reports divergences on every program", which `/bin/true` satisfies and which demonstrates only that the harness notices *absent* output. A committed list of one-line mutations to `rexx-exec`, each of which the subset must catch, mapped onto the handed-over blind spots: off-by-one on `If::false_target`; off-by-one on `When::exit`; `Loop::end` off by one; `Controlled::order` evaluated in fixed To/By/For order; `Abuttal` treated as `Blank`; `=` treated as `==`; `LEAVE` unwinding one block too few; formatting with the current digits instead of the created digits; and formatting with the current form instead of the created form.
    The mechanism is the mutation script this project already uses, carrying its **exit-non-zero-on-an-unapplied-pattern guard** — that guard fired in four separate Phase 3 tasks, and without it a pattern that has gone stale reports coverage that does not exist. This is the one criterion a `cargo test` cannot be, since it edits the source it tests, so the gate records the script's output and the plan says so rather than leaving it to look like the others.
-7. **Zero `unsafe`, `clippy -D warnings` clean, `cargo fmt` clean**, and the Task 1 spike committed with its findings written down.
+7. **Zero `unsafe`, `clippy -D warnings` clean, `cargo fmt` clean**, and Task 3's spike committed with its findings written down.
 
 ## Phase 4 gate items decided now
 
@@ -483,7 +486,7 @@ Without this file, "all 81" is a criterion the phase ordering cannot satisfy, wh
 
 Writing the file surfaced a **third status** the spec had not anticipated, and the file carries it as its own section: a **known gap** is a measured divergence with **no owner assigned** — neither work a later phase owes nor a difference anyone chose. Today that is prefix-operator chains, the still-recursive `Debug`/`PartialEq`/`Clone` derives, and the fact that a depth counter protects a sized caller only. Filing those as exclusions would imply someone owes them; filing them as deviations would imply someone chose them. Both would be false, and the second would be worse, since a deviation is meant to be permanent.
 
-The file carries a **second section for semantic deviations**, which are not exclusions and must not be filed as ones. It holds two rows: `DO OVER` on a stem does not reproduce the oracle's traversal order (D15a), with the corpus consequence that no program may contain it; and 4a raises 11.1 at its evaluation-depth limit where the oracle crashes with no condition at all (D19). **The set assertion covers this section too**, so adding a deviation is a plan amendment rather than a file edit. A deviation is permanent and therefore strictly worse than an exclusion, which is assigned work: pinning the weaker thing and leaving the stronger one editable by the phase being gated would be backwards. A deviation is a permanent difference chosen on purpose; an exclusion is work assigned to a later phase. Filing one as the other is how a deviation stops being reviewed.
+The file carries a **further section for semantic deviations**, which are not exclusions and must not be filed as ones. It holds two rows: `DO OVER` on a stem does not reproduce the oracle's traversal order (D15a), with the corpus consequence that no program may contain it; and 4a raises 11.1 at its evaluation-depth limit where the oracle crashes with no condition at all (D19). **The set assertion covers this section too**, so adding a deviation is a plan amendment rather than a file edit. A deviation is permanent and therefore strictly worse than an exclusion, which is assigned work: pinning the weaker thing and leaving the stronger one editable by the phase being gated would be backwards. A deviation is a permanent difference chosen on purpose; an exclusion is work assigned to a later phase. Filing one as the other is how a deviation stops being reviewed.
 
 ### The rexxcps gate
 

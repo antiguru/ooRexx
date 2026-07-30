@@ -304,7 +304,7 @@ git commit -m "Spike the executor's borrow shape: Interp owns everything but the
 |---|---|---|
 | `block.rs::visit_expr`, a hand-written walk called from `add_clause` per clause | **2,450 terms** | iterative, this task |
 | compiler drop glue for a `Box<Expr>` chain | ~10,000-20,000 | iterative, this task |
-| `parse_subterm`'s parenthesis descent | ~85,000 debug, sized thread | a counter raising 11.1, Task 3c |
+| `subterm`'s parenthesis descent | ~85,000 debug, sized thread | a counter raising 11.1, Task 3c |
 
 The first is what blocks the corpus test: it runs *during* parsing, so `parse_program` aborts before a `Program` value exists for anyone to drop.
 
@@ -358,7 +358,7 @@ Do this **after Task 3b**, not beside it: both touch `rexx-parse` and 3b's itera
 
 - [ ] **Step 2: Write the failing test** — a parenthesis nesting that aborts our parser today, asserting it instead raises 11.1.
 
-- [ ] **Step 3: Add the counter** to `parse_subterm`'s recursion, raising 11.1 at a limit set below our own abort cliff (measured at 90,000 in debug on a 512 MiB thread, so debug is what binds) and near the oracle's. **Exact depth parity is not achievable** — both cliffs are stack artifacts of two different implementations — so pick a limit inside the oracle's own reporting range and say in the doc comment that programs within a few thousand levels of it may diverge, and that no corpus program goes near either cliff.
+- [ ] **Step 3: Add the counter** to `subterm`'s recursion, raising 11.1 at a limit set below our own abort cliff (measured at 90,000 in debug on a 512 MiB thread, so debug is what binds) and near the oracle's. **Exact depth parity is not achievable** — both cliffs are stack artifacts of two different implementations — so pick a limit inside the oracle's own reporting range and say in the doc comment that programs within a few thousand levels of it may diverge, and that no corpus program goes near either cliff.
 
 - [ ] **Step 4: Check the other recursive descents in the parser** for the same exposure: nested `DO`/`SELECT` block structure, and any other place that recurses per source construct. Report which you tested and which you did not.
 
@@ -372,7 +372,7 @@ Do this **after Task 3b**, not beside it: both touch `rexx-parse` and 3b's itera
 
 **Spec:** D19. **Files:** `rust/crates/rexx-parse/src/expr.rs`, `tests/deep.rs`, `examples/depth_probe.rs`.
 
-**Why this and not the prefix-chain gap:** Task 3c deferred two unguarded recursions as equals. They are not. Nested calls, `f(f(f(…)))`, descend through `arg_list` rather than the grouping-paren arm `MAX_PAREN_DEPTH` guards, and Task 3c's review measured the oracle's side of it:
+**Why this and not the prefix-chain gap:** Task 3c deferred two unguarded recursions as equals. They are not. Nested calls, `f(f(f(…)))`, descend through `arg_list` rather than the grouping-paren arm `MAX_EXPR_DEPTH` guards, and Task 3c's review measured the oracle's side of it:
 
 | depth | oracle | ours, default 2 MiB | ours, sized 512 MiB |
 |---|---|---|---|
@@ -385,9 +385,9 @@ So above roughly 92,000 the **sized** path — the one the executor actually run
 
 - [ ] **Step 1: Bisect our sized-path cliff and the oracle's**, unpiped, checking the build's exit status before trusting any number. Two figures in this phase were wrong because a pipe swallowed a failed build and the bisection measured a stale binary.
 - [ ] **Step 2: Write the failing test** — a nesting deep enough to abort on the sized path today, asserting 11.1 instead.
-- [ ] **Step 3: Count the `arg_list` descent**, sharing one depth budget with `MAX_PAREN_DEPTH` if a shared counter is defensible, or a second counter if the recursions genuinely differ. Say which and why.
+- [ ] **Step 3: Count the `arg_list` descent**, sharing one depth budget with `MAX_EXPR_DEPTH` if a shared counter is defensible, or a second counter if the recursions genuinely differ. Say which and why.
 - [ ] **Step 4: Fold in Task 3c's two corrections**, both from its review. The default-thread cliff is **331/332**, not the 337/338 stated in four places — the counter's own field and check cost about six levels, so the fix made the unprotected case slightly worse, and one of those four places is a test whose job is to document the gap accurately. And "nested calls are shallower than plain parens" is **backwards** in both the report and `depth_probe.rs`: measured like-for-like on one binary, parens are 331 and calls are 349. The priority it argued for is still right, since calls are the shallowest *unguarded* recursion; only the comparison is wrong.
-- [ ] **Step 5: Two minors from the same review.** `parse_constant_expression`'s own `(` is uncounted, so `RAISE`, `FORWARD`, `USE ARG` and `ADDRESS WITH` effectively get 50,001 — harmless, worth a clause. And the paren test covers only the sized path, so nothing would notice `MAX_PAREN_DEPTH` being raised above the native cliff; a plain const comparison pins it.
+- [ ] **Step 5: Two minors from the same review.** `parse_constant_expression`'s own `(` is uncounted, so `RAISE`, `FORWARD`, `USE ARG` and `ADDRESS WITH` effectively get 50,001 — harmless, worth a clause. And the paren test covers only the sized path, so nothing would notice `MAX_EXPR_DEPTH` being raised above the native cliff; a plain const comparison pins it.
 - [ ] **Step 6: Verify and commit.** `cargo test -p rexx-parse --no-fail-fast`, clippy unpiped, and the whole workspace.
 
 **Do not attempt a stack-aware counter.** Task 3c's review costed it: a remaining-stack query has no safe stable API, and a per-frame byte estimate is a class of number this phase has got wrong twice in one day. The long-term answer is a documented minimum stack or a sized entry point in `rexx-parse` itself.
@@ -550,7 +550,18 @@ git commit -m "Stems: tombstones, aliasing, and a name the object carries itself
 - Test: a `#[cfg(test)] mod tests` inside `rust/crates/rexx-exec/src/plan.rs`
 
 **Interfaces:**
-- Produces: `Plan { slots: HashMap<Box<[u8]>, usize>, len: usize }`, `build_plan(&CodeBody, &SymbolTable) -> Plan`, and on `Interp` a cache keyed by `(program_id, body_index)` where the loader assigns `program_id`.
+- Produces: the `Plan` **already in the tree at `lib.rs:424`**, which Task 3 built:
+  ```rust
+  struct Plan {
+      names: HashMap<Box<[u8]>, usize>,      // arrives as text: tail pieces, DROP (v), fragments
+      by_symbol: HashMap<SymbolId, usize>,   // arrives as a SymbolId: the common case
+  }
+  ```
+  plus `Plan::build(&CodeBody, &SymbolTable)` and, on `Interp`, a cache keyed by `(program_id, body_index)` where the loader assigns `program_id`.
+
+  **Both maps point at the same slot index**, which is what makes a tail piece and a same-named variable share a slot rather than merely agree. An earlier draft of this task specified `Plan { slots, len }` with no `by_symbol` at all, which would have put a byte-string hash on the access path D16 motivates the whole design by costing at 8.1% of runtime and 32.2% on stem-heavy code.
+
+  **The open choice, which `lib.rs:418` records rather than settles:** `by_symbol` is a `HashMap` where D16's shape wants an array index, and it cannot be one yet because `SymbolId` is a newtype over a private `u32` with no accessor, so nothing outside `rexx-parse` can index a `Vec` by one. Either ask for `SymbolId::index()` as a `rexx-parse` amendment, or keep the hash deliberately. Make the choice and record the reasoning; do not inherit it.
 - `Activation { plan: Rc<Plan>, extra: HashMap<Box<[u8]>, usize>, frame: SlotFrame, blocks: Vec<Block>, pc: usize, settings: Settings, program: Rc<Program> }`.
 
 **`extra` is not optional and Task 3 already proved why.** The plan is an `Rc`, shared and immutable, built by an upfront pass that never saw a name introduced at run time — and such names exist in 4a: `DROP (v)` names its target at run time, and an interpreted fragment's bindings are visible to the enclosing body's own later clauses (measured: `interpret "newvar = 7"` then `say newvar + 1` prints 8). Resolution is `plan.slot_of(name).or_else(|| extra.get(name))`; allocation writes `extra` and calls `grow_slots`. Task 3 built this; you are inheriting its shape, not inventing one.
@@ -679,11 +690,13 @@ git commit -m "Comparison in two families, and logic that coerces nothing"
 **Interfaces:**
 - Produces: `enum Flow { Next, Goto(usize), Exit(Option<ObjRef>) }` and `fn step(&mut self, body: &CodeBody, index: usize) -> Result<Flow, Raised>`.
 
-- [ ] **Step 1: Write the failing tests** — assignment to a variable, a stem and a compound; `SAY` of each value kind and of an omitted expression (a blank line); `DROP` of a variable, a tail, a whole stem and the `(v)` indirect form; `NUMERIC DIGITS`/`FUZZ`/`FORM` including the `VALUE` spellings; `EXIT` with and without an expression; a `LABEL` as a traced no-op; `NOP`.
+- [ ] **Step 1: Write the failing tests** — assignment to a variable, a stem and a compound; `SAY` of each value kind and of an omitted expression (a blank line); `DROP` of a variable, a tail, a whole stem and the `(v)` indirect form, **using `RootSet::clear_slot`, which Task 2b added expressly for this**; `NUMERIC DIGITS`/`FUZZ`/`FORM` including the `VALUE` spellings; `EXIT` with and without an expression; a `LABEL` as a traced no-op; `NOP`.
 
 - [ ] **Step 2: Run to watch them fail**
 
 - [ ] **Step 3: Implement**
+
+**Do not write `ObjRef::NIL` to mean "dropped".** `x = .nil` is legal Rexx and `.nil` is a value, so the two states are observationally distinct: measured, `y = .nil; drop y; say y` prints `Y`, the derived name, while `x = .nil; say x` prints `The NIL object`. `clear_slot` exists because of exactly this.
 
 `SAY` writes to the output sink, default stdout. Trace goes to the **trace sink, default stderr** — the two are separate descriptors, so their interleaving is not observable and two independently buffered sinks are safe.
 

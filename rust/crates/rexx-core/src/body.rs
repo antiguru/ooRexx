@@ -78,12 +78,25 @@ pub enum Body {
         created_form: Form,
         text: Option<Vec<u8>>,
     },
-    /// A stem: its own name (rendered when the stem itself is read as a
-    /// value, e.g. an alias to `q.` still prints `Q.`), an optional default,
-    /// and its tails keyed by the tail's value verbatim (D15a). A tail entry
-    /// present and mapped to `None` is a tombstone -- an explicitly dropped
-    /// tail, which must not fall back to the default -- and is distinct from
-    /// the key being absent, which does.
+    /// A stem: its own name, an optional default, and its tails keyed by the
+    /// tail's value verbatim (D15a). A tail entry present and mapped to
+    /// `None` is a tombstone -- an explicitly dropped tail, which must not
+    /// fall back to the default -- and is distinct from the key being
+    /// absent, which does.
+    ///
+    /// `name` has to live on the object rather than being derived from
+    /// wherever it is read, and the case that forces this is a stem with no
+    /// default at all: `q.1 = 'x'` never bare-assigns `q.` itself, so the
+    /// object it auto-vivifies has `default: None`. Aliasing it into a
+    /// plain variable and reading that alias back still answers `Q.` --
+    /// `q.1 = 'x' ; y = q. ; say y` prints `Q.`, not the tail value and not
+    /// anything derivable from `y`'s own identity, because by the time `y`
+    /// is read the reference site (`q.`) is gone from context and only the
+    /// object's own `name` field still says "Q.". A stem that *does* have a
+    /// default (`w. = 'wd'`) does not need this to make the same point as
+    /// forcefully, since one could still argue the rendered text travelled
+    /// with the value; the tails-only case is the one with nothing else to
+    /// carry it.
     Stem {
         name: Box<[u8]>,
         default: Option<ObjRef>,

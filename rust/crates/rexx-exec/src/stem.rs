@@ -242,20 +242,28 @@ impl Interp {
     /// (`default: None`, no tails) and rebinds the variable -- the same
     /// "replace and rebind" `stem_assign` uses, with nothing to wrap.
     ///
-    /// This is not merely consistent with D15a's wording, it is forced:
-    /// `RootSet::set_slot` takes an `ObjRef`, never `Option<ObjRef>`, so
-    /// there is no way to write "unset" back into an existing slot through
-    /// the current API at all (checked in `rexx-core/src/roots.rs`).
-    /// Rebinding to a fresh, harmless object is the only shape a `rexx-exec`
-    /// -only change can take. General `DROP` on a *simple* variable will hit
-    /// the identical wall and needs a `rexx-core` amendment; that is a
-    /// later task's, not this one's.
+    /// Not `RootSet::clear_slot`, even though one exists (added, after this
+    /// was first written, for plain `DROP` on a simple variable, whose read
+    /// path has to tell "unset" apart from every other value for 4b's
+    /// `NOVALUE`). A stem's slot is not "empty or not" the way a simple
+    /// variable's is: replacing the object is the literal reading of
+    /// D15a's own wording, and it is what makes `stem_assign`'s wrap branch
+    /// and this function one shared operation (`replace_stem`) rather than
+    /// two independently-written ones that happen to agree today.
     ///
     /// Measured, and it is the only case this task found where "dropped"
     /// and "never touched" turn out to be indistinguishable rather than
     /// merely similar: `x.='d'; x.1='one'; drop x.; say x.1; say x.` gives
     /// `X.1` then `X.`, exactly what a stem named `X.` that had never been
     /// touched at all would give.
+    ///
+    /// **This does not generalise to tails, and reading it that way is the
+    /// trap.** A dropped *tail* (`stem_drop_tail`) is a tombstone: present
+    /// in the map, and it does *not* fall back to the default, which an
+    /// absent key does. Here, one level up, "dropped" and "absent" collapse
+    /// into the very same thing. The two rules sit one level apart -- a
+    /// whole stem versus one of its tails -- precisely because they
+    /// disagree.
     pub(crate) fn stem_drop(&mut self, stem_name: &[u8]) {
         self.replace_stem(stem_name, None);
     }
