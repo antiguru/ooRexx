@@ -741,6 +741,13 @@ fn a_call_span_reaches_its_closing_parenthesis() {
 fn every_node_in_a_dense_expression_contains_its_operands() {
     // `check_spans` runs on every `shape` call, so this adds the shapes that
     // no other test needs plus the cases that stress the widening.
+    //
+    // Containment cannot fail on parser output, and this test does not claim
+    // otherwise. `Expr::new` widens a node's span over its children before
+    // storing it, so the property holds by construction and no input can
+    // violate it. What this does buy is a guard on that invariant: if
+    // `Expr::new` ever stops widening, these shapes fail. `tests/tiling.rs`
+    // carries the falsifiable properties, on operand ordering and tightness.
     for text in [
         "a + b * c ** -d || e f g",
         ".array~of(1, 2)~~append(3)[1]",

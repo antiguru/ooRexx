@@ -63,11 +63,14 @@ lines that parse as expressions, with the shared scanner explicitly subtracted
 and the instruction and directive layers never written. Task 3.10's 3.29 ms is
 a different measurement of different work: the whole shipped parser, scanning
 and clause splitting and 500 directives and some 3,000 nested instructions.
-Multiplying the one ratio onto the other number would conflate them, and the
-product, roughly 24 ms of extra parse time, would in any case be weighed
-against a ~55 ms budget whose other components are all unmeasured. Whether that
-is decisive depends on what bootstrap execution, heap setup and class
-construction cost, and nobody knows yet.
+Multiplying the one ratio onto the other number would conflate them, so this
+document does not do it and does not state the product. An earlier revision
+computed the figure and then disclaimed it in the same sentence, which is worse
+than omitting it: a reader keeps the number and drops the caveat. Whatever the
+combinator arm would have cost on the whole file, it would be weighed against a
+~55 ms budget whose other components are all unmeasured, so whether it is
+decisive depends on what bootstrap execution, heap setup and class construction
+cost, and nobody knows yet.
 
 Two earlier revisions of this paragraph got this wrong in opposite directions.
 The first claimed parse time *is* cold-start time, which is the overreach the

@@ -205,6 +205,15 @@ const CORPUS: &str = include_str!("../../../../corpus/expr/precedence.tsv");
 /// The generator emits a handful of syntactically invalid expressions, and
 /// they are worth keeping: `2 \3` is one, because no blank token is emitted
 /// before a `\` and so the `\` lands in a dyadic position, which is 35.1.
+///
+/// This list is wider than the corpus header's, which names 35, 36, 37, 19 and
+/// 20. Those five are the ones the generator actually produces today; 6, 13 and
+/// 25 are unmatched comment, invalid character and invalid subkeyword, which are
+/// translation errors too and would have to be classified the same way if a
+/// regenerated corpus ever emitted one. The list is deliberately the property,
+/// every translation-time number, rather than an inventory of what is currently
+/// exercised, because an inventory silently reclassifies a row the day the
+/// generator changes.
 const SYNTAX_ERRORS: &[&str] = &["6", "13", "19", "20", "25", "35", "36", "37"];
 
 #[test]

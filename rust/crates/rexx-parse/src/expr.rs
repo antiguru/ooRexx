@@ -251,7 +251,7 @@ pub(crate) fn parse_arg_list(
 /// Parses the expression inside a `(`, whose `(` is already consumed, and
 /// consumes the `)`.
 ///
-/// `LanguageParser::parenExpression` (`LanguageParser.cpp:3465`). A comma does
+/// `LanguageParser::parenExpression` (`LanguageParser.cpp:2695`). A comma does
 /// NOT build a list here, unlike `parse_constant_expression`'s parenthesised
 /// form: `parenExpression` calls `parseSubExpression` where
 /// `parseConstantExpression` calls `parseFullSubExpression`.
@@ -271,7 +271,7 @@ pub(crate) fn parse_paren_expression(
 /// Parses the restricted expression form that `RAISE`, `FORWARD`, `USE ARG`
 /// defaults and `ADDRESS ... WITH` accept.
 ///
-/// `LanguageParser::parseConstantExpression` (`LanguageParser.cpp:3400`): a
+/// `LanguageParser::parseConstantExpression` (`LanguageParser.cpp:2632`): a
 /// literal, a constant symbol, or a parenthesised expression, and nothing
 /// else. `None` means the clause ended, which every caller turns into its own
 /// error. Anything present that is not one of the three is 35.1.
@@ -378,7 +378,7 @@ pub(crate) fn parse_variable_or_message_term(
 
 /// Raises the error a non-variable symbol gets where a variable was required.
 ///
-/// `LanguageParser::needVariable` (`LanguageParser.cpp:3555`): a stem and a
+/// `LanguageParser::needVariable` (`LanguageParser.cpp:885`): a stem and a
 /// compound both pass, and the error number depends on the spelling rather
 /// than on the class, because the C++ tests the first character.
 pub(crate) fn need_variable(
@@ -1099,7 +1099,7 @@ impl<'a, 'c> Parser<'a, 'c> {
         }
     }
 
-    /// `parseQualifiedSymbol` (`LanguageParser.cpp:3245`): `ns:name`, either a
+    /// `parseQualifiedSymbol` (`LanguageParser.cpp:3261`): `ns:name`, either a
     /// qualified call or a class lookup.
     ///
     /// The colon is already consumed. The name must be a symbol, of any

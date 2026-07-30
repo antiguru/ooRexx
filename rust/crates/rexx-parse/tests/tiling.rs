@@ -160,6 +160,12 @@ fn non_whitespace_class_line_tail(text: &[u8], range: Range<usize>) -> Option<us
 }
 
 /// Property 1: every node's span contains its children's spans.
+///
+/// The numbering here is this file's own and does not match
+/// `docs/superpowers/plans/phase-3-gate.md`, which numbers the exit criterion's
+/// two clauses so that its Property 2 is clause ordering, this file's Property
+/// 3. The gate doc's Property 2 and this file's Property 2 are different
+/// properties, so cite them by name rather than by number.
 fn containment_errors(e: &Expr, errors: &mut Vec<String>) {
     children_of(e, &mut |child| {
         if child.span.start < e.span.start || child.span.end > e.span.end {

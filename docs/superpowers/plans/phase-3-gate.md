@@ -26,7 +26,14 @@ Checking it over the corpus therefore says nothing about the parser.
 That is the vacuity failure mode this project has now hit three times, and it is recorded here rather than ticked quietly.
 The check is kept anyway, as a pin against a future change to `Expr::new`, and its can-fail probe exercises the checker on a hand-built node, which is evidence about the checker and not about the parser.
 
-**What was added in its place**: a falsifiable property that catches what nesting was reaching for.
+**What was added in its place**: a falsifiable property over `Binary` and `Prefix` nodes only, which catches part of what nesting was reaching for.
+
+The scope limit is the honest part and it is not small.
+`ExprKind` has nine variants that can hold child expressions, and the falsifiable check reaches two of them.
+`Call::args`, `QualifiedCall::args`, `Message::target`, `Message::super_class`, `Message::args`, `List`, `Logical` and `VariableReference::inner` are still covered by containment alone, which is the vacuous check.
+A bug attaching the wrong argument to a `Call`, or mis-slotting a `Message`'s super class, would pass every corpus-wide check in this gate.
+That is the same failure mode the vacuity finding named, surviving inside the fix for it, and the remedy is sibling ordering over argument lists rather than more containment.
+Recorded here rather than fixed because Phase 4 will exercise argument attachment on every call it dispatches, and a wrong attachment there is loud.
 For every `Binary` node, the left operand's span ends at or before the right operand's starts, and the bytes between them, after removing whitespace-class bytes, are operator bytes (plus the parentheses that belong to no node) and nothing else; for the two synthesised operators, abuttal and blank, the gap holds no operator byte at all; for every real operator it holds at least one.
 A mis-nesting that attaches an operand to the wrong operator preserves containment under widening and breaks this.
 The AST does not retain the operator token's own position (`ExprKind::Binary` carries only the `Operator` value), so the check is over the gap's byte class rather than an exact position; that absence is itself worth knowing before Phase 4 wires up error reporting on operators.
@@ -44,7 +51,8 @@ Recorded decisions, each pinned by a probe test:
 * A `::RESOURCE` directive's raw body lines belong to the `Resource` node but sit between clause spans, so a corpus program that gains one will fail tiling for a reason that has nothing to do with a dropped clause.
   No corpus program has one today.
 
-Eight probe tests prove each checker rejects hand-built violations: escaped child spans, mis-nested operands, overlapping operands, a missing operator, overlapping clause spans, a dropped clause, an interstitial `;`, and bytes after the last clause.
+Nine probe tests prove each checker rejects hand-built violations: escaped child spans, mis-nested operands, overlapping operands, a missing operator, an operator with nothing in front of it, overlapping clause spans, a dropped clause, an interstitial `;`, and bytes after the last clause.
+A tenth probe is a positive control, confirming comments and continuations between clauses are permitted rather than rejected.
 No parseable input can produce any of these, so hand-built nodes through the public field surface are the only demonstration possible.
 
 One defect in the harness itself was found and fixed during construction: the first interstice scanner classified a `-` followed by only blanks up to the end of the checked range as a line continuation, which swallowed the subtract operator in `recurse(n - 1)` as a phantom continuation.
@@ -102,7 +110,9 @@ The counts themselves are Task 3.10's change-detector baseline, cited from its r
 > Soundness over the crate's error corpus with matching number, sub-number and plausible line; completeness over that corpus plus `samples/` and the two `.orx` files.
 
 The harness is `rust/crates/rexx-parse/tests/errors.rs` (32 tests) over `rust/corpus/errors/parse-errors.tsv`, whose rows carry the oracle's answers and, as their own field, which direction each row is.
-**Measured for this document: 1,021 corpus rows**, against 385 when the criterion was drafted and 492 at Task 3.8, so the count is reported per the criterion's own instruction rather than asserted.
+**Measured for this document: 1,020 corpus rows**, against 385 when the criterion was drafted and 492 at Task 3.8, so the count is reported per the criterion's own instruction rather than asserted.
+The figure is `grep -vc '^#\|^class\t\|^$'` over `rust/corpus/errors/parse-errors.tsv`, and it decomposes as 567 translation, 9 install and 444 negative.
+An earlier revision of this line said 1,021, having subtracted the 61 comment lines from `wc -l` and counted the header as a data row, which is the kind of arithmetic a section about counting precisely should not get wrong.
 The recorded exceptions (the 18.1/18.2 versus 35.1 label structural difference, the eager-scan masking deviation, the nine non-translation rejections in two classes) are cited from Tasks 3.6 and 3.8.
 
 Verified for this document: the 32 tests pass in the workspace run.
