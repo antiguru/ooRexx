@@ -27,13 +27,18 @@
 //! `activation.rs`, `eval.rs`, `run.rs`, and the rest); nothing here is meant
 //! to survive as it stands except the borrow discipline itself.
 
-use rexx_core::{BehaviourId, Body, Heap, ObjRef, RootSet, SlotFrame};
+use rexx_core::{Heap, ObjRef, RootSet, SlotFrame};
 use rexx_parse::{
     CodeBody, Expr, ExprKind, Fragment, Instruction, InstructionKind, Operator, ParseError,
     PrefixOp, Program, SymbolId, SymbolTable, parse_interpret, parse_program,
 };
 use std::collections::HashMap;
 use std::rc::Rc;
+
+// The value model: `text`/`number`/`to_text`/`to_number` on `Interp`, and the
+// two rules D15 exists to enforce (a number's rendering is fixed at creation,
+// and a `SmallInt` is admissible only within the DIGITS that produced it).
+mod value;
 
 /// The exit code for a construct Phase 4a does not implement.
 ///
@@ -941,7 +946,7 @@ impl Interp {
                     Some(expression) => {
                         let value = self.eval(code, expression)?;
                         self.roots.push_temp(value);
-                        self.text_of(value).to_vec()
+                        self.to_text(value).to_vec()
                     }
                     // `say` with no expression is a blank line.
                     None => Vec::new(),
@@ -976,7 +981,7 @@ impl Interp {
             InstructionKind::Interpret { expression } if self.interpret_spike => {
                 let value = self.eval(code, expression)?;
                 self.roots.push_temp(value);
-                let text = self.text_of(value).to_vec();
+                let text = self.to_text(value).to_vec();
                 self.run_fragment(text)
             }
 
@@ -1136,25 +1141,22 @@ impl Interp {
             // An uninitialised read yields the derived name, which for a
             // simple variable is its own upcased spelling.
             None => {
-                let derived = code.symbols.name(id).as_bytes().to_vec();
-                (self.alloc_text(derived), Novalue::Unset)
+                let derived = code.symbols.name(id).as_bytes();
+                (self.text(derived), Novalue::Unset)
             }
         }
     }
 
     // ---- values ----
-
-    fn alloc_text(&mut self, bytes: Vec<u8>) -> ObjRef {
-        self.heap
-            .alloc_with(BehaviourId::STRING, Body::Text { bytes, num: None })
-    }
-
-    fn text_of(&self, value: ObjRef) -> &[u8] {
-        match &self.heap.get(value).expect("a live value").body {
-            Body::Text { bytes, .. } => bytes,
-            other => unreachable!("the spike allocates only Body::Text, got {other:?}"),
-        }
-    }
+    //
+    // `text`, `number`, `to_text` and `to_number` live in `value.rs` (Task 4),
+    // as `impl Interp` methods in a sibling module rather than here: `Interp`
+    // and its fields are defined in this module (the crate root), and a
+    // private item is visible to its defining module's descendants, so
+    // `value.rs` reaches `self.heap` directly with no `pub(crate)` needed on
+    // the fields themselves. The methods are marked `pub(crate)` there
+    // because visibility does not run the other way -- this module could not
+    // otherwise call them.
 
     // ---- expression evaluation ----
 
@@ -1195,13 +1197,10 @@ impl Interp {
 
     fn eval_node(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Loud> {
         match &expr.kind {
-            ExprKind::Literal(bytes) => Ok(self.alloc_text(bytes.to_vec())),
+            ExprKind::Literal(bytes) => Ok(self.text(bytes)),
             // A constant's value is its own upcased spelling, which is
             // observable rather than incidental: `say 1e5` prints `1E5`.
-            ExprKind::Constant(id) => {
-                let bytes = code.symbols.name(*id).as_bytes().to_vec();
-                Ok(self.alloc_text(bytes))
-            }
+            ExprKind::Constant(id) => Ok(self.text(code.symbols.name(*id).as_bytes())),
             ExprKind::Variable(id) => {
                 let (value, _novalue) = self.read(code, *id);
                 Ok(value)
@@ -1238,9 +1237,9 @@ impl Interp {
                 let right_value = self.eval(code, right)?;
                 self.roots.push_temp(right_value);
 
-                let mut bytes = self.text_of(left_value).to_vec();
-                bytes.extend_from_slice(self.text_of(right_value));
-                let joined = self.alloc_text(bytes);
+                let mut bytes = self.to_text(left_value).to_vec();
+                bytes.extend_from_slice(&self.to_text(right_value));
+                let joined = self.text(&bytes);
 
                 // `joined` is unrooted from here to the caller's own
                 // `push_temp`, and nothing between the two allocates.

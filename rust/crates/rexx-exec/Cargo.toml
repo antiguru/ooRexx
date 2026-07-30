@@ -13,5 +13,10 @@ rexx-core = { path = "../rexx-core" }
 # run time.
 rexx-parse = { path = "../rexx-parse" }
 
+# `Number`, `Form` and the decimal arithmetic a value's own rendering rule
+# (D15) runs through: `Body::Text` holds a `Number`, and `format_form` is
+# what turns one into text.
+rexx-num = { path = "../rexx-num" }
+
 [lints]
 workspace = true
