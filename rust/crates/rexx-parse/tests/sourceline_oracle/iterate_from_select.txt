@@ -1,0 +1,15 @@
+count 14
+/* ITERATE from inside a SELECT nested in a loop. A wrong jump target here
+   would either fall through to "keep" on the iterated pass or skip a later
+   pass entirely; the correct behaviour prints exactly one "skip"/"keep" pair
+   per iteration, never both for i = 2. */
+do i = 1 to 4
+  select
+    when i = 2 then do
+      say "skip" i
+      iterate
+    end
+    otherwise nop
+  end
+  say "keep" i
+end

@@ -1,0 +1,37 @@
+count 36
+/* Bare LEAVE/ITERATE, and LEAVE/ITERATE naming an outer loop's control
+   variable (see leave_nested_outer.rex for why it is the control variable
+   and not a label). Each block is built so the labelled and unlabelled
+   forms are distinguishable in the output: a LEAVE or ITERATE wired to only
+   the inner loop would print an extra "outer-after-*" line and extra
+   "l-leave"/"l-iterate" lines that the correct wiring never reaches. */
+say "== bare leave =="
+do i = 1 to 5
+  if i = 3 then leave
+  say "b-leave" i
+end
+
+say "== bare iterate =="
+do i = 1 to 4
+  if i = 2 then iterate
+  say "b-iterate" i
+end
+
+say "== leave naming the outer loop =="
+do outer = 1 to 3
+  do inner = 1 to 3
+    if outer = 2 & inner = 2 then leave outer
+    say "l-leave" outer inner
+  end
+  say "outer-after-leave" outer
+end
+say "after outer loop"
+
+say "== iterate naming the outer loop =="
+do outer = 1 to 3
+  do inner = 1 to 3
+    if outer = 2 & inner = 2 then iterate outer
+    say "l-iterate" outer inner
+  end
+  say "outer-after-iter" outer
+end

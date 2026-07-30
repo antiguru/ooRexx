@@ -1,0 +1,26 @@
+count 25
+/* SELECT with multi-instruction WHEN bodies that each have a visible side
+   effect. If a WHEN's exit jump were wired to land inside the next WHEN's
+   body instead of after the whole SELECT, this would show up directly:
+   e.g. "done 1" would go missing and "w2-a"/"w2-b" would print twice. */
+do n = 1 to 4
+  select
+    when n = 1 then do
+      say "w1-a"
+      say "w1-b"
+      say "w1-c"
+    end
+    when n = 2 then do
+      say "w2-a"
+      say "w2-b"
+    end
+    when n = 3 then do
+      say "w3-a"
+    end
+    otherwise do
+      say "w4-a"
+      say "w4-b"
+    end
+  end
+  say "done" n
+end

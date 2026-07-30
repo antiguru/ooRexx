@@ -1,0 +1,29 @@
+count 28
+/* Three stem-identity cases, measured against the oracle rather than
+   assumed:
+
+   1. `b. = a.` where the right-hand side is itself a bare stem (trailing
+      dot, no tail) makes b share a.'s underlying table -- not a copy of
+      a.'s current default. Setting a.1 afterwards is visible through b.1
+      too: both print 2, and the untouched tails (a.2/b.2) both keep the
+      shared default 1.
+   2. Assigning a bare stem into a plain scalar (`u = r.`) captures the
+      stem's current default as an ordinary value. `drop r.` resets r's own
+      table, but u already holds its own copy of that value and is
+      unaffected -- "the old object survives" because u never referenced
+      r's table to begin with, r's default was just a plain string.
+   3. A stem that was never assigned renders `say q.` as its own upcased
+      name including the trailing period, same tombstone rule as a dropped
+      compound. */
+a. = 1
+b. = a.
+a.1 = 2
+say a.1 b.1 a.2 b.2
+
+r. = 'rd'
+u = r.
+drop r.
+say u
+say r.1
+
+say q.

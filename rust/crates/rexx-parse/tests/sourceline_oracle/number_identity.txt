@@ -1,0 +1,19 @@
+count 18
+/* A number's displayed form is fixed when the value is created, not when it
+   is displayed. Both DIGITS and FORM are captured at creation:
+
+   y is computed under DIGITS 9 and keeps 9 significant digits even after
+   DIGITS drops to 3. x is computed under FORM ENGINEERING and keeps its
+   engineering-notation spelling ("10E+9") even after FORM switches to
+   SCIENTIFIC -- switching FORM again does not re-render an existing value,
+   it only affects values created afterwards. */
+numeric digits 9
+y = 1 / 3
+numeric digits 3
+say y
+
+numeric form engineering
+x = 1e10 + 0
+say x
+numeric form scientific
+say x

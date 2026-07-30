@@ -1,0 +1,21 @@
+count 20
+/* A second WHEN written as the first's THEN instruction. This parses and is
+   accepted, but the second WHEN is never collected into the SELECT's list
+   of clauses -- it is swallowed as the (empty) consequence of the first, so
+   when the first WHEN's condition is true, NEITHER assignment below runs
+   and n is left at 0.
+
+   Do not "fix" this by making the first condition false to test the
+   fallthrough: `when 1 = 2 then / when 2 = 2 then n = 42` segfaults the
+   oracle deterministically (measured 2026-07-30, build/bin/rexx, exit 139,
+   3/3 runs). That is a real defect in the oracle itself, not something a
+   memory-safe reimplementation could or should reproduce -- this program
+   stays on the side of the trap that the oracle survives. */
+n = 0
+select
+  when 1 = 1 then
+    when 2 = 2 then n = 42
+  otherwise
+    n = 99
+end
+say n
