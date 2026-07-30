@@ -144,19 +144,25 @@ the first draft of `primitive_classes.rex` and both failed.
 
 `LEAVE name`/`ITERATE name` accept two different kinds of name, and a
 *clause* label is neither of them. `outer: do i = 1 to 3` then `leave outer`
-fails: a label written directly before the `DO` it names is rejected outright
-with error 47.2 ("Labels are not allowed within a DO/LOOP block"), and a label
-written anywhere else compiles but `LEAVE`/`ITERATE` still refuse it with
-28.3 ("must either match the label of a current loop or block instruction") —
-a clause label is a `SIGNAL` target, not a loop name. What does work is
-either the loop's own **control variable** (`do outer = 1 to 3` / `leave
-outer`, used throughout `leave_nested_outer.rex` and
-`leave_iterate_variants.rex`) or the explicit **`DO LABEL name`** form
-(`do label outer i = 1 to 3` / `leave outer`, which also works on a plain
-non-repetitive block and is the only corpus program that constructs the
-parser's `Loop::label` field — see `do_label.rex`). First draft of
-`leave_nested_outer.rex` used a clause label and failed both ways before this
-was measured.
+fails, and it fails the **same way** regardless of where the clause label
+sits relative to the `DO` it was meant to name: `rexxc` accepts the program
+(it is not a translate-time error), and at run time `LEAVE`/`ITERATE` refuse
+the name with error 28.3 ("must either match the label of a current loop or
+block instruction") — a clause label is a `SIGNAL` target, not a loop name,
+and 28.3 does not distinguish "wrong kind of name" from "right kind, wrong
+loop". Error 47.2 ("Labels are not allowed within a DO/LOOP block") is
+unrelated: it is a translate-time rejection of a clause label written
+*inside* a loop's body, between `DO` and `END`, which has nothing to do with
+naming the loop at all. (An earlier revision of this entry conflated the
+two — measure the claim that only lands in documentation, not just the one
+that decides what a program contains.) What does work is either the loop's
+own **control variable** (`do outer = 1 to 3` / `leave outer`, used
+throughout `leave_nested_outer.rex` and `leave_iterate_variants.rex`) or the
+explicit **`DO LABEL name`** form (`do label outer i = 1 to 3` / `leave
+outer`, which also works on a plain non-repetitive block and is the only
+corpus program that constructs the parser's `Loop::label` field — see
+`do_label.rex`). First draft of `leave_nested_outer.rex` used a clause label
+and failed with 28.3 before this was measured.
 
 A `WHEN` whose `THEN` instruction is itself a `WHEN` clause
 (`select_when_absorption.rex`) parses and is accepted, and the second `WHEN`
