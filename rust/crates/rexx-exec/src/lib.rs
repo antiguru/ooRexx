@@ -72,9 +72,9 @@ pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 /// rustc 1.96.1: **784 bytes per `eval` level in a debug build, 192 in
 /// release**. Debug is the number that matters, because that is what `cargo
 /// test` runs and what the in-process harnesses will therefore sit on. The
-/// whole pipeline survives to roughly 620,000 levels here, against a limit
-/// that has to be at least 100,000, so there is about six times the headroom a
-/// limit at the oracle's own maximum needs.
+/// whole pipeline survives to roughly 685,000 levels here, against a limit
+/// that has to be at least 100,000, so there is about six and a half times the
+/// headroom a limit at the oracle's own maximum needs.
 ///
 /// The budget this covers is larger than `eval` alone, and all three of its
 /// users run on this same thread because the entry point owns everything from
@@ -82,32 +82,51 @@ pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 ///
 /// * `eval` recursing once per term of a left-deep expression,
 /// * `Plan::note` recursing over the same expression to assign its slots,
-/// * and `Drop` for the AST, which recurses once per `Box<Expr>` level when
-///   the `Rc<Program>` goes. That third one is easy to forget and is a real
-///   stack consumer: nothing in the source says "recursive", the derive does.
+///   which is this crate's own and is the shallowest-per-level of the three
+///   at about 160 bytes, but is still a recursion and could be given the same
+///   explicit-worklist treatment `rexx-parse`'s walks got,
+/// * and dropping the AST, which `rexx-parse` now does iteratively. It used to
+///   recurse once per `Box<Expr>` level, and was the thing that bound this
+///   budget until it was fixed.
 ///
-/// **The 784 figure covers only the first of those three, and the first is not
-/// the one that binds.** Measured by bisecting `rexx-run` on this stack, debug,
-/// with the three phases separated by choosing programs that reach different
-/// ones (`exit` first, so the deep expression is parsed and dropped but never
-/// evaluated; a bare command clause, which `Plan::build` also skips):
+/// **`eval` is the recursion that binds, and the figure to size against is its
+/// own 784.** Measured by bisecting `rexx-run` on this stack, debug, to within
+/// 2,000 levels, with the phases separated by choosing programs that reach
+/// different ones (`exit` first, so the deep expression is parsed and dropped
+/// but never evaluated; a bare command clause, which `Plan::build` skips too):
 ///
 /// | what runs | deepest surviving | implied bytes per level |
 /// |---|---|---|
-/// | parse and drop only | 600,000 to 700,000 | about 820 |
-/// | parse, plan and drop | 600,000 to 640,000 | about 860 |
-/// | all four, including eval | 600,000 to 640,000 | about 860 |
+/// | parse and drop only | over 4,000,000, no cliff found | under 134 |
+/// | parse, plan and drop | 3,354,442, fails at 3,356,347 | about 160 |
+/// | all four, including `eval` | 684,618, fails at 686,523 | about 783 |
 ///
-/// Adding `eval` does not move the cliff, because the phases are sequential
-/// and each unwinds before the next, so what binds is the **`Drop`** at about
-/// 820 bytes per level, slightly more than `eval`'s 784. Sizing against
-/// `eval`'s number alone is optimistic by roughly ten per cent; the honest
-/// budget is about 860 bytes per level, or roughly 620,000 levels here.
+/// The last row is an independent check on the probe inside `eval`, arrived at
+/// by a different method entirely, and the two agree to within 0.2 per cent:
+/// 783 bisected against 784.0 probed. So **roughly 685,000 levels**, and a
+/// limit at the oracle's own maximum of 100,000 has about six and a half times
+/// the headroom.
 ///
-/// One consequence Task 11 should not have to rediscover: a depth limit on
-/// `eval` **does not close the abort path**. `exit` followed by a 700,000-term
-/// expression aborts in the drop with no evaluation at all, and no counter in
-/// this crate is in a position to see it.
+/// **This table replaced an earlier one that said the opposite, and the reason
+/// is worth keeping.** Before `rexx-parse` made `Expr`'s `Drop`, `block.rs`'s
+/// `visit_expr` and the gate walk iterative, the parse-and-drop shape cliffed
+/// near 630,000 and `eval` did not move the cliff at all, so the binding
+/// recursion was in `rexx-parse` and not here. That measurement was correct
+/// when taken and describes a tree that no longer exists. Anyone re-deriving
+/// these numbers should re-run the bisection rather than trust the table,
+/// including this one.
+///
+/// The other lesson from that round: quote the bisected cliff, not a per-level
+/// number divided out of a coarse bracket. A 100,000-wide bracket produced an
+/// apparent 820-versus-860 split that had parse-and-drop costing *less* per
+/// level than parse-plan-and-drop, which no model of sequential phases
+/// produces, and the incoherence was the tell.
+///
+/// One consequence that survives the correction: a depth limit on `eval` still
+/// **does not close the abort path in general**, because parsing, planning and
+/// dropping happen outside any counter this crate owns. It is no longer
+/// reachable in practice at these depths, since those phases now cost 160
+/// bytes a level and under, but nothing enforces that.
 ///
 /// 512 MiB is reserved address space, not resident memory. Linux commits stack
 /// pages on first touch, so a program that never recurses pays for the pages it
