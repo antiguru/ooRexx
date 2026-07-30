@@ -264,6 +264,39 @@ git commit -m "Spike the executor's borrow shape: Interp owns everything but the
 
 ---
 
+### Task 3b: `rexx-parse` drops a deep expression by recursion
+
+**Spec:** D19, "Phase 3's parser has the same exposure and it is unverified".
+
+**Files:**
+- Modify: `rust/crates/rexx-parse/src/ast.rs`
+- Test: `rust/crates/rexx-parse/tests/deep.rs`
+
+**Why:** D19 flagged this as a check rather than an assumption, and Phase 4a's corpus confirmed it at a tenth of the guessed depth. `rust/corpus/lang/deep_nested_expr.rex`, a 3000-term `1 + 1 + ...` chain that the oracle evaluates without complaint, makes `cargo test -p rexx-parse --test program` abort with a stack overflow.
+
+**Parsing is not what overflows** — measure before you fix. `expr.rs` parses dyadic operators with a precedence loop, and the executor's `rexx-run`, which runs on a 512 MiB thread, parses the same file happily. What overflows on a default 2 MiB test thread is the **compiler-generated recursive drop** of a 3000-deep `Box<Expr>` chain: `rexx-parse` has no `impl Drop` at all.
+
+This is not cosmetic. A stack overflow aborts the process with no message and no exit code, which is the one outcome D19's "failing loudly" rule most wants to exclude, and it is reachable from ordinary user code that the oracle handles.
+
+- [ ] **Step 1: Find the actual cliff before changing anything.** Parse expressions of increasing term count on a default-stack thread and record where it aborts. Report the number; the corpus program's 3000 is a datum, not the boundary.
+
+- [ ] **Step 2: Write the failing test** — parse an expression deep enough to abort today, on a normal test thread, and drop the result. Then also assert the case the oracle handles: 100,000 terms.
+
+- [ ] **Step 3: Implement an iterative `Drop` for `Expr`.** The standard shape: take each child out with `std::mem::replace` into a worklist and drain it, so unwinding is a loop rather than a recursion. `Expr` owns children through `Box` and `Vec`, so every child-holding variant participates. Do not change the tree's shape and do not add `unsafe`.
+
+- [ ] **Step 4: Check the neighbours.** `PartialEq`, `Debug` and any other derive that walks children recursively has the same exposure. Say in the report which of them you tested at depth and which you did not, rather than leaving the boundary to be inferred.
+
+- [ ] **Step 5: Verify** — `cargo test -p rexx-parse`, `cargo test --workspace`, clippy clean, and the workspace suite green on a default stack with the 3000-term corpus program present.
+
+- [ ] **Step 6: Commit.**
+
+```bash
+git add rust/crates/rexx-parse
+git commit -m "Drop a deep expression tree iteratively, not by recursion"
+```
+
+---
+
 ### Task 4: The value model
 
 **Spec:** D15 in full, including every transcript.
