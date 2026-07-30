@@ -207,6 +207,22 @@ git commit -m "Add the executor's value bodies and root-set slot frames"
 
 ---
 
+### Task 2b: `RootSet` cannot express an unset slot
+
+**Spec:** D16's `RootSet` bullet. **Files:** `rust/crates/rexx-core/src/roots.rs`, `tests/collect.rs`.
+
+**Why:** `set_slot` takes an `ObjRef`, so there is no way to write "unset" back into a slot that has been written. `ObjRef::NIL` cannot stand in for it: `x = .nil` is legal Rexx and `.nil` is a value, which D16 already settled when it rejected storing slots in `temps`.
+
+Found by Task 5's design pre-flight rather than by anything looking for it. It does not block Task 5, because a stem's `DROP` replaces the object with `default: None, tails: {}`, which is observationally identical to never-touched — measured: after `drop x.`, both `x.1` and `x.` render derived names. It **does** block plain `DROP a` on a simple variable in Task 9, where the read afterwards must yield the derived name, and in 4b must fire `NOVALUE`.
+
+- [ ] **Step 1: Write the failing test** — set a slot, clear it, and assert the read answers "unset" rather than any value, including that it is distinguishable from a slot holding `.nil`.
+- [ ] **Step 2: Add the clearing operation.** Either `set_slot` takes an `Option<ObjRef>` or a `clear_slot` sits beside it; pick one and say why in the doc comment. Whichever you choose, `RootSet::iter` must keep yielding exactly the live slots, so a cleared slot stops being a root — that is the half a naive `Option` wrapper gets wrong, and a swept-too-late value is invisible until a collection happens at the wrong moment.
+- [ ] **Step 3: Check the neighbours.** `grow_slots` and `pop_slots` both touch the same storage; say in the report whether a cleared slot interacts with either, particularly whether growth can reuse a cleared index.
+- [ ] **Step 4: Verify** — `cargo test -p rexx-core`, then the workspace, clippy unpiped.
+- [ ] **Step 5: Commit.**
+
+---
+
 ### Task 3: The borrow-shape spike
 
 **Spec:** "Architecture / The borrow shape", and D19.
