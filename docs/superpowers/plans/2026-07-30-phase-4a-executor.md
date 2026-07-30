@@ -1,0 +1,744 @@
+# Phase 4a executor implementation plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** run a classic Rexx program with no procedures, no `PARSE` and no builtin calls, byte-for-byte as `build/bin/rexx` runs it.
+
+**Architecture:** a new `rexx-exec` crate. `Interp` owns the heap, root set, activation stack, plan cache and sinks, and holds programs as `Rc<Program>` so `&Expr` borrows never collide with `&mut self`. Expression evaluation is recursive over the AST with a trace event per step; instruction execution is a program counter over Phase 3's flat, index-linked instruction list.
+
+**Tech stack:** Rust 1.96.1, no `unsafe`, `cargo fmt` default, `clippy -D warnings`. Depends on `rexx-core`, `rexx-num`, `rexx-parse`, `rexx-inventory`.
+
+**The spec is `docs/superpowers/specs/2026-07-30-phase-4a-executor-design.md` and it governs.** It carries the measured transcripts every task below is checked against, and its decision blocks D15 to D19 are binding. Read the section a task names; do not read the whole spec.
+
+## Global constraints
+
+* **The C++ tree is the oracle and is never modified.** `interpreter/`, `samples/`, `build/`, `ootest/` are read-only. Every behavioural question is settled by running `build/bin/rexx`, not by reading the ANSI standard.
+* **Wrap every oracle invocation** as `( ulimit -v 1048576; build/bin/rexx FILE )`. The interpreter requests gigabytes mid-range and gets OOM-killed otherwise, which has already cost a session.
+* **Never set `NUMERIC DIGITS` above 1000** in a probe.
+* **Never instantiate `.Package~new`** on a file inside the repository: it executes that file's prolog and has written untracked files into the tree.
+* Scratch files go in the session scratchpad, never in the repository.
+* **No `unsafe`.** If a task appears to need it, stop and report BLOCKED.
+* **Never `git add -A`.** Stage the exact paths the task names. Do not run `git reset --hard`, do not force-push.
+* Comments state the contract at the top and the reasoning at the decision point. No em-dashes, no structuring semicolons. Never delete an existing comment to make a change easier.
+* A value's rendering is fixed when the value is created. Any code that formats a number with `settings.digits()` or `settings.form()` instead of the value's own captured pair is wrong; see D15.
+* Anything 4a does not implement **fails loudly**: a dedicated exit code outside 157..253 (where `256 - major` lives) and a message naming the construct and the owning sub-phase. Never a plausible Rexx condition.
+
+## File structure
+
+```
+rust/crates/rexx-exec/
+  Cargo.toml
+  src/lib.rs          Interp, the public entry point, the plan cache
+  src/value.rs        value model, conversions, string and number identity
+  src/stem.rs         stems, tail resolution, derived names
+  src/plan.rs         the per-body resolution pass
+  src/activation.rs   one frame: slot handle, block stack, pc, Settings, Rc<Plan>
+  src/eval.rs         expression evaluation and the operators
+  src/run.rs          the instruction loop and control flow
+  src/trace.rs        trace events and prefix formatting
+  src/error.rs        Raised, the condition payload, the message catalogue
+  src/bin/rexx-run.rs the runner the differential tests drive
+  tests/              per-area integration tests, plus the gate harnesses
+rust/corpus/phase-4a.txt     the named L0 subset
+rust/corpus/lang/*.rex       new 4a programs
+docs/superpowers/plans/phase-4-exclusions.txt
+```
+
+Two earlier crates are amended, and those amendments are Tasks 1 and 2 rather than incidental edits: `rexx-parse` gains a `CodeBody` for the main body, and `rexx-core` gains the value bodies and root-set slot frames.
+
+---
+
+### Task 1: `rexx-parse` gives the main body a `CodeBody`
+
+**Spec:** "The borrow shape", the paragraph beginning "One `rexx-parse` change is required".
+
+**Files:**
+- Modify: `rust/crates/rexx-parse/src/lib.rs`
+- Modify: `rust/crates/rexx-parse/tests/program.rs`, and any test that names `Program::instructions` or `Program::labels`
+
+**Interfaces:**
+- Produces: `Program { source, main: CodeBody, directives, symbols }` and `Fragment { source, body: CodeBody, symbols }`.
+- `CodeBody { instructions: Vec<Instruction>, labels: BTreeMap<Box<[u8]>, usize> }` is unchanged and keeps its `Clone, PartialEq, Eq, Debug, Default` derives.
+
+**Why:** `fn eval(&mut self, body: &CodeBody, …)` cannot be called for the body 4a actually runs. `Program` holds `instructions` and `labels` as sibling fields and `Fragment` has no label table at all, so there is no borrowed `CodeBody` view to hand the evaluator, and behind an `Rc` you cannot make one without cloning both vectors per call.
+
+- [ ] **Step 1: Measure whether an `INTERPRET` fragment may contain a label**
+
+Run, wrapped: a program whose body is `interpret "lab: nop"` and a second whose body is `interpret "signal lab; lab: nop"`. Record the exact error number and text if either is rejected.
+
+Expected from Phase 3's own note: a label inside `INTERPRET` text is error 47.1, so `Fragment`'s label table is always empty. **Confirm it rather than assuming it**, and put the transcript in the task report. If it turns out labels are legal, say so and stop: the `Fragment` field is then load-bearing and 4b needs to know.
+
+- [ ] **Step 2: Change the two structs**
+
+`Program::instructions` and `Program::labels` become `Program::main: CodeBody`. `Fragment::instructions` becomes `Fragment::body: CodeBody`. Keep every doc comment: move each field's comment onto the corresponding `CodeBody` field's use site, and do not drop the paragraph explaining why labels are keyed by value rather than by `SymbolId`.
+
+In `parse_program` and `parse_interpret`, `parsed.main` already *is* a `CodeBody`, so both become a move rather than a field split.
+
+- [ ] **Step 3: Update callers and tests**
+
+`cargo test -p rexx-parse` names every caller. Prefer `program.main.instructions` over destructuring, so the diff stays mechanical.
+
+- [ ] **Step 4: Verify**
+
+Run: `cd rust && cargo test -p rexx-parse && cargo clippy -p rexx-parse --all-targets -- -D warnings && cargo fmt --check`
+Expected: the same test count as before the change, zero failures. A changed count means a test was lost, not that the change worked.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add rust/crates/rexx-parse
+git commit -m "Give the main program body a CodeBody, so the executor can borrow one"
+```
+
+---
+
+### Task 2: `rexx-core` gains the value bodies and root-set slot frames
+
+**Spec:** D15 "Where these variants live, and what that costs", D15a, and D16's `RootSet` bullet.
+
+**Files:**
+- Modify: `rust/crates/rexx-core/src/body.rs`, `src/roots.rs`, `src/heap.rs` (tests), `Cargo.toml`
+- Test: `rust/crates/rexx-core/tests/collect.rs`
+
+**Interfaces:**
+- Produces:
+  ```rust
+  pub enum Body {
+      Text { bytes: Vec<u8>, num: Option<Result<Box<Number>, NotNumeric>> },
+      Num { value: Number, created_digits: u32, created_form: Form, text: Option<Vec<u8>> },
+      Stem { name: Box<[u8]>, default: Option<ObjRef>, tails: HashMap<Vec<u8>, Option<ObjRef>> },
+      Array(Vec<ObjRef>),
+      Instance(Vec<(String, ObjRef)>),
+      WeakRef(ObjRef),
+  }
+  ```
+  `Body::String` is deleted. `BehaviourId::STEM` is added.
+- Produces on `RootSet`: `push_slots(initial_len: usize) -> SlotFrame`, `pop_slots(SlotFrame)`, `slot(SlotFrame, usize) -> Option<ObjRef>`, `set_slot(&mut self, SlotFrame, usize, ObjRef)`, `grow_slots(&mut self, SlotFrame) -> usize` returning the new index.
+
+**Why:** the values 4a manipulates are heap objects, and `Body` lives here. And an activation's variables must be reachable from the collector: `RootSet` is globals plus temps, so as it stands the first collection sweeps every local.
+
+- [ ] **Step 1: Write the failing tests**
+
+```rust
+#[test]
+fn a_stems_tails_and_default_are_traced() {
+    let mut heap = Heap::new();
+    let mut roots = RootSet::new();
+    let tail = heap.alloc(Body::Text { bytes: b"kept".to_vec(), num: None });
+    let default = heap.alloc(Body::Text { bytes: b"dflt".to_vec(), num: None });
+    let mut tails = HashMap::new();
+    tails.insert(b"1".to_vec(), Some(tail));
+    // A tombstone: present, and reaching nothing.
+    tails.insert(b"2".to_vec(), None);
+    let stem = heap.alloc_with(BehaviourId::STEM, Body::Stem {
+        name: b"A.".to_vec().into_boxed_slice(),
+        default: Some(default),
+        tails,
+    });
+    roots.add_global("a.", stem);
+    heap.collect(&roots);
+    assert_eq!(heap.get(tail).is_some(), true, "a live tail was swept");
+    assert_eq!(heap.get(default).is_some(), true, "the stem default was swept");
+}
+
+#[test]
+fn slot_frames_keep_locals_alive_and_release_them_on_pop() {
+    let mut heap = Heap::new();
+    let mut roots = RootSet::new();
+    let frame = roots.push_slots(2);
+    let v = heap.alloc(Body::Text { bytes: b"local".to_vec(), num: None });
+    roots.set_slot(frame, 0, v);
+    heap.collect(&roots);
+    assert!(heap.get(v).is_some(), "a live local was swept");
+    roots.pop_slots(frame);
+    let stats = heap.collect(&roots);
+    assert_eq!(stats.swept, 1, "the local outlived its frame");
+}
+
+#[test]
+fn a_slot_frame_grows_for_a_name_the_plan_never_saw() {
+    let mut roots = RootSet::new();
+    let frame = roots.push_slots(1);
+    let index = roots.grow_slots(frame);
+    assert_eq!(index, 1);
+}
+```
+
+- [ ] **Step 2: Run them to watch them fail**
+
+Run: `cd rust && cargo test -p rexx-core`
+Expected: compile errors — `Body::Text`, `Body::Stem`, `push_slots` do not exist.
+
+- [ ] **Step 3: Add the variants and extend `trace`**
+
+`Body::trace` must gain arms for `Text` (reaches nothing) and `Stem` (reaches `default` and every `Some` tail). **It has no wildcard arm and must not gain one**: that exhaustive match is the whole of Phase 1's GC-safety argument, so a new variant has to be a compile error here rather than a use-after-free later.
+
+`rexx-core/Cargo.toml` gains `rexx-num`, because `Body::Text` holds a `Number`. That edge is new and points the object model at the arithmetic core; it is declared in the spec and is not an accident to be quietly avoided.
+
+Delete `Body::String` and update `heap.rs`'s `retire_tests`, which construct it.
+
+- [ ] **Step 4: Implement slot frames**
+
+Only the **top** frame ever grows, which holds under D19's one-Rust-frame-per-activation dispatch and for `INTERPRET`, which runs inside the activation that created it. Assert it: `grow_slots` on a frame that is not the top one is a panic with a message saying so, because a silent wrong answer here is a variable that lands in another routine's pool.
+
+`iter()` must yield globals, temps **and** every assigned slot, so `collect`'s signature does not change.
+
+- [ ] **Step 5: Verify**
+
+Run: `cd rust && cargo test -p rexx-core && cargo clippy -p rexx-core --all-targets -- -D warnings`
+Expected: all pass, including the three new tests.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add rust/crates/rexx-core
+git commit -m "Add the executor's value bodies and root-set slot frames"
+```
+
+---
+
+### Task 3: The borrow-shape spike
+
+**Spec:** "Architecture / The borrow shape", and D19.
+
+**Files:**
+- Create: `rust/crates/rexx-exec/Cargo.toml`, `src/lib.rs`, `src/bin/rexx-run.rs`
+- Create: `rust/crates/rexx-exec/tests/spike.rs`
+- Modify: `rust/Cargo.toml` (workspace members)
+
+**Interfaces:**
+- Produces: `Interp` owning `Heap`, `RootSet`, `Vec<Activation>`, `plans: HashMap<BodyKey, Rc<Plan>>`, an output sink and a trace sink; `pub fn run_program(text: Vec<u8>) -> Outcome`, executed on a dedicated thread.
+
+**Why:** this is the phase's one unsolved architectural question and the parent plan says to spike it first. The deliverable is a proof that compiles, not a design note.
+
+- [ ] **Step 1: Prove the shape with the smallest possible interpreter**
+
+Enough of `Interp` to execute `say 'hello'` and nothing else. The discipline being proven:
+
+```rust
+// The instruction loop clones the Rc into a local on entry, and every
+// &CodeBody and &Expr derives from that local. The activation's own Rc is a
+// liveness anchor and is never borrowed through.
+let program = Rc::clone(&self.activations.last().expect("a frame").program);
+let body = &program.main;
+while let Some(instruction) = body.instructions.get(self.pc()) {
+    // self.eval(...) takes &mut self, which only compiles because `body`
+    // borrows `program`, a local, rather than borrowing self.
+    self.step(body, instruction)?;
+}
+```
+
+Put the version that does **not** compile in a comment beside it, with its `E0502`, because the next phase to touch this will want to know which shape is wrong:
+
+```rust
+// Does not compile: borrows self, then calls &mut self.
+//   let body = &self.activations.last().unwrap().program.main;
+//   self.step(body, ...);           // E0502
+```
+
+- [ ] **Step 2: Prove it survives a fragment created mid-instruction**
+
+A test that parses a fragment at run time with `parse_interpret`, executes its body inside the current activation, and returns. The fragment's `Rc` is a local that outlives the nested loop. This is 4a building the machinery; the `INTERPRET` *instruction* is 4b's and still fails loudly.
+
+- [ ] **Step 3: Run the interpreter on its own thread**
+
+`rexx-run` spawns a thread with an explicit stack size and **that thread owns everything from `parse_program` onward** — bytes in, an outcome out. `Rc<Program>` is `!Send`, so a program parsed on the main thread cannot be handed across, and getting this wrong is a compile error on day one rather than a subtle bug.
+
+Record the chosen stack size and the measured per-frame cost in the task report; Task 11 sets the depth limit from them.
+
+- [ ] **Step 4: Verify**
+
+Run: `cd rust && cargo test -p rexx-exec && cargo clippy -p rexx-exec --all-targets -- -D warnings`
+Expected: the spike tests pass, `say 'hello'` prints `hello`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add rust/crates/rexx-exec rust/Cargo.toml
+git commit -m "Spike the executor's borrow shape: Interp owns everything but the AST"
+```
+
+---
+
+### Task 4: The value model
+
+**Spec:** D15 in full, including every transcript.
+
+**Files:**
+- Create: `rust/crates/rexx-exec/src/value.rs`
+- Test: `rust/crates/rexx-exec/tests/value.rs`
+
+**Interfaces:**
+- Produces: `Value` constructors and accessors on `Interp` — `text(&mut self, &[u8]) -> ObjRef`, `number(&mut self, Number) -> ObjRef` (which applies the `SmallInt` admissibility rule), `to_text(&mut self, ObjRef) -> Cow<'_, [u8]>`, `to_number(&mut self, ObjRef) -> Result<Number, NotNumeric>`.
+
+**Why:** every later task manipulates values through these four functions, and the two rules they enforce are the ones the oracle makes observable everywhere.
+
+- [ ] **Step 1: Write the failing tests, straight from the spec's transcripts**
+
+```rust
+#[test]
+fn a_numbers_rendering_is_fixed_when_it_is_created() {
+    // numeric digits 9 ; y = 1/3 ; numeric digits 3 ; say y  ->  0.333333333
+    let mut interp = Interp::new();
+    interp.settings_mut().set_digits_str("9").unwrap();
+    let y = interp.eval_str("1 / 3").unwrap();
+    interp.settings_mut().set_digits_str("3").unwrap();
+    assert_eq!(&*interp.to_text(y), b"0.333333333");
+}
+
+#[test]
+fn numeric_form_is_captured_at_creation_too() {
+    // numeric form engineering ; x = 1e10+0 -> 10E+9, and stays 10E+9.
+    let mut interp = Interp::new();
+    interp.settings_mut().set_form_str("ENGINEERING").unwrap();
+    let x = interp.eval_str("1e10 + 0").unwrap();
+    interp.settings_mut().set_form_str("SCIENTIFIC").unwrap();
+    assert_eq!(&*interp.to_text(x), b"10E+9");
+    let y = interp.eval_str("1e10 + 0").unwrap();
+    assert_eq!(&*interp.to_text(y), b"1E+10");
+}
+
+#[test]
+fn a_small_int_is_only_admissible_within_the_digits_of_its_own_operation() {
+    // numeric digits 1 ; x = 15 + 0 ; x is 20, so x + 6 is 3E+1 while 15 + 6 is 2E+1.
+    let mut interp = Interp::new();
+    interp.settings_mut().set_digits_str("1").unwrap();
+    let x = interp.eval_str("15 + 0").unwrap();
+    assert_eq!(&*interp.to_text(x), b"2E+1");
+    let sum = interp.eval_with("x + 6", &[("X", x)]).unwrap();
+    assert_eq!(&*interp.to_text(sum), b"3E+1");
+    let direct = interp.eval_str("15 + 6").unwrap();
+    assert_eq!(&*interp.to_text(direct), b"2E+1");
+}
+
+#[test]
+fn text_keeps_its_own_spelling_and_caches_an_exact_parse() {
+    // x = '007' ; say x -> 007 ; say x + 0 -> 7
+    // and the cache is exact, so it survives a DIGITS change:
+    // x = '1.234567890123456789'; digits 5 -> 1.2346 ; digits 20 -> the whole thing
+    let mut interp = Interp::new();
+    let x = interp.text(b"007");
+    assert_eq!(&*interp.to_text(x), b"007");
+    let converted = interp.eval_with("x + 0", &[("X", x)]).unwrap();
+    assert_eq!(&*interp.to_text(converted), b"7");
+}
+
+#[test]
+fn nil_has_a_string_value_and_the_booleans_are_plain_strings() {
+    // say .nil -> The NIL object ; .true is "1" ; .false is "0"
+    let mut interp = Interp::new();
+    assert_eq!(&*interp.to_text(ObjRef::NIL), b"The NIL object");
+}
+```
+
+- [ ] **Step 2: Run them to watch them fail**
+
+Run: `cd rust && cargo test -p rexx-exec value`
+Expected: compile errors, no constructors yet.
+
+- [ ] **Step 3: Implement**
+
+Conversions are total. Text to number is `std::str::from_utf8` then `Number::parse`, and both failures collapse into `NotNumeric` because a Rexx number's characters are ASCII by definition. Number to text is `format_form(created_digits, created_form)` — **never** `settings.digits()`.
+
+The `num` cache is tri-state and **holds the exact parse, never a rounded one**. Rounding belongs to the operation, which is what makes the cache safe across a settings change.
+
+`number()` admits a `SmallInt` only when the value is whole, inside `SMALL_INT_MIN..=SMALL_INT_MAX`, and its decimal digit count is at most the `DIGITS` of the operation that produced it. The check happens once, at creation, and is never re-derived.
+
+- [ ] **Step 4: Verify against the oracle, not just against the tests**
+
+For each of the five transcripts, run the equivalent `.rex` under `( ulimit -v 1048576; build/bin/rexx … )` and paste both outputs into the task report. The tests encode my transcripts; this step checks my transcripts.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add rust/crates/rexx-exec/src/value.rs rust/crates/rexx-exec/tests/value.rs
+git commit -m "The value model: text keeps its spelling, a number keeps its rendering"
+```
+
+---
+
+### Task 5: Stems and compound variables
+
+**Spec:** D15a in full.
+
+**Files:**
+- Create: `rust/crates/rexx-exec/src/stem.rs`
+- Test: `rust/crates/rexx-exec/tests/stem.rs`
+
+**Interfaces:**
+- Produces: `tail_key(&mut self, &Plan, frame, SymbolId) -> Vec<u8>` resolving a compound's tail pieces; `stem_get`, `stem_set`, `stem_drop_tail`, `stem_assign`, `stem_drop`.
+
+**Why:** four measured behaviours that the obvious model gets wrong, and the derived-name rule that every uninitialised read depends on.
+
+- [ ] **Step 1: Write the failing tests from the six transcripts**
+
+Each of these is a measured oracle transcript and the test asserts the same bytes:
+
+```rust
+// u. = 'd' ; u.1 = 'one' ; drop u.1  ->  u.1 is U.1, u.2 is d
+// a. = 1 ; b. = a. ; a.1 = 2         ->  b.1 is 2      (one shared object)
+// r. = 'rd' ; u = r. ; drop r.       ->  u is rd       (drop rebinds)
+// s. = 'def' ; t = s. ; s. = 'other' ->  t is def      (assign rebinds)
+// say q.                             ->  Q.            (name, with the period)
+// i = 'abc' ; v.i = 'val'            ->  v.ABC is V.ABC (keys are verbatim)
+// i = 1 ; j = 2 ; a.i.j = 'deep'     ->  a.1.2 is deep  (pieces joined by '.')
+```
+
+- [ ] **Step 2: Run them to watch them fail**
+
+- [ ] **Step 3: Implement**
+
+A dropped tail is `Some(key) -> None`, a **tombstone** that does not take the default; an absent key does. `stem_assign` and `stem_drop` **replace the Stem object** and rebind the variable, leaving the old object for anything that aliased it; a tail assignment mutates in place. Tail keys are the resolved piece values verbatim and case-sensitively, joined with `.` for a multi-level tail.
+
+- [ ] **Step 4: Verify against the oracle** — same rule as Task 4, all seven transcripts re-run and pasted into the report.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add rust/crates/rexx-exec/src/stem.rs rust/crates/rexx-exec/tests/stem.rs
+git commit -m "Stems: tombstones, aliasing, and a name the object carries itself"
+```
+
+---
+
+### Task 6: The resolution plan
+
+**Spec:** D16 in full.
+
+**Files:**
+- Create: `rust/crates/rexx-exec/src/plan.rs`, `src/activation.rs`
+- Test: `rust/crates/rexx-exec/tests/plan.rs`
+
+**Interfaces:**
+- Produces: `Plan { slots: HashMap<Box<[u8]>, usize>, len: usize }`, `build_plan(&CodeBody, &SymbolTable) -> Plan`, and on `Interp` a cache keyed by `(program_id, body_index)` where the loader assigns `program_id`.
+- `Activation { plan: Rc<Plan>, frame: SlotFrame, blocks: Vec<Block>, pc: usize, settings: Settings, program: Rc<Program> }`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```rust
+#[test]
+fn a_tail_piece_and_a_plain_variable_share_one_slot() {
+    // b = 2 ; say a.b -> A.2 ; a.2 = 'hit' ; say a.b -> hit
+    // An implementer who gives tail pieces their own slots gets A.B.
+}
+
+#[test]
+fn a_runtime_name_grows_the_frame() {
+    // v = 'X' ; x = 1 ; drop (v) ; say x  ->  X
+    // X may not appear in the body at all, so the plan cannot have a slot for it.
+}
+
+#[test]
+fn names_are_keyed_upcased_but_tail_values_are_not() {
+    // The two rules live in different decision blocks and are easy to swap.
+}
+```
+
+- [ ] **Step 2: Run them to watch them fail**
+
+- [ ] **Step 3: Implement the upfront pass**
+
+One walk over the body's AST, collecting every referenced name and every `Tail::Variable` piece from `compound_parts`, assigning dense indices. **Not lazy**: a lazy design threads a "seen this name?" check through every site that touches a variable, which is a different algorithm and the wrong one. Run-time growth is the exception, not the normal path.
+
+`Settings` lives on the `Activation`, inherited from the caller at call time. Measured: an internal call sees the caller's `DIGITS`, changes its own, and the caller is unaffected after `return`.
+
+- [ ] **Step 4: Verify** — `cargo test -p rexx-exec plan`, plus the three oracle transcripts.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add rust/crates/rexx-exec/src/plan.rs rust/crates/rexx-exec/src/activation.rs rust/crates/rexx-exec/tests/plan.rs
+git commit -m "Resolve a body's variables once, keyed by name, cached on Interp"
+```
+
+---
+
+### Task 7: Expression evaluation, part one — terms, arithmetic, concatenation
+
+**Spec:** "Expression evaluation", the arithmetic and concatenation groups.
+
+**Files:**
+- Create: `rust/crates/rexx-exec/src/eval.rs`
+- Test: `rust/crates/rexx-exec/tests/eval_arith.rs`
+
+**Interfaces:**
+- Produces: `fn eval(&mut self, body: &CodeBody, expr: &Expr) -> Result<ObjRef, Raised>`.
+
+- [ ] **Step 1: Write the failing tests** — `Literal`, `Constant` (`say 1e5` is `1E5`), `Variable`, `Stem`, `Compound`, `DotVariable` for the three admissible names, `Prefix` (`+ - \`), arithmetic `+ - * / % // **` through `rexx-num`, and `Abuttal` / `Blank` / `||`.
+
+- [ ] **Step 2: Run to watch them fail**
+
+- [ ] **Step 3: Implement**
+
+Push every intermediate to `RootSet::push_temp` before any allocation that could collect while it is live. A value held only in a Rust local across an allocation is the defect class the root set exists to remove.
+
+Every unimplemented `ExprKind` — `Call`, `QualifiedCall`, `Message`, `ClassResolver`, `List`, `VariableReference`, and any `DotVariable` beyond the three — takes the loud-failure path with the owning sub-phase named.
+
+- [ ] **Step 4: Verify** — plus a `--release` run, because the temps discipline is what `debug_assert`s cannot check.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add rust/crates/rexx-exec/src/eval.rs rust/crates/rexx-exec/tests/eval_arith.rs
+git commit -m "Evaluate terms, arithmetic and concatenation"
+```
+
+---
+
+### Task 8: Expression evaluation, part two — comparison and logic
+
+**Spec:** "Expression evaluation", the comparison and logical groups, with their transcripts.
+
+**Files:**
+- Modify: `rust/crates/rexx-exec/src/eval.rs`
+- Test: `rust/crates/rexx-exec/tests/eval_compare.rs`
+
+- [ ] **Step 1: Write the failing tests, from the measured line**
+
+```
+'a' = 'a '  -> 1     '' = ' '   -> 1     'abc' < 'abd' -> 1     'b' > 'a ' -> 1
+'01' = '1'  -> 1     ' 1 ' = 1  -> 1     'a' = 1       -> 0     '01' == '1' -> 0
+'10' >> '9' -> 0     '10' > '9' -> 1     'a' << 'a '   -> 1
+```
+
+- [ ] **Step 2: Run to watch them fail**
+
+- [ ] **Step 3: Implement all four families**
+
+* Numeric-or-string `= \= <> >< > < >= <= \> \<`: numeric through `rexx-num`'s free `compare` under the current `DIGITS` and `FUZZ` when **both** operands are numeric, otherwise a string comparison with the shorter blank-padded on the right.
+* Strict `== \== >> << >>= <<= \>> \<<`: no padding, shorter is less.
+* Logical `& | &&`: a logical value is **exactly** the one-character string `0` or `1`. Measured, `' 1 '`, `'01'`, `'1.0'` and `''` are each error 34.
+* `ExprKind::Logical`, the comma list, is an AND of its parts under the same check.
+
+- [ ] **Step 4: Verify** — every line above re-run under the oracle and pasted into the report.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add rust/crates/rexx-exec/src/eval.rs rust/crates/rexx-exec/tests/eval_compare.rs
+git commit -m "Comparison in two families, and logic that coerces nothing"
+```
+
+---
+
+### Task 9: The instruction loop — assignment, SAY, DROP, NUMERIC, EXIT, LABEL, NOP
+
+**Spec:** "Control flow", "Output and trace sinks".
+
+**Files:**
+- Create: `rust/crates/rexx-exec/src/run.rs`
+- Test: `rust/crates/rexx-exec/tests/run_basic.rs`
+
+**Interfaces:**
+- Produces: `enum Flow { Next, Goto(usize), Exit(Option<ObjRef>) }` and `fn step(&mut self, body: &CodeBody, index: usize) -> Result<Flow, Raised>`.
+
+- [ ] **Step 1: Write the failing tests** — assignment to a variable, a stem and a compound; `SAY` of each value kind and of an omitted expression (a blank line); `DROP` of a variable, a tail, a whole stem and the `(v)` indirect form; `NUMERIC DIGITS`/`FUZZ`/`FORM` including the `VALUE` spellings; `EXIT` with and without an expression; a `LABEL` as a traced no-op; `NOP`.
+
+- [ ] **Step 2: Run to watch them fail**
+
+- [ ] **Step 3: Implement**
+
+`SAY` writes to the output sink, default stdout. Trace goes to the **trace sink, default stderr** — the two are separate descriptors, so their interleaving is not observable and two independently buffered sinks are safe.
+
+- [ ] **Step 4: Verify** — `cargo test`, plus each instruction run under both interpreters through `rexx-run`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add rust/crates/rexx-exec/src/run.rs rust/crates/rexx-exec/tests/run_basic.rs
+git commit -m "The instruction loop, and the seven instructions that do not branch"
+```
+
+---
+
+### Task 10: `IF`, `SELECT`, `SELECT CASE`
+
+**Spec:** "Control flow", and the `WhenCase` rule.
+
+**Files:**
+- Modify: `rust/crates/rexx-exec/src/run.rs`
+- Test: `rust/crates/rexx-exec/tests/run_select.rs`
+
+- [ ] **Step 1: Write the failing tests**
+
+Include the two shapes that discriminate a wrong jump target, because Phase 3 cannot see either: an `IF`/`ELSE` chain where the false target and the then-exit differ, and a `SELECT` whose `WHEN` bodies are several instructions long with visible side effects, so a wrong exit lands inside a later `WHEN`'s body. Also `when 1 = 1 then` followed by `when 2 = 2 then nop`, where the second `WHEN` is the first's `THEN` instruction and is never collected into `whens`.
+
+`SELECT CASE` compares with `==`: measured, `select case '007'` does not match `when 7`.
+
+A `SELECT` that reaches its `END` with no `WHEN` taken is **7.3**.
+
+- [ ] **Step 2 to 5** as before, ending with:
+
+```bash
+git add rust/crates/rexx-exec/src/run.rs rust/crates/rexx-exec/tests/run_select.rs
+git commit -m "IF and SELECT, including the case form's strict comparison"
+```
+
+---
+
+### Task 11: `DO` and `LOOP` in every variant
+
+**Spec:** "Control flow", D19's depth policy.
+
+**Files:**
+- Modify: `rust/crates/rexx-exec/src/run.rs`
+- Test: `rust/crates/rexx-exec/tests/run_loops.rs`
+
+- [ ] **Step 1: Write the failing tests** — `Simple`, `Forever`, `Count`, `Controlled` with every combination of `TO`/`BY`/`FOR`, and `Over` on a **non-stem** target (measured: a string and a number each iterate once, yielding themselves). `LoopKind::With` is Phase 5's and takes the loud-failure path, because `DO WITH` sends `SUPPLIER` and nothing in 4a answers a message.
+
+Control expressions are evaluated in `Controlled::order`, which Phase 3 recorded because an expression can have side effects.
+
+`LEAVE` and `ITERATE`, bare and by label, including from inside a `SELECT` nested in a loop.
+
+- [ ] **Step 2: Measure the `DO` control error family before implementing it**
+
+Confirmed already: `do i = 'x' to 3` and `do i = 1 to 'y'` are both **41.1**. Reported but unconfirmed: **26.2** and **26.3** for non-whole control values. And `do i = 1 by 0 to 3` **loops forever and raises nothing**, which is behaviour to reproduce rather than an error to catalogue. Enumerate the family against the oracle and put the table in the report.
+
+- [ ] **Step 3: Implement**, including the depth counter D19 requires, with its limit derived from Task 3's measured per-frame cost and stack size.
+
+- [ ] **Step 4: Verify** — plus an expression at a depth the oracle handles comfortably. Do **not** put a program near the oracle's 200,000-term cliff in the corpus: 100,000 terms pass and 200,000 exits 139, so what a near-cliff program measures is a C++ stack size, not a language rule.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add rust/crates/rexx-exec/src/run.rs rust/crates/rexx-exec/tests/run_loops.rs
+git commit -m "Every DO and LOOP variant, with the block stack LEAVE unwinds"
+```
+
+---
+
+### Task 12: Errors, the message catalogue, and the exit code
+
+**Spec:** "Errors, and the reporting subsystem".
+
+**Files:**
+- Create: `rust/crates/rexx-exec/src/error.rs`
+- Modify: `rust/crates/rexx-exec/Cargo.toml` (add `rexx-inventory`)
+- Test: `rust/crates/rexx-exec/tests/errors.rs`
+
+**Why:** criterion 1 compares stderr and the exit code byte for byte, so "terminates with the oracle's message" is a subsystem, not a sentence.
+
+- [ ] **Step 1: Capture the oracle's exact output for each of 4a's raiser families**
+
+Measured for 7.3, and this is the format to reproduce exactly, two spaces after each colon:
+
+```
+     3 *-* end
+Error 7 running /abs/path/vB.rex line 3:  WHEN or OTHERWISE expected.
+Error 7.3:  All WHEN expressions of SELECT are false; OTHERWISE expected.
+rc=249
+```
+
+Note the clause echo appears **with trace off**. Capture the same for 34.1 (measured rc 222), the arithmetic family, and the `DO` control numbers from Task 11.
+
+- [ ] **Step 2: Write the failing tests** against those captures.
+
+- [ ] **Step 3: Implement**
+
+The message text comes from `rexx-inventory`'s generated table — Phase 0 already generates `errors.rs` from `rexxmsg.xml`, 704 messages. Do not hand-transcribe text the tree already generates. Arithmetic's text comes from `rexx-num`'s `ArithError::message()`.
+
+`exit code = 256 - major`. The **loud-failure** code for unimplemented constructs must sit outside 157..253, where `256 - major` lives, or a not-implemented failure is indistinguishable from error 11; state the chosen code in a doc comment.
+
+- [ ] **Step 4 and 5** as before, committing `src/error.rs`, the test and the manifest.
+
+---
+
+### Task 13: Trace
+
+**Spec:** D17, and exit criterion 3.
+
+**Files:**
+- Create: `rust/crates/rexx-exec/src/trace.rs`
+- Test: `rust/crates/rexx-exec/tests/trace.rs`, `tests/trace_oracle/` for committed expectations
+
+- [ ] **Step 1: Build the prefix table from the oracle's side, not from what we emit**
+
+All 19 prefixes at `RexxActivation.hpp:90`-`110`. Each row is either a witness program 4a emits, or the sub-phase that first emits it. Measured reachable from pure-4a code: `*-*`, `>>>`, `>=>`, `>L>`, `>V>`, `>O>`, `>K>`, `>C>`, and a prefix-operator line.
+
+- [ ] **Step 2: Capture the oracle's exact bytes for each witness** — spacing, quoting and indentation are unspecified anywhere but the oracle. Commit the expectations the way `rexx-parse/tests/sourceline_oracle/` does, with a regeneration command named in the reading test, so `cargo test` alone is the gate.
+
+- [ ] **Step 3: Implement**, emitting to the trace sink (stderr) per evaluation step, gated on the setting.
+
+- [ ] **Step 4: Verify** — `trace r` and `trace i` byte for byte against every committed expectation.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add rust/crates/rexx-exec/src/trace.rs rust/crates/rexx-exec/tests/trace.rs rust/crates/rexx-exec/tests/trace_oracle
+git commit -m "Trace value lines, quantified from the oracle's nineteen prefixes"
+```
+
+---
+
+### Task 14: The corpus, and the L0 differential harness
+
+**Spec:** "L0 differential corpus".
+
+**Files:**
+- Create: `rust/corpus/phase-4a.txt`, and 12 to 15 new `rust/corpus/lang/*.rex`
+- Create: `rust/crates/rexx-exec/tests/corpus.rs`, `tests/corpus_oracle/`
+- Modify: `rust/corpus/README.md`
+
+**Why:** of the 28 existing corpus programs only 10 are 4a-clean, **none of the 10 contains a `LEAVE` or an `ITERATE`**, and seven are numeric, so the inherited corpus mostly re-tests `rexx-num` through a new front end.
+
+- [ ] **Step 1: Write the programs**
+
+Start with a 4a-only cut of `do_variants.rex`, which is excluded today by the single line `do i over .array~of("x", "y")`. Then: the four control-flow shapes from criterion 1; `LEAVE`/`ITERATE` by label; whole-stem versus tail `DROP` including the tombstone; `EXIT` with an expression; the created-digits and created-form transcripts; the stem-aliasing transcripts; an expression at a safe depth.
+
+**No program may contain `DO OVER` on a stem** — the iteration order is a recorded deviation (D15a).
+
+- [ ] **Step 2: Fix `corpus/README.md`'s hard-coded "24 programs"** to report rather than assert. It is the count-rot this project warns about, in the document the corpus rules come from.
+
+- [ ] **Step 3: Build the harness as a `cargo test`** with the oracle's expected output committed, so `cargo test` alone is the gate and a script regenerates. Report the program count; never assert it.
+
+- [ ] **Step 4: Run it**, and separately under collect-on-every-allocation.
+
+- [ ] **Step 5: Commit.**
+
+---
+
+### Task 15: The `base/expressions` assertion table
+
+**Spec:** "L1, and why it is table-driven", exit criterion 2.
+
+**Files:**
+- Modify: `rust/crates/rexx-extract/src/lib.rs`, `src/bin/rexx-extract.rs`
+- Create: `rust/crates/rexx-exec/tests/assertions.rs`
+
+**Why:** `rexx-extract`'s current rendering produces programs whose main body is empty, so they execute nothing at all — verified under the oracle, which prints nothing and exits 0. The route is data, not programs.
+
+- [ ] **Step 1: Add an extraction mode emitting one row per assertion** — the expression text, the expected value, and the `NUMERIC DIGITS` in force.
+
+Those files change the setting throughout, from 1 to 100, so the extractor **scans sequentially and carries the setting**. Getting this wrong silently tests the wrong precision and still passes, which is the worst available outcome, so it gets its own test against a file that changes the setting mid-way.
+
+- [ ] **Step 2: Include the `PRECEDENCE` (1,226) and `CONCATENATION` (388) groups.** Phase 2 excluded them because it had no parser; 4a has one, and those 1,614 assertions are the ones most relevant to an evaluator.
+
+- [ ] **Step 3: Compare byte for byte, never numerically** — a numeric comparison would hide the entire created-digits and created-form story across thousands of rows.
+
+- [ ] **Step 4: Report the row count and list rows blocked on 4b or 4c** with the sub-phase that unblocks each.
+
+- [ ] **Step 5: Commit.**
+
+---
+
+### Task 16: The gate harnesses
+
+**Spec:** the 4a exit gate, all seven criteria.
+
+**Files:**
+- Create: `rust/crates/rexx-exec/tests/coverage.rs`, `tests/loud.rs`, `rust/scripts/mutate-4a.sh`
+- Create: `docs/superpowers/plans/phase-4-exclusions.txt`
+
+- [ ] **Step 1: The coverage enumeration** — a macro-generated match with **no wildcard arm** over `InstructionKind`, `ExprKind`, `LoopKind`, `PrefixOp`, `EndStyle`, `Trace` and `Operator`. Every variant carries either a witness program in the subset or the phase that owns it, and the test fails on a variant carrying neither. Without the owner arm this criterion demands a witness for `LoopKind::With`, which needs Phase 5, and the criterion written to close a blindness finding would itself be unsatisfiable.
+
+- [ ] **Step 2: The loud-failure enumeration** — for every `InstructionKind` and `ExprKind` variant, either 4a executes it or it produces the not-implemented exit code and names its owner. One test closes a surface larger than 4a's own.
+
+- [ ] **Step 3: The mutation control** — a committed list of one-line mutations, each of which the subset must catch: off-by-one on `If::false_target`, on `When::exit`, on `Loop::end`; `Controlled::order` in fixed To/By/For order; `Abuttal` as `Blank`; `=` as `==`; `LEAVE` unwinding one block too few; formatting with the current digits, and with the current form, instead of the created pair.
+
+The script **exits non-zero on an unapplied pattern**. That guard fired in four separate Phase 3 tasks, and without it a stale pattern reports coverage that does not exist. This is the one criterion a `cargo test` cannot be, since it edits the source it tests.
+
+- [ ] **Step 4: Write `phase-4-exclusions.txt`** — the 15 whole exclusions, the 3 partial rows, and a **separate deviations section** holding the stem iteration order. A deviation is permanent and chosen; an exclusion is work assigned to a later phase, and filing one as the other is how a deviation stops being reviewed.
+
+- [ ] **Step 5: Assess every criterion in `docs/superpowers/plans/phase-4a-gate.md`**, in the shape of `phase-3-gate.md`: state what was measured, and where a criterion is met but weak, say so. A gate that reports only "met" is worth less than one that says which of its criteria could not have failed.
+
+- [ ] **Step 6: Commit.**
