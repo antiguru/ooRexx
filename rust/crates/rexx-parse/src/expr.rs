@@ -45,6 +45,28 @@ use crate::token::{
     Operator, ParseCtx, ParseError, SymbolClass, SymbolId, Tag, Token, TokenCursor, TokenKind,
 };
 
+/// How many levels of `(...)` nesting `subterm` will descend before raising
+/// `11.1`, "Insufficient control stack space; cannot continue execution",
+/// instead of recursing one level deeper.
+///
+/// Chosen between two measured cliffs (Task 3c's report has the transcripts):
+/// `build/bin/rexx` itself starts raising 11.1 for `say ((((...'a'...))))`
+/// somewhere between 39,900 and 39,950 parens (noisy in between, stable on
+/// both sides, wrapped at `ulimit -v 1048576`), and this parser's own
+/// recursion, with no counter, aborts with a native stack overflow between
+/// 88,800 and 89,000 parens on the 512 MiB thread D19 gives `rexx-exec`'s
+/// public entry point (debug build; debug is what binds, per the same
+/// section). 50,000 sits inside the oracle's own reporting range and leaves
+/// a wide margin below this parser's measured native cliff.
+///
+/// Exact depth parity with the oracle is not achievable -- both cliffs are
+/// stack artifacts of two unrelated implementations, not a language rule --
+/// so this is a chosen approximation, not a reproduction. A program between
+/// roughly 40,000 and 50,000 levels of parenthesis nesting diverges: the
+/// oracle already raises 11.1 there and this parser still succeeds. No
+/// corpus program goes anywhere near either cliff.
+const MAX_PAREN_DEPTH: u32 = 50_000;
+
 /// Dyadic operator precedence, ported from `RexxToken::precedence`
 /// (`Token.cpp:111`).
 ///
@@ -414,6 +436,15 @@ struct Parser<'a, 'c> {
     /// clause's line even though the `*` is on the next one, and `r = (1,`
     /// continued likewise reports 36.901 on the clause's line.
     clause_byte: usize,
+    /// How many `(...)` groups are currently open, i.e. how many levels deep
+    /// `subterm`'s own recursion on a `TokenKind::LeftParen` currently sits.
+    /// Checked against `MAX_PAREN_DEPTH` before descending one level
+    /// further, so nested grouping parentheses raise `11.1` instead of
+    /// exhausting the native stack. Zero at the start of every top-level
+    /// expression parse, which is correct: one `Parser` is built fresh per
+    /// clause-level expression (see the free functions above), so nesting in
+    /// one expression is never carried into an unrelated one.
+    paren_depth: u32,
 }
 
 impl<'a, 'c> Parser<'a, 'c> {
@@ -426,6 +457,7 @@ impl<'a, 'c> Parser<'a, 'c> {
             ctx,
             cursor,
             clause_byte,
+            paren_depth: 0,
         }
     }
 
@@ -1022,9 +1054,21 @@ impl<'a, 'c> Parser<'a, 'c> {
         match &token.kind {
             TokenKind::LeftParen => {
                 self.advance();
+                // Task 3c: one more level would recurse past MAX_PAREN_DEPTH,
+                // so raise the same condition the oracle raises somewhere
+                // past its own, differently-sized cliff, rather than
+                // descending into `full_subexpression` at all. See
+                // `MAX_PAREN_DEPTH`'s own doc comment for the two measured
+                // cliffs this sits between.
+                if self.paren_depth >= MAX_PAREN_DEPTH {
+                    return Err(self.error(11, 1));
+                }
+                self.paren_depth += 1;
                 // The enclosing terminators are dropped, because the brackets
                 // disambiguate, and a comma list is allowed again in here.
-                let Some(inner) = self.full_subexpression(Terminators::RIGHT)? else {
+                let inner = self.full_subexpression(Terminators::RIGHT);
+                self.paren_depth -= 1;
+                let Some(inner) = inner? else {
                     // `()` is 35.1.
                     return Err(self.error(35, 1));
                 };
