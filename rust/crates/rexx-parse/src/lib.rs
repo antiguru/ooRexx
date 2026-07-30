@@ -64,6 +64,11 @@ pub use ast::{
     Protection, Raise, RaiseResult, Redirection, Requires, Resource, RoutineDirective, Signal,
     Tail, Trace, TriggerKind, Use, UseTarget, VariableRef, compound_parts,
 };
+/// The parser's own nesting limit, exported because a caller has to be able
+/// to reason about it: it decides which inputs come back as `11.1` rather than
+/// as an AST, and it is the number a test or an embedder checks its own depths
+/// against rather than hardcoding 50,000 in two places.
+pub use expr::MAX_EXPR_DEPTH;
 pub use scanner::{ResourceBody, Scanned, scan};
 pub use source::{ProgramSource, SourceKind};
 pub use token::{

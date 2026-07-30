@@ -36,31 +36,43 @@
 //! `paren_sized` parse `say (((...('a')...)))` with `n` levels of nesting,
 //! on a thread with no explicit `stack_size` (`paren_default`, what
 //! `cargo test` gives a test) or an explicit 512 MiB one (`paren_sized`,
-//! what `rexx-exec`'s public entry point creates, per D19). Measured before
-//! Task 3c's counter existed, this build and machine: `paren_sized` aborted
-//! natively between 88,800 and 89,000 parens; `paren_default` aborted far
-//! shallower, between 337 and 338. `MAX_PAREN_DEPTH` (`expr.rs`) now stops
-//! the recursion at 50,000, inside the oracle's own reporting range
-//! (`build/bin/rexx` starts raising `11.1` for the same program between
-//! 39,900 and 39,950 parens) and well below the sized cliff -- but not
-//! below the default one, which is thousands of levels shallower than the
-//! counter itself: a `paren_default` run at any depth past 338 still aborts
-//! natively today, counter or not, because there is not enough stack left
-//! to reach the check. See Task 3c's report for the full reasoning.
+//! what `rexx-exec`'s public entry point creates, per D19). `paren_sized`
+//! aborted natively between 88,800 and 89,000 parens before any counter
+//! existed; `MAX_EXPR_DEPTH` (`expr.rs`) now stops the recursion at 50,000,
+//! inside the oracle's own reporting range (`build/bin/rexx` starts raising
+//! `11.1` for the same program between 39,900 and 39,950 parens) and well
+//! below that sized cliff -- but not below the *default*-thread one, which
+//! is tens of thousands of levels shallower than the counter itself: a
+//! `paren_default` run past its native cliff still aborts today, counter or
+//! not, because there is not enough stack left to reach the check.
 //!
-//! `prefix_chain`, `nested_calls` and `nested_do` are Task 3c Step 4's check
-//! of other per-source-construct recursions, on a default 2 MiB thread:
-//! `nested_do` (`do` nested `n` deep before one `nop` and `n` matching
-//! `end`s) parses cleanly to at least 100,000, because `translate_block`
-//! tracks open blocks on a heap-allocated `Vec`, not the call stack, and
-//! never recurses per nesting level. `prefix_chain` (`- - - - ...1`, unary
-//! minus repeated, recursing in `message_subterm`) aborted between 1,150 and
-//! 1,200. `nested_calls` (`f(f(f(...'a'...)))`, recursing through `subterm`'s
-//! `arg_list` call rather than through the grouping-paren branch `expr.rs`'s
-//! counter guards) aborted between 350 and 360 -- shallower than plain
-//! parens. Neither is fixed by Task 3c, which is scoped to the grouping-paren
-//! recursion D19 measured; both are reported as known gaps of the same
-//! shape.
+//! **Re-measure the default-thread cliffs rather than quoting these.** A
+//! counter costs stack, so each one makes the unprotected case slightly
+//! shallower than the measurement that justified it, and this comment stated
+//! pre-counter numbers as though they described the shipped parser for a
+//! whole task. On the current code: `paren_default` parses 331 and aborts at
+//! 332 (was 337/338 before Task 3c's counter), and `nested_calls` parses 341
+//! and aborts at 342 (was 349/350 before Task 3d's).
+//!
+//! `prefix_chain`, `nested_calls`, `nested_do` and `select_nesting` are the
+//! survey of other per-source-construct recursions, on a default 2 MiB
+//! thread. `nested_do` (`do` nested `n` deep before one `nop` and `n`
+//! matching `end`s) and `select_nesting` both parse cleanly to at least
+//! 100,000, because `translate_block` tracks open blocks on a heap-allocated
+//! `Vec`, not the call stack, and never recurses per nesting level.
+//! `prefix_chain` (`- - - - ...1`, unary minus repeated, recursing in
+//! `message_subterm`) aborts between 1,150 and 1,200 and is **the one gap
+//! still open**: it never passes through either counted site, closing it
+//! needs its own check and its own oracle cliff, and unlike the call
+//! recursion it does not reach the sized path.
+//!
+//! `nested_calls` was the other gap and Task 3d closed it. Note the
+//! comparison this file used to draw, because it was **backwards**: nested
+//! calls are *deeper* than plain grouping parens, not shallower. Measured
+//! like-for-like on one binary, 341 against 331. The priority it was arguing
+//! for still held -- calls were the shallowest *unguarded* recursion, prefix
+//! chains being three times deeper -- but the comparison itself was wrong,
+//! and it was wrong on this file's own numbers before anyone re-measured.
 use rexx_parse::{Expr, ExprKind, Operator, parse_program};
 
 fn main() {
@@ -194,12 +206,52 @@ fn main() {
                 .unwrap();
             handle.join().unwrap();
         }
-        "nested_calls" => {
+        // `nested_calls_sized` is the mode Task 3d needed and Task 3c did not
+        // have. Measuring nested calls only on a default thread made the gap
+        // look like a small-stack embedder's problem; on the 512 MiB thread
+        // D19 gives `rexx-exec`'s public entry point, the same construct
+        // aborted above roughly 92,000, which is the sized path the executor
+        // actually runs on.
+        "nested_calls" | "nested_calls_sized" => {
             let mut src = String::from("say ");
             src.push_str(&"f(".repeat(n));
             src.push_str("'a'");
             src.push_str(&")".repeat(n));
             src.push('\n');
+            let bytes = src.into_bytes();
+            let mut builder = std::thread::Builder::new();
+            if mode == "nested_calls_sized" {
+                builder = builder.stack_size(512 * 1024 * 1024);
+            }
+            let handle = builder
+                .spawn(move || match parse_program(bytes) {
+                    Ok(p) => {
+                        drop(p);
+                        println!("ok: depth {n} {mode}, parsed");
+                    }
+                    Err(e) => println!("ok: depth {n} {mode}, error {e}"),
+                })
+                .unwrap();
+            handle.join().unwrap();
+        }
+        // `select_nesting` exists because of a probe that measured nothing
+        // while appearing to pass. A `select` whose next clause is
+        // `otherwise` is **error 7.1, "WHEN or OTHERWISE expected"**, raised
+        // at the first `select` before any nesting is built, so a probe using
+        // that shape reports a clean parse error at every depth and looks
+        // like a pass. `when 1=1 then` is the clause that actually nests.
+        // Measured with this mode: 100,000 levels parse cleanly on a default
+        // 2 MiB thread, which is what confirms `translate_block`'s `Vec`
+        // covers `SELECT` as well as `DO`.
+        "select_nesting" => {
+            let mut src = String::new();
+            for _ in 0..n {
+                src.push_str("select\nwhen 1=1 then\n");
+            }
+            src.push_str("nop\n");
+            for _ in 0..n {
+                src.push_str("end\n");
+            }
             let bytes = src.into_bytes();
             let handle = std::thread::Builder::new()
                 .spawn(move || match parse_program(bytes) {
