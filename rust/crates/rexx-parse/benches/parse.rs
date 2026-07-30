@@ -150,7 +150,11 @@ fn parse(c: &mut Criterion) {
                     });
                     let nested: usize = program.directives.iter().map(|d| body_len(&d.kind)).sum();
                     assert_eq!(
-                        (program.main.instructions.len(), program.directives.len(), nested,),
+                        (
+                            program.main.instructions.len(),
+                            program.directives.len(),
+                            nested,
+                        ),
                         (
                             case.main_instructions,
                             case.directives,
