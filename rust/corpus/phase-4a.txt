@@ -21,6 +21,7 @@ num/operators.rex
 
 # New for Task 14a -- executor control flow, stems, EXIT, TRACE, comparison:
 lang/do_loop_forms.rex
+lang/do_label.rex
 lang/leave_nested_outer.rex
 lang/iterate_from_select.rex
 lang/if_else_chain.rex

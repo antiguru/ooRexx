@@ -71,6 +71,7 @@ command clauses, no `DO WITH`, and no `DO OVER` on a stem.
 | File | Covers |
 |---|---|
 | `do_loop_forms.rex` | `do_variants.rex` minus its one `DO OVER` line -- `TO`/`BY`, a repetition count, `WHILE`, `UNTIL`, inline `ITERATE`/`LEAVE` |
+| `do_label.rex` | the explicit `DO LABEL name` form -- on a plain block and on a controlled loop, `LEAVE`/`ITERATE` by that label from a nested loop; the only program constructing `Loop::label` |
 | `leave_nested_outer.rex` | nested `DO` with `LEAVE` naming the outer loop's control variable |
 | `iterate_from_select.rex` | `ITERATE` from inside a `SELECT` nested in a loop |
 | `if_else_chain.rex` | an `IF`/`ELSE IF`/`ELSE` chain with different-length bodies, so a wrong then-exit or false-target is visible |
@@ -141,21 +142,51 @@ asserting the wrong output, and only caught by running it.
 `.rexxinfo` is an *instance*, not a class, so it has no `~id`. Both were in
 the first draft of `primitive_classes.rex` and both failed.
 
-`LEAVE name`/`ITERATE name` name a loop by its **control variable**, not by a
-label. A label written directly before the `DO` it names is rejected outright
-with error 47.2 ("Labels are not allowed within a DO/LOOP block"); a label
+`LEAVE name`/`ITERATE name` accept two different kinds of name, and a
+*clause* label is neither of them. `outer: do i = 1 to 3` then `leave outer`
+fails: a label written directly before the `DO` it names is rejected outright
+with error 47.2 ("Labels are not allowed within a DO/LOOP block"), and a label
 written anywhere else compiles but `LEAVE`/`ITERATE` still refuse it with
-28.3 ("must either match the label of a current loop or block instruction").
-Only `do outer = 1 to 3` / `leave outer` — naming the control variable itself
-— works. First draft of `leave_nested_outer.rex` used a label and failed both
-ways before this was measured.
+28.3 ("must either match the label of a current loop or block instruction") —
+a clause label is a `SIGNAL` target, not a loop name. What does work is
+either the loop's own **control variable** (`do outer = 1 to 3` / `leave
+outer`, used throughout `leave_nested_outer.rex` and
+`leave_iterate_variants.rex`) or the explicit **`DO LABEL name`** form
+(`do label outer i = 1 to 3` / `leave outer`, which also works on a plain
+non-repetitive block and is the only corpus program that constructs the
+parser's `Loop::label` field — see `do_label.rex`). First draft of
+`leave_nested_outer.rex` used a clause label and failed both ways before this
+was measured.
 
 A `WHEN` whose `THEN` instruction is itself a `WHEN` clause
 (`select_when_absorption.rex`) parses and is accepted, and the second `WHEN`
 is never added to the enclosing `SELECT`'s clause list — it is silently
-swallowed as the first `WHEN`'s (empty) consequence. Confirmed only for the
-case where the first `WHEN`'s condition is *true*. Flipping it to false, so
-control would have to fall through to the never-collected second `WHEN`,
-segfaults `build/bin/rexx` deterministically (measured 2026-07-30, exit 139,
-3/3 runs) — a real defect in the oracle itself, worth its own ticket, but not
-something this corpus should ask a memory-safe reimplementation to match.
+swallowed as the first `WHEN`'s (empty) consequence. That is confirmed only
+for the case where the first `WHEN`'s condition is *true*, which is all the
+shipped program uses. The *false* variant is an orphaned-`WHEN` landmine, not
+a corpus program, and this is its full writeup:
+
+```rexx
+n = 0
+select
+  when 1 = 2 then
+    when 2 = 2 then n = 42
+  otherwise
+    n = 99
+end
+say n
+```
+
+`build/bin/rexxc` accepts this file and exits 0 — it is not a parse defect.
+Running it under `build/bin/rexx` segfaults deterministically: exit 139,
+3/3 runs (measured 2026-07-30). Changing only the first line's `2` to a `1`
+(so the first `WHEN`'s condition is true, control never reaches the orphaned
+second `WHEN`, and this is exactly `select_when_absorption.rex`) removes the
+crash entirely — output `0`, exit 0, also 3/3 stable. So the crash is
+specifically in the fallthrough path past an unmatched `WHEN` whose `THEN`
+was itself absorbed, not in parsing or in the SELECT construct generally.
+This is a real defect in the oracle itself. It is being surfaced upstream by
+the team lead's human partner with this repro; it is deliberately not built
+into a corpus program, because the corpus's one rule is byte-identical
+output between the two interpreters under test, and a memory-safe Rust
+reimplementation neither can nor should reproduce a C++ segfault.
