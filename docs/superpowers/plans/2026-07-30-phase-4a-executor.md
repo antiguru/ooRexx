@@ -297,6 +297,41 @@ git commit -m "Drop a deep expression tree iteratively, not by recursion"
 
 ---
 
+### Task 3c: A depth counter on the parser's subexpression recursion
+
+**Spec:** D19, "There are two cliffs, not one".
+
+**Files:**
+- Modify: `rust/crates/rexx-parse/src/expr.rs`, `src/error.rs`
+- Test: `rust/crates/rexx-parse/tests/deep.rs` (created by Task 3b)
+
+**Why:** nested parentheses recurse in the parser and nothing counts them. Measured against the oracle:
+
+| `say ((((…'a'…))))` | oracle | ours today |
+|---|---|---|
+| 38,000 | rc 0 | rc 0 |
+| 40,000 | **rc 245, Error 11.1** | rc 0 |
+| 85,000 | rc 245 | rc 0 |
+| 90,000 | rc 245 | **rc 134, SIGABRT, no message** |
+
+We diverge in both directions, and the abort is the outcome the phase's failing-loudly rule exists to prevent. Unlike the evaluation-depth limit, this one is **parity, not a deviation**: the oracle raises 11.1 here, so raising 11.1 matches it.
+
+Do this **after Task 3b**, not beside it: both touch `rexx-parse` and 3b's iterative `Drop` changes how deep trees behave.
+
+- [ ] **Step 1: Pin the oracle's cliff more precisely than the bracket above.** It is between 38,000 and 40,000 parens. Bisect it, and record the number and the fact that it is a C++ stack artifact rather than a language constant, so nobody later mistakes it for a specification.
+
+- [ ] **Step 2: Write the failing test** — a parenthesis nesting that aborts our parser today, asserting it instead raises 11.1.
+
+- [ ] **Step 3: Add the counter** to `parse_subterm`'s recursion, raising 11.1 at a limit set below our own abort cliff (measured at 90,000 in debug on a 512 MiB thread, so debug is what binds) and near the oracle's. **Exact depth parity is not achievable** — both cliffs are stack artifacts of two different implementations — so pick a limit inside the oracle's own reporting range and say in the doc comment that programs within a few thousand levels of it may diverge, and that no corpus program goes near either cliff.
+
+- [ ] **Step 4: Check the other recursive descents in the parser** for the same exposure: nested `DO`/`SELECT` block structure, and any other place that recurses per source construct. Report which you tested and which you did not.
+
+- [ ] **Step 5: Verify** — `cargo test --workspace` green, clippy clean, and the counter's limit recorded in the report alongside Task 3's 512 MiB / 784-bytes-per-level figures.
+
+- [ ] **Step 6: Commit.**
+
+---
+
 ### Task 4: The value model
 
 **Spec:** D15 in full, including every transcript.

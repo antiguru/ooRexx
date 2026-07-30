@@ -252,6 +252,19 @@ A command clause fails loudly until Phase 7.
 The oracle has measured capabilities here that a naive recursive evaluator cannot match: it evaluates `x = 1+1+…+1` with **100,000 terms** and prints `100000`, and `say ((((…1…))))` with **20,000 nested parentheses**, both exit 0.
 A `fn eval` recursive over a left-deep `Binary` chain uses one Rust frame per term, and the failure mode is a native stack overflow, which aborts with no message and no exit code: precisely the outcome the failing-loudly rule most wants to exclude.
 
+**There are two cliffs, not one, and they behave differently.** Revisions 3 to 7 wrote D19 against flat term chains only. Task 3's spike measured the parenthesis axis and it is an order of magnitude shallower, and — decisively — the oracle *reports* there rather than dying:
+
+| `say ((((…'a'…))))` | oracle | ours, debug, sized thread |
+|---|---|---|
+| 38,000 parens | rc 0 | rc 0 |
+| 40,000 parens | **rc 245, Error 11.1** | rc 0 |
+| 85,000 parens | rc 245 | rc 0 |
+| 90,000 parens | rc 245 | **rc 134, SIGABRT, no message** |
+
+So on parens we diverge in **both** directions: we succeed from 40,000 to 85,000 where the oracle raises `Insufficient control stack space`, and we abort past 90,000 where the oracle still raises. A flat 100,000-term chain, by contrast, the oracle evaluates and only dies at 150,000, with no condition at all.
+
+Three consequences. The parenthesis recursion is in **`rexx-parse`**, not in `eval`, so D19's counter cannot see it and `parse_program` aborts before the executor exists. Because the oracle answers deep parens with the very 11.1 this design already names, a counter in the parser's subexpression recursion is **parity rather than a deviation** — unlike the evaluation-depth limit, where the oracle crashes and 11.1 is a chosen answer. And the corpus rule, written against the 100,000-term cliff, does not cover a paren cliff at 39,000.
+
 **The bound is two-sided, which revision 2 got wrong by treating 100,000 as a capability rather than as the largest depth anyone had tried.** Measured: 100,000 terms prints `100000` and exits 0; **200,000 terms exits 139**, a SIGSEGV. So a generously sized stack is a *divergence*: `rexx-run` succeeding at 200,000 where the oracle dies is an exit-code difference criterion 1 reports as a failure.
 
 So, and each of these three numbers is chosen and recorded rather than left to be inferred:
