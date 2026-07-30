@@ -60,7 +60,7 @@ pub enum Body {
     /// `DIGITS`. Rounding belongs to the operation reading it, which is what
     /// keeps the cache safe across a `NUMERIC` change. Measured: `x =
     /// '1.234567890123456789'` gives `1.2346` under `DIGITS 5` and the full
-    /// eighteen-digit value under `DIGITS 20`, both read from the one stored
+    /// nineteen-digit value under `DIGITS 20`, both read from the one stored
     /// parse. An implementation that "helpfully" rounds at fill time creates
     /// exactly the staleness this tri-state exists to avoid.
     Text {
