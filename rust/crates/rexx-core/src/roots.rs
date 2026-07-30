@@ -16,7 +16,7 @@ use crate::ObjRef;
 pub struct FrameId(usize);
 
 /// A handle to one activation's range of local-variable slots inside
-/// `RootSet` (D16). `push_slots`/`pop_slots` bracket its lifetime; `slot`,
+/// `RootSet` (D16). `push_slots`/`pop_slots` bracket its lifetime. `slot`,
 /// `set_slot` and `grow_slots` address within it. `depth` is the frame
 /// stack's length at the moment this frame was pushed, and is how
 /// `grow_slots` recognises "the top frame" even when two frames happen to
@@ -126,7 +126,7 @@ impl RootSet {
     /// *caller* print 9 after `return`, so a callee write lands in the
     /// caller's pool while the callee's frame sits on top of it. 4b either
     /// grows a non-top frame or binds an exposed name to a slot in the
-    /// caller's frame at call time; deciding which is 4b's. A panic here is
+    /// caller's frame at call time. Deciding which is 4b's. A panic here is
     /// the right shape until that decision is made: a silent wrong answer
     /// would be a variable landing in another routine's pool, discovered by
     /// chasing a wrong result instead of a message that already says why.

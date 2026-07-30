@@ -57,7 +57,7 @@ pub enum Body {
     /// on every comparison.
     ///
     /// The cache holds the exact parse and is never rounded to fit a later
-    /// `DIGITS`; rounding belongs to the operation reading it, which is what
+    /// `DIGITS`. Rounding belongs to the operation reading it, which is what
     /// keeps the cache safe across a `NUMERIC` change. Measured: `x =
     /// '1.234567890123456789'` gives `1.2346` under `DIGITS 5` and the full
     /// eighteen-digit value under `DIGITS 20`, both read from the one stored
