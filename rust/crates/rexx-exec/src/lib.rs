@@ -30,7 +30,7 @@
 use rexx_core::{BehaviourId, Body, Heap, ObjRef, RootSet, SlotFrame};
 use rexx_parse::{
     CodeBody, Expr, ExprKind, Fragment, Instruction, InstructionKind, Operator, ParseError,
-    Program, SymbolId, SymbolTable, parse_interpret, parse_program,
+    PrefixOp, Program, SymbolId, SymbolTable, parse_interpret, parse_program,
 };
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -60,10 +60,10 @@ pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 /// Measured on a 100,000-term left-deep expression, `x86_64-unknown-linux-gnu`,
 /// rustc 1.96.1: **784 bytes per `eval` level in a debug build, 192 in
 /// release**. Debug is the number that matters, because that is what `cargo
-/// test` runs and what the in-process harnesses will therefore sit on. At 784
-/// bytes this stack survives roughly 684,000 levels, against a limit that has
-/// to be at least 100,000, so there is room for the real `eval` to be several
-/// times the size of the spike's before the margin is gone.
+/// test` runs and what the in-process harnesses will therefore sit on. The
+/// whole pipeline survives to roughly 620,000 levels here, against a limit
+/// that has to be at least 100,000, so there is about six times the headroom a
+/// limit at the oracle's own maximum needs.
 ///
 /// The budget this covers is larger than `eval` alone, and all three of its
 /// users run on this same thread because the entry point owns everything from
@@ -75,10 +75,28 @@ pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 ///   the `Rc<Program>` goes. That third one is easy to forget and is a real
 ///   stack consumer: nothing in the source says "recursive", the derive does.
 ///
-/// The 784 figure covers only the first of those three, so the test that
-/// establishes it is deliberately a whole run: it parses, plans, evaluates and
-/// drops the same 100,000-deep tree, and passing at this size is what says the
-/// other two fit alongside it.
+/// **The 784 figure covers only the first of those three, and the first is not
+/// the one that binds.** Measured by bisecting `rexx-run` on this stack, debug,
+/// with the three phases separated by choosing programs that reach different
+/// ones (`exit` first, so the deep expression is parsed and dropped but never
+/// evaluated; a bare command clause, which `Plan::build` also skips):
+///
+/// | what runs | deepest surviving | implied bytes per level |
+/// |---|---|---|
+/// | parse and drop only | 600,000 to 700,000 | about 820 |
+/// | parse, plan and drop | 600,000 to 640,000 | about 860 |
+/// | all four, including eval | 600,000 to 640,000 | about 860 |
+///
+/// Adding `eval` does not move the cliff, because the phases are sequential
+/// and each unwinds before the next, so what binds is the **`Drop`** at about
+/// 820 bytes per level, slightly more than `eval`'s 784. Sizing against
+/// `eval`'s number alone is optimistic by roughly ten per cent; the honest
+/// budget is about 860 bytes per level, or roughly 620,000 levels here.
+///
+/// One consequence Task 11 should not have to rediscover: a depth limit on
+/// `eval` **does not close the abort path**. `exit` followed by a 700,000-term
+/// expression aborts in the drop with no evaluation at all, and no counter in
+/// this crate is in a position to see it.
 ///
 /// 512 MiB is reserved address space, not resident memory. Linux commits stack
 /// pages on first touch, so a program that never recurses pays for the pages it
@@ -176,11 +194,21 @@ impl Loud {
     }
 
     /// An expression form 4a does not evaluate.
+    ///
+    /// Names the **form** and never formats the node. An earlier version wrote
+    /// `{kind:?}` and produced 364 KB of stderr for one clause of
+    /// `corpus/lang/deep_nested_expr.rex`, because `ExprKind`'s derived `Debug`
+    /// walks the whole tree and a tree is unbounded. Failing loudly is a gate
+    /// criterion and every later task inherits this path, so the size of the
+    /// message is part of the contract: the variant name is what a reader
+    /// needs, and the differential harness has to compare whatever is emitted
+    /// byte for byte.
     fn expression(kind: &ExprKind) -> Loud {
         Loud {
             message: format!(
-                "this expression form is not implemented: Task 3's spike evaluates a literal, a \
-                 simple variable and `||` only, and got {kind:?}"
+                "{} is not implemented: Task 3's spike evaluates a literal, a constant, a simple \
+                 variable and `||` only",
+                form_name(kind)
             ),
         }
     }
@@ -192,6 +220,51 @@ impl Loud {
             message: format!("INTERPRET text did not parse: {error}"),
         }
     }
+}
+
+/// Names an expression form in **bounded** text, for a loud failure to quote.
+///
+/// The bound is the whole point and it is a contract, not a preference: this is
+/// called on nodes 4a cannot evaluate, and those nodes carry arbitrarily large
+/// subtrees. Everything returned here is either a `&'static str` or one
+/// `Operator::spelling`, which is also `&'static`, so no input can make the
+/// answer long. **Never format a node into a message.**
+///
+/// The match is exhaustive with no `_` arm on purpose, so a new `ExprKind`
+/// variant is a compile error here rather than a silent "unknown".
+fn form_name(kind: &ExprKind) -> String {
+    let name = match kind {
+        ExprKind::Literal(_) => "a literal",
+        ExprKind::Constant(_) => "a constant symbol",
+        ExprKind::Variable(_) => "a simple variable",
+        ExprKind::Stem(_) => "a stem",
+        ExprKind::Compound(_) => "a compound variable",
+        ExprKind::DotVariable(_) => "an environment symbol",
+        // The two operator forms name the operator, because "a dyadic
+        // operator is not implemented" does not tell a reader which one to
+        // go and implement. Both spellings are `&'static`.
+        ExprKind::Prefix { op, .. } => {
+            return format!(
+                "the prefix operator `{}`",
+                match op {
+                    PrefixOp::Plus => "+",
+                    PrefixOp::Minus => "-",
+                    PrefixOp::Not => "\\",
+                }
+            );
+        }
+        ExprKind::Binary { op, .. } => {
+            return format!("the operator `{}`", op.spelling());
+        }
+        ExprKind::Call { .. } => "a function call",
+        ExprKind::QualifiedCall { .. } => "a namespace-qualified call",
+        ExprKind::ClassResolver { .. } => "a namespace-qualified class lookup",
+        ExprKind::Message { .. } => "a message send",
+        ExprKind::List(_) => "a parenthesised list",
+        ExprKind::Logical(_) => "a comma list in a condition",
+        ExprKind::VariableReference(_) => "a variable reference",
+    };
+    name.to_string()
 }
 
 /// A loaded program's identity.
@@ -570,6 +643,74 @@ impl Interp {
     /// the activation would then point into a program the activation no longer
     /// holds. The `Rc` in the local is what makes that impossible rather than
     /// merely unlikely.
+    ///
+    /// # The pair of doctests below, and what they are worth
+    ///
+    /// Everything above is prose. It was true when it was written, and nothing
+    /// in the tree would notice if it stopped being true, so the two snippets
+    /// that follow are the checkable form of it: a miniature of the same
+    /// borrow, once in the shape that compiles and once in the shape that does
+    /// not. `cargo test` runs both.
+    ///
+    /// **Read them for what they prove and not more.** `compile_fail` proves
+    /// only "this does not compile", not "this fails with `E0502`". The
+    /// `compile_fail,E0502` spelling looks like it pins the code and does not:
+    /// measured on rustc 1.96.1, a doctest annotated `compile_fail,E0502`
+    /// whose body is `let x: u32 = "not a u32";` passes, and that is `E0308`.
+    /// A `compile_fail` snippet with a typo in it therefore passes for the
+    /// wrong reason, which is the standard trap with this attribute.
+    ///
+    /// What narrows it is the **first** snippet, which must compile. The two
+    /// differ by one line and share everything else, so any breakage in the
+    /// shared part fails the passing twin instead of silently satisfying the
+    /// failing one. Checked by mutation rather than assumed: rewriting the
+    /// passing snippet's `Rc::clone` line into the failing snippet's shape
+    /// makes it fail, and it fails with `E0502`. One test says "the fix
+    /// works", the other says "the shape it fixes is still broken", and
+    /// neither is worth much alone.
+    ///
+    /// What the pair still cannot catch is a typo confined to the failing
+    /// snippet's own one different line. Nothing available here closes that,
+    /// and it is smaller than what is closed.
+    ///
+    /// Compiles, because `body` borrows the local `program`:
+    ///
+    /// ```
+    /// use std::rc::Rc;
+    /// struct CodeBody { instructions: Vec<u32> }
+    /// struct Frame { program: Rc<CodeBody>, pc: usize }
+    /// struct Interp { activations: Vec<Frame> }
+    /// impl Interp {
+    ///     fn step(&mut self, _instruction: &u32) {}
+    ///     fn run(&mut self) {
+    ///         let program = Rc::clone(&self.activations.last().unwrap().program);
+    ///         let body = &program.instructions;
+    ///         while let Some(instruction) = body.get(self.activations.last().unwrap().pc) {
+    ///             self.step(instruction);
+    ///             self.activations.last_mut().unwrap().pc += 1;
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    ///
+    /// Does not compile, because `body` borrows `self`. One line different:
+    ///
+    /// ```compile_fail
+    /// use std::rc::Rc;
+    /// struct CodeBody { instructions: Vec<u32> }
+    /// struct Frame { program: Rc<CodeBody>, pc: usize }
+    /// struct Interp { activations: Vec<Frame> }
+    /// impl Interp {
+    ///     fn step(&mut self, _instruction: &u32) {}
+    ///     fn run(&mut self) {
+    ///         let body = &self.activations.last().unwrap().program.instructions;
+    ///         while let Some(instruction) = body.get(self.activations.last().unwrap().pc) {
+    ///             self.step(instruction);
+    ///             self.activations.last_mut().unwrap().pc += 1;
+    ///         }
+    ///     }
+    /// }
+    /// ```
     fn run_activation(&mut self) -> Result<Option<ObjRef>, Loud> {
         let program = Rc::clone(&self.activation().program);
         let plan = Rc::clone(&self.activation().plan);

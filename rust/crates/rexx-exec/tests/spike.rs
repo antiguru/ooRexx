@@ -164,6 +164,52 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
     assert!(stderr.contains("DO"), "stderr was {stderr:?}");
 }
 
+/// A loud failure names the **form** and never formats the node, so the
+/// message stays a constant size however big the expression behind it is.
+///
+/// This is a regression test for a real defect and not a tidiness rule. The
+/// first version of `Loud::expression` wrote `{kind:?}`, and `ExprKind`'s
+/// derived `Debug` walks the whole tree: one clause of
+/// `corpus/lang/deep_nested_expr.rex` produced **373,332 bytes** of stderr
+/// beginning `Binary { op: Plus, left: Expr { kind: Binary { op: Plus, left:
+/// ...`. Failing loudly is a gate criterion and every later task inherits this
+/// path, and criterion 1 compares stderr byte for byte, so an unbounded
+/// message is an unbounded diff.
+///
+/// The bound is deliberately loose. What must hold is that the message does
+/// not grow with the tree, which is why the same assertion runs against two
+/// expressions three orders of magnitude apart in size.
+#[test]
+fn a_loud_failure_message_does_not_grow_with_the_expression() {
+    const BOUND: usize = 300;
+
+    let small = run_program(b"say 1 + 1\n".to_vec());
+    assert_eq!(small.exit_code, NOT_IMPLEMENTED_EXIT);
+
+    let mut deep = b"say 1".to_vec();
+    for _ in 0..3_000 {
+        deep.extend_from_slice(b" + 1");
+    }
+    deep.push(b'\n');
+    let deep = run_program(deep);
+    assert_eq!(deep.exit_code, NOT_IMPLEMENTED_EXIT);
+
+    assert_eq!(
+        small.stderr, deep.stderr,
+        "the same unimplemented form should give the same message whatever is under it"
+    );
+    assert!(
+        deep.stderr.len() < BOUND,
+        "a loud message for a 3000-term expression was {} bytes, over the {BOUND}-byte bound",
+        deep.stderr.len()
+    );
+    let stderr = String::from_utf8(deep.stderr).expect("the loud message is ASCII");
+    assert!(
+        stderr.contains("the operator `+`"),
+        "the message should name the form it could not evaluate, and was {stderr:?}"
+    );
+}
+
 /// Step 3's numbers, and the reason this test exists rather than a note in the
 /// report: **Task 11 sets D19's evaluation-depth limit from what this prints**,
 /// so it has to be re-runnable rather than a figure someone recorded once.
