@@ -266,7 +266,7 @@ mod retire_tests {
     fn a_slot_at_generation_max_is_retired_not_reused() {
         let mut heap = Heap::new();
         let roots = RootSet::new();
-        let r = heap.alloc(Body::String("old".into()));
+        let r = heap.alloc(Body::Text { bytes: b"old".to_vec(), num: None });
         let Decoded::Heap { slot, .. } = r.decode() else {
             panic!("heap handle")
         };
@@ -275,7 +275,7 @@ mod retire_tests {
         }
         let stale = ObjRef::heap(slot, GENERATION_MAX);
         heap.collect(&roots);
-        let next = heap.alloc(Body::String("new".into()));
+        let next = heap.alloc(Body::Text { bytes: b"new".to_vec(), num: None });
         assert_eq!(
             heap.slot_capacity(),
             2,

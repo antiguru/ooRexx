@@ -24,7 +24,10 @@ fn build_graph() -> (Heap, RootSet) {
             // A distinct string per slot, as in the Rexx side. A shared
             // constant would collapse the graph to ~1,001 objects and make
             // the pause meaningless.
-            elems.push(heap.alloc(Body::String(format!("e{j}"))));
+            elems.push(heap.alloc(Body::Text {
+                bytes: format!("e{j}").into_bytes(),
+                num: None,
+            }));
         }
         outer.push(heap.alloc(Body::Array(elems)));
     }
@@ -51,7 +54,10 @@ fn allocation(c: &mut Criterion) {
         b.iter(|| {
             let mut heap = Heap::new();
             for j in 0..1_000_000usize {
-                heap.alloc(Body::String(format!("e{j}")));
+                heap.alloc(Body::Text {
+                    bytes: format!("e{j}").into_bytes(),
+                    num: None,
+                });
             }
             black_box(heap.live_count())
         })

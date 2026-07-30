@@ -5,6 +5,12 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[dependencies]
+# `Body::Text` holds a cached `Number` parse and `Body::Num` holds the
+# `Number`/`Form` a value's identity is fixed to at creation (D15), so the
+# object model depends on the arithmetic core.
+rexx-num = { path = "../rexx-num" }
+
 [dev-dependencies]
 criterion = "0.8.2"
 

@@ -3,7 +3,7 @@ use rexx_core::{Body, ObjRef};
 #[test]
 fn a_string_reaches_nothing() {
     let mut out = Vec::new();
-    Body::String("x".into()).trace(&mut out);
+    Body::Text { bytes: b"x".to_vec(), num: None }.trace(&mut out);
     assert!(out.is_empty());
 }
 
