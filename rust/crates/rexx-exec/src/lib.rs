@@ -785,11 +785,21 @@ impl Interp {
     ///
     /// # The pair of doctests below, and what they are worth
     ///
-    /// Everything above is prose. It was true when it was written, and nothing
-    /// in the tree would notice if it stopped being true, so the two snippets
-    /// that follow are the checkable form of it: a miniature of the same
-    /// borrow, once in the shape that compiles and once in the shape that does
-    /// not. `cargo test` runs both.
+    /// **What keeps the function honest is the compiler.** This function would
+    /// not build if the discipline broke, which is the whole reason the
+    /// discipline is worth having and is a stronger guarantee than any test.
+    /// **What the pair below keeps honest is the documentation**, which is the
+    /// part with no compiler behind it: everything above is prose, and nothing
+    /// in the tree would notice if it stopped describing anything real.
+    ///
+    /// So the two snippets are a miniature of the same borrow, once in the
+    /// shape that compiles and once in the shape that does not. `cargo test`
+    /// runs both. A precondition that nothing states and that the pair
+    /// silently depends on: **rustdoc does collect doctests on private
+    /// items.** Confirmed rather than assumed, by putting a deliberately
+    /// failing snippet on a private method and watching it run. If it did not,
+    /// both of these would not exist rather than fail, and the pair would be
+    /// decoration.
     ///
     /// **Read them for what they prove and not more.** `compile_fail` proves
     /// only "this does not compile", not "this fails with `E0502`". The
@@ -800,17 +810,30 @@ impl Interp {
     /// wrong reason, which is the standard trap with this attribute.
     ///
     /// What narrows it is the **first** snippet, which must compile. The two
-    /// differ by one line and share everything else, so any breakage in the
-    /// shared part fails the passing twin instead of silently satisfying the
-    /// failing one. Checked by mutation rather than assumed: rewriting the
-    /// passing snippet's `Rc::clone` line into the failing snippet's shape
-    /// makes it fail, and it fails with `E0502`. One test says "the fix
-    /// works", the other says "the shape it fixes is still broken", and
-    /// neither is worth much alone.
+    /// differ only in how `body` is obtained, two lines against one, and share
+    /// everything else, so any breakage in the shared part fails the passing
+    /// twin instead of silently satisfying the failing one. Checked by
+    /// mutation rather than assumed: rewriting the passing snippet's
+    /// `Rc::clone` line into the failing snippet's shape makes it fail, and it
+    /// fails with `E0502`. One test says "the fix works", the other says "the
+    /// shape it fixes is still broken", and neither is worth much alone.
     ///
-    /// What the pair still cannot catch is a typo confined to the failing
-    /// snippet's own one different line. Nothing available here closes that,
-    /// and it is smaller than what is closed.
+    /// Two residuals, the second larger than the first and worth stating
+    /// because the pair is easy to over-read.
+    ///
+    /// A typo confined to the failing snippet's own `let body = …` line passes
+    /// for the wrong reason and nothing here closes that.
+    ///
+    /// And **the miniature can drift away from this function.** It models
+    /// `Rc<CodeBody>` over a `Vec<u32>` with a two-argument `step`, where the
+    /// real thing has `Rc<Program>`, a three-field `Code<'a>` and a different
+    /// `step`. Nothing ties the two together. A future rewrite of
+    /// `run_activation` into a shape the miniature does not model leaves both
+    /// doctests green while the prose above them describes a function that no
+    /// longer exists. That is a real limit and not a reason to drop the pair:
+    /// the compiler is still what stops the *function* going wrong, and the
+    /// pair is still what stops this *comment* claiming a borrow error that
+    /// the language no longer produces.
     ///
     /// Compiles, because `body` borrows the local `program`:
     ///

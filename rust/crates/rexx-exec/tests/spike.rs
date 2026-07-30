@@ -179,6 +179,21 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
 /// The bound is deliberately loose. What must hold is that the message does
 /// not grow with the tree, which is why the same assertion runs against two
 /// expressions three orders of magnitude apart in size.
+///
+/// **What this test establishes on its own is narrower than the contract, and
+/// the rest is a compile-time property rather than a tested one.** Both
+/// programs here use `+`, so this pins the message for exactly one of the
+/// fifteen `ExprKind` forms. What extends it to the other fourteen is
+/// `form_name`'s match: it is exhaustive with no `_` arm, and every arm
+/// returns a `&'static str` or one `Operator::spelling`, so a form whose
+/// message could grow with its input cannot be added without failing to
+/// compile. Auditing coverage from this test alone would over-read it.
+///
+/// The other two loud paths are bounded for their own reasons, checked in
+/// review rather than here, so the size contract holds on all three:
+/// `Loud::instruction` returns `keyword()`'s `&'static str` or one of four
+/// literals, and `Loud::parse` renders a `ParseError`, which deliberately
+/// carries no substitution values.
 #[test]
 fn a_loud_failure_message_does_not_grow_with_the_expression() {
     const BOUND: usize = 300;
