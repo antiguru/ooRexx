@@ -48,5 +48,20 @@ fn main() -> ExitCode {
     // `ExitCode::from` takes a `u8`, which is the whole range a process exit
     // status carries anyway. Task 12 owns the `256 - major` mapping that makes
     // this range meaningful.
+    //
+    // **This saturates and the oracle wraps, so it is wrong for any code
+    // outside 0..=255, and it is Task 9's to fix** together with `EXIT expr`,
+    // which is the only thing that can produce such a code. Measured:
+    //
+    //     exit 256   ->  rc 0        exit 257  ->  rc 1
+    //     exit -1    ->  rc 255      exit 255  ->  rc 255
+    //
+    // so the oracle takes the value modulo 256, while `unwrap_or(u8::MAX)`
+    // answers 255 for every one of them. Nothing 4a's spike can emit reaches
+    // here out of range, since `NOT_IMPLEMENTED_EXIT` and 0 and 2 are the only
+    // values, which is why this is a comment rather than an arithmetic change
+    // made blind: the correct conversion needs the whole `EXIT` result rule,
+    // including what a non-numeric or fractional result does, and none of that
+    // is measured yet.
     ExitCode::from(u8::try_from(outcome.exit_code).unwrap_or(u8::MAX))
 }

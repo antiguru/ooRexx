@@ -43,6 +43,17 @@ use std::rc::Rc;
 /// cannot be read as a shell's `128 + signal` encoding either, and it is not
 /// 0, 1, 2, 126 or 127.
 ///
+/// **No value in 0..=255 is collision-free, and pretending otherwise is the
+/// mistake to avoid here.** A program can name its own exit code, and once
+/// Task 9 implements `EXIT` with a result it can name this one: measured,
+/// `exit 120` gives rc 120 under the oracle, so a corpus program could produce
+/// this code legitimately. What makes the choice safe is not the number, it is
+/// **the harness treating this code as a hard failure whatever the oracle
+/// did** (criterion 5), rather than comparing it against an expectation. The
+/// 157..=253 exclusion is still worth having, because a code inside that band
+/// would be wrong in a second and worse way: it would look like a *condition*
+/// the interpreter raised, and a program expecting that condition would pass.
+///
 /// **Task 12 owns the final value** and states it in `error.rs` alongside the
 /// message catalogue. This constant is the spike's choice and the single place
 /// to change it.
@@ -467,6 +478,16 @@ struct Activation {
     /// exists so that the `Rc` the instruction loop clones into its local has
     /// something to be cloned from, and so that a frame keeps its program
     /// alive independently of `Interp::programs`.
+    ///
+    /// **It records the program and not the body, and `run_activation` fills
+    /// that gap by hardcoding `&program.main`.** True for every activation 4a
+    /// can build, since 4a has one and it runs the main body. False the moment
+    /// 4b calls a `::routine`: that activation's body is
+    /// `directives[i]`'s, and without a field saying so it would re-run
+    /// `main` instead, silently and with the right program. The missing field
+    /// is a body selector beside this one, the same thing `BodyKey::directive`
+    /// already carries for the plan cache, and adding it is 4b's rather than
+    /// speculative scaffolding here.
     program: Rc<Program>,
     plan: Rc<Plan>,
     /// Names bound after `plan` was built, and the reason this field exists is
@@ -552,7 +573,20 @@ struct Interp {
     /// `ProgramId(0)`'s program is still here.
     programs: Vec<Rc<Program>>,
     plans: HashMap<BodyKey, Rc<Plan>>,
+    /// The output sink. `SAY` writes here and `Outcome::stdout` is what it
+    /// becomes.
     out: Vec<u8>,
+    /// The trace sink, which becomes `Outcome::stderr` **and which nothing in
+    /// this crate writes yet.**
+    ///
+    /// It exists because the design puts both sinks on `Interp` and D17 makes
+    /// them separate for a measured reason: with `trace r` the `*-*` and `>>>`
+    /// lines are on stderr while `SAY` is on stdout, and being separate
+    /// descriptors is what makes their relative interleaving unobservable and
+    /// two independently buffered sinks safe. Task 13 is the first to write to
+    /// it. Keeping it now costs one field and means the loud-failure path
+    /// already appends to the right buffer rather than being rerouted later,
+    /// which is when a stray ordering difference would appear.
     trace: Vec<u8>,
     /// True when the caller is the fragment spike, in which case
     /// `InstructionKind::Interpret` runs its fragment instead of failing
@@ -694,8 +728,13 @@ impl Interp {
     /// }
     /// ```
     ///
-    /// That is not a paraphrase. It was compiled in this file, and this is
-    /// what rustc 1.96.1 said about it:
+    /// The block below was captured by hand: the wrong version was written
+    /// into this file, built, and deleted again, and this is what rustc 1.96.1
+    /// printed. **Nothing re-checks it.** If the borrow checker's wording or
+    /// its choice of underline changes, this text goes stale and no test
+    /// fails, which is exactly why the doctests further down exist. Read it as
+    /// a record of what was seen once, not as an assertion about what rustc
+    /// does now:
     ///
     /// ```text
     /// error[E0502]: cannot borrow `*self` as mutable because it is also borrowed as immutable
@@ -822,7 +861,7 @@ impl Interp {
         let depth = self.activations.len();
 
         while let Some(instruction) = code.body.instructions.get(self.activation().pc) {
-            match self.step(&code, instruction)? {
+            match self.step_in_temps_frame(&code, instruction)? {
                 Flow::Next => self.activation_mut().pc += 1,
                 Flow::Goto(target) => self.activation_mut().pc = target,
                 Flow::Exit(value) => return Ok(value),
@@ -844,12 +883,22 @@ impl Interp {
     /// `name` is a `&[u8]` pulled out of `code.symbols` and it stays valid
     /// across `self.eval(…)`, which the same slice read out of `self` would
     /// not.
+    ///
+    /// **Every `eval` result is rooted before anything else runs.** `eval`
+    /// hands back an unrooted handle by design, so its caller owns the moment
+    /// it becomes a root, and here that is a `push_temp` on the line after
+    /// each call. The instruction loops open a temps frame around this call
+    /// and close it after, so what is pushed here lives exactly one clause.
+    /// Not doing it would happen to work today, because `Heap::alloc_with`
+    /// never collects, and would become a use-after-free the day it does,
+    /// found by chasing a wrong value rather than by a compiler message.
     fn step(&mut self, code: &Code<'_>, instruction: &Instruction) -> Result<Flow, Loud> {
         match &instruction.kind {
             InstructionKind::Say { expression } => {
                 let line = match expression {
                     Some(expression) => {
                         let value = self.eval(code, expression)?;
+                        self.roots.push_temp(value);
                         self.text_of(value).to_vec()
                     }
                     // `say` with no expression is a blank line.
@@ -868,6 +917,7 @@ impl Interp {
                 };
                 let name = code.symbols.name(*id).as_bytes();
                 let value = self.eval(code, value)?;
+                self.roots.push_temp(value);
                 let slot = self.slot_of(name);
                 let frame = self.activation().frame;
                 self.roots.set_slot(frame, slot, value);
@@ -883,12 +933,35 @@ impl Interp {
             // top of it, so through `run_program` this is not implemented.
             InstructionKind::Interpret { expression } if self.interpret_spike => {
                 let value = self.eval(code, expression)?;
+                self.roots.push_temp(value);
                 let text = self.text_of(value).to_vec();
                 self.run_fragment(text)
             }
 
             other => Err(Loud::instruction(other)),
         }
+    }
+
+    /// Runs one instruction inside its own temps frame.
+    ///
+    /// The frame is opened and closed **here rather than inside `step`**,
+    /// because `step` returns through a dozen `?` paths and a frame closed on
+    /// only some of them is worse than none: it would leak on exactly the
+    /// paths nobody tests. Closing it around the call covers every exit,
+    /// including the loud failures.
+    ///
+    /// One clause is the right lifetime for a temporary. It is also what the
+    /// C++ does, and it is why `step` can push freely without deciding when to
+    /// let go.
+    fn step_in_temps_frame(
+        &mut self,
+        code: &Code<'_>,
+        instruction: &Instruction,
+    ) -> Result<Flow, Loud> {
+        let frame = self.roots.push_frame();
+        let flow = self.step(code, instruction);
+        self.roots.pop_frame(frame);
+        flow
     }
 
     /// Parses `text` as an `INTERPRET` fragment and runs it **inside the
@@ -929,7 +1002,7 @@ impl Interp {
 
         let mut pc = 0;
         while let Some(instruction) = code.body.instructions.get(pc) {
-            match self.step(&code, instruction)? {
+            match self.step_in_temps_frame(&code, instruction)? {
                 Flow::Next => pc += 1,
                 Flow::Goto(_) => unreachable!("a fragment has no labels, so it cannot jump (47.1)"),
                 // `exit` inside `INTERPRET` ends the program, not the
@@ -1107,6 +1180,16 @@ impl Interp {
                 // allocate runs. `Heap::alloc` does not collect on its own
                 // today, which makes this belt and braces at the moment and
                 // load-bearing the day allocation triggers a collection.
+                //
+                // The contract at the boundary, stated because an earlier
+                // version of this comment described one the callers did not
+                // keep: **`eval` returns an unrooted handle, and its caller
+                // roots it before doing anything that can allocate.** Here
+                // that is the `push_temp` two lines below each `eval`. In
+                // `step` it is the `push_temp` in each arm, bounded by the
+                // per-clause frame the instruction loops open. A returned
+                // value is deliberately not rooted by `eval` itself, because
+                // then nothing would know when to drop it.
                 let frame = self.roots.push_frame();
                 let left_value = self.eval(code, left)?;
                 self.roots.push_temp(left_value);
@@ -1165,9 +1248,25 @@ pub fn run_program(text: Vec<u8>) -> Outcome {
 /// it needs an entry point that admits the fragment while `run_program` keeps
 /// the loud failure that 4a's contract requires.
 ///
+/// `#[doc(hidden)]` because it is `pub` only to reach `tests/`, and without it
+/// it appears in the rendered docs beside `run_program` as though it were an
+/// equal choice of entry point.
+///
+/// **The choice that created this surface, named so that whoever deletes it
+/// knows what to weigh:** a `#[cfg(test)] mod tests` inside this file could
+/// call the private `on_interpreter_thread` directly and prove the same
+/// lifetime with **no public surface at all**. Picking an integration test
+/// over a unit test is what forced a public entry point to exist. The
+/// integration test was preferred because it exercises the crate the way every
+/// later harness will, through the public API and on the sized thread, and
+/// because a unit test with privileged access to private internals proves less
+/// about the shape callers actually get. That is a defensible trade and not an
+/// obvious one, so 4b should re-make it rather than inherit it.
+///
 /// The rejected alternative is worth recording: hooking the fragment onto an
 /// innocent instruction such as `NOP` proves the same lifetime while lying
 /// about which node owns it, and leaves nothing for 4b to delete.
+#[doc(hidden)]
 pub fn run_program_interpret_spike(text: Vec<u8>) -> Outcome {
     on_interpreter_thread(move || execute(text, true))
 }
