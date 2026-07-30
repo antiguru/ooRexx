@@ -12,6 +12,14 @@
 
 ## Global constraints
 
+* **Test a private subject with a `#[cfg(test)] mod tests` beside it, not an integration test.**
+  `Interp` and its methods are private to `rexx-exec`, and an integration test under `tests/`
+  can only reach what is `pub`. Choosing one is what forced Task 3's spike to expose a public
+  entry point that now carries `#[doc(hidden)]` and a note telling a later sub-phase to delete
+  it. Integration tests are for the public surface: the runner, the corpus harness, the gate
+  harnesses. An earlier draft of this plan named an integration test for every module task,
+  which is why two implementers asked the same question.
+
 * **The C++ tree is the oracle and is never modified.** `interpreter/`, `samples/`, `build/`, `ootest/` are read-only. Every behavioural question is settled by running `build/bin/rexx`, not by reading the ANSI standard.
 * **Wrap every oracle invocation** as `( ulimit -v 1048576; build/bin/rexx FILE )`. The interpreter requests gigabytes mid-range and gets OOM-killed otherwise, which has already cost a session.
 * **Never set `NUMERIC DIGITS` above 1000** in a probe.
@@ -376,7 +384,7 @@ So above roughly 92,000 the **sized** path — the one the executor actually run
 
 **Files:**
 - Create: `rust/crates/rexx-exec/src/value.rs`
-- Test: `rust/crates/rexx-exec/tests/value.rs`
+- Test: a `#[cfg(test)] mod tests` inside `rust/crates/rexx-exec/src/value.rs`
 
 **Interfaces:**
 - Produces: `Value` constructors and accessors on `Interp` — `text(&mut self, &[u8]) -> ObjRef`, **`number(&mut self, Number, created_digits: u32, created_form: Form) -> ObjRef`** (which applies the `SmallInt` admissibility rule), `to_text(&mut self, ObjRef) -> Cow<'_, [u8]>`, `to_number(&mut self, ObjRef) -> Result<Number, NotNumeric>`.
@@ -479,7 +487,7 @@ git commit -m "The value model: text keeps its spelling, a number keeps its rend
 
 **Files:**
 - Create: `rust/crates/rexx-exec/src/stem.rs`
-- Test: `rust/crates/rexx-exec/tests/stem.rs`
+- Test: a `#[cfg(test)] mod tests` inside `rust/crates/rexx-exec/src/stem.rs`
 
 **Interfaces:**
 - Produces: `tail_key(&mut self, &Plan, frame, SymbolId) -> Vec<u8>` resolving a compound's tail pieces; `stem_get`, `stem_set`, `stem_drop_tail`, `stem_assign`, `stem_drop`.
@@ -523,7 +531,7 @@ git commit -m "Stems: tombstones, aliasing, and a name the object carries itself
 
 **Files:**
 - Create: `rust/crates/rexx-exec/src/plan.rs`, `src/activation.rs`
-- Test: `rust/crates/rexx-exec/tests/plan.rs`
+- Test: a `#[cfg(test)] mod tests` inside `rust/crates/rexx-exec/src/plan.rs`
 
 **Interfaces:**
 - Produces: `Plan { slots: HashMap<Box<[u8]>, usize>, len: usize }`, `build_plan(&CodeBody, &SymbolTable) -> Plan`, and on `Interp` a cache keyed by `(program_id, body_index)` where the loader assigns `program_id`.
@@ -577,7 +585,7 @@ git commit -m "Resolve a body's variables once, keyed by name, cached on Interp"
 
 **Files:**
 - Create: `rust/crates/rexx-exec/src/eval.rs`
-- Test: `rust/crates/rexx-exec/tests/eval_arith.rs`
+- Test: a `#[cfg(test)] mod tests` inside `rust/crates/rexx-exec/src/eval.rs`
 
 **Interfaces:**
 - Produces: `fn eval(&mut self, body: &CodeBody, expr: &Expr) -> Result<ObjRef, Raised>`.
@@ -609,7 +617,7 @@ git commit -m "Evaluate terms, arithmetic and concatenation"
 
 **Files:**
 - Modify: `rust/crates/rexx-exec/src/eval.rs`
-- Test: `rust/crates/rexx-exec/tests/eval_compare.rs`
+- Test: a `#[cfg(test)] mod tests` inside `rust/crates/rexx-exec/src/eval.rs`
 
 - [ ] **Step 1: Write the failing tests, from the measured line**
 
@@ -650,7 +658,7 @@ git commit -m "Comparison in two families, and logic that coerces nothing"
 
 **Files:**
 - Create: `rust/crates/rexx-exec/src/run.rs`
-- Test: `rust/crates/rexx-exec/tests/run_basic.rs`
+- Test: a `#[cfg(test)] mod tests` inside `rust/crates/rexx-exec/src/run.rs`
 
 **Interfaces:**
 - Produces: `enum Flow { Next, Goto(usize), Exit(Option<ObjRef>) }` and `fn step(&mut self, body: &CodeBody, index: usize) -> Result<Flow, Raised>`.
@@ -680,7 +688,7 @@ git commit -m "The instruction loop, and the seven instructions that do not bran
 
 **Files:**
 - Modify: `rust/crates/rexx-exec/src/run.rs`
-- Test: `rust/crates/rexx-exec/tests/run_select.rs`
+- Test: a `#[cfg(test)] mod tests` inside `rust/crates/rexx-exec/src/run.rs`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -705,7 +713,7 @@ git commit -m "IF and SELECT, including the case form's strict comparison"
 
 **Files:**
 - Modify: `rust/crates/rexx-exec/src/run.rs`
-- Test: `rust/crates/rexx-exec/tests/run_loops.rs`
+- Test: a `#[cfg(test)] mod tests` inside `rust/crates/rexx-exec/src/run.rs`
 
 - [ ] **Step 1: Write the failing tests** — `Simple`, `Forever`, `Count`, `Controlled` with every combination of `TO`/`BY`/`FOR`, and `Over` on a **non-stem** target (measured: a string and a number each iterate once, yielding themselves). `LoopKind::With` is Phase 5's and takes the loud-failure path, because `DO WITH` sends `SUPPLIER` and nothing in 4a answers a message.
 
@@ -771,7 +779,7 @@ git commit -m "Every DO and LOOP variant, with the block stack LEAVE unwinds"
 **Files:**
 - Create: `rust/crates/rexx-exec/src/error.rs`
 - Modify: `rust/crates/rexx-exec/Cargo.toml` (add `rexx-inventory`)
-- Test: `rust/crates/rexx-exec/tests/errors.rs`
+- Test: a `#[cfg(test)] mod tests` inside `rust/crates/rexx-exec/src/error.rs`
 
 **Why:** criterion 1 compares stderr and the exit code byte for byte, so "terminates with the oracle's message" is a subsystem, not a sentence.
 
@@ -810,7 +818,7 @@ The message text comes from `rexx-inventory`'s generated table — Phase 0 alrea
 
 **Files:**
 - Create: `rust/crates/rexx-exec/src/trace.rs`
-- Test: `rust/crates/rexx-exec/tests/trace.rs`, `tests/trace_oracle/` for committed expectations
+- Test: a `#[cfg(test)] mod tests` inside `rust/crates/rexx-exec/src/trace.rs`, with the committed expectations under `rust/crates/rexx-exec/tests/trace_oracle/`
 
 - [ ] **Step 1: Build the prefix table from the oracle's side, not from what we emit**
 
