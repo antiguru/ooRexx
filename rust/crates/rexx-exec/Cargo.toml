@@ -1,0 +1,17 @@
+[package]
+name = "rexx-exec"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The heap, the root set and the value bodies every evaluated value lives in.
+rexx-core = { path = "../rexx-core" }
+
+# The AST this crate executes, and `parse_interpret` for a fragment built at
+# run time.
+rexx-parse = { path = "../rexx-parse" }
+
+[lints]
+workspace = true

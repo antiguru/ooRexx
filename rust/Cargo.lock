@@ -427,6 +427,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rexx-exec"
+version = "0.1.0"
+dependencies = [
+ "rexx-core",
+ "rexx-parse",
+]
+
+[[package]]
 name = "rexx-extract"
 version = "0.1.0"
 
