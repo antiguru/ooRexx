@@ -105,6 +105,17 @@ impl Interp {
     /// usually implies, because filling that cache mutates the heap object
     /// the first time this is asked about it. The name is the one the
     /// design's interface list gives every later task to call.
+    ///
+    /// A `Body::Stem` (D15a, Task 5) renders through its own `default` if
+    /// `Some`, else its own `name` -- measured, `w. = 'wd' ; say w.` is
+    /// `wd`, while `say q.` on a stem nobody has ever assigned a default to
+    /// is `Q.`. The `default` may itself be any value at all, including
+    /// (through `stem_assign`'s object-sharing rule, see `stem.rs`) another
+    /// `Body::Stem`, so rendering it is a fresh, separate call to this same
+    /// function rather than something the match arm below can produce
+    /// inline -- the two calls cannot overlap their borrows of `self.heap`,
+    /// which is why the redirect is decided and the first borrow dropped
+    /// before the second call is ever made.
     #[allow(
         clippy::wrong_self_convention,
         reason = "the interface name is D15's, and `&mut self` is load-bearing \
@@ -115,6 +126,22 @@ impl Interp {
             Decoded::Nil => return Cow::Borrowed(b"The NIL object"),
             Decoded::SmallInt(n) => return Cow::Owned(n.to_string().into_bytes()),
             Decoded::Heap { .. } => {}
+        }
+
+        let stem_default = {
+            let object = self.heap.get(value).expect("a live value");
+            match &object.body {
+                Body::Stem {
+                    default: Some(d), ..
+                } => Some(*d),
+                _ => None,
+            }
+        };
+        if let Some(default) = stem_default {
+            // `Cow::Owned`: the borrow this recursive call returns is tied
+            // to `self`, not to `value`'s own object, so the two Cows
+            // cannot share one lifetime.
+            return Cow::Owned(self.to_text(default).into_owned());
         }
 
         let object = self.heap.get_mut(value).expect("a live value");
@@ -133,7 +160,18 @@ impl Interp {
                 });
                 Cow::Borrowed(rendered.as_slice())
             }
-            other => unreachable!("the value model only creates Text and Num, got {other:?}"),
+            // Reached for a `Body::Stem` with `default: None` too (the
+            // `stem_default` check above only short-circuits the `Some`
+            // case), rendering the object's own name.
+            //
+            // `&**name` and not `name.as_ref()`: the latter fails to borrow-
+            // check here (E0515, "cannot return value referencing local
+            // variable `name`"), even though `name` is match-ergonomically
+            // `&mut Box<[u8]>` here exactly as `text` above is `&mut
+            // Vec<u8>`. The explicit double-deref sidesteps whatever `AsRef`
+            // impl `.as_ref()`'s method resolution was picking.
+            Body::Stem { name, .. } => Cow::Borrowed(&**name),
+            other => unreachable!("the value model only creates Text, Num and Stem, got {other:?}"),
         }
     }
 

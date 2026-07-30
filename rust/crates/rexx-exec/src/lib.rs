@@ -40,6 +40,10 @@ use std::rc::Rc;
 // and a `SmallInt` is admissible only within the DIGITS that produced it).
 mod value;
 
+// Stems and compound variables (D15a): tail resolution, the tombstone rule,
+// and the "replace the object, mutate a tail in place" split.
+mod stem;
+
 /// The exit code for a construct Phase 4a does not implement.
 ///
 /// It has to sit outside 157..=253, where a Rexx error's `256 - major` lives,
