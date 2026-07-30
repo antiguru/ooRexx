@@ -617,7 +617,9 @@ Re-run each row yourself and put the table in the report; two accounts of this f
 
 - [ ] **Step 3: Implement**, including the depth counter D19 requires.
 
-Its limit is bounded on **both** sides: at least 100,000, the oracle's largest measured passing depth, and below what Task 3's stack size and per-frame cost allow. Record all three numbers in the report — an upper bound alone is satisfied by a limit of 20,000, which diverges on every program between there and 100,000.
+Its limit is bounded on **both** sides: at least 100,000, the oracle's largest measured passing depth, and below what Task 3's stack size and per-frame cost allow. An upper bound alone is satisfied by a limit of 20,000, which diverges on every program between there and 100,000.
+
+**Task 3 measured the three numbers, so inherit them rather than re-deriving:** a **512 MiB** stack on the interpreter thread, at **784 bytes per `eval` level in debug** and **192 in release**, over a 100,000-term expression. Debug is the binding case, and 512 MiB at 784 bytes gives roughly 670,000 levels, so a limit anywhere from 100,000 to a few hundred thousand clears the oracle's depth with a wide margin. Confirm the per-level cost still holds for *your* `eval`, which has more cases than the spike's, before fixing the number.
 
 - [ ] **Step 4: Verify** — plus an expression at a depth the oracle handles comfortably, and a **unit test that reaches the 11.1 raise**, since no differential program can cross our limit without also crossing the oracle's cliff, and without that test the depth path is untested by construction.
 
