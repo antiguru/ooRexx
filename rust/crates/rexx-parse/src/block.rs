@@ -973,15 +973,27 @@ fn visit_refs(variables: &[VariableRef], symbols: &SymbolTable, f: &mut impl FnM
 ///
 /// A constant, a `.name` environment symbol and a literal are not variables and
 /// reach neither `addSimpleVariable` nor `addStem`, so none is reported.
+///
+/// An explicit stack rather than recursion through `for_each_child`, because
+/// `add_clause` calls this on every instruction as it is parsed, so a
+/// left-leaning expression tree the width of one clause overflows the stack
+/// while the program is still being read. Measured (Task 3b): the corpus's
+/// `deep_nested_expr.rex`, a 3000-term `1 + 1 + ...` chain, aborted here on a
+/// default 2 MiB thread; the cliff was 2450 terms. `referenced`, the only
+/// thing this feeds, is a `BTreeSet` read only through `.contains`, so the
+/// order names arrive in is not observable and an explicit stack is free to
+/// visit in a different order than the recursive version did.
 fn visit_expr(expr: &Expr, symbols: &SymbolTable, f: &mut impl FnMut(&str)) {
-    match &expr.kind {
-        ExprKind::Variable(id) | ExprKind::Stem(id) | ExprKind::Compound(id) => {
-            f(symbols.name(*id));
+    let mut stack: Vec<&Expr> = vec![expr];
+    while let Some(expr) = stack.pop() {
+        match &expr.kind {
+            ExprKind::Variable(id) | ExprKind::Stem(id) | ExprKind::Compound(id) => {
+                f(symbols.name(*id));
+            }
+            _ => {}
         }
-        _ => {}
+        expr.kind.for_each_child(&mut |child| stack.push(child));
     }
-    expr.kind
-        .for_each_child(&mut |child| visit_expr(child, symbols, f));
 }
 
 /// Which stack frame a block instruction opens.

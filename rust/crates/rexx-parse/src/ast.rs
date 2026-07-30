@@ -212,7 +212,16 @@ impl ExprKind {
     ///
     /// An omitted argument has no node and is skipped, so this yields fewer
     /// items than an argument list has positions.
-    pub(crate) fn for_each_child(&self, f: &mut impl FnMut(&Expr)) {
+    ///
+    /// The lifetime is named, rather than elided to a fresh one per call,
+    /// so that a caller building an explicit worklist (an iterative tree
+    /// walk, rather than one that recurses through this function) can stash
+    /// a yielded `&Expr` past the call that produced it -- `block.rs`'s
+    /// `visit_expr` does exactly that. A closure that only reads a child
+    /// inside its own body, the original use here, still satisfies this
+    /// signature; naming the lifetime only widens what is possible, it
+    /// narrows nothing already working.
+    pub(crate) fn for_each_child<'a>(&'a self, f: &mut impl FnMut(&'a Expr)) {
         match self {
             ExprKind::Literal(_)
             | ExprKind::Constant(_)
@@ -247,6 +256,59 @@ impl ExprKind {
             }
             ExprKind::List(items) => {
                 for item in items.iter().flatten() {
+                    f(item);
+                }
+            }
+            ExprKind::Logical(items) => {
+                for item in items {
+                    f(item);
+                }
+            }
+            ExprKind::VariableReference(inner) => f(inner),
+        }
+    }
+
+    /// The mutable twin of `for_each_child`, for `Expr`'s iterative `Drop`.
+    ///
+    /// Kept in exact lockstep with `for_each_child` -- same variants, same
+    /// order -- because a case added to one and not the other would silently
+    /// leave a child unvisited by whichever fell behind, and here that means
+    /// a child `Drop` skips, not merely a rendering gap.
+    fn for_each_child_mut(&mut self, f: &mut impl FnMut(&mut Expr)) {
+        match self {
+            ExprKind::Literal(_)
+            | ExprKind::Constant(_)
+            | ExprKind::Variable(_)
+            | ExprKind::Stem(_)
+            | ExprKind::Compound(_)
+            | ExprKind::DotVariable(_)
+            | ExprKind::ClassResolver { .. } => {}
+            ExprKind::Prefix { operand, .. } => f(operand),
+            ExprKind::Binary { left, right, .. } => {
+                f(left);
+                f(right);
+            }
+            ExprKind::Call { args, .. } | ExprKind::QualifiedCall { args, .. } => {
+                for arg in args.iter_mut().flatten() {
+                    f(arg);
+                }
+            }
+            ExprKind::Message {
+                target,
+                super_class,
+                args,
+                ..
+            } => {
+                f(target);
+                if let Some(super_class) = super_class {
+                    f(super_class);
+                }
+                for arg in args.iter_mut().flatten() {
+                    f(arg);
+                }
+            }
+            ExprKind::List(items) => {
+                for item in items.iter_mut().flatten() {
                     f(item);
                 }
             }
@@ -402,6 +464,49 @@ impl Expr {
             }
             ExprKind::VariableReference(inner) => format!("(vref {})", inner.shape(symbols)),
         }
+    }
+}
+
+/// Drops the whole subtree by iteration, not by the recursion a derived
+/// `Drop` would use.
+///
+/// `Expr` owns its children through `Box` and `Vec` (see this file's own
+/// header comment), so a compiler-generated destructor calls itself once per
+/// level of the tree. Measured (Task 3b): a flat `1 + 1 + ... + 1` chain
+/// parses and drops fine up to 2449 terms on a default 2 MiB thread stack
+/// and aborts from 2450 on, well inside what the oracle accepts. Every child
+/// is instead taken out of its `Box` or `Vec` slot in place with
+/// `mem::replace`, leaving a cheap childless leaf behind so that slot's own
+/// automatic drop glue is O(1), and the extracted child is pushed onto a
+/// worklist this loop drains. The whole subtree unwinds in one stack frame,
+/// however deep it is.
+///
+/// A child popped off the worklist still runs through this same `drop` a
+/// second time when it falls out of scope at the end of the loop body, but
+/// that second call finds a childless leaf (this call already hollowed it
+/// out) and returns immediately, so nothing recurses.
+impl Drop for Expr {
+    fn drop(&mut self) {
+        let mut worklist: Vec<Expr> = Vec::new();
+        self.kind.for_each_child_mut(&mut |child| {
+            worklist.push(std::mem::replace(child, cheap_leaf()));
+        });
+        while let Some(mut expr) = worklist.pop() {
+            expr.kind.for_each_child_mut(&mut |child| {
+                worklist.push(std::mem::replace(child, cheap_leaf()));
+            });
+        }
+    }
+}
+
+/// A leaf with no children, swapped into a slot once its real value has been
+/// moved onto `Drop`'s worklist, so the slot's own drop has nothing deep left
+/// to walk. The span is meaningless: this node is never observed, only
+/// dropped.
+fn cheap_leaf() -> Expr {
+    Expr {
+        kind: ExprKind::Literal(Box::from(&b""[..])),
+        span: 0..0,
     }
 }
 

@@ -341,9 +341,22 @@ pub fn each_directive<'a>(p: &'a Program, visit: &mut impl FnMut(&'a Directive))
 
 /// Calls `visit` on every expression in the program, parents before children.
 pub fn each_expr<'a>(p: &'a Program, visit: &mut impl FnMut(&'a Expr)) {
-    fn walk<'a>(e: &'a Expr, visit: &mut impl FnMut(&'a Expr)) {
-        visit(e);
-        children_of(e, &mut |child| walk(child, visit));
+    // An explicit stack rather than recursion through `children_of`, because
+    // a left-leaning expression tree the width of one clause overflows the
+    // stack here otherwise: `deep_nested_expr.rex`'s 3000-term chain aborted
+    // this walk on a default 2 MiB thread before Task 3b (see its report).
+    // Pushing a node's children in reverse and popping is what keeps this a
+    // parents-before-children, left-to-right walk exactly like the recursive
+    // version: the leftmost child is pushed last, so it is popped, and so
+    // fully visited depth-first, before its next sibling.
+    fn walk<'a>(root: &'a Expr, visit: &mut impl FnMut(&'a Expr)) {
+        let mut stack = vec![root];
+        while let Some(e) = stack.pop() {
+            visit(e);
+            let mut children: Vec<&'a Expr> = Vec::new();
+            children_of(e, &mut |child| children.push(child));
+            stack.extend(children.into_iter().rev());
+        }
     }
     each_instruction(p, &mut |i| {
         exprs_of_instruction(&i.kind, &mut |e| walk(e, visit));
