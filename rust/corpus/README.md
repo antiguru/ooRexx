@@ -22,9 +22,23 @@ cargo build --release
     --cpp ../build/bin/rexx --rs ../build/bin/rexx --corpus corpus
 ```
 
-Expect `24 programs, 0 divergences` and exit 0. Substituting any other binary
-for `--rs` should report 24 divergences and exit 1; that negative control is
-what makes a zero meaningful.
+Expect `N programs, 0 divergences` and exit 0, where `N` is whatever the tool
+itself counts (`find corpus -name '*.rex' | wc -l` agrees with it) -- do not
+hard-code a number here, since it goes stale every time a program is added or
+removed and nothing catches the drift. Substituting any other binary for
+`--rs` should report `N` divergences and exit 1; that negative control is what
+makes a zero meaningful.
+
+## Phase 4a subset
+
+Phase 4a's executor implements a subset of the language -- no builtin
+functions, no `CALL`/`INTERPRET`/`PARSE`, no message sends, no `::`
+directives, no `DO WITH` or `DO OVER` on a stem. `phase-4a.txt` lists exactly
+the programs in this directory that stay inside that subset, so Task 14's
+harness has something narrower to run than "every `.rex` file here" while
+Phase 4a is still the only thing built. It is a plain list, one path per
+line, relative to this directory; rebuild it by hand whenever a program's
+scope changes rather than trusting a stale copy.
 
 ## Current programs
 
@@ -43,6 +57,34 @@ what makes a zero meaningful.
 | `source_arg.rex` | `PARSE SOURCE`, `SOURCELINE()`, `ARG()` option forms |
 | `primitive_classes.rex` | `~id` of every class reachable as an environment symbol |
 | `whitespace_significant.rex` | `f(x)` vs `f (x)`, abuttal forms, and the empty-binary-literal trap |
+
+### Phase 4a additions -- executor control flow
+
+Written for Task 14a because, of the programs above, none exercises `LEAVE`
+or `ITERATE` and most exercise the arithmetic core rather than the
+executor's control flow. Every file below stays inside what Phase 4a's
+executor implements (see `phase-4a.txt`): no builtin function calls, no
+`CALL`/`RETURN`/`PROCEDURE`/`USE`/`SIGNAL`/`RAISE`/`INTERPRET`, no
+`PARSE`/`ARG`/`PULL`/`PUSH`/`QUEUE`, no message sends, no `::` directives, no
+command clauses, no `DO WITH`, and no `DO OVER` on a stem.
+
+| File | Covers |
+|---|---|
+| `do_loop_forms.rex` | `do_variants.rex` minus its one `DO OVER` line -- `TO`/`BY`, a repetition count, `WHILE`, `UNTIL`, inline `ITERATE`/`LEAVE` |
+| `leave_nested_outer.rex` | nested `DO` with `LEAVE` naming the outer loop's control variable |
+| `iterate_from_select.rex` | `ITERATE` from inside a `SELECT` nested in a loop |
+| `if_else_chain.rex` | an `IF`/`ELSE IF`/`ELSE` chain with different-length bodies, so a wrong then-exit or false-target is visible |
+| `select_when_bodies.rex` | `SELECT`/`WHEN` bodies several instructions long, so a wrong exit lands inside a neighbouring `WHEN` |
+| `select_when_absorption.rex` | a `WHEN` whose `THEN` instruction is itself a `WHEN` clause -- it is never collected into the `SELECT`'s list |
+| `leave_iterate_variants.rex` | bare and outer-naming `LEAVE`/`ITERATE`, matrixed so mis-wiring either one is visible |
+| `drop_stem_tail.rex` | single-tail vs whole-stem `DROP`, including the tombstone rendering of a dropped compound |
+| `stem_aliasing.rex` | `b. = a.` shares a.'s table; assigning a bare stem into a scalar copies its default; an unset stem renders its own name |
+| `exit_with_value.rex` | `EXIT` with an expression sets the process exit code |
+| `exit_no_value.rex` | bare `EXIT` exits 0 |
+| `number_identity.rex` | a number's `DIGITS`/`FORM` are fixed when it is created, not when it is displayed |
+| `comparison_families.rex` | the four comparison-operator families (simple, strict, simple ordering, strict ordering) and the cases that tell them apart |
+| `deep_nested_expr.rex` | a 3000-term expression, deep enough to matter and far below the oracle's ~150,000-term stack cliff |
+| `trace_results.rex` | `TRACE R` output on stderr, distinct from `SAY`'s stdout |
 
 ### `num/` — Phase 2, the numeric core
 
@@ -98,3 +140,22 @@ asserting the wrong output, and only caught by running it.
 `.integer` is not an environment symbol; `Integer` is internal and unexposed.
 `.rexxinfo` is an *instance*, not a class, so it has no `~id`. Both were in
 the first draft of `primitive_classes.rex` and both failed.
+
+`LEAVE name`/`ITERATE name` name a loop by its **control variable**, not by a
+label. A label written directly before the `DO` it names is rejected outright
+with error 47.2 ("Labels are not allowed within a DO/LOOP block"); a label
+written anywhere else compiles but `LEAVE`/`ITERATE` still refuse it with
+28.3 ("must either match the label of a current loop or block instruction").
+Only `do outer = 1 to 3` / `leave outer` — naming the control variable itself
+— works. First draft of `leave_nested_outer.rex` used a label and failed both
+ways before this was measured.
+
+A `WHEN` whose `THEN` instruction is itself a `WHEN` clause
+(`select_when_absorption.rex`) parses and is accepted, and the second `WHEN`
+is never added to the enclosing `SELECT`'s clause list — it is silently
+swallowed as the first `WHEN`'s (empty) consequence. Confirmed only for the
+case where the first `WHEN`'s condition is *true*. Flipping it to false, so
+control would have to fall through to the never-collected second `WHEN`,
+segfaults `build/bin/rexx` deterministically (measured 2026-07-30, exit 139,
+3/3 runs) — a real defect in the oracle itself, worth its own ticket, but not
+something this corpus should ask a memory-safe reimplementation to match.

@@ -1,0 +1,30 @@
+/* do_loop_forms.rex -- a Phase 4a cut of do_variants.rex. Identical except
+   for the last block, `do i over .array~of("x", "y")`, which is out of
+   scope: it needs .array~of (a message send) and Phase 4a's executor
+   deliberately does not implement DO OVER at all yet. Everything else
+   do_variants.rex covers -- TO/BY, a repetition count, WHILE, UNTIL, and
+   inline ITERATE/LEAVE -- is unchanged. */
+do i = 1 to 3
+  say "to" i
+end
+do i = 10 to 1 by -4
+  say "by" i
+end
+do 2
+  say "count"
+end
+i = 0
+do while i < 2
+  i = i + 1
+  say "while" i
+end
+i = 5
+do until i >= 7
+  i = i + 1
+  say "until" i
+end
+do i = 1 to 5
+  if i = 2 then iterate
+  if i = 4 then leave
+  say "ctl" i
+end

@@ -1,0 +1,18 @@
+/* Whole-stem DROP vs single-tail DROP. Dropping one compound tombstones
+   just that tail -- it renders as its own upcased name, "U.1", not the
+   stem's default "d" -- while every other tail keeps the default. Dropping
+   the whole stem (a bare "s.") clears the default too, so every tail,
+   touched or not, reverts to its own tombstone name. */
+u. = 'd'
+u.1 = 'one'
+drop u.1
+say u.1
+say u.2
+
+s. = 'zzz'
+s.1 = 'aaa'
+s.2 = 'bbb'
+drop s.
+say s.1
+say s.2
+say s.3

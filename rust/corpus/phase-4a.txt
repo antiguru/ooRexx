@@ -1,0 +1,37 @@
+# Phase 4a corpus subset -- see README.md's "Phase 4a subset" section.
+#
+# One path per line, relative to this directory (rust/corpus/). Every entry
+# below was read and checked against what Phase 4a's executor implements: no
+# builtin function calls, no CALL/RETURN/PROCEDURE/USE/SIGNAL/RAISE/
+# INTERPRET, no PARSE/ARG/PULL/PUSH/QUEUE, no message sends, no ::
+# directives, no command clauses, no DO WITH, and no DO OVER on a stem.
+# Lines starting with # are comments; blank lines are ignored.
+#
+# Existing programs (Phase 2/3) that already qualify:
+lang/arith_digits.rex
+lang/no_trailing_newline.rex
+lang/select_when.rex
+lang/stem_compound.rex
+lang/trace_output.rex
+num/comparison.rex
+num/digits_rounding.rex
+num/exponential.rex
+num/notation_thresholds.rex
+num/operators.rex
+
+# New for Task 14a -- executor control flow, stems, EXIT, TRACE, comparison:
+lang/do_loop_forms.rex
+lang/leave_nested_outer.rex
+lang/iterate_from_select.rex
+lang/if_else_chain.rex
+lang/select_when_bodies.rex
+lang/select_when_absorption.rex
+lang/leave_iterate_variants.rex
+lang/drop_stem_tail.rex
+lang/stem_aliasing.rex
+lang/exit_with_value.rex
+lang/exit_no_value.rex
+lang/number_identity.rex
+lang/comparison_families.rex
+lang/deep_nested_expr.rex
+lang/trace_results.rex

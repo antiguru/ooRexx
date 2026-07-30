@@ -1,0 +1,24 @@
+/* The four comparison-operator families, with the cases that discriminate
+   the real rule from a plausible wrong one:
+
+     = / \=       simple: strips leading/trailing blanks, numeric-aware
+                  when both sides are valid numbers
+     == / \==     strict: exact character-for-character match, no blank
+                  stripping, no numeric coercion
+     < > <= >=    same "simple" family as = -- numeric-aware
+     << >> <<= >>= strict ordering: byte-wise, shorter side blank-padded,
+                  no numeric coercion
+
+   Every result below is wrapped in `say (...)` rather than left as a bare
+   expression: an expression statement with no assignable left side is a
+   command clause, which Phase 4a does not implement. */
+say (' a' = 'a')          /* simple: leading blank stripped -> 1 */
+say ('a b' = 'a  b')      /* simple: internal blanks are NOT collapsed -> 0 */
+say ('10' >> '9')         /* strict: byte-wise, "1" < "9" -> 0 */
+say ('10' > '9')          /* simple: numeric-aware, 10 > 9 -> 1 */
+say ('a' << 'a ')          /* strict: "a " pads "a", so <= holds -> 1 */
+say (1 = 1.0)             /* simple: numeric equal -> 1 */
+say (1 == 1.0)            /* strict: "1" vs "1.0" differ -> 0 */
+say (' 1' == '1')         /* strict: leading blank is significant -> 0 */
+say ('1.0' = '1')         /* simple: numeric equal -> 1 */
+say ('1.0' == '1')        /* strict: differing text -> 0 */

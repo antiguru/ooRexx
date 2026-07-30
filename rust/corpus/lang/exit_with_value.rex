@@ -1,0 +1,4 @@
+/* EXIT with an expression sets the program's exit code. */
+say "before"
+exit 42
+say "unreached"

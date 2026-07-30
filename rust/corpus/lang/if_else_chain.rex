@@ -1,0 +1,23 @@
+/* An IF/ELSE-IF/ELSE chain where each branch's body has a different length
+   and the false-target of one link is the condition of the next. A
+   then-exit wired to the wrong offset lands inside a neighbouring branch's
+   body instead of at "after"; a false-target wired to the wrong offset
+   skips a condition or re-tests one already failed. */
+do n = 1 to 4
+  if n = 1 then do
+    say "one-a"
+    say "one-b"
+  end
+  else if n = 2 then do
+    say "two-a"
+  end
+  else if n = 3 then do
+    say "three-a"
+    say "three-b"
+    say "three-c"
+  end
+  else do
+    say "other-a"
+  end
+  say "after" n
+end
