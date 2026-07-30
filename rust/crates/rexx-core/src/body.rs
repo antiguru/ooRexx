@@ -28,10 +28,16 @@ impl BehaviourId {
 }
 
 /// A byte string that failed `Number::parse`, or whose bytes are not even
-/// UTF-8 -- both collapse into this one marker (D15): the cache on
-/// `Body::Text` only needs to distinguish "is a number" from "is not",
-/// never which of the two ways it failed to be one.
-#[derive(Clone, PartialEq, Eq, Debug)]
+/// UTF-8 -- both collapse into this one marker (D15), and that is not a
+/// simplification paid for later: nothing observable distinguishes the two
+/// causes. A Rexx program that uses a non-numeric value in arithmetic gets
+/// error 41.1, "Nonnumeric value ("val") used in arithmetic operation",
+/// which substitutes the *value* and never says why it failed to parse. The
+/// distinction is also about to get thinner still: once `rexx-num` gains a
+/// byte-slice parse entry point (a later task), there is no separate
+/// `from_utf8` step left to fail on its own -- a parse over bytes either
+/// yields a number or does not.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct NotNumeric;
 
 /// The payload of a heap object.
@@ -44,10 +50,19 @@ pub struct NotNumeric;
 pub enum Body {
     /// A value whose identity is its bytes (D15). `num` is a tri-state cache
     /// of the one parse those bytes ever get: `None` is "not yet asked", and
-    /// the two `Result` arms tell "is a number" from "is not" apart so a
-    /// non-numeric string is not re-parsed on every comparison. The cache
-    /// holds the exact parse and is never rounded to fit a later `DIGITS`;
-    /// rounding belongs to the operation reading it, not to this cache.
+    /// must keep meaning exactly that -- treating it as "definitely not a
+    /// number" after some other value has been filled in answers wrongly for
+    /// a value nobody has asked about yet. The two `Result` arms tell "is a
+    /// number" from "is not" apart so a non-numeric string is not re-parsed
+    /// on every comparison.
+    ///
+    /// The cache holds the exact parse and is never rounded to fit a later
+    /// `DIGITS`; rounding belongs to the operation reading it, which is what
+    /// keeps the cache safe across a `NUMERIC` change. Measured: `x =
+    /// '1.234567890123456789'` gives `1.2346` under `DIGITS 5` and the full
+    /// eighteen-digit value under `DIGITS 20`, both read from the one stored
+    /// parse. An implementation that "helpfully" rounds at fill time creates
+    /// exactly the staleness this tri-state exists to avoid.
     Text {
         bytes: Vec<u8>,
         num: Option<Result<Box<Number>, NotNumeric>>,
