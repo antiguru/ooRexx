@@ -1,0 +1,144 @@
+Phase 4 exclusions and deviations
+=================================
+
+Two sections, and the distinction between them is the whole point of the file.
+
+  An EXCLUSION is work assigned to a later phase. It will exist one day, and a
+  row names the phase that owes it.
+
+  A DEVIATION is a permanent difference chosen on purpose. Nobody is coming
+  back for it.
+
+A deviation is therefore strictly worse than an exclusion, and the gate asserts
+the SET of both sections rather than a count. Adding a row to either is a plan
+amendment, not a file edit -- otherwise the file is an artifact of the phase
+being gated, and anything that turns out hard can be excluded by editing it.
+
+Phase 7 and Phase 10 delete their own exclusion rows as they deliver them. The
+deviations section shrinks only if a decision is reversed, which is a plan
+amendment too.
+
+The gate reads "66 of the 81 builtins in builtinTable[] (BuiltinFunctions.cpp
+:3042) are in scope, three of them partially, and the excluded set is exactly
+this file".
+
+
+EXCLUSIONS -- builtins, whole
+-----------------------------
+
+Each fails loudly meanwhile: exit code 120, and a message naming the construct
+and the phase that owes it. Never a plausible Rexx condition, because a program
+expecting that condition would otherwise pass against a gap.
+
+  Phase 7, the stream model and the platform layer:
+
+    CHARIN      CHAROUT     CHARS
+    LINEIN      LINEOUT     LINES
+    STREAM      QUALIFY     USERID
+    SETLOCAL    ENDLOCAL
+
+  Phase 10, the RXAPI daemon:
+
+    RXQUEUE     RXFUNCADD   RXFUNCDROP  RXFUNCQUERY
+
+Fifteen names. 81 - 15 = 66 in scope.
+
+
+EXCLUSIONS -- partial
+---------------------
+
+Three builtins are in scope in one form and excluded in another. Excluding the
+whole name would overstate the gap; ignoring the split would understate it.
+
+  VALUE      The variable-access form is 4c's. The external-selector form,
+             which reads a pool such as ENVIRONMENT, is Phase 7's: it needs
+             process environment access, which is the platform layer.
+
+  ADDRESS()  Reporting an environment set by an ADDRESS instruction is 4c's.
+             The platform-supplied default is Phase 7's -- measured, "say
+             address()" with no ADDRESS instruction prints "sh", which comes
+             from the layer D18 defers.
+
+  QUEUED     In scope against 4b's in-process queue. Cross-process sharing with
+             the oracle's rxapi-backed session queue will never match, so a
+             differential run of QUEUED is single-program only. This row is a
+             caveat on a delivered builtin rather than undelivered work.
+
+
+DEVIATIONS -- permanent, chosen
+-------------------------------
+
+  1. DO OVER on a stem does not reproduce the oracle's traversal order.
+
+     The oracle walks a balanced tree; we use a hash map. Measured, inserting
+     tails 1, 2, 3, 10, ZZ, B, the oracle yields "1 B 3 2 ZZ 10" -- not
+     insertion order, not ascending, not descending, not byte order. It is
+     CompoundVariableTable's tree shape, and reproducing it means reproducing
+     the tree, which is the entire cost the hash map exists to avoid.
+
+     Justified by measurement rather than by appeal to ANSI leaving the order
+     implementation-defined: DO OVER on a stem appears zero times in ooTest,
+     zero times in CoreClasses.orx and StreamClasses.orx, and a handful of
+     times in samples/windows/ under oodialog/ and ole/, of which at least two
+     print in iteration order. All are Windows-only samples that no gate runs.
+
+     Consequence, and it is a rule rather than an observation: NO CORPUS
+     PROGRAM MAY CONTAIN DO OVER ON A STEM. Such a program could never pass,
+     because the oracle's order is deterministic and ours is a different
+     deterministic order. DO OVER on a string or a number is fine -- each
+     iterates once, yielding itself.
+
+  2. The EVALUATION-depth limit raises 11.1 where the oracle raises nothing.
+
+     Read this row carefully, because the same error number is parity on two
+     axes and a deviation on a third, and only the third belongs here.
+
+     PARITY, not a deviation, on the parse-side axes: nested parentheses and
+     nested calls both raise 11.1 in the oracle -- bisected at roughly 39,900
+     parens and in [34,500, 34,760] calls -- and MAX_EXPR_DEPTH raises the same
+     11.1 at 50,000 on one shared budget. Same construct, same condition, same
+     number. Nothing to record but the fact that it matches.
+
+     DEVIATION on the flat-term axis: the oracle evaluates a 100,000-term
+     expression and prints its answer, then dies at 150,000 with SIGSEGV, rc
+     139, no condition and no message at all. There is no number to reproduce.
+     4a raises 11.1 above its evaluation-depth limit instead, because 11.1,
+     "Insufficient control stack space", is the closest condition the language
+     has to what actually happened.
+
+     So: on parens and calls we match the oracle; on flat terms we report where
+     the oracle crashes. Both use 11.1 and only the second is a difference.
+
+     Second-order consequence worth stating: a limit ABOVE the oracle's own
+     cliff would be worse than one below it, since it widens the window where
+     we succeed and the oracle segfaults. That is why the recommended limit is
+     100,000 -- the largest depth the oracle is measured to survive -- and why
+     the check must fire above 100,000 rather than at it. A 100,000-term
+     expression reaches depth 100,000, and that is precisely the depth the
+     oracle handles.
+
+
+KNOWN GAPS -- neither excluded nor deviated, just not closed yet
+---------------------------------------------------------------
+
+Recorded here so they are not rediscovered as mysteries. Each is a real
+divergence with no owner assigned, which is a third status and should not be
+confused with either section above.
+
+  Prefix operator chains ("- - - -1") recurse in message_subterm, which the
+  shared expression-depth budget does not guard. They abort natively between
+  1,150 and 1,200 levels on a default 2 MiB thread. The oracle's cliff for this
+  construct has not been measured, so the size of the divergence is unknown.
+
+  Debug, PartialEq and Clone on Expr are still recursive, with cliffs measured
+  at 2,000/2,050 for Debug and 2,100/2,200 for the other two. No non-test path
+  reaches them on a deep tree today: the only production formatter is a
+  panic!("... {other:?}") that fires when the parser is already panicking, so
+  the worst case is a panic message becoming a silent abort.
+
+  A depth counter protects a sized caller only. On a default 2 MiB thread the
+  native abort arrives at 331 parens or 341 calls, long before any counter at
+  50,000 could fire. Every in-tree consumer runs on the sized interpreter
+  thread; a library embedder on a normal stack does not, and the long-term
+  answer is a documented minimum stack or a sized entry point in rexx-parse
+  itself rather than a smarter counter.
