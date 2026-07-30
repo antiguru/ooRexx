@@ -26,9 +26,17 @@ this file".
 EXCLUSIONS -- builtins, whole
 -----------------------------
 
-Each fails loudly meanwhile: exit code 120, and a message naming the construct
-and the phase that owes it. Never a plausible Rexx condition, because a program
-expecting that condition would otherwise pass against a gap.
+Each fails loudly meanwhile: the not-implemented exit code, NOT_IMPLEMENTED_EXIT
+in rexx-exec, plus a message naming the construct and the phase that owes it.
+Never a plausible Rexx condition, because a program expecting that condition
+would otherwise pass against a gap.
+
+The constant is named rather than its value written out here. What matters to
+the argument is the band: the code must sit outside 157..253, where 256 - major
+lives, or a not-implemented failure is indistinguishable from a raised
+condition, which is the worse failure. The specific integer is Task 12's to
+confirm, and this file is a gate artifact that nothing recompiles -- writing the
+number here is how it goes stale silently while still reading as true.
 
   Phase 7, the stream model and the platform layer:
 
@@ -124,6 +132,15 @@ KNOWN GAPS -- neither excluded nor deviated, just not closed yet
 Recorded here so they are not rediscovered as mysteries. Each is a real
 divergence with no owner assigned, which is a third status and should not be
 confused with either section above.
+
+This section is pinned ASYMMETRICALLY, deliberately, and the asymmetry is the
+point. ADDING a row needs no amendment: recording a divergence you have just
+measured should never require permission, or the incentive runs the wrong way
+and gaps go unrecorded. REMOVING one does, and only two things justify it --
+assigning an owner, which moves the row up into EXCLUSIONS, or a measurement
+showing the divergence is gone. Deleting a row because it is inconvenient is
+the failure the set assertion exists to prevent, and it applies here as much as
+above.
 
   Prefix operator chains ("- - - -1") recurse in message_subterm, which the
   shared expression-depth budget does not guard. They abort natively between
