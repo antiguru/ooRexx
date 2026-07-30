@@ -210,6 +210,54 @@ fn a_loud_failure_message_does_not_grow_with_the_expression() {
     );
 }
 
+/// The reported span comes from one call chain, so what else the program
+/// evaluated cannot change it.
+///
+/// A regression test for a defect the review found by measuring rather than by
+/// reading. `eval` records a depth-1 address and a deepest address; if the
+/// first is rewritten by *every* top-level evaluation while the second moves
+/// only on a new maximum, the two can end up describing different chains, and
+/// the frames above `eval` then no longer cancel. A fragment's evaluation runs
+/// under `run_fragment` under `step` under the enclosing `eval`, about 2 KB
+/// deeper than a top-level one, so appending one `INTERPRET` to a program was
+/// enough: measured before the fix, this pair reported **784.0** and
+/// **782.158**, and the second is the dangerous direction, since a smaller
+/// per-level cost implies more survivable levels than there are.
+///
+/// The assertion is equality of the two spans rather than a bound on either,
+/// because the property is "the span does not depend on what else ran" and a
+/// bound would pass for both the fixed and the broken version.
+#[test]
+fn the_stack_span_does_not_depend_on_what_else_the_program_evaluated() {
+    let mut alone = b"say 'a'".to_vec();
+    for _ in 1..1_000 {
+        alone.extend_from_slice(b"||''");
+    }
+    alone.push(b'\n');
+
+    let mut then_a_fragment = alone.clone();
+    then_a_fragment.extend_from_slice(b"interpret \"say 'b'\"\n");
+
+    let alone = run_program(alone);
+    let then_a_fragment = run_program_interpret_spike(then_a_fragment);
+
+    assert_eq!(alone.exit_code, 0, "stderr: {:?}", alone.stderr);
+    assert_eq!(
+        then_a_fragment.exit_code, 0,
+        "stderr: {:?}",
+        then_a_fragment.stderr
+    );
+    assert_eq!(
+        alone.stack.max_depth, then_a_fragment.stack.max_depth,
+        "the fragment's own evaluation is shallow, so it must not move the maximum"
+    );
+    assert_eq!(
+        alone.stack.bytes, then_a_fragment.stack.bytes,
+        "the span must come from the chain that reached the maximum, not from the last \
+         top-level evaluation to start"
+    );
+}
+
 /// Step 3's numbers, and the reason this test exists rather than a note in the
 /// report: **Task 11 sets D19's evaluation-depth limit from what this prints**,
 /// so it has to be re-runnable rather than a figure someone recorded once.

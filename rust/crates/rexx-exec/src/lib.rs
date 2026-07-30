@@ -134,6 +134,23 @@ pub struct Outcome {
 /// Both ends are inside the same function, so the fixed cost of the frames
 /// *above* `eval` cancels and what is left is the per-level cost.
 ///
+/// **Both ends come from the same call chain, and that is load-bearing rather
+/// than incidental.** A program evaluates many separate expressions, each its
+/// own chain from depth 1, and the frames above `eval` are not the same height
+/// for all of them: a fragment's `eval` runs under `run_fragment` under `step`
+/// under the enclosing `eval`, thousands of bytes deeper than a top-level one.
+/// An earlier version rewrote the depth-1 address on every depth-1 entry while
+/// recording the deepest only on a new maximum, so the two ends could come
+/// from different chains and the "frames above cancel" argument silently
+/// stopped holding. Measured: a 1000-term expression followed by `interpret
+/// "say 'b'"` reported **782.16** bytes per level against the true 784.0,
+/// because the fragment's shallow evaluation sits deeper and shortened the
+/// span. The error ran in the **unsafe** direction, since a smaller
+/// bytes-per-level implies more survivable levels than there are, and this
+/// value is public and its doc tells Task 11 to size a limit from it. So the
+/// depth-1 address is now held aside and copied in at the moment the maximum
+/// is beaten, which pins both ends to one chain by construction.
+///
 /// The probe itself perturbs the frame it measures, by the width of the local
 /// whose address it takes. That biases the answer upward by a few bytes per
 /// level, which is the safe direction for sizing a stack.
@@ -142,7 +159,9 @@ pub struct StackSpan {
     /// The deepest `eval` recursion the run reached. Zero if it never
     /// evaluated an expression at all.
     pub max_depth: usize,
-    /// Stack bytes between the first `eval` level and the deepest one.
+    /// Stack bytes between the first `eval` level and the deepest one, both
+    /// on the chain that reached `max_depth`. Meaningless unless `max_depth`
+    /// is above 1, which is what `bytes_per_frame` checks before dividing.
     pub bytes: usize,
 }
 
@@ -171,19 +190,69 @@ struct Loud {
 }
 
 impl Loud {
-    /// An instruction 4a does not execute. `keyword` is `None` for the four
+    /// An instruction 4a does not execute. `keyword()` is `None` for the four
     /// clause shapes no keyword introduces, and their names come from the
     /// shape rather than from a keyword table.
+    ///
+    /// Two properties of the match below, both deliberate and both easy to
+    /// undo by accident.
+    ///
+    /// It is **exhaustive with no `_` arm**, so adding an `InstructionKind`
+    /// variant is a compile error here rather than a silent fallthrough. That
+    /// is the same rule `form_name` follows, and it is why 36 variants are
+    /// listed by name to reach one shared expression.
+    ///
+    /// It **cannot panic**. An earlier version ended `_ => unreachable!(…)`,
+    /// which was true of the tree as it stood and broke the failing-loudly
+    /// rule anyway: a new keywordless variant would have aborted the process
+    /// instead of producing `NOT_IMPLEMENTED_EXIT` and a message naming the
+    /// construct, and an abort is precisely the outcome that rule exists to
+    /// exclude. The fallback is a string, not a panic, and the exhaustive
+    /// match is what stops it ever being reached.
     fn instruction(kind: &InstructionKind) -> Loud {
-        let name = match kind.keyword() {
-            Some(keyword) => keyword,
-            None => match kind {
-                InstructionKind::Assignment { .. } => "an assignment",
-                InstructionKind::Label { .. } => "a label",
-                InstructionKind::Message { .. } => "a message send",
-                InstructionKind::Command { .. } => "a command",
-                _ => unreachable!("keyword() answers Some for every other kind"),
-            },
+        let name = match kind {
+            // The four clause shapes no keyword introduces.
+            InstructionKind::Assignment { .. } => "an assignment",
+            InstructionKind::Label { .. } => "a label",
+            InstructionKind::Message { .. } => "a message send",
+            InstructionKind::Command { .. } => "a command",
+            // Everything else is named by the keyword that introduced it.
+            InstructionKind::Address { .. }
+            | InstructionKind::Arg { .. }
+            | InstructionKind::Call { .. }
+            | InstructionKind::Do { .. }
+            | InstructionKind::Drop { .. }
+            | InstructionKind::Else { .. }
+            | InstructionKind::End { .. }
+            | InstructionKind::Exit { .. }
+            | InstructionKind::Expose { .. }
+            | InstructionKind::Forward { .. }
+            | InstructionKind::Guard { .. }
+            | InstructionKind::If { .. }
+            | InstructionKind::Interpret { .. }
+            | InstructionKind::Iterate { .. }
+            | InstructionKind::Leave { .. }
+            | InstructionKind::Loop { .. }
+            | InstructionKind::Nop
+            | InstructionKind::Numeric { .. }
+            | InstructionKind::Options { .. }
+            | InstructionKind::Otherwise
+            | InstructionKind::Parse { .. }
+            | InstructionKind::Procedure { .. }
+            | InstructionKind::Pull { .. }
+            | InstructionKind::Push { .. }
+            | InstructionKind::Queue { .. }
+            | InstructionKind::Raise { .. }
+            | InstructionKind::Reply { .. }
+            | InstructionKind::Return { .. }
+            | InstructionKind::Say { .. }
+            | InstructionKind::Select { .. }
+            | InstructionKind::Signal { .. }
+            | InstructionKind::Then
+            | InstructionKind::Trace { .. }
+            | InstructionKind::Use { .. }
+            | InstructionKind::When { .. }
+            | InstructionKind::WhenCase { .. } => kind.keyword().unwrap_or("an instruction"),
         };
         Loud {
             message: format!(
@@ -501,9 +570,20 @@ struct Interp {
     /// is set from numbers this spike is what produces.
     depth: usize,
     max_depth: usize,
-    /// Stack addresses of a local inside `eval`, at the first level and at the
-    /// deepest one. `usize::MAX`/0 are the "nothing measured yet" values, and
-    /// `stack_span` reports nothing rather than a difference against them.
+    /// The depth-1 address of the chain currently being evaluated, kept aside
+    /// until that chain turns out to be the deepest one.
+    ///
+    /// Scratch, not a result. It is overwritten by every new top-level
+    /// evaluation, which is exactly why it is not `stack_first`: see
+    /// `StackSpan` for the measurement that showed what happens when the two
+    /// ends of the span come from different chains.
+    stack_entry: usize,
+    /// The two ends of the span, both from the chain that reached
+    /// `max_depth`, written together so they can never disagree.
+    ///
+    /// Zero before anything is measured. `stack_span` subtracts one from the
+    /// other saturatingly, so the unmeasured state answers zero rather than
+    /// needing a sentinel to test for.
     stack_first: usize,
     stack_deepest: usize,
 }
@@ -521,8 +601,9 @@ impl Interp {
             interpret_spike,
             depth: 0,
             max_depth: 0,
+            stack_entry: 0,
             stack_first: 0,
-            stack_deepest: usize::MAX,
+            stack_deepest: 0,
         }
     }
 
@@ -712,6 +793,25 @@ impl Interp {
     /// }
     /// ```
     fn run_activation(&mut self) -> Result<Option<ObjRef>, Loud> {
+        // `code` is bound to the activation on top of the stack at entry,
+        // while every `pc` read and write below goes to whatever is on top
+        // *now*. Those are the same frame only because `step` leaves the
+        // activation stack as it found it, which is true in 4a because
+        // nothing here pushes one, and true for a fragment because it runs
+        // inside the creating activation rather than pushing its own.
+        //
+        // **4b breaks that and will not be told so by the compiler.** A
+        // `CALL` pushes an activation inside `step`, and if it ever returned
+        // with the callee still on the stack, this loop would carry on
+        // reading the callee's `pc` while executing the caller's body: a
+        // wrong answer, not a borrow error, because both are plain field
+        // accesses on `self`. The assertion below is what turns that into a
+        // failure at the first instruction instead of a debugging session.
+        //
+        // The body is `program.main` and the activation does not record which
+        // body it is running, which is the other half of the same assumption.
+        // 4b's activation for a `::routine` needs that field; without it, such
+        // an activation would re-run the main body here. See `Activation`.
         let program = Rc::clone(&self.activation().program);
         let plan = Rc::clone(&self.activation().plan);
         let code = Code {
@@ -719,6 +819,7 @@ impl Interp {
             symbols: &program.symbols,
             slots: &plan.by_symbol,
         };
+        let depth = self.activations.len();
 
         while let Some(instruction) = code.body.instructions.get(self.activation().pc) {
             match self.step(&code, instruction)? {
@@ -726,6 +827,12 @@ impl Interp {
                 Flow::Goto(target) => self.activation_mut().pc = target,
                 Flow::Exit(value) => return Ok(value),
             }
+            debug_assert_eq!(
+                self.activations.len(),
+                depth,
+                "step left the activation stack changed, so this loop's `code` and its `pc` \
+                 no longer describe the same frame"
+            );
         }
         Ok(None)
     }
@@ -949,16 +1056,20 @@ impl Interp {
     /// level and at the deepest. Taking a raw pointer and casting it to
     /// `usize` is safe code, so this needs no `unsafe`, and measuring the real
     /// function rather than a replica of it is the whole reason to do it here.
+    /// The two ends are written **together**, when the maximum is beaten, so
+    /// they always describe one call chain; `StackSpan`'s doc has the
+    /// measurement that made that necessary.
     fn eval(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Loud> {
         let probe = 0u8;
         let here = &probe as *const u8 as usize;
 
         self.depth += 1;
         if self.depth == 1 {
-            self.stack_first = here;
+            self.stack_entry = here;
         }
         if self.depth > self.max_depth {
             self.max_depth = self.depth;
+            self.stack_first = self.stack_entry;
             self.stack_deepest = here;
         }
 
