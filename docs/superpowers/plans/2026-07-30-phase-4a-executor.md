@@ -244,7 +244,9 @@ A test that parses a fragment at run time with `parse_interpret`, executes its b
 
 - [ ] **Step 3: Run the interpreter on its own thread**
 
-`rexx-run` spawns a thread with an explicit stack size and **that thread owns everything from `parse_program` onward** — bytes in, an outcome out. `Rc<Program>` is `!Send`, so a program parsed on the main thread cannot be handed across, and getting this wrong is a compile error on day one rather than a subtle bug.
+**The sized thread belongs to `rexx-exec`'s public entry point, not to the `rexx-run` binary**, because the L0 harness and the assertion-table harness both run in process and a `cargo test` thread's default stack is far smaller than the one the depth limit is calibrated against. Put it in the binary only, and every in-process caller sits on the cliff the depth policy exists to keep them off.
+
+That entry point spawns a thread with an explicit stack size, and **that thread owns everything from `parse_program` onward** — bytes in, an outcome out. `Rc<Program>` is `!Send`, so a program parsed on the main thread cannot be handed across, and getting this wrong is a compile error on day one rather than a subtle bug.
 
 Record the chosen stack size and the measured per-frame cost in the task report; Task 11 sets the depth limit from them.
 
@@ -510,7 +512,9 @@ The first row is the one that matters. An earlier draft of this plan said the st
 
 - [ ] **Step 3: Implement all four families**
 
-* Numeric-or-string `= \= <> >< > < >= <= \> \<`: **call `rexx-num`'s free `compare` and do not write a string comparison at all.** It is the whole algorithm, string fallback included — `string_order` at `rust/crates/rexx-num/src/compare.rs:173`, ported from `RexxString::stringComp` (`StringClass.cpp:795`), which strips leading blanks *and tabs*, compares the shared prefix, and decides a leftover tail against a space. Writing a second one here means writing a divergent one.
+* Numeric-or-string `= \= <> >< > < >= <= \> \<`: **call `rexx-num`'s comparison and do not write a string comparison at all.**
+
+**Step 3a comes first: amend `rexx-num` with a byte-slice entry point.** Today `compare` takes `&str` and re-parses both operands on every call. A Rexx string can hold bytes that are not valid UTF-8 (D14), so `&str` cannot carry one, and re-parsing defeats D15's cache, whose whole stated purpose is that a non-numeric string is not re-parsed on every comparison. Add an entry taking byte slices and already-decoded operands, keep the existing one, and do not duplicate `string_order`. It is the whole algorithm, string fallback included — `string_order` at `rust/crates/rexx-num/src/compare.rs:173`, ported from `RexxString::stringComp` (`StringClass.cpp:795`), which strips leading blanks *and tabs*, compares the shared prefix, and decides a leftover tail against a space. Writing a second one here means writing a divergent one.
 * Strict `== \== >> << >>= <<= \>> \<<`: no padding, shorter is less.
 * Logical `& | &&`: a logical value is **exactly** the one-character string `0` or `1`. Measured, `' 1 '`, `'01'`, `'1.0'` and `''` are each error 34.
 * `ExprKind::Logical`, the comma list, is an AND of its parts under the same check.
@@ -597,7 +601,17 @@ Control expressions are evaluated in `Controlled::order`, which Phase 3 recorded
 
 - [ ] **Step 2: Measure the `DO` control error family before implementing it**
 
-Confirmed already: `do i = 'x' to 3` and `do i = 1 to 'y'` are both **41.1**. Reported but unconfirmed: **26.2** and **26.3** for non-whole control values. And `do i = 1 by 0 to 3` **loops forever and raises nothing**, which is behaviour to reproduce rather than an error to catalogue. Enumerate the family against the oracle and put the table in the report.
+Measured, and note the paraphrase an earlier draft used was wrong in a way that would have pointed your probes at the one case that never raises:
+
+| clause | oracle |
+|---|---|
+| `do i = 'a' to 3`, `do i = 1 to 'x'`, `do i = 1 by 'x'` | 41.1 |
+| `do i = 1 to 3 for 'x'`, `for -1`, `for 1.5` | **26.3**, the `FOR` count |
+| `do 'a'`, `do -1`, `do 2.5` | **26.2**, the `DO` repetitor |
+| `do i = 1.5 to 3` | **no error** — a non-whole *control* value is legal |
+| `do i = 1 by 0 to 3` | **no error**, loops forever — behaviour to reproduce, not an error to catalogue |
+
+Re-run each row yourself and put the table in the report; two accounts of this family have already disagreed.
 
 - [ ] **Step 3: Implement**, including the depth counter D19 requires.
 
@@ -750,7 +764,9 @@ So a row carries the method's **assignment prelude**, and any assertion whose pr
 - Create: `rust/crates/rexx-exec/tests/coverage.rs`, `tests/loud.rs`, `rust/scripts/mutate-4a.sh`
 - Create: `docs/superpowers/plans/phase-4-exclusions.txt`
 
-- [ ] **Step 1: The coverage enumeration** — a macro-generated match with **no wildcard arm** over `InstructionKind`, `ExprKind`, `LoopKind`, `PrefixOp`, `EndStyle`, `Trace` and `Operator`. Every variant carries either a witness program in the subset or the phase that owns it, and the test fails on a variant carrying neither. Without the owner arm this criterion demands a witness for `LoopKind::With`, which needs Phase 5, and the criterion written to close a blindness finding would itself be unsatisfiable.
+- [ ] **Step 1: The coverage enumeration** — a macro-generated match with **no wildcard arm** over `InstructionKind`, `ExprKind`, `LoopKind`, `PrefixOp`, `EndStyle`, `Trace` and `Operator`. Every variant carries either a witness program in the subset or the phase that owns it, and the test fails on a variant carrying neither.
+
+The owner arm is an escape unless it is policed, so: the owner string must be one of the phases named in the spec's split table or its "assigned elsewhere" paragraph, and the **set** of out-of-4a variants is asserted, the way the exclusions file is. Otherwise a variant that turns out hard can be relabelled Phase 5's instead of getting a witness. The assignment is complete today — 40 `InstructionKind` variants (20 in 4a, 9 in 4b, 4 in 4c, 6 in Phase 5, 1 in Phase 7) and 15 `ExprKind` variants (9 in scope, 6 failing loudly) — so the assertion costs nothing to add now. Without the owner arm this criterion demands a witness for `LoopKind::With`, which needs Phase 5, and the criterion written to close a blindness finding would itself be unsatisfiable.
 
 - [ ] **Step 2: The loud-failure enumeration** — for every `InstructionKind` and `ExprKind` variant, either 4a executes it or it produces the not-implemented exit code and names its owner. One test closes a surface larger than 4a's own.
 
