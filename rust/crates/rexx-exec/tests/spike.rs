@@ -170,16 +170,24 @@ fn the_interpret_keyword_still_fails_loudly() {
 
 /// The loud-failure code is outside the band a Rexx error can produce, so a
 /// differential run can never mistake an implementation gap for a condition.
+///
+/// **The probe construct changed under Task 11.** This used to run `do i =
+/// 1 to 3 / end`, which was true of every task before Task 11 and stopped
+/// being true the moment `DO`/`LOOP` were implemented -- that program now
+/// runs to completion instead of failing loudly, and the test would have
+/// started asserting `0 == NOT_IMPLEMENTED_EXIT` and failed for a reason
+/// that has nothing to do with what it is meant to check. `CALL` is 4b's,
+/// still not implemented through `run_program`, and is the new probe.
 #[test]
 fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
     assert!(
         !(157..=253).contains(&NOT_IMPLEMENTED_EXIT),
         "256 - major lives in 157..=253 for majors 3 to 99"
     );
-    let outcome = run_program(SPIKE_PATH, b"do i = 1 to 3\nend\n".to_vec());
+    let outcome = run_program(SPIKE_PATH, b"call \"sub\"\n".to_vec());
     assert_eq!(outcome.exit_code, NOT_IMPLEMENTED_EXIT);
     let stderr = String::from_utf8(outcome.stderr).expect("the loud message is ASCII");
-    assert!(stderr.contains("DO"), "stderr was {stderr:?}");
+    assert!(stderr.contains("CALL"), "stderr was {stderr:?}");
 }
 
 /// A loud failure names the **form** and never formats the node, so the
@@ -320,6 +328,23 @@ fn the_stack_span_does_not_depend_on_what_else_the_program_evaluated() {
 /// Three recursions ride on the same stack here and the test covers all three
 /// at once, because it parses, plans, evaluates and then drops the tree:
 /// `Plan::note`, `eval`, and `Drop` for the `Box<Expr>` chain.
+///
+/// **Task 11 itself changed what this test can still measure, and this is
+/// the paragraph recording that rather than letting the test quietly stop
+/// witnessing what its own name claims.** `eval.rs`'s `MAX_EVAL_DEPTH` is
+/// now 100,000, enforced inside `eval` itself, so `run_program` -- the only
+/// way anything outside this crate reaches a sized stack at all -- refuses
+/// to recurse past it. This test's own chain is exactly 100,000 terms, at
+/// or below the limit, so it still runs for real and still measures a real
+/// `bytes_per_frame` at a real depth; nothing about *this* assertion became
+/// vacuous. What is gone is the ability to go past 100,000 *through this
+/// same public entry point* to independently re-confirm the `survivable`
+/// extrapolation below against an actual guard-page abort, the way the
+/// external `rexx-run` bisection this file's sibling doc comments describe
+/// once did (`lib.rs`'s own `INTERPRETER_STACK_BYTES` doc comment records
+/// the same consequence, and how to deliberately get past it again: raise
+/// `MAX_EVAL_DEPTH`, or call `eval` directly bypassing `run_program`, for
+/// the duration of a fresh bisection only, and put it back).
 #[test]
 fn records_the_stack_cost_of_one_eval_frame() {
     const TERMS: usize = 100_000;

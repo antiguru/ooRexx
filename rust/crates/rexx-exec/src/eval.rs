@@ -61,6 +61,36 @@ use rexx_core::{NotNumeric, ObjRef};
 use rexx_num::{CompareOp, DivOp, Number, compare_decoded};
 use rexx_parse::{Expr, ExprKind, Operator, PrefixOp, compound_parts};
 
+/// D19's evaluation-depth limit: `eval`'s own recursion, one level per
+/// left-deep term, refuses anything past this depth with 11.1 ("Insufficient
+/// control stack space") rather than letting the interpreter thread's guard
+/// page abort the process silently.
+///
+/// **Exactly 100,000, the largest depth the oracle is measured to survive**
+/// (`phase-4-exclusions.txt`'s Deviation 2: it prints an answer for a
+/// 100,000-term expression and SIGSEGVs, no condition, between 100,000 and
+/// 150,000). Bounded on both sides, per D19: at least 100,000 is the floor a
+/// lower limit would fail (it would refuse programs the oracle accepts), and
+/// `INTERPRETER_STACK_BYTES` (512 MiB) divided by this crate's own measured
+/// per-level cost (`lib.rs`'s own doc comment on `INTERPRETER_STACK_BYTES` --
+/// ~1600 bytes/level in debug after Task 7's `eval_node` growth, re-measured
+/// at implementation time below) is the ceiling a higher one would fail. A
+/// limit *above* the oracle's own cliff would be worse than one below it: it
+/// would widen the window where this crate succeeds and the oracle segfaults,
+/// which is the opposite of what a differential harness wants.
+///
+/// `eval` checks `self.depth > MAX_EVAL_DEPTH`, never `>=`: a 100,000-term
+/// expression's deepest `eval` call is depth 100,000 exactly, and that is the
+/// one depth the oracle is known to handle, so the check has to fire one
+/// level past it or the corpus's own passing case would be refused.
+///
+/// **What this does not do, and must not be documented as doing**: a program
+/// can reach a deep tree without ever evaluating it (`exit` before a
+/// 700,000-term expression aborts inside `Drop`, with no `eval` call and
+/// this counter never in a position to see it) -- that path is closed by
+/// `rexx-parse`'s iterative `Drop`, not by this counter.
+const MAX_EVAL_DEPTH: usize = 100_000;
+
 impl Interp {
     /// Evaluates one expression node, and keeps the depth bookkeeping D19
     /// needs.
@@ -90,6 +120,21 @@ impl Interp {
             self.max_depth = self.depth;
             self.stack_first = self.stack_entry;
             self.stack_deepest = here;
+        }
+
+        // D19's evaluation-depth limit, checked **after** the bookkeeping
+        // above so a run that trips it still gets an accurate `StackSpan`
+        // (the deepest level reached is this one, not the one before it).
+        // `> MAX_EVAL_DEPTH`, not `>=`: a 100,000-term left-deep expression
+        // reaches depth exactly 100,000 and the oracle is measured to
+        // survive and print an answer at that depth
+        // (`phase-4-exclusions.txt`'s Deviation 2), so the check must fire
+        // one level *above* the one the oracle is known to handle, or the
+        // one depth we are supposed to match becomes the first one we
+        // refuse.
+        if self.depth > MAX_EVAL_DEPTH {
+            self.depth -= 1;
+            return Err(Raised::insufficient_stack().into());
         }
 
         let value = self.eval_node(code, expr);
@@ -334,7 +379,13 @@ impl Interp {
     /// operand's own rendered text as the substitution -- measured, `say
     /// 'abc' + 1` reports `Nonnumeric value ("abc")`, the operand as it
     /// renders, not upcased or otherwise transformed.
-    fn arith_operand(&mut self, value: ObjRef) -> Result<Number, Failure> {
+    ///
+    /// `pub(crate)` since Task 11: a controlled `DO`/`LOOP`'s own
+    /// `initial`/`TO`/`BY` need exactly this conversion (measured, `do i =
+    /// 'a' to 3` is the identical 41.1 an arithmetic operand's own failure
+    /// is) and `run.rs` is where that header is evaluated, not here --
+    /// reused rather than a second copy of the same three lines.
+    pub(crate) fn arith_operand(&mut self, value: ObjRef) -> Result<Number, Failure> {
         match self.to_number(value) {
             Ok(number) => Ok(number),
             Err(NotNumeric) => {
@@ -547,7 +598,12 @@ impl Interp {
 /// (`rexx-num` reserves working storage proportional to `DIGITS`) long
 /// before precision ever mattered. No corpus program, and no realistic
 /// one, can reach the clamp.
-fn saturate_digits(digits: u64) -> u32 {
+///
+/// `pub(crate)` since Task 11: a controlled `DO`/`LOOP`'s own control
+/// variable is created through `Interp::number` exactly like any other
+/// arithmetic result (`run.rs`'s `loop_advance`), and needs the identical
+/// narrowing -- reused from here rather than copied.
+pub(crate) fn saturate_digits(digits: u64) -> u32 {
     u32::try_from(digits).unwrap_or(u32::MAX)
 }
 
@@ -1241,5 +1297,99 @@ mod tests {
             panic!("an element that IS reached must raise, or the two cases above prove nothing");
         };
         assert_eq!((raised.number, raised.sub), (42, 3));
+    }
+
+    // ---- D19's evaluation-depth limit ----
+
+    /// A left-deep chain of `terms` `SAY`-able terms, joined by `||''` --
+    /// the concatenation analogue `records_the_stack_cost_of_one_eval_frame`
+    /// (`tests/spike.rs`) already establishes recurses exactly once per
+    /// term (`outcome.stack.max_depth == TERMS`, asserted there), reused
+    /// here rather than a fresh arithmetic chain invented for this test:
+    /// one already-measured relationship between term count and `eval`
+    /// depth is worth more than two unrelated ones.
+    ///
+    /// **Not nested parentheses.** `rexx-parse`'s own `MAX_EXPR_DEPTH` is
+    /// 50,000 and raises the identical 11.1 from the *parser*, before
+    /// `eval` ever runs -- a depth test built that way would go green
+    /// without this counter firing at all, which is exactly the trap this
+    /// task's own brief warns about. A flat chain of same-precedence binary
+    /// operators does not increase parser recursion the way a nested
+    /// construct does (the precedence-climbing loop that assembles it does
+    /// not recurse per term), so 100,000 (and 100,001) terms here never
+    /// come near that other limit.
+    fn chain(terms: usize) -> Vec<u8> {
+        let mut program = b"say 'a'".to_vec();
+        for _ in 1..terms {
+            program.extend_from_slice(b"||''");
+        }
+        program.push(b'\n');
+        program
+    }
+
+    /// **Why this goes through `run_program` and not a direct `eval` call.**
+    /// The only sized stack in the workspace is inside `run_program`
+    /// (`lib.rs`'s own `INTERPRETER_STACK_BYTES`); a `cargo test` thread's
+    /// default 2 MiB is far smaller than what this depth needs, and `eval`
+    /// would die natively, as an unreported guard-page abort, long before
+    /// reaching either boundary this pair tests -- precisely the silent
+    /// failure D19's limit exists to prevent, so a plain `#[cfg(test)]`
+    /// unit test calling `eval` directly cannot exercise this at all. This
+    /// is a unit test file, not `tests/`, but the subject it is testing
+    /// (`run_program`'s own observable behaviour at the limit) is public
+    /// cross-crate surface, so an integration-shaped test of it is not the
+    /// thing the crate's own testing rule forbids (that rule is about
+    /// integration-testing a *private* subject, and there is not one
+    /// here) -- it simply lives beside the counter it defends rather than
+    /// in a separate file, since nothing about reaching `run_program`
+    /// requires a different module.
+    ///
+    /// **Confirming this reaches `MAX_EVAL_DEPTH` and neither of the two
+    /// other limits nearby.** Not the parser's own 50,000 (`chain`'s own
+    /// doc comment: no nested construct, so no parser recursion to hit).
+    /// Not the native guard page either: printed and checked directly, both
+    /// halves of this pair report `outcome.stack.max_depth` (via a `dbg!`
+    /// run by hand while writing this test, since the assertion below only
+    /// needs the boundary case to hold) equal to `MAX_EVAL_DEPTH` and
+    /// `MAX_EVAL_DEPTH + 1` respectively -- exactly one term more between
+    /// the two, and both values sit at roughly 1600 bytes/level *
+    /// 100,000 ~= 160 MB into the 512 MiB stack, nowhere near its own
+    /// cliff (`INTERPRETER_STACK_BYTES`'s own doc comment: ~335,000
+    /// survivable levels at that per-level cost).
+    #[test]
+    fn eval_survives_exactly_max_eval_depth_terms_and_prints_the_oracles_own_answer() {
+        let outcome = crate::run_program("depth-boundary-at.rex", chain(MAX_EVAL_DEPTH));
+        assert_eq!(
+            outcome.exit_code,
+            0,
+            "stderr: {:?}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(
+            outcome.stdout, b"a\n",
+            "the oracle's own answer for this exact depth (Deviation 2, phase-4-exclusions.txt)"
+        );
+        assert_eq!(outcome.stack.max_depth, MAX_EVAL_DEPTH);
+    }
+
+    /// **The off-by-one this task's own brief calls out by name**: one term
+    /// past the boundary the previous test pins must raise, not merely
+    /// "eventually" refuse something deeper. Kills a `>=` in place of `eval`'s
+    /// own `>` check, which would refuse the boundary case above instead of
+    /// this one.
+    #[test]
+    fn eval_raises_11_1_exactly_one_term_past_max_eval_depth() {
+        let outcome = crate::run_program("depth-boundary-past.rex", chain(MAX_EVAL_DEPTH + 1));
+        assert_eq!(
+            outcome.exit_code,
+            245,
+            "256 - 11, stderr: {:?}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(
+            outcome.stdout, b"",
+            "SAY never runs: the whole expression must finish evaluating first, \
+             and this one cannot"
+        );
     }
 }

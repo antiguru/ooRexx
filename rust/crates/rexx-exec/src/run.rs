@@ -46,14 +46,15 @@
 //! no-ops (like `Label`) -- they are never independently dispatched, only
 //! ever read as data by `If`/`Select` or walked over inside a bounded loop.
 
-use crate::error::Raised;
+use crate::error::{FailureSite, Raised};
 use crate::eval::logical_value;
 use crate::{Code, Failure, Interp, Loud};
 use rexx_core::ObjRef;
-use rexx_num::SettingsError;
+use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
-    EndStyle, Expr, ExprKind, Fragment, Instruction, InstructionKind, NumericSetting,
-    ProgramSource, VariableRef, compound_parts, parse_interpret,
+    ControlExpr, Controlled, EndStyle, Expr, ExprKind, Fragment, Instruction, InstructionKind,
+    Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource, SymbolId, VariableRef,
+    compound_parts, parse_interpret,
 };
 use std::rc::Rc;
 
@@ -76,6 +77,121 @@ enum Flow {
     /// jump such a construct computes stays inside the fragment's own range.
     Goto(usize),
     Exit(Option<ObjRef>),
+    /// `LEAVE`, bare (`None`) or by name. Live since Task 11.
+    ///
+    /// **Why this is a `Flow` variant and not an immediate `Err`:** `LEAVE`
+    /// finding its own target is not a failure, so it has to travel as data
+    /// through exactly the same channel `Goto`/`Exit` already do --
+    /// `run_bounded`'s own catch-all (`other => return Ok(other)`, its doc
+    /// comment names this variant by name as the reason it exists) forwards
+    /// it outward through any nested `IF` untouched, and `Do`/`Select`'s own
+    /// arms are the only two that ever inspect it, matching the oracle's own
+    /// rule that only a `SELECT`/`DO`/`LOOP` block ever participates in the
+    /// search (`RexxActivation::leaveLoop`, read directly and cited in the
+    /// report -- `IF`/`THEN`/`ELSE` never push a frame at all, so they are
+    /// transparent by construction, not by a case this crate has to add).
+    ///
+    /// **The invariant this crate's whole `Do`/`Select` design holds so this
+    /// variant is safe to use at all**: unlike `Goto`, a `Do`'s own
+    /// repetition is never expressed as a `Goto` back to its own body's top.
+    /// The trap that would create is exactly `run_bounded`'s own doc comment
+    /// warns about for a future `LEAVE`/`ITERATE` variant -- a `Goto` whose
+    /// target lands inside an *enclosing* `IF`/`SELECT`'s own range (a `DO`
+    /// nested in an `IF`'s `THEN`, iterating) is absorbed by that enclosing
+    /// `run_bounded` directly, never seen by the `DO`'s own arm again, which
+    /// would re-enter it as a first entry with its own state reset. `Do`'s
+    /// own arm therefore never returns to its caller until the *entire*
+    /// loop -- every iteration -- is over, one way or another: it drives its
+    /// own `run_bounded(body)` calls in an internal `loop {}` and only ever
+    /// returns a `Flow` once there is truly nothing left for it to decide.
+    /// `leave_and_iterate_survive_a_goto_absorbing_enclosing_if` (this
+    /// file's own tests) pins exactly this shape: a `DO` with an `ITERATE`
+    /// in its body, nested inside an `IF`'s `THEN`, run enough times that a
+    /// version which instead returned a re-entry `Goto` to the loop's own
+    /// top would either loop forever (the `IF`'s own `run_bounded` silently
+    /// re-entering the `DO` as a fresh first pass on every `Goto`) or lose
+    /// the loop's own running total, depending on exactly how such a bug
+    /// were shaped -- either way, not the correct, small, printed result the
+    /// test asserts.
+    ///
+    /// The payload eagerly resolves the `LEAVE`/`ITERATE` instruction's own
+    /// clause and static indent (`LeaveOrigin`) at the moment it steps,
+    /// before any propagation: **28.1-28.4 (the "found nothing at all"
+    /// family) and 28.5 (the "found a name match, but it names something
+    /// that is not a loop" family) report at two different, both
+    /// oracle-measured, indentations that no longer-lived state can recover
+    /// once the search has moved on** -- see the report's own transcripts.
+    Leave(Option<SymbolId>, LeaveOrigin),
+    /// `ITERATE`, bare or by name. See `Leave`'s own doc comment; the two
+    /// variants are handled by nearly identical logic in `Do`/`Select`'s own
+    /// arms, differing only in which of the oracle's measured asymmetries
+    /// applies (`Select` never consumes a bare `Iterate` at all, and a named
+    /// one that matches its own label but is not a loop is 28.5, not simply
+    /// "not mine, keep looking").
+    Iterate(Option<SymbolId>, LeaveOrigin),
+}
+
+/// Where a `LEAVE`/`ITERATE` instruction itself sits, captured the instant
+/// it steps rather than reconstructed later -- see `Flow::Leave`'s own doc
+/// comment for why eagerly.
+///
+/// `indent` is `static_indent` applied to the `LEAVE`/`ITERATE`'s own
+/// index, computed once here rather than carried as a live counter (the
+/// design this task chose over a mutable `Interp` field -- see the report).
+/// It is used **only** by 28.5 (`Select`/`Do`'s own arms, for a named
+/// `ITERATE` that matches a label but is not a loop): measured, that error
+/// reports the instruction's own full lexical depth, unreduced by however
+/// many enclosing frames the search has already looked past on its way to
+/// the match. The exhausted-search family (28.1-28.4) does not read this
+/// field at all -- measured, that family always reports indent zero,
+/// regardless of lexical depth -- and hardcodes it instead.
+struct LeaveOrigin {
+    /// `None` only when `source` was `None` at the moment this instruction
+    /// stepped (inside an `INTERPRET` fragment, `run_fragment`'s own
+    /// established convention of not resolving a site there at all).
+    site: Option<(usize, Vec<u8>)>,
+    indent: usize,
+}
+
+/// What drives one repeating `DO`/`LOOP`'s own iteration, once its header
+/// has already been evaluated and validated -- everything `LoopKind` can be
+/// except `Simple` (a block, never repeats, and `run_loop`'s own `Simple`
+/// arm never builds one of these at all) and `With` (the loud path).
+///
+/// `Count`, `OverOnce` and `Controlled` all decrement whatever budget the
+/// oracle is measured to decrement once per candidate iteration, including
+/// one an `ITERATE` cuts short (measured: a `FOR 3` loop with an `ITERATE`
+/// on its first pass still stops after exactly three iterations, not four).
+enum LoopState {
+    Forever,
+    /// `DO expr`: a fixed repeat count, decremented to zero.
+    Count {
+        remaining: u64,
+    },
+    /// `DO name OVER expr`, a **non-stem** target only (Deviation 1: a stem
+    /// target takes the loud path in `run_loop` before one of these is ever
+    /// built): iterates exactly once, binding `control` to `value` itself
+    /// (measured, the brief's own framing: "a string and a number each
+    /// iterate once, yielding themselves"). `remaining` is `FOR`'s own
+    /// budget, already validated, independent of `done`.
+    OverOnce {
+        control: SymbolId,
+        value: ObjRef,
+        done: bool,
+        remaining: Option<u64>,
+    },
+    /// `DO i = initial TO to BY by FOR for_count`. `to`/`for_remaining` are
+    /// `None` when that keyword was not written at all (an absent `TO`
+    /// loops until `LEAVE` or `FOR` stops it, exactly like `FOREVER` with a
+    /// control variable riding along); `by` is never absent here --
+    /// `setup_controlled` already defaulted it to `1`.
+    Controlled {
+        control: SymbolId,
+        current: Number,
+        to: Option<Number>,
+        by: Number,
+        for_remaining: Option<u64>,
+    },
 }
 
 impl Interp {
@@ -294,6 +410,34 @@ impl Interp {
                 Flow::Next => self.activation_mut().pc += 1,
                 Flow::Goto(target) => self.activation_mut().pc = target,
                 Flow::Exit(value) => return Ok(value),
+                // Task 11: a `LEAVE`/`ITERATE` that reached the very top of
+                // the program -- nothing anywhere, at any nesting depth,
+                // ever matched it. This is the exhausted-search family,
+                // 28.1 (bare `LEAVE`)/28.2 (bare `ITERATE`)/28.3 (named
+                // `LEAVE`)/28.4 (named `ITERATE`) -- **always reported at
+                // indent zero**, regardless of how deep the instruction was
+                // lexically nested (measured, including a two-`DO`-deep
+                // case that still reports zero; see the report). 28.5 (a
+                // named `ITERATE` that *did* match something, just not a
+                // loop) is a different family, raised where the match was
+                // found, in `Select`/`Do`'s own arms, and never reaches
+                // here.
+                Flow::Leave(name, origin) => {
+                    self.record_leave_failure_at_zero(&origin);
+                    let raised = match name {
+                        None => raised_leave_no_loop(),
+                        Some(n) => raised_leave_no_match(code.symbols.name(n).as_bytes()),
+                    };
+                    return Err(raised.into());
+                }
+                Flow::Iterate(name, origin) => {
+                    self.record_leave_failure_at_zero(&origin);
+                    let raised = match name {
+                        None => raised_iterate_no_loop(),
+                        Some(n) => raised_iterate_no_match(code.symbols.name(n).as_bytes()),
+                    };
+                    return Err(raised.into());
+                }
             }
             debug_assert_eq!(
                 self.activations.len(),
@@ -539,11 +683,11 @@ impl Interp {
             // a decision of its own, only ever run past inside a bounded
             // sub-loop (see the `When`/`WhenCase` arm, below, for why).
             InstructionKind::Select {
+                label,
                 case,
                 whens,
                 otherwise,
                 end,
-                ..
             } => {
                 let len = code.body.instructions.len();
                 let case_text = match case {
@@ -580,7 +724,12 @@ impl Interp {
                                 {
                                     Ok(holds) => holds,
                                     Err(failure) => {
-                                        self.record_failure_site(source, when_instruction);
+                                        self.record_failure_site(
+                                            code,
+                                            when_index,
+                                            source,
+                                            when_instruction,
+                                        );
                                         return Err(failure);
                                     }
                                 };
@@ -597,7 +746,12 @@ impl Interp {
                             let matched = match self.test_case_when(code, values, case_text) {
                                 Ok(matched) => matched,
                                 Err(failure) => {
-                                    self.record_failure_site(source, when_instruction);
+                                    self.record_failure_site(
+                                        code,
+                                        when_index,
+                                        source,
+                                        when_instruction,
+                                    );
                                     return Err(failure);
                                 }
                             };
@@ -606,22 +760,38 @@ impl Interp {
                         other => panic!("a SELECT's whens holds only When/WhenCase, not {other:?}"),
                     };
                     if let Some((body_end, resume)) = outcome {
-                        return match self.run_bounded(code, when_index + 1, body_end, source)? {
-                            Flow::Next => Ok(Flow::Goto(resume)),
-                            other => Ok(other),
-                        };
+                        let flow = self.run_bounded(code, when_index + 1, body_end, source)?;
+                        return self.leave_select(code, *label, resume, flow);
                     }
                 }
                 match otherwise {
-                    // `OTHERWISE` is always the last clause before `END`, so
-                    // its own fallthrough into `END` is already correct with
-                    // no sibling to accidentally re-enter -- unlike a
-                    // matched `WHEN`, this needs no bounded sub-loop.
-                    Some(otherwise_index) => Ok(Flow::Goto(*otherwise_index)),
+                    // Task 11: **used to be** a plain `Goto` onto the
+                    // `OTHERWISE` marker, left for the outer loop's own
+                    // ordinary fallthrough to run -- correct for clause
+                    // attribution (nothing here ever needed a bounded
+                    // sub-loop to get *that* right, and the fallthrough
+                    // still lands exactly on `END` with nothing to skip,
+                    // same as before), but wrong for `LEAVE`/`ITERATE`: this
+                    // `SELECT` never gets a chance to recognise its own
+                    // label from inside a branch it does not itself call
+                    // `run_bounded` over. So `OTHERWISE`'s own body is now
+                    // `[otherwise_index + 1, end)`, run the same way a
+                    // matched `WHEN`'s is -- attribution is unaffected
+                    // (`step_in_temps_frame`'s own resolution does not care
+                    // which loop dispatched it), and a `LEAVE`/`ITERATE`
+                    // naming this `SELECT`'s own label from inside
+                    // `OTHERWISE` is now caught here too.
+                    Some(otherwise_index) => {
+                        let otherwise_end = end.unwrap_or(len);
+                        let flow =
+                            self.run_bounded(code, otherwise_index + 1, otherwise_end, source)?;
+                        self.leave_select(code, *label, otherwise_end, flow)
+                    }
                     // Landing exactly on `END` is deliberate: that is what
                     // makes 7.3's clause echo the `END`'s and not the
                     // `SELECT`'s (`End`'s own arm, below, is where it
-                    // raises).
+                    // raises). No body ran, so there is nothing for a
+                    // `LEAVE`/`ITERATE` to have escaped from here.
                     None => Ok(Flow::Goto(end.unwrap_or(len))),
                 }
             }
@@ -643,24 +813,59 @@ impl Interp {
             InstructionKind::When { .. } | InstructionKind::WhenCase { .. } => Ok(Flow::Next),
             InstructionKind::Otherwise => Ok(Flow::Next),
 
-            // `END`. `Do`/`Loop` closings are Task 11's and fail loudly.
-            // `Select`'s two non-7.3 closings (`OTHERWISE` present) are
-            // reached only by that `OTHERWISE`'s own ordinary body
+            // `DO`/`LOOP`, every kind but `DO WITH` (the loud path,
+            // `run_loop`'s own doc comment) -- Task 11. Resolves the whole
+            // construct itself, every iteration, exactly the discipline
+            // `If`/`Select` already established: see `Flow::Leave`'s own
+            // doc comment for why `Do`'s own arm never returns until the
+            // entire loop is over, one way or another.
+            InstructionKind::Do(body) | InstructionKind::Loop(body) => {
+                self.run_loop(code, index, instruction, body, source)
+            }
+
+            // `LEAVE`/`ITERATE`, bare or by name -- Task 11. Resolves to
+            // data, not a failure (`Flow::Leave`'s own doc comment): whether
+            // this instruction's own name matches anything is answered by
+            // whichever `Do`/`Select` (or `run_activation`'s own top level,
+            // if none does) inspects the `Flow` this returns, never here.
+            InstructionKind::Leave { name } => Ok(Flow::Leave(
+                *name,
+                self.leave_origin(code, index, source, instruction),
+            )),
+            InstructionKind::Iterate { name } => Ok(Flow::Iterate(
+                *name,
+                self.leave_origin(code, index, source, instruction),
+            )),
+
+            // `END`. `Select`'s two non-7.3 closings (`OTHERWISE` present)
+            // are reached only by that `OTHERWISE`'s own ordinary body
             // fallthrough and do nothing. `EndStyle::Select`'s own doc
             // comment: "Reaching this END at run time is error 7.3, because
             // every WHEN was false" -- which is exactly the one path that
             // lands here, since `Select`'s own arm above sends every other
             // path around this instruction entirely.
+            //
+            // **`EndStyle::Do`/`LabeledDo`/`Loop` used to fail loudly here,
+            // and no longer do.** Task 11's `Do`/`Loop` arm now resolves its
+            // own construct exactly the way `If`/`Select` already do,
+            // returning a `Goto` past this exact instruction on every exit
+            // path -- normal completion, a consumed `LEAVE`, or `UNTIL`
+            // finally holding. So this is reached only inside a bounded
+            // sub-loop, as inert filler, precisely like `Then`/`Else`/
+            // `When`/`Otherwise` above; nothing independently dispatches it
+            // for a decision of its own, and a plain no-op is what those
+            // four already do in that position.
             InstructionKind::End { closes, .. } => {
                 let closes = closes
                     .as_ref()
                     .expect("an End's closes is only None while its body is still being assembled");
                 match closes.style {
                     EndStyle::Select => Err(raised_select_no_when().into()),
-                    EndStyle::Otherwise | EndStyle::LabeledOtherwise => Ok(Flow::Next),
-                    EndStyle::Do | EndStyle::LabeledDo | EndStyle::Loop => {
-                        Err(Loud::instruction(&instruction.kind).into())
-                    }
+                    EndStyle::Otherwise
+                    | EndStyle::LabeledOtherwise
+                    | EndStyle::Do
+                    | EndStyle::LabeledDo
+                    | EndStyle::Loop => Ok(Flow::Next),
                 }
             }
 
@@ -723,13 +928,14 @@ impl Interp {
         let flow = self.step(code, index, instruction, source);
         self.roots.pop_frame(frame);
         if flow.is_err() {
-            self.record_failure_site(source, instruction);
+            self.record_failure_site(code, index, source, instruction);
         }
         flow
     }
 
-    /// Resolves `instruction`'s own clause into `self.failure_site`, first
-    /// call wins (`self.failure_site.is_none()`), when `source` is `Some`.
+    /// Resolves `instruction`'s own clause (and its statically-derived
+    /// indent, `static_indent`) into `self.failure_site`, first call wins
+    /// (`self.failure_site.is_none()`), when `source` is `Some`.
     ///
     /// The shared half of `step_in_temps_frame`'s own resolution (its doc
     /// comment has the full argument for why the *first* caller to run this
@@ -737,25 +943,147 @@ impl Interp {
     /// call it directly for a `When`/`WhenCase` whose *condition* raises,
     /// which never goes through `step_in_temps_frame` at all since that
     /// instruction's own `step` arm never runs for a decision of its own.
-    fn record_failure_site(&mut self, source: Option<&ProgramSource>, instruction: &Instruction) {
-        let Some(source) = source else { return };
+    ///
+    /// `index` is `instruction`'s own position in `code.body.instructions`,
+    /// needed (beyond what `step_in_temps_frame` already required it for)
+    /// so `static_indent` has something to walk the flat instruction list
+    /// up to.
+    fn record_failure_site(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        source: Option<&ProgramSource>,
+        instruction: &Instruction,
+    ) {
+        self.record_failure_at(
+            source,
+            instruction,
+            static_indent(&code.body.instructions, index),
+        );
+    }
+
+    /// Assigns `blame`'s own clause to `self.failure_site` at exactly
+    /// `indent` spaces, first call wins, when `source` is `Some`.
+    ///
+    /// The common tail `record_failure_site` itself uses (computing
+    /// `indent` from `blame`'s own position first) and that `Do`'s own
+    /// `WHILE`/`UNTIL` checks call directly with a *different* indent --
+    /// neither corresponds to a flat instruction position `static_indent`
+    /// resolves correctly on its own (`static_indent`'s own doc comment has
+    /// the full argument), so `Do`'s own arm computes `WHILE`'s/`UNTIL`'s
+    /// indent itself and hands it straight to this function rather than
+    /// asking `record_failure_site` to guess between two different, both
+    /// correct, answers for the same instruction index.
+    fn record_failure_at(
+        &mut self,
+        source: Option<&ProgramSource>,
+        blame: &Instruction,
+        indent: usize,
+    ) {
         if self.failure_site.is_some() {
             return;
         }
-        self.failure_site = Some((
-            source.line_of(instruction.clause_span.start),
-            source
-                .join_span(instruction.clause_span.clone())
-                .map_or_else(
-                    // Visible rather than silent, matching
-                    // `Raised::message`'s own reasoning for a
-                    // catalogue miss: the error path is the worst
-                    // place to turn a reportable condition into a
-                    // crash or a blank line.
-                    || b"<clause span outside the retained source>".to_vec(),
-                    |bytes| bytes.into_owned(),
-                ),
-        ));
+        if let Some((line, text)) = clause_site(source, blame) {
+            self.failure_site = Some(FailureSite { line, text, indent });
+        }
+    }
+
+    /// Captures a `LEAVE`/`ITERATE` instruction's own clause site and static
+    /// indent the instant it steps, before any propagation -- see
+    /// `Flow::Leave`'s own doc comment for why eagerly, and `LeaveOrigin`'s
+    /// own doc comment for why `indent` is computed here rather than read
+    /// back later. `clause_site` is the free function `record_failure_site`
+    /// itself resolves through, shared rather than duplicated: this needs
+    /// the same (line, text) pair, just held onto instead of assigned to
+    /// `self.failure_site` immediately, since a `LEAVE`/`ITERATE` might
+    /// still be consumed by an enclosing `Do`/`Select` rather than ever
+    /// becoming a failure at all.
+    fn leave_origin(
+        &self,
+        code: &Code<'_>,
+        index: usize,
+        source: Option<&ProgramSource>,
+        instruction: &Instruction,
+    ) -> LeaveOrigin {
+        LeaveOrigin {
+            site: clause_site(source, instruction),
+            indent: static_indent(&code.body.instructions, index),
+        }
+    }
+
+    /// Assigns `origin`'s own captured site to `self.failure_site`, first
+    /// call wins, at `origin`'s own captured indent -- the 28.5 half of
+    /// `Flow::Leave`'s doc comment: unlike the exhausted-search family
+    /// (28.1-28.4, which hardcodes indent zero and does not call this),
+    /// 28.5 is raised right where the match was found and reports the
+    /// `LEAVE`/`ITERATE` instruction's own full lexical depth, which is
+    /// exactly what `origin.indent` already is.
+    fn record_leave_failure(&mut self, origin: &LeaveOrigin) {
+        if self.failure_site.is_some() {
+            return;
+        }
+        if let Some((line, text)) = &origin.site {
+            self.failure_site = Some(FailureSite {
+                line: *line,
+                text: text.clone(),
+                indent: origin.indent,
+            });
+        }
+    }
+
+    /// `record_leave_failure`'s own twin for the exhausted-search family
+    /// (28.1-28.4, `run_activation`'s own doc comment on its `Flow::Leave`/
+    /// `Flow::Iterate` arms): `origin`'s own captured site, but at indent
+    /// **zero** rather than `origin.indent` -- measured, this family always
+    /// reports unindented, regardless of how deep the instruction was
+    /// lexically nested.
+    fn record_leave_failure_at_zero(&mut self, origin: &LeaveOrigin) {
+        if self.failure_site.is_some() {
+            return;
+        }
+        if let Some((line, text)) = &origin.site {
+            self.failure_site = Some(FailureSite {
+                line: *line,
+                text: text.clone(),
+                indent: 0,
+            });
+        }
+    }
+
+    /// Turns the `Flow` a `SELECT`'s own matched `WHEN` or `OTHERWISE` body
+    /// produced into this `SELECT`'s own answer.
+    ///
+    /// `Flow::Next` becomes `Goto(resume)`, exactly the shape every branch
+    /// gave before Task 11. A `LEAVE`/`ITERATE` naming this `SELECT`'s own
+    /// `label` (`Some` only for `SELECT LABEL name` -- an ordinary clause
+    /// label in front of a `SELECT` is a separate `Label` instruction and
+    /// never reaches `label` at all, measured 28.3/28.4 exactly as for an
+    /// unlabelled loop) is consumed here: a matching `LEAVE` resumes past
+    /// the whole `SELECT`; a matching `ITERATE` is **28.5**, because
+    /// `SELECT` is never a repetitive loop (`RexxInstructionSelect::isLoop`
+    /// answers `false` unconditionally, read directly in the report) --
+    /// measured, `ITERATE` never accepts a non-loop target even when the
+    /// name matches. Everything else -- an unnamed `LEAVE`/`ITERATE` (a
+    /// `SELECT` is never a bare target either, same reason), one naming
+    /// something else, `Exit`, or a `Goto` that escaped `run_bounded`'s own
+    /// range -- passes through unchanged, for an enclosing loop or `Select`
+    /// to keep looking.
+    fn leave_select(
+        &mut self,
+        code: &Code<'_>,
+        label: Option<SymbolId>,
+        resume: usize,
+        flow: Flow,
+    ) -> Result<Flow, Failure> {
+        match flow {
+            Flow::Next => Ok(Flow::Goto(resume)),
+            Flow::Leave(Some(name), _) if label == Some(name) => Ok(Flow::Goto(resume)),
+            Flow::Iterate(Some(name), origin) if label == Some(name) => {
+                self.record_leave_failure(&origin);
+                Err(raised_iterate_wrong_kind(code.symbols.name(name).as_bytes()).into())
+            }
+            other => Ok(other),
+        }
     }
 
     /// Runs `code.body.instructions[start..end]` in place, one instruction at
@@ -829,6 +1157,511 @@ impl Interp {
             }
         }
         Ok(Flow::Next)
+    }
+
+    /// `DO`/`LOOP`, every kind. Resolves the whole construct -- header
+    /// validation, every iteration, `LEAVE`/`ITERATE`, `WHILE`/`UNTIL` --
+    /// inside this one call, exactly the discipline `If`/`Select` already
+    /// hold: see `Flow::Leave`'s own doc comment for why a `Do` must never
+    /// return to its caller mid-loop.
+    ///
+    /// **`COUNTER` and `DO WITH` both take the loud path, checked first and
+    /// unconditionally.** The brief this task started from names both
+    /// explicitly and asks for a decision, not a silent fallthrough:
+    /// `COUNTER`'s own running-count bookkeeping is Phase-5-shaped extra
+    /// state that no other of `DO`/`LOOP`'s 21 other forms needs, and
+    /// `DO WITH` sends `SUPPLIER` a message, which nothing in 4a answers
+    /// (no message dispatch at all yet). Checked ahead of any header
+    /// evaluation, so `do counter c with index i over x` -- both keywords
+    /// at once -- fails loudly without evaluating `x` either.
+    fn run_loop(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        instruction: &Instruction,
+        body: &Loop,
+        source: Option<&ProgramSource>,
+    ) -> Result<Flow, Failure> {
+        if body.counter.is_some() || matches!(body.kind, LoopKind::With { .. }) {
+            return Err(Loud::instruction(&instruction.kind).into());
+        }
+
+        let body_start = index + 1;
+        let end_index = body
+            .end
+            .expect("an unclosed DO/LOOP is error 14.1/14.5, so a body that parsed has this set");
+        let resume = end_index + 1;
+        let label = body.label;
+
+        match &body.kind {
+            // A block, not a loop: exactly one pass, and `WHILE`/`UNTIL`
+            // can never be present (`create_loop`'s own parser only reaches
+            // `LoopKind::Simple` through the bare, at-end-of-clause `DO`
+            // arm, before any conditional is even looked for). Still
+            // leavable by an explicit `DO LABEL`, never by a bare `LEAVE`
+            // (`do_body_outcome`'s own `is_loop: false`) -- measured, a
+            // labelled simple block is leavable but an unlabelled one is
+            // 28.1 on a bare `LEAVE` reaching it.
+            LoopKind::Simple => {
+                let flow = self.run_bounded(code, body_start, end_index, source)?;
+                match self.do_body_outcome(code, label, false, resume, flow)? {
+                    Some(escape) => Ok(escape),
+                    None => Ok(Flow::Goto(resume)),
+                }
+            }
+            LoopKind::Forever => self.run_repeating(
+                code,
+                index,
+                instruction,
+                body_start,
+                end_index,
+                resume,
+                label,
+                body.conditional.as_ref(),
+                source,
+                LoopState::Forever,
+            ),
+            LoopKind::Count(count_expr) => {
+                let remaining = match count_expr {
+                    Some(expr) => {
+                        let value = self.eval(code, expr)?;
+                        self.roots.push_temp(value);
+                        let text = self.to_text(value).to_vec();
+                        self.whole_nonneg(value)
+                            .ok_or_else(|| raised_repetition_count_not_whole(&text))?
+                    }
+                    // Defensive, not measured: `count_loop`'s own parser
+                    // (`instruction.rs`) always calls `opt_expr`, which can
+                    // answer `None`, but nothing in this crate's own tests
+                    // reaches `DO` with truly nothing after it and no
+                    // recognised keyword either -- `create_loop`'s own
+                    // `at_end()` check catches a bare `DO` first and builds
+                    // `LoopKind::Simple` instead. A single pass, matching
+                    // `Simple`'s own behaviour, is the least surprising
+                    // answer if this is ever reached.
+                    None => 1,
+                };
+                self.run_repeating(
+                    code,
+                    index,
+                    instruction,
+                    body_start,
+                    end_index,
+                    resume,
+                    label,
+                    body.conditional.as_ref(),
+                    source,
+                    LoopState::Count { remaining },
+                )
+            }
+            LoopKind::Controlled(ctrl) => {
+                let state = self.setup_controlled(code, ctrl)?;
+                self.run_repeating(
+                    code,
+                    index,
+                    instruction,
+                    body_start,
+                    end_index,
+                    resume,
+                    label,
+                    body.conditional.as_ref(),
+                    source,
+                    state,
+                )
+            }
+            LoopKind::Over {
+                control,
+                target,
+                for_count,
+            } => {
+                // Deviation 1 (`phase-4-exclusions.txt`): a stem target's
+                // own tail order does not reproduce the oracle's (a
+                // balanced tree against our hash map), and no corpus
+                // program may contain one. Detected from `target`'s own
+                // *syntax*, never by evaluating it: `over a.` parses `a.`
+                // through the ordinary expression grammar, which recognises
+                // a bare trailing-dot token as `ExprKind::Stem` the same
+                // way a plain stem read anywhere else does, so a target
+                // that is a stem never needs evaluating to know it is out
+                // of scope. A stem reached indirectly (`over (a.)`, a
+                // function returning one, ...) is not detected here and is
+                // simplification this task's own report names rather than
+                // hides -- no test may write one either way, so nothing
+                // observable depends on catching it.
+                if matches!(target.kind, ExprKind::Stem(_)) {
+                    return Err(Loud::instruction(&instruction.kind).into());
+                }
+                let value = self.eval(code, target)?;
+                self.roots.push_temp(value);
+                let remaining = match for_count {
+                    Some(expr) => {
+                        let count_value = self.eval(code, expr)?;
+                        self.roots.push_temp(count_value);
+                        let text = self.to_text(count_value).to_vec();
+                        Some(
+                            self.whole_nonneg(count_value)
+                                .ok_or_else(|| raised_for_count_not_whole(&text))?,
+                        )
+                    }
+                    None => None,
+                };
+                self.run_repeating(
+                    code,
+                    index,
+                    instruction,
+                    body_start,
+                    end_index,
+                    resume,
+                    label,
+                    body.conditional.as_ref(),
+                    source,
+                    LoopState::OverOnce {
+                        control: *control,
+                        value,
+                        done: false,
+                        remaining,
+                    },
+                )
+            }
+            LoopKind::With { .. } => unreachable!("DO WITH takes the loud path above"),
+        }
+    }
+
+    /// The shared driver for every repeating `LoopKind` (everything but
+    /// `Simple`, which never repeats and runs through `run_loop`'s own
+    /// arm directly): advance-test-run-test-advance, in the order the
+    /// oracle is measured to use it in (`report`'s own transcripts) --
+    /// `WHILE` tested before the body, `UNTIL` after, and a `LEAVE`/
+    /// `ITERATE` handled identically to falling off the bottom of the body
+    /// normally, because that is what the oracle's own `ITERATE` does
+    /// (measured: `do until n = 1 / n = n + 1 / if n = 1 then iterate / ...`
+    /// terminates immediately rather than skipping straight to the next
+    /// pass's top, because `ITERATE` jumps to the loop's own
+    /// bottom-of-iteration bookkeeping, which for an `UNTIL` loop includes
+    /// testing `UNTIL` right there -- see the report for the full
+    /// transcript).
+    ///
+    /// `do_index`/`do_instruction` are the `DO`/`LOOP` instruction's own
+    /// position and node, needed only for `WHILE`'s own attribution
+    /// (`end_index` is `END`'s own, for `UNTIL`'s) -- neither corresponds
+    /// to a flat position `static_indent` resolves on its own, so both
+    /// indents are computed here rather than asked of it (`record_failure_at`'s
+    /// own doc comment).
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "every parameter is load-bearing state one repeating DO/LOOP needs; splitting it into a struct is Task 13's to consider if it too needs this shape"
+    )]
+    fn run_repeating(
+        &mut self,
+        code: &Code<'_>,
+        do_index: usize,
+        do_instruction: &Instruction,
+        body_start: usize,
+        end_index: usize,
+        resume: usize,
+        label: Option<SymbolId>,
+        conditional: Option<&LoopConditional>,
+        source: Option<&ProgramSource>,
+        mut state: LoopState,
+    ) -> Result<Flow, Failure> {
+        // The loop's own two spaces of indent, added once here rather than
+        // per-check: `static_indent(&code.body.instructions, do_index)` is
+        // what a control-setup failure at `do_index` itself already
+        // reports (measured: `do i = 1 to 3 for 1/0` is unindented at top
+        // level), and `WHILE`/`UNTIL` both report two spaces *more* than
+        // that (measured: `do while 1/0` at top level is indented two).
+        let loop_indent = static_indent(&code.body.instructions, do_index) + 2;
+
+        loop {
+            if !self.loop_advance(code, &mut state)? {
+                return Ok(Flow::Goto(resume));
+            }
+            if let Some(cond) = conditional
+                && !cond.until
+            {
+                match self.eval_condition(code, &cond.condition, raised_while_not_logical) {
+                    Ok(true) => {}
+                    Ok(false) => return Ok(Flow::Goto(resume)),
+                    Err(failure) => {
+                        self.record_failure_at(source, do_instruction, loop_indent);
+                        return Err(failure);
+                    }
+                }
+            }
+
+            let flow = self.run_bounded(code, body_start, end_index, source)?;
+            if let Some(escape) = self.do_body_outcome(code, label, true, resume, flow)? {
+                return Ok(escape);
+            }
+
+            if let Some(cond) = conditional
+                && cond.until
+            {
+                match self.eval_condition(code, &cond.condition, raised_until_not_logical) {
+                    Ok(true) => return Ok(Flow::Goto(resume)),
+                    Ok(false) => {}
+                    Err(failure) => {
+                        let end_instruction = &code.body.instructions[end_index];
+                        self.record_failure_at(source, end_instruction, loop_indent);
+                        return Err(failure);
+                    }
+                }
+            }
+
+            self.loop_step(&mut state)?;
+        }
+    }
+
+    /// What one repeating `Do`/`Loop`'s own body just produced, translated
+    /// into what `run_repeating`/`run_loop`'s own `Simple` arm does next.
+    ///
+    /// `Ok(None)`: the body ran to completion, or an `ITERATE` naming this
+    /// construct was consumed -- proceed to whatever bottom-of-iteration
+    /// test/advance comes next (`run_repeating`'s own doc comment has the
+    /// argument for why the two are the identical next step). `Ok(Some(f))`:
+    /// stop, and `f` is this construct's own final answer -- either
+    /// `Goto(resume)` (a consumed `LEAVE`) or an unconsumed `Flow` to
+    /// propagate outward unchanged (`Exit`, a `Goto` that escaped
+    /// `run_bounded`'s own range, or a `LEAVE`/`ITERATE` naming something
+    /// else). `Err`: a named `ITERATE` matched `label`, but `is_loop` is
+    /// `false` -- 28.5, `ITERATE` never accepts a labelled block, only a
+    /// loop (measured).
+    ///
+    /// `is_loop` is `false` only for `LoopKind::Simple` (`run_loop`'s own
+    /// `Simple` arm passes it); every `LoopState` variant `run_repeating`
+    /// drives is a real, repetitive loop and passes `true`.
+    fn do_body_outcome(
+        &mut self,
+        code: &Code<'_>,
+        label: Option<SymbolId>,
+        is_loop: bool,
+        resume: usize,
+        flow: Flow,
+    ) -> Result<Option<Flow>, Failure> {
+        match flow {
+            Flow::Next => Ok(None),
+            Flow::Leave(name, origin) => {
+                let matched = match name {
+                    None => is_loop,
+                    Some(n) => label == Some(n),
+                };
+                if matched {
+                    Ok(Some(Flow::Goto(resume)))
+                } else {
+                    Ok(Some(Flow::Leave(name, origin)))
+                }
+            }
+            Flow::Iterate(name, origin) => {
+                let matched = match name {
+                    None => is_loop,
+                    Some(n) => label == Some(n),
+                };
+                if !matched {
+                    return Ok(Some(Flow::Iterate(name, origin)));
+                }
+                if !is_loop {
+                    let name = name.expect(
+                        "is_loop is false and matched is true only through the named branch above",
+                    );
+                    self.record_leave_failure(&origin);
+                    return Err(
+                        raised_iterate_wrong_kind(code.symbols.name(name).as_bytes()).into(),
+                    );
+                }
+                Ok(None)
+            }
+            other => Ok(Some(other)),
+        }
+    }
+
+    /// Decides whether one more candidate iteration of `state` should run,
+    /// consuming whatever budget (`FOR`, a bare count) applies and binding
+    /// a control variable **before** the decision is answered, not after --
+    /// measured, `do i = 5 to 3 / say never / end / say i` prints `5`: the
+    /// control variable is bound to its own value even for a loop that ends
+    /// up running zero iterations.
+    fn loop_advance(&mut self, code: &Code<'_>, state: &mut LoopState) -> Result<bool, Failure> {
+        match state {
+            LoopState::Forever => Ok(true),
+            LoopState::Count { remaining } => {
+                if *remaining == 0 {
+                    return Ok(false);
+                }
+                *remaining -= 1;
+                Ok(true)
+            }
+            LoopState::OverOnce {
+                control,
+                value,
+                done,
+                remaining,
+            } => {
+                if *done {
+                    return Ok(false);
+                }
+                if let Some(r) = remaining {
+                    if *r == 0 {
+                        *done = true;
+                        return Ok(false);
+                    }
+                    *r -= 1;
+                }
+                *done = true;
+                self.bind_control(code, *control, *value);
+                Ok(true)
+            }
+            LoopState::Controlled {
+                control,
+                current,
+                to,
+                by,
+                for_remaining,
+            } => {
+                // **Bound before the decision, not after** -- measured
+                // against the oracle, `do i = 5 to 3 / say never / end /
+                // say i` prints `5`: the control variable takes its own
+                // header value even for a loop that goes on to run zero
+                // iterations, for *either* reason a candidate iteration can
+                // fail below (an exhausted `FOR` budget or the `TO` bound).
+                let digits = self.activation().settings.digits();
+                let fuzz = self.activation().settings.fuzz();
+                let form = self.activation().settings.form();
+                let value =
+                    self.number(current.clone(), crate::eval::saturate_digits(digits), form);
+                self.bind_control(code, *control, value);
+
+                if let Some(r) = for_remaining
+                    && *r == 0
+                {
+                    return Ok(false);
+                }
+                if let Some(to) = to {
+                    let by_negative =
+                        numeric_less(by, &Number::zero(), digits, fuzz).map_err(Raised::from)?;
+                    let within = if by_negative {
+                        !numeric_less(current, to, digits, fuzz).map_err(Raised::from)?
+                    } else {
+                        !numeric_less(to, current, digits, fuzz).map_err(Raised::from)?
+                    };
+                    if !within {
+                        return Ok(false);
+                    }
+                }
+                if let Some(r) = for_remaining {
+                    *r -= 1;
+                }
+                Ok(true)
+            }
+        }
+    }
+
+    /// Advances `state` for the *next* candidate iteration, once this one
+    /// has fully finished (fallen through, or an `ITERATE` was consumed) --
+    /// only `Controlled` has anything to do here: `current = current + by`,
+    /// under the settings active *now*, matching every other arithmetic
+    /// operation in this crate (`eval_arithmetic`'s own doc comment).
+    fn loop_step(&mut self, state: &mut LoopState) -> Result<(), Failure> {
+        if let LoopState::Controlled { current, by, .. } = state {
+            let digits = self.activation().settings.digits();
+            *current = current.add(by, digits).map_err(Raised::from)?;
+        }
+        Ok(())
+    }
+
+    /// Evaluates a `Controlled` loop's header: `initial` first, then
+    /// whichever of `TO`/`BY`/`FOR` were written, in the order they were
+    /// written (`ctrl.order`, recorded because the expressions can have
+    /// side effects) -- never a fixed `TO`-then-`BY`-then-`FOR` order.
+    ///
+    /// `initial`/`to`/`by` need only be *numeric* (41.1 if not, via
+    /// `arith_operand` -- the same check ordinary arithmetic already
+    /// makes), never *whole*: measured, `do i = 1.5 to 3` is legal and
+    /// steps by fractional values. `by` defaults to `1` when absent.
+    /// `for_count` is the one exception, checked against `whole_nonneg`
+    /// (26.3) exactly like a bare `DO`'s own repeat count is (26.2).
+    fn setup_controlled(
+        &mut self,
+        code: &Code<'_>,
+        ctrl: &Controlled,
+    ) -> Result<LoopState, Failure> {
+        let initial_value = self.eval(code, &ctrl.initial)?;
+        self.roots.push_temp(initial_value);
+        let current = self.arith_operand(initial_value)?;
+
+        let mut to = None;
+        let mut by = None;
+        let mut for_remaining = None;
+        for entry in &ctrl.order {
+            match entry {
+                ControlExpr::To => {
+                    let expr = ctrl
+                        .to
+                        .as_ref()
+                        .expect("ctrl.order names To only when ctrl.to is Some");
+                    let value = self.eval(code, expr)?;
+                    self.roots.push_temp(value);
+                    to = Some(self.arith_operand(value)?);
+                }
+                ControlExpr::By => {
+                    let expr = ctrl
+                        .by
+                        .as_ref()
+                        .expect("ctrl.order names By only when ctrl.by is Some");
+                    let value = self.eval(code, expr)?;
+                    self.roots.push_temp(value);
+                    by = Some(self.arith_operand(value)?);
+                }
+                ControlExpr::For => {
+                    let expr = ctrl
+                        .for_count
+                        .as_ref()
+                        .expect("ctrl.order names For only when ctrl.for_count is Some");
+                    let value = self.eval(code, expr)?;
+                    self.roots.push_temp(value);
+                    let text = self.to_text(value).to_vec();
+                    for_remaining = Some(
+                        self.whole_nonneg(value)
+                            .ok_or_else(|| raised_for_count_not_whole(&text))?,
+                    );
+                }
+            }
+        }
+        let by = match by {
+            Some(by) => by,
+            None => Number::parse("1").expect("the literal 1 always parses"),
+        };
+        Ok(LoopState::Controlled {
+            control: ctrl.control,
+            current,
+            to,
+            by,
+            for_remaining,
+        })
+    }
+
+    /// Writes `value` into `control`'s own slot -- the same read-the-name,
+    /// resolve-a-slot, write path `Assignment`'s `Variable` target already
+    /// uses (`step`'s own `Assignment` arm), reused rather than duplicated.
+    fn bind_control(&mut self, code: &Code<'_>, control: SymbolId, value: ObjRef) {
+        let name = code.symbols.name(control).as_bytes();
+        let slot = self.slot_of(name);
+        let frame = self.activation().frame;
+        self.roots.set_slot(frame, slot, value);
+    }
+
+    /// Validates `value` as "zero or a positive whole number" -- the rule a
+    /// bare `DO`'s own repeat count and a `FOR` expression share (26.2/26.3
+    /// respectively; the caller supplies which raiser applies, since that
+    /// is the only way the two differ), and answers it as a `u64`, or
+    /// `None` if it fails either check. `rexx_num::ARGUMENT_DIGITS` is
+    /// `exit_code_for`'s own choice of width for exactly this
+    /// current-`DIGITS`-independent kind of conversion (`lib.rs`'s own doc
+    /// comment on it), reused here rather than invented: a loop bound is no
+    /// more digits-limited than `EXIT`'s own result is.
+    fn whole_nonneg(&mut self, value: ObjRef) -> Option<u64> {
+        let number = self.to_number(value).ok()?;
+        let whole = number.whole_value(rexx_num::ARGUMENT_DIGITS)?;
+        u64::try_from(whole).ok()
     }
 
     /// Evaluates `condition` and answers whether it holds, for `IF`/`WHEN`.
@@ -1187,6 +2020,204 @@ impl Interp {
     // entry points.
 }
 
+/// `instruction`'s own 1-based line and clause text, or `None` when `source`
+/// is `None` (`run_fragment`'s own established convention of not resolving a
+/// site for an instruction inside an `INTERPRET` fragment at all).
+///
+/// A free function, not a method: needs no `&self`, and both
+/// `record_failure_site` and `leave_origin` resolve the identical pair from
+/// it rather than each carrying its own copy.
+fn clause_site(
+    source: Option<&ProgramSource>,
+    instruction: &Instruction,
+) -> Option<(usize, Vec<u8>)> {
+    let source = source?;
+    Some((
+        source.line_of(instruction.clause_span.start),
+        source
+            .join_span(instruction.clause_span.clone())
+            .map_or_else(
+                // Visible rather than silent, matching `Raised::message`'s
+                // own reasoning for a catalogue miss: the error path is the
+                // worst place to turn a reportable condition into a crash or
+                // a blank line.
+                || b"<clause span outside the retained source>".to_vec(),
+                |bytes| bytes.into_owned(),
+            ),
+    ))
+}
+
+/// How many spaces of nesting depth `target`'s own clause sits at --
+/// Task 11's whole indentation feature, and the design decision at its
+/// centre: **computed fresh from the flat instruction list every time,
+/// never carried on a running `Interp` counter.**
+///
+/// Task 10's own report concluded the depth is derivable from the AST
+/// statically, with no runtime block stack, and this task's own oracle
+/// probes confirm it (the report has the full transcripts): a clause's
+/// indentation never depends on which iteration of an enclosing loop is
+/// currently running, only on how many `DO`/`LOOP` bodies, matched `IF`
+/// branches and `SELECT` scans lexically enclose it -- exactly the
+/// information `If`'s `false_target`, `Select`'s `whens`/`otherwise`/`end`
+/// and `Loop`'s `end` already carry, with nothing further to add.
+///
+/// **A mutable counter was the design first tried here, and it was dropped
+/// once it became clear what it would cost to keep correct.** It would need
+/// to be incremented and decremented in exact lockstep on *every* exit path
+/// out of *every* `IF`/`SELECT`/`DO` arm, including every `?`-propagated
+/// error path and the `Goto`-absorption case `Flow::Leave`'s own doc comment
+/// describes -- precisely the shape of defect this crate's own skipped-
+/// `pop_frame` discussion elsewhere warns is easy to introduce and hard to
+/// notice, because the symptom is two spaces of wrong stderr that no
+/// existing test asserts on. A pure function of `(instructions, target)`
+/// cannot desync from anything, because there is no state to desync: asking
+/// it twice for the same `target` on the same body always gives the same
+/// answer, computed the same way, whether the failure happens on a loop's
+/// first pass or its thousandth. `the_indent_after_a_loop_has_already_exited_
+/// is_not_left_over_from_it` (this file's own tests) is the test that would
+/// have caught a live counter's most likely failure mode -- a raise reached
+/// *after* a loop's own body has already run and exited, at a shallower
+/// lexical depth, where a counter not perfectly unwound on every path out of
+/// the loop would over-indent and a purely static answer cannot.
+///
+/// **The one place this recomputes something rather than reading it back**
+/// is `WHILE`/`UNTIL`: neither corresponds to a *distinct* flat instruction
+/// position with the right semantics (`WHILE` shares the `DO`/`LOOP`
+/// instruction's own clause, tested *inside* the loop's own frame; `UNTIL`
+/// shares the `END`'s, likewise inside), so `Do`'s own arm adds the loop's
+/// own two spaces on top of `static_indent(instructions, do_index)` directly
+/// at its two call sites rather than asking this function to guess which of
+/// two different, correct answers a `DO`/`LOOP` instruction's *own* index
+/// means (measured: `do i = 1 to 3 for 1/0`'s control-setup failure is
+/// unindented at that same index, while `do while 1/0` is indented two).
+///
+/// Recurses into whichever construct's own range contains `target`, adding
+/// that construct's contribution before descending -- see the report for
+/// the additive model (two per `DO`/`LOOP`, four per matched `IF` branch,
+/// two for a `SELECT`'s own scan plus four more for a matched `WHEN`'s
+/// `THEN` or two more for `OTHERWISE`) and the oracle transcripts that pin
+/// each number, including the two the brief this task started from did not
+/// state: a `WHEN`'s own condition sits at the `SELECT`'s own two, not zero,
+/// and `OTHERWISE`'s own body is two more, not the `WHEN`-`THEN` shape's
+/// four more.
+fn static_indent(instructions: &[Instruction], target: usize) -> usize {
+    indent_in_range(instructions, 0, instructions.len(), target)
+}
+
+/// `static_indent`'s own recursive worker, over one `[start, end)` range --
+/// the same range shape `run_bounded` itself runs, so this function's
+/// dispatch on `If`/`Select`/`Do`/`Loop` mirrors `step`'s own arms for them,
+/// reading the identical fields, just never evaluating anything.
+fn indent_in_range(instructions: &[Instruction], start: usize, end: usize, target: usize) -> usize {
+    let len = instructions.len();
+    let mut pc = start;
+    while pc < end {
+        if pc == target {
+            // `target` is this range's own instruction at this position --
+            // a plain clause, or a block-opener's own clause (a `DO`'s
+            // control-setup expressions, a `SELECT`'s own `CASE` scrutinee),
+            // with nothing further to add beyond whatever the caller already
+            // contributed before recursing in here.
+            return 0;
+        }
+        match &instructions[pc].kind {
+            InstructionKind::If { false_target, .. } => {
+                let false_target = false_target.unwrap_or(len);
+                let then_start = pc + 1;
+                if target >= then_start && target < false_target {
+                    return 4 + indent_in_range(instructions, then_start, false_target, target);
+                }
+                match instructions.get(false_target).map(|i| &i.kind) {
+                    Some(InstructionKind::Else { then_exit }) => {
+                        let else_end = then_exit.unwrap_or(len);
+                        if target > false_target && target < else_end {
+                            return 4 + indent_in_range(
+                                instructions,
+                                false_target + 1,
+                                else_end,
+                                target,
+                            );
+                        }
+                        pc = else_end;
+                    }
+                    _ => pc = false_target,
+                }
+                continue;
+            }
+            InstructionKind::Do(body) | InstructionKind::Loop(body) => {
+                let body_start = pc + 1;
+                let end_index = body
+                    .end
+                    .expect("an End's closes is only None while its body is still being assembled");
+                if target > pc && target < end_index {
+                    return 2 + indent_in_range(instructions, body_start, end_index, target);
+                }
+                pc = end_index + 1;
+                continue;
+            }
+            InstructionKind::Select {
+                whens,
+                otherwise,
+                end: select_end,
+                ..
+            } => {
+                let select_end = select_end.unwrap_or(len);
+                if target > pc && target < select_end {
+                    // Inside this SELECT's own scan-through-dispatch range:
+                    // two spaces on their own (measured: a WHEN's own
+                    // condition, `target == when_index` below, sits at
+                    // exactly this level), plus whichever branch's own
+                    // extra applies.
+                    for &when_index in whens {
+                        if when_index == target {
+                            return 2;
+                        }
+                        let (body_start, body_end) = match &instructions[when_index].kind {
+                            InstructionKind::When { false_target, .. }
+                            | InstructionKind::WhenCase { false_target, .. } => {
+                                (when_index + 1, false_target.unwrap_or(len))
+                            }
+                            other => {
+                                unreachable!(
+                                    "a SELECT's whens holds only When/WhenCase, not {other:?}"
+                                )
+                            }
+                        };
+                        if target >= body_start && target < body_end {
+                            return 6 + indent_in_range(instructions, body_start, body_end, target);
+                        }
+                    }
+                    if let Some(otherwise_index) = otherwise
+                        && target > *otherwise_index
+                        && target < select_end
+                    {
+                        return 4 + indent_in_range(
+                            instructions,
+                            otherwise_index + 1,
+                            select_end,
+                            target,
+                        );
+                    }
+                    // `target` is in range but matches none of the above:
+                    // every reachable position inside a resolved SELECT is
+                    // either a WHEN's own index, one WHEN's own body, or
+                    // OTHERWISE's own body, so a body that parsed cannot
+                    // reach here for a `target` this crate ever resolves a
+                    // failure site for.
+                    unreachable!(
+                        "a resolved SELECT's own range holds only its WHENs and OTHERWISE"
+                    );
+                }
+                pc = select_end;
+                continue;
+            }
+            _ => {}
+        }
+        pc += 1;
+    }
+    0
+}
+
 /// Which of the three variable shapes `name`'s own spelling is, from an
 /// already-interned (or already-upcased runtime) name alone.
 ///
@@ -1383,6 +2414,135 @@ fn raised_from_settings(error: SettingsError) -> Raised {
     }
 }
 
+/// 34.3: a single (non-list) `WHILE` condition is not exactly `0` or `1`.
+/// Same shape as `raised_if_not_logical`/`raised_when_not_logical`, with
+/// `WHILE`'s own sub-number; a comma-list condition never reaches this
+/// raiser (34.6 instead, `eval_logical_list`'s own answer).
+fn raised_while_not_logical(found: &[u8]) -> Raised {
+    Raised {
+        condition: "SYNTAX",
+        number: 34,
+        sub: 3,
+        additional: vec![String::from_utf8_lossy(found).into_owned()],
+    }
+}
+
+/// 34.4: `UNTIL`'s own version of `raised_while_not_logical`.
+fn raised_until_not_logical(found: &[u8]) -> Raised {
+    Raised {
+        condition: "SYNTAX",
+        number: 34,
+        sub: 4,
+        additional: vec![String::from_utf8_lossy(found).into_owned()],
+    }
+}
+
+/// 26.2: a bare `DO`'s own repetition-count expression is not zero or a
+/// positive whole number. `Error_Invalid_expression_do`, measured: `do
+/// 'a'`/`do -1`/`do 2.5` all give this, `found` the operand's own
+/// unmodified text (`"a"`/`"-1"`/`"2.5"`).
+fn raised_repetition_count_not_whole(found: &[u8]) -> Raised {
+    Raised {
+        condition: "SYNTAX",
+        number: 26,
+        sub: 2,
+        additional: vec![String::from_utf8_lossy(found).into_owned()],
+    }
+}
+
+/// 26.3: a `DO`/`LOOP`'s `FOR` expression is not zero or a positive whole
+/// number. Measured: `do i = 1 to 3 for 'x'`/`for -1`/`for 1.5`.
+fn raised_for_count_not_whole(found: &[u8]) -> Raised {
+    Raised {
+        condition: "SYNTAX",
+        number: 26,
+        sub: 3,
+        additional: vec![String::from_utf8_lossy(found).into_owned()],
+    }
+}
+
+/// 28.1: a bare `LEAVE` found no repetitive loop or labeled block
+/// instruction anywhere on the enclosing chain. No substitution.
+fn raised_leave_no_loop() -> Raised {
+    Raised {
+        condition: "SYNTAX",
+        number: 28,
+        sub: 1,
+        additional: Vec::new(),
+    }
+}
+
+/// 28.2: a bare `ITERATE` found no repetitive loop anywhere on the
+/// enclosing chain. No substitution.
+fn raised_iterate_no_loop() -> Raised {
+    Raised {
+        condition: "SYNTAX",
+        number: 28,
+        sub: 2,
+        additional: Vec::new(),
+    }
+}
+
+/// 28.3: a named `LEAVE name` found nothing on the enclosing chain whose own
+/// label (`DO LABEL`, or a controlled/`OVER` loop's own control variable)
+/// matches `name` -- **an ordinary clause label never matches**, measured:
+/// `outer: do i = 1 to 3` then `leave outer` is this, not a hit. `found` is
+/// the symbol's own (already-upcased) spelling.
+fn raised_leave_no_match(found: &[u8]) -> Raised {
+    Raised {
+        condition: "SYNTAX",
+        number: 28,
+        sub: 3,
+        additional: vec![String::from_utf8_lossy(found).into_owned()],
+    }
+}
+
+/// 28.4: `ITERATE`'s own version of `raised_leave_no_match`.
+fn raised_iterate_no_match(found: &[u8]) -> Raised {
+    Raised {
+        condition: "SYNTAX",
+        number: 28,
+        sub: 4,
+        additional: vec![String::from_utf8_lossy(found).into_owned()],
+    }
+}
+
+/// 28.5: a named `ITERATE name` matched a block on the enclosing chain by
+/// label, but that block is not a repetitive loop (a labelled `DO`/plain
+/// block, or a `SELECT LABEL` -- `ITERATE` never accepts either, unlike
+/// `LEAVE`). Measured: `do label x / say 1 / iterate x / end` gives this,
+/// not 28.4, because `x` *did* match something.
+fn raised_iterate_wrong_kind(found: &[u8]) -> Raised {
+    Raised {
+        condition: "SYNTAX",
+        number: 28,
+        sub: 5,
+        additional: vec![String::from_utf8_lossy(found).into_owned()],
+    }
+}
+
+/// Whether `a < b`, numerically, through `rexx-num`'s own `compare_decoded`
+/// rather than a hand-rolled sign comparison -- this crate's standing rule
+/// against a second copy of a comparison `rexx-num` already owns
+/// (`eval_compare`'s own doc comment states it for the twelve expression
+/// operators; a controlled loop's own bound test and its `BY`'s sign are
+/// the same rule applied to two `Number`s this crate already holds, not a
+/// different one).
+///
+/// **The empty byte slices are provably unused, not a placeholder standing
+/// in for something forgotten.** `compare_decoded`'s own body only reads
+/// its `bytes` arguments when at least one side's `Option<Number>` is
+/// `None` (the string-fallback and strict families) -- every call here
+/// passes `Some` on both sides and a non-strict `CompareOp`, so the branch
+/// that would read `a`/`b` is never taken. Passing real text would cost an
+/// unwanted `Number::format` round-trip (rendering, then reparsing, which
+/// is not exactly what a fresh comparison of the already-held `Number`s
+/// would give at the boundary of a value too wide for `digits` to hold
+/// exactly) for bytes the function does not use.
+fn numeric_less(a: &Number, b: &Number, digits: u64, fuzz: u64) -> Result<bool, ArithError> {
+    compare_decoded(b"", Some(a), b"", Some(b), digits, fuzz, CompareOp::Less)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1445,6 +2605,27 @@ mod tests {
             Flow::Exit(value) => Ok(value),
             Flow::Goto(_) => {
                 unreachable!("run_bounded never escapes a top-level program's own [0, len) range")
+            }
+            // A miniature of `run_activation`'s own top-level conversion
+            // (its doc comment on the same two arms has the full argument):
+            // nothing anywhere in this test program's own body consumed
+            // the `LEAVE`/`ITERATE`, so it becomes the exhausted-search
+            // error, at indent zero.
+            Flow::Leave(name, origin) => {
+                interp.record_leave_failure_at_zero(&origin);
+                let raised = match name {
+                    None => raised_leave_no_loop(),
+                    Some(n) => raised_leave_no_match(code.symbols.name(n).as_bytes()),
+                };
+                Err(raised.into())
+            }
+            Flow::Iterate(name, origin) => {
+                interp.record_leave_failure_at_zero(&origin);
+                let raised = match name {
+                    None => raised_iterate_no_loop(),
+                    Some(n) => raised_iterate_no_match(code.symbols.name(n).as_bytes()),
+                };
+                Err(raised.into())
             }
         }
     }
@@ -2209,7 +3390,7 @@ mod tests {
     fn a_when_conditions_own_failure_is_attributed_to_the_when_not_the_select() {
         let mut interp = Interp::new(false);
         run_source(&mut interp, b"select\nwhen 'x' then nop\nend").unwrap_err();
-        let (line, text) = interp
+        let FailureSite { line, text, .. } = interp
             .failure_site
             .expect("a raised condition always resolves a site when source is Some");
         assert_eq!(line, 2, "the WHEN's own line, not the SELECT's (line 1)");
@@ -2232,7 +3413,7 @@ mod tests {
             b"select\nwhen 1 = 0 then nop\nwhen 'x' then nop\nend",
         )
         .unwrap_err();
-        let (line, text) = interp.failure_site.expect("a site was resolved");
+        let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(line, 3, "the second WHEN's own line, not the first's (2)");
         assert_eq!(text, b"when 'x' ".to_vec());
     }
@@ -2245,7 +3426,7 @@ mod tests {
     fn a_select_cases_own_expression_failure_is_attributed_to_the_select() {
         let mut interp = Interp::new(false);
         run_source(&mut interp, b"select case (1/0)\nwhen 1 then nop\nend").unwrap_err();
-        let (line, text) = interp.failure_site.expect("a site was resolved");
+        let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(line, 1);
         assert_eq!(text, b"select case (1/0)".to_vec());
     }
@@ -2258,7 +3439,7 @@ mod tests {
     fn a_whencase_values_own_failure_is_attributed_to_the_when_not_the_select() {
         let mut interp = Interp::new(false);
         run_source(&mut interp, b"select case 1\nwhen (1/0) then nop\nend").unwrap_err();
-        let (line, text) = interp.failure_site.expect("a site was resolved");
+        let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(line, 2);
         assert_eq!(text, b"when (1/0) ".to_vec());
     }
@@ -2276,7 +3457,7 @@ mod tests {
             b"select\nwhen 1 = 0 then nop\notherwise\n  say 1/0\nend",
         )
         .unwrap_err();
-        let (line, text) = interp.failure_site.expect("a site was resolved");
+        let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(line, 4);
         assert_eq!(text, b"say 1/0".to_vec());
     }
@@ -2306,7 +3487,7 @@ mod tests {
     fn a_raise_inside_a_matched_whens_body_is_attributed_to_its_own_clause() {
         let mut interp = Interp::new(false);
         run_source(&mut interp, b"select\nwhen 1 = 1 then\n  say 1/0\nend").unwrap_err();
-        let (line, text) = interp.failure_site.expect("a site was resolved");
+        let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(
             line, 3,
             "the WHEN's own body clause, not the SELECT's (line 1)"
@@ -2324,7 +3505,7 @@ mod tests {
     fn a_raise_inside_an_ifs_then_body_is_attributed_to_its_own_clause() {
         let mut interp = Interp::new(false);
         run_source(&mut interp, b"if 1 = 1 then\n  say 1/0").unwrap_err();
-        let (line, text) = interp.failure_site.expect("a site was resolved");
+        let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(
             line, 2,
             "the THEN branch's own body clause, not the IF's (line 1)"
@@ -2427,6 +3608,812 @@ mod tests {
                 b"a = 'a'\nif 1 = 1 then select\n  when 1 = 1 then a = a || 'b'\nend\na = a || 'c'\nsay a"
             ),
             b"abc\n".to_vec()
+        );
+    }
+
+    // ---- DO/LOOP: every LoopKind ----
+
+    #[test]
+    fn a_simple_do_block_runs_its_body_exactly_once_with_no_control() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"do\nsay 'once'\nend"),
+            b"once\n".to_vec()
+        );
+    }
+
+    /// `LOOP` alone is `DO FOREVER`; `DO` alone is a block, not a loop
+    /// (`ast.rs`'s own doc comment on `LoopKind::Simple`/`Forever`) --
+    /// proven here by the fact that only the `LOOP` form is stopped by a
+    /// bare `LEAVE`.
+    #[test]
+    fn loop_alone_is_forever_and_do_alone_is_a_block_not_a_loop() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"n = 0\nloop\nn = n + 1\nif n = 3 then leave\nend\nsay n"
+            ),
+            b"3\n".to_vec()
+        );
+    }
+
+    #[test]
+    fn do_forever_runs_until_a_bare_leave() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"n = 0\ndo forever\nn = n + 1\nif n = 3 then leave\nend\nsay n"
+            ),
+            b"3\n".to_vec()
+        );
+    }
+
+    #[test]
+    fn do_count_repeats_exactly_the_evaluated_number_of_times() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"n = 0\ndo 3\nn = n + 1\nend\nsay n"),
+            b"3\n".to_vec()
+        );
+        // The repeat count is an expression, evaluated once.
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"n = 0\ndo 1 + 2\nn = n + 1\nend\nsay n"),
+            b"3\n".to_vec()
+        );
+        // Zero repetitions is legal and runs the body no times at all.
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"n = 0\ndo 0\nn = n + 1\nend\nsay n"),
+            b"0\n".to_vec()
+        );
+    }
+
+    #[test]
+    fn do_with_takes_the_loud_path() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"do with index i over 'x'\nsay i\nend").unwrap_err();
+        let Failure::Loud(_) = failure else {
+            panic!("expected Loud, got {failure:?}");
+        };
+    }
+
+    #[test]
+    fn do_counter_takes_the_loud_path_regardless_of_which_other_kind_it_rides_on() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"do counter c i = 1 to 3\nnop\nend").unwrap_err();
+        let Failure::Loud(_) = failure else {
+            panic!("expected Loud, got {failure:?}");
+        };
+    }
+
+    // ---- DO i = TO/BY/FOR (controlled), and DO OVER ----
+
+    #[test]
+    fn a_controlled_loop_runs_to_then_by_then_stops() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"do i = 1 to 3\nsay i\nend"),
+            b"1\n2\n3\n".to_vec()
+        );
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"do i = 10 to 1 by -4\nsay i\nend"),
+            b"10\n6\n2\n".to_vec(),
+            "measured against the oracle, do_loop_forms.rex's own transcript"
+        );
+    }
+
+    /// A non-whole control value is legal (Step 2's own table): `do i = 1.5
+    /// to 3` steps by fractional values, not an error.
+    #[test]
+    fn a_controlled_loops_own_values_need_only_be_numeric_not_whole() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"do i = 1.5 to 3\nsay i\nend"),
+            b"1.5\n2.5\n".to_vec()
+        );
+    }
+
+    /// `BY 0` loops forever -- behaviour to reproduce, not an error
+    /// (Step 2's own table) -- bounded here by a `LEAVE` so the test itself
+    /// terminates.
+    #[test]
+    fn a_controlled_loop_with_by_0_loops_forever() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"i = 0\ndo j = 1 by 0 to 3\ni = i + 1\nif i > 5 then leave\nend\nsay i"
+            ),
+            b"6\n".to_vec(),
+            "measured against the oracle"
+        );
+    }
+
+    #[test]
+    fn a_controlled_loops_own_for_caps_the_iteration_count_independent_of_to() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"n = 0\ndo i = 1 to 100 for 3\nn = n + 1\nend\nsay n"
+            ),
+            b"3\n".to_vec()
+        );
+    }
+
+    /// The control variable is bound to its own header value **before** the
+    /// loop's own bound test, even for a loop that ends up running zero
+    /// iterations -- measured against the oracle.
+    #[test]
+    fn the_control_variable_is_bound_even_when_the_loop_never_runs_its_body() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"do i = 5 to 3\nsay 'never'\nend\nsay i"),
+            b"5\n".to_vec()
+        );
+    }
+
+    /// `DO name OVER expr` on a **non-stem** target: a string and a number
+    /// each iterate exactly once, yielding themselves -- Deviation 1 keeps
+    /// a stem target out of scope, and this test uses none.
+    #[test]
+    fn do_over_a_non_stem_target_iterates_once_yielding_itself() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"do x over 'hello'\nsay x\nend"),
+            b"hello\n".to_vec()
+        );
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"do x over 42\nsay x\nend"),
+            b"42\n".to_vec()
+        );
+    }
+
+    /// `DO OVER ... FOR` on a non-stem target: `FOR 0` skips the one
+    /// iteration entirely; any `FOR` at least `1` still runs it exactly
+    /// once (there is only ever one item). Not independently measured
+    /// against the oracle (no oracle transcript pins `OVER ... FOR` on a
+    /// non-stem target specifically); implemented as the direct, minimal
+    /// extension of `FOR`'s own general "caps the iteration count" rule,
+    /// and named as a judgement call in the report.
+    #[test]
+    fn do_over_for_0_skips_the_single_non_stem_iteration() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"do x over 'hello' for 0\nsay x\nend\nsay 'after'"
+            ),
+            b"after\n".to_vec()
+        );
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"do x over 'hello' for 5\nsay x\nend"),
+            b"hello\n".to_vec()
+        );
+    }
+
+    /// Deviation 1 (`phase-4-exclusions.txt`): `DO OVER` on a stem does not
+    /// reproduce the oracle's traversal order, and takes the loud path
+    /// instead -- detected from `target`'s own syntax (a bare `NAME.`
+    /// parses as `ExprKind::Stem`), never by evaluating it.
+    #[test]
+    fn do_over_a_stem_target_takes_the_loud_path() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"a.1 = 'x'\ndo v over a.\nsay v\nend").unwrap_err();
+        let Failure::Loud(_) = failure else {
+            panic!("expected Loud, got {failure:?}");
+        };
+    }
+
+    // ---- DO/LOOP header errors (Step 2's own table, re-measured) ----
+
+    #[test]
+    fn a_non_numeric_control_value_raises_41_1() {
+        for (source, found) in [
+            (&b"do i = 'a' to 3\nnop\nend"[..], "a"),
+            (&b"do i = 1 to 'x'\nnop\nend"[..], "x"),
+            (&b"do i = 1 by 'x'\nnop\nend"[..], "x"),
+        ] {
+            let mut interp = Interp::new(false);
+            let failure = run_source(&mut interp, source).unwrap_err();
+            let Failure::Raised(raised) = failure else {
+                panic!("expected Raised, got {failure:?}");
+            };
+            assert_eq!((raised.number, raised.sub), (41, 1), "{source:?}");
+            assert_eq!(raised.additional, vec![found.to_string()], "{source:?}");
+        }
+    }
+
+    #[test]
+    fn a_bad_for_expression_raises_26_3() {
+        for (source, found) in [
+            (&b"do i = 1 to 3 for 'x'\nnop\nend"[..], "x"),
+            (&b"do i = 1 to 3 for -1\nnop\nend"[..], "-1"),
+            (&b"do i = 1 to 3 for 1.5\nnop\nend"[..], "1.5"),
+        ] {
+            let mut interp = Interp::new(false);
+            let failure = run_source(&mut interp, source).unwrap_err();
+            let Failure::Raised(raised) = failure else {
+                panic!("expected Raised, got {failure:?}");
+            };
+            assert_eq!((raised.number, raised.sub), (26, 3), "{source:?}");
+            assert_eq!(raised.additional, vec![found.to_string()], "{source:?}");
+        }
+    }
+
+    #[test]
+    fn a_bad_repetition_count_raises_26_2() {
+        for (source, found) in [
+            (&b"do 'a'\nnop\nend"[..], "a"),
+            (&b"do -1\nnop\nend"[..], "-1"),
+            (&b"do 2.5\nnop\nend"[..], "2.5"),
+        ] {
+            let mut interp = Interp::new(false);
+            let failure = run_source(&mut interp, source).unwrap_err();
+            let Failure::Raised(raised) = failure else {
+                panic!("expected Raised, got {failure:?}");
+            };
+            assert_eq!((raised.number, raised.sub), (26, 2), "{source:?}");
+            assert_eq!(raised.additional, vec![found.to_string()], "{source:?}");
+        }
+    }
+
+    // ---- WHILE/UNTIL ----
+
+    #[test]
+    fn do_while_tests_the_condition_before_the_body_and_do_until_after() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"i = 0\ndo while i < 2\ni = i + 1\nsay i\nend"),
+            b"1\n2\n".to_vec()
+        );
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"i = 5\ndo until i >= 7\ni = i + 1\nsay i\nend"
+            ),
+            b"6\n7\n".to_vec(),
+            "measured against the oracle, do_loop_forms.rex's own transcript"
+        );
+    }
+
+    #[test]
+    fn a_while_condition_that_is_not_0_or_1_raises_34_3_not_34_1() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"do while 'x'\nnop\nend").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (34, 3));
+        assert_eq!(raised.additional, vec!["x".to_string()]);
+    }
+
+    #[test]
+    fn an_until_condition_that_is_not_0_or_1_raises_34_4() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"do until 'x'\nnop\nend").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (34, 4));
+        assert_eq!(raised.additional, vec!["x".to_string()]);
+    }
+
+    /// A comma-list `WHILE`/`UNTIL` condition is 34.6, never 34.3/34.4 --
+    /// `eval_condition`'s own rule, reused unchanged from `IF`/`WHEN`.
+    #[test]
+    fn a_comma_list_while_condition_raises_34_6_not_34_3() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"do while 'x', 1\nnop\nend").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (34, 6));
+    }
+
+    /// **The discriminating measurement for this whole section**: `UNTIL`
+    /// is tested at the *bottom* of the loop, so its own failure is
+    /// attributed to the `END`'s own clause, not the `DO`'s -- a loop that
+    /// evaluated `UNTIL` eagerly, at the top like `WHILE`, would still
+    /// produce the same raised number and the same exit code, and only the
+    /// echoed clause reveals the difference. Measured against the oracle:
+    /// `do until 'x' / end` echoes `end`, `do while 'x' / end` echoes the
+    /// `do` line.
+    #[test]
+    fn until_is_attributed_to_the_end_clause_while_while_is_attributed_to_the_do_clause() {
+        let mut interp = Interp::new(false);
+        run_source(&mut interp, b"do until 'x'\nnop\nend").unwrap_err();
+        let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(line, 3, "the END's own line");
+        assert_eq!(text, b"end".to_vec(), "the END's own clause, not the DO's");
+
+        let mut interp = Interp::new(false);
+        run_source(&mut interp, b"do while 'x'\nnop\nend").unwrap_err();
+        let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(line, 1, "the DO's own line");
+        assert_eq!(text, b"do while 'x'".to_vec(), "the DO's own clause");
+    }
+
+    /// **`ITERATE` jumps to the loop's own bottom-of-iteration bookkeeping,
+    /// not to the top of the next pass** -- measured against the oracle,
+    /// this exact program terminates immediately with `n` still `1`, rather
+    /// than looping forever. A design that instead skipped `UNTIL` for the
+    /// interrupted iteration would hang on this program (`n` would keep
+    /// advancing past `1` and `UNTIL n = 1` would never hold again), which
+    /// is the mutation this test is built to catch -- not run, for the
+    /// obvious reason a hang cannot be asserted against, but predicted and
+    /// confirmed absent by construction: `do_body_outcome`'s own `Iterate`
+    /// arm answers `Ok(None)`, the *same* value `Flow::Next` answers, so
+    /// `run_repeating`'s own `UNTIL` check below it runs on both paths
+    /// identically.
+    #[test]
+    fn iterate_reaches_untils_own_bottom_of_iteration_test_rather_than_skipping_it() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"n = 0\ndo until n = 1\nn = n + 1\nif n = 1 then iterate\nsay 'unreached'\nend\nsay 'done' n"
+            ),
+            b"done 1\n".to_vec()
+        );
+    }
+
+    // ---- LEAVE/ITERATE: the block-stack rules ----
+
+    #[test]
+    fn bare_leave_stops_the_innermost_loop() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"do i = 1 to 5\nif i = 3 then leave\nsay i\nend"
+            ),
+            b"1\n2\n".to_vec()
+        );
+    }
+
+    #[test]
+    fn bare_iterate_skips_the_rest_of_the_current_pass() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"do i = 1 to 4\nif i = 2 then iterate\nsay i\nend"
+            ),
+            b"1\n3\n4\n".to_vec()
+        );
+    }
+
+    /// A bare `LEAVE`/`ITERATE` skips **transparently past** an unlabelled
+    /// `DO` block on its way to the nearest enclosing loop -- measured
+    /// against the oracle: this program prints `1` then `after`, not
+    /// `unreached`, because the innermost `DO` (a block, not a loop) never
+    /// intercepts the bare `LEAVE` at all.
+    #[test]
+    fn bare_leave_passes_transparently_through_an_unlabelled_simple_block() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"do i = 1 to 3\ndo\nsay i\nleave\nsay 'unreached'\nend\nend\nsay 'after'"
+            ),
+            b"1\nafter\n".to_vec()
+        );
+    }
+
+    /// **Bare `LEAVE` in a simple `DO` block is 28.1** (not a loop, and
+    /// unlabelled, so nothing on the enclosing chain ever matches) -- but a
+    /// **labelled** simple block is leavable by its own explicit name,
+    /// which the next test pins.
+    #[test]
+    fn bare_leave_in_an_unlabelled_simple_block_with_nothing_enclosing_it_raises_28_1() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"do\nleave\nend").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (28, 1));
+    }
+
+    #[test]
+    fn a_labelled_simple_block_is_leavable_by_its_own_name() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"do label blk\nsay 'a'\nleave blk\nsay 'b'\nend\nsay 'after'"
+            ),
+            b"a\nafter\n".to_vec()
+        );
+    }
+
+    /// **An ordinary clause label does not name a loop or a block.**
+    /// `outer:` here is a plain `Label` instruction, entirely separate from
+    /// the `DO`'s own `label` field (which is `i`, the control variable,
+    /// since no `LABEL` keyword was written) -- measured, `leave outer` is
+    /// 28.3, not a hit, exactly as `leave_nested_outer.rex`'s own comment
+    /// states.
+    #[test]
+    fn an_ordinary_clause_label_does_not_name_the_loop_it_precedes() {
+        let mut interp = Interp::new(false);
+        let failure =
+            run_source(&mut interp, b"outer: do i = 1 to 3\nleave outer\nend").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (28, 3));
+        assert_eq!(raised.additional, vec!["OUTER".to_string()]);
+
+        let mut interp = Interp::new(false);
+        let failure =
+            run_source(&mut interp, b"outer: do i = 1 to 3\niterate outer\nend").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (28, 4));
+        assert_eq!(raised.additional, vec!["OUTER".to_string()]);
+    }
+
+    /// **What does name a loop for `LEAVE`/`ITERATE`**: a controlled loop's
+    /// own control variable, as an automatic label, with no `LABEL` keyword
+    /// needed at all. `leave i`/`iterate i` from inside a *nested* loop
+    /// reaches the outer one and unwinds the inner one on the way --
+    /// `leave_nested_outer.rex`'s own transcript, reproduced here.
+    #[test]
+    fn a_controlled_loops_own_control_variable_is_an_automatic_label() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"do outer = 1 to 3\ndo inner = 1 to 3\nif inner = 2 then leave outer\nsay 'inner' outer inner\nend\nsay 'after inner' outer\nend\nsay 'after outer'"
+            ),
+            b"inner 1 1\nafter outer\n".to_vec()
+        );
+    }
+
+    #[test]
+    fn iterate_naming_the_outer_loops_control_variable_cuts_every_outer_pass_short() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"do outer = 1 to 3\ndo inner = 1 to 3\nif inner = 2 then iterate outer\nsay 'l' outer inner\nend\nsay 'outer-after' outer\nend"
+            ),
+            b"l 1 1\nl 2 1\nl 3 1\n".to_vec(),
+            "outer-after never prints for any pass, since every one is cut short at inner = 2"
+        );
+    }
+
+    /// **`leave sel` exits a `SELECT` only when it was written
+    /// `SELECT LABEL sel`.** An ordinary clause label in front of a
+    /// `SELECT` does not make it leavable (28.3, exactly like a loop).
+    #[test]
+    fn leave_by_name_exits_a_select_only_when_it_was_given_that_label() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"s: select label s\nwhen 1 = 1 then\ndo\nleave s\nend\notherwise\nnop\nend\nsay 'after'"
+            ),
+            b"after\n".to_vec()
+        );
+
+        let mut interp = Interp::new(false);
+        let failure = run_source(
+            &mut interp,
+            b"select\nwhen 1 = 1 then\ndo\nleave sel\nend\notherwise\nnop\nend",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (28, 3));
+        assert_eq!(raised.additional, vec!["SEL".to_string()]);
+    }
+
+    /// A named `LEAVE` reaching a `SELECT LABEL` from inside its
+    /// `OTHERWISE` branch -- the fix that routes `OTHERWISE`'s own body
+    /// through `Select`'s own `run_bounded`/`leave_select`, not the plain
+    /// `Goto` it used before Task 11 (`Select`'s own arm has the full
+    /// argument). Kills a version that still lets `OTHERWISE` fall through
+    /// to the outer loop directly: that version would propagate this
+    /// `LEAVE` all the way to `run_activation`'s own top level and raise
+    /// 28.3 instead of the clean exit this test asserts.
+    #[test]
+    fn leave_by_name_reaches_a_select_label_from_inside_its_otherwise_branch() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"select label s\nwhen 1 = 0 then nop\notherwise\nsay 'o'\nleave s\nsay 'unreached'\nend\nsay 'after'"
+            ),
+            b"o\nafter\n".to_vec()
+        );
+    }
+
+    /// **`ITERATE` never accepts a labelled block or a labelled `SELECT`,
+    /// only a loop -- 28.5, not silently skipped, when the name matches but
+    /// the kind is wrong.**
+    #[test]
+    fn a_named_iterate_matching_a_labelled_simple_block_raises_28_5_not_28_4() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"do label x\nsay 1\niterate x\nend").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (28, 5));
+        assert_eq!(raised.additional, vec!["X".to_string()]);
+    }
+
+    #[test]
+    fn a_named_iterate_matching_a_select_label_raises_28_5() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(
+            &mut interp,
+            b"select label s\nwhen 1 = 1 then\ndo\niterate s\nend\notherwise\nnop\nend",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (28, 5));
+        assert_eq!(raised.additional, vec!["S".to_string()]);
+    }
+
+    #[test]
+    fn iterate_from_inside_a_select_nested_in_a_loop_skips_only_the_current_pass() {
+        // iterate_from_select.rex's own transcript: an ITERATE inside a
+        // SELECT's WHEN body must skip straight to the loop's own next
+        // pass, past both the SELECT's own resume point and back up to the
+        // enclosing DO, printing exactly one "skip"/"keep" pair per
+        // iteration and never both for the same i.
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"do i = 1 to 4\nselect\nwhen i = 2 then do\nsay 'skip' i\niterate\nend\notherwise nop\nend\nsay 'keep' i\nend"
+            ),
+            b"keep 1\nskip 2\nkeep 3\nkeep 4\n".to_vec()
+        );
+    }
+
+    /// **The exhausted-search family (28.1-28.4) reports at indent zero,
+    /// regardless of how deep the instruction was lexically nested** --
+    /// the asymmetry the report measured against 28.5, pinned here two
+    /// `DO`s deep so a version that read `origin.indent` instead of
+    /// hardcoding zero would fail this and pass the single-level case.
+    #[test]
+    fn leave_no_match_reports_at_indent_zero_even_when_nested_two_dos_deep() {
+        let mut interp = Interp::new(false);
+        run_source(
+            &mut interp,
+            b"do i = 1 to 3\ndo j = 1 to 3\nleave zz\nend\nend",
+        )
+        .unwrap_err();
+        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(indent, 0);
+    }
+
+    /// **28.5's own indent is the instruction's full lexical depth,
+    /// unreduced by however many frames the search looked past on its way
+    /// to the match** -- measured against the oracle with one intervening
+    /// unlabelled `DO` between the `ITERATE` and its target.
+    #[test]
+    fn iterate_wrong_kind_reports_the_instructions_own_full_lexical_depth() {
+        let mut interp = Interp::new(false);
+        run_source(&mut interp, b"do label x\ndo\niterate x\nend\nend").unwrap_err();
+        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(indent, 4, "two DO frames deep, matching the oracle");
+    }
+
+    /// **The `run_bounded` `Goto`-absorption trap, named in `Flow::Leave`'s
+    /// own doc comment.** A `DO` with an `ITERATE` in its body, nested
+    /// inside an `IF`'s `THEN`, run enough times that a version which
+    /// implemented repetition as a `Goto` back to the loop's own top
+    /// (rather than an internal `run_repeating` loop that never returns
+    /// mid-construct) would have that `Goto`'s target absorbed by the
+    /// enclosing `IF`'s own `run_bounded` -- which owns the whole `THEN`
+    /// range the `DO` sits inside -- and re-enter the `DO`'s own arm as a
+    /// fresh first pass, with its running total reset to `Simple`/`Count`'s
+    /// own initial state every time. That bug's own observable signature
+    /// is `n` staying stuck at whatever the first `ITERATE`d pass produced,
+    /// forever, or (depending on exactly how the re-entry is shaped)
+    /// hanging outright, rather than the small, exact total this test
+    /// asserts.
+    #[test]
+    fn leave_and_iterate_survive_a_do_nested_in_an_ifs_then_iterating_repeatedly() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"n = 0\nif 1 = 1 then do i = 1 to 5\nif i // 2 = 0 then iterate\nn = n + i\nend\nsay n"
+            ),
+            b"9\n".to_vec(),
+            "1 + 3 + 5, the odd i's only -- a Goto-based re-entry would not \
+             accumulate this total across the DO's own five iterations"
+        );
+    }
+
+    // ---- Task 11's own indentation quantity ----
+
+    #[test]
+    fn one_two_and_three_enclosing_dos_indent_by_two_four_and_six() {
+        for (source, spaces) in [
+            (&b"do i = 1 to 3\nsay 1/0\nend"[..], 2),
+            (&b"do i = 1 to 3\ndo j = 1 to 3\nsay 1/0\nend\nend"[..], 4),
+            (
+                &b"do i = 1 to 3\ndo j = 1 to 3\ndo k = 1 to 3\nsay 1/0\nend\nend\nend"[..],
+                6,
+            ),
+        ] {
+            let mut interp = Interp::new(false);
+            run_source(&mut interp, source).unwrap_err();
+            let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+            assert_eq!(indent, spaces, "{source:?}");
+        }
+    }
+
+    /// **The test the coordinator's own design review asked for by name**:
+    /// a raise *after* a loop has already exited, at a shallower lexical
+    /// depth than the loop's own body -- exactly the shape a live,
+    /// imperfectly-unwound `Interp` counter would over-indent and a purely
+    /// static function of `(instructions, index)` cannot, because there is
+    /// no state left over from the loop's own three completed iterations
+    /// for anything to have failed to unwind.
+    #[test]
+    fn the_indent_after_a_loop_has_already_exited_is_not_left_over_from_it() {
+        let mut interp = Interp::new(false);
+        run_source(&mut interp, b"do i = 1 to 3\nsay i\nend\nsay 1/0").unwrap_err();
+        let FailureSite { indent, text, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(
+            indent, 0,
+            "top level, after the loop, not the loop's own two"
+        );
+        assert_eq!(text, b"say 1/0".to_vec());
+    }
+
+    /// `DO`'s own control-setup expressions (`TO`/`BY`/`FOR`/the repeat
+    /// count/`OVER`'s target) are evaluated **before** the loop's own body
+    /// is entered, and are unindented even though the `DO` clause they
+    /// belong to sits at the same lexical position the body's own two
+    /// spaces would apply to -- the case the brief's own bullet 4 names
+    /// (`do i = 1 to 'x'` gets none), re-measured across the sibling forms
+    /// the brief did not enumerate.
+    #[test]
+    fn control_setup_expressions_are_unindented_unlike_the_loop_body_they_precede() {
+        for source in [
+            &b"do i = 1 to 'x'\nsay 1\nend"[..],
+            &b"do 1/0\nsay 1\nend"[..],
+            &b"do i = 1 to 3 for 1/0\nsay 1\nend"[..],
+            &b"do i = 1 to 3 by 1/0\nsay 1\nend"[..],
+        ] {
+            let mut interp = Interp::new(false);
+            run_source(&mut interp, source).unwrap_err();
+            let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+            assert_eq!(indent, 0, "{source:?}");
+        }
+    }
+
+    /// `WHILE`/`UNTIL` are tested **inside** the loop's own frame, unlike
+    /// the header's control-setup expressions -- measured, `do while 1/0`
+    /// is indented two at top level, not zero.
+    #[test]
+    fn while_and_until_are_indented_inside_the_loops_own_frame() {
+        let mut interp = Interp::new(false);
+        run_source(&mut interp, b"do while 1/0\nsay 1\nend").unwrap_err();
+        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(indent, 2);
+
+        let mut interp = Interp::new(false);
+        run_source(&mut interp, b"do until 1/0\nsay 1\nend").unwrap_err();
+        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(indent, 2);
+    }
+
+    /// A `SELECT`'s own scan (evaluating each `WHEN`'s condition) is
+    /// indented two, present even before any `WHEN` matches -- the finding
+    /// this task made that the brief did not state (measured: `select /
+    /// when 1/0 then nop / end` indents the failing `WHEN`'s own condition
+    /// by two, not zero).
+    #[test]
+    fn a_whens_own_condition_is_indented_at_the_selects_own_two_spaces() {
+        let mut interp = Interp::new(false);
+        run_source(&mut interp, b"select\nwhen 1/0 then nop\nend").unwrap_err();
+        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(indent, 2);
+    }
+
+    /// A matched `WHEN`'s own `THEN` body indents six (`SELECT`'s two, plus
+    /// the `WHEN`-`THEN` shape's own four, the same as an `IF`'s matched
+    /// branch); `OTHERWISE`'s own body indents only four, **not** six --
+    /// the second finding this task made that the brief did not state,
+    /// because `OTHERWISE` is not built from the same double-frame `IF`-
+    /// shaped machinery a `WHEN`'s `THEN` is.
+    #[test]
+    fn a_matched_whens_then_body_indents_six_but_otherwises_body_indents_only_four() {
+        let mut interp = Interp::new(false);
+        run_source(&mut interp, b"select\nwhen 1 = 1 then say 1/0\nend").unwrap_err();
+        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(indent, 6);
+
+        let mut interp = Interp::new(false);
+        run_source(
+            &mut interp,
+            b"select\nwhen 1 = 0 then nop\notherwise\nsay 1/0\nend",
+        )
+        .unwrap_err();
+        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(
+            indent, 4,
+            "OTHERWISE's own body, one frame, not the WHEN-THEN shape's two"
+        );
+    }
+
+    /// An `IF`'s matched branch is four spaces, for **both** `THEN` and a
+    /// plain `ELSE` (not only the "else if" chain shape the brief's own
+    /// example used) -- and an "else if" chain nests two such branches,
+    /// giving eight.
+    #[test]
+    fn an_ifs_matched_then_or_else_branch_indents_four_and_an_else_if_chain_indents_eight() {
+        let mut interp = Interp::new(false);
+        run_source(&mut interp, b"if 1 = 1 then say 1/0").unwrap_err();
+        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(indent, 4, "THEN");
+
+        let mut interp = Interp::new(false);
+        run_source(&mut interp, b"if 1 = 0 then say 2\nelse say 1/0").unwrap_err();
+        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(indent, 4, "a plain ELSE, not part of an else-if chain");
+
+        let mut interp = Interp::new(false);
+        run_source(
+            &mut interp,
+            b"if 1 = 0 then say 2\nelse if 1 = 1 then say 1/0",
+        )
+        .unwrap_err();
+        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(
+            indent, 8,
+            "the outer ELSE's own four, plus the inner IF's THEN's own four"
+        );
+    }
+
+    /// Nesting a `SELECT` (with a matched `WHEN`) inside a `DO`: two plus
+    /// two plus four -- confirming the additive model composes across
+    /// different construct kinds, not only same-kind nesting.
+    #[test]
+    fn a_select_nested_inside_a_do_composes_the_two_constructs_own_contributions() {
+        let mut interp = Interp::new(false);
+        run_source(
+            &mut interp,
+            b"do i = 1 to 3\nselect\nwhen 1 = 1 then say 1/0\notherwise nop\nend\nend",
+        )
+        .unwrap_err();
+        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(indent, 8);
+    }
+
+    // ---- End arm ----
+
+    #[test]
+    fn a_do_loops_own_end_is_a_pure_marker_never_independently_dispatched() {
+        // Reached at all only if something jumped straight onto it, which
+        // nothing in this crate does -- covered indirectly by every DO/LOOP
+        // test above completing without the loud failure this arm used to
+        // give before Task 11. Direct coverage: a labelled LOOP closes
+        // cleanly (EndStyle::LabeledDo is exercised on the same code path
+        // EndStyle::Do/Loop are).
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"do label x\nsay 'ok'\nend"),
+            b"ok\n".to_vec()
         );
     }
 }

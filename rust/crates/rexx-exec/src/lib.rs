@@ -67,7 +67,7 @@ use activation::Activation;
 // `Loud` not-implemented marker or a `Raised` condition, the one type
 // `step` and everything above it propagate).
 mod error;
-use error::{ClauseSite, Failure};
+use error::{ClauseSite, Failure, FailureSite};
 
 // Expression evaluation (`eval`/`eval_node`): terms, arithmetic and
 // concatenation.
@@ -215,6 +215,32 @@ pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 /// 512 MiB is reserved address space, not resident memory. Linux commits stack
 /// pages on first touch, so a program that never recurses pays for the pages it
 /// actually uses and not for this number.
+///
+/// **Task 11 set `eval.rs`'s `MAX_EVAL_DEPTH` to 100,000, and that closes off
+/// the way every figure on this page was re-derived.** Everything above was
+/// measured by letting `eval` recurse far past 100,000 -- the external
+/// `rexx-run` bisection to a guard-page abort (684,618 survives, 700,000
+/// aborts, rc 134) and this crate's own `records_the_stack_cost_of_one_eval_frame`
+/// (`tests/spike.rs`) both depend on that being possible. `run_program` is
+/// now the only public entry point that reaches `eval` on a sized stack at
+/// all, and `eval` itself refuses anything past `MAX_EVAL_DEPTH`, so neither
+/// method can be re-run through it any more: a program built to recurse
+/// 700,000 levels now raises 11.1 at 100,001 and never reaches the guard
+/// page, and `records_the_stack_cost_of_one_eval_frame`'s own 100,000-term
+/// chain is the deepest such a program can now legally go.
+///
+/// That measurement, at exactly 100,000, is still real and still runs on
+/// every `cargo test` -- it is what the two-sided bound above is checked
+/// against today, and it needed no external bisection to begin with, only a
+/// division. What is gone is the ability to go *past* 100,000 through the
+/// public API to independently confirm the extrapolation still holds at
+/// higher depths, the way the external bisection to ~685,000 once did.
+/// **Whoever next revisits this figure and wants that confirmation has to
+/// raise `MAX_EVAL_DEPTH` (or call `eval` directly, bypassing `run_program`,
+/// from code temporarily built for the purpose) before bisecting again, and
+/// must remember to put it back.** Recorded here rather than only in
+/// `eval.rs`, because this constant's own two-sided justification is the
+/// thing the change affects, not the counter itself.
 pub const INTERPRETER_STACK_BYTES: usize = 512 * 1024 * 1024;
 
 /// What one interpreter run produced.
@@ -530,7 +556,7 @@ struct Interp {
     /// `execute` after `run` has already popped the activation the site came
     /// from. That teardown is why the site cannot simply be reconstructed at
     /// the top: by then the frame is gone.
-    failure_site: Option<(usize, Vec<u8>)>,
+    failure_site: Option<FailureSite>,
     /// True when the caller is the fragment spike, in which case
     /// `InstructionKind::Interpret` runs its fragment instead of failing
     /// loudly.
@@ -856,12 +882,16 @@ fn execute(path: &str, text: Vec<u8>, interpret_spike: bool) -> Outcome {
             // loop, which nothing in 4a can do; it renders visibly rather than
             // panicking, on the error path's standing rule that a reportable
             // condition must never become a crash.
-            let (line, text) =
-                failure_site.unwrap_or_else(|| (0, b"<no failing clause recorded>".to_vec()));
+            let failure_site = failure_site.unwrap_or_else(|| FailureSite {
+                line: 0,
+                text: b"<no failing clause recorded>".to_vec(),
+                indent: 0,
+            });
             let site = ClauseSite {
                 path,
-                line,
-                text: &text,
+                line: failure_site.line,
+                text: &failure_site.text,
+                indent: failure_site.indent,
             };
             interp.trace.extend_from_slice(&raised.report(&site));
             raised.exit_code()

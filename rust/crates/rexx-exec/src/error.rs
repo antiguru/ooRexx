@@ -101,6 +101,15 @@ impl Raised {
         Raised::syntax(34, 901, vec![String::from_utf8_lossy(found).into_owned()])
     }
 
+    /// 11.1: "Insufficient control stack space" -- D19's evaluation-depth
+    /// limit (`eval.rs`'s own `MAX_EVAL_DEPTH`). No substitution: measured
+    /// against the oracle's own parse-side 11.1 (nested parens/calls,
+    /// `phase-4-exclusions.txt`'s Deviation 2), the catalogue's `(11, 1)`
+    /// entry carries none either.
+    pub(crate) fn insufficient_stack() -> Raised {
+        Raised::syntax(11, 1, Vec::new())
+    }
+
     /// 34.6: one element of a comma-separated logical list
     /// (`ExprKind::Logical`, `if a, b then` and friends) is not a logical
     /// value. A distinct sub-number from `not_logical`'s 34.901, and
@@ -163,12 +172,45 @@ impl From<Raised> for Failure {
     }
 }
 
+/// Where a failing clause was found -- `Interp::failure_site`'s own type
+/// (`lib.rs`), and what `run.rs`'s `record_failure_site` fills in.
+///
+/// A named struct rather than a `(usize, Vec<u8>, usize)` tuple **on
+/// purpose**: `line` and `indent` are both bare `usize`s, and a position-only
+/// tuple lets the two transpose with nothing to catch it -- the failure mode
+/// would be plausible-looking, wrong stderr, not a compile error or a panic.
+/// Naming the fields removes that whole class rather than trusting call-site
+/// order.
+pub(crate) struct FailureSite {
+    pub(crate) line: usize,
+    pub(crate) text: Vec<u8>,
+    /// Spaces to prefix `text` with on the echo line, Task 11's own
+    /// nesting-depth quantity. **Computed statically from the AST** (`run.rs`'s
+    /// `static_indent`), never carried on a running counter: Task 10's own
+    /// report concluded the depth is derivable from the instruction list
+    /// alone with no runtime block stack, and this task's own oracle
+    /// measurements confirm it for the ordinary case and for one
+    /// LEAVE/ITERATE error family (28.5) besides -- see `static_indent`'s
+    /// own doc comment and the report for the transcripts. A mutable
+    /// per-`Interp` counter was the first design tried here and was
+    /// abandoned once it became clear it would need perfect symmetric
+    /// bookkeeping on every exit path out of every construct, including the
+    /// error paths and the `run_bounded` `Goto`-absorption case `Flow`'s own
+    /// doc comment warns about -- exactly the class of defect this crate's
+    /// skipped-`pop_frame` discussion elsewhere already flags. A pure
+    /// function of `(instructions, index)` cannot desync, because there is
+    /// nothing stateful to desync.
+    pub(crate) indent: usize,
+}
+
 /// Where the failing clause is, which is everything the report needs from
 /// outside this module.
 ///
 /// Passed in rather than reached for: `error.rs` owns the *format*, and the
 /// instruction loop owns knowing which clause failed. That split is why this
-/// module needs no access to `Interp`, the program or the source.
+/// module needs no access to `Interp`, the program or the source. Built from
+/// a `FailureSite` plus the one thing it does not carry, the program's own
+/// path -- `execute` (`lib.rs`) is the one place both are in hand together.
 pub(crate) struct ClauseSite<'a> {
     /// The program's path **as the oracle prints it**, absolute. Measured:
     /// the major line carries the full path, and `rexx-oracle`'s `normalize`
@@ -181,6 +223,11 @@ pub(crate) struct ClauseSite<'a> {
     /// the trailing space, because an `IF`'s span stops at the start of the
     /// token that ended its condition.
     pub(crate) text: &'a [u8],
+    /// Spaces to prefix `text` with on the echo line -- `FailureSite`'s own
+    /// `indent`, forwarded unchanged. Zero for every clause this crate
+    /// reported before Task 11, so every pre-existing call site keeps its
+    /// old behaviour by passing `0`.
+    pub(crate) indent: usize,
 }
 
 impl Raised {
@@ -223,6 +270,11 @@ impl Raised {
     pub(crate) fn report(&self, site: &ClauseSite<'_>) -> Vec<u8> {
         let mut out = Vec::new();
         out.extend_from_slice(format!("{:>6} *-* ", site.line).as_bytes());
+        // `Task 11`'s own addition: `site.indent` spaces of nesting depth
+        // before the clause's own text, never before it -- measured, an
+        // unindented top-level clause (`indent == 0`) is byte-identical to
+        // every pre-Task-11 report this module already had a test for.
+        out.extend(std::iter::repeat_n(b' ', site.indent));
         out.extend_from_slice(site.text);
         out.push(b'\n');
         out.extend_from_slice(
@@ -318,6 +370,7 @@ mod tests {
             path: "/abs/path/f.rex",
             line: 4,
             text: b"end",
+            indent: 0,
         };
         assert_eq!(
             String::from_utf8(raised.report(&site)).unwrap(),
@@ -341,6 +394,7 @@ mod tests {
             path: "/abs/w.rex",
             line: 12,
             text: b"if 'x' ",
+            indent: 0,
         };
         let report = String::from_utf8(raised.report(&site)).unwrap();
         assert_eq!(
@@ -362,6 +416,7 @@ mod tests {
                 path: "/p",
                 line,
                 text: b"nop",
+                indent: 0,
             };
             let report = Raised::syntax(7, 3, vec![]).report(&site);
             let first = String::from_utf8(report).unwrap();
@@ -378,9 +433,11 @@ mod tests {
     fn the_exit_code_is_256_minus_the_major() {
         for (major, sub, rc) in [
             (7u16, 3u16, 249i32),
+            (11, 1, 245),
             (24, 901, 232),
             (25, 11, 231),
             (26, 5, 230),
+            (28, 3, 228),
             (33, 1, 223),
             (34, 1, 222),
             (41, 1, 215),
@@ -406,6 +463,7 @@ mod tests {
     fn every_measured_family_has_catalogue_text() {
         for (major, sub) in [
             (7u16, 3u16),
+            (11, 1),
             (24, 1),
             (24, 901),
             (25, 11),
@@ -419,6 +477,11 @@ mod tests {
             (34, 2),
             (34, 3),
             (34, 4),
+            (28, 1),
+            (28, 2),
+            (28, 3),
+            (28, 4),
+            (28, 5),
             (34, 6),
             (34, 901),
             (41, 1),
@@ -468,4 +531,44 @@ mod tests {
             "<no message 999.999 in the catalogue>"
         );
     }
+
+    /// Task 11's own addition: `site.indent` prefixes the clause echo with
+    /// that many spaces, and nothing else on the report moves.
+    ///
+    /// Captured against the oracle: `do i = 1 to 3 / say 1/0 / end`
+    /// reports `     2 *-*   say 1/0` -- two spaces for the one enclosing
+    /// `DO`. Kills a mutation that applies the indent to the wrong line (the
+    /// `Error 42 running ...` line, say), one that appends it after `text`
+    /// instead of before, and one that never applies it at all (which the
+    /// pre-existing `indent: 0` tests above would not catch, since they are
+    /// silent about anything `indent` does when it is nonzero).
+    #[test]
+    fn the_indent_field_prefixes_the_clause_echo_with_that_many_spaces() {
+        let raised = Raised::syntax(42, 3, vec![]);
+        let site = ClauseSite {
+            path: "/abs/do1.rex",
+            line: 2,
+            text: b"say 1/0",
+            indent: 2,
+        };
+        let report = String::from_utf8(raised.report(&site)).unwrap();
+        assert_eq!(
+            report.lines().next().unwrap(),
+            "     2 *-*   say 1/0",
+            "two spaces before the clause text, none anywhere else on the line"
+        );
+    }
+
+    // The new Task 11 raisers themselves -- 26.2/26.3/28.1-28.5/34.3/34.4 --
+    // live in `run.rs` as local `fn raised_*` free functions, matching that
+    // file's own established convention for every other instruction-
+    // specific raiser (`raised_if_not_logical`, `raised_select_no_when`,
+    // `raised_symbol_expected`, ...), not as `Raised::` methods here: this
+    // module holds only the raisers `eval.rs` also needs (cross-module), and
+    // `insufficient_stack` is the one member of this task's own set that
+    // qualifies. Their wording is exercised end to end by `run.rs`'s own
+    // tests (`run_source` against a real program, checking `raised.number`/
+    // `.sub`/`.additional`), not spot-checked again here -- `Raised::message`
+    // is private to this module and `every_measured_family_has_catalogue_text`
+    // above already proves every one of their catalogue entries exists.
 }
