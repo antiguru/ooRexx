@@ -82,9 +82,13 @@ impl RootSet {
     /// own `pop_frame` unreached; every one of those is healed here, because
     /// the enclosing `step_in_temps_frame` pops unconditionally with an outer
     /// watermark and this call unwinds the skipped inner frames with it. Pops
-    /// are therefore idempotent and out-of-order pops are not representable:
-    /// the worst a stale `FrameId` can do is discard more than its owner
-    /// meant to.
+    /// are therefore idempotent and no corrupt state is representable. A stale
+    /// `FrameId` has exactly two shapes and neither is unsound: one taken
+    /// deeper than the current top truncates to a larger index, which is a
+    /// silent no-op, and one taken shallower discards more than its owner
+    /// meant to. Losing a root early is the direction that could bite, and it
+    /// cannot happen from a handle this type issued, since every handle is a
+    /// length this stack once had.
     ///
     /// **Do not add a balance assertion here** without first making those six
     /// sites pop on their own path. It would fire on the ordinary error path
