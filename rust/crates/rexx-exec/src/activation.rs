@@ -81,14 +81,11 @@ pub(crate) struct Activation {
     /// not leak back into its caller once it returns, so each activation
     /// needs its own copy rather than sharing one. Task 6 adds the field,
     /// default-initialised, since 4a's one activation never has a caller to
-    /// inherit from; Task 9's `NUMERIC` instruction is what actually
-    /// mutates it, and 4b's `CALL` is what will initialise a callee's from
-    /// the caller's current value instead of the default.
-    #[allow(
-        dead_code,
-        reason = "nothing reads or mutates this yet -- Task 9's NUMERIC \
-                   instruction is the first to touch it"
-    )]
+    /// inherit from. Task 7's arithmetic is its first reader (`eval.rs`'s
+    /// `digits()`/`form()` calls, feeding the DIGITS/FORM pair a value is
+    /// rendered under at creation); Task 9's `NUMERIC` instruction is what
+    /// will first mutate it, and 4b's `CALL` is what will initialise a
+    /// callee's from the caller's current value instead of the default.
     pub(crate) settings: Settings,
 }
 
