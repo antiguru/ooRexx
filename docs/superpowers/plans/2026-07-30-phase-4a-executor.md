@@ -733,13 +733,27 @@ Include the two shapes that discriminate a wrong jump target, because Phase 3 ca
 
 `SELECT CASE` compares with `==`: measured, `select case '007'` does not match `when 7`.
 
-A `SELECT` that reaches its `END` with no `WHEN` taken is **7.3**.
+**A `WhenCase`'s comma is a value list, an OR of `==` tests, and this is the opposite of a plain `WHEN`'s comma.** Measured: `select case 2` with `when 1, 2 then say 'hit'` prints `hit`, while a plain `when 1, 2` on a non-logical value raises 34.6. The two commas parse into the same-looking node and mean opposite things, so an implementer who handles one and reuses it for the other gets a silently wrong answer rather than a failure. `ast.rs:801-815` records the distinction.
 
-- [ ] **Step 2 to 5** as before, ending with:
+**Do not check a comma-list condition yourself.** A single-expression condition that is not `0` or `1` raises **34.1** under `IF` and **34.2** under `WHEN`. A comma list raises **34.6** from inside `eval_logical_list`, which already does it, and re-checking the result would replace 34.6 with 34.1. Measured across all four keywords, and the rule is that the sub-number is decided by the clause being a list at all, not by which element failed: `if 'x', 1 then` is 34.6, not 34.1.
+
+A `SELECT` that reaches its `END` with no `WHEN` taken is **7.3**, and **the clause it echoes is the `END`, not the `SELECT`** (measured, rc 249). Raise it from the wrong arm and stdout and the exit code still match; only the stderr echo shows it.
+
+`when 1 = 1 then` followed by `when 2 = 2 then nop` is **accepted, rc 0** (`ast.rs:776`, re-confirmed at run time). Do not confuse it with the *false*-condition variant, which segfaults the oracle and is upstream bug SF #2018, not ours to reproduce.
+
+**The clause echo is indented by block nesting depth, two spaces per level, and `Raised::report` does not do this yet.** Measured: one enclosing `DO` gives two spaces, two gives four, three gives six; a `SELECT` contributes as well, and `do i = 1 to 'x'` gets none because the control expression is evaluated before the block is entered. This is the same indentation `TRACE` applies, so Task 13 shares it. It is unreachable today only because no block instruction exists; **this task is what makes it reachable**, and the first corpus program with a failure inside a block will diverge on stderr. Characterise the per-construct counting during implementation, since it is not simply one level per keyword.
+
+- [ ] **Step 2: Run to watch them fail**
+
+- [ ] **Step 3: Implement**
+
+- [ ] **Step 4: Verify** — `cargo test`, plus each construct run under both interpreters through `rexx-run`, comparing stdout, stderr and exit code.
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add rust/crates/rexx-exec/src/run.rs rust/crates/rexx-exec/tests/run_select.rs
-git commit -m "IF and SELECT, including the case form's strict comparison"
+git add rust/crates/rexx-exec/src/run.rs
+git commit -F <message-file>
 ```
 
 ---
@@ -750,13 +764,30 @@ git commit -m "IF and SELECT, including the case form's strict comparison"
 
 **Files:**
 - Modify: `rust/crates/rexx-exec/src/run.rs`
-- Test: a `#[cfg(test)] mod tests` inside `rust/crates/rexx-exec/src/run.rs`
+- Modify: `rust/crates/rexx-exec/src/eval.rs` — **the evaluation-depth counter belongs here, not in `run.rs`.** `eval.rs:70-71` already says "Task 11 adds the limit check to this function", and the recursion the limit guards is `eval`'s.
+- Modify: `rust/crates/rexx-exec/src/error.rs` — the 11.1 catalogue-family test lives beside the other catalogue tests. 11.1 is present in the generated catalogue as "Insufficient control stack space".
+- Test: a `#[cfg(test)] mod tests` inside each file it touches
 
 - [ ] **Step 1: Write the failing tests** — `Simple`, `Forever`, `Count`, `Controlled` with every combination of `TO`/`BY`/`FOR`, and `Over` on a **non-stem** target (measured: a string and a number each iterate once, yielding themselves). `LoopKind::With` is Phase 5's and takes the loud-failure path, because `DO WITH` sends `SUPPLIER` and nothing in 4a answers a message.
 
+**`DO OVER` on a stem is out of scope and no test may use it.** That is not a judgement to re-make here: it is DEVIATION 1 in `phase-4-exclusions.txt`, which states the rule as "no corpus program may contain `DO OVER` on a stem", because the oracle walks a balanced tree and we use a hash map, so the orders are two different deterministic orders. `DO OVER` on a stem *does* work on the oracle and iterates in hash order, so it is easy to write a test for by accident.
+
+**`COUNTER` and `OVER ... FOR` are in the AST and absent from this list.** Decide each explicitly, implement or take the loud path, and say which in the report. Do not leave them to fall through a catch-all.
+
+**`WHILE` and `UNTIL` are missing from this list and are yours.** With them come **34.3** (`WHILE`) and **34.4** (`UNTIL`) for a single-expression condition that is not `0` or `1`. As with `IF` and `WHEN`, do not check a comma-list condition yourself: it raises **34.6** from inside `eval_logical_list`.
+
+**Which clause the report echoes distinguishes a correct loop from one that evaluates its condition in the wrong place, and nothing else does.** Measured: `do until 'x'; end` echoes **`end`**, because `UNTIL` is tested at the bottom, while `do while 'x'; end` echoes the **`do`** line. A loop that evaluates `UNTIL` eagerly still produces the right values and the right exit code, and only the echoed clause reveals it.
+
 Control expressions are evaluated in `Controlled::order`, which Phase 3 recorded because an expression can have side effects.
 
-`LEAVE` and `ITERATE`, bare and by label, including from inside a `SELECT` nested in a loop.
+`LEAVE` and `ITERATE`, bare and by label, including from inside a `SELECT` nested in a loop. **Measured, and it is not what classic-Rexx intuition suggests:**
+
+* An **ordinary clause label does not name a loop.** `outer: do i = 1 to 3` followed by `leave outer` is **28.3**, and `iterate outer` is **28.4**.
+* What does work is `DO LABEL name`, and the **control variable's automatic label**: `leave i` or `iterate i` from inside a nested loop reaches the *outer* loop and unwinds the inner one.
+* Bare `leave` in a simple `DO` block is **28.1**, but a **labelled** simple block is leavable.
+* `leave sel`, where `sel` labels a `SELECT`, exits the `SELECT`.
+
+**That last one is a coordination point with Task 10 and neither task's text mentions the other's stake.** `LEAVE` must find and unwind through Task 10's `SELECT`s by label, so if Task 10 ships jump targets alone, this task retrofits block bookkeeping onto Task 10's arms in the same file immediately afterwards. Read Task 10's committed code before designing the block stack, rather than designing against its brief.
 
 - [ ] **Step 2: Measure the `DO` control error family before implementing it**
 
@@ -805,8 +836,8 @@ The oracle's cliff is between **100,000 and 150,000** terms, not at 200,000: 100
 - [ ] **Step 5: Commit**
 
 ```bash
-git add rust/crates/rexx-exec/src/run.rs rust/crates/rexx-exec/tests/run_loops.rs
-git commit -m "Every DO and LOOP variant, with the block stack LEAVE unwinds"
+git add rust/crates/rexx-exec/src/run.rs rust/crates/rexx-exec/src/eval.rs rust/crates/rexx-exec/src/error.rs
+git commit -F <message-file>
 ```
 
 ---
