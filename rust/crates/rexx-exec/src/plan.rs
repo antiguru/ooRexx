@@ -685,6 +685,42 @@ mod tests {
         }
     }
 
+    /// The table above only asserts that each expected name is *present*,
+    /// so an over-wide `build` -- one that registers every name in the
+    /// program, or anything else besides the right set -- would still pass
+    /// it. That is exactly the shape of gap that let the original `_ =>
+    /// {}` catch-all through unnoticed: presence checks cannot fail on
+    /// extra entries, only on missing ones.
+    ///
+    /// These two assert the plan's key set **exactly**, and both expect
+    /// nothing at all: `LEAVE`'s target is a block label matched against
+    /// `LEAVE`/`ITERATE`/`END`, never a variable read through `slot_of`
+    /// (`note_instruction`'s own comment on this, above); `.nil` is one of
+    /// `note`'s no-op `ExprKind` arms. An empty expected set cannot pass
+    /// vacuously -- there is no name a broken `build` could accidentally
+    /// omit and still match -- so these two carry the most weight per
+    /// assertion of anything in this module.
+    #[test]
+    fn build_registers_exactly_the_expected_set_not_merely_a_superset() {
+        let cases: &[(&[u8], &[&str])] = &[(b"leave lbl", &[]), (b"say .nil", &[])];
+        for (source, expected_names) in cases {
+            let program = parse_program(source.to_vec()).expect("test program parses");
+            let plan = Plan::build(&program.main, &program.symbols);
+
+            let mut actual: Vec<&[u8]> = plan.names.keys().map(|k| &**k).collect();
+            actual.sort();
+            let mut expected: Vec<&[u8]> = expected_names.iter().map(|n| n.as_bytes()).collect();
+            expected.sort();
+
+            assert_eq!(
+                actual,
+                expected,
+                "{:?}: expected the plan's key set to be exactly {expected_names:?}",
+                String::from_utf8_lossy(source)
+            );
+        }
+    }
+
     #[test]
     fn a_tail_piece_and_a_plain_variable_share_one_slot() {
         // b = 2 ; say a.b -> A.2 ; a.2 = 'hit' ; say a.b -> hit
