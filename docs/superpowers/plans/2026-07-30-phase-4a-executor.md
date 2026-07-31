@@ -888,7 +888,15 @@ The message text comes from `rexx-inventory`'s generated table — Phase 0 alrea
 
 **Files:**
 - Create: `rust/crates/rexx-exec/src/trace.rs`
+- Modify: `rust/crates/rexx-exec/src/eval.rs` — the value-line events (`>L>`, `>V>`, `>O>`, `>=>`) are emitted from expression evaluation, which means threading an event through roughly eighteen `eval_node` arms.
+- Modify: `rust/crates/rexx-exec/src/run.rs` — the `*-*` clause event, and `InstructionKind::Trace`'s own `step` arm, which no step below mentions and which nothing implements today.
 - Test: a `#[cfg(test)] mod tests` inside `rust/crates/rexx-exec/src/trace.rs`, with the committed expectations under `rust/crates/rexx-exec/tests/trace_oracle/`
+
+> **D17 said emit the event from the start, and that did not happen. This task is the retrofit D17 was written to avoid.** Measured before dispatch: there are **zero** trace emission points in `eval.rs` or `run.rs`, and the only writer to the trace sink is `execute`'s error path. Tasks 7, 8 and 9 each built part of the dispatch loop without an event hook, because D17 lives in the design spec and none of their task bodies carried it, and a brief is extracted per task.
+>
+> The consequence is scope, not correctness: the hook has to be threaded through code that already works, in `run.rs`, which is the most contended file in the phase. Sequence this task **after** Task 11 rather than beside it, and read the committed `run.rs` rather than designing against this plan.
+>
+> The lesson is already recorded elsewhere and is repeated here because this is the task that pays for it: a decision recorded only in the spec reaches nobody. When a decision constrains how later tasks are *built*, it belongs in each of those tasks' bodies.
 
 - [ ] **Step 1: Build the prefix table from the oracle's side, not from what we emit**
 
@@ -992,8 +1000,10 @@ The owner arm is an escape unless it is policed, so: the owner string must be on
 
 The script **exits non-zero on an unapplied pattern**. That guard fired in four separate Phase 3 tasks, and without it a stale pattern reports coverage that does not exist. This is the one criterion a `cargo test` cannot be, since it edits the source it tests.
 
-- [ ] **Step 4: Write `phase-4-exclusions.txt`** — the 15 whole exclusions, the 3 partial rows, and a **separate deviations section** holding the stem iteration order. A deviation is permanent and chosen; an exclusion is work assigned to a later phase, and filing one as the other is how a deviation stops being reviewed.
+- [ ] **Step 4: `phase-4-exclusions.txt` ALREADY EXISTS and is ahead of this step. Do not write it, and do not follow this step literally.** It holds the 15 whole exclusions, the 3 partial rows, a **separate deviations section** (a deviation is permanent and chosen, an exclusion is work assigned to a later phase, and filing one as the other is how a deviation stops being reviewed), **and** a KNOWN GAPS section this step never described, pinned asymmetrically on purpose: adding a row needs no permission, removing one needs an owner or a measurement. The file has gained rows during the phase, including a second deviation and several gaps. Writing it from this step would **regress** it.
+>
+> What this task still owes the file is the **set assertion in the harness**, so the enumerated exclusions cannot drift from the file, and syncing the 66-of-81 phrasing. Nothing else.
 
-- [ ] **Step 5: Assess every criterion in `docs/superpowers/plans/phase-4a-gate.md`**, in the shape of `phase-3-gate.md`: state what was measured, and where a criterion is met but weak, say so. A gate that reports only "met" is worth less than one that says which of its criteria could not have failed.
+- [ ] **Step 5: Assess every criterion, writing `docs/superpowers/plans/phase-4a-gate.md`.** That file does **not** exist and is this step's output, not its input; the seven criteria live in the design spec's "4a exit gate" section. Follow the shape of `phase-3-gate.md`: state what was measured, and where a criterion is met but weak, say so. A gate that reports only "met" is worth less than one that says which of its criteria could not have failed.
 
 - [ ] **Step 6: Commit.**
