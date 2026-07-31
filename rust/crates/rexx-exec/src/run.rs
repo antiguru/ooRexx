@@ -550,6 +550,19 @@ impl Interp {
                 };
                 for &when_index in whens {
                     let when_instruction = &code.body.instructions[when_index];
+                    // Every fallible call below is matched explicitly,
+                    // never through `?`, so a failure can be attributed to
+                    // `when_instruction` -- the `When`/`WhenCase` whose
+                    // condition is actually being evaluated -- before it
+                    // propagates. Nothing here goes through
+                    // `step_in_temps_frame` at all: `When`/`WhenCase`'s own
+                    // `step` arm is a no-op (see its own doc comment), so
+                    // without this a raise here would still be attributed
+                    // to this `SELECT` instruction, which is exactly the
+                    // defect `record_failure_site`'s own doc comment
+                    // describes. Measured: `select` / `when 'x' then nop` /
+                    // `end` must report the `WHEN`'s own line and clause,
+                    // not the `SELECT`'s.
                     let outcome = match &when_instruction.kind {
                         InstructionKind::When {
                             condition,
@@ -557,7 +570,14 @@ impl Interp {
                             exit,
                         } => {
                             let holds =
-                                self.eval_condition(code, condition, raised_when_not_logical)?;
+                                match self.eval_condition(code, condition, raised_when_not_logical)
+                                {
+                                    Ok(holds) => holds,
+                                    Err(failure) => {
+                                        self.record_failure_site(source, when_instruction);
+                                        return Err(failure);
+                                    }
+                                };
                             holds.then(|| (false_target.unwrap_or(len), exit.unwrap_or(len)))
                         }
                         InstructionKind::WhenCase {
@@ -568,7 +588,13 @@ impl Interp {
                             let case_text = case_text.as_deref().expect(
                                 "a WhenCase's enclosing Select always carries a case expression",
                             );
-                            let matched = self.test_case_when(code, values, case_text)?;
+                            let matched = match self.test_case_when(code, values, case_text) {
+                                Ok(matched) => matched,
+                                Err(failure) => {
+                                    self.record_failure_site(source, when_instruction);
+                                    return Err(failure);
+                                }
+                            };
                             matched.then(|| (false_target.unwrap_or(len), exit.unwrap_or(len)))
                         }
                         other => panic!("a SELECT's whens holds only When/WhenCase, not {other:?}"),
@@ -657,14 +683,29 @@ impl Interp {
     /// misattributed to the enclosing `SELECT`'s own clause (measured
     /// against the oracle before this existed: a `1/0` inside a matched
     /// `WHEN`'s `THEN` reported the `SELECT`'s line and text, not the
-    /// failing clause's). `self.failure_site.is_none()` is the guard that
-    /// makes the *innermost* call win: the deepest `step_in_temps_frame`
-    /// that sees the error is always the first to run this check, and every
-    /// enclosing one that the error then propagates through leaves an
-    /// already-`Some` site alone. `source: None` (`run_fragment`'s own call
-    /// into `run_bounded`) skips this entirely, preserving that function's
-    /// existing, deliberate choice not to resolve a site for an instruction
-    /// inside an `INTERPRET` fragment.
+    /// failing clause's).
+    ///
+    /// **This alone is not enough for a `WHEN`/`WhenCase` whose own
+    /// *condition* raises**, and a second, real defect this task's own
+    /// review found: `Select`'s own arm evaluates a `When`/`WhenCase`'s
+    /// condition directly, as data, and never opens a `step_in_temps_frame`
+    /// for the `When`/`WhenCase` instruction itself (that instruction's own
+    /// `step` arm is a pure no-op, per the `When`/`WhenCase` arm's own doc
+    /// comment) -- so a raise there has no inner wrapper call to be the
+    /// "innermost" one, and would still be attributed to the `SELECT`.
+    /// Measured: `select` / `when 'x' then nop` / `end` reported the
+    /// `SELECT`'s own line and clause, not the `WHEN`'s. `Select`'s own arm
+    /// calls `record_failure_site` directly, past `code.body.instructions[
+    /// when_index]`, on exactly that path -- see its own call sites there.
+    ///
+    /// `self.failure_site.is_none()` is the guard, in both callers, that
+    /// makes the *first* resolution win, which is always the most specific
+    /// one available: the deepest `step_in_temps_frame` call, or `Select`'s
+    /// own direct call for a `When`/`WhenCase` condition, always runs before
+    /// any enclosing propagation reaches an outer wrapper. `source: None`
+    /// (`run_fragment`'s own call into `run_bounded`) skips this entirely,
+    /// preserving that function's existing, deliberate choice not to
+    /// resolve a site for an instruction inside an `INTERPRET` fragment.
     fn step_in_temps_frame(
         &mut self,
         code: &Code<'_>,
@@ -675,25 +716,40 @@ impl Interp {
         let frame = self.roots.push_frame();
         let flow = self.step(code, index, instruction, source);
         self.roots.pop_frame(frame);
-        if let (Err(_), Some(source)) = (&flow, source)
-            && self.failure_site.is_none()
-        {
-            self.failure_site = Some((
-                source.line_of(instruction.clause_span.start),
-                source
-                    .join_span(instruction.clause_span.clone())
-                    .map_or_else(
-                        // Visible rather than silent, matching
-                        // `Raised::message`'s own reasoning for a
-                        // catalogue miss: the error path is the worst
-                        // place to turn a reportable condition into a
-                        // crash or a blank line.
-                        || b"<clause span outside the retained source>".to_vec(),
-                        |bytes| bytes.into_owned(),
-                    ),
-            ));
+        if flow.is_err() {
+            self.record_failure_site(source, instruction);
         }
         flow
+    }
+
+    /// Resolves `instruction`'s own clause into `self.failure_site`, first
+    /// call wins (`self.failure_site.is_none()`), when `source` is `Some`.
+    ///
+    /// The shared half of `step_in_temps_frame`'s own resolution (its doc
+    /// comment has the full argument for why the *first* caller to run this
+    /// is always the right one) -- factored out so `Select`'s own arm can
+    /// call it directly for a `When`/`WhenCase` whose *condition* raises,
+    /// which never goes through `step_in_temps_frame` at all since that
+    /// instruction's own `step` arm never runs for a decision of its own.
+    fn record_failure_site(&mut self, source: Option<&ProgramSource>, instruction: &Instruction) {
+        let Some(source) = source else { return };
+        if self.failure_site.is_some() {
+            return;
+        }
+        self.failure_site = Some((
+            source.line_of(instruction.clause_span.start),
+            source
+                .join_span(instruction.clause_span.clone())
+                .map_or_else(
+                    // Visible rather than silent, matching
+                    // `Raised::message`'s own reasoning for a
+                    // catalogue miss: the error path is the worst
+                    // place to turn a reportable condition into a
+                    // crash or a blank line.
+                    || b"<clause span outside the retained source>".to_vec(),
+                    |bytes| bytes.into_owned(),
+                ),
+        ));
     }
 
     /// Runs `code.body.instructions[start..end]` in place, one instruction at
@@ -2128,6 +2184,94 @@ mod tests {
         };
         assert_eq!((raised.number, raised.sub), (34, 2));
         assert_eq!(raised.additional, vec!["x".to_string()]);
+    }
+
+    /// **The coordinator's own finding, fixed after the first round.** A
+    /// `WHEN`'s own `step` arm is a pure no-op (`Select`'s own arm reads it
+    /// as data instead), so a raise while evaluating its *condition* never
+    /// went through a `step_in_temps_frame` call for the `WHEN` itself --
+    /// the first version of this task attributed it to the enclosing
+    /// `SELECT`, wrong clause *and* wrong line, measured against the
+    /// oracle. `record_failure_site`'s own doc comment on `Select`'s call
+    /// sites has the fix. Checks `failure_site` directly (line and clause
+    /// text), which `raised.number`/`.sub` alone -- every other test in
+    /// this file -- cannot: both were already unaffected by the bug, since
+    /// the bug is entirely in *which clause* gets echoed, not in which
+    /// condition failed.
+    #[test]
+    fn a_when_conditions_own_failure_is_attributed_to_the_when_not_the_select() {
+        let mut interp = Interp::new(false);
+        run_source(&mut interp, b"select\nwhen 'x' then nop\nend").unwrap_err();
+        let (line, text) = interp
+            .failure_site
+            .expect("a raised condition always resolves a site when source is Some");
+        assert_eq!(line, 2, "the WHEN's own line, not the SELECT's (line 1)");
+        assert_eq!(
+            text,
+            b"when 'x' ".to_vec(),
+            "the WHEN's own clause text, not \"select\""
+        );
+    }
+
+    /// The line has to move with the failing `WHEN`, not merely differ from
+    /// the `SELECT`'s -- a test whose expected line is the first `WHEN`'s
+    /// cannot tell a correct resolution from one that defaults to
+    /// "whichever `WHEN` this loop happens to be looking at first".
+    #[test]
+    fn the_second_of_two_whens_own_failure_moves_the_line_with_it() {
+        let mut interp = Interp::new(false);
+        run_source(
+            &mut interp,
+            b"select\nwhen 1 = 0 then nop\nwhen 'x' then nop\nend",
+        )
+        .unwrap_err();
+        let (line, text) = interp.failure_site.expect("a site was resolved");
+        assert_eq!(line, 3, "the second WHEN's own line, not the first's (2)");
+        assert_eq!(text, b"when 'x' ".to_vec());
+    }
+
+    /// A `SELECT CASE` expression that itself raises is the `SELECT`'s own
+    /// clause -- confirmed against the oracle rather than assumed, since
+    /// `case` is evaluated directly inside `Select`'s own `step` call and
+    /// the coordinator asked this be checked, not taken on faith.
+    #[test]
+    fn a_select_cases_own_expression_failure_is_attributed_to_the_select() {
+        let mut interp = Interp::new(false);
+        run_source(&mut interp, b"select case (1/0)\nwhen 1 then nop\nend").unwrap_err();
+        let (line, text) = interp.failure_site.expect("a site was resolved");
+        assert_eq!(line, 1);
+        assert_eq!(text, b"select case (1/0)".to_vec());
+    }
+
+    /// A `WhenCase` value expression that raises is the `WHEN`'s own
+    /// clause, the same rule as a plain `WHEN`'s condition -- both go
+    /// through `Select`'s own explicit-match-and-record path, never
+    /// through `step_in_temps_frame` for the `When`/`WhenCase` node itself.
+    #[test]
+    fn a_whencase_values_own_failure_is_attributed_to_the_when_not_the_select() {
+        let mut interp = Interp::new(false);
+        run_source(&mut interp, b"select case 1\nwhen (1/0) then nop\nend").unwrap_err();
+        let (line, text) = interp.failure_site.expect("a site was resolved");
+        assert_eq!(line, 2);
+        assert_eq!(text, b"when (1/0) ".to_vec());
+    }
+
+    /// A raise inside an `OTHERWISE` branch was already correct before this
+    /// round's fix (`OTHERWISE`'s own body runs through the outer loop's
+    /// ordinary `step_in_temps_frame`, never through `Select`'s own
+    /// explicit-match path), and stays that way -- checked because the
+    /// coordinator asked for it explicitly, not assumed from the `WHEN` fix.
+    #[test]
+    fn a_raise_inside_an_otherwise_branch_is_attributed_to_its_own_clause() {
+        let mut interp = Interp::new(false);
+        run_source(
+            &mut interp,
+            b"select\nwhen 1 = 0 then nop\notherwise\n  say 1/0\nend",
+        )
+        .unwrap_err();
+        let (line, text) = interp.failure_site.expect("a site was resolved");
+        assert_eq!(line, 4);
+        assert_eq!(text, b"say 1/0".to_vec());
     }
 
     // ---- SELECT CASE / WhenCase ----

@@ -121,7 +121,7 @@ pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 /// that has to be at least 100,000, so there is about six and a half times the
 /// headroom a limit at the oracle's own maximum needs.
 ///
-/// The budget this covers is larger than `eval` alone, and all three of its
+/// The budget this covers is larger than `eval` alone, and all four of its
 /// users run on this same thread because the entry point owns everything from
 /// `parse_program` onward:
 ///
@@ -130,9 +130,26 @@ pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 ///   which is this crate's own and is the shallowest-per-level of the three
 ///   at about 160 bytes, but is still a recursion and could be given the same
 ///   explicit-worklist treatment `rexx-parse`'s walks got,
-/// * and dropping the AST, which `rexx-parse` now does iteratively. It used to
+/// * dropping the AST, which `rexx-parse` now does iteratively. It used to
 ///   recurse once per `Box<Expr>` level, and was the thing that bound this
-///   budget until it was fixed.
+///   budget until it was fixed,
+/// * and, since Task 10, `step` recursing through `run_bounded` once per
+///   source *nesting* level of `IF` or `SELECT` (`run.rs`'s own module doc
+///   comment and `run_bounded`'s doc comment have the full argument: a
+///   nested `IF`/`SELECT` resolves itself inside its enclosing one's own
+///   `step` call, through `step_in_temps_frame`, rather than returning to
+///   this thread's outer loop first). **Unmeasured** -- unlike the other
+///   three, nothing generates a program with thousands of *lexically*
+///   nested `IF`/`SELECT` clauses the way a left-deep expression generates
+///   deep `eval` recursion from one term count, so there is no natural knob
+///   to bisect against, and no corpus or real program comes remotely close
+///   to needing one: a 2,000-level synthetic nested-`IF` chain ran clean in
+///   about 70ms as a sanity check, nothing more precise. Bounded by program
+///   *text* rather than by data, so it is not the unbounded case D19's
+///   limit exists for and needs no counter of its own -- but the next
+///   person to move this figure should know it is a fourth consumer, not
+///   only the three above, and that "unmeasured" is the honest state of it
+///   rather than a number this comment is confident in.
 ///
 /// **`eval` is the recursion that binds, and the figure to size against is its
 /// own 784.** Measured by bisecting `rexx-run` on this stack, debug, to within
