@@ -2211,12 +2211,41 @@ fn indent_in_range(instructions: &[Instruction], start: usize, end: usize, targe
             InstructionKind::If { false_target, .. } => {
                 let false_target = false_target.unwrap_or(len);
                 let then_start = pc + 1;
-                if target >= then_start && target < false_target {
+                // `then_start` is the `Then` marker's *own* index, not its
+                // body's first instruction -- measured against the oracle
+                // (`ThenInstruction.cpp`'s `execute`: `indent(); trace;
+                // indent();`), a marker clause sits at exactly two spaces,
+                // half of what its own body gets (four). Before this check
+                // existed, `target == then_start` fell into the body branch
+                // below and got the wrong answer (4, not 2) because that
+                // branch's own recursive call happens to return 0 for the
+                // very first position of its range -- silently, since
+                // nothing before this task ever asked for a `Then`'s own
+                // indent (a marker clause carries no expression, so it can
+                // never be a `FailureSite`, only ever a `TRACE` echo).
+                if target == then_start {
+                    return 2;
+                }
+                if target > then_start && target < false_target {
                     return 4 + indent_in_range(instructions, then_start, false_target, target);
                 }
                 match instructions.get(false_target).map(|i| &i.kind) {
                     Some(InstructionKind::Else { then_exit }) => {
                         let else_end = then_exit.unwrap_or(len);
+                        // Same shape as `Then`, and the same measurement
+                        // (`ElseInstruction.cpp`'s `execute` is byte-for-byte
+                        // the same two-`indent()`-calls dance). Before this
+                        // check, `target == false_target` fell all the way
+                        // through this whole arm (the body check below is
+                        // strict `>`) to `pc = else_end; continue`, which
+                        // advances `pc` *past* `target` in the enclosing
+                        // walk -- the `Else` marker's own index was never
+                        // revisited by anything, silently returning
+                        // whatever the *enclosing* level happened to be
+                        // (0 too shallow) rather than erroring.
+                        if target == false_target {
+                            return 2;
+                        }
                         if target > false_target && target < else_end {
                             return 4 + indent_in_range(
                                 instructions,
@@ -2270,30 +2299,75 @@ fn indent_in_range(instructions: &[Instruction], start: usize, end: usize, targe
                                 )
                             }
                         };
-                        if target >= body_start && target < body_end {
+                        // `body_start` is the WHEN's own `Then` marker,
+                        // sharing `InstructionKind::Then` with `IF` (both go
+                        // through `instruction.rs`'s `if_instruction`) --
+                        // measured against the oracle exactly like `IF`'s
+                        // own: the marker sits at half its body's indent
+                        // (four, not six). Before this check, `target ==
+                        // body_start` matched the `>=` below and returned
+                        // six, the body's own value -- again invisible
+                        // before `TRACE`, since a `Then` marker never raises.
+                        if target == body_start {
+                            return 4;
+                        }
+                        if target > body_start && target < body_end {
                             return 6 + indent_in_range(instructions, body_start, body_end, target);
                         }
                     }
-                    if let Some(otherwise_index) = otherwise
-                        && target > *otherwise_index
-                        && target < select_end
-                    {
-                        return 4 + indent_in_range(
-                            instructions,
-                            otherwise_index + 1,
-                            select_end,
-                            target,
-                        );
+                    if let Some(otherwise_index) = otherwise {
+                        // `OTHERWISE` traces its own clause once (no double
+                        // `indent()` -- `OtherwiseInstruction.cpp`'s
+                        // `execute` is `trace; indent();`, not `indent();
+                        // trace; indent();`) at the SELECT's own scan level,
+                        // the same two spaces a `WHEN`'s condition gets, and
+                        // only its body gets the further two. Before this
+                        // check, `target == *otherwise_index` matched
+                        // neither this arm's `>` check nor anything in the
+                        // `whens` loop, and fell all the way to the
+                        // `unreachable!` below -- **a live panic**, not
+                        // merely a wrong number, confirmed by directly
+                        // calling `static_indent` on `select\nwhen 1 = 0
+                        // then nop\notherwise\nsay 'y'\nend`'s own
+                        // `otherwise_index` before this fix existed.
+                        if target == *otherwise_index {
+                            return 2;
+                        }
+                        if target > *otherwise_index && target < select_end {
+                            return 4 + indent_in_range(
+                                instructions,
+                                otherwise_index + 1,
+                                select_end,
+                                target,
+                            );
+                        }
                     }
-                    // `target` is in range but matches none of the above:
-                    // every reachable position inside a resolved SELECT is
-                    // either a WHEN's own index, one WHEN's own body, or
-                    // OTHERWISE's own body, so a body that parsed cannot
-                    // reach here for a `target` this crate ever resolves a
-                    // failure site for.
-                    unreachable!(
-                        "a resolved SELECT's own range holds only its WHENs and OTHERWISE"
-                    );
+                    // `target` is in range but matches none of the above.
+                    // After the two equality cases just added, every
+                    // reachable position inside a resolved SELECT is
+                    // provably one of: a WHEN's own index, a WHEN's own
+                    // `Then` marker, one WHEN's own body, `OTHERWISE`'s own
+                    // marker, or `OTHERWISE`'s own body -- so a body that
+                    // parsed should never reach here. It reached here once
+                    // already, though (the `OTHERWISE`-marker case, before
+                    // its equality check existed), and this exact arm is
+                    // where that panic actually happened -- `unreachable!`
+                    // asserted a claim about the code's own shape, and the
+                    // claim was false for a case nothing had exercised yet.
+                    // This crate's rule for the diagnostic path (`error.rs`'s
+                    // message-catalogue miss renders a visible marker
+                    // instead of aborting; `run.rs:536` cites the same
+                    // reasoning) is that a formatting gap must never become
+                    // a crash, and `static_indent` feeds both the error
+                    // report and `TRACE` now -- so this returns the
+                    // enclosing level (0 relative, "nothing further to add")
+                    // rather than asserting unreachability a second time.
+                    // If a reader ever sees indentation that looks too
+                    // shallow by exactly the amount a `SELECT` construct
+                    // should have contributed, this is where to look: it
+                    // means some future `SELECT`-shaped clause position is
+                    // not one of the five cases enumerated above.
+                    return 0;
                 }
                 pc = select_end;
                 continue;
@@ -4585,6 +4659,116 @@ mod tests {
             indent, 8,
             "the outer ELSE's own four, plus the inner IF's THEN's own four"
         );
+    }
+
+    /// Task 13's own four `static_indent` fixes, found while building
+    /// `TRACE`'s clause echo -- **not a second computation of the
+    /// indentation quantity**, a bug in the existing one, for a case
+    /// Task 10/11 structurally could not exercise: none of `THEN`/`ELSE`/
+    /// `OTHERWISE`/a `WHEN`'s own `THEN` carries an expression, so none of
+    /// them can ever raise a condition and become a `FailureSite` -- the
+    /// only way anything before this task ever asked `static_indent` a
+    /// question. `TRACE` echoes every stepped instruction, markers
+    /// included, which is what finally asks.
+    ///
+    /// Each expected number is the oracle's, read with `cat -A` against
+    /// `build/bin/rexx` under `trace r` (the report has the full
+    /// transcripts): a marker clause sits at exactly half the indent its
+    /// own body gets, all the way down through nesting -- confirmed by
+    /// `ThenInstruction.cpp`/`ElseInstruction.cpp`'s own `execute`
+    /// (`indent(); trace; indent();`, so the marker traces after the first
+    /// bump and the body after the second) and by `OtherwiseInstruction.cpp`
+    /// (`trace; indent();`, one bump, so `OTHERWISE`'s own clause sits at
+    /// the `SELECT`'s scan level, the same as a `WHEN`'s own condition).
+    ///
+    /// This calls `static_indent` directly rather than through a raise,
+    /// because a marker clause cannot raise -- there is no `FailureSite` to
+    /// read one back from.
+    #[test]
+    fn a_then_else_when_then_or_otherwise_markers_own_clause_indents_half_its_bodys() {
+        // `IF`'s own `THEN`: `then_start` used to fall into the body's `+4`
+        // branch (the branch's own recursive call returns 0 for the very
+        // first position of its range) and answer 4, not 2.
+        let instructions = instructions_of(b"if 1 = 1 then say 'x'");
+        let then_start = if_then_start(&instructions, 0);
+        assert_eq!(static_indent(&instructions, then_start), 2, "IF's own THEN");
+
+        // `IF`'s own `ELSE`: `target == false_target` used to fall through
+        // this whole arm entirely (`pc = else_end; continue`, which passes
+        // straight over the marker's own index in the enclosing walk) and
+        // answer 0, the enclosing level, not 2.
+        let instructions = instructions_of(b"if 1 = 0 then say 'x'\nelse say 'y'");
+        let if_index = 0;
+        let InstructionKind::If { false_target, .. } = &instructions[if_index].kind else {
+            panic!("index 0 is the IF")
+        };
+        let else_index = false_target.expect("this IF has an ELSE");
+        assert_eq!(static_indent(&instructions, else_index), 2, "IF's own ELSE");
+
+        // A `WHEN`'s own `THEN`, sharing `InstructionKind::Then` with `IF`
+        // (`instruction.rs`'s `if_instruction` builds both): `target ==
+        // body_start` used to match the loop's own `>=` and answer 6, the
+        // body's value, not 4.
+        let instructions = instructions_of(b"select\nwhen 1 = 1 then say 'x'\nend");
+        let when_index = 1;
+        let then_start = if_then_start(&instructions, when_index);
+        assert_eq!(
+            static_indent(&instructions, then_start),
+            4,
+            "WHEN's own THEN"
+        );
+
+        // `OTHERWISE`'s own clause -- **this one used to abort the process**,
+        // not merely answer a wrong number: `target == *otherwise_index`
+        // matched neither the `whens` loop nor the body check below it, and
+        // fell to `unreachable!("a resolved SELECT's own range holds only
+        // its WHENs and OTHERWISE")`. Reproduced against the tree before
+        // this fix (`cargo test` aborted this exact test with that message,
+        // `run.rs`'s panic site named in the fix's own commit) rather than
+        // inferred.
+        let instructions = instructions_of(b"select\nwhen 1 = 0 then nop\notherwise\nsay 'y'\nend");
+        let otherwise_index = instructions
+            .iter()
+            .find_map(|i| match &i.kind {
+                InstructionKind::Select { otherwise, .. } => *otherwise,
+                _ => None,
+            })
+            .expect("this SELECT has an OTHERWISE");
+        assert_eq!(
+            static_indent(&instructions, otherwise_index),
+            2,
+            "OTHERWISE's own marker clause"
+        );
+    }
+
+    /// `if_instruction` (`rexx-parse`'s `instruction.rs`) gives both `IF`
+    /// and a `WHEN`'s own `THEN` the identical shape: the `Then` marker
+    /// sits immediately after the condition-bearing instruction at
+    /// `condition_index`. A free function rather than inlined three times
+    /// in the test above, since all three call sites need the exact same
+    /// index arithmetic and nothing else about `Instruction` to find it.
+    fn if_then_start(instructions: &[Instruction], condition_index: usize) -> usize {
+        assert!(
+            matches!(
+                instructions[condition_index].kind,
+                InstructionKind::If { .. }
+                    | InstructionKind::When { .. }
+                    | InstructionKind::WhenCase { .. }
+            ),
+            "condition_index must be an IF, a WHEN or a WHEN CASE"
+        );
+        condition_index + 1
+    }
+
+    /// Parses `source` and returns its top-level instruction list, owned --
+    /// the marker-index tests above need to read `InstructionKind` fields
+    /// directly (`false_target`, `otherwise`) rather than only run the
+    /// program to a raise, since a marker clause cannot raise at all.
+    fn instructions_of(source: &[u8]) -> Vec<Instruction> {
+        parse_program(source.to_vec())
+            .expect("test program parses")
+            .main
+            .instructions
     }
 
     /// Nesting a `SELECT` (with a matched `WHEN`) inside a `DO`: two plus
