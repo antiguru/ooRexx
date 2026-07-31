@@ -459,13 +459,19 @@ impl Interp {
     /// comment).
     ///
     /// **Short-circuits on the first element that checks out false**,
-    /// unlike `&` (`eval_logical`'s own doc comment) -- measured: `if 0,
-    /// 'x' then nop` followed by `say 'reached'` prints `reached` with no
-    /// error at all, so `'x'` is never evaluated once `0` has already
-    /// decided the list, and `if 1, 0, 'x' then` behaves identically with
-    /// three elements. Every element up to and including the first false
-    /// one is evaluated left to right and checked to be exactly `0`/`1`;
-    /// nothing after it is touched.
+    /// unlike `&` (`eval_logical`'s own doc comment). Measured with `if 0,
+    /// (1/0) then nop` followed by `say 'reached'`, which prints `reached`
+    /// and exits 0, and `if 1, 0, (1/0) then nop`, which does the same with
+    /// three elements. Every element up to and including the first false one
+    /// is evaluated left to right and checked to be exactly `0`/`1`; nothing
+    /// after it is touched.
+    ///
+    /// The probe is `(1/0)` rather than the `'x'` an earlier version of this
+    /// comment cited, because `'x'` cannot tell the two candidate rules
+    /// apart: a literal evaluates harmlessly, so skipping only the *check*
+    /// would produce the same clean run. `(1/0)` raises 42.3 the moment it is
+    /// evaluated, and `if 1, (1/0)` does exactly that (rc 214), so what is
+    /// skipped is the evaluation.
     ///
     /// **Always 34.6, the per-element message, never 34.1/34.2/34.3/34.4**
     /// -- measured, `if 1, 'x' then` and `if 'x', 1 then` both give 34.6,
@@ -977,6 +983,28 @@ mod tests {
         assert_eq!(eval_text(&mut interp, b"say ('9' >>= '9')"), b"1");
         assert_eq!(eval_text(&mut interp, b"say ('8' >>= '9')"), b"0");
         assert_eq!(eval_text(&mut interp, b"say ('10' <<= '9')"), b"1");
+
+        // **Equal operands, and every row above is unequal ones.** Seven of
+        // the eighteen mapping rows survived a mutation run against the whole
+        // suite: `\>` to `Less`, `\<` to `Greater`, `\>>` to `StrictLess`,
+        // `\<<` to `StrictGreater`, `<<=` to `StrictLess`, `>=` to `Greater`,
+        // and `<=` to `Less`. Equality is the only case that separates
+        // `LessEqual` from `Less`, so unequal operands cannot tell those pairs
+        // apart however many of them a test lists, and non-strict `>=`/`<=`
+        // appeared in no test at all.
+        //
+        // The gap started as a measurement gap and became a test gap: the
+        // fourteen oracle measurements behind the rows above have the same
+        // blind spot, no equal-operand case for any negated form. Each value
+        // below was measured against `build/bin/rexx` before being written
+        // here, not derived from the mapping it checks.
+        assert_eq!(eval_text(&mut interp, b"say ('9' \\> '9')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('9' \\< '9')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('9' \\>> '9')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('9' \\<< '9')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('9' <<= '9')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('9' <= '9')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('9' >= '9')"), b"1");
     }
 
     #[test]
@@ -1005,13 +1033,24 @@ mod tests {
     }
 
     #[test]
-    fn strict_comparison_never_calls_to_number() {
-        // '01' == '1' -> 0: if the strict family accidentally routed
-        // through to_number it would compare 1 == 1 and answer 1, wrongly.
-        // This is the direct behavioural check that strictness actually
-        // skips the numeric path, not an inspection of internal state.
+    fn strict_equality_compares_bytes_where_the_ordinary_form_compares_value() {
+        // The contrast is the test: the same two operands answer 0 under `==`
+        // and 1 under `=`, so this pins that `==` reaches `CompareOp`'s strict
+        // row rather than the ordinary one.
+        //
+        // **It is deliberately not named for skipping `to_number`, which was
+        // this test's previous name and claim.** That claim is unobservable
+        // from any result, and its stated failure story ("would compare 1 == 1
+        // and answer 1") is wrong: `compare_decoded` returns on
+        // `op.is_strict()` before reading either `Number`, so routing a strict
+        // operator through `to_number` changes nothing a program can see.
+        // Proved by mutation, not by reading -- hardwiring `is_strict_compare`
+        // to `false` left the whole suite green. `is_strict_compare` gating
+        // the parse is a real saving and its own doc comment gives that
+        // honest, performance rationale; no behavioural test can guard it.
         let mut interp = Interp::new(false);
         assert_eq!(eval_text(&mut interp, b"say ('01' == '1')"), b"0");
+        assert_eq!(eval_text(&mut interp, b"say ('01' = '1')"), b"1");
     }
 
     // ---- logical ----
@@ -1136,19 +1175,40 @@ mod tests {
 
     #[test]
     fn a_comma_list_short_circuits_on_the_first_false_element() {
-        // if 0, 'x' then -> no error at all: 'x' is never evaluated once 0
-        // has already decided the list is false. The opposite of &'s own
-        // rule (logical_operators_do_not_short_circuit, above).
+        // The opposite of `&`'s own rule
+        // (logical_operators_do_not_short_circuit, above).
+        //
+        // **`(1/0)` and not `'x'`, and the difference is the whole strength of
+        // this test.** A skipped `'x'` only shows the *check* was skipped: a
+        // literal evaluates harmlessly, so `if 0, 'x'` passes just as well
+        // against an implementation that evaluates every element and then
+        // stops checking. `(1/0)` cannot be evaluated without raising 42.3, so
+        // it separates the two. Measured on the oracle: `if 0, (1/0) then nop`
+        // and `if 1, 0, (1/0) then nop` both exit 0, while `if 1, (1/0)` exits
+        // 214 with Error 42.3 -- that last one is the control, and without it
+        // this test would pass against an evaluator that raised nothing ever.
         let mut interp = Interp::new(false);
-        assert_eq!(
-            eval_condition_text(&mut interp, b"if 0, 'x' then nop"),
-            b"0",
-            "the bad third-position value 'x' must never be reached"
+        // An activation, which the `'x'` version of this test did not need:
+        // division reads the frame's own `NUMERIC DIGITS`, so the control case
+        // below reaches `activation()` where a literal never would.
+        activate(
+            &mut interp,
+            parse_program(b"nop".to_vec()).expect("test program parses"),
         );
         assert_eq!(
-            eval_condition_text(&mut interp, b"if 1, 0, 'x' then nop"),
+            eval_condition_text(&mut interp, b"if 0, (1/0) then nop"),
+            b"0",
+            "the second element must never be evaluated, not merely left unchecked"
+        );
+        assert_eq!(
+            eval_condition_text(&mut interp, b"if 1, 0, (1/0) then nop"),
             b"0",
             "short-circuits at the second element, never reaching the third"
         );
+        let reached = eval_condition(&mut interp, b"if 1, (1/0) then nop");
+        let Err(Failure::Raised(raised)) = reached else {
+            panic!("an element that IS reached must raise, or the two cases above prove nothing");
+        };
+        assert_eq!((raised.number, raised.sub), (42, 3));
     }
 }
