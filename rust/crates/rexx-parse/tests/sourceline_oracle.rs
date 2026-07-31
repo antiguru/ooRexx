@@ -22,15 +22,59 @@
 //! with the driver's; the driver prefixes its own lines and the capture keeps
 //! only those.
 //!
+//! **Constructing the package runs the file's prolog** -- this is also the
+//! project's standing "never instantiate `.Package~new` on a repository
+//! file" rule, and this driver is the one place that already breaks it. It
+//! has been safe only because every corpus prolog used to be trivial: `SAY`
+//! and assignment, nothing that raises. `trace_numeric_request.rex` is the
+//! first one where that stopped being true (its whole point is a prolog
+//! that raises `Error 24.901`), and it will not be the last, since this
+//! phase now writes witness programs whose entire purpose is a specific
+//! failure. A driver that only works on programs that succeed is not a
+//! driver for a corpus that deliberately contains failures -- so the driver
+//! below traps the construction failing and falls back to reading the file
+//! as plain text instead, rather than assuming every prolog behaves.
+//!
+//! The fallback is `LINEIN()` in a loop, not another call into `.Package`,
+//! specifically so a crashing prolog cannot run a second time. It is a
+//! faithful substitute for `~source` only because none of today's crashing
+//! programs need the cases where a naive line reader and `~source` could
+//! disagree -- CRLF terminators, an embedded `CTRL-Z`, or a missing final
+//! newline (`no_trailing_newline.rex`'s entire reason to exist, and why it
+//! must never be the file whose prolog is made to crash). Verified this
+//! driver taking the fallback path on `trace_numeric_request.rex` and the
+//! primary path everywhere else, including on `no_trailing_newline.rex`
+//! itself (still 7 lines, matching `~source`, not 6): the `SIGNAL ON
+//! SYNTAX` wrapper does not change what any non-crashing file's expectation
+//! looks like. If a future witness program needs to crash its prolog *and*
+//! has one of those three shapes, this fallback stops being faithful and
+//! needs its own measurement before being trusted for that file.
+//!
 //! To regenerate, put this driver in a scratch directory as `srclines.rex`:
 //!
 //! ```rexx
 //! parse arg f
+//! signal on syntax name fallback
 //! a = .Package~new(f)~source
-//! say "%SRCG%COUNT" a~items
-//! do i = 1 to a~items
-//!   say "%SRCG%L" || a[i]
-//! end
+//! call report a
+//! exit 0
+//!
+//! fallback:
+//!   lines = .array~new
+//!   do while lines(f) \== 0
+//!     lines~append(linein(f))
+//!   end
+//!   call stream f, "c", "close"
+//!   call report lines
+//!   exit 0
+//!
+//! report: procedure
+//!   use arg a
+//!   say "%SRCG%COUNT" a~items
+//!   do i = 1 to a~items
+//!     say "%SRCG%L" || a[i]
+//!   end
+//!   return
 //! ```
 //!
 //! and run, from the repository root (the `ulimit` guards against the

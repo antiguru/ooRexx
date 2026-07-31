@@ -87,7 +87,26 @@ command clauses, no `DO WITH`, and no `DO OVER` on a stem.
 | `deep_nested_expr.rex` | a 3000-term expression, deep enough to matter and far below the oracle's ~150,000-term stack cliff |
 | `trace_results.rex` | `TRACE R` output on stderr, distinct from `SAY`'s stdout |
 
+### Phase 4a additions -- closing criterion 1's variant-coverage gap
+
+Written for Task 14b, closing criterion 1's coverage requirement (every
+`InstructionKind`/`ExprKind`/`LoopKind`/`PrefixOp`/`EndStyle`/`Trace`
+variant in scope, and every `Operator`, constructed by at least one program
+in the subset). A gap analysis found nineteen such variants unconstructed
+by any program above; these three close every one of them.
+
+| File | Covers |
+|---|---|
+| `prefix_dotvar_logical_over_label.rex` | `LOOP` as its own keyword, a bare label, `.nil`, a comma-list condition, `DO OVER` on a non-stem, an `OTHERWISE`-less `SELECT`, prefix `+` and `\`, bare `TRACE`, `TRACE VALUE` |
+| `comparison_operators_remaining.rex` | the ten `Operator` variants no other program constructs (`\>` `\<` `\>>` `\<<` `>>=` `<<=` `<>` `><` `\|` `&&`), and a labelled `SELECT` with an `OTHERWISE` |
+| `trace_numeric_request.rex` | `TRACE` with a bare number (`trace 5`) -- a raiser, Error 24.901, not a no-op, so it has to be this program's last statement |
+
 ### `num/` — Phase 2, the numeric core
+
+`digits_rounding.rex`, `exponential.rex` and `operators.rex` are listed here
+as corpus programs but are **not** in the Phase 4a subset (`phase-4a.txt`):
+all three build `ExprKind::List` from a comma in a `SAY`, which is out of
+4a's scope. They stay in this directory for 4b or 4c, once `List` exists.
 
 | File | Covers |
 |---|---|
