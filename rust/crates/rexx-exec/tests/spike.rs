@@ -20,13 +20,28 @@
 
 use rexx_exec::{NOT_IMPLEMENTED_EXIT, run_program, run_program_interpret_spike};
 
+/// The path these tests report programs under.
+///
+/// They build programs from bytes rather than from files, so there is no real
+/// path here to canonicalise. It reaches output in exactly one place, the
+/// middle line of a raised condition's report, and
+/// `a_raised_condition_reports_the_failing_clause` asserts it there verbatim.
+///
+/// What a made-up path deliberately does **not** check is the canonicalisation
+/// itself: the oracle prints the absolute, dot-normalised path, and that
+/// conversion lives in `rexx-run`, on the far side of this entry point. It is
+/// covered by running real files through both interpreters, not from here, and
+/// a test that asserted canonical output against a value it invented would be
+/// checking its own arithmetic.
+const SPIKE_PATH: &str = "/nonexistent/spike-program.rex";
+
 /// The whole of Step 1: an interpreter small enough to prove the shape and
 /// nothing else.
 ///
 /// Oracle, `say 'hello'`: stdout `hello\n`, rc 0.
 #[test]
 fn say_hello_prints_hello() {
-    let outcome = run_program(b"say 'hello'\n".to_vec());
+    let outcome = run_program(SPIKE_PATH, b"say 'hello'\n".to_vec());
     assert_eq!(outcome.stdout, b"hello\n");
     assert_eq!(outcome.stderr, b"");
     assert_eq!(outcome.exit_code, 0);
@@ -45,7 +60,10 @@ fn say_hello_prints_hello() {
 /// gives `hello, world\n`, rc 0.
 #[test]
 fn a_variable_round_trips_through_its_slot() {
-    let outcome = run_program(b"greeting = 'hello'\nsay greeting || ', world'\n".to_vec());
+    let outcome = run_program(
+        SPIKE_PATH,
+        b"greeting = 'hello'\nsay greeting || ', world'\n".to_vec(),
+    );
     assert_eq!(outcome.stdout, b"hello, world\n");
     assert_eq!(outcome.exit_code, 0);
 }
@@ -55,7 +73,7 @@ fn a_variable_round_trips_through_its_slot() {
 /// Oracle, `say nosuchvariable`: stdout `NOSUCHVARIABLE\n`, rc 0.
 #[test]
 fn an_unset_variable_reads_as_its_own_name() {
-    let outcome = run_program(b"say nosuchvariable\n".to_vec());
+    let outcome = run_program(SPIKE_PATH, b"say nosuchvariable\n".to_vec());
     assert_eq!(outcome.stdout, b"NOSUCHVARIABLE\n");
     assert_eq!(outcome.exit_code, 0);
 }
@@ -101,7 +119,7 @@ fn a_fragment_shares_the_enclosing_frames_variable_pool() {
                     interpret \"say zork\"\n\
                     zzz = zzz || '!'\n\
                     interpret \"say zzz\"\n";
-    let outcome = run_program_interpret_spike(program.to_vec());
+    let outcome = run_program_interpret_spike(SPIKE_PATH, program.to_vec());
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
         outcome.stdout,
@@ -129,7 +147,7 @@ fn an_exit_inside_a_fragment_ends_the_program() {
                     interpret \"say 'inside'\"\n\
                     interpret \"exit\"\n\
                     say 'after'\n";
-    let outcome = run_program_interpret_spike(program.to_vec());
+    let outcome = run_program_interpret_spike(SPIKE_PATH, program.to_vec());
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(outcome.stdout, b"before\ninside\n");
 }
@@ -143,7 +161,7 @@ fn an_exit_inside_a_fragment_ends_the_program() {
 #[test]
 fn the_interpret_keyword_still_fails_loudly() {
     let program = b"interpret \"say 'reached'\"\n";
-    let outcome = run_program(program.to_vec());
+    let outcome = run_program(SPIKE_PATH, program.to_vec());
     assert_eq!(outcome.exit_code, NOT_IMPLEMENTED_EXIT);
     assert_eq!(outcome.stdout, b"", "the fragment must not have run");
     let stderr = String::from_utf8(outcome.stderr).expect("the loud message is ASCII");
@@ -158,7 +176,7 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
         !(157..=253).contains(&NOT_IMPLEMENTED_EXIT),
         "256 - major lives in 157..=253 for majors 3 to 99"
     );
-    let outcome = run_program(b"do i = 1 to 3\nend\n".to_vec());
+    let outcome = run_program(SPIKE_PATH, b"do i = 1 to 3\nend\n".to_vec());
     assert_eq!(outcome.exit_code, NOT_IMPLEMENTED_EXIT);
     let stderr = String::from_utf8(outcome.stderr).expect("the loud message is ASCII");
     assert!(stderr.contains("DO"), "stderr was {stderr:?}");
@@ -215,7 +233,7 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
 fn a_loud_failure_message_does_not_grow_with_the_expression() {
     const BOUND: usize = 300;
 
-    let small = run_program(b"say 1~a\n".to_vec());
+    let small = run_program(SPIKE_PATH, b"say 1~a\n".to_vec());
     assert_eq!(small.exit_code, NOT_IMPLEMENTED_EXIT);
 
     let mut deep = b"say 1".to_vec();
@@ -223,7 +241,7 @@ fn a_loud_failure_message_does_not_grow_with_the_expression() {
         deep.extend_from_slice(b"~a");
     }
     deep.push(b'\n');
-    let deep = run_program(deep);
+    let deep = run_program(SPIKE_PATH, deep);
     assert_eq!(deep.exit_code, NOT_IMPLEMENTED_EXIT);
 
     assert_eq!(
@@ -270,8 +288,8 @@ fn the_stack_span_does_not_depend_on_what_else_the_program_evaluated() {
     let mut then_a_fragment = alone.clone();
     then_a_fragment.extend_from_slice(b"interpret \"say 'b'\"\n");
 
-    let alone = run_program(alone);
-    let then_a_fragment = run_program_interpret_spike(then_a_fragment);
+    let alone = run_program(SPIKE_PATH, alone);
+    let then_a_fragment = run_program_interpret_spike(SPIKE_PATH, then_a_fragment);
 
     assert_eq!(alone.exit_code, 0, "stderr: {:?}", alone.stderr);
     assert_eq!(
@@ -312,7 +330,7 @@ fn records_the_stack_cost_of_one_eval_frame() {
     }
     program.push(b'\n');
 
-    let outcome = run_program(program);
+    let outcome = run_program(SPIKE_PATH, program);
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
         outcome.stdout, b"a\n",
@@ -368,5 +386,45 @@ fn records_the_stack_cost_of_one_eval_frame() {
         survivable > 100_000.0,
         "the stack survives only {survivable:.0} eval frames, and D19 needs the depth \
          limit to be at least 100,000"
+    );
+}
+
+/// The wiring between the instruction loop and `Raised::report`: which clause
+/// the echo names, which line it resolves to, and the `256 - major` exit code.
+///
+/// `error.rs`'s own tests pin the report's *format* against captured oracle
+/// bytes. None of them can pin the three things that only exist once a program
+/// actually runs, which is what this covers: that the clause echoed is the one
+/// that failed rather than the first or the last, that its line survives
+/// `run`'s teardown of the activation it came from, and that the exit code
+/// stops being `NOT_IMPLEMENTED_EXIT`.
+///
+/// Oracle, with the same three lines in a file at an absolute path (rc 222):
+///
+/// ```text
+/// a
+/// b
+///      3 *-* say 2 & 1
+/// Error 34 running /abs/pin.rex line 3:  Logical value not 0 or 1.
+/// Error 34.901:  Logical value must be exactly "0" or "1"; found "2".
+/// ```
+///
+/// `say 'a'` and `say 'b'` are there to make the line number wrong in a
+/// noticeable way if the site were taken from the first instruction or from
+/// the activation's `pc` after teardown, both of which would still produce a
+/// well-formed report.
+#[test]
+fn a_raised_condition_reports_the_failing_clause() {
+    let outcome = run_program(SPIKE_PATH, b"say 'a'\nsay 'b'\nsay 2 & 1\n".to_vec());
+
+    assert_eq!(outcome.stdout, b"a\nb\n");
+    assert_eq!(outcome.exit_code, 256 - 34);
+    assert_eq!(
+        String::from_utf8(outcome.stderr).expect("the report is ASCII"),
+        format!(
+            "     3 *-* say 2 & 1\n\
+             Error 34 running {SPIKE_PATH} line 3:  Logical value not 0 or 1.\n\
+             Error 34.901:  Logical value must be exactly \"0\" or \"1\"; found \"2\".\n"
+        )
     );
 }

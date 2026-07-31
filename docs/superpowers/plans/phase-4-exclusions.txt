@@ -159,3 +159,21 @@ above.
   thread; a library embedder on a normal stack does not, and the long-term
   answer is a documented minimum stack or a sized entry point in rexx-parse
   itself rather than a smarter counter.
+
+  A raised condition's report prints ONE clause echo; the oracle prints one per
+  nesting level, innermost first. Measured with a two-line file whose line 2 is
+  interpret "say 2 & 1":
+
+         2 *-* say 2 & 1
+         2 *-* interpret "say 2 & 1"
+    Error 34 running /abs/frag.rex line 2:  Logical value not 0 or 1.
+    Error 34.901:  Logical value must be exactly "0" or "1"; found "2".
+
+  Note both echoes carry the ENCLOSING clause's line number, not a line of the
+  fragment. 4a emits the second line only. The gap is unreachable from any
+  corpus program today, because the only construct that nests an instruction
+  loop inside another is the INTERPRET fragment spike, which 4b deletes and
+  which run_program does not expose. Closing it means giving Raised::report a
+  stack of sites rather than one, so whoever implements 4b's real INTERPRET or
+  4b's CALL should decide the shape then rather than inheriting a single-site
+  signature by default.

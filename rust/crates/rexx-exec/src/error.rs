@@ -37,6 +37,21 @@ pub(crate) struct Raised {
     /// it is carried as a field rather than hardcoded at each call site
     /// because the spec's own shape includes it and later tasks (4b's
     /// `NOVALUE`, `NOMETHOD`, ...) need to set it to something else.
+    ///
+    /// **Nothing reads it yet**, and until `execute` was wired to
+    /// `Raised::report` that was hidden: the placeholder stderr line printed
+    /// this field, so it had a reader that existed only because the real
+    /// rendering did not. The oracle's report names the *number*, not the
+    /// condition, so the first genuine reader is 4b's `SIGNAL ON` and
+    /// `condition('c')`.
+    ///
+    /// `expect` rather than `allow` on purpose: it is itself a warning once
+    /// the lint stops firing, so the day 4b reads this field the annotation
+    /// asks to be deleted instead of quietly outliving its reason.
+    #[expect(
+        dead_code,
+        reason = "no reader until 4b's SIGNAL ON and condition('c'); expect self-expires"
+    )]
     pub(crate) condition: &'static str,
     pub(crate) number: u16,
     pub(crate) sub: u16,
@@ -154,10 +169,6 @@ impl From<Raised> for Failure {
 /// Passed in rather than reached for: `error.rs` owns the *format*, and the
 /// instruction loop owns knowing which clause failed. That split is why this
 /// module needs no access to `Interp`, the program or the source.
-#[allow(
-    dead_code,
-    reason = "the reporting layer; `execute` in lib.rs wires it, which is not this task's file"
-)]
 pub(crate) struct ClauseSite<'a> {
     /// The program's path **as the oracle prints it**, absolute. Measured:
     /// the major line carries the full path, and `rexx-oracle`'s `normalize`
@@ -172,10 +183,6 @@ pub(crate) struct ClauseSite<'a> {
     pub(crate) text: &'a [u8],
 }
 
-#[allow(
-    dead_code,
-    reason = "the reporting layer; `execute` in lib.rs wires it, which is not this task's file"
-)]
 impl Raised {
     /// `256 - major`, the whole rule.
     ///
@@ -270,10 +277,6 @@ impl Raised {
 ///
 /// An `&` not followed by a digit, and a digit with no matching value, are
 /// both passed through unchanged rather than swallowed.
-#[allow(
-    dead_code,
-    reason = "the reporting layer; `execute` in lib.rs wires it, which is not this task's file"
-)]
 fn substitute(text: &str, values: &[String]) -> String {
     let mut out = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();

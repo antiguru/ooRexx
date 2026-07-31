@@ -64,7 +64,7 @@ use activation::Activation;
 // `Loud` not-implemented marker or a `Raised` condition, the one type
 // `step` and everything above it propagate).
 mod error;
-use error::Failure;
+use error::{ClauseSite, Failure};
 
 // Expression evaluation (`eval`/`eval_node`): terms, arithmetic and
 // concatenation.
@@ -498,6 +498,20 @@ struct Interp {
     /// already appends to the right buffer rather than being rerouted later,
     /// which is when a stray ordering difference would appear.
     trace: Vec<u8>,
+    /// The clause a `Raised` condition escaped from, as the 1-based line and
+    /// the bytes `TRACE` would echo, or `None` if nothing raised.
+    ///
+    /// Resolved here rather than carried on `Raised`, and the reason is that
+    /// only an instruction loop knows **which source** an
+    /// `Instruction::clause_span` indexes into: the main loop's spans are the
+    /// program's, a fragment's are its own. Storing a bare span would leave
+    /// `execute` guessing between them.
+    ///
+    /// Written once, by the first loop to see the failure escape, and read by
+    /// `execute` after `run` has already popped the activation the site came
+    /// from. That teardown is why the site cannot simply be reconstructed at
+    /// the top: by then the frame is gone.
+    failure_site: Option<(usize, Vec<u8>)>,
     /// True when the caller is the fragment spike, in which case
     /// `InstructionKind::Interpret` runs its fragment instead of failing
     /// loudly.
@@ -542,6 +556,7 @@ impl Interp {
             plans: HashMap::new(),
             out: Vec::new(),
             trace: Vec::new(),
+            failure_site: None,
             interpret_spike,
             depth: 0,
             max_depth: 0,
@@ -771,7 +786,54 @@ impl Interp {
         let depth = self.activations.len();
 
         while let Some(instruction) = code.body.instructions.get(self.activation().pc) {
-            match self.step_in_temps_frame(&code, instruction)? {
+            let flow = match self.step_in_temps_frame(&code, instruction) {
+                Ok(flow) => flow,
+                Err(failure) => {
+                    // The last place the failing instruction is in hand.
+                    // `run` pops this activation on the way out, so a site
+                    // resolved any higher up would have nothing left to
+                    // resolve against.
+                    //
+                    // A condition raised inside an `INTERPRET` fragment
+                    // arrives here too, and records the enclosing `INTERPRET`
+                    // clause rather than the fragment's own, because the
+                    // fragment loop deliberately does not record: its spans
+                    // index the fragment's source and not this one, so the
+                    // line they resolve to would be the fragment's.
+                    //
+                    // The oracle prints **both**, innermost first, each
+                    // carrying the enclosing clause's line number (measured,
+                    // `interpret "say 2 & 1"` on line 2):
+                    //
+                    // ```text
+                    //      2 *-* say 2 & 1
+                    //      2 *-* interpret "say 2 & 1"
+                    // ```
+                    //
+                    // so this reproduces the second of those lines and not the
+                    // first. A known gap rather than something to fix here:
+                    // stacking one echo per nesting level changes
+                    // `Raised::report`'s shape, and 4a's only nesting is the
+                    // fragment spike that 4b deletes.
+                    let source = &program.source;
+                    self.failure_site = Some((
+                        source.line_of(instruction.clause_span.start),
+                        source
+                            .join_span(instruction.clause_span.clone())
+                            .map_or_else(
+                                // Visible rather than silent, for the same
+                                // reason `Raised::message` renders a catalogue
+                                // miss instead of panicking: the error path is
+                                // the worst place to turn a reportable
+                                // condition into a crash or into a blank line.
+                                || b"<clause span outside the retained source>".to_vec(),
+                                |bytes| bytes.into_owned(),
+                            ),
+                    ));
+                    return Err(failure);
+                }
+            };
+            match flow {
                 Flow::Next => self.activation_mut().pc += 1,
                 Flow::Goto(target) => self.activation_mut().pc = target,
                 Flow::Exit(value) => return Ok(value),
@@ -988,8 +1050,18 @@ impl Interp {
 /// `!Send`: a program parsed on the caller's thread cannot be handed across.
 /// That is a compile error on day one rather than a subtle bug, and it is why
 /// `text` crosses as `Vec<u8>` and an `Outcome` comes back.
-pub fn run_program(text: Vec<u8>) -> Outcome {
-    on_interpreter_thread(move || execute(text, false))
+///
+/// `path` is the program's location **as the oracle prints it**, which is the
+/// absolute, dot-normalised form: measured, running `./sub/../sub/rel.rex` and
+/// `rel.rex` from two different working directories both report the same
+/// canonical path. It is a parameter rather than something derived from `text`
+/// because a program's own bytes cannot know where they came from, and it is
+/// separate from `ProgramSource` because the parser has no use for it. The
+/// caller that read the file is the one that knows; `rexx-run` canonicalises
+/// before calling.
+pub fn run_program(path: &str, text: Vec<u8>) -> Outcome {
+    let path = path.to_string();
+    on_interpreter_thread(move || execute(&path, text, false))
 }
 
 /// `run_program`, except that an `INTERPRET` instruction runs its fragment
@@ -1021,8 +1093,9 @@ pub fn run_program(text: Vec<u8>) -> Outcome {
 /// innocent instruction such as `NOP` proves the same lifetime while lying
 /// about which node owns it, and leaves nothing for 4b to delete.
 #[doc(hidden)]
-pub fn run_program_interpret_spike(text: Vec<u8>) -> Outcome {
-    on_interpreter_thread(move || execute(text, true))
+pub fn run_program_interpret_spike(path: &str, text: Vec<u8>) -> Outcome {
+    let path = path.to_string();
+    on_interpreter_thread(move || execute(&path, text, true))
 }
 
 /// Runs `body` on a thread with `INTERPRETER_STACK_BYTES` of stack.
@@ -1049,13 +1122,20 @@ fn on_interpreter_thread(body: impl FnOnce() -> Outcome + Send + 'static) -> Out
 }
 
 /// Everything that happens on the interpreter thread: parse, run, report.
-fn execute(text: Vec<u8>, interpret_spike: bool) -> Outcome {
+fn execute(path: &str, text: Vec<u8>, interpret_spike: bool) -> Outcome {
     let program = match parse_program(text) {
         Ok(program) => program,
-        // Task 12 owns the oracle's exact two-line syntax-error format and the
-        // `256 - major` exit code. Until then a parse failure is loud, which
-        // is wrong in the details and right in never being mistaken for
-        // success.
+        // **A parse failure stays loud, and Task 12 did not change that.** It
+        // built the catalogue and the three-line format for conditions a
+        // *running* program raises, which is what the arms below now use. A
+        // syntax error needs two things that path does not supply: the major
+        // and sub extracted from a `ParseError` rather than from a `Raised`,
+        // and a clause echo for a clause that by definition did not parse into
+        // an `Instruction` with a `clause_span`. Parse errors are also
+        // deliberately not reproduced byte for byte here (the number and sub
+        // match on a plausible line; message text and substitutions are not
+        // gated), so this arm is wrong in the details on purpose and right in
+        // never being mistaken for success.
         Err(error) => {
             return Outcome {
                 exit_code: NOT_IMPLEMENTED_EXIT,
@@ -1069,6 +1149,9 @@ fn execute(text: Vec<u8>, interpret_spike: bool) -> Outcome {
     let mut interp = Interp::new(interpret_spike);
     let result = interp.run(program);
     let stack = interp.stack_span();
+    // Taken before `trace` is moved out below, which ends `interp`'s life as a
+    // whole value.
+    let failure_site = interp.failure_site.take();
     let mut stderr = interp.trace;
     let exit_code = match result {
         Ok(_) => 0,
@@ -1076,20 +1159,21 @@ fn execute(text: Vec<u8>, interpret_spike: bool) -> Outcome {
             stderr.extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
             NOT_IMPLEMENTED_EXIT
         }
-        // Task 12 owns the oracle's exact two-line stderr format and the
-        // `256 - number` exit code; this only says WHICH condition fired,
-        // without pretending to reproduce what the oracle prints for it --
-        // the same "wrong in the details, right in never being mistaken
-        // for success" rule the parse-error arm above already follows.
         Err(Failure::Raised(raised)) => {
-            stderr.extend_from_slice(
-                format!(
-                    "rexx-exec: raised {} {}.{} (not yet rendered: Task 12), additional {:?}\n",
-                    raised.condition, raised.number, raised.sub, raised.additional
-                )
-                .as_bytes(),
-            );
-            NOT_IMPLEMENTED_EXIT
+            // `run_activation` records the site on the way out. `None` here
+            // would mean a condition escaped without passing an instruction
+            // loop, which nothing in 4a can do; it renders visibly rather than
+            // panicking, on the error path's standing rule that a reportable
+            // condition must never become a crash.
+            let (line, text) =
+                failure_site.unwrap_or_else(|| (0, b"<no failing clause recorded>".to_vec()));
+            let site = ClauseSite {
+                path,
+                line,
+                text: &text,
+            };
+            stderr.extend_from_slice(&raised.report(&site));
+            raised.exit_code()
         }
     };
 

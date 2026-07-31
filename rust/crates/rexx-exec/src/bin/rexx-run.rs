@@ -36,7 +36,20 @@ fn main() -> ExitCode {
         }
     };
 
-    let outcome = rexx_exec::run_program(text);
+    // The oracle names the program in its error reports by the absolute,
+    // dot-normalised path, whatever was typed on the command line: measured,
+    // `./sub/../sub/rel.rex` and a bare `rel.rex` run from the directory both
+    // report the same canonical path. `canonicalize` is that normalisation and
+    // also resolves symlinks, which is one step further than the oracle has
+    // been measured to go; nothing in the corpus runs through a symlink, so
+    // that difference is unobserved rather than known to agree.
+    //
+    // A failure here falls back to the path as given rather than aborting: the
+    // file has already been read successfully by this point, so a canonicalise
+    // failure is a race or a permission quirk on the directory, and reporting
+    // the program under the name the caller used beats refusing to run it.
+    let reported = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone().into());
+    let outcome = rexx_exec::run_program(&reported.to_string_lossy(), text);
 
     // Written in the order the program produced them relative to each other,
     // which is no order at all: they are separate descriptors, and D17 records
