@@ -786,7 +786,7 @@ Control expressions are evaluated in `Controlled::order`, which Phase 3 recorded
 * An **ordinary clause label does not name a loop.** `outer: do i = 1 to 3` followed by `leave outer` is **28.3**, and `iterate outer` is **28.4**.
 * What does work is `DO LABEL name`, and the **control variable's automatic label**: `leave i` or `iterate i` from inside a nested loop reaches the *outer* loop and unwinds the inner one.
 * Bare `leave` in a simple `DO` block is **28.1**, but a **labelled** simple block is leavable.
-* `leave sel`, where `sel` labels a `SELECT`, exits the `SELECT`.
+* `leave sel` exits a `SELECT` **only when that `SELECT` was written `SELECT LABEL sel`**. An ordinary clause label in front of a `SELECT` does not make it leavable, exactly as it does not for a loop: that form is 28.3. The distinction matters to you specifically, because you are designing the block stack and the question is which constructs put a *named* frame on it.
 
 **That last one is a coordination point with Task 10, and Task 10 has since shipped, so here is what it actually left you.** `LEAVE` must find and unwind through Task 10's `SELECT`s by label. Read the committed `run.rs` rather than reasoning from this plan; the three facts below were established after this section was first written, and two of them were mutation-verified.
 

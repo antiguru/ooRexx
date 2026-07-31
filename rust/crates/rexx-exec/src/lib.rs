@@ -21,7 +21,7 @@
 //!
 //! **What it executes grows task by task, and this doc deliberately does not
 //! list it.** The enumeration that stood here was true of Task 3's spike and
-//! false by Task 6, and the two `Loud` messages carried the same list and went
+//! false by Task 7, and the two `Loud` messages carried the same list and went
 //! stale the same way; `Loud::expression`'s doc records why the cure is
 //! deleting the list rather than correcting it. What holds instead: any
 //! construct not yet implemented fails loudly with `NOT_IMPLEMENTED_EXIT`
@@ -385,7 +385,7 @@ impl Loud {
     /// byte for byte.
     ///
     /// **Neither message lists what *is* implemented**, and both used to. The
-    /// list was true of Task 3's spike and false by Task 6, which is the whole
+    /// list was true of Task 3's spike and false by Task 7, which is the whole
     /// argument: every task that implements a form has to remember to edit a
     /// string in a file it is not otherwise touching, and none of the three
     /// that shipped between did. A message that can only go stale by being

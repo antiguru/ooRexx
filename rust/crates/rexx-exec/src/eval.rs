@@ -1017,11 +1017,18 @@ mod tests {
         // apart however many of them a test lists, and non-strict `>=`/`<=`
         // appeared in no test at all.
         //
-        // The gap started as a measurement gap and became a test gap: the
-        // fourteen oracle measurements behind the rows above have the same
-        // blind spot, no equal-operand case for any negated form. Each value
-        // below was measured against `build/bin/rexx` before being written
-        // here, not derived from the mapping it checks.
+        // **This was a transcription loss, not a measurement gap, and an
+        // earlier version of this comment blamed the wrong step.** Task 8's
+        // report does carry equal-operand rows: `'9' <<= '9'` is there and
+        // would have exposed the `<<=` mutation, and `'9' \== '9'` is an
+        // equal-operand negated form. Both were measured and neither reached
+        // a test. So the oracle work was sound and the loss happened between
+        // the report and the assertions, which is the more likely failure of
+        // the two and the one worth guarding: check a report's own table
+        // against the test that claims to encode it.
+        //
+        // Each value below was re-measured against `build/bin/rexx` before
+        // being written here rather than derived from the mapping it checks.
         assert_eq!(eval_text(&mut interp, b"say ('9' \\> '9')"), b"1");
         assert_eq!(eval_text(&mut interp, b"say ('9' \\< '9')"), b"1");
         assert_eq!(eval_text(&mut interp, b"say ('9' \\>> '9')"), b"1");
