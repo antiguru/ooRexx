@@ -24,6 +24,30 @@
 //! `DotVariable` beyond the three -- still fails loudly through the
 //! existing, exhaustive `form_name`.
 //!
+//! **Six functions here open a temps frame and then use `?`, so a raised
+//! condition leaves their own `pop_frame` unreached. That is deliberate, and
+//! Tasks 10 and 11 should copy it rather than repair it.** `eval_prefix`,
+//! `eval_arithmetic`, `concat`, `eval_compare`, `eval_logical` and
+//! `eval_logical_list` are the six. `step_in_temps_frame` pops
+//! unconditionally with an outer watermark, and `pop_frame` truncates rather
+//! than popping one frame, so the skipped inner frames are discarded when the
+//! failing instruction returns. Nothing accumulates: an instruction is the
+//! granularity at which the temps stack is guaranteed balanced, not an
+//! expression.
+//!
+//! The alternative was measured and rejected rather than left untried. A
+//! `Drop` guard cannot be written here at all, because it would have to hold
+//! `&mut RootSet` across `self.eval(&mut self)` and that is two live `&mut`
+//! borrows; the only escapes are a raw pointer, which is `unsafe` for no
+//! strict need, and putting the `RootSet` behind a `RefCell`, which relaxes
+//! this crate's borrow discipline to fix something that is not a defect.
+//!
+//! What this does depend on is every instruction loop routing through
+//! `step_in_temps_frame`. A future caller that evaluates in a loop *outside*
+//! instruction context and carries on past an `Err` would accumulate for
+//! real, and would do it silently, since nothing asserts temps balance. Only
+//! test helpers do that today.
+//!
 //! **Arithmetic, comparison and logic can all fail two different ways, and
 //! this module is where that split first matters.** An unimplemented form
 //! is `Loud`, unchanged. A real Rexx condition -- `1/0`, `'abc' + 1`, `2 **

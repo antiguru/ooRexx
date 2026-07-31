@@ -67,10 +67,30 @@ impl RootSet {
         }
     }
 
+    /// Marks the current top of the temporaries stack, to be handed back to
+    /// `pop_frame`. Mutates nothing, so an unpopped `FrameId` costs nothing on
+    /// its own.
     pub fn push_frame(&mut self) -> FrameId {
         FrameId(self.temps.len())
     }
 
+    /// Discards every temporary pushed since `frame` was taken.
+    ///
+    /// **Truncating to a watermark, rather than popping one frame, is
+    /// load-bearing and callers rely on it.** `rexx-exec` has six functions
+    /// that open a frame and then use `?`, so a raised condition leaves their
+    /// own `pop_frame` unreached; every one of those is healed here, because
+    /// the enclosing `step_in_temps_frame` pops unconditionally with an outer
+    /// watermark and this call unwinds the skipped inner frames with it. Pops
+    /// are therefore idempotent and out-of-order pops are not representable:
+    /// the worst a stale `FrameId` can do is discard more than its owner
+    /// meant to.
+    ///
+    /// **Do not add a balance assertion here** without first making those six
+    /// sites pop on their own path. It would fire on the ordinary error path
+    /// of a correct program. That is also why the slot side of this file
+    /// asserts and this side deliberately does not; the asymmetry is a
+    /// decision, not an oversight.
     pub fn pop_frame(&mut self, frame: FrameId) {
         self.temps.truncate(frame.0);
     }
