@@ -41,7 +41,7 @@
 //! true and false arrivals are indistinguishable from `(instruction, pc)`
 //! alone, and only one of the two is supposed to enter the `Else`'s body.
 //! `SELECT`/`WHEN` has the same defect with no marker to disambiguate with
-//! at all. `run_bounded`'s doc comment carries the resolution; `Then`,
+//! at all. `run_bounded`'s doc comment carries the resolution. `Then`,
 //! `Else`, `Otherwise`, `When` and `WhenCase` accordingly step as pure
 //! no-ops (like `Label`) -- they are never independently dispatched, only
 //! ever read as data by `If`/`Select` or walked over inside a bounded loop.
@@ -60,14 +60,20 @@ use std::rc::Rc;
 /// Where control goes after one instruction (the design's "Control flow").
 enum Flow {
     Next,
-    /// Unreachable in a fragment for a measured reason: a label inside
-    /// `INTERPRET` text is error 47.1 (Task 1), so a fragment's `labels` is
-    /// always empty and a fragment can never jump -- `run_fragment`'s own
-    /// `unreachable!` on this variant still holds. Live everywhere else since
-    /// Task 10: `If`/`Select` each resolve to one `Goto` that skips straight
-    /// to their construct's true resume point, and `run_bounded`'s own
-    /// internal loop applies one whenever a nested construct's target lands
-    /// inside its range.
+    /// Live since Task 10: `If`/`Select` each resolve to one `Goto` that
+    /// skips straight to their construct's true resume point, and
+    /// `run_bounded`'s own internal loop applies one whenever a nested
+    /// construct's target lands inside its range.
+    ///
+    /// **This includes inside a fragment.** A label inside `INTERPRET` text
+    /// is still error 47.1 (Task 1), so a fragment's `labels` is still
+    /// always empty and nothing there can jump to a *label* -- but Task 10
+    /// makes `IF`/`SELECT` able to appear (and jump) anywhere a `Code` body
+    /// can be stepped, a fragment's own included, with no label involved at
+    /// all. `run_fragment` no longer has an `unreachable!` on this variant;
+    /// it now runs through `run_bounded` for exactly this reason (that
+    /// function's own doc comment has the argument for why every jump such
+    /// a construct computes stays inside the fragment's own range).
     Goto(usize),
     Exit(Option<ObjRef>),
 }
@@ -504,7 +510,7 @@ impl Interp {
                     // comment) or is simply where control resumes with no
                     // `ELSE` at all, the outer loop's ordinary fallthrough
                     // already lands in the right place with no ambiguity --
-                    // that is only true of the false path; see
+                    // that is only true of the false path. See
                     // `run_bounded`'s doc comment for why the true path
                     // cannot rely on the same thing.
                     Ok(Flow::Goto(false_target))
@@ -637,7 +643,7 @@ impl Interp {
             InstructionKind::When { .. } | InstructionKind::WhenCase { .. } => Ok(Flow::Next),
             InstructionKind::Otherwise => Ok(Flow::Next),
 
-            // `END`. `Do`/`Loop` closings are Task 11's and fail loudly;
+            // `END`. `Do`/`Loop` closings are Task 11's and fail loudly.
             // `Select`'s two non-7.3 closings (`OTHERWISE` present) are
             // reached only by that `OTHERWISE`'s own ordinary body
             // fallthrough and do nothing. `EndStyle::Select`'s own doc
@@ -799,7 +805,7 @@ impl Interp {
     /// matched (and silently mishandled) by name.
     ///
     /// Reaching `end` exactly, whether by `pc += 1` or by an in-range `Goto`,
-    /// is the only way this returns `Ok(Flow::Next)`; every other exit
+    /// is the only way this returns `Ok(Flow::Next)`. Every other exit
     /// returns the escaping `Flow` unchanged, and the caller (`If`/`Select`)
     /// must check which happened rather than assume the former.
     ///
@@ -827,18 +833,19 @@ impl Interp {
 
     /// Evaluates `condition` and answers whether it holds, for `IF`/`WHEN`.
     ///
-    /// **A comma list checks itself; a single expression does not, and this
-    /// is the one place that gap gets closed.** `ExprKind::Logical` (a comma
-    /// list) is evaluated through `eval`'s own dispatch to `eval_logical_list`
-    /// exactly like any other expression, which already validates every
-    /// element is exactly `0`/`1` and raises 34.6 on the first that is not --
-    /// re-checking its result here would misreport that failure as 34.1/34.2.
-    /// A single, non-list expression never passes through `eval_logical_list`
-    /// at all (there is no list to iterate), so nothing has checked it yet;
-    /// `raise` is the keyword-specific raiser for exactly that case (34.1
-    /// `IF`, 34.2 `WHEN`) -- measured across both, `if 'x', 1 then` is 34.6
-    /// (a list, regardless of which element failed) while `if 'x' then` is
-    /// 34.1 (not a list at all).
+    /// **A comma list checks itself, but a single expression does not, and
+    /// this is the one place that gap gets closed.** `ExprKind::Logical` (a
+    /// comma list) is evaluated through `eval`'s own dispatch to
+    /// `eval_logical_list` exactly like any other expression, which already
+    /// validates every element is exactly `0`/`1` and raises 34.6 on the
+    /// first that is not -- re-checking its result here would misreport
+    /// that failure as 34.1/34.2. A single, non-list expression never
+    /// passes through `eval_logical_list` at all (there is no list to
+    /// iterate), so nothing has checked it yet. `raise` is the
+    /// keyword-specific raiser for exactly that case (34.1 `IF`, 34.2
+    /// `WHEN`) -- measured across both, `if 'x', 1 then` is 34.6 (a list,
+    /// regardless of which element failed) while `if 'x' then` is 34.1 (not
+    /// a list at all).
     fn eval_condition(
         &mut self,
         code: &Code<'_>,
@@ -895,7 +902,7 @@ impl Interp {
 
     /// If `target` names an `Else` instruction, its own `then_exit`
     /// (defaulting to the end of the body when `None`, "the end of this
-    /// body" per `ast.rs`'s own doc comment); otherwise `target` unchanged.
+    /// body" per `ast.rs`'s own doc comment). Otherwise `target` unchanged.
     ///
     /// Shared by both of `If`'s own arms: the true path calls this to learn
     /// where to resume once its bounded branch finishes, and the doc comment
@@ -1951,7 +1958,7 @@ mod tests {
     /// through into the `ELSE` marker without skipping it (the naive
     /// fallthrough this task's whole design exists to avoid -- see
     /// `run_bounded`'s doc comment) runs *both* assignments and prints
-    /// `abXc`; a version that never runs the `ELSE` branch on the false path
+    /// `abXc`. A version that never runs the `ELSE` branch on the false path
     /// at all prints `aXc` for the companion case below. Only the correct
     /// wiring prints `abc` and `aXc` respectively.
     #[test]
@@ -2271,6 +2278,51 @@ mod tests {
         .unwrap_err();
         let (line, text) = interp.failure_site.expect("a site was resolved");
         assert_eq!(line, 4);
+        assert_eq!(text, b"say 1/0".to_vec());
+    }
+
+    /// A raise inside a matched `WHEN`'s **body** (not its condition) has to
+    /// go through `run_bounded`'s own `step_in_temps_frame` calls with
+    /// `source` actually threaded through, which is a different path from
+    /// every other test in this section: those all check a condition/value
+    /// expression `Select`'s own arm evaluates directly, and
+    /// `a_raise_inside_an_otherwise_branch_is_attributed_to_its_own_clause`
+    /// runs through the *outer* loop's `step_in_temps_frame`, never through
+    /// `run_bounded` at all. This is round 1's own defect class -- an error
+    /// escaping a nested `run_bounded` call misattributed to the enclosing
+    /// construct -- and no existing test exercises the path that would
+    /// regress if `source` stopped being threaded into `run_bounded`.
+    /// Confirmed by mutation, not assumed: passing `None` in place of
+    /// `source` at both of `Select`'s own `run_bounded` call sites made this
+    /// test (and the `IF` one below) fail, while leaving all 102
+    /// pre-existing tests green -- restored immediately after.
+    #[test]
+    fn a_raise_inside_a_matched_whens_body_is_attributed_to_its_own_clause() {
+        let mut interp = Interp::new(false);
+        run_source(&mut interp, b"select\nwhen 1 = 1 then\n  say 1/0\nend").unwrap_err();
+        let (line, text) = interp.failure_site.expect("a site was resolved");
+        assert_eq!(
+            line, 3,
+            "the WHEN's own body clause, not the SELECT's (line 1)"
+        );
+        assert_eq!(text, b"say 1/0".to_vec());
+    }
+
+    /// The `IF` analogue of the `WHEN`-body test above: a raise inside the
+    /// matched `THEN` branch's own body, which likewise only ever reaches
+    /// `step_in_temps_frame` through `run_bounded`. Confirmed by the same
+    /// mutation (`None` for `source` at `If`'s own `run_bounded` call site
+    /// made this fail too, alongside the `WHEN`-body test, both restored
+    /// after).
+    #[test]
+    fn a_raise_inside_an_ifs_then_body_is_attributed_to_its_own_clause() {
+        let mut interp = Interp::new(false);
+        run_source(&mut interp, b"if 1 = 1 then\n  say 1/0").unwrap_err();
+        let (line, text) = interp.failure_site.expect("a site was resolved");
+        assert_eq!(
+            line, 2,
+            "the THEN branch's own body clause, not the IF's (line 1)"
+        );
         assert_eq!(text, b"say 1/0".to_vec());
     }
 
