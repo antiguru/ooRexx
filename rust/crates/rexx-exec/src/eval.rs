@@ -9,28 +9,32 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! Expression evaluation, part one: terms, arithmetic and concatenation.
+//! Expression evaluation, parts one and two: terms, arithmetic,
+//! concatenation, comparison and logic.
 //!
 //! `eval`/`eval_node`/`stack_span` moved here from Task 3's spike, extended
-//! with `Stem`, `Compound`, `DotVariable`'s three admissible names, `Prefix`,
-//! the seven arithmetic operators and the two concatenation forms `||` did
-//! not already cover. Comparison (`=`, `==`, ...) and logical (`&`, `|`,
-//! `&&`) stay out -- Task 8's, waiting on a byte-slice `compare` entry point
-//! `rexx-num` does not have yet. Every other `ExprKind` -- `Call`,
-//! `QualifiedCall`, `Message`, `ClassResolver`, `List`, `VariableReference`,
-//! and any `DotVariable` beyond the three -- still fails loudly through the
+//! (Task 7) with `Stem`, `Compound`, `DotVariable`'s three admissible names,
+//! `Prefix`, the seven arithmetic operators and the two concatenation forms
+//! `||` did not already cover, and (Task 8) with the twelve comparison
+//! operators (through `rexx-num`'s `compare_decoded`, never a hand-written
+//! string comparison), the three binary logical operators `&`/`|`/`&&`, and
+//! `ExprKind::Logical` (the comma-separated conditional list `IF a, b THEN`
+//! desugars to). Every other `ExprKind` -- `Call`, `QualifiedCall`,
+//! `Message`, `ClassResolver`, `List`, `VariableReference`, and any
+//! `DotVariable` beyond the three -- still fails loudly through the
 //! existing, exhaustive `form_name`.
 //!
-//! **Arithmetic can now fail two different ways, and this module is where
-//! that split first matters.** An unimplemented form is `Loud`, unchanged.
-//! A real Rexx condition -- `1/0`, `'abc' + 1`, `2 ** 'x'` -- is `Raised`
-//! (`error.rs`), and both convert into the one type `step` and everything
-//! above it propagate, `Failure`.
+//! **Arithmetic, comparison and logic can all fail two different ways, and
+//! this module is where that split first matters.** An unimplemented form
+//! is `Loud`, unchanged. A real Rexx condition -- `1/0`, `'abc' + 1`, `2 **
+//! 'x'`, `\'abc'`, `if 1, 'x' then` -- is `Raised` (`error.rs`), and both
+//! convert into the one type `step` and everything above it propagate,
+//! `Failure`.
 
 use crate::error::Raised;
 use crate::{Code, Failure, Interp, Loud, StackSpan};
 use rexx_core::{NotNumeric, ObjRef};
-use rexx_num::{DivOp, Number};
+use rexx_num::{CompareOp, DivOp, Number, compare_decoded};
 use rexx_parse::{Expr, ExprKind, Operator, PrefixOp, compound_parts};
 
 impl Interp {
@@ -148,6 +152,51 @@ impl Interp {
                 right,
             } => self.eval_arithmetic(code, *op, left, right),
 
+            // The twelve comparison operators (D15's "Expression
+            // evaluation": numeric-or-string `= \= <> >< > < >= <= \> \<`,
+            // and strict `== \== >> << >>= <<= \>> \<<`), all through
+            // `rexx-num`'s `compare_decoded` -- see `eval_compare`'s own
+            // doc comment for why no string comparison is written here.
+            ExprKind::Binary {
+                op:
+                    op @ (Operator::Equal
+                    | Operator::BackslashEqual
+                    | Operator::GreaterThan
+                    | Operator::BackslashGreaterThan
+                    | Operator::LessThan
+                    | Operator::BackslashLessThan
+                    | Operator::GreaterThanEqual
+                    | Operator::LessThanEqual
+                    | Operator::StrictEqual
+                    | Operator::StrictBackslashEqual
+                    | Operator::StrictGreaterThan
+                    | Operator::StrictBackslashGreaterThan
+                    | Operator::StrictLessThan
+                    | Operator::StrictBackslashLessThan
+                    | Operator::StrictGreaterThanEqual
+                    | Operator::StrictLessThanEqual
+                    | Operator::LessThanGreaterThan
+                    | Operator::GreaterThanLessThan),
+                left,
+                right,
+            } => self.eval_compare(code, *op, left, right),
+
+            // `&`/`|`/`&&`: always evaluate and check both operands, never
+            // short-circuited (measured, see `eval_logical`'s own doc
+            // comment) -- the opposite of `ExprKind::Logical`'s own rule
+            // just below.
+            ExprKind::Binary {
+                op: op @ (Operator::And | Operator::Or | Operator::Xor),
+                left,
+                right,
+            } => self.eval_logical(code, *op, left, right),
+
+            // The comma-separated conditional list (`IF a, b THEN`, and
+            // `WHEN`/`GUARD`/`WHILE`/`UNTIL`'s own versions of the same
+            // syntax) -- see `eval_logical_list`'s own doc comment for the
+            // short-circuit and sub-number this arm alone can give it.
+            ExprKind::Logical(items) => self.eval_logical_list(code, items),
+
             other => Err(Loud::expression(other).into()),
         }
     }
@@ -184,11 +233,12 @@ impl Interp {
             }
             PrefixOp::Not => {
                 let text = self.to_text(value).to_vec();
-                match text.as_slice() {
-                    b"0" => self.text(b"1"),
-                    b"1" => self.text(b"0"),
-                    _ => return Err(Raised::not_logical(&text).into()),
-                }
+                let flipped = match logical_value(&text) {
+                    Some(true) => b"0",
+                    Some(false) => b"1",
+                    None => return Err(Raised::not_logical(&text).into()),
+                };
+                self.text(flipped)
             }
         };
 
@@ -300,6 +350,155 @@ impl Interp {
         Ok(joined)
     }
 
+    /// The twelve comparison operators, all through `rexx-num`'s
+    /// `compare_decoded` -- **no string comparison is written here**, per
+    /// the plan's own instruction and this crate's standing rule against a
+    /// second copy of logic `rexx-num` already owns (the same rule
+    /// `compare.rs`'s own module doc states for its three entry points).
+    ///
+    /// Calls `to_number` for the non-strict family only, and never for
+    /// strict operators, which `compare_decoded` never even inspects a
+    /// `Number` for (`is_strict()`'s short-circuit, `compare.rs:154`) --
+    /// asking for one anyway would force a needless parse of an operand
+    /// `==`/`>>`/... never numerically compares. When `to_number` is
+    /// called, it already routes through `Body::Text`'s tri-state `num`
+    /// cache (`value.rs`), so an operand already asked about is not
+    /// reparsed -- passing its *bytes* to `compare_decoded` alongside the
+    /// already-parsed `Number` is what the plan's "do not quietly defeat
+    /// the cache by using the `&str` entry point" is about, not a
+    /// prohibition on calling `to_number` at all.
+    fn eval_compare(
+        &mut self,
+        code: &Code<'_>,
+        op: Operator,
+        left: &Expr,
+        right: &Expr,
+    ) -> Result<ObjRef, Failure> {
+        let frame = self.roots.push_frame();
+        let left_value = self.eval(code, left)?;
+        self.roots.push_temp(left_value);
+        let right_value = self.eval(code, right)?;
+        self.roots.push_temp(right_value);
+
+        let left_bytes = self.to_text(left_value).into_owned();
+        let right_bytes = self.to_text(right_value).into_owned();
+
+        let strict = is_strict_compare(op);
+        let left_number = if strict {
+            None
+        } else {
+            self.to_number(left_value).ok()
+        };
+        let right_number = if strict {
+            None
+        } else {
+            self.to_number(right_value).ok()
+        };
+
+        let digits = self.activation().settings.digits();
+        let fuzz = self.activation().settings.fuzz();
+        let holds = compare_decoded(
+            &left_bytes,
+            left_number.as_ref(),
+            &right_bytes,
+            right_number.as_ref(),
+            digits,
+            fuzz,
+            compare_op(op),
+        )
+        .map_err(Raised::from)?;
+
+        let result = self.text(if holds { b"1" } else { b"0" });
+        self.roots.pop_frame(frame);
+        Ok(result)
+    }
+
+    /// `&`/`|`/`&&`. **Both operands are always evaluated and checked,
+    /// never short-circuited**, and the left is checked before the right
+    /// when both are bad -- measured: `say (0 & 'x')` and `say (1 | 'x')`
+    /// both raise 34.901 on `"x"` even though the result is already
+    /// decided by the first operand alone, and `say ('y' & 'x')` (both
+    /// bad) reports `"y"`, the left operand's own text, not `"x"`. The
+    /// opposite rule from `ExprKind::Logical`'s comma list, just below,
+    /// which does short-circuit -- both are implemented exactly as
+    /// measured rather than made to agree with each other.
+    fn eval_logical(
+        &mut self,
+        code: &Code<'_>,
+        op: Operator,
+        left: &Expr,
+        right: &Expr,
+    ) -> Result<ObjRef, Failure> {
+        let frame = self.roots.push_frame();
+        let left_value = self.eval(code, left)?;
+        self.roots.push_temp(left_value);
+        let right_value = self.eval(code, right)?;
+        self.roots.push_temp(right_value);
+
+        let left_text = self.to_text(left_value).to_vec();
+        let left_bool = logical_value(&left_text).ok_or_else(|| Raised::not_logical(&left_text))?;
+        let right_text = self.to_text(right_value).to_vec();
+        let right_bool =
+            logical_value(&right_text).ok_or_else(|| Raised::not_logical(&right_text))?;
+
+        let holds = match op {
+            Operator::And => left_bool && right_bool,
+            Operator::Or => left_bool || right_bool,
+            Operator::Xor => left_bool != right_bool,
+            _ => unreachable!("eval_node only dispatches And/Or/Xor here"),
+        };
+
+        let result = self.text(if holds { b"1" } else { b"0" });
+        self.roots.pop_frame(frame);
+        Ok(result)
+    }
+
+    /// `ExprKind::Logical`: the comma-separated conditional list `IF a, b,
+    /// c THEN` (and `WHEN`/`GUARD`/`WHILE`/`UNTIL`'s own versions)
+    /// desugars to, "a logical AND of its parts" (`ast.rs`'s own doc
+    /// comment).
+    ///
+    /// **Short-circuits on the first element that checks out false**,
+    /// unlike `&` (`eval_logical`'s own doc comment) -- measured: `if 0,
+    /// 'x' then nop` followed by `say 'reached'` prints `reached` with no
+    /// error at all, so `'x'` is never evaluated once `0` has already
+    /// decided the list, and `if 1, 0, 'x' then` behaves identically with
+    /// three elements. Every element up to and including the first false
+    /// one is evaluated left to right and checked to be exactly `0`/`1`;
+    /// nothing after it is touched.
+    ///
+    /// **Always 34.6, the per-element message, never 34.1/34.2/34.3/34.4**
+    /// -- measured, `if 1, 'x' then` and `if 'x', 1 then` both give 34.6,
+    /// "Value of logical list expression element must be exactly...",
+    /// regardless of position, while a *single*, non-list condition
+    /// (`if 'x' then`, no comma) gives 34.1 instead. The four
+    /// keyword-specific numbers belong to `IF`/`WHEN`/`WHILE`/`UNTIL`
+    /// themselves (Tasks 9-11), evaluating a bare condition `Expr`
+    /// directly and checking its own result rather than going through this
+    /// arm at all -- this function has no instruction context to prefer
+    /// one of those numbers over 34.6, and the oracle's own rule does not
+    /// ask it to: 34.6 is what a list element gets independent of which of
+    /// the five keywords built the list.
+    fn eval_logical_list(&mut self, code: &Code<'_>, items: &[Expr]) -> Result<ObjRef, Failure> {
+        let frame = self.roots.push_frame();
+        let mut holds = true;
+        for item in items {
+            let value = self.eval(code, item)?;
+            self.roots.push_temp(value);
+            let text = self.to_text(value).to_vec();
+            let item_holds =
+                logical_value(&text).ok_or_else(|| Raised::logical_list_element(&text))?;
+            if !item_holds {
+                holds = false;
+                break;
+            }
+        }
+
+        let result = self.text(if holds { b"1" } else { b"0" });
+        self.roots.pop_frame(frame);
+        Ok(result)
+    }
+
     pub(crate) fn stack_span(&self) -> StackSpan {
         StackSpan {
             max_depth: self.max_depth,
@@ -320,6 +519,80 @@ impl Interp {
 /// one, can reach the clamp.
 fn saturate_digits(digits: u64) -> u32 {
     u32::try_from(digits).unwrap_or(u32::MAX)
+}
+
+/// A logical value is *exactly* the one-byte string `0` or `1` -- text, not
+/// numeric, no coercion (D15's "Expression evaluation"; measured, `' 1 '`,
+/// `'01'`, `'1.0'` and `''` are each not logical, error 34). Shared by
+/// prefix `\`, `&`/`|`/`&&` and `ExprKind::Logical`'s per-element check,
+/// which differ only in *which* sub-number they raise on `None`, never in
+/// what counts as logical.
+fn logical_value(text: &[u8]) -> Option<bool> {
+    match text {
+        b"0" => Some(false),
+        b"1" => Some(true),
+        _ => None,
+    }
+}
+
+/// `Operator` -> `rexx-num`'s `CompareOp`, for the eighteen `Operator`
+/// variants `eval_node` dispatches to `eval_compare`. `CompareOp` has only
+/// twelve variants: `\=`/`<>`/`><` (`BackslashEqual`/`LessThanGreaterThan`/
+/// `GreaterThanLessThan`) all mean `NotEqual` (`compare.rs`'s own doc
+/// comment: the interpreter's operator table repeats one method pointer for
+/// all three), and the four backslash-negated forms invert their positive
+/// counterpart's sense rather than getting a `CompareOp` of their own: `\>`
+/// ("not greater than") is `LessEqual`, `\<` is `GreaterEqual`, and their
+/// strict siblings `\>>`/`\<<` map the same way onto `StrictLessEqual`/
+/// `StrictGreaterEqual`. Verified against the oracle (this task's report),
+/// not derived from the names alone -- `\>>`/`\<<` are strict-family byte
+/// comparisons, where "greater"/"less" do not carry the numeric intuition
+/// their spelling suggests.
+fn compare_op(op: Operator) -> CompareOp {
+    use Operator::*;
+    match op {
+        Equal => CompareOp::Equal,
+        BackslashEqual | LessThanGreaterThan | GreaterThanLessThan => CompareOp::NotEqual,
+        GreaterThan => CompareOp::Greater,
+        LessThan => CompareOp::Less,
+        GreaterThanEqual => CompareOp::GreaterEqual,
+        LessThanEqual => CompareOp::LessEqual,
+        BackslashGreaterThan => CompareOp::LessEqual,
+        BackslashLessThan => CompareOp::GreaterEqual,
+        StrictEqual => CompareOp::StrictEqual,
+        StrictBackslashEqual => CompareOp::StrictNotEqual,
+        StrictGreaterThan => CompareOp::StrictGreater,
+        StrictLessThan => CompareOp::StrictLess,
+        StrictGreaterThanEqual => CompareOp::StrictGreaterEqual,
+        StrictLessThanEqual => CompareOp::StrictLessEqual,
+        StrictBackslashGreaterThan => CompareOp::StrictLessEqual,
+        StrictBackslashLessThan => CompareOp::StrictGreaterEqual,
+        other => unreachable!(
+            "eval_node only dispatches the eighteen comparison operators here, got {other:?}"
+        ),
+    }
+}
+
+/// Whether `op` is one of the eight strict comparison operators -- decided
+/// directly off `Operator` rather than off `CompareOp`, because
+/// `CompareOp::is_strict` is private to `rexx-num` (`compare.rs`) and this
+/// crate has no other need for a public one: strictness is only ever asked
+/// here, to decide whether calling `to_number` is worth it at all before
+/// `compare_decoded` is reached (a strict comparison never looks at a
+/// `Number`, so parsing one first would be pure waste).
+fn is_strict_compare(op: Operator) -> bool {
+    use Operator::*;
+    matches!(
+        op,
+        StrictEqual
+            | StrictBackslashEqual
+            | StrictGreaterThan
+            | StrictLessThan
+            | StrictGreaterThanEqual
+            | StrictLessThanEqual
+            | StrictBackslashGreaterThan
+            | StrictBackslashLessThan
+    )
 }
 
 #[cfg(test)]
@@ -661,5 +934,221 @@ mod tests {
         };
         let value = interp.eval(&code, expr).unwrap();
         assert_eq!(&*interp.to_text(value), b"ab");
+    }
+
+    // ---- comparison ----
+
+    #[test]
+    fn the_thirteen_line_comparison_transcript() {
+        // The plan's own measured block, verbatim (task-8-report.md has
+        // the oracle run). The first row is the one that discriminates the
+        // real string rule from "blank-pad the shorter on the right".
+        let mut interp = Interp::new(false);
+        assert_eq!(eval_text(&mut interp, b"say (' a' = 'a')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('09'x'a' = 'a')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('a' = 'a'||'09'x)"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('a' = 'a ')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('a b' = 'a  b')"), b"0");
+        assert_eq!(eval_text(&mut interp, b"say ('' = ' ')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('01' = '1')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say (' 1 ' = 1)"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('a' = 1)"), b"0");
+        assert_eq!(eval_text(&mut interp, b"say ('10' >> '9')"), b"0");
+        assert_eq!(eval_text(&mut interp, b"say ('10' > '9')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('a' << 'a ')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('01' == '1')"), b"0");
+    }
+
+    #[test]
+    fn backslash_negated_and_synonym_forms() {
+        // Not in the plan's own transcript; measured separately (report)
+        // to pin the Operator -> CompareOp mapping, particularly that
+        // \>/\< invert the *positive* comparison's sense rather than
+        // getting a CompareOp of their own.
+        let mut interp = Interp::new(false);
+        assert_eq!(eval_text(&mut interp, b"say ('9' \\> '10')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('9' \\< '10')"), b"0");
+        assert_eq!(eval_text(&mut interp, b"say ('9' \\>> '10')"), b"0");
+        assert_eq!(eval_text(&mut interp, b"say ('9' \\<< '10')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('9' <> '10')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('9' >< '10')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('9' \\= '10')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('9' \\== '9')"), b"0");
+        assert_eq!(eval_text(&mut interp, b"say ('9' >>= '9')"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say ('8' >>= '9')"), b"0");
+        assert_eq!(eval_text(&mut interp, b"say ('10' <<= '9')"), b"1");
+    }
+
+    #[test]
+    fn a_comparison_reuses_an_already_parsed_num_cache() {
+        // Not a behaviour difference visible from the answer alone (the
+        // numeric family gives the same result whether or not the cache
+        // was already warm) -- what this actually exercises is that
+        // eval_compare, reading `x` back out through a variable, still
+        // takes the numeric path on an object whose `num` cache this test
+        // itself already filled, rather than `to_number` inside
+        // eval_compare somehow needing a cold object to work at all.
+        // 007 and 7 comparing numerically equal (not "0" -- a byte compare
+        // would disagree with the leading zero) is what proves the
+        // numeric path, not the string one, ran.
+        let mut interp = Interp::new(false);
+        activate(
+            &mut interp,
+            parse_program(b"nop".to_vec()).expect("test program parses"),
+        );
+        let x = interp.text(b"007");
+        interp.to_number(x).expect("007 parses, filling its cache");
+        let slot = interp.slot_of(b"X");
+        let frame = interp.activation().frame;
+        interp.roots.set_slot(frame, slot, x);
+        assert_eq!(eval_in_place_text(&mut interp, b"say (x = '7')"), b"1");
+    }
+
+    #[test]
+    fn strict_comparison_never_calls_to_number() {
+        // '01' == '1' -> 0: if the strict family accidentally routed
+        // through to_number it would compare 1 == 1 and answer 1, wrongly.
+        // This is the direct behavioural check that strictness actually
+        // skips the numeric path, not an inspection of internal state.
+        let mut interp = Interp::new(false);
+        assert_eq!(eval_text(&mut interp, b"say ('01' == '1')"), b"0");
+    }
+
+    // ---- logical ----
+
+    #[test]
+    fn the_three_logical_operators_and_their_truth_tables() {
+        let mut interp = Interp::new(false);
+        assert_eq!(eval_text(&mut interp, b"say (1 & 1)"), b"1");
+        assert_eq!(eval_text(&mut interp, b"say (1 & 0)"), b"0");
+        assert_eq!(eval_text(&mut interp, b"say (0 | 0)"), b"0");
+        assert_eq!(eval_text(&mut interp, b"say (1 && 1)"), b"0");
+        assert_eq!(eval_text(&mut interp, b"say (1 && 0)"), b"1");
+    }
+
+    #[test]
+    fn logical_operators_raise_34_901_on_a_non_logical_operand() {
+        // ' 1 ' & 1 -> Error 34.901, found " 1 " (and '01'/'1.0'/'' alike,
+        // measured in the report -- one representative here, the same
+        // check `logical_value` gives all four).
+        let mut interp = Interp::new(false);
+        let failure = eval_source(&mut interp, b"say (' 1 ' & 1)").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (34, 901));
+        assert_eq!(raised.additional, vec![" 1 ".to_string()]);
+    }
+
+    #[test]
+    fn logical_operators_do_not_short_circuit() {
+        // say (0 & 'x') -> still raises on 'x', even though 0 already
+        // decides the AND -- both operands are always evaluated and
+        // checked. Contrast with ExprKind::Logical's comma list, below.
+        let mut interp = Interp::new(false);
+        let and_failure = eval_source(&mut interp, b"say (0 & 'x')").unwrap_err();
+        assert!(
+            matches!(and_failure, Failure::Raised(_)),
+            "got {and_failure:?}"
+        );
+        let or_failure = eval_source(&mut interp, b"say (1 | 'x')").unwrap_err();
+        assert!(
+            matches!(or_failure, Failure::Raised(_)),
+            "got {or_failure:?}"
+        );
+    }
+
+    #[test]
+    fn logical_operators_check_the_left_operand_first() {
+        // say ('y' & 'x') -> reports "y", the left operand, when both are
+        // bad -- confirms evaluation order rather than assuming it.
+        let mut interp = Interp::new(false);
+        let failure = eval_source(&mut interp, b"say ('y' & 'x')").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!(raised.additional, vec!["y".to_string()]);
+    }
+
+    // ---- ExprKind::Logical (the comma list) ----
+
+    /// Parses `if <cond> then nop`, extracts the `IF`'s own `condition`
+    /// (an `ExprKind::Logical` for a comma list, an ordinary `Expr`
+    /// otherwise) and evaluates it directly. The only way to build one:
+    /// comma-list syntax is gated to `IF`/`WHEN`/`GUARD`/`WHILE`/`UNTIL` in
+    /// the parser (`ast.rs`'s own doc comment on `ExprKind::Logical`), and
+    /// none of those instructions run yet -- Tasks 9-11's `step` dispatch
+    /// does not reach `IF` -- so a real program can only ever hand the
+    /// parsed condition to this test directly, never through `run`.
+    fn eval_condition(interp: &mut Interp, source: &[u8]) -> Result<ObjRef, Failure> {
+        let program = parse_program(source.to_vec()).expect("test program parses");
+        let code = Code {
+            body: &program.main,
+            symbols: &program.symbols,
+            slots: &HashMap::new(),
+        };
+        let condition = match &program.main.instructions[0].kind {
+            InstructionKind::If { condition, .. } => condition,
+            other => panic!("expected an IF, got {other:?}"),
+        };
+        interp.eval(&code, condition)
+    }
+
+    fn eval_condition_text(interp: &mut Interp, source: &[u8]) -> Vec<u8> {
+        let value = eval_condition(interp, source)
+            .unwrap_or_else(|failure| panic!("expected {source:?} to evaluate, got {failure:?}"));
+        interp.to_text(value).to_vec()
+    }
+
+    #[test]
+    fn a_comma_list_is_an_and_of_its_parts() {
+        // if 1, 1, 1 then -> true ; if 1, 0, 1 then -> false (measured
+        // against the oracle's own THEN/ELSE branch taken).
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            eval_condition_text(&mut interp, b"if 1, 1, 1 then nop"),
+            b"1"
+        );
+        assert_eq!(
+            eval_condition_text(&mut interp, b"if 1, 0, 1 then nop"),
+            b"0"
+        );
+    }
+
+    #[test]
+    fn a_comma_list_element_failure_raises_34_6_not_34_901() {
+        // if 1, 'x' then -> Error 34.6, found "x" (checked left to right:
+        // if 'x', 1 then also gives 34.6 on "x", the first element).
+        let mut interp = Interp::new(false);
+        let failure = eval_condition(&mut interp, b"if 1, 'x' then nop").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (34, 6));
+        assert_eq!(raised.additional, vec!["x".to_string()]);
+
+        let first_bad = eval_condition(&mut interp, b"if 'x', 1 then nop").unwrap_err();
+        let Failure::Raised(first_bad) = first_bad else {
+            panic!("expected Raised, got {first_bad:?}");
+        };
+        assert_eq!(first_bad.additional, vec!["x".to_string()]);
+    }
+
+    #[test]
+    fn a_comma_list_short_circuits_on_the_first_false_element() {
+        // if 0, 'x' then -> no error at all: 'x' is never evaluated once 0
+        // has already decided the list is false. The opposite of &'s own
+        // rule (logical_operators_do_not_short_circuit, above).
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            eval_condition_text(&mut interp, b"if 0, 'x' then nop"),
+            b"0",
+            "the bad third-position value 'x' must never be reached"
+        );
+        assert_eq!(
+            eval_condition_text(&mut interp, b"if 1, 0, 'x' then nop"),
+            b"0",
+            "short-circuits at the second element, never reaching the third"
+        );
     }
 }
