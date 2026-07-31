@@ -13,12 +13,14 @@
 //!
 //! Moved here from Task 3's spike, which built this shape; `plan.rs` moved
 //! alongside it, since the two are the halves of one design. `blocks:
-//! Vec<Block>` is deliberately **not** here: the design's crate layout names
-//! it as this file's eventual shape, but `Block`'s only real definition
-//! anywhere is the DO/LOOP passage of the design doc (the control
-//! variable's slot, `to`/`by`/`for`, the iteration counter, the block's
-//! label and its `end` index), which is Task 11's to write, not Task 6's to
-//! guess at. Task 11 adds the field when it can give `Block` a real shape.
+//! Vec<Block>` is deliberately **not** here, and the reason is that nothing
+//! reads it yet, not that its shape is unknown: the design doc's DO/LOOP
+//! passage already gives one, naming the control variable's slot,
+//! `to`/`by`/`for`, the iteration counter, the block's label and its `end`
+//! index. Task 11 is the first code that will actually walk a block, so it
+//! should pick the representation against a real reader rather than inherit
+//! a guess made here. An earlier version of this comment claimed no
+//! definition existed while listing it in the same sentence.
 
 use crate::Interp;
 use crate::plan::Plan;
