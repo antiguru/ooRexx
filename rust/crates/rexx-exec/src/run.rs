@@ -135,16 +135,33 @@ enum Flow {
 /// it steps rather than reconstructed later -- see `Flow::Leave`'s own doc
 /// comment for why eagerly.
 ///
-/// `indent` is `static_indent` applied to the `LEAVE`/`ITERATE`'s own
-/// index, computed once here rather than carried as a live counter (the
-/// design this task chose over a mutable `Interp` field -- see the report).
-/// It is used **only** by 28.5 (`Select`/`Do`'s own arms, for a named
-/// `ITERATE` that matches a label but is not a loop): measured, that error
-/// reports the instruction's own full lexical depth, unreduced by however
-/// many enclosing frames the search has already looked past on its way to
-/// the match. The exhausted-search family (28.1-28.4) does not read this
-/// field at all -- measured, that family always reports indent zero,
-/// regardless of lexical depth -- and hardcodes it instead.
+/// **`indent`'s own rule, corrected after review.** `indent` starts as
+/// `static_indent` applied to the `LEAVE`/`ITERATE`'s own index -- its full
+/// lexical depth, computed once when it steps -- and from there is the
+/// search's own running **residual**, updated (not merely read) as the
+/// `Flow` this is attached to propagates outward: every `SELECT` (always)
+/// and every `DO`/`LOOP` that either `is_loop` or carries an explicit
+/// `LABEL` (i.e. every one **except** an unlabelled `Simple` block) "owns a
+/// search frame," and when such a construct examines this `Flow` and does
+/// **not** consume it, it resets `indent` to *its own* `static_indent`
+/// (`pop_search_frame`) before forwarding -- mirroring the oracle's own
+/// `popBlockInstruction`, which restores `traceIndent` to the value saved
+/// when the frame it is popping was pushed. A construct that *does*
+/// consume the `Flow` (a match, successful or 28.5) does **not** reset
+/// anything itself; whatever `indent` already holds at that point is the
+/// answer. An unlabelled `Simple` block owns no frame and is fully
+/// transparent, exactly like `IF` (which never even sees this `Flow` at
+/// all, since it is not a block instruction and forwards everything
+/// through ordinary fallthrough).
+///
+/// This first shipped as two hardcoded shapes -- 28.1-28.4 always zero,
+/// 28.5 always the origin's own unmodified full lexical depth -- which
+/// happened to match every probe behind it because none of them mixed an
+/// `IF`/unlabelled-`Simple` intervenor with a `SELECT`/`DO`/`LOOP` one. A
+/// reviewer's fourteen-point probe (nine of theirs, plus this task's own
+/// five re-measured and added afterward) falsified seven of the fourteen
+/// under that rule and fits all fourteen under this one; the report has
+/// every transcript.
 struct LeaveOrigin {
     /// `None` only when `source` was `None` at the moment this instruction
     /// stepped (inside an `INTERPRET` fragment, `run_fragment`'s own
@@ -414,16 +431,19 @@ impl Interp {
                 // the program -- nothing anywhere, at any nesting depth,
                 // ever matched it. This is the exhausted-search family,
                 // 28.1 (bare `LEAVE`)/28.2 (bare `ITERATE`)/28.3 (named
-                // `LEAVE`)/28.4 (named `ITERATE`) -- **always reported at
-                // indent zero**, regardless of how deep the instruction was
-                // lexically nested (measured, including a two-`DO`-deep
-                // case that still reports zero; see the report). 28.5 (a
-                // named `ITERATE` that *did* match something, just not a
-                // loop) is a different family, raised where the match was
-                // found, in `Select`/`Do`'s own arms, and never reaches
-                // here.
+                // `LEAVE`)/28.4 (named `ITERATE`). `origin.indent` already
+                // holds this family's own answer by the time it gets here
+                // -- every `Select`/`Do` frame the search walked through on
+                // the way up has already reset it to its own `static_indent`
+                // as it forwarded past (`LeaveOrigin`'s own doc comment has
+                // the rule, corrected after review: it is **not** always
+                // zero, only when every popped frame along the way happened
+                // to sit at top level). 28.5 (a named `ITERATE` that *did*
+                // match something, just not a loop) is a different family,
+                // raised where the match was found, in `Select`/`Do`'s own
+                // arms, and never reaches here.
                 Flow::Leave(name, origin) => {
-                    self.record_leave_failure_at_zero(&origin);
+                    self.record_leave_failure(&origin);
                     let raised = match name {
                         None => raised_leave_no_loop(),
                         Some(n) => raised_leave_no_match(code.symbols.name(n).as_bytes()),
@@ -431,7 +451,7 @@ impl Interp {
                     return Err(raised.into());
                 }
                 Flow::Iterate(name, origin) => {
-                    self.record_leave_failure_at_zero(&origin);
+                    self.record_leave_failure(&origin);
                     let raised = match name {
                         None => raised_iterate_no_loop(),
                         Some(n) => raised_iterate_no_match(code.symbols.name(n).as_bytes()),
@@ -761,7 +781,7 @@ impl Interp {
                     };
                     if let Some((body_end, resume)) = outcome {
                         let flow = self.run_bounded(code, when_index + 1, body_end, source)?;
-                        return self.leave_select(code, *label, resume, flow);
+                        return self.leave_select(code, index, *label, resume, flow);
                     }
                 }
                 match otherwise {
@@ -785,7 +805,7 @@ impl Interp {
                         let otherwise_end = end.unwrap_or(len);
                         let flow =
                             self.run_bounded(code, otherwise_index + 1, otherwise_end, source)?;
-                        self.leave_select(code, *label, otherwise_end, flow)
+                        self.leave_select(code, index, *label, otherwise_end, flow)
                     }
                     // Landing exactly on `END` is deliberate: that is what
                     // makes 7.3's clause echo the `END`'s and not the
@@ -1012,12 +1032,25 @@ impl Interp {
     }
 
     /// Assigns `origin`'s own captured site to `self.failure_site`, first
-    /// call wins, at `origin`'s own captured indent -- the 28.5 half of
-    /// `Flow::Leave`'s doc comment: unlike the exhausted-search family
-    /// (28.1-28.4, which hardcodes indent zero and does not call this),
-    /// 28.5 is raised right where the match was found and reports the
-    /// `LEAVE`/`ITERATE` instruction's own full lexical depth, which is
-    /// exactly what `origin.indent` already is.
+    /// call wins, at `origin`'s own captured indent.
+    ///
+    /// **Corrected after review.** This crate's first cut of the
+    /// LEAVE/ITERATE indent family hardcoded the exhausted-search family
+    /// (28.1-28.4) to zero and reported `origin.indent` unmodified for
+    /// 28.5, on the theory that those were the only two shapes the
+    /// oracle's own indent could take. A reviewer's fourteen-point probe
+    /// falsified that in seven cases (re-measured independently against
+    /// the oracle before changing anything -- see the report): the actual
+    /// rule is that `origin.indent` is the search's own *residual*, updated
+    /// every time a frame the search examines is popped rather than
+    /// matched, and this function's only job now is to report whatever
+    /// `origin.indent` already holds by the time either family reaches its
+    /// own resolution point -- there is exactly one caller-facing function
+    /// for both families, because the difference between them was never in
+    /// how the site gets recorded, only in how far the search walked before
+    /// giving up. See `Do`'s and `Select`'s own arms (`do_body_outcome`,
+    /// `leave_select`) for where the residual is actually updated, and
+    /// `LeaveOrigin`'s own doc comment for the rule in full.
     fn record_leave_failure(&mut self, origin: &LeaveOrigin) {
         if self.failure_site.is_some() {
             return;
@@ -1027,25 +1060,6 @@ impl Interp {
                 line: *line,
                 text: text.clone(),
                 indent: origin.indent,
-            });
-        }
-    }
-
-    /// `record_leave_failure`'s own twin for the exhausted-search family
-    /// (28.1-28.4, `run_activation`'s own doc comment on its `Flow::Leave`/
-    /// `Flow::Iterate` arms): `origin`'s own captured site, but at indent
-    /// **zero** rather than `origin.indent` -- measured, this family always
-    /// reports unindented, regardless of how deep the instruction was
-    /// lexically nested.
-    fn record_leave_failure_at_zero(&mut self, origin: &LeaveOrigin) {
-        if self.failure_site.is_some() {
-            return;
-        }
-        if let Some((line, text)) = &origin.site {
-            self.failure_site = Some(FailureSite {
-                line: *line,
-                text: text.clone(),
-                indent: 0,
             });
         }
     }
@@ -1064,13 +1078,19 @@ impl Interp {
     /// answers `false` unconditionally, read directly in the report) --
     /// measured, `ITERATE` never accepts a non-loop target even when the
     /// name matches. Everything else -- an unnamed `LEAVE`/`ITERATE` (a
-    /// `SELECT` is never a bare target either, same reason), one naming
-    /// something else, `Exit`, or a `Goto` that escaped `run_bounded`'s own
-    /// range -- passes through unchanged, for an enclosing loop or `Select`
-    /// to keep looking.
+    /// `SELECT` is never a bare target either, same reason), or one naming
+    /// something else -- is **not matched, but not untouched either**: a
+    /// `SELECT` always owns a search frame (unconditionally, labelled or
+    /// not -- unlike `Do`'s own unlabelled-`Simple` exception), so
+    /// forwarding it outward resets `origin.indent` to this `SELECT`'s own
+    /// `static_indent` first (`LeaveOrigin`'s own doc comment has the full
+    /// rule and the oracle transcripts that pin it). `Exit` and a `Goto`
+    /// that escaped `run_bounded`'s own range pass through with nothing
+    /// touched, same as always.
     fn leave_select(
         &mut self,
         code: &Code<'_>,
+        index: usize,
         label: Option<SymbolId>,
         resume: usize,
         flow: Flow,
@@ -1082,7 +1102,33 @@ impl Interp {
                 self.record_leave_failure(&origin);
                 Err(raised_iterate_wrong_kind(code.symbols.name(name).as_bytes()).into())
             }
+            // Not consumed: this SELECT is being "popped" by the search,
+            // so its own indent becomes the new residual before the flow
+            // continues outward.
+            Flow::Leave(name, origin) => Ok(Flow::Leave(
+                name,
+                self.pop_search_frame(code, index, origin),
+            )),
+            Flow::Iterate(name, origin) => Ok(Flow::Iterate(
+                name,
+                self.pop_search_frame(code, index, origin),
+            )),
             other => Ok(other),
+        }
+    }
+
+    /// Resets `origin.indent` to `index`'s own `static_indent`, for a
+    /// `SELECT`/`DO`/`LOOP` that owns a search frame and is being forwarded
+    /// past (not matched) -- the update `LeaveOrigin`'s own doc comment
+    /// describes as "restoring the indent to the value saved when that
+    /// frame was pushed." Shared by `leave_select` (always calls it, since
+    /// a `SELECT` always owns a frame) and `do_body_outcome` (calls it only
+    /// when the `Do`/`Loop` in question owns one, i.e. skips an unlabelled
+    /// `Simple` block).
+    fn pop_search_frame(&self, code: &Code<'_>, index: usize, origin: LeaveOrigin) -> LeaveOrigin {
+        LeaveOrigin {
+            site: origin.site,
+            indent: static_indent(&code.body.instructions, index),
         }
     }
 
@@ -1204,7 +1250,7 @@ impl Interp {
             // 28.1 on a bare `LEAVE` reaching it.
             LoopKind::Simple => {
                 let flow = self.run_bounded(code, body_start, end_index, source)?;
-                match self.do_body_outcome(code, label, false, resume, flow)? {
+                match self.do_body_outcome(code, index, label, false, resume, flow)? {
                     Some(escape) => Ok(escape),
                     None => Ok(Flow::Goto(resume)),
                 }
@@ -1283,11 +1329,24 @@ impl Interp {
                 // a bare trailing-dot token as `ExprKind::Stem` the same
                 // way a plain stem read anywhere else does, so a target
                 // that is a stem never needs evaluating to know it is out
-                // of scope. A stem reached indirectly (`over (a.)`, a
-                // function returning one, ...) is not detected here and is
-                // simplification this task's own report names rather than
-                // hides -- no test may write one either way, so nothing
-                // observable depends on catching it.
+                // of scope.
+                //
+                // **Corrected after review**: an earlier version of this
+                // comment said a stem reached indirectly (`over (a.)`) is
+                // "not detected here". Measured (`do_over_a_parenthesised_
+                // stem_target_is_also_caught`), it *is*: a single
+                // parenthesised sub-expression collapses to that
+                // sub-expression's own `ExprKind` rather than being wrapped
+                // in `ExprKind::List`, so `(a.)` is already
+                // `ExprKind::Stem` by the time the `matches!` below runs,
+                // with nothing extra needed to catch it. What genuinely
+                // escapes this check is a stem reached through something
+                // that does not collapse this way -- a function call
+                // returning one, for instance -- and that gap is real, not
+                // a mistaken claim: no test may write one either way, so
+                // nothing observable depends on catching it, but the
+                // previous wording overstated the gap to include a case
+                // this check already closes.
                 if matches!(target.kind, ExprKind::Stem(_)) {
                     return Err(Loud::instruction(&instruction.kind).into());
                 }
@@ -1390,7 +1449,7 @@ impl Interp {
             }
 
             let flow = self.run_bounded(code, body_start, end_index, source)?;
-            if let Some(escape) = self.do_body_outcome(code, label, true, resume, flow)? {
+            if let Some(escape) = self.do_body_outcome(code, do_index, label, true, resume, flow)? {
                 return Ok(escape);
             }
 
@@ -1430,14 +1489,30 @@ impl Interp {
     /// `is_loop` is `false` only for `LoopKind::Simple` (`run_loop`'s own
     /// `Simple` arm passes it); every `LoopState` variant `run_repeating`
     /// drives is a real, repetitive loop and passes `true`.
+    ///
+    /// **Whether this construct "owns a search frame" (`LeaveOrigin`'s own
+    /// doc comment has the rule and the oracle transcripts) is `is_loop ||
+    /// label.is_some()`, not `is_loop` alone.** A labelled `Simple` block
+    /// does not repeat, but it is still leavable by name and still resets
+    /// the search's own residual indent when a `LEAVE`/`ITERATE` naming
+    /// something else is forwarded past it -- only an *unlabelled* `Simple`
+    /// block is fully transparent, touching nothing as a `LEAVE`/`ITERATE`
+    /// passes through.
+    ///
+    /// `do_index` is this `Do`/`Loop` instruction's own position, needed
+    /// only to compute that reset (`pop_search_frame`); it is *not* used
+    /// for clause attribution here, since nothing in this function raises
+    /// against this instruction's own clause.
     fn do_body_outcome(
         &mut self,
         code: &Code<'_>,
+        do_index: usize,
         label: Option<SymbolId>,
         is_loop: bool,
         resume: usize,
         flow: Flow,
     ) -> Result<Option<Flow>, Failure> {
+        let owns_frame = is_loop || label.is_some();
         match flow {
             Flow::Next => Ok(None),
             Flow::Leave(name, origin) => {
@@ -1447,6 +1522,11 @@ impl Interp {
                 };
                 if matched {
                     Ok(Some(Flow::Goto(resume)))
+                } else if owns_frame {
+                    Ok(Some(Flow::Leave(
+                        name,
+                        self.pop_search_frame(code, do_index, origin),
+                    )))
                 } else {
                     Ok(Some(Flow::Leave(name, origin)))
                 }
@@ -1457,7 +1537,14 @@ impl Interp {
                     Some(n) => label == Some(n),
                 };
                 if !matched {
-                    return Ok(Some(Flow::Iterate(name, origin)));
+                    return Ok(Some(Flow::Iterate(
+                        name,
+                        if owns_frame {
+                            self.pop_search_frame(code, do_index, origin)
+                        } else {
+                            origin
+                        },
+                    )));
                 }
                 if !is_loop {
                     let name = name.expect(
@@ -2610,9 +2697,10 @@ mod tests {
             // (its doc comment on the same two arms has the full argument):
             // nothing anywhere in this test program's own body consumed
             // the `LEAVE`/`ITERATE`, so it becomes the exhausted-search
-            // error, at indent zero.
+            // error, at whatever residual indent the search's own walk
+            // back up already left in `origin`.
             Flow::Leave(name, origin) => {
-                interp.record_leave_failure_at_zero(&origin);
+                interp.record_leave_failure(&origin);
                 let raised = match name {
                     None => raised_leave_no_loop(),
                     Some(n) => raised_leave_no_match(code.symbols.name(n).as_bytes()),
@@ -2620,7 +2708,7 @@ mod tests {
                 Err(raised.into())
             }
             Flow::Iterate(name, origin) => {
-                interp.record_leave_failure_at_zero(&origin);
+                interp.record_leave_failure(&origin);
                 let raised = match name {
                     None => raised_iterate_no_loop(),
                     Some(n) => raised_iterate_no_match(code.symbols.name(n).as_bytes()),
@@ -3811,6 +3899,25 @@ mod tests {
         };
     }
 
+    /// A stem target wrapped in parens is **also** caught -- corrected after
+    /// review, which found this task's own comment on the `Over` arm
+    /// claimed the opposite (`over (a.)` "is not detected"). It is detected:
+    /// a single parenthesised sub-expression collapses to that
+    /// sub-expression's own `ExprKind` rather than wrapping it in
+    /// `ExprKind::List`, so `(a.)` is already `ExprKind::Stem` by the time
+    /// `run_loop`'s own `matches!` check sees it, with nothing extra
+    /// needed. The safe direction either way (loud, never a silent
+    /// divergence), but the comment was wrong about which one it is.
+    #[test]
+    fn do_over_a_parenthesised_stem_target_is_also_caught() {
+        let mut interp = Interp::new(false);
+        let failure =
+            run_source(&mut interp, b"a.1 = 'x'\ndo v over (a.)\nsay v\nend").unwrap_err();
+        let Failure::Loud(_) = failure else {
+            panic!("expected Loud, got {failure:?}");
+        };
+    }
+
     // ---- DO/LOOP header errors (Step 2's own table, re-measured) ----
 
     #[test]
@@ -4184,13 +4291,19 @@ mod tests {
         );
     }
 
-    /// **The exhausted-search family (28.1-28.4) reports at indent zero,
-    /// regardless of how deep the instruction was lexically nested** --
-    /// the asymmetry the report measured against 28.5, pinned here two
-    /// `DO`s deep so a version that read `origin.indent` instead of
-    /// hardcoding zero would fail this and pass the single-level case.
+    /// Two real, unnamed loops nested two deep, neither matching `zz`: both
+    /// own a search frame (`is_loop` true for a `Controlled` loop), so both
+    /// get popped and both reset the residual to their own `static_indent`
+    /// -- the outer one last, to `0` (top level), which is what survives to
+    /// the exhausted-search report. This is **not** "28.1-28.4 always
+    /// report zero" (that rule was wrong -- see `n1`/`n2`/`n3` below, and
+    /// `LeaveOrigin`'s own doc comment for the corrected one): it is zero
+    /// here specifically because the outermost popped frame happens to sit
+    /// at top level, the same way it did in every one of this task's own
+    /// original probes, which is exactly how the wrong rule looked right
+    /// for as long as it did.
     #[test]
-    fn leave_no_match_reports_at_indent_zero_even_when_nested_two_dos_deep() {
+    fn leave_no_match_through_two_real_loops_resets_to_the_outer_ones_own_indent() {
         let mut interp = Interp::new(false);
         run_source(
             &mut interp,
@@ -4201,16 +4314,105 @@ mod tests {
         assert_eq!(indent, 0);
     }
 
-    /// **28.5's own indent is the instruction's full lexical depth,
-    /// unreduced by however many frames the search looked past on its way
-    /// to the match** -- measured against the oracle with one intervening
-    /// unlabelled `DO` between the `ITERATE` and its target.
+    /// The one intervening construct is an *unlabelled* `Simple` block,
+    /// which owns no search frame and is fully transparent -- so nothing
+    /// ever resets the residual, and it stays at the `ITERATE`'s own full
+    /// lexical depth all the way to the match (the outer labelled block,
+    /// which does not reset on a match either). Two real loops in
+    /// `leave_no_match_through_two_real_loops_resets_to_the_outer_ones_own_indent`
+    /// above land on the *same* final answer as this test for an entirely
+    /// different reason -- neither test tells the two rules apart, which is
+    /// this task's own original mistake and why the corrected rule below has
+    /// its own dedicated tests.
     #[test]
-    fn iterate_wrong_kind_reports_the_instructions_own_full_lexical_depth() {
+    fn iterate_wrong_kind_through_a_transparent_unlabelled_block_reports_full_lexical_depth() {
         let mut interp = Interp::new(false);
         run_source(&mut interp, b"do label x\ndo\niterate x\nend\nend").unwrap_err();
         let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(indent, 4, "two DO frames deep, matching the oracle");
+    }
+
+    /// **The corrected 28.x indent rule, all fourteen points**: nine from
+    /// the reviewer's own probe (`p1`/`p2`/`p5`/`p8`/`p9`/`p10`/`p11`/`p12`/
+    /// `p13`, their own naming, kept so the report's cross-reference to
+    /// this table still resolves) plus five re-measured independently by
+    /// this task against the oracle before touching any code (`n1`-`n3`
+    /// entirely new shapes, `p1`/`p11` re-run to confirm the two that
+    /// already matched still do). Every row was captured with `cat -A`
+    /// against `build/bin/rexx`, byte for byte, not inferred.
+    ///
+    /// **The rule the whole table obeys**: start at the `LEAVE`/`ITERATE`'s
+    /// own full lexical depth; walk outward; every `SELECT` (always) or
+    /// `DO`/`LOOP` (unless an unlabelled `Simple` block) that is examined
+    /// and does *not* match resets the residual to *its own*
+    /// `static_indent`; a match stops the walk without resetting anything
+    /// itself; report whatever the residual is at that point. `p11`/`p1`
+    /// are the two rows where the very first frame examined is the match,
+    /// so nothing ever resets and the reported value is the origin's own
+    /// unmodified full depth -- the case the original, wrong rule
+    /// generalised from.
+    #[test]
+    fn the_corrected_28x_indent_rule_matches_all_fourteen_probed_shapes() {
+        for (name, source, expect) in [
+            ("p5", &b"if 1=1 then leave"[..], 4),
+            ("p9", &b"if 1=1 then do\nleave\nend"[..], 6),
+            ("p12", &b"do\nleave\nend"[..], 2),
+            ("p8", &b"if 1=1 then do i=1 to 3\nleave zz\nend"[..], 4),
+            (
+                "p2",
+                &b"do label x\nselect\nwhen 1=1 then iterate x\notherwise nop\nend\nend"[..],
+                2,
+            ),
+            (
+                "p10",
+                &b"do label x\nselect\nwhen 1=1 then do\niterate x\nend\notherwise nop\nend\nend"[..],
+                2,
+            ),
+            (
+                "p13",
+                &b"do label x\ndo label y\niterate x\nend\nend"[..],
+                2,
+            ),
+            (
+                "p1",
+                &b"do label x\nif 1=1 then do\niterate x\nend\nend"[..],
+                8,
+            ),
+            (
+                "p11",
+                &b"select label s\nwhen 1=1 then iterate s\notherwise nop\nend"[..],
+                6,
+            ),
+            // Independently added by this task, not in the reviewer's own
+            // table: a bare LEAVE reaching only an unlabelled SELECT
+            // (SELECT owns a frame unconditionally, even unlabelled, so
+            // the pop still happens and still resets to its own indent).
+            (
+                "n1",
+                &b"select\nwhen 1=1 then leave\notherwise nop\nend"[..],
+                0,
+            ),
+            // Three real loops nested three deep, none matching: each pop
+            // resets in turn, the outermost (top level) wins.
+            (
+                "n2",
+                &b"do i=1 to 3\ndo j=1 to 3\ndo k=1 to 3\nleave zz\nend\nend\nend"[..],
+                0,
+            ),
+            // A named ITERATE crossing one unlabelled real loop and one
+            // unlabelled SELECT, matching neither: both pop, the outer
+            // loop's own indent (0, top level) is what survives.
+            (
+                "n3",
+                &b"do i=1 to 3\nselect\nwhen 1=1 then iterate zz\notherwise nop\nend\nend"[..],
+                0,
+            ),
+        ] {
+            let mut interp = Interp::new(false);
+            run_source(&mut interp, source).unwrap_err();
+            let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+            assert_eq!(indent, expect, "{name}: {source:?}");
+        }
     }
 
     /// **The `run_bounded` `Goto`-absorption trap, named in `Flow::Leave`'s

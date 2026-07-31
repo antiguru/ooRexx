@@ -73,8 +73,11 @@ use rexx_parse::{Expr, ExprKind, Operator, PrefixOp, compound_parts};
 /// lower limit would fail (it would refuse programs the oracle accepts), and
 /// `INTERPRETER_STACK_BYTES` (512 MiB) divided by this crate's own measured
 /// per-level cost (`lib.rs`'s own doc comment on `INTERPRETER_STACK_BYTES` --
-/// ~1600 bytes/level in debug after Task 7's `eval_node` growth, re-measured
-/// at implementation time below) is the ceiling a higher one would fail. A
+/// **1840** bytes/level in debug, re-measured at this task's own
+/// implementation time and recorded there with the date, method and
+/// survivable-depth arithmetic; ~1600 was the figure current before this
+/// task's own depth counter added its own few bytes per level) is the
+/// ceiling a higher one would fail. A
 /// limit *above* the oracle's own cliff would be worse than one below it: it
 /// would widen the window where this crate succeeds and the oracle segfaults,
 /// which is the opposite of what a differential harness wants.

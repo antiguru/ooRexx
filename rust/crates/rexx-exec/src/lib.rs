@@ -216,6 +216,30 @@ pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 /// pages on first touch, so a program that never recurses pays for the pages it
 /// actually uses and not for this number.
 ///
+/// **Re-measured again at Task 11: 1840 bytes per `eval` level in debug, up
+/// from the 1600 above.** `eval`'s own D19 depth counter (`MAX_EVAL_DEPTH`,
+/// `eval.rs`) adds a handful of bookkeeping bytes to every level, exactly the
+/// mechanism the 784-to-1600 move already described -- a dispatch function's
+/// frame grows with what it does on every call, not only on the arm actually
+/// taken. Method: `cargo test -p rexx-exec --test spike
+/// records_the_stack_cost_of_one_eval_frame -- --nocapture`, unchanged from
+/// the row above, printing (byte for byte, this run):
+///
+/// ```text
+/// interpreter stack: 536870912 bytes, eval depth reached: 100000, span: 183998160 bytes, per frame: 1840.0 bytes
+/// ```
+///
+/// Survivable depth at this cost: `536,870,912 / 1840 ≈ 291,777` levels,
+/// still comfortably over D19's 100,000 floor (about 2.9x headroom, down
+/// from Task 7's ~3.35x at 335,000 -- the trend this table exists to show is
+/// still shrinking, as expected, and still nowhere near the floor).
+/// `INTERPRETER_STACK_BYTES` stays at 512 MiB; this is the fifth value this
+/// figure has taken across this phase (820, 850, 783/784, 1600, now 1840),
+/// and the point of keeping every row rather than overwriting the last one
+/// is that each was correct for the code it measured -- re-measure again
+/// rather than trust this one either, the same instruction every prior row
+/// already gives.
+///
 /// **Task 11 set `eval.rs`'s `MAX_EVAL_DEPTH` to 100,000, and that closes off
 /// the way every figure on this page was re-derived.** Everything above was
 /// measured by letting `eval` recurse far past 100,000 -- the external

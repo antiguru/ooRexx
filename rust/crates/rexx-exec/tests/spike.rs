@@ -345,6 +345,16 @@ fn the_stack_span_does_not_depend_on_what_else_the_program_evaluated() {
 /// the same consequence, and how to deliberately get past it again: raise
 /// `MAX_EVAL_DEPTH`, or call `eval` directly bypassing `run_program`, for
 /// the duration of a fresh bisection only, and put it back).
+///
+/// **The re-measured figure this test prints, recorded here too and not
+/// only in the report file**: at Task 11's own implementation, this test
+/// prints `per frame: 1840.0 bytes` (up from the ~1600 `lib.rs`'s own doc
+/// comment on `INTERPRETER_STACK_BYTES` recorded after Task 7), giving
+/// `survivable ≈ 291,777` -- comfortably over the `> 100_000.0` the
+/// assertion below checks, still by about 2.9x. `lib.rs`'s own doc comment
+/// on the constant carries the dated row; this comment exists so `grep`
+/// for the figure finds it beside the test that produces it too, not only
+/// in a report a later reader may never open.
 #[test]
 fn records_the_stack_cost_of_one_eval_frame() {
     const TERMS: usize = 100_000;
