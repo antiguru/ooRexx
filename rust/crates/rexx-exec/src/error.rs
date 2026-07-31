@@ -85,6 +85,23 @@ impl Raised {
     pub(crate) fn not_logical(found: &[u8]) -> Raised {
         Raised::syntax(34, 901, vec![String::from_utf8_lossy(found).into_owned()])
     }
+
+    /// 34.6: one element of a comma-separated logical list
+    /// (`ExprKind::Logical`, `if a, b then` and friends) is not a logical
+    /// value. A distinct sub-number from `not_logical`'s 34.901, and
+    /// deliberately not shared with it even though the underlying check is
+    /// identical (exactly `0` or `1`, text not numeric) -- measured, `if 1,
+    /// 'x' then` gives 34.6 ("Value of logical list expression element
+    /// must be exactly \"0\" or \"1\"; found \"x\""), a different message
+    /// from `&`'s 34.901 for the identical bad value. `IF`/`WHEN`/`WHILE`/
+    /// `UNTIL`'s own 34.1/34.2/34.3/34.4 are for when the *whole* condition
+    /// is a single expression, not a list, and are Tasks 9-11's to raise
+    /// when they exist; this crate has no instruction context yet to
+    /// prefer one of those over 34.6, so 34.6 is `ExprKind::Logical`'s own
+    /// answer regardless of which keyword built the list.
+    pub(crate) fn logical_list_element(found: &[u8]) -> Raised {
+        Raised::syntax(34, 6, vec![String::from_utf8_lossy(found).into_owned()])
+    }
 }
 
 /// Converts a `rexx-num` arithmetic failure into a `Raised`.
@@ -128,5 +145,324 @@ impl From<Loud> for Failure {
 impl From<Raised> for Failure {
     fn from(raised: Raised) -> Failure {
         Failure::Raised(raised)
+    }
+}
+
+/// Where the failing clause is, which is everything the report needs from
+/// outside this module.
+///
+/// Passed in rather than reached for: `error.rs` owns the *format*, and the
+/// instruction loop owns knowing which clause failed. That split is why this
+/// module needs no access to `Interp`, the program or the source.
+#[allow(
+    dead_code,
+    reason = "the reporting layer; `execute` in lib.rs wires it, which is not this task's file"
+)]
+pub(crate) struct ClauseSite<'a> {
+    /// The program's path **as the oracle prints it**, absolute. Measured:
+    /// the major line carries the full path, and `rexx-oracle`'s `normalize`
+    /// masks the cwd, so an absolute path is comparable across machines.
+    pub(crate) path: &'a str,
+    /// The clause's 1-based source line.
+    pub(crate) line: usize,
+    /// The clause's own bytes, exactly as `Instruction::clause_span` covers
+    /// them. Not trimmed: measured, `if 'x' then nop` echoes `if 'x' ` with
+    /// the trailing space, because an `IF`'s span stops at the start of the
+    /// token that ended its condition.
+    pub(crate) text: &'a [u8],
+}
+
+#[allow(
+    dead_code,
+    reason = "the reporting layer; `execute` in lib.rs wires it, which is not this task's file"
+)]
+impl Raised {
+    /// `256 - major`, the whole rule.
+    ///
+    /// Verified across nine majors rather than the four the plan recorded:
+    /// 7 -> 249, 24 -> 232, 25 -> 231, 26 -> 230, 33 -> 223, 34 -> 222,
+    /// 41 -> 215, 42 -> 214, 98 -> 158.
+    ///
+    /// This is also why `NOT_IMPLEMENTED_EXIT` must stay outside 157..=253:
+    /// majors 3 to 99 fill that band, so a loud failure inside it would be
+    /// indistinguishable from a raised condition and a program *expecting*
+    /// that condition would pass against a gap.
+    pub(crate) fn exit_code(&self) -> i32 {
+        256 - i32::from(self.number)
+    }
+
+    /// The exact bytes the oracle writes to stderr for this condition.
+    ///
+    /// Three lines, and every part of the shape is measured rather than
+    /// inferred (`say 1` then a `SELECT` with no true `WHEN`, `cat -A`):
+    ///
+    /// ```text
+    ///      4 *-* end
+    /// Error 7 running /abs/path/f.rex line 4:  WHEN or OTHERWISE expected.
+    /// Error 7.3:  All WHEN expressions of SELECT are false; OTHERWISE expected.
+    /// ```
+    ///
+    /// * The **clause echo appears with trace off**, which is the part that
+    ///   surprises: this is not trace output and is not suppressed by
+    ///   `TRACE OFF`.
+    /// * The line number is **right-aligned in a six-character field**,
+    ///   measured at one, two and three digits: `     4`, `    12`, `   105`.
+    /// * **Two spaces after each colon**, on both error lines.
+    /// * The major line's text is the catalogue's `(major, 0)` entry and the
+    ///   sub line's is `(major, sub)`.
+    ///
+    /// `SAY` output goes to stdout and all of this to stderr, so their
+    /// relative order is not observable (D17).
+    pub(crate) fn report(&self, site: &ClauseSite<'_>) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(format!("{:>6} *-* ", site.line).as_bytes());
+        out.extend_from_slice(site.text);
+        out.push(b'\n');
+        out.extend_from_slice(
+            format!(
+                "Error {} running {} line {}:  {}\n",
+                self.number,
+                site.path,
+                site.line,
+                self.message(self.number, 0)
+            )
+            .as_bytes(),
+        );
+        out.extend_from_slice(
+            format!(
+                "Error {}.{}:  {}\n",
+                self.number,
+                self.sub,
+                self.message(self.number, self.sub)
+            )
+            .as_bytes(),
+        );
+        out
+    }
+
+    /// One catalogue entry with this error's substitutions applied.
+    ///
+    /// The text comes from `rexx-inventory`'s generated table, derived from
+    /// `interpreter/messages/rexxmsg.xml`, never hand-transcribed here: 704
+    /// messages the tree already generates, and criterion 1 compares these
+    /// bytes exactly.
+    ///
+    /// A miss renders visibly rather than panicking or rendering empty. The
+    /// catalogue and the oracle come from one source, so a miss is a bug in
+    /// this crate's numbering, and the error path is the worst possible place
+    /// to abort: it would turn a reportable condition into a crash, which is
+    /// the outcome the whole failing-loudly rule exists to prevent.
+    fn message(&self, major: u16, sub: u16) -> String {
+        match rexx_inventory::errors::lookup(major, sub) {
+            Some(entry) => substitute(entry.text, &self.additional),
+            None => format!("<no message {major}.{sub} in the catalogue>"),
+        }
+    }
+}
+
+/// Replaces `&1`, `&2`, ... with the raiser's substitution values.
+///
+/// The catalogue spells substitutions the way `rexxmsg.xml` does, so this is
+/// the one piece of message rendering that is ours rather than generated.
+/// Scans rather than chaining `replace`, so a substitution value that itself
+/// contains `&2` cannot be re-substituted -- a real risk here, since these
+/// values are arbitrary Rexx data (`say '&1' + 1` puts `&1` in the message).
+///
+/// An `&` not followed by a digit, and a digit with no matching value, are
+/// both passed through unchanged rather than swallowed.
+#[allow(
+    dead_code,
+    reason = "the reporting layer; `execute` in lib.rs wires it, which is not this task's file"
+)]
+fn substitute(text: &str, values: &[String]) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '&' {
+            out.push(c);
+            continue;
+        }
+        match chars.peek().and_then(|d| d.to_digit(10)) {
+            Some(index) if index >= 1 => {
+                chars.next();
+                match values.get(index as usize - 1) {
+                    Some(value) => out.push_str(value),
+                    None => {
+                        out.push('&');
+                        out.push_str(&index.to_string());
+                    }
+                }
+            }
+            _ => out.push('&'),
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The 7.3 transcript, captured from `build/bin/rexx` with `cat -A` so the
+    /// trailing bytes are the oracle's and not a guess.
+    ///
+    /// Program: `say 1` / `select` / `when 1=0 then nop` / `end`. Stdout gets
+    /// `1`; all three lines below go to stderr; rc is 249.
+    #[test]
+    fn the_7_3_report_matches_the_oracle_byte_for_byte() {
+        let raised = Raised::syntax(7, 3, vec![]);
+        let site = ClauseSite {
+            path: "/abs/path/f.rex",
+            line: 4,
+            text: b"end",
+        };
+        assert_eq!(
+            String::from_utf8(raised.report(&site)).unwrap(),
+            "     4 *-* end\n\
+             Error 7 running /abs/path/f.rex line 4:  WHEN or OTHERWISE expected.\n\
+             Error 7.3:  All WHEN expressions of SELECT are false; OTHERWISE expected.\n"
+        );
+        assert_eq!(raised.exit_code(), 249);
+    }
+
+    /// A substituted message, and a clause echo that keeps its trailing space.
+    ///
+    /// Captured: `if 'x' then nop` on line 12 of a twelve-line program echoes
+    /// `    12 *-* if 'x' ` -- the span stops at the start of `then`, so the
+    /// space before it belongs to the clause. Trimming it would diverge on
+    /// every `IF`.
+    #[test]
+    fn a_substituted_message_and_a_clause_echo_that_keeps_its_trailing_space() {
+        let raised = Raised::not_logical(b"x");
+        let site = ClauseSite {
+            path: "/abs/w.rex",
+            line: 12,
+            text: b"if 'x' ",
+        };
+        let report = String::from_utf8(raised.report(&site)).unwrap();
+        assert_eq!(
+            report,
+            "    12 *-* if 'x' \n\
+             Error 34 running /abs/w.rex line 12:  Logical value not 0 or 1.\n\
+             Error 34.901:  Logical value must be exactly \"0\" or \"1\"; found \"x\".\n"
+        );
+        assert_eq!(raised.exit_code(), 222);
+    }
+
+    /// The line number is right-aligned in a six-character field, measured at
+    /// one, two and three digits against the oracle: `     4`, `    12`,
+    /// `   105`.
+    #[test]
+    fn the_line_number_field_is_six_wide() {
+        for (line, expected) in [(4usize, "     4"), (12, "    12"), (105, "   105")] {
+            let site = ClauseSite {
+                path: "/p",
+                line,
+                text: b"nop",
+            };
+            let report = Raised::syntax(7, 3, vec![]).report(&site);
+            let first = String::from_utf8(report).unwrap();
+            let first = first.lines().next().unwrap().to_string();
+            assert_eq!(&first[..6], expected, "line {line}");
+        }
+    }
+
+    /// `256 - major`, over every major 4a is measured to raise.
+    ///
+    /// Nine, not the four the plan recorded, each confirmed by running the
+    /// construct under the oracle and reading `$?`.
+    #[test]
+    fn the_exit_code_is_256_minus_the_major() {
+        for (major, sub, rc) in [
+            (7u16, 3u16, 249i32),
+            (24, 901, 232),
+            (25, 11, 231),
+            (26, 5, 230),
+            (33, 1, 223),
+            (34, 1, 222),
+            (41, 1, 215),
+            (42, 3, 214),
+            (98, 913, 158),
+        ] {
+            assert_eq!(
+                Raised::syntax(major, sub, vec![]).exit_code(),
+                rc,
+                "{major}"
+            );
+        }
+    }
+
+    /// Every raiser family 4a is measured to produce has catalogue text for
+    /// both its lines.
+    ///
+    /// This is the test that would have caught a hand-transcribed catalogue
+    /// going stale, and it is why the text is looked up rather than written
+    /// here: it asserts the entries *exist* and are non-empty, never what they
+    /// say, so it cannot drift from `rexxmsg.xml` the way a copy would.
+    #[test]
+    fn every_measured_family_has_catalogue_text() {
+        for (major, sub) in [
+            (7u16, 3u16),
+            (24, 1),
+            (24, 901),
+            (25, 11),
+            (26, 2),
+            (26, 3),
+            (26, 5),
+            (26, 6),
+            (26, 8),
+            (33, 1),
+            (34, 1),
+            (34, 2),
+            (34, 3),
+            (34, 4),
+            (34, 6),
+            (34, 901),
+            (41, 1),
+            (42, 3),
+            (42, 901),
+            (98, 913),
+        ] {
+            for (m, s) in [(major, 0), (major, sub)] {
+                let entry = rexx_inventory::errors::lookup(m, s)
+                    .unwrap_or_else(|| panic!("no catalogue entry for {m}.{s}"));
+                assert!(!entry.text.is_empty(), "{m}.{s} has empty text");
+            }
+        }
+    }
+
+    /// A substitution value containing `&1` is not re-substituted.
+    ///
+    /// Reachable from a Rexx program: `say '&1' + 1` raises 41.1 with the
+    /// operand text `&1`, so a `replace`-chaining implementation would expand
+    /// the value into itself. Scanning once is what makes that impossible.
+    #[test]
+    fn a_substitution_value_containing_an_ampersand_digit_is_left_alone() {
+        let raised = Raised::nonnumeric(b"&1");
+        assert_eq!(
+            raised.message(41, 1),
+            "Nonnumeric value (\"&1\") used in arithmetic operation."
+        );
+    }
+
+    /// An `&` that is not a substitution, and a missing value, both pass
+    /// through rather than being swallowed.
+    #[test]
+    fn a_bare_ampersand_and_a_missing_value_pass_through() {
+        assert_eq!(substitute("a & b", &[]), "a & b");
+        assert_eq!(substitute("x &1 y", &[]), "x &1 y");
+        assert_eq!(substitute("&1 and &2", &["one".into()]), "one and &2");
+    }
+
+    /// A catalogue miss renders visibly instead of panicking or rendering
+    /// empty: the error path is the worst place to abort, since it would turn
+    /// a reportable condition into a crash.
+    #[test]
+    fn a_catalogue_miss_is_visible_rather_than_silent() {
+        let raised = Raised::syntax(999, 999, vec![]);
+        assert_eq!(
+            raised.message(999, 999),
+            "<no message 999.999 in the catalogue>"
+        );
     }
 }

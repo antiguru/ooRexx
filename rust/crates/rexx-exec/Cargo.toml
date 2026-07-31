@@ -18,5 +18,12 @@ rexx-parse = { path = "../rexx-parse" }
 # what turns one into text.
 rexx-num = { path = "../rexx-num" }
 
+# The message catalogue. Phase 0 already generates `errors.rs` from
+# `interpreter/messages/rexxmsg.xml`, 704 messages, and criterion 1 compares
+# stderr byte for byte -- so the text an error prints is looked up here rather
+# than hand-transcribed. Leaving this crate out of the dependency list is the
+# omission spec revision 4 was made to correct.
+rexx-inventory = { path = "../rexx-inventory" }
+
 [lints]
 workspace = true
