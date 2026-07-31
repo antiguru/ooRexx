@@ -28,7 +28,10 @@
 //! prints 8).
 
 use crate::Interp;
-use rexx_parse::{CodeBody, Expr, ExprKind, Fragment, InstructionKind, SymbolId, SymbolTable};
+use rexx_parse::{
+    Call, CodeBody, Expr, ExprKind, Fragment, InstructionKind, Loop, LoopKind, Parse, ParseSource,
+    Redirection, Signal, SymbolId, SymbolTable, Tail, Trace, Use, VariableRef, compound_parts,
+};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -79,11 +82,13 @@ pub(crate) struct BodyKey {
 /// dense, table-local, zero-based index internally
 /// (`SymbolId(u32::try_from(self.names.len())...)`, `self.names[id.0 as
 /// usize]`), so exposing it as `SymbolId::index()` would cost nothing new.
-/// Recorded as an open `rexx-parse` amendment rather than made here: it
-/// changes a crate this task does not own, and variable lookup is
-/// 8.1%/32.2% of runtime (the realistic and stem-heavy benchmarks), so the
-/// choice is worth making deliberately rather than as a side effect of this
-/// task. Kept as a hash for now, pending that decision.
+/// **That accessor has since landed** (`SymbolId::index()`, `180875a9`), so
+/// switching `by_symbol` to a `Vec` indexed by it is now a decision this
+/// crate could make, not one blocked on `rexx-parse`. Not made in this fix
+/// round, which is scoped to making `note`/`build` exhaustive rather than
+/// to the representation: variable lookup is 8.1%/32.2% of runtime (the
+/// realistic and stem-heavy benchmarks), so trading a `HashMap` for a `Vec`
+/// is worth its own measurement, not a side effect of an unrelated change.
 #[derive(Debug, Default)]
 pub(crate) struct Plan {
     pub(crate) names: HashMap<Box<[u8]>, usize>,
@@ -93,27 +98,310 @@ pub(crate) struct Plan {
 impl Plan {
     /// Walks `body` once and returns a finished table (D16: "built by one
     /// upfront pass", not populated lazily one name at a time).
+    ///
+    /// **Exhaustive over `InstructionKind`, with no catch-all arm.** The
+    /// original `_ => {}` here (and `note`'s own, below) was the actual
+    /// defect this fix closes, not a placeholder: a body containing a
+    /// `Stem` or `Compound` produced an *empty* plan, so every one of its
+    /// names went through `grow_slots` one at a time on first touch --
+    /// precisely the lazy algorithm D16 exists to replace, and worst on the
+    /// stem-heavy code D16's own 32.2% figure measures. Matching every
+    /// variant explicitly, even the ones that contribute nothing, is what
+    /// makes a future omission a compile error instead of a silent one.
+    ///
+    /// Registers every name an instruction's fields *could* name, not only
+    /// the ones this phase's `eval`/`run` already executes: most kinds
+    /// below still fail loudly today and gain real behaviour only in later
+    /// tasks, but pre-registering a name costs nothing when it is never
+    /// read (an unread slot is simply unread), and it means neither this
+    /// function nor a later task has to remember to revisit `plan.rs` the
+    /// day one of them stops failing loudly.
     pub(crate) fn build(body: &CodeBody, symbols: &SymbolTable) -> Plan {
         let mut plan = Plan::default();
         for instruction in &body.instructions {
-            match &instruction.kind {
-                InstructionKind::Assignment { target, value } => {
-                    plan.note(target, symbols);
-                    plan.note(value, symbols);
-                }
-                InstructionKind::Say {
-                    expression: Some(expression),
-                } => plan.note(expression, symbols),
-                InstructionKind::Interpret { expression } => plan.note(expression, symbols),
-                // Every other instruction fails loudly before evaluation ever
-                // reaches it, so a variable inside one can never be read and
-                // needs no slot. Task 6 makes this pass exhaustive over
-                // `InstructionKind`, which is the point at which the omission
-                // would start to matter.
-                _ => {}
-            }
+            plan.note_instruction(&instruction.kind, symbols);
         }
         plan
+    }
+
+    /// Registers every name one instruction's own fields could read -- the
+    /// exhaustive match `build`'s doc comment describes, factored out to
+    /// its own function because the match itself, covering all
+    /// thirty-nine `InstructionKind` variants, does not fit inside a loop
+    /// body and stay readable.
+    fn note_instruction(&mut self, kind: &InstructionKind, symbols: &SymbolTable) {
+        match kind {
+            InstructionKind::Assignment { target, value } => {
+                self.note(target, symbols);
+                self.note(value, symbols);
+            }
+            InstructionKind::Message { term, value } => {
+                self.note(term, symbols);
+                self.note_opt(value, symbols);
+            }
+            InstructionKind::Command { expression }
+            | InstructionKind::Push { expression }
+            | InstructionKind::Queue { expression }
+            | InstructionKind::Say { expression }
+            | InstructionKind::Return { expression }
+            | InstructionKind::Exit { expression }
+            | InstructionKind::Reply { expression }
+            | InstructionKind::Numeric { expression, .. } => self.note_opt(expression, symbols),
+            InstructionKind::Interpret { expression } | InstructionKind::Options { expression } => {
+                self.note(expression, symbols);
+            }
+            InstructionKind::Do(loop_) | InstructionKind::Loop(loop_) => {
+                self.note_loop(loop_, symbols);
+            }
+            InstructionKind::If { condition, .. } | InstructionKind::When { condition, .. } => {
+                self.note(condition, symbols);
+            }
+            InstructionKind::WhenCase { values, .. } => {
+                for value in values {
+                    self.note(value, symbols);
+                }
+            }
+            InstructionKind::Select { case, .. } => self.note_opt(case, symbols),
+            // No expression and no data variable: `Select`'s own `label`
+            // and `Leave`/`Iterate`/`End`'s `name` are *block* labels
+            // matched against `LEAVE`/`ITERATE`/`END`, never read through
+            // `slot_of` -- the same distinction `note_loop` draws for a
+            // `DO`/`LOOP`'s own `label`, below.
+            InstructionKind::Label { .. }
+            | InstructionKind::Then
+            | InstructionKind::Else { .. }
+            | InstructionKind::Otherwise
+            | InstructionKind::Leave { .. }
+            | InstructionKind::Iterate { .. }
+            | InstructionKind::End { .. }
+            | InstructionKind::Nop => {}
+            InstructionKind::Drop { variables }
+            | InstructionKind::Expose { variables }
+            | InstructionKind::Procedure { variables } => {
+                for variable in variables {
+                    self.note_variable_ref(variable, symbols);
+                }
+            }
+            InstructionKind::Parse(parse)
+            | InstructionKind::Arg(parse)
+            | InstructionKind::Pull(parse) => self.note_parse(parse, symbols),
+            InstructionKind::Call(call) => self.note_call(call, symbols),
+            InstructionKind::Signal(signal) => {
+                if let Signal::Value(expr) = &**signal {
+                    self.note(expr, symbols);
+                }
+                // `Label`/`Trap` name a label or a condition, neither a
+                // data variable.
+            }
+            InstructionKind::Guard(guard) => self.note_opt(&guard.condition, symbols),
+            InstructionKind::Forward(forward) => {
+                self.note_opt(&forward.to, symbols);
+                self.note_opt(&forward.message, symbols);
+                self.note_opt(&forward.class, symbols);
+                self.note_opt(&forward.arguments, symbols);
+                if let Some(items) = &forward.array {
+                    self.note_args(items, symbols);
+                }
+            }
+            InstructionKind::Raise(raise) => {
+                self.note_opt(&raise.rc, symbols);
+                self.note_opt(&raise.description, symbols);
+                self.note_opt(&raise.additional, symbols);
+                if let Some(items) = &raise.array {
+                    self.note_args(items, symbols);
+                }
+                if let Some(result) = &raise.result {
+                    self.note_opt(&result.value, symbols);
+                }
+            }
+            InstructionKind::Use(use_) => match &**use_ {
+                Use::Arg { targets, .. } => {
+                    for target in targets.iter().flatten() {
+                        self.note(&target.target, symbols);
+                        self.note_opt(&target.default, symbols);
+                    }
+                }
+                Use::Local { variables } => {
+                    for variable in variables {
+                        self.note_variable_ref(variable, symbols);
+                    }
+                }
+            },
+            InstructionKind::Address(address) => {
+                self.note_opt(&address.dynamic, symbols);
+                self.note_opt(&address.command, symbols);
+                if let Some(io) = &address.io {
+                    for redirection in [&io.input, &io.output, &io.error] {
+                        match redirection {
+                            // `STEM name.`: the same single, complete,
+                            // interned symbol a bare `ExprKind::Stem` read
+                            // is, so it gets the same treatment `note`
+                            // gives one, id and all.
+                            Redirection::Stem(id) => self.bind(*id, symbols.name(*id).as_bytes()),
+                            Redirection::Stream(expr) | Redirection::Using(expr) => {
+                                self.note(expr, symbols);
+                            }
+                            Redirection::Default | Redirection::Normal => {}
+                        }
+                    }
+                }
+            }
+            InstructionKind::Trace(trace) => {
+                if let Trace::Value(expr) = trace {
+                    self.note(expr, symbols);
+                }
+            }
+        }
+    }
+
+    /// A `DO`/`LOOP` header's own names: `COUNTER`/control variables (bound,
+    /// since each is one complete, interned symbol with its own id, the
+    /// same treatment `note` gives a bare `Variable`) and every expression
+    /// its kind and its trailing `WHILE`/`UNTIL` carry.
+    ///
+    /// `label` is deliberately not bound: a loop label names the block for
+    /// `LEAVE`/`ITERATE`/`END`, not a data variable, exactly like `Select`'s
+    /// own `label` in `note_instruction`.
+    fn note_loop(&mut self, loop_: &Loop, symbols: &SymbolTable) {
+        if let Some(counter) = loop_.counter {
+            self.bind(counter, symbols.name(counter).as_bytes());
+        }
+        match &loop_.kind {
+            LoopKind::Simple | LoopKind::Forever => {}
+            LoopKind::Count(count) => self.note_opt(count, symbols),
+            LoopKind::Controlled(controlled) => {
+                self.bind(
+                    controlled.control,
+                    symbols.name(controlled.control).as_bytes(),
+                );
+                self.note(&controlled.initial, symbols);
+                self.note_opt(&controlled.to, symbols);
+                self.note_opt(&controlled.by, symbols);
+                self.note_opt(&controlled.for_count, symbols);
+            }
+            LoopKind::Over {
+                control,
+                target,
+                for_count,
+            } => {
+                self.bind(*control, symbols.name(*control).as_bytes());
+                self.note(target, symbols);
+                self.note_opt(for_count, symbols);
+            }
+            LoopKind::With {
+                index,
+                item,
+                target,
+                for_count,
+            } => {
+                if let Some(index) = index {
+                    self.bind(*index, symbols.name(*index).as_bytes());
+                }
+                if let Some(item) = item {
+                    self.bind(*item, symbols.name(*item).as_bytes());
+                }
+                self.note(target, symbols);
+                self.note_opt(for_count, symbols);
+            }
+        }
+        if let Some(conditional) = &loop_.conditional {
+            self.note(&conditional.condition, symbols);
+        }
+    }
+
+    /// A `PARSE`/`ARG`/`PULL` instruction's own names: `PARSE VAR name`'s
+    /// source variable (read from, so bound the same way any read is), any
+    /// expression a `VALUE` source or a trigger's pattern carries, and
+    /// every template target -- already `Expr`s (`ast.rs`'s own doc: a
+    /// dropped `.` placeholder aside, a target is a `Variable`/`Stem`/
+    /// `Compound` node), so `note` alone is enough for them.
+    fn note_parse(&mut self, parse: &Parse, symbols: &SymbolTable) {
+        match &parse.source {
+            ParseSource::Var(id) => self.bind(*id, symbols.name(*id).as_bytes()),
+            ParseSource::Value(expr) => self.note_opt(expr, symbols),
+            ParseSource::Arg
+            | ParseSource::LineIn
+            | ParseSource::Pull
+            | ParseSource::Source
+            | ParseSource::Version => {}
+        }
+        for trigger in parse.template.iter().flatten() {
+            self.note_opt(&trigger.value, symbols);
+            self.note_args(&trigger.targets, symbols);
+        }
+    }
+
+    /// A `CALL`'s own names: a dynamic target and every argument. `Named`'s
+    /// own `name`/`literal` and `Qualified`'s `namespace`/`name` are a
+    /// routine name and a namespace, resolved by their own search, never
+    /// through `slot_of`; `Trap` names a condition, not a variable.
+    fn note_call(&mut self, call: &Call, symbols: &SymbolTable) {
+        match call {
+            Call::Named { args, .. } | Call::Qualified { args, .. } => {
+                self.note_args(args, symbols);
+            }
+            Call::Dynamic { target, args } => {
+                self.note(target, symbols);
+                self.note_args(args, symbols);
+            }
+            Call::Trap(_) => {}
+        }
+    }
+
+    /// One `Drop`/`Expose`/`Procedure`/`Use Local` target.
+    ///
+    /// `Indirect(id)`'s `id` is the *wrapper* variable read at run time to
+    /// learn the real target's name (`DROP (v)` reads `v` itself, the same
+    /// as any ordinary read) -- the target `v` names is not knowable until
+    /// then, so nothing more can be pre-registered for it, and this file's
+    /// own `a_runtime_name_grows_the_frame` test is exactly this case,
+    /// expected to keep falling through to `extra`/`grow_slots`.
+    /// `Direct(id)`'s spelling can be a simple variable, a stem or a
+    /// compound with no tag saying which (`VariableRef`'s own doc comment)
+    /// -- dispatched here on whether it contains a `.` at all, the same
+    /// condition `compound_parts` itself requires before it can be called.
+    fn note_variable_ref(&mut self, var_ref: &VariableRef, symbols: &SymbolTable) {
+        let (VariableRef::Direct(id) | VariableRef::Indirect(id)) = *var_ref;
+        let name = symbols.name(id);
+        if name.contains('.') {
+            self.note_compound_name(name.as_bytes());
+        } else {
+            self.bind(id, name.as_bytes());
+        }
+    }
+
+    /// Registers every name a compound-shaped spelling's decomposition
+    /// touches: the stem itself, and any tail piece that is a variable
+    /// (D15a) -- a constant piece (a bare digit run, or the empty piece a
+    /// trailing period leaves) names nothing. `name` is either a `Compound`
+    /// expression's own interned spelling, or a `Drop`/`Expose`/
+    /// `Procedure`/`Use Local` target's, once `note_variable_ref` has
+    /// already established it is compound- or stem-shaped.
+    ///
+    /// Registers by name alone, with no `SymbolId` to bind alongside:
+    /// neither the stem prefix nor a tail piece has one of its own --
+    /// `compound_parts` only ever hands back a borrowed slice of the one
+    /// interned spelling a `Compound` id carries, and a piece was never a
+    /// token the scanner saw (`ast.rs`'s own `Compound` doc comment says
+    /// so). That is exactly why `stem.rs`'s `tail_key`/`read_by_name`
+    /// resolve both of these purely by name, which is what makes `names`,
+    /// not `by_symbol`, the correct table for them to land on.
+    fn note_compound_name(&mut self, name: &[u8]) {
+        // `compound_parts` needs `&str` and panics on a name with no period
+        // at all; every caller here already guarantees one -- a `Compound`
+        // expression's own spelling always has one (`ast.rs`), and
+        // `note_variable_ref` checks first. A Rexx symbol's interned
+        // spelling is always ASCII (the scanner classifies only ASCII
+        // symbol characters as `Stem`/`Compound`), so the conversion itself
+        // cannot fail either.
+        let name = std::str::from_utf8(name).expect("an interned compound name is ASCII");
+        let (stem, tails) = compound_parts(name);
+        self.slot_for(stem.as_bytes());
+        for tail in tails {
+            if let Tail::Variable(piece) = tail {
+                self.slot_for(piece.as_bytes());
+            }
+        }
     }
 
     /// Assigns slots to every variable `expr` names, in source order.
@@ -121,20 +409,77 @@ impl Plan {
     /// Recursive, and that recursion is on the interpreter thread's stack
     /// budget alongside `eval`'s: a left-deep 100,000-term expression is
     /// walked here as deeply as it is later evaluated.
+    ///
+    /// **Exhaustive over `ExprKind`, with no catch-all arm** -- see
+    /// `build`'s doc comment for why: the original `_ => {}` here was the
+    /// actual defect, not a placeholder, and matching every variant
+    /// explicitly is what turns a future omission into a compile error.
+    /// Reimplements the same shape `ExprKind::for_each_child`
+    /// (`rexx-parse`'s `ast.rs`) already walks, rather than calling it:
+    /// that method is `pub(crate)` to `rexx-parse`, so nothing outside that
+    /// crate can reach it -- `rexx-parse/tests/gate_walk/mod.rs`'s
+    /// `children_of` reimplements the identical shape for the identical
+    /// reason, one crate over.
     fn note(&mut self, expr: &Expr, symbols: &SymbolTable) {
         match &expr.kind {
-            ExprKind::Variable(id) => self.bind(*id, symbols.name(*id).as_bytes()),
+            ExprKind::Variable(id) | ExprKind::Stem(id) => {
+                self.bind(*id, symbols.name(*id).as_bytes());
+            }
+            ExprKind::Compound(id) => self.note_compound_name(symbols.name(*id).as_bytes()),
+            // A literal, a constant (its value is its own spelling, never a
+            // variable) and a `.name` environment symbol (resolved through
+            // the class/environment lookup, never `slot_of`) name nothing.
+            // A namespace:name class resolver names a class, not a
+            // variable, either.
+            ExprKind::Literal(_)
+            | ExprKind::Constant(_)
+            | ExprKind::DotVariable(_)
+            | ExprKind::ClassResolver { .. } => {}
             ExprKind::Prefix { operand, .. } => self.note(operand, symbols),
             ExprKind::Binary { left, right, .. } => {
                 self.note(left, symbols);
                 self.note(right, symbols);
             }
-            // A literal and a constant name no variable; every remaining form
-            // fails loudly in `eval` before its names could be read. Task 6
-            // covers `Stem`, `Compound` and the rest, where D16's rule that a
-            // tail piece lands on the *same* slot as a same-named variable is
-            // what `names` exists for.
-            _ => {}
+            ExprKind::Call { args, .. } | ExprKind::QualifiedCall { args, .. } => {
+                self.note_args(args, symbols);
+            }
+            ExprKind::Message {
+                target,
+                super_class,
+                args,
+                ..
+            } => {
+                self.note(target, symbols);
+                if let Some(super_class) = super_class {
+                    self.note(super_class, symbols);
+                }
+                self.note_args(args, symbols);
+            }
+            ExprKind::List(items) => self.note_args(items, symbols),
+            ExprKind::Logical(items) => {
+                for item in items {
+                    self.note(item, symbols);
+                }
+            }
+            ExprKind::VariableReference(inner) => self.note(inner, symbols),
+        }
+    }
+
+    /// `note` for an optional expression: an omitted argument, a `Say` with
+    /// nothing after it, and every other `Option<Expr>` field this module
+    /// walks share this one shape rather than each writing its own `if let`.
+    fn note_opt(&mut self, expr: &Option<Expr>, symbols: &SymbolTable) {
+        if let Some(expr) = expr {
+            self.note(expr, symbols);
+        }
+    }
+
+    /// `note` for an argument list, an omitted position skipped -- the
+    /// `Vec<Option<Expr>>` shape a call's arguments, a list's elements and a
+    /// `PARSE` template's targets all share.
+    fn note_args(&mut self, args: &[Option<Expr>], symbols: &SymbolTable) {
+        for arg in args.iter().flatten() {
+            self.note(arg, symbols);
         }
     }
 
@@ -145,9 +490,18 @@ impl Plan {
     /// the first one got, which is why the slot number comes from `names` and
     /// never from `by_symbol`'s length.
     fn bind(&mut self, id: SymbolId, name: &[u8]) {
-        let next = self.names.len();
-        let slot = *self.names.entry(name.into()).or_insert(next);
+        let slot = self.slot_for(name);
         self.by_symbol.insert(id, slot);
+    }
+
+    /// Assigns `name` a slot, reusing one already assigned to the identical
+    /// spelling. The name-only half of `bind`, factored out because a
+    /// compound's stem prefix and tail-piece variables have no `SymbolId`
+    /// to bind alongside them (`note_compound_name`'s own doc comment says
+    /// why) and so go through this directly.
+    fn slot_for(&mut self, name: &[u8]) -> usize {
+        let next = self.names.len();
+        *self.names.entry(name.into()).or_insert(next)
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -271,6 +625,64 @@ mod tests {
             .activations
             .push(crate::Activation::new(Rc::clone(&program), plan, frame));
         program
+    }
+
+    /// The measured bug this fix closes (Task 6 fix dispatch): before it,
+    /// every one of the first four bodies below built an *empty* plan --
+    /// `Plan::note`'s `_ => {}` dropped `Stem`/`Compound` outright, and
+    /// `Plan::build`'s own `_ => {}` meant an instruction it did not
+    /// explicitly list (a `DROP`, a controlled `DO`) never even reached
+    /// `note` at all. This asserts the plan's actual *contents* -- which
+    /// names ended up in `plan.names` -- not merely that resolution still
+    /// works afterwards through the `extra`/`grow_slots` fallback, which is
+    /// the exact bar the dispatch set: neutering `Plan::build` to return an
+    /// empty plan unconditionally must fail this test. It does not fail the
+    /// pre-existing tests below, whose own assertions run through
+    /// `slot_of`, which still gives the right *answer* via that fallback
+    /// even when the plan is empty -- only the plan's own contents catch
+    /// the regression.
+    #[test]
+    fn build_registers_every_name_a_stem_or_compound_touches() {
+        let cases: &[(&[u8], &[&str])] = &[
+            // say a.b -- the stem "A." and the tail-piece variable "B",
+            // neither of which `note`'s old match handled at all.
+            (&b"say a.b"[..], &["A.", "B"][..]),
+            // a.1 = 'x' -- a bare digit tail is a constant (D15a), so only
+            // the stem itself needs a slot.
+            (b"a.1 = 'x'", &["A."]),
+            // q. = 1 -- a bare Stem assignment target, dropped by the same
+            // `_ => {}` a Compound was.
+            (b"q. = 1", &["Q."]),
+            // say v -- unaffected by this fix, kept as the control case:
+            // if this one broke, the fix broke something that already
+            // worked, not just left something unfixed.
+            (b"say v", &["V"]),
+            // drop a.b.c -- `Drop`'s own `_ => {}` in the pre-fix `build`
+            // meant this never reached `note` at all, compound or not.
+            // Both tail pieces are letter-led, so both are variables.
+            (b"drop a.b.c", &["A.", "B", "C"]),
+            // do i = 1 to 5 / end -- a controlled loop's control variable,
+            // which never went through `note` before either: `Do` was not
+            // one of `build`'s three explicitly handled kinds.
+            (b"do i = 1 to 5\nend", &["I"]),
+        ];
+        for (source, expected_names) in cases {
+            let program = parse_program(source.to_vec()).expect("test program parses");
+            let plan = Plan::build(&program.main, &program.symbols);
+            assert!(
+                !plan.names.is_empty(),
+                "{:?} must build a non-empty plan",
+                String::from_utf8_lossy(source)
+            );
+            for name in *expected_names {
+                assert!(
+                    plan.names.contains_key(name.as_bytes()),
+                    "{:?}: expected {name:?} in the plan, got {:?}",
+                    String::from_utf8_lossy(source),
+                    plan.names.keys().collect::<Vec<_>>()
+                );
+            }
+        }
     }
 
     #[test]
