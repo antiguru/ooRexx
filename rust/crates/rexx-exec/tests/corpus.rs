@@ -78,25 +78,55 @@
 //! nobody reads at the moment they see green: a `cargo test` line that means
 //! "17 of 26 disagree" is exactly the failure this project keeps finding in
 //! its own harnesses, and the worst place to introduce it is the instrument
-//! that measures the others. Because a passing test's `println!` output is
-//! only shown by `cargo test -- --nocapture` (the same tradeoff `spike.rs`'s
-//! `records_the_stack_cost_of_one_eval_frame` already accepts for its own
-//! numbers), that is the invocation to use when reading this report:
+//! that measures the others.
 //!
-//! ```text
-//! cargo test -p rexx-exec --test corpus -- --nocapture
-//! ```
+//! **The report does not rely on `--nocapture`.** `println!`/`eprintln!`
+//! inside a `#[test]` write through a *thread-local* sink libtest swaps in for
+//! the duration of the test, not through the process's real file descriptor
+//! 2 -- so a passing test's own prints are invisible under a plain `cargo
+//! test`, `--nocapture` or not, is a flag the reader has to already know to
+//! reach for, and documenting that flag as the answer is the same
+//! reader-has-to-already-know-to-ask shape as the silent pass this report
+//! exists to prevent. `emit_uncaptured` instead pipes the finished report into
+//! a `cat >&2` child process whose *stderr is inherited*: a child's inherited
+//! descriptor is dup'd from this process's own real fd 2 at spawn time, which
+//! the thread-local swap never touches, so the write reaches the terminal (or
+//! whatever `cargo test`'s own stderr is connected to) regardless of capture
+//! state. Verified, not assumed: a throwaway two-test crate
+//! (`a_captured_println_is_invisible` / `a_subprocess_write_bypasses_capture`)
+//! run under plain `cargo test`, no flags, showed the `println!` line nowhere
+//! in the terminal and the subprocess-written line printed inline between the
+//! two `test ... ok` lines.
+//!
+//! `demonstrate_the_report_reaches_a_plain_cargo_test` below is that same
+//! proof, kept in the tree rather than left as a one-off experiment. It cannot
+//! observe its *own* real fd 2 from inside itself with no `unsafe` (the only
+//! way to intercept a process's own inherited descriptor is a `dup2`-shaped
+//! syscall), so it instead re-executes **this same test binary**
+//! (`std::env::current_exe`) as a child, asking libtest for exactly one
+//! `#[ignore]`d probe test and *not* passing `--nocapture` -- the identical
+//! invocation `cargo test` itself uses on every test binary in the workspace.
+//! Piping that child's stdout and stderr back (`Command::output`) is legitimate
+//! here in a way it would not be for the real report: this process is the
+//! child's *parent*, so reading its pipes is not "capturing your own tests'
+//! output" but observing a separate process from outside, exactly what a
+//! human at a terminal does. Finding the probe's marker in that captured
+//! output demonstrates the mechanism survives an ordinary, flagless test run;
+//! not finding it would mean this file's whole premise is wrong.
 //!
 //! STRICT (`REXX_CORPUS_GATE=1 cargo test ...`) runs the identical comparison
-//! and fails the test if any program mismatches, printing the same report.
-//! Because a *failing* test's captured output is always shown, the report is
-//! visible on a gate failure with no extra flag needed.
+//! and fails the test if any program mismatches. The report is written the
+//! same way either way, so a gate failure and a report-mode run are equally
+//! visible; the assertion failure is what turns the mismatch into a non-zero
+//! exit, not what makes it legible.
 
 use std::collections::BTreeMap;
 use std::env;
+use std::fmt::Write as _;
 use std::fs;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use rexx_exec::Outcome;
 
@@ -312,30 +342,45 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
     })
 }
 
-/// Prints the report. Called on every run, gate or not: STRICT's failure
-/// message is this same text, since a failing test's captured output is
-/// always shown regardless of `--nocapture`.
-fn print_report(matched: usize, total: usize, mismatches: &[Mismatch], gate: bool) {
+/// Builds the report text. A `String`, not a `println!` stream: the whole
+/// point is that this text crosses to [`emit_uncaptured`] as one payload
+/// rather than going through libtest's per-call capture at all.
+fn build_report(matched: usize, total: usize, mismatches: &[Mismatch], gate: bool) -> String {
     let banner = "=".repeat(78);
-    println!("{banner}");
-    println!("rexx-exec differential corpus report -- rust/corpus/phase-4a.txt");
+    let mut report = String::new();
+    let w = &mut report;
+    writeln!(w, "{banner}").unwrap();
+    writeln!(
+        w,
+        "rexx-exec differential corpus report -- rust/corpus/phase-4a.txt"
+    )
+    .unwrap();
     if gate {
-        println!("mode: STRICT (the gate) -- {GATE_ENV} is set");
+        writeln!(w, "mode: STRICT (the gate) -- {GATE_ENV} is set").unwrap();
     } else {
-        println!("*** REPORT MODE -- NOT THE GATE. Set {GATE_ENV}=1 to run this as the gate. ***");
+        writeln!(
+            w,
+            "*** REPORT MODE -- NOT THE GATE. Set {GATE_ENV}=1 to run this as the gate. ***"
+        )
+        .unwrap();
     }
     let not_the_gate = if gate {
         ""
     } else {
         " -- REPORT MODE, NOT THE GATE"
     };
-    println!("{matched} of {total} matching{not_the_gate}");
+    writeln!(w, "{matched} of {total} matching{not_the_gate}").unwrap();
 
     if !mismatches.is_empty() {
-        println!("mismatches ({}):", mismatches.len());
+        writeln!(w, "mismatches ({}):", mismatches.len()).unwrap();
         for mismatch in mismatches {
             let owner = mismatch.owner.as_deref().unwrap_or("UNCLASSIFIED");
-            println!("  [{owner:<10}] {}: {}", mismatch.rel_path, mismatch.reason);
+            writeln!(
+                w,
+                "  [{owner:<10}] {}: {}",
+                mismatch.rel_path, mismatch.reason
+            )
+            .unwrap();
         }
 
         let mut by_owner: BTreeMap<&str, usize> = BTreeMap::new();
@@ -343,21 +388,61 @@ fn print_report(matched: usize, total: usize, mismatches: &[Mismatch], gate: boo
             let owner = mismatch.owner.as_deref().unwrap_or("UNCLASSIFIED");
             *by_owner.entry(owner).or_insert(0) += 1;
         }
-        println!("by owner:");
+        writeln!(w, "by owner:").unwrap();
         for (owner, count) in &by_owner {
-            println!("  {owner}: {count}");
+            writeln!(w, "  {owner}: {count}").unwrap();
         }
     }
 
     if !gate {
-        println!(
+        writeln!(
+            w,
             "*** REPORT MODE -- NOT THE GATE. {matched} of {total} matching means {} \
              programs still disagree with the oracle; it is a progress signal for the \
              tasks still landing, not a claim that the phase is done. ***",
             total - matched
-        );
+        )
+        .unwrap();
     }
-    println!("{banner}");
+    writeln!(w, "{banner}").unwrap();
+    report
+}
+
+/// Writes `text` to the real, process-level stderr, so it reaches the
+/// terminal under a plain `cargo test` with no `--nocapture` -- see the
+/// module doc's "REPORT vs STRICT" section for why `println!`/`eprintln!`
+/// cannot do this from inside a `#[test]`.
+///
+/// `sh -c 'cat >&2'` rather than `Command::new("cat")` directly: `cat`'s own
+/// stdout has to land on *this process's* real fd 2, and redirecting a
+/// child's stdout to a specific existing descriptor is exactly what a shell's
+/// `>&2` does; reaching for the same effect through `std::process::Stdio`
+/// alone would need a raw-fd constructor this workspace's `unsafe_code =
+/// "forbid"` lint rules out. Setting the `Command`'s own `stderr` to
+/// `Stdio::inherit()` is what makes that `>&2` resolve to the *real* fd 2:
+/// a child's inherited descriptor is dup'd from the parent's at spawn time,
+/// upstream of libtest's thread-local capture.
+fn emit_uncaptured(text: &str) {
+    let mut child = Command::new("sh")
+        .arg("-c")
+        .arg("cat >&2")
+        .stdin(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .expect("spawning `sh -c 'cat >&2'` to bypass libtest's output capture");
+    child
+        .stdin
+        .take()
+        .expect("stdin was requested as piped")
+        .write_all(text.as_bytes())
+        .expect("writing the report to the uncaptured-output child's stdin");
+    let status = child
+        .wait()
+        .expect("waiting for the uncaptured-output child");
+    assert!(
+        status.success(),
+        "the uncaptured-output child (`sh -c 'cat >&2'`) exited abnormally: {status}"
+    );
 }
 
 /// The runner itself. See the module doc for REPORT vs STRICT and how the
@@ -365,7 +450,7 @@ fn print_report(matched: usize, total: usize, mismatches: &[Mismatch], gate: boo
 ///
 /// Today's expected result, at commit `e0e57825`: 9 of 26 matching, the
 /// remaining 17 partitioned as `DO` 10, `TRACE` 4, `SELECT` 2, `IF` 1 --
-/// reproduced by running this test with `--nocapture` before writing it.
+/// reproduced with a standalone shell loop before this test was written.
 /// Tasks implementing `IF` and `SELECT` may move this number out from under a
 /// later run; that is expected, not a regression, and the fix is to re-run
 /// and record which commit was measured, not to adjust this comment to match
@@ -391,12 +476,54 @@ fn corpus_differential() {
 
     let total = subset.len();
     let gate = gate_mode();
-    print_report(matched, total, &mismatches, gate);
+    emit_uncaptured(&build_report(matched, total, &mismatches, gate));
 
     assert!(
         !gate || mismatches.is_empty(),
         "STRICT ({GATE_ENV}) mode: {} of {total} phase-4a corpus programs disagree with \
          the oracle; see the report above for which and why.",
         mismatches.len()
+    );
+}
+
+/// Not a corpus case. Exists only to be re-executed, alone, by
+/// [`demonstrate_the_report_reaches_a_plain_cargo_test`], which is the reason
+/// it is `#[ignore]`d: a normal test run must not run it as a case of its
+/// own, only as the child process the demonstration spawns.
+#[test]
+#[ignore = "run only by demonstrate_the_report_reaches_a_plain_cargo_test, as a child process"]
+fn probe_emit_uncaptured_marker() {
+    emit_uncaptured("EMIT-UNCAPTURED-PROBE-MARKER\n");
+}
+
+/// Proves `emit_uncaptured` reaches the terminal under a plain `cargo test`,
+/// rather than asserting it should. See the module doc's "REPORT vs STRICT"
+/// section for why this cannot observe its own process's fd 2 and instead
+/// re-executes this test binary as a child running only
+/// [`probe_emit_uncaptured_marker`], with no `--nocapture` -- the same
+/// invocation `cargo test` (workspace or single-crate) uses on every test
+/// binary. `--include-ignored` is required for exactly one reason: the
+/// probe's own `#[ignore]`, which exists so *this* process's normal test run
+/// does not also execute it directly.
+#[test]
+fn demonstrate_the_report_reaches_a_plain_cargo_test() {
+    let exe = env::current_exe().expect("a running test binary knows its own path");
+    let output = Command::new(exe)
+        .args([
+            "--exact",
+            "probe_emit_uncaptured_marker",
+            "--include-ignored",
+        ])
+        .output()
+        .expect("re-executing this test binary against itself");
+
+    let mut combined = output.stdout;
+    combined.extend_from_slice(&output.stderr);
+    let text = String::from_utf8_lossy(&combined);
+    assert!(
+        text.contains("EMIT-UNCAPTURED-PROBE-MARKER"),
+        "the probe's marker did not reach the child test binary's own captured \
+         output under a plain (no --nocapture) run, so emit_uncaptured is not \
+         bypassing libtest's capture. Full child output:\n{text}"
     );
 }
