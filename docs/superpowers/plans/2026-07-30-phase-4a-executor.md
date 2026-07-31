@@ -621,6 +621,12 @@ git commit -m "Resolve a body's variables once, keyed by name, cached on Interp"
 
 - [ ] **Step 2: Run to watch them fail**
 
+**`Raised` is built here, not in Task 12, and the boundary matters.** Task 7's own Interfaces name it as `eval`'s error type, and arithmetic is one of 4a's raisers, so a divide-by-zero test that can only assert "fails loudly" is asserting the same thing an *unimplemented* construct produces — it cannot tell a working raiser from an absent one.
+
+Build the payload, the propagation and `From<ArithError>`. Do **not** build the message catalogue, the two-line stderr format, the clause echo or the exit-code mapping: those are Task 12's, they need `rexx-inventory`'s generated table and oracle-captured expectations, and they are where the work is. Tests assert the **condition data** — that `1/0` raises 42.3 — not the rendered text or the process exit code.
+
+Measured, so the tests assert something real: `1/0` and `1//0` give **42.3 at rc 214**, `'abc'+1` gives **41.1 at rc 215**, and `2**'x'` gives **26.8 at rc 230**. Arithmetic raisers therefore span majors 26, 41 and 42, not the two the error section names most often, and `256 - major` holds for all three — which is Task 12's rule to implement, not this one's.
+
 - [ ] **Step 3: Implement**
 
 Push every intermediate to `RootSet::push_temp` before any allocation that could collect while it is live. A value held only in a Rust local across an allocation is the defect class the root set exists to remove.
