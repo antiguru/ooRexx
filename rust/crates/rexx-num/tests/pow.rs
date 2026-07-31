@@ -87,3 +87,31 @@ fn the_reciprocal_is_rounded_exactly_once() {
     // through the general division rounds twice and lands on ...547.
     assert_eq!(pow("129720.468", "-23", 7).unwrap(), "2.516546E-118");
 }
+
+/// Two of the six rows in the oracle's power-operator asymmetry table
+/// (Task 8a's report has the full six and the reasoning), pinned with the
+/// exact `(major, sub)` pair `sub_code()` now exposes rather than only the
+/// major `pow()`'s own helper checks elsewhere in this file. Measured:
+/// `2**-1` -> `0.5`, `2**2.5` -> `Error 26.8`.
+///
+/// **The other four rows -- both non-numeric-operand cases, `2**'x'`,
+/// `'y'**2`, `'y'**'x'`, and the fact the base is checked before the
+/// exponent -- cannot be tested here, and that is a structural fact about
+/// this function's signature, not a gap in this crate's coverage.**
+/// `pow(&self, exponent: &Number, ...)` takes two already-parsed `Number`s;
+/// a non-numeric operand never becomes one, so there is no way to hand
+/// `pow` a string that failed to parse, and therefore no call this crate
+/// could make that exercises the routing between 26.8 and 41.1 for that
+/// case at all. That routing is necessarily decided one layer up, by
+/// whatever calls `Number::parse` on each operand *before* calling `pow`
+/// and picks which error to raise depending on which operand (if either)
+/// failed to convert -- `rexx-exec`'s job, not this crate's. A later
+/// simplification cannot "unify" that routing into `pow` without changing
+/// its signature to accept unparsed text, which would be a much larger
+/// change than a simplification.
+#[test]
+fn the_two_pow_asymmetry_rows_that_are_actually_this_crates_to_own() {
+    assert_eq!(pow("2", "-1", 9).unwrap(), "0.5");
+    let err = n("2").pow(&n("2.5"), 9).unwrap_err();
+    assert_eq!(err.sub_code(), (26, 8));
+}

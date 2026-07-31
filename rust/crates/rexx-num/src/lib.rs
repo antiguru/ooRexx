@@ -120,6 +120,20 @@ pub enum ArithError {
 }
 
 impl ArithError {
+    /// The major number a trapped Rexx program sees in `RC` (`condition('o')
+    /// ~code` is this pair's major half). For the *sub*-number too -- what
+    /// distinguishes 42.3 from 42.901 and 42.902, all of which are major 42
+    /// -- see [`ArithError::sub_code`], which also returns this same major
+    /// alongside it.
+    ///
+    /// Kept even though `sub_code` alone could answer both: this predates
+    /// `sub_code`, several callers only ever want the major (`bin/muldiv
+    /// .rs`/`bin/addsub.rs`'s harnesses render it as `<E{major}>` and never
+    /// look at the sub-number at all), and forcing every one of them to
+    /// destructure a pair for a value they discard would not make the code
+    /// clearer. A caller that needs *both* should call `sub_code()` once
+    /// rather than this and `sub_code()` separately -- calling both parses
+    /// the same `match` twice for one answer.
     pub fn code(self) -> u16 {
         match self {
             ArithError::Overflow { .. }
@@ -138,8 +152,24 @@ impl ArithError {
     /// The `(major, sub)` pair identifying this failure's exact entry in
     /// the generated message table -- `code()` only ever exposes `major`
     /// (the interpreter number a trapped Rexx program sees in `RC`), so
-    /// `message`/`additional` need this to pick the right table row.
-    fn sub_code(&self) -> (u16, u16) {
+    /// `message`/`additional` need this to pick the right table row, and so
+    /// does any other caller that has to report the sub-number a trapped
+    /// `SYNTAX` condition would carry (`condition('o')~code`'s minor half).
+    ///
+    /// Public because a caller outside this crate needs exactly this and
+    /// has no other way to get it: `rexx-exec`'s `From<ArithError> for
+    /// Raised` (Task 7) has to carry the sub-number into the condition it
+    /// raises, and the alternative -- hand-copying this `match` a second
+    /// time in `rexx-exec` -- is precisely the divergent second copy this
+    /// workspace's own rule against duplicating `rexx-num` logic (see
+    /// `compare.rs`'s module doc for the same rule applied to comparison)
+    /// exists to prevent. Kept as one function returning the pair, not
+    /// split into a `sub()` beside `code()`: a caller wanting both calls
+    /// this once and destructures it, which is both the natural way to use
+    /// a `(major, sub)` fact that is always decided together (see this
+    /// `match`, and `message`/`additional`'s own callers) and already this
+    /// crate's own internal usage (`message`, below).
+    pub fn sub_code(&self) -> (u16, u16) {
         match self {
             ArithError::Overflow { .. } => (42, 901),
             ArithError::Underflow { .. } => (42, 902),

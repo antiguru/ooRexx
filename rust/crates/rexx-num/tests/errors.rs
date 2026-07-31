@@ -237,6 +237,53 @@ fn code_still_matches_every_variant_after_the_split() {
     assert_eq!(n("2").pow(&n("2.5"), 9).unwrap_err().code(), 26);
 }
 
+/// `sub_code()`'s major half must agree with `code()` for every variant --
+/// they answer the same question about the major number two different
+/// ways (a plain u16, or the first half of the full pair), and a caller
+/// choosing between them, per `code()`'s own doc comment on when each is
+/// canonical, must get the same answer either way. Reuses the same
+/// provoked errors `code_still_matches_every_variant_after_the_split`
+/// does, rather than only the two variants `sub_code()` was added for.
+#[test]
+fn sub_codes_major_half_agrees_with_code_on_every_variant() {
+    let cases: Vec<ArithError> = vec![
+        n("1").div(&n("0"), 9, DivOp::Divide).unwrap_err(),
+        n("9e999999999").mul(&n("9e999999999"), 9).unwrap_err(),
+        n("1e-999999990")
+            .div(&n("1e20"), 9, DivOp::Divide)
+            .unwrap_err(),
+        n("0").pow(&n("-1"), 9).unwrap_err(),
+        n("100").pow(&n("999999999"), 9).unwrap_err(),
+        n("123456")
+            .div(&n("2"), 3, DivOp::IntegerDivide)
+            .unwrap_err(),
+        n("123456").div(&n("2"), 3, DivOp::Remainder).unwrap_err(),
+        n("2").pow(&n("2.5"), 9).unwrap_err(),
+    ];
+    for err in cases {
+        assert_eq!(err.clone().code(), err.sub_code().0, "{err:?}");
+    }
+}
+
+/// `sub_code()` pinned directly against the oracle for the two variants
+/// `rexx-exec`'s `From<ArithError> for Raised` (Task 7) needs first --
+/// `DivideByZero` and `PowerExponentNotWhole` are the two that stopgap
+/// hand-copied before this accessor existed, independently verified there
+/// against `1/0`/`1//0` and `2**2.5`. Repinned here, through the real
+/// accessor, so a regression shows up in `rexx-num` itself rather than
+/// only in whichever crate copied the numbers.
+#[test]
+fn sub_code_is_42_3_for_divide_by_zero_and_26_8_for_power_exponent_not_whole() {
+    assert_eq!(
+        n("1")
+            .div(&n("0"), 9, DivOp::Divide)
+            .unwrap_err()
+            .sub_code(),
+        (42, 3)
+    );
+    assert_eq!(n("2").pow(&n("2.5"), 9).unwrap_err().sub_code(), (26, 8));
+}
+
 #[test]
 fn additional_and_message_agree_on_every_placeholder() {
     // additional()'s values, joined into message()'s own text, must appear
