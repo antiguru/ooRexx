@@ -557,7 +557,7 @@ fn saturate_digits(digits: u64) -> u32 {
 /// prefix `\`, `&`/`|`/`&&` and `ExprKind::Logical`'s per-element check,
 /// which differ only in *which* sub-number they raise on `None`, never in
 /// what counts as logical.
-fn logical_value(text: &[u8]) -> Option<bool> {
+pub(crate) fn logical_value(text: &[u8]) -> Option<bool> {
     match text {
         b"0" => Some(false),
         b"1" => Some(true),

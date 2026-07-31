@@ -28,25 +28,46 @@
 //! move unchanged. New here: `Assignment`'s `Stem`/`Compound` targets, all of
 //! `DROP`, all six spellings of `NUMERIC`, `EXIT` with a result, and `LABEL`/
 //! `NOP` as the no-ops they are.
+//!
+//! Task 10 is the first to make `Flow::Goto` live, for `IF`/`SELECT`/
+//! `SELECT CASE`. **`If` and `Select` each resolve their whole construct
+//! inside their own `step` arm**, running the winning branch through a
+//! bounded local loop (`run_bounded`, shaped like `run_fragment`'s) rather
+//! than leaving the outer `run_activation` loop to fall through the flat
+//! instruction list on its own. That is not a style choice: Phase 3 elides
+//! the C++'s synthetic end-of-branch markers, so `false_target` on an `If`
+//! lands exactly on its `Else` (never past it), and a matched branch's own
+//! completion, via plain `pc += 1`, lands on that exact same index -- the
+//! true and false arrivals are indistinguishable from `(instruction, pc)`
+//! alone, and only one of the two is supposed to enter the `Else`'s body.
+//! `SELECT`/`WHEN` has the same defect with no marker to disambiguate with
+//! at all. `run_bounded`'s doc comment carries the resolution; `Then`,
+//! `Else`, `Otherwise`, `When` and `WhenCase` accordingly step as pure
+//! no-ops (like `Label`) -- they are never independently dispatched, only
+//! ever read as data by `If`/`Select` or walked over inside a bounded loop.
 
 use crate::error::Raised;
+use crate::eval::logical_value;
 use crate::{Code, Failure, Interp, Loud};
 use rexx_core::ObjRef;
 use rexx_num::SettingsError;
 use rexx_parse::{
-    Expr, ExprKind, Fragment, Instruction, InstructionKind, NumericSetting, VariableRef,
-    compound_parts, parse_interpret,
+    EndStyle, Expr, ExprKind, Fragment, Instruction, InstructionKind, NumericSetting,
+    ProgramSource, VariableRef, compound_parts, parse_interpret,
 };
 use std::rc::Rc;
 
 /// Where control goes after one instruction (the design's "Control flow").
 enum Flow {
     Next,
-    /// Unreachable in the spike, which has no jump, and unreachable in a
-    /// fragment for a measured reason: a label inside `INTERPRET` text is
-    /// error 47.1 (Task 1), so a fragment's `labels` is always empty and a
-    /// fragment can never jump.
-    #[allow(dead_code, reason = "Tasks 10 and 11 build the jumps that produce it")]
+    /// Unreachable in a fragment for a measured reason: a label inside
+    /// `INTERPRET` text is error 47.1 (Task 1), so a fragment's `labels` is
+    /// always empty and a fragment can never jump -- `run_fragment`'s own
+    /// `unreachable!` on this variant still holds. Live everywhere else since
+    /// Task 10: `If`/`Select` each resolve to one `Goto` that skips straight
+    /// to their construct's true resume point, and `run_bounded`'s own
+    /// internal loop applies one whenever a nested construct's target lands
+    /// inside its range.
     Goto(usize),
     Exit(Option<ObjRef>),
 }
@@ -233,53 +254,36 @@ impl Interp {
         let depth = self.activations.len();
 
         while let Some(instruction) = code.body.instructions.get(self.activation().pc) {
-            let flow = match self.step_in_temps_frame(&code, instruction) {
-                Ok(flow) => flow,
-                Err(failure) => {
-                    // The last place the failing instruction is in hand.
-                    // `run` pops this activation on the way out, so a site
-                    // resolved any higher up would have nothing left to
-                    // resolve against.
-                    //
-                    // A condition raised inside an `INTERPRET` fragment
-                    // arrives here too, and records the enclosing `INTERPRET`
-                    // clause rather than the fragment's own, because the
-                    // fragment loop deliberately does not record: its spans
-                    // index the fragment's source and not this one, so the
-                    // line they resolve to would be the fragment's.
-                    //
-                    // The oracle prints **both**, innermost first, each
-                    // carrying the enclosing clause's line number (measured,
-                    // `interpret "say 2 & 1"` on line 2):
-                    //
-                    // ```text
-                    //      2 *-* say 2 & 1
-                    //      2 *-* interpret "say 2 & 1"
-                    // ```
-                    //
-                    // so this reproduces the second of those lines and not the
-                    // first. A known gap rather than something to fix here:
-                    // stacking one echo per nesting level changes
-                    // `Raised::report`'s shape, and 4a's only nesting is the
-                    // fragment spike that 4b deletes.
-                    let source = &program.source;
-                    self.failure_site = Some((
-                        source.line_of(instruction.clause_span.start),
-                        source
-                            .join_span(instruction.clause_span.clone())
-                            .map_or_else(
-                                // Visible rather than silent, for the same
-                                // reason `Raised::message` renders a catalogue
-                                // miss instead of panicking: the error path is
-                                // the worst place to turn a reportable
-                                // condition into a crash or into a blank line.
-                                || b"<clause span outside the retained source>".to_vec(),
-                                |bytes| bytes.into_owned(),
-                            ),
-                    ));
-                    return Err(failure);
-                }
-            };
+            let index = self.activation().pc;
+            // The failing clause's site, if any escapes, is resolved inside
+            // `step_in_temps_frame` itself (Task 10's own doc comment there):
+            // this call may nest arbitrarily deep through `If`/`Select`'s own
+            // `run_bounded`, and only the *innermost* one has the failing
+            // instruction in hand. `run` pops this activation on the way out,
+            // so a site resolved any higher up than that would have nothing
+            // left to resolve against.
+            //
+            // A condition raised inside an `INTERPRET` fragment arrives here
+            // too, and records the enclosing `INTERPRET` clause rather than
+            // the fragment's own, because `run_fragment` passes `None` for
+            // `source` and deliberately does not record: its spans index the
+            // fragment's own source, not this one.
+            //
+            // The oracle prints **both**, innermost first, each carrying the
+            // enclosing clause's line number (measured, `interpret "say 2 &
+            // 1"` on line 2):
+            //
+            // ```text
+            //      2 *-* say 2 & 1
+            //      2 *-* interpret "say 2 & 1"
+            // ```
+            //
+            // so this reproduces the second of those lines and not the
+            // first. A known gap rather than something to fix here: stacking
+            // one echo per nesting level changes `Raised::report`'s shape,
+            // and 4a's only nesting is the fragment spike that 4b deletes.
+            let flow =
+                self.step_in_temps_frame(&code, index, instruction, Some(&program.source))?;
             match flow {
                 Flow::Next => self.activation_mut().pc += 1,
                 Flow::Goto(target) => self.activation_mut().pc = target,
@@ -311,7 +315,33 @@ impl Interp {
     /// Not doing it would happen to work today, because `Heap::alloc_with`
     /// never collects, and would become a use-after-free the day it does,
     /// found by chasing a wrong value rather than by a compiler message.
-    fn step(&mut self, code: &Code<'_>, instruction: &Instruction) -> Result<Flow, Failure> {
+    ///
+    /// `index` is `instruction`'s own position in `code.body.instructions`,
+    /// added for Task 10: `If` and `Select` need their own position to
+    /// compute a branch's start (`index + 1`, past the `Then`/`When` node
+    /// itself), and nothing else in `self.activation().pc` can stand in for
+    /// it here, because a nested call (from inside `run_bounded`) is
+    /// stepping an instruction the activation's own `pc` is not pointing at.
+    ///
+    /// `source`, also added for Task 10, is threaded through to `If`/
+    /// `Select`'s own `run_bounded` calls purely so `step_in_temps_frame`
+    /// can resolve *its own* clause when an error escapes from inside one --
+    /// without it, an error raised several `run_bounded` levels deep would
+    /// only ever be attributed to the outermost `If`/`SELECT` that
+    /// `run_activation` itself was stepping, which is wrong for exactly the
+    /// same reason `run_activation`'s own doc comment gives for popping this
+    /// activation before resolving a site: the last place the failing
+    /// instruction is in hand has to be the one that resolves it. `None`
+    /// preserves `run_fragment`'s existing, deliberate choice not to resolve
+    /// a site at all for an instruction inside an `INTERPRET` fragment (its
+    /// spans index the fragment's own source, not this one).
+    fn step(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        instruction: &Instruction,
+        source: Option<&ProgramSource>,
+    ) -> Result<Flow, Failure> {
         match &instruction.kind {
             InstructionKind::Say { expression } => {
                 let line = match expression {
@@ -447,6 +477,161 @@ impl Interp {
                 self.run_fragment(text)
             }
 
+            // `IF`/`THEN`/`ELSE`. This arm resolves the whole construct
+            // itself rather than leaving the outer loop to fall through the
+            // flat list -- see `run_bounded`'s doc comment for why that is
+            // not optional. `false_target`'s own doc comment: "the ELSE if
+            // there is one, otherwise the instruction after the THEN
+            // branch" -- confirmed by tracing `block.rs` by hand, it is the
+            // `Else` instruction's own index when there is one, landing
+            // *on* it rather than past it.
+            InstructionKind::If {
+                condition,
+                false_target,
+            } => {
+                let len = code.body.instructions.len();
+                let false_target = false_target.unwrap_or(len);
+                if self.eval_condition(code, condition, raised_if_not_logical)? {
+                    let resume = self.skip_else(code, false_target);
+                    match self.run_bounded(code, index + 1, false_target, source)? {
+                        Flow::Next => Ok(Flow::Goto(resume)),
+                        other => Ok(other),
+                    }
+                } else {
+                    // Nothing to skip on the false path: whether
+                    // `false_target` names an `Else` (whose own body then
+                    // runs, and only traces on the way in, per its own doc
+                    // comment) or is simply where control resumes with no
+                    // `ELSE` at all, the outer loop's ordinary fallthrough
+                    // already lands in the right place with no ambiguity --
+                    // that is only true of the false path; see
+                    // `run_bounded`'s doc comment for why the true path
+                    // cannot rely on the same thing.
+                    Ok(Flow::Goto(false_target))
+                }
+            }
+
+            // A pure marker: only ever reached inside `If`'s own bounded
+            // sub-loop (the true branch, right after the `IF`) or via
+            // ordinary fallthrough on the false path. Never independently
+            // dispatched for a decision of its own.
+            InstructionKind::Then => Ok(Flow::Next),
+
+            // Also a pure marker (`ast.rs`'s own doc comment: "executing an
+            // ELSE only traces"). Reached only by ordinary fallthrough on
+            // the false path -- the true path's `Goto` in the `If` arm above
+            // skips straight past it to `then_exit`, so this is never asked
+            // to decide anything.
+            InstructionKind::Else { .. } => Ok(Flow::Next),
+
+            // `SELECT`/`SELECT CASE`. Evaluates `case` at most once (if this
+            // is a `SELECT CASE`), then tests each of its own `whens` in
+            // source order by reading the `When`/`WhenCase` node directly as
+            // data (`condition`/`values`, `false_target`, `exit`) rather
+            // than dispatching through `step_in_temps_frame` -- a
+            // `When`/`WhenCase` node must never be independently stepped for
+            // a decision of its own, only ever run past inside a bounded
+            // sub-loop (see the `When`/`WhenCase` arm, below, for why).
+            InstructionKind::Select {
+                case,
+                whens,
+                otherwise,
+                end,
+                ..
+            } => {
+                let len = code.body.instructions.len();
+                let case_text = match case {
+                    Some(case_expr) => {
+                        let value = self.eval(code, case_expr)?;
+                        self.roots.push_temp(value);
+                        Some(self.to_text(value).to_vec())
+                    }
+                    None => None,
+                };
+                for &when_index in whens {
+                    let when_instruction = &code.body.instructions[when_index];
+                    let outcome = match &when_instruction.kind {
+                        InstructionKind::When {
+                            condition,
+                            false_target,
+                            exit,
+                        } => {
+                            let holds =
+                                self.eval_condition(code, condition, raised_when_not_logical)?;
+                            holds.then(|| (false_target.unwrap_or(len), exit.unwrap_or(len)))
+                        }
+                        InstructionKind::WhenCase {
+                            values,
+                            false_target,
+                            exit,
+                        } => {
+                            let case_text = case_text.as_deref().expect(
+                                "a WhenCase's enclosing Select always carries a case expression",
+                            );
+                            let matched = self.test_case_when(code, values, case_text)?;
+                            matched.then(|| (false_target.unwrap_or(len), exit.unwrap_or(len)))
+                        }
+                        other => panic!("a SELECT's whens holds only When/WhenCase, not {other:?}"),
+                    };
+                    if let Some((body_end, resume)) = outcome {
+                        return match self.run_bounded(code, when_index + 1, body_end, source)? {
+                            Flow::Next => Ok(Flow::Goto(resume)),
+                            other => Ok(other),
+                        };
+                    }
+                }
+                match otherwise {
+                    // `OTHERWISE` is always the last clause before `END`, so
+                    // its own fallthrough into `END` is already correct with
+                    // no sibling to accidentally re-enter -- unlike a
+                    // matched `WHEN`, this needs no bounded sub-loop.
+                    Some(otherwise_index) => Ok(Flow::Goto(*otherwise_index)),
+                    // Landing exactly on `END` is deliberate: that is what
+                    // makes 7.3's clause echo the `END`'s and not the
+                    // `SELECT`'s (`End`'s own arm, below, is where it
+                    // raises).
+                    None => Ok(Flow::Goto(end.unwrap_or(len))),
+                }
+            }
+
+            // Pure markers, exactly like `Then`/`Else`: real dispatch lives
+            // entirely in `Select`'s own arm above, which reads a
+            // `When`/`WhenCase` node as data rather than stepping it. A
+            // `When`/`WhenCase` reached here at all is either inside a
+            // bounded sub-loop (the winning branch's body, where it is
+            // inert filler) or is the absorbed-`WHEN` shape -- a `WHEN`
+            // whose own `THEN` consequence is itself a `WHEN` clause, which
+            // `Select.whens` never collects (`ast.rs`'s own doc comment on
+            // `whens`, `select_when_absorption.rex`) -- and in neither case
+            // does it get to decide anything on its own: measured against
+            // the oracle, `select / when 1 = 1 then / when 2 = 2 then n = 42
+            // / otherwise / n = 99 / end / say n` prints `0`, not `42`, so
+            // the absorbed `WHEN`'s own condition being true must not run
+            // its own consequence.
+            InstructionKind::When { .. } | InstructionKind::WhenCase { .. } => Ok(Flow::Next),
+            InstructionKind::Otherwise => Ok(Flow::Next),
+
+            // `END`. `Do`/`Loop` closings are Task 11's and fail loudly;
+            // `Select`'s two non-7.3 closings (`OTHERWISE` present) are
+            // reached only by that `OTHERWISE`'s own ordinary body
+            // fallthrough and do nothing. `EndStyle::Select`'s own doc
+            // comment: "Reaching this END at run time is error 7.3, because
+            // every WHEN was false" -- which is exactly the one path that
+            // lands here, since `Select`'s own arm above sends every other
+            // path around this instruction entirely.
+            InstructionKind::End { closes, .. } => {
+                let closes = closes
+                    .as_ref()
+                    .expect("an End's closes is only None while its body is still being assembled");
+                match closes.style {
+                    EndStyle::Select => Err(raised_select_no_when().into()),
+                    EndStyle::Otherwise | EndStyle::LabeledOtherwise => Ok(Flow::Next),
+                    EndStyle::Do | EndStyle::LabeledDo | EndStyle::Loop => {
+                        Err(Loud::instruction(&instruction.kind).into())
+                    }
+                }
+            }
+
             other => Err(Loud::instruction(other).into()),
         }
     }
@@ -462,15 +647,211 @@ impl Interp {
     /// One clause is the right lifetime for a temporary. It is also what the
     /// C++ does, and it is why `step` can push freely without deciding when to
     /// let go.
+    ///
+    /// **Also resolves the failing clause's site, when one escapes and
+    /// `source` is `Some`.** Moved here from `run_activation`'s own error
+    /// path (Task 10), because `run_activation` only ever sees the outermost
+    /// instruction it was stepping, and Task 10 nests `step_in_temps_frame`
+    /// calls arbitrarily deep through `If`/`Select`'s own `run_bounded` --
+    /// without this, an error raised inside a `WHEN`'s branch would be
+    /// misattributed to the enclosing `SELECT`'s own clause (measured
+    /// against the oracle before this existed: a `1/0` inside a matched
+    /// `WHEN`'s `THEN` reported the `SELECT`'s line and text, not the
+    /// failing clause's). `self.failure_site.is_none()` is the guard that
+    /// makes the *innermost* call win: the deepest `step_in_temps_frame`
+    /// that sees the error is always the first to run this check, and every
+    /// enclosing one that the error then propagates through leaves an
+    /// already-`Some` site alone. `source: None` (`run_fragment`'s own call
+    /// into `run_bounded`) skips this entirely, preserving that function's
+    /// existing, deliberate choice not to resolve a site for an instruction
+    /// inside an `INTERPRET` fragment.
     fn step_in_temps_frame(
         &mut self,
         code: &Code<'_>,
+        index: usize,
         instruction: &Instruction,
+        source: Option<&ProgramSource>,
     ) -> Result<Flow, Failure> {
         let frame = self.roots.push_frame();
-        let flow = self.step(code, instruction);
+        let flow = self.step(code, index, instruction, source);
         self.roots.pop_frame(frame);
+        if let (Err(_), Some(source)) = (&flow, source)
+            && self.failure_site.is_none()
+        {
+            self.failure_site = Some((
+                source.line_of(instruction.clause_span.start),
+                source
+                    .join_span(instruction.clause_span.clone())
+                    .map_or_else(
+                        // Visible rather than silent, matching
+                        // `Raised::message`'s own reasoning for a
+                        // catalogue miss: the error path is the worst
+                        // place to turn a reportable condition into a
+                        // crash or a blank line.
+                        || b"<clause span outside the retained source>".to_vec(),
+                        |bytes| bytes.into_owned(),
+                    ),
+            ));
+        }
         flow
+    }
+
+    /// Runs `code.body.instructions[start..end]` in place, one instruction at
+    /// a time through `step_in_temps_frame`, and answers what happened.
+    ///
+    /// **Why this exists at all.** Phase 3 elides the C++'s synthetic
+    /// end-of-branch markers (`ast.rs`'s own "Why there is no node for the
+    /// synthetic end of a branch"), so a flat instruction list has nowhere to
+    /// hang "the THEN branch just finished, skip the ELSE" or "one true WHEN
+    /// ends the whole SELECT" other than on the branch instruction itself.
+    /// Concretely, traced by hand against `block.rs`: `if c then A else B`
+    /// gives `If.false_target == Else`'s own index, so the true path (fall
+    /// through `A`, land on `Else` by `pc += 1`) and the false path (`Goto`
+    /// straight to `Else`) arrive at the *identical* `(instruction, pc)`, and
+    /// only one of the two arrivals is supposed to enter `B`. `SELECT`/`WHEN`
+    /// has the same defect with no marker at all: a matched `WHEN`'s body,
+    /// left to fall through on its own, lands on the next `WHEN` and would
+    /// test it again (`select_when_bodies.rex` is written to catch exactly
+    /// that). Per-instruction dispatch on `(instruction, pc)` alone cannot
+    /// tell these two arrivals apart, and a per-activation block stack would
+    /// resolve it trivially but does not exist yet (`Activation`'s own doc
+    /// comment: Task 11's).
+    ///
+    /// **The fix confines itself to a range instead.** `If`/`Select` compute
+    /// the winning branch's `[start, end)` directly from data already on the
+    /// node (`If`'s `false_target`, `Select`'s `whens`/`false_target`/`exit`)
+    /// and run exactly that range here, then return one `Flow::Goto` past
+    /// the whole construct -- so the ambiguous fallthrough this function
+    /// would otherwise produce never reaches the outer loop at all. Nested
+    /// constructs are safe under this with no extra bookkeeping, because
+    /// `block.rs` assembles an inner branch's own jump targets to close
+    /// before the outer one's does, so they always fall inside (or exactly
+    /// at the boundary of) whichever range encloses them.
+    ///
+    /// **What this owns, and what it does not.** A `Flow::Next` advances the
+    /// local `pc` by one. A `Flow::Goto(target)` is only "mine" when `target`
+    /// is inside `[start, end]` (`end` inclusive: a nested construct's own
+    /// resume point landing exactly on my own boundary is normal completion,
+    /// not an escape) -- anything else, this returns immediately and
+    /// unchanged, exactly as received. That covers `Flow::Exit` today and is
+    /// written to keep covering whatever Task 11 adds for `LEAVE`/`ITERATE`:
+    /// `leave sel` on a labelled `SELECT` has to unwind out of a nested Rust
+    /// call the same way `Flow::Exit` already does here, and a `Flow`
+    /// variant this function does not recognise is deliberately the same
+    /// case as one whose `Goto` target falls outside the range -- both fall
+    /// to the catch-all below and propagate outward rather than being
+    /// matched (and silently mishandled) by name.
+    ///
+    /// Reaching `end` exactly, whether by `pc += 1` or by an in-range `Goto`,
+    /// is the only way this returns `Ok(Flow::Next)`; every other exit
+    /// returns the escaping `Flow` unchanged, and the caller (`If`/`Select`)
+    /// must check which happened rather than assume the former.
+    ///
+    /// `source` is forwarded to `step_in_temps_frame` unchanged, purely so it
+    /// can resolve the failing clause's own site rather than the caller's --
+    /// see that function's own doc comment.
+    fn run_bounded(
+        &mut self,
+        code: &Code<'_>,
+        start: usize,
+        end: usize,
+        source: Option<&ProgramSource>,
+    ) -> Result<Flow, Failure> {
+        let mut pc = start;
+        while pc < end {
+            let instruction = &code.body.instructions[pc];
+            match self.step_in_temps_frame(code, pc, instruction, source)? {
+                Flow::Next => pc += 1,
+                Flow::Goto(target) if target >= start && target <= end => pc = target,
+                other => return Ok(other),
+            }
+        }
+        Ok(Flow::Next)
+    }
+
+    /// Evaluates `condition` and answers whether it holds, for `IF`/`WHEN`.
+    ///
+    /// **A comma list checks itself; a single expression does not, and this
+    /// is the one place that gap gets closed.** `ExprKind::Logical` (a comma
+    /// list) is evaluated through `eval`'s own dispatch to `eval_logical_list`
+    /// exactly like any other expression, which already validates every
+    /// element is exactly `0`/`1` and raises 34.6 on the first that is not --
+    /// re-checking its result here would misreport that failure as 34.1/34.2.
+    /// A single, non-list expression never passes through `eval_logical_list`
+    /// at all (there is no list to iterate), so nothing has checked it yet;
+    /// `raise` is the keyword-specific raiser for exactly that case (34.1
+    /// `IF`, 34.2 `WHEN`) -- measured across both, `if 'x', 1 then` is 34.6
+    /// (a list, regardless of which element failed) while `if 'x' then` is
+    /// 34.1 (not a list at all).
+    fn eval_condition(
+        &mut self,
+        code: &Code<'_>,
+        condition: &Expr,
+        raise: fn(&[u8]) -> Raised,
+    ) -> Result<bool, Failure> {
+        let value = self.eval(code, condition)?;
+        self.roots.push_temp(value);
+        let text = self.to_text(value).to_vec();
+        if matches!(condition.kind, ExprKind::Logical(_)) {
+            // `eval_logical_list` already validated every element and
+            // answers exactly `b"0"`/`b"1"` (its own doc comment), so this
+            // is a plain readback rather than a second check.
+            Ok(text == b"1")
+        } else {
+            logical_value(&text).ok_or_else(|| raise(&text).into())
+        }
+    }
+
+    /// Whether any of a `WHEN CASE`'s `values` compares `==` (byte-for-byte,
+    /// no padding, no numeric awareness) equal to the `SELECT CASE`'s own
+    /// `case_text`, matching on the first that does (an OR of `==`, the
+    /// opposite of a plain `WHEN`'s comma list, which is an AND checked for
+    /// `0`/`1` -- `ast.rs`'s own doc comment on `WhenCase`).
+    ///
+    /// **Reasoned rather than routed through `eval_compare`'s own
+    /// `Operator::StrictEqual`, and this is why.** The design's own
+    /// "Expression evaluation" section states the strict family's rule in
+    /// full: "there is no padding and the shorter string is less" -- for an
+    /// *ordering* comparison. Equality has no "less" to fall back on, so
+    /// under that same rule two strict operands are equal if and only if
+    /// they are the same length and every byte matches, which is exactly
+    /// `==` on the two `Vec<u8>`s below and needs no numeric awareness or
+    /// `rexx-num` call to compute. Measured, matching D15's own example:
+    /// `select case '007'` does not match `when 7`, because `"007"` and
+    /// `"7"` are not byte-identical. Calling `eval_compare` would work too,
+    /// but needs a second `eval.rs` visibility bump beyond the one already
+    /// asked for and approved (`logical_value`); this way needs none.
+    fn test_case_when(
+        &mut self,
+        code: &Code<'_>,
+        values: &[Expr],
+        case_text: &[u8],
+    ) -> Result<bool, Failure> {
+        for value in values {
+            let value = self.eval(code, value)?;
+            self.roots.push_temp(value);
+            if &*self.to_text(value) == case_text {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// If `target` names an `Else` instruction, its own `then_exit`
+    /// (defaulting to the end of the body when `None`, "the end of this
+    /// body" per `ast.rs`'s own doc comment); otherwise `target` unchanged.
+    ///
+    /// Shared by both of `If`'s own arms: the true path calls this to learn
+    /// where to resume once its bounded branch finishes, and the doc comment
+    /// on the `If` arm is where the false path's own reasoning for *not*
+    /// needing this lives.
+    fn skip_else(&self, code: &Code<'_>, target: usize) -> usize {
+        match code.body.instructions.get(target).map(|i| &i.kind) {
+            Some(InstructionKind::Else { then_exit }) => {
+                then_exit.unwrap_or(code.body.instructions.len())
+            }
+            _ => target,
+        }
     }
 
     /// Parses `text` as an `INTERPRET` fragment and runs it **inside the
@@ -485,10 +866,18 @@ impl Interp {
     ///   instruction that is mid-execution.
     /// * The nested loop's program counter is a **local `usize`**, not the
     ///   activation's, because the activation's is sitting on the `INTERPRET`
-    ///   instruction and has to still be there afterwards. A local is enough
-    ///   for the measured reason that a fragment can never jump: a label
-    ///   inside `INTERPRET` text is error 47.1 (Task 1), so `body.labels` is
-    ///   always empty.
+    ///   instruction and has to still be there afterwards. A `LEAVE`/
+    ///   `ITERATE` naming an outer loop could not target anything inside a
+    ///   fragment for the measured reason that a fragment can never have a
+    ///   label at all: one inside `INTERPRET` text is error 47.1 (Task 1), so
+    ///   `body.labels` is always empty. `IF`/`SELECT` need no label and can
+    ///   still appear and jump *inside* a fragment, which is why this reuses
+    ///   `run_bounded` (Task 10) rather than the hand-rolled loop this
+    ///   function used to have: every jump such a construct computes stays
+    ///   within `[0, code.body.instructions.len())` by construction
+    ///   (`resolve_targets` clamps everything else to `None`, and `None`
+    ///   defaults to the body's own length), so `run_bounded` always "owns"
+    ///   it and never mistakes it for an escape.
     /// * No frame is pushed. The fragment's assignments land in the enclosing
     ///   frame's slots, which is what `fragment_plan` resolves them against,
     ///   and it is why `RootSet::grow_slots`'s top-frame assertion holds here.
@@ -509,17 +898,11 @@ impl Interp {
             slots: &slots,
         };
 
-        let mut pc = 0;
-        while let Some(instruction) = code.body.instructions.get(pc) {
-            match self.step_in_temps_frame(&code, instruction)? {
-                Flow::Next => pc += 1,
-                Flow::Goto(_) => unreachable!("a fragment has no labels, so it cannot jump (47.1)"),
-                // `exit` inside `INTERPRET` ends the program, not the
-                // fragment, so this propagates rather than stopping here.
-                Flow::Exit(value) => return Ok(Flow::Exit(value)),
-            }
-        }
-        Ok(Flow::Next)
+        // `exit` inside `INTERPRET` ends the program, not the fragment, so
+        // it has to propagate rather than stop here -- `run_bounded`'s own
+        // catch-all does exactly that for anything it does not own, `Exit`
+        // included, with nothing fragment-specific to add.
+        self.run_bounded(&code, 0, code.body.instructions.len(), None)
     }
 
     /// Drops one `DROP` target: a plain variable, a whole stem, one tail, or
@@ -862,6 +1245,55 @@ fn raised_dot_led(found: &[u8]) -> Raised {
     }
 }
 
+/// 34.1: a single (non-list) `IF` condition is not exactly `0` or `1`.
+/// `Error_Logical_value_if`, catalogue text "Value of expression following
+/// IF keyword must be exactly \"0\" or \"1\"; found \"...\"", one
+/// substitution, the operand's own rendered text.
+fn raised_if_not_logical(found: &[u8]) -> Raised {
+    Raised {
+        condition: "SYNTAX",
+        number: 34,
+        sub: 1,
+        additional: vec![String::from_utf8_lossy(found).into_owned()],
+    }
+}
+
+/// 34.2: a single (non-list) `WHEN` condition is not exactly `0` or `1`.
+/// `Error_Logical_value_when`, the same shape as `raised_if_not_logical`
+/// with `WHEN`'s own sub-number -- a plain `WHEN`'s comma list is the
+/// opposite case (`WhenCase`'s doc comment) and never reaches this raiser,
+/// since `eval_condition` only calls it when `condition.kind` is not
+/// `ExprKind::Logical`.
+fn raised_when_not_logical(found: &[u8]) -> Raised {
+    Raised {
+        condition: "SYNTAX",
+        number: 34,
+        sub: 2,
+        additional: vec![String::from_utf8_lossy(found).into_owned()],
+    }
+}
+
+/// 7.3: a `SELECT` reached its `END` with every `WHEN` false and no
+/// `OTHERWISE`. `Error_When_expected_nootherwise`, catalogue text "All WHEN
+/// expressions of SELECT are false; OTHERWISE expected.", no substitutions
+/// (measured against `interpreter/messages/rexxmsg.xml`'s own `<Text>` for
+/// major 7 sub 003, which carries no `<Sub>` tag).
+///
+/// Raised from `End`'s own arm, not `Select`'s -- `EndStyle::Select`'s own
+/// doc comment says reaching that `END` at run time *is* the error, and
+/// `Select`'s arm sends every other outcome around this instruction
+/// entirely (`Flow::Goto` past it on a match, or onto it exactly on no
+/// match/no `OTHERWISE`), so the clause `run_activation`'s failure path
+/// echoes is the `END`'s own, matching the oracle (measured, rc 249).
+fn raised_select_no_when() -> Raised {
+    Raised {
+        condition: "SYNTAX",
+        number: 7,
+        sub: 3,
+        additional: Vec::new(),
+    }
+}
+
 /// Converts a `rexx-num` settings failure into a `Raised`.
 ///
 /// `ArithError` has a `sub_code` accessor `rexx-num` made `pub` expressly for
@@ -920,17 +1352,18 @@ mod tests {
         program
     }
 
-    /// Parses `source`, activates it, and runs every one of its instructions
-    /// through `step_in_temps_frame` in order -- a miniature `run_activation`
-    /// for a program that never branches, which is every program this
-    /// module's tests write. Goes through the wrapper and not `step`
-    /// directly: `step_in_temps_frame` is the chokepoint that unconditionally
-    /// closes each instruction's temps frame, including on the failure path,
-    /// and calling `step` around it would leave this the one caller in the
-    /// crate that skips it -- exactly the shape a future non-test caller
-    /// could copy by example. `slots` is an empty map throughout:
-    /// `read`/`slot_of`'s fallback chain answers correctly without the real
-    /// plan's fast path, the same choice `eval.rs`'s own test helpers make.
+    /// Parses `source`, activates it, and runs its whole body -- a miniature
+    /// `run_activation`, through `run_bounded` rather than a hand-rolled
+    /// `for` loop since Task 10: this module's tests now include `IF`/
+    /// `SELECT` programs that branch, and `run_bounded(code, 0, len)` is
+    /// exactly `run_activation`'s own loop shape (Task 10's own doc comment
+    /// on it explains why a plain `for` cannot follow a `Goto`). Every call
+    /// here still reaches `step` only through `step_in_temps_frame`, since
+    /// that is what `run_bounded` itself does -- this helper never calls
+    /// `step` directly, matching the one-non-test-caller rule. `slots` is an
+    /// empty map throughout: `read`/`slot_of`'s fallback chain answers
+    /// correctly without the real plan's fast path, the same choice
+    /// `eval.rs`'s own test helpers make.
     fn run_source(interp: &mut Interp, source: &[u8]) -> Result<Option<ObjRef>, Failure> {
         let program = parse_program(source.to_vec()).expect("test program parses");
         let program = activate(interp, program);
@@ -939,14 +1372,18 @@ mod tests {
             symbols: &program.symbols,
             slots: &HashMap::new(),
         };
-        for instruction in &code.body.instructions {
-            match interp.step_in_temps_frame(&code, instruction)? {
-                Flow::Next => {}
-                Flow::Goto(_) => unreachable!("no test program in this module branches"),
-                Flow::Exit(value) => return Ok(value),
+        match interp.run_bounded(
+            &code,
+            0,
+            code.body.instructions.len(),
+            Some(&program.source),
+        )? {
+            Flow::Next => Ok(None),
+            Flow::Exit(value) => Ok(value),
+            Flow::Goto(_) => {
+                unreachable!("run_bounded never escapes a top-level program's own [0, len) range")
             }
         }
-        Ok(None)
     }
 
     fn say_output(interp: &mut Interp, source: &[u8]) -> Vec<u8> {
@@ -1447,6 +1884,347 @@ mod tests {
         assert_eq!(
             say_output(&mut interp, b"nop\nsay 'after'"),
             b"after\n".to_vec()
+        );
+    }
+
+    // ---- IF/THEN/ELSE ----
+
+    /// The discriminating shape for a wrong `false_target`/`then_exit`: a
+    /// true condition whose `ELSE` branch has a **different** side effect
+    /// than the `THEN` branch. A version that lets the true path fall
+    /// through into the `ELSE` marker without skipping it (the naive
+    /// fallthrough this task's whole design exists to avoid -- see
+    /// `run_bounded`'s doc comment) runs *both* assignments and prints
+    /// `abXc`; a version that never runs the `ELSE` branch on the false path
+    /// at all prints `aXc` for the companion case below. Only the correct
+    /// wiring prints `abc` and `aXc` respectively.
+    #[test]
+    fn if_then_else_runs_exactly_one_branch() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"a = 'a'\nif 1 = 1 then a = a || 'b'\nelse a = a || 'X'\na = a || 'c'\nsay a"
+            ),
+            b"abc\n".to_vec(),
+            "true: runs the THEN branch and skips the ELSE branch entirely"
+        );
+
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"a = 'a'\nif 1 = 0 then a = a || 'b'\nelse a = a || 'X'\na = a || 'c'\nsay a"
+            ),
+            b"aXc\n".to_vec(),
+            "false: runs the ELSE branch and skips the THEN branch entirely"
+        );
+    }
+
+    #[test]
+    fn if_then_with_no_else_falls_through_on_false() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"a = 'a'\nif 1 = 0 then a = a || 'b'\na = a || 'c'\nsay a"
+            ),
+            b"ac\n".to_vec()
+        );
+    }
+
+    /// The `ast.rs`/`block.rs`-derived discriminating case: an `IF`/`ELSE
+    /// IF`/`ELSE` chain (no `DO`, which Task 11 owns) where each link's
+    /// `false_target` is the next link's own condition and the whole
+    /// chain's resume point sits after all of them. Run once per branch so
+    /// a wrong `false_target` (skipping or re-testing a link) and a wrong
+    /// `then_exit`/resume (landing inside a later link, matching
+    /// `if_else_chain.rex`'s own framing) are both visible.
+    #[test]
+    fn if_else_if_chain_takes_exactly_one_link() {
+        let source = |n: &str| -> Vec<u8> {
+            format!(
+                "n = {n}\na = ''\nif n = 1 then a = a || 'one'\nelse if n = 2 then a = a || 'two'\nelse if n = 3 then a = a || 'three'\nelse a = a || 'other'\na = a || '-after'\nsay a"
+            )
+            .into_bytes()
+        };
+        for (n, expected) in [
+            ("1", "one-after\n"),
+            ("2", "two-after\n"),
+            ("3", "three-after\n"),
+            ("4", "other-after\n"),
+        ] {
+            let mut interp = Interp::new(false);
+            assert_eq!(
+                say_output(&mut interp, &source(n)),
+                expected.as_bytes().to_vec(),
+                "n = {n}"
+            );
+        }
+    }
+
+    #[test]
+    fn if_condition_that_is_not_0_or_1_raises_34_1() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"if 'x' then nop").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (34, 1));
+        assert_eq!(raised.additional, vec!["x".to_string()]);
+    }
+
+    /// A comma list is 34.6 regardless of which element fails, never 34.1 --
+    /// re-checking `eval_logical_list`'s own result would misreport it.
+    /// Measured against the oracle (brief's own transcript).
+    #[test]
+    fn if_condition_that_is_a_comma_list_raises_34_6_not_34_1() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"if 'x', 1 then nop").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (34, 6));
+        assert_eq!(raised.additional, vec!["x".to_string()]);
+    }
+
+    #[test]
+    fn a_true_comma_list_condition_is_an_and_of_its_parts() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"if 1, 1 then say 'hit'\nelse say 'miss'"),
+            b"hit\n".to_vec()
+        );
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"if 1, 0 then say 'hit'\nelse say 'miss'"),
+            b"miss\n".to_vec()
+        );
+    }
+
+    // ---- SELECT / WHEN ----
+
+    #[test]
+    fn select_when_runs_exactly_the_first_matching_when() {
+        let source = |n: &str| -> Vec<u8> {
+            format!(
+                "n = {n}\nr = ''\nselect\n  when n = 1 then r = r || 'one'\n  when n = 2 then r = r || 'two'\n  when n = 3 then r = r || 'three'\n  otherwise r = r || 'other'\nend\nr = r || '-after'\nsay r"
+            )
+            .into_bytes()
+        };
+        for (n, expected) in [
+            ("1", "one-after\n"),
+            ("2", "two-after\n"),
+            ("3", "three-after\n"),
+            ("4", "other-after\n"),
+        ] {
+            let mut interp = Interp::new(false);
+            assert_eq!(
+                say_output(&mut interp, &source(n)),
+                expected.as_bytes().to_vec(),
+                "n = {n}"
+            );
+        }
+    }
+
+    /// The `select_when_bodies.rex` discriminating shape, reproduced without
+    /// `DO` (Task 11's): each `WHEN`'s consequence is a nested `SELECT`
+    /// spanning several flat instructions of its own
+    /// (`Select`/`When`/`Then`/two assignments/`End`), so a wrong exit that
+    /// lands even one instruction into a *later* `WHEN`'s span, rather than
+    /// cleanly past the whole outer `SELECT`, shows up as an extra or
+    /// missing accumulator update. Run for every `n` so a wrong exit wired
+    /// to (for instance) always resume after the *first* `WHEN` would still
+    /// be caught on `n = 2` or `n = 3`.
+    #[test]
+    fn select_when_wrong_exit_would_land_in_a_later_whens_multi_instruction_body() {
+        let source = |n: &str| -> Vec<u8> {
+            format!(
+                "n = {n}\nr = ''\nselect\n  when n = 1 then select\n    when 1 = 1 then r = r || 'w1a'\n    otherwise nop\n  end\n  when n = 2 then select\n    when 1 = 1 then r = r || 'w2a'\n    otherwise nop\n  end\n  when n = 3 then select\n    when 1 = 1 then r = r || 'w3a'\n    otherwise nop\n  end\n  otherwise r = r || 'w4a'\nend\nr = r || '-done'\nsay r"
+            )
+            .into_bytes()
+        };
+        for (n, expected) in [
+            ("1", "w1a-done\n"),
+            ("2", "w2a-done\n"),
+            ("3", "w3a-done\n"),
+            ("4", "w4a-done\n"),
+        ] {
+            let mut interp = Interp::new(false);
+            assert_eq!(
+                say_output(&mut interp, &source(n)),
+                expected.as_bytes().to_vec(),
+                "n = {n}: exactly one nested SELECT's body ran, and nothing else did"
+            );
+        }
+    }
+
+    /// `when 1 = 1 then` followed immediately by `when 2 = 2 then n = 42` is
+    /// the second `WHEN`'s absorption into the first's (empty) consequence
+    /// (`ast.rs`'s own doc comment on `Select::whens`): the second `WHEN` is
+    /// never collected, and its own `exit` is permanently `None`. Measured
+    /// against the oracle: prints `0`, rc 0 -- the absorbed `WHEN`'s own
+    /// condition being true (`2 = 2`) must not run `n = 42`, and `OTHERWISE`
+    /// must not run either, because one true `WHEN` (the outer one) already
+    /// ended the whole `SELECT`.
+    #[test]
+    fn an_absorbed_when_runs_neither_its_own_consequence_nor_otherwise() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"n = 0\nselect\n  when 1 = 1 then\n    when 2 = 2 then n = 42\n  otherwise\n    n = 99\nend\nsay n"
+            ),
+            b"0\n".to_vec()
+        );
+    }
+
+    /// The true-condition-variant is accepted at rc 0 (`ast.rs:776`, and the
+    /// brief's own transcript) -- the *false*-condition variant is a
+    /// separate, upstream oracle segfault (SF #2018) and is deliberately not
+    /// probed here.
+    #[test]
+    fn when_absorbing_a_when_parses_and_runs_at_rc_0() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            run_source(
+                &mut interp,
+                b"select\n  when 1 = 1 then\n    when 2 = 2 then nop\nend"
+            )
+            .expect("accepted, rc 0"),
+            None
+        );
+    }
+
+    #[test]
+    fn select_with_no_when_true_and_no_otherwise_raises_7_3() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"select\n  when 1 = 0 then nop\nend").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (7, 3));
+        assert_eq!(raised.additional, Vec::<String>::new());
+    }
+
+    #[test]
+    fn select_with_no_when_true_and_an_otherwise_runs_it_without_error() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"select\n  when 1 = 0 then nop\n  otherwise say 'lo'\nend"
+            ),
+            b"lo\n".to_vec()
+        );
+    }
+
+    #[test]
+    fn when_condition_that_is_not_0_or_1_raises_34_2() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"select\n  when 'x' then nop\nend").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (34, 2));
+        assert_eq!(raised.additional, vec!["x".to_string()]);
+    }
+
+    // ---- SELECT CASE / WhenCase ----
+
+    /// **The central `WhenCase` rule.** `select case 2` / `when 1, 2 then`
+    /// matches (an OR of `==`), while a plain `select` / `when 1, 2` on the
+    /// same non-logical value is 34.6 (an AND, each element checked for
+    /// `0`/`1`) -- the two commas parse into the same-looking node and mean
+    /// opposites (`ast.rs:801-815`, and the brief's own framing).
+    #[test]
+    fn whencase_comma_is_an_or_of_equals_the_opposite_of_a_plain_whens_and() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"select case 2\n  when 1, 2 then say 'hit'\n  otherwise say 'miss'\nend"
+            ),
+            b"hit\n".to_vec(),
+            "SELECT CASE: an OR of == comparisons"
+        );
+
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"select\n  when 1, 2 then nop\nend").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!(
+            (raised.number, raised.sub),
+            (34, 6),
+            "plain SELECT: 2 is not a logical value, an AND-with-a-check, not an OR-of-=="
+        );
+        assert_eq!(raised.additional, vec!["2".to_string()]);
+    }
+
+    /// `==` is strict: byte-for-byte, no padding, no numeric awareness.
+    /// Measured (D15's own example, restated in the brief): `'007'` does not
+    /// match `when 7`, because the two are not byte-identical.
+    #[test]
+    fn select_case_compares_with_strict_equality_not_numeric_equality() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"select case '007'\n  when 7 then say 'hit'\n  otherwise say 'miss'\nend"
+            ),
+            b"miss\n".to_vec()
+        );
+
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"select case 7\n  when 7 then say 'hit'\n  otherwise say 'miss'\nend"
+            ),
+            b"hit\n".to_vec()
+        );
+    }
+
+    #[test]
+    fn select_case_evaluates_its_own_expression_and_runs_exactly_the_matching_when() {
+        let source = |v: &str| -> Vec<u8> {
+            format!("select case {v}\n  when 1 then say 'one'\n  when 2 then say 'two'\n  otherwise say 'other'\nend")
+                .into_bytes()
+        };
+        for (v, expected) in [("1", "one\n"), ("2", "two\n"), ("3", "other\n")] {
+            let mut interp = Interp::new(false);
+            assert_eq!(
+                say_output(&mut interp, &source(v)),
+                expected.as_bytes().to_vec(),
+                "v = {v}"
+            );
+        }
+    }
+
+    // ---- SELECT with a LABEL, and a nested SELECT/IF ----
+
+    #[test]
+    fn a_labelled_select_with_otherwise_runs_normally() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"select label s\n  when 1 = 0 then nop\n  otherwise say 'lo'\nend"
+            ),
+            b"lo\n".to_vec()
+        );
+    }
+
+    #[test]
+    fn a_select_nested_inside_an_ifs_then_branch_is_fully_resolved_before_resuming() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"a = 'a'\nif 1 = 1 then select\n  when 1 = 1 then a = a || 'b'\nend\na = a || 'c'\nsay a"
+            ),
+            b"abc\n".to_vec()
         );
     }
 }
