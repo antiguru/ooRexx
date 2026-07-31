@@ -70,10 +70,10 @@ enum Flow {
     /// always empty and nothing there can jump to a *label* -- but Task 10
     /// makes `IF`/`SELECT` able to appear (and jump) anywhere a `Code` body
     /// can be stepped, a fragment's own included, with no label involved at
-    /// all. `run_fragment` no longer has an `unreachable!` on this variant;
-    /// it now runs through `run_bounded` for exactly this reason (that
-    /// function's own doc comment has the argument for why every jump such
-    /// a construct computes stays inside the fragment's own range).
+    /// all. `run_fragment` no longer has an `unreachable!` on this variant.
+    /// It now runs through `run_bounded` for exactly this reason, and
+    /// `run_fragment`'s own doc comment carries the argument for why every
+    /// jump such a construct computes stays inside the fragment's own range.
     Goto(usize),
     Exit(Option<ObjRef>),
 }
@@ -883,7 +883,7 @@ impl Interp {
     /// `select case '007'` does not match `when 7`, because `"007"` and
     /// `"7"` are not byte-identical. Calling `eval_compare` would work too,
     /// but needs a second `eval.rs` visibility bump beyond the one already
-    /// asked for and approved (`logical_value`); this way needs none.
+    /// asked for and approved for `logical_value`. This way needs none.
     fn test_case_when(
         &mut self,
         code: &Code<'_>,
@@ -2287,15 +2287,21 @@ mod tests {
     /// every other test in this section: those all check a condition/value
     /// expression `Select`'s own arm evaluates directly, and
     /// `a_raise_inside_an_otherwise_branch_is_attributed_to_its_own_clause`
-    /// runs through the *outer* loop's `step_in_temps_frame`, never through
-    /// `run_bounded` at all. This is round 1's own defect class -- an error
-    /// escaping a nested `run_bounded` call misattributed to the enclosing
-    /// construct -- and no existing test exercises the path that would
-    /// regress if `source` stopped being threaded into `run_bounded`.
-    /// Confirmed by mutation, not assumed: passing `None` in place of
-    /// `source` at both of `Select`'s own `run_bounded` call sites made this
-    /// test (and the `IF` one below) fail, while leaving all 102
-    /// pre-existing tests green -- restored immediately after.
+    /// runs through the *outer* loop's `step_in_temps_frame`, never through a
+    /// `run_bounded` nested inside `If`/`Select`'s own arm. That last
+    /// distinction matters and an earlier wording of it was wrong: in the
+    /// test harness `run_source` routes everything through its own top-level
+    /// `run_bounded` with `source` supplied directly, so "never through
+    /// `run_bounded` at all" is true of the production outer loop only.
+    ///
+    /// This is round 1's own defect class -- an error escaping a nested
+    /// `run_bounded` call misattributed to the enclosing construct -- and no
+    /// existing test exercises the path that would regress if `source`
+    /// stopped being threaded into `run_bounded`. Confirmed by mutation, not
+    /// assumed: passing `None` in place of `source` at the two call sites,
+    /// which are `If`'s and `Select`'s and not two of `Select`'s own, made
+    /// this test and the `IF` one below fail while leaving all 102
+    /// pre-existing tests green. Restored immediately after.
     #[test]
     fn a_raise_inside_a_matched_whens_body_is_attributed_to_its_own_clause() {
         let mut interp = Interp::new(false);
