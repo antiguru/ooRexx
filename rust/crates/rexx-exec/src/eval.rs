@@ -74,8 +74,10 @@ use rexx_parse::{Expr, ExprKind, Operator, PrefixOp, compound_parts};
 /// `INTERPRETER_STACK_BYTES` (512 MiB) divided by this crate's own measured
 /// per-level cost (`lib.rs`'s own doc comment on `INTERPRETER_STACK_BYTES` --
 /// **1840** bytes/level in debug, re-measured at this task's own
-/// implementation time and recorded there with the date, method and
-/// survivable-depth arithmetic; ~1600 was the figure current before this
+/// implementation time and recorded there with the task it belongs to, the
+/// method and the survivable-depth arithmetic, in the same task-anchored
+/// form as every other row in that lineage rather than under a calendar
+/// date; ~1600 was the figure current before this
 /// task's own depth counter added its own few bytes per level) is the
 /// ceiling a higher one would fail. A
 /// limit *above* the oracle's own cliff would be worse than one below it: it
