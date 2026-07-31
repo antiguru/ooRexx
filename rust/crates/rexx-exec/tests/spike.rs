@@ -182,7 +182,7 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
 ///
 /// **What this test establishes on its own is narrower than the contract, and
 /// the rest is a compile-time property rather than a tested one.** Both
-/// programs here use `+`, so this pins the message for exactly one of the
+/// programs here use `=`, so this pins the message for exactly one of the
 /// fifteen `ExprKind` forms. What extends it to the other fourteen is
 /// `form_name`'s match: it is exhaustive with no `_` arm, and every arm
 /// returns a `&'static str` or one `Operator::spelling`, so a form whose
@@ -194,16 +194,22 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
 /// `Loud::instruction` returns `keyword()`'s `&'static str` or one of four
 /// literals, and `Loud::parse` renders a `ParseError`, which deliberately
 /// carries no substitution values.
+///
+/// `=` and not `+`: Task 7 implemented `+` (arithmetic), so a program using
+/// it now succeeds instead of failing loudly, and this test's whole point is
+/// a form that still does not evaluate. `=` (comparison) is Task 8's,
+/// waiting on `rexx-num`'s byte-slice `compare` entry point, so it stays a
+/// loud failure and this test's assertions still describe something real.
 #[test]
 fn a_loud_failure_message_does_not_grow_with_the_expression() {
     const BOUND: usize = 300;
 
-    let small = run_program(b"say 1 + 1\n".to_vec());
+    let small = run_program(b"say 1 = 1\n".to_vec());
     assert_eq!(small.exit_code, NOT_IMPLEMENTED_EXIT);
 
     let mut deep = b"say 1".to_vec();
     for _ in 0..3_000 {
-        deep.extend_from_slice(b" + 1");
+        deep.extend_from_slice(b" = 1");
     }
     deep.push(b'\n');
     let deep = run_program(deep);
@@ -220,7 +226,7 @@ fn a_loud_failure_message_does_not_grow_with_the_expression() {
     );
     let stderr = String::from_utf8(deep.stderr).expect("the loud message is ASCII");
     assert!(
-        stderr.contains("the operator `+`"),
+        stderr.contains("the operator `=`"),
         "the message should name the form it could not evaluate, and was {stderr:?}"
     );
 }
@@ -324,10 +330,21 @@ fn records_the_stack_cost_of_one_eval_frame() {
     // A loose sanity bound rather than a tight one, because the exact frame
     // size is a property of the compiler and the profile and will move. What
     // must not move is that the number is real: a zero would mean the probe
-    // measured nothing, and anything above a kilobyte per frame would mean the
-    // stack size below needs recomputing rather than the test relaxing.
+    // measured nothing.
+    //
+    // Raised from 1024 to 4096 after Task 7: `eval_node` grew from four
+    // match arms to fifteen (Stem, Compound, DotVariable, Prefix, seven
+    // arithmetic operators, Abuttal/Blank), and the measured cost moved from
+    // 784 to 1600 bytes even on this test's own unchanged `||`-only stress
+    // program -- see `INTERPRETER_STACK_BYTES`'s doc comment for the
+    // re-measurement and why 512 MiB stays as it is (still over three times
+    // D19's 100,000-level minimum at the new cost). The real safety check is
+    // the `survivable` assertion below, computed from whatever this run
+    // measured rather than a constant; this bound exists only to catch the
+    // probe measuring nothing, or a genuine blow-up, not to pin an exact
+    // figure that every later task's new `ExprKind` arms will keep moving.
     assert!(
-        (16.0..=1024.0).contains(&bytes_per_frame),
+        (16.0..=4096.0).contains(&bytes_per_frame),
         "measured {bytes_per_frame} bytes per eval frame, which is outside the range \
          INTERPRETER_STACK_BYTES was sized against"
     );

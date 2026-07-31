@@ -62,13 +62,6 @@ impl Interp {
     /// heap `Body::Num` carrying the same pair, so the rendering rule is the
     /// same fact stated twice, on the fast path and the general one, never
     /// two different rules that happen to agree today.
-    #[allow(
-        dead_code,
-        reason = "no arithmetic evaluator calls this yet -- that is Task 7's \
-                   eval.rs, which does not exist until then. Exercised here by \
-                   this module's own tests, which build `Number`s directly \
-                   through rexx-num rather than through an evaluator."
-    )]
     pub(crate) fn number(
         &mut self,
         value: Number,
@@ -183,8 +176,10 @@ impl Interp {
     /// "does not understand message +"), because `.nil`'s class defines no
     /// `+` method at all. 4a has no general message dispatch (Phase 5's), so
     /// this function cannot reproduce that error and does not try to --
-    /// `NotNumeric` is the honest answer for what this layer alone can see,
-    /// and raising from it is a later task's job (`error.rs`).
+    /// `NotNumeric` is the honest answer for what this layer alone can see.
+    /// Turning it into a real 41.1 condition is `eval.rs`'s job (Task 7,
+    /// `Raised::nonnumeric`): this function only reports "not a number",
+    /// never why arithmetic wanted one or what number to raise.
     ///
     /// A `Body::Text`'s `num` cache holds the exact parse and is filled at
     /// most once: `std::str::from_utf8` then `Number::parse`, with both
@@ -194,11 +189,6 @@ impl Interp {
     /// `DIGITS` -- rounding belongs to the operation that reads the result,
     /// which is what lets the same cached parse answer `1.2346` at `DIGITS
     /// 5` and the full value at `DIGITS 20`.
-    #[allow(
-        dead_code,
-        reason = "no arithmetic evaluator calls this yet -- that is Task 7's \
-                   eval.rs. Exercised here by this module's own tests."
-    )]
     // `&mut self` for the same reason `to_text` gives: this lazily fills
     // `Body::Text`'s `num` cache in place, which `to_*` alone would not imply.
     #[allow(

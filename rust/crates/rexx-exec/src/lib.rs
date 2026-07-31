@@ -29,8 +29,8 @@
 
 use rexx_core::{Heap, ObjRef, RootSet};
 use rexx_parse::{
-    CodeBody, Expr, ExprKind, Fragment, Instruction, InstructionKind, Operator, ParseError,
-    PrefixOp, Program, SymbolId, SymbolTable, parse_interpret, parse_program,
+    CodeBody, ExprKind, Fragment, Instruction, InstructionKind, ParseError, PrefixOp, Program,
+    SymbolId, SymbolTable, parse_interpret, parse_program,
 };
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -53,6 +53,16 @@ use plan::{BodyKey, Plan, ProgramId};
 // One activation: everything about the frame currently executing (D16).
 mod activation;
 use activation::Activation;
+
+// `Raised` (the payload of a real Rexx condition) and `Failure` (either a
+// `Loud` not-implemented marker or a `Raised` condition, the one type
+// `step` and everything above it propagate).
+mod error;
+use error::Failure;
+
+// Expression evaluation (`eval`/`eval_node`): terms, arithmetic and
+// concatenation.
+mod eval;
 
 /// The exit code for a construct Phase 4a does not implement.
 ///
@@ -146,6 +156,28 @@ pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 /// dropping happen outside any counter this crate owns. It is no longer
 /// reachable in practice at these depths, since those phases now cost 160
 /// bytes a level and under, but nothing enforces that.
+///
+/// **Re-measured after Task 7, and it moved: 1600 bytes per `eval` level in
+/// debug, roughly double the 784 above.** `eval_node` grew from four match
+/// arms to fifteen (`Stem`, `Compound`, `DotVariable`, `Prefix`, the seven
+/// arithmetic operators, `Abuttal`/`Blank` beside `||`), and in an
+/// unoptimised debug build the compiler does not appear to reuse stack slots
+/// across mutually exclusive match arms as aggressively as it does in
+/// release, so a dispatch function's own frame grows with how many forms it
+/// names, not only with what the one taken arm does -- confirmed by
+/// re-running `records_the_stack_cost_of_one_eval_frame` on the unchanged
+/// `||`-only stress program, whose own logic did not change. This is
+/// `bytes_per_frame`'s probe reading, **not a re-bisection**: the earlier
+/// table's own two rows for `eval` (783 bisected, 784.0 probed) agreed to
+/// within 0.2%, so the probe is a reasonable stand-in, but confirming that
+/// still holds at this size is Task 11's to do when it sets the real depth
+/// limit, not assumed here. Survivable depth at the new cost is
+/// `512 MiB / 1600 ≈ 335,000` levels, still more than three times D19's
+/// 100,000 minimum, so `INTERPRETER_STACK_BYTES` stays unchanged rather than
+/// growing to chase a number every later task's new `ExprKind` arms will
+/// keep moving. Expect this figure to keep drifting downward as Task 8
+/// (comparison, logical) and later tasks add more forms, and re-measure
+/// rather than trust it, the same instruction the row above already gives.
 ///
 /// 512 MiB is reserved address space, not resident memory. Linux commits stack
 /// pages on first touch, so a program that never recurses pays for the pages it
@@ -516,7 +548,7 @@ impl Interp {
 
     /// Loads `program`, runs its main body in a fresh activation, and tears
     /// the activation down again.
-    fn run(&mut self, program: Program) -> Result<Option<ObjRef>, Loud> {
+    fn run(&mut self, program: Program) -> Result<Option<ObjRef>, Failure> {
         let program = Rc::new(program);
         let id = ProgramId(self.programs.len());
         self.programs.push(Rc::clone(&program));
@@ -702,7 +734,7 @@ impl Interp {
     ///     }
     /// }
     /// ```
-    fn run_activation(&mut self) -> Result<Option<ObjRef>, Loud> {
+    fn run_activation(&mut self) -> Result<Option<ObjRef>, Failure> {
         // `code` is bound to the activation on top of the stack at entry,
         // while every `pc` read and write below goes to whatever is on top
         // *now*. Those are the same frame only because `step` leaves the
@@ -763,7 +795,7 @@ impl Interp {
     /// Not doing it would happen to work today, because `Heap::alloc_with`
     /// never collects, and would become a use-after-free the day it does,
     /// found by chasing a wrong value rather than by a compiler message.
-    fn step(&mut self, code: &Code<'_>, instruction: &Instruction) -> Result<Flow, Loud> {
+    fn step(&mut self, code: &Code<'_>, instruction: &Instruction) -> Result<Flow, Failure> {
         match &instruction.kind {
             InstructionKind::Say { expression } => {
                 let line = match expression {
@@ -789,7 +821,7 @@ impl Interp {
                 // loop), which needs `eval_node` to evaluate those forms as
                 // an expression first, and that is Task 7's.
                 let ExprKind::Variable(id) = &target.kind else {
-                    return Err(Loud::expression(&target.kind));
+                    return Err(Loud::expression(&target.kind).into());
                 };
                 let name = code.symbols.name(*id).as_bytes();
                 let value = self.eval(code, value)?;
@@ -814,7 +846,7 @@ impl Interp {
                 self.run_fragment(text)
             }
 
-            other => Err(Loud::instruction(other)),
+            other => Err(Loud::instruction(other).into()),
         }
     }
 
@@ -833,7 +865,7 @@ impl Interp {
         &mut self,
         code: &Code<'_>,
         instruction: &Instruction,
-    ) -> Result<Flow, Loud> {
+    ) -> Result<Flow, Failure> {
         let frame = self.roots.push_frame();
         let flow = self.step(code, instruction);
         self.roots.pop_frame(frame);
@@ -859,10 +891,10 @@ impl Interp {
     /// * No frame is pushed. The fragment's assignments land in the enclosing
     ///   frame's slots, which is what `fragment_plan` resolves them against,
     ///   and it is why `RootSet::grow_slots`'s top-frame assertion holds here.
-    fn run_fragment(&mut self, text: Vec<u8>) -> Result<Flow, Loud> {
+    fn run_fragment(&mut self, text: Vec<u8>) -> Result<Flow, Failure> {
         let fragment: Rc<Fragment> = match parse_interpret(text) {
             Ok(fragment) => Rc::new(fragment),
-            Err(error) => return Err(Loud::parse(&error)),
+            Err(error) => return Err(Loud::parse(&error).into()),
         };
 
         // An owned `Fragment` would do here, since nothing but this loop reads
@@ -926,105 +958,11 @@ impl Interp {
     // because visibility does not run the other way -- this module could not
     // otherwise call them.
 
-    // ---- expression evaluation ----
-
-    /// Evaluates one expression node, and keeps the depth bookkeeping D19
-    /// needs.
-    ///
-    /// Split from `eval_node` so that the depth is decremented on every exit
-    /// path including the `?` ones, without a guard type that would need to
-    /// hold a borrow of `self` across the recursive call. Task 11 adds the
-    /// limit check to this function, which is why it is the one that owns the
-    /// counter.
-    ///
-    /// The stack probe: the address of a local here, recorded at the first
-    /// level and at the deepest. Taking a raw pointer and casting it to
-    /// `usize` is safe code, so this needs no `unsafe`, and measuring the real
-    /// function rather than a replica of it is the whole reason to do it here.
-    /// The two ends are written **together**, when the maximum is beaten, so
-    /// they always describe one call chain; `StackSpan`'s doc has the
-    /// measurement that made that necessary.
-    fn eval(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Loud> {
-        let probe = 0u8;
-        let here = &probe as *const u8 as usize;
-
-        self.depth += 1;
-        if self.depth == 1 {
-            self.stack_entry = here;
-        }
-        if self.depth > self.max_depth {
-            self.max_depth = self.depth;
-            self.stack_first = self.stack_entry;
-            self.stack_deepest = here;
-        }
-
-        let value = self.eval_node(code, expr);
-        self.depth -= 1;
-        value
-    }
-
-    fn eval_node(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Loud> {
-        match &expr.kind {
-            ExprKind::Literal(bytes) => Ok(self.text(bytes)),
-            // A constant's value is its own upcased spelling, which is
-            // observable rather than incidental: `say 1e5` prints `1E5`.
-            ExprKind::Constant(id) => Ok(self.text(code.symbols.name(*id).as_bytes())),
-            ExprKind::Variable(id) => {
-                let (value, _novalue) = self.read(code, *id);
-                Ok(value)
-            }
-
-            // One operator, chosen because it needs no arithmetic and so no
-            // `rexx-num` dependency yet, while still being a genuinely
-            // recursive left-deep chain: `'' || '' || …` is the same tree
-            // shape as D19's `1 + 1 + …`.
-            ExprKind::Binary {
-                op: Operator::Concatenate,
-                left,
-                right,
-            } => {
-                // The temps discipline, established here rather than
-                // retrofitted: a value held only in a Rust local is invisible
-                // to the collector, so it is pushed before anything that can
-                // allocate runs. `Heap::alloc` does not collect on its own
-                // today, which makes this belt and braces at the moment and
-                // load-bearing the day allocation triggers a collection.
-                //
-                // The contract at the boundary, stated because an earlier
-                // version of this comment described one the callers did not
-                // keep: **`eval` returns an unrooted handle, and its caller
-                // roots it before doing anything that can allocate.** Here
-                // that is the `push_temp` two lines below each `eval`. In
-                // `step` it is the `push_temp` in each arm, bounded by the
-                // per-clause frame the instruction loops open. A returned
-                // value is deliberately not rooted by `eval` itself, because
-                // then nothing would know when to drop it.
-                let frame = self.roots.push_frame();
-                let left_value = self.eval(code, left)?;
-                self.roots.push_temp(left_value);
-                let right_value = self.eval(code, right)?;
-                self.roots.push_temp(right_value);
-
-                let mut bytes = self.to_text(left_value).to_vec();
-                bytes.extend_from_slice(&self.to_text(right_value));
-                let joined = self.text(&bytes);
-
-                // `joined` is unrooted from here to the caller's own
-                // `push_temp`, and nothing between the two allocates.
-                self.roots.pop_frame(frame);
-                Ok(joined)
-            }
-
-            other => Err(Loud::expression(other)),
-        }
-    }
-
-    fn stack_span(&self) -> StackSpan {
-        StackSpan {
-            max_depth: self.max_depth,
-            bytes: self.stack_first.saturating_sub(self.stack_deepest),
-        }
-    }
+    // `eval`/`eval_node`/`stack_span` live in `eval.rs` (Task 7), beside the
+    // operators they evaluate. `depth`/`max_depth`/`stack_entry`/
+    // `stack_first`/`stack_deepest` stay here, on `Interp`'s own struct
+    // definition, exactly like every other field a sibling module's
+    // `impl Interp` block reaches into.
 }
 
 // ---- the public entry point ----
@@ -1127,8 +1065,23 @@ fn execute(text: Vec<u8>, interpret_spike: bool) -> Outcome {
     let mut stderr = interp.trace;
     let exit_code = match result {
         Ok(_) => 0,
-        Err(loud) => {
+        Err(Failure::Loud(loud)) => {
             stderr.extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
+            NOT_IMPLEMENTED_EXIT
+        }
+        // Task 12 owns the oracle's exact two-line stderr format and the
+        // `256 - number` exit code; this only says WHICH condition fired,
+        // without pretending to reproduce what the oracle prints for it --
+        // the same "wrong in the details, right in never being mistaken
+        // for success" rule the parse-error arm above already follows.
+        Err(Failure::Raised(raised)) => {
+            stderr.extend_from_slice(
+                format!(
+                    "rexx-exec: raised {} {}.{} (not yet rendered: Task 12), additional {:?}\n",
+                    raised.condition, raised.number, raised.sub, raised.additional
+                )
+                .as_bytes(),
+            );
             NOT_IMPLEMENTED_EXIT
         }
     };
