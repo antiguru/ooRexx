@@ -73,17 +73,6 @@ fn body_variant_name(body: &Body) -> &'static str {
     }
 }
 
-// No arithmetic or assignment-target dispatch calls any of these outside
-// this module's own tests yet -- that wiring (recognising `ExprKind::Stem`/
-// `Compound` in `eval_node` and `step`'s `Assignment` arm) is a later task's,
-// the same reason Task 4's `number`/`to_number` needed this allow. Applied
-// once at the `impl` block because dead-code analysis is transitive: with no
-// live caller outside `#[cfg(test)]`, every function here is one connected
-// unreachable component, `tail_key` down through its own private helpers.
-#[allow(
-    dead_code,
-    reason = "not yet wired into eval/assignment; exercised by this module's own tests"
-)]
 impl Interp {
     /// Resolves a compound's tail pieces into the one key its tails map is
     /// keyed by (D15a): each piece verbatim and case-sensitively, joined by
