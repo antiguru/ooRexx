@@ -170,10 +170,15 @@ above.
     Error 34.901:  Logical value must be exactly "0" or "1"; found "2".
 
   Note both echoes carry the ENCLOSING clause's line number, not a line of the
-  fragment. 4a emits the second line only. The gap is unreachable from any
-  corpus program today, because the only construct that nests an instruction
-  loop inside another is the INTERPRET fragment spike, which 4b deletes and
-  which run_program does not expose. Closing it means giving Raised::report a
+  fragment. 4a emits the second line only. The gap was recorded as unreachable from
+  any corpus program, on the grounds that the only construct nesting an
+  instruction loop inside another was the INTERPRET fragment spike, which 4b
+  deletes and which run_program does not expose. TASK 10 FALSIFIED THAT
+  REASON (commit addf89b1): IF and SELECT now resolve their whole construct
+  inside their own step arm through a nested bounded loop, so nesting is
+  ordinary rather than exotic. The gap itself still does not surface, because
+  4a has no construct that both nests and traps a condition, but the stated
+  reason was wrong and a reader who checked it would have found it false. Closing it means giving Raised::report a
   stack of sites rather than one, so whoever implements 4b's real INTERPRET or
   4b's CALL should decide the shape then rather than inheriting a single-site
   signature by default.

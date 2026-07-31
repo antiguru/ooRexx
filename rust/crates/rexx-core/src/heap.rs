@@ -77,6 +77,14 @@ impl Heap {
     /// looking at. Sweep `rexx-exec` for the same shape before doing it: an
     /// unrooted window is invisible to the compiler and shows up as a wrong
     /// value rather than a crash.
+    ///
+    /// **That window does not block 4a's collect-on-every-allocation gate
+    /// criterion, and this comment used to imply it did.** Nothing between
+    /// that pop and `exit_code_for` calls `alloc_with`: the conversion fills
+    /// a `Number` in place or parses onto the Rust heap. So a faithful
+    /// collect-on-every-allocation mode never fires inside the window, and
+    /// the criterion can be met with the window still open. It is a debt
+    /// against a future collector, not an obstacle to the gate.
     pub fn collect(&mut self, roots: &RootSet) -> CollectStats {
         self.marks.clear();
         // Resized every time: the heap grows between collections.

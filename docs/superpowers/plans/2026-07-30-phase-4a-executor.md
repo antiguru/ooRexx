@@ -714,7 +714,7 @@ git commit -m "Comparison in two families, and logic that coerces nothing"
 - [ ] **Step 5: Commit**
 
 ```bash
-git add rust/crates/rexx-exec/src/run.rs rust/crates/rexx-exec/tests/run_basic.rs
+git add rust/crates/rexx-exec/src/run.rs
 git commit -m "The instruction loop, and the seven instructions that do not branch"
 ```
 
@@ -788,7 +788,22 @@ Control expressions are evaluated in `Controlled::order`, which Phase 3 recorded
 * Bare `leave` in a simple `DO` block is **28.1**, but a **labelled** simple block is leavable.
 * `leave sel`, where `sel` labels a `SELECT`, exits the `SELECT`.
 
-**That last one is a coordination point with Task 10 and neither task's text mentions the other's stake.** `LEAVE` must find and unwind through Task 10's `SELECT`s by label, so if Task 10 ships jump targets alone, this task retrofits block bookkeeping onto Task 10's arms in the same file immediately afterwards. Read Task 10's committed code before designing the block stack, rather than designing against its brief.
+**That last one is a coordination point with Task 10, and Task 10 has since shipped, so here is what it actually left you.** `LEAVE` must find and unwind through Task 10's `SELECT`s by label. Read the committed `run.rs` rather than reasoning from this plan; the three facts below were established after this section was first written, and two of them were mutation-verified.
+
+* **`run_bounded` forwards a `Flow` it does not own, outward and unchanged** (`other => return Ok(other)`, and both the `If` and `Select` callers forward untouched). That is settled, not a contingency: a mutation that swallowed an unowned variant was applied and killed. So a `Flow` variant you add for `LEAVE`/`ITERATE` will propagate out of a nested `IF`/`SELECT` without either arm interfering.
+* **But `run_bounded` absorbs any `Goto` whose target lands INSIDE its own range**, forwards or backwards, and does not tell the arm that produced it. Its doc guarantees the propagation case, which is the case that does not bite. The one that bites is yours: a `DO` inside an `IF`'s `THEN`, with an `ITERATE` in the loop body, computes a jump to the loop top, which is inside the `IF`'s range, so the `IF`'s `run_bounded` takes it directly and your `Do` arm re-enters as a **first entry** with its counter reset. That is exactly criterion 6's "`LEAVE` unwinds one block too few" mutation arriving by a route no document mentions. **So the invariant you must hold is: every block-stack change a `LEAVE`/`ITERATE` implies must be complete before the `Goto` is returned**, because you cannot rely on seeing that `Goto` again. State in your report which of your tests pins it.
+* **`error.rs` is in your Files list for two reasons, not one.** The 11.1 catalogue entry is the obvious one. The other is `Raised::report`, which is where the clause-echo indentation belongs, and which nothing else points you at.
+
+**The clause-echo indentation is yours, and it was recorded in four places with four different owners before it was recorded here.** Both other named owners are closed tasks, so this is the only statement of it that will reach an implementer. What the oracle does, measured, and re-verified by a reviewer including the two rows that were originally inferred:
+
+* Two spaces per open block frame. One enclosing `DO` gives two, two gives four, three gives six.
+* An `IF`'s `THEN` counts as **two** frames: `if 1=1 then say 2 & 1` indents four.
+* A `SELECT` adds one more, so a `say` inside a true `WHEN`'s `THEN` indents six. `SELECT CASE`'s `THEN` is also six, and an `ELSE IF` chain is eight.
+* `do i = 1 to 'x'` gets **none**, because its control expression is evaluated before the block is entered.
+
+`Raised::report` emits no indentation today, so every corpus program that raises inside a block currently differs from the oracle on stderr, and that is the largest single source of remaining divergence. Two warnings. **The quantity is shared with `TRACE`'s own `*-*` indentation (Task 13), so put it somewhere Task 13 can use rather than inline in the report formatter** -- one quantity, two formatters. And Task 10's report concludes the depth is **derivable from the AST statically, with no runtime block stack**; every probe behind the measured rule was a raising `say`, and the claim that `TRACE` indents identically is asserted rather than measured, so **measure the trace half yourself before sharing the mechanism**.
+
+**Two more things this section did not say.** `MAX_EXPR_DEPTH` in `rexx-parse` is 50,000 and raises the **same** 11.1 from the parser, so a depth test built from nested parentheses goes green without `eval`'s counter ever firing: build the depth test from a left-deep operator chain, not from parentheses. And `End`/`EndStyle` for `DO`/`LOOP` are yours and appear nowhere in the steps below.
 
 - [ ] **Step 2: Measure the `DO` control error family before implementing it**
 
@@ -830,7 +845,11 @@ Two lessons recorded alongside it. The ~820 figure was wrong in a way visible wi
 
 **And know what this limit cannot do.** A counter in `eval` does not close the abort path, because a program can reach a deep tree without evaluating it at all: `exit` followed by a 700,000-term expression aborts inside the `Drop`, with nothing evaluated and no counter in `rexx-exec` in a position to see it. That path is closed by Task 3b's iterative `Drop`, not here. Do not write a doc comment claiming this limit makes deep expressions safe.
 
-- [ ] **Step 4: Verify** — plus an expression at a depth the oracle handles comfortably, and a **unit test that reaches the 11.1 raise**, since no differential program can cross our limit without also crossing the oracle's cliff, and without that test the depth path is untested by construction.
+- [ ] **Step 4: Verify** — plus an expression at a depth the oracle handles comfortably, and a **test that reaches the 11.1 raise**, since no differential program can cross our limit without also crossing the oracle's cliff, and without that test the depth path is untested by construction.
+
+> **That test cannot be a plain `#[cfg(test)]` unit test, and writing one is the trap this step used to set.** The only sized stack in the workspace is inside `run_program` (`lib.rs`), the public entry point; a libtest thread gets 2 MiB by default. At roughly the per-level cost quoted above, `eval` dies natively somewhere around a thousand levels, far below the limit you are trying to trigger, and it dies as a **guard-page abort with no message**, which is precisely the silent death D19's limit exists to prevent. Worse, the cheapest-looking way to make a failing test pass is to lower the limit, which would quietly defeat the whole decision.
+>
+> So drive it through `run_program`, which is what puts you on the sized thread. `tests/spike.rs` and `tests/corpus.rs` both already do this. If that means this one test is an integration test while the rest of your work is unit-tested in place, that is correct and not a constraint violation: the constraint forbids integration-testing a **private** subject, and `run_program` is public cross-crate surface. Say in your report how you confirmed the test reaches your counter rather than the parser's 50,000 or the guard page.
 
 The oracle's cliff is between **100,000 and 150,000** terms, not at 200,000: 100,000 prints its answer, and both 150,000 and 200,000 exit 139. A corpus rule phrased against 200,000 would admit a 150,000-term program that SIGSEGVs.
 
@@ -893,17 +912,21 @@ The message text comes from `rexx-inventory`'s generated table — Phase 0 alrea
 - Modify: `rust/crates/rexx-exec/src/run.rs` — the `*-*` clause event, and `InstructionKind::Trace`'s own `step` arm, which no step below mentions and which nothing implements today.
 - Test: a `#[cfg(test)] mod tests` inside `rust/crates/rexx-exec/src/trace.rs`, with the committed expectations under `rust/crates/rexx-exec/tests/trace_oracle/`
 
-> **D17 said emit the event from the start, and that did not happen. This task is the retrofit D17 was written to avoid.** Measured before dispatch: there are **zero** trace emission points in `eval.rs` or `run.rs`, and the only writer to the trace sink is `execute`'s error path. Tasks 7, 8 and 9 each built part of the dispatch loop without an event hook, because D17 lives in the design spec and none of their task bodies carried it, and a brief is extracted per task.
+> **There are zero trace emission points in `eval.rs` or `run.rs` today**, and the only writer to the trace sink is `execute`'s error path. So this task adds the hook to code that already works, rather than finding it in place.
 >
-> The consequence is scope, not correctness: the hook has to be threaded through code that already works, in `run.rs`, which is the most contended file in the phase. Sequence this task **after** Task 11 rather than beside it, and read the committed `run.rs` rather than designing against this plan.
+> **An earlier version of this note called that a breach of D17 and a process failure. That verdict was wrong and is withdrawn.** D17 does say "emit the event from the start", but its stated purpose is to forbid constant folding and expression fusion so the evaluator is not designed twice, and the shipped `eval_node` does neither, so the harm D17 names never occurred. This plan has also scheduled trace at Task 13 since revision 1, which means Tasks 7 to 9 followed the governing document exactly; a brief carrying all of D17 would not have changed what they built. The note is kept rather than deleted because recording a sound decision as unimplemented invites a later reader to reopen it.
 >
-> The lesson is already recorded elsewhere and is repeated here because this is the task that pays for it: a decision recorded only in the spec reaches nobody. When a decision constrains how later tasks are *built*, it belongs in each of those tasks' bodies.
+> **The retrofit is also far smaller than that note claimed.** It said roughly eighteen `eval_node` arms; there are ten top-level `ExprKind` arms, and more to the point `eval` was already split from `eval_node` precisely so that every exit path including the `?` ones goes through one place. A post-order value event with the value in hand is therefore **one** insertion point in `eval`, not a threading job across arms.
+>
+> Two things from that note stand on their own merits and are not withdrawn. Sequence this task **after** Task 11, because `run.rs` is the most contended file in the phase, and **read the committed `run.rs`** rather than designing against this plan.
 
 - [ ] **Step 1: Build the prefix table from the oracle's side, not from what we emit**
 
 All 19 prefixes at `RexxActivation.hpp:90`-`110`. Each row is either a witness program 4a emits, or the sub-phase that first emits it. Measured reachable from pure-4a code: `*-*`, `>>>`, `>=>`, `>L>`, `>V>`, `>O>`, `>K>`, `>C>`, and a prefix-operator line.
 
 - [ ] **Step 2: Capture the oracle's exact bytes for each witness** — spacing, quoting and indentation are unspecified anywhere but the oracle. Commit the expectations the way `rexx-parse/tests/sourceline_oracle/` does, with a regeneration command named in the reading test, so `cargo test` alone is the gate.
+
+> **This is the opposite strategy from the corpus runner, deliberately, and both are right.** `tests/corpus.rs` runs the oracle **live** and compares in process, because it exists to track progress across tasks and a committed expectation would have to be regenerated on every task that changes behaviour. Trace expectations are committed instead, because a trace witness is a fixed artefact whose whole value is that it cannot drift silently, and because capturing it requires a running oracle that a machine checking out this tree may not have. Neither section knew about the other when they were written, so the difference looked like an inconsistency; it is a real distinction between an instrument and an expectation. Do not "unify" them.
 
 - [ ] **Step 3: Implement**, emitting to the trace sink (stderr) per evaluation step, gated on the setting.
 
@@ -912,7 +935,7 @@ All 19 prefixes at `RexxActivation.hpp:90`-`110`. Each row is either a witness p
 - [ ] **Step 5: Commit**
 
 ```bash
-git add rust/crates/rexx-exec/src/trace.rs rust/crates/rexx-exec/tests/trace.rs rust/crates/rexx-exec/tests/trace_oracle
+git add rust/crates/rexx-exec/src/trace.rs rust/crates/rexx-exec/src/eval.rs rust/crates/rexx-exec/src/run.rs rust/crates/rexx-exec/tests/trace_oracle
 git commit -m "Trace value lines, quantified from the oracle's nineteen prefixes"
 ```
 
@@ -923,8 +946,8 @@ git commit -m "Trace value lines, quantified from the oracle's nineteen prefixes
 **Spec:** "L0 differential corpus".
 
 **Files:**
-- Create: `rust/corpus/phase-4a.txt`, and 12 to 15 new `rust/corpus/lang/*.rex`
-- Create: `rust/crates/rexx-exec/tests/corpus.rs`, `tests/corpus_oracle/`
+- **`rust/corpus/phase-4a.txt` ALREADY EXISTS** with 26 entries, amended during the phase. Add to it; do not create it. Plus 12 to 15 new `rust/corpus/lang/*.rex`
+- **`rust/crates/rexx-exec/tests/corpus.rs` ALREADY EXISTS** and is the differential runner, built early on purpose so every later task can see its own effect. It runs the oracle **live** rather than against committed expectations, and reports in a non-gate mode by default with a strict mode the gate flips. `tests/corpus_oracle/` was never created and is not needed: see the note under Task 13's Step 2 about which strategy applies where
 - Modify: `rust/corpus/README.md`
 
 **Why:** of the 28 existing corpus programs only 10 are 4a-clean, **none of the 10 contains a `LEAVE` or an `ITERATE`**, and seven are numeric, so the inherited corpus mostly re-tests `rexx-num` through a new front end.
@@ -985,7 +1008,7 @@ So a row carries the method's **assignment prelude**, and any assertion whose pr
 
 **Files:**
 - Create: `rust/crates/rexx-exec/tests/coverage.rs`, `tests/loud.rs`, `rust/scripts/mutate-4a.sh`
-- Create: `docs/superpowers/plans/phase-4-exclusions.txt`
+- **`docs/superpowers/plans/phase-4-exclusions.txt` ALREADY EXISTS** and is ahead of this plan; Step 4 below says what is still owed and why writing it would regress it
 
 - [ ] **Step 1: The coverage enumeration** — a macro-generated match with **no wildcard arm** over `InstructionKind`, `ExprKind`, `LoopKind`, `PrefixOp`, `EndStyle`, `Trace` and `Operator`. Every variant carries either a witness program in the subset or the phase that owns it, and the test fails on a variant carrying neither.
 
