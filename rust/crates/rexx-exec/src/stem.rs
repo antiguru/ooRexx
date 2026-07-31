@@ -51,6 +51,28 @@ use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
 use rexx_parse::{SymbolId, Tail, compound_parts};
 use std::collections::HashMap;
 
+/// Names a `Body` variant without printing it.
+///
+/// The three `unreachable!` sites below want to say *what* was found in a
+/// stem-named slot, and `{:?}` on the value answers that at unbounded length:
+/// a `Body::Stem` formats its entire tails map, so a panic message could carry
+/// a whole variable pool. Same defect the not-implemented messages had, where
+/// one expression produced 373,332 bytes, and the same fix.
+///
+/// Exhaustive with no wildcard arm on purpose, mirroring `Body::trace` and
+/// `form_name`: a new `Body` variant is a compile error here rather than a
+/// silent "unknown".
+fn body_variant_name(body: &Body) -> &'static str {
+    match body {
+        Body::Text { .. } => "Body::Text",
+        Body::Num { .. } => "Body::Num",
+        Body::Stem { .. } => "Body::Stem",
+        Body::Array(_) => "Body::Array",
+        Body::Instance(_) => "Body::Instance",
+        Body::WeakRef(_) => "Body::WeakRef",
+    }
+}
+
 // No arithmetic or assignment-target dispatch calls any of these outside
 // this module's own tests yet -- that wiring (recognising `ExprKind::Stem`/
 // `Compound` in `eval_node` and `step`'s `Assignment` arm) is a later task's,
@@ -114,41 +136,78 @@ impl Interp {
         }
     }
 
-    /// Reads a tail: `stem_name` is the stem's own name including its
-    /// trailing period, `key` is `tail_key`'s output.
+    /// Reads a tail: `stem_name` is the **read site's** own name (used only
+    /// to find the slot), including its trailing period; `key` is
+    /// `tail_key`'s output.
     ///
-    /// Unset stem -> the whole compound is uninitialised, derived name,
-    /// no `Body::Stem` needed (measured: `say never_touched.5` is
-    /// `NEVER_TOUCHED.5`). Set: a tombstone (`Some(None)`) or an absent key
-    /// with no default both derive the name; a tombstone does **not** fall
+    /// Unset stem -> the whole compound is uninitialised, derived name from
+    /// `stem_name` (there is no object to ask), no `Body::Stem` needed
+    /// (measured: `say never_touched.5` is `NEVER_TOUCHED.5`). Set: a
+    /// tombstone (`Some(None)`) or an absent key with no default both
+    /// derive the name -- but from the **object's own** `name` field, not
+    /// `stem_name`, once an object exists. A tombstone does **not** fall
     /// back to the default, which is the rule an obvious "just check the
     /// map" implementation misses (D15a's `u.1`/`u.2` pair).
+    ///
+    /// **`stem_name` does two different jobs, and once aliasing exists they
+    /// want different names.** Finding the slot needs the read site's
+    /// spelling, always. Deriving an unresolved tail's name needs the
+    /// object's own, the same rule `to_text` already applies to a bare
+    /// stem read (D15a: "a stem carries its own name"). An earlier version
+    /// used `stem_name` for both, which is right exactly when the two agree
+    /// and wrong the moment they do not. Measured, and the aliased case no
+    /// existing test reached because every read in the aliasing test
+    /// *resolved* (through a shared default or a written tail), while
+    /// `derived_tail_name` is reachable only when a tail does *not*
+    /// resolve -- so the aliasing test and the tombstone test never met:
+    ///
+    /// ```text
+    /// a.1='x'; b.=a.;             say b.2  ->  A.2   (not B.2)
+    /// c.1='x'; d.=c.; drop d.1;   say d.1  ->  C.1   (not D.1)
+    /// g.1='x'; h.=g.; k.=h.;      say k.9  ->  G.9   (two hops, still G)
+    /// m.1='x'; n.2='y'; m.=n.;    say m.1  ->  N.1   (m.'s own object discarded)
+    /// ```
     pub(crate) fn stem_get(&mut self, stem_name: &[u8], key: &[u8]) -> ObjRef {
         let slot = self.slot_of(stem_name);
         let frame = self.activation().frame;
         let stem_value = match self.roots.slot(frame, slot) {
             Some(v) => v,
+            // No object at all: the read site's own spelling is all there
+            // is to derive from.
             None => return self.derived_tail_name(stem_name, key),
         };
 
-        // `resolved` is computed fully before any further `self` call, so
-        // the borrow on `self.heap` below never has to overlap one.
-        let object = self.heap.get(stem_value).expect("a live value");
-        let Body::Stem { default, tails, .. } = &object.body else {
-            unreachable!(
-                "a stem-named slot holds only Body::Stem, got {:?}",
-                object.body
-            );
-        };
-        let resolved = match tails.get(key) {
-            Some(Some(value)) => Some(*value),
-            Some(None) => None, // the tombstone: absent from the default too
-            None => *default,   // an untouched tail falls back to the default
+        // `resolved` and `object_name` are both computed, fully, before any
+        // further `self` call, so the borrow on `self.heap` below never has
+        // to overlap one. `object_name` is cloned (a small, boxed slice)
+        // rather than borrowed, for the same reason.
+        let (resolved, object_name) = {
+            let object = self.heap.get(stem_value).expect("a live value");
+            let Body::Stem {
+                name,
+                default,
+                tails,
+            } = &object.body
+            else {
+                unreachable!(
+                    "a stem-named slot holds only Body::Stem, got {}",
+                    body_variant_name(&object.body)
+                );
+            };
+            let resolved = match tails.get(key) {
+                Some(Some(value)) => Some(*value),
+                Some(None) => None, // the tombstone: absent from the default too
+                None => *default,   // an untouched tail falls back to the default
+            };
+            (resolved, name.clone())
         };
 
         match resolved {
             Some(value) => value,
-            None => self.derived_tail_name(stem_name, key),
+            // An object exists but this key does not resolve: derive from
+            // the OBJECT's own name, not the read site's -- see this
+            // function's doc comment for why the two can differ.
+            None => self.derived_tail_name(&object_name, key),
         }
     }
 
@@ -165,8 +224,8 @@ impl Interp {
                 let object = self.heap.get_mut(stem_value).expect("a live value");
                 let Body::Stem { tails, .. } = &mut object.body else {
                     unreachable!(
-                        "a stem-named slot holds only Body::Stem, got {:?}",
-                        object.body
+                        "a stem-named slot holds only Body::Stem, got {}",
+                        body_variant_name(&object.body)
                     );
                 };
                 tails.insert(key.to_vec(), Some(value));
@@ -200,8 +259,8 @@ impl Interp {
             let object = self.heap.get_mut(stem_value).expect("a live value");
             let Body::Stem { tails, .. } = &mut object.body else {
                 unreachable!(
-                    "a stem-named slot holds only Body::Stem, got {:?}",
-                    object.body
+                    "a stem-named slot holds only Body::Stem, got {}",
+                    body_variant_name(&object.body)
                 );
             };
             tails.insert(key.to_vec(), None);
