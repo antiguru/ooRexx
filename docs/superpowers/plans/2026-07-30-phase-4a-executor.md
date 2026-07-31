@@ -776,7 +776,9 @@ Re-run each row yourself and put the table in the report; two accounts of this f
 
 Its limit is bounded on **both** sides: at least 100,000, the oracle's largest measured passing depth, and below what Task 3's stack size and per-frame cost allow. An upper bound alone is satisfied by a limit of 20,000, which diverges on every program between there and 100,000.
 
-**Task 3 measured these and the answer is not the one this plan first recorded, so inherit the corrected numbers.** The interpreter thread is **512 MiB**. **`eval` binds the stack, at ~783 bytes per level, with roughly 685,000 survivable levels in debug.** Measured on the current tree and independently confirmed: 600,000 and 684,000 levels pass, 700,000 aborts at rc 134.
+**Task 3 measured these and the answer is not the one this plan first recorded, so inherit the corrected numbers.** The interpreter thread is **512 MiB**. **`eval` binds the stack, and the figure moves whenever `eval`'s shape does — treat the rule as the deliverable and the number as perishable.** After Task 7 grew `eval_node` to fifteen match arms it went from ~783 to **~1600 bytes per level in debug**, roughly 335,000 survivable levels, still clearing D19's 100,000 minimum by more than three times. That is the **fourth** value this figure has taken in two days: ~820, then ~850, then ~783 once three tree walks became iterative, now ~1600. Every one was correct for the code it measured. **Re-measure at implementation and do not quote a predecessor's number.**
+
+The historical figure, superseded: ~783 bytes per level with roughly 685,000 levels in debug. Measured on the current tree and independently confirmed: 600,000 and 684,000 levels pass, 700,000 aborts at rc 134.
 
 | what runs | deepest surviving | bytes/level |
 |---|---|---|
