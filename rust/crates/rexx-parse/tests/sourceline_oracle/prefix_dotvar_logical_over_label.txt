@@ -1,0 +1,21 @@
+count 20
+/* Closes the criterion-1 coverage gap analysis's Program A: InstructionKind
+   ::Loop (the LOOP keyword, distinct from DO) and ::Label (a bare label,
+   traced as a no-op); ExprKind::DotVariable (.nil) and ::Logical (a
+   comma-list condition, `if a, b then`, evaluated as an AND of its parts);
+   LoopKind::Over on a non-stem target (DO OVER on a stem is the excluded
+   traversal-order deviation and could never pass -- a string or number
+   iterates exactly once, yielding itself); PrefixOp::Plus and ::Not;
+   EndStyle::Select (a SELECT whose END has no OTHERWISE, because its one
+   WHEN matches); and Trace::Default (bare TRACE) and ::Value. Neither TRACE
+   form here emits trace output, so it does not disturb the expectation. */
+trace
+say +5
+say \1
+say .nil
+if 1 = 1, 2 = 2 then say 'both'
+do i over 'abc'; say i; end
+select; when 1 = 1 then say 'sel'; end
+lab: nop
+trace value 'N'
+loop 2; say 'lp'; end

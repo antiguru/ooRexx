@@ -1,0 +1,11 @@
+count 10
+/* Closes the criterion-1 coverage gap analysis's Program C: Trace::Skip
+   (TRACE with a bare number, `trace 5`). Unlike Trace::Default and
+   ::Value, this is a raiser, not a no-op: outside interactive debugging it
+   is Error 24.901, "Numeric TRACE requests are valid only from
+   interactive debugging.", rc 232, with the clause echo on stderr first --
+   the same shape the spec records for error 7.3. Because it terminates
+   the program, it has to be this program's last statement, and it lives
+   alone rather than folded into a program that runs anything after it. */
+say 0
+trace 5

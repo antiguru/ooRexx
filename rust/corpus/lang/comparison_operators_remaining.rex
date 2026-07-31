@@ -1,0 +1,21 @@
+/* Closes the criterion-1 coverage gap analysis's Program B: the ten
+   Operator variants no other corpus program constructs -- the four
+   negated-strict-ordering forms (\>, \<, \>>, \<<), the two strict
+   greater/less-than-or-equal forms (>>=, <<=), the two "not equal to
+   either side of an ordering" forms (<>, ><), and the logical Or (|) and
+   Xor (&&) operators -- plus EndStyle::LabeledOtherwise, a labelled
+   SELECT whose END has an OTHERWISE. */
+say 1 \> 2
+say 1 \< 2
+say '1' \>> '2'
+say '1' \<< '2'
+say '1' >>= '1'
+say '1' <<= '1'
+say 1 <> 2
+say 1 >< 2
+say 1 | 0
+say 1 && 0
+select label s
+  when 1 = 0 then nop
+  otherwise say 'lo'
+end

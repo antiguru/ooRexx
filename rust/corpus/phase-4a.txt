@@ -8,16 +8,24 @@
 # Lines starting with # are comments; blank lines are ignored.
 #
 # Existing programs (Phase 2/3) that already qualify:
+#
+# num/digits_rounding.rex, num/exponential.rex and num/operators.rex are
+# deliberately NOT listed here even though they were checked and read as
+# qualifying: all three build ExprKind::List from a comma in a SAY (e.g.
+# operators.rex:8, `say (-2) ** 3 , (-2) ** 2`), and List is not 4a's --
+# the oracle prints two lines at rc 0, 4a fails loudly, so criterion 1's
+# zero-divergence requirement cannot hold while they are in this subset.
+# They stay in corpus/num/ for 4b or 4c, once List exists; this is a
+# subset-membership exclusion, not a deletion (measured 2026-07-31: the
+# variant-coverage gap list is unchanged with them excluded, so nothing
+# about coverage was lost by dropping them).
 lang/arith_digits.rex
 lang/no_trailing_newline.rex
 lang/select_when.rex
 lang/stem_compound.rex
 lang/trace_output.rex
 num/comparison.rex
-num/digits_rounding.rex
-num/exponential.rex
 num/notation_thresholds.rex
-num/operators.rex
 
 # New for Task 14a -- executor control flow, stems, EXIT, TRACE, comparison:
 lang/do_loop_forms.rex
@@ -36,3 +44,10 @@ lang/number_identity.rex
 lang/comparison_families.rex
 lang/deep_nested_expr.rex
 lang/trace_results.rex
+
+# New for Task 14b -- closing criterion 1's variant-coverage gap (nineteen
+# InstructionKind/ExprKind/LoopKind/PrefixOp/EndStyle/Trace/Operator variants
+# unconstructed by any program above; see criterion-1-coverage-gap.md):
+lang/prefix_dotvar_logical_over_label.rex
+lang/comparison_operators_remaining.rex
+lang/trace_numeric_request.rex
