@@ -402,6 +402,24 @@ impl Interp {
                 let value = match expression {
                     Some(expression) => {
                         let value = self.eval(code, expression)?;
+                        // Rooted for exactly one clause, like every other
+                        // `eval` result -- and that is shorter than this
+                        // value actually needs. `step_in_temps_frame` pops
+                        // this temp unconditionally right after `step`
+                        // returns, before `Flow::Exit` ever reaches
+                        // `run_activation`, so from that pop through `run`'s
+                        // activation teardown and into `execute`'s
+                        // `exit_code_for` call, this `ObjRef` is an
+                        // **under-rooted** value -- longer and later than
+                        // any other window in this crate. Benign only
+                        // because nothing on that path allocates or
+                        // collects (`Heap::alloc_with` never collects, and
+                        // `to_number`/`to_text` read an existing object
+                        // rather than making one); once a collector exists,
+                        // this needs a root that survives past the
+                        // temps-frame pop -- a global, or a dedicated field
+                        // on `Interp` -- rather than the one-clause
+                        // `push_temp` every other instruction result gets.
                         self.roots.push_temp(value);
                         Some(value)
                     }
@@ -507,83 +525,106 @@ impl Interp {
     /// Drops one `DROP` target: a plain variable, a whole stem, one tail, or
     /// the `(v)` indirect form.
     ///
-    /// **`Direct` and `Indirect` resolve a name the same three ways once they
-    /// have one, and differ only in how they get it.** `Direct(id)`'s name
-    /// came through the scanner, so a compound-shaped spelling still has real
-    /// tail pieces to resolve as variables -- `tail_key`, exactly what a
-    /// `Compound` expression's own read or `Assignment`'s own write already
-    /// does. `Indirect(id)`'s name is a plain runtime string with nothing
-    /// left to resolve: everything after the first period is the tail key
-    /// **verbatim**, joined dots and all, never re-parsed as if it were
-    /// source. Measured, discriminating the two:
+    /// **`Direct` resolves a compound's tail pieces as variables; `Indirect`
+    /// is a subsidiary list, not a single name.** `Direct(id)`'s name came
+    /// through the scanner, so a compound-shaped spelling still has real
+    /// tail pieces to resolve -- `tail_key`, exactly what a `Compound`
+    /// expression's own read or `Assignment`'s own write already does.
+    ///
+    /// `Indirect(id)`'s value is **blank- or tab-separated list of variable
+    /// symbols, each validated and dropped on its own**, not one verbatim
+    /// name -- a fix-round correction to this function's first version,
+    /// which treated the whole value as a single name and let three classes
+    /// of bad input through silently. Measured, the six rows that pin it
+    /// down (all against the oracle):
     ///
     /// ```text
-    /// v = 'A.1.2'; a.1.2 = 'x'; drop (v); say a.1.2  ->  A.1.2
-    /// v = 'A.B'  ; a.b   = 'x'; drop (v); say a.b    ->  A.B
+    /// a=1; b=2; v='a b'      ; drop (v); say a; say b   ->  A / B  (both dropped)
+    /// x=1;      v=' x '      ; drop (v); say x           ->  X      (trimmed)
+    /// v='9'                  ; drop (v)                  ->  Error 31.2
+    /// v='.x'                 ; drop (v)                  ->  Error 31.3
+    /// w=1;      v='(w)'      ; drop (v)                  ->  Error 20.928
+    /// a=1;      v='a'        ; drop (v); say a           ->  A      (agrees with the old reading)
     /// ```
     ///
-    /// The second line is the discriminating one: if `(v)`'s resolved name
-    /// were re-parsed as compound source, the tail piece `B` would be looked
-    /// up as a variable a second time; instead the drop uses the byte string
-    /// `"B"` as the key directly, the same key `a.b`'s own (unset) tail
-    /// piece `B` already derives to, so the two agree and the stem's default
-    /// answers `A.B` either way -- a test that only checked "the whole stem
-    /// still answers something" could not tell this apart from double
-    /// resolution, since an unset piece variable's derived name (`B`,
-    /// upcased) happens to equal its own literal spelling.
+    /// The last row is why every pre-fix test passed: a single-word,
+    /// already-valid, unpadded value is exactly where "split, validate,
+    /// resolve each" and "resolve the whole value" coincide. The `(w)` row
+    /// is what rules out a recursive reading -- a parenthesised entry is
+    /// 20.928, "Symbol expected as an indirect variable name", the same
+    /// error any other not-a-symbol word gets (`a-b` gives the identical
+    /// 20.928, `found "a-b"`), not a second round of indirection.
     ///
-    /// **The indirect name is upcased before it names anything; the value
-    /// itself is not.** Measured: `v = 'x'; x = 1; drop (v); say x` prints
-    /// `X` -- the wrapper's value is upcased exactly as the scanner would
-    /// have upcased `x` had it been written directly, because `DROP (v)`
-    /// never goes through the scanner at all. A `Direct` name is already
-    /// upcased, by `SymbolTable::intern`, long before this ever runs.
+    /// **Validation runs over the whole list before any drop happens.**
+    /// Measured: `a=1; b=2; v='a 9 b'; drop (v)` raises 31.2 on `"9"` and
+    /// leaves *both* `a` and `b` at `1` and `2` -- `a` is never dropped even
+    /// though it sits before the bad word. So this collects every word's
+    /// validated, upcased name first (`validate_indirect_word`, which can
+    /// fail) and only then drops each one (`drop_by_name`, which cannot),
+    /// rather than interleaving the two.
+    ///
+    /// **The value is upcased only after validation, one word at a time,
+    /// never as a whole.** Measured: `v = 'x'; x = 1; drop (v); say x`
+    /// prints `X` -- each word is upcased exactly as the scanner would have
+    /// upcased it had it been written directly, because `DROP (v)` never
+    /// goes through the scanner at all. A `Direct` name is already upcased,
+    /// by `SymbolTable::intern`, long before this ever runs.
     fn drop_variable(&mut self, code: &Code<'_>, variable: &VariableRef) -> Result<(), Failure> {
         match variable {
             VariableRef::Direct(id) => {
                 let name = code.symbols.name(*id);
-                match shape_of(name.as_bytes()) {
-                    NameShape::Simple => {
-                        let slot = self.slot_of(name.as_bytes());
-                        let frame = self.activation().frame;
-                        self.roots.clear_slot(frame, slot);
-                    }
-                    NameShape::Stem => self.stem_drop(name.as_bytes()),
-                    NameShape::Compound => {
-                        let (stem_name, _tails) = compound_parts(name);
-                        let key = self.tail_key(code, *id);
-                        self.stem_drop_tail(stem_name.as_bytes(), &key);
-                    }
+                if shape_of(name.as_bytes()) == NameShape::Compound {
+                    let (stem_name, _tails) = compound_parts(name);
+                    let key = self.tail_key(code, *id);
+                    self.stem_drop_tail(stem_name.as_bytes(), &key);
+                } else {
+                    self.drop_by_name(name.as_bytes());
                 }
             }
             VariableRef::Indirect(id) => {
                 let (value, _novalue) = self.read(code, *id);
-                let name = self.to_text(value).to_ascii_uppercase();
-                match shape_of(&name) {
-                    NameShape::Simple => {
-                        let slot = self.slot_of(&name);
-                        let frame = self.activation().frame;
-                        self.roots.clear_slot(frame, slot);
-                    }
-                    NameShape::Stem => self.stem_drop(&name),
-                    NameShape::Compound => {
-                        // Everything after the first period, verbatim: an
-                        // indirect name has already been fully resolved to a
-                        // plain string by the time it gets here, so there is
-                        // no per-piece variable left to look up a second
-                        // time -- see this function's own doc comment for
-                        // the transcript that tells the two cases apart.
-                        let dot = name
-                            .iter()
-                            .position(|&b| b == b'.')
-                            .expect("NameShape::Compound guarantees at least one period");
-                        let (stem_name, key) = name.split_at(dot + 1);
-                        self.stem_drop_tail(stem_name, key);
-                    }
+                let text = self.to_text(value).into_owned();
+                let mut names = Vec::new();
+                for word in split_indirect_words(&text) {
+                    names.push(validate_indirect_word(word)?);
+                }
+                for name in &names {
+                    self.drop_by_name(name);
                 }
             }
         }
         Ok(())
+    }
+
+    /// Drops the variable, whole stem, or one verbatim-keyed tail `name`'s
+    /// own spelling names, dispatched by `shape_of`.
+    ///
+    /// Shared by `Direct`'s `Simple`/`Stem` cases (an already-upcased
+    /// compile-time name) and by every word of an indirect subsidiary list
+    /// (already validated and upcased by `validate_indirect_word`) -- both
+    /// are "a plain string names a variable, resolve it with no further
+    /// symbol lookup", the same operation `drop_variable`'s own doc comment
+    /// says the two cases share. **Not** used for `Direct`'s `Compound` case:
+    /// a source-level compound's tail pieces are still symbols to resolve
+    /// (`tail_key`), which this function's uniform verbatim split at the
+    /// first period does not do.
+    fn drop_by_name(&mut self, name: &[u8]) {
+        match shape_of(name) {
+            NameShape::Simple => {
+                let slot = self.slot_of(name);
+                let frame = self.activation().frame;
+                self.roots.clear_slot(frame, slot);
+            }
+            NameShape::Stem => self.stem_drop(name),
+            NameShape::Compound => {
+                let dot = name
+                    .iter()
+                    .position(|&b| b == b'.')
+                    .expect("NameShape::Compound guarantees at least one period");
+                let (stem_name, key) = name.split_at(dot + 1);
+                self.stem_drop_tail(stem_name, key);
+            }
+        }
     }
 
     /// `NUMERIC DIGITS`/`FUZZ`/`FORM`, in every spelling the parser produces
@@ -730,6 +771,97 @@ fn shape_of(name: &[u8]) -> NameShape {
     }
 }
 
+/// Splits a `DROP (v)` wrapper's value into its subsidiary list's words.
+///
+/// A blank (`' '`) or a tab (`'\t'`) separates words, any run of either
+/// counts as one separator, and an empty word never results -- measured,
+/// `'a    b'` and a leading/trailing-blank `'  a  b  '` both give exactly
+/// `["a", "b"]`, and a `'09'x` (tab) byte between two names splits them the
+/// same way a space does. A newline or carriage return does **not**
+/// separate: `'a' || '0a'x || 'b'` is one word, `"a\nb"`, which then fails
+/// `validate_indirect_word`'s character check and raises 20.928 rather than
+/// splitting. An all-blank or empty value yields no words at all, which is
+/// why `drop (v)` on an empty or blanks-only `v` is a silent no-op on the
+/// oracle rather than an error.
+fn split_indirect_words(text: &[u8]) -> impl Iterator<Item = &[u8]> {
+    text.split(|&b| b == b' ' || b == b'\t')
+        .filter(|word| !word.is_empty())
+}
+
+/// One legal symbol character, by the scanner's own character table
+/// (`scanner.rs`'s `is_symbol_char`: `! . ? _ 0-9 A-Z a-z`, ASCII only --
+/// `SymbolTable::intern`'s own doc says a non-ASCII byte cannot be part of a
+/// symbol at all).
+fn is_symbol_byte(b: u8) -> bool {
+    matches!(b, b'!' | b'.' | b'?' | b'_' | b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z')
+}
+
+/// Validates one word of an indirect `DROP`'s subsidiary list and answers
+/// its upcased name, or the condition the oracle raises for it.
+///
+/// Three ways a word can fail, checked in the order the oracle's own error
+/// numbers imply (a character-set check before either shape check, since a
+/// word with an illegal character is never inspected for its *first*
+/// character at all -- measured, `'a-b'` and `'(w)'` both give 20.928, not
+/// 31.2/31.3, even though neither starts with a digit or a period):
+///
+/// * any byte outside the symbol character set (`is_symbol_byte`) -- 20.928,
+///   "Symbol expected as an indirect variable name"; this is also what rules
+///   out treating a parenthesised entry as a nested indirect reference,
+///   since `(`/`)` are not symbol characters and so are rejected the same
+///   way any other stray punctuation is, not by a dedicated recursion guard;
+/// * a leading digit -- 31.2, "Variable symbol must not start with a
+///   number", matching `SymbolClass::Constant`'s own first-byte rule;
+/// * a leading period -- 31.3, "Variable symbol must not start with a
+///   '.'" (measured on a bare `"."` too, not only a longer dot-led word).
+///
+/// Every substitution is the word's **own, unmodified** bytes -- measured,
+/// `'.X'`/`'9abc'` report `found ".X"`/`found "9abc"`, not the upcased form
+/// -- so upcasing happens only on the success path, after every check.
+fn validate_indirect_word(word: &[u8]) -> Result<Vec<u8>, Failure> {
+    if !word.iter().copied().all(is_symbol_byte) {
+        return Err(raised_symbol_expected(word).into());
+    }
+    match word[0] {
+        b'0'..=b'9' => return Err(raised_digit_led(word).into()),
+        b'.' => return Err(raised_dot_led(word).into()),
+        _ => {}
+    }
+    Ok(word.to_ascii_uppercase())
+}
+
+/// 20.928: a subsidiary-list word is not a legal symbol at all (contains a
+/// byte outside `is_symbol_byte`'s set, which is also what a parenthesised
+/// entry like `"(w)"` fails on).
+fn raised_symbol_expected(found: &[u8]) -> Raised {
+    Raised {
+        condition: "SYNTAX",
+        number: 20,
+        sub: 928,
+        additional: vec![String::from_utf8_lossy(found).into_owned()],
+    }
+}
+
+/// 31.2: a subsidiary-list word starts with a digit.
+fn raised_digit_led(found: &[u8]) -> Raised {
+    Raised {
+        condition: "SYNTAX",
+        number: 31,
+        sub: 2,
+        additional: vec![String::from_utf8_lossy(found).into_owned()],
+    }
+}
+
+/// 31.3: a subsidiary-list word starts with a period.
+fn raised_dot_led(found: &[u8]) -> Raised {
+    Raised {
+        condition: "SYNTAX",
+        number: 31,
+        sub: 3,
+        additional: vec![String::from_utf8_lossy(found).into_owned()],
+    }
+}
+
 /// Converts a `rexx-num` settings failure into a `Raised`.
 ///
 /// `ArithError` has a `sub_code` accessor `rexx-num` made `pub` expressly for
@@ -789,11 +921,16 @@ mod tests {
     }
 
     /// Parses `source`, activates it, and runs every one of its instructions
-    /// through `step` in order -- a miniature `run_activation` for a program
-    /// that never branches, which is every program this module's tests write.
-    /// `slots` is an empty map throughout: `read`/`slot_of`'s fallback chain
-    /// answers correctly without the real plan's fast path, the same choice
-    /// `eval.rs`'s own test helpers make.
+    /// through `step_in_temps_frame` in order -- a miniature `run_activation`
+    /// for a program that never branches, which is every program this
+    /// module's tests write. Goes through the wrapper and not `step`
+    /// directly: `step_in_temps_frame` is the chokepoint that unconditionally
+    /// closes each instruction's temps frame, including on the failure path,
+    /// and calling `step` around it would leave this the one caller in the
+    /// crate that skips it -- exactly the shape a future non-test caller
+    /// could copy by example. `slots` is an empty map throughout:
+    /// `read`/`slot_of`'s fallback chain answers correctly without the real
+    /// plan's fast path, the same choice `eval.rs`'s own test helpers make.
     fn run_source(interp: &mut Interp, source: &[u8]) -> Result<Option<ObjRef>, Failure> {
         let program = parse_program(source.to_vec()).expect("test program parses");
         let program = activate(interp, program);
@@ -803,7 +940,7 @@ mod tests {
             slots: &HashMap::new(),
         };
         for instruction in &code.body.instructions {
-            match interp.step(&code, instruction)? {
+            match interp.step_in_temps_frame(&code, instruction)? {
                 Flow::Next => {}
                 Flow::Goto(_) => unreachable!("no test program in this module branches"),
                 Flow::Exit(value) => return Ok(value),
@@ -939,6 +1076,135 @@ mod tests {
                 b"v = 'A.1.2'\na.1.2 = 'x'\ndrop (v)\nsay a.1.2"
             ),
             b"A.1.2\n".to_vec()
+        );
+    }
+
+    /// Fix-round: the indirect form's value is a **subsidiary list**, not a
+    /// single verbatim name. Every case here uses *set* targets (the trap
+    /// the review named: an unset target's cleared slot and its own derived
+    /// name render identically, so a test built on unset targets cannot
+    /// tell "resolved the whole value as one name" apart from "split,
+    /// validated and dropped two names" -- only a set value discriminates).
+    #[test]
+    fn drop_of_the_indirect_form_is_a_subsidiary_list_of_words() {
+        // Two names, blank-separated, both set and both dropped.
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"a = 1\nb = 2\nv = 'a b'\ndrop (v)\nsay a\nsay b"
+            ),
+            b"A\nB\n".to_vec(),
+            "a blank-separated list drops every word, not one name literally spelled 'A B'"
+        );
+
+        // A run of blanks between words, and leading/trailing blanks, both
+        // collapse -- still exactly two words.
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"a = 1\nb = 2\nv = '  a    b  '\ndrop (v)\nsay a\nsay b"
+            ),
+            b"A\nB\n".to_vec()
+        );
+
+        // A tab (`'09'x`) separates two words exactly like a blank does.
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"a = 1\nb = 2\nv = 'a'||'09'x||'b'\ndrop (v)\nsay a\nsay b"
+            ),
+            b"A\nB\n".to_vec(),
+            "a tab byte separates words the same way a blank does"
+        );
+
+        // A mix of shapes in one list: a whole stem and a simple variable.
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"a. = 'd'\na.1 = 'one'\nx = 5\nv = 'a. x'\ndrop (v)\nsay a.1\nsay x"
+            ),
+            b"A.1\nX\n".to_vec()
+        );
+    }
+
+    #[test]
+    fn drop_of_the_indirect_form_validates_every_word() {
+        // A digit-led word: 31.2.
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"v = '9'\ndrop (v)").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (31, 2));
+        assert_eq!(raised.additional, vec!["9".to_string()]);
+
+        // A dot-led word: 31.3.
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"v = '.x'\ndrop (v)").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (31, 3));
+        assert_eq!(raised.additional, vec![".x".to_string()]);
+
+        // A parenthesised word: 20.928, not a second round of indirection --
+        // proves the list is not recursive.
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"w = 1\nv = '(w)'\ndrop (v)").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (20, 928));
+        assert_eq!(raised.additional, vec!["(w)".to_string()]);
+    }
+
+    #[test]
+    fn drop_of_the_indirect_form_validates_before_dropping_any_of_it() {
+        // a=1; b=2; v='a 9 b'; drop (v) -> Error 31.2, and NEITHER a nor b
+        // is dropped, even though `a` sits before the bad word -- measured
+        // against the oracle (SIGNAL ON SYNTAX recovery there shows both
+        // untouched). The whole list validates before any drop runs.
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"a = 1\nb = 2\nv = 'a 9 b'\ndrop (v)").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (31, 2));
+        assert_eq!(raised.additional, vec!["9".to_string()]);
+
+        // The activation is still on the stack (`run_source` does not pop
+        // on error), so `a`'s slot is still directly inspectable.
+        let a_slot = interp.slot_of(b"A");
+        let frame = interp.activation().frame;
+        let a_value = interp
+            .roots
+            .slot(frame, a_slot)
+            .expect("a must still be set");
+        assert_eq!(
+            &*interp.to_text(a_value),
+            b"1",
+            "a must not have been dropped before the list's third word failed validation"
+        );
+    }
+
+    #[test]
+    fn drop_of_the_indirect_form_on_an_empty_or_blanks_only_value_is_a_no_op() {
+        // Measured: `v=''`/`v='   '` both run clean under the oracle -- zero
+        // words, nothing to validate or drop.
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"v = ''\ndrop (v)\nsay 'after'"),
+            b"after\n".to_vec()
+        );
+
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(&mut interp, b"v = '   '\ndrop (v)\nsay 'after'"),
+            b"after\n".to_vec()
         );
     }
 
