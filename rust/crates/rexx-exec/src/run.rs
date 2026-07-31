@@ -1160,6 +1160,26 @@ mod tests {
         };
         assert_eq!((raised.number, raised.sub), (20, 928));
         assert_eq!(raised.additional, vec!["(w)".to_string()]);
+
+        // **A newline does not separate.** It is not whitespace for this
+        // purpose: the whole of `a`, the newline and `b` form ONE word, which
+        // then fails the character-set check, and the reported name carries
+        // the raw newline. Measured byte for byte against the oracle,
+        // substitution included.
+        //
+        // This assertion is why `split_indirect_words` tests space and tab
+        // explicitly instead of calling `is_ascii_whitespace`. Without it a
+        // mutant that used `is_ascii_whitespace` passed all 79 tests, because
+        // no other case here carries a newline, and the distinction rested
+        // entirely on an end-to-end diff nobody re-runs. Carriage return,
+        // form feed and vertical tab behave as the newline does.
+        let mut interp = Interp::new(false);
+        let failure = run_source(&mut interp, b"v = 'a'||'0a'x||'b'\ndrop (v)").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (20, 928));
+        assert_eq!(raised.additional, vec!["a\nb".to_string()]);
     }
 
     #[test]
