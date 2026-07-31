@@ -60,21 +60,22 @@ fn main() -> ExitCode {
 
     // `ExitCode::from` takes a `u8`, which is the whole range a process exit
     // status carries anyway. What makes that range meaningful is
-    // `Raised::exit_code`'s `256 - major`, which `execute` now applies.
+    // `Raised::exit_code`'s `256 - major`, which `execute` applies, and now
+    // `EXIT expr`'s own result, which `Interp::exit_code_for` (`lib.rs`)
+    // converts into an `i32` that can be negative or wider than a byte.
     //
-    // **This saturates and the oracle wraps, so it is wrong for any code
-    // outside 0..=255, and it is Task 9's to fix** together with `EXIT expr`,
-    // which is the only thing that can produce such a code. Measured:
+    // **A truncating cast, not `u8::try_from`, because the oracle wraps and
+    // the old conversion saturated.** Measured:
     //
     //     exit 256   ->  rc 0        exit 257  ->  rc 1
     //     exit -1    ->  rc 255      exit 255  ->  rc 255
     //
-    // so the oracle takes the value modulo 256, while `unwrap_or(u8::MAX)`
-    // answers 255 for every one of them. Nothing 4a's spike can emit reaches
-    // here out of range, since `NOT_IMPLEMENTED_EXIT` and 0 and 2 are the only
-    // values, which is why this is a comment rather than an arithmetic change
-    // made blind: the correct conversion needs the whole `EXIT` result rule,
-    // including what a non-numeric or fractional result does, and none of that
-    // is measured yet.
-    ExitCode::from(u8::try_from(outcome.exit_code).unwrap_or(u8::MAX))
+    // so the oracle keeps only the low 8 bits of the value, which is exactly
+    // what `as u8` does on an `i32` (defined, not implementation-specific:
+    // Rust's numeric `as` narrows by truncating the two's-complement bit
+    // pattern) -- `-1i32 as u8` is 255, `256i32 as u8` is 0, `257i32 as u8` is
+    // 1, matching all four rows above. `u8::try_from(-1)` or `(256)` would
+    // instead fail and fall back to 255 for every one of them, indistinguishable
+    // from `exit -1` alone, which is the bug this replaces.
+    ExitCode::from(outcome.exit_code as u8)
 }

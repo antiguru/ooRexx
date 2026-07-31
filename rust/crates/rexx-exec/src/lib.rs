@@ -16,8 +16,8 @@
 //! `Rc` into a local on entry, and every `&CodeBody` and `&Expr` derives from
 //! that local.** `Interp` owns the heap, the root set, the activation stack,
 //! the plan cache and the two sinks, and does not own the AST. `run_activation`
-//! below is where that discipline is written down, together with the version
-//! of it that does not compile.
+//! (`run.rs`) is where that discipline is written down, together with the
+//! version of it that does not compile.
 //!
 //! **What it executes grows task by task, and this doc deliberately does not
 //! list it.** The enumeration that stood here was true of Task 3's spike and
@@ -29,14 +29,17 @@
 //!
 //! The per-concept modules the design's crate layout names have landed beside
 //! this file (`value.rs`, `stem.rs`, `plan.rs`, `activation.rs`, `error.rs`,
-//! `eval.rs`). What stays here is the interpreter itself, the loud-failure
-//! path, and the borrow discipline, which is the one thing meant to survive as
-//! it stands.
+//! `eval.rs`, `run.rs`). What stays here is the interpreter itself, the
+//! loud-failure path, and the entry point and thread setup that exercise the
+//! borrow discipline `run.rs` writes down -- `Code<'a>`, the type that
+//! discipline is expressed through, stays here too, because every module that
+//! evaluates or steps through one needs it equally and none of them is a
+//! better owner than the crate root.
 
 use rexx_core::{Heap, ObjRef, RootSet};
 use rexx_parse::{
-    CodeBody, ExprKind, Fragment, Instruction, InstructionKind, ParseError, PrefixOp, Program,
-    SymbolId, SymbolTable, parse_interpret, parse_program,
+    CodeBody, ExprKind, InstructionKind, ParseError, PrefixOp, Program, SymbolId, SymbolTable,
+    parse_program,
 };
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -69,6 +72,13 @@ use error::{ClauseSite, Failure};
 // Expression evaluation (`eval`/`eval_node`): terms, arithmetic and
 // concatenation.
 mod eval;
+
+// The instruction loop (D16's "Control flow"): `Flow`, and `step` and its two
+// callers, together with the borrow discipline `run_activation` is written
+// down to prove (Task 3's spike). Extended task by task with the branches and
+// calls later tasks add; Task 9 is the first to extend it, with the seven
+// instructions that do not branch.
+mod run;
 
 /// The exit code for a construct Phase 4a does not implement.
 ///
@@ -448,18 +458,6 @@ struct Code<'a> {
     slots: &'a HashMap<SymbolId, usize>,
 }
 
-/// Where control goes after one instruction (the design's "Control flow").
-enum Flow {
-    Next,
-    /// Unreachable in the spike, which has no jump, and unreachable in a
-    /// fragment for a measured reason: a label inside `INTERPRET` text is
-    /// error 47.1 (Task 1), so a fragment's `labels` is always empty and a
-    /// fragment can never jump.
-    #[allow(dead_code, reason = "Tasks 10 and 11 build the jumps that produce it")]
-    Goto(usize),
-    Exit(Option<ObjRef>),
-}
-
 /// Whether a variable read found a value or derived one from the name.
 ///
 /// D16 requires the read path to answer this from the start rather than gain
@@ -609,391 +607,6 @@ impl Interp {
     // `plan_for` and `activation`/`activation_mut` live in `plan.rs`/
     // `activation.rs` (Task 6), beside the types they operate on.
 
-    // ---- the instruction loop, which is what this spike is for ----
-
-    /// Runs the current activation's body to completion.
-    ///
-    /// **This function is the architectural claim.** The discipline is: clone
-    /// the `Rc` into a local on entry, and derive every `&CodeBody` and
-    /// `&Expr` from that local. It compiles for exactly one reason, and the
-    /// reason is that `code` borrows `program` and `plan`, which are locals,
-    /// rather than borrowing `self` -- so `self.step(…)`, which takes
-    /// `&mut self`, has nothing to collide with.
-    ///
-    /// The version that does **not** compile, kept because the next phase to
-    /// touch this will want to know which shape is wrong. Reaching the body
-    /// through the activation and then stepping:
-    ///
-    /// ```text
-    /// fn run_activation_wrong(&mut self) -> Result<Option<ObjRef>, Loud> {
-    ///     let body = &self.activations.last().expect("a live activation").program.main;
-    ///     while let Some(instruction) = body.instructions.get(self.activation().pc) {
-    ///         self.step_wrong(body, instruction)?;
-    ///     }
-    ///     Ok(None)
-    /// }
-    /// ```
-    ///
-    /// The block below was captured by hand: the wrong version was written
-    /// into this file, built, and deleted again, and this is what rustc 1.96.1
-    /// printed. **Nothing re-checks it.** If the borrow checker's wording or
-    /// its choice of underline changes, this text goes stale and no test
-    /// fails, which is exactly why the doctests further down exist. Read it as
-    /// a record of what was seen once, not as an assertion about what rustc
-    /// does now:
-    ///
-    /// ```text
-    /// error[E0502]: cannot borrow `*self` as mutable because it is also borrowed as immutable
-    ///    --> crates/rexx-exec/src/lib.rs:851:13
-    ///     |
-    /// 849 |         let body = &self.activations.last().expect("a live activation").program.main;
-    ///     |                     ---------------- immutable borrow occurs here
-    /// 850 |         while let Some(instruction) = body.instructions.get(self.activation().pc) {
-    ///     |                                       ----------------- immutable borrow later used here
-    /// 851 |             self.step_wrong(body, instruction)?;
-    ///     |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ mutable borrow occurs here
-    /// ```
-    ///
-    /// Worth reading the second underline rather than the third: the borrow
-    /// that survives is not the argument, it is the **loop condition**.
-    /// Compiled here too, rather than reasoned about: replacing the body of
-    /// the loop with a `self.step_wrong_noargs()` that takes no arguments at
-    /// all gives the identical `E0502`, with `while body.instructions.get(…)`
-    /// underlined as the later use. So handing the body to `step` some other
-    /// way is not the fix. `Rc::clone` is the fix, because what has to change
-    /// is where `body` is rooted, not who it is passed to.
-    ///
-    /// The `Rc::clone` is what removes it, and it is not a workaround for the
-    /// borrow checker being conservative: the checker is right. An activation
-    /// can be replaced under a running loop, and a `&CodeBody` reached through
-    /// the activation would then point into a program the activation no longer
-    /// holds. The `Rc` in the local is what makes that impossible rather than
-    /// merely unlikely.
-    ///
-    /// # The pair of doctests below, and what they are worth
-    ///
-    /// **What keeps the function honest is the compiler.** This function would
-    /// not build if the discipline broke, which is the whole reason the
-    /// discipline is worth having and is a stronger guarantee than any test.
-    /// **What the pair below keeps honest is the documentation**, which is the
-    /// part with no compiler behind it: everything above is prose, and nothing
-    /// in the tree would notice if it stopped describing anything real.
-    ///
-    /// So the two snippets are a miniature of the same borrow, once in the
-    /// shape that compiles and once in the shape that does not. `cargo test`
-    /// runs both. A precondition that nothing states and that the pair
-    /// silently depends on: **rustdoc does collect doctests on private
-    /// items.** Confirmed rather than assumed, by putting a deliberately
-    /// failing snippet on a private method and watching it run. If it did not,
-    /// both of these would not exist rather than fail, and the pair would be
-    /// decoration.
-    ///
-    /// **Read them for what they prove and not more.** `compile_fail` proves
-    /// only "this does not compile", not "this fails with `E0502`". The
-    /// `compile_fail,E0502` spelling looks like it pins the code and does not:
-    /// measured on rustc 1.96.1, a doctest annotated `compile_fail,E0502`
-    /// whose body is `let x: u32 = "not a u32";` passes, and that is `E0308`.
-    /// A `compile_fail` snippet with a typo in it therefore passes for the
-    /// wrong reason, which is the standard trap with this attribute.
-    ///
-    /// What narrows it is the **first** snippet, which must compile. The two
-    /// differ only in how `body` is obtained, two lines against one, and share
-    /// everything else, so any breakage in the shared part fails the passing
-    /// twin instead of silently satisfying the failing one. Checked by
-    /// mutation rather than assumed: rewriting the passing snippet's
-    /// `Rc::clone` line into the failing snippet's shape makes it fail, and it
-    /// fails with `E0502`. One test says "the fix works", the other says "the
-    /// shape it fixes is still broken", and neither is worth much alone.
-    ///
-    /// Two residuals, the second larger than the first and worth stating
-    /// because the pair is easy to over-read.
-    ///
-    /// A typo confined to the failing snippet's own `let body = …` line passes
-    /// for the wrong reason and nothing here closes that.
-    ///
-    /// And **the miniature can drift away from this function.** It models
-    /// `Rc<CodeBody>` over a `Vec<u32>` with a two-argument `step`, where the
-    /// real thing has `Rc<Program>`, a three-field `Code<'a>` and a different
-    /// `step`. Nothing ties the two together. A future rewrite of
-    /// `run_activation` into a shape the miniature does not model leaves both
-    /// doctests green while the prose above them describes a function that no
-    /// longer exists. That is a real limit and not a reason to drop the pair:
-    /// the compiler is still what stops the *function* going wrong, and the
-    /// pair is still what stops this *comment* claiming a borrow error that
-    /// the language no longer produces.
-    ///
-    /// Compiles, because `body` borrows the local `program`:
-    ///
-    /// ```
-    /// use std::rc::Rc;
-    /// struct CodeBody { instructions: Vec<u32> }
-    /// struct Frame { program: Rc<CodeBody>, pc: usize }
-    /// struct Interp { activations: Vec<Frame> }
-    /// impl Interp {
-    ///     fn step(&mut self, _instruction: &u32) {}
-    ///     fn run(&mut self) {
-    ///         let program = Rc::clone(&self.activations.last().unwrap().program);
-    ///         let body = &program.instructions;
-    ///         while let Some(instruction) = body.get(self.activations.last().unwrap().pc) {
-    ///             self.step(instruction);
-    ///             self.activations.last_mut().unwrap().pc += 1;
-    ///         }
-    ///     }
-    /// }
-    /// ```
-    ///
-    /// Does not compile, because `body` borrows `self`. One line different:
-    ///
-    /// ```compile_fail
-    /// use std::rc::Rc;
-    /// struct CodeBody { instructions: Vec<u32> }
-    /// struct Frame { program: Rc<CodeBody>, pc: usize }
-    /// struct Interp { activations: Vec<Frame> }
-    /// impl Interp {
-    ///     fn step(&mut self, _instruction: &u32) {}
-    ///     fn run(&mut self) {
-    ///         let body = &self.activations.last().unwrap().program.instructions;
-    ///         while let Some(instruction) = body.get(self.activations.last().unwrap().pc) {
-    ///             self.step(instruction);
-    ///             self.activations.last_mut().unwrap().pc += 1;
-    ///         }
-    ///     }
-    /// }
-    /// ```
-    fn run_activation(&mut self) -> Result<Option<ObjRef>, Failure> {
-        // `code` is bound to the activation on top of the stack at entry,
-        // while every `pc` read and write below goes to whatever is on top
-        // *now*. Those are the same frame only because `step` leaves the
-        // activation stack as it found it, which is true in 4a because
-        // nothing here pushes one, and true for a fragment because it runs
-        // inside the creating activation rather than pushing its own.
-        //
-        // **4b breaks that and will not be told so by the compiler.** A
-        // `CALL` pushes an activation inside `step`, and if it ever returned
-        // with the callee still on the stack, this loop would carry on
-        // reading the callee's `pc` while executing the caller's body: a
-        // wrong answer, not a borrow error, because both are plain field
-        // accesses on `self`. The assertion below is what turns that into a
-        // failure at the first instruction instead of a debugging session.
-        //
-        // The body is `program.main` and the activation does not record which
-        // body it is running, which is the other half of the same assumption.
-        // 4b's activation for a `::routine` needs that field; without it, such
-        // an activation would re-run the main body here. See `Activation`.
-        let program = Rc::clone(&self.activation().program);
-        let plan = Rc::clone(&self.activation().plan);
-        let code = Code {
-            body: &program.main,
-            symbols: &program.symbols,
-            slots: &plan.by_symbol,
-        };
-        let depth = self.activations.len();
-
-        while let Some(instruction) = code.body.instructions.get(self.activation().pc) {
-            let flow = match self.step_in_temps_frame(&code, instruction) {
-                Ok(flow) => flow,
-                Err(failure) => {
-                    // The last place the failing instruction is in hand.
-                    // `run` pops this activation on the way out, so a site
-                    // resolved any higher up would have nothing left to
-                    // resolve against.
-                    //
-                    // A condition raised inside an `INTERPRET` fragment
-                    // arrives here too, and records the enclosing `INTERPRET`
-                    // clause rather than the fragment's own, because the
-                    // fragment loop deliberately does not record: its spans
-                    // index the fragment's source and not this one, so the
-                    // line they resolve to would be the fragment's.
-                    //
-                    // The oracle prints **both**, innermost first, each
-                    // carrying the enclosing clause's line number (measured,
-                    // `interpret "say 2 & 1"` on line 2):
-                    //
-                    // ```text
-                    //      2 *-* say 2 & 1
-                    //      2 *-* interpret "say 2 & 1"
-                    // ```
-                    //
-                    // so this reproduces the second of those lines and not the
-                    // first. A known gap rather than something to fix here:
-                    // stacking one echo per nesting level changes
-                    // `Raised::report`'s shape, and 4a's only nesting is the
-                    // fragment spike that 4b deletes.
-                    let source = &program.source;
-                    self.failure_site = Some((
-                        source.line_of(instruction.clause_span.start),
-                        source
-                            .join_span(instruction.clause_span.clone())
-                            .map_or_else(
-                                // Visible rather than silent, for the same
-                                // reason `Raised::message` renders a catalogue
-                                // miss instead of panicking: the error path is
-                                // the worst place to turn a reportable
-                                // condition into a crash or into a blank line.
-                                || b"<clause span outside the retained source>".to_vec(),
-                                |bytes| bytes.into_owned(),
-                            ),
-                    ));
-                    return Err(failure);
-                }
-            };
-            match flow {
-                Flow::Next => self.activation_mut().pc += 1,
-                Flow::Goto(target) => self.activation_mut().pc = target,
-                Flow::Exit(value) => return Ok(value),
-            }
-            debug_assert_eq!(
-                self.activations.len(),
-                depth,
-                "step left the activation stack changed, so this loop's `code` and its `pc` \
-                 no longer describe the same frame"
-            );
-        }
-        Ok(None)
-    }
-
-    /// Runs one instruction.
-    ///
-    /// `code` is the caller's, so everything reached through it outlives every
-    /// `&mut self` call in here. The `Assignment` arm is the clearest case:
-    /// `name` is a `&[u8]` pulled out of `code.symbols` and it stays valid
-    /// across `self.eval(…)`, which the same slice read out of `self` would
-    /// not.
-    ///
-    /// **Every `eval` result is rooted before anything else runs.** `eval`
-    /// hands back an unrooted handle by design, so its caller owns the moment
-    /// it becomes a root, and here that is a `push_temp` on the line after
-    /// each call. The instruction loops open a temps frame around this call
-    /// and close it after, so what is pushed here lives exactly one clause.
-    /// Not doing it would happen to work today, because `Heap::alloc_with`
-    /// never collects, and would become a use-after-free the day it does,
-    /// found by chasing a wrong value rather than by a compiler message.
-    fn step(&mut self, code: &Code<'_>, instruction: &Instruction) -> Result<Flow, Failure> {
-        match &instruction.kind {
-            InstructionKind::Say { expression } => {
-                let line = match expression {
-                    Some(expression) => {
-                        let value = self.eval(code, expression)?;
-                        self.roots.push_temp(value);
-                        self.to_text(value).to_vec()
-                    }
-                    // `say` with no expression is a blank line.
-                    None => Vec::new(),
-                };
-                self.out.extend_from_slice(&line);
-                self.out.push(b'\n');
-                Ok(Flow::Next)
-            }
-
-            InstructionKind::Assignment { target, value } => {
-                // `addVariable` builds only `Variable`, `Stem` or `Compound`
-                // here; the spike takes the first. Task 5 built the
-                // `stem_assign`/`stem_set` library the other two need, but
-                // not the dispatch itself: recognising a `Stem`/`Compound`
-                // target and calling into it is Task 9's (the instruction
-                // loop), which needs `eval_node` to evaluate those forms as
-                // an expression first, and that is Task 7's.
-                let ExprKind::Variable(id) = &target.kind else {
-                    return Err(Loud::expression(&target.kind).into());
-                };
-                let name = code.symbols.name(*id).as_bytes();
-                let value = self.eval(code, value)?;
-                self.roots.push_temp(value);
-                let slot = self.slot_of(name);
-                let frame = self.activation().frame;
-                self.roots.set_slot(frame, slot, value);
-                Ok(Flow::Next)
-            }
-
-            // `EXIT` with a result is Task 9's, together with the mapping from
-            // that result to a process exit code, so the spike takes only the
-            // bare form.
-            InstructionKind::Exit { expression: None } => Ok(Flow::Exit(None)),
-
-            // 4a builds the fragment machinery and 4b builds the keyword on
-            // top of it, so through `run_program` this is not implemented.
-            InstructionKind::Interpret { expression } if self.interpret_spike => {
-                let value = self.eval(code, expression)?;
-                self.roots.push_temp(value);
-                let text = self.to_text(value).to_vec();
-                self.run_fragment(text)
-            }
-
-            other => Err(Loud::instruction(other).into()),
-        }
-    }
-
-    /// Runs one instruction inside its own temps frame.
-    ///
-    /// The frame is opened and closed **here rather than inside `step`**,
-    /// because `step` returns through a dozen `?` paths and a frame closed on
-    /// only some of them is worse than none: it would leak on exactly the
-    /// paths nobody tests. Closing it around the call covers every exit,
-    /// including the loud failures.
-    ///
-    /// One clause is the right lifetime for a temporary. It is also what the
-    /// C++ does, and it is why `step` can push freely without deciding when to
-    /// let go.
-    fn step_in_temps_frame(
-        &mut self,
-        code: &Code<'_>,
-        instruction: &Instruction,
-    ) -> Result<Flow, Failure> {
-        let frame = self.roots.push_frame();
-        let flow = self.step(code, instruction);
-        self.roots.pop_frame(frame);
-        flow
-    }
-
-    /// Parses `text` as an `INTERPRET` fragment and runs it **inside the
-    /// current activation**.
-    ///
-    /// This is the case that stresses the lifetime, and the three things it
-    /// proves are:
-    ///
-    /// * The fragment's `Rc` is a **local** that outlives the nested loop, the
-    ///   same shape `run_activation` uses, one level down. The enclosing
-    ///   loop's own local `Rc<Program>` is untouched and still anchors the
-    ///   instruction that is mid-execution.
-    /// * The nested loop's program counter is a **local `usize`**, not the
-    ///   activation's, because the activation's is sitting on the `INTERPRET`
-    ///   instruction and has to still be there afterwards. A local is enough
-    ///   for the measured reason that a fragment can never jump: a label
-    ///   inside `INTERPRET` text is error 47.1 (Task 1), so `body.labels` is
-    ///   always empty.
-    /// * No frame is pushed. The fragment's assignments land in the enclosing
-    ///   frame's slots, which is what `fragment_plan` resolves them against,
-    ///   and it is why `RootSet::grow_slots`'s top-frame assertion holds here.
-    fn run_fragment(&mut self, text: Vec<u8>) -> Result<Flow, Failure> {
-        let fragment: Rc<Fragment> = match parse_interpret(text) {
-            Ok(fragment) => Rc::new(fragment),
-            Err(error) => return Err(Loud::parse(&error).into()),
-        };
-
-        // An owned `Fragment` would do here, since nothing but this loop reads
-        // it. It is an `Rc` because that is the shape 4b needs, where an
-        // `INTERPRET` inside a fragment makes this function reentrant and each
-        // level anchors its own.
-        let slots = self.fragment_plan(&fragment);
-        let code = Code {
-            body: &fragment.body,
-            symbols: &fragment.symbols,
-            slots: &slots,
-        };
-
-        let mut pc = 0;
-        while let Some(instruction) = code.body.instructions.get(pc) {
-            match self.step_in_temps_frame(&code, instruction)? {
-                Flow::Next => pc += 1,
-                Flow::Goto(_) => unreachable!("a fragment has no labels, so it cannot jump (47.1)"),
-                // `exit` inside `INTERPRET` ends the program, not the
-                // fragment, so this propagates rather than stopping here.
-                Flow::Exit(value) => return Ok(Flow::Exit(value)),
-            }
-        }
-        Ok(Flow::Next)
-    }
-
     // `fragment_plan` and `slot_of` live in `plan.rs` (Task 6), beside
     // `Plan` itself.
 
@@ -1017,6 +630,59 @@ impl Interp {
                 let derived = code.symbols.name(id).as_bytes();
                 (self.text(derived), Novalue::Unset)
             }
+        }
+    }
+
+    /// Converts `EXIT`'s result into the raw exit code, before `rexx-run`'s
+    /// own 8-bit truncation (`bin/rexx-run.rs`) narrows it to a process exit
+    /// status.
+    ///
+    /// `None` -- a bare `EXIT`, or falling off the end of the body -- is 0,
+    /// matching the oracle. `Some(value)` needs `value` to be a whole number
+    /// that fits a signed 32-bit integer (`Numerics::objectToSignedInteger`'s
+    /// own bound, `INT32_MIN..=INT32_MAX`, both inclusive); anything else --
+    /// fractional, non-numeric, or simply too wide -- leaves the exit code at
+    /// 0, which is where it already sits on every path 4a can reach. Measured:
+    /// `exit 5.9` and `exit 'abc'` and `exit 2147483648` (one past
+    /// `INT32_MAX`) all give rc 0.
+    ///
+    /// **Not a fixed-width check on its own -- it inherits one for free from
+    /// D15's own rule that a number's precision is fixed at creation.** A
+    /// bare literal like `exit 2147483647` never passes through arithmetic, so
+    /// `to_number` hands back the exact value with nothing rounded, and the
+    /// only bound left is the `i32` one. A value built by arithmetic -- even
+    /// `EXIT`'s own unary minus, `-2147483647` -- was already rounded to the
+    /// *active* `NUMERIC DIGITS` (9 by default) the moment it was created
+    /// (`eval_prefix`, `eval.rs`), and this function never re-rounds it. That
+    /// is the entire explanation for an asymmetry that looks, at first, like
+    /// a sign bug: measured, `exit 2147483647` gives rc 255 while `exit
+    /// -2147483647` gives rc 0, because the second is `0 - 2147483647`
+    /// rounded to 9 digits at creation (`2147483650`, one past `INT32_MAX`),
+    /// not because negative values are bounded differently. Raising the
+    /// active DIGITS before the subtraction removes the rounding and the
+    /// asymmetry with it: measured, `numeric digits 20; exit -2147483647`
+    /// gives rc 1, `-2147483647 mod 256`.
+    ///
+    /// `rexx_num::ARGUMENT_DIGITS` (18) is `whole_value`'s own precision
+    /// argument here, deliberately not the activation's current `NUMERIC
+    /// DIGITS`: the oracle's own conversion (`NumberString::int64Value`) uses
+    /// a fixed width of its own, independent of the setting in force --
+    /// measured, `numeric digits 3; exit 2147483647` still gives rc 255. Any
+    /// width at least the ten digits `INT32_MAX` needs gives the identical
+    /// answer here, since a value wide enough to need rounding at 18 digits is
+    /// already wide enough to fail the `i32` bound regardless of how it was
+    /// rounded; 18 is used rather than invented because it is already
+    /// `rexx-num`'s own public constant for exactly this kind of
+    /// current-DIGITS-independent conversion (`::OPTIONS DIGITS`'s own reason
+    /// for reaching for it).
+    fn exit_code_for(&mut self, value: Option<ObjRef>) -> i32 {
+        let Some(value) = value else { return 0 };
+        let Ok(number) = self.to_number(value) else {
+            return 0;
+        };
+        match number.whole_value(rexx_num::ARGUMENT_DIGITS) {
+            Some(whole) => i32::try_from(whole).unwrap_or(0),
+            None => 0,
         }
     }
 
@@ -1153,14 +819,18 @@ fn execute(path: &str, text: Vec<u8>, interpret_spike: bool) -> Outcome {
     let mut interp = Interp::new(interpret_spike);
     let result = interp.run(program);
     let stack = interp.stack_span();
-    // Taken before `trace` is moved out below, which ends `interp`'s life as a
-    // whole value.
     let failure_site = interp.failure_site.take();
-    let mut stderr = interp.trace;
+    // `exit_code_for` needs `&mut interp` (`to_number` fills a lazy cache),
+    // so this has to run before `interp.trace`/`interp.out` move out of
+    // `interp` below -- a partial move of one field ends `interp`'s usability
+    // as a whole value, and every other call above this one only reads or
+    // takes a single field, never the whole struct.
     let exit_code = match result {
-        Ok(_) => 0,
+        Ok(value) => interp.exit_code_for(value),
         Err(Failure::Loud(loud)) => {
-            stderr.extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
+            interp
+                .trace
+                .extend_from_slice(format!("rexx-exec: {}\n", loud.message).as_bytes());
             NOT_IMPLEMENTED_EXIT
         }
         Err(Failure::Raised(raised)) => {
@@ -1176,7 +846,7 @@ fn execute(path: &str, text: Vec<u8>, interpret_spike: bool) -> Outcome {
                 line,
                 text: &text,
             };
-            stderr.extend_from_slice(&raised.report(&site));
+            interp.trace.extend_from_slice(&raised.report(&site));
             raised.exit_code()
         }
     };
@@ -1184,7 +854,7 @@ fn execute(path: &str, text: Vec<u8>, interpret_spike: bool) -> Outcome {
     Outcome {
         exit_code,
         stdout: interp.out,
-        stderr,
+        stderr: interp.trace,
         stack,
     }
 }
