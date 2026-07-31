@@ -19,13 +19,19 @@
 //! below is where that discipline is written down, together with the version
 //! of it that does not compile.
 //!
-//! What it executes is deliberately almost nothing: `SAY`, assignment to a
-//! simple variable, concatenation with `||`, and an `INTERPRET` fragment when
-//! the spike entry point asks for one. Every other construct fails loudly with
-//! `NOT_IMPLEMENTED_EXIT`. Tasks 4 to 13 replace this file with the per-concept
-//! modules the design's crate layout names (`value.rs`, `plan.rs`,
-//! `activation.rs`, `eval.rs`, `run.rs`, and the rest); nothing here is meant
-//! to survive as it stands except the borrow discipline itself.
+//! **What it executes grows task by task, and this doc deliberately does not
+//! list it.** The enumeration that stood here was true of Task 3's spike and
+//! false by Task 6, and the two `Loud` messages carried the same list and went
+//! stale the same way; `Loud::expression`'s doc records why the cure is
+//! deleting the list rather than correcting it. What holds instead: any
+//! construct not yet implemented fails loudly with `NOT_IMPLEMENTED_EXIT`
+//! rather than silently, which is a gate criterion.
+//!
+//! The per-concept modules the design's crate layout names have landed beside
+//! this file (`value.rs`, `stem.rs`, `plan.rs`, `activation.rs`, `error.rs`,
+//! `eval.rs`). What stays here is the interpreter itself, the loud-failure
+//! path, and the borrow discipline, which is the one thing meant to survive as
+//! it stands.
 
 use rexx_core::{Heap, ObjRef, RootSet};
 use rexx_parse::{
@@ -336,10 +342,7 @@ impl Loud {
             | InstructionKind::WhenCase { .. } => kind.keyword().unwrap_or("an instruction"),
         };
         Loud {
-            message: format!(
-                "{name} is not implemented: Task 3's spike executes SAY, EXIT, assignment to a \
-                 simple variable, and `||` only"
-            ),
+            message: format!("{name} is not implemented"),
         }
     }
 
@@ -353,13 +356,17 @@ impl Loud {
     /// message is part of the contract: the variant name is what a reader
     /// needs, and the differential harness has to compare whatever is emitted
     /// byte for byte.
+    ///
+    /// **Neither message lists what *is* implemented**, and both used to. The
+    /// list was true of Task 3's spike and false by Task 6, which is the whole
+    /// argument: every task that implements a form has to remember to edit a
+    /// string in a file it is not otherwise touching, and none of the three
+    /// that shipped between did. A message that can only go stale by being
+    /// wrong about its own subject cannot rot this way, so the enumeration is
+    /// gone rather than corrected.
     fn expression(kind: &ExprKind) -> Loud {
         Loud {
-            message: format!(
-                "{} is not implemented: Task 3's spike evaluates a literal, a constant, a simple \
-                 variable and `||` only",
-                form_name(kind)
-            ),
+            message: format!("{} is not implemented", form_name(kind)),
         }
     }
 
@@ -1091,5 +1098,74 @@ fn execute(text: Vec<u8>, interpret_spike: bool) -> Outcome {
         stdout: interp.out,
         stderr,
         stack,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::form_name;
+    use rexx_parse::{Expr, ExprKind, Operator, PrefixOp};
+
+    fn literal() -> Expr {
+        Expr::new(ExprKind::Literal(Box::from(&b"1"[..])), 0..1)
+    }
+
+    fn nest(depth: usize) -> Expr {
+        let mut node = literal();
+        for _ in 0..depth {
+            node = Expr::new(
+                ExprKind::Binary {
+                    op: Operator::Plus,
+                    left: Box::new(node),
+                    right: Box::new(literal()),
+                },
+                0..1,
+            );
+        }
+        node
+    }
+
+    /// `Loud::expression`'s size contract, tested on the two arms that can
+    /// break it.
+    ///
+    /// Thirteen of `form_name`'s fifteen arms return a `&'static str` and
+    /// cannot grow with anything. `Prefix` and `Binary` are the two that call
+    /// `format!`, so they are the two where a regression to `{kind:?}` -- the
+    /// 364 KB stderr the doc on `Loud::expression` records -- could actually
+    /// land. Both are checked here against a subtree two hundred levels deep,
+    /// which is the direct form of the property: the message is a function of
+    /// the operator alone, and the children are not read.
+    ///
+    /// **This lives here rather than in `tests/spike.rs` because the runtime
+    /// test cannot reach these two arms for long.** A test that observes a
+    /// loud failure needs a form the executor does not evaluate, and every
+    /// operator, prefix and dyadic, is implemented within Phase 4a -- the
+    /// spike's witness had to move from `+` to `=` when Task 7 landed and
+    /// would have moved again for Task 8. Calling `form_name` directly needs
+    /// no unimplemented form at all, so nothing a later task does can take
+    /// this coverage away.
+    #[test]
+    fn the_two_formatting_arms_do_not_grow_with_the_subtree() {
+        let deep = nest(200);
+        let shallow = nest(1);
+        assert_eq!(form_name(&deep.kind), form_name(&shallow.kind));
+        assert_eq!(form_name(&deep.kind), "the operator `+`");
+
+        let deep = Expr::new(
+            ExprKind::Prefix {
+                op: PrefixOp::Minus,
+                operand: Box::new(nest(200)),
+            },
+            0..1,
+        );
+        let shallow = Expr::new(
+            ExprKind::Prefix {
+                op: PrefixOp::Minus,
+                operand: Box::new(literal()),
+            },
+            0..1,
+        );
+        assert_eq!(form_name(&deep.kind), form_name(&shallow.kind));
+        assert_eq!(form_name(&deep.kind), "the prefix operator `-`");
     }
 }

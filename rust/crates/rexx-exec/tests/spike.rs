@@ -182,12 +182,13 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
 ///
 /// **What this test establishes on its own is narrower than the contract, and
 /// the rest is a compile-time property rather than a tested one.** Both
-/// programs here use `=`, so this pins the message for exactly one of the
-/// fifteen `ExprKind` forms. What extends it to the other fourteen is
-/// `form_name`'s match: it is exhaustive with no `_` arm, and every arm
-/// returns a `&'static str` or one `Operator::spelling`, so a form whose
-/// message could grow with its input cannot be added without failing to
-/// compile. Auditing coverage from this test alone would over-read it.
+/// programs here use `~`, so this pins the message for exactly one of the
+/// fifteen `ExprKind` forms, and the unit test named below pins two more. What
+/// extends it to the remaining twelve is `form_name`'s match: it is exhaustive
+/// with no `_` arm, and every arm returns a `&'static str` or one
+/// `Operator::spelling`, so a form whose message could grow with its input
+/// cannot be added without failing to compile. Auditing coverage from this
+/// test alone would over-read it.
 ///
 /// The other two loud paths are bounded for their own reasons, checked in
 /// review rather than here, so the size contract holds on all three:
@@ -195,21 +196,31 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
 /// literals, and `Loud::parse` renders a `ParseError`, which deliberately
 /// carries no substitution values.
 ///
-/// `=` and not `+`: Task 7 implemented `+` (arithmetic), so a program using
-/// it now succeeds instead of failing loudly, and this test's whole point is
-/// a form that still does not evaluate. `=` (comparison) is Task 8's,
-/// waiting on `rexx-num`'s byte-slice `compare` entry point, so it stays a
-/// loud failure and this test's assertions still describe something real.
+/// **A message send, and the choice of witness is the point.** This test needs
+/// a form the executor does not evaluate, and it has now been broken twice by
+/// its own witness being implemented underneath it: it began on `+`, moved to
+/// `=` when Task 7 landed arithmetic, and went red again when Task 8 landed
+/// comparison. Picking a third operator would only schedule a third break --
+/// *every* operator, prefix and dyadic, is inside Phase 4a. `~` is Phase 5's
+/// object model, so no task in this plan can take it away, and the message it
+/// produces is `form_name`'s `&'static "a message send"`.
+///
+/// The cost of moving off an operator is that this test no longer reaches
+/// either of the two arms that call `format!`, which are the only two where
+/// the size contract could actually break. That coverage did not go away with
+/// it: `lib.rs`'s `the_two_formatting_arms_do_not_grow_with_the_subtree` calls
+/// `form_name` directly on a 200-deep `Binary` and `Prefix`, which needs no
+/// unimplemented form and so cannot be broken by a later task either.
 #[test]
 fn a_loud_failure_message_does_not_grow_with_the_expression() {
     const BOUND: usize = 300;
 
-    let small = run_program(b"say 1 = 1\n".to_vec());
+    let small = run_program(b"say 1~a\n".to_vec());
     assert_eq!(small.exit_code, NOT_IMPLEMENTED_EXIT);
 
     let mut deep = b"say 1".to_vec();
     for _ in 0..3_000 {
-        deep.extend_from_slice(b" = 1");
+        deep.extend_from_slice(b"~a");
     }
     deep.push(b'\n');
     let deep = run_program(deep);
@@ -226,7 +237,7 @@ fn a_loud_failure_message_does_not_grow_with_the_expression() {
     );
     let stderr = String::from_utf8(deep.stderr).expect("the loud message is ASCII");
     assert!(
-        stderr.contains("the operator `=`"),
+        stderr.contains("a message send"),
         "the message should name the form it could not evaluate, and was {stderr:?}"
     );
 }
