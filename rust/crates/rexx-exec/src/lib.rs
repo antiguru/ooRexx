@@ -89,9 +89,9 @@ mod eval;
 /// would be wrong in a second and worse way: it would look like a *condition*
 /// the interpreter raised, and a program expecting that condition would pass.
 ///
-/// **Task 12 owns the final value** and states it in `error.rs` alongside the
-/// message catalogue. This constant is the spike's choice and the single place
-/// to change it.
+/// **Task 12 settled this at 120 by leaving it alone**, having built the
+/// `256 - major` band it has to avoid, so the spike's choice is now the final
+/// one. This constant remains the single place to change it.
 pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 
 /// The interpreter thread's stack, in bytes.
@@ -370,8 +370,12 @@ impl Loud {
         }
     }
 
-    /// A fragment that did not parse. Task 12 owns the real reporting; the
-    /// spike only has to not swallow it.
+    /// A fragment that did not parse.
+    ///
+    /// Stays loud for the reason `execute`'s parse arm spells out: Task 12's
+    /// catalogue reports conditions a *running* program raises, and a syntax
+    /// error supplies neither a `Raised` nor a clause that became an
+    /// `Instruction`. The spike only has to not swallow it.
     fn parse(error: &ParseError) -> Loud {
         Loud {
             message: format!("INTERPRET text did not parse: {error}"),

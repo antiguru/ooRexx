@@ -59,8 +59,8 @@ fn main() -> ExitCode {
     let _ = std::io::stderr().write_all(&outcome.stderr);
 
     // `ExitCode::from` takes a `u8`, which is the whole range a process exit
-    // status carries anyway. Task 12 owns the `256 - major` mapping that makes
-    // this range meaningful.
+    // status carries anyway. What makes that range meaningful is
+    // `Raised::exit_code`'s `256 - major`, which `execute` now applies.
     //
     // **This saturates and the oracle wraps, so it is wrong for any code
     // outside 0..=255, and it is Task 9's to fix** together with `EXIT expr`,
