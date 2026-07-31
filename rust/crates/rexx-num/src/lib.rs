@@ -23,7 +23,7 @@ mod addsub;
 mod compare;
 mod muldiv;
 mod pow;
-pub use compare::{CompareOp, compare};
+pub use compare::{CompareOp, compare, compare_bytes, compare_decoded};
 pub use muldiv::DivOp;
 mod settings;
 pub use settings::{Form, Settings, SettingsError};

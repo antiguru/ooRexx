@@ -26,6 +26,20 @@
 //!   (false) comparison, not a syntax error.
 //! - **Strict** (`==`, `\==`, `<<`, `>>`, `<<=`, `>>=`): always a byte
 //!   comparison of the operand text, never numeric, never blank-trimmed.
+//!
+//! Three public entry points, all reaching the one `numeric_order`/
+//! `string_order` pair below rather than each carrying its own copy of the
+//! rule: [`compare`] takes `&str`, for a caller that already has one (kept
+//! working exactly as before -- `rexx-parse`'s differential harness calls
+//! it); [`compare_bytes`] takes `&[u8]`, because a Rexx string is a *byte*
+//! string that need not be valid UTF-8 (D14; `reverse('ää')` is the
+//! standing example), which `&str` cannot carry; and [`compare_decoded`]
+//! additionally accepts an already-parsed `Number` per side, for a caller
+//! sitting on one already (`rexx-exec`'s `Body::Text::num` cache exists
+//! precisely so a string is not reparsed on every comparison, and
+//! comparison is the operation that asks "is this a number?" most often).
+//! A hand-written second copy of `string_order` for the byte-slice path
+//! would be exactly the divergence this module's own header warns against.
 
 use std::cmp::Ordering;
 
@@ -87,9 +101,52 @@ impl CompareOp {
 /// `digits` and `fuzz` are `NUMERIC DIGITS`/`NUMERIC FUZZ`; `fuzz` is ignored
 /// for the strict operators, exactly as `NumberString::strictComp` takes no
 /// fuzz parameter at all.
+///
+/// Kept exactly as it was for the callers that already have a `&str` --
+/// `rexx-parse`'s differential harness among them -- and now a thin call
+/// into [`compare_decoded`], which is the one place the comparison rule
+/// itself lives.
 pub fn compare(
     a: &str,
     b: &str,
+    digits: u64,
+    fuzz: u64,
+    op: CompareOp,
+) -> Result<bool, ArithError> {
+    compare_decoded(a.as_bytes(), None, b.as_bytes(), None, digits, fuzz, op)
+}
+
+/// [`compare`]'s byte-slice twin, for a caller holding a Rexx value's actual
+/// bytes rather than an already-checked `&str` -- see this module's header
+/// for why `&str` cannot carry one. Reduces to [`compare_decoded`] with
+/// nothing pre-parsed, exactly as [`compare`] does.
+pub fn compare_bytes(
+    a: &[u8],
+    b: &[u8],
+    digits: u64,
+    fuzz: u64,
+    op: CompareOp,
+) -> Result<bool, ArithError> {
+    compare_decoded(a, None, b, None, digits, fuzz, op)
+}
+
+/// [`compare_bytes`], but for a caller that already knows one or both
+/// operands' parsed `Number` -- passing it in skips reparsing `bytes` for
+/// the numeric family, which is the whole reason this entry point exists
+/// rather than only [`compare_bytes`]. `None` means "parse from the bytes if
+/// a numeric operator needs a value", which is what both `compare` and
+/// `compare_bytes` pass for every operand.
+///
+/// `bytes` is still required even when `number` is `Some`: the strict
+/// family and the non-numeric string fallback both compare the operand's
+/// own text, not a value derived from it, and a `Number` does not carry its
+/// original spelling (`"007"` and `"7"` parse to the same `Number` but do
+/// not strict-compare equal).
+pub fn compare_decoded(
+    a: &[u8],
+    a_number: Option<&Number>,
+    b: &[u8],
+    b_number: Option<&Number>,
     digits: u64,
     fuzz: u64,
     op: CompareOp,
@@ -101,11 +158,29 @@ pub fn compare(
         // differ, full stop. Rust's slice `Ord` already implements exactly
         // that (shared prefix decides; a tie is broken by length), so there
         // is nothing to hand-roll here.
-        return Ok(op.holds(a.as_bytes().cmp(b.as_bytes())));
+        return Ok(op.holds(a.cmp(b)));
     }
 
-    let ord = match (Number::parse(a), Number::parse(b)) {
-        (Some(na), Some(nb)) => numeric_order(&na, &nb, digits, fuzz)?,
+    // Parses only when the caller did not already hand in a `Number`, and
+    // only once per side, so a caller that already has one never pays for a
+    // second parse of the same bytes -- the entire point of this entry
+    // point over `compare_bytes`. The two `Option<Number>` locals exist to
+    // give a freshly-parsed value somewhere to live long enough to borrow;
+    // when `a_number`/`b_number` is already `Some`, neither is touched and
+    // nothing is cloned.
+    let mut parsed_a = None;
+    let mut parsed_b = None;
+    let a_number = a_number.or_else(|| {
+        parsed_a = parse_bytes(a);
+        parsed_a.as_ref()
+    });
+    let b_number = b_number.or_else(|| {
+        parsed_b = parse_bytes(b);
+        parsed_b.as_ref()
+    });
+
+    let ord = match (a_number, b_number) {
+        (Some(na), Some(nb)) => numeric_order(na, nb, digits, fuzz)?,
         // `RexxString::comp`: if either side doesn't convert, this drops to
         // `stringComp` -- not an error. `NumberString::comp` does the same
         // thing symmetrically (`stringValue()->stringComp(...)`) when only
@@ -113,6 +188,15 @@ pub fn compare(
         _ => string_order(a, b),
     };
     Ok(op.holds(ord))
+}
+
+/// `Number::parse` over bytes that may not be valid UTF-8. A Rexx number's
+/// characters are ASCII by definition (`rexx-core`'s `NotNumeric` doc
+/// comment makes the same point for the same reason), so invalid UTF-8 can
+/// never be one and is treated as a parse failure exactly like malformed
+/// ASCII text already is -- there is no third outcome to invent here.
+fn parse_bytes(bytes: &[u8]) -> Option<Number> {
+    std::str::from_utf8(bytes).ok().and_then(Number::parse)
 }
 
 /// Numeric ordering per `NumberString::comp` (`NumberStringClass.cpp:3194`).
@@ -179,7 +263,16 @@ fn numeric_order(a: &Number, b: &Number, digits: u64, fuzz: u64) -> Result<Order
 /// if the rest of it is blank/tab too -- otherwise the first non-blank
 /// leftover byte is compared against a literal space to decide the order.
 /// This is how non-strict `=` still treats `"1"` and `"1  "` as equal.
-fn string_order(a: &str, b: &str) -> Ordering {
+///
+/// Takes `&[u8]` rather than `&str`: the C++ this is ported from never
+/// assumed UTF-8 either, comparing raw operand bytes, and nothing below
+/// decodes a character at any point -- only single blank/tab/space byte
+/// values are ever inspected. Measured against the oracle with a
+/// deliberately invalid-UTF-8 operand (a lone `'C3'x`) to confirm this: the
+/// leading-blank rule strips a real blank byte in front of it exactly as it
+/// does for any other operand, with no UTF-8 validity requirement anywhere
+/// in the actual comparison.
+fn string_order(a: &[u8], b: &[u8]) -> Ordering {
     fn is_blank(byte: u8) -> bool {
         byte == b' ' || byte == b'\t'
     }
@@ -201,8 +294,8 @@ fn string_order(a: &str, b: &str) -> Ordering {
         Ordering::Equal
     }
 
-    let a = skip_leading_blanks(a.as_bytes());
-    let b = skip_leading_blanks(b.as_bytes());
+    let a = skip_leading_blanks(a);
+    let b = skip_leading_blanks(b);
     let shared = a.len().min(b.len());
     match a[..shared].cmp(&b[..shared]) {
         Ordering::Equal => {
