@@ -27,7 +27,8 @@
 * Scratch files go in the session scratchpad, never in the repository.
 * **No `unsafe`.** If a task appears to need it, stop and report BLOCKED.
 * **Never `git add -A`.** Stage the exact paths the task names. Do not run `git reset --hard`, do not force-push.
-* Comments state the contract at the top and the reasoning at the decision point. No em-dashes, no structuring semicolons. Never delete an existing comment to make a change easier.
+* Comments state the contract at the top and the reasoning at the decision point. Never delete an existing comment to make a change easier. Prefer `--` over an em-dash, matching what the tree already does everywhere.
+  > **The "no structuring semicolons" rule was imported here by mistake and is withdrawn.** It belongs to a different repository's conventions, not this one. It was enforced through several task reviews before Moritz corrected it, and enforcing it did measurable harm: a comment-only fix round rewriting semicolons into separate sentences introduced three false statements, one of them a new structuring semicolon inside the very comment being rewritten. Reviewers should not raise it, and nothing already written needs changing. Kept as a note rather than deleted, because the reviews that cited it are on disk and a reader meeting one needs to know it was withdrawn rather than forgotten.
 * A value's rendering is fixed when the value is created. Any code that formats a number with `settings.digits()` or `settings.form()` instead of the value's own captured pair is wrong; see D15.
 * Anything 4a does not implement **fails loudly**: a dedicated exit code outside 157..253 (where `256 - major` lives) and a message naming the construct and the owning sub-phase. Never a plausible Rexx condition.
 
