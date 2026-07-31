@@ -62,6 +62,21 @@ impl Heap {
     }
 
     /// Marks from the roots, then sweeps everything unmarked.
+    ///
+    /// **Nothing in the interpreter calls this yet, and one known under-rooted
+    /// window is waiting for the day something does.** `alloc_with` never
+    /// collects, so `rexx-exec` currently has a value that lives past the
+    /// temps frame that rooted it: `EXIT`'s result, from the wrapper's
+    /// `pop_frame` through to `exit_code_for`. It is written up at that site
+    /// in `run.rs`, and the fix is a root that outlives a clause rather than
+    /// the one-clause `push_temp` every other instruction result gets.
+    ///
+    /// The pointer is here, rather than only there, because the person who
+    /// wires a collector into the interpreter is the one who turns that
+    /// window into a use-after-free, and this is the function they will be
+    /// looking at. Sweep `rexx-exec` for the same shape before doing it: an
+    /// unrooted window is invisible to the compiler and shows up as a wrong
+    /// value rather than a crash.
     pub fn collect(&mut self, roots: &RootSet) -> CollectStats {
         self.marks.clear();
         // Resized every time: the heap grows between collections.
