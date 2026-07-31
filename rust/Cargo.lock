@@ -431,6 +431,7 @@ name = "rexx-exec"
 version = "0.1.0"
 dependencies = [
  "rexx-core",
+ "rexx-inventory",
  "rexx-num",
  "rexx-parse",
 ]
