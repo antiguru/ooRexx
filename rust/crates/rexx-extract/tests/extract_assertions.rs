@@ -1,4 +1,4 @@
-use rexx_extract::{Form, extract_assertions, find_test_groups};
+use rexx_extract::{Form, RaiseExpectation, extract_assertions, find_test_groups};
 use std::path::Path;
 
 /// Two `assertSame` calls in one method, a `NUMERIC DIGITS` change between
@@ -171,6 +171,145 @@ fn other_assertion_kinds_are_ignored_without_blocking_or_changing_state() {
     assert!(out.blocked.is_empty());
 }
 
+/// `DIVISION.testGroup`'s own `test_262` shape: `self~expectSyntax` is not
+/// even the line immediately before the assertion (`Numeric Digits 5` sits
+/// between them), so a row after it must still pick up the expectation --
+/// a same-line or previous-line check would have missed this.
+#[test]
+fn an_expect_syntax_marker_turns_the_following_row_into_a_raise_expectation() {
+    let source = r#"
+::class "S.testGroup" subclass ooTestCase public
+
+::method "test_262"
+   self~expectSyntax(26.11)
+   Numeric Digits 5
+   self~assertSame("-5678932" % "-37", 1)
+"#;
+    let out = extract_assertions("S", source);
+    assert_eq!(out.rows.len(), 1);
+    assert_eq!(
+        out.rows[0].expect_raise,
+        Some(RaiseExpectation { major: 26, sub: 11 })
+    );
+    assert_eq!(out.rows[0].digits, 5, "NUMERIC DIGITS is still carried too");
+    assert!(out.blocked.is_empty());
+}
+
+/// A row before any `expectSyntax` in the same method is an ordinary value
+/// row; only what follows the marker changes meaning. Mirrors
+/// `an_unsupported_statement_blocks_only_what_follows_it`'s own shape for
+/// blocking, but this marker does not block -- it converts.
+#[test]
+fn a_row_before_the_expect_syntax_marker_is_unaffected() {
+    let source = r#"
+::class "T.testGroup" subclass ooTestCase public
+
+::method "test_1"
+   self~assertSame(1 + 1, '2')
+   self~expectSyntax(26.11)
+   self~assertSame(1 % 0, 1)
+"#;
+    let out = extract_assertions("T", source);
+    assert_eq!(out.rows.len(), 2);
+    assert_eq!(out.rows[0].expect_raise, None);
+    assert_eq!(
+        out.rows[1].expect_raise,
+        Some(RaiseExpectation { major: 26, sub: 11 })
+    );
+}
+
+/// Carried sequentially, exactly like `digits`/`form`: a second
+/// `expectSyntax` changes the expectation for whatever follows *it*, rather
+/// than the first marker sticking for the rest of the method. No method in
+/// `base/expressions` does this today (checked), but the state-carrying
+/// mechanism is the same one `digits`/`form` already need to get right, so
+/// it is proven directly rather than left as an unexercised claim.
+#[test]
+fn a_second_expect_syntax_marker_replaces_the_first_for_what_follows_it() {
+    let source = r#"
+::class "U.testGroup" subclass ooTestCase public
+
+::method "test_1"
+   self~expectSyntax(26.11)
+   self~assertSame(1 % 0, 1)
+   self~expectSyntax(42.3)
+   self~assertSame(1 % 0, 1)
+"#;
+    let out = extract_assertions("U", source);
+    assert_eq!(out.rows.len(), 2);
+    assert_eq!(
+        out.rows[0].expect_raise,
+        Some(RaiseExpectation { major: 26, sub: 11 })
+    );
+    assert_eq!(
+        out.rows[1].expect_raise,
+        Some(RaiseExpectation { major: 42, sub: 3 })
+    );
+}
+
+/// `expectSyntax`'s array form (`(major.sub, message inserts...)`) is not
+/// one of the 19 real shapes this scanner was built against, and rather
+/// than guess which comma-separated item is the code, it blocks -- the
+/// same conservative choice `parse_assert_same` makes for an `assertSame`
+/// shape it does not recognise.
+#[test]
+fn expect_syntax_with_message_inserts_blocks_rather_than_guesses() {
+    let source = r#"
+::class "V.testGroup" subclass ooTestCase public
+
+::method "test_1"
+   self~expectSyntax((15.1, 1))
+   self~assertSame(1, 1)
+"#;
+    let out = extract_assertions("V", source);
+    assert!(out.rows.is_empty());
+    assert_eq!(out.blocked.len(), 1);
+    assert_eq!(out.blocked[0].dropped, 1);
+}
+
+/// `self~assertSyntaxError`/`self~assertRuntimeError` call `expectSyntax`
+/// internally but check the raise *within that same call* -- confirmed by
+/// reading `OOREXXUNIT.CLS` -- so unlike a bare `self~expectSyntax`, they
+/// leave nothing pending for a later `self~assertSame` in the same method.
+/// This is the existing "other assertion kinds are inert" behaviour and
+/// must not regress into treating them like `expectSyntax`.
+#[test]
+fn assert_syntax_error_does_not_leave_a_pending_raise_expectation() {
+    let source = r#"
+::class "W.testGroup" subclass ooTestCase public
+
+::method "test_1"
+   self~assertSyntaxError(15.1, self~hex(" "))
+   self~assertSame(1 + 1, '2')
+"#;
+    let out = extract_assertions("W", source);
+    assert_eq!(out.rows.len(), 1);
+    assert_eq!(out.rows[0].expect_raise, None);
+    assert!(out.blocked.is_empty());
+}
+
+/// `self~expectCondition` defers a raise-check the same way `expectSyntax`
+/// does, but for an arbitrary condition *name* rather than a numbered
+/// `SYNTAX` one -- this row schema has nowhere to carry a bare name, so it
+/// blocks rather than silently falling into the generic "other assertion
+/// kind, inert" branch, which would reproduce the exact bug this file's
+/// other tests exist to close. Not a case `base/expressions` has today
+/// (checked); this is a forward guard.
+#[test]
+fn expect_condition_blocks_rather_than_silently_passing_through() {
+    let source = r#"
+::class "X.testGroup" subclass ooTestCase public
+
+::method "test_1"
+   self~expectCondition("USER SOMETHING")
+   self~assertSame(1, 1)
+"#;
+    let out = extract_assertions("X", source);
+    assert!(out.rows.is_empty());
+    assert_eq!(out.blocked.len(), 1);
+    assert_eq!(out.blocked[0].dropped, 1);
+}
+
 /// A method whose name is not `test`-prefixed is not run by the ooTest
 /// framework at all (matching `extract`'s own existing filter), so an
 /// `assertSame` inside one must not produce a row.
@@ -279,4 +418,44 @@ fn base_expressions_yields_the_measured_row_and_blocked_counts() {
     assert_eq!(rows_by_group["MULTIPLICATION"], 1048);
     assert_eq!(rows_by_group["Literals"], 39);
     assert_eq!(rows_by_group["SPECIAL"], 27);
+}
+
+/// The measured extent of the `self~expectSyntax` conversion: 184 of the
+/// 4,259 rows are raise-expectations rather than value comparisons -- 60 in
+/// `DIVISION`, 6 in `EXPONENT`, 118 in `REMAINDER`, zero everywhere else
+/// (in particular, `PRECEDENCE`'s 139 `self~assertSyntaxError` calls are
+/// all self-contained wrapping calls, never followed by a separate
+/// `assertSame`, so none of its rows convert). The row/dropped totals
+/// themselves are unchanged from the previous test -- converting a row
+/// changes what it means, not whether it exists -- pinning that here too
+/// makes it explicit that this is not a second, competing count.
+#[test]
+fn base_expressions_expect_syntax_conversion_counts() {
+    let suite =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../ootest/ooRexx/base/expressions");
+    let groups = find_test_groups(&suite);
+    let mut raising_by_group = std::collections::HashMap::new();
+    let mut total_rows = 0usize;
+    let mut total_raising = 0usize;
+    for path in &groups {
+        let bytes = std::fs::read(path).expect("readable .testGroup file");
+        let source = String::from_utf8_lossy(&bytes);
+        let group_name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap()
+            .to_string();
+        let out = extract_assertions(&group_name, &source);
+        total_rows += out.rows.len();
+        let raising = out.rows.iter().filter(|r| r.expect_raise.is_some()).count();
+        total_raising += raising;
+        raising_by_group.insert(group_name, raising);
+    }
+    assert_eq!(total_rows, 4259, "conversion must not change the row count");
+    assert_eq!(total_raising, 184);
+    assert_eq!(raising_by_group["DIVISION"], 60);
+    assert_eq!(raising_by_group["EXPONENT"], 6);
+    assert_eq!(raising_by_group["REMAINDER"], 118);
+    assert_eq!(raising_by_group["PRECEDENCE"], 0);
+    assert_eq!(raising_by_group["Literals"], 0);
 }

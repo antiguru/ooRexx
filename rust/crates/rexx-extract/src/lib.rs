@@ -129,16 +129,62 @@ pub enum Form {
     Engineering,
 }
 
+/// A condition an assertion's expression is expected to **raise**, in place
+/// of a value it is expected to equal.
+///
+/// `self~expectSyntax(major.sub)` does not check anything itself -- it sets
+/// a flag (`OOREXXUNIT.CLS`: `self~conditionExpected = .true; self~
+/// conditionName = "SYNTAX"; self~conditionCode = major.sub`) that the
+/// framework's own per-method condition trap consults *later*, whenever
+/// something in the rest of that method actually raises. So a
+/// `self~assertSame` seen after one is not testing "expr equals expected"
+/// at all: it is testing "evaluating expr raises major.sub", and `expected`
+/// (its second argument) is never even reached under the oracle, because
+/// Rexx evaluates a message send's arguments left to right and the raise
+/// happens while evaluating the first one.
+///
+/// Measured, `DIVISION.testGroup`'s `test_262`:
+///
+/// ```text
+/// self~expectSyntax(26.11)
+/// Numeric Digits 5
+/// self~assertSame("-5678932" % "-37", 1)
+/// ```
+///
+/// running `"-5678932" % "-37"` under `DIGITS 5` raises the oracle's own
+/// Error 26.11 ("Result of % operation did not result in a whole number"),
+/// which is what this row is actually checking -- not that the quotient
+/// equals `1`. Note `expectSyntax` is not even the *immediately* preceding
+/// line here; `NUMERIC DIGITS` sits between it and the assertion, which is
+/// why this is carried as state (below) rather than checked one line back.
+///
+/// **Carried sequentially, exactly like `digits`/`form`**, and for the same
+/// reason: a second `self~expectSyntax` in the same method (none occur in
+/// `base/expressions` today -- checked -- but nothing about the mechanism
+/// is specific to there being only one) would set a new expectation for
+/// whatever follows it, the same way a second `NUMERIC DIGITS` would. This
+/// struct is `Copy` so carrying it costs nothing extra in the scan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RaiseExpectation {
+    pub major: u32,
+    pub sub: u32,
+}
+
 /// One `self~assertSame` call, together with everything about its method's
 /// prior statements that decides what it means: `NUMERIC DIGITS`/`FORM` in
-/// force, and any assignment lines earlier in the same method.
+/// force, any assignment lines earlier in the same method, and whether a
+/// `self~expectSyntax` earlier in the method turns this row into a
+/// raise-expectation rather than a value comparison.
 ///
 /// `expr` and `expected` are `assertSame`'s two positional arguments,
 /// verbatim source text, unparsed. Both are ordinary Rexx expressions --
 /// method-call arguments always are, so a quoted literal and a bare signed
 /// number are both just expressions that happen to be constant -- and
 /// deciding what either one evaluates to needs a real evaluator, which is a
-/// later harness's job, not this extractor's.
+/// later harness's job, not this extractor's. When `expect_raise` is
+/// `Some`, `expected` is still the raw text `assertSame` was called with,
+/// kept for provenance, but it is not meaningful to compare against: see
+/// `RaiseExpectation`'s own doc for why.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AssertionRow {
     pub group: String,
@@ -151,6 +197,9 @@ pub struct AssertionRow {
     pub expected: String,
     pub digits: u32,
     pub form: Form,
+    /// `Some` when a `self~expectSyntax` earlier in this method means this
+    /// row tests a raise rather than a value. See [`RaiseExpectation`].
+    pub expect_raise: Option<RaiseExpectation>,
 }
 
 /// One method whose remaining `assertSame` calls could not become rows, and
@@ -198,6 +247,7 @@ fn scan_method_for_assertions(
     let mut digits: u32 = 9;
     let mut form = Form::Scientific;
     let mut prelude: Vec<String> = Vec::new();
+    let mut expect_raise: Option<RaiseExpectation> = None;
     let mut blocked_reason: Option<String> = None;
     let mut dropped = 0usize;
 
@@ -259,6 +309,7 @@ fn scan_method_for_assertions(
                         expected,
                         digits,
                         form,
+                        expect_raise,
                     }),
                     None => {
                         block(&mut blocked_reason, trimmed);
@@ -270,9 +321,49 @@ fn scan_method_for_assertions(
             }
             continue;
         }
+        // `self~expectSyntax(major.sub)` defers a raise-check to whatever
+        // in the rest of this method actually raises -- see
+        // `RaiseExpectation`'s own doc. Checked, and blocked on parse
+        // failure, *before* the generic `self~expect` fallback just below,
+        // which would otherwise treat this exact prefix as inert and
+        // silently keep emitting ordinary value-comparison rows for
+        // whatever `self~assertSame` follows.
+        if let Some(rest) = lower.strip_prefix("self~expectsyntax") {
+            match parse_raise_expectation(rest.trim()) {
+                Some(expectation) => {
+                    if blocked_reason.is_none() {
+                        expect_raise = Some(expectation);
+                    }
+                }
+                None => block(&mut blocked_reason, trimmed),
+            }
+            continue;
+        }
+        // `self~expectCondition(name)` defers the same way, but for an
+        // arbitrary named condition rather than a numbered `SYNTAX` one --
+        // this row schema has nowhere to carry a bare condition name, so
+        // rather than silently fall into the generic inert branch below
+        // (which would keep emitting ordinary value rows exactly as
+        // wrongly as the `expectSyntax` gap this struct exists to close),
+        // block. Zero occurrences of `self~expectCondition` anywhere near
+        // an `assertSame` in `base/expressions` today -- checked -- so
+        // this is a forward guard against the corpus growing, not a
+        // measured case.
+        if lower.starts_with("self~expectcondition") {
+            block(&mut blocked_reason, trimmed);
+            continue;
+        }
         if lower.starts_with("self~assert") || lower.starts_with("self~expect") {
-            // A different assertion kind: no variables assigned, so nothing
-            // to extract and nothing that invalidates later state.
+            // A different assertion kind: no variables assigned, and
+            // (unlike `expectSyntax`/`expectCondition` above) it does not
+            // defer anything to a later statement either -- `assertSyntaxError`
+            // and `assertRuntimeError` both call `expectSyntax` and then
+            // perform their own check *within the same call*, so nothing
+            // is left pending by the time this method's next line runs.
+            // Confirmed for this corpus: no `self~assertSame` ever follows
+            // one of these two in the same method (checked, 0 occurrences),
+            // matching the framework's own self-contained behaviour rather
+            // than coincidence.
             continue;
         }
         if blocked_reason.is_none()
@@ -359,6 +450,29 @@ fn parse_assert_same(line: &str) -> Option<(String, String)> {
     let expr = rest[open + 1..comma].trim().to_string();
     let expected = rest[comma + 1..close].trim().to_string();
     Some((expr, expected))
+}
+
+/// Parses `self~expectSyntax`'s argument, already known (case-insensitively)
+/// to follow that prefix. `rest` is everything after `self~expectSyntax`,
+/// trimmed -- expected to be exactly `(major.sub)` with nothing else, which
+/// is the shape every one of the 19 occurrences preceding an `assertSame`
+/// in `base/expressions` uses.
+///
+/// `None` for anything else, including `expectSyntax`'s own array form
+/// (`(major.sub, message inserts...)`, which the method also accepts but
+/// none of these 19 use) or a trailing `msg` argument. Rather than guess
+/// which comma-separated item is the code, or discard the inserts, this
+/// blocks the method -- the same conservative choice `parse_assert_same`
+/// makes for an `assertSame` shape it has not seen either.
+fn parse_raise_expectation(rest: &str) -> Option<RaiseExpectation> {
+    let inner = rest.strip_prefix('(')?.strip_suffix(')')?.trim();
+    if inner.contains(',') {
+        return None;
+    }
+    let (major, sub) = inner.split_once('.')?;
+    let major = major.trim().parse::<u32>().ok()?;
+    let sub = sub.trim().parse::<u32>().ok()?;
+    Some(RaiseExpectation { major, sub })
 }
 
 /// A whole-line, single-clause assignment: a symbol (letters, digits, `_`,

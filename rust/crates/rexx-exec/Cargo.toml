@@ -25,5 +25,11 @@ rexx-num = { path = "../rexx-num" }
 # omission spec revision 4 was made to correct.
 rexx-inventory = { path = "../rexx-inventory" }
 
+[dev-dependencies]
+# `extract_assertions`, the row extractor `tests/assertions.rs` runs against
+# `ootest/ooRexx/base/expressions/`. Test-only: nothing in `src/` produces or
+# consumes an `AssertionRow`.
+rexx-extract = { path = "../rexx-extract" }
+
 [lints]
 workspace = true
