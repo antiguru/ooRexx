@@ -935,21 +935,71 @@ impl Interp {
                 }
             }
 
-            // Pure markers, exactly like `Then`/`Else`: real dispatch lives
-            // entirely in `Select`'s own arm above, which reads a
-            // `When`/`WhenCase` node as data rather than stepping it. A
-            // `When`/`WhenCase` reached here at all is either inside a
-            // bounded sub-loop (the winning branch's body, where it is
-            // inert filler) or is the absorbed-`WHEN` shape -- a `WHEN`
-            // whose own `THEN` consequence is itself a `WHEN` clause, which
-            // `Select.whens` never collects (`ast.rs`'s own doc comment on
-            // `whens`, `select_when_absorption.rex`) -- and in neither case
-            // does it get to decide anything on its own: measured against
-            // the oracle, `select / when 1 = 1 then / when 2 = 2 then n = 42
-            // / otherwise / n = 99 / end / say n` prints `0`, not `42`, so
-            // the absorbed `WHEN`'s own condition being true must not run
-            // its own consequence.
-            InstructionKind::When { .. } | InstructionKind::WhenCase { .. } => Ok(Flow::Next),
+            // **Fixed after review: this used to be a bare `Ok(Flow::Next)`,
+            // and that was a silently wrong answer, not a formatting gap.**
+            // A `When`/`WhenCase` is only ever reached here through the
+            // absorbed-`WHEN` shape -- a `WHEN` whose own `THEN` consequence
+            // is itself a `WHEN`/`WHEN CASE` clause, which the enclosing
+            // `SELECT`'s own `whens` never collects (`ast.rs`'s own doc
+            // comment on `whens`, `LanguageParser.cpp:1319`) -- since a
+            // *listed* `When`/`WhenCase` is always fully handled by
+            // `Select`'s own explicit arm, above, without ever calling
+            // `step` on itself (its own body range never contains another
+            // listed sibling's index).
+            //
+            // The old comment's own measurement was real but its conclusion
+            // was wrong: `select / when 1=1 then / when 2=2 then n=42 /
+            // otherwise / n=99 / end / say n` prints `0`, and that alone is
+            // consistent with *never evaluating* condition B just as much
+            // as with *evaluating it and discarding the answer*. The
+            // measurement that tells the two apart is a raising absorbed
+            // condition: `select / when 1=1 then / when 1/0 then nop / end`
+            // is rc **214**, `Error 42.3`, on the oracle -- so B's condition
+            // *is* evaluated for real, and simply never gets to take its
+            // own branch (confirmed the other direction too: `when 2=2
+            // then say 'x'` with no `otherwise` prints nothing but `after`,
+            // not `x` -- true or false, the absorbed consequence never
+            // runs). `Select`'s own arm already reasons this exactly right
+            // for a *listed* `WHEN`'s condition (raise first, decide
+            // second); this arm was the one place that reasoning did not
+            // reach, because nothing before this task's own review probed
+            // a raising absorbed condition -- every prior probe used a
+            // side-effect-free true one, which cannot distinguish the two
+            // models.
+            //
+            // `current_value_indent` is already correct here without any
+            // extra work: this instruction *is* being stepped through the
+            // ordinary `step_in_temps_frame` path (unlike a listed `WHEN`,
+            // which `Select`'s own arm overrides it for explicitly), so the
+            // clause echo and this trace both land at this absorbed
+            // clause's own static indent.
+            InstructionKind::When { condition, .. } => {
+                self.eval_condition(
+                    code,
+                    condition,
+                    ConditionTrace::Result(self.current_value_indent),
+                    raised_when_not_logical,
+                )?;
+                Ok(Flow::Next)
+            }
+            // `SELECT CASE`'s own absorbed form. Evaluates every `values`
+            // expression, for the identical reason (side effects, and a
+            // raise must escape) -- **known gap, not attempted**: with no
+            // access to the enclosing `SELECT CASE`'s own `case` text here
+            // (nothing threads it to an absorbed node, unlike a listed
+            // `WhenCase`, which `Select`'s own arm already has it in hand
+            // for), this cannot reproduce `test_case_when`'s own two-line
+            // `>>>` comparison pair for the absorbed case, only evaluate
+            // and trace each value on its own. No corpus or spec example
+            // exercises an absorbed `WHEN CASE`; this is deliberately
+            // proportionate to that, not a claim that it is fully correct.
+            InstructionKind::WhenCase { values, .. } => {
+                for value in values {
+                    let v = self.eval(code, value)?;
+                    self.roots.push_temp(v);
+                }
+                Ok(Flow::Next)
+            }
             InstructionKind::Otherwise => Ok(Flow::Next),
 
             // `DO`/`LOOP`, every kind but `DO WITH` (the loud path,
@@ -1446,6 +1496,19 @@ impl Interp {
                         let value = self.eval(code, expr)?;
                         self.roots.push_temp(value);
                         let text = self.to_text(value).to_vec();
+                        // `>K>   "FOR" => "2"`, once, at the `DO`'s own
+                        // level -- measured, this task's own report (F1,
+                        // found by review): the oracle traces a bare
+                        // repeat count under the `FOR` tag, the same as
+                        // an explicit `DO ... FOR n`'s own. Fires before
+                        // the `whole_nonneg` check below, matching every
+                        // other `>K>` site in this function (the value is
+                        // traced as evaluated, not as validated).
+                        self.trace_keyword(
+                            static_indent(&code.body.instructions, index),
+                            "FOR",
+                            &text,
+                        );
                         self.whole_nonneg(value)
                             .ok_or_else(|| raised_repetition_count_not_whole(&text))?
                     }
@@ -3890,6 +3953,50 @@ mod tests {
         );
     }
 
+    /// **Critical, found by review, not by this task's own probes.** The
+    /// mutation this kills is exactly the one the old `Ok(Flow::Next)`
+    /// arm *was*: treating an absorbed `WHEN`'s own condition as never
+    /// evaluated at all, rather than evaluated and discarded. A version
+    /// that reverts `InstructionKind::When`'s arm to a bare `Ok(Flow::
+    /// Next)` makes this test hang around `run_source` returning `Ok`
+    /// (prints `after`, rc 0) where the oracle raises 42.3 at rc 214 --
+    /// `an_absorbed_when_runs_neither_its_own_consequence_nor_otherwise`,
+    /// just above, cannot distinguish the two models (both give `n = 0`
+    /// for a side-effect-free true condition), which is exactly why every
+    /// probe before this review used one and missed this.
+    #[test]
+    fn an_absorbed_whens_raising_condition_escapes_even_though_its_own_consequence_never_runs() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(
+            &mut interp,
+            b"select\n  when 1 = 1 then\n    when 1 / 0 then nop\n  otherwise nop\nend\nsay 'after'",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (42, 3));
+    }
+
+    /// The companion half: a **true** absorbed condition with a printable
+    /// side effect still never runs its own consequence (matching the
+    /// existing `n = 0` test, restated with `SAY` so a wrong "the
+    /// absorbed WHEN's branch is taken" model would be caught by output
+    /// content rather than only by a variable's final value) -- measured,
+    /// this task's own report: `ABSORBED-RAN` never prints, only `after`.
+    #[test]
+    fn an_absorbed_whens_true_condition_still_never_runs_its_own_consequence() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"select\n  when 1 = 1 then\n    when 2 = 2 then say 'ABSORBED-RAN'\nend\nsay 'after'"
+            ),
+            b"after\n".to_vec(),
+            "a reverted fix would print ABSORBED-RAN first"
+        );
+    }
+
     #[test]
     fn select_with_no_when_true_and_no_otherwise_raises_7_3() {
         let mut interp = Interp::new(false);
@@ -4218,6 +4325,37 @@ mod tests {
         assert_eq!(
             say_output(&mut interp, b"n = 0\ndo 0\nn = n + 1\nend\nsay n"),
             b"0\n".to_vec()
+        );
+    }
+
+    /// F1, found by review: a bare count `DO n` traced no `>K>` line at
+    /// all, where the oracle traces it tagged `FOR` -- the same tag an
+    /// explicit `DO ... FOR n` gets, measured (this task's own report).
+    /// The mutation this kills is exactly the gap: deleting the new
+    /// `trace_keyword` call in `run_loop`'s `LoopKind::Count` arm makes
+    /// `interp.trace` empty instead of carrying the `>K>` line, with
+    /// every other assertion in this file untouched -- this is the one
+    /// test that would have caught the omission, since the report's own
+    /// verification claimed `>K>` was checked while never actually
+    /// running a bare-count program through it.
+    #[test]
+    fn a_bare_repeat_count_traces_as_for_the_same_as_an_explicit_one() {
+        let mut interp = Interp::new(false);
+        interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
+        say_output(&mut interp, b"do 2\nnop\nend");
+        // `>K>` fires exactly once, on the first pass, matching every
+        // other single-evaluation control-setup keyword (`TO`/`BY`/
+        // `OVER`) -- the third `do 2` re-echo is the exit-check pass
+        // `run_repeating`'s own per-pass re-echo already covers, verified
+        // by running this exact assertion once and reading the bytes
+        // back rather than hand-composing them (`this file's own report
+        // has the trap: a hand-guessed expectation here was short by
+        // exactly this one pass on the first attempt).
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* do 2\n       >K>   \"FOR\" => \"2\"\n     2 *-*   nop\n     \
+              3 *-* end\n     1 *-* do 2\n     2 *-*   nop\n     3 *-* end\n     1 *-* do 2\n"
+                .to_vec()
         );
     }
 
