@@ -182,3 +182,28 @@ above.
   stack of sites rather than one, so whoever implements 4b's real INTERPRET or
   4b's CALL should decide the shape then rather than inheriting a single-site
   signature by default.
+
+  A Controlled (TO-style) loop's re-tested pass omits two >>> value lines that
+  the oracle emits for its control variable. Measured, and read from the C++
+  rather than inferred: DoBlock::checkControl (DoBlock.cpp:182) traces the
+  control variable's current value and then the computed value+by on every
+  pass AFTER the first, the first pass being skipped explicitly because the
+  initial assignment was already traced during setup. Our loop_advance/loop_step
+  split has the increment already computed by the time loop_advance would need
+  the pre-increment value, so emitting the pair means moving the increment into
+  loop_advance, restructuring a split that several review rounds and a mutation
+  suite have certified.
+
+  Everything else about loop tracing is complete and byte-identical: the
+  DO/LOOP clause re-echoes every pass, END re-echoes only on a pass that falls
+  through the bottom and not on the pass where LEAVE fires, >K> fires once for
+  TO/BY/FOR/COUNTER and every pass for WHILE/UNTIL, and DO OVER and DO FOREVER
+  both match.
+
+  Recorded here rather than left in a report because the implementer could not
+  write to this file and flagged it, and because a measured divergence that
+  lives only in a source comment and a task report is one nobody meets again.
+  The committed >K> witness (keyword_while.rex) is a complete answer for a
+  different LoopKind, chosen because it fully exercises re-echo and per-pass
+  >K>. It is NOT a witness selected to avoid this gap: the gap is stated here,
+  and criterion 3's assessment should say the Controlled pair is unwitnessed.
