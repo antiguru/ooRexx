@@ -190,9 +190,14 @@ above.
   pass AFTER the first, the first pass being skipped explicitly because the
   initial assignment was already traced during setup. Our loop_advance/loop_step
   split has the increment already computed by the time loop_advance would need
-  the pre-increment value, so emitting the pair means moving the increment into
-  loop_advance, restructuring a split that several review rounds and a mutation
-  suite have certified.
+  the pre-increment value, so emitting the pair means moving the
+  increment into loop_advance behind a not-first-pass flag, mirroring
+  checkControl's own shape. COSTED, because an earlier version of this row said
+  "restructuring a split that review rounds and a mutation suite have certified"
+  and that overstates it enough to deter someone who should simply do it: the
+  edit is roughly twenty lines, and the real cost is re-verifying
+  bound-before-test, FOR and ITERATE semantics against the existing suite. Half
+  a day, not a rewrite.
 
   Everything else about loop tracing is complete and byte-identical: the
   DO/LOOP clause re-echoes every pass, END re-echoes only on a pass that falls
