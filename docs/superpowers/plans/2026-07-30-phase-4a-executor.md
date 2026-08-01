@@ -988,7 +988,7 @@ Those files change the setting throughout, from 1 to 100, so the extractor **sca
 
 Every assertion in that group references variables `a` through `g` assigned at the top of its test method. A row of (expression, expected, digits) cannot carry them, and **part** of the resulting failure is silent: with `a`..`g` unset, each renders as a distinct single-character name, so any row whose expected value happens to match that all-distinct pattern passes while testing nothing. Measured, that is **106** of the 388, not the 56 an earlier version of this paragraph claimed; the remaining **282** turn on real blank-padding equalities between different variables and so fail visibly instead — line 71 expects `0 0 1 1 0 1 0`, which unset operands do not produce.
 
-Every row still needs the real prelude to mean anything. The reason to state the split precisely is that "all 388 would pass silently" was the original claim, and it is wrong: a reader who checks it, finds 332 loud failures, and concludes the hazard was imagined would then add the group naively.
+Every row still needs the real prelude to mean anything. The reason to state the split precisely is that "all 388 would pass silently" was the original claim, and it is wrong: a reader who checks it, finds 282 loud failures, and concludes the hazard was imagined would then add the group naively.
 
 So a row carries the method's **assignment prelude**, and any assertion whose prelude cannot be represented is listed as blocked rather than quietly included.
 

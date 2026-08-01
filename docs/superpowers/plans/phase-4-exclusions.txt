@@ -298,3 +298,27 @@ above.
   the gap is specific to a stem correctly becoming a real object where it
   used to be a plain `Text`, which is the same shape F4 itself is: object
   identity becoming observable once it exists to be observed.
+
+  TRACE ? (the interactive prefix) is silently ignored. `mode_from_setting`
+  accepts the letter and drops the `?`, so `trace ?r` behaves exactly as
+  `trace r`. The oracle, measured with stdin at /dev/null so no tty is
+  involved, emits two extra stderr lines that we do not:
+
+    +++ "LINUX COMMAND <absolute path>"        (before the first clause echo)
+    +++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
+
+  stdout and the exit code match; only stderr differs. Not a deviation and
+  not an exclusion: the design spec's own Risks section required measuring
+  what the oracle does with `?` and no tty and then either reproducing it or
+  failing loudly, and neither happened.
+
+  THE REASON IT WENT MISSING IS THE POINT, and it is the sixth instance of one
+  mechanism in this phase: the requirement lived only in the spec's Risks
+  section and never reached any task body. Briefs are extracted per task, so a
+  decision recorded outside a task's own section is invisible to the person
+  who would act on it. Recording it here rather than in a report because this
+  file is where an owner looks.
+
+  Owner unassigned. Reproducing the banner needs a decision about whether 4a's
+  TRACE claims interactivity it cannot deliver; failing loudly on `?` is the
+  cheaper alternative the spec already sanctioned.
