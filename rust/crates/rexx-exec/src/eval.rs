@@ -144,7 +144,115 @@ impl Interp {
 
         let value = self.eval_node(code, expr);
         self.depth -= 1;
+        // `TRACE I`'s own value events (D17), and the **single insertion
+        // point** for all of them: `eval` was already split from
+        // `eval_node` so every exit path -- every `?`-propagated one
+        // included -- passes through here, so a post-order event with the
+        // value already in hand needs no threading through `eval_node`'s
+        // own arms at all. Only `Ok` gets one: a raise has no value to
+        // show, and the oracle's own trace never shows one for a failing
+        // sub-expression either (the *clause* echo already happened, and
+        // the raise's own report is what follows).
+        if let Ok(v) = &value {
+            self.trace_intermediate(code, expr, *v);
+        }
         value
+    }
+
+    /// `>L>`/`>V>`/`>E>`/`>C>`/`>O>`/`>P>`, dispatched on `expr.kind` --
+    /// `eval`'s own hook, called once per node with `value` already
+    /// computed. A no-op immediately when `!self.tracing_intermediates()`
+    /// (`TRACE I` only; `TRACE R` never reaches any of these, measured),
+    /// so the match below only ever runs its own `to_text` cost under `I`.
+    ///
+    /// **Every arm here is additive tracing, never a second evaluation.**
+    /// `expr.kind`'s own already-computed pieces (a `SymbolId`'s name, an
+    /// operator's spelling) are read directly; nothing re-derives a value
+    /// `eval_node` already produced.
+    fn trace_intermediate(&mut self, code: &Code<'_>, expr: &Expr, value: ObjRef) {
+        if !self.tracing_intermediates() {
+            return;
+        }
+        let indent = self.current_value_indent;
+        match &expr.kind {
+            // `Constant`'s own shape is reasoned from `Literal`'s measured
+            // one, not independently probed (this crate's own report says
+            // so) -- both are `>L>` with no tag.
+            ExprKind::Literal(_) | ExprKind::Constant(_) => {
+                let text = self.to_text(value).to_vec();
+                self.trace_literal(indent, &text);
+            }
+            // A bare stem read (`ExprKind::Stem`) goes through the exact
+            // same slot read a simple variable's does (`eval_node`'s own
+            // doc comment on this shared arm), and traces the same way --
+            // measured only for a simple variable; a bare stem's own `>V>`
+            // is reasoned from that, not separately probed.
+            ExprKind::Variable(id) | ExprKind::Stem(id) => {
+                let tag = code.symbols.name(*id).as_bytes().to_vec();
+                let text = self.to_text(value).to_vec();
+                self.trace_variable(indent, &tag, &text);
+            }
+            // `>C>` then `>V>` -- measured (this task's report,
+            // `RexxActivation.cpp:4791`-`4802` read directly): a compound
+            // read always announces the fully-resolved name it used before
+            // showing what is stored there, whether or not the tail
+            // actually resolves. `tag` is the compound's own *unresolved*
+            // source spelling (`code.symbols.name(id)`, e.g. `A.I`);
+            // `resolved` is `stem_name` (the read site's own) concatenated
+            // with `tail_key`'s output, the read-site-derived name --
+            // matching `stem_get`'s own answer exactly when the read site
+            // and the stem object's own name agree, and diverging from it
+            // only through the aliasing this task's permitted files
+            // (`eval.rs`/`run.rs`/`lib.rs`/`trace.rs`) cannot reach into
+            // `stem.rs` to resolve the object's own name for -- a known,
+            // narrow gap, not silently assumed correct.
+            ExprKind::Compound(id) => {
+                let tag = code.symbols.name(*id).as_bytes().to_vec();
+                let (stem_name, _tails) = compound_parts(code.symbols.name(*id));
+                let mut resolved = stem_name.as_bytes().to_vec();
+                resolved.extend_from_slice(&self.tail_key(code, *id));
+                self.trace_compound_name(indent, &tag, &resolved);
+                let text = self.to_text(value).to_vec();
+                self.trace_variable(indent, &tag, &text);
+            }
+            // `.NIL`/`.TRUE`/`.FALSE` -- `>E>`, measured (this task's
+            // report): **not** in the design spec's own "measured reachable
+            // from pure-4a code" list, a correction this task found rather
+            // than assumed. The other `DotVariable` names all fail loudly
+            // before reaching here (`eval_node`'s own arm), so this is
+            // exhaustive over what can arrive.
+            ExprKind::DotVariable(id) => {
+                let tag = code.symbols.name(*id).as_bytes().to_vec();
+                let text = self.to_text(value).to_vec();
+                self.trace_dotvar(indent, &tag, &text);
+            }
+            ExprKind::Prefix { op, .. } => {
+                let spelling = match op {
+                    PrefixOp::Plus => "+",
+                    PrefixOp::Minus => "-",
+                    PrefixOp::Not => "\\",
+                };
+                let text = self.to_text(value).to_vec();
+                self.trace_prefix_op(indent, spelling.as_bytes(), &text);
+            }
+            // Every binary operator, arithmetic, comparison, logical and
+            // concatenation alike, traces as `>O>` -- not independently
+            // probed for every family, reasoned from the arithmetic
+            // transcript this task's report has (`RexxBinaryOperator`'s own
+            // base `evaluate` is where the oracle's `traceOperator` call
+            // sits, shared by every operator subclass the same way this one
+            // `match` arm is shared here).
+            ExprKind::Binary { op, .. } => {
+                let text = self.to_text(value).to_vec();
+                self.trace_operator(indent, op.spelling().as_bytes(), &text);
+            }
+            // A comma list (`ExprKind::Logical`) has no value line of its
+            // own -- each element is a full `eval` call in its own right
+            // (`eval_logical_list`), and traces itself through this same
+            // function when it runs. Every other unimplemented `ExprKind`
+            // never reaches here at all (`eval_node`'s own loud fallback).
+            _ => {}
+        }
     }
 
     fn eval_node(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Failure> {

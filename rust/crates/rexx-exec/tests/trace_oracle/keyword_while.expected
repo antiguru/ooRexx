@@ -1,0 +1,20 @@
+RC 0
+===STDOUT===
+2
+===STDERR===
+     2 *-* n = 0
+       >>>   "0"
+     3 *-* do while n < 2
+       >K>     "WHILE" => "1"
+     4 *-*   n = n + 1
+       >>>     "1"
+     5 *-* end
+     3 *-* do while n < 2
+       >K>     "WHILE" => "1"
+     4 *-*   n = n + 1
+       >>>     "2"
+     5 *-* end
+     3 *-* do while n < 2
+       >K>     "WHILE" => "0"
+     6 *-* say n
+       >>>   "2"

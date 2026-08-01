@@ -80,6 +80,14 @@ mod eval;
 // instructions that do not branch.
 mod run;
 
+// `TRACE` (D17): the mode, the nine reachable prefixes' own byte formatting,
+// and the classification a `TRACE`/`TRACE VALUE` setting goes through to
+// become one. `run.rs`'s `step_in_temps_frame` and its loop drivers, and
+// `eval.rs`'s `eval`, own *when* to call into this module; this module owns
+// only the bytes.
+mod trace;
+use trace::TraceMode;
+
 /// The exit code for a construct Phase 4a does not implement.
 ///
 /// It has to sit outside 157..=253, where a Rexx error's `256 - major` lives,
@@ -567,6 +575,39 @@ struct Interp {
     /// already appends to the right buffer rather than being rerouted later,
     /// which is when a stray ordering difference would appear.
     trace: Vec<u8>,
+    /// The current `TRACE` setting's visible-output shape (D17). Lives on
+    /// `Interp` rather than per-`Activation`'s `Settings`, unlike the design's
+    /// own stated rule that `TRACE` "behaves the same way" as `Settings` and
+    /// is restored across a call -- **a deliberate 4a-only simplification,
+    /// not a rediscovery of that rule**: 4a has exactly one frame (the design
+    /// says so in the same breath, "which is exactly why this must be written
+    /// down now rather than discovered by 4b"), so there is no call for a
+    /// callee's `TRACE OFF` to fail to survive past, and putting this on
+    /// `Activation` today would be the same throwaway-scaffolding shape the
+    /// `eval_str` correction and Task 6's `Vec<Block>` deferral both ruled
+    /// out -- `Activation` already carries its own `Settings` for exactly
+    /// this per-frame inheritance, and 4b's `CALL` is what makes a second
+    /// frame exist for `TRACE` to need the same treatment. 4b's first move
+    /// here, matching `interpret_spike`'s own note just below, is to move
+    /// this field onto `Activation` and delete it from here.
+    trace_mode: TraceMode,
+    /// The indent (Task 11's `static_indent` quantity, spaces already
+    /// doubled) an intermediate value line traces at right now -- the one
+    /// piece of state `eval`'s own single insertion point needs that
+    /// `eval`'s signature does not otherwise carry, mirroring the oracle's
+    /// own `settings.traceIndent` (a persistent field every `traceValue`/
+    /// `traceVariable`/... call reads, never threaded as a parameter
+    /// through `evaluate`). Set once per traced clause, at whichever call
+    /// site already computed that clause's own indent for the `*-*` echo
+    /// or a `>K>` line -- `run.rs`'s own doc comments name each site.
+    ///
+    /// **Why a field and not an `eval` parameter.** Threading an indent
+    /// through `eval`/`eval_node`'s entire recursive call graph would touch
+    /// every arm in `eval.rs`, exactly the "eighteen arms" retrofit the
+    /// design's own withdrawn note wrongly predicted for the value events
+    /// themselves -- reading the oracle's own field-not-parameter design
+    /// avoids inventing that threading here instead.
+    current_value_indent: usize,
     /// The clause a `Raised` condition escaped from, as the 1-based line and
     /// the bytes `TRACE` would echo, or `None` if nothing raised.
     ///
@@ -625,6 +666,8 @@ impl Interp {
             plans: HashMap::new(),
             out: Vec::new(),
             trace: Vec::new(),
+            trace_mode: TraceMode::OFF,
+            current_value_indent: 0,
             failure_site: None,
             interpret_spike,
             depth: 0,

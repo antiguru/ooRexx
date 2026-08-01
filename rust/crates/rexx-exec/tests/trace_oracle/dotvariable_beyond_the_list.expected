@@ -1,0 +1,7 @@
+RC 0
+===STDOUT===
+The NIL object
+===STDERR===
+     2 *-* say .nil
+       >E>   .NIL => "The NIL object"
+       >>>   "The NIL object"

@@ -48,12 +48,16 @@
 
 use crate::error::{FailureSite, Raised};
 use crate::eval::logical_value;
+use crate::trace::{
+    is_whole_number, mode_from_setting, raised_invalid_trace_letter,
+    raised_numeric_trace_interactive_only,
+};
 use crate::{Code, Failure, Interp, Loud};
 use rexx_core::ObjRef;
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
     ControlExpr, Controlled, EndStyle, Expr, ExprKind, Fragment, Instruction, InstructionKind,
-    Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource, SymbolId, VariableRef,
+    Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource, SymbolId, Trace, VariableRef,
     compound_parts, parse_interpret,
 };
 use std::rc::Rc;
@@ -209,6 +213,20 @@ enum LoopState {
         by: Number,
         for_remaining: Option<u64>,
     },
+}
+
+/// What `eval_condition` should do with the value it just computed, beyond
+/// answering the caller's `bool` -- a caller-chosen variant rather than a
+/// decision `eval_condition` makes on its own, because the same function
+/// serves `IF`/`WHEN` (their own `>>>`, measured) and `WHILE`/`UNTIL`
+/// (their own `>K>` instead, never a bare `>>>` alongside it, also
+/// measured) and the two are genuinely different oracle behaviours, not
+/// two spellings of one.
+enum ConditionTrace<'a> {
+    /// `IF`/`WHEN`'s own `>>>`.
+    Result(usize),
+    /// `WHILE`/`UNTIL`'s own `>K>`, tagged `"WHILE"`/`"UNTIL"`.
+    Keyword(usize, &'a str),
 }
 
 impl Interp {
@@ -520,9 +538,14 @@ impl Interp {
                         self.roots.push_temp(value);
                         self.to_text(value).to_vec()
                     }
-                    // `say` with no expression is a blank line.
+                    // `say` with no expression is a blank line. Still
+                    // traced (`RexxInstructionExpression::
+                    // evaluateStringExpression`'s own `else` arm:
+                    // `traceResult(GlobalNames::NULLSTRING)`), as an empty
+                    // string, not skipped.
                     None => Vec::new(),
                 };
+                self.trace_result(static_indent(&code.body.instructions, index), &line);
                 self.out.extend_from_slice(&line);
                 self.out.push(b'\n');
                 Ok(Flow::Next)
@@ -539,27 +562,52 @@ impl Interp {
                 // own rule is to fail loudly rather than trust it blindly.
                 let value = self.eval(code, value)?;
                 self.roots.push_temp(value);
+                // `>>>` fires before the assignment itself
+                // (`RexxInstructionAssignment::execute`: evaluate, trace,
+                // *then* assign), which matters only in that the traced
+                // value can never be affected by the write it precedes.
+                let indent = static_indent(&code.body.instructions, index);
+                let rendered = self.to_text(value).to_vec();
+                self.trace_result(indent, &rendered);
                 match &target.kind {
                     ExprKind::Variable(id) => {
-                        let name = code.symbols.name(*id).as_bytes();
-                        let slot = self.slot_of(name);
+                        let name = code.symbols.name(*id).as_bytes().to_vec();
+                        let slot = self.slot_of(&name);
                         let frame = self.activation().frame;
                         self.roots.set_slot(frame, slot, value);
+                        self.trace_assignment(indent, &name, &rendered);
                     }
                     // `stem. = expr`: replace-and-rebind (D15a), through the
                     // library `stem_assign` already builds -- this arm is the
                     // dispatch Task 9 owns, not new stem logic.
                     ExprKind::Stem(id) => {
-                        let name = code.symbols.name(*id).as_bytes();
-                        self.stem_assign(name, value);
+                        let name = code.symbols.name(*id).as_bytes().to_vec();
+                        self.stem_assign(&name, value);
+                        self.trace_assignment(indent, &name, &rendered);
                     }
                     // `a.b = expr`: resolve the tail key the same way reading
                     // `a.b` would (`eval_node`'s own `Compound` arm), then
                     // mutate that one tail in place through `stem_set`.
+                    //
+                    // `>C>` before `>=>` (`RexxActivation.cpp:4791`-`4802`'s
+                    // own order for a *read*; measured, this task's report,
+                    // that a *write* through `ExpressionCompoundVariable::
+                    // assign` announces the same resolved name first too):
+                    // the tag is the compound's own **source spelling**
+                    // (`a.i` stays `A.I` regardless of `i`'s value), and the
+                    // resolved name is `stem_name` (the read site's own,
+                    // matching `stem_set`'s own convention) concatenated
+                    // with `key`.
                     ExprKind::Compound(id) => {
+                        let tag = code.symbols.name(*id).as_bytes().to_vec();
                         let (stem_name, _tails) = compound_parts(code.symbols.name(*id));
+                        let stem_name = stem_name.as_bytes().to_vec();
                         let key = self.tail_key(code, *id);
-                        self.stem_set(stem_name.as_bytes(), &key, value);
+                        self.stem_set(&stem_name, &key, value);
+                        let mut resolved = stem_name;
+                        resolved.extend_from_slice(&key);
+                        self.trace_compound_name(indent, &tag, &resolved);
+                        self.trace_assignment(indent, &tag, &rendered);
                     }
                     other => return Err(Loud::expression(other).into()),
                 }
@@ -586,6 +634,13 @@ impl Interp {
                 expression,
             } => {
                 self.exec_numeric(code, setting, expression)?;
+                Ok(Flow::Next)
+            }
+
+            // `TRACE` (D17): sets `self.trace_mode`, or raises 24.901 for
+            // the interactive-only skip-count forms. See `exec_trace`.
+            InstructionKind::Trace(setting) => {
+                self.exec_trace(code, setting)?;
                 Ok(Flow::Next)
             }
 
@@ -661,7 +716,13 @@ impl Interp {
             } => {
                 let len = code.body.instructions.len();
                 let false_target = false_target.unwrap_or(len);
-                if self.eval_condition(code, condition, raised_if_not_logical)? {
+                let indent = static_indent(&code.body.instructions, index);
+                if self.eval_condition(
+                    code,
+                    condition,
+                    ConditionTrace::Result(indent),
+                    raised_if_not_logical,
+                )? {
                     let resume = self.skip_else(code, false_target);
                     match self.run_bounded(code, index + 1, false_target, source)? {
                         Flow::Next => Ok(Flow::Goto(resume)),
@@ -710,16 +771,48 @@ impl Interp {
                 end,
             } => {
                 let len = code.body.instructions.len();
+                let select_indent = static_indent(&code.body.instructions, index);
                 let case_text = match case {
                     Some(case_expr) => {
                         let value = self.eval(code, case_expr)?;
                         self.roots.push_temp(value);
-                        Some(self.to_text(value).to_vec())
+                        let text = self.to_text(value).to_vec();
+                        // `>K>` (`SelectInstruction.cpp:372`,
+                        // `traceKeywordResult(CASE, ...)`), at the
+                        // `SELECT`'s own level -- measured, this task's
+                        // report, `>K>   "CASE" => "2"` sits at the same
+                        // indent as `select case ...` itself, not the
+                        // `WHEN`-scan level `WhenCase`'s own comparison
+                        // lines (below) are indented to.
+                        self.trace_keyword(select_indent, "CASE", &text);
+                        Some(text)
                     }
                     None => None,
                 };
                 for &when_index in whens {
                     let when_instruction = &code.body.instructions[when_index];
+                    // `When`/`WhenCase`'s own clause echo, explicit for the
+                    // same reason `record_failure_site`'s own call below is:
+                    // that instruction's `step` arm is a pure no-op (never
+                    // independently dispatched, only ever read as data
+                    // here), so nothing else ever calls `step_in_temps_
+                    // frame` for it and its `*-*` line would otherwise never
+                    // appear at all -- measured, `select` / `when 1 = 1
+                    // then ...` echoes the `WHEN`'s own clause on its own
+                    // line before anything about its condition.
+                    let when_indent = static_indent(&code.body.instructions, when_index);
+                    // Overrides the enclosing `SELECT`'s own
+                    // `current_value_indent` (`step_in_temps_frame` set it
+                    // to `select_indent` before this arm even started) for
+                    // exactly the same reason the explicit clause echo just
+                    // above is explicit: this condition is evaluated
+                    // outside any `step_in_temps_frame` call of its own.
+                    self.current_value_indent = when_indent;
+                    if self.trace_mode.all
+                        && let Some((line, text)) = clause_site(source, when_instruction)
+                    {
+                        self.trace_clause(line, when_indent, &text);
+                    }
                     // Every fallible call below is matched explicitly,
                     // never through `?`, so a failure can be attributed to
                     // `when_instruction` -- the `When`/`WhenCase` whose
@@ -739,32 +832,13 @@ impl Interp {
                             false_target,
                             exit,
                         } => {
-                            let holds =
-                                match self.eval_condition(code, condition, raised_when_not_logical)
-                                {
-                                    Ok(holds) => holds,
-                                    Err(failure) => {
-                                        self.record_failure_site(
-                                            code,
-                                            when_index,
-                                            source,
-                                            when_instruction,
-                                        );
-                                        return Err(failure);
-                                    }
-                                };
-                            holds.then(|| (false_target.unwrap_or(len), exit.unwrap_or(len)))
-                        }
-                        InstructionKind::WhenCase {
-                            values,
-                            false_target,
-                            exit,
-                        } => {
-                            let case_text = case_text.as_deref().expect(
-                                "a WhenCase's enclosing Select always carries a case expression",
-                            );
-                            let matched = match self.test_case_when(code, values, case_text) {
-                                Ok(matched) => matched,
+                            let holds = match self.eval_condition(
+                                code,
+                                condition,
+                                ConditionTrace::Result(when_indent),
+                                raised_when_not_logical,
+                            ) {
+                                Ok(holds) => holds,
                                 Err(failure) => {
                                     self.record_failure_site(
                                         code,
@@ -775,6 +849,29 @@ impl Interp {
                                     return Err(failure);
                                 }
                             };
+                            holds.then(|| (false_target.unwrap_or(len), exit.unwrap_or(len)))
+                        }
+                        InstructionKind::WhenCase {
+                            values,
+                            false_target,
+                            exit,
+                        } => {
+                            let case_text = case_text.as_deref().expect(
+                                "a WhenCase's enclosing Select always carries a case expression",
+                            );
+                            let matched =
+                                match self.test_case_when(code, values, case_text, when_indent) {
+                                    Ok(matched) => matched,
+                                    Err(failure) => {
+                                        self.record_failure_site(
+                                            code,
+                                            when_index,
+                                            source,
+                                            when_instruction,
+                                        );
+                                        return Err(failure);
+                                    }
+                                };
                             matched.then(|| (false_target.unwrap_or(len), exit.unwrap_or(len)))
                         }
                         other => panic!("a SELECT's whens holds only When/WhenCase, not {other:?}"),
@@ -803,6 +900,28 @@ impl Interp {
                     // `OTHERWISE` is now caught here too.
                     Some(otherwise_index) => {
                         let otherwise_end = end.unwrap_or(len);
+                        // `OTHERWISE`'s own clause echo, explicit for the
+                        // same reason `WHEN`'s own is, above: its `step`
+                        // arm is a no-op and its own index is never inside
+                        // any `run_bounded` range (the body below starts
+                        // *after* it), so nothing else ever visits it.
+                        // Measured, this task's report: `otherwise` traces
+                        // on its own line, at the `SELECT`'s own scan
+                        // level, before its body.
+                        let otherwise_instruction = &code.body.instructions[*otherwise_index];
+                        // `static_indent`'s own fixed answer for
+                        // `*otherwise_index` (this task's earlier fix, not
+                        // `select_indent`): the marker sits at the scan
+                        // level (2 at top level), the same as a `WHEN`'s
+                        // own condition, not the `SELECT`'s own level.
+                        let otherwise_indent =
+                            static_indent(&code.body.instructions, *otherwise_index);
+                        self.current_value_indent = otherwise_indent;
+                        if self.trace_mode.all
+                            && let Some((line, text)) = clause_site(source, otherwise_instruction)
+                        {
+                            self.trace_clause(line, otherwise_indent, &text);
+                        }
                         let flow =
                             self.run_bounded(code, otherwise_index + 1, otherwise_end, source)?;
                         self.leave_select(code, index, *label, otherwise_end, flow)
@@ -944,6 +1063,38 @@ impl Interp {
         instruction: &Instruction,
         source: Option<&ProgramSource>,
     ) -> Result<Flow, Failure> {
+        // `TRACE`'s own `*-*` clause echo (D17), and the single insertion
+        // point for it -- exactly the analogue of `eval`'s own split from
+        // `eval_node`, since this is the one place `run_bounded`'s loop
+        // (this function's only non-test caller) visits every flat
+        // instruction position it steps, markers (`Then`/`Else`/
+        // `Otherwise`/`When`/`WhenCase`/`Label`) included, matching the
+        // oracle's own `RexxInstruction::traceInstruction`, which every one
+        // of those calls too from its own `execute`.
+        //
+        // **Not the whole story for a `DO`/`LOOP`.** The oracle's own `DO`
+        // instruction is re-executed once per iteration, so its own clause
+        // (and `END`'s) echoes again on every pass -- this call site fires
+        // exactly once, when the `DO`/`LOOP` instruction is first stepped,
+        // because `run_loop`/`run_repeating` resolve every iteration inside
+        // *this* one `step` call rather than returning between passes
+        // (`Flow::Leave`'s own doc comment has the reason: a `Goto`-shaped
+        // re-entry risks the absorption trap that design avoids). The
+        // per-iteration re-echo is `run_repeating`'s own, separate call
+        // into `trace_clause` -- see its doc comment.
+        // `current_value_indent` (`lib.rs`'s own doc comment on the field)
+        // is set here **unconditionally**, not only when `trace_mode.all`
+        // -- `INTERMEDIATES` implies `all` (`TraceMode`'s own doc comment),
+        // never the reverse, so anything that reads this field is already
+        // gated by its own `intermediates` check; setting it plainly is
+        // cheaper than a second `if` that would just repeat that gate.
+        let indent = static_indent(&code.body.instructions, index);
+        self.current_value_indent = indent;
+        if self.trace_mode.all
+            && let Some((line, text)) = clause_site(source, instruction)
+        {
+            self.trace_clause(line, indent, &text);
+        }
         let frame = self.roots.push_frame();
         let flow = self.step(code, index, instruction, source);
         self.roots.pop_frame(frame);
@@ -1252,7 +1403,29 @@ impl Interp {
                 let flow = self.run_bounded(code, body_start, end_index, source)?;
                 match self.do_body_outcome(code, index, label, false, resume, flow)? {
                     Some(escape) => Ok(escape),
-                    None => Ok(Flow::Goto(resume)),
+                    // Falls through to `END`, which `run_bounded`'s own
+                    // `[body_start, end_index)` range never visits (the
+                    // `Goto(resume)` below jumps straight past it) --
+                    // unlike a repeating loop, a `Simple` block never runs
+                    // this arm again, so one explicit echo here is the
+                    // whole story, not a per-pass one the way
+                    // `run_repeating`'s own is. Measured, this task's
+                    // report: `if 1 = 1 then do / say 'x' / end` traces
+                    // `end` on its own line even though the block never
+                    // repeats.
+                    None => {
+                        if self.trace_mode.all
+                            && let Some((line, text)) =
+                                clause_site(source, &code.body.instructions[end_index])
+                        {
+                            self.trace_clause(
+                                line,
+                                static_indent(&code.body.instructions, index),
+                                &text,
+                            );
+                        }
+                        Ok(Flow::Goto(resume))
+                    }
                 }
             }
             LoopKind::Forever => self.run_repeating(
@@ -1301,7 +1474,8 @@ impl Interp {
                 )
             }
             LoopKind::Controlled(ctrl) => {
-                let state = self.setup_controlled(code, ctrl)?;
+                let indent = static_indent(&code.body.instructions, index);
+                let state = self.setup_controlled(code, ctrl, indent)?;
                 self.run_repeating(
                     code,
                     index,
@@ -1352,6 +1526,13 @@ impl Interp {
                 }
                 let value = self.eval(code, target)?;
                 self.roots.push_temp(value);
+                // `>K>   "OVER" => "abc"`, once, at the `DO`'s own level --
+                // measured, this task's report: fires on the first pass
+                // only, exactly like `TO`/`BY`/`FOR`, because `target` is
+                // evaluated once at loop entry here too.
+                let over_indent = static_indent(&code.body.instructions, index);
+                let over_text = self.to_text(value).to_vec();
+                self.trace_keyword(over_indent, "OVER", &over_text);
                 let remaining = match for_count {
                     Some(expr) => {
                         let count_value = self.eval(code, expr)?;
@@ -1429,16 +1610,46 @@ impl Interp {
         // reports (measured: `do i = 1 to 3 for 1/0` is unindented at top
         // level), and `WHILE`/`UNTIL` both report two spaces *more* than
         // that (measured: `do while 1/0` at top level is indented two).
-        let loop_indent = static_indent(&code.body.instructions, do_index) + 2;
+        let do_indent = static_indent(&code.body.instructions, do_index);
+        let loop_indent = do_indent + 2;
+        // `TRACE`'s own per-iteration re-echo (D17, this task's report,
+        // "Step 6"): the oracle's `DO`/`LOOP` instruction is re-executed
+        // once per pass (`DoBlock::checkControl`, read directly), so its
+        // own clause -- and `END`'s -- echo again on every pass, unlike
+        // every other construct in this crate, which resolves its whole
+        // repetition inside one `step` call and so is stepped, and echoed,
+        // exactly once (`step_in_temps_frame`'s own doc comment). `false`
+        // on entry because the *first* pass's echo already happened there,
+        // before `run_loop` ever called into this function.
+        let mut first_pass = true;
 
         loop {
+            if !first_pass
+                && self.trace_mode.all
+                && let Some((line, text)) = clause_site(source, do_instruction)
+            {
+                self.trace_clause(line, do_indent, &text);
+            }
+            first_pass = false;
+
             if !self.loop_advance(code, &mut state)? {
                 return Ok(Flow::Goto(resume));
             }
             if let Some(cond) = conditional
                 && !cond.until
             {
-                match self.eval_condition(code, &cond.condition, raised_while_not_logical) {
+                // Overrides `step_in_temps_frame`'s own setting of
+                // `current_value_indent` (to `do_indent`, from stepping the
+                // `DO`/`LOOP` instruction itself) -- `WHILE`'s own
+                // condition is evaluated here, inside that same `step`
+                // call, never through a `step_in_temps_frame` of its own.
+                self.current_value_indent = loop_indent;
+                match self.eval_condition(
+                    code,
+                    &cond.condition,
+                    ConditionTrace::Keyword(loop_indent, "WHILE"),
+                    raised_while_not_logical,
+                ) {
                     Ok(true) => {}
                     Ok(false) => return Ok(Flow::Goto(resume)),
                     Err(failure) => {
@@ -1453,14 +1664,39 @@ impl Interp {
                 return Ok(escape);
             }
 
+            // Reached only when the pass is about to continue (fell
+            // through, or a matched `ITERATE` -- `do_body_outcome`
+            // returning `Ok(None)` is exactly that set, per its own doc
+            // comment). **Not** reached on a matched `LEAVE`, which
+            // returns above instead -- measured, this task's report
+            // (`DO FOREVER` with a `LEAVE` on the second pass): `END`
+            // never echoes for that final pass, only for a pass that
+            // genuinely falls through to it.
+            let end_instruction = &code.body.instructions[end_index];
+            if self.trace_mode.all
+                && let Some((line, text)) = clause_site(source, end_instruction)
+            {
+                self.trace_clause(line, do_indent, &text);
+            }
+
             if let Some(cond) = conditional
                 && cond.until
             {
-                match self.eval_condition(code, &cond.condition, raised_until_not_logical) {
+                // Same override as `WHILE`'s own, above -- the re-echoed
+                // `END` clause just before this point left
+                // `current_value_indent` untouched (its own `trace_clause`
+                // call does not set it), so without this `UNTIL`'s
+                // intermediates would otherwise still read `do_indent`.
+                self.current_value_indent = loop_indent;
+                match self.eval_condition(
+                    code,
+                    &cond.condition,
+                    ConditionTrace::Keyword(loop_indent, "UNTIL"),
+                    raised_until_not_logical,
+                ) {
                     Ok(true) => return Ok(Flow::Goto(resume)),
                     Ok(false) => {}
                     Err(failure) => {
-                        let end_instruction = &code.body.instructions[end_index];
                         self.record_failure_at(source, end_instruction, loop_indent);
                         return Err(failure);
                     }
@@ -1604,6 +1840,36 @@ impl Interp {
                 by,
                 for_remaining,
             } => {
+                // **KNOWN GAP, disclosed rather than fixed under this
+                // task's own time budget.** `DoBlock::checkControl`
+                // (`DoBlock.cpp:182`, read directly) traces two `>>>`
+                // lines on every pass after the first: the control
+                // variable's own pre-increment value, then `value + by`,
+                // both via plain `traceResult` -- measured, this task's
+                // report, `do i = 1 to 2`'s own second pass shows `>>>
+                // "1"` then `>>>   "2"` with nothing else around them.
+                // This function does not reproduce that pair: `current`
+                // here already holds `loop_step`'s own pre-computed
+                // `current + by` from the *previous* pass (this arm only
+                // binds and tests it), so the pre-increment value is gone
+                // by the time this runs, and recovering it would mean
+                // moving the increment out of `loop_step` and into this
+                // arm -- restructuring already-reviewed, working control
+                // flow (`the_corrected_28x_indent_rule_matches_all_
+                // fourteen_probed_shapes` and the whole `Flow::Leave`/
+                // `run_bounded` absorption discipline both sit downstream
+                // of this exact split) for a formatting concern, under
+                // less time than that would need to be done safely. Every
+                // `>K>` (`TO`/`BY`/`FOR`, fires once, matches the oracle
+                // exactly because these headers are evaluated once here
+                // too) and every `WHILE`/`UNTIL` `>K>` (fires every pass,
+                // matches because the condition is genuinely re-evaluated
+                // every pass here too) is unaffected -- this gap is
+                // narrowly the two-line pair for a `Controlled`
+                // (`TO`-style) loop's own re-tested pass, nothing else.
+                // This task's report names it explicitly rather than
+                // choosing a witness that cannot see it.
+                //
                 // **Bound before the decision, not after** -- measured
                 // against the oracle, `do i = 5 to 3 / say never / end /
                 // say i` prints `5`: the control variable takes its own
@@ -1666,10 +1932,20 @@ impl Interp {
     /// steps by fractional values. `by` defaults to `1` when absent.
     /// `for_count` is the one exception, checked against `whole_nonneg`
     /// (26.3) exactly like a bare `DO`'s own repeat count is (26.2).
+    /// `indent`: the `DO`/`LOOP` instruction's own `static_indent`, for
+    /// `>K>`'s own `TO`/`BY`/`FOR` lines -- **not** `loop_indent`
+    /// (`+2`, `WHILE`/`UNTIL`'s own level): measured, `>K>   "TO" => "2"`
+    /// sits at the same indent as `do i = 1 to 2` itself, because these
+    /// header expressions are evaluated once at loop entry, before the
+    /// body's own frame exists at all (`control_setup_expressions_are_
+    /// unindented_unlike_the_loop_body_they_precede`, this file's own test
+    /// from Task 11, makes the identical point about a *raise* at this
+    /// same point).
     fn setup_controlled(
         &mut self,
         code: &Code<'_>,
         ctrl: &Controlled,
+        indent: usize,
     ) -> Result<LoopState, Failure> {
         let initial_value = self.eval(code, &ctrl.initial)?;
         self.roots.push_temp(initial_value);
@@ -1687,6 +1963,8 @@ impl Interp {
                         .expect("ctrl.order names To only when ctrl.to is Some");
                     let value = self.eval(code, expr)?;
                     self.roots.push_temp(value);
+                    let text = self.to_text(value).to_vec();
+                    self.trace_keyword(indent, "TO", &text);
                     to = Some(self.arith_operand(value)?);
                 }
                 ControlExpr::By => {
@@ -1696,6 +1974,8 @@ impl Interp {
                         .expect("ctrl.order names By only when ctrl.by is Some");
                     let value = self.eval(code, expr)?;
                     self.roots.push_temp(value);
+                    let text = self.to_text(value).to_vec();
+                    self.trace_keyword(indent, "BY", &text);
                     by = Some(self.arith_operand(value)?);
                 }
                 ControlExpr::For => {
@@ -1706,6 +1986,7 @@ impl Interp {
                     let value = self.eval(code, expr)?;
                     self.roots.push_temp(value);
                     let text = self.to_text(value).to_vec();
+                    self.trace_keyword(indent, "FOR", &text);
                     for_remaining = Some(
                         self.whole_nonneg(value)
                             .ok_or_else(|| raised_for_count_not_whole(&text))?,
@@ -1770,11 +2051,32 @@ impl Interp {
         &mut self,
         code: &Code<'_>,
         condition: &Expr,
+        trace: ConditionTrace<'_>,
         raise: fn(&[u8]) -> Raised,
     ) -> Result<bool, Failure> {
         let value = self.eval(code, condition)?;
         self.roots.push_temp(value);
         let text = self.to_text(value).to_vec();
+        match trace {
+            // `IF`/plain `WHEN`'s own `>>>` (`IfInstruction.cpp:140`, and
+            // `select` / `when 1 = 1 then` measured to show the identical
+            // shape) -- measured, `WHILE`/`UNTIL` never get this (this
+            // task's report: `trace r` over a `DO WHILE` shows only `>K>
+            // "WHILE" => ...`, no bare `>>>` alongside it), which is why
+            // this is a variant a caller picks rather than something
+            // `eval_condition` decides on its own. `SELECT CASE`'s own
+            // `WHEN`/`WhenCase` comparison never reaches this function at
+            // all -- see `test_case_when`'s own trace calls instead.
+            ConditionTrace::Result(indent) => self.trace_result(indent, &text),
+            // `WHILE`/`UNTIL`'s own `>K>` (`DoBlockComponents.cpp`'s
+            // `traceKeywordResult(WHILE, ...)`/`(UNTIL, ...)`) -- re-fires
+            // every pass because the oracle re-evaluates the condition every
+            // pass too, which `run_repeating`'s own call site already does
+            // without any change from this task.
+            ConditionTrace::Keyword(indent, keyword) => {
+                self.trace_keyword(indent, keyword, &text);
+            }
+        }
         if matches!(condition.kind, ExprKind::Logical(_)) {
             // `eval_logical_list` already validated every element and
             // answers exactly `b"0"`/`b"1"` (its own doc comment), so this
@@ -1804,16 +2106,31 @@ impl Interp {
     /// `"7"` are not byte-identical. Calling `eval_compare` would work too,
     /// but needs a second `eval.rs` visibility bump beyond the one already
     /// asked for and approved for `logical_value`. This way needs none.
+    /// `indent` traces two `>>>` lines per value tested, up to and including
+    /// whichever one matches (`WhenCaseInstruction.cpp:154`/`158`:
+    /// `traceResult(compareValue)` then `traceResult(result)`, "result"
+    /// being the comparison's own `0`/`1` outcome, not a second copy of the
+    /// value) -- measured, `select case 1 + 1 / when 2 then ...`:
+    /// `>>>   "2"` (the one `values` entry evaluated) then `>>>   "1"`
+    /// (matched). Stops at the first match, mirroring the early `return
+    /// Ok(true)` below -- an oracle transcript with more than one `values`
+    /// entry and no match on the first would need its own probe to confirm
+    /// every untested entry gets the same pair, which this task did not run.
     fn test_case_when(
         &mut self,
         code: &Code<'_>,
         values: &[Expr],
         case_text: &[u8],
+        indent: usize,
     ) -> Result<bool, Failure> {
         for value in values {
             let value = self.eval(code, value)?;
             self.roots.push_temp(value);
-            if &*self.to_text(value) == case_text {
+            let text = self.to_text(value).to_vec();
+            self.trace_result(indent, &text);
+            let matched = text == case_text;
+            self.trace_result(indent, if matched { b"1" } else { b"0" });
+            if matched {
                 return Ok(true);
             }
         }
@@ -2009,6 +2326,60 @@ impl Interp {
     /// the identical thing below; a later phase's `::OPTIONS FORM` is what
     /// would make the two differ, and should split this arm rather than
     /// assume they stay equal.
+    /// `TRACE`'s four forms (D17). `Trace::Default` (bare `TRACE`) and a
+    /// `Trace::Setting` letter that recognises but has nothing visible to
+    /// show in this crate's scope (`C`/`L`/`E`/`F`/`N`/`O`) both land on
+    /// `TraceMode::OFF` -- `mode_from_setting` draws no distinction between
+    /// them because this crate cannot observe one (measured: `trace` alone
+    /// and `trace value 'N'` are both silent, this task's own report has
+    /// the transcript).
+    ///
+    /// `Trace::Setting`'s own bytes were already validated by `rexx-parse`'s
+    /// `check_trace_setting` at parse time, so `.expect()` rather than
+    /// propagating the `Err` arm -- a `Trace::Setting` this crate ever sees
+    /// cannot carry an unrecognised letter. `Trace::Value`'s text has no
+    /// such guarantee (it is computed at run time from an arbitrary Rexx
+    /// expression), which is the one path that can reach `mode_from_
+    /// setting`'s `Err` for real, and does through `raised_invalid_trace_
+    /// letter`.
+    fn exec_trace(&mut self, code: &Code<'_>, setting: &Trace) -> Result<(), Failure> {
+        match setting {
+            Trace::Default => {
+                self.trace_mode = crate::trace::TraceMode::OFF;
+            }
+            Trace::Setting(bytes) => {
+                self.trace_mode = mode_from_setting(bytes)
+                    .expect("rexx-parse's check_trace_setting already validated this byte");
+            }
+            // 24.901, unconditional -- measured, `trace 0` raises it
+            // exactly like `trace 5` (this task's report), because this
+            // runtime has no interactive debugging for a nonzero skip
+            // count to be valid *from* either way.
+            Trace::Skip(_) => {
+                return Err(raised_numeric_trace_interactive_only().into());
+            }
+            // `TRACE VALUE expr`: computed at run time, then classified
+            // exactly like a literal `TRACE` setting would have been --
+            // measured, `trace value 5` raises 24.901 like `trace 5`, and
+            // `trace value 'R'` behaves exactly like `trace r` (this
+            // task's report has both transcripts). A whole number is a
+            // skip count checked *before* trying it as a letter, matching
+            // `rexx-parse`'s own `trace` parser's order (`instruction.rs`'s
+            // `whole_number` attempt precedes its `check_trace_setting`
+            // fallback).
+            Trace::Value(expression) => {
+                let value = self.eval(code, expression)?;
+                self.roots.push_temp(value);
+                let text = self.to_text(value).to_vec();
+                if is_whole_number(&text) {
+                    return Err(raised_numeric_trace_interactive_only().into());
+                }
+                self.trace_mode = mode_from_setting(&text).map_err(raised_invalid_trace_letter)?;
+            }
+        }
+        Ok(())
+    }
+
     fn exec_numeric(
         &mut self,
         code: &Code<'_>,
@@ -2293,11 +2664,28 @@ fn indent_in_range(instructions: &[Instruction], start: usize, end: usize, targe
                             | InstructionKind::WhenCase { false_target, .. } => {
                                 (when_index + 1, false_target.unwrap_or(len))
                             }
-                            other => {
-                                unreachable!(
-                                    "a SELECT's whens holds only When/WhenCase, not {other:?}"
-                                )
-                            }
+                            // This asserted unreachability too, on a claim
+                            // that turned out to be no better-founded than
+                            // the `OTHERWISE` one three lines of history
+                            // below: "`whens` holds only `When`/`WhenCase`"
+                            // is `rexx-parse`'s own invariant, not this
+                            // function's, and this phase's invariants have
+                            // not all held -- the absorbed-`WHEN` case
+                            // (`when_absorbing_a_when_parses_and_runs_at_
+                            // rc_0`, this module's own test) is exactly a
+                            // `When` instruction executing while its
+                            // enclosing `SELECT`'s own `whens` does not list
+                            // it, which is the same shape of surprise. If a
+                            // reader ever sees this, `whens` names an index
+                            // whose own kind is not what built it -- a
+                            // `rexx-parse` defect, not a formatting one, and
+                            // nothing this function can correct. Skipping
+                            // the entry (matching the outer fallback's own
+                            // "nothing further to add" answer once the loop
+                            // and the `OTHERWISE` check both come up empty)
+                            // keeps the diagnostic path alive instead of
+                            // trading a wrong indent for a dead process.
+                            _ => continue,
                         };
                         // `body_start` is the WHEN's own `Then` marker,
                         // sharing `InstructionKind::Then` with `IF` (both go
