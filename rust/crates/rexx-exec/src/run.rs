@@ -2347,9 +2347,18 @@ impl Interp {
         ctrl: &Controlled,
         indent: usize,
     ) -> Result<LoopState, Failure> {
+        // Read once, not once per header component: nothing between here
+        // and the last `round_via_unary_plus` call below executes an
+        // instruction (only expression evaluation happens in a controlled
+        // loop's own header), and `NUMERIC DIGITS` only ever changes by
+        // running one, so one read stands in correctly for "current digits
+        // at loop entry," which is the oracle's own rule (`round_via_unary_
+        // plus`'s own doc comment has the citation).
+        let entry_digits = self.activation().settings.digits();
         let initial_value = self.eval(code, &ctrl.initial)?;
         self.roots.push_temp(initial_value);
         let current = self.arith_operand(initial_value)?;
+        let current = round_via_unary_plus(&current, entry_digits).map_err(Raised::from)?;
 
         let mut to = None;
         let mut by = None;
@@ -2365,7 +2374,8 @@ impl Interp {
                     self.roots.push_temp(value);
                     let text = self.to_text(value).to_vec();
                     self.trace_keyword(indent, "TO", &text);
-                    to = Some(self.arith_operand(value)?);
+                    let bound = self.arith_operand(value)?;
+                    to = Some(round_via_unary_plus(&bound, entry_digits).map_err(Raised::from)?);
                 }
                 ControlExpr::By => {
                     let expr = ctrl
@@ -2376,7 +2386,8 @@ impl Interp {
                     self.roots.push_temp(value);
                     let text = self.to_text(value).to_vec();
                     self.trace_keyword(indent, "BY", &text);
-                    by = Some(self.arith_operand(value)?);
+                    let step = self.arith_operand(value)?;
+                    by = Some(round_via_unary_plus(&step, entry_digits).map_err(Raised::from)?);
                 }
                 ControlExpr::For => {
                     let expr = ctrl
@@ -2394,6 +2405,9 @@ impl Interp {
                 }
             }
         }
+        // No `round_via_unary_plus` needed on the default: a bare literal
+        // `1` is already whole at any width, so rounding it at `entry_
+        // digits` could only ever answer `1` again.
         let by = match by {
             Some(by) => by,
             None => Number::parse("1").expect("the literal 1 always parses"),
@@ -2421,14 +2435,29 @@ impl Interp {
     /// bare `DO`'s own repeat count and a `FOR` expression share (26.2/26.3
     /// respectively; the caller supplies which raiser applies, since that
     /// is the only way the two differ), and answers it as a `u64`, or
-    /// `None` if it fails either check. `rexx_num::ARGUMENT_DIGITS` is
-    /// `exit_code_for`'s own choice of width for exactly this
-    /// current-`DIGITS`-independent kind of conversion (`lib.rs`'s own doc
-    /// comment on it), reused here rather than invented: a loop bound is no
-    /// more digits-limited than `EXIT`'s own result is.
+    /// `None` if it fails either check.
+    ///
+    /// **Corrected after the branch review's F3 (Important, a silently
+    /// wrong answer).** This used to convert under `rexx_num::
+    /// ARGUMENT_DIGITS` (18, `Numerics::ARGUMENT_DIGITS`'s own width), on
+    /// the reasoning "a loop bound is no more digits-limited than `EXIT`'s
+    /// own result is" -- wrong by measurement, not merely stale: `EXIT`
+    /// genuinely does convert under `ARGUMENT_DIGITS` (`lib.rs`'s
+    /// `exit_code_for`, unaffected by this fix, `exit 12345` under `digits
+    /// 3` matches the oracle at rc 57 on both sides), but a loop bound does
+    /// not. The oracle's own `ForLoop::setup` (`DoBlockComponents.cpp`
+    /// ~80-100, verified by containment) rounds under the *current*
+    /// `NUMERIC DIGITS` (`requestNumber(count, number_digits())`) before
+    /// asking whether the result is whole -- the same rule `TRACE`'s own
+    /// skip count uses (`Number::whole_value`'s own doc comment states the
+    /// contrast between the two rules directly), not `EXIT`'s. Measured:
+    /// `numeric digits 3; do 12345; end` is error 26.2, rc 230 on the
+    /// oracle; this crate ran clean, rc 0, before this fix. `do i = 1 to
+    /// 99999 for 12345` under `digits 3` is 26.3 on the oracle, same gap.
     fn whole_nonneg(&mut self, value: ObjRef) -> Option<u64> {
         let number = self.to_number(value).ok()?;
-        let whole = number.whole_value(rexx_num::ARGUMENT_DIGITS)?;
+        let digits = usize::try_from(self.activation().settings.digits()).ok()?;
+        let whole = number.whole_value(digits)?;
         u64::try_from(whole).ok()
     }
 
@@ -2833,14 +2862,14 @@ impl Interp {
         match setting {
             NumericSetting::Digits => {
                 let default = rexx_num::DEFAULT_DIGITS.to_string();
-                let text = self.numeric_operand(code, expression, &default)?;
+                let text = self.numeric_operand(code, expression, "DIGITS", &default)?;
                 self.activation_mut()
                     .settings
                     .set_digits_str(&text)
                     .map_err(raised_from_settings)?;
             }
             NumericSetting::Fuzz => {
-                let text = self.numeric_operand(code, expression, "0")?;
+                let text = self.numeric_operand(code, expression, "FUZZ", "0")?;
                 self.activation_mut()
                     .settings
                     .set_fuzz_str(&text)
@@ -2879,7 +2908,19 @@ impl Interp {
                 // case-insensitively.
                 let value = self.eval(code, expression)?;
                 self.roots.push_temp(value);
-                let text = String::from_utf8_lossy(&self.to_text(value)).into_owned();
+                let text = self.to_text(value).to_vec();
+                // `>K>   "FORM" => "engineering"` (F2, branch review): fires
+                // before `set_form_str`'s own validation, same as `DIGITS`/
+                // `FUZZ` below and `setup_controlled`'s own `TO`/`BY`/`FOR`
+                // -- measured, `numeric form value 'engineering'` under
+                // `trace r` traces `>K>` and *then* raises 25.11, not the
+                // reverse. Untranslated, matching the error report's own
+                // `found "engineering"` substitution, which is also
+                // unmodified case -- `set_form_str`'s own no-uppercasing
+                // rule for this one path, unlike the two keyword spellings
+                // above.
+                self.trace_keyword(self.current_value_indent, "FORM", &text);
+                let text = String::from_utf8_lossy(&text).into_owned();
                 self.activation_mut()
                     .settings
                     .set_form_str(&text)
@@ -2899,17 +2940,34 @@ impl Interp {
     /// `error.rs`), and a lossy byte cannot parse as a valid DIGITS/FUZZ
     /// value either way, so the conversion still ends in the right error
     /// family rather than silently accepting mangled input.
+    ///
+    /// **`>K>` traces only when `expression` is `Some` (F2, branch review,
+    /// Important).** `RexxInstructionNumeric::execute` calls
+    /// `traceKeywordResult` for `DIGITS`/`FUZZ`/`FORM` alike whenever an
+    /// expression is present (`NumericInstruction.cpp:98`/`135`/`174`,
+    /// verified by containment) -- measured, `trace r; numeric digits 9`
+    /// emits `>K>   "DIGITS" => "9"` after the clause echo, and a bare
+    /// `numeric digits`/`numeric fuzz` (no expression, "restore to the
+    /// previous value") traces nothing at all, confirming the gate is on
+    /// the expression's presence and not on the keyword. Before the
+    /// validating `set_digits_str`/`set_fuzz_str` call, same reason
+    /// `setup_controlled` already traces `TO`/`BY`/`FOR` before validating
+    /// them: measured, `numeric digits 'x'` under `trace r` emits `>K>
+    /// "DIGITS" => "x"` and *then* raises 26.5, not the reverse.
     fn numeric_operand(
         &mut self,
         code: &Code<'_>,
         expression: &Option<Expr>,
+        keyword: &str,
         default: &str,
     ) -> Result<String, Failure> {
         match expression {
             Some(expression) => {
                 let value = self.eval(code, expression)?;
                 self.roots.push_temp(value);
-                Ok(String::from_utf8_lossy(&self.to_text(value)).into_owned())
+                let text = self.to_text(value).to_vec();
+                self.trace_keyword(self.current_value_indent, keyword, &text);
+                Ok(String::from_utf8_lossy(&text).into_owned())
             }
             None => Ok(default.to_string()),
         }
@@ -3537,6 +3595,34 @@ fn numeric_less(a: &Number, b: &Number, digits: u64, fuzz: u64) -> Result<bool, 
     compare_decoded(b"", Some(a), b"", Some(b), digits, fuzz, CompareOp::Less)
 }
 
+/// Rounds `number` under `digits`, mirroring the oracle's own unary `+` at
+/// a controlled loop's entry (F1, branch review, Important): `setup_
+/// controlled` used to store `initial`/`to`/`by` as their exact parse, but
+/// `ControlledLoop::setup` (`DoBlockComponents.cpp:126-166`, verified by
+/// containment) rounds all three with `callOperatorMethod(OPERATOR_PLUS,
+/// ...)` before the loop ever starts. Masked while `NUMERIC DIGITS` stays
+/// constant (every later use re-rounds to the same width anyway) and wrong
+/// the moment digits changes inside the loop body -- measured: `numeric
+/// digits 3; do i = 1.23456 to 3; say i; numeric digits 9; end` is `1.23 /
+/// 2.23 / 3.23` on the oracle (the header values were rounded once, at
+/// entry, under digits 3, and stay that width even after digits widens);
+/// this crate gave `1.23 / 2.23456 / 3.23456` before this fix (the exact
+/// parse survived into the wider-digits passes untouched).
+///
+/// `Number::zero().add(number, digits)` rather than `Number::round_to`:
+/// unary `+` is `0 + number` under the active digits (`eval.rs`'s own
+/// `PrefixOp::Plus` arm does exactly this, though for an `ObjRef` this
+/// function has no need to produce -- `LoopState::Controlled`'s own fields
+/// are `Number`, not `ObjRef`), and `round_to`'s own doc comment
+/// distinguishes the two: rounding alone is not what "prefix +" means, and
+/// the oracle's citation is explicitly the operator, not a bare rounding.
+/// A free function taking `&Number`/`u64` rather than a method, matching
+/// `numeric_less`, just above: it needs no `&self` either, and reads only
+/// what `rexx_num` already exposes as `pub`.
+fn round_via_unary_plus(number: &Number, digits: u64) -> Result<Number, ArithError> {
+    Number::zero().add(number, digits)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4017,6 +4103,46 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (25, 11));
+    }
+
+    /// F2 (branch review, Important): `NUMERIC DIGITS`/`FUZZ`/`FORM VALUE`
+    /// trace `>K>` when an expression is present, and a bare `NUMERIC
+    /// DIGITS`/`FUZZ` (no expression) traces nothing -- both measured
+    /// against the oracle (`numeric_operand`'s own doc comment has the two
+    /// transcripts this mirrors). Mutation killed: removing either
+    /// `trace_keyword` call (`numeric_operand`'s own, shared by `DIGITS`/
+    /// `FUZZ`, or `FormValue`'s own inline one) drops that setting's own
+    /// `>K>` line from `interp.trace` entirely, verified by reverting each
+    /// in turn.
+    #[test]
+    fn numeric_digits_fuzz_and_form_value_trace_k_only_with_an_expression() {
+        let mut interp = Interp::new(false);
+        interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
+        say_output(
+            &mut interp,
+            b"numeric digits 9\nnumeric fuzz 2\nnumeric form value 'SCIENTIFIC'",
+        );
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* numeric digits 9\n       >K>   \"DIGITS\" => \"9\"\n     \
+              2 *-* numeric fuzz 2\n       >K>   \"FUZZ\" => \"2\"\n     \
+              3 *-* numeric form value 'SCIENTIFIC'\n       >K>   \"FORM\" => \"SCIENTIFIC\"\n"
+                .to_vec()
+        );
+
+        let mut interp = Interp::new(false);
+        interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
+        say_output(
+            &mut interp,
+            b"numeric digits 3\nnumeric digits\nnumeric fuzz",
+        );
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* numeric digits 3\n       >K>   \"DIGITS\" => \"3\"\n     \
+              2 *-* numeric digits\n     3 *-* numeric fuzz\n"
+                .to_vec(),
+            "a bare NUMERIC DIGITS/FUZZ, with no expression, traces nothing"
+        );
     }
 
     // ---- EXIT ----
@@ -5098,6 +5224,49 @@ mod tests {
         };
     }
 
+    /// F1 (branch review, Important): `initial`/`to`/`by` are rounded under
+    /// the *entry* `NUMERIC DIGITS`, once, not stored as their exact parse
+    /// -- `round_via_unary_plus`'s own doc comment has the oracle citation
+    /// and both transcripts this mirrors exactly. Masked while `DIGITS`
+    /// stays constant (every later use re-rounds to the same width, so the
+    /// exact and the rounded value render identically); this widens
+    /// `DIGITS` *inside* the loop body, after entry, so only a value
+    /// rounded at entry -- not the exact parse -- can still show `1.23` on
+    /// every pass. Mutation killed: removing either `round_via_unary_plus`
+    /// call in `setup_controlled` (the one on `current`, or the one in
+    /// `ControlExpr::By`'s own arm) makes the affected probe's second and
+    /// third lines read the exact, unrounded value instead (`2.23456`/
+    /// `3.23456` for `current`, or accumulating by the exact `1.2345`
+    /// instead of the rounded `1.23` for `by`) -- verified by reverting
+    /// each in turn.
+    #[test]
+    fn a_controlled_loops_header_values_round_at_entry_not_the_exact_parse() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"numeric digits 3\ndo i = 1.23456 to 3\nsay i\nnumeric digits 9\nend"
+            ),
+            b"1.23\n2.23\n".to_vec(),
+            "measured against the oracle: current is rounded once at entry \
+             (1.23456 -> 1.23), and widening digits inside the loop must \
+             not un-round it -- the exact parse would give 2.23456"
+        );
+
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"numeric digits 3\ndo i = 1 to 9 by 1.2345\nsay i\nnumeric digits 9\nend"
+            ),
+            b"1\n2.23\n3.46\n4.69\n5.92\n7.15\n8.38\n".to_vec(),
+            "measured against the oracle: by is rounded to 1.23 once at \
+             entry and accumulated at that width, not the exact 1.2345 -- \
+             the loop stops after 8.38 because the next value, 9.61, is \
+             past the bound"
+        );
+    }
+
     // ---- DO/LOOP header errors (Step 2's own table, re-measured) ----
 
     #[test]
@@ -5149,6 +5318,38 @@ mod tests {
             assert_eq!((raised.number, raised.sub), (26, 2), "{source:?}");
             assert_eq!(raised.additional, vec![found.to_string()], "{source:?}");
         }
+    }
+
+    /// F3 (branch review, Important): a bare `DO` count and a `FOR` count
+    /// are validated under the *current* `NUMERIC DIGITS`, not a fixed
+    /// width -- `whole_nonneg`'s own doc comment has the oracle citation
+    /// and the two oracle-measured transcripts this mirrors
+    /// (`numeric digits 3; do 12345; end` is 26.2 rc 230; the `FOR` shape
+    /// is 26.3). Mutation killed: reverting `whole_nonneg` to convert
+    /// under `rexx_num::ARGUMENT_DIGITS` (18) instead of the activation's
+    /// own `settings.digits()` makes both of these run clean (`after`
+    /// prints, no error) instead of raising, since `12345`/`54321` both
+    /// fit comfortably under 18 digits and only fail to fit under 3.
+    #[test]
+    fn a_repetition_or_for_count_is_validated_under_the_current_digits_not_a_fixed_width() {
+        let mut interp = Interp::new(false);
+        let failure =
+            run_source(&mut interp, b"numeric digits 3\ndo 12345\nend\nsay 'after'").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (26, 2));
+
+        let mut interp = Interp::new(false);
+        let failure = run_source(
+            &mut interp,
+            b"numeric digits 3\ndo i = 1 to 99999 for 12345\nend\nsay 'after'",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (26, 3));
     }
 
     // ---- WHILE/UNTIL ----
