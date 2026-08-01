@@ -35,16 +35,34 @@
 //!    `val V.ABC`: `I` resolves to `abc`, which is not upcased, while `ABC`
 //!    written literally stands for itself.
 //!
-//! **What needs no code here at all.** Reading a *bare* stem
-//! (`ExprKind::Stem`) is not a new operation: it goes through the exact same
-//! slot read every variable uses, unset or not. Unset, it derives its own
-//! name exactly as an uninitialised simple variable does -- no `Body::Stem`
-//! is ever allocated for that case (measured: `say never_touched.5` needs no
-//! stem object to answer `NEVER_TOUCHED.5`, and `drop x.` leaves `x.`
-//! behaving exactly as if it had never been touched at all, so there is
-//! nothing to distinguish). Set, the slot holds a `Body::Stem`, and
-//! *rendering* it is the one thing this module adds to `value.rs`'s
-//! `to_text`: the object's `default` if `Some`, else its own `name`.
+//! 5. **Reading a bare, unset stem must auto-vivify a real `Body::Stem`
+//!    object** (branch review F4), the same way the oracle's
+//!    `createStemVariable` fires on any miss to the variable dictionary,
+//!    reads included (`VariableDictionary::getStemVariable`,
+//!    `VariableDictionary.hpp:178-183`). `read_stem` is the function: it
+//!    binds a fresh `Body::Stem { default: None, tails: {}, .. }` into the
+//!    slot and returns it, rather than a derived-name `Body::Text` the way
+//!    an uninitialised simple variable's read does.
+//!
+//! **Correction to an earlier version of this doc.** It used to claim
+//! reading a bare, unset stem "is not a new operation" and needs "no
+//! `Body::Stem` ... allocated for that case", reasoning from two
+//! measurements: `say never_touched.5` needs no stem object to answer
+//! `NEVER_TOUCHED.5`, and `drop x.` leaves `x.` behaving as if never
+//! touched. Both measurements were *rendering-only*, and both are still
+//! true of rendering: `to_text` on a fresh, defaultless `Body::Stem` gives
+//! the same derived name a bare `Body::Text` would, so nothing about how
+//! `say`/`to_text` show an unset stem changed. What the claim missed is
+//! that **aliasing is where an object's identity becomes observable, and
+//! rendering alone can never reach it.** `b. = a.` with `a.` never
+//! touched, then `a.1 = 5`, then `say b.1`, needs `b.`'s read of `a.` to
+//! hand back the very object `a.1 = 5` will mutate -- a derived
+//! `Body::Text` has no identity to share, so `b.` ended up with its own,
+//! unrelated default instead of seeing `5`. Aliasing an untouched stem
+//! needs `PROCEDURE EXPOSE` to reach from outside pure 4a (4b's scope), so
+//! this was invisible to every 4a instrument; the divergence above needs
+//! no `PROCEDURE EXPOSE` at all and is reachable in a two-line pure-4a
+//! program.
 
 use crate::{Code, Interp};
 use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
@@ -112,10 +130,17 @@ impl Interp {
     /// `compound_parts` is a borrowed `&str`, not a token, so there is no id
     /// for it (`ExprKind::Compound`'s doc comment on `ast.rs`). Unset
     /// derives the name's own (already upcased) spelling, same as any
-    /// uninitialised read -- which is also exactly what a *bare* stem read
-    /// needs (`ExprKind::Stem`'s id already carries its own trailing
-    /// period), so this one function serves both a tail piece's value and a
-    /// stem variable's raw, unconverted one.
+    /// uninitialised simple-variable read.
+    ///
+    /// **Not** a bare stem's own read -- `read_stem` below is, since branch
+    /// review F4. A tail piece is always a *plain* variable
+    /// (`compound_parts`/`Tail::Variable` only ever names one, never a
+    /// stem), so this function never needs to auto-vivify anything; an
+    /// earlier version of this doc claimed it served the bare-stem case too,
+    /// reasoning from the (correct, but incomplete) observation that
+    /// rendering an unset name looks identical either way. It does not, once
+    /// the result is aliased rather than only rendered -- see `read_stem`'s
+    /// own doc comment and the module doc's correction.
     pub(crate) fn read_by_name(&mut self, name: &[u8]) -> ObjRef {
         let slot = self.slot_of(name);
         let frame = self.activation().frame;
@@ -123,6 +148,49 @@ impl Interp {
             Some(value) => value,
             None => self.text(name),
         }
+    }
+
+    /// Reads a bare stem (`ExprKind::Stem`): D15a's own auto-vivification
+    /// rule (branch review F4), mirroring the oracle's `createStemVariable`,
+    /// which fires on any miss to the variable dictionary, reads included
+    /// (`VariableDictionary::getStemVariable`, `VariableDictionary.hpp:
+    /// 178-183`).
+    ///
+    /// Unlike `read_by_name`'s plain-variable fallback, an unset stem-named
+    /// slot cannot come back as a derived-name `Body::Text`: a bare stem
+    /// read's result can be aliased (`b. = a.` shares whatever object the
+    /// read of `a.` hands back, `stem_assign`'s own rule), and a `Body::Text`
+    /// has no identity for a later write through the other name to reach.
+    /// So this always allocates on a miss (`Body::Stem { default: None,
+    /// tails: {}, .. }`), binds it into the slot, and returns it -- there is
+    /// no way, from the read alone, to know whether its result will be
+    /// aliased, so every bare stem read pays for the alias case. Measured
+    /// harmless when the result is never aliased: rendering a fresh,
+    /// defaultless `Body::Stem` gives the object's own name, the identical
+    /// bytes the old derived-`Body::Text` answer gave, so no
+    /// rendering-only test moves.
+    ///
+    /// `default: None`, never the derived name -- getting this backwards
+    /// would make a later tombstoned tail fall back to the derived name
+    /// instead of deriving its own from the object, silently breaking
+    /// D15a's tombstone rule (item 1 above) for a slot this function
+    /// touches but has no business changing the meaning of.
+    pub(crate) fn read_stem(&mut self, name: &[u8]) -> ObjRef {
+        let slot = self.slot_of(name);
+        let frame = self.activation().frame;
+        if let Some(value) = self.roots.slot(frame, slot) {
+            return value;
+        }
+        let stem = self.alloc_with(
+            BehaviourId::STEM,
+            Body::Stem {
+                name: name.into(),
+                default: None,
+                tails: HashMap::new(),
+            },
+        );
+        self.roots.set_slot(frame, slot, stem);
+        stem
     }
 
     /// Reads a tail: `stem_name` is the **read site's** own name (used only
@@ -463,7 +531,7 @@ mod tests {
 
         let one = interp.number(Number::parse("1").unwrap(), 9, Form::Scientific);
         interp.stem_assign(b"A.", one);
-        let a_value = interp.read_by_name(b"A.");
+        let a_value = interp.read_stem(b"A.");
         interp.stem_assign(b"B.", a_value);
 
         let two = interp.number(Number::parse("2").unwrap(), 9, Form::Scientific);
@@ -475,7 +543,7 @@ mod tests {
         let nine = interp.number(Number::parse("9").unwrap(), 9, Form::Scientific);
         interp.stem_assign(b"A.", nine);
 
-        let b_bare = interp.read_by_name(b"B.");
+        let b_bare = interp.read_stem(b"B.");
         assert_eq!(&*interp.to_text(b_bare), b"1");
         let b1_again = interp.stem_get(b"B.", b"1");
         assert_eq!(&*interp.to_text(b1_again), b"2");
@@ -489,7 +557,7 @@ mod tests {
 
         let rd = interp.text(b"rd");
         interp.stem_assign(b"R.", rd);
-        let r_value = interp.read_by_name(b"R.");
+        let r_value = interp.read_stem(b"R.");
         // `u = r.`: an ordinary simple-variable assignment, aliasing whatever
         // `r.`'s slot currently holds -- no stem function involved, because
         // the target is not a stem.
@@ -511,7 +579,7 @@ mod tests {
 
         let def = interp.text(b"def");
         interp.stem_assign(b"S.", def);
-        let s_value = interp.read_by_name(b"S.");
+        let s_value = interp.read_stem(b"S.");
         let t_slot = interp.slot_of(b"T");
         let frame = interp.activation().frame;
         interp.roots.set_slot(frame, t_slot, s_value);
@@ -526,10 +594,88 @@ mod tests {
     #[test]
     fn an_untouched_stem_derives_its_own_name_with_the_period() {
         // say q. -> Q.
+        //
+        // The module doc's "measured harmless" half of the F4 correction:
+        // `read_stem` now auto-vivifies a real `Body::Stem` here where the
+        // old code returned a derived `Body::Text`, and this test proves
+        // that change is invisible to rendering alone -- `q`'s bytes are
+        // identical either way. Only `reading_an_untouched_stem_auto_
+        // vivifies_a_shared_object` below, which aliases the result, can
+        // tell the two implementations apart.
         let mut interp = Interp::new(false);
         activated(&mut interp);
-        let q = interp.read_by_name(b"Q.");
+        let q = interp.read_stem(b"Q.");
         assert_eq!(&*interp.to_text(q), b"Q.");
+    }
+
+    #[test]
+    fn reading_an_untouched_stem_auto_vivifies_a_shared_object() {
+        // b. = a. (a. never touched) ; a.1 = 5 ; say b.1 -> 5 ; say b.7 ->
+        // A.7 (measured against the oracle; branch review F4).
+        //
+        // Kills two independent mutations at once:
+        // 1. Reverting `read_stem` to `read_by_name`'s derive-a-`Body::Text`
+        //    behaviour on a miss: `stem_assign`'s `is_stem` check would then
+        //    see a `Body::Text`, take the "wrap as new default" branch
+        //    instead of "share the object", and `b1` would render `A.`
+        //    (the wrapped default) rather than `5`.
+        // 2. `read_stem` allocating with the wrong default -- `Some` of the
+        //    derived name instead of `None` -- which would make `b7`
+        //    resolve through that default (`A.`) instead of deriving its
+        //    own tail name (`A.7`), silently breaking D15a's "a tombstone/
+        //    unresolved tail does not take a name-shaped default" shape one
+        //    level up from where it is normally tested.
+        let mut interp = Interp::new(false);
+        activated(&mut interp);
+
+        let a_value = interp.read_stem(b"A.");
+        interp.stem_assign(b"B.", a_value);
+
+        let five = interp.number(Number::parse("5").unwrap(), 9, Form::Scientific);
+        interp.stem_set(b"A.", b"1", five);
+
+        let b1 = interp.stem_get(b"B.", b"1");
+        assert_eq!(&*interp.to_text(b1), b"5");
+        let b7 = interp.stem_get(b"B.", b"7");
+        assert_eq!(&*interp.to_text(b7), b"A.7");
+    }
+
+    #[test]
+    fn an_unset_tail_piece_variable_still_derives_its_own_name_not_a_stem() {
+        // i = (unset) ; v.i = 'x' ; say v.I -> x (measured: `I` is v.'s
+        // upcased own spelling, exactly what an uninitialised simple
+        // variable derives -- never a stem object, since a tail piece is
+        // always a plain variable, `compound_parts`/`Tail::Variable`'s own
+        // contract). `read_by_name` -- not `read_stem` -- is what
+        // `tail_key` calls for a piece, and this pins that it still takes
+        // the plain, non-vivifying path after F4 split the two functions
+        // apart: a mutation that merged them back into one auto-vivifying
+        // function would make `i`'s unset read allocate a `Body::Stem`
+        // named `I` instead of deriving the text `I`, which this test
+        // cannot observe going wrong through rendering alone -- so it
+        // additionally checks that no slot was bound for `I` at all.
+        let mut interp = Interp::new(false);
+        let (program, id) = compound_id(&mut interp, b"say v.i");
+
+        let code = Code {
+            body: &program.main,
+            symbols: &program.symbols,
+            slots: &HashMap::new(),
+        };
+        let key = interp.tail_key(&code, id);
+        assert_eq!(key, b"I");
+
+        let x = interp.text(b"x");
+        interp.stem_set(b"V.", &key, x);
+        let v_i = interp.stem_get(b"V.", b"I");
+        assert_eq!(&*interp.to_text(v_i), b"x");
+
+        let i_slot = interp.slot_of(b"I");
+        let frame = interp.activation().frame;
+        assert!(
+            interp.roots.slot(frame, i_slot).is_none(),
+            "an unset tail piece must not bind anything into its own slot"
+        );
     }
 
     #[test]

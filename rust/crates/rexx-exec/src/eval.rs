@@ -182,11 +182,14 @@ impl Interp {
                 let text = self.to_text(value).to_vec();
                 self.trace_literal(indent, &text);
             }
-            // A bare stem read (`ExprKind::Stem`) goes through the exact
-            // same slot read a simple variable's does (`eval_node`'s own
-            // doc comment on this shared arm), and traces the same way --
-            // measured only for a simple variable; a bare stem's own `>V>`
-            // is reasoned from that, not separately probed.
+            // A bare stem read (`ExprKind::Stem`) no longer shares its
+            // *read* with a simple variable's (`eval_node`'s own arms below
+            // split them, branch review F4), but it traces identically:
+            // both arms produce a tag and an already-computed value, and
+            // `>V>` shows the same two things regardless of which read
+            // produced the value -- measured only for a simple variable; a
+            // bare stem's own `>V>` is reasoned from that, not separately
+            // probed.
             ExprKind::Variable(id) | ExprKind::Stem(id) => {
                 let tag = code.symbols.name(*id).as_bytes().to_vec();
                 let text = self.to_text(value).to_vec();
@@ -261,14 +264,24 @@ impl Interp {
             // A constant's value is its own upcased spelling, which is
             // observable rather than incidental: `say 1e5` prints `1E5`.
             ExprKind::Constant(id) => Ok(self.text(code.symbols.name(*id).as_bytes())),
-            // A bare stem read is not a new operation (D15a, `stem.rs`'s own
-            // module doc): it goes through the exact same slot read every
-            // variable uses, unset or not, so `Stem` and `Variable` share
-            // this arm rather than each getting their own copy of it.
-            ExprKind::Variable(id) | ExprKind::Stem(id) => {
+            ExprKind::Variable(id) => {
                 let (value, _novalue) = self.read(code, *id);
                 Ok(value)
             }
+            // A bare stem read is NOT the same operation a simple variable's
+            // is, despite once looking that way from rendering-only
+            // evidence (branch review F4). An unset simple variable derives
+            // its own name and nothing more can ever observe the
+            // difference; an unset stem-named slot must come back as a real,
+            // shared `Body::Stem` object (`read_stem`, `stem.rs`), because
+            // the oracle's `createStemVariable` fires on any miss, reads
+            // included, and a read's result can be aliased (`b. = a.` with
+            // `a.` never touched, then `a.1 = 5`, then `say b.1` -> `5`).
+            // Rendering an unset stem alone cannot tell the two models
+            // apart (both give the derived name), which is exactly how this
+            // was missed the first time; aliasing is where the object's
+            // identity becomes observable.
+            ExprKind::Stem(id) => Ok(self.read_stem(code.symbols.name(*id).as_bytes())),
 
             // `id` names the *whole* compound (its interned spelling is the
             // full dotted text); `compound_parts` decomposes it into the

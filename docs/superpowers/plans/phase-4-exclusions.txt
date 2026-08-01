@@ -273,3 +273,28 @@ above.
   different LoopKind, chosen because it fully exercises re-echo and per-pass
   >K>. It is NOT a witness selected to avoid this gap: the gap is stated here,
   and criterion 3's assessment should say the Controlled pair is unwitnessed.
+
+  A stem operand's arithmetic failure omits one stderr line the oracle
+  prints before it. Measured, `b. = never touched ; say b. + 1`:
+
+           *-* Compiled method "+" with scope "String".
+         1 *-* say b. + 1
+    Error 41 running /abs/f.rex line 1:  Bad arithmetic conversion.
+    Error 41.1:  Nonnumeric value ("B.") used in arithmetic operation.
+
+  Ours omits the first line; the rc (215) and both the "Error 41" and
+  "Error 41.1" lines, including the quoted value, match exactly. The missing
+  line is method-dispatch bookkeeping -- the oracle compiling and caching a
+  method for the `+` operator against the operand's own class before the
+  conversion inside it fails -- which needs the object model 4a does not
+  have, so it is Phase 5's.
+
+  This became reachable, not introduced, by this task's own fix for
+  branch-review-value.md's F5/F4: before the fix, `to_number` on a bare
+  stem operand hit `unreachable!` and aborted the process, so the oracle's
+  line was never even reached for comparison. `say 'abc' + 1` (a plain
+  string operand, no stem, no object identity to dispatch through) has
+  matched the oracle byte for byte all phase and still does after this fix;
+  the gap is specific to a stem correctly becoming a real object where it
+  used to be a plain `Text`, which is the same shape F4 itself is: object
+  identity becoming observable once it exists to be observed.

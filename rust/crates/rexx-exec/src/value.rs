@@ -189,6 +189,18 @@ impl Interp {
     /// `DIGITS` -- rounding belongs to the operation that reads the result,
     /// which is what lets the same cached parse answer `1.2346` at `DIGITS
     /// 5` and the full value at `DIGITS 20`.
+    ///
+    /// A `Body::Stem` (D15a) converts through the same redirect `to_text`
+    /// uses: its own `default` if `Some`, else its own `name` parsed as a
+    /// number (`NotNumeric` when the name does not parse, e.g. the default
+    /// derived name `Q.`, which is not a number). This is F5 from the branch
+    /// review: `to_text` already had this arm, `to_number` did not, so any
+    /// arithmetic, comparison, or numeric-context read of a bare stem
+    /// (`a. = 5; say a. + 1`) hit the `unreachable!` below and aborted the
+    /// process. Measured against the oracle: `a. = 5; say a. + 1` is `6`;
+    /// `say q. + 1` on a stem nobody ever assigned a default to raises 41.1
+    /// (non-numeric name `Q.`), which is exactly `NotNumeric` here turning
+    /// into a condition one layer up (`eval.rs`'s `Raised::nonnumeric`).
     // `&mut self` for the same reason `to_text` gives: this lazily fills
     // `Body::Text`'s `num` cache in place, which `to_*` alone would not imply.
     #[allow(
@@ -202,6 +214,22 @@ impl Interp {
             Decoded::SmallInt(n) => Ok(Number::parse(&n.to_string())
                 .expect("an i64's decimal spelling is always a number")),
             Decoded::Heap { .. } => {
+                // Mirrors `to_text`'s own stem redirect above: decided, and
+                // the borrow on `self.heap` dropped, before the recursive
+                // call below, which cannot overlap it.
+                let stem_default = {
+                    let object = self.heap.get(value).expect("a live value");
+                    match &object.body {
+                        Body::Stem {
+                            default: Some(d), ..
+                        } => Some(*d),
+                        _ => None,
+                    }
+                };
+                if let Some(default) = stem_default {
+                    return self.to_number(default);
+                }
+
                 let object = self.heap.get_mut(value).expect("a live value");
                 match &mut object.body {
                     Body::Num { value, .. } => Ok(value.clone()),
@@ -215,8 +243,25 @@ impl Interp {
                             Err(marker) => Err(*marker),
                         }
                     }
+                    // Reached for a `Body::Stem` with `default: None` too
+                    // (the `stem_default` check above only short-circuits
+                    // the `Some` case): parses the object's own name, the
+                    // same fallback `to_text` renders. No cache field
+                    // exists on `Body::Stem` to hold the parse the way
+                    // `Body::Text`'s `num` does, so this reparses on every
+                    // call rather than memoising -- a stem's derived name
+                    // almost never parses as a number, so there is nothing
+                    // costly to memoise in the common case, and a cache
+                    // field added just for this would be new state on
+                    // `Body::Stem` no other rule needs.
+                    Body::Stem { name, .. } => match std::str::from_utf8(name) {
+                        Ok(text) => Number::parse(text).ok_or(NotNumeric),
+                        Err(_) => Err(NotNumeric),
+                    },
                     other => {
-                        unreachable!("the value model only creates Text and Num, got {other:?}")
+                        unreachable!(
+                            "the value model only creates Text, Num and Stem, got {other:?}"
+                        )
                     }
                 }
             }
@@ -290,6 +335,7 @@ fn small_int_for(value: &Number, created_digits: u32) -> Option<i64> {
 mod tests {
     use super::*;
     use rexx_num::DivOp;
+    use std::collections::HashMap;
 
     /// A test-only shorthand: every literal here is a number by construction,
     /// so a parse failure is this test's own bug, not a case to handle.
@@ -435,5 +481,84 @@ mod tests {
         let words = interp.text(b"not a number");
         assert_eq!(interp.to_number(words), Err(NotNumeric));
         assert_eq!(interp.to_number(ObjRef::NIL), Err(NotNumeric));
+    }
+
+    // Branch review F5 (Critical): `to_number` on a `Body::Stem` used to hit
+    // the `unreachable!` fallback and abort the process (rc 101) --
+    // `to_text` already redirected through a stem's default/name, `to_number`
+    // never learned to. These three tests build a `Body::Stem` directly
+    // (the same shape `stem.rs`'s own allocations use) and drive it straight
+    // through `to_number`, with no live activation needed for that alone.
+
+    #[test]
+    fn to_number_on_a_stem_redirects_through_its_numeric_default() {
+        // a. = 5 ; say a. + 1 -> 6 (measured against the oracle). Kills the
+        // mutation that reverts this arm to `unreachable!`: that mutant
+        // panics this test instead of returning `Ok(5)`.
+        let mut interp = Interp::new(false);
+        let five = interp.number(n("5"), 9, Form::Scientific);
+        let stem = interp.alloc_with(
+            BehaviourId::STEM,
+            Body::Stem {
+                name: b"A.".to_vec().into(),
+                default: Some(five),
+                tails: HashMap::new(),
+            },
+        );
+        let value = interp.to_number(stem).unwrap();
+        let sum = interp.number(value.add(&n("1"), 9).unwrap(), 9, Form::Scientific);
+        assert_eq!(&*interp.to_text(sum), b"6");
+    }
+
+    #[test]
+    fn to_number_on_a_defaultless_stem_parses_its_own_name_and_fails() {
+        // say q. + 1 on a stem nobody ever assigned a default to: the
+        // oracle raises 41.1, nonnumeric value "Q." (measured). Kills a
+        // mutation that makes the `default: None` arm return some fixed
+        // `Ok` (e.g. `Ok(0)`) instead of parsing the object's own name and
+        // reporting `NotNumeric` when, as here, that name is not one.
+        let mut interp = Interp::new(false);
+        let stem = interp.alloc_with(
+            BehaviourId::STEM,
+            Body::Stem {
+                name: b"Q.".to_vec().into(),
+                default: None,
+                tails: HashMap::new(),
+            },
+        );
+        assert_eq!(interp.to_number(stem), Err(NotNumeric));
+        // Rendering is untouched by this fix -- still the derived name.
+        assert_eq!(&*interp.to_text(stem), b"Q.");
+    }
+
+    #[test]
+    fn to_number_on_a_stem_aliasing_another_stem_chases_through_both() {
+        // a. = 5 ; b. = a. ; say b. + 1 -> 6, the aliasing shape
+        // `stem_assign` actually produces (`stem.rs`): `b.`'s default is
+        // itself a `Body::Stem`, never a copy of `a.`'s value. Kills a
+        // mutation that only redirects one level deep (e.g. matching
+        // `Body::Num`/`Body::Text` inline instead of recursing through
+        // `to_number` again), which would panic on the second hop.
+        let mut interp = Interp::new(false);
+        let five = interp.number(n("5"), 9, Form::Scientific);
+        let a = interp.alloc_with(
+            BehaviourId::STEM,
+            Body::Stem {
+                name: b"A.".to_vec().into(),
+                default: Some(five),
+                tails: HashMap::new(),
+            },
+        );
+        let b = interp.alloc_with(
+            BehaviourId::STEM,
+            Body::Stem {
+                name: b"B.".to_vec().into(),
+                default: Some(a),
+                tails: HashMap::new(),
+            },
+        );
+        let value = interp.to_number(b).unwrap();
+        let sum = interp.number(value.add(&n("1"), 9).unwrap(), 9, Form::Scientific);
+        assert_eq!(&*interp.to_text(sum), b"6");
     }
 }
