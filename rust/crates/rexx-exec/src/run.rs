@@ -500,9 +500,14 @@ impl Interp {
     /// it becomes a root, and here that is a `push_temp` on the line after
     /// each call. The instruction loops open a temps frame around this call
     /// and close it after, so what is pushed here lives exactly one clause.
-    /// Not doing it would happen to work today, because `Heap::alloc_with`
-    /// never collects, and would become a use-after-free the day it does,
-    /// found by chasing a wrong value rather than by a compiler message.
+    /// Not doing it would happen to work in an ordinary run, because
+    /// `Heap::alloc_with_uncollected` never collects on its own, and would
+    /// become a use-after-free the day something does, found by chasing a
+    /// wrong value rather than by a compiler message. **Task 16's
+    /// collect-on-every-allocation mode is that something, opt in**, and this
+    /// discipline is what it verified: with the mode on, deleting one
+    /// `push_temp` in `eval_arithmetic` panics seven of the subset's
+    /// programs.
     ///
     /// `index` is `instruction`'s own position in `code.body.instructions`,
     /// added for Task 10: `If` and `Select` need their own position to
@@ -668,9 +673,11 @@ impl Interp {
                         // **under-rooted** value -- longer and later than
                         // any other window in this crate. Benign only
                         // because nothing on that path allocates or
-                        // collects (`Heap::alloc_with` never collects, and
-                        // `to_number`/`to_text` read an existing object
-                        // rather than making one); once a collector exists,
+                        // collects (`Heap::alloc_with_uncollected` never
+                        // collects on its own, and `to_number`/`to_text` read
+                        // an existing object rather than making one, which is
+                        // why Task 16's stress mode never fires inside this
+                        // window either); once a collector exists,
                         // this needs a root that survives past the
                         // temps-frame pop -- a global, or a dedicated field
                         // on `Interp` -- rather than the one-clause
