@@ -850,6 +850,7 @@ impl Interp {
                                         when_index,
                                         source,
                                         when_instruction,
+                                        None,
                                     );
                                     return Err(failure);
                                 }
@@ -873,6 +874,7 @@ impl Interp {
                                             when_index,
                                             source,
                                             when_instruction,
+                                            None,
                                         );
                                         return Err(failure);
                                     }
@@ -1010,8 +1012,22 @@ impl Interp {
             // the *outer* `WhenCase`'s own `run_bounded` call is bounded to,
             // so `Flow::Goto(false_target)` escapes it unchanged exactly the
             // way a `LEAVE`/`ITERATE` naming an enclosing construct already
-            // does (`run_bounded`'s own doc comment), with no further
-            // change needed anywhere else.
+            // does (`run_bounded`'s own doc comment).
+            //
+            // **The one further change: whatever this `Goto` lands on is
+            // reported at this node's own condition depth minus two, not
+            // its own lexical position.** Found by review, one perimeter
+            // deeper than the fix above: `select case 2 / when 2 then /
+            // when 3 then nop / end / say 'after'` (no `OTHERWISE`) reports
+            // `END`'s own 7.3 clause at indent 4, where `END`'s own
+            // `static_indent` (top-level `SELECT`) is 0. `lib.rs`'s own
+            // doc comment on `pending_escape_indent` has the full argument
+            // for why `current_value_indent - 2` is the right number (the
+            // same "marker is half its body" arithmetic already governing
+            // `THEN`/`ELSE`/`OTHERWISE`, not a new rule) and why it is
+            // carried through a field rather than by growing `Flow::Goto`
+            // a payload every ordinary resume-`Goto` would then have to
+            // carry too.
             //
             // **A true match still never runs its own consequence**,
             // confirmed by a dedicated probe (`t13_f3_true.rex`, this
@@ -1053,6 +1069,7 @@ impl Interp {
                     if self.test_case_when(code, values, &case_text, indent)? {
                         Ok(Flow::Next)
                     } else {
+                        self.pending_escape_indent = Some(indent.saturating_sub(2));
                         Ok(Flow::Goto(
                             false_target.unwrap_or(code.body.instructions.len()),
                         ))
@@ -1096,9 +1113,17 @@ impl Interp {
             // are reached only by that `OTHERWISE`'s own ordinary body
             // fallthrough and do nothing. `EndStyle::Select`'s own doc
             // comment: "Reaching this END at run time is error 7.3, because
-            // every WHEN was false" -- which is exactly the one path that
-            // lands here, since `Select`'s own arm above sends every other
-            // path around this instruction entirely.
+            // every WHEN was false" -- the ordinary way to land here, but
+            // **not the only one since F3**: an absorbed `WhenCase`'s own
+            // false-branch escape (`InstructionKind::WhenCase`'s own arm,
+            // above) can also `Goto` straight onto this exact instruction,
+            // carrying its own residual indent along in `pending_escape_
+            // indent` for this arm's own 7.3 to be reported at rather than
+            // this position's ordinary `static_indent`. An earlier version
+            // of this comment said `Select`'s own arm "sends every other
+            // path around this instruction entirely," which was true of
+            // every path *it* controls directly and false of this one,
+            // which escapes through it rather than being dispatched by it.
             //
             // **`EndStyle::Do`/`LabeledDo`/`Loop` used to fail loudly here,
             // and no longer do.** Task 11's `Do`/`Loop` arm now resolves its
@@ -1204,6 +1229,14 @@ impl Interp {
         // never the reverse, so anything that reads this field is already
         // gated by its own `intermediates` check; setting it plainly is
         // cheaper than a second `if` that would just repeat that gate.
+        //
+        // `pending_escape_indent` (F3's own perimeter, `lib.rs`'s own doc
+        // comment) is consumed here too, **every** step, not only a
+        // failing one -- an absorbed `WhenCase`'s own escape lands
+        // directly on whatever this call is about to step, and whether or
+        // not stepping it fails, the residual must not survive to affect
+        // anything after it.
+        let escape_indent = self.pending_escape_indent.take();
         let indent = static_indent(&code.body.instructions, index);
         self.current_value_indent = indent;
         if self.trace_mode.all
@@ -1215,7 +1248,7 @@ impl Interp {
         let flow = self.step(code, index, instruction, source);
         self.roots.pop_frame(frame);
         if flow.is_err() {
-            self.record_failure_site(code, index, source, instruction);
+            self.record_failure_site(code, index, source, instruction, escape_indent);
         }
         flow
     }
@@ -1235,18 +1268,24 @@ impl Interp {
     /// needed (beyond what `step_in_temps_frame` already required it for)
     /// so `static_indent` has something to walk the flat instruction list
     /// up to.
+    ///
+    /// `escape_indent`: `step_in_temps_frame`'s own consumed
+    /// `pending_escape_indent` (`lib.rs`'s own doc comment), used instead
+    /// of `static_indent` when `Some` -- **always `None` from `Select`'s
+    /// own two direct calls below**, which resolve a `When`/`WhenCase`
+    /// condition's own failure from *inside* the enclosing `SELECT`'s own
+    /// `step_in_temps_frame` call, not a fresh one of their own, so there
+    /// is nothing for them to have consumed.
     fn record_failure_site(
         &mut self,
         code: &Code<'_>,
         index: usize,
         source: Option<&ProgramSource>,
         instruction: &Instruction,
+        escape_indent: Option<usize>,
     ) {
-        self.record_failure_at(
-            source,
-            instruction,
-            static_indent(&code.body.instructions, index),
-        );
+        let indent = escape_indent.unwrap_or_else(|| static_indent(&code.body.instructions, index));
+        self.record_failure_at(source, instruction, indent);
     }
 
     /// Assigns `blame`'s own clause to `self.failure_site` at exactly
@@ -4149,6 +4188,34 @@ mod tests {
         };
         assert_eq!((raised.number, raised.sub), (7, 3));
         assert_eq!(raised.additional, Vec::<String>::new());
+    }
+
+    /// F3's own perimeter, found by review: an absorbed `WhenCase`'s
+    /// false-branch escape landing directly on `END` reports 7.3 at the
+    /// escape's own residual indent (4, the absorbed condition's own
+    /// depth of 6 minus 2), not `END`'s own lexical `static_indent` (0,
+    /// top-level `SELECT`). The mutation this kills: removing the
+    /// `self.pending_escape_indent = Some(...)` assignment in
+    /// `InstructionKind::WhenCase`'s own false-branch arm (or reverting
+    /// `record_failure_site` to ignore it) makes this test's own `indent`
+    /// read back `0` instead of `4`, while `select_with_no_when_true_and_
+    /// no_otherwise_raises_7_3`, just above -- the *ordinary*, non-
+    /// absorbed 7.3 path, unaffected by this fix -- stays green either
+    /// way, confirming the fix is scoped to the escape path alone.
+    #[test]
+    fn an_absorbed_whencases_escaping_false_branch_reports_end_at_its_own_residual_indent() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(
+            &mut interp,
+            b"select case 2\n  when 2 then\n    when 3 then nop\nend\nsay 'after'",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (7, 3));
+        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(indent, 4);
     }
 
     #[test]

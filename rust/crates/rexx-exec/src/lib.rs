@@ -633,6 +633,43 @@ struct Interp {
     /// `WhenCase` arm names the same limitation again at its own read
     /// site.
     current_case_text: Option<Vec<u8>>,
+    /// **F3's own perimeter, found by review.** When an absorbed `WhenCase`
+    /// (`run.rs`'s own doc comment on that arm) takes its `Flow::Goto
+    /// (false_target)` branch, the position it lands on is reported at
+    /// *this* indent, not its own `static_indent` -- one call to whichever
+    /// of `step_in_temps_frame`'s two indent-consuming purposes (the
+    /// `*-*`/value-line indent, or a failure's own `FailureSite.indent`)
+    /// fires next, whichever comes first, then cleared.
+    ///
+    /// Measured, not derived from the marker rule and merely reused by
+    /// analogy: `select case 2 / when 2 then / when 3 then nop / end / say
+    /// 'after'` (no `OTHERWISE`) reports `END`'s own 7.3 clause at indent
+    /// **4**, not the `0` its own lexical position (top-level `SELECT`)
+    /// would give -- `6` is the absorbed `WhenCase`'s own condition depth
+    /// (`current_value_indent` at the moment its arm decides to escape,
+    /// already measured correct and unchanged for its own clause), and `4`
+    /// is `6 - 2`, the identical "marker is half its body" arithmetic
+    /// `static_indent`'s own doc comment already states for `THEN`/`ELSE`/
+    /// `OTHERWISE` -- so this is the same rule, not a second one invented
+    /// for this one path, even though it is carried through a field rather
+    /// than through `static_indent`'s own recursion.
+    ///
+    /// **Why a field, not `Flow::Goto` growing a payload.** `Flow::Goto`
+    /// is the ordinary resume mechanism *every* `If`/`Select`/`Do` match
+    /// uses (`Ok(Flow::Goto(resume))`, dozens of sites), none of which has
+    /// any residual indent to carry -- only this one escape does. Giving
+    /// every one of those sites an indent to thread, to serve the single
+    /// site that needs one, is the restructuring the coordinator asked to
+    /// be told about rather than done; this field is the same shape
+    /// `current_value_indent`/`current_case_text` already are, applied to
+    /// a third, narrower quantity, not a new idiom.
+    ///
+    /// `None` in the overwhelmingly common case (nothing escaping right
+    /// now); consumed by `.take()` in `step_in_temps_frame` on *every*
+    /// step, not only a failing one, so a landing that does not itself
+    /// fail cannot leave this set for an unrelated, later failure to pick
+    /// up by accident.
+    pending_escape_indent: Option<usize>,
     /// The clause a `Raised` condition escaped from, as the 1-based line and
     /// the bytes `TRACE` would echo, or `None` if nothing raised.
     ///
@@ -694,6 +731,7 @@ impl Interp {
             trace_mode: TraceMode::OFF,
             current_value_indent: 0,
             current_case_text: None,
+            pending_escape_indent: None,
             failure_site: None,
             interpret_spike,
             depth: 0,
