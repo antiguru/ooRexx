@@ -121,7 +121,7 @@ fn a_stems_tails_and_default_are_traced() {
     tails.insert(b"1".to_vec(), Some(tail));
     // A tombstone: present, and reaching nothing.
     tails.insert(b"2".to_vec(), None);
-    let stem = heap.alloc_with(
+    let stem = heap.alloc_with_uncollected(
         BehaviourId::STEM,
         Body::Stem {
             name: b"A.".to_vec().into_boxed_slice(),

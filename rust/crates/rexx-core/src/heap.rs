@@ -45,6 +45,13 @@ pub struct Heap {
     free_head: Option<u32>,
     live: usize,
     marks: Vec<bool>,
+    /// How many times `collect` has run, ever. Exists for Task 16's
+    /// collect-on-every-allocation gate criterion (4a exit gate, criterion
+    /// 4): the mode has to *prove* it collected rather than merely claim to,
+    /// and a caller that never sees this move above zero has not tested
+    /// what it says it tested. Not reset by anything; a fresh count needs a
+    /// fresh `Heap`.
+    collections: u64,
 }
 
 impl Heap {
@@ -54,6 +61,7 @@ impl Heap {
             free_head: None,
             live: 0,
             marks: Vec::new(),
+            collections: 0,
         }
     }
 
@@ -61,31 +69,44 @@ impl Heap {
         self.slots.len()
     }
 
+    /// How many times `collect` has run against this heap. See the field's
+    /// own doc comment.
+    pub fn collections_performed(&self) -> u64 {
+        self.collections
+    }
+
     /// Marks from the roots, then sweeps everything unmarked.
     ///
-    /// **Nothing in the interpreter calls this yet, and one known under-rooted
-    /// window is waiting for the day something does.** `alloc_with` never
-    /// collects, so `rexx-exec` currently has a value that lives past the
-    /// temps frame that rooted it: `EXIT`'s result, from the wrapper's
-    /// `pop_frame` through to `exit_code_for`. It is written up at that site
-    /// in `run.rs`, and the fix is a root that outlives a clause rather than
-    /// the one-clause `push_temp` every other instruction result gets.
+    /// **Until Task 16, nothing in the interpreter called this at all, and
+    /// one known under-rooted window was waiting for the day something
+    /// did.** `alloc_with_uncollected` never collects on its own, so
+    /// `rexx-exec` has a value that lives past the temps frame that rooted
+    /// it: `EXIT`'s result, from the wrapper's `pop_frame` through to
+    /// `exit_code_for`. It is written up at that site in `run.rs`, and the
+    /// fix is a root that outlives a clause rather than the one-clause
+    /// `push_temp` every other instruction result gets. Task 16 gave
+    /// `rexx-exec` an opt-in stress mode (`Interp::alloc_with`, `lib.rs`)
+    /// that calls this after every allocation when enabled; it is still off
+    /// by default, so this paragraph's "nothing calls this" becomes "nothing
+    /// calls this unless asked to" rather than going stale outright.
     ///
     /// The pointer is here, rather than only there, because the person who
-    /// wires a collector into the interpreter is the one who turns that
-    /// window into a use-after-free, and this is the function they will be
-    /// looking at. Sweep `rexx-exec` for the same shape before doing it: an
-    /// unrooted window is invisible to the compiler and shows up as a wrong
-    /// value rather than a crash.
+    /// wires a collector into the interpreter permanently is the one who
+    /// turns that window into a use-after-free, and this is the function
+    /// they will be looking at. Sweep `rexx-exec` for the same shape before
+    /// doing it: an unrooted window is invisible to the compiler and shows
+    /// up as a wrong value rather than a crash.
     ///
     /// **That window does not block 4a's collect-on-every-allocation gate
     /// criterion, and this comment used to imply it did.** Nothing between
-    /// that pop and `exit_code_for` calls `alloc_with`: the conversion fills
-    /// a `Number` in place or parses onto the Rust heap. So a faithful
-    /// collect-on-every-allocation mode never fires inside the window, and
-    /// the criterion can be met with the window still open. It is a debt
-    /// against a future collector, not an obstacle to the gate.
+    /// that pop and `exit_code_for` calls `alloc_with_uncollected`: the
+    /// conversion fills a `Number` in place or parses onto the Rust heap.
+    /// So a faithful collect-on-every-allocation mode never fires inside the
+    /// window, and the criterion can be met with the window still open. It
+    /// is a debt against a future *permanent* collector, not an obstacle to
+    /// the gate.
     pub fn collect(&mut self, roots: &RootSet) -> CollectStats {
+        self.collections += 1;
         self.marks.clear();
         // Resized every time: the heap grows between collections.
         self.marks.resize(self.slots.len(), false);
@@ -209,10 +230,27 @@ impl Heap {
     }
 
     pub fn alloc(&mut self, body: Body) -> ObjRef {
-        self.alloc_with(BehaviourId::OBJECT, body)
+        self.alloc_with_uncollected(BehaviourId::OBJECT, body)
     }
 
-    pub fn alloc_with(&mut self, behaviour: BehaviourId, body: Body) -> ObjRef {
+    /// Allocates without ever collecting, whatever else is enabled.
+    ///
+    /// Named `_uncollected` rather than plain `alloc_with`, on request, so
+    /// that a **new** allocation site written the natural way announces at
+    /// the call site that it is bypassing the stress hook, rather than
+    /// silently matching the four existing `rexx-exec` sites that already
+    /// went through the friendly-named wrapper before this rename existed. A
+    /// fifth allocation site added later that keeps calling this name
+    /// directly would not fail anything -- the stress mode would just
+    /// quietly collect less often than it claims to, which is exactly the
+    /// vacuity shape this project keeps finding in its own instruments. The
+    /// obviously-correct choice for production code is
+    /// `rexx_exec::Interp::alloc_with` (`lib.rs`), which calls this and then
+    /// decides whether to collect; this method stays `pub` because
+    /// `rexx-core`'s own tests allocate directly with no `Interp` in scope
+    /// at all, and forcing every one of those through a heavier entry point
+    /// would buy this rule nothing they can bypass just as easily.
+    pub fn alloc_with_uncollected(&mut self, behaviour: BehaviourId, body: Body) -> ObjRef {
         let object = Object {
             behaviour,
             body,

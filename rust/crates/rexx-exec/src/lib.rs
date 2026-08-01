@@ -297,6 +297,15 @@ pub struct Outcome {
     /// What the run cost in stack. Task 11 reads this to set the
     /// evaluation-depth limit; see `StackSpan`.
     pub stack: StackSpan,
+    /// How many times `Heap::collect` ran during this program. Always `0`
+    /// under `run_program`/`run_program_interpret_spike`, since neither
+    /// enables Task 16's stress mode and nothing else in this crate calls
+    /// `collect` at all -- a non-zero value here is only ever possible
+    /// through `run_program_collect_every_alloc`, and criterion 4's gate
+    /// asserts it is non-zero specifically so a mode that silently
+    /// collected nothing cannot pass by being indistinguishable from one
+    /// that collected correctly.
+    pub collections: u64,
 }
 
 /// How deep evaluation went and how much stack it took to get there.
@@ -693,6 +702,16 @@ struct Interp {
     /// still not implemented and still exits `NOT_IMPLEMENTED_EXIT`. 4b's
     /// first move here is to delete this field and the branch that reads it.
     interpret_spike: bool,
+    /// Task 16's collect-on-every-allocation gate criterion (4a exit gate,
+    /// criterion 4): when true, [`Interp::alloc_with`] calls `Heap::collect`
+    /// after every allocation instead of never. Off by default, and the off
+    /// path is untouched by this field's existence -- `alloc_with` reads it
+    /// once, in an `if`, and does nothing else differently; nothing upstream
+    /// of that one check changed at all. Named for what it does rather than
+    /// for the criterion, since a later, permanent collector would want the
+    /// same flag and should not have to rename it away from a gate task's
+    /// number.
+    stress_collect: bool,
     /// Current `eval` recursion depth, and the deepest it has reached.
     ///
     /// Task 11 turns `depth` into D19's guard by comparing it against a limit
@@ -719,6 +738,15 @@ struct Interp {
 }
 
 impl Interp {
+    /// `stress_collect` always starts `false` here rather than as a second
+    /// parameter: `Interp::new` has well over a hundred callers, almost all
+    /// of them unit tests in files this task is not permitted to touch
+    /// (`run.rs`, `eval.rs`, `plan.rs`, `trace.rs`), so widening its
+    /// signature would force edits far outside this task's granted scope
+    /// for a flag only two callers (`execute`, below) ever need to set.
+    /// [`Interp::stress_collect`] flips it after construction instead,
+    /// which is exactly as inert for every existing caller as adding a
+    /// field with a fixed default already is.
     fn new(interpret_spike: bool) -> Interp {
         Interp {
             heap: Heap::new(),
@@ -734,6 +762,7 @@ impl Interp {
             pending_escape_indent: None,
             failure_site: None,
             interpret_spike,
+            stress_collect: false,
             depth: 0,
             max_depth: 0,
             stack_entry: 0,
@@ -860,6 +889,71 @@ impl Interp {
         }
     }
 
+    /// Turns on Task 16's collect-on-every-allocation stress mode. Only
+    /// `execute`'s `collect_every_alloc` arm calls this, right after
+    /// construction and before `run`; nothing else needs to flip it, and
+    /// nothing can un-flip it once a run has started.
+    fn enable_stress_collect(&mut self) {
+        self.stress_collect = true;
+    }
+
+    /// The one allocation entry point every value/stem constructor in this
+    /// crate goes through, so that Task 16's stress mode has exactly one
+    /// place to hook rather than one per call site.
+    ///
+    /// **Off by default, and provably inert when off**: with
+    /// `stress_collect` false (the constructed default, and the only value
+    /// `run_program`/`run_program_interpret_spike` ever leave it at), this
+    /// is `self.heap.alloc_with_uncollected(behaviour, body)` and nothing
+    /// else -- one call, one `if` that does not take its branch, no new
+    /// allocation, no new borrow of `self.roots`. Every existing caller
+    /// (`value.rs`'s `text`/`number`, `stem.rs`'s two stem constructors) was
+    /// renamed from `self.heap.alloc_with` to `self.alloc_with` with no
+    /// other change at the call site, so the behaviour those four sites saw
+    /// before this task is exactly what they see now with the mode off.
+    ///
+    /// **On, it is `Heap::collect(&self.roots)` followed by
+    /// `Heap::alloc_with_uncollected`.** `self.heap` and `self.roots` are
+    /// sibling fields, so this borrows each independently and needs no
+    /// interior mutability or unsafe cell to call one method with a
+    /// borrow of the other in scope.
+    ///
+    /// **Collecting BEFORE the allocation, not after, and this was not the
+    /// first thing tried.** An earlier version of this method collected
+    /// *after* allocating, on the reasoning that a fresh object is the one
+    /// thing this mode should be checking. That reasoning is backwards: the
+    /// caller has not had a chance to root the value this call is about to
+    /// return -- `self.text(bytes)` cannot call `push_temp` on its own
+    /// result before handing it back -- so a collect fused into the
+    /// allocation that produced it can only ever find it unreached and
+    /// sweep it, on every single allocation, unconditionally. Measured: with
+    /// that order, `run_program_collect_every_alloc("say 1")` panicked
+    /// (`value.rs`'s `to_text`, "a live value") and so did all 29 of
+    /// `phase-4a.txt`'s programs, including the ones with no rooting
+    /// question at stake at all -- a mode that fails everything tests
+    /// nothing, the same shape `/bin/true` failed criterion 6 for. Collecting
+    /// *before* asks the right question instead: is everything the caller
+    /// already holds -- rooted by an *earlier* call's `push_temp`, which by
+    /// now has had every chance to run -- still reachable at the moment a
+    /// *new* allocation is requested. `eval_arithmetic`'s own shape
+    /// (`eval.rs`) is what makes this the faithful test: `push_temp
+    /// (left_value)` runs immediately after `left_value` is produced and
+    /// strictly before `right_value`'s own evaluation can allocate anything,
+    /// so by the time this method's pre-allocation collect runs for
+    /// `right_value`'s own allocation, `left_value` has already had its
+    /// chance to be rooted -- and the negative control below is what
+    /// confirms the mode actually notices when that chance was skipped.
+    pub(crate) fn alloc_with(
+        &mut self,
+        behaviour: rexx_core::BehaviourId,
+        body: rexx_core::Body,
+    ) -> ObjRef {
+        if self.stress_collect {
+            self.heap.collect(&self.roots);
+        }
+        self.heap.alloc_with_uncollected(behaviour, body)
+    }
+
     // ---- values ----
     //
     // `text`, `number`, `to_text` and `to_number` live in `value.rs` (Task 4),
@@ -905,7 +999,7 @@ impl Interp {
 /// before calling.
 pub fn run_program(path: &str, text: Vec<u8>) -> Outcome {
     let path = path.to_string();
-    on_interpreter_thread(move || execute(&path, text, false))
+    on_interpreter_thread(move || execute(&path, text, false, false))
 }
 
 /// `run_program`, except that an `INTERPRET` instruction runs its fragment
@@ -939,7 +1033,33 @@ pub fn run_program(path: &str, text: Vec<u8>) -> Outcome {
 #[doc(hidden)]
 pub fn run_program_interpret_spike(path: &str, text: Vec<u8>) -> Outcome {
     let path = path.to_string();
-    on_interpreter_thread(move || execute(&path, text, true))
+    on_interpreter_thread(move || execute(&path, text, true, false))
+}
+
+/// `run_program`, except that `Heap::collect` runs after every allocation
+/// instead of never. The 4a exit gate's criterion 4: the named L0 subset
+/// has to pass again under this mode, with the mode proved to have actually
+/// collected (`Outcome::collections` non-zero) rather than merely having
+/// been requested.
+///
+/// `#[doc(hidden)]` for the same reason `run_program_interpret_spike` is:
+/// `pub` only so `tests/` can reach it, not a second front-door choice
+/// beside `run_program`.
+///
+/// **This mode was built at Task 16 gate time, not during the phase, and
+/// this is the first time anything has run the L0 subset under it.** The
+/// design spec's criterion 4 asked to run the subset under collect-on-every-
+/// allocation as though the mode already existed; it did not -- `alloc_with`
+/// never collected and `Heap::collect` had no caller outside `rexx-core`'s
+/// own tests. So a pass here is real evidence about this run, gathered for
+/// the first time on the day it was gathered, not a re-confirmation of
+/// something exercised throughout the phase. Say that plainly wherever this
+/// criterion's result is reported, rather than letting a passing gate imply
+/// otherwise.
+#[doc(hidden)]
+pub fn run_program_collect_every_alloc(path: &str, text: Vec<u8>) -> Outcome {
+    let path = path.to_string();
+    on_interpreter_thread(move || execute(&path, text, false, true))
 }
 
 /// Runs `body` on a thread with `INTERPRETER_STACK_BYTES` of stack.
@@ -966,7 +1086,7 @@ fn on_interpreter_thread(body: impl FnOnce() -> Outcome + Send + 'static) -> Out
 }
 
 /// Everything that happens on the interpreter thread: parse, run, report.
-fn execute(path: &str, text: Vec<u8>, interpret_spike: bool) -> Outcome {
+fn execute(path: &str, text: Vec<u8>, interpret_spike: bool, collect_every_alloc: bool) -> Outcome {
     let program = match parse_program(text) {
         Ok(program) => program,
         // **A parse failure stays loud, and Task 12 did not change that.** It
@@ -986,13 +1106,18 @@ fn execute(path: &str, text: Vec<u8>, interpret_spike: bool) -> Outcome {
                 stdout: Vec::new(),
                 stderr: format!("rexx-exec: {error}\n").into_bytes(),
                 stack: StackSpan::default(),
+                collections: 0,
             };
         }
     };
 
     let mut interp = Interp::new(interpret_spike);
+    if collect_every_alloc {
+        interp.enable_stress_collect();
+    }
     let result = interp.run(program);
     let stack = interp.stack_span();
+    let collections = interp.heap.collections_performed();
     let failure_site = interp.failure_site.take();
     // `exit_code_for` needs `&mut interp` (`to_number` fills a lazy cache),
     // so this has to run before `interp.trace`/`interp.out` move out of
@@ -1034,6 +1159,7 @@ fn execute(path: &str, text: Vec<u8>, interpret_spike: bool) -> Outcome {
         stdout: interp.out,
         stderr: interp.trace,
         stack,
+        collections,
     }
 }
 

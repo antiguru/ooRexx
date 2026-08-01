@@ -1,0 +1,21 @@
+count 20
+/* Task 16's mutation-testing witness: a number's rendering is fixed by the
+   DIGITS in force when it is CREATED, never by the DIGITS in force when it
+   is first DISPLAYED. Every other write site in 4a (a plain assignment, a
+   stem or compound tail) renders its value eagerly, for the traced `>>>`
+   line, before anything else can run -- so by the time a later NUMERIC
+   DIGITS changes the setting, the number's text cache is already warm and
+   the bug this witness targets cannot surface. A Controlled loop's control
+   variable is the one exception: `bind_control` (run.rs) binds it with no
+   eager render at all, so its first display can genuinely happen after an
+   intervening NUMERIC DIGITS change, inside the loop body itself.
+
+   Measured: the oracle prints "0.333333333" (9 significant digits, the
+   DIGITS in force when `i` is bound for this pass), not "0.333" (3 digits,
+   the DIGITS in force at the `say`). Mutating the render site to use the
+   current setting instead of the value's own created_digits flips this to
+   "0.333". */
+do i = 1 / 3 to 1 by 1
+  numeric digits 3
+  say i
+end

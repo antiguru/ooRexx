@@ -126,6 +126,67 @@ DEVIATIONS -- permanent, chosen
      oracle handles.
 
 
+EXPRKIND OWNERSHIP -- the six expression forms 4a does not evaluate
+---------------------------------------------------------------------
+
+Criterion 5 requires every out-of-4a `ExprKind` variant to name an owning
+phase, and that owner has to be one of the phases the split table names --
+"4b", "4c", "Phase 5" or "Phase 7", spelled exactly as the table spells them,
+because `coverage.rs` and `loud.rs` assert the set and compare the strings.
+
+The design spec assigns only one of the six outright: `Message` is Phase 5's
+(the "assigned elsewhere" paragraph names it, and `InstructionKind::Message`'s
+own doc says its `term` is always an `ExprKind::Message`, so the instruction
+and the expression travel together). The other five are never individually
+assigned anywhere in the spec -- the nearest sentence ("argument attachment
+inside Call, QualifiedCall, Message, List and VariableReference is exercised
+by 4b and 4c") names two phases jointly for five variants, which is not an
+owner a `match` arm can return.
+
+This gap was found and closed at Task 16 gate time, not before. Five of the
+six rows below are a judgement call rather than a spec citation, made by the
+team lead ("main") on request when Task 16 flagged the ambiguity as the one
+place a wrong call quietly breaks criterion 5's policing.
+
+  Call              4b. Genuinely split, and the split is recorded rather than
+                    smoothed into one silent string: a Rexx function call
+                    resolves internal-routine first, then builtin, then
+                    external, so 4b delivers the internal-routine half and 4c
+                    delivers the builtin half. The owner named is the phase
+                    after which the variant stops failing loudly for SOME
+                    call target, which is 4b -- an internal-routine call
+                    evaluates as soon as 4b lands. A reader who reaches the
+                    end of 4b and finds `f(1)` still loud for a builtin name
+                    is seeing exactly this, not a regression.
+
+  VariableReference 4b. `>x`/`<x` exists to be passed at a call site (Error
+                    20.930 otherwise), and `USE` -- the instruction that reads
+                    an argument on the receiving end -- is 4b's.
+
+  QualifiedCall     Phase 5. `ns:name(...)` needs a resolved package/namespace
+                    object; namespaces come from `::REQUIRES`, and "every
+                    directive... [is] Phase 5's" per the split table's
+                    assigned-elsewhere paragraph.
+
+  ClassResolver     Phase 5. Explicitly: "environment symbols beyond .nil,
+                    .true and .false are Phase 5's", and this variant is how a
+                    namespace-qualified class name resolves.
+
+  List              Phase 5. The general form builds an array, which is Phase
+                    5's object model -- the same reasoning Task 14b's gap
+                    report used when it argued against bringing `List` into
+                    4a for the `SAY` case alone.
+
+  Message           Phase 5, per the spec directly (see above).
+
+This section is asserted the same way EXCLUSIONS and DEVIATIONS are: the set
+of six names and their owners is fixed, and `coverage.rs`/`loud.rs` fail if
+their own owner table drifts from it. Changing a row here is a plan amendment,
+the same rule the rest of this file follows, because this is exactly the kind
+of decision that has previously gone missing by living only in a test file's
+comment.
+
+
 KNOWN GAPS -- neither excluded nor deviated, just not closed yet
 ---------------------------------------------------------------
 

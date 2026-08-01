@@ -44,7 +44,7 @@ impl Interp {
     /// has converted yet, which is the whole reason the cache is a tri-state
     /// rather than a plain `Option<Number>`.
     pub(crate) fn text(&mut self, bytes: &[u8]) -> ObjRef {
-        self.heap.alloc_with(
+        self.alloc_with(
             BehaviourId::STRING,
             Body::Text {
                 bytes: bytes.to_vec(),
@@ -72,7 +72,7 @@ impl Interp {
             return ObjRef::small_int(small)
                 .expect("small_int_for already checked SMALL_INT_MIN/MAX");
         }
-        self.heap.alloc_with(
+        self.alloc_with(
             BehaviourId::STRING,
             Body::Num {
                 value,

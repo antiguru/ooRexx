@@ -51,3 +51,12 @@ lang/trace_results.rex
 lang/prefix_dotvar_logical_over_label.rex
 lang/comparison_operators_remaining.rex
 lang/trace_numeric_request.rex
+
+# New for Task 16 -- mutation-control witnesses for a real, previously
+# uncaught defect class: a Controlled loop's control variable is the one
+# construct in 4a whose first render can genuinely happen after a later
+# NUMERIC DIGITS/FORM change, because bind_control does not eagerly render
+# (unlike an assignment's traced value). See each file's own comment.
+lang/mutation_digits_at_render.rex
+lang/mutation_form_at_render.rex
+lang/mutation_controlled_order.rex

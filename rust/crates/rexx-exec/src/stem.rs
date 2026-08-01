@@ -222,7 +222,7 @@ impl Interp {
             None => {
                 let mut tails = HashMap::new();
                 tails.insert(key.to_vec(), Some(value));
-                let stem = self.heap.alloc_with(
+                let stem = self.alloc_with(
                     BehaviourId::STEM,
                     Body::Stem {
                         name: stem_name.into(),
@@ -324,7 +324,7 @@ impl Interp {
     fn replace_stem(&mut self, stem_name: &[u8], default: Option<ObjRef>) {
         let slot = self.slot_of(stem_name);
         let frame = self.activation().frame;
-        let stem = self.heap.alloc_with(
+        let stem = self.alloc_with(
             BehaviourId::STEM,
             Body::Stem {
                 name: stem_name.into(),
