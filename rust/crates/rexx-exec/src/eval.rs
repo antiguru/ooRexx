@@ -673,13 +673,48 @@ impl Interp {
     /// one of those numbers over 34.6, and the oracle's own rule does not
     /// ask it to: 34.6 is what a list element gets independent of which of
     /// the five keywords built the list.
+    ///
+    /// **F4, found by review: every element traces its own `>>>`, under
+    /// `TRACE R` alone, not only `TRACE I`.** Measured: `trace r` /
+    /// `if 1, 1 then say 'x'` gives *three* `>>>` lines --  one per
+    /// element (`"1"`, `"1"`) and one more for the list's own overall
+    /// result (`"1"`), the third of which was already covered (`eval_
+    /// condition`'s own `ConditionTrace::Result`/`Keyword` fires on
+    /// whatever this function returns, list or not). The two missing
+    /// lines are `trace_result`, **not** an intermediate: comma-list
+    /// elements trace through the same `results`-gated path a traced
+    /// instruction's own top-level value does (matching `test_case_when`'s
+    /// own per-value `>>>` pair, `SELECT CASE`'s comma list, the other
+    /// place this crate already has this exact shape), not through
+    /// `eval`'s `intermediates`-gated hook -- which is *why* `TRACE R`
+    /// alone already shows it on the oracle, and confirms this is not a
+    /// second, competing computation of anything `eval`'s own hook
+    /// already produces: an element already gets its own `>L>`/`>V>`/
+    /// `>O>` etc. under `TRACE I` from that hook (unaffected, still
+    /// correct), and *additionally* gets this `results`-gated line,
+    /// exactly as `IF`'s own condition gets both an intermediate trace
+    /// for its sub-expressions and its own separate `>>>`.
+    ///
+    /// Fixes `IF`/`WHEN`/`WHILE`/`UNTIL` **all four** in this one place,
+    /// since every one of them reaches a comma-list condition only
+    /// through this shared function (`eval_node`'s `ExprKind::Logical`
+    /// arm, the desugaring point) -- confirmed, not assumed: re-ran the
+    /// oracle differential for `IF` with this exact fix in place, byte
+    /// for byte (this task's report has the transcript).
+    ///
+    /// **The failing element still traces before it raises**: measured,
+    /// `if 1, 'x' then nop` shows `>>>   "1"` then `>>>   "x"` and only
+    /// then 34.6 -- the trace call sits ahead of the `logical_value`
+    /// check below, matching that order exactly.
     fn eval_logical_list(&mut self, code: &Code<'_>, items: &[Expr]) -> Result<ObjRef, Failure> {
         let frame = self.roots.push_frame();
+        let indent = self.current_value_indent;
         let mut holds = true;
         for item in items {
             let value = self.eval(code, item)?;
             self.roots.push_temp(value);
             let text = self.to_text(value).to_vec();
+            self.trace_result(indent, &text);
             let item_holds =
                 logical_value(&text).ok_or_else(|| Raised::logical_list_element(&text))?;
             if !item_holds {

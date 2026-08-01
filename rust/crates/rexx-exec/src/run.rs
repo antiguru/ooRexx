@@ -789,6 +789,11 @@ impl Interp {
                     }
                     None => None,
                 };
+                // F3: the one hand-off an absorbed `WhenCase` needs and
+                // nothing else threads to it -- `lib.rs`'s own doc comment
+                // on `current_case_text` has the full argument, including
+                // the disclosed nested-`SELECT CASE` limitation.
+                self.current_case_text = case_text.clone();
                 for &when_index in whens {
                     let when_instruction = &code.body.instructions[when_index];
                     // `When`/`WhenCase`'s own clause echo, explicit for the
@@ -982,24 +987,85 @@ impl Interp {
                 )?;
                 Ok(Flow::Next)
             }
-            // `SELECT CASE`'s own absorbed form. Evaluates every `values`
-            // expression, for the identical reason (side effects, and a
-            // raise must escape) -- **known gap, not attempted**: with no
-            // access to the enclosing `SELECT CASE`'s own `case` text here
-            // (nothing threads it to an absorbed node, unlike a listed
-            // `WhenCase`, which `Select`'s own arm already has it in hand
-            // for), this cannot reproduce `test_case_when`'s own two-line
-            // `>>>` comparison pair for the absorbed case, only evaluate
-            // and trace each value on its own. No corpus or spec example
-            // exercises an absorbed `WHEN CASE`; this is deliberately
-            // proportionate to that, not a claim that it is fully correct.
-            InstructionKind::WhenCase { values, .. } => {
-                for value in values {
-                    let v = self.eval(code, value)?;
-                    self.roots.push_temp(v);
+            // `SELECT CASE`'s own absorbed form.
+            //
+            // **F3, fixed by review: unlike plain `WHEN`'s absorbed form,
+            // this one *does* branch, on the false side.** Measured:
+            // `select case 2 / when 2 then / when 3 then nop / otherwise
+            // say 'O' / end / say 'after'` prints `O` then `after` on the
+            // oracle; this crate, before this fix, printed only `after`.
+            // Read the parsed field values directly rather than guessed
+            // (`f3dbg`, a throwaway debug binary against `rexx_parse::
+            // parse_program`) to find the mechanism: the *outer*, listed
+            // `WhenCase`'s own `false_target` stops *before* the absorbed
+            // `WhenCase`'s own body (it bounds `Select`'s own `run_bounded`
+            // call to `[when_index+1, false_target)`, which ends exactly at
+            // the absorbed node's own index), so the absorbed body is
+            // structurally unreachable through that call *regardless* of
+            // this arm's own answer when it does **not** need to branch.
+            // The one case that does need to branch is a **false** match on
+            // the absorbed condition: the absorbed node's own `false_target`
+            // points past its own (unrun) body to whatever comes next in
+            // the *enclosing* body (`OTHERWISE`, here) -- outside the range
+            // the *outer* `WhenCase`'s own `run_bounded` call is bounded to,
+            // so `Flow::Goto(false_target)` escapes it unchanged exactly the
+            // way a `LEAVE`/`ITERATE` naming an enclosing construct already
+            // does (`run_bounded`'s own doc comment), with no further
+            // change needed anywhere else.
+            //
+            // **A true match still never runs its own consequence**,
+            // confirmed by a dedicated probe (`t13_f3_true.rex`, this
+            // task's report) rather than assumed from the false case's own
+            // fix: "matches on both sides" is the coordinator's own
+            // phrase for this, meaning this crate's pre-F3 behaviour (fall
+            // through, `Flow::Next`) already agreed with the oracle for a
+            // true absorbed match, and F3 is entirely the false path's own
+            // fix.
+            //
+            // **The plain-`WHEN` sibling of this false path is
+            // deliberately left alone.** Its own false-absorbed shape is
+            // one line away from `select / when 1=0 then / when 2=2 then
+            // nop / end`, SF #2018's segfault -- the oracle cannot answer
+            // what a false absorbed plain `WHEN` should do because it
+            // crashes before answering anything, so there is no oracle
+            // byte to fix `InstructionKind::When`'s own arm against, and
+            // probing to find out is explicitly out of scope (this task's
+            // own coordinator, and `phase-4-exclusions.txt`'s standing rule
+            // against reproducing that crash).
+            //
+            // `current_case_text` is `lib.rs`'s own new field, the one
+            // hand-off a listed `WhenCase` already has (`case_text`,
+            // passed directly) that an absorbed one otherwise has no way
+            // to reach; `None` only if this is somehow absorbed inside a
+            // plain `SELECT` with no `CASE` expression at all, which the
+            // parser should never produce for a `WhenCase` node (only a
+            // `SELECT CASE` ever builds one) -- kept as a fallback that
+            // evaluates for side effects and never branches, rather than
+            // an `unreachable!`, on this crate's own rule against turning
+            // an unproven parser invariant into a crash.
+            InstructionKind::WhenCase {
+                values,
+                false_target,
+                ..
+            } => match self.current_case_text.clone() {
+                Some(case_text) => {
+                    let indent = self.current_value_indent;
+                    if self.test_case_when(code, values, &case_text, indent)? {
+                        Ok(Flow::Next)
+                    } else {
+                        Ok(Flow::Goto(
+                            false_target.unwrap_or(code.body.instructions.len()),
+                        ))
+                    }
                 }
-                Ok(Flow::Next)
-            }
+                None => {
+                    for value in values {
+                        let v = self.eval(code, value)?;
+                        self.roots.push_temp(v);
+                    }
+                    Ok(Flow::Next)
+                }
+            },
             InstructionKind::Otherwise => Ok(Flow::Next),
 
             // `DO`/`LOOP`, every kind but `DO WITH` (the loud path,
@@ -1684,10 +1750,24 @@ impl Interp {
         // exactly once (`step_in_temps_frame`'s own doc comment). `false`
         // on entry because the *first* pass's echo already happened there,
         // before `run_loop` ever called into this function.
+        //
+        // **`UNTIL` gets no echo here at all, only its own further down.**
+        // Measured (re-verifying this task's F4 fix rather than assuming
+        // the existing re-echo covered it): a multi-pass `DO UNTIL` shows
+        // exactly *one* `DO`/`LOOP` re-echo per completed pass, sitting
+        // between `END` and the `UNTIL` test itself, never a second one
+        // here too -- `UNTIL`'s own re-entry *is* the loop's only decision
+        // point for this shape (there is no separate "test `WHILE`, then
+        // maybe run the body again" event to echo for, unlike every other
+        // `LoopConditional`/`LoopState` shape), so echoing both here and
+        // at `UNTIL`'s own site would double it. `is_until_loop` decides
+        // which of the two echo sites is live for this call, never both.
+        let is_until_loop = matches!(conditional, Some(cond) if cond.until);
         let mut first_pass = true;
 
         loop {
             if !first_pass
+                && !is_until_loop
                 && self.trace_mode.all
                 && let Some((line, text)) = clause_site(source, do_instruction)
             {
@@ -1745,6 +1825,27 @@ impl Interp {
             if let Some(cond) = conditional
                 && cond.until
             {
+                // **F4's own sibling, found while re-verifying this task's
+                // review fixes rather than assumed clean**: `UNTIL`'s own
+                // check needs a *second*, unconditional re-echo of the
+                // `DO`/`LOOP` clause here, not only the top-of-loop one
+                // above. Measured: `do until n = 1 / n = n + 1 / end`
+                // re-echoes `do until ...` a second time, after `END`,
+                // before testing `UNTIL` at all -- even on the very first
+                // test, which runs after the body's only pass and before
+                // the top-of-loop re-echo (gated on `!first_pass`) would
+                // ever fire again. The oracle's own `DO`/`LOOP` instruction
+                // is re-entered to make *this* decision too, exactly like
+                // it is to test `WHILE` or advance a `Controlled` loop
+                // (`checkControl`, read directly, this task's report) --
+                // `UNTIL`'s decision point is not the same event as the
+                // top-of-loop one, so it needs its own echo unconditionally
+                // rather than sharing `first_pass`'s gate.
+                if self.trace_mode.all
+                    && let Some((line, text)) = clause_site(source, do_instruction)
+                {
+                    self.trace_clause(line, do_indent, &text);
+                }
                 // Same override as `WHILE`'s own, above -- the re-echoed
                 // `END` clause just before this point left
                 // `current_value_indent` untouched (its own `trace_clause`
@@ -3997,6 +4098,48 @@ mod tests {
         );
     }
 
+    /// F3, found by review: unlike a plain `WHEN`'s absorbed form, a
+    /// `WHEN CASE`'s own absorbed form branches to its own `false_target`
+    /// on a false match. The mutation this kills: reverting
+    /// `InstructionKind::WhenCase`'s arm to the old evaluate-and-discard
+    /// shape (matching `When`'s own, still correct for `When`) makes this
+    /// program print only `after`, where the oracle -- and this fix --
+    /// print `O` then `after`. Verified by mutation: reverting made this
+    /// test fail with exactly that wrong output, while
+    /// `an_absorbed_whens_true_condition_still_never_runs_its_own_
+    /// consequence` (a `WHEN`, not a `WHEN CASE`) stayed green, confirming
+    /// the fix is scoped to `WhenCase` alone.
+    #[test]
+    fn an_absorbed_whencases_false_condition_branches_to_its_own_false_target() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"select case 2\n  when 2 then\n    when 3 then nop\n  otherwise say 'O'\nend\nsay 'after'"
+            ),
+            b"O\nafter\n".to_vec()
+        );
+    }
+
+    /// The companion true-match case, matching the coordinator's own
+    /// phrase "matches on both sides": a true absorbed `WhenCase` still
+    /// never runs its own consequence, exactly like a plain `WHEN`'s own
+    /// true-absorbed case -- this is *not* new behaviour F3 introduced, it
+    /// is what this crate already did before the fix, re-pinned here so a
+    /// future change to the false-path fix cannot silently start running
+    /// the true path's own consequence too.
+    #[test]
+    fn an_absorbed_whencases_true_condition_still_never_runs_its_own_consequence() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"select case 2\n  when 2 then\n    when 2 then say 'INNER'\n  otherwise say 'O'\nend\nsay 'after'"
+            ),
+            b"after\n".to_vec()
+        );
+    }
+
     #[test]
     fn select_with_no_when_true_and_no_otherwise_raises_7_3() {
         let mut interp = Interp::new(false);
@@ -4355,6 +4498,56 @@ mod tests {
             interp.trace,
             b"     1 *-* do 2\n       >K>   \"FOR\" => \"2\"\n     2 *-*   nop\n     \
               3 *-* end\n     1 *-* do 2\n     2 *-*   nop\n     3 *-* end\n     1 *-* do 2\n"
+                .to_vec()
+        );
+    }
+
+    /// F4, found by review: a comma-list condition traced no `>>>` for its
+    /// own elements at all, only the list's overall result, under
+    /// `TRACE R` (not merely `TRACE I`) -- measured, the oracle shows
+    /// *three* `>>>` lines for `if 1, 1 then`, one per element plus one
+    /// for the list, and `eval_logical_list`'s own fix (`eval.rs`) is what
+    /// this test defends. The mutation it kills: removing that function's
+    /// `self.trace_result(indent, &text)` call drops the middle two lines,
+    /// leaving only the third (`eval_condition`'s own, unaffected) --
+    /// caught by this test and by neither of the pre-existing comma-list
+    /// tests (`if_condition_that_is_a_comma_list_raises_34_6_not_34_1`,
+    /// the short-circuit test), since neither one traces anything.
+    #[test]
+    fn a_comma_list_conditions_own_elements_each_trace_their_result_under_trace_r() {
+        let mut interp = Interp::new(false);
+        interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
+        say_output(&mut interp, b"if 1, 1 then nop");
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* if 1, 1 \n       >>>   \"1\"\n       >>>   \"1\"\n       >>>   \"1\"\n     \
+              1 *-*   then\n     1 *-*     nop\n"
+                .to_vec()
+        );
+    }
+
+    /// Found while re-verifying F4 rather than assumed clean: fixing the
+    /// comma-list `>>>` gap exposed that `DO UNTIL`'s own re-echo was
+    /// wired to the wrong site. The mutation this kills is two-sided --
+    /// removing `is_until_loop`'s own gate on the top-of-loop echo makes
+    /// a multi-pass `UNTIL` loop echo its clause **twice** per pass (once
+    /// there, once at `UNTIL`'s own site); removing `UNTIL`'s own
+    /// unconditional echo instead makes it echo **zero** times on the
+    /// first pass (the top-of-loop site is `first_pass`-gated and never
+    /// fires before the loop has gone around once). Only the fix in
+    /// between gets exactly one echo per completed pass, matching the
+    /// oracle (`t13_until_multi.rex`, this task's report).
+    #[test]
+    fn do_until_re_echoes_its_clause_exactly_once_per_pass_not_twice_or_zero() {
+        let mut interp = Interp::new(false);
+        interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
+        say_output(&mut interp, b"n = 0\ndo until n = 2\nn = n + 1\nend\nsay n");
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* n = 0\n       >>>   \"0\"\n     2 *-* do until n = 2\n     \
+              3 *-*   n = n + 1\n       >>>     \"1\"\n     4 *-* end\n     2 *-* do until n = 2\n       \
+              >K>     \"UNTIL\" => \"0\"\n     3 *-*   n = n + 1\n       >>>     \"2\"\n     4 *-* end\n     \
+              2 *-* do until n = 2\n       >K>     \"UNTIL\" => \"1\"\n     5 *-* say n\n       >>>   \"2\"\n"
                 .to_vec()
         );
     }

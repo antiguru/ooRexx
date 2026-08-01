@@ -608,6 +608,31 @@ struct Interp {
     /// themselves -- reading the oracle's own field-not-parameter design
     /// avoids inventing that threading here instead.
     current_value_indent: usize,
+    /// **F3, found by review.** The innermost `SELECT CASE`'s own evaluated
+    /// `case` text, or `None` inside a plain `SELECT` (or before any
+    /// `SELECT`/`SELECT CASE` has run at all) -- the one piece of state an
+    /// **absorbed** `WhenCase` needs that nothing else threads to it: a
+    /// *listed* `WhenCase` gets `case_text` handed to it directly by
+    /// `Select`'s own explicit arm (`run.rs`), but an absorbed one (a
+    /// `WhenCase` reached only through ordinary `step_in_temps_frame`
+    /// stepping, because it is itself the `THEN` consequence of a
+    /// preceding `WHEN`/`WHEN CASE`, `ast.rs`'s own doc comment on
+    /// `whens`) has no such hand-off -- it is stepped like any other
+    /// instruction, with nothing carrying its enclosing `SELECT CASE`'s
+    /// own comparison value along.
+    ///
+    /// Set by `Select`'s own arm, unconditionally, every time (mirroring
+    /// `current_value_indent`'s own field-not-parameter shape) -- **not
+    /// saved and restored across a nested `SELECT`/`SELECT CASE`**, which
+    /// is a real, narrow, disclosed limitation: an absorbed `WhenCase`
+    /// belonging to an *outer* `SELECT CASE`, reached only *after* a
+    /// *nested* `SELECT CASE` inside the same outer body has already run
+    /// and overwritten this field, would read the nested one's `case`
+    /// text instead of its own. No corpus or spec example nests `SELECT
+    /// CASE` around an absorbed `WHEN CASE` this way; `run.rs`'s own
+    /// `WhenCase` arm names the same limitation again at its own read
+    /// site.
+    current_case_text: Option<Vec<u8>>,
     /// The clause a `Raised` condition escaped from, as the 1-based line and
     /// the bytes `TRACE` would echo, or `None` if nothing raised.
     ///
@@ -668,6 +693,7 @@ impl Interp {
             trace: Vec::new(),
             trace_mode: TraceMode::OFF,
             current_value_indent: 0,
+            current_case_text: None,
             failure_site: None,
             interpret_spike,
             depth: 0,
