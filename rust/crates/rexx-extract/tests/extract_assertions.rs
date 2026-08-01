@@ -248,10 +248,10 @@ fn a_second_expect_syntax_marker_replaces_the_first_for_what_follows_it() {
 }
 
 /// `expectSyntax`'s array form (`(major.sub, message inserts...)`) is not
-/// one of the 19 real shapes this scanner was built against, and rather
-/// than guess which comma-separated item is the code, it blocks -- the
-/// same conservative choice `parse_assert_same` makes for an `assertSame`
-/// shape it does not recognise.
+/// one of the shapes any of the 184 real markers this scanner converts
+/// uses, and rather than guess which comma-separated item is the code, it
+/// blocks -- the same conservative choice `parse_assert_same` makes for an
+/// `assertSame` shape it does not recognise.
 #[test]
 fn expect_syntax_with_message_inserts_blocks_rather_than_guesses() {
     let source = r#"
@@ -267,14 +267,19 @@ fn expect_syntax_with_message_inserts_blocks_rather_than_guesses() {
     assert_eq!(out.blocked[0].dropped, 1);
 }
 
-/// `self~assertSyntaxError`/`self~assertRuntimeError` call `expectSyntax`
-/// internally but check the raise *within that same call* -- confirmed by
-/// reading `OOREXXUNIT.CLS` -- so unlike a bare `self~expectSyntax`, they
-/// leave nothing pending for a later `self~assertSame` in the same method.
-/// This is the existing "other assertion kinds are inert" behaviour and
-/// must not regress into treating them like `expectSyntax`.
+/// `self~assertSyntaxError`/`self~assertRuntimeError` call `self~
+/// expectSyntax` internally and then attempt the risky statement
+/// themselves, with **no local check** -- confirmed by reading
+/// `OOREXXUNIT.CLS`, a raise there escapes to the same per-method trap a
+/// bare `self~expectSyntax` relies on, exactly like `self~expectCondition`
+/// above. Blocks for the same reason: this scanner cannot tell, from the
+/// calling method's text alone, whether a `self~assertSame` after one of
+/// these two would need raise-treatment, so it does not guess "inert"
+/// merely because that happens to hold for every real occurrence today (0
+/// of them have a `self~assertSame` anywhere later in the same method,
+/// checked corpus-wide).
 #[test]
-fn assert_syntax_error_does_not_leave_a_pending_raise_expectation() {
+fn assert_syntax_error_blocks_rather_than_silently_passing_through() {
     let source = r#"
 ::class "W.testGroup" subclass ooTestCase public
 
@@ -283,9 +288,29 @@ fn assert_syntax_error_does_not_leave_a_pending_raise_expectation() {
    self~assertSame(1 + 1, '2')
 "#;
     let out = extract_assertions("W", source);
+    assert!(out.rows.is_empty());
+    assert_eq!(out.blocked.len(), 1);
+    assert_eq!(out.blocked[0].dropped, 1);
+}
+
+/// A row *before* `self~assertSyntaxError`/`self~assertRuntimeError` in the
+/// same method is unaffected -- the same "blocks only what follows"
+/// property every other unsupported statement in this file has.
+#[test]
+fn a_row_before_assert_syntax_error_is_unaffected() {
+    let source = r#"
+::class "Y.testGroup" subclass ooTestCase public
+
+::method "test_1"
+   self~assertSame(1 + 1, '2')
+   self~assertSyntaxError(15.1, self~hex(" "))
+   self~assertSame(1 % 0, 1)
+"#;
+    let out = extract_assertions("Y", source);
     assert_eq!(out.rows.len(), 1);
-    assert_eq!(out.rows[0].expect_raise, None);
-    assert!(out.blocked.is_empty());
+    assert_eq!(out.rows[0].expr, "1 + 1");
+    assert_eq!(out.blocked.len(), 1);
+    assert_eq!(out.blocked[0].dropped, 1);
 }
 
 /// `self~expectCondition` defers a raise-check the same way `expectSyntax`
@@ -422,13 +447,19 @@ fn base_expressions_yields_the_measured_row_and_blocked_counts() {
 
 /// The measured extent of the `self~expectSyntax` conversion: 184 of the
 /// 4,259 rows are raise-expectations rather than value comparisons -- 60 in
-/// `DIVISION`, 6 in `EXPONENT`, 118 in `REMAINDER`, zero everywhere else
-/// (in particular, `PRECEDENCE`'s 139 `self~assertSyntaxError` calls are
-/// all self-contained wrapping calls, never followed by a separate
-/// `assertSame`, so none of its rows convert). The row/dropped totals
-/// themselves are unchanged from the previous test -- converting a row
-/// changes what it means, not whether it exists -- pinning that here too
-/// makes it explicit that this is not a second, competing count.
+/// `DIVISION`, 6 in `EXPONENT`, 118 in `REMAINDER`, zero everywhere else.
+/// In particular, zero in `PRECEDENCE` despite it having 139 real
+/// `self~expectSyntax` markers (not `self~assertSyntaxError`, which never
+/// appears there at all -- that name is `Literals`'s, 33 times, all as
+/// wrapping calls like `self~assertSyntaxError((15.1, 1), self~hex(" "))`):
+/// every one of `PRECEDENCE`'s 139 markers is immediately followed by a
+/// bare assignment that itself raises (e.g. `self~expectSyntax(42.3)` then
+/// `xre=0/0`, each pair alone in its own single-purpose method with
+/// nothing else in the body), so no `self~assertSame` ever follows one in
+/// the same method for there to be anything to convert. The row/dropped
+/// totals themselves are unchanged from the previous test -- converting a
+/// row changes what it means, not whether it exists -- pinning that here
+/// too makes it explicit that this is not a second, competing count.
 #[test]
 fn base_expressions_expect_syntax_conversion_counts() {
     let suite =

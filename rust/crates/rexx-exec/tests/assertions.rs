@@ -73,21 +73,51 @@
 //! [`rexx_exec::NOT_IMPLEMENTED_EXIT`] -- some `ExprKind` the row's `expr` or
 //! `expected` text constructs is outside 4a's scope. Measured over the full
 //! 4,259-row set (see [`assertions_differential`]'s own report and
-//! `task-15b-report.md`): 35 rows, all in `Literals.testGroup` (2 `a function
-//! call`, 33 `a message send`), none anywhere else -- `base/expressions`
-//! otherwise constructs only the arithmetic, comparison, concatenation and
-//! logical forms 4a already evaluates, plus plain literals and variables.
-//! [`owning_subphase`] names the sub-phase for the two constructs actually
-//! observed (`a function call` is 4b's, `a message send` is Phase 5's, both
-//! per the design spec's own split table); anything else falls to an
-//! honestly-unknown fallback rather than a guess, since this harness has
-//! never measured it. The classification exists at all because "measured
-//! today" is a fact about this corpus at this commit, not a property that
-//! should be assumed going forward: a later task landing a new group of
-//! `.testGroup` files, or 4a itself narrowing its scope, could change this
-//! set, and a harness that could not even name what it hit would be the
-//! silent-vacuous-harness shape this project keeps finding in its own
-//! instruments.
+//! `task-15b-report.md`): 35 rows, all in `Literals.testGroup`, none
+//! anywhere else -- `base/expressions` otherwise constructs only the
+//! arithmetic, comparison, concatenation and logical forms 4a already
+//! evaluates, plus plain literals and variables.
+//!
+//! **Attribution is "the sub-phase that actually unblocks this row", not
+//! "whichever construct its program happens to hit first today", and those
+//! two questions have different answers for 2 of the 35.** Both come from
+//! `Literals.testGroup`'s `test_string_range`, whose program's *first*
+//! `NOT_IMPLEMENTED_EXIT` is `a function call` (`xrange()`, in its own
+//! prelude) -- but the very next prelude line is `all~changeStr(.String~cr,
+//! "")`, a message send, so even a 4b that implements `Call` would only
+//! move this row's first blocker one line later, not make it pass. **All 35
+//! rows are unblocked only by Phase 5** (`Message`, per the design spec's
+//! own split table: "4a has no general message dispatch"). [`EXEMPT`] is
+//! where this fact is committed -- each entry's `unblocked_by` is `"Phase
+//! 5"`, including the two whose first-observed blocker is a 4b construct --
+//! and `RowOutcome::RuntimeBlocked`'s own `construct` field is kept
+//! alongside it, unrenamed, as the separate and genuinely first-hit fact it
+//! is: useful for a reader who wants to know what actually happened when
+//! this ran, not a stand-in for what would need to change to fix it.
+//!
+//! # The exempt set, and why STRICT can use it without becoming an escape hatch
+//!
+//! Criterion 2, taken literally within 4a alone, cannot pass STRICT: it
+//! contains rows only Phase 5 can ever satisfy, and 4a's own gate criteria
+//! never named Phase 5 as something 4a delivers. [`EXEMPT`] is a **committed,
+//! explicit list of the 35 rows** this is true for today (identified by
+//! `group`, `method`, source-order `occurrence` within that method --
+//! needed because two `test_string_range` rows share byte-identical
+//! `expr`/`expected` text -- and the `expr`/`expected` text itself, checked
+//! together so a corpus edit that changes a row's text without changing its
+//! position cannot silently keep matching the wrong entry). This is
+//! criterion 5's own device, reused: its owner arm requires the *set* of
+//! out-of-scope variants to be asserted, precisely so a variant that turns
+//! out hard cannot be quietly relabelled instead of getting a witness
+//! (`docs/superpowers/plans/phase-4-exclusions.txt`'s SET assertion is the
+//! same idea again, one level up).
+//! [`the_exempt_set_matches_the_current_blocked_rows`] asserts the set
+//! unconditionally, in every mode; STRICT
+//! (inside [`assertions_differential`]) additionally fails if a row **not**
+//! on the list is not passing, or if a row **on** the list *is* passing --
+//! the second case means the exemption is stale and the fix is to edit
+//! [`EXEMPT`], which shows up in a diff, not to let the harness quietly
+//! decide for itself that the row no longer needs forgiving.
 //!
 //! # REPORT vs STRICT, and why the report reaches the terminal
 //!
@@ -146,15 +176,16 @@ fn suite_root() -> PathBuf {
 /// sorted file order (`find_test_groups` already sorts).
 ///
 /// This does **not** re-pin the row/blocked counts against a hardcoded
-/// number: `rexx-extract`'s own tests (`base_expressions_yields_the_measured_
-/// row_and_blocked_counts`) already do that for the extractor's output, and
-/// duplicating the pin here would just be two places that can go stale
-/// against each other. What this function's caller does check is that the
-/// count is nonzero and matches what the extractor's own invariant assertion
-/// (rows + dropped == assertSame calls, enforced inside `extract_assertions`'s
-/// caller in `rexx-extract-assertions`) implies -- recomputed independently
-/// below in `assertions_differential` from `count_assert_same`, so a future
-/// regression in either crate's counting is still caught from this side too.
+/// number, and does not independently recount `self~assertSame` occurrences
+/// either -- both pins already live on the extractor's own side
+/// (`rexx-extract/tests/extract_assertions.rs`'s
+/// `base_expressions_yields_the_measured_row_and_blocked_counts` and
+/// `every_assert_same_in_base_expressions_is_a_row_or_an_accounted_for_drop`),
+/// and duplicating either here would just be a second place that can drift
+/// out of sync with the first rather than a real cross-check. What this
+/// function's own caller checks is only that the count is nonzero, which is
+/// the narrower "not a silently empty extraction" property this crate can
+/// state without repeating the extractor's own arithmetic.
 fn collect_all() -> (Vec<AssertionRow>, Vec<BlockedMethod>) {
     let dir = suite_root();
     let mut groups = find_test_groups(&dir);
@@ -266,24 +297,356 @@ fn construct_from_stderr(stderr: &[u8]) -> Option<String> {
     Some(after_marker[..end].to_string())
 }
 
-/// Which sub-phase owns a runtime-blocked construct, for the two this
-/// harness has actually measured -- see the module doc's "Rows this
-/// harness cannot run yet". `None` for anything else: an honest "not yet
-/// attributed" rather than a guess, since nothing here has measured a third
-/// construct.
+/// One row this harness cannot make pass through `rexx_exec`'s public entry
+/// point today, named explicitly. See the module doc's "The exempt set" for
+/// why this exists and how STRICT is allowed to use it without becoming an
+/// unpoliced escape hatch.
+struct ExemptRow {
+    group: &'static str,
+    method: &'static str,
+    /// 1-based position of this `self~assertSame` within its own
+    /// `group`+`method`, in source order (see [`occurrence_of`]). Needed
+    /// because `test_string_range`'s two rows share byte-identical `expr`/
+    /// `expected` text -- only their prelude differs, and `AssertionRow`
+    /// does not carry the prelude into this identity check -- so `(group,
+    /// method, expr, expected)` alone is not a unique key for them.
+    occurrence: usize,
+    expr: &'static str,
+    expected: &'static str,
+    /// The sub-phase whose delivery would actually make this row pass.
+    /// **Not** the same question as "which construct does this row's
+    /// program happen to hit first today" (`RowOutcome::RuntimeBlocked`'s
+    /// own `construct` field, reported separately) -- see the module doc's
+    /// "Rows this harness cannot run yet" for the two `test_string_range`
+    /// rows where the two answers differ.
+    unblocked_by: &'static str,
+}
+
+/// The committed exempt set: every row this harness measured as not
+/// passing at the time this list was written, with the sub-phase that
+/// would actually unblock it. Generated once from a real run and hand
+/// -verified against the source (`Literals.testGroup`), not hand-guessed --
+/// see `task-15b-report.md` for the method.
 ///
-/// * `"a function call"` is `ExprKind::Call` -- the design spec's split
-///   table assigns `Call` to 4b ("routine resolution, which is handover
-///   1").
-/// * `"a message send"` is `ExprKind::Message` -- the same table assigns
-///   `Message` to Phase 5 ("4a has no general message dispatch", `value.rs`'s
-///   own words), alongside `Guard`/`Reply`/`Forward`/every directive.
-fn owning_subphase(construct: &str) -> Option<&'static str> {
-    match construct {
-        "a function call" => Some("4b"),
-        "a message send" => Some("Phase 5"),
-        _ => None,
-    }
+/// All 35 are `"Phase 5"`: `test_hexadecimal`/`test_binary` both open with
+/// `tab = .String~tab` (or the corresponding prelude line), a message
+/// send, so *every* row in either method blocks there regardless of its
+/// own `expr`/`expected` text; `test_string_range` opens with `all =
+/// xrange()` (a function call, first-blocked as 4b's) but its very next
+/// prelude line is a message send, so implementing 4b's `Call` would not
+/// make either of its two rows pass either.
+const EXEMPT: &[ExemptRow] = &[
+    ExemptRow {
+        group: "Literals",
+        method: "test_string_range",
+        occurrence: 1,
+        expr: "all",
+        expected: "self~runDynamicSource(\"return\" self~q(all~changeStr('\"', '\"\"')))",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_string_range",
+        occurrence: 2,
+        expr: "all",
+        expected: "self~runDynamicSource(\"return\" self~q(all~changeStr('\"', '\"\"')))",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_hexadecimal",
+        occurrence: 1,
+        expr: "\"AB\"",
+        expected: "\"41 42\"x",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_hexadecimal",
+        occurrence: 2,
+        expr: "\"AB\"",
+        expected: "\"41  42\"x",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_hexadecimal",
+        occurrence: 3,
+        expr: "\"AB\"",
+        expected: "\"41   42\"x",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_hexadecimal",
+        occurrence: 4,
+        expr: "\"AB\"",
+        expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || \"42\"))",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_hexadecimal",
+        occurrence: 5,
+        expr: "\"AB\"",
+        expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || tab || \"42\"))",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_hexadecimal",
+        occurrence: 6,
+        expr: "\"AB\"",
+        expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || tab || tab || \"42\"))",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_hexadecimal",
+        occurrence: 7,
+        expr: "\"AB\"",
+        expected: "self~runDynamicSource(\"return\" self~hex(\"41 \" || tab || \"42\"))",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_hexadecimal",
+        occurrence: 8,
+        expr: "\"AB\"",
+        expected: "self~runDynamicSource(\"return\" self~hex(\"41\" || tab || \" 42\"))",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_hexadecimal",
+        occurrence: 9,
+        expr: "'04'x",
+        expected: "\"4\"x",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_hexadecimal",
+        occurrence: 10,
+        expr: "\"A\"",
+        expected: "\"41\"x",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_hexadecimal",
+        occurrence: 11,
+        expr: "'00'x || \"A\"",
+        expected: "\"041\"x",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_hexadecimal",
+        occurrence: 12,
+        expr: "\"AB\"",
+        expected: "\"4142\"x",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_hexadecimal",
+        occurrence: 13,
+        expr: "'04'x || \"AB\"",
+        expected: "\"441 42\"x",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_hexadecimal",
+        occurrence: 14,
+        expr: "\"ABC\"",
+        expected: "\"414243\"x",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_hexadecimal",
+        occurrence: 15,
+        expr: ".String~xdigit~x2c",
+        expected: "'0123456789ABCDEFabcdef'x",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 1,
+        expr: "\"A\"",
+        expected: "\"0100 0001\"b",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 2,
+        expr: "\"A\"",
+        expected: "\"0100  0001\"b",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 3,
+        expr: "\"A\"",
+        expected: "\"0100   0001\"b",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 4,
+        expr: "\"A\"",
+        expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || \"0001\"))",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 5,
+        expr: "\"A\"",
+        expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || tab || \"0001\"))",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 6,
+        expr: "\"A\"",
+        expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || tab || tab || \"0001\"))",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 7,
+        expr: "\"A\"",
+        expected: "self~runDynamicSource(\"return\" self~bin(\"0100 \" || tab || \"0001\"))",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 8,
+        expr: "\"A\"",
+        expected: "self~runDynamicSource(\"return\" self~bin(\"0100\" || tab || \" 0001\"))",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 9,
+        expr: "\"AB\"",
+        expected: "\"0100 0001 0100 0010\"b",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 10,
+        expr: "\"AB\"",
+        expected: "\"0100 0001  01000010\"b",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 11,
+        expr: "\"AB\"",
+        expected: "\"0100 00010100  0010\"b",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 12,
+        expr: "\"AB\"",
+        expected: "\"0100   000101000010\"b",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 13,
+        expr: "\"AB\"",
+        expected: "\"01000001 0100 0010\"b",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 14,
+        expr: "\"AB\"",
+        expected: "\"01000001  01000010\"b",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 15,
+        expr: "\"AB\"",
+        expected: "\"010000010100  0010\"b",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 16,
+        expr: "0",
+        expected: "\"00110000\"b",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 17,
+        expr: "0",
+        expected: "\"0110000\"b",
+        unblocked_by: "Phase 5",
+    },
+    ExemptRow {
+        group: "Literals",
+        method: "test_binary",
+        occurrence: 18,
+        expr: "0",
+        expected: "\"110000\"b",
+        unblocked_by: "Phase 5",
+    },
+];
+
+/// `row`'s 1-based position among every row seen so far (including `row`
+/// itself) sharing its `group` and `method`, in the source order `rows`
+/// already carries. `counts` is the caller's running tally, keyed by
+/// `(group, method)`, threaded through one call per row in a single pass
+/// rather than recomputed by re-scanning `rows` every time -- there are
+/// 4,259 of them, and this runs once per row.
+fn occurrence_of(
+    counts: &mut std::collections::HashMap<(String, String), usize>,
+    row: &AssertionRow,
+) -> usize {
+    let key = (row.group.clone(), row.method.clone());
+    let count = counts.entry(key).or_insert(0);
+    *count += 1;
+    *count
+}
+
+/// Looks `row` (at its `occurrence` position within its own group+method)
+/// up in [`EXEMPT`] by full identity -- `group`, `method`, `occurrence` and
+/// both `expr` and `expected` text, all five, so a corpus edit that shifts
+/// occurrence numbers or changes a row's text cannot silently keep
+/// matching the wrong committed entry.
+fn exempt_entry(row: &AssertionRow, occurrence: usize) -> Option<&'static ExemptRow> {
+    EXEMPT.iter().find(|e| {
+        e.group == row.group
+            && e.method == row.method
+            && e.occurrence == occurrence
+            && e.expr == row.expr
+            && e.expected == row.expected
+    })
 }
 
 /// Runs one row's program and classifies what happened.
@@ -460,7 +823,14 @@ struct Reported {
     detail: String,
 }
 
-fn describe(row: &AssertionRow, outcome: &RowOutcome) -> Option<Reported> {
+/// `exempt` is this row's own [`EXEMPT`] entry, if it has one -- looked up
+/// once by the caller (which already computed `occurrence`) rather than
+/// re-derived here, so this function stays a pure formatter.
+fn describe(
+    row: &AssertionRow,
+    outcome: &RowOutcome,
+    exempt: Option<&ExemptRow>,
+) -> Option<Reported> {
     let detail = match outcome {
         RowOutcome::Pass => return None,
         RowOutcome::Mismatch { actual, expected } => format!(
@@ -478,10 +848,21 @@ fn describe(row: &AssertionRow, outcome: &RowOutcome) -> Option<Reported> {
                 expect.major, expect.sub
             )
         }
-        RowOutcome::RuntimeBlocked { construct } => match owning_subphase(construct) {
-            Some(phase) => format!("RUNTIME-BLOCKED: {construct} is not implemented ({phase})"),
+        // `construct` is the first-hit fact ("what did this row's program
+        // actually run into"); `exempt.unblocked_by` is the separate,
+        // committed fact ("what would actually make this row pass") -- see
+        // the module doc's "Rows this harness cannot run yet" for the two
+        // rows where those differ. A `RuntimeBlocked` row with no exempt
+        // entry is not on the committed list at all, and says so plainly
+        // rather than guessing a phase for it.
+        RowOutcome::RuntimeBlocked { construct } => match exempt {
+            Some(e) => format!(
+                "RUNTIME-BLOCKED: first hit {construct} (not implemented); unblocked only by {}",
+                e.unblocked_by
+            ),
             None => format!(
-                "RUNTIME-BLOCKED: {construct} is not implemented (sub-phase not attributed)"
+                "RUNTIME-BLOCKED: first hit {construct} (not implemented); NOT on the committed \
+                 EXEMPT list -- this is a new blocked row, not a known one"
             ),
         },
         RowOutcome::Anomaly { detail } => format!("ANOMALY: {detail}"),
@@ -497,11 +878,17 @@ fn describe(row: &AssertionRow, outcome: &RowOutcome) -> Option<Reported> {
 
 /// Builds the report text, in the same "always visible, caveated top and
 /// bottom in REPORT mode" shape as `corpus.rs::build_report`.
+///
+/// `gate_failures` is shown unconditionally, in REPORT mode too, not only
+/// when `gate` is set: each entry is precisely a reason STRICT would fail
+/// if it ran right now, and a reader in REPORT mode should not have to
+/// re-run with `{GATE_ENV}=1` just to find out whether any exist.
 fn build_report(
     total: usize,
     passed: usize,
     reported: &[Reported],
     extraction_blocked: &[BlockedMethod],
+    gate_failures: &[String],
     gate: bool,
 ) -> String {
     let banner = "=".repeat(78);
@@ -568,6 +955,18 @@ fn build_report(
         }
     }
 
+    if !gate_failures.is_empty() {
+        writeln!(
+            w,
+            "EXEMPT-set violations ({}) -- what STRICT would fail on right now:",
+            gate_failures.len()
+        )
+        .unwrap();
+        for failure in gate_failures {
+            writeln!(w, "  {failure}").unwrap();
+        }
+    }
+
     if !gate {
         writeln!(
             w,
@@ -610,8 +1009,15 @@ fn emit_uncaptured(text: &str) {
     );
 }
 
-/// The runner. See the module doc for REPORT vs STRICT, and
-/// `task-15b-report.md` for the measured counts.
+/// The runner. See the module doc for REPORT vs STRICT and "The exempt
+/// set", and `task-15b-report.md` for the measured counts.
+///
+/// STRICT fails on exactly two shapes, both against the committed
+/// [`EXEMPT`] list rather than anything recomputed here: a row **not** on
+/// the list that is not passing (an unattributed regression), or a row
+/// **on** the list that *is* passing (a stale exemption -- the fix is to
+/// remove that row from `EXEMPT`, not for the gate to quietly stop
+/// forgiving it on its own).
 #[test]
 fn assertions_differential() {
     let (rows, blocked) = collect_all();
@@ -624,23 +1030,125 @@ fn assertions_differential() {
     let total = rows.len();
     let mut passed = 0usize;
     let mut reported = Vec::new();
+    let mut gate_failures: Vec<String> = Vec::new();
+    let mut occurrence_counts: std::collections::HashMap<(String, String), usize> =
+        std::collections::HashMap::new();
     for row in &rows {
+        let occurrence = occurrence_of(&mut occurrence_counts, row);
+        let exempt = exempt_entry(row, occurrence);
         let outcome = evaluate_row(row);
-        match describe(row, &outcome) {
-            None => passed += 1,
-            Some(r) => reported.push(r),
+
+        if matches!(outcome, RowOutcome::Pass) {
+            passed += 1;
+            if let Some(e) = exempt {
+                gate_failures.push(format!(
+                    "{}::{} occurrence {} now PASSES but is still listed in EXEMPT as \
+                     unblocked_by {:?} -- remove it from EXEMPT",
+                    e.group, e.method, e.occurrence, e.unblocked_by
+                ));
+            }
+            continue;
+        }
+
+        if exempt.is_none() {
+            gate_failures.push(format!(
+                "{}::{} occurrence {occurrence} is not passing and is not on the committed \
+                 EXEMPT list",
+                row.group, row.method
+            ));
+        }
+        if let Some(r) = describe(row, &outcome, exempt) {
+            reported.push(r);
         }
     }
 
     let gate = gate_mode();
-    emit_uncaptured(&build_report(total, passed, &reported, &blocked, gate));
+    emit_uncaptured(&build_report(
+        total,
+        passed,
+        &reported,
+        &blocked,
+        &gate_failures,
+        gate,
+    ));
 
     assert!(
-        !gate || reported.is_empty(),
-        "STRICT ({GATE_ENV}) mode: {} of {total} assertion-table rows are not passing; see \
-         the report above for which and why.",
-        reported.len()
+        !gate || gate_failures.is_empty(),
+        "STRICT ({GATE_ENV}) mode: {} EXEMPT-set violation(s); see the report above for which \
+         and why.",
+        gate_failures.len()
     );
+}
+
+/// Polices [`EXEMPT`] itself, in every mode, independent of `{GATE_ENV}`:
+/// the current not-passing set must equal the committed list **exactly**,
+/// same identity check `exempt_entry` uses (`group`, `method`,
+/// `occurrence`, `expr`, `expected`). This is the "assert that set" half
+/// of criterion 5's own device -- `assertions_differential`'s STRICT mode
+/// is the *use* of the committed list (deciding what to forgive); this is
+/// the check that the list still describes reality, and it runs whether or
+/// not anyone ever sets `{GATE_ENV}`.
+///
+/// Verified to actually catch something rather than merely compile: with
+/// `program_for`'s prelude-writing loop commented out (so
+/// `test_hexadecimal`/`test_binary`'s `tab = .String~tab` line,
+/// `test_string_range`'s `all = xrange()` chain, and (load-bearing for a
+/// much larger set) `CONCATENATION`'s own `a`..`g` prelude all stop
+/// running), this test failed immediately with a length mismatch, `336`
+/// not-passing rows against `EXEMPT`'s `35`. Both directions this device
+/// exists to catch actually fired at once: 22 of the 35 committed rows --
+/// every one of `test_hexadecimal`/`test_binary`'s pure-literal
+/// comparisons with no `self~` in their own `expr`/`expected` text, e.g.
+/// `"AB"` vs `"41 42"x` -- started passing outright (a stale exemption, in
+/// `assertions_differential`'s own words for it: `"... now PASSES but is
+/// still listed in EXEMPT"`), and separately 323 previously-passing rows
+/// outside the committed list, almost all of them `CONCATENATION`'s
+/// (unset `a`..`g` rendering as their own names, exactly the silent/loud
+/// split Task 15's brief and `task-15a-report.md` already measured),
+/// started failing with no exemption to explain them. Reverted before
+/// committing; see `task-15b-report.md` for the full transcript and the
+/// exact counts, taken from `assertions_differential`'s own "EXEMPT-set
+/// violations" section while the mutation was live.
+#[test]
+fn the_exempt_set_matches_the_current_blocked_rows() {
+    let (rows, _) = collect_all();
+    let mut occurrence_counts: std::collections::HashMap<(String, String), usize> =
+        std::collections::HashMap::new();
+    let mut still_blocked: Vec<(String, String, usize, String, String)> = Vec::new();
+    for row in &rows {
+        let occurrence = occurrence_of(&mut occurrence_counts, row);
+        if !matches!(evaluate_row(row), RowOutcome::Pass) {
+            still_blocked.push((
+                row.group.clone(),
+                row.method.clone(),
+                occurrence,
+                row.expr.clone(),
+                row.expected.clone(),
+            ));
+        }
+    }
+
+    assert_eq!(
+        still_blocked.len(),
+        EXEMPT.len(),
+        "the not-passing row count no longer matches EXEMPT's length -- a row was added to or \
+         removed from reality without EXEMPT being updated to match"
+    );
+    for (group, method, occurrence, expr, expected) in &still_blocked {
+        let found = EXEMPT.iter().any(|e| {
+            e.group == *group
+                && e.method == *method
+                && e.occurrence == *occurrence
+                && e.expr == *expr
+                && e.expected == *expected
+        });
+        assert!(
+            found,
+            "{group}::{method} occurrence {occurrence} (expr={expr:?}, expected={expected:?}) \
+             is not passing but has no EXEMPT entry -- add one, naming the sub-phase that \
+             actually unblocks it"
+        );
+    }
 }
 
 /// The falsification proof Task 15's brief requires: perturbing one row's
@@ -736,7 +1244,9 @@ fn digits_and_form_are_carried_not_defaulted() {
     assert!(
         matches!(honest, RowOutcome::Pass),
         "test_198 at its real digits/form did not pass: {}",
-        describe(row, &honest).map(|r| r.detail).unwrap_or_default()
+        describe(row, &honest, None)
+            .map(|r| r.detail)
+            .unwrap_or_default()
     );
 
     let mut defaulted = row.clone();
@@ -780,7 +1290,9 @@ fn the_raise_falsification_proof() {
     assert!(
         matches!(honest, RowOutcome::Pass),
         "test_262 did not pass at its real expectation: {}",
-        describe(row, &honest).map(|r| r.detail).unwrap_or_default()
+        describe(row, &honest, None)
+            .map(|r| r.detail)
+            .unwrap_or_default()
     );
 
     // Did-not-raise: the sharpest possible perturbation, an expectation the

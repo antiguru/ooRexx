@@ -353,17 +353,33 @@ fn scan_method_for_assertions(
             block(&mut blocked_reason, trimmed);
             continue;
         }
+        // `self~assertSyntaxError`/`self~assertRuntimeError` call
+        // `self~expectSyntax` internally (`OOREXXUNIT.CLS:1203`/`:1213`) and
+        // then attempt the risky statement themselves -- but neither checks
+        // the raise *locally*. There is no local catch inside either
+        // method: if the attempt raises, it escapes exactly the way a bare
+        // `self~expectSyntax` followed by a raising statement would, all
+        // the way out to the same per-method trap. So a `self~assertSame`
+        // is safe to leave un-converted after one of these two not because
+        // they are self-contained -- they are not -- but only because none
+        // of the 33 occurrences (all in `Literals.testGroup`, all wrapping
+        // calls like `self~assertSyntaxError((15.1, 1), self~hex(" "))`)
+        // has a `self~assertSame` anywhere later in the same method
+        // (checked, 0 occurrences). That is an empirical fact about this
+        // corpus, not a structural guarantee this scanner can rely on --
+        // block here too, the same forward guard `self~expectCondition`
+        // above has, rather than trusting the generic "other assertion
+        // kind, inert" fallback below to be safe here by luck.
+        if lower.starts_with("self~assertsyntaxerror")
+            || lower.starts_with("self~assertruntimeerror")
+        {
+            block(&mut blocked_reason, trimmed);
+            continue;
+        }
         if lower.starts_with("self~assert") || lower.starts_with("self~expect") {
-            // A different assertion kind: no variables assigned, and
-            // (unlike `expectSyntax`/`expectCondition` above) it does not
-            // defer anything to a later statement either -- `assertSyntaxError`
-            // and `assertRuntimeError` both call `expectSyntax` and then
-            // perform their own check *within the same call*, so nothing
-            // is left pending by the time this method's next line runs.
-            // Confirmed for this corpus: no `self~assertSame` ever follows
-            // one of these two in the same method (checked, 0 occurrences),
-            // matching the framework's own self-contained behaviour rather
-            // than coincidence.
+            // Every other assertion kind (`assertTrue`, `assertEquals`,
+            // `assertNull`, ...): no variables assigned, and no deferred
+            // expectation set either.
             continue;
         }
         if blocked_reason.is_none()
@@ -455,15 +471,16 @@ fn parse_assert_same(line: &str) -> Option<(String, String)> {
 /// Parses `self~expectSyntax`'s argument, already known (case-insensitively)
 /// to follow that prefix. `rest` is everything after `self~expectSyntax`,
 /// trimmed -- expected to be exactly `(major.sub)` with nothing else, which
-/// is the shape every one of the 19 occurrences preceding an `assertSame`
-/// in `base/expressions` uses.
+/// is the shape every one of the 184 `self~assertSame` calls this scanner
+/// converts to a raise expectation follows.
 ///
 /// `None` for anything else, including `expectSyntax`'s own array form
 /// (`(major.sub, message inserts...)`, which the method also accepts but
-/// none of these 19 use) or a trailing `msg` argument. Rather than guess
-/// which comma-separated item is the code, or discard the inserts, this
-/// blocks the method -- the same conservative choice `parse_assert_same`
-/// makes for an `assertSame` shape it has not seen either.
+/// none of these 184 rows' own markers use) or a trailing `msg` argument.
+/// Rather than guess which comma-separated item is the code, or discard the
+/// inserts, this blocks the method -- the same conservative choice
+/// `parse_assert_same` makes for an `assertSame` shape it has not seen
+/// either.
 fn parse_raise_expectation(rest: &str) -> Option<RaiseExpectation> {
     let inner = rest.strip_prefix('(')?.strip_suffix(')')?.trim();
     if inner.contains(',') {
