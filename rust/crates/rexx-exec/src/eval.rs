@@ -853,11 +853,13 @@ mod tests {
 
     /// Pushes a fresh top-level activation for `program`, the same setup
     /// `Interp::run` does, so a test can drive `eval` through a live
-    /// activation without running the instruction loop -- `step`'s
-    /// `Assignment` arm only handles `ExprKind::Variable` targets today
-    /// (`Stem`/`Compound` are Task 9's dispatch), so a program that
-    /// assigns a stem cannot simply be run; tests that need one set it up
-    /// directly through `stem_assign`/`stem_set` instead.
+    /// activation without running the instruction loop. `step`'s
+    /// `Assignment` arm has handled all three targets (`Variable`/`Stem`/
+    /// `Compound`) since Task 9, so this is no longer needed to work around
+    /// a gap in `run` -- it stays because this module's tests are about
+    /// `eval` itself, isolated from `step`'s surrounding dispatch, the same
+    /// reason `run.rs`'s own test module keeps its own copy of the same
+    /// helper rather than sharing one through `run`.
     fn activate(interp: &mut Interp, program: Program) -> Rc<Program> {
         let program = Rc::new(program);
         let id = ProgramId(interp.programs.len());
@@ -1361,12 +1363,14 @@ mod tests {
 
     /// Parses `if <cond> then nop`, extracts the `IF`'s own `condition`
     /// (an `ExprKind::Logical` for a comma list, an ordinary `Expr`
-    /// otherwise) and evaluates it directly. The only way to build one:
-    /// comma-list syntax is gated to `IF`/`WHEN`/`GUARD`/`WHILE`/`UNTIL` in
-    /// the parser (`ast.rs`'s own doc comment on `ExprKind::Logical`), and
-    /// none of those instructions run yet -- Tasks 9-11's `step` dispatch
-    /// does not reach `IF` -- so a real program can only ever hand the
-    /// parsed condition to this test directly, never through `run`.
+    /// otherwise) and evaluates it directly, bypassing `run`. The only way
+    /// to build one: comma-list syntax is gated to `IF`/`WHEN`/`GUARD`/
+    /// `WHILE`/`UNTIL` in the parser (`ast.rs`'s own doc comment on
+    /// `ExprKind::Logical`). `IF`/`WHEN`/`WHILE`/`UNTIL` all run since
+    /// Tasks 10/11, so a real program can reach one through `run` too --
+    /// this helper stays because it isolates `eval`'s own handling of the
+    /// condition from `step`'s surrounding dispatch, not because `run`
+    /// cannot reach one at all.
     fn eval_condition(interp: &mut Interp, source: &[u8]) -> Result<ObjRef, Failure> {
         let program = parse_program(source.to_vec()).expect("test program parses");
         let code = Code {

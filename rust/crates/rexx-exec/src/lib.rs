@@ -146,9 +146,14 @@ pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 ///   comment and `run_bounded`'s doc comment have the full argument: a
 ///   nested `IF`/`SELECT` resolves itself inside its enclosing one's own
 ///   `step` call, through `step_in_temps_frame`, rather than returning to
-///   this thread's outer loop first). **Unmeasured** -- unlike the other
-///   three, nothing generates a program with thousands of *lexically*
-///   nested `IF`/`SELECT` clauses the way a left-deep expression generates
+///   this thread's outer loop first). Task 11 added `DO`/`LOOP` to this
+///   same recursion (`run_loop`/`run_repeating` each drive their own
+///   `run_bounded` calls one level deeper, per lexical nesting level, the
+///   identical shape `IF`/`SELECT` already had): a nested `DO`, `LOOP` or
+///   `SELECT WHEN`/`WHEN CASE` costs a level here exactly like a nested
+///   `IF` does. **Unmeasured** -- unlike the other three, nothing
+///   generates a program with thousands of *lexically* nested `IF`/
+///   `SELECT`/`DO`/`LOOP` clauses the way a left-deep expression generates
 ///   deep `eval` recursion from one term count, so there is no natural knob
 ///   to bisect against, and no corpus or real program comes remotely close
 ///   to needing one: a 2,000-level synthetic nested-`IF` chain ran clean in
@@ -475,6 +480,39 @@ impl Loud {
             message: format!("INTERPRET text did not parse: {error}"),
         }
     }
+
+    /// A named `LEAVE`/`ITERATE` inside `INTERPRET` text, escaping out to the
+    /// enclosing program. Filed as F-EX2 in the branch review.
+    ///
+    /// `run_fragment` gives the fragment its own fresh `SymbolTable`
+    /// (`parse_interpret`'s doc), so the `SymbolId` a `leave name`/`iterate
+    /// name` inside that text carries is relative to *that* table, not the
+    /// program's. Every consumer above `run_fragment` (`do_body_outcome`,
+    /// `leave_select`, `run_activation`) compares a forwarded `Flow::Leave`/
+    /// `Iterate`'s id against labels interned in the *program's* table, so
+    /// forwarding it unchanged can match the wrong label, miss the right
+    /// one, or panic in `code.symbols.name` -- silently, since nothing
+    /// about a mismatched `SymbolId` looks wrong at the type level. `name`
+    /// is resolved here, inside `run_fragment`, while the fragment's own
+    /// table is still in scope to resolve it correctly; nothing past this
+    /// point sees the id at all. A **bare** `LEAVE`/`ITERATE` (no name)
+    /// carries no `SymbolId` and is unaffected -- `run_fragment` forwards
+    /// it exactly as before.
+    ///
+    /// Reachable only through `run_program_interpret_spike` today (`run_
+    /// program`'s `INTERPRET` arm is `Loud::instruction` before this
+    /// function ever runs), so no shipped behavior changes. 4b builds a
+    /// real `INTERPRET` on this exact machinery and has to replace this
+    /// with an actual resolution -- either a name-based lookup added to
+    /// `SymbolTable`, or `Flow` carrying a resolved name instead of an id
+    /// across this one boundary -- rather than inherit a silent mismatch.
+    fn interpret_leave(name: &str) -> Loud {
+        Loud {
+            message: format!(
+                "a LEAVE/ITERATE naming {name:?} cannot cross an INTERPRET boundary yet"
+            ),
+        }
+    }
 }
 
 /// Names an expression form in **bounded** text, for a loud failure to quote.
@@ -572,17 +610,17 @@ struct Interp {
     /// The output sink. `SAY` writes here and `Outcome::stdout` is what it
     /// becomes.
     out: Vec<u8>,
-    /// The trace sink, which becomes `Outcome::stderr` **and which nothing in
-    /// this crate writes yet.**
+    /// The trace sink, which becomes `Outcome::stderr`.
     ///
     /// It exists because the design puts both sinks on `Interp` and D17 makes
     /// them separate for a measured reason: with `trace r` the `*-*` and `>>>`
     /// lines are on stderr while `SAY` is on stdout, and being separate
     /// descriptors is what makes their relative interleaving unobservable and
-    /// two independently buffered sinks safe. Task 13 is the first to write to
-    /// it. Keeping it now costs one field and means the loud-failure path
-    /// already appends to the right buffer rather than being rerouted later,
-    /// which is when a stray ordering difference would appear.
+    /// two independently buffered sinks safe. Task 13 was the first to write
+    /// to it (`trace.rs` and a dozen call sites in `run.rs` now do); keeping
+    /// the field from the start meant the loud-failure path already appended
+    /// to the right buffer rather than being rerouted later, which is when a
+    /// stray ordering difference would have appeared.
     trace: Vec<u8>,
     /// The current `TRACE` setting's visible-output shape (D17). Lives on
     /// `Interp` rather than per-`Activation`'s `Settings`, unlike the design's
@@ -642,26 +680,45 @@ struct Interp {
     /// `WhenCase` arm names the same limitation again at its own read
     /// site.
     current_case_text: Option<Vec<u8>>,
-    /// **F3's own perimeter, found by review.** When an absorbed `WhenCase`
-    /// (`run.rs`'s own doc comment on that arm) takes its `Flow::Goto
-    /// (false_target)` branch, the position it lands on is reported at
-    /// *this* indent, not its own `static_indent` -- one call to whichever
-    /// of `step_in_temps_frame`'s two indent-consuming purposes (the
-    /// `*-*`/value-line indent, or a failure's own `FailureSite.indent`)
-    /// fires next, whichever comes first, then cleared.
+    /// **F3's own perimeter, found by review -- and corrected twice more,
+    /// each correction found by re-verifying the previous one rather than
+    /// trusting it.** When an absorbed `WhenCase` (`run.rs`'s own doc
+    /// comment on that arm) takes its `Flow::Goto(false_target)` branch,
+    /// whatever it lands on -- `END`'s own 7.3, or (F-EX1) `OTHERWISE`'s
+    /// own marker *and its whole body*, redirected through `run_
+    /// otherwise` -- reports every indent it computes **`self` spaces
+    /// higher** than its own ordinary `static_indent` would give, for as
+    /// long as this stays non-zero.
     ///
-    /// Measured, not derived from the marker rule and merely reused by
-    /// analogy: `select case 2 / when 2 then / when 3 then nop / end / say
-    /// 'after'` (no `OTHERWISE`) reports `END`'s own 7.3 clause at indent
-    /// **4**, not the `0` its own lexical position (top-level `SELECT`)
-    /// would give -- `6` is the absorbed `WhenCase`'s own condition depth
-    /// (`current_value_indent` at the moment its arm decides to escape,
-    /// already measured correct and unchanged for its own clause), and `4`
-    /// is `6 - 2`, the identical "marker is half its body" arithmetic
-    /// `static_indent`'s own doc comment already states for `THEN`/`ELSE`/
-    /// `OTHERWISE` -- so this is the same rule, not a second one invented
-    /// for this one path, even though it is carried through a field rather
-    /// than through `static_indent`'s own recursion.
+    /// **The value is the constant `4`, always -- not a function of the
+    /// absorbed condition's own depth, which the field's second version
+    /// wrongly used.** That second version (`current_value_indent - 2`,
+    /// an *additive* offset rather than the first version's absolute
+    /// replacement) was right at the top level (`6 - 2 = 4`) and wrong one
+    /// `DO` deeper (`8 - 2 = 6`, where the oracle still wants `4`) --
+    /// caught only because F-EX1's own fix was re-verified at a second
+    /// nesting depth rather than trusted from the first. The real
+    /// invariant: the absorbed condition always sits exactly two
+    /// `indent()` bumps past an *ordinary* `SELECT`-level construct's own
+    /// position -- the enclosing, listed `WHEN`/`WHEN CASE`'s own marker,
+    /// then its own body entry -- and that gap (`4` spaces) does not grow
+    /// with how many other constructs enclose the whole `SELECT`, because
+    /// both the absorbed condition's own depth *and* `END`'s/`OTHERWISE`'s
+    /// own ordinary depth grow by the identical amount together. Measured
+    /// at two nesting depths for all three landing shapes before trusting
+    /// it a second time (this task's report has the full transcripts):
+    ///
+    /// | landing shape | top-level ordinary / actual | one `DO` deeper |
+    /// |---|---|---|
+    /// | `END`'s own 7.3 | `0` / `4` | `2` / `6` |
+    /// | `OTHERWISE`'s own marker | `2` / `6` | `4` / `8` |
+    /// | `OTHERWISE`'s own body | `4` / `8` | `6` / `10` |
+    ///
+    /// every row's own `actual - ordinary` is `4`. `4` is the identical
+    /// "marker is half its body" arithmetic `static_indent`'s own doc
+    /// comment already states for `THEN`/`ELSE`/`OTHERWISE`, so the
+    /// *number* is still the one rule this task keeps reusing; it is
+    /// simply a fixed constant here, not `current_value_indent`-derived.
     ///
     /// **Why a field, not `Flow::Goto` growing a payload.** `Flow::Goto`
     /// is the ordinary resume mechanism *every* `If`/`Select`/`Do` match
@@ -673,12 +730,35 @@ struct Interp {
     /// `current_value_indent`/`current_case_text` already are, applied to
     /// a third, narrower quantity, not a new idiom.
     ///
-    /// `None` in the overwhelmingly common case (nothing escaping right
-    /// now); consumed by `.take()` in `step_in_temps_frame` on *every*
-    /// step, not only a failing one, so a landing that does not itself
-    /// fail cannot leave this set for an unrelated, later failure to pick
-    /// up by accident.
-    pending_escape_indent: Option<usize>,
+    /// **Why persistent rather than consumed after one step, unlike the
+    /// field's own first version.** `OTHERWISE`'s own body can be more
+    /// than one clause (`say 'O'` *and* `leave s`, in the measured case,
+    /// both needing the offset), so a `.take()` at the top of the very
+    /// next `step_in_temps_frame` call -- right for `END`'s own one-clause
+    /// landing -- would have zeroed it before the second body clause ever
+    /// read it. `0` in the overwhelmingly common case (nothing escaping
+    /// right now); set by the absorbed `WhenCase`'s own false branch,
+    /// added (never replacing) inside `step_in_temps_frame`'s own indent
+    /// computation on every step while non-zero, and explicitly restored
+    /// to `0` by `run_otherwise` once its own `run_bounded` call returns --
+    /// the one place that knows the elevated dispatch is now over. The
+    /// `END`-only landing needs no explicit restore: 7.3 is fatal, so
+    /// nothing runs afterward to see a stale value (`execute`, `lib.rs`,
+    /// gives every run a fresh `Interp`).
+    ///
+    /// **Narrower than the general case, disclosed rather than chased
+    /// further under this task's own time budget.** Only `step_in_temps_
+    /// frame`'s own indent computation and `run_otherwise`'s own explicit
+    /// marker computation add this offset; the `WHEN`-scan's and `WHILE`/
+    /// `UNTIL`'s own explicit `current_value_indent` overrides do not, so a
+    /// `SELECT`/`DO`/`WHILE` *nested inside* an escaped `OTHERWISE`'S own
+    /// body would not have every one of *its own* explicit-override sites
+    /// inherit the elevation, only whatever reaches `step_in_temps_frame`
+    /// ordinarily. No corpus or spec example nests this deeply; this is
+    /// the same class of disclosure as `current_case_text`'s own nested-
+    /// clobber limitation just above, not a silently assumed correctness
+    /// claim.
+    indent_offset: usize,
     /// The clause a `Raised` condition escaped from, as the 1-based line and
     /// the bytes `TRACE` would echo, or `None` if nothing raised.
     ///
@@ -759,7 +839,7 @@ impl Interp {
             trace_mode: TraceMode::OFF,
             current_value_indent: 0,
             current_case_text: None,
-            pending_escape_indent: None,
+            indent_offset: 0,
             failure_site: None,
             interpret_spike,
             stress_collect: false,

@@ -42,9 +42,15 @@
 //! alone, and only one of the two is supposed to enter the `Else`'s body.
 //! `SELECT`/`WHEN` has the same defect with no marker to disambiguate with
 //! at all. `run_bounded`'s doc comment carries the resolution. `Then`,
-//! `Else`, `Otherwise`, `When` and `WhenCase` accordingly step as pure
-//! no-ops (like `Label`) -- they are never independently dispatched, only
-//! ever read as data by `If`/`Select` or walked over inside a bounded loop.
+//! `Else` and `Otherwise` step as pure no-ops (like `Label`), only ever read
+//! as data by `If`/`Select` or walked over inside a bounded loop. `When` and
+//! `WhenCase` no longer are (Task 13's absorbed-`WHEN` fix and its own F3):
+//! an ordinary, listed `When`/`WhenCase` is still never independently
+//! stepped for its own decision -- `Select`'s arm evaluates and dispatches
+//! it directly -- but one *absorbed* into another `When`/`WhenCase`'s own
+//! `THEN` (never collected into the enclosing `SELECT`'s own `whens` list,
+//! `ast.rs`'s own doc comment) is reached only by ordinary stepping, and its
+//! arm evaluates its condition and, for `WhenCase`, branches on the result.
 
 use crate::error::{FailureSite, Raised};
 use crate::eval::logical_value;
@@ -108,8 +114,8 @@ enum Flow {
     /// loop -- every iteration -- is over, one way or another: it drives its
     /// own `run_bounded(body)` calls in an internal `loop {}` and only ever
     /// returns a `Flow` once there is truly nothing left for it to decide.
-    /// `leave_and_iterate_survive_a_goto_absorbing_enclosing_if` (this
-    /// file's own tests) pins exactly this shape: a `DO` with an `ITERATE`
+    /// `leave_and_iterate_survive_a_do_nested_in_an_ifs_then_iterating_repeatedly`
+    /// (this file's own tests) pins exactly this shape: a `DO` with an `ITERATE`
     /// in its body, nested inside an `IF`'s `THEN`, run enough times that a
     /// version which instead returned a re-entry `Goto` to the loop's own
     /// top would either loop forever (the `IF`'s own `run_bounded` silently
@@ -550,7 +556,7 @@ impl Interp {
                     // string, not skipped.
                     None => Vec::new(),
                 };
-                self.trace_result(static_indent(&code.body.instructions, index), &line);
+                self.trace_result(self.current_value_indent, &line);
                 self.out.extend_from_slice(&line);
                 self.out.push(b'\n');
                 Ok(Flow::Next)
@@ -571,7 +577,16 @@ impl Interp {
                 // (`RexxInstructionAssignment::execute`: evaluate, trace,
                 // *then* assign), which matters only in that the traced
                 // value can never be affected by the write it precedes.
-                let indent = static_indent(&code.body.instructions, index);
+                // Reads `current_value_indent` rather than recomputing
+                // `static_indent(index)` independently -- `step_in_temps_
+                // frame` already computed exactly this value (`indent_
+                // offset` included, F-EX1's own correction to F3) for this
+                // same instruction right before calling `step`, and a
+                // second computation of the identical quantity is how the
+                // two drift, which is exactly what happened here before
+                // this fix: this site's own copy never learned about the
+                // offset when the field was added.
+                let indent = self.current_value_indent;
                 let rendered = self.to_text(value).to_vec();
                 self.trace_result(indent, &rendered);
                 match &target.kind {
@@ -691,8 +706,9 @@ impl Interp {
             }
 
             // A label is a traced no-op: the C++'s own `execute` on a label
-            // instruction only traces it (nothing in 4a writes to the trace
-            // sink yet -- Task 13's own construct) and does nothing else.
+            // instruction only traces it (Task 13's own construct -- a
+            // `Label` clause is echoed here via `step_in_temps_frame`, same
+            // as any other instruction) and does nothing else besides.
             // `SIGNAL`/`CALL` reach a label by jumping to the instruction
             // after it; nothing ever executes the label node for its own
             // effect.
@@ -723,7 +739,10 @@ impl Interp {
             } => {
                 let len = code.body.instructions.len();
                 let false_target = false_target.unwrap_or(len);
-                let indent = static_indent(&code.body.instructions, index);
+                // Reads `current_value_indent` rather than recomputing
+                // `static_indent(index)` -- same reasoning as `Assignment`'s
+                // own arm, above.
+                let indent = self.current_value_indent;
                 if self.eval_condition(
                     code,
                     condition,
@@ -763,13 +782,18 @@ impl Interp {
             InstructionKind::Else { .. } => Ok(Flow::Next),
 
             // `SELECT`/`SELECT CASE`. Evaluates `case` at most once (if this
-            // is a `SELECT CASE`), then tests each of its own `whens` in
-            // source order by reading the `When`/`WhenCase` node directly as
-            // data (`condition`/`values`, `false_target`, `exit`) rather
-            // than dispatching through `step_in_temps_frame` -- a
-            // `When`/`WhenCase` node must never be independently stepped for
-            // a decision of its own, only ever run past inside a bounded
-            // sub-loop (see the `When`/`WhenCase` arm, below, for why).
+            // is a `SELECT CASE`), then tests each of its own *listed*
+            // `whens` in source order by reading the `When`/`WhenCase` node
+            // directly as data (`condition`/`values`, `false_target`,
+            // `exit`) rather than dispatching through `step_in_temps_frame`
+            // -- a *listed* `When`/`WhenCase` node (one collected into this
+            // `whens` list, `ast.rs`'s own doc comment) must never be
+            // independently stepped for a decision of its own, only ever
+            // run past inside a bounded sub-loop. An *absorbed* one (never
+            // collected here at all, because it is itself another `When`/
+            // `WhenCase`'s own `THEN`) is the exception, and is
+            // independently stepped -- see the `When`/`WhenCase` arm,
+            // below, for both halves.
             InstructionKind::Select {
                 label,
                 case,
@@ -778,7 +802,10 @@ impl Interp {
                 end,
             } => {
                 let len = code.body.instructions.len();
-                let select_indent = static_indent(&code.body.instructions, index);
+                // Reads `current_value_indent` rather than recomputing
+                // `static_indent(index)` -- same reasoning as `Assignment`'s
+                // own arm.
+                let select_indent = self.current_value_indent;
                 let case_text = match case {
                     Some(case_expr) => {
                         let value = self.eval(code, case_expr)?;
@@ -857,7 +884,6 @@ impl Interp {
                                         when_index,
                                         source,
                                         when_instruction,
-                                        None,
                                     );
                                     return Err(failure);
                                 }
@@ -868,30 +894,85 @@ impl Interp {
                             values,
                             false_target,
                             exit,
-                        } => {
-                            let case_text = case_text.as_deref().expect(
-                                "a WhenCase's enclosing Select always carries a case expression",
-                            );
-                            let matched =
-                                match self.test_case_when(code, values, case_text, when_indent) {
-                                    Ok(matched) => matched,
-                                    Err(failure) => {
-                                        self.record_failure_site(
-                                            code,
-                                            when_index,
-                                            source,
-                                            when_instruction,
-                                            None,
-                                        );
-                                        return Err(failure);
-                                    }
-                                };
-                            matched.then(|| (false_target.unwrap_or(len), exit.unwrap_or(len)))
-                        }
+                        } => match case_text.as_deref() {
+                            Some(case_text) => {
+                                let matched =
+                                    match self.test_case_when(code, values, case_text, when_indent)
+                                    {
+                                        Ok(matched) => matched,
+                                        Err(failure) => {
+                                            self.record_failure_site(
+                                                code,
+                                                when_index,
+                                                source,
+                                                when_instruction,
+                                            );
+                                            return Err(failure);
+                                        }
+                                    };
+                                matched.then(|| (false_target.unwrap_or(len), exit.unwrap_or(len)))
+                            }
+                            // A listed `WhenCase` with no `case` expression:
+                            // a plain `SELECT` with no `CASE` at all, which
+                            // the parser should never produce for a
+                            // `WhenCase` node (only `SELECT CASE` ever
+                            // builds one, `ast.rs`'s own doc comment) --
+                            // F-EX3, the same unproven parser invariant the
+                            // absorbed `WhenCase` arm below already refuses
+                            // to crash on, and formerly an `.expect()` here
+                            // that did. Evaluates `values` for side effects
+                            // and never matches, the identical fallback.
+                            None => {
+                                for value in values {
+                                    let v = self.eval(code, value)?;
+                                    self.roots.push_temp(v);
+                                }
+                                None
+                            }
+                        },
                         other => panic!("a SELECT's whens holds only When/WhenCase, not {other:?}"),
                     };
                     if let Some((body_end, resume)) = outcome {
                         let flow = self.run_bounded(code, when_index + 1, body_end, source)?;
+                        // **F-EX1, found by the whole-branch review, not by
+                        // this task's own probes.** An absorbed `WhenCase`'s
+                        // own false-branch escape (its own arm, below) can
+                        // land exactly on this `SELECT`'s own `OTHERWISE`
+                        // marker via a bare `Flow::Goto`, which `leave_
+                        // select`'s own `other => Ok(other)` arm would
+                        // otherwise forward unrecognised -- all the way out
+                        // of this `SELECT`'s own `step` entirely, so
+                        // `OTHERWISE`'s own body would then run under
+                        // whichever *outer* construct happens to receive
+                        // that `Goto`, with no `SELECT` frame on the search
+                        // a `LEAVE`/`ITERATE` inside it needs to find. That
+                        // is precisely the pre-Task-11 shape Task 11 built
+                        // `run_otherwise` (below, this fix's own extraction
+                        // of what was inline here) to fix in the first
+                        // place -- measured, `select label s case 2 / when
+                        // 2 then / when 3 then nop / otherwise say 'O' /
+                        // leave s / end`: oracle `O`, `after`, rc 0; before
+                        // this fix, `O`, then `Error 28.3`, rc 228, because
+                        // `leave s` searched outward from *outside* this
+                        // `SELECT` and never found it. Redirecting through
+                        // `run_otherwise` here, exactly as the ordinary "no
+                        // `WHEN` matched" path already does below, is what
+                        // restores the frame.
+                        if let Flow::Goto(target) = flow
+                            && *otherwise == Some(target)
+                        {
+                            // **Do not clear `indent_offset` here.** F-EX1's
+                            // own re-review found the first version of this
+                            // comment wrong: `OTHERWISE`'s own marker *and
+                            // its whole body* need the offset still active
+                            // through `run_otherwise`'s own dispatch (`lib.
+                            // rs`'s own doc comment on `indent_offset` has
+                            // the measured transcript) -- `run_otherwise`
+                            // itself is what restores it to `0`, once that
+                            // whole dispatch is over, not here before it
+                            // has even started.
+                            return self.run_otherwise(code, index, *label, target, *end, source);
+                        }
                         return self.leave_select(code, index, *label, resume, flow);
                     }
                 }
@@ -913,32 +994,7 @@ impl Interp {
                     // naming this `SELECT`'s own label from inside
                     // `OTHERWISE` is now caught here too.
                     Some(otherwise_index) => {
-                        let otherwise_end = end.unwrap_or(len);
-                        // `OTHERWISE`'s own clause echo, explicit for the
-                        // same reason `WHEN`'s own is, above: its `step`
-                        // arm is a no-op and its own index is never inside
-                        // any `run_bounded` range (the body below starts
-                        // *after* it), so nothing else ever visits it.
-                        // Measured, this task's report: `otherwise` traces
-                        // on its own line, at the `SELECT`'s own scan
-                        // level, before its body.
-                        let otherwise_instruction = &code.body.instructions[*otherwise_index];
-                        // `static_indent`'s own fixed answer for
-                        // `*otherwise_index` (this task's earlier fix, not
-                        // `select_indent`): the marker sits at the scan
-                        // level (2 at top level), the same as a `WHEN`'s
-                        // own condition, not the `SELECT`'s own level.
-                        let otherwise_indent =
-                            static_indent(&code.body.instructions, *otherwise_index);
-                        self.current_value_indent = otherwise_indent;
-                        if self.trace_mode.all
-                            && let Some((line, text)) = clause_site(source, otherwise_instruction)
-                        {
-                            self.trace_clause(line, otherwise_indent, &text);
-                        }
-                        let flow =
-                            self.run_bounded(code, otherwise_index + 1, otherwise_end, source)?;
-                        self.leave_select(code, index, *label, otherwise_end, flow)
+                        self.run_otherwise(code, index, *label, *otherwise_index, *end, source)
                     }
                     // Landing exactly on `END` is deliberate: that is what
                     // makes 7.3's clause echo the `END`'s and not the
@@ -1021,20 +1077,25 @@ impl Interp {
             // way a `LEAVE`/`ITERATE` naming an enclosing construct already
             // does (`run_bounded`'s own doc comment).
             //
-            // **The one further change: whatever this `Goto` lands on is
-            // reported at this node's own condition depth minus two, not
-            // its own lexical position.** Found by review, one perimeter
-            // deeper than the fix above: `select case 2 / when 2 then /
-            // when 3 then nop / end / say 'after'` (no `OTHERWISE`) reports
-            // `END`'s own 7.3 clause at indent 4, where `END`'s own
-            // `static_indent` (top-level `SELECT`) is 0. `lib.rs`'s own
-            // doc comment on `pending_escape_indent` has the full argument
-            // for why `current_value_indent - 2` is the right number (the
-            // same "marker is half its body" arithmetic already governing
-            // `THEN`/`ELSE`/`OTHERWISE`, not a new rule) and why it is
-            // carried through a field rather than by growing `Flow::Goto`
-            // a payload every ordinary resume-`Goto` would then have to
-            // carry too.
+            // **The one further change: whatever this `Goto` lands on
+            // reports every indent `self.indent_offset` spaces higher than
+            // its own ordinary `static_indent`, for as long as that stays
+            // non-zero.** Found by review, one perimeter deeper than the
+            // fix above (`select case 2 / when 2 then / when 3 then nop /
+            // end / say 'after'`, no `OTHERWISE`: `END`'s own 7.3 clause
+            // reports at indent 4, not `END`'s own ordinary `0`) --
+            // **and corrected once more by a second review** that found an
+            // absolute-replacement version of this field right for `END`
+            // only by coincidence (`0 + 4` and `4` are the same number) and
+            // wrong for F-EX1's own `OTHERWISE` redirect just below, whose
+            // ordinary marker level is `2`, not `0`. `lib.rs`'s own doc
+            // comment on `indent_offset` has the full argument and the
+            // measured `TRACE R` transcript pinning all three numbers
+            // (the absorbed condition's own `6`, `OTHERWISE`'s own marker
+            // at `6`, its own body at `8`) to one additive offset, `6 - 2`,
+            // not three different rules -- and why it is carried through a
+            // field rather than by growing `Flow::Goto` a payload every
+            // ordinary resume-`Goto` would then have to carry too.
             //
             // **A true match still never runs its own consequence**,
             // confirmed by a dedicated probe (`t13_f3_true.rex`, this
@@ -1076,7 +1137,31 @@ impl Interp {
                     if self.test_case_when(code, values, &case_text, indent)? {
                         Ok(Flow::Next)
                     } else {
-                        self.pending_escape_indent = Some(indent.saturating_sub(2));
+                        // **Corrected after a second re-verification found
+                        // the first version of this line wrong under
+                        // nesting.** `current_value_indent.saturating_sub
+                        // (2)` (this line's own first attempt) gave the
+                        // right answer at the top level by coincidence
+                        // (`6 - 2 = 4`) and the *wrong* one nested one `DO`
+                        // deeper (`8 - 2 = 6`, where the oracle still wants
+                        // `4`) -- measured directly (`t13_f3_nested.rex`,
+                        // then a `TRACE R` transcript one level deeper
+                        // again, `i_trace_nested_escape.rex`/`j_trace_
+                        // nested_otherwise.rex`, this task's report has
+                        // all three). The offset is the **constant** `4`,
+                        // not a function of how deep the absorbed
+                        // condition itself sits: it is exactly two
+                        // `indent()` bumps -- the enclosing, listed
+                        // `WHEN`/`WHEN CASE`'s own marker, then its own
+                        // body entry -- past wherever an *ordinary* `SELECT`
+                        // -level construct (`END`, `OTHERWISE`) would sit,
+                        // and that gap is the same two bumps regardless of
+                        // how many other constructs enclose the whole
+                        // `SELECT`. Confirmed at both nesting depths for
+                        // all three landing shapes (`END`, `OTHERWISE`'s
+                        // own marker, `OTHERWISE`'s own body) before
+                        // trusting it a second time.
+                        self.indent_offset = 4;
                         Ok(Flow::Goto(
                             false_target.unwrap_or(code.body.instructions.len()),
                         ))
@@ -1172,6 +1257,20 @@ impl Interp {
     /// C++ does, and it is why `step` can push freely without deciding when to
     /// let go.
     ///
+    /// **No longer quite true of a `DO`/`LOOP` clause, since Task 11
+    /// (F-EX4, branch review, Minor).** `run_loop`/`run_repeating` resolve
+    /// an entire multi-pass loop inside this one call -- the doc comment
+    /// two paragraphs below explains why a `Goto`-shaped re-entry cannot be
+    /// used instead -- so everything pushed per pass (`eval_condition`'s own
+    /// `push_temp` for every `WHILE`/`UNTIL` test, one `ObjRef` per
+    /// iteration) accumulates for the loop's whole run rather than one
+    /// iteration's. Not a correctness defect: nothing collects mid-run, and
+    /// the temps are rooted throughout, so a stress collector sees nothing
+    /// but live roots. It costs memory a future collector cannot reclaim
+    /// early (a `do while` running 10^7 passes holds ~10^7 dead-but-rooted
+    /// temps in one frame), and it means "one clause" describes every
+    /// instruction here except this one.
+    ///
     /// **Also resolves the failing clause's site, when one escapes and
     /// `source` is `Some`.** Moved here from `run_activation`'s own error
     /// path (Task 10), because `run_activation` only ever sees the outermost
@@ -1237,14 +1336,14 @@ impl Interp {
         // gated by its own `intermediates` check; setting it plainly is
         // cheaper than a second `if` that would just repeat that gate.
         //
-        // `pending_escape_indent` (F3's own perimeter, `lib.rs`'s own doc
-        // comment) is consumed here too, **every** step, not only a
-        // failing one -- an absorbed `WhenCase`'s own escape lands
-        // directly on whatever this call is about to step, and whether or
-        // not stepping it fails, the residual must not survive to affect
-        // anything after it.
-        let escape_indent = self.pending_escape_indent.take();
-        let indent = static_indent(&code.body.instructions, index);
+        // `indent_offset` (F-EX1's own correction to F3, `lib.rs`'s own doc
+        // comment) is **added**, not consumed -- an absorbed `WhenCase`'s
+        // own escape can elevate every step for the whole span it reaches
+        // (`OTHERWISE`'s own marker *and* its entire body), not only the
+        // one instruction it lands on directly, so this reads the field
+        // rather than taking it; `run_otherwise` is what clears it once
+        // that span is over.
+        let indent = static_indent(&code.body.instructions, index) + self.indent_offset;
         self.current_value_indent = indent;
         if self.trace_mode.all
             && let Some((line, text)) = clause_site(source, instruction)
@@ -1255,7 +1354,7 @@ impl Interp {
         let flow = self.step(code, index, instruction, source);
         self.roots.pop_frame(frame);
         if flow.is_err() {
-            self.record_failure_site(code, index, source, instruction, escape_indent);
+            self.record_failure_site(code, index, source, instruction);
         }
         flow
     }
@@ -1276,22 +1375,23 @@ impl Interp {
     /// so `static_indent` has something to walk the flat instruction list
     /// up to.
     ///
-    /// `escape_indent`: `step_in_temps_frame`'s own consumed
-    /// `pending_escape_indent` (`lib.rs`'s own doc comment), used instead
-    /// of `static_indent` when `Some` -- **always `None` from `Select`'s
-    /// own two direct calls below**, which resolve a `When`/`WhenCase`
-    /// condition's own failure from *inside* the enclosing `SELECT`'s own
-    /// `step_in_temps_frame` call, not a fresh one of their own, so there
-    /// is nothing for them to have consumed.
+    /// Adds `self.indent_offset` (F-EX1's own correction to F3, `lib.rs`'s
+    /// own doc comment), same as `step_in_temps_frame`'s own indent
+    /// computation -- safe unconditionally, including at `Select`'s own
+    /// two direct calls below (a `When`/`WhenCase` condition's own
+    /// failure): `indent_offset` is only ever non-zero while a *different*
+    /// `SELECT`'s own absorbed-escape dispatch is still open, and that
+    /// dispatch is always fully closed (`run_otherwise`'s own restore, or
+    /// `END`'s own fatal 7.3) before this `SELECT`'s own `whens` scan ever
+    /// runs, so it is always `0` here in practice.
     fn record_failure_site(
         &mut self,
         code: &Code<'_>,
         index: usize,
         source: Option<&ProgramSource>,
         instruction: &Instruction,
-        escape_indent: Option<usize>,
     ) {
-        let indent = escape_indent.unwrap_or_else(|| static_indent(&code.body.instructions, index));
+        let indent = static_indent(&code.body.instructions, index) + self.indent_offset;
         self.record_failure_at(source, instruction, indent);
     }
 
@@ -1340,7 +1440,15 @@ impl Interp {
     ) -> LeaveOrigin {
         LeaveOrigin {
             site: clause_site(source, instruction),
-            indent: static_indent(&code.body.instructions, index),
+            // `+ self.indent_offset` (F-EX1's own correction to F3,
+            // `lib.rs`'s own doc comment): found missing here on the
+            // *second* re-verification of F-EX1's own fix, not the first --
+            // a `LEAVE`/`ITERATE` inside an escaped `OTHERWISE`'s own body
+            // captures its own origin indent here, not through `step_in_
+            // temps_frame`'s own computation at all (`Flow::Leave`'s own
+            // doc comment: eagerly, before any propagation), so it needs
+            // the identical addition independently, not by inheritance.
+            indent: static_indent(&code.body.instructions, index) + self.indent_offset,
         }
     }
 
@@ -1400,6 +1508,65 @@ impl Interp {
     /// rule and the oracle transcripts that pin it). `Exit` and a `Goto`
     /// that escaped `run_bounded`'s own range pass through with nothing
     /// touched, same as always.
+    /// Runs a `SELECT`'s own `OTHERWISE`, `leave_select`-wrapped -- the one
+    /// dispatch every path that reaches `OTHERWISE` must go through,
+    /// whether it got there the ordinary way (no `WHEN` matched) or through
+    /// F-EX1's own escape redirect (a matched `WHEN`'s own bounded body
+    /// produced a bare `Flow::Goto` landing exactly on `otherwise_index`).
+    /// Extracted from what was `Select`'s own inline `Some(otherwise_index)`
+    /// arm, unchanged in behaviour, so the second call site cannot drift
+    /// from the first one's.
+    ///
+    /// `otherwise_index`'s own clause echo is explicit for the same reason
+    /// `WHEN`'s own is (`Select`'s own arm, above): its `step` arm is a
+    /// no-op and its own index is never inside any `run_bounded` range
+    /// (the body below starts *after* it), so nothing else ever visits it.
+    /// Measured, this task's report: `otherwise` traces on its own line, at
+    /// the `SELECT`'s own scan level, before its body.
+    fn run_otherwise(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        label: Option<SymbolId>,
+        otherwise_index: usize,
+        end: Option<usize>,
+        source: Option<&ProgramSource>,
+    ) -> Result<Flow, Failure> {
+        let otherwise_end = end.unwrap_or(code.body.instructions.len());
+        let otherwise_instruction = &code.body.instructions[otherwise_index];
+        // `static_indent`'s own fixed answer for `otherwise_index` (this
+        // task's earlier fix, not `select_indent`): the marker sits at the
+        // scan level (2 at top level), the same as a `WHEN`'s own
+        // condition, not the `SELECT`'s own level. `+ self.indent_offset`
+        // (F-EX1's own correction to F3, `lib.rs`'s own doc comment on the
+        // field): `0` on the ordinary "no `WHEN` matched" path this
+        // function already served before F-EX1, and the absorbed
+        // `WhenCase`'s own escape's residual on the redirect path F-EX1
+        // added -- one computation serves both callers correctly because
+        // the field itself, not this function, is what carries the
+        // difference between them.
+        let otherwise_indent =
+            static_indent(&code.body.instructions, otherwise_index) + self.indent_offset;
+        self.current_value_indent = otherwise_indent;
+        if self.trace_mode.all
+            && let Some((line, text)) = clause_site(source, otherwise_instruction)
+        {
+            self.trace_clause(line, otherwise_indent, &text);
+        }
+        let flow = self.run_bounded(code, otherwise_index + 1, otherwise_end, source)?;
+        // Restores the offset to `0` now that `OTHERWISE`'s own whole
+        // dispatch (marker and body alike) is finished reading it --
+        // `?` above already returned early without reaching this line if
+        // `run_bounded` raised, which this crate's own rule leaves
+        // unrestored deliberately: a raise in 4a is always fatal (no
+        // `SIGNAL ON`/condition trapping exists yet), so nothing runs
+        // afterward to see a stale value, the same reasoning `lib.rs`'s
+        // own doc comment gives for never restoring it after `END`'s own
+        // 7.3 either.
+        self.indent_offset = 0;
+        self.leave_select(code, index, label, otherwise_end, flow)
+    }
+
     fn leave_select(
         &mut self,
         code: &Code<'_>,
@@ -1580,9 +1747,20 @@ impl Interp {
                             && let Some((line, text)) =
                                 clause_site(source, &code.body.instructions[end_index])
                         {
+                            // A fresh computation, not `current_value_
+                            // indent` -- `run_bounded`, just above, has
+                            // already stepped this block's own body, so
+                            // that field now holds whatever the *last*
+                            // body instruction left it at, not this `DO`'s
+                            // own. `+ self.indent_offset` for the same
+                            // reason every other site on this page has it:
+                            // consistency if this `Simple` block's own
+                            // `END` is ever itself the direct landing
+                            // point of an escape (untested, but cheap to
+                            // keep uniform rather than silently exempt).
                             self.trace_clause(
                                 line,
-                                static_indent(&code.body.instructions, index),
+                                static_indent(&code.body.instructions, index) + self.indent_offset,
                                 &text,
                             );
                         }
@@ -1616,11 +1794,13 @@ impl Interp {
                         // the `whole_nonneg` check below, matching every
                         // other `>K>` site in this function (the value is
                         // traced as evaluated, not as validated).
-                        self.trace_keyword(
-                            static_indent(&code.body.instructions, index),
-                            "FOR",
-                            &text,
-                        );
+                        // Reads `current_value_indent` rather than
+                        // recomputing `static_indent(index)`: `self.eval`
+                        // just above never touches that field (only
+                        // `step_in_temps_frame` does, for an
+                        // *instruction*, and evaluating `expr` steps none),
+                        // so it still holds exactly this `DO`'s own value.
+                        self.trace_keyword(self.current_value_indent, "FOR", &text);
                         self.whole_nonneg(value)
                             .ok_or_else(|| raised_repetition_count_not_whole(&text))?
                     }
@@ -1649,7 +1829,9 @@ impl Interp {
                 )
             }
             LoopKind::Controlled(ctrl) => {
-                let indent = static_indent(&code.body.instructions, index);
+                // Reads `current_value_indent` rather than recomputing --
+                // same reasoning as `Count`'s own `FOR`, just above.
+                let indent = self.current_value_indent;
                 let state = self.setup_controlled(code, ctrl, indent)?;
                 self.run_repeating(
                     code,
@@ -1704,8 +1886,10 @@ impl Interp {
                 // `>K>   "OVER" => "abc"`, once, at the `DO`'s own level --
                 // measured, this task's report: fires on the first pass
                 // only, exactly like `TO`/`BY`/`FOR`, because `target` is
-                // evaluated once at loop entry here too.
-                let over_indent = static_indent(&code.body.instructions, index);
+                // evaluated once at loop entry here too. Reads `current_
+                // value_indent` rather than recomputing -- same reasoning
+                // as `Count`'s own `FOR`.
+                let over_indent = self.current_value_indent;
                 let over_text = self.to_text(value).to_vec();
                 self.trace_keyword(over_indent, "OVER", &over_text);
                 let remaining = match for_count {
@@ -1785,7 +1969,13 @@ impl Interp {
         // reports (measured: `do i = 1 to 3 for 1/0` is unindented at top
         // level), and `WHILE`/`UNTIL` both report two spaces *more* than
         // that (measured: `do while 1/0` at top level is indented two).
-        let do_indent = static_indent(&code.body.instructions, do_index);
+        // Captured from `current_value_indent` once, here, rather than
+        // recomputed: `step_in_temps_frame` already set it to exactly this
+        // value (`indent_offset` included) for this same `DO`/`LOOP`
+        // instruction, and every caller into this function reaches it
+        // through nothing but `self.eval` calls in between (never another
+        // instruction step), so it has not moved.
+        let do_indent = self.current_value_indent;
         let loop_indent = do_indent + 2;
         // `TRACE`'s own per-iteration re-echo (D17, this task's report,
         // "Step 6"): the oracle's `DO`/`LOOP` instruction is re-executed
@@ -2391,6 +2581,32 @@ impl Interp {
     /// * No frame is pushed. The fragment's assignments land in the enclosing
     ///   frame's slots, which is what `fragment_plan` resolves them against,
     ///   and it is why `RootSet::grow_slots`'s top-frame assertion holds here.
+    ///
+    /// That bullet covers only the *inward* direction -- a label inside the
+    /// fragment cannot be targeted, because there are none. The *outward*
+    /// direction is the opposite shape and was missed until the branch
+    /// review found it (F-EX2): a `LEAVE`/`ITERATE` *inside* the fragment
+    /// naming something in the *enclosing* program carries a `SymbolId`
+    /// from the fragment's own table, meaningless once compared against
+    /// the program's. This function refuses that case loudly rather than
+    /// forward a table-relative id -- see the `Loud::interpret_leave` call
+    /// below.
+    ///
+    /// **A bare `LEAVE`/`ITERATE` still forwards, and its site is still
+    /// unresolved past this point** (`LeaveOrigin.site`'s own doc: `None`
+    /// whenever `source` was `None` when it stepped, which it always is
+    /// inside a fragment). Unlike a `Raised` condition escaping a fragment
+    /// -- which the enclosing `INTERPRET` clause's own `step_in_temps_frame`
+    /// call gets a fresh chance to record, first-wins, once the error
+    /// propagates back up to it -- a `Flow::Leave`/`Iterate` is `Ok`, so it
+    /// never runs that recording path at all, and an exhausted search
+    /// escaping all the way out reports `<no failing clause recorded>`
+    /// rather than the enclosing `INTERPRET` clause. Left open by this
+    /// round's F-EX2 fix: it needs `record_leave_failure`'s callers to fall
+    /// back to their own current clause when `origin.site` is `None`,
+    /// which touches `run_activation`, `leave_select` and `do_body_outcome`
+    /// together rather than this one function, and nothing measures what
+    /// the oracle actually does here to aim the fix at.
     fn run_fragment(&mut self, text: Vec<u8>) -> Result<Flow, Failure> {
         let fragment: Rc<Fragment> = match parse_interpret(text) {
             Ok(fragment) => Rc::new(fragment),
@@ -2412,7 +2628,25 @@ impl Interp {
         // it has to propagate rather than stop here -- `run_bounded`'s own
         // catch-all does exactly that for anything it does not own, `Exit`
         // included, with nothing fragment-specific to add.
-        self.run_bounded(&code, 0, code.body.instructions.len(), None)
+        let flow = self.run_bounded(&code, 0, code.body.instructions.len(), None)?;
+
+        // F-EX2 (branch review): a *named* `Leave`/`Iterate` carries a
+        // `SymbolId` interned in `fragment.symbols`, which every consumer
+        // above this function resolves against the *program's* table
+        // instead -- table-relative ids, wrong table, no compile-time
+        // signal either way. Refuse it here, loudly, while `fragment
+        // .symbols` is still the table that can name it correctly; past
+        // this `return` nothing holds a reference to it. A bare (`None`)
+        // `Leave`/`Iterate` carries no id and forwards unchanged, same as
+        // `Goto`/`Exit` always have. See `Loud::interpret_leave` for why
+        // this is a refusal and not a resolution: 4b replaces both this
+        // and the id with something that can actually cross the boundary.
+        match &flow {
+            Flow::Leave(Some(id), _) | Flow::Iterate(Some(id), _) => {
+                Err(Loud::interpret_leave(fragment.symbols.name(*id)).into())
+            }
+            _ => Ok(flow),
+        }
     }
 
     /// Drops one `DROP` target: a plain variable, a whole stem, one tail, or
@@ -2843,9 +3077,9 @@ fn indent_in_range(instructions: &[Instruction], start: usize, end: usize, targe
             }
             InstructionKind::Do(body) | InstructionKind::Loop(body) => {
                 let body_start = pc + 1;
-                let end_index = body
-                    .end
-                    .expect("an End's closes is only None while its body is still being assembled");
+                let end_index = body.end.expect(
+                    "an unclosed DO/LOOP is error 14.1/14.5, so a body that parsed has this set",
+                );
                 if target > pc && target < end_index {
                     return 2 + indent_in_range(instructions, body_start, end_index, target);
                 }
@@ -2954,9 +3188,10 @@ fn indent_in_range(instructions: &[Instruction], start: usize, end: usize, targe
                     // claim was false for a case nothing had exercised yet.
                     // This crate's rule for the diagnostic path (`error.rs`'s
                     // message-catalogue miss renders a visible marker
-                    // instead of aborting; `run.rs:536` cites the same
-                    // reasoning) is that a formatting gap must never become
-                    // a crash, and `static_indent` feeds both the error
+                    // instead of aborting; `clause_site`'s own fallback, this
+                    // file, cites the identical reasoning) is that a
+                    // formatting gap must never become a crash, and
+                    // `static_indent` feeds both the error
                     // report and `TRACE` now -- so this returns the
                     // enclosing level (0 relative, "nothing further to add")
                     // rather than asserting unreachability a second time.
@@ -4225,6 +4460,84 @@ mod tests {
         assert_eq!(indent, 4);
     }
 
+    /// The same shape, one `DO` level deeper -- `indent_offset`'s own doc
+    /// comment (`lib.rs`) has the full argument for why the answer stays
+    /// `6`, not `8`: the offset past an *ordinary* `SELECT`-level
+    /// construct's own depth is the constant `4`, not a function of how
+    /// deep the absorbed condition itself sits, and both grow by the same
+    /// amount together under nesting. The mutation this kills: reverting
+    /// `indent_offset`'s own assignment to `self.current_value_indent.
+    /// saturating_sub(2)` (an earlier, wrong version of this same fix)
+    /// makes this test read back `6` (`8 - 2`) instead of `4`, while the
+    /// non-nested version just above still reads back the right answer
+    /// either way (`6 - 2` and the constant `4` coincide at the top
+    /// level) -- this is the one test that distinguishes them.
+    #[test]
+    fn an_absorbed_whencases_escape_to_end_reports_the_same_constant_offset_nested() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(
+            &mut interp,
+            b"do i = 1 to 1\n  select case 2\n    when 2 then\n      when 3 then nop\n  end\nend\nsay 'after'",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (7, 3));
+        let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
+        assert_eq!(indent, 6);
+    }
+
+    /// **F-EX1, Important, found by the whole-branch review, not by this
+    /// task's own probes.** An absorbed `WhenCase`'s own false-branch
+    /// escape landing on `OTHERWISE` used to leave `Select`'s own arm
+    /// through a bare `Flow::Goto` that `leave_select` had no way to
+    /// recognise, so `OTHERWISE`'s own body ran under whichever *outer*
+    /// construct received that `Goto` -- with no `SELECT` frame on the
+    /// search a `LEAVE` naming the enclosing `SELECT LABEL` needs to find.
+    /// The mutation this kills: reverting the escape-redirect check in
+    /// `Select`'s own arm (the `if let Flow::Goto(target) = flow && *
+    /// otherwise == Some(target)` branch, calling `run_otherwise` instead
+    /// of forwarding the bare `Goto`) makes `leave s` search *outward* from
+    /// outside this `SELECT` and find nothing, raising 28.3 at rc 228
+    /// instead of resuming past the `SELECT` cleanly -- reproduced by
+    /// actually reverting it (this task's report has the transcript).
+    #[test]
+    fn an_absorbed_whencases_escape_to_otherwise_still_finds_the_enclosing_selects_own_label() {
+        let mut interp = Interp::new(false);
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"select label s case 2\n  when 2 then\n    when 3 then nop\n  otherwise say 'O'\n  \
+                  leave s\nend\nsay 'after'"
+            ),
+            b"O\nafter\n".to_vec()
+        );
+    }
+
+    /// The companion half of F-EX1: a **named `ITERATE`** inside the same
+    /// escaped `OTHERWISE`, naming the enclosing `SELECT LABEL`, is 28.5
+    /// (matches the name, but a `SELECT` is never a repetitive block) --
+    /// not 28.4 (no match at all), which is what it read as before this
+    /// fix, because the search never reached `leave_select`'s own name
+    /// check at all. Distinguishes "the frame is restored" from "the frame
+    /// is restored, and the specific consumption rule inside it still
+    /// applies", which the `LEAVE` test above alone cannot.
+    #[test]
+    fn an_absorbed_whencases_escape_to_otherwise_reports_a_named_iterate_as_28_5_not_28_4() {
+        let mut interp = Interp::new(false);
+        let failure = run_source(
+            &mut interp,
+            b"select label s case 2\n  when 2 then\n    when 3 then nop\n  otherwise say 'O'\n  \
+              iterate s\nend\nsay 'after'",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (28, 5));
+    }
+
     #[test]
     fn select_with_no_when_true_and_an_otherwise_runs_it_without_error() {
         let mut interp = Interp::new(false);
@@ -5308,6 +5621,50 @@ mod tests {
             "1 + 3 + 5, the odd i's only -- a Goto-based re-entry would not \
              accumulate this total across the DO's own five iterations"
         );
+    }
+
+    // ---- F-EX2: a named LEAVE/ITERATE cannot cross the run_fragment boundary ----
+
+    /// `run_fragment` gives `"leave foo"` its own fresh `SymbolTable`, so
+    /// `foo` interns at id 0 there regardless of what the enclosing program's
+    /// own table looks like. This program's own table also has exactly one
+    /// symbol -- `BAR`, also id 0, from the assignment on the first line --
+    /// chosen deliberately so the two tables collide on the same id with
+    /// *different* names, which is exactly the shape that makes forwarding
+    /// the id instead of refusing it produce a wrong answer instead of a
+    /// panic: mutation-kill this test by replacing the `match &flow { ... }`
+    /// in `run_fragment` with a bare `Ok(flow)` (its pre-fix shape), and the
+    /// error changes from `Loud` naming `"FOO"` to the exhausted-search
+    /// `Raised` 28.3 naming `"BAR"` -- the enclosing program's own symbol 0,
+    /// not the one `leave` actually named.
+    #[test]
+    fn a_fragments_named_leave_refuses_to_cross_the_boundary_rather_than_forward_an_id() {
+        let mut interp = Interp::new(true);
+        let failure = run_source(&mut interp, b"bar = 1\ninterpret \"leave foo\"\n").unwrap_err();
+        let Failure::Loud(loud) = failure else {
+            panic!("expected Loud (F-EX2's refusal), got {failure:?}");
+        };
+        assert!(
+            loud.message.contains("\"FOO\""),
+            "message should name the fragment's own symbol, got {:?}",
+            loud.message
+        );
+    }
+
+    /// The same shape, but a bare (unnamed) `LEAVE` -- which carries no
+    /// `SymbolId` and so has nothing for F-EX2's refusal to catch -- still
+    /// forwards out of the fragment exactly as it did before that fix, and
+    /// still becomes the ordinary exhausted-search error at the top.
+    /// Mutation-kill by making the refusal in `run_fragment` unconditional
+    /// (matching on `Flow::Leave(..)`/`Flow::Iterate(..)` instead of only
+    /// the `Some(id)` arms): this test then gets `Loud` instead of `Raised`.
+    #[test]
+    fn a_fragments_bare_leave_still_forwards_across_the_boundary() {
+        let mut interp = Interp::new(true);
+        let failure = run_source(&mut interp, b"interpret \"leave\"\n").unwrap_err();
+        let Failure::Raised(_) = failure else {
+            panic!("expected Raised (the ordinary exhausted-search error), got {failure:?}");
+        };
     }
 
     // ---- Task 11's own indentation quantity ----
