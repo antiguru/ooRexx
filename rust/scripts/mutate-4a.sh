@@ -34,15 +34,33 @@
 #
 # WHAT "CAUGHT" MEANS: after applying one mutation, this script runs
 # `REXX_CORPUS_GATE=1 cargo test -p rexx-exec --test corpus`, the same
-# command criterion 1 runs. A mutation is caught if that command's exit
-# code is non-zero -- either because a program's output diverges from the
-# oracle (the ordinary case) or because the mutated code no longer compiles
-# or panics (still a real, observable failure of the subset, not something
-# this script tries to distinguish from a value mismatch). A mutation
-# caught only by `cargo test -p rexx-exec --lib` and not by the corpus
-# itself would not satisfy this criterion, so this script does not run the
-# lib suite at all -- see the gate report for which of the nine mutations
-# needed a new corpus witness before the subset could see them.
+# command criterion 1 runs, and reads its printed "N of M matching" line
+# rather than trusting the exit code alone -- see "THE INFRASTRUCTURE-
+# FAILURE GUARD" below for why the exit code alone is not enough. A
+# mutation is caught only when that line names a real divergence (N < M):
+# a program's output disagreeing with the oracle, or the mutated code
+# panicking or failing to compile, all of which `corpus.rs` still prints
+# that line for before reporting `Err`. A mutation caught only by
+# `cargo test -p rexx-exec --lib` and not by the corpus itself would not
+# satisfy this criterion, so this script does not run the lib suite at all
+# -- see the gate report for which of the nine mutations needed a new
+# corpus witness before the subset could see them.
+#
+# THE INFRASTRUCTURE-FAILURE GUARD, added after a branch review reproduced
+# the exact defect this script exists to close, arriving from the other
+# side. `run_subset`'s exit code alone cannot tell "the subset diverged"
+# apart from "the run never got that far": with the oracle binary missing,
+# `corpus_differential` panics before printing any "N of M matching" line
+# at all, its exit code is non-zero all the same, and the first version of
+# this script counted that as a catch -- nine of nine, exit 0, having
+# compared nothing. Two things close it. First, a **baseline run** before
+# the first mutation and another after the last restore, each required to
+# report every program matching; either failing aborts the whole script
+# before it draws any conclusion from a mutation. Second, `subset_status`
+# below parses the captured output for the "N of M matching" line itself:
+# no such line at all is `INFRA_FAILURE`, a hard, immediate abort, never a
+# catch and never "not caught" either, because neither of those is true --
+# the mutation was never actually tested.
 #
 # EQUIVALENT MUTANTS are not this script's problem to invent: two are
 # already known and documented elsewhere in this project's own history
@@ -153,18 +171,93 @@ with open(path, "w") as f:
 PYEOF
 }
 
-# Runs the L0 subset against the oracle in gate (STRICT) mode. Returns the
-# command's own exit code; does not itself decide pass/fail.
+# Runs the L0 subset against the oracle in gate (STRICT) mode, capturing
+# output for `subset_status` to classify. Called only from inside an `if`
+# (or with its exit captured via the same idiom), never bare, so a non-zero
+# exit does not trip `set -e` -- every call site below follows that rule.
 run_subset() {
     REXX_CORPUS_GATE=1 cargo test --offline -p rexx-exec --test corpus \
-        > /tmp/mutate-4a-subset-output.txt 2>&1
+        > "${SUBSET_OUTPUT}" 2>&1
+}
+
+# The last "N of M matching" line `corpus.rs` printed into `${SUBSET_OUTPUT}`,
+# as "N M" on stdout, or nothing if no such line exists at all -- which is
+# exactly the signal that the run never reached the point of comparing
+# anything (a missing oracle, a compile error, a panic before the report).
+matching_line() {
+    grep -oE '^[0-9]+ of [0-9]+ matching' "${SUBSET_OUTPUT}" | tail -n 1 |
+        sed -E 's/^([0-9]+) of ([0-9]+) matching$/\1 \2/'
+}
+
+# Classifies the `run_subset` call that just finished, given its exit code.
+# Three outcomes, and `INFRA_FAILURE` is the one the old version of this
+# script could not name -- see the header comment's "INFRASTRUCTURE-FAILURE
+# GUARD" for why that mattered.
+#   PASSED        -- exit 0, every program matching.
+#   DIVERGED       -- non-zero exit, and the report names N < M matching:
+#                     a real, observed divergence from the oracle.
+#   INFRA_FAILURE -- no "N of M matching" line at all (whatever the exit
+#                     code), or an exit/line combination that contradicts
+#                     itself. Never a catch, never "not caught" -- the
+#                     mutation (or, at the baseline, nothing) was never
+#                     actually exercised.
+subset_status() {
+    local exit_code="$1" line matched total
+    line="$(matching_line)"
+    if [ -z "${line}" ]; then
+        echo "INFRA_FAILURE"
+        return
+    fi
+    read -r matched total <<<"${line}"
+    if [ "${exit_code}" -eq 0 ]; then
+        if [ "${matched}" -eq "${total}" ]; then
+            echo "PASSED"
+        else
+            echo "INFRA_FAILURE"
+        fi
+    else
+        if [ "${matched}" -lt "${total}" ]; then
+            echo "DIVERGED"
+        else
+            echo "INFRA_FAILURE"
+        fi
+    fi
+}
+
+# Runs the subset and requires `PASSED`, aborting the whole script loudly
+# otherwise. Called once before the first mutation and once after the last
+# restore, so neither a broken environment nor an interrupted revert can be
+# mistaken for a clean run of nine real mutations.
+require_baseline_pass() {
+    local label="$1" exit_code
+    echo "=== baseline (${label}): the unmutated subset must pass ==="
+    if run_subset; then
+        exit_code=0
+    else
+        exit_code=$?
+    fi
+    local status
+    status="$(subset_status "${exit_code}")"
+    if [ "${status}" != "PASSED" ]; then
+        echo "FATAL: the unmutated subset does not pass (${label}, status=${status})." \
+             "Nothing below this point can be trusted as a mutation result --" \
+             "any of the nine could be an environment failure wearing a" \
+             "catch's clothing. Full output:" >&2
+        cat "${SUBSET_OUTPUT}" >&2
+        exit 1
+    fi
+    read -r matched total <<<"$(matching_line)"
+    echo "baseline ok (${label}): ${matched} of ${total} matching"
+    echo
 }
 
 # One mutation: apply, run the subset, report, revert. Exits the whole
 # script non-zero immediately if the pattern could not be applied
-# (UNAPPLIED PATTERN is fatal, never merely "skipped"); records but does not
-# abort on a mutation that fails to be CAUGHT, so one uncaught mutation does
-# not hide the result of the other eight.
+# (UNAPPLIED PATTERN is fatal, never merely "skipped"), or if the subset run
+# itself failed for a reason that is not a divergence (`INFRA_FAILURE`,
+# never silently folded into either "caught" or "not caught"). Otherwise
+# records but does not abort on a mutation that fails to be CAUGHT, so one
+# uncaught mutation does not hide the result of the other eight.
 run_one() {
     local name="$1" file="$2" old="$3" new="$4"
     TOTAL=$((TOTAL + 1))
@@ -178,21 +271,48 @@ run_one() {
         exit 1
     fi
 
+    local exit_code
     if run_subset; then
-        echo "NOT CAUGHT: the subset still passes under this mutation."
-        tail -n 5 /tmp/mutate-4a-subset-output.txt
-        FAILURES+=("${name}")
+        exit_code=0
     else
-        echo "caught: the subset diverges under this mutation."
-        grep -E "matching|FAILED" /tmp/mutate-4a-subset-output.txt || true
-        CAUGHT=$((CAUGHT + 1))
+        exit_code=$?
     fi
+    local status
+    status="$(subset_status "${exit_code}")"
+
+    case "${status}" in
+    DIVERGED)
+        echo "caught: the subset diverges under this mutation."
+        grep -E "matching|FAILED" "${SUBSET_OUTPUT}" || true
+        CAUGHT=$((CAUGHT + 1))
+        ;;
+    PASSED)
+        echo "NOT CAUGHT: the subset still passes under this mutation."
+        tail -n 5 "${SUBSET_OUTPUT}"
+        FAILURES+=("${name}")
+        ;;
+    INFRA_FAILURE)
+        echo "FATAL: mutation '${name}' could not be assessed -- the subset run" \
+             "failed for an infrastructure reason, not an observed divergence" \
+             "(no \"N of M matching\" line in its output). Reporting this as" \
+             "caught or not caught would both be wrong; something about the" \
+             "environment broke instead. Full output:" >&2
+        cat "${SUBSET_OUTPUT}" >&2
+        restore
+        exit 1
+        ;;
+    esac
 
     restore
     echo
 }
 
+# A fresh temp file per run rather than a fixed path, so two concurrent
+# invocations of this script cannot interleave their output.
+SUBSET_OUTPUT="$(mktemp)"
+
 require_clean
+require_baseline_pass "before any mutation"
 
 # ---------------------------------------------------------------------------
 # The nine mutations, mapped onto the design spec's own list (4a exit gate,
@@ -308,6 +428,8 @@ run_one "9. formatting with the current form, not the created form" "${VALUE_RS}
                 });
                 Cow::Borrowed(rendered.as_slice())
             }'
+
+require_baseline_pass "after the last restore"
 
 echo "==============================================================================
 ${CAUGHT} of ${TOTAL} mutations caught by rust/corpus/phase-4a.txt

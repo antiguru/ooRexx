@@ -46,6 +46,21 @@
 //! | `>P>` | `prefix_operators.rex` |
 //! | `>E>` (bonus, not required) | `dotvariable_beyond_the_list.rex` |
 //!
+//! **This table used to be prose only, and a branch review (H3,
+//! `branch-review-harness.md`) showed exactly what that cost**: replacing
+//! `keyword_while.rex` with a straight-line program emitting no `>K>` at
+//! all, regenerating its `.expected` from the live oracle with this file's
+//! own documented recipe, still passed all five tests -- the byte-for-byte
+//! check compares this crate's output to the committed file and nothing
+//! else, so a witness that stopped witnessing its own prefix went
+//! unnoticed. [`WITNESS_PREFIXES`] and
+//! [`every_witness_still_emits_every_prefix_it_is_named_for`] turn the
+//! table above into an assertion: each witness's committed `.expected`
+//! stderr must contain every prefix this table claims for it, checked as a
+//! byte substring, and the union across all five must be exactly the ten
+//! prefixes claimed. A witness can still be swapped for a better one, but
+//! not for one that silently covers less.
+//!
 //! **A known, disclosed gap, not a witness that avoids it.** A `Controlled`
 //! (`TO`-style) `DO`/`LOOP`'s own re-tested pass traces two more `>>>` lines
 //! (the control variable's pre- and post-increment value, `DoBlock::
@@ -191,4 +206,85 @@ fn dotvariable_beyond_the_list_covers_the_spec_correction() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests/trace_oracle/dotvariable_beyond_the_list.rex");
     check_witness("dotvariable_beyond_the_list", &path);
+}
+
+/// The module doc's own table, as data: which prefixes each witness is
+/// claimed to cover. See the module doc's own note on why this exists --
+/// found missing by a branch review (H3), which swapped `keyword_while.rex`
+/// for a program with no `>K>` at all and watched every test stay green.
+const WITNESS_PREFIXES: &[(&str, &[&str])] = &[
+    ("trace_output", &["*-*", ">>>", ">=>", ">L>", ">V>", ">O>"]),
+    ("keyword_while", &["*-*", ">>>", ">K>"]),
+    (
+        "compound_read_write",
+        &["*-*", ">>>", ">=>", ">L>", ">V>", ">C>"],
+    ),
+    ("prefix_operators", &["*-*", ">>>", ">L>", ">P>"]),
+    ("dotvariable_beyond_the_list", &["*-*", ">>>", ">E>"]),
+];
+
+/// The nine prefixes the design spec's own "measured reachable from pure-4a
+/// code" list names, plus `>E>`, the one correction this task's report
+/// records -- ten total. `WITNESS_PREFIXES`'s union must equal this set
+/// exactly: not a subset (a prefix could otherwise be claimed by the module
+/// doc's own table and never checked at all) and not a superset (a typo'd
+/// prefix that no witness could ever really emit would go unnoticed
+/// otherwise).
+const CLAIMED_PREFIXES: &[&str] = &[
+    "*-*", ">>>", ">=>", ">L>", ">V>", ">O>", ">K>", ">C>", ">P>", ">E>",
+];
+
+fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
+    haystack.windows(needle.len().max(1)).any(|w| w == needle)
+}
+
+/// Turns the module doc's prefix-to-witness table from prose into a check.
+/// For every witness, its committed `.expected` file's stderr must contain
+/// every prefix `WITNESS_PREFIXES` claims for it, as a byte substring --
+/// the same shape `check_witness` itself uses for the full comparison, at
+/// a coarser grain. A witness that stops witnessing its own prefix (the
+/// exact H3 attack: `keyword_while.rex` replaced with a straight-line
+/// program, `.expected` regenerated from the live oracle, both still
+/// "correct" in the sense that they agree with each other) now fails here
+/// instead of passing silently.
+#[test]
+fn every_witness_still_emits_every_prefix_it_is_named_for() {
+    let oracle_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/trace_oracle");
+    let mut failures = String::new();
+    let mut covered: Vec<&str> = Vec::new();
+
+    for (name, prefixes) in WITNESS_PREFIXES {
+        let expected_path = oracle_dir.join(format!("{name}.expected"));
+        let bytes = std::fs::read(&expected_path)
+            .unwrap_or_else(|e| panic!("{}: unreadable ({e})", expected_path.display()));
+        let expected = parse_expected(&bytes, name);
+        for prefix in *prefixes {
+            if contains_bytes(&expected.stderr, prefix.as_bytes()) {
+                covered.push(prefix);
+            } else {
+                use std::fmt::Write as _;
+                writeln!(
+                    failures,
+                    "{name}: claimed to cover {prefix:?} but its committed \
+                     `.expected` stderr does not contain it"
+                )
+                .unwrap();
+            }
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "a witness stopped witnessing a prefix this file's own table \
+         claims for it:\n{failures}"
+    );
+
+    covered.sort_unstable();
+    covered.dedup();
+    let mut expected_union = CLAIMED_PREFIXES.to_vec();
+    expected_union.sort_unstable();
+    assert_eq!(
+        covered, expected_union,
+        "WITNESS_PREFIXES' union no longer matches CLAIMED_PREFIXES -- both \
+         must be updated together, the module doc's own table with them"
+    );
 }

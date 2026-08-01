@@ -779,6 +779,69 @@ fn variant_counts_match_the_audited_split() {
     assert_eq!(OPERATOR_TAGS.len(), 32);
 }
 
+/// `phase-4a.txt`'s exact line list, one entry per non-comment, non-blank
+/// line, in file order. A branch review (`branch-review-harness.md`, H2)
+/// found that nothing pinned this: `corpus.rs`, `collect_stress.rs` and
+/// this file's own coverage test all report "N of N" or "witnessed by the
+/// subset" against whatever the file happens to contain, so deleting a
+/// line shrinks every measurement silently and `cargo test -p rexx-exec`
+/// stays fully green. Measured in that review: deleting exactly the three
+/// `mutation_*` entries below leaves the whole suite green while
+/// `mutate-4a.sh` falls from 9 of 9 caught to 5 of 9, because three of the
+/// nine mutations have no other witness. `phase_4a_subset_matches_the_
+/// committed_list` closes it the same way `EXPECTED_OUT_OF_SCOPE` above
+/// and `tests/assertions.rs`'s `EXEMPT` already do: a literal, checked by
+/// equality rather than by length, so removing *or* adding a line is a
+/// test failure here, and the file's own set assertion in
+/// `docs/superpowers/plans/phase-4-exclusions.txt`'s spirit -- adding a
+/// witness is not free, but making one silently stop counting must not
+/// be either.
+const EXPECTED_SUBSET: &[&str] = &[
+    "lang/arith_digits.rex",
+    "lang/no_trailing_newline.rex",
+    "lang/select_when.rex",
+    "lang/stem_compound.rex",
+    "lang/trace_output.rex",
+    "num/comparison.rex",
+    "num/notation_thresholds.rex",
+    "lang/do_loop_forms.rex",
+    "lang/do_label.rex",
+    "lang/leave_nested_outer.rex",
+    "lang/iterate_from_select.rex",
+    "lang/if_else_chain.rex",
+    "lang/select_when_bodies.rex",
+    "lang/select_when_absorption.rex",
+    "lang/leave_iterate_variants.rex",
+    "lang/drop_stem_tail.rex",
+    "lang/stem_aliasing.rex",
+    "lang/exit_with_value.rex",
+    "lang/exit_no_value.rex",
+    "lang/number_identity.rex",
+    "lang/comparison_families.rex",
+    "lang/deep_nested_expr.rex",
+    "lang/trace_results.rex",
+    "lang/prefix_dotvar_logical_over_label.rex",
+    "lang/comparison_operators_remaining.rex",
+    "lang/trace_numeric_request.rex",
+    "lang/mutation_digits_at_render.rex",
+    "lang/mutation_form_at_render.rex",
+    "lang/mutation_controlled_order.rex",
+];
+
+#[test]
+fn phase_4a_subset_matches_the_committed_list() {
+    let corpus_dir = corpus_dir();
+    let subset = read_subset(&corpus_dir.join("phase-4a.txt"));
+    assert_eq!(
+        subset, EXPECTED_SUBSET,
+        "phase-4a.txt's entries drifted from EXPECTED_SUBSET -- adding or \
+         removing a line from the L0 subset is a plan amendment, and must \
+         change both the file and this list together, so a line cannot be \
+         silently dropped (shrinking every measurement that reads the file) \
+         or silently added (widening the subset with no witness review)"
+    );
+}
+
 #[test]
 fn every_in_scope_variant_is_witnessed_by_the_phase_4a_subset() {
     let mut instructions = Coverage::new("InstructionKind", INSTRUCTION_TAGS);
