@@ -21,10 +21,13 @@
 //! `ExprKind::Logical` (the comma-separated conditional list `IF a, b THEN`
 //! desugars to), and (Task 4, 4b) `ExprKind::Call`, the internal-function
 //! form (`f(...)`/`"f"(...)`) -- see `eval_call`'s own doc for the
-//! resolution order and what still falls through to the loud `4c` fallback.
+//! resolution order and what still falls through to the loud `4c` fallback,
+//! and (Task 5, 4b) `ExprKind::VariableReference`, the `>x`/`<x` form, which
+//! evaluates to the referenced variable's own value -- the arm's own comment
+//! has the measurement, and why `USE ARG >name` does not come through here.
 //! Every other `ExprKind` -- `QualifiedCall`, `Message`, `ClassResolver`,
-//! `List`, `VariableReference`, and any `DotVariable` beyond the three --
-//! still fails loudly through the existing, exhaustive `form_name`.
+//! `List`, and any `DotVariable` beyond the three -- still fails loudly
+//! through the existing, exhaustive `form_name`.
 //!
 //! **Six functions here open a temps frame and then use `?`, so a raised
 //! condition leaves their own `pop_frame` unreached. That is deliberate, and
@@ -394,6 +397,21 @@ impl Interp {
             // syntax) -- see `eval_logical_list`'s own doc comment for the
             // short-circuit and sub-number this arm alone can give it.
             ExprKind::Logical(items) => self.eval_logical_list(code, items),
+
+            // `>name`/`<name` in an ordinary value position **decays to the
+            // referenced variable's value**, measured: `p = 'orig'; say >p`
+            // prints `orig`, and `call sub2 >p` into a plain (non-`>`) `use
+            // arg q` binds `orig` and leaves the caller's `p` untouched. So
+            // there is no reference *object* to build here.
+            //
+            // What makes `>` more than a no-op is `USE ARG >name`, and that
+            // path never reaches this arm: `resolve_and_run_call` evaluates
+            // a call's arguments through `eval_argument` instead, which
+            // keeps the caller's slot alongside this same value. Only an
+            // argument written `>something` at the call site carries one,
+            // which is why passing a plain symbol to `use arg >q` is error
+            // 88.928 rather than silently aliasing something.
+            ExprKind::VariableReference(inner) => self.eval_node(code, inner),
 
             // `f(...)`/`"f"(...)` (Task 4, 4b) -- see `eval_call`'s own doc.
             ExprKind::Call { target, args } => self.eval_call(code, target, args),

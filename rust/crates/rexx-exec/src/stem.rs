@@ -380,6 +380,45 @@ impl Interp {
     /// into the very same thing. The two rules sit one level apart -- a
     /// whole stem versus one of its tails -- precisely because they
     /// disagree.
+    ///
+    /// **Inherited item I17, reclassified: replacing this body with a slot
+    /// clear is a *genuinely equivalent* mutant, and no distinguishing
+    /// program exists.** This is recorded here rather than in a `mutate-4b.sh`
+    /// comment because no such script exists in the tree; whoever writes one
+    /// should copy this paragraph into it and drop the mutant rather than
+    /// list it as uncaught.
+    ///
+    /// The old explanation was that "nothing in 4a can hold a second
+    /// reference to the object", and it is false in both directions:
+    ///
+    /// * `b. = a.` **does** share the object in 4a -- `stem_assign`'s own
+    ///   doc comment above has the measurement, and `a.=1; b.=a.; a.1=2; say
+    ///   b.1` is `2` on both interpreters. So a second reference is easy to
+    ///   make.
+    /// * And it still does not discriminate. `a.1='orig'; keep. = a.; drop
+    ///   a.; say a.1 keep.1` prints `A.1 orig` under this code *and* under
+    ///   the mutant -- built and run both ways, not reasoned about -- because
+    ///   rebinding `a.`'s slot to a fresh stem and clearing it both leave
+    ///   `a.1` deriving its name, while `keep.` goes on holding the old
+    ///   object either way. Writing a fresh tail afterwards (`a.2 =
+    ///   'second'`) agrees too.
+    ///
+    /// The reason the two agree is that a stem's slot is never read as
+    /// "empty or not": `read_stem` vivifies a fresh stem on a miss, so a
+    /// cleared slot and a slot holding a fresh empty stem answer identically
+    /// at every observation point this phase has. Exposure does not open a
+    /// gap either -- `PROCEDURE EXPOSE a.` aliases the *slot*, so both
+    /// spellings write through the alias to the same place. Checked under
+    /// the mutant rather than assumed: the third and fourth of the five stem
+    /// transcripts `run.rs`'s own
+    /// `an_exposed_stem_aliases_the_callers_entry_not_the_object` pins -- the
+    /// two `drop a.` ones -- still print the oracle's `A.1` and `A.1 orig`
+    /// with the mutant applied.
+    ///
+    /// So the shape here is kept for the reasons above -- one shared
+    /// `replace_stem` with `stem_assign`, and the literal reading of D15a --
+    /// and not because a test distinguishes it. There is no such test to
+    /// write.
     pub(crate) fn stem_drop(&mut self, stem_name: &[u8]) {
         self.replace_stem(stem_name, None);
     }

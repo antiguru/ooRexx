@@ -151,6 +151,125 @@ impl Raised {
     pub(crate) fn no_data_returned(name: &[u8]) -> Raised {
         Raised::syntax(44, 1, vec![String::from_utf8_lossy(name).into_owned()])
     }
+
+    /// 17.1: a `PROCEDURE` that is not the first instruction executed after
+    /// an internal `CALL` or function invocation. No substitutions.
+    ///
+    /// Measured at all four shapes, in a clean directory, all rc 239: at top
+    /// level; as the first instruction of a label *fallen into* rather than
+    /// called; after a `NOP` in a called routine; and inside `interpret
+    /// "procedure"` as a called routine's first clause. Two labels between
+    /// the call and the `PROCEDURE` do **not** raise it --
+    /// `Activation::first_instruction_pending` carries that whole table.
+    pub(crate) fn procedure_out_of_place() -> Raised {
+        Raised::syntax(17, 1, Vec::new())
+    }
+
+    /// 40.3: `USE STRICT ARG` with fewer arguments than it has targets
+    /// without defaults. `routine` is the callee's own resolved name, upcased,
+    /// and `minimum` counts the targets that must be supplied.
+    ///
+    /// Measured: `call sub2 1` into `use strict arg p, q` gives rc 216 and
+    /// `Not enough arguments in invocation of SUB2; minimum expected is 2.`
+    /// A target carrying a default satisfies the minimum -- `use strict arg
+    /// p, q = 'dflt'` with one argument runs and prints `[1][dflt]`.
+    pub(crate) fn not_enough_arguments(routine: &[u8], minimum: usize) -> Raised {
+        Raised::syntax(
+            40,
+            3,
+            vec![
+                String::from_utf8_lossy(routine).into_owned(),
+                minimum.to_string(),
+            ],
+        )
+    }
+
+    /// 40.4: `USE STRICT ARG` with more arguments than it has targets, and
+    /// no trailing `...`.
+    ///
+    /// Measured: `call sub2 1,2,3` into `use strict arg p` gives rc 216 and
+    /// `Too many arguments in invocation of SUB2; maximum expected is 1.`
+    /// With `use strict arg p, q, ...` the same three arguments run clean, so
+    /// `allow_optionals` suppresses this check and not the 40.3 one.
+    pub(crate) fn too_many_arguments(routine: &[u8], maximum: usize) -> Raised {
+        Raised::syntax(
+            40,
+            4,
+            vec![
+                String::from_utf8_lossy(routine).into_owned(),
+                maximum.to_string(),
+            ],
+        )
+    }
+
+    /// 88.928: `USE ARG >name` where the caller did not pass a variable
+    /// reference. `position` is 1-based; `found` is the argument's own
+    /// **rendered value**.
+    ///
+    /// That `found` is the value and not the argument's spelling is measured
+    /// rather than assumed, because the obvious probe cannot tell them apart:
+    /// a variable named `caller` reports `found "caller"` whichever rule
+    /// holds. Three programs that do discriminate, all rc 168 -- `zebra =
+    /// 'orig'; call sub2 zebra` reports `found "orig"`, a literal argument
+    /// `'literal-value'` reports its own text, and passing it second reports
+    /// `The 2 argument`.
+    pub(crate) fn not_a_variable_reference(position: usize, found: &[u8]) -> Raised {
+        Raised::syntax(
+            88,
+            928,
+            vec![
+                position.to_string(),
+                String::from_utf8_lossy(found).into_owned(),
+            ],
+        )
+    }
+
+    /// 88.931: `USE ARG >name` where the caller omitted that position
+    /// entirely. `position` is 1-based.
+    ///
+    /// A different sub-number from [`not_a_variable_reference`]'s 88.928, and
+    /// measured rather than assumed to be the same: `call sub2 1` into `use
+    /// arg p, >q` gives rc 168 and `Argument 2 was omitted. A
+    /// VariableReference argument is required.`, where passing a *wrong-kind*
+    /// value in that position gives 88.928 instead. An omission and a bad
+    /// value are two different complaints here.
+    ///
+    /// [`not_a_variable_reference`]: Raised::not_a_variable_reference
+    pub(crate) fn variable_reference_omitted(position: usize) -> Raised {
+        Raised::syntax(88, 931, vec![position.to_string()])
+    }
+
+    /// 98.993: `USE LOCAL` as the first instruction executed of a top-level
+    /// program. No substitutions.
+    ///
+    /// Measured, rc 158: `use local outer` on line 1 of a program gives `The
+    /// USE LOCAL instruction may only be used from method invocations.` This
+    /// crate has no method invocations at all, so `USE LOCAL` is never legal
+    /// here -- implementing it means implementing which of its two refusals
+    /// applies, and [`use_local_not_first`] is the other one.
+    ///
+    /// [`use_local_not_first`]: Raised::use_local_not_first
+    pub(crate) fn use_local_outside_method() -> Raised {
+        Raised::syntax(98, 993, Vec::new())
+    }
+
+    /// 99.910: `USE LOCAL` anywhere other than the first instruction executed
+    /// of a top-level program. No substitutions.
+    ///
+    /// Measured, rc 157, at three shapes: as the *second* instruction of a
+    /// program, as the first instruction of a called routine, and after a
+    /// `PROCEDURE` in a called routine. The second of those is the one that
+    /// makes this the wider case -- a called routine's first instruction is
+    /// still "not first after a *method* invocation", so it lands here rather
+    /// than on 98.993.
+    ///
+    /// The shape that would separate "is a method" from "was entered by a
+    /// call" cannot be written in this phase, since no method invocation
+    /// exists to write it with; both errors are reproduced from the four
+    /// shapes that can be.
+    pub(crate) fn use_local_not_first() -> Raised {
+        Raised::syntax(99, 910, Vec::new())
+    }
 }
 
 /// Converts a `rexx-num` arithmetic failure into a `Raised`.

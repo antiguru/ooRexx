@@ -162,15 +162,25 @@ fn a_slot_frame_grows_for_a_name_the_plan_never_saw() {
 
 /// `grow_slots` must panic rather than silently grow a frame that is not on
 /// top, because a silent wrong answer here is a variable landing in another
-/// routine's pool. The check is deliberately **4a-only**: measured, `sub:
-/// procedure expose zzz` with `zzz = 5` set in the callee makes the
-/// *caller* print 9 after `return`, so 4b's `PROCEDURE EXPOSE` needs a
-/// callee to write into its caller's (non-top) frame, which today's
-/// top-frame-only rule forbids outright. 4b must find and remove this
-/// panic deliberately when it relaxes the rule, not discover a silent
-/// allowance it never decided to make -- so the `expected` string pins the
-/// "4a invariant" wording itself: if the message stops naming that, this
-/// test should break and point back here.
+/// routine's pool.
+///
+/// **This is no longer a rule awaiting relaxation.** An earlier version of
+/// this comment predicted that 4b's `PROCEDURE EXPOSE` would need a callee
+/// to write into its caller's non-top frame, and that whoever implemented
+/// it would have to delete this panic. 4b's Task 5 implemented it and did
+/// not: an exposed name is bound by `alias_slot`, which allocates nothing
+/// in the caller, and the one case that can still need a fresh slot -- a
+/// computed `expose (v)` naming a symbol no instruction mentions -- is
+/// resolved before the callee's frame is pushed, while the caller's frame
+/// is still on top. `RootSet::grow_slots`'s own doc comment has both halves.
+///
+/// So the invariant is now permanent rather than provisional, and the
+/// `expected` string still pins the "4a invariant" wording because that is
+/// what names it: if the message stops saying it, this test should break
+/// and point back here.
+///
+/// (The same earlier comment also had the callee setting `zzz = 5` and the
+/// caller printing `9`, which no run produces; the measured value is `5`.)
 #[test]
 #[should_panic(expected = "4a invariant")]
 fn growing_a_frame_that_is_not_the_top_one_panics() {

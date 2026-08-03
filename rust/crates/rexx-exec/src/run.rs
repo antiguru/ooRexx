@@ -71,14 +71,15 @@ use crate::trace::{
     is_whole_number, mode_from_setting, raised_invalid_trace_letter,
     raised_numeric_trace_interactive_only,
 };
-use crate::{Code, Failure, Interp, Loud};
-use rexx_core::ObjRef;
+use crate::{Argument, CallContext, Code, Failure, Interp, Loud};
+use rexx_core::{ObjRef, SlotRef};
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
     ControlExpr, Controlled, EndStyle, Expr, ExprKind, Fragment, Instruction, InstructionKind,
-    Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource, SymbolId, Trace, VariableRef,
-    compound_parts, parse_interpret,
+    Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource, SymbolId, Trace, Use,
+    UseTarget, VariableRef, compound_parts, parse_interpret,
 };
+use std::collections::HashMap;
 use std::rc::Rc;
 
 /// Where control goes after one instruction (the design's "Control flow").
@@ -556,6 +557,23 @@ impl Interp {
 
         while let Some(instruction) = code.body.instructions.get(self.activation().pc) {
             let index = self.activation().pc;
+            // "Is this the first instruction executed in this activation" --
+            // consumed here, one instruction at a time, and read by
+            // `PROCEDURE` and `USE LOCAL` alone. A `Label` is transparent to
+            // it: measured, `call sub` into `sub:` / `lbl2:` / `procedure`
+            // runs, while the same with a `nop` in place of the second label
+            // is error 17.1. So a label neither grants the permission nor
+            // spends it.
+            //
+            // Cleared *before* the step and carried across it on
+            // `Interp::procedure_permitted`, which `step` takes on entry --
+            // that is what stops an `INTERPRET` fragment or an `IF` branch
+            // inheriting it, measured through `sub: interpret "procedure"`
+            // being 17.1. See the field's own doc comment.
+            if !matches!(instruction.kind, InstructionKind::Label { .. }) {
+                self.procedure_permitted =
+                    std::mem::take(&mut self.activation_mut().first_instruction_pending);
+            }
             // The failing clause's site, if any escapes, is resolved inside
             // `step_in_temps_frame` itself (Task 10's own doc comment there):
             // this call may nest arbitrarily deep through `If`/`Select`'s own
@@ -701,6 +719,11 @@ impl Interp {
         instruction: &Instruction,
         source: Option<&ProgramSource>,
     ) -> Result<Flow, Failure> {
+        // Taken on entry, unconditionally, so that this call consumes it and
+        // every nested `step` below it -- a fragment's, an `IF` branch's --
+        // sees `false`. Only `run_activation` ever sets it. `Procedure` and
+        // `Use` are the two arms that read it.
+        let first_instruction = std::mem::take(&mut self.procedure_permitted);
         match &instruction.kind {
             InstructionKind::Say { expression } => {
                 let line = match expression {
@@ -1591,7 +1614,393 @@ impl Interp {
                 Ok(Flow::Return(value))
             }
 
+            // `PROCEDURE`, bare or with an `EXPOSE` list (D9r). Isolates the
+            // callee's variable pool and aliases the exposed names back into
+            // the pool they came from. See `exec_procedure`.
+            InstructionKind::Procedure { variables } => {
+                self.exec_procedure(code, variables, first_instruction)?;
+                Ok(Flow::Next)
+            }
+
+            // `USE ARG`/`USE STRICT ARG`/`USE LOCAL`. See `exec_use`.
+            InstructionKind::Use(use_) => {
+                self.exec_use(code, use_, first_instruction)?;
+                Ok(Flow::Next)
+            }
+
             other => Err(Loud::instruction(other).into()),
+        }
+    }
+
+    /// `PROCEDURE`, with or without an `EXPOSE` list (D9r).
+    ///
+    /// Two things happen here, in this order, and the order is the design:
+    /// every exposed name is resolved **while the caller's frame is still the
+    /// top one**, and only then does the callee get a frame of its own. That
+    /// is what lets a computed `expose (v)` naming a symbol no instruction
+    /// mentions go through `Interp::slot_of` -- which may call
+    /// `RootSet::grow_slots` -- without ever growing a non-top frame. The 4a
+    /// invariant `grow_slots` asserts is therefore untouched by this task:
+    /// it was not overlooked, it is what this ordering preserves.
+    ///
+    /// **The frame is allocated here and not at the `CALL`**, and that is
+    /// measured rather than a matter of taste. Whether a `PROCEDURE` is legal
+    /// is a property of how control arrived, not of the body's text: `call
+    /// sub` into `sub: procedure` runs, and falling through into the very
+    /// same `sub:` label raises 17.1. A precomputed per-body "does this start
+    /// with `PROCEDURE`" flag cannot distinguish the two, so there is nothing
+    /// for `CALL` to act on -- `Activation::first_instruction_pending` has
+    /// the full four-shape table.
+    ///
+    /// **Exposure is transitive, and the transitivity is in `slot_ref`.**
+    /// Measured: `a` exposes `n` to `b`, `b` exposes the same `n` to `c`, `c`
+    /// writes it, and `a` sees the write. Resolving `c`'s target through the
+    /// frame in force -- which is `b`'s, already carrying `b`'s own alias --
+    /// chases to `a` in one step. Binding to `b`'s storage instead would give
+    /// a silently wrong value two levels up.
+    ///
+    /// **One `PROCEDURE` can expose names that live in different frames**, so
+    /// the redirect is per slot and not one target frame for the whole
+    /// callee. Measured: `c: procedure expose n m` above, where `n` chases to
+    /// `a` and `m` stops at `b` because `m` was `b`'s own local -- `b` sees
+    /// both of `c`'s writes and `a` sees only `n`'s. An earlier statement of
+    /// this design called the redirect "a bitset over slot indices plus one
+    /// target `SlotFrame`"; that shape cannot represent this pair, and this
+    /// program is what shows it.
+    fn exec_procedure(
+        &mut self,
+        code: &Code<'_>,
+        variables: &[VariableRef],
+        first_instruction: bool,
+    ) -> Result<(), Failure> {
+        // 17.1 covers every shape but one: the first instruction executed
+        // after an internal `CALL` or function invocation. Both halves are
+        // needed -- top level fails the second, and anything after another
+        // instruction fails the first.
+        if !(first_instruction && self.activation().entered_by_call) {
+            return Err(Raised::procedure_out_of_place().into());
+        }
+
+        let names = self.expose_names(code, variables)?;
+
+        // Resolved against the pool still in force, which is the caller's:
+        // this activation has not swapped in a frame of its own yet.
+        let outer = self.activation().frame;
+        let mut bindings: Vec<(Box<[u8]>, usize, SlotRef)> = Vec::with_capacity(names.len());
+        for name in names {
+            // Whole stems alias fine -- the stem object lives in one slot,
+            // so aliasing that slot shares the object and every measured
+            // stem transcript falls out of it. A single tail does not; see
+            // `Loud::compound_expose`.
+            if shape_of(&name) == NameShape::Compound {
+                return Err(Loud::compound_expose(&name).into());
+            }
+            let slot = self.slot_of(&name);
+            let target = self.roots.slot_ref(outer, slot);
+            bindings.push((name, slot, target));
+        }
+
+        // Any name that needed a fresh slot just grew the caller's frame and
+        // was recorded in *this* activation's `extra` -- which is a clone of
+        // the caller's, taken at the call. The caller has to learn about it,
+        // because after the isolation below this map is replaced and the
+        // return path deliberately does not write it back.
+        //
+        // Measured, and it does not fall out of anything else: a caller with
+        // `nm = 'ZQXW'`, a callee `procedure expose (nm)` doing `interpret
+        // "zqxw = 'set-in-callee'"`, and the caller then reading `zqxw`
+        // through its own `interpret` prints `set-in-callee`. `ZQXW` appears
+        // in no instruction of either, so the plan has no slot for it and
+        // both sides reach it only through a run-time binding.
+        let resolved = self.activation().extra.clone();
+        if let Some(caller) = self
+            .activations
+            .len()
+            .checked_sub(2)
+            .and_then(|index| self.activations.get_mut(index))
+        {
+            caller.extra = resolved;
+        }
+
+        // Sized from the caller's *current* frame length rather than from
+        // `plan.len()`: an exposed name may sit at an index the caller grew
+        // into, and that same index has to address something on this side of
+        // the alias too.
+        let len = self.roots.frame_len(outer);
+        let inner = self.roots.push_slots(len);
+        for (_, slot, target) in &bindings {
+            self.roots.alias_slot(inner, *slot, *target);
+        }
+
+        // The callee's own run-time bindings start empty -- that is the
+        // isolation -- except for exposed names the plan never saw, which
+        // must keep resolving to the index the alias was installed at.
+        let plan = Rc::clone(&self.activation().plan);
+        let mut extra = HashMap::new();
+        for (name, slot, _) in bindings {
+            if plan.slot_of(&name).is_none() {
+                extra.insert(name, slot);
+            }
+        }
+
+        let activation = self.activation_mut();
+        activation.frame = inner;
+        activation.owns_frame = true;
+        activation.extra = extra;
+        Ok(())
+    }
+
+    /// Every name one `PROCEDURE EXPOSE` list names, in source order.
+    ///
+    /// **The indirect form is plural and also exposes its own selector.**
+    /// Measured twice: with `list = 'ALPHA BETA'`, `procedure expose (list)`
+    /// exposes `ALPHA` and `BETA` and nothing else; and with `v = 'zzz'`,
+    /// `procedure expose (v)` exposes `v` *itself* as well as `ZZZ` -- the
+    /// callee reads `v` as `zzz` (the caller's value) and a write to either
+    /// name in the callee is visible in the caller. So the selector's own
+    /// name goes on the list beside the words its value spells.
+    ///
+    /// The value is split and validated exactly the way `DROP (v)`'s own arm
+    /// does it, through the same two functions, and for the same measured
+    /// reason: a word is upcased only after it validates, one word at a time,
+    /// never as a whole. Validation runs over the entire list before any of
+    /// it is used, so a bad word later in the list cannot leave half a
+    /// `PROCEDURE` performed.
+    fn expose_names(
+        &mut self,
+        code: &Code<'_>,
+        variables: &[VariableRef],
+    ) -> Result<Vec<Box<[u8]>>, Failure> {
+        let mut names: Vec<Box<[u8]>> = Vec::new();
+        for variable in variables {
+            match variable {
+                VariableRef::Direct(id) => names.push(code.symbols.name(*id).as_bytes().into()),
+                VariableRef::Indirect(id) => {
+                    // The selector itself, then the names its value spells.
+                    names.push(code.symbols.name(*id).as_bytes().into());
+                    let (value, _novalue) = self.read(code, *id);
+                    let text = self.to_text(value).into_owned();
+                    for word in split_indirect_words(&text) {
+                        names.push(validate_indirect_word(word)?.into());
+                    }
+                }
+            }
+        }
+        Ok(names)
+    }
+
+    /// `USE ARG`, `USE STRICT ARG` and `USE LOCAL`.
+    ///
+    /// `USE LOCAL` is never legal here -- this crate has no method
+    /// invocations at all -- so implementing it means implementing which of
+    /// its two refusals applies. Measured on the oracle: as a program's own
+    /// first instruction it is 98.993 ("may only be used from method
+    /// invocations"); as a program's second instruction, as a called
+    /// routine's first instruction, and after a `PROCEDURE`, it is 99.910
+    /// ("must be the first instruction executed after a method invocation").
+    ///
+    /// **Only the 98.993 shape reaches this function, and the 99.910 arm is
+    /// unreached today.** `rexx-parse` already enforces the placement rule
+    /// at parse time (`instruction.rs`'s own `use_local`, error 99.910, and
+    /// 99.915 for a fragment), so every shape that would take the second arm
+    /// fails before execution begins. Eight were tried and all were
+    /// intercepted: second instruction of a program, after a label on its own
+    /// line, after a label on the same line, after a `PROCEDURE`, inside a
+    /// `DO` block, inside an `IF`, and inside an `INTERPRET` in two
+    /// positions. Those cases already answer the oracle's own number; what
+    /// they do not answer byte for byte is the clause echo, which is the
+    /// standing parse-error limitation `execute` documents (`lib.rs`) and is
+    /// unchanged by this task -- the baseline binary emits the identical
+    /// bytes for them.
+    ///
+    /// The arm is kept rather than collapsed, on the same reasoning
+    /// `Loud::missing_body` states for its own unreached arm: a rule the
+    /// parser happens to enforce first is not a guarantee this function can
+    /// rely on, and answering 98.993 unconditionally would be a silent wrong
+    /// answer the day that check moves. It carries no test, because a test
+    /// for it would necessarily pass through the parse-time path instead and
+    /// so could not fail if this arm were wrong.
+    ///
+    /// The shape that would separate "is a method invocation" from "was not
+    /// entered by a call" cannot be written in this phase either: no method
+    /// invocation exists to write it with.
+    fn exec_use(
+        &mut self,
+        code: &Code<'_>,
+        use_: &Use,
+        first_instruction: bool,
+    ) -> Result<(), Failure> {
+        match use_ {
+            Use::Local { .. } => {
+                if first_instruction && !self.activation().entered_by_call {
+                    Err(Raised::use_local_outside_method().into())
+                } else {
+                    Err(Raised::use_local_not_first().into())
+                }
+            }
+            Use::Arg {
+                strict,
+                allow_optionals,
+                targets,
+            } => self.exec_use_arg(code, *strict, *allow_optionals, targets),
+        }
+    }
+
+    /// `USE ARG`/`USE STRICT ARG`: bind the call's arguments to this
+    /// instruction's targets, positionally.
+    ///
+    /// Every rule below is measured, in a clean directory:
+    ///
+    /// * Extra arguments are ignored without `STRICT`. `call sub 1,2,3` into
+    ///   `use arg p` binds `p = 1`.
+    /// * An **absent** target is *dropped*, not left alone. `r = 'preset'`
+    ///   before a no-`PROCEDURE` `call sub 1` into `use arg p, r` makes both
+    ///   the callee and the caller read `r` as `R`. A probe using a target
+    ///   whose prior value equalled its own derived name could not have seen
+    ///   this.
+    /// * An omitted position (`call sub 1,,3`) holds its place: `use arg p,
+    ///   q, r` gives `[1] [Q] [3]`.
+    /// * A default fills an absent *or* omitted position: `call sub 1,,3`
+    ///   into `use arg p, q = 'dflt', r` gives `[1] [dflt] [3]`.
+    /// * `STRICT` adds two arity checks, and a default satisfies the
+    ///   minimum: `use strict arg p, q` with one argument is 40.3, while
+    ///   `use strict arg p, q = 'dflt'` with one argument runs.
+    /// * A trailing `...` suppresses the maximum check only. `use strict arg
+    ///   p, q, ...` takes four arguments; `use strict arg p` takes one.
+    fn exec_use_arg(
+        &mut self,
+        code: &Code<'_>,
+        strict: bool,
+        allow_optionals: bool,
+        targets: &[Option<UseTarget>],
+    ) -> Result<(), Failure> {
+        if strict {
+            let supplied = self.call_context.arguments.len();
+            // The minimum is the position of the last target that must be
+            // supplied -- one with no default of its own. A later target
+            // carrying a default does not raise it, which is what makes `use
+            // strict arg p, q = 'dflt'` legal with one argument.
+            let minimum = targets
+                .iter()
+                .rposition(|target| {
+                    target
+                        .as_ref()
+                        .is_none_or(|target| target.default.is_none())
+                })
+                .map_or(0, |index| index + 1);
+            if supplied < minimum {
+                let name = self.call_context.name.clone();
+                return Err(Raised::not_enough_arguments(&name, minimum).into());
+            }
+            if !allow_optionals && supplied > targets.len() {
+                let name = self.call_context.name.clone();
+                return Err(Raised::too_many_arguments(&name, targets.len()).into());
+            }
+        }
+
+        for (index, target) in targets.iter().enumerate() {
+            let Some(target) = target else { continue };
+            // `get` past the end and a `None` inside the list are the same
+            // thing to a target: nothing was supplied for this position.
+            let argument = self.call_context.arguments.get(index).copied().flatten();
+            self.bind_use_target(code, index, target, argument)?;
+        }
+        Ok(())
+    }
+
+    /// Binds one `USE ARG` target to one argument, or to its default, or to
+    /// nothing.
+    ///
+    /// The `alias` case is the whole reason `Argument` is not a bare
+    /// `ObjRef`: `>name` needs the *caller's* slot, and only an argument
+    /// written `>something` at the call carries one. Its two refusals are
+    /// separate measured errors -- a supplied argument that is not a
+    /// reference is 88.928, and an omitted position is 88.931.
+    fn bind_use_target(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        target: &UseTarget,
+        argument: Option<Argument>,
+    ) -> Result<(), Failure> {
+        let position = index + 1;
+        if target.alias {
+            let Some(argument) = argument else {
+                return Err(Raised::variable_reference_omitted(position).into());
+            };
+            let Argument::Reference { target: slot, .. } = argument else {
+                let found = self.to_text(argument.value()).to_vec();
+                return Err(Raised::not_a_variable_reference(position, &found).into());
+            };
+            let name = self.use_target_name(code, target)?;
+            let index = self.slot_of(&name);
+            let frame = self.activation().frame;
+            self.roots.alias_slot(frame, index, slot);
+            return Ok(());
+        }
+
+        // Present: bind the value. Absent: the default if there is one, and
+        // otherwise drop the target -- measured, an absent target does not
+        // keep whatever it held before.
+        let value = match argument {
+            Some(argument) => Some(argument.value()),
+            None => match &target.default {
+                Some(default) => {
+                    let value = self.eval(code, default)?;
+                    self.roots.push_temp(value);
+                    Some(value)
+                }
+                None => None,
+            },
+        };
+        let name = self.use_target_name(code, target)?;
+        match value {
+            Some(value) => self.assign_by_name(&name, value),
+            None => self.drop_by_name(&name),
+        }
+        Ok(())
+    }
+
+    /// One `USE ARG` target's variable name.
+    ///
+    /// A target is `parseVariableOrMessageTerm`, so the grammar admits a
+    /// message term here as well as a variable (`UseTarget::target`'s own
+    /// doc). Only the variable spellings are implemented, and a message term
+    /// fails loudly through the same `Loud::expression` path every other
+    /// unimplemented expression form uses rather than being approximated.
+    fn use_target_name(&mut self, code: &Code<'_>, target: &UseTarget) -> Result<Vec<u8>, Failure> {
+        match &target.target.kind {
+            ExprKind::Variable(id) | ExprKind::Stem(id) | ExprKind::Compound(id) => {
+                Ok(code.symbols.name(*id).as_bytes().to_vec())
+            }
+            other => Err(Loud::expression(other).into()),
+        }
+    }
+
+    /// Assigns `value` to the variable, whole stem, or one verbatim-keyed
+    /// tail that `name`'s own spelling names.
+    ///
+    /// `drop_by_name`'s counterpart, dispatched by the same `shape_of` and
+    /// through the same stem entry points, so that `USE ARG` binding a stem
+    /// target does what an ordinary `stem. = value` assignment does --
+    /// measured, `call sub2 'val'` into `use arg st.` makes `st.` render as
+    /// `val`.
+    fn assign_by_name(&mut self, name: &[u8], value: ObjRef) {
+        match shape_of(name) {
+            NameShape::Simple => {
+                let slot = self.slot_of(name);
+                let frame = self.activation().frame;
+                self.roots.set_slot(frame, slot, value);
+            }
+            NameShape::Stem => self.stem_assign(name, value),
+            NameShape::Compound => {
+                let dot = name
+                    .iter()
+                    .position(|&b| b == b'.')
+                    .expect("NameShape::Compound guarantees at least one period");
+                let (stem_name, key) = name.split_at(dot + 1);
+                self.stem_set(stem_name, key, value);
+            }
         }
     }
 
@@ -1677,18 +2086,23 @@ impl Interp {
         // reported against the `CALL` clause, at rc 214, and a version that
         // skipped evaluation would run the callee instead.
         //
-        // `flatten` skips an omitted position (`call sub 1,,3` parses as
-        // `[Some, None, Some]`) rather than evaluating something for it. The
-        // values are rooted for this clause and then dropped: nothing in this
-        // phase can read them, and a field holding them would be a field
-        // nothing reads. Whoever lands `USE ARG` keeps this `Vec` instead of
-        // discarding it, and needs the `Option`s intact -- measured, `call
-        // sub 1,,3` into three `USE ARG` targets gives `[1] [Q] [3]`, the
-        // omitted position leaving its target unset rather than shifting the
-        // ones after it.
-        for arg in args.iter().flatten() {
-            let value = self.eval(code, arg)?;
-            self.roots.push_temp(value);
+        // An omitted position (`call sub 1,,3` parses as `[Some, None,
+        // Some]`) stays a `None` here rather than being skipped or closed
+        // up: measured, that call into three `USE ARG` targets gives `[1]
+        // [Q] [3]`, so an omission holds its place and leaves its target
+        // unset instead of shifting the ones after it. Task 3 evaluated and
+        // discarded these; Task 5 keeps them, which is what that comment
+        // said whoever landed `USE ARG` would do.
+        let mut arguments: Vec<Option<Argument>> = Vec::with_capacity(args.len());
+        for arg in args {
+            match arg {
+                None => arguments.push(None),
+                Some(expr) => {
+                    let argument = self.eval_argument(code, expr)?;
+                    self.roots.push_temp(argument.value());
+                    arguments.push(Some(argument));
+                }
+            }
         }
 
         // D19/I6: one Rust frame per activation, plus this counter, so an
@@ -1761,10 +2175,25 @@ impl Interp {
         //   measured against the oracle, and not confined to `TRACE`: a
         //   plain, untraced `say f(1) + g(2)` with a raise inside `g`
         //   reports that error's clause echo at the wrong indent.
+        //
+        // * `call_context` is the **fifth** piece, added by Task 5, and it is
+        //   saved here rather than anywhere else precisely because of the
+        //   finding above: `current_value_indent` was the fourth and went
+        //   unrestored, unobservable until two activations per clause became
+        //   reachable. `USE ARG` reads this, so a callee that did not put its
+        //   caller's back would give the caller's own later `USE ARG` the
+        //   callee's arguments.
         let base_indent = self.current_value_indent;
         let saved_base = std::mem::replace(&mut self.activation_indent, base_indent + 2);
         let saved_offset = std::mem::take(&mut self.indent_offset);
         let saved_line = std::mem::take(&mut self.clause_line_override);
+        let saved_context = std::mem::replace(
+            &mut self.call_context,
+            CallContext {
+                name: name.to_vec(),
+                arguments,
+            },
+        );
 
         let ended = self.run_activation();
 
@@ -1774,11 +2203,25 @@ impl Interp {
         // trip that assertion in the caller rather than quietly running the
         // wrong frame's `pc`.
         let callee = self.activations.pop().expect("the activation just pushed");
-        self.activation_mut().extra = callee.extra;
+        // **The two halves of "was the pool shared" are one bool, and both
+        // are needed.** A `PROCEDURE` callee pushed a frame of its own, so
+        // that frame is popped here -- on the error path as well, which is
+        // why this is not inside the `Ok` arm below. It also keeps its own
+        // run-time name bindings, so they are *not* moved back: doing that
+        // would overwrite the caller's `extra` with the callee's isolated
+        // one. A shared-pool callee is the opposite on both counts, and its
+        // `extra` write-back is what makes a name bound inside it survive
+        // the return (measured, `interpret "zork = 42"` in a callee).
+        if callee.owns_frame {
+            self.roots.pop_slots(callee.frame);
+        } else {
+            self.activation_mut().extra = callee.extra;
+        }
         self.activation_indent = saved_base;
         self.indent_offset = saved_offset;
         self.clause_line_override = saved_line;
         self.current_value_indent = base_indent;
+        self.call_context = saved_context;
 
         match ended {
             Ok(ended) => Ok(ended),
@@ -1795,6 +2238,47 @@ impl Interp {
                 Err(failure)
             }
         }
+    }
+
+    /// Evaluates one call argument, keeping the caller's slot when the
+    /// argument is a variable reference (`>name` or `<name`).
+    ///
+    /// **Every argument has a value and only some have a slot**, which is
+    /// what `Argument`'s two variants say. A variable reference decays to
+    /// the referenced variable's value everywhere except a `USE ARG >`
+    /// target -- measured, `say >p` prints `p`'s value, and `call sub2 >p`
+    /// into a plain `use arg q` binds that value and leaves the caller's `p`
+    /// alone. So the value is computed here for both variants, by evaluating
+    /// the inner expression through the ordinary path rather than by reading
+    /// the slot directly, which is what keeps a stem reference rendering the
+    /// way a bare stem read does.
+    ///
+    /// The inner node is always a `Variable` or a `Stem` (`rexx-parse`'s own
+    /// doc on `ExprKind::VariableReference`; anything else is error 20.930 at
+    /// parse time), so it names exactly one slot. The `other` arm is the same
+    /// belt-and-braces shape the `Assignment` arm's own comment describes: a
+    /// guarantee the grammar makes is not one the type system enforces, and
+    /// this crate fails loudly rather than trusting it blindly.
+    fn eval_argument(&mut self, code: &Code<'_>, expr: &Expr) -> Result<Argument, Failure> {
+        let ExprKind::VariableReference(inner) = &expr.kind else {
+            return Ok(Argument::Value(self.eval(code, expr)?));
+        };
+        let id = match &inner.kind {
+            ExprKind::Variable(id) | ExprKind::Stem(id) => *id,
+            other => return Err(Loud::expression(other).into()),
+        };
+        let slot = match code.slots.get(&id) {
+            Some(slot) => *slot,
+            None => self.slot_of(code.symbols.name(id).as_bytes()),
+        };
+        let frame = self.activation().frame;
+        // Chased here, in the caller, where any alias the caller itself
+        // holds is still addressable -- the same one-step chase exposure
+        // uses, and what makes `>p` work when the caller's own `p` is
+        // already exposed from *its* caller.
+        let target = self.roots.slot_ref(frame, slot);
+        let value = self.eval(code, inner)?;
+        Ok(Argument::Reference { target, value })
     }
 
     /// Runs one named `CALL`: `resolve_and_run_call`, then settle `RESULT`
@@ -7735,6 +8219,602 @@ mod tests {
         assert!(
             body_of(&program, Some(1)).is_none(),
             "an out-of-range selector resolves to nothing rather than panicking"
+        );
+    }
+
+    // ---- PROCEDURE, PROCEDURE EXPOSE, USE and the variable reference
+    // (4b Task 5) ----
+    //
+    // Every program below runs its `PROCEDURE` through a real `CALL`, and
+    // not because a `CALL` reads better: `run_source` drives the body
+    // through `run_bounded`, and only `run_activation` grants the
+    // first-instruction permission a `PROCEDURE` needs. A `PROCEDURE`
+    // reached any other way is error 17.1 -- which is the oracle's own
+    // answer too, measured, and what
+    // `a_procedure_that_is_not_a_calls_first_instruction_raises_17_1`
+    // asserts.
+    //
+    // **No value in these programs equals its own variable's derived name.**
+    // An unexposed unset read yields the name, so a witness whose exposed
+    // variable holds, say, `W` in `w` cannot tell exposure from
+    // non-exposure. Every literal here is a hyphenated word no derived name
+    // can collide with.
+
+    #[test]
+    fn procedure_isolates_and_expose_aliases_the_caller_entry() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"v = 'caller-v'\ncall sub\nsay v w\nexit\n\
+                  sub: procedure expose w\nv = 'callee-v'\nw = 'callee-w'\nreturn\n",
+            ),
+            b"caller-v callee-w\n".to_vec(),
+            "V is the callee's own variable and must not have escaped; W is \
+             exposed and must have"
+        );
+    }
+
+    /// Exposure is transitive: `a` exposes `n` to `b`, `b` exposes the same
+    /// `n` to `c`, and `c`'s write is visible in `a`.
+    ///
+    /// Measured on the oracle. Binding `c`'s `n` to `b`'s frame instead of
+    /// chasing `b`'s own alias passes at one level and gives `from-a` here.
+    #[test]
+    fn exposure_is_transitive_through_an_intermediate_procedure() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"n = 'from-a'\ncall bee\nsay 'a sees:' n\nexit\n\
+                  bee: procedure expose n\ncall cee\nsay 'bee sees after c:' n\nreturn\n\
+                  cee: procedure expose n\nn = 'set-by-cee'\nreturn\n",
+            ),
+            b"bee sees after c: set-by-cee\na sees: set-by-cee\n".to_vec()
+        );
+    }
+
+    /// **The program that refuted "a bitset plus one target `SlotFrame`".**
+    ///
+    /// One `PROCEDURE` exposes two names that live in two different frames:
+    /// `n` chases through `bee`'s alias up to `a`, while `m` is `bee`'s own
+    /// local and stops there. Measured on the oracle -- `bee` sees both of
+    /// `cee`'s writes and `a` sees only `n`'s.
+    ///
+    /// Any design carrying a single target frame per callee gets exactly one
+    /// of the two names right, whichever frame it picked, so this is the
+    /// test that cannot pass by accident. It is also why `RootSet`'s
+    /// redirect is a per-slot `Vec<Option<usize>>`.
+    #[test]
+    fn one_procedure_can_expose_names_living_in_two_different_frames() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"n = 'from-a'\nm = 'from-a-m'\ncall bee\nsay 'a sees:' n m\nexit\n\
+                  bee: procedure expose n\nm = 'from-bee-m'\ncall cee\n\
+                  say 'bee sees:' n m\nreturn\n\
+                  cee: procedure expose n m\nn = 'set-by-cee'\nm = 'set-by-cee-m'\nreturn\n",
+            ),
+            b"bee sees: set-by-cee set-by-cee-m\na sees: set-by-cee from-a-m\n".to_vec(),
+            "N must reach A and M must stop at BEE, from one PROCEDURE"
+        );
+    }
+
+    /// `EXPOSE (v)` is plural and also exposes `v` itself. Both halves are
+    /// measured; `DROP (v)` took the identical correction in 4a.
+    #[test]
+    fn the_indirect_expose_form_is_plural_and_exposes_its_own_selector() {
+        // Plural, with GAMMA as the control: it is never named and must not
+        // be exposed, so a version that exposed everything passes the first
+        // two assertions and fails on it.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"list = 'ALPHA BETA'\nalpha = 'a-in-caller'\nbeta = 'b-in-caller'\n\
+                  gamma = 'g-in-caller'\ncall sub\nsay alpha beta gamma\nexit\n\
+                  sub: procedure expose (list)\n\
+                  alpha = 'a-set'\nbeta = 'b-set'\ngamma = 'g-set'\nreturn\n",
+            ),
+            b"a-set b-set g-in-caller\n".to_vec()
+        );
+
+        // The selector itself. The callee reads `v` as `zzz` (the caller's
+        // value, so `v` is exposed) and writes both names, and the caller
+        // sees both writes.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"v = 'zzz'\nzzz = 'z-in-caller'\ncall sub\n\
+                  say 'caller v:' v 'caller zzz:' zzz\nexit\n\
+                  sub: procedure expose (v)\nsay 'callee v:' v 'callee zzz:' zzz\n\
+                  v = 'v-set'\nzzz = 'zzz-set'\nreturn\n",
+            ),
+            b"callee v: zzz callee zzz: z-in-caller\ncaller v: v-set caller zzz: zzz-set\n"
+                .to_vec()
+        );
+    }
+
+    /// The five stem transcripts D9r records, all measured on the oracle.
+    ///
+    /// Their common point is that `EXPOSE` aliases the caller's **variable
+    /// entry**, not the stem *object*, which is what the `drop` pair pins:
+    /// `drop a.` in the callee rebinds the caller's entry to a fresh stem,
+    /// while a second variable holding the old object still sees the old
+    /// tail. That is why `stem_drop`'s `replace_stem(name, None)` shape is
+    /// correct under exposure and must not become a slot clear.
+    #[test]
+    fn an_exposed_stem_aliases_the_callers_entry_not_the_object() {
+        for (source, expected, why) in [
+            (
+                &b"a.1 = 'kept'\ncall sub\nsay a.1\nexit\n\
+                   sub: procedure expose a.\na.1 = 'changed'\nreturn\n"[..],
+                &b"changed\n"[..],
+                "a tail written in the callee is visible through the caller's stem",
+            ),
+            (
+                b"a.1 = 'kept'\ncall sub\nsay a.1\nexit\n\
+                  sub: procedure expose a.\na. = 'wiped'\nreturn\n",
+                b"wiped\n",
+                "a whole-stem assignment in the callee replaces the caller's stem",
+            ),
+            (
+                b"a.1 = 'kept'\ncall sub\nsay a.1\nexit\n\
+                  sub: procedure expose a.\ndrop a.\nreturn\n",
+                b"A.1\n",
+                "DROP of an exposed stem leaves the caller's stem looking untouched",
+            ),
+            (
+                b"a.1 = 'orig'\nkeep. = a.\ncall sub\nsay a.1 keep.1\nexit\n\
+                  sub: procedure expose a.\ndrop a.\nreturn\n",
+                b"A.1 orig\n",
+                "the DROP rebinds the entry; KEEP. still holds the old object, which \
+                 is what distinguishes rebinding from clearing",
+            ),
+            (
+                b"a.1 = 'from-caller'\nother.1 = 'not-exposed'\ncall sub\nexit\n\
+                  sub: procedure expose a.\nsay 'callee reads:' a.1 other.1\nreturn\n",
+                b"callee reads: from-caller OTHER.1\n",
+                "the callee reads the exposed stem's tail and derives the name of the \
+                 unexposed one",
+            ),
+        ] {
+            let mut interp = Interp::new();
+            assert_eq!(say_output(&mut interp, source), expected.to_vec(), "{why}");
+        }
+    }
+
+    /// A name the plan never saw, exposed through the indirect form, has to
+    /// keep resolving to the same slot on both sides of the return.
+    ///
+    /// `ZQXW` appears in no instruction of either routine -- only inside
+    /// string literals -- so the plan has no slot for it and both sides
+    /// reach it only through a run-time binding. Measured on the oracle.
+    /// This is the case `exec_procedure`'s write-back of `extra` exists for,
+    /// and the one that would otherwise need a non-top `grow_slots`.
+    #[test]
+    fn a_computed_expose_of_a_name_no_instruction_mentions_survives_the_return() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"nm = 'ZQXW'\ncall sub\ninterpret \"say 'caller:' zqxw\"\nexit\n\
+                  sub: procedure expose (nm)\ninterpret \"zqxw = 'set-in-callee'\"\nreturn\n",
+            ),
+            b"caller: set-in-callee\n".to_vec()
+        );
+    }
+
+    /// 17.1 at every shape but the legal one, and labels are transparent.
+    ///
+    /// All five measured on the oracle. The `nop` case beside the two-label
+    /// case is what shows the rule is "first instruction *executed*" with
+    /// labels not counting, rather than "first instruction in the body".
+    #[test]
+    fn a_procedure_that_is_not_a_calls_first_instruction_raises_17_1() {
+        for (source, why) in [
+            (
+                &b"say 'top'\nprocedure\n"[..],
+                "at top level, with no call at all",
+            ),
+            (
+                b"say 'main'\nsub:\nprocedure\n",
+                "fallen into rather than called",
+            ),
+            (
+                b"call sub\nexit\nsub:\nnop\nprocedure\nreturn\n",
+                "after a NOP in a called routine",
+            ),
+            (
+                b"call sub\nexit\nsub: interpret \"procedure\"\nreturn\n",
+                "inside a fragment, which does not inherit its host's permission",
+            ),
+        ] {
+            let mut interp = Interp::new();
+            let failure = run_source(&mut interp, source).unwrap_err();
+            let Failure::Raised(raised) = failure else {
+                panic!("expected Raised for {why}, got {failure:?}");
+            };
+            assert_eq!((raised.number, raised.sub), (17, 1), "{why}");
+        }
+
+        // Two labels between the CALL and the PROCEDURE: legal, measured.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"outer = 'caller'\ncall sub\nsay outer\nexit\n\
+                  sub:\nlbl2:\nprocedure\nouter = 'callee'\nreturn\n",
+            ),
+            b"caller\n".to_vec(),
+            "a label neither grants the permission nor spends it, and the PROCEDURE \
+             still isolated"
+        );
+    }
+
+    /// An isolated callee's frame is released on the way out, on the error
+    /// path as well as the ordinary one.
+    ///
+    /// Asserted against the root set's own slot count rather than through
+    /// output, because a leak is invisible in a program's bytes: the run
+    /// would still be correct and would simply hold one frame per call
+    /// forever, which `do 100000; call sub; end` turns into 100,000 rooted
+    /// frames. Both paths are checked here because they share the one
+    /// `pop_slots` call whose position in `resolve_and_run_call` is the whole
+    /// point -- outside the `Ok` arm, not inside it.
+    ///
+    /// The property is that frames balance, so this counts **frames** and not
+    /// slots. A slot count moves for reasons that are not leaks -- the first
+    /// `CALL` in a program that never writes `RESULT` grows the top frame by
+    /// one to hold it, measured while writing this test -- and it moves by a
+    /// *different* amount on the error path, which never reaches that write.
+    /// `RootSet::live_frames` has no such confounder.
+    ///
+    /// `run_source` leaves the top-level frame standing (only `Interp::run`
+    /// pops that one), so one frame is the correct answer for a balanced run
+    /// and each unreleased callee would add one more.
+    #[test]
+    fn an_isolated_callees_frame_is_released_on_both_paths() {
+        let mut interp = Interp::new();
+        say_output(
+            &mut interp,
+            b"zz = 1\ncall sub\ncall sub\ncall sub\nexit\nsub: procedure\nyy = 2\nreturn\n",
+        );
+        assert_eq!(
+            interp.roots.live_frames(),
+            1,
+            "three isolated calls must leave only the top-level frame open"
+        );
+
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"zz = 1\ncall sub\nexit\nsub: procedure\nyy = 2\nsay 1/0\nreturn\n",
+        )
+        .unwrap_err();
+        assert!(
+            matches!(failure, Failure::Raised(_)),
+            "the callee must have raised, or this proves nothing about the error path"
+        );
+        assert_eq!(
+            interp.roots.live_frames(),
+            1,
+            "a raise inside an isolated callee must still release its frame"
+        );
+
+        // The control: a callee with no PROCEDURE pushes no frame at all
+        // (D9r's shared pool), so this arrives at the same answer for a
+        // different reason. Without it, an implementation that never pushed
+        // a callee frame would pass both assertions above.
+        let mut interp = Interp::new();
+        say_output(
+            &mut interp,
+            b"zz = 1\ncall sub\nexit\nsub:\nyy = 2\nreturn\n",
+        );
+        assert_eq!(interp.roots.live_frames(), 1);
+    }
+
+    // ---- USE ARG ----
+
+    #[test]
+    fn use_arg_binds_positionally_and_ignores_extra_arguments() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call sub2 1,2,3\nexit\nsub2: procedure\nuse arg p\nsay '['p']'\nreturn\n",
+            ),
+            b"[1]\n".to_vec()
+        );
+
+        // An omitted position holds its place rather than closing the list
+        // up: an implementation that skipped it would bind R to 3.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call sub2 1,,3\nexit\n\
+                  sub2: procedure\nuse arg p, q, r\nsay '['p']' '['q']' '['r']'\nreturn\n",
+            ),
+            b"[1] [Q] [3]\n".to_vec()
+        );
+    }
+
+    /// A target with no argument and no default is **dropped**, not left
+    /// alone.
+    ///
+    /// The callee has no `PROCEDURE` on purpose, so the caller's `PRESET` is
+    /// the same variable and the drop is observable after the return.
+    /// `preset-value` is deliberately not `PRESET`: a target whose prior
+    /// value equalled its own derived name would render identically whether
+    /// it was dropped or left, so such a probe could not fail.
+    #[test]
+    fn use_arg_drops_a_target_with_no_argument_and_no_default() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"preset = 'preset-value'\ncall sub2 1\nsay 'after:' preset\nexit\n\
+                  sub2:\nuse arg p, preset\nsay 'inside:' preset\nreturn\n",
+            ),
+            b"inside: PRESET\nafter: PRESET\n".to_vec()
+        );
+    }
+
+    #[test]
+    fn use_arg_defaults_fill_an_absent_or_omitted_position() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call sub2 1\nexit\n\
+                  sub2: procedure\nuse arg p, q = 'dflt'\nsay '['p']['q']'\nreturn\n",
+            ),
+            b"[1][dflt]\n".to_vec(),
+            "absent past the end of the list"
+        );
+
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call sub2 1,,3\nexit\n\
+                  sub2: procedure\nuse arg p, q = 'dflt', r\nsay '['p']['q']['r']'\nreturn\n",
+            ),
+            b"[1][dflt][3]\n".to_vec(),
+            "omitted in the middle"
+        );
+    }
+
+    /// `STRICT`'s two arity checks, and the two things that switch them off.
+    /// Every number and boundary measured on the oracle.
+    #[test]
+    fn use_strict_arg_checks_arity_at_both_ends() {
+        // Too many: 40.4, naming the routine and the maximum.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"call sub2 1,2,3\nexit\nsub2: procedure\nuse strict arg p\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (40, 4));
+        assert_eq!(raised.additional, vec!["SUB2".to_string(), "1".to_string()]);
+
+        // Too few: 40.3, naming the minimum.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"call sub2 1\nexit\nsub2: procedure\nuse strict arg p, q\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (40, 3));
+        assert_eq!(raised.additional, vec!["SUB2".to_string(), "2".to_string()]);
+
+        // A trailing `...` suppresses the maximum check only.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call sub2 1,2,3,4\nexit\n\
+                  sub2: procedure\nuse strict arg p, q, ...\nsay '['p']['q']'\nreturn\n",
+            ),
+            b"[1][2]\n".to_vec()
+        );
+
+        // A default satisfies the minimum, so this must not raise 40.3.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call sub2 1\nexit\n\
+                  sub2: procedure\nuse strict arg p, q = 'dflt'\nsay '['p']['q']'\nreturn\n",
+            ),
+            b"[1][dflt]\n".to_vec()
+        );
+    }
+
+    /// `USE ARG >name` aliases the caller's variable; the same call into a
+    /// plain target copies its value instead.
+    ///
+    /// The pair is what makes this test discriminating: an implementation
+    /// that aliased unconditionally, or never, gets exactly one of the two
+    /// right.
+    #[test]
+    fn use_arg_alias_binds_the_callers_variable_and_a_plain_target_does_not() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"p = 'orig'\ncall sub2 >p\nsay 'after:' p\nexit\n\
+                  sub2: procedure\nuse arg >q\nsay 'callee:' q\nq = 'aliased'\nreturn\n",
+            ),
+            b"callee: orig\nafter: aliased\n".to_vec()
+        );
+
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"p = 'orig'\ncall sub2 >p\nsay 'after:' p\nexit\n\
+                  sub2: procedure\nuse arg q\nq = 'aliased'\nreturn\n",
+            ),
+            b"after: orig\n".to_vec(),
+            "a plain target copies the value, so the caller's P is untouched"
+        );
+
+        // A stem aliases the same way, measured.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"st.1 = 'orig'\ncall sub2 >st.\nsay 'after:' st.1\nexit\n\
+                  sub2: procedure\nuse arg >q.\nq.1 = 'aliased'\nreturn\n",
+            ),
+            b"after: aliased\n".to_vec()
+        );
+
+        // An aliased but unset variable reads as the *callee's* own derived
+        // name, not the caller's -- measured, and it falls out of the alias
+        // pointing at an unset slot.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call sub2 >unsetvar\nexit\n\
+                  sub2: procedure\nuse arg >q\nsay 'callee:' q\nreturn\n",
+            ),
+            b"callee: Q\n".to_vec()
+        );
+    }
+
+    /// `USE ARG >` has two distinct refusals, and they are different
+    /// sub-numbers rather than one shared complaint. Both measured.
+    #[test]
+    fn use_arg_alias_refuses_a_plain_value_and_an_omitted_position() {
+        // A supplied argument that is not a reference: 88.928, carrying the
+        // 1-based position and the argument's own *value*.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"zebra = 'orig'\ncall sub2 zebra\nexit\nsub2: procedure\nuse arg >q\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (88, 928));
+        assert_eq!(
+            raised.additional,
+            vec!["1".to_string(), "orig".to_string()],
+            "the substitution is the argument's value, not the variable's spelling -- \
+             a probe naming the variable `caller` could not tell those apart"
+        );
+
+        // An omitted position: 88.931, a different complaint.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"call sub2 1\nexit\nsub2: procedure\nuse arg p, >q\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (88, 931));
+        assert_eq!(raised.additional, vec!["2".to_string()]);
+    }
+
+    /// A variable reference in an ordinary value position is worth the
+    /// referenced variable's value. Measured: `say >p` prints `p`'s value.
+    #[test]
+    fn a_variable_reference_decays_to_the_referenced_value() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(&mut interp, b"p = 'orig'\nsay >p"),
+            b"orig\n".to_vec()
+        );
+    }
+
+    /// The caller's own arguments survive a nested call.
+    ///
+    /// **This is Task 4's Critical, in this task's own currency.** That
+    /// finding was a piece of per-activation state a call failed to restore,
+    /// invisible until two activations per clause were reachable.
+    /// `Interp::call_context` is the fifth such piece; without the restore in
+    /// `resolve_and_run_call`, the second `USE ARG` below reads the *inner*
+    /// call's arguments and prints `inner-arg`.
+    #[test]
+    fn a_callers_arguments_survive_a_nested_call() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call outer 'outer-arg'\nexit\n\
+                  outer: procedure\nuse arg first\ncall inner 'inner-arg'\n\
+                  use arg second\nsay '['first']['second']'\nreturn\n\
+                  inner: procedure\nuse arg deep\nreturn\n",
+            ),
+            b"[outer-arg][outer-arg]\n".to_vec()
+        );
+    }
+
+    /// `USE LOCAL` as a program's own first instruction is 98.993 -- the one
+    /// shape that reaches `exec_use` at all, since `rexx-parse` rejects the
+    /// rest at parse time. `exec_use`'s own doc comment lists the eight
+    /// shapes that were tried and why the 99.910 arm carries no test.
+    ///
+    /// **Driven through `run_program` rather than `run_source`**, and that is
+    /// not incidental: this module's helper runs a body through
+    /// `run_bounded`, which never grants the first-instruction permission,
+    /// so a `run_source` version of this test would take the *other* arm and
+    /// assert 99.910 -- passing against an implementation that had the two
+    /// swapped. Only the real entry point puts the program in the state the
+    /// oracle's own 98.993 describes. Verified against the oracle in a clean
+    /// directory: rc 158 and these two lines.
+    #[test]
+    fn use_local_as_a_programs_first_instruction_raises_98_993() {
+        let outcome = crate::run_program("/tmp/use-local.rex", b"use local outer\n".to_vec());
+        assert_eq!(outcome.exit_code, 158, "256 - 98");
+        let stderr = String::from_utf8_lossy(&outcome.stderr);
+        assert!(
+            stderr.contains("Error 98.993:")
+                && stderr.contains(
+                    "The USE LOCAL instruction may only be used from method invocations."
+                ),
+            "expected the oracle's own 98.993 report, got: {stderr}"
+        );
+    }
+
+    /// `PROCEDURE EXPOSE` of a single compound tail fails loudly rather than
+    /// approximating.
+    ///
+    /// Measured on the oracle: exposing `a.1` shares that one tail and
+    /// leaves `a.2` the callee's own, which is aliasing inside a stem object
+    /// and not something a whole-slot alias can express. Exposing the stem
+    /// instead would silently share `a.2` too.
+    #[test]
+    fn procedure_expose_of_a_single_compound_tail_fails_loudly() {
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"a.1 = 'kept'\ncall sub\nexit\nsub: procedure expose a.1\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Loud(loud) = failure else {
+            panic!("expected Loud, got {failure:?}");
+        };
+        assert!(
+            loud.message.contains("A.1"),
+            "the message must name the tail it refused: {}",
+            loud.message
         );
     }
 }

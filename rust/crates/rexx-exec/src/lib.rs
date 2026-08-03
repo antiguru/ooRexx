@@ -36,7 +36,7 @@
 //! evaluates or steps through one needs it equally and none of them is a
 //! better owner than the crate root.
 
-use rexx_core::{Heap, ObjRef, RootSet};
+use rexx_core::{Heap, ObjRef, RootSet, SlotRef};
 use rexx_parse::{
     CodeBody, ExprKind, InstructionKind, PrefixOp, Program, SymbolId, SymbolTable, parse_program,
 };
@@ -498,6 +498,33 @@ impl Loud {
         }
     }
 
+    /// `PROCEDURE EXPOSE` naming a single compound tail, `expose a.1`.
+    ///
+    /// **A disclosed gap inside an otherwise implemented instruction, and
+    /// loud rather than approximated because the near-miss is a silent wrong
+    /// answer.** Measured: with the caller holding `a.1 = 'kept'` and `a.2 =
+    /// 'other'`, `sub: procedure expose a.1` writing both tails leaves the
+    /// caller printing `changed other` -- tail 1 is shared and tail 2 is the
+    /// callee's own. So this is aliasing *inside* a stem object, at one tail,
+    /// and 4b's exposure mechanism aliases whole slots: the stem lives in a
+    /// slot and its tails do not. Exposing the whole stem instead would make
+    /// `a.2` shared as well, which is a wrong answer found by chasing a wrong
+    /// value rather than a message that says why.
+    ///
+    /// No owner string: unlike `unresolved_call`'s `4c`, the steps behind
+    /// this are not another phase's to build -- nothing has been scheduled to
+    /// build them. `owned_message` is deliberately not used, since its shape
+    /// belongs to the variant-keyed owner tables (`instruction_owner`) and
+    /// this is a sub-case within a variant those tables call implemented.
+    fn compound_expose(name: &[u8]) -> Loud {
+        Loud {
+            message: format!(
+                "PROCEDURE EXPOSE of the single compound tail \"{}\" is not implemented",
+                String::from_utf8_lossy(name)
+            ),
+        }
+    }
+
     /// An activation's body selector named something that is not a routine
     /// body -- an internal inconsistency, never a program error.
     ///
@@ -683,9 +710,16 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
             rexx_parse::Call::Trap(_) => Some("4b"),
             rexx_parse::Call::Qualified { .. } => Some("Phase 5"),
         },
-        InstructionKind::Procedure { .. }
-        | InstructionKind::Use(_)
-        | InstructionKind::Signal(_)
+        // In scope since 4b's Task 5, both of them. `Use` is `None` even
+        // though `USE LOCAL` can only ever fail here: it fails with the
+        // oracle's own two errors (98.993/99.910), measured, which is an
+        // implemented instruction answering the same bytes the oracle
+        // answers -- not a gap. The one shape inside `Procedure` this crate
+        // cannot express, `expose a.1`, fails loudly through
+        // `Loud::compound_expose` rather than through this table, because it
+        // is a sub-case of a variant and this table is per variant.
+        InstructionKind::Procedure { .. } | InstructionKind::Use(_) => None,
+        InstructionKind::Signal(_)
         | InstructionKind::Raise(_)
         | InstructionKind::Push { .. }
         | InstructionKind::Queue { .. } => Some("4b"),
@@ -730,8 +764,12 @@ fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
         // external steps behind the label search are that phase's, exactly
         // the same shape `InstructionKind::Call`'s own comment above
         // describes for `CALL`.
-        ExprKind::Call { .. } => None,
-        ExprKind::VariableReference(_) => Some("4b"),
+        // `None` since Task 5. `>name`/`<name` decays to the referenced
+        // variable's value in every ordinary position (measured, `say >p`
+        // prints `p`'s value), and its one load-bearing use, as the argument
+        // half of `USE ARG >name`, is handled at the call site by
+        // `run.rs`'s `eval_argument` rather than here.
+        ExprKind::Call { .. } | ExprKind::VariableReference(_) => None,
         ExprKind::QualifiedCall { .. }
         | ExprKind::ClassResolver { .. }
         | ExprKind::Message { .. }
@@ -1070,6 +1108,90 @@ struct Interp {
     /// needing a sentinel to test for.
     stack_first: usize,
     stack_deepest: usize,
+    /// Whether the instruction about to be stepped is allowed to be a
+    /// `PROCEDURE` -- and, read the other way, whether it is the first
+    /// instruction executed in its activation.
+    ///
+    /// **Set only by `run_activation`, and taken at the top of `step`.**
+    /// That pairing is the whole mechanism, and it is what makes the
+    /// permission stop at exactly one instruction: any nested stepping --
+    /// an `INTERPRET` fragment, an `IF`/`SELECT` branch through
+    /// `run_bounded` -- reaches `step` again after the outer `step` has
+    /// already taken the flag, so it sees `false` without any of those paths
+    /// having to know this field exists. Measured, and the reason it is
+    /// taken on the way in rather than cleared on the way out: `sub:
+    /// interpret "procedure"` is error 17.1, so a fragment must not inherit
+    /// its host clause's permission.
+    ///
+    /// A field rather than a parameter for the reason `current_value_indent`
+    /// gives for the same choice: `step` is reached from several callers
+    /// that have no business knowing about `PROCEDURE`.
+    procedure_permitted: bool,
+    /// The call that entered the running activation: what `USE ARG` reads.
+    ///
+    /// **Saved and restored around every call, alongside the four pieces of
+    /// level state `resolve_and_run_call` already saves.** That is the same
+    /// discipline Task 4's own review finding was about -- a fifth piece of
+    /// per-activation state added without a restore is invisible until two
+    /// activations per clause are reachable, and then wrong. Everything a
+    /// call sets here is set in one place and put back in one place.
+    ///
+    /// On `Interp` and not on `Activation` because it is filled *before* the
+    /// callee's activation exists: the arguments are evaluated in the caller,
+    /// which is where the argument expressions' own variables live.
+    ///
+    /// Empty for the top-level program, which is not a wrong answer but the
+    /// right one -- measured, `use arg p` as a program's own first clause
+    /// binds nothing and `p` reads as `P`.
+    call_context: CallContext,
+}
+
+/// The name and arguments of one call in progress.
+///
+/// One struct rather than two `Interp` fields so that the save-and-restore
+/// in `resolve_and_run_call` is a single `mem::replace`: two fields would be
+/// two places to forget, which is precisely the defect shape this is
+/// modelled to avoid.
+#[derive(Default)]
+struct CallContext {
+    /// The resolved routine name, as errors 40.3 and 40.4 spell it --
+    /// measured, `Not enough arguments in invocation of SUB2`, the label's
+    /// own upcased spelling.
+    name: Vec<u8>,
+    /// The arguments in source order, an omitted position (`call sub 1,,3`)
+    /// left as `None` rather than closed up. Measured: that call into `use
+    /// arg p, q, r` gives `[1] [Q] [3]`, so an omission holds its place.
+    arguments: Vec<Option<Argument>>,
+}
+
+/// One evaluated call argument.
+///
+/// Two variants and not a bare `ObjRef`, because `USE ARG >name` needs
+/// something an ordinary value cannot carry: which of the *caller's* slots
+/// the argument named, so the callee's own variable can be aliased to it.
+/// Measured -- `call sub2 >p` into `use arg >q` makes the callee's `q =
+/// 'aliased'` visible as the caller's `p`, while the same call into a plain
+/// `use arg q` merely copies the value.
+///
+/// `Reference` carries a value as well as a slot, and that is not
+/// redundancy: a variable reference used as an ordinary argument **decays
+/// to the referenced variable's value**, measured -- `say >p` prints `p`'s
+/// value, and `call sub2 >p` into a plain `use arg q` binds that value.
+/// So every argument has a value and only some have a slot.
+#[derive(Copy, Clone)]
+enum Argument {
+    Value(ObjRef),
+    Reference { target: SlotRef, value: ObjRef },
+}
+
+impl Argument {
+    /// The argument's value, which every form has. `USE ARG` without `>`
+    /// and `ARG()` both want only this.
+    fn value(self) -> ObjRef {
+        match self {
+            Argument::Value(value) | Argument::Reference { value, .. } => value,
+        }
+    }
 }
 
 impl Interp {
@@ -1111,6 +1233,8 @@ impl Interp {
             stack_entry: 0,
             stack_first: 0,
             stack_deepest: 0,
+            procedure_permitted: false,
+            call_context: CallContext::default(),
         }
     }
 

@@ -120,8 +120,15 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // its `expand_for_witnesses`, which now expands this one tag to the two
     // arms that still fail loudly rather than to all four.
     InstructionKind::Call(_) => ("Call", Owner::Phase("4b")),
-    InstructionKind::Procedure { .. } => ("Procedure", Owner::Phase("4b")),
-    InstructionKind::Use(_) => ("Use", Owner::Phase("4b")),
+    // **In scope since 4b's Task 5**, both of them, and both fully rather
+    // than arm-grained the way `Call` above is. `PROCEDURE` isolates the
+    // callee's pool and aliases the exposed names; `USE ARG`/`USE STRICT
+    // ARG` bind the call's arguments. `USE LOCAL` can only ever fail here,
+    // since this crate has no method invocations -- but it fails with the
+    // oracle's own 98.993/99.910, measured, which is an implemented
+    // instruction answering the right bytes and not a gap.
+    InstructionKind::Procedure { .. } => ("Procedure", Owner::InScope),
+    InstructionKind::Use(_) => ("Use", Owner::InScope),
     InstructionKind::Signal(_) => ("Signal", Owner::Phase("4b")),
     InstructionKind::Raise(_) => ("Raise", Owner::Phase("4b")),
     InstructionKind::Push { .. } => ("Push", Owner::Phase("4b")),
@@ -159,7 +166,11 @@ tags!(expr_tag, EXPR_TAGS, ExprKind, {
     // order a name still falls through to the loud `4c` fallback for.
     ExprKind::Call { .. } => ("Call", Owner::InScope),
     // ---- the five that still fail loudly; see coverage.rs's module doc's ownership section ----
-    ExprKind::VariableReference(_) => ("VariableReference", Owner::Phase("4b")),
+    // In scope since 4b's Task 5: `>x`/`<x` evaluates to the referenced
+    // variable's value in every ordinary position (measured, `say >p` prints
+    // `p`'s value), and its load-bearing use is as the argument half of `USE
+    // ARG >name`, which `run.rs`'s `eval_argument` handles at the call site.
+    ExprKind::VariableReference(_) => ("VariableReference", Owner::InScope),
     ExprKind::QualifiedCall { .. } => ("QualifiedCall", Owner::Phase("Phase 5")),
     ExprKind::ClassResolver { .. } => ("ClassResolver", Owner::Phase("Phase 5")),
     ExprKind::List(_) => ("List", Owner::Phase("Phase 5")),
@@ -291,8 +302,6 @@ impl Coverage {
 pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("InstructionKind", "Command", "Phase 7"),
     ("InstructionKind", "Call", "4b"),
-    ("InstructionKind", "Procedure", "4b"),
-    ("InstructionKind", "Use", "4b"),
     ("InstructionKind", "Signal", "4b"),
     ("InstructionKind", "Raise", "4b"),
     ("InstructionKind", "Push", "4b"),
@@ -307,7 +316,6 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("InstructionKind", "Guard", "Phase 5"),
     ("InstructionKind", "Reply", "Phase 5"),
     ("InstructionKind", "Forward", "Phase 5"),
-    ("ExprKind", "VariableReference", "4b"),
     ("ExprKind", "QualifiedCall", "Phase 5"),
     ("ExprKind", "ClassResolver", "Phase 5"),
     ("ExprKind", "List", "Phase 5"),
@@ -399,34 +407,43 @@ fn out_of_scope_set_matches_the_committed_expectation() {
 #[test]
 fn variant_counts_match_the_audited_split() {
     // Re-derived here rather than trusted: 40 InstructionKind variants and 15
-    // ExprKind (10 in scope, 5 failing loudly since 4b's Task 4), per the
+    // ExprKind (11 in scope, 4 failing loudly since 4b's Task 5), per the
     // design spec's criterion 1. The InstructionKind split was 20/9/4/6/1 at
     // the 4a gate; 4b's Task 1 moved `Interpret` from 4b's column into the
-    // implemented one (21/8/4/6/1) and Task 3 moved `Return` (22/7/4/6/1).
-    // `InstructionKind::Call` did **not** move with it: the table is
+    // implemented one (21/8/4/6/1), Task 3 moved `Return` (22/7/4/6/1) and
+    // Task 5 moved `Procedure` and `Use` together (24/5/4/6/1).
+    // `InstructionKind::Call` did **not** move with them: the table is
     // variant-grained and `Call::Trap` is still 4b's, so the variant stays in
     // that column while two of its four arms are implemented.
     // `ExprKind::Call` is different -- unlike the instruction, it has no
     // later-phase arm hiding inside its own `CallTarget`, so Task 4 moves the
     // whole variant, and only it, from 6 to 5 in the ExprKind row below (9 to
-    // 10 in scope). These numbers are the *implemented* counts, not "4a's
+    // 10 in scope); Task 5 then moves `VariableReference` the same way, 5 to
+    // 4 and 10 to 11. These numbers are the *implemented* counts, not "4a's
     // own": every later 4b/4c task moves another variant across the same
     // line, and relabelling the column each time would be churn without
     // information.
+    //
+    // `Use` moving in scope is not a claim that every `USE` runs: `USE LOCAL`
+    // can only ever fail here, because this crate has no method invocations
+    // for it to be legal in. It fails with the oracle's own 98.993/99.910
+    // rather than with a loud gap, which is what "in scope" means for this
+    // table -- the same distinction `Procedure` draws for a misplaced
+    // `PROCEDURE`, which is error 17.1 and not a gap either.
     assert_eq!(INSTRUCTION_TAGS.len(), 40);
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        22
+        24
     );
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("4b"))
             .count(),
-        7
+        5
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -456,14 +473,14 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        10
+        11
     );
     assert_eq!(
         EXPR_TAGS
             .iter()
             .filter(|(_, o)| matches!(o, Owner::Phase(_)))
             .count(),
-        5
+        4
     );
 
     assert_eq!(LOOP_TAGS.len(), 6);

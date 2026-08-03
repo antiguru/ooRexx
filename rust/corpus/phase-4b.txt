@@ -27,6 +27,17 @@
 #   two CALL arms: CALL ON/OFF is Task 7's and CALL ns:name is Phase 5's, and
 #   both still fail loudly.
 #
+#   PROCEDURE, PROCEDURE EXPOSE, USE ARG/USE STRICT ARG and the >name
+#   variable-reference argument (4b Task 5) -- an isolated callee pool, an
+#   exposed name aliased back into the pool it came from, exposure chased
+#   through two levels, the plural indirect EXPOSE (list) form, a whole stem
+#   exposed, positional and omitted and defaulted USE ARG targets, and
+#   USE ARG >name aliasing the caller's own variable. NOT USE LOCAL, which
+#   rexx-parse rejects at parse time in every position but one and which has
+#   no legal use here at all (this crate has no method invocations), and NOT
+#   PROCEDURE EXPOSE of a single compound tail (`expose a.1`), which fails
+#   loudly -- see Loud::compound_expose.
+#
 #   ExprKind::Call, the internal-function expression form (4b Task 4) -- f(...)
 #   resolved against the calling activation's own labels and evaluated for its
 #   value, reusing the same nested-activation machinery CALL uses. NOT
@@ -47,8 +58,8 @@
 # both spellings print 42 and both match the oracle.
 #
 # WHAT IT STILL EXCLUDES. Everything phase-4a.txt excludes except INTERPRET,
-# CALL and RETURN, which is to say: no builtin function calls, no PROCEDURE/
-# USE/SIGNAL/RAISE, no PARSE/ARG/PULL/PUSH/QUEUE, no message sends, no ::
+# CALL, RETURN, PROCEDURE and USE ARG, which is to say: no builtin function
+# calls, no SIGNAL/RAISE, no PARSE/ARG/PULL/PUSH/QUEUE, no message sends, no ::
 # directives, no command clauses, no DO WITH, and no DO OVER on a stem. The
 # authoritative, machine-checked list is tests/owners.rs's INSTRUCTION_TAGS/
 # EXPR_TAGS: anything still carrying an `Owner::Phase` there fails loudly and
@@ -105,3 +116,18 @@ lang/call_return.rex
 # unchanged after it, unlike CALL, which settles RESULT on return -- and
 # stderr's clause sequence and line numbers.
 lang/call_expression.rex
+
+# New for 4b Task 5 -- PROCEDURE and PROCEDURE EXPOSE. Its header states, per
+# block, which wrong answer each would print; the values are chosen so that
+# none of them equals its own variable's derived name, which is what makes an
+# exposure failure and a non-exposure failure print differently. The
+# transitivity block is the one that cannot be got right by accident: it needs
+# both a name chased two levels up and a name that stops one level up, from a
+# single PROCEDURE.
+lang/call_procedure_expose.rex
+
+# New for 4b Task 5 -- USE ARG, USE STRICT ARG and the >name argument. The
+# `dropped` block deliberately uses a routine with no PROCEDURE, because a
+# target that USE ARG drops is only observable from outside the routine when
+# the pool is shared.
+lang/use_arg_forms.rex

@@ -121,6 +121,61 @@ pub(crate) struct Activation {
     /// fragment-only mechanism.
     pub(crate) extra: HashMap<Box<[u8]>, usize>,
     pub(crate) frame: SlotFrame,
+    /// Whether this activation is the one that must `pop_slots` [`frame`],
+    /// and equivalently whether the pool in it is its own.
+    ///
+    /// **The whole of D9r's shared-pool default lives in this one bool.** A
+    /// callee with no `PROCEDURE` reuses the caller's frame, so it is `false`
+    /// and the frame outlives the return; a `PROCEDURE` callee pushes a frame
+    /// of its own and sets it `true`. The top-level activation owns its frame
+    /// too -- `Interp::run` is what pops that one.
+    ///
+    /// It also decides a second thing, and getting only the first right is a
+    /// silent bug: `resolve_and_run_call` moves the callee's `extra` back into
+    /// the caller on return, which is correct exactly when the two shared a
+    /// pool. For a `PROCEDURE` callee it would overwrite the caller's own
+    /// run-time name bindings with the callee's isolated ones.
+    ///
+    /// [`frame`]: Activation::frame
+    pub(crate) owns_frame: bool,
+    /// Whether this activation was entered by a `CALL` or a function call, as
+    /// opposed to being the program's top-level activation.
+    ///
+    /// Read only by `PROCEDURE` and `USE LOCAL`, which are the two
+    /// instructions whose legality depends on how their activation was
+    /// entered. Measured on the oracle, and the two do not agree on what they
+    /// want -- `PROCEDURE` is legal in a called routine and error 17.1 at top
+    /// level, while `USE LOCAL` is error 99.910 in a called routine and error
+    /// 98.993 at top level.
+    pub(crate) entered_by_call: bool,
+    /// Whether no instruction has yet been executed in this activation --
+    /// where a label does not count as an instruction.
+    ///
+    /// `PROCEDURE` and `USE LOCAL` both ask "is this the *first* instruction
+    /// executed", and the answer is a run-time property, not a static one.
+    /// Measured on the oracle, all four shapes:
+    ///
+    /// ```text
+    /// call sub / sub: procedure                 -> runs
+    /// call sub / sub: / lbl2: / procedure       -> runs      (labels do not count)
+    /// call sub / sub: nop / procedure           -> 17.1      (a NOP does)
+    /// say 'main' / sub: / procedure             -> 17.1      (fell through, no call)
+    /// ```
+    ///
+    /// The second and third together are why this is cleared per instruction
+    /// *kind* rather than at the label the call jumped to, and the fourth is
+    /// why [`entered_by_call`] is a separate field: a body's text cannot say
+    /// whether its `PROCEDURE` is reachable, because the same instruction is
+    /// legal when called and not when fallen into.
+    ///
+    /// `run_activation` is the only writer, and it clears this **before**
+    /// stepping rather than after -- measured, `sub: interpret "procedure"`
+    /// is 17.1, so a fragment does not inherit its host clause's permission.
+    /// `Interp::procedure_permitted` carries the value across the one step
+    /// that is allowed to use it.
+    ///
+    /// [`entered_by_call`]: Activation::entered_by_call
+    pub(crate) first_instruction_pending: bool,
     pub(crate) pc: usize,
     /// This activation's own `NUMERIC DIGITS`/`FUZZ`/`FORM`.
     ///
@@ -167,6 +222,9 @@ impl Activation {
             plan,
             extra: HashMap::new(),
             frame,
+            owns_frame: true,
+            entered_by_call: false,
+            first_instruction_pending: true,
             pc: 0,
             settings: Settings::default(),
             trace_mode: TraceMode::OFF,
@@ -187,9 +245,14 @@ impl Activation {
     /// own fields are then simply dropped with its frame.
     ///
     /// `frame` is the caller's own `SlotFrame` for a callee with no
-    /// `PROCEDURE` (D9r's shared pool, the default this task implements), so
-    /// this constructor does not decide the pool -- its caller does, and
-    /// Task 5's `PROCEDURE` is what will ever pass a different one.
+    /// `PROCEDURE` (D9r's shared pool, the default Task 3 implemented), so
+    /// this constructor does not decide the pool -- and, since Task 5, it
+    /// never does: the callee is always born sharing, and its `PROCEDURE`
+    /// arm is what swaps in a frame of its own if it has one. Nothing here
+    /// inspects the callee's first instruction, because whether that
+    /// instruction is a legal `PROCEDURE` is not knowable from the body's
+    /// text (`first_instruction_pending`'s own doc has the four measured
+    /// shapes).
     pub(crate) fn nested(
         program: Rc<Program>,
         body: Option<usize>,
@@ -205,6 +268,9 @@ impl Activation {
             plan,
             extra: HashMap::new(),
             frame,
+            owns_frame: false,
+            entered_by_call: true,
+            first_instruction_pending: true,
             pc,
             settings,
             trace_mode,

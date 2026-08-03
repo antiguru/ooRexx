@@ -1,0 +1,77 @@
+count 76
+/* USE ARG, USE STRICT ARG and the variable-reference argument (4b Task 5).   */
+/*                                                                           */
+/* What each block would print if the implementation were wrong:              */
+/*                                                                           */
+/*   extra     -- USE ARG takes as many arguments as it has targets and       */
+/*                ignores the rest; a version that raised on the surplus      */
+/*                would not reach the SAY at all.                            */
+/*   omitted   -- an omitted position holds its place. Closing the list up    */
+/*                would bind R to 3 and leave Q unset, printing "[1] [3]      */
+/*                [R]" instead.                                              */
+/*   dropped   -- a target with no argument and no default is DROPPED, not    */
+/*                left alone. PRESET is set in the caller and the callee      */
+/*                shares its pool (no PROCEDURE), so an implementation that   */
+/*                merely skips an absent target prints "preset-value" where   */
+/*                the oracle prints the derived name. A target whose prior    */
+/*                value happened to equal its own name could not show this.   */
+/*   default   -- a default fills an absent position, and satisfies STRICT's  */
+/*                own minimum: the strict block below supplies one argument   */
+/*                for two targets and must not raise 40.3.                   */
+/*   alias     -- >PREF passes the caller's variable rather than its value,   */
+/*                so the callee's write is visible in the caller. Copying     */
+/*                the value instead prints "before-alias" afterwards.        */
+/*   decay     -- >PREF in an ordinary expression position is worth the      */
+/*                referenced variable's value, not a reference object.       */
+/*                It has to stand alone after SAY: `say 'text' >pref` is a   */
+/*                comparison, because a `>` that follows a complete term is  */
+/*                the operator and only a leading one builds a reference.    */
+
+call show 1, 2, 3
+call omitted 1,,3
+
+preset = 'preset-value'
+call dropped 1
+say 'dropped:' preset
+
+call defaulted 1
+call strictly 1
+
+pref = 'before-alias'
+call aliasing >pref
+say 'alias:' pref
+say >pref
+exit
+
+show: procedure
+use arg p
+say 'extra:' '['p']'
+return
+
+omitted: procedure
+use arg p, q, r
+say 'omitted:' '['p']' '['q']' '['r']'
+return
+
+/* No PROCEDURE on purpose: the caller's PRESET must be reachable here for  */
+/* the drop to be observable from outside the routine.                      */
+dropped:
+use arg p, preset
+say 'inside:' '['preset']'
+return
+
+defaulted: procedure
+use arg p, q = 'filled-in'
+say 'default:' '['p']' '['q']'
+return
+
+strictly: procedure
+use strict arg p, q = 'strict-default'
+say 'strict:' '['p']' '['q']'
+return
+
+aliasing: procedure
+use arg >target
+say 'callee sees:' target
+target = 'set-through-alias'
+return

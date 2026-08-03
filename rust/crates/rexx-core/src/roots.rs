@@ -27,6 +27,20 @@ pub struct SlotFrame {
     depth: usize,
 }
 
+/// One slot's absolute position in the arena, with any alias already
+/// followed: what `PROCEDURE EXPOSE` and `USE ARG >name` bind a callee's
+/// slot *to*.
+///
+/// A newtype rather than a bare `usize` because the two are not
+/// interchangeable at a call site: every other index in this file is
+/// relative to a `SlotFrame`, and an absolute one passed where a relative
+/// one belongs addresses a real slot in some other activation's range
+/// rather than failing. Only [`RootSet::slot_ref`] produces one, and it
+/// chases before returning, so a `SlotRef` is by construction a final
+/// destination and never itself an alias.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct SlotRef(usize);
+
 /// Everything the collector starts from.
 ///
 /// The C++ implementation needs `ProtectedObject` at every allocation-crossing
@@ -44,6 +58,34 @@ pub struct RootSet {
     /// a slot must be able to say "no value" without that colliding with
     /// `ObjRef::NIL`, which is itself a legal Rexx value (`x = .nil`).
     slots: Vec<Option<ObjRef>>,
+    /// Exactly parallel to `slots`: `Some(target)` at absolute position `p`
+    /// means position `p` is an **alias** for absolute position `target`,
+    /// and every read and write addressed to `p` is served by `target`
+    /// instead. `None` is the ordinary case, a slot that is its own storage.
+    ///
+    /// This is where `PROCEDURE EXPOSE` lives (4b's Task 5). A `PROCEDURE`
+    /// callee gets a frame of its own, so its variables are isolated; an
+    /// exposed name's slot in that frame is aliased to the entry it was
+    /// exposed *from*, so reads and writes through it reach the other
+    /// activation's storage. `USE ARG >name` binds one slot the same way.
+    ///
+    /// **A parallel vector rather than a per-frame map**, because the
+    /// resolution is on the hot path -- variable lookup is 8.1%/32.2% of
+    /// runtime -- and this shape costs one indexed load and one branch with
+    /// no hashing and no second bounds regime. It is a `Vec<Option<usize>>`
+    /// and not a bitset-plus-one-target-frame, and that is measured rather
+    /// than a preference: one `PROCEDURE` can expose two names that resolve
+    /// to two *different* frames. Measured on the oracle, `a` calling `b:
+    /// procedure expose n` calling `c: procedure expose n m`, with `c`
+    /// writing both -- `b` sees both writes, `a` sees only `n`'s, because
+    /// `m` was `b`'s own local and `n` was chased through `b`'s alias to
+    /// `a`. A single target frame per callee cannot represent that pair.
+    ///
+    /// **Aliases are recorded per slot and already chased** ([`SlotRef`]),
+    /// so resolution here follows exactly one link and never loops. The
+    /// chase happens once, at bind time, where the intermediate frame is
+    /// still addressable.
+    aliases: Vec<Option<usize>>,
     /// The starting offset of every currently pushed frame, in push order.
     /// Its length is also every live frame's `depth` plus one, which is how
     /// `grow_slots` and `pop_slots` recognise the top frame.
@@ -56,6 +98,7 @@ impl RootSet {
             globals: Vec::new(),
             temps: Vec::new(),
             slots: Vec::new(),
+            aliases: Vec::new(),
             frame_starts: Vec::new(),
         }
     }
@@ -123,9 +166,54 @@ impl RootSet {
     pub fn push_slots(&mut self, initial_len: usize) -> SlotFrame {
         let start = self.slots.len();
         self.slots.resize(start + initial_len, None);
+        self.aliases.resize(start + initial_len, None);
         let depth = self.frame_starts.len();
         self.frame_starts.push(start);
         SlotFrame { start, depth }
+    }
+
+    /// How many slot frames are currently open.
+    ///
+    /// **For asserting that frames are released, and nothing else.** A
+    /// `PROCEDURE` callee allocates a frame and `resolve_and_run_call`
+    /// releases it on both the ordinary and the error path; a missing
+    /// release is invisible in a program's output -- the run stays correct
+    /// and simply holds one frame per call forever, which `do 100000; call
+    /// sub; end` turns into 100,000 rooted frames. This is what lets a test
+    /// see that directly instead of inferring it.
+    ///
+    /// Counts frames rather than slots on purpose. A slot count also moves
+    /// for reasons that are not leaks -- the first `CALL` in a program that
+    /// never writes `RESULT` grows the top frame by one to hold it -- so a
+    /// test written against slots has to model those too, and gets a
+    /// different baseline on the ordinary and the error path because the
+    /// error path never reaches the `RESULT` write. The frame count has no
+    /// such confounder: it is one per live activation-with-a-pool, whatever
+    /// happened inside them.
+    ///
+    /// Not a capacity or a budget, exactly like `temps_len` beside it.
+    pub fn live_frames(&self) -> usize {
+        self.frame_starts.len()
+    }
+
+    /// How many slots `frame` currently holds, its own growth included.
+    ///
+    /// What a `PROCEDURE` callee's frame is sized from: the exposed names
+    /// were resolved to indices in the *caller's* frame, so the callee's
+    /// frame has to be at least as long for those same indices to address
+    /// anything at all. Sizing it from the plan alone would be one slot
+    /// short for every name the caller grew at run time.
+    ///
+    /// A frame ends where the next one begins, and the top frame ends at
+    /// the end of the arena -- which is the same fact `grow_slots` relies
+    /// on, read here instead of assumed.
+    pub fn frame_len(&self, frame: SlotFrame) -> usize {
+        let end = self
+            .frame_starts
+            .get(frame.depth + 1)
+            .copied()
+            .unwrap_or(self.slots.len());
+        end - frame.start
     }
 
     /// Closes `frame`, releasing its slots. Frames nest like any stack, so
@@ -139,16 +227,62 @@ impl RootSet {
         );
         self.frame_starts.pop();
         self.slots.truncate(frame.start);
+        // Truncated together with `slots`, never separately: the two are
+        // parallel by construction, and an `aliases` left longer would give
+        // the *next* frame pushed at this offset a set of stale redirects
+        // pointing into a dead activation's storage.
+        self.aliases.truncate(frame.start);
+    }
+
+    /// The absolute position slot `index` of `frame` finally resolves to.
+    ///
+    /// The only producer of a [`SlotRef`], and it chases: if the slot is
+    /// itself an alias, the answer is what it aliases, so the result is
+    /// always a final destination. That single step is what makes exposure
+    /// **transitive** -- measured on the oracle, `a` exposing `n` to `b` and
+    /// `b` exposing the same `n` to `c` leaves `c`'s write visible in `a`,
+    /// which only happens if binding `c` resolves through `b`'s alias to
+    /// `a`'s storage rather than stopping at `b`'s frame.
+    ///
+    /// One step suffices for all depths precisely because every alias this
+    /// type records was produced from a `SlotRef` and so was chased when it
+    /// was made; there is no chain here to walk, by induction on the order
+    /// the frames were pushed.
+    pub fn slot_ref(&self, frame: SlotFrame, index: usize) -> SlotRef {
+        SlotRef(self.resolve(frame, index))
+    }
+
+    /// Makes slot `index` of `frame` an alias for `target`: every later
+    /// read and write addressed to it is served by `target`'s storage
+    /// instead of its own.
+    ///
+    /// `PROCEDURE EXPOSE` and `USE ARG >name` are the two callers. The
+    /// aliased slot's own storage stops being reachable, and stays `None`
+    /// -- which is also what keeps `iter` honest, since an alias therefore
+    /// contributes no root of its own and the target contributes exactly
+    /// one.
+    pub fn alias_slot(&mut self, frame: SlotFrame, index: usize, target: SlotRef) {
+        self.aliases[frame.start + index] = Some(target.0);
+    }
+
+    /// `frame`'s slot `index` as an absolute position, following an alias if
+    /// one is in force. The one place the redirect is applied, so that
+    /// `slot`/`set_slot`/`clear_slot` cannot come apart on it.
+    fn resolve(&self, frame: SlotFrame, index: usize) -> usize {
+        let position = frame.start + index;
+        // `unwrap_or` and not a loop: see `slot_ref`.
+        self.aliases[position].unwrap_or(position)
     }
 
     /// Reads slot `index` within `frame`: `None` for an unassigned or
     /// `DROP`ped variable, which is a legal outcome and not an error.
     pub fn slot(&self, frame: SlotFrame, index: usize) -> Option<ObjRef> {
-        self.slots[frame.start + index]
+        self.slots[self.resolve(frame, index)]
     }
 
     pub fn set_slot(&mut self, frame: SlotFrame, index: usize, value: ObjRef) {
-        self.slots[frame.start + index] = Some(value);
+        let position = self.resolve(frame, index);
+        self.slots[position] = Some(value);
     }
 
     /// Returns slot `index` within `frame` to the unset state, which is what
@@ -191,7 +325,8 @@ impl RootSet {
     /// because `DROP` on a never-assigned variable is legal Rexx and does
     /// nothing.
     pub fn clear_slot(&mut self, frame: SlotFrame, index: usize) {
-        self.slots[frame.start + index] = None;
+        let position = self.resolve(frame, index);
+        self.slots[position] = None;
     }
 
     /// Grows `frame` by one slot for a name its plan never saw -- `DROP (v)`
@@ -199,29 +334,49 @@ impl RootSet {
     /// say x` prints `X`, so a name resolving to no existing slot must be
     /// able to allocate one. Returns the new slot's index within `frame`.
     ///
-    /// Only the top frame may grow. **This is a 4a invariant, not a general
-    /// one, and 4b must revisit it before it has more than one live frame.**
-    /// It holds in 4a because 4a has exactly one frame, and for `INTERPRET`,
+    /// Only the top frame may grow. **4b made the decision this invariant
+    /// was waiting on, and the invariant stands unchanged.**
+    ///
+    /// It held in 4a because 4a has exactly one frame, and for `INTERPRET`,
     /// which runs inside the activation that created it rather than pushing
-    /// its own. It is already false once a call can be in progress: measured,
-    /// `sub: procedure expose zzz` with `zzz = 5` set in the callee makes the
-    /// *caller* print 9 after `return`, so a callee write lands in the
-    /// caller's pool while the callee's frame sits on top of it. 4b either
-    /// grows a non-top frame or binds an exposed name to a slot in the
-    /// caller's frame at call time. Deciding which is 4b's. A panic here is
-    /// the right shape until that decision is made: a silent wrong answer
-    /// would be a variable landing in another routine's pool, discovered by
-    /// chasing a wrong result instead of a message that already says why.
+    /// its own. The case that looked like it would break it is a callee
+    /// writing into its caller's pool -- measured, `sub: procedure expose
+    /// zzz` with `zzz = 5` set in the callee makes the *caller* print 5
+    /// after `return`, while the callee's frame sits on top of the caller's.
+    /// The two answers open to 4b were to grow a non-top frame or to bind
+    /// the exposed name to a slot in the caller's frame; **4b's Task 5 took
+    /// the second**, and neither half of it needs a non-top grow:
+    ///
+    /// * An exposed name is bound by [`alias_slot`], which writes into the
+    ///   *callee's* own frame and only reads the target's position. Nothing
+    ///   is allocated in the caller at all.
+    /// * A name the plan never saw -- a computed `expose (v)` naming a
+    ///   symbol that appears in no instruction -- is resolved **before** the
+    ///   callee's frame is pushed, while the caller's frame is still the top
+    ///   one, so the grow it may need is a top-frame grow. That ordering is
+    ///   the reason `PROCEDURE` allocates the callee's frame itself instead
+    ///   of `CALL` allocating it in advance.
+    ///
+    /// So a panic here is not a placeholder awaiting a later relaxation: it
+    /// is the check that the ordering above is still being observed. A
+    /// silent wrong answer would be a variable landing in another routine's
+    /// pool, discovered by chasing a wrong result instead of a message that
+    /// already says why.
+    ///
+    /// [`alias_slot`]: RootSet::alias_slot
     pub fn grow_slots(&mut self, frame: SlotFrame) -> usize {
         assert_eq!(
             self.frame_starts.len(),
             frame.depth + 1,
             "grow_slots on a frame that is not the top one (a 4a invariant, \
-             see grow_slots's doc comment: 4b must bind exposed names \
-             differently rather than relax this)"
+             kept: 4b binds exposed names with alias_slot and resolves a \
+             computed expose (v) before the callee's frame is pushed, so \
+             neither needs this -- see grow_slots's doc comment)"
         );
         let index = self.slots.len() - frame.start;
         self.slots.push(None);
+        // Kept parallel; a new slot is its own storage, never an alias.
+        self.aliases.push(None);
         index
     }
 
@@ -229,6 +384,15 @@ impl RootSet {
     /// active frame -- a popped frame's slots are already gone, truncated
     /// out of `slots` by `pop_slots`, so nothing here needs to filter them
     /// out again by frame.
+    ///
+    /// **Aliased slots need no filtering either, and that is a property of
+    /// how they are written rather than of this loop.** A write through an
+    /// alias lands in the target's storage (`set_slot` resolves first), so
+    /// an aliasing slot's own entry stays `None` for its whole life and the
+    /// `filter_map` drops it. The exposed value is therefore yielded exactly
+    /// once, from the frame that really holds it -- not twice, which would
+    /// merely be wasted work, and not zero times, which would collect a live
+    /// object.
     pub fn iter(&self) -> impl Iterator<Item = ObjRef> + '_ {
         self.globals
             .iter()

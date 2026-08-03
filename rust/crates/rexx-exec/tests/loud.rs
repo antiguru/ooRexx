@@ -93,22 +93,25 @@
 //! assumed, and (b) reaches that instruction or expression through ordinary
 //! straight-line execution with no preceding label, call or condition to
 //! satisfy. Some out-of-scope instructions are conventionally written after
-//! a label reached by `CALL` (`PROCEDURE`, `EXPOSE`, `GUARD`, `REPLY`,
-//! `FORWARD`) -- nothing in the grammar requires that context, so each is
-//! written as a bare top-level clause instead, which also avoids depending on
-//! `CALL` (itself out of scope) ever succeeding.
+//! a label reached by `CALL` (`EXPOSE`, `GUARD`, `REPLY`, `FORWARD`) --
+//! nothing in the grammar requires that context, so each is written as a
+//! bare top-level clause instead, which also avoids depending on `CALL`
+//! (itself out of scope) ever succeeding. `PROCEDURE` was on that list until
+//! 4b's Task 5 moved it in scope and deleted its row; a bare top-level
+//! `procedure` is now the oracle's error 17.1, not a gap.
 //!
-//! **`ExprKind::VariableReference` (`>x`/`<x`) needs no `CALL` at all --
-//! `say >x` reaches the arm directly.** An earlier version of this
-//! paragraph claimed the opposite (that a call or message argument list is
-//! `VariableReference`'s only legal position, citing `ast.rs`'s 20.930),
-//! and that was wrong: 20.930 is about which *token* may follow `>`/`<`
-//! (a variable or a stem, not a literal or a number, `expr.rs`'s own
-//! `parseVariableReferenceTerm` doc), not about which instruction context
-//! the whole reference may sit in. `eval.rs`'s own module doc already says
-//! `VariableReference` fails loudly on *any* evaluation. Measured: `say
-//! >x\n` gives `rexx-exec: a variable reference is not implemented (4b)`,
-//! with no `CALL` anywhere in the program.
+//! **`ExprKind::VariableReference` (`>x`/`<x`) also has no row since Task
+//! 5.** The fact this paragraph existed to record is still worth keeping,
+//! because it was got wrong once: `ast.rs`'s 20.930 is about which *token*
+//! may follow `>`/`<` (a variable or a stem, not a literal or a number,
+//! `expr.rs`'s own `parseVariableReferenceTerm` doc), **not** about which
+//! instruction context the whole reference may sit in -- so `say >x` is
+//! legal on its own and needs no `CALL` around it. What has changed is the
+//! outcome: `say >x` now prints the referenced variable's value, measured
+//! against the oracle, where it used to answer `rexx-exec: a variable
+//! reference is not implemented (4b)`. One position where `>` is *not* a
+//! reference, also measured: `say 'text' >x` is a comparison, because a `>`
+//! following a complete term is the operator.
 
 use std::path::Path;
 
@@ -220,21 +223,13 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
         source: "call off error\n",
         category: Category::Instruction,
     },
-    Witness {
-        tag: "Procedure",
-        owner: "4b",
-        // Only legal as an internal routine's first instruction, but nothing
-        // stops straight-line execution from reaching it: the label above it
-        // is a traced no-op and control falls through.
-        source: "sub: procedure\n",
-        category: Category::Instruction,
-    },
-    Witness {
-        tag: "Use",
-        owner: "4b",
-        source: "use arg x\n",
-        category: Category::Instruction,
-    },
+    // **No `Procedure` or `Use` row since 4b's Task 5.** Both moved into
+    // scope (`owners.rs`'s own `INSTRUCTION_TAGS`). The `Procedure` row's
+    // own witness, `sub: procedure` reached by falling through the label,
+    // is now the oracle's error 17.1 at rc 239 rather than a loud gap --
+    // measured, and `exec_procedure`'s doc has the four-shape table -- so
+    // keeping the row would assert a loud failure that correctly no longer
+    // happens.
     // ---- `Signal`, arm-grained (Step 2) for `Trap` only: `Value`/`Label`
     // both move in scope in the same task (6), so they stay one row; `Trap`
     // (`SIGNAL ON`/`SIGNAL OFF`) does not move until Task 7 -- see the
@@ -369,14 +364,6 @@ const EXPR_WITNESSES: &[Witness] = &[
         source: "say (1, 2)\n",
         category: Category::Expr,
     },
-    Witness {
-        tag: "VariableReference",
-        owner: "4b",
-        // `say >x` reaches this arm directly -- see the module doc's
-        // corrected note. No `CALL` needed.
-        source: "say >x\n",
-        category: Category::Expr,
-    },
 ];
 
 /// Confirms `path`'s program actually constructs `witness.tag` in the
@@ -478,12 +465,12 @@ fn walk_exprs<'a>(kind: &'a InstructionKind, f: &mut impl FnMut(&'a rexx_parse::
 fn assert_witness_set_is_complete() {
     // `flat_map(expand_for_witnesses)`, not a bare `.map`: `Call` and
     // `Signal` each expand to more than one expected tag (Step 2, the
-    // module doc's "Arm-grained ownership"). 18 coarse phase-owned
-    // `InstructionKind` tags since 4b's Task 3 moved `Return` in scope (19
-    // after Task 1's `Interpret`, 20 at the 4a gate); `Call`'s one row
-    // becomes two (`Qualified`/`Trap`, its other two arms being Task 3's)
-    // and `Signal`'s one becomes two (`Signal`/`Signal::Trap`), net +1 +1,
-    // so 20 expected witness tags.
+    // module doc's "Arm-grained ownership"). 16 coarse phase-owned
+    // `InstructionKind` tags since 4b's Task 5 moved `Procedure` and `Use`
+    // in scope (18 after Task 3's `Return`, 19 after Task 1's `Interpret`,
+    // 20 at the 4a gate); `Call`'s one row becomes two (`Qualified`/`Trap`,
+    // its other two arms being Task 3's) and `Signal`'s one becomes two
+    // (`Signal`/`Signal::Trap`), net +1 +1, so 18 expected witness tags.
     let expected_instructions: Vec<&str> = INSTRUCTION_TAGS
         .iter()
         .filter(|(_, o)| matches!(o, Owner::Phase(_)))
@@ -499,7 +486,7 @@ fn assert_witness_set_is_complete() {
          InstructionKind variant (per arm, for Call/Signal), no more and no \
          fewer"
     );
-    assert_eq!(expected_instructions.len(), 20);
+    assert_eq!(expected_instructions.len(), 18);
 
     let expected_exprs: Vec<&str> = EXPR_TAGS
         .iter()
@@ -515,30 +502,33 @@ fn assert_witness_set_is_complete() {
         "EXPR_WITNESSES must have exactly one entry per out-of-scope ExprKind \
          variant, no more and no fewer"
     );
-    // 5 since 4b's Task 4 moved `ExprKind::Call` in scope and deleted its
-    // row (6 before it).
-    assert_eq!(expected_exprs.len(), 5);
+    // 4 since 4b's Task 5 moved `ExprKind::VariableReference` in scope and
+    // deleted its row (5 after Task 4 did the same for `ExprKind::Call`, 6
+    // before that).
+    assert_eq!(expected_exprs.len(), 4);
 }
 
 #[test]
 fn in_scope_counts_match_the_audited_split() {
-    // 22 since 4b's Task 3 moved `Return` in scope, 21 after Task 1 moved
-    // `Interpret`; see `owners.rs`'s own
-    // `variant_counts_match_the_audited_split` for the full split.
+    // 24 since 4b's Task 5 moved `Procedure` and `Use` in scope, 22 after
+    // Task 3 moved `Return` and 21 after Task 1 moved `Interpret`; see
+    // `owners.rs`'s own `variant_counts_match_the_audited_split` for the
+    // full split.
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        22
+        24
     );
-    // 10 since 4b's Task 4 moved `ExprKind::Call` in scope (9 before it).
+    // 11 since 4b's Task 5 moved `ExprKind::VariableReference` in scope (10
+    // after Task 4 moved `ExprKind::Call`, 9 before that).
     assert_eq!(
         EXPR_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        10
+        11
     );
 }
 
