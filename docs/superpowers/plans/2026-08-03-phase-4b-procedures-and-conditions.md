@@ -130,7 +130,22 @@ delta = 2 for a CALL or function-call activation
 delta = 0 for an INTERPRET fragment
 ```
 
-The oracle keeps one running counter that blocks and activations both push onto, so a callee inherits the caller's *whole* current indent, lexical part included. The base **cannot be computed from the depth counter** and must be carried on the site stack, taken from the calling clause's own printed indent. The architectural half survives: the base is still added outside `static_indent`, and `static_indent` stays a pure function of the flat instruction list.
+The oracle keeps one running counter that blocks and activations both push onto, so a callee inherits the caller's *whole* current indent, lexical part included. The base **cannot be computed from the depth counter** and must be carried on the site stack, taken from the calling clause's own printed indent.
+
+**`static_indent`'s purity is our model, not the oracle's behaviour, and the difference is measurable.** Earlier revisions of this plan said "`static_indent` stays a pure function of the flat instruction list" as though that were an oracle-verified property. It is a property of *our* implementation only. Measured 2026-08-03, with no `INTERPRET` and no `CALL` anywhere:
+
+```rexx
+do
+do jj = 1 to 1
+nop
+end
+say 1/0
+end
+```
+
+The oracle prints `5 *-* say 1/0` at indent **0**; we print it at **2**. A controlled or repeat `DO` that terminates by **exhausting its count** decrements the oracle's running counter for every subsequent clause at that level. Measured, `do jj = 1 to 1` and `do 2` do it; `do forever`+`leave`, `do while 0 = 1`, a zero-trip `do jj = 1 to 0`, `if`, and `select` do not.
+
+This is a **pre-existing 4a divergence**, not 4b's to fix, and it is the same re-tested-pass mechanism as I31's two missing `>>>` lines -- a second symptom of one cause. But do not write, or leave standing, any statement that the fragment or activation base is the enclosing clause's printed indent *exactly*: that is true except after an exhausted controlled or repeat `DO`. `static_indent`'s own doc comment states the contrary as its central design decision and is wrong; the existing test that looks for this runs at top level, where the oracle's counter is already clamped at 0 and the two models agree.
 
 **The clause echo saturates at 40 columns, and this is a live 4a defect.** Measured on the oracle with nested `DO`s and no calls at all: depth 18 gives 36, depth 19 gives 38, depth 20 gives 40, and depths 21 and 25 give 40. Our binary is uncapped -- at 25 nested `DO`s the oracle prints the echo at 40 and `rexx-run` prints it at 50, verified by `diff` with the echo as the only differing line. **This ships today**; 4a's gate passed because none of the 29 corpus programs nests past 20.
 
@@ -383,7 +398,11 @@ Then point the harnesses at the union. Task 0 made `read_subset` take a list, bu
 **Interfaces:**
 - Produces: `Raised` carries a stack of sites, innermost first, each entry carrying its own line number and its own **absolute printed indent**.
 - Consumes: `static_indent` from `run.rs`. Its signature does not change and the clamp does not go inside it.
-- Consumes: **`Interp::indent_offset` (`src/lib.rs:888`), which already exists.** 4a's F-EX1 work added it and the call sites already read `static_indent(...) + self.indent_offset`. `run.rs:1045` carries a "**Do not clear `indent_offset` here**" note with its reasoning. The activation base this task adds is the same quantity, so extend that mechanism rather than introducing a parallel one, and read its doc comment before touching it.
+- Consumes: **`Interp::indent_offset` (`src/lib.rs:888`), which already exists -- but does NOT share it.** 4a's F-EX1 work added it and the call sites already read `static_indent(...) + self.indent_offset`.
+
+  **An earlier revision of this plan told Task 2 to extend that field rather than introduce a parallel one. That instruction was wrong and it caused a live divergence.** `indent_offset` is a *transient escape elevation* that only ever goes `0 -> 4 -> 0`, and two sites write it **absolutely**: `run_otherwise` sets it to `0` and the absorbed `WhenCase` false escape sets it to `4`. An activation or fragment base is a *long-lived* quantity, so both writes destroy it -- measured, a `SELECT` with an `OTHERWISE` inside an `INTERPRET` loses two spaces on every clause after the `OTHERWISE`.
+
+  The activation base gets **its own field**, `Interp::activation_indent`, added alongside `indent_offset` at every site that adds `indent_offset` today. That keeps the escape elevation's absolute set and reset correct, and it is the field Task 3 needs anyway. Two existing quantities, two fields; the lesson is that "a field with a similar name already exists" is not the same as "it means the same thing".
 
 **Why:** every raise inside a routine differs from the oracle on stderr until this exists, which is most of what a 4b differential corpus contains. Building it after `CALL` means every corpus program written in between is unverifiable.
 
