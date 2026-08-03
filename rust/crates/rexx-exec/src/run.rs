@@ -1827,11 +1827,12 @@ impl Interp {
             // oracle's own `RexxInstructionQueue::execute` shares `SAY`'s
             // `RexxInstructionExpression::evaluateStringExpression`
             // (`QueueInstruction.cpp:69`), differing only in which end of
-            // the queue the value lands on. See `queue.rs`'s own module doc
-            // for the measured LIFO (`PUSH`)/FIFO (`QUEUE`) order and why
-            // nothing here reads a line back: `PULL`, `PARSE PULL` and
-            // `QUEUED()` are all 4c's.
-            InstructionKind::Push { expression } => {
+            // the queue the value lands on, decided below by which variant
+            // matched (review round 1's M4: one arm, not two copies that can
+            // drift). See `queue.rs`'s own module doc for the measured LIFO
+            // (`PUSH`)/FIFO (`QUEUE`) order and why nothing here reads a
+            // line back: `PULL`, `PARSE PULL` and `QUEUED()` are all 4c's.
+            InstructionKind::Push { expression } | InstructionKind::Queue { expression } => {
                 let line = match expression {
                     Some(expression) => {
                         let value = self.eval(code, expression)?;
@@ -1843,20 +1844,11 @@ impl Interp {
                     None => Vec::new(),
                 };
                 self.trace_result(self.clause_state.current_value_indent, &line);
-                self.queue.push(line);
-                Ok(Flow::Next)
-            }
-            InstructionKind::Queue { expression } => {
-                let line = match expression {
-                    Some(expression) => {
-                        let value = self.eval(code, expression)?;
-                        self.roots.push_temp(value);
-                        self.to_text(value).to_vec()
-                    }
-                    None => Vec::new(),
-                };
-                self.trace_result(self.clause_state.current_value_indent, &line);
-                self.queue.queue(line);
+                if matches!(instruction.kind, InstructionKind::Push { .. }) {
+                    self.queue.push(line);
+                } else {
+                    self.queue.queue(line);
+                }
                 Ok(Flow::Next)
             }
 

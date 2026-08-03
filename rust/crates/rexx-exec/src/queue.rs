@@ -16,10 +16,19 @@
 //! **Nothing in 4b reads this queue.** `PULL`, `PARSE PULL` and `QUEUED()`
 //! are all 4c's, so this module has no removal method yet: adding one before
 //! anything calls it would be speculative API nobody has measured a caller
-//! for. The type's own unit tests below read the stored order through its
-//! private field instead, the same way `stem.rs`'s tests reach into
+//! for. This module's own tests read the stored order back through the
+//! private `lines` field instead, the same way `stem.rs`'s tests reach into
 //! `Body::Stem` directly rather than through a round trip nothing wires up
-//! yet.
+//! yet -- both the type-level tests below, which construct a `Queue`
+//! directly, and
+//! `tests::push_and_queue_actually_write_into_the_running_interpreters_queue`,
+//! which runs a program through a real `Interp` and reads `Interp::queue`
+//! back the same way. The second exists because the first two cannot see
+//! whether `run.rs`'s `step` arms ever call `Queue::push`/`Queue::queue` at
+//! all -- review round 1's I3 found that deleting just those two call sites
+//! (keeping the evaluation and the trace) left every other gate green,
+//! because nothing ran a program through the interpreter and then read the
+//! queue back.
 //!
 //! # LIFO and FIFO, and which end is which
 //!
@@ -55,6 +64,17 @@
 //! `B` only through `PULL`'s own transform, not because `queue.rs` folded
 //! their case on the way in.
 //!
+//! **The "head is what `PULL` removes" half of that is an assumption
+//! nothing here enforces (review round 1, M5).** `Queue` has no removal
+//! method (the paragraph above explains why not yet), so this file's own
+//! unit tests can only assert the internal order is `c`, `a`, `b`, not that
+//! a future `PULL` will actually consume it front-first. 4c's own `PULL`
+//! must pop the *front* to keep that order matching the oracle's `C`, `A`,
+//! `B`; a `pop_back` implementation would leave every test in this file
+//! green while printing `B`, `A`, `C` instead. Whoever implements `PULL`
+//! should treat this paragraph as the guard, not re-derive the premise from
+//! the measurement above.
+//!
 //! # Why not cross-process
 //!
 //! The oracle's own queue is `rxapi`-backed and, per the design's scoping
@@ -78,14 +98,17 @@
 
 use std::collections::VecDeque;
 
-/// One `Interp`'s queue: every line `PUSH`/`QUEUE` has written, oldest
-/// `PULL` target at the front. `Vec<u8>` per line rather than an `ObjRef`,
-/// matching `Interp::out`/`Interp::trace`'s own sinks: `PUSH`/`QUEUE` store
-/// the already-rendered string form (`evaluateStringExpression`'s
-/// `requestString`, mirrored by `run.rs`'s arms calling `Interp::to_text`
-/// the same way `SAY`'s own arm does), not a heap value, so there is nothing
-/// here for the collector to trace and no `ObjRef` to keep rooted between a
-/// write and whatever later `PULL` reads it back.
+/// One `Interp`'s queue: every line `PUSH`/`QUEUE` has written, the head
+/// being the next line `PULL` will remove -- see the module doc's own
+/// "LIFO and FIFO" section for which end that is for each keyword, and the
+/// paragraph after it for why that is a premise this type does not enforce.
+/// `Vec<u8>` per line rather than an `ObjRef`, matching `Interp::out`/
+/// `Interp::trace`'s own sinks: `PUSH`/`QUEUE` store the already-rendered
+/// string form (`evaluateStringExpression`'s `requestString`, mirrored by
+/// `run.rs`'s arms calling `Interp::to_text` the same way `SAY`'s own arm
+/// does), not a heap value, so there is nothing here for the collector to
+/// trace and no `ObjRef` to keep rooted between a write and whatever later
+/// `PULL` reads it back.
 pub(crate) struct Queue {
     lines: VecDeque<Vec<u8>>,
 }
@@ -113,17 +136,28 @@ impl Queue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::plan::{BodyKey, ProgramId};
+    use crate::{Activation, Interp};
+    use rexx_parse::{Program, parse_program};
+    use std::rc::Rc;
 
     /// The module doc's own 4c-shaped probe (`push "a"`, `queue "b"`,
     /// `push "c"`), asserted against the queue type directly rather than
-    /// through the instruction loop -- `step`'s own `Push`/`Queue` arms
-    /// (`run.rs`) are exercised separately by the loud-witness removal in
-    /// `tests/loud.rs`, but nothing in 4b can observe *order* through the
-    /// executor, since `PULL` is 4c's. This is the whole of Task 8's
-    /// coverage for the property that would make a degenerate `Push | Queue
-    /// => Ok(Flow::Next)` wrong: deleting either `push_front` or
-    /// `push_back` above (collapsing both to the same end) or dropping the
-    /// argument entirely (an empty queue) both fail this assertion.
+    /// through the instruction loop.
+    ///
+    /// **What this pins, and what it does not (review round 1, I1/I2/M2
+    /// corrected this comment's earlier, wrong claim about the split).**
+    /// This test constructs a `Queue` and calls its methods directly, so it
+    /// can only ever prove `push_front`/`push_back` are wired to the right
+    /// keyword -- collapsing either to the other end, or dropping the
+    /// argument entirely, fails it. It says nothing about whether `run.rs`'s
+    /// `step` arms actually call these methods (that is
+    /// `push_and_queue_actually_write_into_the_running_interpreters_queue`,
+    /// below) or whether the expression reaching them was evaluated and
+    /// traced correctly (that is `corpus/lang/push_queue.rex`, under
+    /// `REXX_CORPUS_GATE`). `tests/loud.rs` proves neither: it runs a
+    /// program only for an *out-of-scope* variant, and `Push`/`Queue` moved
+    /// in scope this same task.
     #[test]
     fn interleaved_push_and_queue_match_the_oracle_order() {
         let mut queue = Queue::new();
@@ -155,6 +189,58 @@ mod tests {
         assert_eq!(
             queue.lines,
             VecDeque::from([b"a".to_vec(), b"b".to_vec(), b"c".to_vec()])
+        );
+    }
+
+    /// Pushes a fresh top-level activation for `program`, the minimal setup
+    /// `Interp::run` does. Copied rather than shared, matching every other
+    /// test module in this crate -- `run.rs`'s own copy of this same
+    /// function has why: `eval.rs`, `stem.rs` and `plan.rs` each keep their
+    /// own rather than exporting one for every caller to share.
+    fn activate(interp: &mut Interp, program: Program) -> Rc<Program> {
+        let program = Rc::new(program);
+        let id = ProgramId(interp.programs.len());
+        interp.programs.push(Rc::clone(&program));
+        let plan = interp.plan_for(
+            BodyKey {
+                program: id,
+                directive: None,
+            },
+            &program.main,
+            &program.symbols,
+        );
+        let frame = interp.roots.push_slots(plan.len());
+        let id = interp.next_activation_id();
+        interp
+            .activations
+            .push(Activation::new(id, Rc::clone(&program), plan, frame));
+        program
+    }
+
+    /// **I3 (review round 1): the reader `Queue`'s own tests above cannot
+    /// be.** Both tests above construct a `Queue` and call its methods
+    /// directly, so neither can see whether `step`'s `Push`/`Queue` arms
+    /// (`run.rs`) ever call `Queue::push`/`Queue::queue` at all. Measured:
+    /// deleting just those two call sites -- keeping the expression's
+    /// evaluation and its trace, discarding only the rendered line --
+    /// left `cargo test --workspace` at 978 passed / 0 failed and the
+    /// STRICT corpus at 39 of 39, because nothing ran a program through the
+    /// interpreter and then read `Interp::queue` back afterward. This test
+    /// is that reader: it runs the module doc's own 4c-shaped probe (minus
+    /// the three `PULL`s 4c has not implemented yet) through
+    /// `Interp::run_activation`, the same entry point `Interp::run` uses in
+    /// production, and inspects the queue afterward through the same
+    /// private field the type-level tests above use.
+    #[test]
+    fn push_and_queue_actually_write_into_the_running_interpreters_queue() {
+        let mut interp = Interp::new();
+        let program = parse_program(b"push \"a\"\nqueue \"b\"\npush \"c\"\n".to_vec())
+            .expect("test program parses");
+        activate(&mut interp, program);
+        interp.run_activation().expect("push/queue never fail");
+        assert_eq!(
+            interp.queue.lines,
+            VecDeque::from([b"c".to_vec(), b"a".to_vec(), b"b".to_vec()])
         );
     }
 }

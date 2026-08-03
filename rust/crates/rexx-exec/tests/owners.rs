@@ -183,11 +183,17 @@ tags!(expr_tag, EXPR_TAGS, ExprKind, {
     ExprKind::Binary { .. } => ("Binary", Owner::InScope),
     ExprKind::Logical(_) => ("Logical", Owner::InScope),
     // In scope since 4b's Task 4: unlike `InstructionKind::Call`, which
-    // keeps its `Owner::Phase("4b")` because `Call::Trap`/`Call::Qualified`
-    // are still loud, `ExprKind::Call`'s own `CallTarget` has exactly two
-    // forms and both are 4b's, so there is no later-phase arm left hiding
-    // inside it -- see `eval_call`'s own doc (`eval.rs`) for the resolution
-    // order a name still falls through to the loud `4c` fallback for.
+    // stays split -- `Owner::Phase("4b")` at the time this comment was
+    // written, because `Call::Trap`/`Call::Qualified` were both still loud;
+    // `Owner::Phase("Phase 5")` since Task 7 moved `Call::Trap` in scope,
+    // leaving only `Call::Qualified` loud (review round 1's M6 corrects
+    // this comment, which went stale the same way `loud.rs`'s own
+    // `INSTRUCTION_WITNESSES` doc did at the same task and for the same
+    // reason: an edit at line 129 below was not propagated here) --
+    // `ExprKind::Call`'s own `CallTarget` has exactly two forms and both are
+    // 4b's, so there is no later-phase arm left hiding inside it -- see
+    // `eval_call`'s own doc (`eval.rs`) for the resolution order a name
+    // still falls through to the loud `4c` fallback for.
     ExprKind::Call { .. } => ("Call", Owner::InScope),
     // ---- the five that still fail loudly; see coverage.rs's module doc's ownership section ----
     // In scope since 4b's Task 5: `>x`/`<x` evaluates to the referenced

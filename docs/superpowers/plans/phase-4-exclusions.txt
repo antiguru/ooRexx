@@ -324,9 +324,13 @@ in a test file's comment.
 KNOWN GAPS -- neither excluded nor deviated, just not closed yet
 ---------------------------------------------------------------
 
-Recorded here so they are not rediscovered as mysteries. Each is a real
-divergence with no owner assigned, which is a third status and should not be
-confused with either section above.
+Recorded here so they are not rediscovered as mysteries. Most rows are a real
+divergence with no owner assigned, a third status that should not be confused
+with either section above. One row (PUSH/QUEUE's queue storage) is not a
+divergence at all -- nothing is known to be wrong with it -- but an absence of
+differential coverage with the same property that earns a row here: a reader
+who does not already know about it has no way to find out from a green gate.
+That row says so explicitly where it appears.
 
 This section is pinned ASYMMETRICALLY, deliberately, and the asymmetry is the
 point. ADDING a row needs no amendment: recording a divergence you have just
@@ -759,39 +763,48 @@ above.
   TRACE claims interactivity it cannot deliver; failing loudly on `?` is the
   cheaper alternative the spec already sanctioned.
 
-  PUSH/QUEUE's own queue storage has no differential witness (4b Task 8,
-  I15). Every construct that can read the queue back -- PULL, PARSE PULL,
-  QUEUED() -- is 4c's, so no corpus program can distinguish a correct
-  PUSH/QUEUE from `Push | Queue => Ok(Flow::Next)`, a pure no-op: measured,
-  a program whose whole body is `push "X"` / `queue "Y"` gives empty
-  stdout, empty stderr, rc 0, whether the queue stores anything or not.
+  PUSH/QUEUE's own queue storage has no *differential* witness -- no
+  corpus program run against the oracle can distinguish a correct
+  implementation from a specific, narrower degenerate one (4b Task 8, I15).
+  Every construct that can read the queue back -- PULL, PARSE PULL,
+  QUEUED() -- is 4c's, so no corpus program can observe what the queue
+  actually stored; only what was written to it and how it traced.
+
+  THE BOUNDARY, MEASURED THREE WAYS (an earlier version of this row named
+  the wrong degenerate as the one that survives; review round 1 found that
+  version false by mutating the tree and is why this one is stated as three
+  separate, checked claims rather than one blanket sentence):
+
+  * `Push | Queue => Ok(Flow::Next)` (evaluate nothing, store nothing) --
+    CAUGHT, differentially. `REXX_CORPUS_GATE=1 cargo test -p rexx-exec
+    --test corpus` drops from 39 of 39 to 38 of 39: `lang/push_queue.rex`'s
+    `TRACE R` output no longer matches, because the expression is never
+    evaluated or traced.
+  * Evaluate and trace correctly, discard the rendered line (delete only
+    `run.rs`'s two `self.queue.push(line)`/`self.queue.queue(line)`
+    calls) -- NOT caught differentially: STRICT corpus stays at 39 of 39,
+    because no corpus program reads the queue back. This is the actual
+    gap the first version of this row misnamed, and it is what `queue.rs`'s
+    own `push_and_queue_actually_write_into_the_running_interpreters_queue`
+    test now catches (`cargo test --workspace` fails under this mutation).
+  * That third test is a unit test, not a differential one: it runs a
+    program through `Interp::run_activation` and reads `Interp::queue`
+    back, but compares against a constant this task measured from the
+    oracle once, not against a live oracle run. So the storage/wiring half
+    is covered in-crate; it is not covered *differentially*, which is what
+    "no differential witness" above precisely means.
 
   UNLIKE THE REST OF THIS SECTION, this is not a measured divergence from
   the oracle -- nothing is known to be wrong. It is recorded here anyway,
   per Task 8's own brief, because a reader who sees `PUSH`/`QUEUE` marked
-  in scope and a green gate would otherwise have no way to learn that the
-  differential harness cannot see the one thing PUSH/QUEUE actually do.
-
-  WHAT COVERAGE EXISTS INSTEAD. `lang/push_queue.rex` (new for this task,
-  `phase-4b.txt`) runs under TRACE R and differentially pins the half the
-  harness CAN reach: PUSH/QUEUE evaluate their expression, render it to
-  string form and trace the result exactly like SAY, and a bare PUSH/QUEUE
-  traces a null string rather than being skipped or erroring. `queue.rs`'s
-  own `#[cfg(test)] mod tests` (`rust/crates/rexx-exec/src/queue.rs`) is
-  where the storage order itself is pinned, against values measured from
-  the oracle with a 4c-shaped probe this crate cannot run end to end yet
-  (`push "a"; queue "b"; push "c"`, then three bare `PULL`s into
-  `v1`/`v2`/`v3`, each `SAY`n): the oracle prints `C`, `A`, `B` -- `PULL`
-  upcases what it reads -- so the queue's own order, before that
-  transform, is `c`, `a`, `b` (`PUSH` lands at the head/LIFO, `QUEUE` at
-  the tail/FIFO). That probe is not a corpus program and does not go in
-  the subset, by the brief's own instruction: it needs `PULL`, which does
-  not exist yet.
+  in scope and a green gate would otherwise have no way to learn that no
+  corpus program can observe the queue's own contents.
 
   CLOSES when 4c lands its first `PARSE PULL` (or `PULL`, or `QUEUED()`)
-  corpus program: that is the first point a differential run can actually
-  observe what this crate's queue stored, rather than only what was
-  written to it.
+  corpus program: that is the first point a *differential* run can observe
+  what this crate's queue stored, rather than only what was written to it
+  (the corpus's own reach today) or what an in-crate unit test asserts it
+  should be (`queue.rs`'s own reach today).
 
   THE CROSS-PROCESS CAVEAT, CORRECTED. The scoping document (I15,
   `2026-08-01-phase-4bc-scoping.md`) recorded the oracle's rxapi-backed

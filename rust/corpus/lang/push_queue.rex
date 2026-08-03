@@ -5,15 +5,19 @@
 /* in this subset can differentially witness which end of the queue a line  */
 /* landed on or in what order. What it CAN pin, and what TRACE R is here    */
 /* for: PUSH/QUEUE evaluate their own expression, render it to string form  */
-/* and trace the result exactly like SAY does (the oracle's own             */
-/* RexxInstructionQueue::execute shares SAY's evaluateStringExpression), and */
-/* a bare PUSH/QUEUE with no expression traces a null string rather than     */
-/* being skipped or erroring. Without TRACE R this program would produce    */
-/* empty stdout, empty stderr, rc 0 whether PUSH/QUEUE store anything at     */
-/* all -- a test that cannot fail -- so the >>> lines below are the whole    */
-/* point, not decoration. The interleaved storage order itself is pinned by */
-/* queue.rs's own unit tests (rust/crates/rexx-exec/src/queue.rs), the only */
-/* place it can be, per that task's own report.                             */
+/* -- a string literal, a concatenation, and a number (`queue 42`, added     */
+/* per round-1 review finding M7: a string-only probe pinned requestString   */
+/* narrower than this header claimed, since a number renders through a      */
+/* different path than a literal does) -- and trace the result exactly      */
+/* like SAY does (the oracle's own RexxInstructionQueue::execute shares      */
+/* SAY's evaluateStringExpression). A bare PUSH/QUEUE with no expression     */
+/* traces a null string rather than being skipped or erroring. Without      */
+/* TRACE R this program would produce empty stdout, empty stderr, rc 0      */
+/* whether PUSH/QUEUE store anything at all -- a test that cannot fail --   */
+/* so the >>> lines below are the whole point, not decoration. The          */
+/* interleaved storage order, and whether run.rs's arms write to the queue  */
+/* at all, are pinned by queue.rs's own unit tests instead (rust/crates/    */
+/* rexx-exec/src/queue.rs) -- the only place either can be.                 */
 /*                                                                           */
 /* Ends with a bare EXIT, not `exit 0`: condition_traps.rex's own header     */
 /* already recorded why -- an EXIT with a value has a pre-existing,          */
@@ -26,6 +30,7 @@ a = 'hello'
 push a
 queue 'world'
 push a 'there'
+queue 42
 queue
 push
 exit
