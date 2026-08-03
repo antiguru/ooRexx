@@ -245,7 +245,8 @@ above.
 
   * Each echo's indent is ABSOLUTE and is NOT 2 x the depth of the stack. A
     fragment's clauses sit at the enclosing INTERPRET clause's own printed
-    indent -- delta 0 -- plus whatever nests them INSIDE the fragment:
+    indent -- delta 0 -- plus whatever nests them INSIDE the fragment, EXCEPT
+    after an exhausted controlled or repeat DO (the separate row below):
     interpret "do jj = 1 to 1; say 2 & 1; end" at top level echoes the inner
     clause at 2 and the INTERPRET at 0, and the identical fragment two DOs
     deep echoes them at 6 and 4.
@@ -338,6 +339,56 @@ above.
   different LoopKind, chosen because it fully exercises re-echo and per-pass
   >K>. It is NOT a witness selected to avoid this gap: the gap is stated here,
   and criterion 3's assessment should say the Controlled pair is unwitnessed.
+
+  A SECOND SYMPTOM OF THE SAME RE-TESTED PASS, and it is not about tracing at
+  all: the *-* indent is NOT a pure function of lexical nesting. A DO that
+  terminates BY EXHAUSTING ITS ITERATIONS decrements the oracle's indent
+  counter one time too many, so every later clause at that level prints two
+  spaces lower than its lexical depth. Found by review of 4b Task 2 and
+  re-measured independently. No INTERPRET and no CALL involved:
+
+    do
+    do jj = 1 to 1
+    nop
+    end
+    say 1/0          <- oracle prints at 0; we print at 2
+    end
+
+  Which preceding block shapes do it, `say 1/0` one `do` deep, all seven
+  measured against the oracle:
+
+      preceding block                    | oracle | ours
+      -----------------------------------+--------+------
+      do jj = 1 to 1 ... end (controlled)|   0    |  2
+      do 2 ... end (repeat count)        |   0    |  2
+      do forever ... leave ... end       |   2    |  2
+      do while 0 = 1 ... end             |   2    |  2
+      do jj = 1 to 0 ... end (zero-trip) |   2    |  2
+      if 1 = 1 then nop                  |   2    |  2
+      select ... end                     |   2    |  2
+
+  So it is exactly the two shapes that run out of iterations. A zero-trip
+  controlled DO does NOT do it, which is the row that shows the decrement
+  belongs to the re-test that fails rather than to the construct.
+
+  IT REACHES 4b TASK 2's OWN DELIVERABLE, which is why it is recorded now
+  rather than left to whoever meets it: interpret "do jj = 1 to 1; nop; end;
+  say 1/0" one DO deep reports its innermost echo at 2 against the oracle's 0,
+  and two DOs deep at 4 against 2. The fragment base is right; the lexical
+  indent it is added to is not.
+
+  Not 4a-fixable by making static_indent impure -- that function's own doc
+  comment argues at length for why a running counter was rejected, and the
+  argument still holds. Closing this means modelling the oracle's counter as
+  its own quantity, alongside the >>> pair above, since both come from the
+  same re-tested pass. static_indent's doc now states the exception directly
+  instead of stating purity as settled.
+
+  The existing test the_indent_after_a_loop_has_already_exited_is_not_left_
+  over_from_it does not catch it, and the reason generalises: it runs at top
+  level, where the oracle's counter is already at 0 and cannot go lower. That
+  is the same "at indent 0 the base is 0" blind spot that hid two of 4b Task
+  2's own four mutations, met twice in one task.
 
   A stem operand's arithmetic failure omits one stderr line the oracle
   prints before it. Measured, `b. = never touched ; say b. + 1`:

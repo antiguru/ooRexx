@@ -22,6 +22,17 @@
    The inner echo's text is "say 2 & 1;" -- with the semicolon, because that
    is where the fragment's own clause span ends. Trimming it diverges.
 
+   THE RULE ABOVE HAS ONE EXCEPTION and this file deliberately does not
+   contain it: a DO that terminates by exhausting its iterations leaves the
+   oracle's indent counter two spaces lower for every later clause at that
+   level, which reaches straight through the fragment base -- interpret "do jj
+   = 1 to 1; nop; end; say 1/0" one DO deep echoes at 0 on the oracle and 2
+   here. That is a 4a divergence with nothing to do with fragments; see
+   phase-4-exclusions.txt's KNOWN GAP row on the re-tested pass. The failing
+   fragment below has no completed loop before its failing clause, so the
+   plain rule applies to it. Anyone adding one to this file should expect it
+   to diverge, and should not "fix" the indent to match.
+
    The successful INTERPRETs above it are there so the file is not only an
    error path: the nested one in particular runs a fragment from inside a
    fragment, which is the case that stacks three levels rather than two. It

@@ -803,22 +803,43 @@ impl Interp {
                 // a flat routine echoes the callee's clause at 6), and which
                 // is Task 3's to add.
                 //
-                // `indent_offset` is the mechanism (`lib.rs`'s own doc
-                // comment on the field), **set rather than added**: the
-                // enclosing clause's `current_value_indent` is already
-                // `static_indent + indent_offset`, so adding would count the
-                // offset in force twice. Both this and the line override are
-                // saved and restored rather than cleared, so a fragment
-                // inside a fragment cannot strand the outer one's values --
-                // and restoring the line override is what makes the *inner*
-                // fragment inherit the outer's line rather than resolving one
-                // of its own, measured on `interpret 'interpret "say 2 & 1"'`
-                // where all three echoes carry the outermost line.
+                // **The rule above is complete except after an exhausted
+                // controlled or repeat `DO`.** `static_indent` is a pure
+                // function of lexical nesting and the oracle's own counter is
+                // not: a `DO name = a TO b` or `DO n` that ends by running out
+                // of iterations leaves every later clause at that level two
+                // spaces lower. That is a 4a divergence with nothing to do
+                // with fragments, but it reaches straight through this base --
+                // `interpret "do jj = 1 to 1; nop; end; say 1/0"` one `DO`
+                // deep reports 2 against the oracle's 0. See
+                // `phase-4-exclusions.txt`'s KNOWN GAP row on the re-tested
+                // pass, which owns both symptoms.
+                //
+                // `activation_indent` is the mechanism (`lib.rs`'s own doc
+                // comment on the field), **set rather than added**, and
+                // `indent_offset` is zeroed alongside it: the enclosing
+                // clause's `current_value_indent` already contains whatever
+                // escape elevation was in force, so leaving that field alone
+                // would count it twice -- measured on an `INTERPRET` in an
+                // escaped `OTHERWISE`'s own body one `DO` deep, where the
+                // oracle prints the fragment's clause at 12 and the
+                // double-counting version prints 16. A fragment is a fresh
+                // level, so it starts with a fresh escape elevation.
+                //
+                // All three are saved and restored rather than cleared, so a
+                // fragment inside a fragment cannot strand the outer one's
+                // values -- and restoring the line override is what makes the
+                // *inner* fragment inherit the outer's line rather than
+                // resolving one of its own, measured on `interpret 'interpret
+                // "say 2 & 1"'` where all three echoes carry the outermost
+                // line.
                 let base_indent = self.current_value_indent;
                 let base_line = self.clause_site(source, instruction).map(|(line, _)| line);
-                let saved_offset = std::mem::replace(&mut self.indent_offset, base_indent);
+                let saved_base = std::mem::replace(&mut self.activation_indent, base_indent);
+                let saved_offset = std::mem::take(&mut self.indent_offset);
                 let saved_line = std::mem::replace(&mut self.clause_line_override, base_line);
                 let flow = self.run_fragment(text);
+                self.activation_indent = saved_base;
                 self.indent_offset = saved_offset;
                 self.clause_line_override = saved_line;
                 flow
@@ -938,7 +959,7 @@ impl Interp {
                     // appear at all -- measured, `select` / `when 1 = 1
                     // then ...` echoes the `WHEN`'s own clause on its own
                     // line before anything about its condition.
-                    let when_indent = static_indent(&code.body.instructions, when_index);
+                    let when_indent = self.printed_indent(&code.body.instructions, when_index);
                     // Overrides the enclosing `SELECT`'s own
                     // `current_value_indent` (`step_in_temps_frame` set it
                     // to `select_indent` before this arm even started) for
@@ -1441,14 +1462,10 @@ impl Interp {
         // gated by its own `intermediates` check; setting it plainly is
         // cheaper than a second `if` that would just repeat that gate.
         //
-        // `indent_offset` (F-EX1's own correction to F3, `lib.rs`'s own doc
-        // comment) is **added**, not consumed -- an absorbed `WhenCase`'s
-        // own escape can elevate every step for the whole span it reaches
-        // (`OTHERWISE`'s own marker *and* its entire body), not only the
-        // one instruction it lands on directly, so this reads the field
-        // rather than taking it; `run_otherwise` is what clears it once
-        // that span is over.
-        let indent = static_indent(&code.body.instructions, index) + self.indent_offset;
+        // `printed_indent` rather than `static_indent` directly, so that
+        // *which* offsets apply is one fact in one place -- see its own doc
+        // comment for what it adds and why open-coding it was a defect.
+        let indent = self.printed_indent(&code.body.instructions, index);
         self.current_value_indent = indent;
         if self.trace_mode.all
             && let Some((line, text)) = self.clause_site(source, instruction)
@@ -1507,15 +1524,22 @@ impl Interp {
     /// so `static_indent` has something to walk the flat instruction list
     /// up to.
     ///
-    /// Adds `self.indent_offset` (F-EX1's own correction to F3, `lib.rs`'s
-    /// own doc comment), same as `step_in_temps_frame`'s own indent
-    /// computation -- safe unconditionally, including at `Select`'s own
-    /// two direct calls below (a `When`/`WhenCase` condition's own
-    /// failure): `indent_offset` is only ever non-zero while a *different*
-    /// `SELECT`'s own absorbed-escape dispatch is still open, and that
-    /// dispatch is always fully closed (`run_otherwise`'s own restore, or
-    /// `END`'s own fatal 7.3) before this `SELECT`'s own `whens` scan ever
-    /// runs, so it is always `0` here in practice.
+    /// Goes through `printed_indent`, same as `step_in_temps_frame`'s own
+    /// indent computation, so both offsets apply here exactly as they do
+    /// anywhere else.
+    ///
+    /// **An earlier version of this paragraph said the escape elevation "is
+    /// always `0` here in practice", and 4b's Task 2 falsified the reasoning
+    /// behind that without noticing.** The argument was sound about
+    /// `indent_offset` alone -- an absorbed `SELECT`'s escape dispatch is
+    /// always closed (`run_otherwise`'s restore, or `END`'s fatal 7.3)
+    /// before another `SELECT`'s `whens` scan runs -- but it was read as
+    /// "the addend is always zero here", and once the same machinery carried
+    /// an `INTERPRET` fragment's base that was flatly wrong: the base is
+    /// non-zero for the whole life of the fragment, `Select`'s direct calls
+    /// included. The base has its own field now (`activation_indent`), the
+    /// addend is emphatically **not** always zero, and nothing below may
+    /// assume it is.
     fn record_failure_site(
         &mut self,
         code: &Code<'_>,
@@ -1523,7 +1547,7 @@ impl Interp {
         source: Option<&ProgramSource>,
         instruction: &Instruction,
     ) {
-        let indent = static_indent(&code.body.instructions, index) + self.indent_offset;
+        let indent = self.printed_indent(&code.body.instructions, index);
         self.record_failure_at(source, instruction, indent);
     }
 
@@ -1580,7 +1604,7 @@ impl Interp {
             // temps_frame`'s own computation at all (`Flow::Leave`'s own
             // doc comment: eagerly, before any propagation), so it needs
             // the identical addition independently, not by inheritance.
-            indent: static_indent(&code.body.instructions, index) + self.indent_offset,
+            indent: self.printed_indent(&code.body.instructions, index),
         }
     }
 
@@ -1677,8 +1701,7 @@ impl Interp {
         // added -- one computation serves both callers correctly because
         // the field itself, not this function, is what carries the
         // difference between them.
-        let otherwise_indent =
-            static_indent(&code.body.instructions, otherwise_index) + self.indent_offset;
+        let otherwise_indent = self.printed_indent(&code.body.instructions, otherwise_index);
         self.current_value_indent = otherwise_indent;
         if self.trace_mode.all
             && let Some((line, text)) = self.clause_site(source, otherwise_instruction)
@@ -1737,11 +1760,55 @@ impl Interp {
     /// a `SELECT` always owns a frame) and `do_body_outcome` (calls it only
     /// when the `Do`/`Loop` in question owns one, i.e. skips an unlabelled
     /// `Simple` block).
+    ///
+    /// **The one site that adds `activation_indent` without going through
+    /// `printed_indent`, and the asymmetry is deliberate.** `origin.indent`
+    /// is an absolute printed indent, so it needs the activation base:
+    /// measured, `do z = 1 to 1` around `interpret "do jj = 1 to 1; leave
+    /// zz; end"` reports the `LEAVE` at 2 on the oracle, and this function
+    /// is what decides it -- the search walks out past the fragment's own
+    /// `DO`, resetting the residual to that `DO`'s lexical position, which
+    /// is 0 *within the fragment* and 2 in the program. Two further shapes
+    /// (the same through a `SELECT`, and through two nested `DO`s) give 2 as
+    /// well. But it must **not** pick up `indent_offset`: this function's
+    /// whole contract is restoring the value saved when the frame was
+    /// pushed, and an escape elevation belongs to the dispatch that is
+    /// currently running rather than to a frame being unwound. Task 11's own
+    /// fourteen-point probe fixed that behaviour and this fix leaves it
+    /// exactly as it was, because `activation_indent` is `0` in every one of
+    /// those fourteen shapes.
     fn pop_search_frame(&self, code: &Code<'_>, index: usize, origin: LeaveOrigin) -> LeaveOrigin {
         LeaveOrigin {
             site: origin.site,
-            indent: static_indent(&code.body.instructions, index),
+            indent: static_indent(&code.body.instructions, index) + self.activation_indent,
         }
+    }
+
+    /// `target`'s own **absolute printed indent**: its lexical
+    /// `static_indent`, plus the activation base it is running under, plus
+    /// any escape elevation currently in force.
+    ///
+    /// **The one place either offset is applied, and it exists because
+    /// open-coding it was a defect.** Through 4a the six sites that needed
+    /// `+ self.indent_offset` each wrote it out, and one of them -- the
+    /// `WHEN` scan in `Select`'s own arm -- did not. That was invisible while
+    /// `indent_offset` was a transient escape elevation whose own doc bounded
+    /// the consequence with "no corpus or spec example nests this deeply",
+    /// and it became a live divergence the moment 4b's Task 2 gave the same
+    /// machinery an activation base to carry: measured under `trace r`, `do z
+    /// = 1 to 1` around `interpret "select; when 1 = 1 then nop; end; nop"`
+    /// printed the `WHEN` at 2 where the oracle prints 4. A missing addend is
+    /// not something a reader notices, so the fix is to leave nothing to
+    /// notice.
+    ///
+    /// `static_indent` itself is untouched and stays a pure function of
+    /// `(instructions, target)` -- see its own doc comment for why that
+    /// matters. This adds the two pieces of running state on top of it, and
+    /// is deliberately *not* where the 40-column clamp lives: that is on the
+    /// `*-*` echo alone (`trace::MAX_CLAUSE_INDENT`), and clamping here would
+    /// truncate every `>>>` value line too.
+    fn printed_indent(&self, instructions: &[Instruction], target: usize) -> usize {
+        static_indent(instructions, target) + self.activation_indent + self.indent_offset
     }
 
     /// Runs `code.body.instructions[start..end]` in place, one instruction at
@@ -1892,7 +1959,7 @@ impl Interp {
                             // keep uniform rather than silently exempt).
                             self.trace_clause(
                                 line,
-                                static_indent(&code.body.instructions, index) + self.indent_offset,
+                                self.printed_indent(&code.body.instructions, index),
                                 &text,
                             );
                         }
@@ -3289,6 +3356,34 @@ impl Interp {
 /// branches and `SELECT` scans lexically enclose it -- exactly the
 /// information `If`'s `false_target`, `Select`'s `whens`/`otherwise`/`end`
 /// and `Loop`'s `end` already carry, with nothing further to add.
+///
+/// # That last paragraph is measurably false, in exactly one shape
+///
+/// **The oracle's indent is not a pure function of lexical nesting.** A
+/// `DO name = a TO b` or a `DO n` that ends by *exhausting its iterations*
+/// decrements the oracle's own counter one time too many, so every later
+/// clause at that level prints two spaces lower. Measured, no `INTERPRET`
+/// and no `CALL` anywhere -- `do` / `do jj = 1 to 1` / `nop` / `end` /
+/// `say 1/0` / `end` reports the `say` at **0** on the oracle and at 2 here.
+/// Only the two exhausting shapes do it; a `DO FOREVER` left by `LEAVE`, a
+/// `DO WHILE` whose condition goes false, a zero-trip `DO jj = 1 TO 0`, an
+/// `IF` and a `SELECT` all leave the counter alone (all seven measured,
+/// `phase-4-exclusions.txt`'s KNOWN GAP row has the table).
+///
+/// It is the same re-tested-pass mechanism as the two missing `>>>` value
+/// lines that row already records, and it is 4a's, not this function's to
+/// fix under any task that has run so far. **What matters here is that the
+/// paragraph above reads as settled and is not**, so a later reader does not
+/// build on it: this function computes the *lexical* indent, that is the
+/// right answer everywhere except after an exhausted controlled or repeat
+/// `DO`, and closing the gap means modelling the oracle's counter rather
+/// than making this function impure.
+///
+/// `the_indent_after_a_loop_has_already_exited_is_not_left_over_from_it`
+/// (this file's own tests) does not catch it, and the reason is worth
+/// keeping: it runs at top level, where the oracle's counter is already at 0
+/// and cannot go lower. That is the same "at indent 0 the base is 0" blind
+/// spot that hid two of 4b Task 2's own four mutations.
 ///
 /// **A mutable counter was the design first tried here, and it was dropped
 /// once it became clear what it would cost to keep correct.** It would need

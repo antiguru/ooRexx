@@ -849,27 +849,74 @@ struct Interp {
     /// landing -- would have zeroed it before the second body clause ever
     /// read it. `0` in the overwhelmingly common case (nothing escaping
     /// right now); set by the absorbed `WhenCase`'s own false branch,
-    /// added (never replacing) inside `step_in_temps_frame`'s own indent
-    /// computation on every step while non-zero, and explicitly restored
-    /// to `0` by `run_otherwise` once its own `run_bounded` call returns --
-    /// the one place that knows the elevated dispatch is now over. The
-    /// `END`-only landing needs no explicit restore: 7.3 is fatal, so
-    /// nothing runs afterward to see a stale value (`execute`, `lib.rs`,
-    /// gives every run a fresh `Interp`).
+    /// added (never replacing) inside `Interp::printed_indent` on every step
+    /// while non-zero, and explicitly restored to `0` by `run_otherwise`
+    /// once its own `run_bounded` call returns -- the one place that knows
+    /// the elevated dispatch is now over. The `END`-only landing needs no
+    /// explicit restore: 7.3 is fatal, so nothing runs afterward to see a
+    /// stale value (`execute`, `lib.rs`, gives every run a fresh `Interp`).
     ///
-    /// **Narrower than the general case, disclosed rather than chased
-    /// further under this task's own time budget.** Only `step_in_temps_
-    /// frame`'s own indent computation and `run_otherwise`'s own explicit
-    /// marker computation add this offset; the `WHEN`-scan's and `WHILE`/
-    /// `UNTIL`'s own explicit `current_value_indent` overrides do not, so a
-    /// `SELECT`/`DO`/`WHILE` *nested inside* an escaped `OTHERWISE`'S own
-    /// body would not have every one of *its own* explicit-override sites
-    /// inherit the elevation, only whatever reaches `step_in_temps_frame`
-    /// ordinarily. No corpus or spec example nests this deeply; this is
-    /// the same class of disclosure as `current_case_text`'s own nested-
-    /// clobber limitation just above, not a silently assumed correctness
-    /// claim.
+    /// **This field means exactly one thing again, and briefly did not.**
+    /// 4b's Task 2 was told to carry an `INTERPRET` fragment's activation
+    /// base here as well, on the reasoning that both are "an indent added on
+    /// top of `static_indent`". They are not the same quantity and the
+    /// difference is lifetime: this one is transient and its two producers
+    /// write it **absolutely** (`= 4` at the absorbed escape, `= 0` at
+    /// `run_otherwise`), while an activation base lives for the whole life
+    /// of the fragment. Measured, with no `CALL` anywhere -- `do z = 1 to 1`
+    /// around `interpret "select; when 1 = 0 then nop; otherwise nop; end;
+    /// say 1/0"` printed `say 1/0` at 0 where the oracle prints 2, because
+    /// `run_otherwise`'s reset destroyed the base. The base now lives in
+    /// [`Interp::activation_indent`], the two are added together, and each
+    /// producer writes only its own.
+    ///
+    /// **The "narrower than the general case" disclosure this doc used to
+    /// carry is gone because the narrowness is.** It said only
+    /// `step_in_temps_frame` and `run_otherwise` added this offset, that the
+    /// `WHEN` scan and the `WHILE`/`UNTIL` overrides did not, and bounded the
+    /// consequence with "no corpus or spec example nests this deeply". The
+    /// bound was false as soon as a fragment base rode the same field: a
+    /// plain `SELECT` inside an `INTERPRET` inside one `DO` reached it, and
+    /// the `WHEN` scan printed 2 where the oracle prints 4. Every site that
+    /// applies either offset now goes through `Interp::printed_indent`, the
+    /// `WHEN` scan included, so there is no per-site list left to go stale.
+    /// The `WHILE`/`UNTIL` sites were never really exceptions -- they read
+    /// `current_value_indent`, which is a `printed_indent` result already.
+    /// `pop_search_frame` is the one deliberate exclusion and says so at its
+    /// own definition.
     indent_offset: usize,
+    /// The absolute printed indent every clause of the **current activation
+    /// level** starts from -- `0` for a program's own body, and an
+    /// `INTERPRET` fragment's enclosing clause's own printed indent for the
+    /// life of that fragment.
+    ///
+    /// Added to `static_indent` alongside [`Interp::indent_offset`] by
+    /// `Interp::printed_indent`, which is the one place either is applied.
+    /// **`0` throughout every 4a program**, which is what makes adding it at
+    /// a site incapable of moving a 4a expectation: nothing but a fragment
+    /// (and, next, `CALL`) ever sets it.
+    ///
+    /// **Measured delta 0 for a fragment, +2 for a called routine**, and
+    /// that is why this is the activation's base rather than "one more
+    /// level of nesting". `interpret "do jj = 1 to 1; say 2 & 1; end"` at
+    /// top level echoes the inner clause at 2 and the `INTERPRET` at 0, and
+    /// the identical fragment two `DO`s deep echoes them at 6 and 4 -- the
+    /// fragment adds nothing of its own. A `CALL` at printed indent 4 into a
+    /// flat routine echoes the callee's clause at 6, so Task 3 sets this to
+    /// the calling clause's printed indent **plus two**.
+    ///
+    /// **Set, not added, and `indent_offset` is zeroed with it.** The
+    /// `Interpret` arm saves both fields, sets this to the enclosing
+    /// clause's `current_value_indent` and `indent_offset` to `0`, and
+    /// restores both afterwards. The enclosing clause's own printed indent
+    /// already contains whatever escape elevation was in force, so leaving
+    /// `indent_offset` alone would count it twice -- measured on an
+    /// `INTERPRET` inside an escaped `OTHERWISE`'s own body one `DO` deep,
+    /// where the oracle prints the fragment's clause at 12 and the
+    /// double-counting version prints 16. A fragment is a fresh level, so it
+    /// starts with a fresh (zero) escape elevation; saving and restoring
+    /// rather than clearing is what lets a fragment nest inside a fragment.
+    activation_indent: usize,
     /// The clause a `Raised` condition escaped from, as the 1-based line and
     /// the bytes `TRACE` would echo, or `None` if nothing raised.
     ///
@@ -999,6 +1046,7 @@ impl Interp {
             current_value_indent: 0,
             current_case_text: None,
             indent_offset: 0,
+            activation_indent: 0,
             failure_site: None,
             failure_sites: Vec::new(),
             clause_line_override: None,
@@ -1645,6 +1693,129 @@ mod tests {
                     "Error 34.901:  Logical value must be exactly \"0\" or \"1\"; found \"2\".\n",
                 ),
                 path = TEST_PATH
+            )
+        );
+    }
+
+    /// Review round 1, F1 and its neighbours: the activation base survives
+    /// every construct inside the fragment that writes an indent of its own.
+    ///
+    /// **F1 was a live divergence and this is the shape that found it.**
+    /// `Interp::indent_offset` had two absolute writers (`= 4` at the
+    /// absorbed `WhenCase` escape, `= 0` at the end of `run_otherwise`),
+    /// which were correct while it carried only a transient escape
+    /// elevation and destroyed the fragment base once it carried that too.
+    /// Every row below was captured from the oracle before the fix and every
+    /// one of the first three failed against it:
+    ///
+    /// | row | what writes an indent inside the fragment | was |
+    /// |---|---|---|
+    /// | `OTHERWISE` | `run_otherwise`'s `indent_offset = 0` | echo at 0, oracle 2 |
+    /// | `LEAVE` out of a `DO` | `pop_search_frame`'s reset | echo at 0, oracle 2 |
+    /// | escaped `OTHERWISE` around the `INTERPRET` | the `= 4` write | already right, and the row that keeps it right |
+    ///
+    /// The third row is the **regression guard on the fix itself**, not a
+    /// third bug: the enclosing clause's own printed indent already contains
+    /// the escape elevation, so a fix that set `activation_indent` without
+    /// zeroing `indent_offset` counts the 4 twice and prints 16 where the
+    /// oracle prints 12. It passed before this fix and it has to keep
+    /// passing, which is the only reason it is here.
+    ///
+    /// Each row asserts the whole stderr, so a wrong indent on *either* echo
+    /// fails rather than only the one being probed.
+    #[test]
+    fn a_fragments_activation_base_survives_every_indent_writer_inside_it() {
+        // (program, expected stderr with `{path}` for the program's path)
+        let rows: &[(&str, &str)] = &[
+            (
+                "do z = 1 to 1\n\
+                 interpret \"select; when 1 = 0 then nop; otherwise nop; end; say 1/0\"\n\
+                 end\n",
+                concat!(
+                    "     2 *-*   say 1/0\n",
+                    "     2 *-*   interpret \"select; when 1 = 0 then nop; otherwise nop; \
+                     end; say 1/0\"\n",
+                    "Error 42 running {path} line 2:  Arithmetic overflow/underflow.\n",
+                    "Error 42.3:  Arithmetic overflow; divisor must not be zero.\n",
+                ),
+            ),
+            (
+                "do z = 1 to 1\n\
+                 interpret \"do jj = 1 to 1; leave zz; end\"\n\
+                 end\n",
+                concat!(
+                    "     2 *-*   leave zz;\n",
+                    "     2 *-*   interpret \"do jj = 1 to 1; leave zz; end\"\n",
+                    "Error 28 running {path} line 2:  Invalid LEAVE or ITERATE.\n",
+                    "Error 28.3:  Symbol following LEAVE (\"ZZ\") must either match the \
+                     label of a current loop or block instruction.\n",
+                ),
+            ),
+            (
+                "do z = 1 to 1\n\
+                 select case 2\n\
+                 \x20 when 2 then\n\
+                 \x20   when 3 then nop\n\
+                 \x20 otherwise interpret \"do jj = 1 to 1; say 1/0; end\"\n\
+                 end\n\
+                 end\n",
+                concat!(
+                    "     5 *-*             say 1/0;\n",
+                    "     5 *-*           interpret \"do jj = 1 to 1; say 1/0; end\"\n",
+                    "Error 42 running {path} line 5:  Arithmetic overflow/underflow.\n",
+                    "Error 42.3:  Arithmetic overflow; divisor must not be zero.\n",
+                ),
+            ),
+        ];
+        for (index, (program, expected)) in rows.iter().enumerate() {
+            let outcome = run_program(TEST_PATH, program.as_bytes().to_vec());
+            assert_eq!(
+                String::from_utf8(outcome.stderr).unwrap(),
+                expected.replace("{path}", TEST_PATH),
+                "row {index}"
+            );
+        }
+    }
+
+    /// Review round 1, F2: the `WHEN` scan's own echo carries the offsets too.
+    ///
+    /// `Select`'s arm computed `when_indent` from `static_indent` alone --
+    /// the one clause-echo indent in `run.rs` that added neither offset.
+    /// Invisible while `indent_offset` was a transient escape elevation whose
+    /// own doc bounded it with "no corpus or spec example nests this deeply",
+    /// and a divergence the moment a fragment base went through the same
+    /// machinery: a plain `SELECT` inside an `INTERPRET` inside one `DO` is
+    /// not deep nesting.
+    ///
+    /// Oracle, verbatim and byte-identical below (rc 0, empty stdout). The
+    /// `WHEN` line is the one that was wrong, at 2 instead of 4; the whole
+    /// transcript is asserted so that fixing it by moving the error elsewhere
+    /// fails too. A plain `do` block rather than `do z = 1 to 1` on purpose:
+    /// a `Controlled` loop's re-tested pass omits two `>>>` lines this crate
+    /// does not yet emit (the KNOWN GAP row on the re-tested pass), and this
+    /// test is not the place to encode that.
+    #[test]
+    fn a_when_scan_inside_a_fragment_echoes_at_the_fragments_own_indent() {
+        let program = "trace r\n\
+                       do\n\
+                       interpret \"select; when 1 = 1 then nop; end; nop\"\n\
+                       end\n";
+        let outcome = run_program(TEST_PATH, program.as_bytes().to_vec());
+        assert_eq!(outcome.exit_code, 0);
+        assert_eq!(outcome.stdout, b"");
+        assert_eq!(
+            String::from_utf8(outcome.stderr).unwrap(),
+            concat!(
+                "     2 *-* do\n",
+                "     3 *-*   interpret \"select; when 1 = 1 then nop; end; nop\"\n",
+                "       >>>     \"select; when 1 = 1 then nop; end; nop\"\n",
+                "     3 *-*   select;\n",
+                "     3 *-*     when 1 = 1 \n",
+                "       >>>       \"1\"\n",
+                "     3 *-*       then\n",
+                "     3 *-*         nop;\n",
+                "     3 *-*   nop\n",
+                "     4 *-* end\n",
             )
         );
     }
