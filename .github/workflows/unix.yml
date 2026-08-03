@@ -163,11 +163,17 @@ jobs:
 
       - name: Configure (CMake 3.5 must get through the IPO guard)
         shell: bash
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        # The -S/-B flags and --build --parallel both postdate CMake 3.5, so use
+        # the classic out-of-source form and pass -j through to make.
+        run: |
+          set -eux
+          mkdir build
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         shell: bash
-        run: cmake --build build --parallel "$(nproc)"
+        run: cmake --build build -- -j "$(nproc)"
 
       - name: Smoke test
         shell: bash
