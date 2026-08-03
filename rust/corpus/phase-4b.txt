@@ -17,8 +17,19 @@
 # WHAT THIS SUBSET ADMITS, one line per construct as it lands. Everything
 # phase-4a.txt admits, plus:
 #
-#   INTERPRET (4b Task 1) -- a dynamic fragment, a fragment that binds a name
-#   the enclosing body never mentions, and a fragment inside a DO body.
+#   INTERPRET (4b Task 1) -- a fragment whose text is built at run time, a
+#   fragment inside a DO body, and a name bound inside one fragment and read
+#   back from a later one, which is the case that reaches Activation::extra.
+#
+# The third clause is stated carefully because it was wrong twice. It requires
+# BOTH the write and the read to be inside fragments: a bare `say zork` in this
+# file's enclosing body would put ZORK in that body's own plan, `slot_of` would
+# find it there, and the extra path would never be reached. Measured by
+# instrumenting slot_of's growth branch -- `interpret "zork = 42"` followed by
+# `say zork` gives zero hits, followed by `interpret "say zork"` gives one.
+# Anyone editing lang/interpret_dynamic.rex should re-run that check rather
+# than assume the property survived, because it is invisible in the output:
+# both spellings print 42 and both match the oracle.
 #
 # WHAT IT STILL EXCLUDES. Everything phase-4a.txt excludes except INTERPRET,
 # which is to say: no builtin function calls, no CALL/RETURN/PROCEDURE/USE/

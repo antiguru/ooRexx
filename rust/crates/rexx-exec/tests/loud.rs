@@ -175,14 +175,22 @@ enum Category {
     Expr,
 }
 
-/// Every out-of-scope `InstructionKind`, one witness each. 19 entries, one
-/// per `Owner::Phase` arm in `INSTRUCTION_TAGS` above (20 until 4b's Task 1
-/// implemented `INTERPRET` and deleted its row -- pinned item 4 in
-/// `owners.rs`'s own list: a witness for a variant that moved in scope must
-/// be *deleted*, not left stale, or `assert_witness_set_is_complete` fails
-/// the other way) -- `assert_witness_set_is_complete`
-/// checks the two lists against each other so a variant cannot be silently
-/// dropped from this list while staying in the tag table.
+/// Every out-of-scope `InstructionKind`, one witness each. **23 entries**, one
+/// per `Owner::Phase` arm after `Call` and `Signal` expand -- 19 coarse
+/// phase-owned tags in `INSTRUCTION_TAGS` above, of which `Call` becomes four
+/// rows and `Signal` two, so 19 + 3 + 1 = 23. (Review finding M1: this line
+/// said "19 entries" and, before that, "20", both of which counted the coarse
+/// tags while describing the expanded list. The two numbers are different
+/// quantities and the arm-grained section of the module doc above is where the
+/// distinction is set out.)
+///
+/// 20 coarse tags until 4b's Task 1 implemented `INTERPRET` and deleted its
+/// row -- pinned item 4 in `owners.rs`'s own list: a witness for a variant that
+/// moved in scope must be *deleted*, not left stale, or
+/// `assert_witness_set_is_complete` fails the other way.
+/// `assert_witness_set_is_complete` checks the two lists against each other so
+/// a variant cannot be silently dropped from this list while staying in the tag
+/// table.
 const INSTRUCTION_WITNESSES: &[Witness] = &[
     Witness {
         tag: "Command",

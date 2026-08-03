@@ -6,3 +6,5 @@ say v
 do i = 1 to 3
   interpret "say 'loop" i "'"
 end
+interpret "zork = 42"
+interpret "say zork"

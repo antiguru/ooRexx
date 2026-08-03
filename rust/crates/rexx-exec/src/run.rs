@@ -456,11 +456,30 @@ impl Interp {
             // `LEAVE`/`ITERATE` boundary shapes in `run_fragment`'s own doc
             // comment, and `interpret "say 2 & 1"` above -- matches the
             // oracle on stdout, on rc, on the error numbers and on every
-            // line of the report *except* the missing innermost echo. Still
-            // not fixed here (it is a `Raised::report` change, not an
-            // instruction-loop one), but it is now a live divergence rather
-            // than a hypothetical, and the 4b corpus subset's own witness
-            // avoids it only by raising nothing at all.
+            // line of the report *except* the missing innermost echo.
+            //
+            // **The missing echo is not confined to the error path, and an
+            // earlier version of this comment implied it was** (review
+            // finding I1). The same `source: None` that suppresses the
+            // fragment's clause here also suppresses it under `TRACE`, where
+            // nothing is raised at all. Measured, `trace r` / `zz = 'nop'` /
+            // `interpret zz`:
+            //
+            // ```text
+            //      3 *-* interpret zz
+            //        >>>   "nop"
+            //      3 *-* nop      <- the oracle prints this line; we do not
+            // ```
+            //
+            // rc 0 and stdout identical, stderr one line short. `TRACE` has
+            // been in scope since 4a, so a 4b corpus program needs only to
+            // trace -- not to raise -- to hit this. The `>>>` line above is
+            // present because the `Interpret` arm now calls `trace_result`
+            // (I1(a), fixed); the clause echo is the half that needs the
+            // stack. So the accurate bound is: **any program that traces or
+            // raises inside fragment text diverges by one line per fragment
+            // clause**, and `lang/interpret_dynamic.rex` avoids it by doing
+            // neither, not merely by raising nothing.
             let flow =
                 self.step_in_temps_frame(&code, index, instruction, Some(&program.source))?;
             match flow {
@@ -750,6 +769,40 @@ impl Interp {
                 let value = self.eval(code, expression)?;
                 self.roots.push_temp(value);
                 let text = self.to_text(value).to_vec();
+                // `>>>` on the interpreted text itself, before the fragment
+                // runs -- the same `trace_result` every other value-producing
+                // arm calls (`Say`, `Assignment`), at the same
+                // `current_value_indent`. Review finding I1(a): the arm
+                // shipped without this and was the only value-producing arm in
+                // the crate that traced nothing. Measured (`trace r`, `zz =
+                // 'nop'`, `interpret zz`), the oracle prints
+                //
+                // ```text
+                //      3 *-* interpret zz
+                //        >>>   "nop"
+                //      3 *-* nop
+                // ```
+                //
+                // and re-measured one `DO` deeper, where the `>>>` picks up
+                // that construct's own two spaces exactly as `Say`'s does.
+                //
+                // **Before `run_fragment`, not after, and that is not
+                // cosmetic**: the fragment's own stepping overwrites
+                // `current_value_indent` on every instruction it runs, so
+                // reading the field afterwards would report the *fragment's*
+                // last indent for the enclosing clause's own value.
+                //
+                // The third line above -- the fragment's own clause echo -- is
+                // still missing, and deliberately: `run_fragment` passes
+                // `source: None`, so `step_in_temps_frame` has no clause site
+                // to echo. Handing it `Some(&fragment.source)` would print the
+                // *fragment's* line number where the oracle prints the
+                // enclosing `INTERPRET`'s, and would also make the fragment's
+                // clause win `record_failure_site`'s first-wins race, moving
+                // the error report off the line the oracle names. Both need
+                // the echo stack Task 2 owns; `run_activation`'s own comment
+                // has the full disclosure.
+                self.trace_result(self.current_value_indent, &text);
                 self.run_fragment(text)
             }
 
@@ -6040,6 +6093,61 @@ mod tests {
         };
         assert_eq!((raised.number, raised.sub), (28, 3));
         assert_eq!(raised.additional, vec!["FOO".to_string()]);
+    }
+
+    /// Review finding I1(a): `INTERPRET` traces `>>>` on the text it is about
+    /// to run, like every other value-producing arm, and it shipped without
+    /// doing so.
+    ///
+    /// Oracle, verbatim, for the first program (rc 0, empty stdout):
+    ///
+    /// ```text
+    ///      1 *-* trace r
+    ///      2 *-* zz = 'nop'
+    ///        >>>   "nop"
+    ///      3 *-* interpret zz
+    ///        >>>   "nop"
+    ///      3 *-* nop
+    /// ```
+    ///
+    /// The last line is the fragment's own clause echo, which this crate does
+    /// not print (the `Interpret` arm's own doc comment says why, and Task 2
+    /// owns it), so the expectation below stops one line short of the oracle
+    /// on purpose. Everything above it is asserted byte for byte.
+    ///
+    /// The second program pins the **indent**, which is the part a wrong fix
+    /// would still get wrong: one `DO` deeper, the oracle's `>>>` picks up
+    /// that construct's own two spaces, and it does so because the arm reads
+    /// `current_value_indent` rather than recomputing anything. Mutation
+    /// killed both ways: dropping the `trace_result` call empties the `>>>`
+    /// lines, and moving it after `run_fragment` reports the *fragment's* last
+    /// indent instead of this clause's.
+    #[test]
+    fn interpret_traces_the_text_it_is_about_to_run() {
+        let mut interp = Interp::new();
+        interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
+        say_output(&mut interp, b"zz = 'nop'\ninterpret zz");
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* zz = 'nop'\n       >>>   \"nop\"\n     \
+              2 *-* interpret zz\n       >>>   \"nop\"\n"
+                .to_vec()
+        );
+
+        let mut interp = Interp::new();
+        interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
+        say_output(&mut interp, b"do kk = 1 to 1\ninterpret \"nop\"\nend");
+        let indented = b"       >>>     \"nop\"\n";
+        assert!(
+            interp
+                .trace
+                .windows(indented.len())
+                .any(|window| window == indented),
+            "expected a >>> line carrying the enclosing DO's own two spaces \
+             ({:?}), got {:?}",
+            String::from_utf8_lossy(indented),
+            String::from_utf8_lossy(&interp.trace)
+        );
     }
 
     /// The other side of the boundary rule: a loop written *inside* the

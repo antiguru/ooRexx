@@ -1871,7 +1871,11 @@ const CORPUS: &[(&str, &str, usize)] = &[
     (
         "interpret_dynamic",
         include_str!("../../../../corpus/lang/interpret_dynamic.rex"),
-        8,
+        // 8 until 4b's Task 1 appended `interpret "zork = 42"` and
+        // `interpret "say zork"`, so that the program witnesses a name bound
+        // in one fragment and read from a later one -- the `Activation::extra`
+        // path, which nothing in the differential corpus reached before.
+        10,
     ),
     (
         "arith_digits",

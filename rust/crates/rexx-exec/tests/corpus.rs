@@ -24,11 +24,18 @@
 //! against the oracle by anything.
 //!
 //! **This is a repeatable progress instrument, not a once-at-the-end gate.**
-//! It replaces the hand-run shell loop this phase has used after every task
-//! (3 of 26 programs matching before Task 9, 9 of 26 after), and each of the
-//! two tasks still to land should be able to see its own effect by re-running
-//! it. See [`REPORT vs STRICT`](#report-vs-strict) below for how the same run
-//! serves both that daily use and the phase gate.
+//! It replaces the hand-run shell loop 4a used after every task (3 of 26
+//! programs matching before that phase's Task 9, 9 of 26 after -- a dated
+//! record of 4a, not a live figure), and every task that lands should be able
+//! to see its own effect by re-running it. See
+//! [`REPORT vs STRICT`](#report-vs-strict) below for how the same run serves
+//! both that daily use and a phase gate.
+//!
+//! The forward reference this paragraph used to carry -- "each of the two
+//! tasks still to land" -- was 4a's plan state and outlived it (review finding
+//! M2). Phase-relative counts of remaining tasks do not belong in a file that
+//! outlives the phase; the subset size does not either, which is why every
+//! figure this runner reports is computed from `subset.len()` at run time.
 //!
 //! # The oracle
 //!
@@ -473,13 +480,20 @@ fn emit_uncaptured(text: &str) {
 /// The runner itself. See the module doc for REPORT vs STRICT and how the
 /// oracle and the memory limit are handled.
 ///
-/// Today's expected result, at commit `e0e57825`: 9 of 26 matching, the
+/// Expected result at commit `e0e57825`: 9 of 26 matching, the
 /// remaining 17 partitioned as `DO` 10, `TRACE` 4, `SELECT` 2, `IF` 1 --
 /// reproduced with a standalone shell loop before this test was written.
 /// Tasks implementing `IF` and `SELECT` may move this number out from under a
 /// later run; that is expected, not a regression, and the fix is to re-run
 /// and record which commit was measured, not to adjust this comment to match
 /// a stale number.
+///
+/// Expected result at commit `a9420630`: **30 of 30 matching**, the subset
+/// being `phase-4a.txt`'s 29 programs plus `phase-4b.txt`'s one. Added as a
+/// second dated row rather than replacing the first, which is what the
+/// paragraph above asks for -- 4b's Task 1 re-ran and had a number, and
+/// recording it is the instruction, not merely leaving the older row intact
+/// (review's ruling on the dated figure).
 #[test]
 fn corpus_differential() {
     let oracle = oracle();
