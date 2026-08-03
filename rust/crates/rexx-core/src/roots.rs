@@ -256,11 +256,21 @@ impl RootSet {
     /// read and write addressed to it is served by `target`'s storage
     /// instead of its own.
     ///
-    /// `PROCEDURE EXPOSE` and `USE ARG >name` are the two callers. The
-    /// aliased slot's own storage stops being reachable, and stays `None`
-    /// -- which is also what keeps `iter` honest, since an alias therefore
-    /// contributes no root of its own and the target contributes exactly
-    /// one.
+    /// `PROCEDURE EXPOSE` and `USE ARG >name` are the two callers, and both
+    /// establish that the slot holds nothing worth reaching before calling:
+    /// `PROCEDURE` aliases into a frame it has just pushed, whose slots are
+    /// all `None`, and `USE ARG >name` refuses a target that is not
+    /// uninitialised (error 98.995, `run.rs`'s `target_is_uninitialised`).
+    /// The aliased slot's own storage then stops being reachable by name.
+    ///
+    /// It is **not** guaranteed to stay `None`, and the one exception is
+    /// deliberate: `USE ARG >q.` accepts a stem slot holding a vivified but
+    /// empty `Body::Stem`, because a bare stem read and a `DROP` both leave
+    /// one and the oracle treats the variable as uninitialised in both cases.
+    /// So an aliasing slot's own entry is either `None` or an empty stem that
+    /// nothing can now reach. See [`iter`] for what that costs.
+    ///
+    /// [`iter`]: RootSet::iter
     pub fn alias_slot(&mut self, frame: SlotFrame, index: usize, target: SlotRef) {
         self.aliases[frame.start + index] = Some(target.0);
     }
@@ -387,12 +397,20 @@ impl RootSet {
     ///
     /// **Aliased slots need no filtering either, and that is a property of
     /// how they are written rather than of this loop.** A write through an
-    /// alias lands in the target's storage (`set_slot` resolves first), so
-    /// an aliasing slot's own entry stays `None` for its whole life and the
-    /// `filter_map` drops it. The exposed value is therefore yielded exactly
-    /// once, from the frame that really holds it -- not twice, which would
-    /// merely be wasted work, and not zero times, which would collect a live
-    /// object.
+    /// alias lands in the target's storage (`set_slot` resolves first), so an
+    /// aliasing slot never accumulates values of its own and the exposed
+    /// value is yielded exactly once, from the frame that really holds it --
+    /// not twice, which would merely be wasted work, and not zero times,
+    /// which would collect a live object.
+    ///
+    /// **An aliasing slot's own entry is not always `None`, though**, and an
+    /// earlier version of this paragraph said it was. `alias_slot`'s callers
+    /// guarantee the slot holds nothing *reachable*, not that it is empty:
+    /// `USE ARG >q.` may alias over a vivified but empty `Body::Stem`, which
+    /// this loop then yields. The cost is bounded and is over-retention only
+    /// -- one empty stem per such alias, kept alive until the frame pops --
+    /// never a collected live object, which is the direction that would
+    /// matter.
     pub fn iter(&self) -> impl Iterator<Item = ObjRef> + '_ {
         self.globals
             .iter()

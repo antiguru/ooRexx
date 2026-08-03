@@ -498,7 +498,16 @@ impl Loud {
         }
     }
 
-    /// `PROCEDURE EXPOSE` naming a single compound tail, `expose a.1`.
+    /// `PROCEDURE EXPOSE` naming a single compound tail.
+    ///
+    /// **Both spellings reach here, and the second is easy to miss.** The
+    /// direct one is `procedure expose a.1`; the indirect one is `v = 'A.1'`
+    /// with `procedure expose (v)`, because `expose_names` expands the
+    /// selector's value into ordinary names and a compound-shaped word among
+    /// them arrives at the same check. Measured, the indirect form: oracle rc
+    /// 0 printing `changed other`, this crate rc 120 with the message below.
+    /// The gap is exactly as wide as the direct spelling suggests, not
+    /// narrower.
     ///
     /// **A disclosed gap inside an otherwise implemented instruction, and
     /// loud rather than approximated because the near-miss is a silent wrong

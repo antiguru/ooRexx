@@ -72,7 +72,7 @@ use crate::trace::{
     raised_numeric_trace_interactive_only,
 };
 use crate::{Argument, CallContext, Code, Failure, Interp, Loud};
-use rexx_core::{ObjRef, SlotRef};
+use rexx_core::{ObjRef, SlotFrame, SlotRef};
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
     ControlExpr, Controlled, EndStyle, Expr, ExprKind, Fragment, Instruction, InstructionKind,
@@ -1913,9 +1913,12 @@ impl Interp {
     ///
     /// The `alias` case is the whole reason `Argument` is not a bare
     /// `ObjRef`: `>name` needs the *caller's* slot, and only an argument
-    /// written `>something` at the call carries one. Its two refusals are
-    /// separate measured errors -- a supplied argument that is not a
-    /// reference is 88.928, and an omitted position is 88.931.
+    /// written `>something` at the call carries one. It has **three**
+    /// separate measured refusals -- a supplied argument that is not a
+    /// reference is 88.928, an omitted position is 88.931, and a target that
+    /// is not currently unset is 98.995 ([`target_is_uninitialised`]).
+    ///
+    /// [`target_is_uninitialised`]: Interp::target_is_uninitialised
     fn bind_use_target(
         &mut self,
         code: &Code<'_>,
@@ -1935,6 +1938,14 @@ impl Interp {
             let name = self.use_target_name(code, target)?;
             let index = self.slot_of(&name);
             let frame = self.activation().frame;
+            // The target must be **currently unset**. `RootSet::slot`
+            // resolves through any alias already in force, which is what the
+            // repeat case needs: after one `use arg >q`, `Q` reads the
+            // caller's variable, so it "has a value" and the second attempt
+            // is refused.
+            if !self.target_is_uninitialised(&name, frame, index) {
+                return Err(Raised::variable_reference_not_uninitialised(&name).into());
+            }
             self.roots.alias_slot(frame, index, slot);
             return Ok(());
         }
@@ -1959,6 +1970,49 @@ impl Interp {
             None => self.drop_by_name(&name),
         }
         Ok(())
+    }
+
+    /// Whether a `USE ARG >name` target is in the uninitialised state the
+    /// oracle requires of it.
+    ///
+    /// **The trigger is only "does this variable have a value". It is not
+    /// about exposure and not about locality**, despite error 98.995's own
+    /// wording ("it must be an uninitialized local variable"). The pair that
+    /// separates those hypotheses is measured, and without it the check would
+    /// very plausibly have been written as an exposure test and been wrong:
+    ///
+    /// * `procedure expose q` where the exposed `q` **holds a value** -> rc
+    ///   158, 98.995.
+    /// * `procedure expose q` where the exposed `q` is **unset** -> rc 0, the
+    ///   alias is installed, the caller prints `q: Q`.
+    ///
+    /// Exposure is identical in both; only the value differs. `DROP` restores
+    /// the uninitialised state, so `q = 'local'; drop q; use arg >q` succeeds.
+    /// Repeating `use arg >q` onto one target fits the same rule rather than
+    /// being a case of its own: the first alias makes `Q` read the caller's
+    /// variable, so it has a value by the second.
+    ///
+    /// **The stem exemption is this crate's own shape showing through, and it
+    /// is measured on both sides.** `read_stem` vivifies a fresh, empty
+    /// `Body::Stem` into the slot on a bare stem read (it must -- a stem's
+    /// object identity is observable through `b. = a.`), and `stem_drop`
+    /// leaves exactly the same thing. Neither is an initialised variable to
+    /// the language, and the oracle agrees: `say q.` then `use arg >q.`
+    /// succeeds, and so does `q.1 = 'x'; drop q.; use arg >q.`, while
+    /// `q.1 = 'local'` and `q. = 'dflt'` both raise. So a slot holding a stem
+    /// with no default and no tails counts as unset.
+    ///
+    /// **Keyed on the target's own name shape, not on the value's**, which is
+    /// the distinction a "value is an empty stem" test would get wrong.
+    /// Measured: `zz = q.` puts a fresh, empty stem object into a *simple*
+    /// variable, and `use arg >zz` then raises 98.995. `ZZ` is an initialised
+    /// simple variable that happens to hold a stem; `Q.` is a stem variable
+    /// nobody has written.
+    fn target_is_uninitialised(&self, name: &[u8], frame: SlotFrame, index: usize) -> bool {
+        match self.roots.slot(frame, index) {
+            None => true,
+            Some(value) => shape_of(name) == NameShape::Stem && self.is_empty_stem(value),
+        }
     }
 
     /// One `USE ARG` target's variable name.
@@ -8504,16 +8558,36 @@ mod tests {
             "a raise inside an isolated callee must still release its frame"
         );
 
-        // The control: a callee with no PROCEDURE pushes no frame at all
-        // (D9r's shared pool), so this arrives at the same answer for a
-        // different reason. Without it, an implementation that never pushed
-        // a callee frame would pass both assertions above.
+        // The shared-pool path, which is the `else` branch of the same
+        // `owns_frame` test and is reached by neither block above: a callee
+        // with no PROCEDURE pushes no frame of its own (D9r), so it must not
+        // pop one either.
+        //
+        // **What this pins, corrected after review.** It used to claim that
+        // without it "an implementation that never pushed a callee frame
+        // would pass both assertions above" -- false, and shown false by
+        // building exactly that mutant, under which all three blocks pass,
+        // because all three compare against the same number. No frame count
+        // can catch a frame that is never pushed; the isolation tests are
+        // what catch it (`procedure_isolates_and_expose_aliases_the_caller_
+        // entry` and four others fail on it).
+        //
+        // What this block does catch, verified by mutation rather than
+        // asserted: popping unconditionally instead of only when
+        // `owns_frame`, which tears down the *caller's* still-live frame.
+        // That mutant fails here and passes
+        // `procedure_isolates_and_expose_aliases_the_caller_entry`, so this
+        // block is the one carrying it.
         let mut interp = Interp::new();
         say_output(
             &mut interp,
             b"zz = 1\ncall sub\nexit\nsub:\nyy = 2\nreturn\n",
         );
-        assert_eq!(interp.roots.live_frames(), 1);
+        assert_eq!(
+            interp.roots.live_frames(),
+            1,
+            "a shared-pool callee must leave the caller's frame open"
+        );
     }
 
     // ---- USE ARG ----
@@ -8730,6 +8804,171 @@ mod tests {
         };
         assert_eq!((raised.number, raised.sub), (88, 931));
         assert_eq!(raised.additional, vec!["2".to_string()]);
+    }
+
+    /// `USE ARG >name` requires its target to be **currently unset**, and
+    /// raises 98.995 otherwise.
+    ///
+    /// **These three are a set and the middle one carries the weight.** The
+    /// message says "it must be an uninitialized *local* variable", which
+    /// invites writing the check as an exposure or locality test. The pair
+    /// that rules that out is the second and third cases below: the same
+    /// `procedure expose q`, raising when the exposed `q` holds a value and
+    /// succeeding when it does not. Exposure is identical in both; only the
+    /// value differs. The raising case alone does not pin which rule is being
+    /// applied, and the succeeding case alone cannot fail against a wrong
+    /// fix -- neither is worth much without the other.
+    #[test]
+    fn use_arg_alias_requires_an_uninitialised_target() {
+        // Assigned, then aliased: refused, naming the target.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"p = 'p-orig'\ncall sub >p\nexit\n\
+              sub: procedure\nq = 1\nuse arg >q\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (98, 995));
+        assert_eq!(raised.additional, vec!["Q".to_string()]);
+
+        // Exposed AND holding a value: still refused. Exposure is not the
+        // trigger, but this case on its own cannot show that.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"p = 'p-orig'\nq = 'q-in-caller'\ncall sub >p\nexit\n\
+              sub: procedure expose q\nuse arg >q\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (98, 995));
+
+        // Exposed and UNSET: succeeds. This is what makes the pair
+        // discriminating -- an exposure check would wrongly refuse here.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"p = 'p-orig'\ncall sub >p\nsay 'p:' p 'q:' q\nexit\n\
+                  sub: procedure expose q\nuse arg >q\nq = 'via-alias'\nreturn\n",
+            ),
+            b"p: via-alias q: Q\n".to_vec(),
+            "the alias must have been installed, and the caller's own exposed Q must \
+             still read unset"
+        );
+
+        // DROP restores the uninitialised state.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"p = 'p-orig'\nq = 'local'\ndrop q\ncall sub >p\nsay 'p:' p\nexit\n\
+                  sub:\nuse arg >q\nq = 'via-alias'\nreturn\n",
+            ),
+            b"p: via-alias\n".to_vec()
+        );
+
+        // Repeating `use arg >q` onto one target is the same rule, not a case
+        // of its own: the first alias makes Q read the caller's variable, so
+        // it has a value by the second. `RootSet::slot` resolving through the
+        // alias is what makes this fall out.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"p = 'p-orig'\nr = 'r-orig'\ncall sub >p, >r\nexit\n\
+              sub:\nuse arg >q\nuse arg xx, >q\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (98, 995));
+    }
+
+    /// The stem half of the same rule, which is where this crate's own
+    /// representation shows through and where the obvious one-line check gets
+    /// it wrong.
+    ///
+    /// `read_stem` vivifies a fresh empty `Body::Stem` into the slot on a bare
+    /// stem read, and `stem_drop` leaves exactly the same thing, so a slot
+    /// being `Some` is *not* the same question as the variable being
+    /// initialised. All five measured against the oracle; the first three
+    /// must succeed and would all raise under a plain `slot(..).is_some()`
+    /// test.
+    #[test]
+    fn use_arg_alias_treats_an_empty_stem_as_uninitialised() {
+        for (source, expected, why) in [
+            (
+                &b"st.1 = 'orig'\ncall sub >st.\nsay 'after:' st.1\nexit\n\
+                   sub: procedure\nuse arg >q.\nq.1 = 'via-alias'\nreturn\n"[..],
+                &b"after: via-alias\n"[..],
+                "a never-touched stem target",
+            ),
+            (
+                b"st.1 = 'orig'\ncall sub >st.\nsay 'after:' st.1\nexit\n\
+                  sub: procedure\nsay 'bare read:' q.\nuse arg >q.\nq.1 = 'via-alias'\nreturn\n",
+                b"bare read: Q.\nafter: via-alias\n",
+                "a bare stem READ vivifies an empty stem into the slot, and must not \
+                 count as initialising it",
+            ),
+            (
+                b"st.1 = 'orig'\ncall sub >st.\nsay 'after:' st.1\nexit\n\
+                  sub: procedure\nq.1 = 'x'\ndrop q.\nuse arg >q.\nq.1 = 'via-alias'\nreturn\n",
+                b"after: via-alias\n",
+                "DROP of a written stem restores the uninitialised state",
+            ),
+        ] {
+            let mut interp = Interp::new();
+            assert_eq!(say_output(&mut interp, source), expected.to_vec(), "{why}");
+        }
+
+        // A written tail initialises the stem: refused, naming `Q.` with its
+        // period, which is the target's own spelling.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"st.1 = 'orig'\ncall sub >st.\nexit\n\
+              sub: procedure\nq.1 = 'local'\nuse arg >q.\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (98, 995));
+        assert_eq!(raised.additional, vec!["Q.".to_string()]);
+
+        // An assigned default initialises it too, with no tails written.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"st.1 = 'orig'\ncall sub >st.\nexit\n\
+              sub: procedure\nq. = 'dflt'\nuse arg >q.\nreturn\n",
+        )
+        .unwrap_err();
+        assert!(matches!(failure, Failure::Raised(_)));
+
+        // **The exemption is keyed on the target's NAME shape, not on the
+        // value's.** A simple variable holding a fresh, empty stem object is
+        // an initialised simple variable -- measured, `zz = q.` then `use arg
+        // >zz` raises. A check written against "the value is an empty stem"
+        // passes everything above and fails here.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"p = 'p-orig'\ncall sub >p\nexit\n\
+              sub: procedure\nzz = q.\nuse arg >zz\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (98, 995));
+        assert_eq!(raised.additional, vec!["ZZ".to_string()]);
     }
 
     /// A variable reference in an ordinary value position is worth the

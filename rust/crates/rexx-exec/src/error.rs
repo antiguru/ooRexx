@@ -239,6 +239,23 @@ impl Raised {
         Raised::syntax(88, 931, vec![position.to_string()])
     }
 
+    /// 98.995: `USE ARG >name` whose target is not currently unset. `name` is
+    /// the target's own spelling.
+    ///
+    /// Measured, rc 158: `p = 'p-orig'; q = 'q-orig'; call sub >p` into `use
+    /// arg >q` gives `Unable to reference variable "Q"; it must be an
+    /// uninitialized local variable.` A stem target reports its own spelling
+    /// including the period -- `Q.` -- which is what `use_target_name`
+    /// already produces, so neither case needs shaping here.
+    ///
+    /// **The message's "local" is not the condition.** An exposed target
+    /// raises this when it holds a value and does not when it is unset;
+    /// `run.rs`'s `target_is_uninitialised` has that pair and is where the
+    /// rule lives.
+    pub(crate) fn variable_reference_not_uninitialised(name: &[u8]) -> Raised {
+        Raised::syntax(98, 995, vec![String::from_utf8_lossy(name).into_owned()])
+    }
+
     /// 98.993: `USE LOCAL` as the first instruction executed of a top-level
     /// program. No substitutions.
     ///

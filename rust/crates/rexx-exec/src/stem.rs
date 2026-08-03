@@ -466,6 +466,36 @@ impl Interp {
             _ => false,
         }
     }
+
+    /// Whether `value` is a stem carrying nothing at all: no default and no
+    /// tails, not even a tombstone.
+    ///
+    /// This is the shape both `read_stem`'s vivification and `stem_drop`'s
+    /// `replace_stem(name, None)` produce, and it is the one `USE ARG >name`
+    /// has to treat as "the variable is unset" -- a bare stem read and a
+    /// `DROP` both leave a stem variable referenceable on the oracle, while a
+    /// written tail or an assigned default do not. `run.rs`'s
+    /// `target_is_uninitialised` is the caller and carries the measurements.
+    ///
+    /// A tombstoned tail (`Some(None)` in `tails`) counts as *not* empty,
+    /// which follows from `tails.is_empty()` rather than from a rule of its
+    /// own. Nothing has measured that shape against the oracle, and the
+    /// conservative direction here is to keep the variable initialised: it
+    /// refuses a reference the oracle might allow, which is a visible error
+    /// rather than a silent alias onto a variable that already has content.
+    pub(crate) fn is_empty_stem(&self, value: ObjRef) -> bool {
+        match value.decode() {
+            Decoded::Heap { .. } => matches!(
+                self.heap.get(value).map(|object| &object.body),
+                Some(Body::Stem {
+                    default: None,
+                    tails,
+                    ..
+                }) if tails.is_empty()
+            ),
+            _ => false,
+        }
+    }
 }
 
 #[cfg(test)]
