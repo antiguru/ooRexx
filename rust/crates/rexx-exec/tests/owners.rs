@@ -515,3 +515,12 @@ fn the_two_harnesses_include_this_exact_file() {
 //    `every_out_of_scope_variant_fails_loudly` fails: the owner text it
 //    asserts stderr contains would no longer match what `instruction_owner`/
 //    `expr_owner` actually produce.
+//
+//    **One arm this drift check cannot reach today (review finding I3):**
+//    `expr_owner(ExprKind::VariableReference(_))`. Its witness
+//    (`call sub >x\n`, `loud.rs`) always fails on the `CALL` *instruction*
+//    first -- `instruction_owner`'s `Call::Named` arm, never this arm --
+//    so a wrong owner here would not be caught by anything until Task 3
+//    implements `Call::Named` and the `CALL` itself stops being loud,
+//    letting the expression's own failure (and this arm's real owner)
+//    surface.

@@ -561,30 +561,49 @@ fn form_name(kind: &ExprKind) -> String {
 }
 
 /// Task 0's Step 3: appends the owner phase to a loud message, `"{name} is
-/// not implemented ({owner})"`, unless `owner` is `"4a"` -- 4a's own name
-/// for itself, which [`instruction_owner`]/[`expr_owner`] answer for a
-/// variant this crate already implements. That case is reachable here only
-/// through two documented edge cases in `run.rs` (`run_loop`'s `DO`/`LOOP`
-/// COUNTER/`DO WITH` check, and its stem-target `DO OVER` deviation) where
-/// the outer `InstructionKind`/`ExprKind` is 4a's own but the specific
-/// reason that call happened is not. Printing "(4a)" there would read as
-/// self-contradictory -- the construct plainly *is* implemented -- so this
-/// leaves the message exactly as it was before this task whenever
-/// `instruction_owner`/`expr_owner` cannot attribute the failure to a later
-/// phase, and is the only reason this function exists rather than a bare
-/// `format!` at each of the two call sites.
-fn owned_message(name: &str, owner: &'static str) -> String {
-    if owner == "4a" {
-        format!("{name} is not implemented")
-    } else {
-        format!("{name} is not implemented ({owner})")
+/// not implemented ({owner})"`, or leaves it exactly as it was before this
+/// task (`"{name} is not implemented"`) when [`instruction_owner`]/
+/// [`expr_owner`] answer `None` -- meaning "this crate already implements
+/// that variant", not "the owner is some particular phase".
+///
+/// **Review finding I6.** An earlier version keyed this on the literal
+/// `"4a"`, which doubles a phase *name* as a sentinel for a different
+/// property ("implemented here"), and that conflation is a forward trap:
+/// the moment Task 3 implements `InstructionKind::Call`, the owner table
+/// would have to either mislabel it `"4a"` (false -- 4b implemented it) or
+/// leave it `"4b"` and let some other, still-unimplemented 4b-local site
+/// print `rexx-exec: CALL is not implemented (4b)` for a *different*
+/// reason -- the exact self-contradiction this carve-out exists to
+/// prevent, with no carve-out left to catch it. `Option<&'static str>`
+/// says what is actually meant and needs no phase name to mean it, so it
+/// survives every later phase unchanged.
+///
+/// `None` is reachable here only through two documented edge cases in
+/// `run.rs` (`run_loop`'s `DO`/`LOOP` COUNTER/`DO WITH` check, and its
+/// stem-target `DO OVER` deviation) where the outer `InstructionKind`/
+/// `ExprKind` is 4a's own but the specific reason that call happened is
+/// not. Printing an owner there would read as self-contradictory -- the
+/// construct plainly *is* implemented -- so this leaves the message
+/// exactly as it was before this task on that path, and is the only
+/// reason this function exists rather than a bare `format!` at each of the
+/// two call sites. `run.rs`'s `do_with_takes_the_loud_path`,
+/// `do_counter_takes_the_loud_path_regardless_of_which_other_kind_it_rides_on`,
+/// `do_over_a_stem_target_takes_the_loud_path` and
+/// `do_over_a_parenthesised_stem_target_is_also_caught` each assert the
+/// exact unsuffixed message (I1) -- before those assertions existed,
+/// deleting this carve-out left the whole suite green.
+fn owned_message(name: &str, owner: Option<&'static str>) -> String {
+    match owner {
+        None => format!("{name} is not implemented"),
+        Some(owner) => format!("{name} is not implemented ({owner})"),
     }
 }
 
 /// Who is responsible for an `InstructionKind` that is not (yet) 4a's own,
 /// spelled exactly as the split table spells it
 /// (`docs/superpowers/specs/2026-07-30-phase-4a-executor-design.md`, "The
-/// split") -- `"4a"` for a variant 4a already implements.
+/// split") -- `None` for a variant 4a already implements (see
+/// [`owned_message`]'s doc for why that is `None` and not a `"4a"` string).
 ///
 /// **A third copy of `tests/owners.rs`'s `INSTRUCTION_TAGS`, unavoidably**:
 /// production code cannot depend on anything under `tests/`, so the two
@@ -609,7 +628,7 @@ fn owned_message(name: &str, owner: &'static str) -> String {
 /// Exhaustive with no `_` arm, matching `Loud::instruction`'s own match: a
 /// new `InstructionKind` variant is a compile error here, not a silent
 /// omission from the loud message's owner.
-fn instruction_owner(kind: &InstructionKind) -> &'static str {
+fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
     match kind {
         InstructionKind::Assignment { .. }
         | InstructionKind::Label { .. }
@@ -630,13 +649,13 @@ fn instruction_owner(kind: &InstructionKind) -> &'static str {
         | InstructionKind::Exit { .. }
         | InstructionKind::Numeric { .. }
         | InstructionKind::Trace(_)
-        | InstructionKind::Nop => "4a",
-        InstructionKind::Call(call) => match &**call {
+        | InstructionKind::Nop => None,
+        InstructionKind::Call(call) => Some(match &**call {
             rexx_parse::Call::Named { .. }
             | rexx_parse::Call::Dynamic { .. }
             | rexx_parse::Call::Trap(_) => "4b",
             rexx_parse::Call::Qualified { .. } => "Phase 5",
-        },
+        }),
         InstructionKind::Return { .. }
         | InstructionKind::Procedure { .. }
         | InstructionKind::Use(_)
@@ -644,18 +663,18 @@ fn instruction_owner(kind: &InstructionKind) -> &'static str {
         | InstructionKind::Raise(_)
         | InstructionKind::Interpret { .. }
         | InstructionKind::Push { .. }
-        | InstructionKind::Queue { .. } => "4b",
+        | InstructionKind::Queue { .. } => Some("4b"),
         InstructionKind::Parse(_)
         | InstructionKind::Arg(_)
         | InstructionKind::Pull(_)
-        | InstructionKind::Address(_) => "4c",
+        | InstructionKind::Address(_) => Some("4c"),
         InstructionKind::Expose { .. }
         | InstructionKind::Options { .. }
         | InstructionKind::Message { .. }
         | InstructionKind::Guard(_)
         | InstructionKind::Reply { .. }
-        | InstructionKind::Forward(_) => "Phase 5",
-        InstructionKind::Command { .. } => "Phase 7",
+        | InstructionKind::Forward(_) => Some("Phase 5"),
+        InstructionKind::Command { .. } => Some("Phase 7"),
     }
 }
 
@@ -663,7 +682,16 @@ fn instruction_owner(kind: &InstructionKind) -> &'static str {
 /// own doc for why this is a third copy of `owners.rs`'s `EXPR_TAGS` (there,
 /// `EXPR_TAGS`), and for the completeness guarantee the exhaustive match
 /// below carries.
-fn expr_owner(kind: &ExprKind) -> &'static str {
+///
+/// **`ExprKind::VariableReference`'s arm is not checked by anything today
+/// (review finding I3).** Its only legal position is a call argument list,
+/// so `loud.rs`'s witness for it (`call sub >x\n`) always fails on the
+/// `CALL` *instruction* first -- `instruction_owner`'s `Call::Named` arm,
+/// never this function's `VariableReference` arm. `owners.rs`'s "What is
+/// pinned here" section names this as the one arm the drift check does not
+/// cover; Task 3 (which implements `Call::Named`) is what makes this
+/// witness actually reach the expression and this arm's own owner real.
+fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
     match kind {
         ExprKind::Literal(_)
         | ExprKind::Constant(_)
@@ -673,12 +701,12 @@ fn expr_owner(kind: &ExprKind) -> &'static str {
         | ExprKind::DotVariable(_)
         | ExprKind::Prefix { .. }
         | ExprKind::Binary { .. }
-        | ExprKind::Logical(_) => "4a",
-        ExprKind::Call { .. } | ExprKind::VariableReference(_) => "4b",
+        | ExprKind::Logical(_) => None,
+        ExprKind::Call { .. } | ExprKind::VariableReference(_) => Some("4b"),
         ExprKind::QualifiedCall { .. }
         | ExprKind::ClassResolver { .. }
         | ExprKind::Message { .. }
-        | ExprKind::List(_) => "Phase 5",
+        | ExprKind::List(_) => Some("Phase 5"),
     }
 }
 

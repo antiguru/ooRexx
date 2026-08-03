@@ -380,6 +380,18 @@ const EXPR_WITNESSES: &[Witness] = &[
         // `Call` itself is 4b's too, so the loudness this produces is not
         // confounded: nothing here depends on `VariableReference` doing
         // anything differently for the exit code to be `NOT_IMPLEMENTED_EXIT`.
+        //
+        // **That argument does not transfer to the owner half of this
+        // witness's own check, and does not hold for it (review finding
+        // I3).** `CALL` fails first here, so the stderr `every_out_of_
+        // scope_variant_fails_loudly` inspects for this row comes from
+        // `instruction_owner`'s `Call::Named` arm (`lib.rs`), never from
+        // `expr_owner`'s `VariableReference` arm -- the two copies agreeing
+        // on `"4b"` here is coincidence, not verification. `expr_owner`'s
+        // own doc comment names this the one arm `owners.rs`'s pinned
+        // drift check does not cover. Task 3 (which implements
+        // `Call::Named`) is what makes this witness actually reach the
+        // expression and the check here real.
         source: "call sub >x\n",
         category: Category::Expr,
     },
@@ -578,12 +590,24 @@ fn every_out_of_scope_variant_fails_loudly() {
         // that does not name the witness's own owner would mean production
         // and this table drifted apart, exactly the drift Step 5's fifth
         // pinned item warns about.
+        //
+        // **Pins the exact trailing shape, not merely the owner's presence
+        // (review finding I2).** An earlier version checked
+        // `stderr.contains(witness.owner)`, which a message reading
+        // `[4b] CALL: unimplemented` also satisfies -- `contains` cannot
+        // tell "names the owner in the documented shape" from "mentions the
+        // owner's bytes somewhere". `ends_with` on the exact suffix
+        // `owned_message` (`lib.rs`) produces is what actually pins the
+        // shape later tasks are told to rely on
+        // (`" is not implemented (OWNER)"`, `trim_end` first since every
+        // message ends in `\n`).
         let stderr = String::from_utf8_lossy(&outcome.stderr);
-        if !stderr.contains(witness.owner) {
+        let want_suffix = format!(" is not implemented ({})", witness.owner);
+        if !stderr.trim_end().ends_with(&want_suffix) {
             use std::fmt::Write as _;
             writeln!(
                 failures,
-                "{} ({}): stderr does not name this owner: {stderr:?}",
+                "{} ({}): stderr does not end with {want_suffix:?}: {stderr:?}",
                 witness.tag, witness.owner
             )
             .unwrap();

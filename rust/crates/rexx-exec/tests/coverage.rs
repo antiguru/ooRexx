@@ -425,6 +425,38 @@ fn read_subset(list_paths: &[&Path]) -> Vec<String> {
     union
 }
 
+/// Review finding I5: `read_subset`'s multi-file union and de-duplication
+/// -- the only new runtime logic Task 0 shipped -- had no test, because
+/// every real call site today passes a one-element slice (Step 4 ships no
+/// behaviour change on purpose). Two files with an overlapping entry are
+/// the direct exercise of the union path a one-element slice cannot reach:
+/// first-seen order across files, and a name repeated in the second file
+/// appearing only once, at its *first* position.
+#[test]
+fn read_subset_unions_two_files_first_seen_order_deduplicated() {
+    let dir = std::env::temp_dir();
+    let a = dir.join("rexx-exec-read-subset-test-a.txt");
+    let b = dir.join("rexx-exec-read-subset-test-b.txt");
+    fs::write(&a, "# a comment\none.rex\ntwo.rex\n").expect("writing the first list file");
+    fs::write(&b, "two.rex\nthree.rex\n").expect("writing the second list file");
+
+    let union = read_subset(&[&a, &b]);
+    assert_eq!(
+        union,
+        vec![
+            "one.rex".to_string(),
+            "two.rex".to_string(),
+            "three.rex".to_string()
+        ],
+        "the union must be first-seen order across files (one.rex before \
+         two.rex before three.rex) with two.rex's second, repeated \
+         occurrence (in b) dropped rather than duplicated"
+    );
+
+    let _ = fs::remove_file(&a);
+    let _ = fs::remove_file(&b);
+}
+
 fn corpus_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus")
 }

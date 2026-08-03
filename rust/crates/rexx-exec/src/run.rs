@@ -5069,18 +5069,36 @@ mod tests {
     fn do_with_takes_the_loud_path() {
         let mut interp = Interp::new(false);
         let failure = run_source(&mut interp, b"do with index i over 'x'\nsay i\nend").unwrap_err();
-        let Failure::Loud(_) = failure else {
+        let Failure::Loud(loud) = failure else {
             panic!("expected Loud, got {failure:?}");
         };
+        // Review finding I1: `instruction.kind` here is `InstructionKind::Do`,
+        // 4a's own -- `lib.rs`'s `owned_message` must not attribute this to a
+        // phase (there is none to blame; `DO WITH` is Phase 5's *reason*, but
+        // the message names the construct, not the reason). Mutation-kill for
+        // deleting the `"4a"`/`None` carve-out in `owned_message`: this
+        // assertion is what turns that deletion into a failure here, since no
+        // corpus program and no other test inspected the message text before.
+        assert_eq!(
+            loud.message, "DO is not implemented",
+            "a construct 4a does implement must not be attributed to a phase; \
+             see lib.rs's owned_message"
+        );
     }
 
     #[test]
     fn do_counter_takes_the_loud_path_regardless_of_which_other_kind_it_rides_on() {
         let mut interp = Interp::new(false);
         let failure = run_source(&mut interp, b"do counter c i = 1 to 3\nnop\nend").unwrap_err();
-        let Failure::Loud(_) = failure else {
+        let Failure::Loud(loud) = failure else {
             panic!("expected Loud, got {failure:?}");
         };
+        // Same mutation-kill as `do_with_takes_the_loud_path`, above.
+        assert_eq!(
+            loud.message, "DO is not implemented",
+            "a construct 4a does implement must not be attributed to a phase; \
+             see lib.rs's owned_message"
+        );
     }
 
     // ---- DO i = TO/BY/FOR (controlled), and DO OVER ----
@@ -5200,9 +5218,17 @@ mod tests {
     fn do_over_a_stem_target_takes_the_loud_path() {
         let mut interp = Interp::new(false);
         let failure = run_source(&mut interp, b"a.1 = 'x'\ndo v over a.\nsay v\nend").unwrap_err();
-        let Failure::Loud(_) = failure else {
+        let Failure::Loud(loud) = failure else {
             panic!("expected Loud, got {failure:?}");
         };
+        // Same mutation-kill as `do_with_takes_the_loud_path` (above, in this
+        // module): `DO`/`LOOP` is 4a's own regardless of which deviation
+        // routed this particular clause to the loud path.
+        assert_eq!(
+            loud.message, "DO is not implemented",
+            "a construct 4a does implement must not be attributed to a phase; \
+             see lib.rs's owned_message"
+        );
     }
 
     /// A stem target wrapped in parens is **also** caught -- corrected after
@@ -5219,9 +5245,16 @@ mod tests {
         let mut interp = Interp::new(false);
         let failure =
             run_source(&mut interp, b"a.1 = 'x'\ndo v over (a.)\nsay v\nend").unwrap_err();
-        let Failure::Loud(_) = failure else {
+        let Failure::Loud(loud) = failure else {
             panic!("expected Loud, got {failure:?}");
         };
+        // Same mutation-kill as `do_with_takes_the_loud_path` (above, in this
+        // module).
+        assert_eq!(
+            loud.message, "DO is not implemented",
+            "a construct 4a does implement must not be attributed to a phase; \
+             see lib.rs's owned_message"
+        );
     }
 
     /// F1 (branch review, Important): `initial`/`to`/`by` are rounded under
