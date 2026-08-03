@@ -38,8 +38,7 @@
 
 use rexx_core::{Heap, ObjRef, RootSet};
 use rexx_parse::{
-    CodeBody, ExprKind, InstructionKind, ParseError, PrefixOp, Program, SymbolId, SymbolTable,
-    parse_program,
+    CodeBody, ExprKind, InstructionKind, PrefixOp, Program, SymbolId, SymbolTable, parse_program,
 };
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -469,30 +468,15 @@ impl Loud {
         }
     }
 
-    /// A fragment that did not parse.
-    ///
-    /// Stays loud for the reason `execute`'s parse arm spells out: Task 12's
-    /// catalogue reports conditions a *running* program raises, and a syntax
-    /// error supplies neither a `Raised` nor a clause that became an
-    /// `Instruction`.
-    ///
-    /// **Reachable through `run_program` since 4b's Task 1, where before it
-    /// needed the deleted spike entry point.** So this is now a live
-    /// divergence rather than a latent one, and it is a real one: measured,
-    /// `interpret "do forever then"` gives the oracle 27.901 at rc 229 with
-    /// a two-line clause echo, and gives this `rexx-exec: INTERPRET text did
-    /// not parse: 27.901: Invalid DO or LOOP syntax.` at rc 120. Loud rather
-    /// than silent, which is what criterion 5 requires of it, and not
-    /// byte-identical, which no parse error in this crate is (`execute`'s own
-    /// parse arm: "wrong in the details on purpose and right in never being
-    /// mistaken for success"). Closing it needs a `ParseError`-to-`Raised`
-    /// conversion, which is the same machinery a *top-level* syntax error
-    /// wants and should be built once for both, not here for one caller.
-    fn parse(error: &ParseError) -> Loud {
-        Loud {
-            message: format!("INTERPRET text did not parse: {error}"),
-        }
-    }
+    // **There is no `Loud::parse` any more, and its absence is the fix.** A
+    // fragment that did not parse used to become a loud `INTERPRET text did
+    // not parse: ...` at rc 120, with a doc comment recording that the
+    // oracle raises 27.901 at rc 229 instead and that closing the gap needed
+    // a `ParseError`-to-`Raised` conversion "built once for both, not here
+    // for one caller". 4b's Task 2 built it -- `impl From<&ParseError> for
+    // Raised` in `error.rs`, which `run_fragment` now uses. What the *top
+    // level* could and could not take from it is written out at `execute`'s
+    // own parse arm, below.
 }
 
 /// Names an expression form in **bounded** text, for a loud failure to quote.
@@ -899,7 +883,57 @@ struct Interp {
     /// `execute` after `run` has already popped the activation the site came
     /// from. That teardown is why the site cannot simply be reconstructed at
     /// the top: by then the frame is gone.
+    ///
+    /// **First-wins *within one level*, and 4b's Task 2 left that unchanged
+    /// on purpose (inherited item I11).** The `is_none()` guard in
+    /// `record_failure_at` still means the most specific clause at this level
+    /// wins, and it still never clears. Clearing it matters only once a trap
+    /// can resume after a raise, which is **Task 7's** to own -- for both this
+    /// field and [`Interp::failure_sites`] below, since a resumed trap would
+    /// have to empty the stack as well as the slot.
     failure_site: Option<FailureSite>,
+    /// The levels that have already finished failing, innermost first --
+    /// `Raised::report`'s echo stack minus its last entry.
+    ///
+    /// **Why two fields and not one `Vec`.** `failure_site` is the level
+    /// currently unwinding and is first-wins; this is the record of levels
+    /// already sealed. `run.rs`'s `seal_site_level` moves one into the other
+    /// and is called by exactly the constructs that open a level -- today
+    /// `run_fragment`, and Task 3's `CALL` next. Keeping the two apart is
+    /// what lets the guard stay a plain `is_none()` rather than a "did
+    /// anything get recorded since the current level opened" watermark, and
+    /// it is why the pre-Task-2 single-site behaviour falls out unchanged
+    /// when nothing ever seals: this stays empty and `execute` builds a
+    /// one-entry stack.
+    ///
+    /// Never resolved by walking `Interp::activations` instead: `run` pops
+    /// the activation before `execute` sees the error, which is the whole
+    /// reason `failure_site` exists rather than being reconstructed at the
+    /// top.
+    failure_sites: Vec<FailureSite>,
+    /// The line number every clause echo prints while an `INTERPRET`
+    /// fragment is running, overriding the clause's own line in its own
+    /// source.
+    ///
+    /// A fragment's spans index the fragment's text, which is line 1 of a
+    /// source of its own, and the oracle prints the **enclosing `INTERPRET`
+    /// clause's** line for every clause inside it -- measured, `interpret
+    /// "say 2 & 1"` on line 2 echoes both the fragment's clause and the
+    /// `INTERPRET` as line 2, and a fragment inside a fragment (`interpret
+    /// 'interpret "say 2 & 1"'` on line 3, inside two `DO`s) echoes all
+    /// three at line 3. So the override is set once by the outermost
+    /// `INTERPRET` and inherited unchanged inward, which falls out of setting
+    /// it from the resolved line of the `INTERPRET` clause itself: by then
+    /// that line has already been through any override in force.
+    ///
+    /// A field rather than a parameter for the same reason
+    /// `current_value_indent` is one: `clause_site` is reached from four
+    /// call sites across `step_in_temps_frame`, `record_failure_at`,
+    /// `leave_origin` and `run_otherwise`, none of which otherwise has any
+    /// business knowing a fragment is running. Saved and restored around
+    /// `run_fragment` by the `Interpret` arm, not cleared afterwards, so a
+    /// nested fragment cannot strand the outer one's value.
+    clause_line_override: Option<usize>,
     /// Task 16's collect-on-every-allocation gate criterion (4a exit gate,
     /// criterion 4): when true, [`Interp::alloc_with`] calls `Heap::collect`
     /// after every allocation instead of never. Off by default, and the off
@@ -966,6 +1000,8 @@ impl Interp {
             current_case_text: None,
             indent_offset: 0,
             failure_site: None,
+            failure_sites: Vec::new(),
+            clause_line_override: None,
             stress_collect: false,
             depth: 0,
             max_depth: 0,
@@ -1261,17 +1297,35 @@ fn on_interpreter_thread(body: impl FnOnce() -> Outcome + Send + 'static) -> Out
 fn execute(path: &str, text: Vec<u8>, collect_every_alloc: bool) -> Outcome {
     let program = match parse_program(text) {
         Ok(program) => program,
-        // **A parse failure stays loud, and Task 12 did not change that.** It
-        // built the catalogue and the three-line format for conditions a
-        // *running* program raises, which is what the arms below now use. A
-        // syntax error needs two things that path does not supply: the major
-        // and sub extracted from a `ParseError` rather than from a `Raised`,
-        // and a clause echo for a clause that by definition did not parse into
-        // an `Instruction` with a `clause_span`. Parse errors are also
-        // deliberately not reproduced byte for byte here (the number and sub
-        // match on a plausible line; message text and substitutions are not
-        // gated), so this arm is wrong in the details on purpose and right in
-        // never being mistaken for success.
+        // **A top-level parse failure stays loud, and 4b's Task 2 checked
+        // whether it could stop being loud rather than assuming either way.**
+        // Task 2 built the `ParseError`-to-`Raised` conversion the old
+        // `Loud::parse` doc comment asked for and used it for `INTERPRET`
+        // (`run_fragment`). This arm can have the *mapping* -- it is one
+        // `impl From` and nothing about it is fragment-specific -- but not
+        // the *report*, and the obstacle is concrete rather than a
+        // preference: `Raised::report`'s major line names a source line, the
+        // line comes from `ParseError::line(&source)`, and `parse_program`
+        // takes `text` by value and returns only the `ParseError` on the
+        // failure path, so by the time this arm runs the `ProgramSource` that
+        // could answer has been built and dropped inside the parser. There is
+        // no way back to it from here: `rexx-parse` exposes `ProgramSource::
+        // new` and `scan`, but the composition that turns a `&ProgramSource`
+        // into a `Program` is private, so the only route is to clone the
+        // whole program text before every parse to serve a path that runs
+        // only on syntax errors. Closing it properly is a `rexx-parse`
+        // signature change -- hand the source back alongside the error, or
+        // make the `parse(&ProgramSource)` composition public -- which is
+        // outside the file list Task 2 was given, so it is written down here
+        // rather than half-done. The second gap `INTERPRET` shares is the
+        // clause echo: the failing clause never became an `Instruction`, and
+        // `ParseError` carries the clause's *start* byte with no end, so
+        // there is no span to echo at either level.
+        //
+        // Parse errors remain deliberately not reproduced byte for byte (the
+        // number and sub match on a plausible line; message text and
+        // substitutions are not gated), so this arm is wrong in the details
+        // on purpose and right in never being mistaken for success.
         Err(error) => {
             return Outcome {
                 exit_code: NOT_IMPLEMENTED_EXIT,
@@ -1290,7 +1344,12 @@ fn execute(path: &str, text: Vec<u8>, collect_every_alloc: bool) -> Outcome {
     let result = interp.run(program);
     let stack = interp.stack_span();
     let collections = interp.heap.collections_performed();
-    let failure_site = interp.failure_site.take();
+    // The whole echo stack, innermost first: the levels `seal_site_level`
+    // already closed, then the level that was still unwinding when the
+    // condition reached the top. See `Interp::failure_sites` for why the two
+    // are separate fields, and `Raised::report` for what the order means.
+    let mut failure_sites = std::mem::take(&mut interp.failure_sites);
+    failure_sites.extend(interp.failure_site.take());
     // `exit_code_for` needs `&mut interp` (`to_number` fills a lazy cache),
     // so this has to run before `interp.trace`/`interp.out` move out of
     // `interp` below -- a partial move of one field ends `interp`'s usability
@@ -1305,21 +1364,22 @@ fn execute(path: &str, text: Vec<u8>, collect_every_alloc: bool) -> Outcome {
             NOT_IMPLEMENTED_EXIT
         }
         Err(Failure::Raised(raised)) => {
-            // `run_activation` records the site on the way out. `None` here
-            // would mean a condition escaped without passing an instruction
-            // loop, which nothing in 4a can do; it renders visibly rather than
-            // panicking, on the error path's standing rule that a reportable
-            // condition must never become a crash.
-            let failure_site = failure_site.unwrap_or_else(|| FailureSite {
-                line: 0,
-                text: b"<no failing clause recorded>".to_vec(),
-                indent: 0,
-            });
+            // `run_activation` records the site on the way out. An empty
+            // stack here would mean a condition escaped without passing an
+            // instruction loop, which nothing in 4a or 4b-so-far can do; it
+            // renders visibly rather than panicking, on the error path's
+            // standing rule that a reportable condition must never become a
+            // crash.
+            if failure_sites.is_empty() {
+                failure_sites.push(FailureSite {
+                    line: 0,
+                    text: b"<no failing clause recorded>".to_vec(),
+                    indent: 0,
+                });
+            }
             let site = ClauseSite {
                 path,
-                line: failure_site.line,
-                text: &failure_site.text,
-                indent: failure_site.indent,
+                sites: &failure_sites,
             };
             interp.trace.extend_from_slice(&raised.report(&site));
             raised.exit_code()
@@ -1520,6 +1580,118 @@ mod tests {
         let outcome = run_program(TEST_PATH, program.to_vec());
         assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
         assert_eq!(outcome.stdout, b"before\ninside\n");
+    }
+
+    /// 4b Task 2: a condition raised inside an `INTERPRET` fragment reports
+    /// **both** clauses, and this is the whole report, byte for byte, at the
+    /// one level `run_program` can see it.
+    ///
+    /// Oracle, verbatim, for a program whose two `DO`s put the `INTERPRET` at
+    /// printed indent 4 and whose fragment nests its failing clause one
+    /// deeper (rc 222, empty stdout):
+    ///
+    /// ```text
+    ///      3 *-*       say 2 & 1;
+    ///      3 *-*     interpret "do jj = 1 to 1; say 2 & 1; end"
+    /// Error 34 running <path> line 3:  Logical value not 0 or 1.
+    /// Error 34.901:  Logical value must be exactly "0" or "1"; found "2".
+    /// ```
+    ///
+    /// **Every field here discriminates a different wrong implementation.**
+    /// Four mutations, each built and run rather than argued about:
+    ///
+    /// | mutation | this shape prints | `interpret ...` alone on line 1 |
+    /// |---|---|---|
+    /// | the level is never sealed | one echo, not two | one echo, not two |
+    /// | no line override | inner echo at line **1** | **identical** |
+    /// | a called routine's `+ 2` base | inner echo at **8** | inner at 4 |
+    /// | no base at all | inner echo at **2** | **identical** |
+    ///
+    /// **That right-hand column is why the program is two `DO`s deep with the
+    /// `INTERPRET` on line 3 and not one line at top level**, and the
+    /// measurement corrected a claim written here first and checked
+    /// afterwards. Two of the four survive the simplest shape, and for two
+    /// unrelated reasons that both look like "it worked": at indent 0 the
+    /// base is 0, so omitting it changes nothing, and with the `INTERPRET` on
+    /// line 1 the enclosing line and the fragment's own line are both 1, so
+    /// overriding it changes nothing either. Varying only the depth would
+    /// have caught the first and not the second.
+    ///
+    /// `say 2 & 1;` keeps its semicolon because that is where the fragment's
+    /// own clause span ends; trimming it diverges.
+    ///
+    /// `rust/corpus/lang/interpret_error_echo.rex` is the same shape as a
+    /// live differential, and all four mutations above were confirmed against
+    /// it as well. This test exists beside it because the corpus gate needs a
+    /// built oracle and is skipped without one, and the property is too
+    /// central to have no assertion on a machine that lacks it.
+    #[test]
+    fn a_raise_inside_a_fragment_reports_both_clauses() {
+        let program = b"do kk = 1 to 1\n\
+                        do mm = 1 to 1\n\
+                        interpret \"do jj = 1 to 1; say 2 & 1; end\"\n\
+                        end\n\
+                        end\n";
+        let outcome = run_program(TEST_PATH, program.to_vec());
+        assert_eq!(outcome.exit_code, 222);
+        assert_eq!(outcome.stdout, b"");
+        assert_eq!(
+            String::from_utf8(outcome.stderr).unwrap(),
+            format!(
+                concat!(
+                    "     3 *-*       say 2 & 1;\n",
+                    "     3 *-*     interpret \"do jj = 1 to 1; say 2 & 1; end\"\n",
+                    "Error 34 running {path} line 3:  Logical value not 0 or 1.\n",
+                    "Error 34.901:  Logical value must be exactly \"0\" or \"1\"; found \"2\".\n",
+                ),
+                path = TEST_PATH
+            )
+        );
+    }
+
+    /// 4b Task 2, Step 5b: a fragment that does not parse raises the oracle's
+    /// own condition instead of failing loudly.
+    ///
+    /// Measured: `interpret "do forever then"` is **27.901 at rc 229** on the
+    /// oracle, and `interpret "if"` is 35.929 at rc 221. Through 4a and 4b's
+    /// Task 1 both were `Loud::parse` at rc 120 -- correct-but-loud while
+    /// `INTERPRET` was unreachable, and a live divergence once Task 1 made it
+    /// reachable.
+    ///
+    /// **What is asserted and what is deliberately not.** The exit code and
+    /// the enclosing clause echo are the oracle's exactly, so this fails for
+    /// anything that kept `NOT_IMPLEMENTED_EXIT` or that dropped the echo.
+    /// Two things still diverge and are asserted as they *are* rather than as
+    /// the oracle has them, so the divergence cannot shrink unnoticed: the
+    /// oracle prints a further echo of the failing fragment clause above this
+    /// one (`     2 *-* do forever then`), which needs a clause span
+    /// `ParseError` does not carry, and its sub-message reads `found "THEN"`
+    /// where ours leaves the catalogue's `&1` unfilled, because `ParseError`
+    /// carries no substitution values. `phase-4-exclusions.txt`'s amended
+    /// KNOWN GAP row records both with their measurements.
+    #[test]
+    fn a_fragment_that_does_not_parse_raises_the_oracles_condition() {
+        let outcome = run_program(
+            TEST_PATH,
+            b"say 1\ninterpret \"do forever then\"\n".to_vec(),
+        );
+        assert_eq!(outcome.exit_code, 229);
+        assert_eq!(outcome.stdout, b"1\n");
+        assert_eq!(
+            String::from_utf8(outcome.stderr).unwrap(),
+            format!(
+                concat!(
+                    "     2 *-* interpret \"do forever then\"\n",
+                    "Error 27 running {path} line 2:  Invalid DO or LOOP syntax.\n",
+                    "Error 27.901:  Incorrect data following FOREVER keyword on the loop; \
+                     found \"&1\".\n",
+                ),
+                path = TEST_PATH
+            )
+        );
+
+        let outcome = run_program(TEST_PATH, b"say 1\ninterpret \"if\"\n".to_vec());
+        assert_eq!(outcome.exit_code, 221);
     }
 
     /// The reported span comes from one call chain, so what else the program

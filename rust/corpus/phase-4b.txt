@@ -47,3 +47,11 @@
 
 # New for 4b Task 1 -- INTERPRET:
 lang/interpret_dynamic.rex
+
+# New for 4b Task 2 -- the error report's echo stack. interpret_dynamic.rex
+# above raises nothing and traces nothing, which was deliberate: through Task 1
+# a fragment's own clause was never echoed, so any program that traced or
+# raised inside fragment text diverged by one line per fragment clause. This
+# one raises on purpose, and its whole value is the two-line echo the report
+# now prints. Its own header says which wrong answer each field would produce.
+lang/interpret_error_echo.rex

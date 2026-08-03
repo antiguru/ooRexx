@@ -174,8 +174,10 @@ enum Flow {
 /// every transcript.
 struct LeaveOrigin {
     /// `None` only when `source` was `None` at the moment this instruction
-    /// stepped (inside an `INTERPRET` fragment, `run_fragment`'s own
-    /// established convention of not resolving a site there at all).
+    /// stepped, which **no caller now produces**: `run_fragment` was the one
+    /// that did, and since 4b's Task 2 it passes its own fragment source, so
+    /// a `LEAVE`/`ITERATE` inside fragment text resolves a real site and
+    /// becomes the report's innermost echo. See `Interp::clause_site`.
     site: Option<(usize, Vec<u8>)>,
     indent: usize,
 }
@@ -427,12 +429,9 @@ impl Interp {
             // left to resolve against.
             //
             // A condition raised inside an `INTERPRET` fragment arrives here
-            // too, and records the enclosing `INTERPRET` clause rather than
-            // the fragment's own, because `run_fragment` passes `None` for
-            // `source` and deliberately does not record: its spans index the
-            // fragment's own source, not this one.
-            //
-            // The oracle prints **both**, innermost first, each carrying the
+            // too, and this level records the enclosing `INTERPRET` clause --
+            // but it is no longer the *only* thing recorded. The oracle
+            // prints one echo per level, innermost first, each carrying the
             // enclosing clause's line number (measured, `interpret "say 2 &
             // 1"` on line 2):
             //
@@ -441,45 +440,25 @@ impl Interp {
             //      2 *-* interpret "say 2 & 1"
             // ```
             //
-            // so this reproduces the second of those lines and not the
-            // first. Stacking one echo per nesting level changes
-            // `Raised::report`'s shape, and also needs the fragment's own
-            // clause *text* resolved against `Fragment::source` while its own
-            // line number is taken from the enclosing `INTERPRET` -- neither
-            // of which `FailureSite` (one site, first-wins) can express.
+            // **Both lines are produced now, and 4b's Task 2 is what closed
+            // it** -- through 4a and 4b's Task 1 this reproduced only the
+            // second. `run_fragment` passes `Some(&fragment.source)` so the
+            // fragment's own spans resolve its clause *text*, the `Interpret`
+            // arm puts the enclosing clause's line and indent in force for
+            // the duration (`Interp::clause_line_override`,
+            // `Interp::indent_offset`), and `seal_site_level` closes the
+            // fragment's level so the first-wins slot is free for this one.
+            // Three separate mechanisms, because the naive version -- pass
+            // the source down and nothing else -- was built twice and
+            // measured wrong twice, once on the line number and once on which
+            // clause won the race.
             //
-            // **4b's Task 1 made this gap reachable through `run_program`,
-            // where before it was latent.** 4a reached a fragment only
-            // through a test-only entry point, so no shipped program could
-            // produce the divergence; `INTERPRET` is implemented now, so any
-            // condition raised inside fragment text -- measured, all six
-            // `LEAVE`/`ITERATE` boundary shapes in `run_fragment`'s own doc
-            // comment, and `interpret "say 2 & 1"` above -- matches the
-            // oracle on stdout, on rc, on the error numbers and on every
-            // line of the report *except* the missing innermost echo.
-            //
-            // **The missing echo is not confined to the error path, and an
-            // earlier version of this comment implied it was** (review
-            // finding I1). The same `source: None` that suppresses the
-            // fragment's clause here also suppresses it under `TRACE`, where
-            // nothing is raised at all. Measured, `trace r` / `zz = 'nop'` /
-            // `interpret zz`:
-            //
-            // ```text
-            //      3 *-* interpret zz
-            //        >>>   "nop"
-            //      3 *-* nop      <- the oracle prints this line; we do not
-            // ```
-            //
-            // rc 0 and stdout identical, stderr one line short. `TRACE` has
-            // been in scope since 4a, so a 4b corpus program needs only to
-            // trace -- not to raise -- to hit this. The `>>>` line above is
-            // present because the `Interpret` arm now calls `trace_result`
-            // (I1(a), fixed); the clause echo is the half that needs the
-            // stack. So the accurate bound is: **any program that traces or
-            // raises inside fragment text diverges by one line per fragment
-            // clause**, and `lang/interpret_dynamic.rex` avoids it by doing
-            // neither, not merely by raising nothing.
+            // The same gap ran through `TRACE`, where nothing is raised at
+            // all (review finding I1), and closed with it: measured, `trace
+            // r` / `zz = 'nop'` / `interpret zz` now prints the oracle's
+            // three lines rather than its first two, and `run.rs`'s own
+            // `interpret_traces_the_text_it_is_about_to_run` asserts the
+            // whole transcript instead of stopping one line short.
             let flow =
                 self.step_in_temps_frame(&code, index, instruction, Some(&program.source))?;
             match flow {
@@ -565,10 +544,13 @@ impl Interp {
     /// `run_activation` itself was stepping, which is wrong for exactly the
     /// same reason `run_activation`'s own doc comment gives for popping this
     /// activation before resolving a site: the last place the failing
-    /// instruction is in hand has to be the one that resolves it. `None`
-    /// preserves `run_fragment`'s existing, deliberate choice not to resolve
-    /// a site at all for an instruction inside an `INTERPRET` fragment (its
-    /// spans index the fragment's own source, not this one).
+    /// instruction is in hand has to be the one that resolves it. **Every
+    /// caller passes `Some` since 4b's Task 2**, `run_fragment` included: a
+    /// fragment resolves its clauses against its own source now, with the
+    /// enclosing clause's line and indent supplied separately
+    /// (`Interp::clause_site`'s own doc comment has why the two come apart).
+    /// The parameter stays an `Option` only because collapsing it is a
+    /// mechanical change across every signature that threads it.
     fn step(
         &mut self,
         code: &Code<'_>,
@@ -792,18 +774,54 @@ impl Interp {
                 // reading the field afterwards would report the *fragment's*
                 // last indent for the enclosing clause's own value.
                 //
-                // The third line above -- the fragment's own clause echo -- is
-                // still missing, and deliberately: `run_fragment` passes
-                // `source: None`, so `step_in_temps_frame` has no clause site
-                // to echo. Handing it `Some(&fragment.source)` would print the
-                // *fragment's* line number where the oracle prints the
-                // enclosing `INTERPRET`'s, and would also make the fragment's
-                // clause win `record_failure_site`'s first-wins race, moving
-                // the error report off the line the oracle names. Both need
-                // the echo stack Task 2 owns; `run_activation`'s own comment
-                // has the full disclosure.
+                // The third line above -- the fragment's own clause echo --
+                // is what the `run_fragment` call below now produces, and it
+                // took the whole of 4b's Task 2 rather than the one-line
+                // change it looks like. Handing `run_fragment` a
+                // `Some(&fragment.source)` and nothing else was built twice
+                // and measured wrong twice, for two independent reasons: the
+                // fragment's spans carry the *fragment's* line numbering
+                // where the oracle prints the enclosing `INTERPRET` clause's
+                // (measured, a raise inside fragment text reports line 3 and
+                // the naive fix reports line 1), and the fragment's clause
+                // would win `record_failure_at`'s first-wins race, taking the
+                // report off the enclosing clause instead of adding to it.
+                // The two lines below are the fix for the first and
+                // `run_fragment`'s own `seal_site_level` is the fix for the
+                // second.
                 self.trace_result(self.current_value_indent, &text);
-                self.run_fragment(text)
+                // **The fragment's level, with delta 0.** Measured: a
+                // fragment's clauses print at the enclosing `INTERPRET`
+                // clause's own absolute indent plus whatever nests them
+                // *inside* the fragment -- `interpret "do jj = 1 to 1; say 2
+                // & 1; end"` at top level echoes the inner clause at 2 and
+                // the `INTERPRET` at 0, and the identical fragment two `DO`s
+                // deep echoes them at 6 and 4. So the base is the enclosing
+                // clause's printed indent exactly, with no bump of its own --
+                // unlike a called routine's, which the same measurements put
+                // two spaces further in (`call sub1` at printed indent 4 into
+                // a flat routine echoes the callee's clause at 6), and which
+                // is Task 3's to add.
+                //
+                // `indent_offset` is the mechanism (`lib.rs`'s own doc
+                // comment on the field), **set rather than added**: the
+                // enclosing clause's `current_value_indent` is already
+                // `static_indent + indent_offset`, so adding would count the
+                // offset in force twice. Both this and the line override are
+                // saved and restored rather than cleared, so a fragment
+                // inside a fragment cannot strand the outer one's values --
+                // and restoring the line override is what makes the *inner*
+                // fragment inherit the outer's line rather than resolving one
+                // of its own, measured on `interpret 'interpret "say 2 & 1"'`
+                // where all three echoes carry the outermost line.
+                let base_indent = self.current_value_indent;
+                let base_line = self.clause_site(source, instruction).map(|(line, _)| line);
+                let saved_offset = std::mem::replace(&mut self.indent_offset, base_indent);
+                let saved_line = std::mem::replace(&mut self.clause_line_override, base_line);
+                let flow = self.run_fragment(text);
+                self.indent_offset = saved_offset;
+                self.clause_line_override = saved_line;
+                flow
             }
 
             // `IF`/`THEN`/`ELSE`. This arm resolves the whole construct
@@ -929,7 +947,7 @@ impl Interp {
                     // outside any `step_in_temps_frame` call of its own.
                     self.current_value_indent = when_indent;
                     if self.trace_mode.all
-                        && let Some((line, text)) = clause_site(source, when_instruction)
+                        && let Some((line, text)) = self.clause_site(source, when_instruction)
                     {
                         self.trace_clause(line, when_indent, &text);
                     }
@@ -1380,10 +1398,16 @@ impl Interp {
     /// makes the *first* resolution win, which is always the most specific
     /// one available: the deepest `step_in_temps_frame` call, or `Select`'s
     /// own direct call for a `When`/`WhenCase` condition, always runs before
-    /// any enclosing propagation reaches an outer wrapper. `source: None`
-    /// (`run_fragment`'s own call into `run_bounded`) skips this entirely,
-    /// preserving that function's existing, deliberate choice not to
-    /// resolve a site for an instruction inside an `INTERPRET` fragment.
+    /// any enclosing propagation reaches an outer wrapper.
+    ///
+    /// **First-wins is per *level*, and an `INTERPRET` fragment is a level**
+    /// (4b's Task 2). The guard is unchanged; what changed is that
+    /// `run_fragment` calls `seal_site_level` on its way out, so the clause
+    /// this guard protects is the first one recorded *since the current level
+    /// opened*, not the first one recorded in the whole run. Without that,
+    /// the fragment's own clause would win the race outright and the
+    /// enclosing `INTERPRET` would never be echoed at all -- which is the
+    /// second of the two ways the obvious one-line fix was measured wrong.
     fn step_in_temps_frame(
         &mut self,
         code: &Code<'_>,
@@ -1427,7 +1451,7 @@ impl Interp {
         let indent = static_indent(&code.body.instructions, index) + self.indent_offset;
         self.current_value_indent = indent;
         if self.trace_mode.all
-            && let Some((line, text)) = clause_site(source, instruction)
+            && let Some((line, text)) = self.clause_site(source, instruction)
         {
             self.trace_clause(line, indent, &text);
         }
@@ -1524,7 +1548,7 @@ impl Interp {
         if self.failure_site.is_some() {
             return;
         }
-        if let Some((line, text)) = clause_site(source, blame) {
+        if let Some((line, text)) = self.clause_site(source, blame) {
             self.failure_site = Some(FailureSite { line, text, indent });
         }
     }
@@ -1547,7 +1571,7 @@ impl Interp {
         instruction: &Instruction,
     ) -> LeaveOrigin {
         LeaveOrigin {
-            site: clause_site(source, instruction),
+            site: self.clause_site(source, instruction),
             // `+ self.indent_offset` (F-EX1's own correction to F3,
             // `lib.rs`'s own doc comment): found missing here on the
             // *second* re-verification of F-EX1's own fix, not the first --
@@ -1657,7 +1681,7 @@ impl Interp {
             static_indent(&code.body.instructions, otherwise_index) + self.indent_offset;
         self.current_value_indent = otherwise_indent;
         if self.trace_mode.all
-            && let Some((line, text)) = clause_site(source, otherwise_instruction)
+            && let Some((line, text)) = self.clause_site(source, otherwise_instruction)
         {
             self.trace_clause(line, otherwise_indent, &text);
         }
@@ -1853,7 +1877,7 @@ impl Interp {
                     None => {
                         if self.trace_mode.all
                             && let Some((line, text)) =
-                                clause_site(source, &code.body.instructions[end_index])
+                                self.clause_site(source, &code.body.instructions[end_index])
                         {
                             // A fresh computation, not `current_value_
                             // indent` -- `run_bounded`, just above, has
@@ -2113,7 +2137,7 @@ impl Interp {
             if !first_pass
                 && !is_until_loop
                 && self.trace_mode.all
-                && let Some((line, text)) = clause_site(source, do_instruction)
+                && let Some((line, text)) = self.clause_site(source, do_instruction)
             {
                 self.trace_clause(line, do_indent, &text);
             }
@@ -2161,7 +2185,7 @@ impl Interp {
             // genuinely falls through to it.
             let end_instruction = &code.body.instructions[end_index];
             if self.trace_mode.all
-                && let Some((line, text)) = clause_site(source, end_instruction)
+                && let Some((line, text)) = self.clause_site(source, end_instruction)
             {
                 self.trace_clause(line, do_indent, &text);
             }
@@ -2186,7 +2210,7 @@ impl Interp {
                 // top-of-loop one, so it needs its own echo unconditionally
                 // rather than sharing `first_pass`'s gate.
                 if self.trace_mode.all
-                    && let Some((line, text)) = clause_site(source, do_instruction)
+                    && let Some((line, text)) = self.clause_site(source, do_instruction)
                 {
                     self.trace_clause(line, do_indent, &text);
                 }
@@ -2763,30 +2787,50 @@ impl Interp {
     /// turned into the condition the oracle actually raises. Nothing past
     /// this function ever sees the id.
     ///
-    /// **The site the report names is the enclosing `INTERPRET` clause, and
-    /// the oracle prints one line more than that.** `record_leave_failure`
-    /// is called with an origin whose `site` is `None` (`LeaveOrigin.site`'s
-    /// own doc: always `None` inside a fragment, since `source` is), so it
-    /// does nothing, and the enclosing `INTERPRET` clause's own
-    /// `step_in_temps_frame` fills the site in on the way out -- first-wins,
-    /// same as for any other condition raised inside a fragment. The oracle
-    /// echoes **both** clauses, innermost first, each carrying the enclosing
-    /// `INTERPRET`'s line number:
+    /// **The report names both clauses, innermost first, each carrying the
+    /// enclosing `INTERPRET`'s line number** -- measured, `do outer = 1 to 1`
+    /// around `interpret "leave outer"` on line 2:
     ///
     /// ```text
-    ///      3 *-*   leave outer
-    ///      3 *-*   interpret "leave outer"
+    ///      2 *-*   leave outer
+    ///      2 *-*   interpret "leave outer"
     /// ```
     ///
-    /// This reproduces the second line only. That is the same known gap
-    /// `run_activation`'s own comment already records for `interpret "say 2
-    /// & 1"` -- stacking one echo per nesting level changes `Raised::report`'s
-    /// shape -- not a new one, and it is why `interpret_dynamic.rex` (the 4b
-    /// subset's witness) raises nothing.
+    /// Both are produced since 4b's Task 2, where 4a and 4b's Task 1 produced
+    /// the second alone. The `LEAVE`'s own clause is the innermost entry:
+    /// `leave_origin` resolves a real site now that this function passes
+    /// `Some(&fragment.source)`, `record_leave_failure` records it, and the
+    /// `seal_site_level` call beside it closes this level so the enclosing
+    /// `INTERPRET` clause can still record its own. Both arms below need that
+    /// call separately from the `run_bounded` error path above, because a
+    /// `Flow::Leave` reaches here as an `Ok` and only becomes an `Err` here.
     fn run_fragment(&mut self, text: Vec<u8>) -> Result<Flow, Failure> {
         let fragment: Rc<Fragment> = match parse_interpret(text) {
             Ok(fragment) => Rc::new(fragment),
-            Err(error) => return Err(Loud::parse(&error).into()),
+            // **Step 5b: the oracle's own condition, not a loud refusal.**
+            // Measured, `interpret "do forever then"` on line 2 raises 27.901
+            // at rc 229; this used to be `Loud::parse`, `rexx-exec: INTERPRET
+            // text did not parse: ...` at rc 120. `error.rs`'s own `impl
+            // From<&ParseError> for Raised` has the transcript and states
+            // exactly what the conversion cannot carry.
+            //
+            // **No level is sealed here, and that is a real one-line
+            // divergence rather than an oversight.** The oracle echoes the
+            // failing *fragment* clause too, at indent 0 whatever the
+            // enclosing indent (measured: two `DO`s deep, the fragment's
+            // `do forever then` still prints at 0 while the `INTERPRET`
+            // prints at 4, so it is not this task's activation base under
+            // another name -- a parse-time echo simply carries no indent).
+            // Reproducing it needs the failing clause's *text*, and
+            // `ParseError` carries the clause's start byte with no end, so
+            // there is no span to cut. Guessing one -- to end of source, or
+            // to the next `;` -- is right for a single-clause fragment and
+            // silently wrong for `interpret "do jj = 1 to 1; do forever
+            // then; end"`, whose echo is `do forever then;` and not the rest
+            // of the text. Closing it wants a clause span on `ParseError`,
+            // which is a `rexx-parse` change; `execute`'s own parse arm
+            // records the same gap for the top-level path.
+            Err(error) => return Err(Raised::from(&error).into()),
         };
 
         // An owned `Fragment` would do here, since nothing but this loop reads
@@ -2804,7 +2848,27 @@ impl Interp {
         // it has to propagate rather than stop here -- `run_bounded`'s own
         // catch-all does exactly that for anything it does not own, `Exit`
         // included, with nothing fragment-specific to add.
-        let flow = self.run_bounded(&code, 0, code.body.instructions.len(), None)?;
+        //
+        // **`Some(&fragment.source)`, where 4a passed `None`.** The fragment
+        // resolves its own clauses now: its spans are the only thing that
+        // can, and the `Interpret` arm has already put the enclosing clause's
+        // line and indent in place so the *text* comes from here while the
+        // *line* and the indent base do not. `?` is deliberately not used --
+        // an error has to seal this level before it propagates, or the
+        // enclosing `INTERPRET` clause's own `step_in_temps_frame` will find
+        // `failure_site` already full and record nothing.
+        let flow = match self.run_bounded(
+            &code,
+            0,
+            code.body.instructions.len(),
+            Some(&fragment.source),
+        ) {
+            Ok(flow) => flow,
+            Err(failure) => {
+                self.seal_site_level();
+                return Err(failure);
+            }
+        };
 
         // The exhausted search, at the fragment's own boundary rather than
         // the program's: measured, the oracle's `LEAVE`/`ITERATE` search
@@ -2821,6 +2885,7 @@ impl Interp {
         match flow {
             Flow::Leave(name, origin) => {
                 self.record_leave_failure(&origin);
+                self.seal_site_level();
                 let raised = match name {
                     None => raised_leave_no_loop(),
                     Some(id) => raised_leave_no_match(fragment.symbols.name(id).as_bytes()),
@@ -2829,6 +2894,7 @@ impl Interp {
             }
             Flow::Iterate(name, origin) => {
                 self.record_leave_failure(&origin);
+                self.seal_site_level();
                 let raised = match name {
                     None => raised_iterate_no_loop(),
                     Some(id) => raised_iterate_no_match(fragment.symbols.name(id).as_bytes()),
@@ -2836,6 +2902,32 @@ impl Interp {
                 Err(raised.into())
             }
             other => Ok(other),
+        }
+    }
+
+    /// Closes off the level that is unwinding now, so the level above it can
+    /// record its own clause.
+    ///
+    /// `Interp::failure_site` is first-wins *within* a level; this is what
+    /// makes "a level" mean something. It moves whatever this level recorded
+    /// onto `Interp::failure_sites` (innermost first, since the innermost
+    /// level always seals first) and leaves the slot empty for the enclosing
+    /// clause's own `step_in_temps_frame` to fill on the way out.
+    ///
+    /// **Called only on an error path, and only by a construct that opened a
+    /// level.** Today that is `run_fragment` alone; Task 3's `CALL` is the
+    /// next, and the rule for it is the same -- seal before the failure
+    /// leaves the callee, never after. Sealing a level that recorded nothing
+    /// is a no-op, which is what gives a fragment that failed to parse one
+    /// echo instead of two.
+    ///
+    /// **Nothing here clears either field, and that is inherited item I11.**
+    /// A raise is still always fatal, so a stale stack cannot be observed;
+    /// the day a trap can resume after a raise -- **Task 7** -- both this
+    /// stack and the slot need emptying, and Task 7 owns that.
+    fn seal_site_level(&mut self) {
+        if let Some(site) = self.failure_site.take() {
+            self.failure_sites.push(site);
         }
     }
 
@@ -3134,38 +3226,54 @@ impl Interp {
         }
     }
 
+    /// `instruction`'s own clause text and the 1-based line to print it against,
+    /// or `None` when `source` is `None`.
+    ///
+    /// **`Interp::clause_line_override` is why this is a method and not the free
+    /// function it was through 4a.** The line and the text do not always come
+    /// from the same place: inside an `INTERPRET` fragment the text is the
+    /// fragment's (its spans index the fragment's own source, and nothing else
+    /// can resolve them) while the line is the enclosing `INTERPRET` clause's,
+    /// measured. Threading that override through the four call sites --
+    /// `step_in_temps_frame`, `record_failure_at`, `leave_origin`,
+    /// `run_otherwise` -- would give each of them a parameter about a construct
+    /// none of them otherwise knows exists, so it reads the field instead,
+    /// exactly as `current_value_indent` and `indent_offset` already do.
+    ///
+    /// `source: None` no longer has a caller: `run_fragment` was the one, and it
+    /// passes `Some(&fragment.source)` since 4b's Task 2 gave the report an echo
+    /// per level. The parameter is still an `Option` because collapsing it is a
+    /// mechanical change across every signature that threads it, which is a
+    /// restructuring rather than this task's -- **but nothing below may assume a
+    /// site is unresolvable any more**, and the comments that used to say so
+    /// have been corrected rather than left standing.
+    fn clause_site(
+        &self,
+        source: Option<&ProgramSource>,
+        instruction: &Instruction,
+    ) -> Option<(usize, Vec<u8>)> {
+        let source = source?;
+        Some((
+            self.clause_line_override
+                .unwrap_or_else(|| source.line_of(instruction.clause_span.start)),
+            source
+                .join_span(instruction.clause_span.clone())
+                .map_or_else(
+                    // Visible rather than silent, matching `Raised::message`'s
+                    // own reasoning for a catalogue miss: the error path is the
+                    // worst place to turn a reportable condition into a crash or
+                    // a blank line.
+                    || b"<clause span outside the retained source>".to_vec(),
+                    |bytes| bytes.into_owned(),
+                ),
+        ))
+    }
+
     // `fragment_plan` and `slot_of` live in `plan.rs` (Task 6), beside `Plan`
     // itself; `stem_assign`/`stem_set`/`stem_drop`/`stem_drop_tail`/
     // `tail_key` live in `stem.rs` (Task 5), beside the rest of the D15a
     // library. `read` lives in `lib.rs`, beside `Interp`'s other value-model
     // entry points.
-}
-
-/// `instruction`'s own 1-based line and clause text, or `None` when `source`
-/// is `None` (`run_fragment`'s own established convention of not resolving a
-/// site for an instruction inside an `INTERPRET` fragment at all).
-///
-/// A free function, not a method: needs no `&self`, and both
-/// `record_failure_site` and `leave_origin` resolve the identical pair from
-/// it rather than each carrying its own copy.
-fn clause_site(
-    source: Option<&ProgramSource>,
-    instruction: &Instruction,
-) -> Option<(usize, Vec<u8>)> {
-    let source = source?;
-    Some((
-        source.line_of(instruction.clause_span.start),
-        source
-            .join_span(instruction.clause_span.clone())
-            .map_or_else(
-                // Visible rather than silent, matching `Raised::message`'s
-                // own reasoning for a catalogue miss: the error path is the
-                // worst place to turn a reportable condition into a crash or
-                // a blank line.
-                || b"<clause span outside the retained source>".to_vec(),
-                |bytes| bytes.into_owned(),
-            ),
-    ))
 }
 
 /// How many spaces of nesting depth `target`'s own clause sits at --
@@ -6110,10 +6218,17 @@ mod tests {
     ///      3 *-* nop
     /// ```
     ///
-    /// The last line is the fragment's own clause echo, which this crate does
-    /// not print (the `Interpret` arm's own doc comment says why, and Task 2
-    /// owns it), so the expectation below stops one line short of the oracle
-    /// on purpose. Everything above it is asserted byte for byte.
+    /// **The last line is 4b Task 2's half, and it is asserted now.** Task 1
+    /// landed the `>>>` and left this expectation one line short of the
+    /// oracle on purpose, because `run_fragment` passed `source: None` and
+    /// `step_in_temps_frame` had no clause site to echo. The whole transcript
+    /// is compared byte for byte below, including that the fragment's clause
+    /// echoes as line **3** -- the enclosing `INTERPRET`'s line, not the
+    /// fragment's own line 1, which is what `Interp::clause_line_override`
+    /// exists for and what a naive `Some(&fragment.source)` gets wrong.
+    /// (`say_output` drives `trace_mode` directly instead of running a `trace
+    /// r` clause, so the program below is the oracle's minus its first line
+    /// and every line number is one lower.)
     ///
     /// The second program pins the **indent**, which is the part a wrong fix
     /// would still get wrong: one `DO` deeper, the oracle's `>>>` picks up
@@ -6122,6 +6237,12 @@ mod tests {
     /// killed both ways: dropping the `trace_result` call empties the `>>>`
     /// lines, and moving it after `run_fragment` reports the *fragment's* last
     /// indent instead of this clause's.
+    ///
+    /// It now pins the fragment echo's indent too, which is the **delta-0**
+    /// measurement: the oracle prints `     3 *-*   nop` -- the enclosing
+    /// clause's own two spaces and no more. An implementation that gave the
+    /// fragment a level's worth of extra indent (the two spaces a *called
+    /// routine* really does get, measured) prints four here and fails.
     #[test]
     fn interpret_traces_the_text_it_is_about_to_run() {
         let mut interp = Interp::new();
@@ -6129,25 +6250,31 @@ mod tests {
         say_output(&mut interp, b"zz = 'nop'\ninterpret zz");
         assert_eq!(
             interp.trace,
-            b"     1 *-* zz = 'nop'\n       >>>   \"nop\"\n     \
-              2 *-* interpret zz\n       >>>   \"nop\"\n"
-                .to_vec()
+            concat!(
+                "     1 *-* zz = 'nop'\n",
+                "       >>>   \"nop\"\n",
+                "     2 *-* interpret zz\n",
+                "       >>>   \"nop\"\n",
+                "     2 *-* nop\n",
+            )
+            .as_bytes()
         );
 
         let mut interp = Interp::new();
         interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
         say_output(&mut interp, b"do kk = 1 to 1\ninterpret \"nop\"\nend");
-        let indented = b"       >>>     \"nop\"\n";
-        assert!(
-            interp
-                .trace
-                .windows(indented.len())
-                .any(|window| window == indented),
-            "expected a >>> line carrying the enclosing DO's own two spaces \
-             ({:?}), got {:?}",
-            String::from_utf8_lossy(indented),
-            String::from_utf8_lossy(&interp.trace)
-        );
+        for expected in [&b"       >>>     \"nop\"\n"[..], &b"     2 *-*   nop\n"[..]] {
+            assert!(
+                interp
+                    .trace
+                    .windows(expected.len())
+                    .any(|window| window == expected),
+                "expected a line carrying the enclosing DO's own two spaces \
+                 ({:?}), got {:?}",
+                String::from_utf8_lossy(expected),
+                String::from_utf8_lossy(&interp.trace)
+            );
+        }
     }
 
     /// The other side of the boundary rule: a loop written *inside* the

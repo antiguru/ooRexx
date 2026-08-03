@@ -218,18 +218,41 @@ fn push_indent(out: &mut Vec<u8>, indent: usize) {
     out.extend(std::iter::repeat_n(b' ', indent));
 }
 
+/// The widest indent a `*-*` clause echo ever prints, in spaces.
+///
+/// **The cap is on the `*-*` echo alone, and it is on the total printed
+/// indent rather than on any of the quantities that add up to it.** Measured
+/// against the oracle with plain nested `DO`s around a failing clause and no
+/// call anywhere (4b Task 2's report has the programs): depth 18 prints 36,
+/// depth 19 prints 38, depth 20 prints 40, and depths 21, 25 and 30 all
+/// print 40 as well. Measured the same way with a fragment on top of a
+/// nest -- 20 `DO`s around `interpret "do jj = 1 to 1; say 1/0; end"` -- the
+/// fragment's own clause would sit at 42 and prints 40, so the cap applies
+/// after the activation base is added, not to either part alone.
+///
+/// **A value line is not capped**, which is what rules out putting this
+/// inside `static_indent` or inside [`push_indent`]: measured under `trace
+/// r` at nesting depth 25, the `*-*` echo prints 40 while the `>>>` value
+/// line for the same clause prints its full 50 ([`push_prefixed_blanks`]'s
+/// own `3 + indent`, so 53 blanks after the prefix). One clamp, at the one
+/// formatter that has it, and nowhere upstream of that.
+pub(crate) const MAX_CLAUSE_INDENT: usize = 40;
+
 /// `TRACE_PREFIX_CLAUSE` (`*-*`): `line`'s own clause, `text`, indented by
 /// `indent` spaces (Task 11's `static_indent`, unchanged and reused, per
-/// this module's own doc comment on why "when" is not this module's job).
+/// this module's own doc comment on why "when" is not this module's job),
+/// clamped at [`MAX_CLAUSE_INDENT`].
 ///
-/// **Byte-identical to `error.rs`'s `Raised::report`'s own clause-echo
-/// line**, `format!("{:>6} *-* ", line)` + indent spaces + `text` + `\n` --
-/// measured against the oracle (this task's report, Step 0) to be one
-/// quantity with two formatters, not two quantities, and this is the
-/// second formatter D17's own retrofit note names.
+/// **The only `*-*` formatter in the crate.** `error.rs`'s `Raised::report`
+/// used to hold a second copy of these four lines, byte-identical to this
+/// one and documented as such -- "one quantity with two formatters, not two
+/// quantities", the second formatter D17's own retrofit note names. 4b's
+/// Task 2 had to clamp that one quantity and found the cheapest way to keep
+/// two formatters agreeing is to have one of them; `report` calls this now,
+/// so the clamp is applied once because there is one place to apply it.
 pub(crate) fn push_clause(out: &mut Vec<u8>, line: usize, indent: usize, text: &[u8]) {
     out.extend_from_slice(format!("{line:>6} *-* ").as_bytes());
-    push_indent(out, indent);
+    push_indent(out, indent.min(MAX_CLAUSE_INDENT));
     out.extend_from_slice(text);
     out.push(b'\n');
 }

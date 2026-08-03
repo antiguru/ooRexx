@@ -508,6 +508,12 @@ const EXPECTED_SUBSET: &[&str] = &[
     "lang/mutation_digits_at_render.rex",
     "lang/mutation_form_at_render.rex",
     "lang/mutation_controlled_order.rex",
+    // 4b Task 2's own addition, and the plan amendment this assertion exists
+    // to make visible. The program is 4a by content -- 25 plain `DO` blocks
+    // around a failing clause -- and pins the error report's 40-column indent
+    // saturation, which 4a diverged on and no other program in this list
+    // nests deeply enough to reach.
+    "lang/deep_nesting_indent_cap.rex",
 ];
 
 #[test]

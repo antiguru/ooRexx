@@ -221,28 +221,93 @@ above.
   answer is a documented minimum stack or a sized entry point in rexx-parse
   itself rather than a smarter counter.
 
-  A raised condition's report prints ONE clause echo; the oracle prints one per
-  nesting level, innermost first. Measured with a two-line file whose line 2 is
-  interpret "say 2 & 1":
+  A raised condition's report prints one clause echo per ACTIVATION-LIKE LEVEL,
+  innermost first, and 4b Task 2 closed the INTERPRET half of this row. The
+  CALL half is still open and belongs to 4b Task 3. The measured rule, in full,
+  because the first version of this row said only "one echo per nesting level,
+  innermost first" and that is not enough to implement from:
+
+  * The unit is a level, NOT a block. An error three nested DOs deep echoes
+    ONCE; the same error inside an INTERPRET fragment echoes twice, and inside
+    a fragment inside a fragment three times.
+
+  * Every echo of a fragment carries the ENCLOSING INTERPRET clause's line
+    number, never a line of the fragment. Measured with a two-line file whose
+    line 2 is interpret "say 2 & 1":
 
          2 *-* say 2 & 1
          2 *-* interpret "say 2 & 1"
     Error 34 running /abs/frag.rex line 2:  Logical value not 0 or 1.
     Error 34.901:  Logical value must be exactly "0" or "1"; found "2".
 
-  Note both echoes carry the ENCLOSING clause's line number, not a line of the
-  fragment. 4a emits the second line only. The gap was recorded as unreachable from
-  any corpus program, on the grounds that the only construct nesting an
-  instruction loop inside another was the INTERPRET fragment spike, which 4b
-  deletes and which run_program does not expose. TASK 10 FALSIFIED THAT
-  REASON (commit addf89b1): IF and SELECT now resolve their whole construct
-  inside their own step arm through a nested bounded loop, so nesting is
-  ordinary rather than exotic. The gap itself still does not surface, because
-  4a has no construct that both nests and traps a condition, but the stated
-  reason was wrong and a reader who checked it would have found it false. Closing it means giving Raised::report a
-  stack of sites rather than one, so whoever implements 4b's real INTERPRET or
-  4b's CALL should decide the shape then rather than inheriting a single-site
-  signature by default.
+    The MAJOR line names the innermost entry's line, which for a fragment is
+    the same number and for a CALL is not (see below).
+
+  * Each echo's indent is ABSOLUTE and is NOT 2 x the depth of the stack. A
+    fragment's clauses sit at the enclosing INTERPRET clause's own printed
+    indent -- delta 0 -- plus whatever nests them INSIDE the fragment:
+    interpret "do jj = 1 to 1; say 2 & 1; end" at top level echoes the inner
+    clause at 2 and the INTERPRET at 0, and the identical fragment two DOs
+    deep echoes them at 6 and 4.
+
+  * A CALLED ROUTINE's base is the calling clause's printed indent PLUS TWO,
+    which is what makes this a different quantity from the fragment's and why
+    it cannot be derived from a depth counter. Measured, all four combinations:
+
+      caller printed indent | callee's own depth | callee clause echoes at
+      ----------------------+--------------------+------------------------
+      0  (call at top level)| 0 (flat routine)   | 2
+      0                     | 1 (one DO)         | 4
+      4  (call two DOs deep)| 0                  | 6
+      4                     | 1                  | 8
+
+    and two nested calls stack three echoes: say 1/0 at 4, call sub2 at 2,
+    call sub1 at 0. The major line names the INNERMOST line (a raise on line 8
+    of a routine called from line 3 reports "line 8", not "line 3").
+
+  4b TASK 2 built the stack (Raised carries a Vec of sites; run.rs's
+  seal_site_level closes a level), and with it the INTERPRET half is measured
+  matching on: a raise inside fragment text, a raise inside a fragment inside
+  a fragment, a LEAVE/ITERATE that escapes fragment text, and the same shapes
+  under TRACE where nothing is raised at all. WHAT REMAINS is CALL: Task 3 owns
+  pushing a level with the +2 base above, and the mechanism is already there
+  (Interp::indent_offset for the base, Interp::clause_line_override for the
+  line, seal_site_level for the first-wins boundary).
+
+  HISTORY, kept because the reason this row gave for being unreachable was
+  falsified once already. It was recorded as unreachable from any corpus
+  program, on the grounds that the only construct nesting an instruction loop
+  inside another was the INTERPRET fragment spike, which 4b deletes and which
+  run_program does not expose. TASK 10 FALSIFIED THAT REASON (commit addf89b1):
+  IF and SELECT resolve their whole construct inside their own step arm through
+  a nested bounded loop, so nesting is ordinary rather than exotic.
+
+  A fragment that fails to PARSE is the one piece of the INTERPRET half still
+  open, and it is one line. 4b Task 2 made such a fragment raise the oracle's
+  own condition (interpret "do forever then" is 27.901 at rc 229, where it used
+  to be a loud rc 120), and the enclosing echoes match, but the oracle ALSO
+  echoes the failing fragment clause -- at indent 0 whatever the enclosing
+  indent, since a parse-time echo carries no indent at all:
+
+         2 *-* do forever then
+         2 *-*   interpret "do forever then"      (enclosing DO: indent 2)
+
+  We emit the second line only. Reproducing the first needs the failing
+  clause's TEXT, and rexx-parse's ParseError carries the clause's START byte
+  with no end, so there is no span to cut; guessing one is right for a
+  single-clause fragment and silently wrong for interpret "do jj = 1 to 1; do
+  forever then; end", whose echo is "do forever then;" and not the rest of the
+  text. Closing it means a clause span on ParseError. The same missing span is
+  why a TOP-LEVEL syntax error still emits no echo either, and a second
+  obstacle applies only there: parse_program takes the text by value and
+  returns no ProgramSource on the failure path, so execute cannot even resolve
+  the LINE for the major line without a rexx-parse signature change.
+
+  Also still unsubstituted: a parse error's sub-message renders its catalogue
+  template with &1 in it (found "&1" rather than found "THEN"), because
+  ParseError deliberately carries no substitution values. rexx-parse's own
+  error.rs module note has the measurement behind that decision and records
+  that Phase 4 owes them for condition('o')~additional regardless.
 
   A Controlled (TO-style) loop's re-tested pass omits two >>> value lines that
   the oracle emits for its control variable. Measured, and read from the C++
@@ -322,3 +387,42 @@ above.
   Owner unassigned. Reproducing the banner needs a decision about whether 4a's
   TRACE claims interactivity it cannot deliver; failing loudly on `?` is the
   cheaper alternative the spec already sanctioned.
+
+
+CLOSED DEFECTS -- measured wrong, measured again, now matching
+-------------------------------------------------------------
+
+A fourth status, and the reason it is a section rather than a deletion: a
+divergence that was found, fixed and verified leaves nothing behind for a
+reader to trip over EXCEPT the temptation to "simplify" the fix. Each row says
+what the oracle does, what we used to do, and which test would go red if the
+fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
+
+  THE *-* CLAUSE ECHO SATURATES AT 40 COLUMNS OF INDENT (fixed, 4b Task 2).
+  Nesting depth drives the echo's indent at two spaces per level and that
+  growth stops at 40. Measured with plain nested DOs around one failing clause
+  and no call or INTERPRET anywhere: depth 18 gives 36, 19 gives 38, 20 gives
+  40, and 21, 25 and 30 all give 40. Before the fix this crate was uncapped and
+  printed 42, 50 and 60 for those last three -- a 4a divergence, not a 4b
+  regression, and one no program in the 4a subset nested deeply enough to see.
+
+  THE CAP IS ON THE *-* ECHO ALONE, AND ON THE TOTAL. Two things follow, and
+  both were measured rather than assumed:
+
+  * Value lines are NOT capped. Under trace r at depth 25 the *-* echo prints
+    40 while the >>> line for the same clause prints its full 50. So a clamp
+    inside static_indent, or applied to the shared push_indent, is wrong in
+    both directions -- it would silently truncate every >>> as well.
+
+  * The cap applies AFTER an activation base is added, not to either part. 20
+    nested DOs around interpret "do jj = 1 to 1; say 1/0; end" would put the
+    fragment's own clause at 42 and the oracle prints 40.
+
+  The fix is one clamp in trace::push_clause (MAX_CLAUSE_INDENT), which is now
+  the only *-* formatter in the crate: error.rs's Raised::report used to hold a
+  byte-identical second copy and calls this one instead. Witnesses:
+  rust/corpus/lang/deep_nesting_indent_cap.rex compares the whole report
+  against the live oracle at depth 25, and error.rs's
+  the_clause_echo_saturates_at_forty_columns pins 36/38/40/42/50 directly.
+  Setting MAX_CLAUSE_INDENT back to usize::MAX takes the corpus from 31 of 31
+  to 30 of 31, naming that program.

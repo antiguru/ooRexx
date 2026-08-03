@@ -60,3 +60,12 @@ lang/trace_numeric_request.rex
 lang/mutation_digits_at_render.rex
 lang/mutation_form_at_render.rex
 lang/mutation_controlled_order.rex
+
+# New for 4b Task 2, and 4a's by content rather than by date -- an authorised
+# plan amendment. The program uses nothing outside this file's own header (25
+# plain DO blocks around a failing clause, no CALL and no INTERPRET); it lands
+# here because the rule it pins is one 4a should always have had. The 40-column
+# saturation of the error report's clause echo was a divergence 4a shipped --
+# the oracle printed 40 at depth 25 and the interpreter printed 50 -- and no
+# program in this subset nested deeply enough to see it.
+lang/deep_nesting_indent_cap.rex

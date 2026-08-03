@@ -28,6 +28,7 @@
 
 use crate::Loud;
 use rexx_num::ArithError;
+use rexx_parse::ParseError;
 
 /// A real Rexx condition raised during evaluation.
 #[derive(Clone, Debug)]
@@ -148,6 +149,39 @@ impl From<ArithError> for Raised {
     }
 }
 
+/// Converts a `rexx-parse` translation failure into the condition the oracle
+/// raises for it.
+///
+/// **Measured, and the reason this exists** (4b Task 2, Step 5b): `interpret
+/// "do forever then"` on line 2 of a two-line program gives the oracle
+///
+/// ```text
+///      2 *-* do forever then
+///      2 *-* interpret "do forever then"
+/// Error 27 running /abs/p1.rex line 2:  Invalid DO or LOOP syntax.
+/// Error 27.901:  Incorrect data following FOREVER keyword on the loop; found "THEN".
+/// ```
+///
+/// at rc 229 -- a real, trappable SYNTAX condition, not a translation-time
+/// refusal. Before this, a fragment that did not parse was a `Loud` failure
+/// at rc 120, which was correct-but-loud while `INTERPRET` was unreachable
+/// and a live divergence once 4b's Task 1 made it reachable.
+///
+/// **What this does not carry, and it is not an oversight.** `ParseError`
+/// has a major, a sub and the clause's start byte, and deliberately no
+/// substitution values -- `rexx-parse`'s own `error.rs` module note has the
+/// measurement behind that decision and what it owes Phase 4. So the sub
+/// line renders its catalogue template with `&1` passed through where the
+/// oracle writes `found "THEN"`. Everything else matches: the condition, the
+/// major, the sub, the exit code, and the enclosing clause echoes. That is
+/// the same bound `execute`'s own top-level parse arm already states, and
+/// closing it is the same job in both places.
+impl From<&ParseError> for Raised {
+    fn from(error: &ParseError) -> Raised {
+        Raised::syntax(error.code, error.sub, Vec::new())
+    }
+}
+
 /// Either kind of failure a clause can produce: a construct 4a does not
 /// implement (`Loud`) or a real Rexx condition (`Raised`). `step` and
 /// everything above it propagate this rather than either alone, since a
@@ -181,6 +215,15 @@ impl From<Raised> for Failure {
 /// would be plausible-looking, wrong stderr, not a compile error or a panic.
 /// Naming the fields removes that whole class rather than trusting call-site
 /// order.
+///
+/// **One of these per *activation-like level*, not per nesting level.** 4b's
+/// Task 2 turned the single site into a stack of them (`ClauseSite::sites`),
+/// and the unit the stack counts is measured: an error inside three nested
+/// `DO`s echoes once, not four times, while the same error inside an
+/// `INTERPRET` fragment echoes twice and inside a fragment inside a fragment
+/// three times. `Interp::failure_site` stays first-wins *within* a level and
+/// `run.rs`'s own `seal_site_level` is what closes one off and starts the
+/// next.
 pub(crate) struct FailureSite {
     pub(crate) line: usize,
     pub(crate) text: Vec<u8>,
@@ -209,25 +252,39 @@ pub(crate) struct FailureSite {
 /// Passed in rather than reached for: `error.rs` owns the *format*, and the
 /// instruction loop owns knowing which clause failed. That split is why this
 /// module needs no access to `Interp`, the program or the source. Built from
-/// a `FailureSite` plus the one thing it does not carry, the program's own
-/// path -- `execute` (`lib.rs`) is the one place both are in hand together.
+/// the `FailureSite` stack plus the one thing it does not carry, the
+/// program's own path -- `execute` (`lib.rs`) is the one place both are in
+/// hand together.
 pub(crate) struct ClauseSite<'a> {
     /// The program's path **as the oracle prints it**, absolute. Measured:
     /// the major line carries the full path, and `rexx-oracle`'s `normalize`
     /// masks the cwd, so an absolute path is comparable across machines.
     pub(crate) path: &'a str,
-    /// The clause's 1-based source line.
-    pub(crate) line: usize,
-    /// The clause's own bytes, exactly as `Instruction::clause_span` covers
-    /// them. Not trimmed: measured, `if 'x' then nop` echoes `if 'x' ` with
-    /// the trailing space, because an `IF`'s span stops at the start of the
-    /// token that ended its condition.
-    pub(crate) text: &'a [u8],
-    /// Spaces to prefix `text` with on the echo line -- `FailureSite`'s own
-    /// `indent`, forwarded unchanged. Zero for every clause this crate
-    /// reported before Task 11, so every pre-existing call site keeps its
-    /// old behaviour by passing `0`.
-    pub(crate) indent: usize,
+    /// One entry per activation-like level the condition escaped through,
+    /// **innermost first** -- 4b's Task 2, and the whole reason this is a
+    /// slice rather than the single site 4a carried.
+    ///
+    /// Measured against the oracle (`interpret "say 2 & 1"` on line 2 of a
+    /// two-line program):
+    ///
+    /// ```text
+    ///      2 *-* say 2 & 1
+    ///      2 *-* interpret "say 2 & 1"
+    /// ```
+    ///
+    /// Each entry carries its own line and its own **absolute** printed
+    /// indent, which is why this module does no arithmetic on either: an
+    /// inner level's line is not derivable from an outer one's (measured,
+    /// every echo of a fragment carries the *enclosing* `INTERPRET` clause's
+    /// line, not the fragment's own), and its indent is not derivable from
+    /// the depth of the stack (measured, a fragment's own clauses sit at the
+    /// enclosing clause's indent plus whatever nests them *inside* the
+    /// fragment: `interpret "do jj = 1 to 1; say 2 & 1; end"` at top level
+    /// echoes the inner clause at 2 and the `INTERPRET` at 0).
+    ///
+    /// Empty only in the "nothing recorded" case `execute` guards, which
+    /// prints no echo at all rather than a blank one.
+    pub(crate) sites: &'a [FailureSite],
 }
 
 impl Raised {
@@ -265,24 +322,38 @@ impl Raised {
     /// * The major line's text is the catalogue's `(major, 0)` entry and the
     ///   sub line's is `(major, sub)`.
     ///
+    /// **There is one echo line per entry in `site.sites`, innermost first**
+    /// (4b's Task 2), so the three-line shape above is the one-entry case and
+    /// not a special case in the code. The **line the major line names is the
+    /// innermost entry's**, measured: `interpret "say 2 & 1"` on line 2 names
+    /// line 2, and a raise on line 8 of a routine called from line 3 names
+    /// line 8, not 3.
+    ///
     /// `SAY` output goes to stdout and all of this to stderr, so their
     /// relative order is not observable (D17).
     pub(crate) fn report(&self, site: &ClauseSite<'_>) -> Vec<u8> {
         let mut out = Vec::new();
-        out.extend_from_slice(format!("{:>6} *-* ", site.line).as_bytes());
-        // `Task 11`'s own addition: `site.indent` spaces of nesting depth
-        // before the clause's own text, never before it -- measured, an
-        // unindented top-level clause (`indent == 0`) is byte-identical to
-        // every pre-Task-11 report this module already had a test for.
-        out.extend(std::iter::repeat_n(b' ', site.indent));
-        out.extend_from_slice(site.text);
-        out.push(b'\n');
+        // `trace::push_clause` rather than a second copy of the same four
+        // lines: the two used to be written out separately and documented as
+        // byte-identical, and 4b's Task 2 needed the 40-column clamp on both.
+        // Calling the one formatter is what makes "one quantity" true in the
+        // code rather than only in a comment -- `push_clause` owns the
+        // clamp, the six-wide line field and the indent, and this loop owns
+        // only the order.
+        for entry in site.sites {
+            crate::trace::push_clause(&mut out, entry.line, entry.indent, &entry.text);
+        }
+        // The innermost entry's line, or `0` when nothing was recorded at all
+        // -- `execute`'s own guard already substitutes a visible placeholder
+        // entry for that case, so this fallback is unreachable from there and
+        // exists so this function has no panic on the error path.
+        let line = site.sites.first().map_or(0, |entry| entry.line);
         out.extend_from_slice(
             format!(
                 "Error {} running {} line {}:  {}\n",
                 self.number,
                 site.path,
-                site.line,
+                line,
                 self.message(self.number, 0)
             )
             .as_bytes(),
@@ -358,6 +429,22 @@ fn substitute(text: &str, values: &[String]) -> String {
 mod tests {
     use super::*;
 
+    /// One `FailureSite`, for the tests that predate the stack.
+    ///
+    /// Every assertion below that used to build a `ClauseSite { line, text,
+    /// indent }` directly now builds a one-entry stack through this, and the
+    /// **expected bytes in those tests are unchanged**: that is the check
+    /// that the stack's one-element case is byte-identical to what 4a
+    /// shipped, and it is worth more as an untouched expectation than as a
+    /// new test asserting the same thing.
+    fn one(line: usize, text: &[u8], indent: usize) -> Vec<FailureSite> {
+        vec![FailureSite {
+            line,
+            text: text.to_vec(),
+            indent,
+        }]
+    }
+
     /// The 7.3 transcript, captured from `build/bin/rexx` with `cat -A` so the
     /// trailing bytes are the oracle's and not a guess.
     ///
@@ -366,11 +453,10 @@ mod tests {
     #[test]
     fn the_7_3_report_matches_the_oracle_byte_for_byte() {
         let raised = Raised::syntax(7, 3, vec![]);
+        let sites = one(4, b"end", 0);
         let site = ClauseSite {
             path: "/abs/path/f.rex",
-            line: 4,
-            text: b"end",
-            indent: 0,
+            sites: &sites,
         };
         assert_eq!(
             String::from_utf8(raised.report(&site)).unwrap(),
@@ -390,11 +476,10 @@ mod tests {
     #[test]
     fn a_substituted_message_and_a_clause_echo_that_keeps_its_trailing_space() {
         let raised = Raised::not_logical(b"x");
+        let sites = one(12, b"if 'x' ", 0);
         let site = ClauseSite {
             path: "/abs/w.rex",
-            line: 12,
-            text: b"if 'x' ",
-            indent: 0,
+            sites: &sites,
         };
         let report = String::from_utf8(raised.report(&site)).unwrap();
         assert_eq!(
@@ -412,11 +497,10 @@ mod tests {
     #[test]
     fn the_line_number_field_is_six_wide() {
         for (line, expected) in [(4usize, "     4"), (12, "    12"), (105, "   105")] {
+            let sites = one(line, b"nop", 0);
             let site = ClauseSite {
                 path: "/p",
-                line,
-                text: b"nop",
-                indent: 0,
+                sites: &sites,
             };
             let report = Raised::syntax(7, 3, vec![]).report(&site);
             let first = String::from_utf8(report).unwrap();
@@ -545,11 +629,10 @@ mod tests {
     #[test]
     fn the_indent_field_prefixes_the_clause_echo_with_that_many_spaces() {
         let raised = Raised::syntax(42, 3, vec![]);
+        let sites = one(2, b"say 1/0", 2);
         let site = ClauseSite {
             path: "/abs/do1.rex",
-            line: 2,
-            text: b"say 1/0",
-            indent: 2,
+            sites: &sites,
         };
         let report = String::from_utf8(raised.report(&site)).unwrap();
         assert_eq!(
@@ -557,6 +640,108 @@ mod tests {
             "     2 *-*   say 1/0",
             "two spaces before the clause text, none anywhere else on the line"
         );
+    }
+
+    /// 4b Task 2: one echo line per entry, innermost first, each carrying its
+    /// own line and its own absolute indent -- and the major line naming the
+    /// **innermost** entry's line, not the outermost.
+    ///
+    /// The expected bytes are the oracle's, from a program whose two levels
+    /// disagree on both quantities at once, which is what makes the assertion
+    /// able to fail. Captured (4b Task 2's report, `c2.rex`): a `CALL` two
+    /// `DO`s deep, at printed indent 4 on line 3, into a flat routine whose
+    /// `say 1/0` is on line 8 and prints at indent 6.
+    ///
+    /// A one-entry implementation fails this (one echo instead of two); an
+    /// outermost-first walk fails it (the two echoes swap); reading the line
+    /// from the *last* entry fails it (`line 3` instead of `line 8`); and
+    /// deriving either entry's indent from its position in the stack fails it
+    /// (nothing about `[6, 4]` follows from `[inner, outer]`).
+    #[test]
+    fn the_report_echoes_one_line_per_level_innermost_first() {
+        let raised = Raised::syntax(42, 3, vec![]);
+        let sites = vec![
+            FailureSite {
+                line: 8,
+                text: b"say 1/0".to_vec(),
+                indent: 6,
+            },
+            FailureSite {
+                line: 3,
+                text: b"call sub1".to_vec(),
+                indent: 4,
+            },
+        ];
+        let site = ClauseSite {
+            path: "/abs/c2.rex",
+            sites: &sites,
+        };
+        assert_eq!(
+            String::from_utf8(raised.report(&site)).unwrap(),
+            concat!(
+                "     8 *-*       say 1/0\n",
+                "     3 *-*     call sub1\n",
+                "Error 42 running /abs/c2.rex line 8:  Arithmetic overflow/underflow.\n",
+                "Error 42.3:  Arithmetic overflow; divisor must not be zero.\n",
+            )
+        );
+    }
+
+    /// The clause echo saturates at 40 columns, and the two error lines do
+    /// not move when it does.
+    ///
+    /// Measured against the oracle with nested `DO`s and no call at all: 18
+    /// levels print 36, 19 print 38, 20 print 40, and 21, 25 and 30 all print
+    /// 40. The 19/20/21 rows are the ones that pin the boundary; 25 is there
+    /// because a clamp written as `if indent == 42` would pass 21 and fail
+    /// it. `trace.rs`'s own `MAX_CLAUSE_INDENT` doc has the value-line half
+    /// of the measurement, which is what keeps the clamp out of
+    /// `static_indent`.
+    #[test]
+    fn the_clause_echo_saturates_at_forty_columns() {
+        for (indent, expected) in [(36usize, 36usize), (38, 38), (40, 40), (42, 40), (50, 40)] {
+            let sites = one(9, b"say 1/0", indent);
+            let site = ClauseSite {
+                path: "/p",
+                sites: &sites,
+            };
+            let report = String::from_utf8(Raised::syntax(42, 3, vec![]).report(&site)).unwrap();
+            let echo = report.lines().next().unwrap();
+            let after_field = &echo[11..];
+            assert_eq!(
+                after_field.len() - after_field.trim_start().len(),
+                expected,
+                "indent {indent}"
+            );
+            assert!(
+                report.contains("Error 42 running /p line 9:  "),
+                "the clamp moved something other than the echo's indent: {report:?}"
+            );
+        }
+    }
+
+    /// A `ParseError` becomes the SYNTAX condition the oracle raises for it,
+    /// with the parser's own major and sub and the matching `256 - major`
+    /// exit code.
+    ///
+    /// The pair is the oracle's, measured through `INTERPRET` rather than
+    /// invented here: `interpret "do forever then"` is 27.901 at rc 229 and
+    /// `interpret "if"` is 35.929 at rc 221. Asserting the exit code as well
+    /// as the numbers is what makes this fail for an implementation that
+    /// kept the loud path's `NOT_IMPLEMENTED_EXIT`.
+    ///
+    /// `condition` is deliberately not asserted: it is still `expect(dead_
+    /// code)` until 4b's `SIGNAL ON` reads it for real, and a test reading it
+    /// would fulfil that expectation in `cfg(test)` builds only, turning the
+    /// annotation into a warning under `--all-targets` without giving the
+    /// field the genuine reader its own doc comment is waiting for.
+    #[test]
+    fn a_parse_error_becomes_the_condition_the_oracle_raises() {
+        for (code, sub, rc) in [(27u16, 901u16, 229i32), (35, 929, 221)] {
+            let raised: Raised = (&ParseError::new(code, sub, 0)).into();
+            assert_eq!((raised.number, raised.sub), (code, sub));
+            assert_eq!(raised.exit_code(), rc);
+        }
     }
 
     // The new Task 11 raisers themselves -- 26.2/26.3/28.1-28.5/34.3/34.4 --

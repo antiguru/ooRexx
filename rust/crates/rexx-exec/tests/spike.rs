@@ -147,11 +147,15 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
 /// cannot be added without failing to compile. Auditing coverage from this
 /// test alone would over-read it.
 ///
-/// The other two loud paths are bounded for their own reasons, checked in
-/// review rather than here, so the size contract holds on all three:
-/// `Loud::instruction` returns `keyword()`'s `&'static str` or one of four
-/// literals, and `Loud::parse` renders a `ParseError`, which deliberately
-/// carries no substitution values.
+/// The one other loud path is bounded for its own reason, checked in review
+/// rather than here, so the size contract holds on both: `Loud::instruction`
+/// returns `keyword()`'s `&'static str` or one of four literals.
+///
+/// There used to be a third, `Loud::parse`, bounded because a `ParseError`
+/// deliberately carries no substitution values. 4b's Task 2 deleted it: a
+/// fragment that does not parse raises the oracle's own condition now rather
+/// than failing loudly, so it is no longer a loud path at all and no longer
+/// has a message whose size this contract governs.
 ///
 /// **A message send, and the choice of witness is the point.** This test needs
 /// a form the executor does not evaluate, and it has now been broken twice by
