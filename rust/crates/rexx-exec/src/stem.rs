@@ -467,23 +467,34 @@ impl Interp {
         }
     }
 
-    /// Whether `value` is a stem carrying nothing at all: no default and no
-    /// tails, not even a tombstone.
+    /// Whether `value` is a stem holding no content: no default, and no tail
+    /// that still has a value.
     ///
-    /// This is the shape both `read_stem`'s vivification and `stem_drop`'s
-    /// `replace_stem(name, None)` produce, and it is the one `USE ARG >name`
-    /// has to treat as "the variable is unset" -- a bare stem read and a
-    /// `DROP` both leave a stem variable referenceable on the oracle, while a
-    /// written tail or an assigned default do not. `run.rs`'s
-    /// `target_is_uninitialised` is the caller and carries the measurements.
+    /// This is what `USE ARG >name` has to treat as "the variable is unset",
+    /// and every part of it is measured against the oracle -- `run.rs`'s
+    /// `target_is_uninitialised` is the caller and carries the rest:
     ///
-    /// A tombstoned tail (`Some(None)` in `tails`) counts as *not* empty,
-    /// which follows from `tails.is_empty()` rather than from a rule of its
-    /// own. Nothing has measured that shape against the oracle, and the
-    /// conservative direction here is to keep the variable initialised: it
-    /// refuses a reference the oracle might allow, which is a visible error
-    /// rather than a silent alias onto a variable that already has content.
-    pub(crate) fn is_empty_stem(&self, value: ObjRef) -> bool {
+    /// ```text
+    /// (nothing)                    -> referenceable   (slot is None)
+    /// say q.                       -> referenceable   (read_stem vivifies an empty stem)
+    /// q.1='x'; drop q.             -> referenceable   (stem_drop leaves an empty stem)
+    /// q.1='x'; drop q.1            -> referenceable   (a tombstone is not content)
+    /// q.1='x'; q.2='y'; drop q.1;
+    ///          drop q.2            -> referenceable   (all tails tombstoned)
+    /// q.1='local'                  -> 98.995
+    /// q.='dflt'                    -> 98.995
+    /// q.1='x'; q.2='y'; drop q.1   -> 98.995          (one live tail left)
+    /// q.='dflt'; drop q.1          -> 98.995          (the default is content)
+    /// ```
+    ///
+    /// **`tails.is_empty()` is not the test, and an earlier version of this
+    /// function used it.** That was written as the conservative guess and was
+    /// simply wrong: the fourth and fifth rows above are rc 0 on the oracle
+    /// and were refused. A tombstone (`None` in `tails`) is a present key with
+    /// no value -- `Body::trace`'s own comment says the same thing for the
+    /// collector, "present but dead" -- so the question is whether any tail
+    /// still *has* a value, not whether the map has entries.
+    pub(crate) fn is_uninitialised_stem(&self, value: ObjRef) -> bool {
         match value.decode() {
             Decoded::Heap { .. } => matches!(
                 self.heap.get(value).map(|object| &object.body),
@@ -491,7 +502,7 @@ impl Interp {
                     default: None,
                     tails,
                     ..
-                }) if tails.is_empty()
+                }) if tails.values().all(Option::is_none)
             ),
             _ => false,
         }

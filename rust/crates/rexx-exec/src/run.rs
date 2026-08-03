@@ -1999,8 +1999,10 @@ impl Interp {
     /// leaves exactly the same thing. Neither is an initialised variable to
     /// the language, and the oracle agrees: `say q.` then `use arg >q.`
     /// succeeds, and so does `q.1 = 'x'; drop q.; use arg >q.`, while
-    /// `q.1 = 'local'` and `q. = 'dflt'` both raise. So a slot holding a stem
-    /// with no default and no tails counts as unset.
+    /// `q.1 = 'local'` and `q. = 'dflt'` both raise. `is_uninitialised_stem`
+    /// has the full nine-row table, including the three rows that make the
+    /// test "no default and no tail that still has a value" rather than the
+    /// tempting "no default and no tails".
     ///
     /// **Keyed on the target's own name shape, not on the value's**, which is
     /// the distinction a "value is an empty stem" test would get wrong.
@@ -2011,7 +2013,7 @@ impl Interp {
     fn target_is_uninitialised(&self, name: &[u8], frame: SlotFrame, index: usize) -> bool {
         match self.roots.slot(frame, index) {
             None => true,
-            Some(value) => shape_of(name) == NameShape::Stem && self.is_empty_stem(value),
+            Some(value) => shape_of(name) == NameShape::Stem && self.is_uninitialised_stem(value),
         }
     }
 
@@ -8922,6 +8924,20 @@ mod tests {
                 b"after: via-alias\n",
                 "DROP of a written stem restores the uninitialised state",
             ),
+            (
+                b"st.1 = 'orig'\ncall sub >st.\nsay 'after:' st.1\nexit\n\
+                  sub: procedure\nq.1 = 'x'\ndrop q.1\nuse arg >q.\nq.1 = 'via-alias'\nreturn\n",
+                b"after: via-alias\n",
+                "a TOMBSTONED tail is not content -- `tails.is_empty()` would refuse this, \
+                 and did until it was measured",
+            ),
+            (
+                b"st.1 = 'orig'\ncall sub >st.\nsay 'after:' st.1\nexit\n\
+                  sub: procedure\nq.1 = 'x'\nq.2 = 'y'\ndrop q.1\ndrop q.2\n\
+                  use arg >q.\nq.1 = 'via-alias'\nreturn\n",
+                b"after: via-alias\n",
+                "every tail tombstoned is still no content",
+            ),
         ] {
             let mut interp = Interp::new();
             assert_eq!(say_output(&mut interp, source), expected.to_vec(), "{why}");
@@ -8951,6 +8967,25 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(failure, Failure::Raised(_)));
+
+        // **The two that make the rule "no LIVE tail" rather than "no
+        // tails".** One tombstone beside one surviving tail still has
+        // content; a default survives a tombstoned tail. Without this pair
+        // the three succeeding tombstone rows above are equally consistent
+        // with "ignore tails entirely", which would wrongly accept both.
+        for source in [
+            &b"st.1 = 'orig'\ncall sub >st.\nexit\n\
+               sub: procedure\nq.1 = 'x'\nq.2 = 'y'\ndrop q.1\nuse arg >q.\nreturn\n"[..],
+            b"st.1 = 'orig'\ncall sub >st.\nexit\n\
+              sub: procedure\nq. = 'dflt'\ndrop q.1\nuse arg >q.\nreturn\n",
+        ] {
+            let mut interp = Interp::new();
+            let failure = run_source(&mut interp, source).unwrap_err();
+            let Failure::Raised(raised) = failure else {
+                panic!("expected Raised, got {failure:?}");
+            };
+            assert_eq!((raised.number, raised.sub), (98, 995));
+        }
 
         // **The exemption is keyed on the target's NAME shape, not on the
         // value's.** A simple variable holding a fresh, empty stem object is
