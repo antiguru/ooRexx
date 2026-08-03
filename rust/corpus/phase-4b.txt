@@ -80,18 +80,28 @@ lang/interpret_dynamic.rex
 # now prints. Its own header says which wrong answer each field would produce.
 lang/interpret_error_echo.rex
 
-# New for 4b Task 3 -- CALL and RETURN. Its whole value is the `trace r`
-# transcript on stderr: the callee's clauses echo at the calling clause's own
-# printed indent plus two, which `call inner` (inside a DO inside `outer:`)
-# pins at 6 where a "2 x depth" rule would say 2. The variables are not
-# decoration either -- a witness with none in it passes against an
-# implementation that wrongly gives every callee its own pool.
+# New for 4b Task 3 -- CALL and RETURN, under trace r throughout. Review
+# finding I1 (Task 4 fix round 1) found the indent claim this entry used to
+# make was never true of this program's own differential run against the
+# oracle: corpus.rs's DEVIATION 0 collapses the run of spaces D2r's indent
+# rule produces, so `call inner` (inside a DO inside `outer:`) echoing at 6
+# where a "2 x depth" rule would say 2 is pinned by run.rs's own unit tests
+# (a_callees_clauses_echo_at_the_calling_clauses_indent_plus_two), which
+# compare raw bytes outside DEVIATION 0's reach, not by this program. What
+# this program's differential run does pin: the clause sequence and line
+# numbers on stderr, NUMERIC DIGITS inherited by a callee and not written
+# back, and RESULT settled on return. The variables are not decoration
+# either -- a witness with none in it passes against an implementation that
+# wrongly gives every callee its own pool.
 lang/call_return.rex
 
-# New for 4b Task 4 -- ExprKind::Call, the internal-function expression form.
-# Under trace r for the same reason call_return.rex is: the D2r indent rule
-# applies to a routine reached from an expression exactly as it does to one
-# reached by CALL, which the unit tests in eval.rs do not check (none of them
-# inspect stderr this closely). RESULT is pinned too -- set before the call
-# and read back unchanged after it, unlike CALL, which settles it on return.
+# New for 4b Task 4 -- ExprKind::Call, the internal-function expression form,
+# under trace r for the same reason call_return.rex is. Also review finding
+# I1: the D2r indent this entry used to claim as pinned here is likewise
+# collapsed by DEVIATION 0 and is pinned by run.rs's own unit tests instead
+# (current_value_indent_is_restored_after_a_nested_expression_call and its
+# neighbours), not by this program. What this program's differential run
+# does pin: stdout byte for byte -- RESULT set before the call and read back
+# unchanged after it, unlike CALL, which settles RESULT on return -- and
+# stderr's clause sequence and line numbers.
 lang/call_expression.rex

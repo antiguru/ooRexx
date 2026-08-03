@@ -407,12 +407,22 @@ impl Interp {
     ///
     /// **I25's split, restated here because a 4c implementer reading this
     /// arm will not otherwise see it: resolution is internal routine first
-    /// (4b, this function), builtin second (4c), external third (Phase 7).
-    /// A name that reaches neither this function's own label search nor
-    /// (once it exists) 4c's builtin table fails loudly naming `4c` --
-    /// `resolve_and_run_call`'s (`run.rs`) `Loud::unresolved_call` is
-    /// already that fallback, and the builtin lookup belongs *between* the
-    /// label search and that call, not after it.**
+    /// (4b), builtin second (4c), external third (Phase 7).** Corrected by
+    /// review finding I2 (Task 4 fix round 1): the label search is not in
+    /// this function at all -- `eval_call` only decides the two inputs a
+    /// `CallTarget` reduces to (`name`, `search_labels`) below and hands
+    /// them to `resolve_and_run_call` (`run.rs`), which both this function
+    /// and `exec_call` (`CALL`) share, and where the label search actually
+    /// lives (`activation_body.labels.get(name)`). **The builtin lookup
+    /// belongs inside `resolve_and_run_call` too, between that miss and its
+    /// `Loud::unresolved_call` fallback** -- not inside `eval_call`, and not
+    /// only for the expression form, or `CALL length 'abc'` would still be
+    /// loud on this crate's own tree the day `f(1)`/`say length('abc')`
+    /// stopped being. `eval_call` itself owns no expression-only resolution
+    /// step; the only thing specific to this call form is what happens
+    /// *after* `resolve_and_run_call` returns (`Ended`'s three cases,
+    /// below), which `CALL` does not need because it never produces a
+    /// value for an enclosing expression to use.
     ///
     /// **`CallTarget::Literal` never searches the label table, symmetric
     /// with `CALL "SUB"` (Task 3).** Its own doc in `rexx-parse` already
@@ -1735,6 +1745,33 @@ mod tests {
             b"say f(1)\nexit 9\nf: exit 5\n".to_vec(),
         );
         assert_eq!(outcome.exit_code, 5, "stderr: {:?}", outcome.stderr);
+        assert_eq!(outcome.stdout, b"");
+        assert_eq!(outcome.stderr, b"");
+    }
+
+    /// **Review finding M4, Task 4 fix round 1.** `Failure::Exited` has two
+    /// producers -- an `EXIT` instruction (the test above) and a routine
+    /// falling off its own end (`run_activation`'s own `Ok(Ended::Exited(
+    /// None))` when its instruction loop runs out) -- and only the first had
+    /// a test. The two are genuinely distinct events reaching the same
+    /// `Ended::Exited` arm in `eval_call`, and the risk this test closes is
+    /// specific: a version that only checked for an explicit `Exit` value
+    /// while treating "no more instructions" as `Ended::Returned(None)`
+    /// would misroute this case into `Raised::no_data_returned` (Error
+    /// 44.1) instead of silently ending the program -- a real, measured
+    /// divergence (`error.rs`'s `no_data_returned` doc has the "**Not** the
+    /// same path" note this pins). Measured on the oracle in a clean
+    /// directory: `say f(1)` into `f: nop` at the very end of the file (no
+    /// `RETURN`, nothing after it) gives rc 0, empty stdout, empty stderr --
+    /// `SAY` never runs because the whole program ends before its argument
+    /// finishes evaluating, exactly as the explicit-`EXIT` case does.
+    #[test]
+    fn a_routine_falling_off_its_own_end_in_expression_form_also_ends_the_whole_program() {
+        let outcome = crate::run_program(
+            "call-expr-fall-off.rex",
+            b"say f(1)\nexit\nf: nop\n".to_vec(),
+        );
+        assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
         assert_eq!(outcome.stdout, b"");
         assert_eq!(outcome.stderr, b"");
     }

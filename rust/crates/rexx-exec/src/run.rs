@@ -1726,9 +1726,9 @@ impl Interp {
         callee.extra = extra;
         self.activations.push(callee);
 
-        // The three pieces of level state, saved here and restored on both
+        // The four pieces of level state, saved here and restored on both
         // paths below. `Interpret`'s own arm is the model and one of the
-        // three differs from it deliberately:
+        // four differs from it deliberately:
         //
         // * `activation_indent` is **set** to the calling clause's printed
         //   indent plus two (D2r). Measured at three shapes rather than one,
@@ -1745,6 +1745,22 @@ impl Interp {
         //   "call sub"` on line 2 echoes the fragment's `call sub` at line 2
         //   and the callee's own clauses at lines 4, 5 and 6. Leaving the
         //   enclosing override in force would print all six as line 2.
+        // * `current_value_indent` is **restored to `base_indent`** on the
+        //   way out (review finding C1, Task 4 fix round 1). It is not
+        //   *set* going in -- `run_activation` -> `step_in_temps_frame`
+        //   overwrites it on every clause the callee steps, the same way
+        //   the callee's own clauses would overwrite it regardless -- but
+        //   nothing had restored the caller's own value afterward until
+        //   this fix, because before `ExprKind::Call` at most one activation
+        //   could be entered per clause and the *next* clause's own
+        //   `step_in_temps_frame` re-set the field before anything read it.
+        //   `say f(1) + g(2)` enters two activations in one clause, and
+        //   without this line `g`'s own base (and everything after it in
+        //   that clause, including the enclosing clause's own `>>>`) is
+        //   computed from `f`'s last clause instead of the caller's own --
+        //   measured against the oracle, and not confined to `TRACE`: a
+        //   plain, untraced `say f(1) + g(2)` with a raise inside `g`
+        //   reports that error's clause echo at the wrong indent.
         let base_indent = self.current_value_indent;
         let saved_base = std::mem::replace(&mut self.activation_indent, base_indent + 2);
         let saved_offset = std::mem::take(&mut self.indent_offset);
@@ -1762,6 +1778,7 @@ impl Interp {
         self.activation_indent = saved_base;
         self.indent_offset = saved_offset;
         self.clause_line_override = saved_line;
+        self.current_value_indent = base_indent;
 
         match ended {
             Ok(ended) => Ok(ended),
@@ -7452,6 +7469,57 @@ mod tests {
               \x20    4 *-*   end\n\
               \x20    5 *-* end\n\
               \x20    6 *-* exit\n"
+                .to_vec()
+        );
+    }
+
+    /// **Review finding C1, Task 4 fix round 1.** `current_value_indent` is
+    /// a fourth piece of level state `resolve_and_run_call` must restore on
+    /// the way out, alongside `activation_indent`/`indent_offset`/
+    /// `clause_line_override` (that function's own doc comment) -- and this
+    /// is the shape that tells a version missing the restore apart from a
+    /// correct one: **two** internal-function calls inside *one* clause
+    /// (`ExprKind::Call`, Task 4). Before Task 4 at most one activation
+    /// could be entered per clause, and the *next* clause's own
+    /// `step_in_temps_frame` re-set the field before anything read it, so
+    /// the gap was unobservable through `CALL` alone. Without the restore,
+    /// `g`'s own base indent -- and everything computed from it: its
+    /// clauses, its `RETURN`'s own value trace, and the enclosing `say`
+    /// clause's own final `>>>` -- is derived from `f`'s last clause instead
+    /// of the caller's own.
+    ///
+    /// Byte-exact against the oracle in a clean directory (source measured
+    /// with a leading `trace r` clause enabling tracing, then every line
+    /// number decremented by one to match `run_source_traced`'s own
+    /// externally-set mode, which consumes no line of its own -- the same
+    /// transformation this file's other `run_source_traced` expectations
+    /// already rely on, checked here against `a_callees_clauses_echo_at_
+    /// the_calling_clauses_indent_plus_two`'s own source with a real
+    /// `trace r` prepended). This assertion compares raw `interp.trace`
+    /// bytes and is **not** reachable by `corpus.rs`'s `normalize_stderr`
+    /// (DEVIATION 0), which collapses exactly this class of indent
+    /// difference -- see `phase-4b.txt`'s own entry for `lang/
+    /// call_expression.rex` for why the corpus differential cannot be
+    /// trusted to catch this at all.
+    #[test]
+    fn current_value_indent_is_restored_after_a_nested_expression_call() {
+        let mut interp = Interp::new();
+        run_source_traced(
+            &mut interp,
+            b"say f(1) + g(2)\nexit\nf: return 1\ng: return 2\n",
+        )
+        .expect("the program runs");
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* say f(1) + g(2)\n\
+              \x20    3 *-*   f:\n\
+              \x20    3 *-*   return 1\n\
+              \x20      >>>     \"1\"\n\
+              \x20    4 *-*   g:\n\
+              \x20    4 *-*   return 2\n\
+              \x20      >>>     \"2\"\n\
+              \x20      >>>   \"3\"\n\
+              \x20    2 *-* exit\n"
                 .to_vec()
         );
     }
