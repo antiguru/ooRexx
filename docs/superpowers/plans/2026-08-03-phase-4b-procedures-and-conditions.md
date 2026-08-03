@@ -1019,6 +1019,18 @@ Include the activation-shaped negative control, and I17's reclassification with 
 
 Full suite; `REXX_CORPUS_GATE=1`; `REXX_ASSERTIONS_GATE=1`; `REXX_KEYWORD_GATE=1`; `cargo clippy -- -D warnings`; `cargo fmt --check`; the mutation script.
 
+- [ ] **Step 3b: Assess whether per-sub-phase ownership attribution earns its keep, and cost the consolidation**
+
+Measured at `e4caa7bf`, mid-4b: `tests/owners.rs`, `tests/loud.rs` and `tests/coverage.rs` are **1,852 lines** against **9,025** lines of interpreter source in `run.rs`, `eval.rs` and `error.rs`. Task 0 was **907 insertions with zero interpreter functionality**, and existed only because variants move in scope one sub-phase at a time.
+
+This is a real question, not a rhetorical one, and 4c is the last sub-phase that could act on the answer. Report on three things:
+
+* **The third copy.** Ownership data lives in `tests/owners.rs`, in `loud.rs`'s witness rows, and in a match in `src/lib.rs` -- production code cannot reach a test module. Task 0 flagged this and it is still hand-maintained. It is *guarded* (the stderr assertion catches drift, verified by mutation), so it is duplication rather than rot. Cost the fix: make `owners.rs` the single source and assert `src/lib.rs`'s match equal to it, rather than maintaining both.
+* **Whether the phase strings are load-bearing at all.** They exist so a gate can say "4b is done" -- but the differential corpus makes that claim better and more directly. A binary implemented/not-implemented, with the reason in the message and no phase attribution, would delete most of this surface. Say what would actually break.
+* **Which defects the attribution caused.** By this point the phase's record will show it. The ones visible at Task 2 were: `loud.rs` deleting the witness covering `Call::Qualified` and `Call::Trap` when `Call` lands; four occurrences of a witness implemented out from under a test; the `>I>`/`<I<` owner question, whose *existence* is an attribution artifact; and the corpus-subset union plumbing.
+
+**Do not act on the answer in 4b.** This step produces a costed recommendation for the 4c plan. Consolidating the harness while ten tasks depend on it is the collision D5 warns about, and it would move every gate figure between here and now.
+
 - [ ] **Step 4: Assess each criterion honestly, including the ones met weakly**
 
 4a's gate recorded five met, one met with an inherited criterion defect, and one met weakly with an open gap. That is what an honest gate looks like. A seven-of-seven with no qualifications, after a sub-phase this size, is a claim about the instruments rather than the code.
