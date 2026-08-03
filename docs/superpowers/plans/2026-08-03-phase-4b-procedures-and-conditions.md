@@ -248,7 +248,24 @@ Use `#[path]` or a shared file both `mod`-include. Then add a test asserting the
 
 - [ ] **Step 3: Give the loud message an owner, and assert it**
 
-Add an `owner: &'static str` to the loud payload sourced from the shared table, so the message reads `rexx-exec: CALL is not implemented (Phase 5)` or similar -- take the exact format from what reads best beside the existing text, and record it here so later tasks assert the same shape. Then make `every_out_of_scope_variant_fails_loudly` assert the emitted stderr contains the witness's owner.
+Add an owner to the loud payload sourced from the shared table, and make `every_out_of_scope_variant_fails_loudly` assert the emitted stderr contains the witness's owner.
+
+**The format chosen, measured live through `rexx-run` at commit `0197b360`, is `"{name} is not implemented ({owner})"`:**
+
+```
+call sub               -> rexx-exec: CALL is not implemented (4b)
+call ns:sub            -> rexx-exec: CALL is not implemented (Phase 5)
+say foo(1)             -> rexx-exec: a function call is not implemented (4b)
+parse var x y          -> rexx-exec: PARSE is not implemented (4c)
+'date'                 -> rexx-exec: a command is not implemented (Phase 7)
+say a~b                -> rexx-exec: a message send is not implemented (Phase 5)
+```
+
+all at rc 120. **Every later task that asserts an owner appears in stderr uses this shape.**
+
+The owner is `Option`-typed, and `None` means "implemented in this crate" rather than being keyed on the phase name `"4a"`. Keying it on a phase name is a forward trap: once Task 3 implements `CALL`, a phase-keyed carve-out forces a choice between labelling a 4b variant `"4a"` and shipping `CALL is not implemented (4b)` from a 4b-local blocked site.
+
+Two in-scope-but-locally-blocked sites in `run.rs` -- the `DO`/`LOOP` `COUNTER`/`WITH` check and the stem-target `DO OVER` deviation -- keep an owner-less message, because they are not out-of-scope constructs. A later task that makes the suffix universal must handle them deliberately.
 
 - [ ] **Step 4: Change the `read_subset` call sites to take a list of subset files**
 
