@@ -850,8 +850,23 @@ At minimum: `SIGNAL` out of a nested block; `SIGNAL` to a label not in the curre
 
 **Inherited items this task pays for:**
 
-* **I10.** `Raised::condition` has no reader. It is a field rather than a hardcoded value because `NOVALUE`, `NOMETHOD` and friends need to set it to something else, and it is `#[expect(dead_code)]` rather than `#[allow]` **on purpose, so the day 4b reads it the annotation asks to be deleted.** Delete it.
-* **I11.** `Interp::failure_site` is set first-call-wins; the guard is documented at `run.rs:1295-1298` and the callers are at `:882`, `:904` and `:1357`. A second raise after a trapped first one would report the first site. **This task is the caller that makes it matter.** Clear it on trap resumption, and write a test with two raises where the second is the one reported.
+* **I10.** `Raised::condition` has no reader. It is a field rather than a hardcoded value because `NOVALUE`, `NOMETHOD` and friends need to set it to something else, and it is `#[expect(dead_code)]` rather than `#[allow]` **on purpose, so the day 4b reads it the annotation asks to be deleted.** Delete it. Verified still present at `0fce4f00` in `error.rs`, reason string "no reader until 4b's SIGNAL ON and condition('c'); expect self-expires". Because it is `expect` and not `allow`, the compiler **errors** the moment you read the field, so the removal is forced rather than remembered -- that is the mechanism working, and reaching for `allow` to quiet it defeats the one thing it was placed there to do.
+
+* **`set_sigl` already exists and traps need it.** `run.rs:2216` sets `SIGL` via `assign_by_name`, added by Task 6 for `SIGNAL` and `CALL`. A trapped condition sets `SIGL` too, so this task is its third caller. **Measure the value the oracle uses on a trap** -- do not assume it is the raising clause's line, and do not assume it matches what `SIGNAL` sets.
+
+* **`Novalue::Unset` is produced at `lib.rs:1417` and read nowhere**, verified at `0fce4f00`. This task is its first reader, exactly as D16 intended.
+* **I11.** `Interp::failure_site` is set first-call-wins. A second raise after a trapped first one would report the first site. **This task is the caller that makes it matter.** Clear it on trap resumption, and write a test with two raises where the second is the one reported.
+
+  **The line numbers an earlier revision of this plan gave you are stale, and so are two doc comments in the tree.** Checked at `0fce4f00`: the guard is **not** in the callers and is **not** spelled `is_none()`. It is an early return at the top of `record_failure_site` itself:
+
+  ```rust
+  // run.rs:2841
+  if self.failure_site.is_some() {
+      return;
+  }
+  ```
+
+  with the assignment three lines below. `record_failure_site` is at `run.rs:2812`; its callers are at `:1248`, `:1270` and `:2771`. Two doc comments -- `run.rs:2674` and `run.rs:2778` -- still say "`self.failure_site.is_none()` is the guard, in both callers", which is wrong about the expression *and* about where it lives. **Correct both while you are in there**, because a task told to clear this field would otherwise go looking in the callers.
 * **I13.** `Novalue::Unset` is produced by the read path and read by nothing. D16 required the flag from the start rather than retrofitting a raise into the hottest path. `SIGNAL ON NOVALUE` is its first reader, and 4c's gate program uses `signal on novalue`.
 * **I14, the `+++` half.** Measured: a trapped `SIGNAL ON SYNTAX` under `trace r` emits **no `+++` and no error report at all**; the trap label's own clause is echoed as an ordinary `*-*`. Condition traps do not bring `+++` into 4b. `+++` is command errors and failures, Phase 7's under D18.
 * **I16, revisited.** 4a concluded `SIGNAL ON SYNTAX` cannot accumulate temps leaks, resting entirely on `step_in_temps_frame` being the single chokepoint: the trap acts at instruction-loop level and the wrapper has truncated before the `Failure` reaches the loop's `Err` arm. **This task makes the trap real.** Re-verify against the implementation; if Task 1 moved execution off the chokepoint, redo the analysis. `.superpowers/sdd/2026-07-30-phase-4a-executor/temps-frame-investigation.md` has the original.
