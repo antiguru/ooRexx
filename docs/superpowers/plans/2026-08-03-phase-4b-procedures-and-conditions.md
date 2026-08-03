@@ -454,6 +454,8 @@ The missing clause echo for a traced `INTERPRET` is the other half of a divergen
 
 - [ ] **Step 5: Clamp the `*-*` echo at 40 columns, and only the `*-*` echo**
 
+> **Amended after Task 2 landed.** `phase-4-exclusions.txt`'s DEVIATION 0 now normalises leading indentation on stderr before comparison, so the differential harness no longer observes this clamp. **The implementation stays** -- it is correct, cheap, and unit-tested directly rather than through the normalising harness, and it is what the pinned shallow-depth indent witnesses check. Nothing to undo.
+
 **There are two `*-*` formatters, not one, and the tree already says they are one quantity.** `Raised::report` (`src/error.rs:272`) writes the error report's echo; `push_clause` (`src/trace.rs:231`) writes the trace echo. `push_clause`'s own doc calls this "one quantity with two formatters, not two quantities, and this is the second formatter D17's own retrofit note names". So the clamp is one rule applied at both, via a shared helper or a shared constant -- not a number typed twice.
 
 Measured, the cap is on the **total** printed indent and is reached at nesting depth 20: depth 18 gives 36, depth 19 gives 38, depth 20 gives 40, depths 21 and 25 give 40. Value lines are **not** capped: at depth 25 under `trace r`, `*-*` tops out at 40 while `>>>` runs to 52. A clamp inside `static_indent`, or one applied to `push_indent` generally, is therefore wrong in both directions.
@@ -479,6 +481,41 @@ It has no 4b construct in it -- 25 nested `DO`s around a failing clause -- so it
 Expect the corpus figure to move from `30 of 30` to `31 of 31`. Confirm the new program is genuinely **compared** and not merely counted: append a program you know diverges, check the report names it, then revert. Task 1 established that pattern after finding that a count moving by one does not by itself prove the new slot was exercised.
 
 - [ ] **Step 8: Amend the KNOWN GAP row, add a DEVIATIONS or fixed-defect note for the cap, commit**
+
+---
+
+### Task 2b: Normalise leading indentation in the differential harnesses
+
+**Run this after Task 3 lands, not before** -- Task 3 is live in `rexx-exec`'s source and this touches the harnesses that grade it. It has no dependency on Task 3's output.
+
+**Files:**
+- Modify: `rust/crates/rexx-exec/tests/corpus.rs` (the stderr comparison in `check_case`)
+- Modify: `rust/crates/rexx-exec/tests/trace_oracle.rs` (the committed-expectation comparison)
+- Create: a small set of pinned indent witnesses that compare **without** normalisation
+
+**Why:** `phase-4-exclusions.txt`'s DEVIATION 0, which this task implements. Read the row in full first; it carries the C++ citations and the exact scope.
+
+**The scope is narrow and the narrowness is the point.** Collapse the run of spaces between a line's prefix field and its content, on **both** sides, for **stderr only**. Exit status, stdout, catalogue text, clause text, line numbers, value-line **content**, and the presence, absence and **order** of every line all stay byte-exact. A reviewer should be able to read the comparison function and see that it cannot hide a missing line, a reordered line, or a changed value.
+
+**Why indentation and nothing else.** Indentation is *derived* from the clause sequence and block structure already being compared byte-for-byte, so matching it proves nothing further -- except that we have reproduced a C++ counter defect, which `BaseDoInstruction.cpp:161` against `:377` documents. Value lines are the opposite case: `>>>`, `>V>`, `>O>`, `>L>`, `>F>` and `>A>` carry intermediate results and evaluation order that nothing else in the output exposes.
+
+**What must still fail.** Keep a small set of indent witnesses at nesting depth <= 3 containing **no completed loop**, compared without normalisation, so running a `WHEN` body at the wrong level still goes red. Name them so a reader can find them.
+
+**What this does not close.** The re-tested pass's two missing `>>>` lines are a **content** difference, not an indent one. Normalisation does not touch them and Task 9 still owns them.
+
+- [ ] **Step 1: Write the normalising comparison, and a test that it still catches a missing line, a reordered line and a changed value**
+
+Three negative controls, each a mutation of an expected transcript. If any passes under normalisation, the function is too permissive.
+
+- [ ] **Step 2: Add the pinned no-normalisation indent witnesses**
+
+- [ ] **Step 3: Confirm every corpus program still matches, and that the count did not move**
+
+- [ ] **Step 4: Report how many previously-failing shapes now pass**
+
+If the answer is zero, say so plainly -- it would mean the deviation bought nothing yet, which is a fact worth having rather than hiding.
+
+- [ ] **Step 5: Commit**
 
 ---
 
@@ -907,6 +944,8 @@ The base is the **calling clause's printed indent** plus the delta, not two time
 
 - [ ] **Step 6: Close I31's two missing `>>>` lines, and re-verify bound-before-test, `FOR` and `ITERATE`**
 
+**Still yours after DEVIATION 0.** That deviation normalises leading *indentation*; I31 is two value lines that are **absent**, which is a content difference normalisation does not touch. Same C++ path -- the failing-control-test exit -- different symptom. A note earlier in this phase wrongly claimed the two closed together.
+
 - [ ] **Step 7: Add a coverage measure to the trace table**
 
 D14's criterion 3 amendment. The honest statement today is that the five witnesses verify what they cover and the trace surface's coverage is measured by nothing. Produce a number: which of the nineteen prefixes have a committed expectation, which do not, and which are out of scope with an owner. **A printed number that no assertion reads cannot fail** -- assert the count against a committed literal.
@@ -1014,6 +1053,7 @@ Report mode first. A strict gate on a table nobody has looked at turns a measure
 * **A trap criterion asserting the program exited 0.** A program that never raised also exits 0. Assert a value the handler set, neither the flag's derived name nor its unset rendering.
 * **Criterion 4 carried forward verbatim.** It passes today with zero call frames exercised. Carried unchanged it cannot fail *for the thing 4b adds*. It needs the subset union and an **activation-shaped negative control**: 4a's control deletes `eval_arithmetic`'s `push_temp(left_value)`. A 4b control must delete a root a *call* holds -- the argument list between evaluation and the callee's `USE` -- or it re-tests 4a and reports a pass that means nothing.
 * **A coverage criterion that enumerates variants** says nothing about combinations, which is how 4a's two Criticals survived everything. State that limit in the criterion's own text.
+* **Criterion 3 must state what DEVIATION 0 removed from its reach.** Leading indentation on stderr is normalised before comparison, so criterion 3 no longer witnesses indent at all except through the pinned shallow-depth witnesses Task 2b keeps. A criterion that reads as though it still checks indentation would be claiming coverage the harness gave up deliberately. Say which witnesses are unnormalised, and say that value-line **content** and line **order** remain byte-exact -- that is where the criterion's power now lives.
 * **A queue criterion.** Task 8 has no differential witness at all. Any criterion covering it must assert unit-level order against oracle-measured values, and the gate must record that the construct ships undifferentiated.
 
 **State up front rather than discover:** criterion 2's exempt list cannot light up at this gate or 4c's.

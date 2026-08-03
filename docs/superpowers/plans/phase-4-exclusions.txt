@@ -76,6 +76,63 @@ whole name would overstate the gap; ignoring the split would understate it.
 DEVIATIONS -- permanent, chosen
 -------------------------------
 
+  0. LEADING INDENTATION ON STDERR IS NORMALISED BEFORE COMPARISON.
+
+     SCOPE, and it is deliberately narrow. The differential harness collapses
+     the run of spaces between a line's prefix field and its content, on BOTH
+     sides, for stderr only. Everything else stays byte-exact: exit status,
+     stdout, the catalogue text, the clause text, the line numbers, the value
+     lines' CONTENT, and the presence, absence and ORDER of every line. This
+     is not licence to normalise anything else, and must not be cited as
+     precedent for a second normalisation.
+
+     WHY. The oracle's indent is not a computed property, it is a mutable
+     counter with two inconsistent exit paths, and one of them is a defect:
+
+       settings.traceIndent is a counter (execution/ActivationSettings.hpp:188).
+       A loop ending NORMALLY calls terminate ->
+         terminateBlockInstruction(doblock->getIndent())
+         (instructions/BaseDoInstruction.cpp:161), an ABSOLUTE RESTORE of the
+         value DoBlock saved at construction (instructions/DoBlock.cpp:71).
+       A loop whose CONTROL TEST FAILS calls endLoop (:377), which does
+         popBlockInstruction and a BARE unindent() -- no restore.
+         unindent() clamps at 0 (execution/RexxActivation.hpp:318).
+
+     So a completed loop that ends on a failing test leaves the counter one
+     notch low for everything after it, until some enclosing construct
+     restores from its own saved DoBlock.
+
+     THE ARGUMENT IS INFORMATION CONTENT, NOT COSMETICS. Indentation is
+     DERIVED from the clause sequence and block structure the harness already
+     compares byte-for-byte. A matching indent proves nothing that a matching
+     clause sequence does not already prove -- except that we have reproduced
+     a C++ counter defect. Value lines are the opposite case and stay exact:
+     >>> , >V>, >O>, >L>, >F> and >A> carry intermediate results and
+     evaluation order that NOTHING else in the output exposes, which is what
+     makes trace the densest differential instrument this project has.
+
+     WHAT IT COST TO NOT DO THIS. Four agents stated the indent rule five
+     different ways and were wrong every time; three fix rounds on one task;
+     and the remaining route to byte-exactness was to port the counter,
+     defect included.
+
+     WHAT SURVIVES SO A GROSS ERROR STILL FAILS: a small set of pinned
+     indent witnesses at nesting depth <= 3 containing NO completed loop,
+     compared WITHOUT normalisation. If we run a WHEN body at the wrong level
+     those still go red.
+
+     WHAT THIS DOES NOT CLOSE. The re-tested pass's two missing >>> lines
+     (the KNOWN GAP below) is a CONTENT difference -- lines absent, not lines
+     indented -- so normalisation does not touch it and it must still be
+     fixed. Same C++ path, different symptom; an earlier note in this session
+     wrongly claimed the two closed together.
+
+     TRACE'S *SETTING* REMAINS EXECUTION SEMANTICS and stays byte-exact in
+     behaviour: TRACE() is readable by the program, the setting is
+     per-activation with measured inheritance rules, TRACE ? changes control
+     flow, and a trapped SIGNAL ON SYNTAX under trace r suppresses the error
+     report entirely. Only the rendering's leading whitespace is normalised.
+
   1. DO OVER on a stem does not reproduce the oracle's traversal order.
 
      The oracle walks a balanced tree; we use a hash map. Measured, inserting
@@ -343,8 +400,16 @@ above.
   >K>. It is NOT a witness selected to avoid this gap: the gap is stated here,
   and criterion 3's assessment should say the Controlled pair is unwitnessed.
 
-  A SECOND SYMPTOM OF THE SAME RE-TESTED PASS, and it is not about tracing at
-  all: the *-* indent is NOT a pure function of lexical nesting. A repetitive
+  A SECOND SYMPTOM OF THE SAME RE-TESTED PASS. *** THIS HALF IS NO LONGER A
+  GAP: IT IS COVERED BY DEVIATION 0, WHICH NORMALISES LEADING INDENTATION ON
+  STDERR. *** Everything below is retained as the measured record of why that
+  deviation exists, and because the pinned shallow-depth indent witnesses
+  named there still compare without normalisation. Do not reopen it as work.
+  The FIRST symptom above -- the two missing >>> value lines -- is a CONTENT
+  difference and is NOT covered by the deviation; it remains open.
+
+  The measured record: the *-* indent is NOT a pure function of lexical
+  nesting. A repetitive
   DO/LOOP that COMPLETES A BODY PASS and then ends on a FAILING CONTROL TEST
   decrements the oracle's indent counter one time too many, so later clauses
   print two spaces lower than their lexical depth -- see the qualification and
