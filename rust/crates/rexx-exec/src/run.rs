@@ -795,7 +795,7 @@ impl Interp {
                     // string, not skipped.
                     None => Vec::new(),
                 };
-                self.trace_result(self.current_value_indent, &line);
+                self.trace_result(self.clause_state.current_value_indent, &line);
                 self.out.extend_from_slice(&line);
                 self.out.push(b'\n');
                 Ok(Flow::Next)
@@ -825,7 +825,7 @@ impl Interp {
                 // two drift, which is exactly what happened here before
                 // this fix: this site's own copy never learned about the
                 // offset when the field was added.
-                let indent = self.current_value_indent;
+                let indent = self.clause_state.current_value_indent;
                 let rendered = self.to_text(value).to_vec();
                 self.trace_result(indent, &rendered);
                 match &target.kind {
@@ -1012,7 +1012,7 @@ impl Interp {
                 // The two lines below are the fix for the first and
                 // `run_fragment`'s own `seal_site_level` is the fix for the
                 // second.
-                self.trace_result(self.current_value_indent, &text);
+                self.trace_result(self.clause_state.current_value_indent, &text);
                 // **The fragment's level, with delta 0.** Measured: a
                 // fragment's clauses print at the enclosing `INTERPRET`
                 // clause's own absolute indent plus whatever nests them
@@ -1079,7 +1079,7 @@ impl Interp {
                 // resolving one of its own, measured on `interpret 'interpret
                 // "say 2 & 1"'` where all three echoes carry the outermost
                 // line.
-                let base_indent = self.current_value_indent;
+                let base_indent = self.clause_state.current_value_indent;
                 let base_line = self.clause_site(source, instruction).map(|(line, _)| line);
                 let saved_base = std::mem::replace(&mut self.activation_indent, base_indent);
                 let saved_offset = std::mem::take(&mut self.indent_offset);
@@ -1108,7 +1108,7 @@ impl Interp {
                 // Reads `current_value_indent` rather than recomputing
                 // `static_indent(index)` -- same reasoning as `Assignment`'s
                 // own arm, above.
-                let indent = self.current_value_indent;
+                let indent = self.clause_state.current_value_indent;
                 if self.eval_condition(
                     code,
                     condition,
@@ -1171,7 +1171,7 @@ impl Interp {
                 // Reads `current_value_indent` rather than recomputing
                 // `static_indent(index)` -- same reasoning as `Assignment`'s
                 // own arm.
-                let select_indent = self.current_value_indent;
+                let select_indent = self.clause_state.current_value_indent;
                 let case_text = match case {
                     Some(case_expr) => {
                         let value = self.eval(code, case_expr)?;
@@ -1212,7 +1212,7 @@ impl Interp {
                     // exactly the same reason the explicit clause echo just
                     // above is explicit: this condition is evaluated
                     // outside any `step_in_temps_frame` call of its own.
-                    self.current_value_indent = when_indent;
+                    self.clause_state.current_value_indent = when_indent;
                     if self.trace_mode().all
                         && let Some((line, text)) = self.clause_site(source, when_instruction)
                     {
@@ -1413,7 +1413,7 @@ impl Interp {
                 self.eval_condition(
                     code,
                     condition,
-                    ConditionTrace::Result(self.current_value_indent),
+                    ConditionTrace::Result(self.clause_state.current_value_indent),
                     raised_when_not_logical,
                 )?;
                 Ok(Flow::Next)
@@ -1499,7 +1499,7 @@ impl Interp {
                 ..
             } => match self.current_case_text.clone() {
                 Some(case_text) => {
-                    let indent = self.current_value_indent;
+                    let indent = self.clause_state.current_value_indent;
                     if self.test_case_when(code, values, &case_text, indent)? {
                         Ok(Flow::Next)
                     } else {
@@ -1638,7 +1638,7 @@ impl Interp {
                     // `Call::Named` has no equivalent of -- measured, `call
                     // sub 1+1, 'q'` under `trace r` traces no value line at
                     // all while `call (nm)` traces one for the target.
-                    self.trace_result(self.current_value_indent, &name);
+                    self.trace_result(self.clause_state.current_value_indent, &name);
                     self.exec_call(code, &name, true, args)
                 }
                 rexx_parse::Call::Qualified { .. } | rexx_parse::Call::Trap(_) => {
@@ -1662,7 +1662,7 @@ impl Interp {
                         let value = self.eval(code, expression)?;
                         self.roots.push_temp(value);
                         let rendered = self.to_text(value).to_vec();
-                        self.trace_result(self.current_value_indent, &rendered);
+                        self.trace_result(self.clause_state.current_value_indent, &rendered);
                         Some(value)
                     }
                     None => None,
@@ -1690,7 +1690,7 @@ impl Interp {
                     // unresolved `SIGNAL` (16.1) ends the program regardless,
                     // matching the oracle's own `signalTo`, which a caller
                     // only ever invokes with an already-resolved target.
-                    self.set_sigl(self.current_clause_line);
+                    self.set_sigl(self.clause_state.current_clause_line);
                     Ok(Flow::Signal(target))
                 }
                 // `SIGNAL VALUE expr`. Its own `>K>` -- `"VALUE" => text`, at
@@ -1708,9 +1708,9 @@ impl Interp {
                     let value = self.eval(code, expr)?;
                     self.roots.push_temp(value);
                     let text = self.to_text(value).to_vec();
-                    self.trace_keyword(self.current_value_indent, "VALUE", &text);
+                    self.trace_keyword(self.clause_state.current_value_indent, "VALUE", &text);
                     let target = self.resolve_signal_target(&text)?;
-                    self.set_sigl(self.current_clause_line);
+                    self.set_sigl(self.clause_state.current_clause_line);
                     Ok(Flow::Signal(target))
                 }
                 rexx_parse::Signal::Trap(_) => Err(Loud::instruction(&instruction.kind).into()),
@@ -2360,7 +2360,7 @@ impl Interp {
         // and `sub`'s own `SIGL` as the `CALL`'s line -- a version setting
         // `SIGL` before evaluating arguments would report the argument as
         // the `CALL`'s own line instead.
-        self.set_sigl(self.current_clause_line);
+        self.set_sigl(self.clause_state.current_clause_line);
 
         // D19/I6: one Rust frame per activation, plus this counter, so an
         // unbounded recursion becomes a reportable condition instead of a
@@ -2397,9 +2397,11 @@ impl Interp {
         callee.extra = extra;
         self.activations.push(callee);
 
-        // The four pieces of level state, saved here and restored on both
-        // paths below. `Interpret`'s own arm is the model and one of the
-        // four differs from it deliberately:
+        // Level state for the callee, five pieces, saved here and restored
+        // on both paths below. `Interpret`'s own arm is the model for four
+        // of them, and one differs from it deliberately -- the fifth,
+        // `clause_state`, is not level state for the callee at all, and is
+        // saved and restored for a different reason stated where it is:
         //
         // * `activation_indent` is **set** to the calling clause's printed
         //   indent plus two (D2r). Measured at three shapes rather than one,
@@ -2416,32 +2418,45 @@ impl Interp {
         //   "call sub"` on line 2 echoes the fragment's `call sub` at line 2
         //   and the callee's own clauses at lines 4, 5 and 6. Leaving the
         //   enclosing override in force would print all six as line 2.
-        // * `current_value_indent` is **restored to `base_indent`** on the
-        //   way out (review finding C1, Task 4 fix round 1). It is not
-        //   *set* going in -- `run_activation` -> `step_in_temps_frame`
-        //   overwrites it on every clause the callee steps, the same way
-        //   the callee's own clauses would overwrite it regardless -- but
-        //   nothing had restored the caller's own value afterward until
-        //   this fix, because before `ExprKind::Call` at most one activation
-        //   could be entered per clause and the *next* clause's own
-        //   `step_in_temps_frame` re-set the field before anything read it.
-        //   `say f(1) + g(2)` enters two activations in one clause, and
-        //   without this line `g`'s own base (and everything after it in
-        //   that clause, including the enclosing clause's own `>>>`) is
-        //   computed from `f`'s last clause instead of the caller's own --
-        //   measured against the oracle, and not confined to `TRACE`: a
-        //   plain, untraced `say f(1) + g(2)` with a raise inside `g`
-        //   reports that error's clause echo at the wrong indent.
+        // * `call_context` is set to this call's own name and arguments, so
+        //   a `USE ARG` inside the callee reads its own rather than an
+        //   enclosing call's (added by Task 5, and saved here rather than
+        //   anywhere else precisely because of the finding just below:
+        //   `current_value_indent`, the fourth piece at the time, had gone
+        //   unrestored, unobservable until two activations per clause
+        //   became reachable).
         //
-        // * `call_context` is the **fifth** piece, added by Task 5, and it is
-        //   saved here rather than anywhere else precisely because of the
-        //   finding above: `current_value_indent` was the fourth and went
-        //   unrestored, unobservable until two activations per clause became
-        //   reachable. `USE ARG` reads this, so a callee that did not put its
-        //   caller's back would give the caller's own later `USE ARG` the
-        //   callee's arguments.
-        let base_indent = self.current_value_indent;
-        let saved_base = std::mem::replace(&mut self.activation_indent, base_indent + 2);
+        // * `clause_state` (`current_value_indent`/`current_clause_line`,
+        //   bundled -- that struct's own doc comment has the property that
+        //   puts the two of them here rather than among the four above)
+        //   is **saved whole and restored whole**, never set to anything
+        //   new going in: `run_activation` -> `step_in_temps_frame`
+        //   overwrites both fields on every clause the callee steps, the
+        //   same way the caller's own next clause would regardless. Before
+        //   `ExprKind::Call` at most one activation could be entered per
+        //   clause, and that next clause's own `step_in_temps_frame`
+        //   re-set both fields before anything read them -- so a version
+        //   missing this restore passes every test with no more than one
+        //   call per clause in it, and `say f(1) + g(2)` (two activations,
+        //   one clause) is what makes the omission observable at all.
+        //   `current_value_indent`'s own restore is review finding C1
+        //   (Task 4 fix round 1): without it, `g`'s own base indent (and
+        //   everything computed from it, including the enclosing clause's
+        //   own `>>>`) reads `f`'s last clause instead of the caller's own.
+        //   `current_clause_line`'s is Task 6 fix round 2, found the
+        //   identical way after shipping without it: without this line,
+        //   `g`'s own `SIGL` (`set_sigl` reading `current_clause_line`)
+        //   reads `f`'s own last line instead of the calling clause's.
+        //   `current_clause_line_is_restored_after_a_nested_call_or_signal`
+        //   (this file's own tests) is what fails if this one line is
+        //   ever removed a second time; `current_value_indent_is_restored_
+        //   after_a_nested_expression_call` is its own sibling for the
+        //   other field.
+        let saved_clause_state = self.clause_state;
+        let saved_base = std::mem::replace(
+            &mut self.activation_indent,
+            saved_clause_state.current_value_indent + 2,
+        );
         let saved_offset = std::mem::take(&mut self.indent_offset);
         let saved_line = std::mem::take(&mut self.clause_line_override);
         let saved_context = std::mem::replace(
@@ -2477,7 +2492,7 @@ impl Interp {
         self.activation_indent = saved_base;
         self.indent_offset = saved_offset;
         self.clause_line_override = saved_line;
-        self.current_value_indent = base_indent;
+        self.clause_state = saved_clause_state;
         self.call_context = saved_context;
 
         match ended {
@@ -2565,7 +2580,7 @@ impl Interp {
         // overwrites `current_value_indent` with its own clauses' -- this is
         // the `CALL` clause's own printed indent, needed below for the
         // caller-side `RESULT` trace.
-        let base_indent = self.current_value_indent;
+        let base_indent = self.clause_state.current_value_indent;
         let ended = self.resolve_and_run_call(code, name, search_labels, args)?;
 
         let value = match ended {
@@ -2707,7 +2722,7 @@ impl Interp {
         // *which* offsets apply is one fact in one place -- see its own doc
         // comment for what it adds and why open-coding it was a defect.
         let indent = self.printed_indent(&code.body.instructions, index);
-        self.current_value_indent = indent;
+        self.clause_state.current_value_indent = indent;
         // Set unconditionally, exactly like `current_value_indent` just
         // above and for the identical reason (that field's own doc comment):
         // `SIGL` (`lib.rs`'s doc on `current_clause_line`) has to stay
@@ -2715,7 +2730,7 @@ impl Interp {
         // every stepped instruction, `SIGNAL`/`CALL` included, passes
         // through before its own `step` call runs.
         if let Some(line) = self.clause_line(source, instruction) {
-            self.current_clause_line = line;
+            self.clause_state.current_clause_line = line;
         }
         if self.trace_mode().all
             && let Some((line, text)) = self.clause_site(source, instruction)
@@ -2956,7 +2971,7 @@ impl Interp {
         // the field itself, not this function, is what carries the
         // difference between them.
         let otherwise_indent = self.printed_indent(&code.body.instructions, otherwise_index);
-        self.current_value_indent = otherwise_indent;
+        self.clause_state.current_value_indent = otherwise_indent;
         if self.trace_mode().all
             && let Some((line, text)) = self.clause_site(source, otherwise_instruction)
         {
@@ -3261,7 +3276,7 @@ impl Interp {
                         // `step_in_temps_frame` does, for an
                         // *instruction*, and evaluating `expr` steps none),
                         // so it still holds exactly this `DO`'s own value.
-                        self.trace_keyword(self.current_value_indent, "FOR", &text);
+                        self.trace_keyword(self.clause_state.current_value_indent, "FOR", &text);
                         self.whole_nonneg(value)
                             .ok_or_else(|| raised_repetition_count_not_whole(&text))?
                     }
@@ -3292,7 +3307,7 @@ impl Interp {
             LoopKind::Controlled(ctrl) => {
                 // Reads `current_value_indent` rather than recomputing --
                 // same reasoning as `Count`'s own `FOR`, just above.
-                let indent = self.current_value_indent;
+                let indent = self.clause_state.current_value_indent;
                 let state = self.setup_controlled(code, ctrl, indent)?;
                 self.run_repeating(
                     code,
@@ -3350,7 +3365,7 @@ impl Interp {
                 // evaluated once at loop entry here too. Reads `current_
                 // value_indent` rather than recomputing -- same reasoning
                 // as `Count`'s own `FOR`.
-                let over_indent = self.current_value_indent;
+                let over_indent = self.clause_state.current_value_indent;
                 let over_text = self.to_text(value).to_vec();
                 self.trace_keyword(over_indent, "OVER", &over_text);
                 let remaining = match for_count {
@@ -3436,7 +3451,7 @@ impl Interp {
         // instruction, and every caller into this function reaches it
         // through nothing but `self.eval` calls in between (never another
         // instruction step), so it has not moved.
-        let do_indent = self.current_value_indent;
+        let do_indent = self.clause_state.current_value_indent;
         let loop_indent = do_indent + 2;
         // `TRACE`'s own per-iteration re-echo (D17, this task's report,
         // "Step 6"): the oracle's `DO`/`LOOP` instruction is re-executed
@@ -3483,7 +3498,7 @@ impl Interp {
                 // `DO`/`LOOP` instruction itself) -- `WHILE`'s own
                 // condition is evaluated here, inside that same `step`
                 // call, never through a `step_in_temps_frame` of its own.
-                self.current_value_indent = loop_indent;
+                self.clause_state.current_value_indent = loop_indent;
                 match self.eval_condition(
                     code,
                     &cond.condition,
@@ -3548,7 +3563,7 @@ impl Interp {
                 // `current_value_indent` untouched (its own `trace_clause`
                 // call does not set it), so without this `UNTIL`'s
                 // intermediates would otherwise still read `do_indent`.
-                self.current_value_indent = loop_indent;
+                self.clause_state.current_value_indent = loop_indent;
                 match self.eval_condition(
                     code,
                     &cond.condition,
@@ -4503,7 +4518,7 @@ impl Interp {
                 // unmodified case -- `set_form_str`'s own no-uppercasing
                 // rule for this one path, unlike the two keyword spellings
                 // above.
-                self.trace_keyword(self.current_value_indent, "FORM", &text);
+                self.trace_keyword(self.clause_state.current_value_indent, "FORM", &text);
                 let text = String::from_utf8_lossy(&text).into_owned();
                 self.activation_mut()
                     .settings
@@ -4550,7 +4565,7 @@ impl Interp {
                 let value = self.eval(code, expression)?;
                 self.roots.push_temp(value);
                 let text = self.to_text(value).to_vec();
-                self.trace_keyword(self.current_value_indent, keyword, &text);
+                self.trace_keyword(self.clause_state.current_value_indent, keyword, &text);
                 Ok(String::from_utf8_lossy(&text).into_owned())
             }
             None => Ok(default.to_string()),
@@ -6314,7 +6329,7 @@ mod tests {
     /// construct's own depth is the constant `4`, not a function of how
     /// deep the absorbed condition itself sits, and both grow by the same
     /// amount together under nesting. The mutation this kills: reverting
-    /// `indent_offset`'s own assignment to `self.current_value_indent.
+    /// `indent_offset`'s own assignment to `self.clause_state.current_value_indent.
     /// saturating_sub(2)` (an earlier, wrong version of this same fix)
     /// makes this test read back `6` (`8 - 2`) instead of `4`, while the
     /// non-nested version just above still reads back the right answer
@@ -8319,6 +8334,41 @@ mod tests {
               \x20      >>>   \"3\"\n\
               \x20    2 *-* exit\n"
                 .to_vec()
+        );
+    }
+
+    /// `current_value_indent`'s own sibling field, found the identical way
+    /// (Task 6 fix round 2): `current_clause_line` (bundled with it into
+    /// `ClauseState`, whose own doc comment states the property that puts
+    /// both fields in one save/restore rather than two) is a piece of level
+    /// state `resolve_and_run_call` must restore on the way out, and shipped
+    /// once already without that restore -- the second field of this exact
+    /// shape to do so, after `current_value_indent` itself went unrestored
+    /// until the test just above this one caught it at Task 4.
+    ///
+    /// The same shape catches it: two internal-function calls inside *one*
+    /// clause. Without the restore, `g`'s own `SIGL` (`set_sigl`, reading
+    /// `current_clause_line`) reads `f`'s own last line (`return 1`, line 5)
+    /// instead of the calling clause's own (line 1) -- measured against the
+    /// oracle in a clean directory, `rexx-run` on this exact source once
+    /// read `sigl in g: 5` before this fix and `sigl in g: 1` after it, and
+    /// the oracle has always answered `1`.
+    #[test]
+    fn current_clause_line_is_restored_after_a_nested_expression_call() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"say f(1) + g(2)\n\
+                  exit\n\
+                  f:\n\
+                  say 'in f'\n\
+                  return 1\n\
+                  g:\n\
+                  say 'sigl in g:' sigl\n\
+                  return 2\n",
+            ),
+            b"in f\nsigl in g: 1\n3\n".to_vec()
         );
     }
 

@@ -179,7 +179,7 @@ impl Interp {
         if !self.tracing_intermediates() {
             return;
         }
-        let indent = self.current_value_indent;
+        let indent = self.clause_state.current_value_indent;
         match &expr.kind {
             // `Constant`'s own shape is reasoned from `Literal`'s measured
             // one, not independently probed (this crate's own report says
@@ -816,7 +816,7 @@ impl Interp {
     /// check below, matching that order exactly.
     fn eval_logical_list(&mut self, code: &Code<'_>, items: &[Expr]) -> Result<ObjRef, Failure> {
         let frame = self.roots.push_frame();
-        let indent = self.current_value_indent;
+        let indent = self.clause_state.current_value_indent;
         let mut holds = true;
         for item in items {
             let value = self.eval(code, item)?;

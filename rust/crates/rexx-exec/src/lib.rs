@@ -819,35 +819,49 @@ enum Novalue {
     Unset,
 }
 
-/// The interpreter. Owns the heap, the root set, the activation stack, the
-/// plan cache and the two sinks, and **does not own the AST**.
-struct Interp {
-    heap: Heap,
-    roots: RootSet,
-    activations: Vec<Activation>,
-    /// Every program the loader has issued an id for, indexed by that id.
-    ///
-    /// This is what makes a `ProgramId` a durable identity rather than a
-    /// number that outlives its program: a plan cached under
-    /// `BodyKey { program: ProgramId(0), .. }` stays correct because
-    /// `ProgramId(0)`'s program is still here.
-    programs: Vec<Rc<Program>>,
-    plans: HashMap<BodyKey, Rc<Plan>>,
-    /// The output sink. `SAY` writes here and `Outcome::stdout` is what it
-    /// becomes.
-    out: Vec<u8>,
-    /// The trace sink, which becomes `Outcome::stderr`.
-    ///
-    /// It exists because the design puts both sinks on `Interp` and D17 makes
-    /// them separate for a measured reason: with `trace r` the `*-*` and `>>>`
-    /// lines are on stderr while `SAY` is on stdout, and being separate
-    /// descriptors is what makes their relative interleaving unobservable and
-    /// two independently buffered sinks safe. Task 13 was the first to write
-    /// to it (`trace.rs` and a dozen call sites in `run.rs` now do); keeping
-    /// the field from the start meant the loud-failure path already appended
-    /// to the right buffer rather than being rerouted later, which is when a
-    /// stray ordering difference would have appeared.
-    trace: Vec<u8>,
+/// Every piece of state `step_in_temps_frame` sets fresh, unconditionally, on
+/// **every** instruction it steps -- and so every field a caller pushing a
+/// nested activation (`resolve_and_run_call`, `run.rs`) must save before the
+/// callee runs and restore after it returns, because the callee's own
+/// `step_in_temps_frame` calls overwrite these exactly as the caller's own
+/// next clause would.
+///
+/// **The property that decides membership**, so the next field can be
+/// checked against it rather than added by analogy: set per clause by
+/// `step_in_temps_frame`, *and* read somewhere that can run after a nested
+/// activation has already run and returned within the same clause. `say
+/// f(1) + g(2)` is what makes the second half observable at all -- at most
+/// one activation could be entered per clause before Task 4 (`ExprKind::
+/// Call`), and the *next* clause's own `step_in_temps_frame` re-set these
+/// fields before anything read them, so a version missing the restore
+/// passed every test with no more than one call per clause in it.
+///
+/// A field failing either half does not belong here. `resolve_and_run_
+/// call`'s own five (`activation_indent`/`indent_offset`/
+/// `clause_line_override`/`call_context`, plus this whole struct) are not
+/// all one shape: those four are level state *for the callee*, each set
+/// once per call to a value the callee computes (`activation_indent` to
+/// the calling clause's indent plus two, `call_context` to that call's own
+/// name and arguments, ...), never refreshed per clause the way this
+/// struct's own fields are -- each already has its own reason, stated at
+/// that save/restore block rather than here.
+///
+/// **Bundled into one field, `Interp::clause_state`, rather than left as
+/// separate fields each needing its own save/restore line at a nested-
+/// activation boundary.** `current_value_indent` is Task 4's own C1;
+/// `current_clause_line` is Task 6's, and it shipped *without* the restore
+/// its own sibling field already carried -- the second time in a row the
+/// newer field of this exact shape went in without it, which is the same
+/// "a hand-maintained list eventually drops an entry" shape this project's
+/// own owner tables were already burned by three times. One `Copy` struct
+/// and one assignment at the save/restore site (`let saved = self.
+/// clause_state; ...; self.clause_state = saved;`) is what makes a third
+/// omission structurally impossible rather than merely against the rules:
+/// a field added *here* is restored by that existing assignment with no
+/// second edit anywhere, where a field added directly to `Interp` needs
+/// someone to have read this comment first.
+#[derive(Copy, Clone)]
+struct ClauseState {
     /// The indent (Task 11's `static_indent` quantity, spaces already
     /// doubled) an intermediate value line traces at right now -- the one
     /// piece of state `eval`'s own single insertion point needs that
@@ -888,6 +902,42 @@ struct Interp {
     /// the C++ architecture that produces it (`run_fragment` still runs
     /// inside the creating activation, not a nested one of its own).
     current_clause_line: usize,
+}
+
+/// The interpreter. Owns the heap, the root set, the activation stack, the
+/// plan cache and the two sinks, and **does not own the AST**.
+struct Interp {
+    heap: Heap,
+    roots: RootSet,
+    activations: Vec<Activation>,
+    /// Every program the loader has issued an id for, indexed by that id.
+    ///
+    /// This is what makes a `ProgramId` a durable identity rather than a
+    /// number that outlives its program: a plan cached under
+    /// `BodyKey { program: ProgramId(0), .. }` stays correct because
+    /// `ProgramId(0)`'s program is still here.
+    programs: Vec<Rc<Program>>,
+    plans: HashMap<BodyKey, Rc<Plan>>,
+    /// The output sink. `SAY` writes here and `Outcome::stdout` is what it
+    /// becomes.
+    out: Vec<u8>,
+    /// The trace sink, which becomes `Outcome::stderr`.
+    ///
+    /// It exists because the design puts both sinks on `Interp` and D17 makes
+    /// them separate for a measured reason: with `trace r` the `*-*` and `>>>`
+    /// lines are on stderr while `SAY` is on stdout, and being separate
+    /// descriptors is what makes their relative interleaving unobservable and
+    /// two independently buffered sinks safe. Task 13 was the first to write
+    /// to it (`trace.rs` and a dozen call sites in `run.rs` now do); keeping
+    /// the field from the start meant the loud-failure path already appended
+    /// to the right buffer rather than being rerouted later, which is when a
+    /// stray ordering difference would have appeared.
+    trace: Vec<u8>,
+    /// `current_value_indent` and `current_clause_line`, bundled -- see
+    /// `ClauseState`'s own doc comment for what the two share, the property
+    /// that decides what belongs alongside them, and why they are one field
+    /// rather than two.
+    clause_state: ClauseState,
     /// **F3, found by review.** The innermost `SELECT CASE`'s own evaluated
     /// `case` text, or `None` inside a plain `SELECT` (or before any
     /// `SELECT`/`SELECT CASE` has run at all) -- the one piece of state an
@@ -1273,8 +1323,10 @@ impl Interp {
             plans: HashMap::new(),
             out: Vec::new(),
             trace: Vec::new(),
-            current_value_indent: 0,
-            current_clause_line: 0,
+            clause_state: ClauseState {
+                current_value_indent: 0,
+                current_clause_line: 0,
+            },
             current_case_text: None,
             indent_offset: 0,
             activation_indent: 0,
