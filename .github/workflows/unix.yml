@@ -120,3 +120,95 @@ jobs:
           name: oorexx-testresults-${{ matrix.known }}
           path: testresults.txt
           if-no-files-found: warn
+
+  # Ubuntu 16.04 ships CMake 3.5.1, which is where the IPO block first broke:
+  # CMP0069 and CheckIPOSupported both arrived in 3.9. GitHub retired the native
+  # 16.04 runner, so this runs in the ubuntu:16.04 container to get that CMake
+  # back. This job is build-only on purpose: the regression is in configure, so
+  # reaching a built rexx is the whole test.
+  ubuntu1604:
+    name: Ubuntu 16.04 (CMake 3.5)
+    runs-on: ubuntu-24.04
+    container: ubuntu:16.04
+    timeout-minutes: 45
+    steps:
+      # 16.04 is end of life, so its apt archives have moved to old-releases.
+      - name: Install the toolchain
+        shell: bash
+        run: |
+          set -eux
+          sed -i 's|//archive.ubuntu.com|//old-releases.ubuntu.com|g; s|//security.ubuntu.com|//old-releases.ubuntu.com|g' /etc/apt/sources.list
+          apt-get update
+          apt-get install -y --no-install-recommends cmake g++ make git ca-certificates
+
+      # actions/checkout needs a Node newer than this container's glibc 2.23 can
+      # run, so the source is cloned by hand at the same ref instead.
+      - name: Check out the source
+        shell: bash
+        run: |
+          set -eux
+          git config --global --add safe.directory '*'
+          git clone --depth 1 --branch "$GITHUB_REF_NAME" \
+            "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" src
+
+      - name: Report toolchain
+        shell: bash
+        run: cd src && cmake --version && g++ --version
+
+      - name: Configure (CMake 3.5 must get through the IPO guard)
+        shell: bash
+        run: >
+          cd src &&
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build
+        shell: bash
+        run: cd src && cmake --build build --parallel "$(nproc)"
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          set -eux
+          cd src
+          build/bin/rexx -v
+          echo 'say .rexxinfo~version' > hello.rex
+          build/bin/rexx hello.rex
+
+  # Arch is a rolling release with a current toolchain, and it is one of the
+  # platforms where `make portable` segfaults (bug tracked separately; Manjaro
+  # is the same family and has no maintained container image, so Arch stands in
+  # for it). This job builds and then runs the portable target to catch that
+  # crash in CI.
+  arch:
+    name: Arch Linux
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    timeout-minutes: 45
+    steps:
+      - name: Install the toolchain
+        shell: bash
+        run: pacman -Syu --noconfirm cmake ninja gcc make subversion git
+
+      - uses: actions/checkout@v4
+
+      - name: Report toolchain
+        shell: bash
+        run: cmake --version && gcc --version
+
+      - name: Configure
+        shell: bash
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --parallel "$(nproc)"
+
+      - name: Build the portable package (bug repro; may segfault)
+        shell: bash
+        run: cmake --build build --target portable
+
+      - name: Smoke test
+        shell: bash
+        run: build/bin/rexx -v

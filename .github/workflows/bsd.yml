@@ -99,3 +99,46 @@ jobs:
           name: oorexx-testresults-openbsd
           path: testresults.txt
           if-no-files-found: warn
+
+  solaris:
+    name: Solaris 11.4
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    # First attempt. GitHub has no Solaris runner, so this boots one in QEMU the
+    # same way the BSD jobs do. Solaris is a different enough userland that it
+    # gets its own build script (ci-solaris.sh): no ninja in IPS, gmake instead
+    # of Solaris make, "su - user -c" instead of GNU "su -l". The package names
+    # below are the most likely thing to need a second iteration.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and test in a Solaris VM
+        uses: vmactions/solaris-vm@v1
+        with:
+          release: '11.4'
+          usesh: true
+          prepare: |
+            pkg install --accept cmake gcc gnu-make subversion gdb
+          run: |
+            sh .github/ci-solaris.sh
+
+      - name: Check test results
+        if: always()
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE/.github/check-test-results.ps1" `
+              -ResultsFile "$env:GITHUB_WORKSPACE/testresults.txt" `
+              -KnownFailuresFile @(
+                  "$env:GITHUB_WORKSPACE/.github/known-test-failures/common.txt",
+                  "$env:GITHUB_WORKSPACE/.github/known-test-failures/solaris.txt") `
+              -ExitCodeFile "$env:GITHUB_WORKSPACE/testexitcode.txt" `
+              -Platform "Solaris 11.4"
+          exit $LASTEXITCODE
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oorexx-testresults-solaris
+          path: testresults.txt
+          if-no-files-found: warn
