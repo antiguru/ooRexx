@@ -935,7 +935,13 @@ Four things to read off it: the callee's `sub:` **label clause is echoed**, and 
 
 - [ ] **Step 2: Record `>I>`/`<I<` as NOT 4b's -- Task 3 settled it by measurement**
 
-**Do not re-probe this from scratch; the answer is in.** `>I>`/`<I<` require `trace l` on a `::routine` or `::method`, and Task 3 measured that **a `::routine` is not reachable in 4b at all**: a same-file `::routine` sits *behind* the builtin resolution step, which is 4c's, so `::routine max` alongside `call max 1,2` still calls the builtin. Confirm that a `::routine` whose name is **not** a builtin is also unreachable before writing the row -- Task 3's witness used a builtin name, and that is the one shape that cannot distinguish "behind the builtin step" from "unreachable entirely".
+`>I>`/`<I<` require `trace l` on a `::routine` or `::method`, so the question is whether 4b reaches one.
+
+**Task 3 first recorded "not reachable at all" and that was wrong; its review caught it.** The `max` witness -- `::routine max` alongside `call max 1,2`, where the builtin wins -- is the one shape where "behind the builtin step" and "unreachable entirely" predict identical bytes. Measured with a non-builtin name, `call zorkolo` with a `::routine zorkolo` runs on the oracle at rc 0.
+
+**The true position: a `::routine` is reachable in 4b for any non-builtin name, and 4b deliberately does not implement it.** The deferral is a scope call, not an impossibility -- getting builtin-colliding names right needs 4c's table, and a wrong answer there would silently run the wrong routine rather than fail loudly. Today the construct fails loudly naming `4c`, which is correct behaviour.
+
+So these two prefixes are out of scope **by decision**, not by unreachability, and the row must say which. Write it as "`::routine`/`::method` under TRACE LABELS, deferred with `::routine` dispatch itself to 4c", and carry Task 3's three measured differences that 4c will meet: a `::routine` activation has its own variable pool, builtins shadow it, and **`TRACE` does not cross into it at all** -- a caller's `trace r` echoes none of its clauses.
 
 Task 3 also measured three ways a `::routine` activation is not an internal label's, which the row should carry because 4c will meet them: it has its own variable pool, builtins shadow it, and **`TRACE` does not cross into it at all** -- a caller's `trace r` echoes none of its clauses.
 
