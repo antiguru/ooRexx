@@ -9,9 +9,19 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The Phase 4a differential corpus runner: every program named in
-//! `rust/corpus/phase-4a.txt`, run under both interpreters, compared byte for
-//! byte on stdout, stderr and exit code.
+//! The differential corpus runner: every program named in the phase subset
+//! files -- `rust/corpus/phase-4a.txt` and `rust/corpus/phase-4b.txt`, read as
+//! a union -- run under both interpreters, compared byte for byte on stdout,
+//! stderr and exit code.
+//!
+//! **Every phase's subset file is read, not only the current phase's.** A
+//! construct a later phase implements cannot have its witness in
+//! `phase-4a.txt`, whose own header excludes those constructs by definition,
+//! so each phase adds a file and this runner unions them. 4b's Task 1 is the
+//! first task to make that true here; before it, this call site was the one
+//! `read_subset` caller of four still pinned to a single file, which would
+//! have left a 4b witness enumerated by `coverage.rs` and never actually run
+//! against the oracle by anything.
 //!
 //! **This is a repeatable progress instrument, not a once-at-the-end gate.**
 //! It replaces the hand-run shell loop this phase has used after every task
@@ -188,9 +198,8 @@ fn oracle() -> Oracle {
 /// **Task 0's Step 4.** Was a single-file reader (`&Path`); widened to `&[&Path]`
 /// so a later task's own subset file can run *alongside* `phase-4a.txt`
 /// rather than replacing it -- see `coverage.rs`'s own copy of this function
-/// for the fuller argument. Today's caller passes a one-element slice
-/// containing only `phase-4a.txt`, so the union is that file's own content
-/// unchanged.
+/// for the fuller argument. The caller below passes `phase-4a.txt` and
+/// `phase-4b.txt` since 4b's Task 1.
 fn read_subset(list_paths: &[&Path]) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut union = Vec::new();
@@ -368,7 +377,7 @@ fn build_report(matched: usize, total: usize, mismatches: &[Mismatch], gate: boo
     writeln!(w, "{banner}").unwrap();
     writeln!(
         w,
-        "rexx-exec differential corpus report -- rust/corpus/phase-4a.txt"
+        "rexx-exec differential corpus report -- rust/corpus/phase-4a.txt + phase-4b.txt"
     )
     .unwrap();
     if gate {
@@ -475,10 +484,14 @@ fn emit_uncaptured(text: &str) {
 fn corpus_differential() {
     let oracle = oracle();
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
-    let subset = read_subset(&[&corpus_dir.join("phase-4a.txt")]);
+    let subset = read_subset(&[
+        &corpus_dir.join("phase-4a.txt"),
+        &corpus_dir.join("phase-4b.txt"),
+    ]);
     assert!(
         !subset.is_empty(),
-        "phase-4a.txt named no programs -- that is a corpus defect, not an empty pass"
+        "the phase subset files named no programs -- that is a corpus defect, \
+         not an empty pass"
     );
 
     let mut mismatches = Vec::new();
@@ -496,7 +509,7 @@ fn corpus_differential() {
 
     assert!(
         !gate || mismatches.is_empty(),
-        "STRICT ({GATE_ENV}) mode: {} of {total} phase-4a corpus programs disagree with \
+        "STRICT ({GATE_ENV}) mode: {} of {total} corpus programs disagree with \
          the oracle; see the report above for which and why.",
         mismatches.len()
     );
