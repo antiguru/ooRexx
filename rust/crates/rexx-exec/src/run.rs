@@ -808,10 +808,19 @@ impl Interp {
                 // failing control test** -- count exhausted, `WHILE` false or
                 // `UNTIL` true alike. `static_indent` is a pure function of
                 // lexical nesting and the oracle's own counter is not: such a
-                // loop leaves every later clause at that level two spaces
-                // lower, and the effect accumulates. A zero-trip loop and one
-                // left by `LEAVE` do not do it, so the property is "a pass
-                // completed", not "a re-test failed".
+                // loop leaves later clauses two spaces lower. A zero-trip loop
+                // and one left by `LEAVE` do not do it, so the property is "a
+                // pass completed", not "a re-test failed".
+                //
+                // The **scope** is narrower than "that level" and than
+                // "accumulates", both of which earlier revisions of this
+                // comment claimed: sibling loops accumulate, nested ones do
+                // not, because the decrement is discarded at the `END` of an
+                // enclosing repetitive `DO`/`LOOP` and at the `END` of an
+                // enclosing `SELECT`. `phase-4-exclusions.txt`'s row has the
+                // measured table and the shapes still unmeasured. Three
+                // revisions have each generalised past their own rows; do not
+                // extend the claim here without measuring.
                 //
                 // That is a 4a divergence with nothing to do with fragments,
                 // but it reaches this base from both sides --
@@ -3381,8 +3390,8 @@ impl Interp {
 /// **The oracle's indent is not a pure function of lexical nesting.** Any
 /// repetitive `DO`/`LOOP` that **completes at least one body pass** and then
 /// ends because a **control test fails** decrements the oracle's own counter
-/// one time too many, so every later clause at that level prints two spaces
-/// lower. Count exhausted, `WHILE` false and `UNTIL` true all qualify.
+/// one time too many, so later clauses print two spaces lower than their
+/// lexical depth. Count exhausted, `WHILE` false and `UNTIL` true all qualify.
 /// Measured, no `INTERPRET` and no `CALL` anywhere -- `do` / `do jj = 1 to 1`
 /// / `nop` / `end` / `say 1/0` / `end` reports the `say` at **0** on the
 /// oracle and at 2 here, and `n=0; do while n = 0; n = 1; end` in the same
@@ -3395,11 +3404,20 @@ impl Interp {
 /// also fails, and an earlier revision of this comment drew exactly that
 /// wrong conclusion from the zero-trip row.
 ///
-/// Two further properties: the decrements **accumulate** (two exhausted
-/// controlled `DO`s in sequence two `do`s deep give oracle 0 against our 4),
-/// and they cross an `INTERPRET` boundary **outward**, so a completed loop
-/// inside a fragment lowers the enclosing program's later clauses.
-/// `phase-4-exclusions.txt`'s KNOWN GAP row carries the full table.
+/// **Scope: siblings accumulate, nesting does not.** Two qualifying loops in
+/// sequence decrement twice; two *nested* qualifying loops decrement **once**.
+/// A decrement propagates into blocks opened after it and outward through the
+/// `END` of a plain `DO` or an `IF`-branch `DO`, but is **discarded** at the
+/// `END` of an enclosing repetitive `DO`/`LOOP` and at the `END` of an
+/// enclosing `SELECT` -- the inner loop does decrement there, visibly, and the
+/// decrement is thrown away at that construct's `END`. They also cross an
+/// `INTERPRET` boundary **outward**.
+///
+/// **Do not extend any of this without measuring.** Three revisions have now
+/// each written a rule reaching further than the rows measured under it: the
+/// qualification predicate, then the scope, then accumulation.
+/// `phase-4-exclusions.txt`'s KNOWN GAP row carries every measured table and
+/// the list of shapes still unmeasured.
 ///
 /// It is the same re-tested-pass mechanism as the two missing `>>>` value
 /// lines that row already records, and it is 4a's, not this function's to

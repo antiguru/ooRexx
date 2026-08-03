@@ -24,14 +24,14 @@
 
    THE RULE ABOVE HAS ONE EXCEPTION, and this file DOES contain it: any
    repetitive DO/LOOP that completes a body pass and then ends on a failing
-   control test -- count exhausted, WHILE false, UNTIL true -- leaves the
-   oracle's counter two spaces lower for every later clause at that level,
-   the effect stacks, and it crosses a fragment boundary outward. See
-   phase-4-exclusions.txt's KNOWN GAP row on the re-tested pass. What
-   protects THIS file is not the absence of such a loop -- `do kk = 1 to 1`
-   below is one -- it is that the failing INTERPRET runs at TOP LEVEL, where
-   the oracle's counter floors at 0 and cannot go lower. Nesting the tail of
-   this file inside another DO exposes the gap at once: measured, 2 and 4.
+   control test -- count exhausted, WHILE false, UNTIL true -- decrements the
+   oracle's counter, with the scope rule in phase-4-exclusions.txt's KNOWN
+   GAP row on the re-tested pass. What protects THIS file is that the
+   COMPLETED do kk = 1 to 1 on lines 47-49 sits at TOP LEVEL, where the
+   counter floors at 0 and its decrement is absorbed -- deleting those three
+   lines changes nothing. Wrapping lines 47-53 in one more DO, the completed
+   loop INCLUDED, exposes the gap at once: oracle 2 and 4, ours 4 and 6.
+   Wrapping only the failing loop, lines 51-53, does not.
 
    The successful INTERPRETs above it are there so the file is not only an
    error path: the nested one in particular runs a fragment from inside a

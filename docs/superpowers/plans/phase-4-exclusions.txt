@@ -247,8 +247,9 @@ above.
     fragment's clauses sit at the enclosing INTERPRET clause's own printed
     indent -- delta 0 -- plus whatever nests them INSIDE the fragment, EXCEPT
     after any repetitive DO/LOOP that completed a pass and then ended on a
-    failing control test, whose decrement also accumulates and also crosses
-    the fragment boundary outward (the separate row below):
+    failing control test, whose decrement crosses the fragment boundary
+    outward and whose scope rule is in the separate row below (siblings
+    accumulate, nesting does not):
     interpret "do jj = 1 to 1; say 2 & 1; end" at top level echoes the inner
     clause at 2 and the INTERPRET at 0, and the identical fragment two DOs
     deep echoes them at 6 and 4.
@@ -343,11 +344,13 @@ above.
   and criterion 3's assessment should say the Controlled pair is unwitnessed.
 
   A SECOND SYMPTOM OF THE SAME RE-TESTED PASS, and it is not about tracing at
-  all: the *-* indent is NOT a pure function of lexical nesting. A DO that
-  terminates BY EXHAUSTING ITS ITERATIONS decrements the oracle's indent
-  counter one time too many, so every later clause at that level prints two
-  spaces lower than its lexical depth. Found by review of 4b Task 2 and
-  re-measured independently. No INTERPRET and no CALL involved:
+  all: the *-* indent is NOT a pure function of lexical nesting. A repetitive
+  DO/LOOP that COMPLETES A BODY PASS and then ends on a FAILING CONTROL TEST
+  decrements the oracle's indent counter one time too many, so later clauses
+  print two spaces lower than their lexical depth -- see the qualification and
+  scope rules below, both of which have been stated wrongly more than once.
+  Found by review of 4b Task 2 and re-measured independently. No INTERPRET and
+  no CALL involved:
 
     do
     do jj = 1 to 1
@@ -356,7 +359,7 @@ above.
     say 1/0          <- oracle prints at 0; we print at 2
     end
 
-  Which preceding block shapes do it, `say 1/0` one `do` deep, all seven
+  Which preceding block shapes do it, `say 1/0` one `do` deep, every row
   measured against the oracle:
 
       preceding block                        | oracle | ours
@@ -390,8 +393,57 @@ above.
   WHILE and UNTIL rows above are what separate them, and they were measured
   only after the narrow rule had been written into four places in the tree.
 
-  THE DECREMENTS ACCUMULATE: two exhausted controlled DOs in sequence, two
-  DOs deep, give oracle 0 against our 4.
+  SCOPE: SIBLINGS ACCUMULATE, NESTING DOES NOT. Measured, all at static
+  indent 6 (three plain DOs deep), oracle vs ours:
+
+      one qualifying loop                        |  4 | 6 | 1 decrement
+      two qualifying loops IN SEQUENCE           |  2 | 6 | 2
+      two qualifying loops NESTED                |  4 | 6 | 1, not 2
+      two qualifying inners in sequence inside
+        a qualifying outer                       |  4 | 6 | 1, not 3
+      qualifying inner inside do jj = 1 to 3 ...
+        leave                                    |  6 | 6 | 0
+      qualifying inner inside do forever...leave |  6 | 6 | 0
+      qualifying inner inside select/when-then-do|  6 | 6 | 0
+      qualifying inner as the WHEN body directly |  6 | 6 | 0
+      qualifying inner inside an OTHERWISE body  |  6 | 6 | 0
+      qualifying inner inside a plain do ... end |  4 | 6 | 1
+      the same inside TWO nested plain do ... end|  4 | 6 | 1
+      qualifying inner inside if 1 = 1 then do   |  4 | 6 | 1
+      qualifying loop AFTER a select ... end at
+        the same level                           |  4 | 6 | 1
+
+  So a decrement applies to later clauses in its own block, propagates into
+  blocks opened after it, and propagates OUTWARD through the END of a plain DO
+  block and an IF-branch DO block -- but is DISCARDED at the END of an
+  enclosing repetitive DO/LOOP and at the END of an enclosing SELECT. In the
+  LEAVE and SELECT rows the inner loop DOES decrement; it is visible on a
+  clause still inside the enclosing construct (oracle 6 against static 8
+  inside the LEAVE-terminated loop, oracle 12 against static 14 inside the
+  WHEN body) and then thrown away at that construct's END.
+
+  AN EARLIER REVISION OF THIS ROW SAID "THE DECREMENTS ACCUMULATE", FULL STOP.
+  That is true only of siblings. The falsifying shape:
+
+      do jj = 1 to 3
+        do kk = 1 to 1
+        nop
+        end
+      leave
+      end
+
+  the inner loop completes a pass and ends on a failing control test, and no
+  clause after the outer END is moved by it.
+
+  WHAT IS NOT KNOWN. Three revisions of this row have each stated a rule that
+  reached further than the rows measured under it -- first the qualification
+  predicate ("exhausting its iterations", missing WHILE and UNTIL), then the
+  scope ("every later clause at that level", both too narrow and too broad),
+  then accumulation. The tables above are measurements and are reliable; a
+  sentence generalising beyond them is not, and has been wrong three times.
+  Shapes still unmeasured include DO OVER running out, DO WITH, a loop left by
+  SIGNAL or RETURN, ITERATE on the final pass, and a FOR budget reached before
+  the TO bound. MEASURE BEFORE EXTENDING ANY CLAIM HERE.
 
   IT REACHES 4b TASK 2's OWN DELIVERABLE, which is why it is recorded now
   rather than left to whoever meets it: interpret "do jj = 1 to 1; nop; end;
