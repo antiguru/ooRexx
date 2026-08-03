@@ -383,6 +383,7 @@ Then point the harnesses at the union. Task 0 made `read_subset` take a list, bu
 **Interfaces:**
 - Produces: `Raised` carries a stack of sites, innermost first, each entry carrying its own line number and its own **absolute printed indent**.
 - Consumes: `static_indent` from `run.rs`. Its signature does not change and the clamp does not go inside it.
+- Consumes: **`Interp::indent_offset` (`src/lib.rs:888`), which already exists.** 4a's F-EX1 work added it and the call sites already read `static_indent(...) + self.indent_offset`. `run.rs:1045` carries a "**Do not clear `indent_offset` here**" note with its reasoning. The activation base this task adds is the same quantity, so extend that mechanism rather than introducing a parallel one, and read its doc comment before touching it.
 
 **Why:** every raise inside a routine differs from the oracle on stderr until this exists, which is most of what a 4b differential corpus contains. Building it after `CALL` means every corpus program written in between is unverifiable.
 
@@ -424,11 +425,17 @@ The missing clause echo for a traced `INTERPRET` is the other half of a divergen
 
 - [ ] **Step 5: Clamp the `*-*` echo at 40 columns, and only the `*-*` echo**
 
+**There are two `*-*` formatters, not one, and the tree already says they are one quantity.** `Raised::report` (`src/error.rs:272`) writes the error report's echo; `push_clause` (`src/trace.rs:231`) writes the trace echo. `push_clause`'s own doc calls this "one quantity with two formatters, not two quantities, and this is the second formatter D17's own retrofit note names". So the clamp is one rule applied at both, via a shared helper or a shared constant -- not a number typed twice.
+
+Measured, the cap is on the **total** printed indent and is reached at nesting depth 20: depth 18 gives 36, depth 19 gives 38, depth 20 gives 40, depths 21 and 25 give 40. Value lines are **not** capped: at depth 25 under `trace r`, `*-*` tops out at 40 while `>>>` runs to 52. A clamp inside `static_indent`, or one applied to `push_indent` generally, is therefore wrong in both directions.
+
 - [ ] **Step 5b: Raise the oracle's condition when a fragment fails to parse**
 
 Found by Task 1 and measured there: a fragment whose text does not parse raises **27.901 at rc 229** on the oracle, and we exit 120 with a loud not-implemented message instead. Like the echo stack, this was unreachable before Task 1 gave `run_program` a real `INTERPRET`, so it is a newly reachable divergence rather than a regression.
 
 The fix is a `ParseError`-to-`Raised` conversion. **A top-level syntax error wants the same conversion**, so build it once and check whether the top-level path can use it -- if it cannot, say why in the report rather than duplicating the mapping.
+
+The starting point exists: `Loud::parse(error: &ParseError)` at **`src/lib.rs:491`**, and the doc comment immediately above it at **`:488`** already names this gap and says closing it needs exactly this conversion. Read that comment first -- it was written by the person who chose to defer it, and it records why.
 
 - [ ] **Step 6: Run the full suite and the corpus gate**
 
