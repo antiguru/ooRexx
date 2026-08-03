@@ -239,6 +239,47 @@ impl Raised {
         Raised::syntax(88, 931, vec![position.to_string()])
     }
 
+    /// 88.929: `USE ARG >name` where the target is a **stem** and the caller
+    /// passed a reference to a **simple** variable.
+    ///
+    /// `reference` is the *caller's* variable name, not the target's -- the
+    /// opposite of 98.995 below, and measured rather than assumed with a
+    /// variable whose value differs from its name: `p = 'value-not-name'`
+    /// passed as `>p` into `use arg >q.` reports rc 168 and `The 1 argument
+    /// must be a VariableReference for a Stem variable; found "P".` The same
+    /// position under 88.928 reports `value-not-name`, so the two families
+    /// genuinely disagree about what they name.
+    pub(crate) fn not_a_stem_variable_reference(position: usize, reference: &[u8]) -> Raised {
+        Raised::syntax(
+            88,
+            929,
+            vec![
+                position.to_string(),
+                String::from_utf8_lossy(reference).into_owned(),
+            ],
+        )
+    }
+
+    /// 88.930: the mirror of [`not_a_stem_variable_reference`] -- the target
+    /// is a **simple** variable and the caller passed a **stem** reference.
+    ///
+    /// Measured: `p.1 = 'value-not-name'` passed as `>p.` into `use arg >q`
+    /// gives rc 168 and `... must be a VariableReference for a simple
+    /// variable; found "P.".` The name carries the trailing period, which is
+    /// the stem's own spelling and needs no shaping here.
+    ///
+    /// [`not_a_stem_variable_reference`]: Raised::not_a_stem_variable_reference
+    pub(crate) fn not_a_simple_variable_reference(position: usize, reference: &[u8]) -> Raised {
+        Raised::syntax(
+            88,
+            930,
+            vec![
+                position.to_string(),
+                String::from_utf8_lossy(reference).into_owned(),
+            ],
+        )
+    }
+
     /// 98.995: `USE ARG >name` whose target is not currently unset. `name` is
     /// the target's own spelling.
     ///

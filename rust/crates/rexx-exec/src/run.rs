@@ -1902,7 +1902,7 @@ impl Interp {
             let Some(target) = target else { continue };
             // `get` past the end and a `None` inside the list are the same
             // thing to a target: nothing was supplied for this position.
-            let argument = self.call_context.arguments.get(index).copied().flatten();
+            let argument = self.call_context.arguments.get(index).cloned().flatten();
             self.bind_use_target(code, index, target, argument)?;
         }
         Ok(())
@@ -1931,11 +1931,36 @@ impl Interp {
             let Some(argument) = argument else {
                 return Err(Raised::variable_reference_omitted(position).into());
             };
-            let Argument::Reference { target: slot, .. } = argument else {
+            let Argument::Reference {
+                target: slot,
+                name: reference,
+                ..
+            } = argument
+            else {
                 let found = self.to_text(argument.value()).to_vec();
                 return Err(Raised::not_a_variable_reference(position, &found).into());
             };
             let name = self.use_target_name(code, target)?;
+            // **The kinds must match, and the check is before the
+            // uninitialised one.** Measured: a target that is both
+            // kind-mismatched and already assigned reports the kind error,
+            // not 98.995. Compound is not a third kind to handle -- `>p.1`
+            // and `>q.1` are both rejected by `rexx-parse` (20.930/20.931),
+            // so each side is a simple variable or a stem and nothing else.
+            let target_is_stem = shape_of(&name) == NameShape::Stem;
+            let reference_is_stem = shape_of(&reference) == NameShape::Stem;
+            if target_is_stem != reference_is_stem {
+                // Both substitute the *caller's* name, unlike 98.995 just
+                // below, which names the target. Measured with a variable
+                // whose value differs from its name, so the two cannot be
+                // confused: `p = 'value-not-name'` passed as `>p` reports
+                // `found "P"`.
+                return Err(if target_is_stem {
+                    Raised::not_a_stem_variable_reference(position, &reference).into()
+                } else {
+                    Raised::not_a_simple_variable_reference(position, &reference).into()
+                });
+            }
             let index = self.slot_of(&name);
             let frame = self.activation().frame;
             // The target must be **currently unset**. `RootSet::slot`
@@ -2334,7 +2359,17 @@ impl Interp {
         // already exposed from *its* caller.
         let target = self.roots.slot_ref(frame, slot);
         let value = self.eval(code, inner)?;
-        Ok(Argument::Reference { target, value })
+        // The referenced variable's own spelling travels with the reference:
+        // it is the reference's *kind* (`P` against `P.`) for the
+        // 88.929/88.930 check, and it is what those two errors substitute.
+        // Read from the caller's own symbol table, here, where it is the
+        // right one.
+        let name = code.symbols.name(id).as_bytes().into();
+        Ok(Argument::Reference {
+            target,
+            value,
+            name,
+        })
     }
 
     /// Runs one named `CALL`: `resolve_and_run_call`, then settle `RESULT`
@@ -8890,6 +8925,159 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (98, 995));
+    }
+
+    /// `USE ARG >name` requires the reference's **kind** to match the
+    /// target's: a simple reference into a stem target is 88.929, and a stem
+    /// reference into a simple target is 88.930.
+    ///
+    /// **Each refusal is paired with its adjacent success, in this test
+    /// rather than elsewhere, and the pairing is the point.** A test that
+    /// only checks `>p` into `>q.` raises cannot distinguish "the kinds must
+    /// match" from "a stem target is always refused"; the passing `>p.` into
+    /// `>q.` case is what rules the second out. The same holds mirrored for
+    /// 88.930. All four cells measured against the oracle.
+    #[test]
+    fn use_arg_alias_requires_the_reference_kind_to_match_the_target() {
+        // Simple reference -> STEM target: refused.
+        //
+        // `p` holds `value-not-name` so that the substitution discriminates:
+        // 88.929 names the *caller's variable*, `P`, where 88.928 in the same
+        // position names the argument's *value*. A probe whose variable held
+        // its own name could not tell those apart -- the mistake this task
+        // already made once, on 88.928.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"p = 'value-not-name'\ncall sub >p\nexit\nsub: procedure\nuse arg >q.\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (88, 929));
+        assert_eq!(raised.additional, vec!["1".to_string(), "P".to_string()]);
+
+        // ...and the adjacent success: a STEM reference into the same stem
+        // target. Without this, "stem targets are always refused" passes.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"p.1 = 'orig'\ncall sub >p.\nsay 'after:' p.1\nexit\n\
+                  sub: procedure\nuse arg >q.\nq.1 = 'via-alias'\nreturn\n",
+            ),
+            b"after: via-alias\n".to_vec()
+        );
+
+        // Stem reference -> SIMPLE target: refused, naming `P.` with its
+        // period.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"p.1 = 'value-not-name'\ncall sub >p.\nexit\n\
+              sub: procedure\nuse arg >q\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (88, 930));
+        assert_eq!(raised.additional, vec!["1".to_string(), "P.".to_string()]);
+
+        // ...and its adjacent success: a simple reference into a simple
+        // target.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"p = 'orig'\ncall sub >p\nsay 'after:' p\nexit\n\
+                  sub: procedure\nuse arg >q\nq = 'via-alias'\nreturn\n",
+            ),
+            b"after: via-alias\n".to_vec()
+        );
+
+        // An argument that is not a reference at all is still 88.928, even
+        // against a stem target, and still substitutes the VALUE. So the kind
+        // check sits behind the is-a-reference check rather than replacing
+        // it.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"p = 'value-not-name'\ncall sub p\nexit\nsub: procedure\nuse arg >q.\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (88, 928));
+        assert_eq!(
+            raised.additional,
+            vec!["1".to_string(), "value-not-name".to_string()]
+        );
+
+        // The position substitution is the argument's own, not always 1.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"p = 'val'\ncall sub 1, >p\nexit\nsub: procedure\nuse arg aa, >q.\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!(raised.additional, vec!["2".to_string(), "P".to_string()]);
+
+        // STRICT does not change the kind rule.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"p = 'val'\ncall sub >p\nexit\nsub: procedure\nuse strict arg >q.\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (88, 929));
+    }
+
+    /// The kind check runs **before** the uninitialised check, so a target
+    /// that fails both reports the kind error.
+    ///
+    /// Measured both ways round. Ordering is not cosmetic here: each of the
+    /// two errors is a different number and rc, so getting it backwards is a
+    /// wrong answer rather than a differently-worded right one. A single
+    /// test would not pin it -- both directions are needed, because a check
+    /// that always reported the kind error would pass one of them alone.
+    #[test]
+    fn use_arg_alias_reports_the_kind_mismatch_before_the_uninitialised_target() {
+        // Stem target, already assigned, given a simple reference: 88.929,
+        // not 98.995.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"p = 'val'\ncall sub >p\nexit\n\
+              sub: procedure\nq.1 = 'already-set'\nuse arg >q.\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (88, 929));
+
+        // Simple target, already assigned, given a stem reference: 88.930,
+        // not 98.995.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"p.1 = 'val'\ncall sub >p.\nexit\n\
+              sub: procedure\nq = 'already-set'\nuse arg >q\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (88, 930));
     }
 
     /// The stem half of the same rule, which is where this crate's own

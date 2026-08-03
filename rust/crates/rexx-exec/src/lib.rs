@@ -1187,18 +1187,39 @@ struct CallContext {
 /// to the referenced variable's value**, measured -- `say >p` prints `p`'s
 /// value, and `call sub2 >p` into a plain `use arg q` binds that value.
 /// So every argument has a value and only some have a slot.
-#[derive(Copy, Clone)]
+///
+/// `Reference` also carries the referenced variable's **name**, which is
+/// there for two distinct jobs and neither is cosmetic. Its *shape* is the
+/// reference's kind, and `USE ARG >name` refuses a kind mismatch -- a simple
+/// reference into a stem target is error 88.929 and the reverse is 88.930,
+/// measured. Its *text* is what those two errors substitute: measured with a
+/// variable whose value differs from its name, `p = 'value-not-name'` passed
+/// as `>p` into `use arg >q.` reports `found "P"`, the caller's name, where
+/// 88.928 in the same position reports the argument's value. The two
+/// families disagree about what they name, so the name has to be carried
+/// rather than reconstructed from the value.
+///
+/// Not `Copy`, only `Clone`, because of that owned name. The one read site
+/// (`exec_use_arg`) clones per target, which is one small allocation per
+/// `USE ARG >` position and nothing at all for an ordinary argument.
+#[derive(Clone)]
 enum Argument {
     Value(ObjRef),
-    Reference { target: SlotRef, value: ObjRef },
+    Reference {
+        target: SlotRef,
+        value: ObjRef,
+        /// The referenced variable's own spelling, upcased as the scanner
+        /// interned it, including a stem's trailing period (`P`, `P.`).
+        name: Box<[u8]>,
+    },
 }
 
 impl Argument {
     /// The argument's value, which every form has. `USE ARG` without `>`
     /// and `ARG()` both want only this.
-    fn value(self) -> ObjRef {
+    fn value(&self) -> ObjRef {
         match self {
-            Argument::Value(value) | Argument::Reference { value, .. } => value,
+            Argument::Value(value) | Argument::Reference { value, .. } => *value,
         }
     }
 }
