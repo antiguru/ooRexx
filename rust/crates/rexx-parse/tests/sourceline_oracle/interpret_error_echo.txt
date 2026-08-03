@@ -23,16 +23,16 @@ count 53
    The inner echo's text is "say 2 & 1;" -- with the semicolon, because that
    is where the fragment's own clause span ends. Trimming it diverges.
 
-   THE RULE ABOVE HAS ONE EXCEPTION, and this file DOES contain it: any
-   repetitive DO/LOOP that completes a body pass and then ends on a failing
-   control test -- count exhausted, WHILE false, UNTIL true -- decrements the
-   oracle's counter, with the scope rule in phase-4-exclusions.txt's KNOWN
-   GAP row on the re-tested pass. What protects THIS file is that the
-   COMPLETED do kk = 1 to 1 on lines 47-49 sits at TOP LEVEL, where the
-   counter floors at 0 and its decrement is absorbed -- deleting those three
-   lines changes nothing. Wrapping lines 47-53 in one more DO, the completed
-   loop INCLUDED, exposes the gap at once: oracle 2 and 4, ours 4 and 6.
-   Wrapping only the failing loop, lines 51-53, does not.
+   THE RULE ABOVE HAS ONE EXCEPTION, and this file DOES contain it: a
+   repetitive DO/LOOP whose control test fails leaves the oracle's trace
+   counter one notch low, because that exit path decrements where a normal
+   exit restores a saved value. phase-4-exclusions.txt's KNOWN GAP row on the
+   re-tested pass has the C++ citations; do not re-derive it here. What
+   protects THIS file is that the COMPLETED do kk = 1 to 1 on lines 47-49 sits
+   at TOP LEVEL, where the counter floors at 0 and its decrement is absorbed:
+   deleting those three lines leaves every INDENT unchanged. Wrapping lines
+   47-53 in one more DO, the completed loop INCLUDED, exposes the gap at once:
+   oracle 2 and 4, ours 4 and 6. Wrapping only lines 51-53 does not.
 
    The successful INTERPRETs above it are there so the file is not only an
    error path: the nested one in particular runs a fragment from inside a
