@@ -406,7 +406,9 @@ The cap expectation fails today. Say so in the report: it is a 4a defect this ta
 
 - [ ] **Step 3: Change `Raised` to carry a stack**
 
-Each entry carries the line to print and its **absolute** printed indent. `Raised::report` walks innermost-first. The existing single-site behaviour must fall out as the one-element case byte-identically -- 4a byte-verified the report on eleven programs and all eleven must still pass.
+Each entry carries the line to print and its **absolute** printed indent. `Raised::report` walks innermost-first. The existing single-site behaviour must fall out as the one-element case byte-identically.
+
+**The checkable form of that requirement:** every pre-existing assertion on report bytes still passes with its expected bytes **untouched**, and the diff to `error.rs` shows only construction-shape changes. As of `1c6cc329` that is nine `#[test]` functions in `src/error.rs` plus `a_raised_condition_reports_the_failing_clause` in `tests/spike.rs`. An earlier revision of this plan said "4a byte-verified the report on eleven programs and all eleven must still pass", copied from the scoping document; no discrete set of eleven exists, they are tests rather than programs, and a Task 2 implementer spent effort looking for them. Do not reintroduce a count nobody can resolve -- the property is that no expected-byte literal changes.
 
 Do **not** resolve the stack at report time by walking `Interp::activations`. `run` pops the activation before `execute` sees the error, which is why `failure_site` exists at all.
 
