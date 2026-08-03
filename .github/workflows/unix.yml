@@ -139,7 +139,13 @@ jobs:
         run: |
           set -eux
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends g++ make
+          sudo apt-get install -y --no-install-recommends g++ make libidn12
+          # The CMake 3.5 binary was linked against libidn.so.11 (its bundled
+          # libcurl era); noble ships libidn.so.12. cmake runs no IDN code during
+          # configure or build, so satisfying the loader with the newer soname is
+          # enough to let the old binary start.
+          sudo ln -sf "$(ldconfig -p | awk '/libidn\.so\.12/{print $NF; exit}')" \
+            /usr/lib/x86_64-linux-gnu/libidn.so.11
 
       # A current runner's CMake never takes the old-policy path, so drop a
       # CMake 3.5 binary in front of it. The old binary was linked against a much
