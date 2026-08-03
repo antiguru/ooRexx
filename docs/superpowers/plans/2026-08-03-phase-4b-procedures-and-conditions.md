@@ -495,8 +495,13 @@ Expect the corpus figure to move from `30 of 30` to `31 of 31`. Confirm the new 
 - Modify: `rust/crates/rexx-exec/tests/owners.rs`
 
 **Interfaces:**
-- Produces: a body selector field on `Activation` whose `None` is the main body and whose `Some(i)` is `directives[i]`'s -- the same shape `BodyKey::directive` carries. A sibling constructor to `Activation::new` that inherits `settings` and `trace_mode` from the caller. `Interp::depth: usize`. A `Flow` variant for `RETURN`.
-- Consumes: Task 2's site stack; `Raised::insufficient_stack()` (`src/error.rs:109`), which **already exists**.
+- Produces: a body selector field on `Activation` whose `None` is the main body and whose `Some(i)` is `directives[i]`'s -- the same shape `BodyKey::directive` carries. A sibling constructor to `Activation::new` that inherits `settings` and `trace_mode` from the caller. `Interp::depth: usize`. A `Flow` variant for `RETURN` (`Flow` currently has `Next`, `Goto`, `Exit`, `Leave`, `Iterate` and none of them expresses "unwind to the activation boundary").
+- Consumes: `Raised::insufficient_stack()` (`src/error.rs:109`), which **already exists** -- do not write a second raiser.
+- Consumes: **three mechanisms Task 2 built for you.** Read each field's own doc comment before using it; they were written for this task and one of them names it.
+
+  * **`Interp::activation_indent` (`src/lib.rs:923`).** **Set, not added**, and `indent_offset` is **zeroed alongside it**, because the enclosing clause's printed indent already contains any escape elevation and leaving it would count that twice -- measured at 16 where the oracle prints 12. Save and restore both around the callee, the way the `Interpret` arm does, so nesting works. Its doc already states your value: **the calling clause's printed indent plus two**, from a measured `CALL` at printed indent 4 into a flat routine echoing the callee at 6.
+  * **`Interp::clause_line_override` (`src/lib.rs:987`).** `INTERPRET` uses this because every echo in a fragment stack carries the **enclosing** clause's line. **`CALL` is the opposite case** -- each activation's echo carries **its own** line -- so this task must **not** set it, and must confirm a `CALL` inside a fragment still resolves each line correctly. That interaction is untested today.
+  * **`seal_site_level` (`src/run.rs:3023`)**, which moves `failure_site` into the `failure_sites` stack. Call it at each activation boundary. Note `failure_site` is still **first-wins** by design; Task 7 owns clearing it on trap resumption.
 
 **Why:** `run_activation` hardcodes `&program.main`. True for every activation 4a can build, false the moment a callee runs, and the failure is silent and with the right program.
 
@@ -572,7 +577,15 @@ Resolution order for a named call is internal label, then builtin, then external
 
 - [ ] **Step 8: Push an activation site entry using D2r's rule, and verify the three-deep transcript**
 
-Capture it fresh from the oracle. **Include a probe where the caller is lexically nested**, or the expectation cannot distinguish D2r's rule from the wrong one the first revision shipped.
+Call `seal_site_level` at the activation boundary and set `activation_indent` to the calling clause's printed indent **plus two**, zeroing `indent_offset` alongside it and restoring both on return. Do **not** set `clause_line_override` -- see Interfaces.
+
+Capture the transcript fresh from the oracle. **Include a probe where the caller is lexically nested**, or the expectation cannot distinguish D2r's rule from `2 x depth`, which the first revision of this plan shipped and which agrees with the truth at caller indent 0. Task 2 measured the discriminating case: a call two `DO`s deep into a flat callee gives 6, where `2 x depth` predicts 2.
+
+**One shape nobody has measured: a `CALL` inside an `INTERPRET` fragment, and an `INTERPRET` inside a called routine.** The two mechanisms compose and their composition is untested. Measure both directions and put the transcripts in the report.
+
+**A warning specific to indentation in this phase.** Four separate agents have now got an indent rule wrong here, and every one measured a single shape and generalised: one nesting depth, one caller indent, one field's existing uses, one loop spelling. The rule you are implementing has itself been restated three times. Measure at two depths and two nesting shapes minimum, and if a claim in this brief does not reproduce for you, report that rather than coding to it.
+
+**And there is a live 4a divergence underneath all of this** that is not yours to fix: a repetitive `DO`/`LOOP` that completes a body pass and then ends on a failing control test decrements the oracle's running indent counter. `phase-4-exclusions.txt`'s KNOWN GAP row on the re-tested pass has the measured tables, the scope rule, and a list of shapes still unmeasured. **Keep completed loops out of your witnesses**, or you will be chasing that instead of your own work.
 
 - [ ] **Step 9: Implement `RESULT`, dropped on return**
 
