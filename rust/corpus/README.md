@@ -35,10 +35,20 @@ Phase 4a's executor implements a subset of the language -- no builtin
 functions, no `CALL`/`INTERPRET`/`PARSE`, no message sends, no `::`
 directives, no `DO WITH` or `DO OVER` on a stem. `phase-4a.txt` lists exactly
 the programs in this directory that stay inside that subset, so Task 14's
-harness has something narrower to run than "every `.rex` file here" while
-Phase 4a is still the only thing built. It is a plain list, one path per
-line, relative to this directory; rebuild it by hand whenever a program's
-scope changes rather than trusting a stale copy.
+harness has something narrower to run than "every `.rex` file here". It is a
+plain list, one path per line, relative to this directory; rebuild it by hand
+whenever a program's scope changes rather than trusting a stale copy.
+
+## Phase 4b subset
+
+`phase-4b.txt` is the same format and is **read alongside `phase-4a.txt`, not
+instead of it**: `read_subset` takes a list of files and unions them in
+first-seen order, so every 4a witness stays exercised as later phases add
+their own programs. A construct 4b implements cannot have its witness in
+`phase-4a.txt`, whose own header excludes those constructs by definition, so
+each phase gets a file rather than the one file growing. The file's own header
+says what that subset admits and what it still excludes, and moves one line at
+a time as 4b's tasks land.
 
 ## Current programs
 

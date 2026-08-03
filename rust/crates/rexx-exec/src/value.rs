@@ -358,7 +358,7 @@ mod tests {
         // numeric digits 9 ; y = 1 / 3 ; numeric digits 3 ; say y
         //   -> 0.333333333 (not 0.333)
         //                   z = 1 / 3 ; say z -> 0.333
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let y = interp.number(
             n("1").div(&n("3"), 9, DivOp::Divide).unwrap(),
             9,
@@ -382,7 +382,7 @@ mod tests {
         // numeric form engineering ; x = 1e10 + 0 ; say x -> 10E+9
         // numeric form scientific  ;               say x -> 10E+9 (unchanged)
         //                            y = 1e10 + 0 ; say y -> 1E+10
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let sum = n("1e10").add(&n("0"), 9).unwrap();
         let x = interp.number(sum.clone(), 9, Form::Engineering);
         assert_eq!(&*interp.to_text(x), b"10E+9");
@@ -395,7 +395,7 @@ mod tests {
     fn a_small_int_is_only_admissible_within_the_digits_of_its_own_operation() {
         // numeric digits 1 ; x = 15 + 0 ; x is 20, so x + 6 is 3E+1 while
         // 15 + 6 is 2E+1.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let x_number = n("15").add(&n("0"), 1).unwrap();
         let x = interp.number(x_number.clone(), 1, Form::Scientific);
         assert_eq!(&*interp.to_text(x), b"2E+1");
@@ -415,7 +415,7 @@ mod tests {
         // and a correctly-refused one can render identically to `to_text` if
         // `to_text`'s two branches happen to agree, and only the tag itself
         // tells them apart.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let a = interp.number(n("20"), 9, Form::Scientific);
         assert!(matches!(a.decode(), Decoded::SmallInt(20)));
         assert_eq!(&*interp.to_text(a), b"20");
@@ -428,7 +428,7 @@ mod tests {
     #[test]
     fn text_keeps_its_own_spelling_and_caches_an_exact_parse() {
         // x = '007' ; say x -> 007 ; say x + 0 -> 7
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let x = interp.text(b"007");
         assert_eq!(&*interp.to_text(x), b"007");
 
@@ -445,7 +445,7 @@ mod tests {
         // `say x` alone -- a `Body::Text`'s identity is its own bytes, so
         // `say x` never converts it at all and prints the literal unchanged
         // at every DIGITS (`t4b.rex`/`t4c.rex` in the task report).
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let x = interp.text(b"1.234567890123456789");
 
         let rounded_5 = interp.to_number(x).unwrap().add(&n("0"), 5).unwrap();
@@ -463,7 +463,7 @@ mod tests {
     #[test]
     fn nil_has_a_string_value_and_the_booleans_are_plain_strings() {
         // say .nil -> The NIL object ; .true is "1" ; .false is "0"
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(&*interp.to_text(ObjRef::NIL), b"The NIL object");
 
         // `.true`/`.false` need no representation of their own (D15): they
@@ -477,7 +477,7 @@ mod tests {
 
     #[test]
     fn nonnumeric_text_and_nil_both_collapse_to_not_numeric() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let words = interp.text(b"not a number");
         assert_eq!(interp.to_number(words), Err(NotNumeric));
         assert_eq!(interp.to_number(ObjRef::NIL), Err(NotNumeric));
@@ -495,7 +495,7 @@ mod tests {
         // a. = 5 ; say a. + 1 -> 6 (measured against the oracle). Kills the
         // mutation that reverts this arm to `unreachable!`: that mutant
         // panics this test instead of returning `Ok(5)`.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let five = interp.number(n("5"), 9, Form::Scientific);
         let stem = interp.alloc_with(
             BehaviourId::STEM,
@@ -517,7 +517,7 @@ mod tests {
         // mutation that makes the `default: None` arm return some fixed
         // `Ok` (e.g. `Ok(0)`) instead of parsing the object's own name and
         // reporting `NotNumeric` when, as here, that name is not one.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let stem = interp.alloc_with(
             BehaviourId::STEM,
             Body::Stem {
@@ -539,7 +539,7 @@ mod tests {
         // mutation that only redirects one level deep (e.g. matching
         // `Body::Num`/`Body::Text` inline instead of recursing through
         // `to_number` again), which would panic on the second hop.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let five = interp.number(n("5"), 9, Form::Scientific);
         let a = interp.alloc_with(
             BehaviourId::STEM,

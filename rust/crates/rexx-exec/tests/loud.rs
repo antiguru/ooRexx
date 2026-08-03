@@ -175,8 +175,12 @@ enum Category {
     Expr,
 }
 
-/// Every out-of-scope `InstructionKind`, one witness each. 20 entries, one
-/// per `Owner::Phase` arm in `INSTRUCTION_TAGS` above -- `assert_witness_set_is_complete`
+/// Every out-of-scope `InstructionKind`, one witness each. 19 entries, one
+/// per `Owner::Phase` arm in `INSTRUCTION_TAGS` above (20 until 4b's Task 1
+/// implemented `INTERPRET` and deleted its row -- pinned item 4 in
+/// `owners.rs`'s own list: a witness for a variant that moved in scope must
+/// be *deleted*, not left stale, or `assert_witness_set_is_complete` fails
+/// the other way) -- `assert_witness_set_is_complete`
 /// checks the two lists against each other so a variant cannot be silently
 /// dropped from this list while staying in the tag table.
 const INSTRUCTION_WITNESSES: &[Witness] = &[
@@ -262,12 +266,6 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
         tag: "Raise",
         owner: "4b",
         source: "raise syntax 40.1\n",
-        category: Category::Instruction,
-    },
-    Witness {
-        tag: "Interpret",
-        owner: "4b",
-        source: "interpret \"say 1\"\n",
         category: Category::Instruction,
     },
     Witness {
@@ -491,6 +489,8 @@ fn assert_witness_set_is_complete() {
     // `InstructionKind` tags become 24 expected witness tags -- `Call`'s
     // one row becomes four (`Named`/`Dynamic`/`Qualified`/`Trap`) and
     // `Signal`'s one becomes two (`Signal`/`Signal::Trap`), net +3 +1 = +4.
+    // 19 coarse phase-owned tags since 4b's Task 1 (20 before it moved
+    // `Interpret` in scope), so 23 expected witness tags.
     let expected_instructions: Vec<&str> = INSTRUCTION_TAGS
         .iter()
         .filter(|(_, o)| matches!(o, Owner::Phase(_)))
@@ -506,7 +506,7 @@ fn assert_witness_set_is_complete() {
          InstructionKind variant (per arm, for Call/Signal), no more and no \
          fewer"
     );
-    assert_eq!(expected_instructions.len(), 24);
+    assert_eq!(expected_instructions.len(), 23);
 
     let expected_exprs: Vec<&str> = EXPR_TAGS
         .iter()
@@ -527,12 +527,14 @@ fn assert_witness_set_is_complete() {
 
 #[test]
 fn in_scope_counts_match_the_audited_split() {
+    // 21 since 4b's Task 1 moved `Interpret` in scope; see `owners.rs`'s own
+    // `variant_counts_match_the_audited_split` for the full split.
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        20
+        21
     );
     assert_eq!(
         EXPR_TAGS

@@ -725,7 +725,7 @@ mod tests {
     fn a_tail_piece_and_a_plain_variable_share_one_slot() {
         // b = 2 ; say a.b -> A.2 ; a.2 = 'hit' ; say a.b -> hit
         // An implementer who gives tail pieces their own slots gets A.B.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let program = parse_program(b"say a.b".to_vec()).expect("test program parses");
         let id = match &program.main.instructions[0].kind {
             InstructionKind::Say {
@@ -774,7 +774,7 @@ mod tests {
         // v = 'X' ; x = 1 ; drop (v) ; say x  ->  X
         // X may not appear in the body at all, so the plan cannot have a
         // slot for it: this program never mentions X in its own text.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let program = parse_program(b"nop".to_vec()).expect("test program parses");
         activate(&mut interp, program);
 
@@ -815,7 +815,7 @@ mod tests {
         // "V.I", and `compound_parts` decomposes the piece as "I", already
         // upcase. A tail VALUE is different: whatever the piece variable's
         // current *value* renders as, verbatim and case-sensitively.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let program = parse_program(b"say v.i".to_vec()).expect("test program parses");
         let id = match &program.main.instructions[0].kind {
             InstructionKind::Say {
@@ -854,7 +854,7 @@ mod tests {
         // oracle). A fragment's plan is never cached (BodyKey has no
         // fragment arm) and its bindings land in the enclosing frame via
         // `extra`, not in a frame of its own.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let program = parse_program(b"nop".to_vec()).expect("test program parses");
         activate(&mut interp, program);
 

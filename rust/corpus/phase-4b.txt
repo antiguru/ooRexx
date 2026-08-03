@@ -1,0 +1,38 @@
+# Phase 4b corpus subset -- the union with phase-4a.txt is what the harnesses
+# read, not this file alone. Every entry in phase-4a.txt stays in force.
+#
+# One path per line, relative to this directory (rust/corpus/). Lines starting
+# with # are comments; blank lines are ignored. Same format as phase-4a.txt,
+# and read by the same `read_subset`, which unions the two in first-seen order
+# and drops a repeat.
+#
+# WHY THIS FILE EXISTS AND WHY IT IS NOT AN EXTENSION OF phase-4a.txt.
+# phase-4a.txt's own header excludes INTERPRET by definition ("no CALL/RETURN/
+# PROCEDURE/USE/SIGNAL/RAISE/INTERPRET"), so a witness for a construct 4b
+# implements cannot go there without making that header false. Criterion 1
+# (tests/coverage.rs) requires every in-scope variant to be witnessed by some
+# program in the subset it reads, so the moment a variant moves into scope its
+# witness has to land in a file that admits it -- this one.
+#
+# WHAT THIS SUBSET ADMITS, one line per construct as it lands. Everything
+# phase-4a.txt admits, plus:
+#
+#   INTERPRET (4b Task 1) -- a dynamic fragment, a fragment that binds a name
+#   the enclosing body never mentions, and a fragment inside a DO body.
+#
+# WHAT IT STILL EXCLUDES. Everything phase-4a.txt excludes except INTERPRET,
+# which is to say: no builtin function calls, no CALL/RETURN/PROCEDURE/USE/
+# SIGNAL/RAISE, no PARSE/ARG/PULL/PUSH/QUEUE, no message sends, no ::
+# directives, no command clauses, no DO WITH, and no DO OVER on a stem. The
+# authoritative, machine-checked list is tests/owners.rs's INSTRUCTION_TAGS/
+# EXPR_TAGS: anything still carrying an `Owner::Phase` there fails loudly and
+# cannot appear in any program listed in this file. Later 4b tasks move their
+# own construct across that line and delete its name from the paragraph above
+# in the same change.
+#
+# A program listed here must also obey the corpus's one standing rule
+# (README.md, "The one rule: determinism"): same bytes on every run, on every
+# machine, with no clock, no PID, no filesystem and no locale in its output.
+
+# New for 4b Task 1 -- INTERPRET:
+lang/interpret_dynamic.rex

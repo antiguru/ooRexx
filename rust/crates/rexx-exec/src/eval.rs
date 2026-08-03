@@ -943,20 +943,20 @@ mod tests {
 
     #[test]
     fn a_literal_is_its_own_bytes() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(eval_text(&mut interp, b"say 123"), b"123");
     }
 
     #[test]
     fn a_constant_is_its_own_upcased_spelling() {
         // say 1e5 -> 1E5 (measured against the oracle; D15's own example).
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(eval_text(&mut interp, b"say 1e5"), b"1E5");
     }
 
     #[test]
     fn a_variable_reads_through_the_plan() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let program = parse_program(b"say x".to_vec()).expect("test program parses");
         let program = activate(&mut interp, program);
         let five = interp.text(b"5");
@@ -981,7 +981,7 @@ mod tests {
     #[test]
     fn a_bare_stem_reads_through_the_same_path_as_a_variable() {
         // w. = 'wd' ; say w. -> wd
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         activate(
             &mut interp,
             parse_program(b"nop".to_vec()).expect("test program parses"),
@@ -994,7 +994,7 @@ mod tests {
     #[test]
     fn a_compound_read_resolves_its_tail_and_looks_it_up() {
         // a.1 = 'x' ; say a.1 -> x
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         activate(
             &mut interp,
             parse_program(b"nop".to_vec()).expect("test program parses"),
@@ -1006,7 +1006,7 @@ mod tests {
 
     #[test]
     fn the_three_admissible_dot_variables() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(eval_text(&mut interp, b"say .nil"), b"The NIL object");
         assert_eq!(eval_text(&mut interp, b"say .true"), b"1");
         assert_eq!(eval_text(&mut interp, b"say .false"), b"0");
@@ -1014,7 +1014,7 @@ mod tests {
 
     #[test]
     fn a_dot_variable_beyond_the_three_fails_loudly() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = eval_source(&mut interp, b"say .foo").unwrap_err();
         assert!(matches!(failure, Failure::Loud(_)), "got {failure:?}");
     }
@@ -1028,7 +1028,7 @@ mod tests {
         // `NUMERIC` is not run through `step` (Task 9's instruction), so
         // `DIGITS` is set directly on the activation the same way Task 9's
         // own implementation eventually will.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         activate(
             &mut interp,
             parse_program(b"nop".to_vec()).expect("test program parses"),
@@ -1044,7 +1044,7 @@ mod tests {
 
     #[test]
     fn prefix_not_flips_a_logical_value() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(eval_text(&mut interp, b"say \\1"), b"0");
         assert_eq!(eval_text(&mut interp, b"say \\0"), b"1");
     }
@@ -1052,7 +1052,7 @@ mod tests {
     #[test]
     fn prefix_not_on_a_non_logical_value_raises_34_901() {
         // say \'abc' -> Error 34.901
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = eval_source(&mut interp, b"say \\'abc'").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -1065,7 +1065,7 @@ mod tests {
 
     #[test]
     fn the_seven_arithmetic_operators() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(eval_text(&mut interp, b"say 1+2"), b"3");
         assert_eq!(eval_text(&mut interp, b"say 5-3"), b"2");
         assert_eq!(eval_text(&mut interp, b"say 2*3"), b"6");
@@ -1078,7 +1078,7 @@ mod tests {
     #[test]
     fn divide_by_zero_raises_42_3() {
         // say 1/0 -> Error 42.3, rc 214
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = eval_source(&mut interp, b"say 1/0").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -1089,7 +1089,7 @@ mod tests {
     #[test]
     fn remainder_by_zero_also_raises_42_3() {
         // say 1//0 -> Error 42.3, rc 214 (the same DivideByZero as /)
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = eval_source(&mut interp, b"say 1//0").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -1100,7 +1100,7 @@ mod tests {
     #[test]
     fn a_nonnumeric_operand_raises_41_1_with_its_own_text() {
         // say 'abc' + 1 -> Error 41.1, "Nonnumeric value (\"abc\")"
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = eval_source(&mut interp, b"say 'abc'+1").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -1113,7 +1113,7 @@ mod tests {
     fn a_non_numeric_power_exponent_raises_26_8_not_41_1() {
         // say 2 ** 'x' -> Error 26.8, "found \"x\""
         // 'y' ** 2     -> Error 41.1 (the base's ordinary nonnumeric path)
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = eval_source(&mut interp, b"say 2**'x'").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -1134,7 +1134,7 @@ mod tests {
         // 15 + 6 is 2E+1 -- D15's own SmallInt-admissibility transcript,
         // reachable end to end through eval now rather than constructed by
         // hand as Task 4 had to.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         activate(
             &mut interp,
             parse_program(b"nop".to_vec()).expect("test program parses"),
@@ -1152,7 +1152,7 @@ mod tests {
 
     #[test]
     fn the_three_concatenation_forms() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(eval_text(&mut interp, b"say 'a'||'b'"), b"ab");
         assert_eq!(eval_text(&mut interp, b"say 'a' 'b'"), b"a b");
 
@@ -1192,7 +1192,7 @@ mod tests {
         // The plan's own measured block, verbatim (task-8-report.md has
         // the oracle run). The first row is the one that discriminates the
         // real string rule from "blank-pad the shorter on the right".
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(eval_text(&mut interp, b"say (' a' = 'a')"), b"1");
         assert_eq!(eval_text(&mut interp, b"say ('09'x'a' = 'a')"), b"1");
         assert_eq!(eval_text(&mut interp, b"say ('a' = 'a'||'09'x)"), b"1");
@@ -1214,7 +1214,7 @@ mod tests {
         // to pin the Operator -> CompareOp mapping, particularly that
         // \>/\< invert the *positive* comparison's sense rather than
         // getting a CompareOp of their own.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(eval_text(&mut interp, b"say ('9' \\> '10')"), b"1");
         assert_eq!(eval_text(&mut interp, b"say ('9' \\< '10')"), b"0");
         assert_eq!(eval_text(&mut interp, b"say ('9' \\>> '10')"), b"0");
@@ -1269,7 +1269,7 @@ mod tests {
         // 007 and 7 comparing numerically equal (not "0" -- a byte compare
         // would disagree with the leading zero) is what proves the
         // numeric path, not the string one, ran.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         activate(
             &mut interp,
             parse_program(b"nop".to_vec()).expect("test program parses"),
@@ -1298,7 +1298,7 @@ mod tests {
         // to `false` left the whole suite green. `is_strict_compare` gating
         // the parse is a real saving and its own doc comment gives that
         // honest, performance rationale; no behavioural test can guard it.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(eval_text(&mut interp, b"say ('01' == '1')"), b"0");
         assert_eq!(eval_text(&mut interp, b"say ('01' = '1')"), b"1");
     }
@@ -1307,7 +1307,7 @@ mod tests {
 
     #[test]
     fn the_three_logical_operators_and_their_truth_tables() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(eval_text(&mut interp, b"say (1 & 1)"), b"1");
         assert_eq!(eval_text(&mut interp, b"say (1 & 0)"), b"0");
         assert_eq!(eval_text(&mut interp, b"say (0 | 0)"), b"0");
@@ -1320,7 +1320,7 @@ mod tests {
         // ' 1 ' & 1 -> Error 34.901, found " 1 " (and '01'/'1.0'/'' alike,
         // measured in the report -- one representative here, the same
         // check `logical_value` gives all four).
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = eval_source(&mut interp, b"say (' 1 ' & 1)").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -1334,7 +1334,7 @@ mod tests {
         // say (0 & 'x') -> still raises on 'x', even though 0 already
         // decides the AND -- both operands are always evaluated and
         // checked. Contrast with ExprKind::Logical's comma list, below.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let and_failure = eval_source(&mut interp, b"say (0 & 'x')").unwrap_err();
         assert!(
             matches!(and_failure, Failure::Raised(_)),
@@ -1351,7 +1351,7 @@ mod tests {
     fn logical_operators_check_the_left_operand_first() {
         // say ('y' & 'x') -> reports "y", the left operand, when both are
         // bad -- confirms evaluation order rather than assuming it.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = eval_source(&mut interp, b"say ('y' & 'x')").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -1395,7 +1395,7 @@ mod tests {
     fn a_comma_list_is_an_and_of_its_parts() {
         // if 1, 1, 1 then -> true ; if 1, 0, 1 then -> false (measured
         // against the oracle's own THEN/ELSE branch taken).
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             eval_condition_text(&mut interp, b"if 1, 1, 1 then nop"),
             b"1"
@@ -1410,7 +1410,7 @@ mod tests {
     fn a_comma_list_element_failure_raises_34_6_not_34_901() {
         // if 1, 'x' then -> Error 34.6, found "x" (checked left to right:
         // if 'x', 1 then also gives 34.6 on "x", the first element).
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = eval_condition(&mut interp, b"if 1, 'x' then nop").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -1439,7 +1439,7 @@ mod tests {
         // and `if 1, 0, (1/0) then nop` both exit 0, while `if 1, (1/0)` exits
         // 214 with Error 42.3 -- that last one is the control, and without it
         // this test would pass against an evaluator that raised nothing ever.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         // An activation, which the `'x'` version of this test did not need:
         // division reads the frame's own `NUMERIC DIGITS`, so the control case
         // below reaches `activation()` where a literal never would.

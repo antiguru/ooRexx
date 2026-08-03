@@ -17,8 +17,18 @@
 //! other. These are not L0 corpus programs: they go through the library entry
 //! point rather than through `rexx-run` and the diff harness, which is Task
 //! 14's.
+//!
+//! **The three fragment-lifetime tests moved to `src/lib.rs`'s own `#[cfg(test)]
+//! mod tests` at 4b's Task 1** (`a_fragment_shares_the_enclosing_frames_
+//! variable_pool`, `an_exit_inside_a_fragment_ends_the_program`, `the_stack_
+//! span_does_not_depend_on_what_else_the_program_evaluated`). They ran through
+//! `run_program_interpret_spike`, a `pub` entry point that existed only because
+//! an integration test could not otherwise reach a fragment; `INTERPRET` is
+//! implemented now, that entry point is deleted, and the tests kept their
+//! assertions unchanged. See the comment above them there for the trade being
+//! re-made.
 
-use rexx_exec::{NOT_IMPLEMENTED_EXIT, run_program, run_program_interpret_spike};
+use rexx_exec::{NOT_IMPLEMENTED_EXIT, run_program};
 
 /// The path these tests report programs under.
 ///
@@ -78,116 +88,37 @@ fn an_unset_variable_reads_as_its_own_name() {
     assert_eq!(outcome.exit_code, 0);
 }
 
-/// Step 2, and the reason the spike exists in the shape it does.
-///
-/// Three separate things are being asserted by one transcript, and they are
-/// listed here because a single `assert_eq!` hides which one broke:
-///
-/// 1. A fragment created mid-instruction **reads** a name the enclosing body
-///    bound (`zzz`).
-/// 2. A fragment **introduces** a name that appears in no instruction of the
-///    enclosing body (`zork`), and a *later, separate* fragment reads it back.
-///    This is the case that forces the enclosing activation to own a mutable
-///    name-to-slot map, because the enclosing plan is an `Rc` and cannot be
-///    extended.
-/// 3. The enclosing body carries on afterwards with its own slots intact, and
-///    a third fragment sees the updated value.
-///
-/// Oracle, verbatim:
-///
-/// ```text
-/// zzz = 'from the enclosing frame'
-/// interpret "say zzz"
-/// interpret "zork = 42"
-/// interpret "say zork"
-/// zzz = zzz || '!'
-/// interpret "say zzz"
-/// ```
-///
-/// ```text
-/// from the enclosing frame
-/// 42
-/// from the enclosing frame!
-/// ```
-///
-/// rc 0.
-#[test]
-fn a_fragment_shares_the_enclosing_frames_variable_pool() {
-    let program = b"zzz = 'from the enclosing frame'\n\
-                    interpret \"say zzz\"\n\
-                    interpret \"zork = 42\"\n\
-                    interpret \"say zork\"\n\
-                    zzz = zzz || '!'\n\
-                    interpret \"say zzz\"\n";
-    let outcome = run_program_interpret_spike(SPIKE_PATH, program.to_vec());
-    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
-    assert_eq!(
-        outcome.stdout,
-        b"from the enclosing frame\n42\nfrom the enclosing frame!\n"
-    );
-}
-
-/// `EXIT` inside a fragment ends the *program*, not the fragment, so control
-/// leaves the nested loop and the enclosing one together and both `Rc` locals
-/// drop in order.
-///
-/// Oracle, verbatim:
-///
-/// ```text
-/// say 'before'
-/// interpret "say 'inside'"
-/// interpret "exit"
-/// say 'after'
-/// ```
-///
-/// gives `before\ninside\n`, rc 0. `after` is not printed.
-#[test]
-fn an_exit_inside_a_fragment_ends_the_program() {
-    let program = b"say 'before'\n\
-                    interpret \"say 'inside'\"\n\
-                    interpret \"exit\"\n\
-                    say 'after'\n";
-    let outcome = run_program_interpret_spike(SPIKE_PATH, program.to_vec());
-    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
-    assert_eq!(outcome.stdout, b"before\ninside\n");
-}
-
-/// The other half of Step 2: 4a builds the machinery, 4b builds the keyword.
-///
-/// The same program the previous two tests run through the spike entry point
-/// must still fail loudly through the real one, or 4a would be shipping an
-/// `INTERPRET` that 4b has not written and the split table says it does not
-/// have.
-#[test]
-fn the_interpret_keyword_still_fails_loudly() {
-    let program = b"interpret \"say 'reached'\"\n";
-    let outcome = run_program(SPIKE_PATH, program.to_vec());
-    assert_eq!(outcome.exit_code, NOT_IMPLEMENTED_EXIT);
-    assert_eq!(outcome.stdout, b"", "the fragment must not have run");
-    let stderr = String::from_utf8(outcome.stderr).expect("the loud message is ASCII");
-    assert!(stderr.contains("INTERPRET"), "stderr was {stderr:?}");
-}
-
 /// The loud-failure code is outside the band a Rexx error can produce, so a
 /// differential run can never mistake an implementation gap for a condition.
 ///
-/// **The probe construct changed under Task 11.** This used to run `do i =
-/// 1 to 3 / end`, which was true of every task before Task 11 and stopped
-/// being true the moment `DO`/`LOOP` were implemented -- that program now
-/// runs to completion instead of failing loudly, and the test would have
-/// started asserting `0 == NOT_IMPLEMENTED_EXIT` and failed for a reason
-/// that has nothing to do with what it is meant to check. `CALL` is 4b's,
-/// still not implemented through `run_program`, and is the new probe.
+/// **The probe construct changed under Task 11, and again under 4b's Task 1.**
+/// It began as `do i = 1 to 3 / end`, which stopped failing loudly the moment
+/// Task 11 implemented `DO`/`LOOP`: the test would have started asserting
+/// `0 == NOT_IMPLEMENTED_EXIT` and failed for a reason with nothing to do with
+/// what it checks. `call "sub"` replaced it, and would have gone the same way
+/// at 4b's Task 3, which implements `CALL`.
+///
+/// A **message send** is the third and last witness. `~` is Phase 5's object
+/// model, so no task in this plan can implement it out from under this test --
+/// which is exactly what happened the first two times, and the fourth
+/// occurrence of that in this project. `PARSE` and `ADDRESS` were the obvious
+/// alternatives and are rejected for the same reason: both are 4c's, weeks
+/// away, so either would only schedule a fourth break.
+///
+/// The expected stderr is quoted from a run rather than described:
+/// `rexx-exec: a message send is not implemented (Phase 5)`.
 #[test]
 fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
     assert!(
         !(157..=253).contains(&NOT_IMPLEMENTED_EXIT),
         "256 - major lives in 157..=253 for majors 3 to 99"
     );
-    let outcome = run_program(SPIKE_PATH, b"call \"sub\"\n".to_vec());
+    let outcome = run_program(SPIKE_PATH, b"q~append(1)\n".to_vec());
     assert_eq!(outcome.exit_code, NOT_IMPLEMENTED_EXIT);
-    let stderr = String::from_utf8(outcome.stderr).expect("the loud message is ASCII");
-    assert!(stderr.contains("CALL"), "stderr was {stderr:?}");
+    assert_eq!(
+        String::from_utf8(outcome.stderr).expect("the loud message is ASCII"),
+        "rexx-exec: a message send is not implemented (Phase 5)\n"
+    );
 }
 
 /// A loud failure names the **form** and never formats the node, so the
@@ -265,54 +196,6 @@ fn a_loud_failure_message_does_not_grow_with_the_expression() {
     assert!(
         stderr.contains("a message send"),
         "the message should name the form it could not evaluate, and was {stderr:?}"
-    );
-}
-
-/// The reported span comes from one call chain, so what else the program
-/// evaluated cannot change it.
-///
-/// A regression test for a defect the review found by measuring rather than by
-/// reading. `eval` records a depth-1 address and a deepest address; if the
-/// first is rewritten by *every* top-level evaluation while the second moves
-/// only on a new maximum, the two can end up describing different chains, and
-/// the frames above `eval` then no longer cancel. A fragment's evaluation runs
-/// under `run_fragment` under `step` under the enclosing `eval`, about 2 KB
-/// deeper than a top-level one, so appending one `INTERPRET` to a program was
-/// enough: measured before the fix, this pair reported **784.0** and
-/// **782.158**, and the second is the dangerous direction, since a smaller
-/// per-level cost implies more survivable levels than there are.
-///
-/// The assertion is equality of the two spans rather than a bound on either,
-/// because the property is "the span does not depend on what else ran" and a
-/// bound would pass for both the fixed and the broken version.
-#[test]
-fn the_stack_span_does_not_depend_on_what_else_the_program_evaluated() {
-    let mut alone = b"say 'a'".to_vec();
-    for _ in 1..1_000 {
-        alone.extend_from_slice(b"||''");
-    }
-    alone.push(b'\n');
-
-    let mut then_a_fragment = alone.clone();
-    then_a_fragment.extend_from_slice(b"interpret \"say 'b'\"\n");
-
-    let alone = run_program(SPIKE_PATH, alone);
-    let then_a_fragment = run_program_interpret_spike(SPIKE_PATH, then_a_fragment);
-
-    assert_eq!(alone.exit_code, 0, "stderr: {:?}", alone.stderr);
-    assert_eq!(
-        then_a_fragment.exit_code, 0,
-        "stderr: {:?}",
-        then_a_fragment.stderr
-    );
-    assert_eq!(
-        alone.stack.max_depth, then_a_fragment.stack.max_depth,
-        "the fragment's own evaluation is shallow, so it must not move the maximum"
-    );
-    assert_eq!(
-        alone.stack.bytes, then_a_fragment.stack.bytes,
-        "the span must come from the chain that reached the maximum, not from the last \
-         top-level evaluation to start"
     );
 }
 

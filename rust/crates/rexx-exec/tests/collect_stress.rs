@@ -99,9 +99,10 @@ fn corpus_dir() -> PathBuf {
 /// **Task 0's Step 4.** Was a single-file reader (`&Path`); widened to `&[&Path]`
 /// so a later task's own subset file can run *alongside* `phase-4a.txt`
 /// rather than replacing it -- see `coverage.rs`'s own copy of this function
-/// for the fuller argument. Today's caller passes a one-element slice
-/// containing only `phase-4a.txt`, so the union is that file's own content
-/// unchanged.
+/// for the fuller argument. 4b's Task 1 is the first task to use that: the
+/// caller below passes `phase-4a.txt` and `phase-4b.txt`, so criterion 4's
+/// stress run covers every later phase's programs too rather than freezing
+/// at 4a's twenty-nine.
 fn read_subset(list_paths: &[&Path]) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut union = Vec::new();
@@ -123,11 +124,14 @@ fn read_subset(list_paths: &[&Path]) -> Vec<String> {
 #[test]
 fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
     let corpus_dir = corpus_dir();
-    let subset = read_subset(&[&corpus_dir.join("phase-4a.txt")]);
+    let subset = read_subset(&[
+        &corpus_dir.join("phase-4a.txt"),
+        &corpus_dir.join("phase-4b.txt"),
+    ]);
     assert!(
         !subset.is_empty(),
-        "phase-4a.txt named no programs -- that is a corpus defect, not an \
-         empty pass"
+        "the phase subset files named no programs -- that is a corpus defect, \
+         not an empty pass"
     );
 
     let mut total_collections: u64 = 0;
@@ -176,7 +180,7 @@ fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
     // check above by construction (nothing to sweep, nothing to diverge),
     // exactly the defect this criterion was rewritten to close. Checked
     // per program, not only in aggregate, so one silent program cannot
-    // hide behind the other 28's counts.
+    // hide behind the rest of the subset's counts.
     assert!(
         zero_collection_programs.is_empty(),
         "these programs performed zero collections under the stress mode, \

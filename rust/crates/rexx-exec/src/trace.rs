@@ -561,13 +561,13 @@ mod tests {
     /// showing both).
     #[test]
     fn the_three_gates_fire_under_exactly_the_modes_that_should_show_them() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         interp.trace_clause(1, 0, b"say 1");
         interp.trace_result(0, b"1");
         interp.trace_keyword(0, "TO", b"2");
         assert!(interp.trace.is_empty(), "TraceMode::OFF is silent");
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         interp.trace_mode = TraceMode::RESULTS;
         interp.trace_clause(1, 0, b"say 1");
         interp.trace_result(0, b"1");

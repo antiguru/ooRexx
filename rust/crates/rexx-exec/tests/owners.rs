@@ -85,7 +85,7 @@ macro_rules! tags {
 }
 
 tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
-    // ---- 4a's own twenty ----
+    // ---- 4a's own twenty, plus Interpret (4b's Task 1) ----
     InstructionKind::Assignment { .. } => ("Assignment", Owner::InScope),
     InstructionKind::Label { .. } => ("Label", Owner::InScope),
     InstructionKind::Command { .. } => ("Command", Owner::Phase("Phase 7")),
@@ -107,14 +107,16 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     InstructionKind::Numeric { .. } => ("Numeric", Owner::InScope),
     InstructionKind::Trace(_) => ("Trace", Owner::InScope),
     InstructionKind::Nop => ("Nop", Owner::InScope),
-    // ---- 4b's nine ----
+    // In scope since 4b's Task 1: 4a built the fragment machinery and that
+    // task built the keyword on top of it.
+    InstructionKind::Interpret { .. } => ("Interpret", Owner::InScope),
+    // ---- 4b's eight ----
     InstructionKind::Call(_) => ("Call", Owner::Phase("4b")),
     InstructionKind::Return { .. } => ("Return", Owner::Phase("4b")),
     InstructionKind::Procedure { .. } => ("Procedure", Owner::Phase("4b")),
     InstructionKind::Use(_) => ("Use", Owner::Phase("4b")),
     InstructionKind::Signal(_) => ("Signal", Owner::Phase("4b")),
     InstructionKind::Raise(_) => ("Raise", Owner::Phase("4b")),
-    InstructionKind::Interpret { .. } => ("Interpret", Owner::Phase("4b")),
     InstructionKind::Push { .. } => ("Push", Owner::Phase("4b")),
     InstructionKind::Queue { .. } => ("Queue", Owner::Phase("4b")),
     // ---- 4c's four ----
@@ -281,7 +283,6 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("InstructionKind", "Use", "4b"),
     ("InstructionKind", "Signal", "4b"),
     ("InstructionKind", "Raise", "4b"),
-    ("InstructionKind", "Interpret", "4b"),
     ("InstructionKind", "Push", "4b"),
     ("InstructionKind", "Queue", "4b"),
     ("InstructionKind", "Parse", "4c"),
@@ -386,23 +387,27 @@ fn out_of_scope_set_matches_the_committed_expectation() {
 
 #[test]
 fn variant_counts_match_the_audited_split() {
-    // Re-derived here rather than trusted: 40 InstructionKind variants (20 in
-    // 4a, 9 in 4b, 4 in 4c, 6 in Phase 5, 1 in Phase 7) and 15 ExprKind (9 in
-    // scope, 6 failing loudly), per the design spec's criterion 1.
+    // Re-derived here rather than trusted: 40 InstructionKind variants and 15
+    // ExprKind (9 in scope, 6 failing loudly), per the design spec's criterion
+    // 1. The InstructionKind split was 20/9/4/6/1 at the 4a gate; 4b's Task 1
+    // moved `Interpret` from 4b's column into the implemented one, so it is
+    // 21/8/4/6/1 now. This number is the *implemented* count, not "4a's own":
+    // every later 4b/4c task moves another variant across the same line, and
+    // relabelling the column each time would be churn without information.
     assert_eq!(INSTRUCTION_TAGS.len(), 40);
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        20
+        21
     );
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("4b"))
             .count(),
-        9
+        8
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -495,10 +500,12 @@ fn the_two_harnesses_include_this_exact_file() {
 // 3. **`coverage.rs`'s `variant_counts_match_the_audited_split`-style
 //    counts**, now living in this file's own
 //    [`variant_counts_match_the_audited_split`]: the four hardcoded
-//    `InstructionKind` phase counts (20/9/4/6/1) and the two `ExprKind`
-//    ones (9/6). A variant moving in scope changes the `InScope` count and
-//    whichever phase count it left, and both sides of that move must be
-//    edited together.
+//    `InstructionKind` phase counts (21/8/4/6/1 since 4b's Task 1, 20/9/…
+//    at the 4a gate) and the two `ExprKind` ones (9/6). A variant moving in
+//    scope changes the `InScope` count and whichever phase count it left,
+//    and both sides of that move must be edited together. `loud.rs`'s own
+//    `in_scope_counts_match_the_audited_split` carries a copy of the
+//    `InScope` figure and moves with it.
 // 4. **`loud.rs`'s `INSTRUCTION_WITNESSES`/`EXPR_WITNESSES`**: one witness
 //    row per out-of-scope tag this file's tables produce -- per *arm*, not
 //    per outer variant, for `InstructionKind::Call` and `InstructionKind::

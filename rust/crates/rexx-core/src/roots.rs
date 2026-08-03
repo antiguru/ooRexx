@@ -103,6 +103,21 @@ impl RootSet {
         self.temps.push(value);
     }
 
+    /// How many temporaries are currently rooted.
+    ///
+    /// For a **debug tripwire only**, and specifically for the one
+    /// `rexx-exec`'s `step_in_temps_frame` carries: comparing this before and
+    /// after a step is how that function checks nothing popped below its own
+    /// watermark. `pop_frame`'s own doc explains why the balance cannot be
+    /// asserted *here*, in the general case, without first making six
+    /// `rexx-exec` sites pop on their own error path; the caller's tripwire is
+    /// narrower (one call site, `Ok` path only) and needs no such change.
+    ///
+    /// Not a capacity, a budget, or anything a decision should be made from.
+    pub fn temps_len(&self) -> usize {
+        self.temps.len()
+    }
+
     /// Opens a new slot frame of `initial_len` unassigned slots, for an
     /// activation entering with a plan of that many resolved names (D16).
     pub fn push_slots(&mut self, initial_len: usize) -> SlotFrame {

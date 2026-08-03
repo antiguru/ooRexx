@@ -303,8 +303,8 @@ pub struct Outcome {
     /// evaluation-depth limit; see `StackSpan`.
     pub stack: StackSpan,
     /// How many times `Heap::collect` ran during this program. Always `0`
-    /// under `run_program`/`run_program_interpret_spike`, since neither
-    /// enables Task 16's stress mode and nothing else in this crate calls
+    /// under `run_program`, which does not enable Task 16's stress mode and
+    /// nothing else in this crate calls
     /// `collect` at all -- a non-zero value here is only ever possible
     /// through `run_program_collect_every_alloc`, and criterion 4's gate
     /// asserts it is non-zero specifically so a mode that silently
@@ -474,43 +474,23 @@ impl Loud {
     /// Stays loud for the reason `execute`'s parse arm spells out: Task 12's
     /// catalogue reports conditions a *running* program raises, and a syntax
     /// error supplies neither a `Raised` nor a clause that became an
-    /// `Instruction`. The spike only has to not swallow it.
+    /// `Instruction`.
+    ///
+    /// **Reachable through `run_program` since 4b's Task 1, where before it
+    /// needed the deleted spike entry point.** So this is now a live
+    /// divergence rather than a latent one, and it is a real one: measured,
+    /// `interpret "do forever then"` gives the oracle 27.901 at rc 229 with
+    /// a two-line clause echo, and gives this `rexx-exec: INTERPRET text did
+    /// not parse: 27.901: Invalid DO or LOOP syntax.` at rc 120. Loud rather
+    /// than silent, which is what criterion 5 requires of it, and not
+    /// byte-identical, which no parse error in this crate is (`execute`'s own
+    /// parse arm: "wrong in the details on purpose and right in never being
+    /// mistaken for success"). Closing it needs a `ParseError`-to-`Raised`
+    /// conversion, which is the same machinery a *top-level* syntax error
+    /// wants and should be built once for both, not here for one caller.
     fn parse(error: &ParseError) -> Loud {
         Loud {
             message: format!("INTERPRET text did not parse: {error}"),
-        }
-    }
-
-    /// A named `LEAVE`/`ITERATE` inside `INTERPRET` text, escaping out to the
-    /// enclosing program. Filed as F-EX2 in the branch review.
-    ///
-    /// `run_fragment` gives the fragment its own fresh `SymbolTable`
-    /// (`parse_interpret`'s doc), so the `SymbolId` a `leave name`/`iterate
-    /// name` inside that text carries is relative to *that* table, not the
-    /// program's. Every consumer above `run_fragment` (`do_body_outcome`,
-    /// `leave_select`, `run_activation`) compares a forwarded `Flow::Leave`/
-    /// `Iterate`'s id against labels interned in the *program's* table, so
-    /// forwarding it unchanged can match the wrong label, miss the right
-    /// one, or panic in `code.symbols.name` -- silently, since nothing
-    /// about a mismatched `SymbolId` looks wrong at the type level. `name`
-    /// is resolved here, inside `run_fragment`, while the fragment's own
-    /// table is still in scope to resolve it correctly; nothing past this
-    /// point sees the id at all. A **bare** `LEAVE`/`ITERATE` (no name)
-    /// carries no `SymbolId` and is unaffected -- `run_fragment` forwards
-    /// it exactly as before.
-    ///
-    /// Reachable only through `run_program_interpret_spike` today (`run_
-    /// program`'s `INTERPRET` arm is `Loud::instruction` before this
-    /// function ever runs), so no shipped behavior changes. 4b builds a
-    /// real `INTERPRET` on this exact machinery and has to replace this
-    /// with an actual resolution -- either a name-based lookup added to
-    /// `SymbolTable`, or `Flow` carrying a resolved name instead of an id
-    /// across this one boundary -- rather than inherit a silent mismatch.
-    fn interpret_leave(name: &str) -> Loud {
-        Loud {
-            message: format!(
-                "a LEAVE/ITERATE naming {name:?} cannot cross an INTERPRET boundary yet"
-            ),
         }
     }
 }
@@ -649,6 +629,10 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         | InstructionKind::Exit { .. }
         | InstructionKind::Numeric { .. }
         | InstructionKind::Trace(_)
+        // In scope since 4b's Task 1: the fragment machinery was 4a's and the
+        // keyword is this task's, so `Interpret` is `None` here (implemented
+        // in this crate) rather than `Some("4b")`.
+        | InstructionKind::Interpret { .. }
         | InstructionKind::Nop => None,
         InstructionKind::Call(call) => Some(match &**call {
             rexx_parse::Call::Named { .. }
@@ -661,7 +645,6 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         | InstructionKind::Use(_)
         | InstructionKind::Signal(_)
         | InstructionKind::Raise(_)
-        | InstructionKind::Interpret { .. }
         | InstructionKind::Push { .. }
         | InstructionKind::Queue { .. } => Some("4b"),
         InstructionKind::Parse(_)
@@ -775,9 +758,12 @@ struct Interp {
     /// `eval_str` correction and Task 6's `Vec<Block>` deferral both ruled
     /// out -- `Activation` already carries its own `Settings` for exactly
     /// this per-frame inheritance, and 4b's `CALL` is what makes a second
-    /// frame exist for `TRACE` to need the same treatment. 4b's first move
-    /// here, matching `interpret_spike`'s own note just below, is to move
-    /// this field onto `Activation` and delete it from here.
+    /// frame exist for `TRACE` to need the same treatment. The move this
+    /// field still owes is onto `Activation`, deleting it from here, and it
+    /// is the task that lands `CALL` that owes it -- **not** 4b's Task 1,
+    /// which was the other half of this note when the `interpret_spike`
+    /// field sat just below it, and which introduces no second frame:
+    /// `INTERPRET` runs its fragment inside the creating activation.
     trace_mode: TraceMode,
     /// The indent (Task 11's `static_indent` quantity, spaces already
     /// doubled) an intermediate value line traces at right now -- the one
@@ -914,15 +900,6 @@ struct Interp {
     /// from. That teardown is why the site cannot simply be reconstructed at
     /// the top: by then the frame is gone.
     failure_site: Option<FailureSite>,
-    /// True when the caller is the fragment spike, in which case
-    /// `InstructionKind::Interpret` runs its fragment instead of failing
-    /// loudly.
-    ///
-    /// 4a builds the fragment machinery and **4b builds the `INTERPRET`
-    /// instruction on top of it**, so through `run_program` the keyword is
-    /// still not implemented and still exits `NOT_IMPLEMENTED_EXIT`. 4b's
-    /// first move here is to delete this field and the branch that reads it.
-    interpret_spike: bool,
     /// Task 16's collect-on-every-allocation gate criterion (4a exit gate,
     /// criterion 4): when true, [`Interp::alloc_with`] calls `Heap::collect`
     /// after every allocation instead of never. Off by default, and the off
@@ -968,7 +945,14 @@ impl Interp {
     /// [`Interp::stress_collect`] flips it after construction instead,
     /// which is exactly as inert for every existing caller as adding a
     /// field with a fixed default already is.
-    fn new(interpret_spike: bool) -> Interp {
+    ///
+    /// **This took an `interpret_spike: bool` until 4b's Task 1**, and the
+    /// hundred-plus callers that argument's removal touched are the direct
+    /// cost the paragraph above was weighing. `INTERPRET` is implemented
+    /// now, so there is no mode left to select between: every caller passed
+    /// `false` except the two spike tests, and all of them now say
+    /// `Interp::new()`.
+    fn new() -> Interp {
         Interp {
             heap: Heap::new(),
             roots: RootSet::new(),
@@ -982,7 +966,6 @@ impl Interp {
             current_case_text: None,
             indent_offset: 0,
             failure_site: None,
-            interpret_spike,
             stress_collect: false,
             depth: 0,
             max_depth: 0,
@@ -1124,7 +1107,7 @@ impl Interp {
     ///
     /// **Off by default, and provably inert when off**: with
     /// `stress_collect` false (the constructed default, and the only value
-    /// `run_program`/`run_program_interpret_spike` ever leave it at), this
+    /// `run_program` ever leaves it at), this
     /// is `self.heap.alloc_with_uncollected(behaviour, body)` and nothing
     /// else -- one call, one `if` that does not take its branch, no new
     /// allocation, no new borrow of `self.roots`. Every existing caller
@@ -1220,41 +1203,7 @@ impl Interp {
 /// before calling.
 pub fn run_program(path: &str, text: Vec<u8>) -> Outcome {
     let path = path.to_string();
-    on_interpreter_thread(move || execute(&path, text, false, false))
-}
-
-/// `run_program`, except that an `INTERPRET` instruction runs its fragment
-/// instead of failing loudly.
-///
-/// **Task 3's spike surface, and 4b deletes it.** The `INTERPRET` *keyword* is
-/// 4b's; what 4a owns is the machinery underneath it, and the lifetime that
-/// machinery has to satisfy is only exercised by actually running a fragment
-/// mid-instruction. An integration test sees only the public API, so proving
-/// it needs an entry point that admits the fragment while `run_program` keeps
-/// the loud failure that 4a's contract requires.
-///
-/// `#[doc(hidden)]` because it is `pub` only to reach `tests/`, and without it
-/// it appears in the rendered docs beside `run_program` as though it were an
-/// equal choice of entry point.
-///
-/// **The choice that created this surface, named so that whoever deletes it
-/// knows what to weigh:** a `#[cfg(test)] mod tests` inside this file could
-/// call the private `on_interpreter_thread` directly and prove the same
-/// lifetime with **no public surface at all**. Picking an integration test
-/// over a unit test is what forced a public entry point to exist. The
-/// integration test was preferred because it exercises the crate the way every
-/// later harness will, through the public API and on the sized thread, and
-/// because a unit test with privileged access to private internals proves less
-/// about the shape callers actually get. That is a defensible trade and not an
-/// obvious one, so 4b should re-make it rather than inherit it.
-///
-/// The rejected alternative is worth recording: hooking the fragment onto an
-/// innocent instruction such as `NOP` proves the same lifetime while lying
-/// about which node owns it, and leaves nothing for 4b to delete.
-#[doc(hidden)]
-pub fn run_program_interpret_spike(path: &str, text: Vec<u8>) -> Outcome {
-    let path = path.to_string();
-    on_interpreter_thread(move || execute(&path, text, true, false))
+    on_interpreter_thread(move || execute(&path, text, false))
 }
 
 /// `run_program`, except that `Heap::collect` runs after every allocation
@@ -1263,9 +1212,11 @@ pub fn run_program_interpret_spike(path: &str, text: Vec<u8>) -> Outcome {
 /// collected (`Outcome::collections` non-zero) rather than merely having
 /// been requested.
 ///
-/// `#[doc(hidden)]` for the same reason `run_program_interpret_spike` is:
-/// `pub` only so `tests/` can reach it, not a second front-door choice
-/// beside `run_program`.
+/// `#[doc(hidden)]` because it is `pub` only so `tests/` can reach it, not a
+/// second front-door choice beside `run_program`. (Task 3's own
+/// `run_program_interpret_spike` carried the identical note until 4b's Task 1
+/// deleted it, `INTERPRET` being implemented; this is now the crate's only
+/// hidden entry point.)
 ///
 /// **This mode was built at Task 16 gate time, not during the phase, and
 /// this is the first time anything has run the L0 subset under it.** The
@@ -1280,7 +1231,7 @@ pub fn run_program_interpret_spike(path: &str, text: Vec<u8>) -> Outcome {
 #[doc(hidden)]
 pub fn run_program_collect_every_alloc(path: &str, text: Vec<u8>) -> Outcome {
     let path = path.to_string();
-    on_interpreter_thread(move || execute(&path, text, false, true))
+    on_interpreter_thread(move || execute(&path, text, true))
 }
 
 /// Runs `body` on a thread with `INTERPRETER_STACK_BYTES` of stack.
@@ -1307,7 +1258,7 @@ fn on_interpreter_thread(body: impl FnOnce() -> Outcome + Send + 'static) -> Out
 }
 
 /// Everything that happens on the interpreter thread: parse, run, report.
-fn execute(path: &str, text: Vec<u8>, interpret_spike: bool, collect_every_alloc: bool) -> Outcome {
+fn execute(path: &str, text: Vec<u8>, collect_every_alloc: bool) -> Outcome {
     let program = match parse_program(text) {
         Ok(program) => program,
         // **A parse failure stays loud, and Task 12 did not change that.** It
@@ -1332,7 +1283,7 @@ fn execute(path: &str, text: Vec<u8>, interpret_spike: bool, collect_every_alloc
         }
     };
 
-    let mut interp = Interp::new(interpret_spike);
+    let mut interp = Interp::new();
     if collect_every_alloc {
         interp.enable_stress_collect();
     }
@@ -1386,8 +1337,17 @@ fn execute(path: &str, text: Vec<u8>, interpret_spike: bool, collect_every_alloc
 
 #[cfg(test)]
 mod tests {
-    use super::form_name;
+    use super::{form_name, run_program};
     use rexx_parse::{Expr, ExprKind, Operator, PrefixOp};
+
+    /// The path these tests report programs under.
+    ///
+    /// They build programs from bytes rather than from files, so there is no
+    /// real path here to canonicalise, and nothing below reads it back: it
+    /// reaches output only through a raised condition's middle line, which
+    /// none of these programs produces. `tests/spike.rs`'s own copy of this
+    /// constant carries the fuller note, beside the test that does assert it.
+    const TEST_PATH: &str = "/nonexistent/lib-test-program.rex";
 
     fn literal() -> Expr {
         Expr::new(ExprKind::Literal(Box::from(&b"1"[..])), 0..1)
@@ -1450,5 +1410,163 @@ mod tests {
         );
         assert_eq!(form_name(&deep.kind), form_name(&shallow.kind));
         assert_eq!(form_name(&deep.kind), "the prefix operator `-`");
+    }
+
+    // ---- the fragment's lifetime (moved here from `tests/spike.rs`, I7) ----
+    //
+    // These three arrived with Task 3's borrow-shape spike and ran through
+    // `run_program_interpret_spike`, a `pub` entry point that existed for one
+    // reason: `INTERPRET` was not implemented, so an *integration* test could
+    // not reach a fragment at all through the public API. That entry point's
+    // own doc comment named the trade it was making -- a `#[cfg(test)] mod
+    // tests` in this file could prove the same lifetime with no public
+    // surface -- and asked 4b to re-make it rather than inherit it.
+    //
+    // Re-made here, and the argument that once favoured the integration test
+    // now settles it the other way. That argument was "a unit test with
+    // privileged access to private internals proves less about the shape
+    // callers actually get". These tests need no privileged access: they call
+    // `run_program`, the same public entry point on the same sized thread
+    // that `tests/spike.rs` would use, because `INTERPRET` is implemented and
+    // a fragment is reachable through the front door. So the public spike
+    // surface is deleted and nothing about what these tests exercise changed
+    // -- only which file they live in, and that they no longer need a second
+    // `pub fn` to exist.
+
+    /// Step 4's test, and the one property `INTERPRET` has that no other
+    /// instruction does: a name bound inside fragment text outlives the
+    /// fragment, so a *later, separate* fragment reads it back.
+    ///
+    /// Measured on the oracle in 4a: the binding outlives the fragment.
+    #[test]
+    fn interpret_binds_a_name_the_enclosing_body_never_mentions() {
+        let outcome = run_program(
+            TEST_PATH,
+            b"interpret \"zork = 42\"\ninterpret \"say zork\"\n".to_vec(),
+        );
+        assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+        assert_eq!(outcome.stdout, b"42\n");
+    }
+
+    /// Step 2, and the reason the spike exists in the shape it does.
+    ///
+    /// Three separate things are being asserted by one transcript, and they are
+    /// listed here because a single `assert_eq!` hides which one broke:
+    ///
+    /// 1. A fragment created mid-instruction **reads** a name the enclosing body
+    ///    bound (`zzz`).
+    /// 2. A fragment **introduces** a name that appears in no instruction of the
+    ///    enclosing body (`zork`), and a *later, separate* fragment reads it back.
+    ///    This is the case that forces the enclosing activation to own a mutable
+    ///    name-to-slot map, because the enclosing plan is an `Rc` and cannot be
+    ///    extended.
+    /// 3. The enclosing body carries on afterwards with its own slots intact, and
+    ///    a third fragment sees the updated value.
+    ///
+    /// Oracle, verbatim:
+    ///
+    /// ```text
+    /// zzz = 'from the enclosing frame'
+    /// interpret "say zzz"
+    /// interpret "zork = 42"
+    /// interpret "say zork"
+    /// zzz = zzz || '!'
+    /// interpret "say zzz"
+    /// ```
+    ///
+    /// ```text
+    /// from the enclosing frame
+    /// 42
+    /// from the enclosing frame!
+    /// ```
+    ///
+    /// rc 0.
+    #[test]
+    fn a_fragment_shares_the_enclosing_frames_variable_pool() {
+        let program = b"zzz = 'from the enclosing frame'\n\
+                        interpret \"say zzz\"\n\
+                        interpret \"zork = 42\"\n\
+                        interpret \"say zork\"\n\
+                        zzz = zzz || '!'\n\
+                        interpret \"say zzz\"\n";
+        let outcome = run_program(TEST_PATH, program.to_vec());
+        assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+        assert_eq!(
+            outcome.stdout,
+            b"from the enclosing frame\n42\nfrom the enclosing frame!\n"
+        );
+    }
+
+    /// `EXIT` inside a fragment ends the *program*, not the fragment, so control
+    /// leaves the nested loop and the enclosing one together and both `Rc` locals
+    /// drop in order.
+    ///
+    /// Oracle, verbatim:
+    ///
+    /// ```text
+    /// say 'before'
+    /// interpret "say 'inside'"
+    /// interpret "exit"
+    /// say 'after'
+    /// ```
+    ///
+    /// gives `before\ninside\n`, rc 0. `after` is not printed.
+    #[test]
+    fn an_exit_inside_a_fragment_ends_the_program() {
+        let program = b"say 'before'\n\
+                        interpret \"say 'inside'\"\n\
+                        interpret \"exit\"\n\
+                        say 'after'\n";
+        let outcome = run_program(TEST_PATH, program.to_vec());
+        assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+        assert_eq!(outcome.stdout, b"before\ninside\n");
+    }
+
+    /// The reported span comes from one call chain, so what else the program
+    /// evaluated cannot change it.
+    ///
+    /// A regression test for a defect the review found by measuring rather than by
+    /// reading. `eval` records a depth-1 address and a deepest address; if the
+    /// first is rewritten by *every* top-level evaluation while the second moves
+    /// only on a new maximum, the two can end up describing different chains, and
+    /// the frames above `eval` then no longer cancel. A fragment's evaluation runs
+    /// under `run_fragment` under `step` under the enclosing `eval`, about 2 KB
+    /// deeper than a top-level one, so appending one `INTERPRET` to a program was
+    /// enough: measured before the fix, this pair reported **784.0** and
+    /// **782.158**, and the second is the dangerous direction, since a smaller
+    /// per-level cost implies more survivable levels than there are.
+    ///
+    /// The assertion is equality of the two spans rather than a bound on either,
+    /// because the property is "the span does not depend on what else ran" and a
+    /// bound would pass for both the fixed and the broken version.
+    #[test]
+    fn the_stack_span_does_not_depend_on_what_else_the_program_evaluated() {
+        let mut alone = b"say 'a'".to_vec();
+        for _ in 1..1_000 {
+            alone.extend_from_slice(b"||''");
+        }
+        alone.push(b'\n');
+
+        let mut then_a_fragment = alone.clone();
+        then_a_fragment.extend_from_slice(b"interpret \"say 'b'\"\n");
+
+        let alone = run_program(TEST_PATH, alone);
+        let then_a_fragment = run_program(TEST_PATH, then_a_fragment);
+
+        assert_eq!(alone.exit_code, 0, "stderr: {:?}", alone.stderr);
+        assert_eq!(
+            then_a_fragment.exit_code, 0,
+            "stderr: {:?}",
+            then_a_fragment.stderr
+        );
+        assert_eq!(
+            alone.stack.max_depth, then_a_fragment.stack.max_depth,
+            "the fragment's own evaluation is shallow, so it must not move the maximum"
+        );
+        assert_eq!(
+            alone.stack.bytes, then_a_fragment.stack.bytes,
+            "the span must come from the chain that reached the maximum, not from the last \
+             top-level evaluation to start"
+        );
     }
 }

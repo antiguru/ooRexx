@@ -524,8 +524,22 @@ fn phase_4a_subset_matches_the_committed_list() {
     );
 }
 
+/// Criterion 1's coverage property, read against the **union** of every
+/// phase's subset file rather than `phase-4a.txt` alone.
+///
+/// Renamed from `..._by_the_phase_4a_subset` at 4b's Task 1, which is the
+/// first task to make the name wrong: `Interpret` moved into scope, and its
+/// witness cannot live in `phase-4a.txt`, whose own header excludes
+/// `INTERPRET` by definition. Reading the union rather than swapping the file
+/// is what keeps every 4a witness exercised as later phases add their own
+/// subsets -- the reason `read_subset` takes a slice at all (Task 0's Step 4),
+/// and this is the first call site to pass more than one path.
+///
+/// [`EXPECTED_SUBSET`]'s own test deliberately does **not** widen with this
+/// one: it pins `phase-4a.txt`'s exact line list, and a union would destroy
+/// that.
 #[test]
-fn every_in_scope_variant_is_witnessed_by_the_phase_4a_subset() {
+fn every_in_scope_variant_is_witnessed_by_the_phase_subsets() {
     let mut instructions = Coverage::new("InstructionKind", INSTRUCTION_TAGS);
     let mut exprs = Coverage::new("ExprKind", EXPR_TAGS);
     let mut loops = Coverage::new("LoopKind", LOOP_TAGS);
@@ -535,11 +549,14 @@ fn every_in_scope_variant_is_witnessed_by_the_phase_4a_subset() {
     let mut operators = Coverage::new("Operator", OPERATOR_TAGS);
 
     let corpus_dir = corpus_dir();
-    let subset = read_subset(&[&corpus_dir.join("phase-4a.txt")]);
+    let subset = read_subset(&[
+        &corpus_dir.join("phase-4a.txt"),
+        &corpus_dir.join("phase-4b.txt"),
+    ]);
     assert!(
         !subset.is_empty(),
-        "phase-4a.txt named no programs -- that is a corpus defect, not an \
-         empty pass"
+        "the phase subset files named no programs -- that is a corpus defect, \
+         not an empty pass"
     );
 
     for rel_path in &subset {
@@ -596,7 +613,7 @@ fn every_in_scope_variant_is_witnessed_by_the_phase_4a_subset() {
             use std::fmt::Write as _;
             writeln!(
                 report,
-                "{}: {} in-scope variant(s) unwitnessed by phase-4a.txt: {}",
+                "{}: {} in-scope variant(s) unwitnessed by the phase subsets: {}",
                 cov.category,
                 missing.len(),
                 missing.join(", ")

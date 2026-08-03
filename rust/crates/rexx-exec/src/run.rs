@@ -442,9 +442,25 @@ impl Interp {
             // ```
             //
             // so this reproduces the second of those lines and not the
-            // first. A known gap rather than something to fix here: stacking
-            // one echo per nesting level changes `Raised::report`'s shape,
-            // and 4a's only nesting is the fragment spike that 4b deletes.
+            // first. Stacking one echo per nesting level changes
+            // `Raised::report`'s shape, and also needs the fragment's own
+            // clause *text* resolved against `Fragment::source` while its own
+            // line number is taken from the enclosing `INTERPRET` -- neither
+            // of which `FailureSite` (one site, first-wins) can express.
+            //
+            // **4b's Task 1 made this gap reachable through `run_program`,
+            // where before it was latent.** 4a reached a fragment only
+            // through a test-only entry point, so no shipped program could
+            // produce the divergence; `INTERPRET` is implemented now, so any
+            // condition raised inside fragment text -- measured, all six
+            // `LEAVE`/`ITERATE` boundary shapes in `run_fragment`'s own doc
+            // comment, and `interpret "say 2 & 1"` above -- matches the
+            // oracle on stdout, on rc, on the error numbers and on every
+            // line of the report *except* the missing innermost echo. Still
+            // not fixed here (it is a `Raised::report` change, not an
+            // instruction-loop one), but it is now a live divergence rather
+            // than a hypothetical, and the 4b corpus subset's own witness
+            // avoids it only by raising nothing at all.
             let flow =
                 self.step_in_temps_frame(&code, index, instruction, Some(&program.source))?;
             match flow {
@@ -716,9 +732,21 @@ impl Interp {
 
             InstructionKind::Nop => Ok(Flow::Next),
 
-            // 4a builds the fragment machinery and 4b builds the keyword on
-            // top of it, so through `run_program` this is not implemented.
-            InstructionKind::Interpret { expression } if self.interpret_spike => {
+            // `INTERPRET expr`: evaluate to a string, parse it as a fragment,
+            // run it against **this** activation. 4a built the machinery
+            // (`run_fragment`) and 4b's Task 1 is the keyword; the arm used to
+            // be gated on an `interpret_spike` flag that only a test entry
+            // point set, and deleting that flag is the whole of the keyword's
+            // implementation, because `run_fragment` already did the work.
+            //
+            // The `Flow` `run_fragment` answers is forwarded unchanged.
+            // `Flow::Exit` crossing this arm is what makes `interpret "exit"`
+            // end the program rather than the fragment (measured, and pinned
+            // by `an_exit_inside_a_fragment_ends_the_program` in `lib.rs`);
+            // `Flow::Leave`/`Iterate` can no longer reach here at all, since
+            // the search does not cross the boundary -- `run_fragment`'s own
+            // doc comment has the oracle transcripts.
+            InstructionKind::Interpret { expression } => {
                 let value = self.eval(code, expression)?;
                 self.roots.push_temp(value);
                 let text = self.to_text(value).to_vec();
@@ -1350,8 +1378,35 @@ impl Interp {
         {
             self.trace_clause(line, indent, &text);
         }
+        // The debug tripwire I22 scheduled in 4a and left unbuilt, added here
+        // by 4b's Task 1 along with `RootSet::temps_len`, its one prerequisite.
+        //
+        // **What it checks, and why it is here rather than in `pop_frame`.**
+        // `pop_frame` truncates to a watermark rather than popping one frame,
+        // and its own doc comment forbids a balance assertion there: six
+        // `eval.rs` sites open a frame and then use `?`, so their own
+        // `pop_frame` goes unreached on the error path and is healed by this
+        // function's unconditional, outer truncation -- an assertion inside
+        // `pop_frame` would fire on the ordinary error path of a correct
+        // program. That healing is exactly what makes `Err` uninteresting to
+        // check and `Ok` interesting: on the `Ok` path every site did run its
+        // own `pop_frame`, so the stack must be back at or above where this
+        // step found it. Below it means a step popped temps it did not own --
+        // someone else's roots, dropped early, which is the direction that
+        // could turn into a use-after-free once a collector runs for real.
+        //
+        // Cheap enough to leave on in debug and absent in release: one
+        // `Vec::len` before and after, and a comparison.
+        let temps_at_entry = self.roots.temps_len();
         let frame = self.roots.push_frame();
         let flow = self.step(code, index, instruction, source);
+        debug_assert!(
+            flow.is_err() || self.roots.temps_len() >= temps_at_entry,
+            "step popped below its own temps watermark ({} -> {}), so it \
+             discarded roots it did not push",
+            temps_at_entry,
+            self.roots.temps_len()
+        );
         self.roots.pop_frame(frame);
         if flow.is_err() {
             self.record_failure_site(code, index, source, instruction);
@@ -2612,30 +2667,69 @@ impl Interp {
     ///   and it is why `RootSet::grow_slots`'s top-frame assertion holds here.
     ///
     /// That bullet covers only the *inward* direction -- a label inside the
-    /// fragment cannot be targeted, because there are none. The *outward*
-    /// direction is the opposite shape and was missed until the branch
-    /// review found it (F-EX2): a `LEAVE`/`ITERATE` *inside* the fragment
-    /// naming something in the *enclosing* program carries a `SymbolId`
-    /// from the fragment's own table, meaningless once compared against
-    /// the program's. This function refuses that case loudly rather than
-    /// forward a table-relative id -- see the `Loud::interpret_leave` call
-    /// below.
+    /// fragment cannot be targeted, because there are none.
     ///
-    /// **A bare `LEAVE`/`ITERATE` still forwards, and its site is still
-    /// unresolved past this point** (`LeaveOrigin.site`'s own doc: `None`
-    /// whenever `source` was `None` when it stepped, which it always is
-    /// inside a fragment). Unlike a `Raised` condition escaping a fragment
-    /// -- which the enclosing `INTERPRET` clause's own `step_in_temps_frame`
-    /// call gets a fresh chance to record, first-wins, once the error
-    /// propagates back up to it -- a `Flow::Leave`/`Iterate` is `Ok`, so it
-    /// never runs that recording path at all, and an exhausted search
-    /// escaping all the way out reports `<no failing clause recorded>`
-    /// rather than the enclosing `INTERPRET` clause. Left open by this
-    /// round's F-EX2 fix: it needs `record_leave_failure`'s callers to fall
-    /// back to their own current clause when `origin.site` is `None`,
-    /// which touches `run_activation`, `leave_select` and `do_body_outcome`
-    /// together rather than this one function, and nothing measures what
-    /// the oracle actually does here to aim the fix at.
+    /// # The outward direction, measured (4b Task 1)
+    ///
+    /// **A `LEAVE`/`ITERATE` search never crosses this boundary.** The
+    /// fragment's own body is where the search ends: one that reaches the
+    /// end of `run_bounded` below is the exhausted search, and raises
+    /// 28.1/28.2/28.3/28.4 here, exactly as `run_activation` does when the
+    /// same `Flow` reaches the top of the *program*. Measured on the oracle,
+    /// every one of the four families and both block shapes -- the report
+    /// has the full transcripts, and this is the summary:
+    ///
+    /// | fragment text | enclosing construct | oracle |
+    /// |---|---|---|
+    /// | `leave outer` | `do label outer while 1` | 28.3, rc 228 |
+    /// | `leave idx` | `do idx = 1 to 3` | 28.3, rc 228 |
+    /// | `leave` | `do kk = 1 to 3` | 28.1, rc 228 |
+    /// | `iterate` | `do kk = 1 to 3` | 28.2, rc 228 |
+    /// | `iterate outer` | `do label outer idx = 1 to 3` | 28.4, rc 228 |
+    /// | `leave choose` | `select label choose` | 28.3, rc 228 |
+    ///
+    /// So an enclosing loop is invisible from inside the text, including to
+    /// a **bare** `LEAVE` -- which is the case worth pointing at, because
+    /// "the fragment runs inside the enclosing activation" would predict the
+    /// opposite, and until this was measured that is what this function did
+    /// (it forwarded a bare `Leave` outward, and the enclosing `DO` consumed
+    /// it). A loop written *inside* the fragment is unaffected and still
+    /// works normally: its own `run_loop` consumes the `Flow` before it ever
+    /// reaches this point (measured: `interpret "do jj = 1 to 5; ...; if jj
+    /// = 2 then leave; end"` prints two lines and exits 0).
+    ///
+    /// This also settles F-EX2, the branch review's finding that the
+    /// `SymbolId` in a named `Flow::Leave`/`Iterate` is interned in the
+    /// fragment's own fresh `SymbolTable` (`parse_interpret`'s doc) and is
+    /// meaningless to every consumer above this function, all of which
+    /// resolve against the *program's* table -- silently, since nothing
+    /// about a mismatched id looks wrong at the type level. That fix was a
+    /// loud refusal, placed here because here is where the id can still be
+    /// named correctly. The refusal is gone and the placement is why: the
+    /// name is resolved against `fragment.symbols` at the same point, and
+    /// turned into the condition the oracle actually raises. Nothing past
+    /// this function ever sees the id.
+    ///
+    /// **The site the report names is the enclosing `INTERPRET` clause, and
+    /// the oracle prints one line more than that.** `record_leave_failure`
+    /// is called with an origin whose `site` is `None` (`LeaveOrigin.site`'s
+    /// own doc: always `None` inside a fragment, since `source` is), so it
+    /// does nothing, and the enclosing `INTERPRET` clause's own
+    /// `step_in_temps_frame` fills the site in on the way out -- first-wins,
+    /// same as for any other condition raised inside a fragment. The oracle
+    /// echoes **both** clauses, innermost first, each carrying the enclosing
+    /// `INTERPRET`'s line number:
+    ///
+    /// ```text
+    ///      3 *-*   leave outer
+    ///      3 *-*   interpret "leave outer"
+    /// ```
+    ///
+    /// This reproduces the second line only. That is the same known gap
+    /// `run_activation`'s own comment already records for `interpret "say 2
+    /// & 1"` -- stacking one echo per nesting level changes `Raised::report`'s
+    /// shape -- not a new one, and it is why `interpret_dynamic.rex` (the 4b
+    /// subset's witness) raises nothing.
     fn run_fragment(&mut self, text: Vec<u8>) -> Result<Flow, Failure> {
         let fragment: Rc<Fragment> = match parse_interpret(text) {
             Ok(fragment) => Rc::new(fragment),
@@ -2659,22 +2753,36 @@ impl Interp {
         // included, with nothing fragment-specific to add.
         let flow = self.run_bounded(&code, 0, code.body.instructions.len(), None)?;
 
-        // F-EX2 (branch review): a *named* `Leave`/`Iterate` carries a
-        // `SymbolId` interned in `fragment.symbols`, which every consumer
-        // above this function resolves against the *program's* table
-        // instead -- table-relative ids, wrong table, no compile-time
-        // signal either way. Refuse it here, loudly, while `fragment
-        // .symbols` is still the table that can name it correctly; past
-        // this `return` nothing holds a reference to it. A bare (`None`)
-        // `Leave`/`Iterate` carries no id and forwards unchanged, same as
-        // `Goto`/`Exit` always have. See `Loud::interpret_leave` for why
-        // this is a refusal and not a resolution: 4b replaces both this
-        // and the id with something that can actually cross the boundary.
-        match &flow {
-            Flow::Leave(Some(id), _) | Flow::Iterate(Some(id), _) => {
-                Err(Loud::interpret_leave(fragment.symbols.name(*id)).into())
+        // The exhausted search, at the fragment's own boundary rather than
+        // the program's: measured, the oracle's `LEAVE`/`ITERATE` search
+        // does not cross an `INTERPRET` (this function's own doc comment has
+        // the six transcripts). Byte-identical in shape to
+        // `run_activation`'s own four arms, deliberately -- same four
+        // constructors, same `record_leave_failure` call -- because it is
+        // the same event happening at a different boundary.
+        //
+        // `fragment.symbols` is what resolves the name, and this is the last
+        // point at which it can: the id is interned in the fragment's own
+        // fresh table (F-EX2, above), so nothing outside this function could
+        // name it correctly even if it wanted to.
+        match flow {
+            Flow::Leave(name, origin) => {
+                self.record_leave_failure(&origin);
+                let raised = match name {
+                    None => raised_leave_no_loop(),
+                    Some(id) => raised_leave_no_match(fragment.symbols.name(id).as_bytes()),
+                };
+                Err(raised.into())
             }
-            _ => Ok(flow),
+            Flow::Iterate(name, origin) => {
+                self.record_leave_failure(&origin);
+                let raised = match name {
+                    None => raised_iterate_no_loop(),
+                    Some(id) => raised_iterate_no_match(fragment.symbols.name(id).as_bytes()),
+                };
+                Err(raised.into())
+            }
+            other => Ok(other),
         }
     }
 
@@ -3720,21 +3828,21 @@ mod tests {
 
     #[test]
     fn assignment_to_a_variable_a_stem_and_a_compound() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"x = 5\nsay x"),
             b"5\n".to_vec(),
             "a simple variable"
         );
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"a. = 'wd'\nsay a.1"),
             b"wd\n".to_vec(),
             "a bare stem assignment, read through an unset tail"
         );
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"a.1 = 'one'\nsay a.1\nsay a.2"),
             b"one\nA.2\n".to_vec(),
@@ -3746,7 +3854,7 @@ mod tests {
 
     #[test]
     fn say_of_each_value_kind_and_of_an_omitted_expression() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(say_output(&mut interp, b"say 'abc'"), b"abc\n".to_vec());
         assert_eq!(say_output(&mut interp, b"say 1 + 2"), b"3\n".to_vec());
         assert_eq!(
@@ -3763,7 +3871,7 @@ mod tests {
     fn drop_of_a_variable_returns_it_to_unset() {
         // a = 5; drop a; say a -> A (the derived name, not left over from
         // before -- and never `.nil`, which is a value and not an absence).
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"a = 5\ndrop a\nsay a"),
             b"A\n".to_vec()
@@ -3772,7 +3880,7 @@ mod tests {
         // The `.nil`-versus-dropped distinction `RootSet::clear_slot` exists
         // for: `x = .nil` renders "The NIL object"; a dropped variable
         // derives its own name instead, never that string.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"y = .nil\ndrop y\nsay y"),
             b"Y\n".to_vec()
@@ -3784,7 +3892,7 @@ mod tests {
         // u. = 'd'; u.1 = 'one'; drop u.1; say u.1 -> U.1 (tombstoned, not
         // falling back to the default); say u.2 -> d (an untouched tail
         // still does).
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -3798,7 +3906,7 @@ mod tests {
     fn drop_of_a_whole_stem_leaves_it_looking_untouched() {
         // x. = 'd'; x.1 = 'one'; drop x.; say x.1; say x. -> X.1, X. (exactly
         // what a never-touched stem would give).
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -3811,7 +3919,7 @@ mod tests {
     #[test]
     fn drop_of_the_indirect_form() {
         // A simple variable named by another's (upcased) value.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"v = 'x'\nx = 1\ndrop (v)\nsay x"),
             b"X\n".to_vec(),
@@ -3819,7 +3927,7 @@ mod tests {
         );
 
         // A whole stem, named indirectly.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -3831,7 +3939,7 @@ mod tests {
         // One tail, named indirectly, joined-dots key taken verbatim rather
         // than re-resolved as source -- the discriminating transcript from
         // `drop_variable`'s own doc comment.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -3850,7 +3958,7 @@ mod tests {
     #[test]
     fn drop_of_the_indirect_form_is_a_subsidiary_list_of_words() {
         // Two names, blank-separated, both set and both dropped.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -3862,7 +3970,7 @@ mod tests {
 
         // A run of blanks between words, and leading/trailing blanks, both
         // collapse -- still exactly two words.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -3872,7 +3980,7 @@ mod tests {
         );
 
         // A tab (`'09'x`) separates two words exactly like a blank does.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -3883,7 +3991,7 @@ mod tests {
         );
 
         // A mix of shapes in one list: a whole stem and a simple variable.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -3896,7 +4004,7 @@ mod tests {
     #[test]
     fn drop_of_the_indirect_form_validates_every_word() {
         // A digit-led word: 31.2.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"v = '9'\ndrop (v)").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -3905,7 +4013,7 @@ mod tests {
         assert_eq!(raised.additional, vec!["9".to_string()]);
 
         // A dot-led word: 31.3.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"v = '.x'\ndrop (v)").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -3915,7 +4023,7 @@ mod tests {
 
         // A parenthesised word: 20.928, not a second round of indirection --
         // proves the list is not recursive.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"w = 1\nv = '(w)'\ndrop (v)").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -3935,7 +4043,7 @@ mod tests {
         // no other case here carries a newline, and the distinction rested
         // entirely on an end-to-end diff nobody re-runs. Carriage return,
         // form feed and vertical tab behave as the newline does.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"v = 'a'||'0a'x||'b'\ndrop (v)").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -3950,7 +4058,7 @@ mod tests {
         // is dropped, even though `a` sits before the bad word -- measured
         // against the oracle (SIGNAL ON SYNTAX recovery there shows both
         // untouched). The whole list validates before any drop runs.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"a = 1\nb = 2\nv = 'a 9 b'\ndrop (v)").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -3977,13 +4085,13 @@ mod tests {
     fn drop_of_the_indirect_form_on_an_empty_or_blanks_only_value_is_a_no_op() {
         // Measured: `v=''`/`v='   '` both run clean under the oracle -- zero
         // words, nothing to validate or drop.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"v = ''\ndrop (v)\nsay 'after'"),
             b"after\n".to_vec()
         );
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"v = '   '\ndrop (v)\nsay 'after'"),
             b"after\n".to_vec()
@@ -3994,13 +4102,13 @@ mod tests {
 
     #[test]
     fn numeric_digits_changes_rounding_and_resets_to_9_with_no_expression() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"numeric digits 3\nsay 1/3"),
             b"0.333\n".to_vec()
         );
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"numeric digits 3\nnumeric digits\nsay 1/3"),
             b"0.333333333\n".to_vec(),
@@ -4012,7 +4120,7 @@ mod tests {
     fn numeric_digits_reset_reports_a_conflict_exactly_as_if_9_were_typed() {
         // numeric digits 20; numeric fuzz 15; numeric digits -> 33.1, ("9")
         // rejected against the still-15 fuzz -- measured against the oracle.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(
             &mut interp,
             b"numeric digits 20\nnumeric fuzz 15\nnumeric digits",
@@ -4027,7 +4135,7 @@ mod tests {
 
     #[test]
     fn numeric_fuzz_changes_comparison_and_resets_to_0_with_no_expression() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4036,7 +4144,7 @@ mod tests {
             b"1\n".to_vec()
         );
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4049,19 +4157,19 @@ mod tests {
 
     #[test]
     fn numeric_form_scientific_engineering_and_default() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"numeric form engineering\nsay 1e10 + 0"),
             b"10E+9\n".to_vec()
         );
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"numeric form scientific\nsay 1e10 + 0"),
             b"1E+10\n".to_vec()
         );
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4076,7 +4184,7 @@ mod tests {
     fn numeric_form_value_spellings() {
         // The keyword VALUE and the implicit `(expr)` spelling both set the
         // same setting.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4085,7 +4193,7 @@ mod tests {
             b"10E+9\n".to_vec()
         );
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"numeric form ('ENGINEERING')\nsay 1e10 + 0"),
             b"10E+9\n".to_vec()
@@ -4097,7 +4205,7 @@ mod tests {
         // set_form_str's own rule: the runtime VALUE path does no
         // uppercasing -- measured, `numeric form value 'engineering'` is
         // 25.11 under the oracle.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"numeric form value 'engineering'").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -4116,7 +4224,7 @@ mod tests {
     /// in turn.
     #[test]
     fn numeric_digits_fuzz_and_form_value_trace_k_only_with_an_expression() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
         say_output(
             &mut interp,
@@ -4130,7 +4238,7 @@ mod tests {
                 .to_vec()
         );
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
         say_output(
             &mut interp,
@@ -4149,11 +4257,11 @@ mod tests {
 
     #[test]
     fn exit_with_and_without_an_expression() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let value = run_source(&mut interp, b"exit").expect("bare exit runs");
         assert_eq!(value, None);
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let value = run_source(&mut interp, b"exit 42").expect("exit with a result runs");
         let value = value.expect("EXIT 42 carries a result");
         assert_eq!(&*interp.to_text(value), b"42");
@@ -4168,7 +4276,7 @@ mod tests {
         // already rounded to the active NUMERIC DIGITS by the time it gets
         // here, which is where the negative-vs-positive asymmetry the report
         // measured against the oracle comes from.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(interp.exit_code_for(None), 0, "a bare EXIT");
 
         let value = run_source(&mut interp, b"exit 2147483647")
@@ -4235,7 +4343,7 @@ mod tests {
 
     #[test]
     fn a_label_is_a_traced_no_op() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"here: say 'hit'"),
             b"hit\n".to_vec(),
@@ -4245,7 +4353,7 @@ mod tests {
 
     #[test]
     fn nop_is_a_no_op() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"nop\nsay 'after'"),
             b"after\n".to_vec()
@@ -4265,7 +4373,7 @@ mod tests {
     /// wiring prints `abc` and `aXc` respectively.
     #[test]
     fn if_then_else_runs_exactly_one_branch() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4275,7 +4383,7 @@ mod tests {
             "true: runs the THEN branch and skips the ELSE branch entirely"
         );
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4288,7 +4396,7 @@ mod tests {
 
     #[test]
     fn if_then_with_no_else_falls_through_on_false() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4319,7 +4427,7 @@ mod tests {
             ("3", "three-after\n"),
             ("4", "other-after\n"),
         ] {
-            let mut interp = Interp::new(false);
+            let mut interp = Interp::new();
             assert_eq!(
                 say_output(&mut interp, &source(n)),
                 expected.as_bytes().to_vec(),
@@ -4330,7 +4438,7 @@ mod tests {
 
     #[test]
     fn if_condition_that_is_not_0_or_1_raises_34_1() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"if 'x' then nop").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -4344,7 +4452,7 @@ mod tests {
     /// Measured against the oracle (brief's own transcript).
     #[test]
     fn if_condition_that_is_a_comma_list_raises_34_6_not_34_1() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"if 'x', 1 then nop").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -4355,12 +4463,12 @@ mod tests {
 
     #[test]
     fn a_true_comma_list_condition_is_an_and_of_its_parts() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"if 1, 1 then say 'hit'\nelse say 'miss'"),
             b"hit\n".to_vec()
         );
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"if 1, 0 then say 'hit'\nelse say 'miss'"),
             b"miss\n".to_vec()
@@ -4383,7 +4491,7 @@ mod tests {
             ("3", "three-after\n"),
             ("4", "other-after\n"),
         ] {
-            let mut interp = Interp::new(false);
+            let mut interp = Interp::new();
             assert_eq!(
                 say_output(&mut interp, &source(n)),
                 expected.as_bytes().to_vec(),
@@ -4415,7 +4523,7 @@ mod tests {
             ("3", "w3a-done\n"),
             ("4", "w4a-done\n"),
         ] {
-            let mut interp = Interp::new(false);
+            let mut interp = Interp::new();
             assert_eq!(
                 say_output(&mut interp, &source(n)),
                 expected.as_bytes().to_vec(),
@@ -4434,7 +4542,7 @@ mod tests {
     /// ended the whole `SELECT`.
     #[test]
     fn an_absorbed_when_runs_neither_its_own_consequence_nor_otherwise() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4450,7 +4558,7 @@ mod tests {
     /// probed here.
     #[test]
     fn when_absorbing_a_when_parses_and_runs_at_rc_0() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             run_source(
                 &mut interp,
@@ -4474,7 +4582,7 @@ mod tests {
     /// probe before this review used one and missed this.
     #[test]
     fn an_absorbed_whens_raising_condition_escapes_even_though_its_own_consequence_never_runs() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(
             &mut interp,
             b"select\n  when 1 = 1 then\n    when 1 / 0 then nop\n  otherwise nop\nend\nsay 'after'",
@@ -4494,7 +4602,7 @@ mod tests {
     /// this task's own report: `ABSORBED-RAN` never prints, only `after`.
     #[test]
     fn an_absorbed_whens_true_condition_still_never_runs_its_own_consequence() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4518,7 +4626,7 @@ mod tests {
     /// the fix is scoped to `WhenCase` alone.
     #[test]
     fn an_absorbed_whencases_false_condition_branches_to_its_own_false_target() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4537,7 +4645,7 @@ mod tests {
     /// the true path's own consequence too.
     #[test]
     fn an_absorbed_whencases_true_condition_still_never_runs_its_own_consequence() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4549,7 +4657,7 @@ mod tests {
 
     #[test]
     fn select_with_no_when_true_and_no_otherwise_raises_7_3() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"select\n  when 1 = 0 then nop\nend").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -4572,7 +4680,7 @@ mod tests {
     /// way, confirming the fix is scoped to the escape path alone.
     #[test]
     fn an_absorbed_whencases_escaping_false_branch_reports_end_at_its_own_residual_indent() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(
             &mut interp,
             b"select case 2\n  when 2 then\n    when 3 then nop\nend\nsay 'after'",
@@ -4600,7 +4708,7 @@ mod tests {
     /// level) -- this is the one test that distinguishes them.
     #[test]
     fn an_absorbed_whencases_escape_to_end_reports_the_same_constant_offset_nested() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(
             &mut interp,
             b"do i = 1 to 1\n  select case 2\n    when 2 then\n      when 3 then nop\n  end\nend\nsay 'after'",
@@ -4630,7 +4738,7 @@ mod tests {
     /// actually reverting it (this task's report has the transcript).
     #[test]
     fn an_absorbed_whencases_escape_to_otherwise_still_finds_the_enclosing_selects_own_label() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4651,7 +4759,7 @@ mod tests {
     /// applies", which the `LEAVE` test above alone cannot.
     #[test]
     fn an_absorbed_whencases_escape_to_otherwise_reports_a_named_iterate_as_28_5_not_28_4() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(
             &mut interp,
             b"select label s case 2\n  when 2 then\n    when 3 then nop\n  otherwise say 'O'\n  \
@@ -4666,7 +4774,7 @@ mod tests {
 
     #[test]
     fn select_with_no_when_true_and_an_otherwise_runs_it_without_error() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4678,7 +4786,7 @@ mod tests {
 
     #[test]
     fn when_condition_that_is_not_0_or_1_raises_34_2() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"select\n  when 'x' then nop\nend").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -4701,7 +4809,7 @@ mod tests {
     /// condition failed.
     #[test]
     fn a_when_conditions_own_failure_is_attributed_to_the_when_not_the_select() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(&mut interp, b"select\nwhen 'x' then nop\nend").unwrap_err();
         let FailureSite { line, text, .. } = interp
             .failure_site
@@ -4720,7 +4828,7 @@ mod tests {
     /// "whichever `WHEN` this loop happens to be looking at first".
     #[test]
     fn the_second_of_two_whens_own_failure_moves_the_line_with_it() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(
             &mut interp,
             b"select\nwhen 1 = 0 then nop\nwhen 'x' then nop\nend",
@@ -4737,7 +4845,7 @@ mod tests {
     /// the coordinator asked this be checked, not taken on faith.
     #[test]
     fn a_select_cases_own_expression_failure_is_attributed_to_the_select() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(&mut interp, b"select case (1/0)\nwhen 1 then nop\nend").unwrap_err();
         let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(line, 1);
@@ -4750,7 +4858,7 @@ mod tests {
     /// through `step_in_temps_frame` for the `When`/`WhenCase` node itself.
     #[test]
     fn a_whencase_values_own_failure_is_attributed_to_the_when_not_the_select() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(&mut interp, b"select case 1\nwhen (1/0) then nop\nend").unwrap_err();
         let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(line, 2);
@@ -4764,7 +4872,7 @@ mod tests {
     /// coordinator asked for it explicitly, not assumed from the `WHEN` fix.
     #[test]
     fn a_raise_inside_an_otherwise_branch_is_attributed_to_its_own_clause() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(
             &mut interp,
             b"select\nwhen 1 = 0 then nop\notherwise\n  say 1/0\nend",
@@ -4798,7 +4906,7 @@ mod tests {
     /// pre-existing tests green. Restored immediately after.
     #[test]
     fn a_raise_inside_a_matched_whens_body_is_attributed_to_its_own_clause() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(&mut interp, b"select\nwhen 1 = 1 then\n  say 1/0\nend").unwrap_err();
         let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(
@@ -4816,7 +4924,7 @@ mod tests {
     /// after).
     #[test]
     fn a_raise_inside_an_ifs_then_body_is_attributed_to_its_own_clause() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(&mut interp, b"if 1 = 1 then\n  say 1/0").unwrap_err();
         let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(
@@ -4835,7 +4943,7 @@ mod tests {
     /// opposites (`ast.rs:801-815`, and the brief's own framing).
     #[test]
     fn whencase_comma_is_an_or_of_equals_the_opposite_of_a_plain_whens_and() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4845,7 +4953,7 @@ mod tests {
             "SELECT CASE: an OR of == comparisons"
         );
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"select\n  when 1, 2 then nop\nend").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -4863,7 +4971,7 @@ mod tests {
     /// match `when 7`, because the two are not byte-identical.
     #[test]
     fn select_case_compares_with_strict_equality_not_numeric_equality() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4872,7 +4980,7 @@ mod tests {
             b"miss\n".to_vec()
         );
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4889,7 +4997,7 @@ mod tests {
                 .into_bytes()
         };
         for (v, expected) in [("1", "one\n"), ("2", "two\n"), ("3", "other\n")] {
-            let mut interp = Interp::new(false);
+            let mut interp = Interp::new();
             assert_eq!(
                 say_output(&mut interp, &source(v)),
                 expected.as_bytes().to_vec(),
@@ -4902,7 +5010,7 @@ mod tests {
 
     #[test]
     fn a_labelled_select_with_otherwise_runs_normally() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4914,7 +5022,7 @@ mod tests {
 
     #[test]
     fn a_select_nested_inside_an_ifs_then_branch_is_fully_resolved_before_resuming() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4928,7 +5036,7 @@ mod tests {
 
     #[test]
     fn a_simple_do_block_runs_its_body_exactly_once_with_no_control() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"do\nsay 'once'\nend"),
             b"once\n".to_vec()
@@ -4941,7 +5049,7 @@ mod tests {
     /// bare `LEAVE`.
     #[test]
     fn loop_alone_is_forever_and_do_alone_is_a_block_not_a_loop() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4953,7 +5061,7 @@ mod tests {
 
     #[test]
     fn do_forever_runs_until_a_bare_leave() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -4965,19 +5073,19 @@ mod tests {
 
     #[test]
     fn do_count_repeats_exactly_the_evaluated_number_of_times() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"n = 0\ndo 3\nn = n + 1\nend\nsay n"),
             b"3\n".to_vec()
         );
         // The repeat count is an expression, evaluated once.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"n = 0\ndo 1 + 2\nn = n + 1\nend\nsay n"),
             b"3\n".to_vec()
         );
         // Zero repetitions is legal and runs the body no times at all.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"n = 0\ndo 0\nn = n + 1\nend\nsay n"),
             b"0\n".to_vec()
@@ -4996,7 +5104,7 @@ mod tests {
     /// running a bare-count program through it.
     #[test]
     fn a_bare_repeat_count_traces_as_for_the_same_as_an_explicit_one() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
         say_output(&mut interp, b"do 2\nnop\nend");
         // `>K>` fires exactly once, on the first pass, matching every
@@ -5028,7 +5136,7 @@ mod tests {
     /// the short-circuit test), since neither one traces anything.
     #[test]
     fn a_comma_list_conditions_own_elements_each_trace_their_result_under_trace_r() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
         say_output(&mut interp, b"if 1, 1 then nop");
         assert_eq!(
@@ -5052,7 +5160,7 @@ mod tests {
     /// oracle (`t13_until_multi.rex`, this task's report).
     #[test]
     fn do_until_re_echoes_its_clause_exactly_once_per_pass_not_twice_or_zero() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
         say_output(&mut interp, b"n = 0\ndo until n = 2\nn = n + 1\nend\nsay n");
         assert_eq!(
@@ -5067,7 +5175,7 @@ mod tests {
 
     #[test]
     fn do_with_takes_the_loud_path() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"do with index i over 'x'\nsay i\nend").unwrap_err();
         let Failure::Loud(loud) = failure else {
             panic!("expected Loud, got {failure:?}");
@@ -5088,7 +5196,7 @@ mod tests {
 
     #[test]
     fn do_counter_takes_the_loud_path_regardless_of_which_other_kind_it_rides_on() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"do counter c i = 1 to 3\nnop\nend").unwrap_err();
         let Failure::Loud(loud) = failure else {
             panic!("expected Loud, got {failure:?}");
@@ -5105,12 +5213,12 @@ mod tests {
 
     #[test]
     fn a_controlled_loop_runs_to_then_by_then_stops() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"do i = 1 to 3\nsay i\nend"),
             b"1\n2\n3\n".to_vec()
         );
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"do i = 10 to 1 by -4\nsay i\nend"),
             b"10\n6\n2\n".to_vec(),
@@ -5122,7 +5230,7 @@ mod tests {
     /// to 3` steps by fractional values, not an error.
     #[test]
     fn a_controlled_loops_own_values_need_only_be_numeric_not_whole() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"do i = 1.5 to 3\nsay i\nend"),
             b"1.5\n2.5\n".to_vec()
@@ -5134,7 +5242,7 @@ mod tests {
     /// terminates.
     #[test]
     fn a_controlled_loop_with_by_0_loops_forever() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5147,7 +5255,7 @@ mod tests {
 
     #[test]
     fn a_controlled_loops_own_for_caps_the_iteration_count_independent_of_to() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5162,7 +5270,7 @@ mod tests {
     /// iterations -- measured against the oracle.
     #[test]
     fn the_control_variable_is_bound_even_when_the_loop_never_runs_its_body() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"do i = 5 to 3\nsay 'never'\nend\nsay i"),
             b"5\n".to_vec()
@@ -5174,12 +5282,12 @@ mod tests {
     /// a stem target out of scope, and this test uses none.
     #[test]
     fn do_over_a_non_stem_target_iterates_once_yielding_itself() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"do x over 'hello'\nsay x\nend"),
             b"hello\n".to_vec()
         );
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"do x over 42\nsay x\nend"),
             b"42\n".to_vec()
@@ -5195,7 +5303,7 @@ mod tests {
     /// and named as a judgement call in the report.
     #[test]
     fn do_over_for_0_skips_the_single_non_stem_iteration() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5203,7 +5311,7 @@ mod tests {
             ),
             b"after\n".to_vec()
         );
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"do x over 'hello' for 5\nsay x\nend"),
             b"hello\n".to_vec()
@@ -5216,7 +5324,7 @@ mod tests {
     /// parses as `ExprKind::Stem`), never by evaluating it.
     #[test]
     fn do_over_a_stem_target_takes_the_loud_path() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"a.1 = 'x'\ndo v over a.\nsay v\nend").unwrap_err();
         let Failure::Loud(loud) = failure else {
             panic!("expected Loud, got {failure:?}");
@@ -5242,7 +5350,7 @@ mod tests {
     /// divergence), but the comment was wrong about which one it is.
     #[test]
     fn do_over_a_parenthesised_stem_target_is_also_caught() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure =
             run_source(&mut interp, b"a.1 = 'x'\ndo v over (a.)\nsay v\nend").unwrap_err();
         let Failure::Loud(loud) = failure else {
@@ -5274,7 +5382,7 @@ mod tests {
     /// each in turn.
     #[test]
     fn a_controlled_loops_header_values_round_at_entry_not_the_exact_parse() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5286,7 +5394,7 @@ mod tests {
              not un-round it -- the exact parse would give 2.23456"
         );
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5309,7 +5417,7 @@ mod tests {
             (&b"do i = 1 to 'x'\nnop\nend"[..], "x"),
             (&b"do i = 1 by 'x'\nnop\nend"[..], "x"),
         ] {
-            let mut interp = Interp::new(false);
+            let mut interp = Interp::new();
             let failure = run_source(&mut interp, source).unwrap_err();
             let Failure::Raised(raised) = failure else {
                 panic!("expected Raised, got {failure:?}");
@@ -5326,7 +5434,7 @@ mod tests {
             (&b"do i = 1 to 3 for -1\nnop\nend"[..], "-1"),
             (&b"do i = 1 to 3 for 1.5\nnop\nend"[..], "1.5"),
         ] {
-            let mut interp = Interp::new(false);
+            let mut interp = Interp::new();
             let failure = run_source(&mut interp, source).unwrap_err();
             let Failure::Raised(raised) = failure else {
                 panic!("expected Raised, got {failure:?}");
@@ -5343,7 +5451,7 @@ mod tests {
             (&b"do -1\nnop\nend"[..], "-1"),
             (&b"do 2.5\nnop\nend"[..], "2.5"),
         ] {
-            let mut interp = Interp::new(false);
+            let mut interp = Interp::new();
             let failure = run_source(&mut interp, source).unwrap_err();
             let Failure::Raised(raised) = failure else {
                 panic!("expected Raised, got {failure:?}");
@@ -5365,7 +5473,7 @@ mod tests {
     /// fit comfortably under 18 digits and only fail to fit under 3.
     #[test]
     fn a_repetition_or_for_count_is_validated_under_the_current_digits_not_a_fixed_width() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure =
             run_source(&mut interp, b"numeric digits 3\ndo 12345\nend\nsay 'after'").unwrap_err();
         let Failure::Raised(raised) = failure else {
@@ -5373,7 +5481,7 @@ mod tests {
         };
         assert_eq!((raised.number, raised.sub), (26, 2));
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(
             &mut interp,
             b"numeric digits 3\ndo i = 1 to 99999 for 12345\nend\nsay 'after'",
@@ -5389,12 +5497,12 @@ mod tests {
 
     #[test]
     fn do_while_tests_the_condition_before_the_body_and_do_until_after() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"i = 0\ndo while i < 2\ni = i + 1\nsay i\nend"),
             b"1\n2\n".to_vec()
         );
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5407,7 +5515,7 @@ mod tests {
 
     #[test]
     fn a_while_condition_that_is_not_0_or_1_raises_34_3_not_34_1() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"do while 'x'\nnop\nend").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -5418,7 +5526,7 @@ mod tests {
 
     #[test]
     fn an_until_condition_that_is_not_0_or_1_raises_34_4() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"do until 'x'\nnop\nend").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -5431,7 +5539,7 @@ mod tests {
     /// `eval_condition`'s own rule, reused unchanged from `IF`/`WHEN`.
     #[test]
     fn a_comma_list_while_condition_raises_34_6_not_34_3() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"do while 'x', 1\nnop\nend").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -5449,13 +5557,13 @@ mod tests {
     /// `do` line.
     #[test]
     fn until_is_attributed_to_the_end_clause_while_while_is_attributed_to_the_do_clause() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(&mut interp, b"do until 'x'\nnop\nend").unwrap_err();
         let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(line, 3, "the END's own line");
         assert_eq!(text, b"end".to_vec(), "the END's own clause, not the DO's");
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(&mut interp, b"do while 'x'\nnop\nend").unwrap_err();
         let FailureSite { line, text, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(line, 1, "the DO's own line");
@@ -5476,7 +5584,7 @@ mod tests {
     /// identically.
     #[test]
     fn iterate_reaches_untils_own_bottom_of_iteration_test_rather_than_skipping_it() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5490,7 +5598,7 @@ mod tests {
 
     #[test]
     fn bare_leave_stops_the_innermost_loop() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5502,7 +5610,7 @@ mod tests {
 
     #[test]
     fn bare_iterate_skips_the_rest_of_the_current_pass() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5519,7 +5627,7 @@ mod tests {
     /// intercepts the bare `LEAVE` at all.
     #[test]
     fn bare_leave_passes_transparently_through_an_unlabelled_simple_block() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5535,7 +5643,7 @@ mod tests {
     /// which the next test pins.
     #[test]
     fn bare_leave_in_an_unlabelled_simple_block_with_nothing_enclosing_it_raises_28_1() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"do\nleave\nend").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -5545,7 +5653,7 @@ mod tests {
 
     #[test]
     fn a_labelled_simple_block_is_leavable_by_its_own_name() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5563,7 +5671,7 @@ mod tests {
     /// states.
     #[test]
     fn an_ordinary_clause_label_does_not_name_the_loop_it_precedes() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure =
             run_source(&mut interp, b"outer: do i = 1 to 3\nleave outer\nend").unwrap_err();
         let Failure::Raised(raised) = failure else {
@@ -5572,7 +5680,7 @@ mod tests {
         assert_eq!((raised.number, raised.sub), (28, 3));
         assert_eq!(raised.additional, vec!["OUTER".to_string()]);
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure =
             run_source(&mut interp, b"outer: do i = 1 to 3\niterate outer\nend").unwrap_err();
         let Failure::Raised(raised) = failure else {
@@ -5589,7 +5697,7 @@ mod tests {
     /// `leave_nested_outer.rex`'s own transcript, reproduced here.
     #[test]
     fn a_controlled_loops_own_control_variable_is_an_automatic_label() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5601,7 +5709,7 @@ mod tests {
 
     #[test]
     fn iterate_naming_the_outer_loops_control_variable_cuts_every_outer_pass_short() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5617,7 +5725,7 @@ mod tests {
     /// `SELECT` does not make it leavable (28.3, exactly like a loop).
     #[test]
     fn leave_by_name_exits_a_select_only_when_it_was_given_that_label() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5626,7 +5734,7 @@ mod tests {
             b"after\n".to_vec()
         );
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(
             &mut interp,
             b"select\nwhen 1 = 1 then\ndo\nleave sel\nend\notherwise\nnop\nend",
@@ -5649,7 +5757,7 @@ mod tests {
     /// 28.3 instead of the clean exit this test asserts.
     #[test]
     fn leave_by_name_reaches_a_select_label_from_inside_its_otherwise_branch() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5664,7 +5772,7 @@ mod tests {
     /// the kind is wrong.**
     #[test]
     fn a_named_iterate_matching_a_labelled_simple_block_raises_28_5_not_28_4() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"do label x\nsay 1\niterate x\nend").unwrap_err();
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -5675,7 +5783,7 @@ mod tests {
 
     #[test]
     fn a_named_iterate_matching_a_select_label_raises_28_5() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let failure = run_source(
             &mut interp,
             b"select label s\nwhen 1 = 1 then\ndo\niterate s\nend\notherwise\nnop\nend",
@@ -5695,7 +5803,7 @@ mod tests {
         // pass, past both the SELECT's own resume point and back up to the
         // enclosing DO, printing exactly one "skip"/"keep" pair per
         // iteration and never both for the same i.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5718,7 +5826,7 @@ mod tests {
     /// for as long as it did.
     #[test]
     fn leave_no_match_through_two_real_loops_resets_to_the_outer_ones_own_indent() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(
             &mut interp,
             b"do i = 1 to 3\ndo j = 1 to 3\nleave zz\nend\nend",
@@ -5740,7 +5848,7 @@ mod tests {
     /// its own dedicated tests.
     #[test]
     fn iterate_wrong_kind_through_a_transparent_unlabelled_block_reports_full_lexical_depth() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(&mut interp, b"do label x\ndo\niterate x\nend\nend").unwrap_err();
         let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(indent, 4, "two DO frames deep, matching the oracle");
@@ -5822,7 +5930,7 @@ mod tests {
                 0,
             ),
         ] {
-            let mut interp = Interp::new(false);
+            let mut interp = Interp::new();
             run_source(&mut interp, source).unwrap_err();
             let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
             assert_eq!(indent, expect, "{name}: {source:?}");
@@ -5845,7 +5953,7 @@ mod tests {
     /// asserts.
     #[test]
     fn leave_and_iterate_survive_a_do_nested_in_an_ifs_then_iterating_repeatedly() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(
                 &mut interp,
@@ -5857,48 +5965,97 @@ mod tests {
         );
     }
 
-    // ---- F-EX2: a named LEAVE/ITERATE cannot cross the run_fragment boundary ----
+    // ---- the LEAVE/ITERATE search stops at the run_fragment boundary ----
 
-    /// `run_fragment` gives `"leave foo"` its own fresh `SymbolTable`, so
-    /// `foo` interns at id 0 there regardless of what the enclosing program's
-    /// own table looks like. This program's own table also has exactly one
-    /// symbol -- `BAR`, also id 0, from the assignment on the first line --
-    /// chosen deliberately so the two tables collide on the same id with
-    /// *different* names, which is exactly the shape that makes forwarding
-    /// the id instead of refusing it produce a wrong answer instead of a
-    /// panic: mutation-kill this test by replacing the `match &flow { ... }`
-    /// in `run_fragment` with a bare `Ok(flow)` (its pre-fix shape), and the
-    /// error changes from `Loud` naming `"FOO"` to the exhausted-search
-    /// `Raised` 28.3 naming `"BAR"` -- the enclosing program's own symbol 0,
-    /// not the one `leave` actually named.
+    /// The measured rule, all four families at once: a `LEAVE`/`ITERATE`
+    /// inside `INTERPRET` text never sees the enclosing loop, so an
+    /// enclosing `DO` that would have consumed it does not, and it is the
+    /// exhausted search instead. `run_fragment`'s own doc comment has the
+    /// oracle transcripts these numbers come from.
+    ///
+    /// **The bare rows are the ones that decide the design**, and until
+    /// this was measured the code did the opposite: a bare `Flow::Leave`
+    /// forwarded out of the fragment and the enclosing `DO` swallowed it,
+    /// which is what "the fragment runs inside the enclosing activation"
+    /// predicts and what the oracle does not do. Mutation-kill: restore
+    /// `Ok(flow)` for the `None` arms in `run_fragment` and the two bare
+    /// rows here run to completion with no error at all.
     #[test]
-    fn a_fragments_named_leave_refuses_to_cross_the_boundary_rather_than_forward_an_id() {
-        let mut interp = Interp::new(true);
-        let failure = run_source(&mut interp, b"bar = 1\ninterpret \"leave foo\"\n").unwrap_err();
-        let Failure::Loud(loud) = failure else {
-            panic!("expected Loud (F-EX2's refusal), got {failure:?}");
-        };
-        assert!(
-            loud.message.contains("\"FOO\""),
-            "message should name the fragment's own symbol, got {:?}",
-            loud.message
-        );
+    fn a_fragments_leave_or_iterate_never_reaches_the_enclosing_loop() {
+        for (source, number, sub, additional) in [
+            (
+                &b"do kk = 1 to 3\ninterpret \"leave\"\nend\n"[..],
+                28u16,
+                1u16,
+                Vec::new(),
+            ),
+            (
+                &b"do kk = 1 to 3\ninterpret \"iterate\"\nend\n"[..],
+                28,
+                2,
+                Vec::new(),
+            ),
+            (
+                &b"do label outer while 1\ninterpret \"leave outer\"\nend\n"[..],
+                28,
+                3,
+                vec!["OUTER".to_string()],
+            ),
+            (
+                &b"do label outer kk = 1 to 3\ninterpret \"iterate outer\"\nend\n"[..],
+                28,
+                4,
+                vec!["OUTER".to_string()],
+            ),
+        ] {
+            let mut interp = Interp::new();
+            let failure = run_source(&mut interp, source).unwrap_err();
+            let Failure::Raised(raised) = failure else {
+                panic!("expected Raised for {source:?}, got {failure:?}");
+            };
+            assert_eq!((raised.number, raised.sub), (number, sub), "{source:?}");
+            assert_eq!(raised.additional, additional, "{source:?}");
+        }
     }
 
-    /// The same shape, but a bare (unnamed) `LEAVE` -- which carries no
-    /// `SymbolId` and so has nothing for F-EX2's refusal to catch -- still
-    /// forwards out of the fragment exactly as it did before that fix, and
-    /// still becomes the ordinary exhausted-search error at the top.
-    /// Mutation-kill by making the refusal in `run_fragment` unconditional
-    /// (matching on `Flow::Leave(..)`/`Flow::Iterate(..)` instead of only
-    /// the `Some(id)` arms): this test then gets `Loud` instead of `Raised`.
+    /// The name in 28.3/28.4 is resolved against the **fragment's** symbol
+    /// table, which is the half of F-EX2 that survives the rule above.
+    ///
+    /// `run_fragment` gives `"leave foo"` its own fresh `SymbolTable`, so
+    /// `foo` interns at id 0 there regardless of what the enclosing
+    /// program's own table looks like. This program's own table also has
+    /// exactly one symbol -- `BAR`, also id 0, from the assignment on the
+    /// first line -- chosen deliberately so the two tables collide on the
+    /// same id with *different* names, which is what makes resolving
+    /// against the wrong table give a wrong answer rather than a panic.
+    /// Mutation-kill: resolve through the enclosing `code.symbols` instead
+    /// and 28.3 names `"BAR"`, the enclosing program's own symbol 0, not the
+    /// one `leave` actually named.
     #[test]
-    fn a_fragments_bare_leave_still_forwards_across_the_boundary() {
-        let mut interp = Interp::new(true);
-        let failure = run_source(&mut interp, b"interpret \"leave\"\n").unwrap_err();
-        let Failure::Raised(_) = failure else {
-            panic!("expected Raised (the ordinary exhausted-search error), got {failure:?}");
+    fn a_fragments_named_leave_is_resolved_against_the_fragments_own_table() {
+        let mut interp = Interp::new();
+        let failure = run_source(&mut interp, b"bar = 1\ninterpret \"leave foo\"\n").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
         };
+        assert_eq!((raised.number, raised.sub), (28, 3));
+        assert_eq!(raised.additional, vec!["FOO".to_string()]);
+    }
+
+    /// The other side of the boundary rule: a loop written *inside* the
+    /// fragment consumes its own `LEAVE` normally, so the rule above is a
+    /// statement about crossing the boundary and not a blanket refusal.
+    /// Measured: this program prints two lines and exits 0.
+    #[test]
+    fn a_leave_inside_the_fragments_own_loop_is_consumed_there() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"interpret \"do jj = 1 to 5; say 'frag' jj; if jj = 2 then leave; end\"\nsay 'after'\n"
+            ),
+            b"frag 1\nfrag 2\nafter\n".to_vec()
+        );
     }
 
     // ---- Task 11's own indentation quantity ----
@@ -5913,7 +6070,7 @@ mod tests {
                 6,
             ),
         ] {
-            let mut interp = Interp::new(false);
+            let mut interp = Interp::new();
             run_source(&mut interp, source).unwrap_err();
             let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
             assert_eq!(indent, spaces, "{source:?}");
@@ -5929,7 +6086,7 @@ mod tests {
     /// for anything to have failed to unwind.
     #[test]
     fn the_indent_after_a_loop_has_already_exited_is_not_left_over_from_it() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(&mut interp, b"do i = 1 to 3\nsay i\nend\nsay 1/0").unwrap_err();
         let FailureSite { indent, text, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(
@@ -5954,7 +6111,7 @@ mod tests {
             &b"do i = 1 to 3 for 1/0\nsay 1\nend"[..],
             &b"do i = 1 to 3 by 1/0\nsay 1\nend"[..],
         ] {
-            let mut interp = Interp::new(false);
+            let mut interp = Interp::new();
             run_source(&mut interp, source).unwrap_err();
             let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
             assert_eq!(indent, 0, "{source:?}");
@@ -5966,12 +6123,12 @@ mod tests {
     /// is indented two at top level, not zero.
     #[test]
     fn while_and_until_are_indented_inside_the_loops_own_frame() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(&mut interp, b"do while 1/0\nsay 1\nend").unwrap_err();
         let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(indent, 2);
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(&mut interp, b"do until 1/0\nsay 1\nend").unwrap_err();
         let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(indent, 2);
@@ -5984,7 +6141,7 @@ mod tests {
     /// by two, not zero).
     #[test]
     fn a_whens_own_condition_is_indented_at_the_selects_own_two_spaces() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(&mut interp, b"select\nwhen 1/0 then nop\nend").unwrap_err();
         let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(indent, 2);
@@ -5998,12 +6155,12 @@ mod tests {
     /// shaped machinery a `WHEN`'s `THEN` is.
     #[test]
     fn a_matched_whens_then_body_indents_six_but_otherwises_body_indents_only_four() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(&mut interp, b"select\nwhen 1 = 1 then say 1/0\nend").unwrap_err();
         let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(indent, 6);
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(
             &mut interp,
             b"select\nwhen 1 = 0 then nop\notherwise\nsay 1/0\nend",
@@ -6022,17 +6179,17 @@ mod tests {
     /// giving eight.
     #[test]
     fn an_ifs_matched_then_or_else_branch_indents_four_and_an_else_if_chain_indents_eight() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(&mut interp, b"if 1 = 1 then say 1/0").unwrap_err();
         let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(indent, 4, "THEN");
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(&mut interp, b"if 1 = 0 then say 2\nelse say 1/0").unwrap_err();
         let FailureSite { indent, .. } = interp.failure_site.expect("a site was resolved");
         assert_eq!(indent, 4, "a plain ELSE, not part of an else-if chain");
 
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(
             &mut interp,
             b"if 1 = 0 then say 2\nelse if 1 = 1 then say 1/0",
@@ -6160,7 +6317,7 @@ mod tests {
     /// different construct kinds, not only same-kind nesting.
     #[test]
     fn a_select_nested_inside_a_do_composes_the_two_constructs_own_contributions() {
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         run_source(
             &mut interp,
             b"do i = 1 to 3\nselect\nwhen 1 = 1 then say 1/0\notherwise nop\nend\nend",
@@ -6180,7 +6337,7 @@ mod tests {
         // give before Task 11. Direct coverage: a labelled LOOP closes
         // cleanly (EndStyle::LabeledDo is exercised on the same code path
         // EndStyle::Do/Loop are).
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         assert_eq!(
             say_output(&mut interp, b"do label x\nsay 'ok'\nend"),
             b"ok\n".to_vec()

@@ -507,7 +507,7 @@ mod tests {
     #[test]
     fn a_dropped_tail_is_a_tombstone_that_does_not_take_the_default() {
         // u. = 'd' ; u.1 = 'one' ; drop u.1 ; say u.1 -> U.1 ; say u.2 -> d
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         activated(&mut interp);
 
         let d = interp.text(b"d");
@@ -526,7 +526,7 @@ mod tests {
     fn bare_stem_assignment_shares_the_object_when_the_value_is_already_a_stem() {
         // a. = 1 ; b. = a. ; a.1 = 2 ; say b.1 -> 2
         // a. = 9 (afterward) ; say b. -> 1 ; say b.1 -> 2  (b. keeps the OLD object)
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         activated(&mut interp);
 
         let one = interp.number(Number::parse("1").unwrap(), 9, Form::Scientific);
@@ -552,7 +552,7 @@ mod tests {
     #[test]
     fn dropping_the_whole_stem_leaves_an_old_alias_intact() {
         // r. = 'rd' ; u = r. ; drop r. ; say u -> rd
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         activated(&mut interp);
 
         let rd = interp.text(b"rd");
@@ -574,7 +574,7 @@ mod tests {
     #[test]
     fn reassigning_the_whole_stem_leaves_an_old_alias_intact() {
         // s. = 'def' ; t = s. ; s. = 'other' ; say t -> def
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         activated(&mut interp);
 
         let def = interp.text(b"def");
@@ -602,7 +602,7 @@ mod tests {
         // identical either way. Only `reading_an_untouched_stem_auto_
         // vivifies_a_shared_object` below, which aliases the result, can
         // tell the two implementations apart.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         activated(&mut interp);
         let q = interp.read_stem(b"Q.");
         assert_eq!(&*interp.to_text(q), b"Q.");
@@ -625,7 +625,7 @@ mod tests {
         //    own tail name (`A.7`), silently breaking D15a's "a tombstone/
         //    unresolved tail does not take a name-shaped default" shape one
         //    level up from where it is normally tested.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         activated(&mut interp);
 
         let a_value = interp.read_stem(b"A.");
@@ -654,7 +654,7 @@ mod tests {
         // named `I` instead of deriving the text `I`, which this test
         // cannot observe going wrong through rendering alone -- so it
         // additionally checks that no slot was bound for `I` at all.
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let (program, id) = compound_id(&mut interp, b"say v.i");
 
         let code = Code {
@@ -681,7 +681,7 @@ mod tests {
     #[test]
     fn tail_keys_are_verbatim_and_case_sensitive() {
         // i = 'abc' ; v.i = 'val' ; say v.i v.ABC -> val V.ABC
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let (program, id) = compound_id(&mut interp, b"say v.i");
         let abc = interp.text(b"abc");
         let i_slot = interp.slot_of(b"I");
@@ -711,7 +711,7 @@ mod tests {
     #[test]
     fn a_multi_level_tail_joins_its_pieces_with_a_period() {
         // i = 1 ; j = 2 ; a.i.j = 'deep' ; say a.1.2 -> deep
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         let (program, id) = compound_id(&mut interp, b"say a.i.j");
 
         let one = interp.text(b"1");
@@ -754,7 +754,7 @@ mod tests {
     #[test]
     fn a_tail_on_a_completely_untouched_stem_derives_its_name() {
         // say never_touched.5 -> NEVER_TOUCHED.5
-        let mut interp = Interp::new(false);
+        let mut interp = Interp::new();
         activated(&mut interp);
         let value = interp.stem_get(b"NEVER_TOUCHED.", b"5");
         assert_eq!(&*interp.to_text(value), b"NEVER_TOUCHED.5");
