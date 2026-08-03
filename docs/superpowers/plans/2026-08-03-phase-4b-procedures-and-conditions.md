@@ -532,12 +532,15 @@ If the answer is zero, say so plainly -- it would mean the deviation bought noth
 - Modify: `rust/crates/rexx-exec/tests/owners.rs`
 
 **Interfaces:**
-- Produces: a body selector field on `Activation` whose `None` is the main body and whose `Some(i)` is `directives[i]`'s -- the same shape `BodyKey::directive` carries. A sibling constructor to `Activation::new` that inherits `settings` and `trace_mode` from the caller. `Interp::depth: usize`. A `Flow` variant for `RETURN` (`Flow` currently has `Next`, `Goto`, `Exit`, `Leave`, `Iterate` and none of them expresses "unwind to the activation boundary").
+- Produces: a body selector field on `Activation` whose `None` is the main body and whose `Some(i)` is `directives[i]`'s -- the same shape `BodyKey::directive` carries. A sibling constructor to `Activation::new` that inherits `settings` and `trace_mode` from the caller. A `Flow` variant for `RETURN` (`Flow` currently has `Next`, `Goto`, `Exit`, `Leave`, `Iterate` and none of them expresses "unwind to the activation boundary").
+- **Correction, after the task ran: there is no `Interp::depth`.** An earlier revision of this line promised later tasks that field. The name was already taken by `eval`'s expression-recursion depth, and the activation quantity is exactly **`activations.len()`**, checked against `MAX_ACTIVATION_DEPTH` -- a second field could only ever disagree with it. Later tasks read `activations.len()`.
 - Consumes: `Raised::insufficient_stack()` (`src/error.rs:109`), which **already exists** -- do not write a second raiser.
 - Consumes: **three mechanisms Task 2 built for you.** Read each field's own doc comment before using it; they were written for this task and one of them names it.
 
   * **`Interp::activation_indent` (`src/lib.rs:923`).** **Set, not added**, and `indent_offset` is **zeroed alongside it**, because the enclosing clause's printed indent already contains any escape elevation and leaving it would count that twice -- measured at 16 where the oracle prints 12. Save and restore both around the callee, the way the `Interpret` arm does, so nesting works. Its doc already states your value: **the calling clause's printed indent plus two**, from a measured `CALL` at printed indent 4 into a flat routine echoing the callee at 6.
-  * **`Interp::clause_line_override` (`src/lib.rs:987`).** `INTERPRET` uses this because every echo in a fragment stack carries the **enclosing** clause's line. **`CALL` is the opposite case** -- each activation's echo carries **its own** line -- so this task must **not** set it, and must confirm a `CALL` inside a fragment still resolves each line correctly. That interaction is untested today.
+  * **`Interp::clause_line_override` (`src/lib.rs:987`).** `INTERPRET` uses this because every echo in a fragment stack carries the **enclosing** clause's line. **`CALL` is the opposite case** -- each activation's echo carries **its own** line.
+
+    **This instruction originally said "must not set it", and that was necessary but not sufficient.** Task 3 found by running it that a `CALL` inside an `INTERPRET` must **clear** the override the enclosing fragment already set, or every callee clause prints at the fragment's line. Task 3 also found that label resolution must go against the running **activation's** body rather than the body being stepped, because inside a fragment those differ and a fragment's label table is always empty -- so every `CALL` inside an `INTERPRET` was unresolvable. **Both defects passed every test that contained no `INTERPRET`.** Later tasks touching this pair: save, clear, restore, and test the composition in both directions.
   * **`seal_site_level` (`src/run.rs:3023`)**, which moves `failure_site` into the `failure_sites` stack. Call it at each activation boundary. Note `failure_site` is still **first-wins** by design; Task 7 owns clearing it on trap resumption.
 
 **Why:** `run_activation` hardcodes `&program.main`. True for every activation 4a can build, false the moment a callee runs, and the failure is silent and with the right program.
@@ -930,9 +933,15 @@ Four things to read off it: the callee's `sub:` **label clause is echoed**, and 
 
 `tests/trace_oracle.rs`'s module doc carries the regeneration command, and all five were verified byte-identical in 4a.
 
-- [ ] **Step 2: Probe `trace l` on a `::routine` and on a `::method`, and settle `>I>`/`<I<`'s owner**
+- [ ] **Step 2: Record `>I>`/`<I<` as NOT 4b's -- Task 3 settled it by measurement**
 
-Not `trace i` on an internal label -- that instrument cannot produce them, which is how the first revision of this plan reached a wrong conclusion.
+**Do not re-probe this from scratch; the answer is in.** `>I>`/`<I<` require `trace l` on a `::routine` or `::method`, and Task 3 measured that **a `::routine` is not reachable in 4b at all**: a same-file `::routine` sits *behind* the builtin resolution step, which is 4c's, so `::routine max` alongside `call max 1,2` still calls the builtin. Confirm that a `::routine` whose name is **not** a builtin is also unreachable before writing the row -- Task 3's witness used a builtin name, and that is the one shape that cannot distinguish "behind the builtin step" from "unreachable entirely".
+
+Task 3 also measured three ways a `::routine` activation is not an internal label's, which the row should carry because 4c will meet them: it has its own variable pool, builtins shadow it, and **`TRACE` does not cross into it at all** -- a caller's `trace r` echoes none of its clauses.
+
+Write the exclusions row as "`::routine`/`::method` under TRACE LABELS, unreachable until 4c's builtin step exists", not as "method invocation" and not as "Phase 5's".
+
+The first revision of this plan reached a wrong conclusion here by probing `trace i` on an internal label, an instrument that could never have produced these prefixes. The lesson generalises and is worth keeping in the row: absence under one instrument is not evidence of ownership.
 
 - [ ] **Step 3: Commit the new expectations, and update `CLAIMED_PREFIXES`**
 
