@@ -350,9 +350,19 @@ Measure both, record the transcripts in the report, and implement what the oracl
 
 - [ ] **Step 7: Run the suite**
 
-- [ ] **Step 8: Move `Interpret` in scope in `tests/owners.rs`, and update `EXPECTED_OUT_OF_SCOPE` and the four counts Task 0's module doc names**
+- [ ] **Step 8: Create `rust/corpus/phase-4b.txt` with this task's witness**
 
-The in-scope tag requires a witness program in the subset, or `every_in_scope_variant_is_witnessed_by_the_phase_4a_subset` fails.
+**This task creates the 4b subset file, not Task 10.** Moving `Interpret` in scope requires a witness program in the subset or `every_in_scope_variant_is_witnessed_by_the_phase_4a_subset` (`tests/coverage.rs:528`) fails, and the 4a subset cannot hold it: `phase-4a.txt`'s own header lists `INTERPRET` among the constructs it excludes by definition.
+
+The witness already exists and is already correctly absent from the 4a subset: **`rust/corpus/lang/interpret_dynamic.rex`**. It exercises a dynamic fragment, a fragment that binds a name the enclosing body never mentions, and a fragment inside a `DO` body. List it in `phase-4b.txt` with a header in the same shape as `phase-4a.txt`'s, saying which constructs the 4b subset admits and which it still excludes (the corpus rules in Task 10 are the list).
+
+Then point the harnesses at the union. Task 0 made `read_subset` take a list, but every call site still passes a one-element slice. **Two of them must change and one must not:**
+
+* `every_in_scope_variant_is_witnessed_by_the_phase_4a_subset` (`:538`) reads the **union**, and its name is now wrong -- rename it to say "subsets".
+* `collect_stress`'s call site reads the **union**.
+* The `EXPECTED_SUBSET` pin (`:516`) stays **`phase-4a.txt` only**. It exists to catch drift in that one file's line list, and widening it would destroy that.
+
+- [ ] **Step 9: Move `Interpret` in scope in `tests/owners.rs`, and update `EXPECTED_OUT_OF_SCOPE` and the four counts Task 0's module doc names**
 
 - [ ] **Step 9: Commit**
 
@@ -839,7 +849,8 @@ Removing a KNOWN GAP row needs the gap closed and a witness in the tree.
 ### Task 10: The 4b corpus and the collector
 
 **Files:**
-- Create: `rust/corpus/phase-4b.txt`, `rust/corpus/proc/*.rex`
+- Create: `rust/corpus/proc/*.rex`
+- Modify: `rust/corpus/phase-4b.txt` -- **Task 1 created it** with `lang/interpret_dynamic.rex` as its only entry, because moving `Interpret` in scope needed a witness and the 4a subset excludes `INTERPRET` by definition. This task grows it and extends its header.
 - Modify: `rust/corpus/phase-4a.txt:18`, `rust/corpus/README.md:108-109`
 - Modify: `rust/crates/rexx-exec/src/lib.rs` if the collector sweep finds a second under-rooting site
 
