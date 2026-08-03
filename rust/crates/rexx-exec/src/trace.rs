@@ -594,9 +594,10 @@ mod tests {
             &program.symbols,
         );
         let frame = interp.roots.push_slots(plan.len());
+        let id = interp.next_activation_id();
         interp
             .activations
-            .push(crate::Activation::new(program, plan, frame));
+            .push(crate::Activation::new(id, program, plan, frame));
     }
 
     #[test]

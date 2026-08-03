@@ -678,6 +678,39 @@ impl Interp {
                     Ok(flow) => flow,
                     Err(failure) => self.offer_to_trap(failure)?,
                 };
+            // **The clause has finished; a `CALL ON` handler waiting on it
+            // runs here, before `flow` is acted on.** Fix round 1's Critical:
+            // this check used to sit at the *bottom* of the loop body, past a
+            // `match` two of whose arms `return`, so an activation whose
+            // clause resolved to `RETURN` or `EXIT` never reached it -- the
+            // condition was dropped outright, or picked up later by an
+            // unrelated activation. Measured, `call aa` into `aa: return
+            // bb()` with `bb` raising a trapped `USER` condition: the oracle
+            // runs the handler at that `return bb()` clause's own boundary
+            // and we ran it never.
+            //
+            // **Placed before the `match` rather than repeated inside two of
+            // its arms**, which is the difference between fixing the defect
+            // and fixing its two instances: there is now no path at all
+            // between "the clause finished" and this check, so a third `Flow`
+            // arm that returns cannot reintroduce it. It is also the honest
+            // reading of what a clause boundary *is* -- `Flow::Return` means
+            // the clause was a `RETURN`, not that the clause did not happen.
+            if self.pending_trap.is_some() {
+                // `flow` may carry an `ObjRef` whose one-clause temps frame
+                // `step_in_temps_frame` has already popped, and the handler
+                // below runs a whole nested activation that allocates. Rooted
+                // across it rather than reasoned about: the same window the
+                // `Exit` arm's own comment describes, but now with arbitrary
+                // user code inside it instead of a straight line to
+                // `exit_code_for`.
+                if let Flow::Return(Some(value)) | Flow::Exit(Some(value)) = &flow {
+                    self.roots.push_temp(*value);
+                }
+                if let Some(ended) = self.deliver_pending_trap(&code)? {
+                    return Ok(ended);
+                }
+            }
             match flow {
                 Flow::Next => self.activation_mut().pc += 1,
                 Flow::Goto(target) => self.activation_mut().pc = target,
@@ -725,20 +758,6 @@ impl Interp {
                     };
                     return Err(raised.into());
                 }
-            }
-            // The clause boundary a `CALL ON` trap's handler waits for, and
-            // the reason `pending_trap` lives on `Interp` rather than on the
-            // raising activation: the routine that raised has usually
-            // already returned by now (`RAISE ... RETURN` is what sets it),
-            // so the activation that delivers is the one still running here.
-            // Measured -- `raise user foo return 'ONEVAL'` inside `one`,
-            // trapped by a `CALL ON` in the main body, runs the handler after
-            // the main body's whole `say 'a' one(1) two(2)` clause has
-            // printed, with `SIGL` set to that clause's line.
-            if self.pending_trap.is_some()
-                && let Some(ended) = self.deliver_pending_trap(&code)?
-            {
-                return Ok(ended);
             }
             debug_assert_eq!(
                 self.activations.len(),
@@ -2479,11 +2498,12 @@ impl Interp {
     /// normally rather than running the handler a second time later.
     fn deliver_pending_trap(&mut self, code: &Code<'_>) -> Result<Option<Ended>, Failure> {
         // Only the activation whose trap table matched delivers, and only
-        // once it is running again -- `PendingTrap::depth`'s own doc comment
-        // has the transcript that separates this from "the next clause
-        // boundary anyone reaches", which is what a deeper activation
-        // stepping its own first clause would otherwise be.
-        if self.pending_trap.as_ref().map(|pending| pending.depth) != Some(self.activations.len()) {
+        // once it is running again -- `PendingTrap::activation`'s own doc
+        // comment has the three transcripts this identity check answers,
+        // including the two a stack depth got wrong.
+        if self.pending_trap.as_ref().map(|pending| pending.activation)
+            != Some(self.activation().id)
+        {
             return Ok(None);
         }
         let Some(pending) = self.pending_trap.take() else {
@@ -2528,7 +2548,24 @@ impl Interp {
         match ended? {
             // The handler returned; execution resumes at the clause after
             // the one that finished.
-            Ended::Returned(_) => Ok(None),
+            //
+            // **And the condition stops being active here** (fix round 1).
+            // A `RAISE PROPAGATE` after this point has nothing to re-raise:
+            // measured, `call sub` (trapped, handler returns) followed by
+            // `raise propagate` is `98.918` at rc 158, where leaving
+            // `active_condition` set gave silence at rc 0.
+            //
+            // **Only on this arm, which is the measured half.** A `SIGNAL ON`
+            // handler that runs on -- `SIGNAL`s to another label and then
+            // propagates -- must still find the original condition, also
+            // measured (both interpreters re-raise the original 42.3 at rc
+            // 214). So the clearing belongs to the point a *call* handler
+            // returns, not to handlers in general, and `offer_to_trap`
+            // deliberately has no equivalent.
+            Ended::Returned(_) => {
+                self.active_condition = None;
+                Ok(None)
+            }
             // `EXIT` inside the handler ends the program, exactly as it does
             // inside any other called routine.
             Ended::Exited(value) => Ok(Some(Ended::Exited(value))),
@@ -2712,8 +2749,14 @@ impl Interp {
         let returns = raise.result.as_ref().is_some_and(|result| !result.exit);
 
         if raise.condition.as_ref() == b"SYNTAX" {
-            let (number, sub) = split_error_number(rc_text.as_deref().unwrap_or(b""));
-            let mut raised = Raised::syntax(number, sub, additional);
+            let mut raised = raise_syntax_condition(rc_text.as_deref().unwrap_or(b""), additional);
+            // **The delivery rule follows the tail even when the argument was
+            // rejected**, which is measured rather than convenient: `raise
+            // syntax 40.10` inside a routine, with the trap in the main body
+            // and none in between, reports 98.941 fatally exactly as a
+            // well-formed tail-less `RAISE SYNTAX` reports its own number
+            // there. The substituted condition is still a `SYNTAX` condition
+            // and travels like one.
             raised.delivery.search = if returns { Search::Here } else { Search::Top };
             return Err(raised.into());
         }
@@ -2751,10 +2794,11 @@ impl Interp {
                 self.pending_trap = Some(PendingTrap {
                     condition: name,
                     rc,
-                    // The caller's own depth: this activation is about to be
-                    // popped, so that is `len() - 1`. See the field's own doc
-                    // comment for the transcript that made it necessary.
-                    depth: self.activations.len() - 1,
+                    // The caller's own identity -- this activation is about
+                    // to be popped, and `caller_trap_for` above just read
+                    // that same activation's table. See the field's own doc
+                    // comment for the three transcripts behind it.
+                    activation: self.activations[self.activations.len() - 2].id,
                 });
                 Ok(Flow::Return(result))
             }
@@ -2801,13 +2845,20 @@ impl Interp {
     /// which is the `USER` half: measured, `raise propagate` inside a `CALL
     /// ON USER FOO` handler prints nothing more and exits 0.
     ///
-    /// **The residual, stated rather than hidden.** `active_condition` is
-    /// set when a trap fires and is never cleared, so a `RAISE PROPAGATE`
-    /// reached *after* a handler has finished re-raises that handler's
-    /// condition where the oracle may well answer 98.918. Nothing measured
-    /// pins that shape either way, and the two probes that do pin something
-    /// (inside a handler, and before any condition at all) are both
-    /// reproduced.
+    /// **What used to be a stated residual here is now measured, and it was
+    /// a divergence** (fix round 1's finding 2). This comment said
+    /// `active_condition` is "never cleared, so a `RAISE PROPAGATE` reached
+    /// after a handler has finished re-raises that handler's condition where
+    /// the oracle *may well* answer 98.918. Nothing measured pins that shape
+    /// either way." One probe pinned it: the oracle does answer 98.918, and
+    /// we answered silence at rc 0. `deliver_pending_trap` clears the field
+    /// in its `Ended::Returned` arm now.
+    ///
+    /// The clearing is deliberately *not* symmetric. A `SIGNAL ON` handler
+    /// that runs on -- `SIGNAL`s to another label and only then propagates --
+    /// must still find its condition, also measured, so `offer_to_trap` has
+    /// no equivalent line and a condition stays active for as long as its
+    /// `SIGNAL` handler's activation does.
     fn exec_raise_propagate(&mut self) -> Result<Flow, Failure> {
         let Some(active) = &self.active_condition else {
             return Err(Raised::syntax(98, 918, Vec::new()).into());
@@ -3008,7 +3059,9 @@ impl Interp {
         // the three probes that measure the inheritance and its one-way
         // direction.
         let traps = caller.traps.clone();
+        let callee_id = self.next_activation_id();
         let mut callee = Activation::nested(
+            callee_id,
             program,
             selector,
             plan,
@@ -5751,34 +5804,83 @@ fn raised_select_no_when() -> Raised {
 /// `settings.rs`'s own doc comments on each variant rather than read through
 /// an accessor that does not exist yet. The pair then goes through
 /// `Raised::syntax`, like every other raiser in this file since 4b's Task 7.
-/// Splits `RAISE SYNTAX`'s own argument into `(major, sub)`.
+/// Turns `RAISE SYNTAX`'s own argument into the condition it names, or into
+/// the condition the oracle raises when it names nothing.
 ///
-/// The text as the expression rendered it, so `40.4` is `(40, 4)` and
-/// `40.912` is `(40, 912)` -- the part after the point is read as a decimal
-/// integer in its own right, not as a fraction, measured both ways. A bare
-/// `40` is `(40, 0)`, and sub `0` is what makes `Raised::report` print the
-/// major line alone (measured: `raise syntax 40` gives one line where `raise
-/// syntax 40.4` gives two).
+/// **Three outcomes, all measured, and 4a never had to know about two of them
+/// because `RAISE` is the first construct that lets a program name an
+/// arbitrary error number.** Fix round 1's finding 5: this used to parse the
+/// text and use whatever fell out, which produced a `<no message N.M in the
+/// catalogue>` placeholder on the user's stderr for an unknown code, an
+/// unrelated catalogue entry at rc 25 for `999`, and -- worst -- `Error 0` at
+/// **rc 0** for a non-numeric argument, a report on stderr beside a
+/// successful exit status.
 ///
-/// A part that does not parse becomes `0`. Reachable only through a
-/// `RAISE SYNTAX` whose argument is not a number at all, which the oracle
-/// answers with an error of its own that this crate does not reproduce; `0`
-/// keeps that case a visible wrong answer rather than a panic on the error
-/// path, following this crate's standing rule for the reporting path.
-fn split_error_number(text: &[u8]) -> (u16, u16) {
+/// ```text
+/// raise syntax 40.4       -> 40.4       the catalogue entry
+/// raise syntax 40         -> 40.0       ditto, major line only (sub 0)
+/// raise syntax 40.001     -> 40.1       ".001" is the integer 1
+/// raise syntax 40.10      -> 98.941     found "40010"
+/// raise syntax 1          -> 98.941     found "1.0"
+/// raise syntax 3.5        -> 98.941     found "3005"
+/// raise syntax 0 / 100 / 999 / 'abc'  -> 33.904
+/// ```
+///
+/// **The major must be 1..=99**; anything else -- including a non-number and
+/// zero -- is `33.904`, "Incorrect expression result following SYNTAX keyword
+/// of RAISE instruction", rc 223. Measured at the boundary: `99` is accepted
+/// (it renders `(99, 0)`, "Translation error"), `100` is 33.904, and so are
+/// `0`, `0.5` and `'abc'`.
+///
+/// **The sub is the digits after the point read as a plain integer**, not as
+/// a fraction: `.4` is 4, `.001` is 1, `.10` is 10, `.912` is 912. Measured
+/// through `raise syntax 40.001`, which renders `(40, 1)`.
+///
+/// **A well-formed pair the catalogue does not know is `98.941`**, rc 158,
+/// and its own `&1` is the *composed* number `major * 1000 + sub` -- except
+/// when the catalogue has no `(major, 0)` entry at all, where it is the
+/// original `major.sub`. Measured: `40.10` gives `"40010"` and `3.5` gives
+/// `"3005"`, while `1` gives `"1.0"` and `2.1` gives `"2.1"`. That is not a
+/// rule fitted to two odd rows -- majors 1 and 2 are the only ones in 1..=99
+/// with no `(major, 0)` entry in the generated catalogue, confirmed by
+/// looking them up, so "the major itself is unknown" and "the major is known
+/// but this sub is not" really are the two cases, and they render
+/// differently.
+fn raise_syntax_condition(text: &[u8], additional: Vec<String>) -> Raised {
     let text = String::from_utf8_lossy(text);
-    let (major, sub) = match text.split_once('.') {
+    let (major_text, sub_text) = match text.split_once('.') {
         Some((major, sub)) => (major, sub),
         None => (text.as_ref(), ""),
     };
-    (
-        major.parse().unwrap_or(0),
-        if sub.is_empty() {
-            0
-        } else {
-            sub.parse().unwrap_or(0)
-        },
-    )
+    // `u32` rather than `u16` for the sub: `raise syntax 40.99999` must reach
+    // the "unknown code" answer rather than wrap into a code that happens to
+    // exist, and the composed number below can exceed `u16` besides.
+    let major: Option<u32> = major_text.parse().ok();
+    let sub: Option<u32> = if sub_text.is_empty() {
+        Some(0)
+    } else {
+        sub_text.parse().ok()
+    };
+    let (Some(major), Some(sub)) = (major, sub) else {
+        return Raised::syntax(33, 904, Vec::new());
+    };
+    if !(1..=99).contains(&major) {
+        return Raised::syntax(33, 904, Vec::new());
+    }
+    // Narrowing is safe under the guard above; the sub is checked by the
+    // catalogue lookup, which a too-wide value simply misses.
+    let narrow = u16::try_from(sub).ok();
+    if let Some(narrow) = narrow
+        && rexx_inventory::errors::lookup(major as u16, narrow).is_some()
+    {
+        return Raised::syntax(major as u16, narrow, additional);
+    }
+    let found = if rexx_inventory::errors::lookup(major as u16, 0).is_some() {
+        (major * 1000 + sub).to_string()
+    } else {
+        format!("{major}.{sub}")
+    };
+    Raised::syntax(98, 941, vec![found])
 }
 
 /// A `RAISE`'s condition name as `Raised::condition` carries it.
@@ -5939,24 +6041,31 @@ mod tests {
             &program.symbols,
         );
         let frame = interp.roots.push_slots(plan.len());
+        let id = interp.next_activation_id();
         interp
             .activations
-            .push(Activation::new(Rc::clone(&program), plan, frame));
+            .push(Activation::new(id, Rc::clone(&program), plan, frame));
         program
     }
 
-    /// Parses `source`, activates it, and runs its whole body -- a miniature
-    /// `run_activation`, through `run_bounded` rather than a hand-rolled
-    /// `for` loop since Task 10: this module's tests now include `IF`/
-    /// `SELECT` programs that branch, and `run_bounded(code, 0, len)` is
-    /// exactly `run_activation`'s own loop shape (Task 10's own doc comment
-    /// on it explains why a plain `for` cannot follow a `Goto`). Every call
-    /// here still reaches `step` only through `step_in_temps_frame`, since
-    /// that is what `run_bounded` itself does -- this helper never calls
-    /// `step` directly, matching the one-non-test-caller rule. `slots` is an
-    /// empty map throughout: `read`/`slot_of`'s fallback chain answers
-    /// correctly without the real plan's fast path, the same choice
-    /// `eval.rs`'s own test helpers make.
+    /// Parses `source`, activates it, and runs its whole body -- through
+    /// `Interp::run_activation` itself since 4b's Task 7, not through a
+    /// miniature of it.
+    ///
+    /// **This comment described the deleted miniature and was left in place;
+    /// fix round 1's finding 4 corrects it.** Both of its claims are now
+    /// false rather than merely stale. It is not "a miniature
+    /// `run_activation`, through `run_bounded`": it is `run_activation`.
+    /// And `slots` is not "an empty map throughout" -- `run_activation`
+    /// builds its `Code` with `slots: &plan.by_symbol`, which
+    /// `Plan::assign` populates, so every test in this module now runs
+    /// through the plan's fast path rather than around it.
+    ///
+    /// That coverage shift is deliberate and is an improvement: these tests
+    /// exercise what production runs. `eval.rs`, `stem.rs` and `plan.rs`
+    /// still pass `&HashMap::new()` in their own helpers, so the by-name
+    /// fallback keeps its expression-level coverage; what this file gains is
+    /// whole-program coverage of the resolved path.
     fn run_source(interp: &mut Interp, source: &[u8]) -> Result<Option<ObjRef>, Failure> {
         let program = parse_program(source.to_vec()).expect("test program parses");
         let program = activate(interp, program);
@@ -11179,5 +11288,242 @@ mod tests {
             ),
             b"ANY-TRAPPED 2\n".to_vec()
         );
+    }
+
+    // ---- fix round 1: the pending-trap delivery boundary, and its identity ----
+
+    /// **Fix round 1's Critical, half (a).** The clause that finishes may
+    /// itself be the `RETURN`: `aa`'s whole body is `return bb()`, and `bb`
+    /// raises a trapped `USER` condition. The oracle runs the handler at that
+    /// clause's own boundary -- so `SIGL` is line 7, `aa`'s `return bb()` --
+    /// and then returns from `aa`.
+    ///
+    /// Against the delivery check at the bottom of `run_activation`'s loop,
+    /// past a `match` whose `Flow::Return` arm returns, the handler never ran
+    /// at all and `ZMARK` kept its pre-set `NOMARK`. Chosen so that failure
+    /// prints `NOMARK` rather than the derived name `ZMARK`: a flag that is
+    /// merely unset reads as plausible data.
+    #[test]
+    fn a_pending_trap_is_delivered_when_the_trapping_clause_is_a_return() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call on user foo name uh\nzmark = 'NOMARK'\ncall aa\nsay 'end mark=' zmark\nexit\naa:\nreturn bb()\nbb:\nraise user foo return 'BBVAL'\nuh:\nzmark = 'HANDLER-AT' sigl\nreturn\n",
+            ),
+            b"end mark= HANDLER-AT 7\n".to_vec()
+        );
+    }
+
+    /// **Fix round 1's Critical, half (b).** The same program with a second,
+    /// unrelated `call cc` after it. The handler still belongs to `aa`'s
+    /// `return bb()` clause (`SIGL` 8 here), and printed `HANDLER-AT 11` --
+    /// the `cc:` label's own line -- before the fix, because it ran inside
+    /// `cc`.
+    ///
+    /// **Which mechanism this actually pins, measured rather than assumed.**
+    /// It dies when the delivery check is put back behind the `Return`/`Exit`
+    /// arms, and *survives* when the activation identity is degraded to a
+    /// stack depth -- because once the check runs at `aa`'s own `return
+    /// bb()` boundary, the condition is gone before `cc` is ever called, and
+    /// a depth is sufficient for that. So this test covers the placement, and
+    /// `a_pending_trap_whose_activation_is_gone_is_never_delivered` is the
+    /// one that covers the identity: the two mutations kill exactly one test
+    /// each, which is what makes them two mechanisms rather than one.
+    #[test]
+    fn a_pending_trap_is_not_delivered_into_a_later_activation_at_the_same_depth() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call on user foo name uh\nzmark = 'NOMARK'\ncall aa\ncall cc\nsay 'end mark=' zmark\nexit\naa:\nreturn bb()\nbb:\nraise user foo return 'BBVAL'\ncc:\nsay 'in cc'\nreturn\nuh:\nzmark = 'HANDLER-AT' sigl\nreturn\n",
+            ),
+            b"in cc\nend mark= HANDLER-AT 8\n".to_vec()
+        );
+    }
+
+    /// **A third shape of the same defect, which the review did not reach and
+    /// a depth cannot close.** The pending condition's activation is unwound
+    /// by an error its *caller* traps, so it dies without ever finishing
+    /// another clause; the caller then calls something else, which lands at
+    /// the very depth the dead activation had.
+    ///
+    /// Measured: the oracle drops the condition outright -- `after mark=
+    /// NOMARK` -- and against a depth-keyed `PendingTrap` we printed
+    /// `after mark= HANDLER-AT 13`, having run the handler inside `cc`. The
+    /// identity check is what makes a dead activation's pending condition
+    /// undeliverable rather than merely unlikely to be delivered.
+    ///
+    /// **This is the test that pins the identity, and the only one.** It
+    /// survives the mutation that reverts the delivery *placement* and dies
+    /// under the one that degrades `ActivationId` to a stack depth; its
+    /// sibling above does the reverse. The reason it can tell them apart is
+    /// that here the activation never reaches another clause boundary at all
+    /// -- the error unwinds it -- so no amount of moving the check helps, and
+    /// only "that activation is gone" answers it.
+    #[test]
+    fn a_pending_trap_whose_activation_is_gone_is_never_delivered() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"signal on syntax name sh\ncall on user foo name uh\nzmark = 'NOMARK'\ncall aa\nsay 'end mark=' zmark\nexit\naa:\nsignal off syntax\nzq = bb() + 1/0\nreturn\nbb:\nraise user foo return 'BBVAL'\ncc:\nsay 'in cc'\nreturn\nuh:\nzmark = 'HANDLER-AT' sigl\nreturn\nsh:\nsay 'SYNTAX at' sigl\ncall cc\nsay 'after mark=' zmark\nexit\n",
+            ),
+            b"SYNTAX at 4\nin cc\nafter mark= NOMARK\n".to_vec()
+        );
+    }
+
+    /// **Fix round 1's finding 2.** Once a `CALL ON` handler has returned,
+    /// its condition is no longer active, so a later `RAISE PROPAGATE` has
+    /// nothing to re-raise and is `98.918`.
+    ///
+    /// The report's Concern 1 called this unmeasured; one probe settled it.
+    /// Against the unclearing version the program was silent at rc 0.
+    #[test]
+    fn a_returned_call_handler_leaves_no_active_condition_to_propagate() {
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"call on user foo name uh\ncall sub\nsay 'resumed'\nraise propagate\nsay 'not reached'\nexit\nsub:\nraise user foo return 'SVAL'\nuh:\nsay 'UH ran'\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (98, 918));
+        assert_eq!(interp.out, b"UH ran\nresumed\n".to_vec());
+    }
+
+    /// The adjacent case that keeps the clearing where it belongs: a `SIGNAL
+    /// ON` handler that runs *on* -- `SIGNAL`s to another label and only then
+    /// propagates -- must still find its condition. Measured, and it is why
+    /// `offer_to_trap` has no equivalent of the line above.
+    #[test]
+    fn a_signal_handler_that_runs_on_can_still_propagate() {
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"signal on syntax name th\nsay 1/0\nsay 'x'\nth:\nsay 'TH ran'\nsignal onward\nonward:\nsay 'onward'\nraise propagate\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (42, 3));
+        assert!(raised.delivery.positionless);
+        assert_eq!(interp.out, b"TH ran\nonward\n".to_vec());
+    }
+
+    /// **Fix round 1's finding 3(a).** A `CALL ON` trap is removed for its
+    /// handler's duration and **put back** afterwards, unlike a `SIGNAL ON`
+    /// trap, which stays removed. `deliver_pending_trap` documented this and
+    /// nothing tested it: deleting the re-insertion left the whole suite and
+    /// the corpus gate green.
+    ///
+    /// Two raises, and the second one's handler run is the assertion -- an
+    /// implementation that never puts the trap back prints `UH 2 / mid / end`
+    /// and drops the second condition silently.
+    #[test]
+    fn a_call_trap_is_put_back_after_its_handler_returns() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call on user foo name uh\ncall raiser\nsay 'mid'\ncall raiser\nsay 'end'\nexit\nraiser:\nraise user foo return 'RV'\nuh:\nsay 'UH' sigl\nreturn\n",
+            ),
+            b"UH 2\nmid\nUH 4\nend\n".to_vec()
+        );
+    }
+
+    /// **Fix round 1's finding 3(b).** `RAISE PROPAGATE` of a condition with
+    /// no catalogue entry ends the program silently rather than reporting.
+    /// The guard that makes that true had no test, and deleting it does not
+    /// merely go unnoticed -- it emits `Error 0:  <no message 0.0 in the
+    /// catalogue>`, which is the exact failure mode `novalue_check`'s own doc
+    /// comment says the design keeps unreachable.
+    #[test]
+    fn raise_propagate_of_an_unreportable_condition_ends_the_program_silently() {
+        let mut interp = Interp::new();
+        let ended = run_source(
+            &mut interp,
+            b"call on user foo name uh\ncall sub\nsay 'after'\nexit\nsub:\nraise user foo return 'SV'\nuh:\nsay 'UH ran'\nraise propagate\n",
+        );
+        assert!(
+            ended.is_ok(),
+            "a USER condition has no report to give, so this ends the \
+             program rather than raising: {ended:?}"
+        );
+        assert_eq!(
+            interp.out,
+            b"UH ran\n".to_vec(),
+            "`say 'after'` must not run -- the propagate ends the program"
+        );
+        assert!(
+            !interp.trace.windows(7).any(|w| w == b"Error 0"),
+            "no `Error 0` placeholder may reach stderr: {:?}",
+            String::from_utf8_lossy(&interp.trace)
+        );
+    }
+
+    /// **Fix round 1's finding 5.** `RAISE SYNTAX`'s argument is validated
+    /// rather than used verbatim. Every row measured against the oracle; see
+    /// `raise_syntax_condition` for the rule and the boundary probes.
+    ///
+    /// Before this, rows 5 and 6 rendered a `<no message N.M in the
+    /// catalogue>` placeholder to the user at rc 216, row 8 rendered an
+    /// unrelated catalogue entry at rc 25, and rows 7, 9 and 10 answered
+    /// `Error 0` at **rc 0** -- a report on stderr beside a successful exit
+    /// status, which is the global constraint's worst case rather than a
+    /// cosmetic one.
+    #[test]
+    fn raise_syntax_validates_its_argument() {
+        for (argument, expected, substitution) in [
+            (&b"40.4"[..], (40u16, 4u16), None),
+            (&b"40"[..], (40, 0), None),
+            (&b"40.001"[..], (40, 1), None),
+            (&b"99"[..], (99, 0), None),
+            (&b"40.10"[..], (98, 941), Some("40010")),
+            (&b"3.5"[..], (98, 941), Some("3005")),
+            // Majors 1 and 2 are the only ones in range with no `(major, 0)`
+            // catalogue entry, and they render the original `major.sub`.
+            (&b"1"[..], (98, 941), Some("1.0")),
+            (&b"2.1"[..], (98, 941), Some("2.1")),
+            (&b"0"[..], (33, 904), None),
+            (&b"100"[..], (33, 904), None),
+            (&b"999"[..], (33, 904), None),
+            (&b"'abc'"[..], (33, 904), None),
+        ] {
+            let mut source = b"raise syntax ".to_vec();
+            source.extend_from_slice(argument);
+            source.push(b'\n');
+            let mut interp = Interp::new();
+            let failure = run_source(&mut interp, &source).unwrap_err();
+            let Failure::Raised(raised) = failure else {
+                panic!("{}: expected Raised", String::from_utf8_lossy(argument));
+            };
+            assert_eq!(
+                (raised.number, raised.sub),
+                expected,
+                "{}",
+                String::from_utf8_lossy(argument)
+            );
+            if let Some(substitution) = substitution {
+                assert_eq!(
+                    raised.additional,
+                    vec![substitution.to_string()],
+                    "{}",
+                    String::from_utf8_lossy(argument)
+                );
+            }
+            // The exit code is a consequence of the number, but the global
+            // constraint is about the *band*: a raise must never exit 0, and
+            // three of these did.
+            assert_ne!(
+                raised.exit_code(),
+                0,
+                "{}: a raise must not exit 0",
+                String::from_utf8_lossy(argument)
+            );
+        }
     }
 }

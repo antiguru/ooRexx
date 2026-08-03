@@ -64,6 +64,16 @@ pub(crate) enum Search {
     /// `fun`'s `raise` line, which is what `Here` gives and which is exactly
     /// what the identical program with `raise syntax 40.4 return` does
     /// report. The two spellings differ in nothing but the condition.
+    ///
+    /// **"Outward" stops at the caller, and that is measured rather than a
+    /// limitation.** Task 7's report listed one-level-only as a residual --
+    /// "if the grandparent has a trap and the parent does not, we ignore the
+    /// condition where the oracle might propagate to it". Built and run: with
+    /// `signal on user foo` in the main body, `signal off user foo` in
+    /// `lev1`, and `raise user foo return` in `lev2`, the oracle does **not**
+    /// reach the main body's handler either -- `lev1` simply resumes. So the
+    /// search really does end at the caller, and this is a behaviour rather
+    /// than a residual.
     Caller,
     /// The **outermost** activation only; every level it unwinds through
     /// skips its own trap check.
@@ -94,8 +104,16 @@ pub(crate) enum Search {
 /// Every field is at its default for every condition an *expression* or an
 /// ordinary instruction raises, which is every raiser in the crate except
 /// `RAISE` itself -- so [`Raised::syntax`] supplies the default and the
-/// thirty-odd raiser functions never mention it. Only `run.rs`'s own
-/// `exec_raise` ever sets any of them.
+/// thirty-odd raiser functions never mention it.
+///
+/// **Three functions in `run.rs` write these fields, not one** (fix round 1's
+/// finding 6, which corrects a line here that named only the first):
+/// `exec_raise` sets `search` from the tail and the condition,
+/// `exec_raise_propagate` sets both fields, and `offer_to_trap` performs the
+/// load-bearing [`Search::Caller`] -> [`Search::Here`] rewrite as a raise
+/// declines its first level. That last one is the writer a reader most needs
+/// to know about, since it is the only one that mutates a `Delivery` already
+/// in flight.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Delivery {
     pub(crate) search: Search,

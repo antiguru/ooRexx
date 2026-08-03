@@ -65,8 +65,31 @@ pub(crate) struct Trap {
     pub(crate) label: Box<[u8]>,
 }
 
+/// A unique identity for one activation, minted when it is pushed and never
+/// reused for the life of an `Interp`.
+///
+/// **Added by fix round 1, because a depth does not identify an activation.**
+/// `PendingTrap` first named its target activation by `activations.len()`,
+/// which is right while that activation is on the stack and wrong the moment
+/// it leaves: a later, unrelated call re-enters the same depth and picks up a
+/// condition that was never its. Measured both ways -- `call aa` then `call
+/// cc`, with `aa` raising a trapped `USER` condition, ran the handler inside
+/// `cc`; and a pending condition whose activation is unwound by an error the
+/// *caller* traps is dropped by the oracle and was delivered into the next
+/// routine by us.
+///
+/// A counter rather than a pointer or an index for the obvious reason: it
+/// stays unique across a pop, which is exactly the case both defects had in
+/// common.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) struct ActivationId(pub(crate) u64);
+
 /// One activation: everything about the frame currently executing.
 pub(crate) struct Activation {
+    /// This activation's own identity, unique for the life of the `Interp`.
+    /// See [`ActivationId`] for the two measured defects that made a depth
+    /// insufficient.
+    pub(crate) id: ActivationId,
     /// The program this frame is running.
     ///
     /// **A liveness anchor, and never borrowed through.** Nothing takes
@@ -271,8 +294,14 @@ impl Activation {
     /// nested call begin from genuinely different starting settings, and
     /// folding them together would need parameters that are meaningless on
     /// one of the two paths.
-    pub(crate) fn new(program: Rc<Program>, plan: Rc<Plan>, frame: SlotFrame) -> Activation {
+    pub(crate) fn new(
+        id: ActivationId,
+        program: Rc<Program>,
+        plan: Rc<Plan>,
+        frame: SlotFrame,
+    ) -> Activation {
         Activation {
+            id,
             program,
             body: None,
             plan,
@@ -318,6 +347,7 @@ impl Activation {
     /// text (`first_instruction_pending`'s own doc has the four measured
     /// shapes).
     pub(crate) fn nested(
+        id: ActivationId,
         program: Rc<Program>,
         body: Option<usize>,
         plan: Rc<Plan>,
@@ -326,6 +356,7 @@ impl Activation {
         inherited: Inherited,
     ) -> Activation {
         Activation {
+            id,
             program,
             body,
             plan,
@@ -387,6 +418,16 @@ pub(crate) fn body_of(program: &Program, selector: Option<usize>) -> Option<&Cod
 }
 
 impl Interp {
+    /// Mints the next [`ActivationId`]. Every `Activation` this crate pushes
+    /// gets its identity from here and nowhere else, which is what makes
+    /// "unique for the life of the `Interp`" a property of the code rather
+    /// than a convention.
+    pub(crate) fn next_activation_id(&mut self) -> ActivationId {
+        let id = ActivationId(self.next_activation_id);
+        self.next_activation_id += 1;
+        id
+    }
+
     pub(crate) fn activation(&self) -> &Activation {
         self.activations.last().expect("a live activation")
     }

@@ -544,9 +544,10 @@ mod tests {
             &program.symbols,
         );
         let frame = interp.roots.push_slots(plan.len());
+        let id = interp.next_activation_id();
         interp
             .activations
-            .push(Activation::new(Rc::clone(&program), plan, frame));
+            .push(Activation::new(id, Rc::clone(&program), plan, frame));
         program
     }
 

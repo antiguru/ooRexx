@@ -60,7 +60,7 @@ use plan::{BodyKey, Plan, ProgramId};
 
 // One activation: everything about the frame currently executing (D16).
 mod activation;
-use activation::Activation;
+use activation::{Activation, ActivationId};
 
 // `Raised` (the payload of a real Rexx condition) and `Failure` (either a
 // `Loud` not-implemented marker or a `Raised` condition, the one type
@@ -871,18 +871,27 @@ struct ActiveCondition {
 struct PendingTrap {
     condition: Box<[u8]>,
     rc: Option<Vec<u8>>,
-    /// The `activations.len()` at which this may be delivered: the raising
-    /// activation's **caller**, which is the level whose trap table matched.
+    /// The activation this may be delivered to: the raising activation's
+    /// **caller**, which is the one whose trap table matched.
     ///
-    /// **Found by measurement, not by design.** The first version had no
-    /// such field and delivered at the next clause boundary reached by any
-    /// activation, which is a different thing entirely the moment the
-    /// raising clause goes on to call something else: `say 'a' one(1)
-    /// two(2)`, with `one` raising, ran the handler inside `two` -- `SIGL` 8,
-    /// the `two:` label's own line, against the oracle's 3 -- and printed it
-    /// before the `SAY` rather than after. Pinned by
-    /// `a_call_trap_waits_for_the_raising_clause_to_finish`.
-    depth: usize,
+    /// **A depth first, then an identity, and both changes came from
+    /// measurement.** The original had no such field at all and delivered at
+    /// the next clause boundary reached by *any* activation, which is a
+    /// different thing the moment the raising clause goes on to call
+    /// something else: `say 'a' one(1) two(2)`, with `one` raising, ran the
+    /// handler inside `two` -- `SIGL` 8, the `two:` label's own line, against
+    /// the oracle's 3 -- and printed it before the `SAY` rather than after.
+    /// A depth closed that and left a second hole, because a depth is only
+    /// unique while its activation is live: `call aa` then `call cc`, with
+    /// `aa` raising, ran the handler inside `cc`, and a pending condition
+    /// whose activation is unwound by an error the caller traps was delivered
+    /// into the next routine where the oracle drops it. [`ActivationId`] is
+    /// unique across a pop, which is what both holes needed.
+    ///
+    /// Pinned by `a_call_trap_waits_for_the_raising_clause_to_finish`,
+    /// `a_pending_trap_is_delivered_when_the_trapping_clause_is_a_return` and
+    /// `a_pending_trap_whose_activation_is_gone_is_never_delivered`.
+    activation: ActivationId,
 }
 
 /// Every piece of state `step_in_temps_frame` sets fresh, unconditionally, on
@@ -976,6 +985,10 @@ struct Interp {
     heap: Heap,
     roots: RootSet,
     activations: Vec<Activation>,
+    /// The next [`ActivationId`] to hand out. Monotonic, never reset, never
+    /// reused -- see that type for the two defects that needed an identity a
+    /// stack depth could not supply.
+    next_activation_id: u64,
     /// Every program the loader has issued an id for, indexed by that id.
     ///
     /// This is what makes a `ProgramId` a durable identity rather than a
@@ -1012,8 +1025,17 @@ struct Interp {
     /// not set per clause by `step_in_temps_frame`, it is set once by a
     /// `RAISE` and *consumed* at the next clause boundary, so a nested
     /// activation overwriting it is not the hazard `ClauseState` exists to
-    /// close -- the hazard would be a nested activation that failed to
-    /// deliver it, and `run_activation`'s check runs in every activation.
+    /// close.
+    ///
+    /// **The real hazard is delivery into the wrong activation, and it took
+    /// two goes to close** (fix round 1's finding 7 corrects the sentence
+    /// that used to assert it was already closed). `run_activation`'s check
+    /// runs once per *clause*, on every path out of one -- placed before the
+    /// `Flow` dispatch precisely so a `RETURN` or `EXIT` cannot skip it --
+    /// and it delivers only to the activation named by
+    /// [`PendingTrap::activation`], an identity rather than a stack depth.
+    /// The first property makes the condition reach its activation; the
+    /// second stops it reaching anyone else's.
     ///
     /// One slot rather than a queue, which is what the oracle's own
     /// behaviour describes: measured, a condition raised while a `CALL ON`
@@ -1422,6 +1444,7 @@ impl Interp {
             },
             pending_trap: None,
             active_condition: None,
+            next_activation_id: 0,
             current_case_text: None,
             indent_offset: 0,
             activation_indent: 0,
@@ -1468,8 +1491,9 @@ impl Interp {
         );
 
         let frame = self.roots.push_slots(plan.len());
+        let id = self.next_activation_id();
         self.activations
-            .push(Activation::new(Rc::clone(&program), plan, frame));
+            .push(Activation::new(id, Rc::clone(&program), plan, frame));
 
         // `Returned` and `Exited` are the same thing at the top: measured,
         // `return 5` in a main body with no active call exits 5, exactly like
