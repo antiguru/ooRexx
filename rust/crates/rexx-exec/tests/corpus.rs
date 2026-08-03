@@ -11,8 +11,9 @@
 
 //! The differential corpus runner: every program named in the phase subset
 //! files -- `rust/corpus/phase-4a.txt` and `rust/corpus/phase-4b.txt`, read as
-//! a union -- run under both interpreters, compared byte for byte on stdout,
-//! stderr and exit code.
+//! a union -- run under both interpreters, compared byte for byte on stdout
+//! and exit code, and on stderr up to DEVIATION 0's own narrow indent
+//! normalisation (see the "DEVIATION 0" section below).
 //!
 //! **Every phase's subset file is read, not only the current phase's.** A
 //! construct a later phase implements cannot have its witness in
@@ -136,6 +137,41 @@
 //! same way either way, so a gate failure and a report-mode run are equally
 //! visible; the assertion failure is what turns the mismatch into a non-zero
 //! exit, not what makes it legible.
+//!
+//! # DEVIATION 0: leading indentation on stderr is normalised
+//!
+//! `check_case`'s own stderr comparison runs both sides through
+//! `support::normalize_stderr` first (`tests/support/mod.rs` has the full
+//! scope statement and its own negative-control tests). Exit status,
+//! stdout, and every other byte of stderr -- the clause text, the line
+//! numbers, a value line's own content, and the presence, absence and
+//! order of every line -- stay byte-exact; only the run of spaces between
+//! a trace line's own 3-byte marker and its content is collapsed. See
+//! `docs/superpowers/plans/phase-4-exclusions.txt`'s DEVIATION 0 for why:
+//! in short, that run is driven by a mutable counter the oracle itself
+//! restores inconsistently on two different loop-exit paths
+//! (`BaseDoInstruction.cpp:161` vs `:377`), so matching it byte-for-byte
+//! proves nothing the clause-sequence comparison does not already prove.
+//!
+//! **What still fails if indentation breaks in some other way.** DEVIATION
+//! 0 requires a small set of pinned witnesses, at nesting depth <= 3 with
+//! no completed loop, that are compared *without* normalisation. Those
+//! already existed before this comparison was written, as `rexx-exec/src/
+//! run.rs` unit tests asserting an exact `FailureSite`/trace indent --
+//! normalisation cannot reach a unit test, since it lives only in this
+//! file's and `trace_oracle.rs`'s own comparison functions, so pinning
+//! them here is a matter of naming them rather than adding anything new:
+//! `one_two_and_three_enclosing_dos_indent_by_two_four_and_six` (precisely
+//! DEVIATION 0's own oracle-counter shape), `the_corrected_28x_indent_rule_
+//! matches_all_fourteen_probed_shapes`, and `an_absorbed_whencases_
+//! escaping_false_branch_reports_end_at_its_own_residual_indent`. **Not**
+//! `the_indent_after_a_loop_has_already_exited_is_not_left_over_from_it`:
+//! that one runs at top level, where the oracle's counter is already
+//! clamped at 0 and the correct and incorrect models agree, so it is not
+//! a witness for the gap this deviation carves out even though its own
+//! name suggests it is.
+
+mod support;
 
 use std::collections::BTreeMap;
 use std::env;
@@ -333,7 +369,10 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
     if rust.stdout != cpp.stdout {
         diffs.push("stdout");
     }
-    if rust.stderr != cpp.stderr {
+    // DEVIATION 0: compared after collapsing each side's own trace-line
+    // indent run, not byte-exact -- see this file's own module doc for the
+    // scope and `tests/support/mod.rs` for the normalising function itself.
+    if support::normalize_stderr(&rust.stderr) != support::normalize_stderr(&cpp.stderr) {
         diffs.push("stderr");
     }
     let exit_differs = rust_exit != cpp.exit_code;
