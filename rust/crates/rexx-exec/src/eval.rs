@@ -1373,6 +1373,11 @@ mod tests {
     /// cannot reach one at all.
     fn eval_condition(interp: &mut Interp, source: &[u8]) -> Result<ObjRef, Failure> {
         let program = parse_program(source.to_vec()).expect("test program parses");
+        // Activated like `eval_source`'s own programs, where this used to
+        // evaluate against a bare `Interp`: `eval`'s own intermediate-value
+        // gate reads the *running activation's* `TRACE` since Task 3 moved
+        // `trace_mode` off `Interp`, so there has to be one.
+        let program = activate(interp, program);
         let code = Code {
             body: &program.main,
             symbols: &program.symbols,

@@ -78,6 +78,7 @@ mod eval;
 // calls later tasks add; Task 9 is the first to extend it, with the seven
 // instructions that do not branch.
 mod run;
+use run::Ended;
 
 // `TRACE` (D17): the mode, the nine reachable prefixes' own byte formatting,
 // and the classification a `TRACE`/`TRACE VALUE` setting goes through to
@@ -85,7 +86,6 @@ mod run;
 // `eval.rs`'s `eval`, own *when* to call into this module; this module owns
 // only the bytes.
 mod trace;
-use trace::TraceMode;
 
 /// The exit code for a construct Phase 4a does not implement.
 ///
@@ -468,6 +468,53 @@ impl Loud {
         }
     }
 
+    /// A named call this crate resolved to nothing it implements: not an
+    /// internal label of the calling body, so the next steps are the builtin
+    /// table and then external resolution, and **both are 4c's**.
+    ///
+    /// The message keeps `owned_message`'s exact shape, `"routine \"NAME\"
+    /// is not implemented (4c)"`, because that trailing shape is a contract
+    /// `loud.rs` pins with an `ends_with`, not a formatting preference -- a
+    /// second spelling here would be a second thing to keep in sync for
+    /// nothing.
+    ///
+    /// **Truncated, and that is the same contract `form_name`'s doc states.**
+    /// A `Call::Named` target is a symbol or a quoted literal and so is
+    /// bounded by the source, but a `Call::Dynamic` target is an arbitrary
+    /// run-time value: `call (v)` with a megabyte in `v` would otherwise put
+    /// a megabyte on stderr, which the differential harness then compares
+    /// byte for byte. The oracle's own 43.1 does not truncate, so this is a
+    /// deliberate difference on a path where the two already differ -- the
+    /// oracle reports a condition here and this reports a gap.
+    fn unresolved_call(name: &[u8]) -> Loud {
+        const LIMIT: usize = 128;
+        let shown = if name.len() > LIMIT {
+            format!("{}...", String::from_utf8_lossy(&name[..LIMIT]))
+        } else {
+            String::from_utf8_lossy(name).into_owned()
+        };
+        Loud {
+            message: owned_message(&format!("routine \"{shown}\""), Some("4c")),
+        }
+    }
+
+    /// An activation's body selector named something that is not a routine
+    /// body -- an internal inconsistency, never a program error.
+    ///
+    /// Unreachable through any program today, since nothing constructs a
+    /// `Some(index)` selector at all (`Activation::body`'s own doc has the
+    /// measured reason). Kept, and kept as a `Loud` rather than an
+    /// `unreachable!`, for the same reason `Loud::instruction`'s own doc
+    /// gives for not ending its match in a panic: a guarantee the resolution
+    /// order makes is not one the type system enforces, and an abort is
+    /// precisely the outcome the failing-loudly rule exists to exclude.
+    /// Whoever first sets `Some(index)` is who makes this reachable.
+    fn missing_body() -> Loud {
+        Loud {
+            message: "an activation's body selector names no routine body".to_string(),
+        }
+    }
+
     // **There is no `Loud::parse` any more, and its absence is the fix.** A
     // fragment that did not parse used to become a loud `INTERPRET text did
     // not parse: ...` at rc 120, with a doc comment recording that the
@@ -617,15 +664,26 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // keyword is this task's, so `Interpret` is `None` here (implemented
         // in this crate) rather than `Some("4b")`.
         | InstructionKind::Interpret { .. }
+        // In scope since Task 3, alongside `Call::Named`/`Call::Dynamic`
+        // below. A `RETURN` in the main body is not a gap either: measured,
+        // it ends the program with its value exactly as `EXIT` does.
+        | InstructionKind::Return { .. }
         | InstructionKind::Nop => None,
-        InstructionKind::Call(call) => Some(match &**call {
-            rexx_parse::Call::Named { .. }
-            | rexx_parse::Call::Dynamic { .. }
-            | rexx_parse::Call::Trap(_) => "4b",
-            rexx_parse::Call::Qualified { .. } => "Phase 5",
-        }),
-        InstructionKind::Return { .. }
-        | InstructionKind::Procedure { .. }
+        // **Arm-grained, and two of the four arms are now `None`.**
+        // `Call::Named` and `Call::Dynamic` are implemented (Task 3), so
+        // "4b" would be a false statement in a table whose only job is to be
+        // true -- `Loud::instruction` is no longer reached for either, and
+        // an owner string nothing reads is exactly how the third copy of
+        // this data drifts. A named call that resolves to no internal label
+        // still fails loudly, through `Loud::unresolved_call`, naming `4c`:
+        // the builtin and external steps behind the label search are that
+        // phase's, not a residual claim on the `CALL` keyword itself.
+        InstructionKind::Call(call) => match &**call {
+            rexx_parse::Call::Named { .. } | rexx_parse::Call::Dynamic { .. } => None,
+            rexx_parse::Call::Trap(_) => Some("4b"),
+            rexx_parse::Call::Qualified { .. } => Some("Phase 5"),
+        },
+        InstructionKind::Procedure { .. }
         | InstructionKind::Use(_)
         | InstructionKind::Signal(_)
         | InstructionKind::Raise(_)
@@ -730,25 +788,6 @@ struct Interp {
     /// to the right buffer rather than being rerouted later, which is when a
     /// stray ordering difference would have appeared.
     trace: Vec<u8>,
-    /// The current `TRACE` setting's visible-output shape (D17). Lives on
-    /// `Interp` rather than per-`Activation`'s `Settings`, unlike the design's
-    /// own stated rule that `TRACE` "behaves the same way" as `Settings` and
-    /// is restored across a call -- **a deliberate 4a-only simplification,
-    /// not a rediscovery of that rule**: 4a has exactly one frame (the design
-    /// says so in the same breath, "which is exactly why this must be written
-    /// down now rather than discovered by 4b"), so there is no call for a
-    /// callee's `TRACE OFF` to fail to survive past, and putting this on
-    /// `Activation` today would be the same throwaway-scaffolding shape the
-    /// `eval_str` correction and Task 6's `Vec<Block>` deferral both ruled
-    /// out -- `Activation` already carries its own `Settings` for exactly
-    /// this per-frame inheritance, and 4b's `CALL` is what makes a second
-    /// frame exist for `TRACE` to need the same treatment. The move this
-    /// field still owes is onto `Activation`, deleting it from here, and it
-    /// is the task that lands `CALL` that owes it -- **not** 4b's Task 1,
-    /// which was the other half of this note when the `interpret_spike`
-    /// field sat just below it, and which introduces no second frame:
-    /// `INTERPRET` runs its fragment inside the creating activation.
-    trace_mode: TraceMode,
     /// The indent (Task 11's `static_indent` quantity, spaces already
     /// doubled) an intermediate value line traces at right now -- the one
     /// piece of state `eval`'s own single insertion point needs that
@@ -1046,7 +1085,6 @@ impl Interp {
             plans: HashMap::new(),
             out: Vec::new(),
             trace: Vec::new(),
-            trace_mode: TraceMode::OFF,
             current_value_indent: 0,
             current_case_text: None,
             indent_offset: 0,
@@ -1067,6 +1105,11 @@ impl Interp {
 
     /// Loads `program`, runs its main body in a fresh activation, and tears
     /// the activation down again.
+    ///
+    /// This is the *outermost* activation only. A `CALL` pushes and pops its
+    /// own (`run.rs`'s `exec_call`), so the pop below is still matched with
+    /// the push above it by the time control gets here -- `run_activation`'s
+    /// own loop asserts exactly that after every step.
     fn run(&mut self, program: Program) -> Result<Option<ObjRef>, Failure> {
         let program = Rc::new(program);
         let id = ProgramId(self.programs.len());
@@ -1090,7 +1133,12 @@ impl Interp {
         self.activations
             .push(Activation::new(Rc::clone(&program), plan, frame));
 
-        let exit = self.run_activation();
+        // `Returned` and `Exited` are the same thing at the top: measured,
+        // `return 5` in a main body with no active call exits 5, exactly like
+        // `exit 5`, and a bare `return` there exits 0. `Ended` keeps the two
+        // apart because a *callee* has to tell them apart, not because the
+        // program's own exit value ever depends on which arrived.
+        let exit = self.run_activation().map(Ended::value);
 
         // Popped whether or not the body raised, so the root set is left the
         // way it was found even on the failure path.

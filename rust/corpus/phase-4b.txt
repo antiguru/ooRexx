@@ -21,7 +21,16 @@
 #   fragment inside a DO body, and a name bound inside one fragment and read
 #   back from a later one, which is the case that reaches Activation::extra.
 #
-# The third clause is stated carefully because it was wrong twice. It requires
+#   CALL and RETURN (4b Task 3) -- CALL to an internal label (the plain and
+#   the CALL (expr) forms), RETURN with and without a value, the shared
+#   variable pool a callee with no PROCEDURE gets, and RESULT. NOT the other
+#   two CALL arms: CALL ON/OFF is Task 7's and CALL ns:name is Phase 5's, and
+#   both still fail loudly.
+#
+# The INTERPRET row's third clause is stated carefully because it was wrong
+# twice (it was "the third clause" until the CALL row landed between them; a
+# positional reference to a list that grows goes stale by construction). It
+# requires
 # BOTH the write and the read to be inside fragments: a bare `say zork` in this
 # file's enclosing body would put ZORK in that body's own plan, `slot_of` would
 # find it there, and the extra path would never be reached. Measured by
@@ -32,14 +41,23 @@
 # both spellings print 42 and both match the oracle.
 #
 # WHAT IT STILL EXCLUDES. Everything phase-4a.txt excludes except INTERPRET,
-# which is to say: no builtin function calls, no CALL/RETURN/PROCEDURE/USE/
-# SIGNAL/RAISE, no PARSE/ARG/PULL/PUSH/QUEUE, no message sends, no ::
+# CALL and RETURN, which is to say: no builtin function calls, no PROCEDURE/
+# USE/SIGNAL/RAISE, no PARSE/ARG/PULL/PUSH/QUEUE, no message sends, no ::
 # directives, no command clauses, no DO WITH, and no DO OVER on a stem. The
 # authoritative, machine-checked list is tests/owners.rs's INSTRUCTION_TAGS/
 # EXPR_TAGS: anything still carrying an `Owner::Phase` there fails loudly and
 # cannot appear in any program listed in this file. Later 4b tasks move their
 # own construct across that line and delete its name from the paragraph above
 # in the same change.
+#
+# **That rule is per *arm* where a variant is split, and CALL is the case.**
+# owners.rs's table is variant-grained, so `InstructionKind::Call` still reads
+# `Owner::Phase("4b")` -- for `Call::Trap` (`CALL ON`/`CALL OFF`), which is
+# Task 7's. `Call::Named` and `Call::Dynamic` are implemented, and a program
+# using them belongs here. loud.rs's `expand_for_witnesses` is where the
+# arm-level truth is machine-checked; reading the coarse tag alone would say
+# that no program here may contain a `CALL` at all, which is not what the
+# tables mean.
 #
 # A program listed here must also obey the corpus's one standing rule
 # (README.md, "The one rule: determinism"): same bytes on every run, on every
@@ -55,3 +73,11 @@ lang/interpret_dynamic.rex
 # one raises on purpose, and its whole value is the two-line echo the report
 # now prints. Its own header says which wrong answer each field would produce.
 lang/interpret_error_echo.rex
+
+# New for 4b Task 3 -- CALL and RETURN. Its whole value is the `trace r`
+# transcript on stderr: the callee's clauses echo at the calling clause's own
+# printed indent plus two, which `call inner` (inside a DO inside `outer:`)
+# pins at 6 where a "2 x depth" rule would say 2. The variables are not
+# decoration either -- a witness with none in it passes against an
+# implementation that wrongly gives every callee its own pool.
+lang/call_return.rex

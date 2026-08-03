@@ -110,9 +110,16 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // In scope since 4b's Task 1: 4a built the fragment machinery and that
     // task built the keyword on top of it.
     InstructionKind::Interpret { .. } => ("Interpret", Owner::InScope),
-    // ---- 4b's eight ----
+    // In scope since 4b's Task 3, with `CALL`.
+    InstructionKind::Return { .. } => ("Return", Owner::InScope),
+    // ---- 4b's seven ----
+    // **Still `Phase("4b")` after Task 3 implemented `Call::Named` and
+    // `Call::Dynamic`**, and that is not a stale label: this table is
+    // variant-grained, and `Call::Trap` (`CALL ON`/`CALL OFF`) is still owed
+    // to 4b's own Task 7. `loud.rs` is where the arms are told apart -- see
+    // its `expand_for_witnesses`, which now expands this one tag to the two
+    // arms that still fail loudly rather than to all four.
     InstructionKind::Call(_) => ("Call", Owner::Phase("4b")),
-    InstructionKind::Return { .. } => ("Return", Owner::Phase("4b")),
     InstructionKind::Procedure { .. } => ("Procedure", Owner::Phase("4b")),
     InstructionKind::Use(_) => ("Use", Owner::Phase("4b")),
     InstructionKind::Signal(_) => ("Signal", Owner::Phase("4b")),
@@ -278,7 +285,6 @@ impl Coverage {
 pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("InstructionKind", "Command", "Phase 7"),
     ("InstructionKind", "Call", "4b"),
-    ("InstructionKind", "Return", "4b"),
     ("InstructionKind", "Procedure", "4b"),
     ("InstructionKind", "Use", "4b"),
     ("InstructionKind", "Signal", "4b"),
@@ -390,8 +396,11 @@ fn variant_counts_match_the_audited_split() {
     // Re-derived here rather than trusted: 40 InstructionKind variants and 15
     // ExprKind (9 in scope, 6 failing loudly), per the design spec's criterion
     // 1. The InstructionKind split was 20/9/4/6/1 at the 4a gate; 4b's Task 1
-    // moved `Interpret` from 4b's column into the implemented one, so it is
-    // 21/8/4/6/1 now. This number is the *implemented* count, not "4a's own":
+    // moved `Interpret` from 4b's column into the implemented one (21/8/4/6/1)
+    // and Task 3 moved `Return` (22/7/4/6/1). `Call` did **not** move with it:
+    // the table is variant-grained and `Call::Trap` is still 4b's, so the
+    // variant stays in that column while two of its four arms are
+    // implemented. This number is the *implemented* count, not "4a's own":
     // every later 4b/4c task moves another variant across the same line, and
     // relabelling the column each time would be churn without information.
     assert_eq!(INSTRUCTION_TAGS.len(), 40);
@@ -400,14 +409,14 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        21
+        22
     );
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("4b"))
             .count(),
-        8
+        7
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -500,8 +509,8 @@ fn the_two_harnesses_include_this_exact_file() {
 // 3. **`coverage.rs`'s `variant_counts_match_the_audited_split`-style
 //    counts**, now living in this file's own
 //    [`variant_counts_match_the_audited_split`]: the four hardcoded
-//    `InstructionKind` phase counts (21/8/4/6/1 since 4b's Task 1, 20/9/…
-//    at the 4a gate) and the two `ExprKind` ones (9/6). A variant moving in
+//    `InstructionKind` phase counts (22/7/4/6/1 since 4b's Task 3, 21/8/…
+//    after Task 1, 20/9/… at the 4a gate) and the two `ExprKind` ones (9/6). A variant moving in
 //    scope changes the `InScope` count and whichever phase count it left,
 //    and both sides of that move must be edited together. `loud.rs`'s own
 //    `in_scope_counts_match_the_audited_split` carries a copy of the
@@ -513,7 +522,10 @@ fn the_two_harnesses_include_this_exact_file() {
 //    grained ownership"). The moment a variant (or arm) moves in scope, its
 //    row must be *deleted*, not merely left stale, or
 //    `assert_witness_set_is_complete` fails the other way (an extra
-//    witness with no matching phase-owned tag).
+//    witness with no matching phase-owned tag). An *arm* moving in scope
+//    while its variant does not -- Task 3, `Call::Named`/`Call::Dynamic` --
+//    also has to shrink `loud.rs`'s own `expand_for_witnesses`, which is
+//    what says how many rows the coarse tag is owed.
 // 5. **`src/lib.rs`'s `instruction_owner`/`expr_owner`**: the third copy of
 //    this same ownership data, unavoidably separate because production
 //    code cannot depend on anything under `tests/` -- see that file's own

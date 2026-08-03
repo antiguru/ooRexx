@@ -357,7 +357,7 @@ impl Interp {
     /// a `DO`/`LOOP` needs the second one and nothing else built so far
     /// does).
     pub(crate) fn trace_clause(&mut self, line: usize, indent: usize, text: &[u8]) {
-        if !self.trace_mode.all {
+        if !self.trace_mode().all {
             return;
         }
         push_clause(&mut self.trace, line, indent, text);
@@ -371,7 +371,7 @@ impl Interp {
     /// transcript in the report: a `say`'s own `>L>`/`>>>` sit at the same
     /// indent as the `say` clause itself, never one level further in).
     pub(crate) fn trace_result(&mut self, indent: usize, value: &[u8]) {
-        if !self.trace_mode.results {
+        if !self.trace_mode().results {
             return;
         }
         push_value(&mut self.trace, ">>>", indent, value);
@@ -383,7 +383,7 @@ impl Interp {
     /// `trace r` alone already shows `>K>   "TO" => "2"` with no other
     /// intermediate line anywhere in the same transcript.
     pub(crate) fn trace_keyword(&mut self, indent: usize, keyword: &str, value: &[u8]) {
-        if !self.trace_mode.results {
+        if !self.trace_mode().results {
             return;
         }
         push_tagged(
@@ -400,7 +400,7 @@ impl Interp {
     /// `>L>`/`>V>`/`>O>`/`>P>` -- `eval.rs`'s own single post-order insertion
     /// point, gated on `trace_mode.intermediates` (`TRACE I` only).
     pub(crate) fn tracing_intermediates(&self) -> bool {
-        self.trace_mode.intermediates
+        self.trace_mode().intermediates
     }
 
     /// `>L>` (`TRACE_PREFIX_LITERAL`): a literal's own value, untagged.
@@ -411,7 +411,7 @@ impl Interp {
     /// `Constant`** (this task's report says so), reasoned from `Literal`'s
     /// own measured shape rather than a second transcript.
     pub(crate) fn trace_literal(&mut self, indent: usize, value: &[u8]) {
-        if !self.trace_mode.intermediates {
+        if !self.trace_mode().intermediates {
             return;
         }
         push_value(&mut self.trace, ">L>", indent, value);
@@ -421,7 +421,7 @@ impl Interp {
     /// read value, tagged with its own name, unquoted
     /// (`traceVariable`/`RexxActivation.hpp:341`-`342`, `quoteTag = false`).
     pub(crate) fn trace_variable(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
-        if !self.trace_mode.intermediates {
+        if !self.trace_mode().intermediates {
             return;
         }
         push_tagged(&mut self.trace, ">V>", indent, false, tag, " => ", value);
@@ -435,7 +435,7 @@ impl Interp {
     /// on pure 4a code (`ExprKind::DotVariable`'s three admissible names are
     /// 4a's own, D15).
     pub(crate) fn trace_dotvar(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
-        if !self.trace_mode.intermediates {
+        if !self.trace_mode().intermediates {
             return;
         }
         push_tagged(&mut self.trace, ">E>", indent, false, tag, " => ", value);
@@ -445,7 +445,7 @@ impl Interp {
     /// tagged with the operator's own spelling, quoted
     /// (`traceOperatorValue` always quotes its tag, unlike `>V>`/`>=>`).
     pub(crate) fn trace_operator(&mut self, indent: usize, op: &[u8], value: &[u8]) {
-        if !self.trace_mode.intermediates {
+        if !self.trace_mode().intermediates {
             return;
         }
         push_operator(&mut self.trace, ">O>", indent, op, value);
@@ -457,7 +457,7 @@ impl Interp {
     /// `traceOperatorValue` `traceOperator` does, differing only in which
     /// `TracePrefix` it passes).
     pub(crate) fn trace_prefix_op(&mut self, indent: usize, op: &[u8], value: &[u8]) {
-        if !self.trace_mode.intermediates {
+        if !self.trace_mode().intermediates {
             return;
         }
         push_operator(&mut self.trace, ">P>", indent, op, value);
@@ -473,7 +473,7 @@ impl Interp {
     /// `trace r` alone shows `>>>` for an assignment's own value but never
     /// `>=>` (this task's report, `trace_results.rex`'s own transcript).
     pub(crate) fn trace_assignment(&mut self, indent: usize, tag: &[u8], value: &[u8]) {
-        if !self.trace_mode.intermediates {
+        if !self.trace_mode().intermediates {
             return;
         }
         push_tagged(&mut self.trace, ">=>", indent, false, tag, " <= ", value);
@@ -490,7 +490,7 @@ impl Interp {
     /// tail actually resolves to a stored value). Gated on `intermediates`
     /// like every other value-prefix line.
     pub(crate) fn trace_compound_name(&mut self, indent: usize, tag: &[u8], resolved: &[u8]) {
-        if !self.trace_mode.intermediates {
+        if !self.trace_mode().intermediates {
             return;
         }
         push_tagged(&mut self.trace, ">C>", indent, false, tag, " => ", resolved);
@@ -582,16 +582,45 @@ mod tests {
     /// only under the mode that names it (`>>>`/`>K>` under `results`,
     /// **not** requiring `intermediates`, matching `trace r` alone already
     /// showing both).
+    /// Pushes the one activation these gates read their mode from.
+    ///
+    /// Needed since Task 3 moved `trace_mode` from `Interp` onto
+    /// `Activation`: `Interp::trace_mode` is the *running* activation's, so
+    /// there has to be one before anything can be traced or set. The program
+    /// is empty because nothing here runs it -- the tests below call the
+    /// three sink functions directly.
+    fn activate_empty(interp: &mut Interp) {
+        use std::rc::Rc;
+
+        let program = Rc::new(rexx_parse::parse_program(Vec::new()).expect("the empty program"));
+        let id = crate::plan::ProgramId(interp.programs.len());
+        interp.programs.push(Rc::clone(&program));
+        let plan = interp.plan_for(
+            crate::plan::BodyKey {
+                program: id,
+                directive: None,
+            },
+            &program.main,
+            &program.symbols,
+        );
+        let frame = interp.roots.push_slots(plan.len());
+        interp
+            .activations
+            .push(crate::Activation::new(program, plan, frame));
+    }
+
     #[test]
     fn the_three_gates_fire_under_exactly_the_modes_that_should_show_them() {
         let mut interp = Interp::new();
+        activate_empty(&mut interp);
         interp.trace_clause(1, 0, b"say 1");
         interp.trace_result(0, b"1");
         interp.trace_keyword(0, "TO", b"2");
         assert!(interp.trace.is_empty(), "TraceMode::OFF is silent");
 
         let mut interp = Interp::new();
-        interp.trace_mode = TraceMode::RESULTS;
+        activate_empty(&mut interp);
+        interp.set_trace_mode(TraceMode::RESULTS);
         interp.trace_clause(1, 0, b"say 1");
         interp.trace_result(0, b"1");
         interp.trace_keyword(0, "TO", b"2");

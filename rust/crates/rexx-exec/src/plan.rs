@@ -61,8 +61,19 @@ pub(crate) struct ProgramId(pub(crate) usize);
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub(crate) struct BodyKey {
     pub(crate) program: ProgramId,
-    /// `None` is the program's main body. 4b is the first to need
-    /// `Some(index)` for `directives[index]`'s body.
+    /// `None` is the program's main body, `Some(index)` is
+    /// `directives[index]`'s.
+    ///
+    /// **The same selector `Activation::body` carries**, decided with it by
+    /// Task 3 rather than separately: a plan is cached under this key and
+    /// looked up again by whatever runs that body, so if the two spellings
+    /// denoted different things a body would run under another body's plan.
+    /// `activation.rs`'s own `body_of` is the single place either is turned
+    /// into a `&CodeBody`.
+    ///
+    /// Still only ever `None` in practice, and that field's doc has the
+    /// measured reason: a `::routine` is reachable only past the builtin
+    /// resolution step, which is 4c's.
     pub(crate) directive: Option<usize>,
 }
 

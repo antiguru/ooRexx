@@ -350,3 +350,49 @@ fn a_raised_condition_reports_the_failing_clause() {
         )
     );
 }
+
+/// I6/D10: unbounded `CALL` recursion is a reportable 11.1 condition, not a
+/// native abort.
+///
+/// Oracle, `n = 0` / `call sub` / `exit` / `sub:` / `n = n + 1` / `call sub` /
+/// `return`: `Error 11.1`, `Insufficient control stack space`, rc 245, at its
+/// own depth of 27,314 (measured by trapping the condition and printing `n`).
+///
+/// **This test lives here rather than beside `CALL`'s own unit tests, and the
+/// reason is I34 rather than tidiness.** It was written there first and
+/// aborted the whole test binary: a `cargo test` thread's default 2 MiB
+/// survives fewer than 90 activations of this crate's own debug build
+/// (measured, 80 survives and 90 aborts), so the native overflow arrives
+/// two orders of magnitude before any counter. `run_program` is what spawns
+/// the 512 MiB thread `MAX_ACTIVATION_DEPTH` is sized against, and going
+/// through it is the whole point of the test rather than an incidental
+/// choice of entry point.
+#[test]
+fn unbounded_call_recursion_raises_11_1_rather_than_overflowing() {
+    let outcome = run_program(
+        SPIKE_PATH,
+        b"n = 0\ncall sub\nexit\nsub:\nn = n + 1\ncall sub\nreturn\n".to_vec(),
+    );
+
+    assert_eq!(outcome.exit_code, 256 - 11);
+    let stderr = String::from_utf8(outcome.stderr).expect("the report is ASCII");
+    // The report's own two lines, verbatim from the oracle. Everything above
+    // them is the echo stack, one `call sub` per activation the recursion
+    // reached -- the same shape the oracle prints, at a different depth: it
+    // echoes 27,318 lines where this echoes `MAX_ACTIVATION_DEPTH` of them.
+    assert!(
+        stderr.ends_with(&format!(
+            "     2 *-* call sub\n\
+             Error 11 running {SPIKE_PATH} line 6:  Control stack full.\n\
+             Error 11.1:  Insufficient control stack space; cannot continue execution.\n"
+        )),
+        "expected the 11.1 report, got the last 200 bytes {:?}",
+        &stderr[stderr.len().saturating_sub(200)..]
+    );
+    assert_eq!(
+        stderr.lines().filter(|l| l.ends_with("call sub")).count(),
+        10_000,
+        "one echo per activation, and every one of them popped again on the \
+         way out rather than the stack unwinding through a native abort"
+    );
+}

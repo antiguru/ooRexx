@@ -51,7 +51,20 @@
 //! `THEN` (never collected into the enclosing `SELECT`'s own `whens` list,
 //! `ast.rs`'s own doc comment) is reached only by ordinary stepping, and its
 //! arm evaluates its condition and, for `WhenCase`, branches on the result.
+//!
+//! 4b's Task 3 is the first to make the **activation stack** real, and it is
+//! `run_activation` that changes shape rather than only gaining arms: it
+//! reads the activation's own body selector instead of hardcoding
+//! `&program.main`, and it answers `Ended` rather than a bare
+//! `Option<ObjRef>`, because a callee has two ways out that differ in what
+//! the caller does next. `CALL`'s own work lives in `exec_call`, which is
+//! `run_fragment`'s counterpart at the other kind of level boundary -- both
+//! save and restore the same indent state and both `seal_site_level` on the
+//! way out, and the one place they differ (this one *clears*
+//! `clause_line_override` where the other *sets* it) is measured and stated
+//! at both.
 
+use crate::activation::{Activation, body_of};
 use crate::error::{FailureSite, Raised};
 use crate::eval::logical_value;
 use crate::trace::{
@@ -87,6 +100,32 @@ enum Flow {
     /// jump such a construct computes stays inside the fragment's own range.
     Goto(usize),
     Exit(Option<ObjRef>),
+    /// `RETURN`, with the expression's value or `None` for the bare form.
+    /// Live since Task 3.
+    ///
+    /// **Why none of the four variants above expresses this.** `Goto` moves
+    /// within one body; `Exit` ends the whole program and every activation
+    /// with it; `Leave`/`Iterate` are consumed by a `DO`/`SELECT` frame
+    /// inside the current activation. `RETURN` unwinds to the **activation**
+    /// boundary and no further -- past every enclosing `DO`, `SELECT` and
+    /// `IF` in the callee, and past no part of the caller. Measured: a
+    /// `return` inside a `do forever` inside a called routine resumes the
+    /// caller's next clause rather than looping, and `LEAVE`'s own search
+    /// (which does stop at those frames) is exactly the behaviour it must
+    /// not have.
+    ///
+    /// So it travels as data through the same channel `Exit` does -- every
+    /// `run_bounded` catch-all and every `Do`/`Select` forwarding arm already
+    /// passes anything they do not own straight out -- and `run_activation`
+    /// is the only thing that ever consumes it.
+    ///
+    /// **In the *main* body, with no caller, it ends the program with its
+    /// value, exactly like `EXIT`.** Measured: `say 'a'` / `return 5` /
+    /// `say 'b'` prints `a` and exits 5, and a bare `return` there exits 0.
+    /// `run_activation` reports it as `Ended::Returned` regardless and
+    /// `Interp::run` is what treats the two alike at the top -- kept apart
+    /// down here because a callee genuinely has to tell them apart.
+    Return(Option<ObjRef>),
     /// `LEAVE`, bare (`None`) or by name. Live since Task 11.
     ///
     /// **Why this is a `Flow` variant and not an immediate `Err`:** `LEAVE`
@@ -140,6 +179,92 @@ enum Flow {
     /// "not mine, keep looking").
     Iterate(Option<SymbolId>, LeaveOrigin),
 }
+
+/// How one activation finished, which is not the same question as what value
+/// it produced.
+///
+/// `run_activation` had a bare `Option<ObjRef>` through 4a, when every
+/// activation was the program's only one and every way out of it stopped the
+/// program. A callee has two ways out that differ in what the *caller* does
+/// next, and the value alone cannot tell them apart -- `return` and `exit`
+/// with the same value are the same `Option` and the opposite instruction.
+///
+/// Measured, and the distinction is not cosmetic: `call sub` / `say 'after'`
+/// with `sub:` ending in `exit` never prints `after`, and with `sub:` ending
+/// in `return` it does.
+pub(crate) enum Ended {
+    /// `RETURN`: the caller resumes at its next clause, with this value in
+    /// `RESULT`.
+    Returned(Option<ObjRef>),
+    /// `EXIT`, **or the body running out of instructions.** The whole program
+    /// stops. Falling off the end belongs here rather than with `Returned`
+    /// and that is measured, not assumed: a callee whose label is the last
+    /// thing in the file ends the program -- `trace r` / `call sub` / `say
+    /// 'after'` / `exit` / `sub:` / `hh = 1` echoes the callee's clauses, then
+    /// stops at rc 0 with `after` neither printed nor echoed.
+    Exited(Option<ObjRef>),
+}
+
+impl Ended {
+    /// The value, whichever way the activation finished -- what the *top*
+    /// level wants, where the distinction carries no information.
+    pub(crate) fn value(self) -> Option<ObjRef> {
+        match self {
+            Ended::Returned(value) | Ended::Exited(value) => value,
+        }
+    }
+}
+
+/// How many activations may be live at once before `CALL` raises 11.1
+/// ("Insufficient control stack space", `Raised::insufficient_stack`).
+///
+/// **The oracle's own number is 27,314** (measured: unbounded `call sub`
+/// recursion under `signal on syntax`, counting the depth reached), and this
+/// limit is deliberately *not* it. What decides ours is where our own native
+/// stack gives out, because one activation costs one `run_activation` Rust
+/// frame (D19's choice, I6) and a native overflow is the silent death this
+/// counter exists to convert into a reportable condition.
+///
+/// **Measured on this crate's own 512 MiB entry thread** (`lib.rs`'s
+/// `on_interpreter_thread`), by bisecting the depth at which `rexx-run`
+/// aborts. `cargo test`'s own debug profile is the binding one, and the
+/// second column is what the value below is chosen against:
+///
+/// ```text
+/// enclosing DO blocks per activation | deepest surviving (debug) | (release)
+///                                  0 |                    22,534 |   133,150
+///                                  1 |                    14,062 |    94,518
+///                                  5 |                     5,616 |         -
+///                                 25 |                     1,403 |         -
+/// ```
+///
+/// The rows are ~23.8 KB for a bare activation and ~14.4 KB for each further
+/// `run_bounded` level inside it, in debug -- `run_bounded` costs a Rust
+/// frame per *lexical* nesting level, and the "0" row already includes one,
+/// since the recursion is guarded by an `IF`.
+///
+/// **So no fixed counter over activations can be a guarantee, and that is
+/// the honest reading of I34 rather than a caveat on it.** A body with about
+/// four or more block levels around its own recursive `CALL` still aborts
+/// natively before this fires: at 25 levels the abort is at 1,403, two
+/// orders below. The counter converts the realistic shapes -- flat and
+/// lightly nested recursion, which is what a recursive routine is -- and the
+/// budget it shares with `run_bounded` (and, from Phase 5, dispatch) is what
+/// a real fix has to bound. That is a documented minimum stack or a shared
+/// depth budget, and it is not this task's.
+///
+/// **Nothing in this tree is on the small-stack cliff, but a `cargo test`
+/// thread is.** Every public entry point spawns the sized thread; a test
+/// reaching the crate internals directly does not, and on the default 2 MiB
+/// this crate's debug build survives fewer than 90 activations (measured: 80
+/// survives, 90 aborts). `tests/spike.rs`'s own recursion test says so at
+/// its definition -- it was written as a unit test first and aborted the
+/// binary.
+///
+/// The value is deliberately not the oracle's 27,314: that is above our own
+/// debug abort in every row above, so matching it would mean shipping a
+/// counter that never fires.
+const MAX_ACTIVATION_DEPTH: usize = 10_000;
 
 /// Where a `LEAVE`/`ITERATE` instruction itself sits, captured the instant
 /// it steps rather than reconstructed later -- see `Flow::Leave`'s own doc
@@ -389,30 +514,41 @@ impl Interp {
     ///     }
     /// }
     /// ```
-    pub(crate) fn run_activation(&mut self) -> Result<Option<ObjRef>, Failure> {
+    pub(crate) fn run_activation(&mut self) -> Result<Ended, Failure> {
         // `code` is bound to the activation on top of the stack at entry,
         // while every `pc` read and write below goes to whatever is on top
         // *now*. Those are the same frame only because `step` leaves the
-        // activation stack as it found it, which is true in 4a because
-        // nothing here pushes one, and true for a fragment because it runs
-        // inside the creating activation rather than pushing its own.
+        // activation stack as it found it -- true for a fragment, which runs
+        // inside the creating activation rather than pushing its own, and
+        // true for a `CALL` only because the `Call` arm pops the callee
+        // before it returns.
         //
-        // **4b breaks that and will not be told so by the compiler.** A
-        // `CALL` pushes an activation inside `step`, and if it ever returned
-        // with the callee still on the stack, this loop would carry on
-        // reading the callee's `pc` while executing the caller's body: a
+        // **That is now a real risk and the compiler will not mention it.**
+        // A `CALL` pushes an activation inside `step`, and if it ever
+        // returned with the callee still on the stack, this loop would carry
+        // on reading the callee's `pc` while executing the caller's body: a
         // wrong answer, not a borrow error, because both are plain field
         // accesses on `self`. The assertion below is what turns that into a
-        // failure at the first instruction instead of a debugging session.
+        // failure at the first instruction instead of a debugging session,
+        // and it is why the `Call` arm's pop is unconditional across both the
+        // `Ok` and the `Err` path.
         //
-        // The body is `program.main` and the activation does not record which
-        // body it is running, which is the other half of the same assumption.
-        // 4b's activation for a `::routine` needs that field; without it, such
-        // an activation would re-run the main body here. See `Activation`.
+        // The body comes from the activation's own selector rather than being
+        // hardcoded to `program.main` (Task 3): `body_of` is the one place
+        // that mapping lives, shared with `BodyKey::directive`'s own.
         let program = Rc::clone(&self.activation().program);
         let plan = Rc::clone(&self.activation().plan);
+        let selector = self.activation().body;
+        // A selector that resolves to nothing is an internal inconsistency
+        // and not a program error: it can only be built by a resolution step
+        // that already looked the body up. Loud rather than a panic, matching
+        // this crate's standing rule -- an abort is precisely the outcome
+        // that rule exists to exclude.
+        let Some(body) = body_of(&program, selector) else {
+            return Err(Loud::missing_body().into());
+        };
         let code = Code {
-            body: &program.main,
+            body,
             symbols: &program.symbols,
             slots: &plan.by_symbol,
         };
@@ -464,7 +600,11 @@ impl Interp {
             match flow {
                 Flow::Next => self.activation_mut().pc += 1,
                 Flow::Goto(target) => self.activation_mut().pc = target,
-                Flow::Exit(value) => return Ok(value),
+                Flow::Exit(value) => return Ok(Ended::Exited(value)),
+                // The activation boundary `Flow::Return` was added to reach.
+                // Every construct between the `RETURN` and here forwarded it
+                // untouched; this is the one consumer.
+                Flow::Return(value) => return Ok(Ended::Returned(value)),
                 // Task 11: a `LEAVE`/`ITERATE` that reached the very top of
                 // the program -- nothing anywhere, at any nesting depth,
                 // ever matched it. This is the exhausted-search family,
@@ -504,7 +644,10 @@ impl Interp {
                  no longer describe the same frame"
             );
         }
-        Ok(None)
+        // Out of instructions. `Exited` and not `Returned`: measured, a
+        // callee that runs off the end of the file ends the *program* and the
+        // caller's next clause never runs. See `Ended::Exited`'s own doc.
+        Ok(Ended::Exited(None))
     }
 
     /// Runs one instruction.
@@ -674,7 +817,8 @@ impl Interp {
                 Ok(Flow::Next)
             }
 
-            // `TRACE` (D17): sets `self.trace_mode`, or raises 24.901 for
+            // `TRACE` (D17): sets the running activation's own trace mode, or
+            // raises 24.901 for
             // the interactive-only skip-count forms. See `exec_trace`.
             InstructionKind::Trace(setting) => {
                 self.exec_trace(code, setting)?;
@@ -812,15 +956,22 @@ impl Interp {
                 // and one left by `LEAVE` do not do it, so the property is "a
                 // pass completed", not "a re-test failed".
                 //
-                // The **scope** is narrower than "that level" and than
-                // "accumulates", both of which earlier revisions of this
-                // comment claimed: sibling loops accumulate, nested ones do
-                // not, because the decrement is discarded at the `END` of an
-                // enclosing repetitive `DO`/`LOOP` and at the `END` of an
-                // enclosing `SELECT`. `phase-4-exclusions.txt`'s row has the
-                // measured table and the shapes still unmeasured. Three
-                // revisions have each generalised past their own rows; do not
-                // extend the claim here without measuring.
+                // **The cause is a C++ defect, and stating the cause is the
+                // only version of this that has not needed correcting.**
+                // `traceIndent` is a counter; a loop ending normally restores
+                // the value `DoBlock` saved, while a loop whose control test
+                // fails takes a different exit path that bare-decrements it
+                // (`BaseDoInstruction.cpp:161` against `:377`). So the stray
+                // decrement survives exactly until some enclosing construct
+                // restores from its own saved block, and is discarded there.
+                //
+                // Four earlier revisions of this comment each stated a rule
+                // about *constructs* instead, and each drifted: the
+                // qualification predicate, the scope, accumulation, and the
+                // discarding class. `phase-4-exclusions.txt`'s row has the
+                // C++ citations and the measured tables. **Do not write a
+                // fifth construct-shaped rule here** -- if a shape is not in
+                // a table, work out which exit path it takes.
                 //
                 // That is a 4a divergence with nothing to do with fragments,
                 // but it reaches this base from both sides --
@@ -983,7 +1134,7 @@ impl Interp {
                     // above is explicit: this condition is evaluated
                     // outside any `step_in_temps_frame` call of its own.
                     self.current_value_indent = when_indent;
-                    if self.trace_mode.all
+                    if self.trace_mode().all
                         && let Some((line, text)) = self.clause_site(source, when_instruction)
                     {
                         self.trace_clause(line, when_indent, &text);
@@ -1377,8 +1528,267 @@ impl Interp {
                 }
             }
 
+            // `CALL name`, `CALL "name"` and `CALL (expr)`. The other two
+            // arms of `rexx_parse::Call` stay loud and keep their own owners
+            // (`instruction_owner`, `lib.rs`): `Trap` (`CALL ON`/`CALL OFF`)
+            // is Task 7's, `Qualified` (`CALL ns:name`) is Phase 5's.
+            InstructionKind::Call(call) => match &**call {
+                // `name` arrives already upcased for the symbol form and
+                // verbatim for the quoted one (`rexx-parse`'s own `Call`
+                // doc). `literal` inverts into "may this search the label
+                // table": measured, `call "SUB"` with `sub:` present is
+                // Error 43.1 and not a call, so the quoted form bypasses the
+                // search entirely rather than merely matching case-sensitively.
+                rexx_parse::Call::Named {
+                    name,
+                    literal,
+                    args,
+                } => self.exec_call(code, name, !*literal, args),
+                // `CALL (expr)`: the target is evaluated in the caller, its
+                // value is traced, and the **verbatim** text is what the
+                // label search sees. Both halves are measured and they pull
+                // in opposite directions from the quoted form: `nm = 'SUB';
+                // call (nm)` runs `sub:`, so this form *does* search labels,
+                // while `nm = 'sub'; call (nm)` is Error 43.1 `Could not find
+                // routine "sub"`, so the value is not upcased on the way in.
+                rexx_parse::Call::Dynamic { target, args } => {
+                    let value = self.eval(code, target)?;
+                    self.roots.push_temp(value);
+                    let name = self.to_text(value).to_vec();
+                    // Its own `>>>`, at the `CALL` clause's own indent, which
+                    // `Call::Named` has no equivalent of -- measured, `call
+                    // sub 1+1, 'q'` under `trace r` traces no value line at
+                    // all while `call (nm)` traces one for the target.
+                    self.trace_result(self.current_value_indent, &name);
+                    self.exec_call(code, &name, true, args)
+                }
+                rexx_parse::Call::Qualified { .. } | rexx_parse::Call::Trap(_) => {
+                    Err(Loud::instruction(&instruction.kind).into())
+                }
+            },
+
+            // `RETURN`, bare or with a value. Unwinds to the activation
+            // boundary; `Flow::Return`'s own doc comment has why none of the
+            // other variants expresses that, and why the main body's own
+            // `RETURN` ends the program.
+            //
+            // The value's `>>>` fires **here**, at the `RETURN`'s own clause
+            // indent, and the caller traces a *second* one at its own --
+            // measured, `return 9` from a routine called at top level prints
+            // `>>>     "9"` then `>>>   "9"`, two lines for one value at two
+            // indents. `exec_call` owns the second; this owns the first.
+            InstructionKind::Return { expression } => {
+                let value = match expression {
+                    Some(expression) => {
+                        let value = self.eval(code, expression)?;
+                        self.roots.push_temp(value);
+                        let rendered = self.to_text(value).to_vec();
+                        self.trace_result(self.current_value_indent, &rendered);
+                        Some(value)
+                    }
+                    None => None,
+                };
+                Ok(Flow::Return(value))
+            }
+
             other => Err(Loud::instruction(other).into()),
         }
+    }
+
+    /// Runs one named call: resolve, evaluate the arguments, run the callee
+    /// in its own activation, and settle `RESULT`.
+    ///
+    /// `search_labels` is false for exactly one caller, `CALL "name"`, and
+    /// its own call site has the measurement.
+    ///
+    /// **Resolution order is internal label, then builtin, then external**,
+    /// and 4b builds only the front of it: a name that is not a label of the
+    /// calling body fails loudly naming `4c`, which owns the builtin table.
+    /// That is the right answer for `CALL "SUB"` even with `sub:` in the
+    /// program -- the oracle's own Error 43.1 there is a statement that
+    /// nothing outside the label table matched either, which is knowledge
+    /// this phase does not have.
+    ///
+    /// A same-file `::routine` is behind the builtin step and so is
+    /// unreachable here too: measured, `::routine max` alongside `call max
+    /// 1,2` still calls the builtin. `Activation::body`'s own doc has what
+    /// that costs and what whoever closes it inherits.
+    fn exec_call(
+        &mut self,
+        code: &Code<'_>,
+        name: &[u8],
+        search_labels: bool,
+        args: &[Option<Expr>],
+    ) -> Result<Flow, Failure> {
+        // **Resolved against the running *activation's* body, not against
+        // `code.body`, and the two differ inside an `INTERPRET` fragment.**
+        // A fragment's `labels` is always empty -- a label in interpreted
+        // text is error 47.1 -- so searching `code.body` would make every
+        // `CALL` inside a fragment unresolvable. Measured on the oracle:
+        // `interpret "call sub"` runs the enclosing program's `sub:`. Found
+        // by running the composition rather than by reading the code: the
+        // first version of this function searched `code.body` and passed
+        // every test that had no `INTERPRET` in it.
+        let program = Rc::clone(&self.activation().program);
+        let selector = self.activation().body;
+        let Some(activation_body) = body_of(&program, selector) else {
+            return Err(Loud::missing_body().into());
+        };
+        let target = if search_labels {
+            activation_body.labels.get(name).copied()
+        } else {
+            None
+        };
+        let Some(target) = target else {
+            return Err(Loud::unresolved_call(name).into());
+        };
+
+        // **Evaluated in the caller, before anything is pushed**, which is
+        // where the argument expressions' own variables live. Unobservable
+        // in this task except through failure -- `USE ARG` (Task 4) and
+        // `ARG()` (4c) are what read an argument, and both are still loud --
+        // but the failure is real and measured: `call sub 1/0` is Error 42.3
+        // reported against the `CALL` clause, at rc 214, and a version that
+        // skipped evaluation would run the callee instead.
+        //
+        // `flatten` skips an omitted position (`call sub 1,,3` parses as
+        // `[Some, None, Some]`) rather than evaluating something for it. The
+        // values are rooted for this clause and then dropped: nothing in this
+        // phase can read them, and a field holding them would be a field
+        // nothing reads. Whoever lands `USE ARG` keeps this `Vec` instead of
+        // discarding it, and needs the `Option`s intact -- measured, `call
+        // sub 1,,3` into three `USE ARG` targets gives `[1] [Q] [3]`, the
+        // omitted position leaving its target unset rather than shifting the
+        // ones after it.
+        for arg in args.iter().flatten() {
+            let value = self.eval(code, arg)?;
+            self.roots.push_temp(value);
+        }
+
+        // D19/I6: one Rust frame per activation, plus this counter, so an
+        // unbounded recursion becomes a reportable condition instead of a
+        // native abort. `Raised::insufficient_stack` already existed
+        // (`error.rs`); measured, the oracle answers the same 11.1 at rc 245
+        // for the same program, at its own depth of 27,314.
+        if self.activations.len() >= MAX_ACTIVATION_DEPTH {
+            return Err(Raised::insufficient_stack().into());
+        }
+
+        // **D9r's default: a shared pool.** The callee reuses the caller's
+        // `SlotFrame`, so it reads and writes the caller's variables and its
+        // writes survive the return -- measured, and `pop_slots` is
+        // deliberately not called on the way out because the frame is not
+        // this activation's to free. Task 5's `PROCEDURE` is what will ever
+        // push a frame of its own.
+        //
+        // `extra` is cloned in and moved back out for the same reason: it is
+        // the *name* half of that one pool (`plan.rs`'s own `slot_of`), and
+        // leaving the callee with an empty one would strand a name bound at
+        // run time inside it. Measured on the oracle -- a callee running
+        // `interpret "zork = 42"` and a caller then saying `zork` prints 42,
+        // which needs the binding as well as the slot to cross the return.
+        // Empty in every program that has no `INTERPRET` and no `DROP (v)`,
+        // which is why the clone is not a cost worth avoiding.
+        let caller = self.activation();
+        let plan = Rc::clone(&caller.plan);
+        let frame = caller.frame;
+        let settings = caller.settings.clone();
+        let trace_mode = caller.trace_mode;
+        let extra = caller.extra.clone();
+        let mut callee =
+            Activation::nested(program, selector, plan, frame, target, settings, trace_mode);
+        callee.extra = extra;
+        self.activations.push(callee);
+
+        // The three pieces of level state, saved here and restored on both
+        // paths below. `Interpret`'s own arm is the model and one of the
+        // three differs from it deliberately:
+        //
+        // * `activation_indent` is **set** to the calling clause's printed
+        //   indent plus two (D2r). Measured at three shapes rather than one,
+        //   because "2 x depth" agrees with the truth at caller indent 0 and
+        //   parts company immediately after: a flat `call` echoes the callee
+        //   at 2, one `DO` deep at 4, two `DO`s deep at 6.
+        // * `indent_offset` is zeroed alongside it, exactly as the fragment
+        //   case is and for the same reason -- the calling clause's printed
+        //   indent already contains any escape elevation, and leaving this
+        //   would count it twice.
+        // * `clause_line_override` is **cleared**, where `INTERPRET` sets it.
+        //   Each activation's echo carries its *own* line, and the clearing
+        //   is what makes that true inside a fragment: measured, `interpret
+        //   "call sub"` on line 2 echoes the fragment's `call sub` at line 2
+        //   and the callee's own clauses at lines 4, 5 and 6. Leaving the
+        //   enclosing override in force would print all six as line 2.
+        let base_indent = self.current_value_indent;
+        let saved_base = std::mem::replace(&mut self.activation_indent, base_indent + 2);
+        let saved_offset = std::mem::take(&mut self.indent_offset);
+        let saved_line = std::mem::take(&mut self.clause_line_override);
+
+        let ended = self.run_activation();
+
+        // Popped on both paths, and unconditionally: `run_activation`'s own
+        // loop asserts the activation stack is where it found it after every
+        // step, so a `CALL` that returned with the callee still on it would
+        // trip that assertion in the caller rather than quietly running the
+        // wrong frame's `pc`.
+        let callee = self.activations.pop().expect("the activation just pushed");
+        self.activation_mut().extra = callee.extra;
+        self.activation_indent = saved_base;
+        self.indent_offset = saved_offset;
+        self.clause_line_override = saved_line;
+
+        let ended = match ended {
+            Ok(ended) => ended,
+            Err(failure) => {
+                // Seal before the failure leaves the callee, never after --
+                // `seal_site_level`'s own rule, and the same one
+                // `run_fragment` follows. Without it the callee's clause
+                // would win `record_failure_at`'s first-wins race outright
+                // and the `CALL` would never be echoed. Measured, the oracle
+                // prints one echo per level, innermost first: a `say 1/0` in
+                // a routine called from a routine called from a `DO` gives
+                // three lines, at indents 6, 4 and 2.
+                self.seal_site_level();
+                return Err(failure);
+            }
+        };
+
+        let value = match ended {
+            // `EXIT` inside the callee ends the program rather than the
+            // call, and so does running off the end of the body -- measured
+            // both ways. Forwarded unchanged; `RESULT` is never touched on
+            // this path.
+            Ended::Exited(value) => return Ok(Flow::Exit(value)),
+            Ended::Returned(value) => value,
+        };
+
+        // **`RESULT` is settled on return and not at the call.** Measured:
+        // a caller setting `result = 'before'` and calling a no-`PROCEDURE`
+        // routine has the callee print `inside result= before`, so nothing
+        // is cleared on the way in. After `return 42` the caller reads `42`;
+        // after a bare `return` it reads the derived name `RESULT`, which is
+        // what an unset variable renders as.
+        let slot = self.slot_of(b"RESULT");
+        let frame = self.activation().frame;
+        match value {
+            Some(value) => {
+                // Re-rooted in the caller: `step_in_temps_frame` popped the
+                // callee's temps frame around every clause it ran, this one
+                // included, so the `push_temp` the `RETURN` arm did is gone
+                // by now. Same window `Flow::Exit`'s own arm documents,
+                // closed here rather than left open, because unlike an exit
+                // value this one goes on to be stored and read.
+                self.roots.push_temp(value);
+                let rendered = self.to_text(value).to_vec();
+                // The caller's own `>>>`, at the `CALL` clause's indent --
+                // `base_indent`, saved before the callee overwrote
+                // `current_value_indent` with its own clauses'.
+                self.trace_result(base_indent, &rendered);
+                self.roots.set_slot(frame, slot, value);
+            }
+            None => self.roots.clear_slot(frame, slot),
+        }
+        Ok(Flow::Next)
     }
 
     /// Runs one instruction inside its own temps frame.
@@ -1483,7 +1893,7 @@ impl Interp {
         // comment for what it adds and why open-coding it was a defect.
         let indent = self.printed_indent(&code.body.instructions, index);
         self.current_value_indent = indent;
-        if self.trace_mode.all
+        if self.trace_mode().all
             && let Some((line, text)) = self.clause_site(source, instruction)
         {
             self.trace_clause(line, indent, &text);
@@ -1723,7 +2133,7 @@ impl Interp {
         // difference between them.
         let otherwise_indent = self.printed_indent(&code.body.instructions, otherwise_index);
         self.current_value_indent = otherwise_indent;
-        if self.trace_mode.all
+        if self.trace_mode().all
             && let Some((line, text)) = self.clause_site(source, otherwise_instruction)
         {
             self.trace_clause(line, otherwise_indent, &text);
@@ -1970,7 +2380,7 @@ impl Interp {
                     // `end` on its own line even though the block never
                     // repeats.
                     None => {
-                        if self.trace_mode.all
+                        if self.trace_mode().all
                             && let Some((line, text)) =
                                 self.clause_site(source, &code.body.instructions[end_index])
                         {
@@ -2231,7 +2641,7 @@ impl Interp {
         loop {
             if !first_pass
                 && !is_until_loop
-                && self.trace_mode.all
+                && self.trace_mode().all
                 && let Some((line, text)) = self.clause_site(source, do_instruction)
             {
                 self.trace_clause(line, do_indent, &text);
@@ -2279,7 +2689,7 @@ impl Interp {
             // never echoes for that final pass, only for a pass that
             // genuinely falls through to it.
             let end_instruction = &code.body.instructions[end_index];
-            if self.trace_mode.all
+            if self.trace_mode().all
                 && let Some((line, text)) = self.clause_site(source, end_instruction)
             {
                 self.trace_clause(line, do_indent, &text);
@@ -2304,7 +2714,7 @@ impl Interp {
                 // `UNTIL`'s decision point is not the same event as the
                 // top-of-loop one, so it needs its own echo unconditionally
                 // rather than sharing `first_pass`'s gate.
-                if self.trace_mode.all
+                if self.trace_mode().all
                     && let Some((line, text)) = self.clause_site(source, do_instruction)
                 {
                     self.trace_clause(line, do_indent, &text);
@@ -3166,11 +3576,13 @@ impl Interp {
     fn exec_trace(&mut self, code: &Code<'_>, setting: &Trace) -> Result<(), Failure> {
         match setting {
             Trace::Default => {
-                self.trace_mode = crate::trace::TraceMode::OFF;
+                self.set_trace_mode(crate::trace::TraceMode::OFF);
             }
             Trace::Setting(bytes) => {
-                self.trace_mode = mode_from_setting(bytes)
-                    .expect("rexx-parse's check_trace_setting already validated this byte");
+                self.set_trace_mode(
+                    mode_from_setting(bytes)
+                        .expect("rexx-parse's check_trace_setting already validated this byte"),
+                );
             }
             // 24.901, unconditional -- measured, `trace 0` raises it
             // exactly like `trace 5` (this task's report), because this
@@ -3195,7 +3607,7 @@ impl Interp {
                 if is_whole_number(&text) {
                     return Err(raised_numeric_trace_interactive_only().into());
                 }
-                self.trace_mode = mode_from_setting(&text).map_err(raised_invalid_trace_letter)?;
+                self.set_trace_mode(mode_from_setting(&text).map_err(raised_invalid_trace_letter)?);
             }
         }
         Ok(())
@@ -4082,6 +4494,12 @@ mod tests {
     fn run_source(interp: &mut Interp, source: &[u8]) -> Result<Option<ObjRef>, Failure> {
         let program = parse_program(source.to_vec()).expect("test program parses");
         let program = activate(interp, program);
+        run_activated(interp, &program)
+    }
+
+    /// `run_source`'s second half, split out so `run_source_traced` can put a
+    /// `TRACE` setting on the activation between the push and the run.
+    fn run_activated(interp: &mut Interp, program: &Program) -> Result<Option<ObjRef>, Failure> {
         let code = Code {
             body: &program.main,
             symbols: &program.symbols,
@@ -4120,11 +4538,39 @@ mod tests {
                 };
                 Err(raised.into())
             }
+            // The main body's own `RETURN`, with no active call: it ends the
+            // program with its value, exactly like `EXIT`, which is what
+            // `Interp::run` does with `Ended::Returned` at the top too.
+            // Measured: `say 'a'` / `return 5` / `say 'b'` prints `a` and
+            // exits 5.
+            Flow::Return(value) => Ok(value),
         }
     }
 
     fn say_output(interp: &mut Interp, source: &[u8]) -> Vec<u8> {
         run_source(interp, source).expect("test program runs");
+        std::mem::take(&mut interp.out)
+    }
+
+    /// `run_source`, with `TRACE R` already in force for the activation it
+    /// pushes.
+    ///
+    /// **A helper rather than an `interp.set_trace_mode(...)` line before the
+    /// call, which is how every one of these tests used to read.** Task 3
+    /// moved `trace_mode` from `Interp` onto `Activation`, so there is
+    /// nothing to set it on until an activation exists, and the activation is
+    /// what `run_source` pushes. `TRACE R` is baked in rather than passed
+    /// because every caller wants exactly that; a second setting gets its own
+    /// helper rather than a parameter nobody varies.
+    fn run_source_traced(interp: &mut Interp, source: &[u8]) -> Result<Option<ObjRef>, Failure> {
+        let program = parse_program(source.to_vec()).expect("test program parses");
+        let program = activate(interp, program);
+        interp.set_trace_mode(mode_from_setting(b"r").expect("R is a valid TRACE setting"));
+        run_activated(interp, &program)
+    }
+
+    fn say_output_traced(interp: &mut Interp, source: &[u8]) -> Vec<u8> {
+        run_source_traced(interp, source).expect("test program runs");
         std::mem::take(&mut interp.out)
     }
 
@@ -4529,8 +4975,7 @@ mod tests {
     #[test]
     fn numeric_digits_fuzz_and_form_value_trace_k_only_with_an_expression() {
         let mut interp = Interp::new();
-        interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
-        say_output(
+        say_output_traced(
             &mut interp,
             b"numeric digits 9\nnumeric fuzz 2\nnumeric form value 'SCIENTIFIC'",
         );
@@ -4543,8 +4988,7 @@ mod tests {
         );
 
         let mut interp = Interp::new();
-        interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
-        say_output(
+        say_output_traced(
             &mut interp,
             b"numeric digits 3\nnumeric digits\nnumeric fuzz",
         );
@@ -5409,8 +5853,7 @@ mod tests {
     #[test]
     fn a_bare_repeat_count_traces_as_for_the_same_as_an_explicit_one() {
         let mut interp = Interp::new();
-        interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
-        say_output(&mut interp, b"do 2\nnop\nend");
+        say_output_traced(&mut interp, b"do 2\nnop\nend");
         // `>K>` fires exactly once, on the first pass, matching every
         // other single-evaluation control-setup keyword (`TO`/`BY`/
         // `OVER`) -- the third `do 2` re-echo is the exit-check pass
@@ -5441,8 +5884,7 @@ mod tests {
     #[test]
     fn a_comma_list_conditions_own_elements_each_trace_their_result_under_trace_r() {
         let mut interp = Interp::new();
-        interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
-        say_output(&mut interp, b"if 1, 1 then nop");
+        say_output_traced(&mut interp, b"if 1, 1 then nop");
         assert_eq!(
             interp.trace,
             b"     1 *-* if 1, 1 \n       >>>   \"1\"\n       >>>   \"1\"\n       >>>   \"1\"\n     \
@@ -5465,8 +5907,7 @@ mod tests {
     #[test]
     fn do_until_re_echoes_its_clause_exactly_once_per_pass_not_twice_or_zero() {
         let mut interp = Interp::new();
-        interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
-        say_output(&mut interp, b"n = 0\ndo until n = 2\nn = n + 1\nend\nsay n");
+        say_output_traced(&mut interp, b"n = 0\ndo until n = 2\nn = n + 1\nend\nsay n");
         assert_eq!(
             interp.trace,
             b"     1 *-* n = 0\n       >>>   \"0\"\n     2 *-* do until n = 2\n     \
@@ -6389,8 +6830,7 @@ mod tests {
     #[test]
     fn interpret_traces_the_text_it_is_about_to_run() {
         let mut interp = Interp::new();
-        interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
-        say_output(&mut interp, b"zz = 'nop'\ninterpret zz");
+        say_output_traced(&mut interp, b"zz = 'nop'\ninterpret zz");
         assert_eq!(
             interp.trace,
             concat!(
@@ -6404,8 +6844,7 @@ mod tests {
         );
 
         let mut interp = Interp::new();
-        interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
-        say_output(&mut interp, b"do kk = 1 to 1\ninterpret \"nop\"\nend");
+        say_output_traced(&mut interp, b"do kk = 1 to 1\ninterpret \"nop\"\nend");
         for expected in [&b"       >>>     \"nop\"\n"[..], &b"     2 *-*   nop\n"[..]] {
             assert!(
                 interp
@@ -6719,6 +7158,464 @@ mod tests {
         assert_eq!(
             say_output(&mut interp, b"do label x\nsay 'ok'\nend"),
             b"ok\n".to_vec()
+        );
+    }
+
+    // ---- CALL and RETURN (Task 3) ----
+
+    /// D9r's default, and the one property a witness without variables in it
+    /// cannot check: a callee with no `PROCEDURE` reads the caller's
+    /// variables **and its writes survive the return**. An implementation
+    /// that gave every callee a fresh pool passes `call sub` / `sub: say
+    /// 'callee'` and fails this.
+    #[test]
+    fn a_routine_without_procedure_shares_the_callers_pool() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"v = 'caller-v'\ncall sub\nsay 'caller sees:' v w\nexit\n\
+                  sub:\nsay 'callee sees v:' v\nw = 'callee-w'\nreturn\n",
+            ),
+            b"callee sees v: caller-v\ncaller sees: caller-v callee-w\n".to_vec()
+        );
+    }
+
+    /// The body selector's own reason to exist, at the level `run_activation`
+    /// hardcoded through 4a: the callee runs *its* clauses, from the label,
+    /// and the caller resumes after the `CALL` rather than at the top.
+    #[test]
+    fn a_called_label_runs_its_own_clauses_not_the_main_body() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call sub\nsay 'main'\nexit\nsub: say 'callee'\nreturn\n"
+            ),
+            b"callee\nmain\n".to_vec()
+        );
+    }
+
+    /// A name bound at run time inside the callee is part of the same shared
+    /// pool, which needs the *name* to cross the return as well as the slot
+    /// -- `Activation::extra`, cloned in and moved back out. Measured on the
+    /// oracle both ways round; this is the direction that fails if `extra`
+    /// is left behind with the callee.
+    #[test]
+    fn a_name_bound_by_interpret_inside_a_callee_survives_the_return() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call sub\ninterpret \"say zork\"\nexit\nsub:\ninterpret \"zork = 42\"\nreturn\n",
+            ),
+            b"42\n".to_vec()
+        );
+
+        // And inward, which is the half that already worked: a name the
+        // caller bound at run time is readable in the callee.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"interpret \"zork = 42\"\ncall sub\nexit\nsub:\ninterpret \"say zork\"\nreturn\n",
+            ),
+            b"42\n".to_vec()
+        );
+    }
+
+    /// `RESULT` is settled on **return**, not at the call: the callee sees
+    /// the caller's own pre-call value, and only the return overwrites it.
+    /// A bare `return` drops it, so it reads back as its own derived name.
+    #[test]
+    fn result_is_settled_on_return_and_a_bare_return_drops_it() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"result = 'before'\ncall sub\nsay 'after result=' result\n\
+                  call bare\nsay 'after bare result=' result\nexit\n\
+                  sub:\nsay 'inside result=' result\nreturn 42\nbare:\nreturn\n",
+            ),
+            b"inside result= before\nafter result= 42\nafter bare result= RESULT\n".to_vec()
+        );
+    }
+
+    /// The two ways out of a callee that are *not* a return, both measured:
+    /// an explicit `EXIT`, and the body simply running out of instructions.
+    /// Either ends the program, so the caller's next clause never runs --
+    /// which is why `Ended` distinguishes them from `Returned` at all.
+    #[test]
+    fn exiting_or_falling_off_the_end_inside_a_callee_ends_the_program() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call sub\nsay 'never'\nsub:\nsay 'in sub'\nexit\n"
+            ),
+            b"in sub\n".to_vec()
+        );
+
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call sub\nsay 'never'\nexit\nsub:\nsay 'in sub'\n"
+            ),
+            b"in sub\n".to_vec()
+        );
+    }
+
+    /// A `RETURN` in the main body, with no active call: it ends the program
+    /// with its value, exactly like `EXIT`. Measured at rc 5.
+    #[test]
+    fn a_return_in_the_main_body_ends_the_program_with_its_value() {
+        let mut interp = Interp::new();
+        let value =
+            run_source(&mut interp, b"say 'a'\nreturn 5\nsay 'b'\n").expect("the program runs");
+        assert_eq!(interp.out, b"a\n".to_vec());
+        assert_eq!(interp.exit_code_for(value), 5);
+
+        let mut interp = Interp::new();
+        let value =
+            run_source(&mut interp, b"say 'a'\nreturn\nsay 'b'\n").expect("the program runs");
+        assert_eq!(interp.out, b"a\n".to_vec());
+        assert_eq!(interp.exit_code_for(value), 0);
+    }
+
+    /// `RETURN` unwinds to the **activation** boundary and past every block
+    /// frame in between -- which is exactly what `LEAVE` does not do. Both
+    /// enclosing constructs here would consume a `Flow::Leave`; neither may
+    /// consume a `Flow::Return`.
+    #[test]
+    fn a_return_escapes_every_enclosing_block_in_the_callee() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call sub\nsay 'back'\nexit\nsub:\ndo forever\nreturn\nend\n",
+            ),
+            b"back\n".to_vec()
+        );
+
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call sub\nsay 'back'\nexit\nsub:\nselect\nwhen 1 = 1 then return\notherwise nop\nend\n",
+            ),
+            b"back\n".to_vec()
+        );
+    }
+
+    /// `NUMERIC` is inherited at call time and never written back -- measured
+    /// with `digits 7` outside and `digits 3` inside. The second `say` is the
+    /// discriminating one: an implementation that shared one `Settings`
+    /// would print `3` there.
+    #[test]
+    fn numeric_settings_are_inherited_by_a_callee_and_not_written_back() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"numeric digits 7\ncall sub\nsay 1/3\nexit\n\
+                  sub:\nsay 1/3\nnumeric digits 3\nsay 1/3\nreturn\n",
+            ),
+            b"0.3333333\n0.333\n0.3333333\n".to_vec()
+        );
+    }
+
+    /// I4: `TRACE` moved onto `Activation`, so a callee's own `trace off`
+    /// dies with the callee. The caller's clauses echo again afterwards,
+    /// which is what a single `Interp`-wide field could not do.
+    #[test]
+    fn a_callees_trace_setting_does_not_survive_its_return() {
+        let mut interp = Interp::new();
+        run_source_traced(
+            &mut interp,
+            b"call sub\nsay 'after'\nexit\nsub:\ntrace off\nsay 'quiet'\nreturn\n",
+        )
+        .expect("the program runs");
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* call sub\n\
+              \x20    4 *-*   sub:\n\
+              \x20    5 *-*   trace off\n\
+              \x20    2 *-* say 'after'\n\
+              \x20      >>>   \"after\"\n\
+              \x20    3 *-* exit\n"
+                .to_vec(),
+            "the callee's `trace off` must silence only the callee"
+        );
+    }
+
+    /// D2r's rule, at **three** caller indents rather than one: a callee's
+    /// clauses echo at the calling clause's own printed indent plus two.
+    /// `2 x depth` agrees with all of this at caller indent 0 and predicts 2
+    /// where the truth is 4 and 6, which is why one shape is not enough.
+    /// Every byte here was captured from the oracle.
+    #[test]
+    fn a_callees_clauses_echo_at_the_calling_clauses_indent_plus_two() {
+        // Flat caller, two levels deep: 0 -> 2 -> 4.
+        let mut interp = Interp::new();
+        run_source_traced(
+            &mut interp,
+            b"aa = 1\ncall one\nexit\none:\nbb = 2\ncall two\nreturn\ntwo:\ncc = 3\nreturn\n",
+        )
+        .expect("the program runs");
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* aa = 1\n\
+              \x20      >>>   \"1\"\n\
+              \x20    2 *-* call one\n\
+              \x20    4 *-*   one:\n\
+              \x20    5 *-*   bb = 2\n\
+              \x20      >>>     \"2\"\n\
+              \x20    6 *-*   call two\n\
+              \x20    8 *-*     two:\n\
+              \x20    9 *-*     cc = 3\n\
+              \x20      >>>       \"3\"\n\
+              \x20   10 *-*     return\n\
+              \x20    7 *-*   return\n\
+              \x20    3 *-* exit\n"
+                .to_vec()
+        );
+
+        // Caller two `DO` blocks deep: the callee echoes at 6, where
+        // `2 x depth` predicts 2.
+        let mut interp = Interp::new();
+        run_source_traced(
+            &mut interp,
+            b"do\ndo\ncall sub\nend\nend\nexit\nsub:\ndd = 4\nreturn\n",
+        )
+        .expect("the program runs");
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* do\n\
+              \x20    2 *-*   do\n\
+              \x20    3 *-*     call sub\n\
+              \x20    7 *-*       sub:\n\
+              \x20    8 *-*       dd = 4\n\
+              \x20      >>>         \"4\"\n\
+              \x20    9 *-*       return\n\
+              \x20    4 *-*   end\n\
+              \x20    5 *-* end\n\
+              \x20    6 *-* exit\n"
+                .to_vec()
+        );
+    }
+
+    /// A returned value traces **twice**, at two different indents: once as
+    /// the `RETURN`'s own value in the callee, once as the call's result in
+    /// the caller. A bare `return` traces neither.
+    #[test]
+    fn a_returned_value_traces_in_the_callee_and_again_in_the_caller() {
+        let mut interp = Interp::new();
+        run_source_traced(&mut interp, b"call sub\nexit\nsub:\nreturn 42\n")
+            .expect("the program runs");
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* call sub\n\
+              \x20    3 *-*   sub:\n\
+              \x20    4 *-*   return 42\n\
+              \x20      >>>     \"42\"\n\
+              \x20      >>>   \"42\"\n\
+              \x20    2 *-* exit\n"
+                .to_vec()
+        );
+
+        let mut interp = Interp::new();
+        run_source_traced(&mut interp, b"call sub\nexit\nsub:\nreturn\n")
+            .expect("the program runs");
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* call sub\n\
+              \x20    3 *-*   sub:\n\
+              \x20    4 *-*   return\n\
+              \x20    2 *-* exit\n"
+                .to_vec(),
+            "a bare return produces no value line at either indent"
+        );
+    }
+
+    /// The composition nobody had measured: a `CALL` **inside** an
+    /// `INTERPRET` fragment. Each activation's echo carries its *own* line,
+    /// so the enclosing fragment's line override has to be cleared for the
+    /// callee -- leaving it in force prints the callee's three clauses as
+    /// line 1 instead of 3, 4 and 5.
+    #[test]
+    fn a_call_inside_a_fragment_echoes_each_activations_own_line() {
+        let mut interp = Interp::new();
+        run_source_traced(
+            &mut interp,
+            b"interpret \"call sub\"\nexit\nsub:\nff = 7\nreturn\n",
+        )
+        .expect("the program runs");
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* interpret \"call sub\"\n\
+              \x20      >>>   \"call sub\"\n\
+              \x20    1 *-* call sub\n\
+              \x20    3 *-*   sub:\n\
+              \x20    4 *-*   ff = 7\n\
+              \x20      >>>     \"7\"\n\
+              \x20    5 *-*   return\n\
+              \x20    2 *-* exit\n"
+                .to_vec()
+        );
+    }
+
+    /// The other direction: an `INTERPRET` **inside** a called routine. The
+    /// fragment adds no indent of its own on top of the activation's, so all
+    /// four of the callee's lines sit at 2.
+    #[test]
+    fn an_interpret_inside_a_callee_runs_at_the_callees_own_level() {
+        let mut interp = Interp::new();
+        run_source_traced(
+            &mut interp,
+            b"call sub\nexit\nsub:\ninterpret \"gg = 8\"\nreturn\n",
+        )
+        .expect("the program runs");
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* call sub\n\
+              \x20    3 *-*   sub:\n\
+              \x20    4 *-*   interpret \"gg = 8\"\n\
+              \x20      >>>     \"gg = 8\"\n\
+              \x20    4 *-*   gg = 8\n\
+              \x20      >>>     \"8\"\n\
+              \x20    5 *-*   return\n\
+              \x20    2 *-* exit\n"
+                .to_vec()
+        );
+    }
+
+    /// I12's `CALL` half: each activation seals its own level, so the report
+    /// echoes one clause per activation, innermost first, each at its own
+    /// indent. Two calls deep from inside a `DO` gives 6, 4, 2 -- the same
+    /// three-deep transcript the oracle prints.
+    #[test]
+    fn the_report_echoes_one_clause_per_activation_innermost_first() {
+        let mut interp = Interp::new();
+        run_source(
+            &mut interp,
+            b"do\ncall one\nend\nexit\none:\ncall two\nreturn\ntwo:\nsay 1/0\nreturn\n",
+        )
+        .unwrap_err();
+        let sealed: Vec<(usize, Vec<u8>, usize)> = interp
+            .failure_sites
+            .iter()
+            .chain(interp.failure_site.iter())
+            .map(|s| (s.line, s.text.clone(), s.indent))
+            .collect();
+        assert_eq!(
+            sealed,
+            vec![
+                (9, b"say 1/0".to_vec(), 6),
+                (6, b"call two".to_vec(), 4),
+                (2, b"call one".to_vec(), 2),
+            ]
+        );
+    }
+
+    /// Arguments are evaluated in the caller, before the callee starts. Not
+    /// observable through `USE ARG`/`ARG()` in this phase -- both still fail
+    /// loudly -- but a failing argument is: the condition is 42.3 and it is
+    /// reported against the `CALL` clause, not against anything in `sub`.
+    #[test]
+    fn a_calls_arguments_are_evaluated_in_the_caller() {
+        let mut interp = Interp::new();
+        let failure = run_source(&mut interp, b"call sub 1/0\nexit\nsub:\nreturn\n").unwrap_err();
+        assert!(
+            matches!(&failure, Failure::Raised(raised) if raised.number == 42),
+            "an argument that raises must surface as its own condition, not run the callee: {failure:?}"
+        );
+        let site = interp.failure_site.expect("a site was resolved");
+        assert_eq!((site.line, site.text), (1, b"call sub 1/0".to_vec()));
+    }
+
+    /// The quoted form bypasses the label search entirely, so `call "SUB"`
+    /// with `sub:` present is *not* a call. 4b's answer is the loud
+    /// builtin/external fallback naming 4c; the oracle's own is Error 43.1,
+    /// which is a claim about what is *not* a builtin either and so not
+    /// this phase's to make.
+    #[test]
+    fn a_quoted_call_name_never_reaches_the_label_table() {
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"call \"SUB\"\nexit\nsub:\nsay 'ran'\nreturn\n",
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&failure, Failure::Loud(loud) if loud.message.ends_with("is not implemented (4c)")),
+            "expected the 4c fallback, got {failure:?}"
+        );
+        assert!(interp.out.is_empty(), "the label must not have run");
+
+        // The unquoted spelling of the same name does reach it, which is
+        // what makes the assertion above about the quotes and not about
+        // `sub:` being unreachable.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(&mut interp, b"call SUB\nexit\nsub:\nsay 'ran'\nreturn\n"),
+            b"ran\n".to_vec()
+        );
+    }
+
+    /// `CALL (expr)` searches the label table, but with the value **verbatim**
+    /// -- the two halves pull opposite ways from the quoted form and both are
+    /// measured. Lower case finds nothing even though `sub:` is stored
+    /// upcased.
+    #[test]
+    fn a_dynamic_call_target_searches_labels_with_the_value_verbatim() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"nm = 'SUB'\ncall (nm)\nexit\nsub:\nsay 'ran'\nreturn\n"
+            ),
+            b"ran\n".to_vec()
+        );
+
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"nm = 'sub'\ncall (nm)\nexit\nsub:\nsay 'ran'\nreturn\n",
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&failure, Failure::Loud(loud) if loud.message.contains("sub")),
+            "the unupcased value must not match the upcased label: {failure:?}"
+        );
+        assert!(interp.out.is_empty(), "the label must not have run");
+    }
+
+    /// The body selector's `Some(index)` half, which no execution path can
+    /// construct yet (`Activation::body`'s own doc has why). Exercised
+    /// directly so the arm is not merely written: a parsed `::routine` has a
+    /// body, and the selector resolves to *that* body rather than to `main`.
+    #[test]
+    fn the_body_selector_resolves_a_routine_directive_and_rejects_a_bad_index() {
+        let program =
+            parse_program(b"call foo\nexit\n::routine foo\nsay 'in foo'\n".to_vec()).unwrap();
+        let main = body_of(&program, None).expect("the main body always resolves");
+        assert_eq!(main.instructions.len(), program.main.instructions.len());
+
+        let routine = body_of(&program, Some(0)).expect("the routine directive has a body");
+        assert_eq!(
+            routine.instructions.len(),
+            1,
+            "the routine's own body is its one `say`, not the main body's two clauses"
+        );
+        assert!(
+            !std::ptr::eq(routine, main),
+            "a routine selector must not resolve to the main body"
+        );
+
+        assert!(
+            body_of(&program, Some(1)).is_none(),
+            "an out-of-range selector resolves to nothing rather than panicking"
         );
     }
 }

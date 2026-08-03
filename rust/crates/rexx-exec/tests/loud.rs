@@ -147,12 +147,11 @@ fn instruction_arm(kind: &InstructionKind) -> String {
 /// already uses for a different set, one level up.
 fn expand_for_witnesses(coarse: &'static str) -> Vec<&'static str> {
     match coarse {
-        "Call" => vec![
-            "Call::Named",
-            "Call::Dynamic",
-            "Call::Qualified",
-            "Call::Trap",
-        ],
+        // Two, not four: Task 3 implemented `Call::Named` and
+        // `Call::Dynamic`, so their rows are gone and this expansion had to
+        // shrink with them. The coarse tag stays phase-owned in `owners.rs`
+        // because `Call::Trap` is still 4b's.
+        "Call" => vec!["Call::Qualified", "Call::Trap"],
         "Signal" => vec!["Signal", "Signal::Trap"],
         other => vec![other],
     }
@@ -175,14 +174,15 @@ enum Category {
     Expr,
 }
 
-/// Every out-of-scope `InstructionKind`, one witness each. **23 entries**, one
-/// per `Owner::Phase` arm after `Call` and `Signal` expand -- 19 coarse
-/// phase-owned tags in `INSTRUCTION_TAGS` above, of which `Call` becomes four
-/// rows and `Signal` two, so 19 + 3 + 1 = 23. (Review finding M1: this line
+/// Every out-of-scope `InstructionKind`, one witness each. **20 entries**, one
+/// per `Owner::Phase` arm after `Call` and `Signal` expand -- 18 coarse
+/// phase-owned tags in `INSTRUCTION_TAGS` above, of which `Call` becomes two
+/// rows and `Signal` two, so 18 + 1 + 1 = 20. (Review finding M1: this line
 /// said "19 entries" and, before that, "20", both of which counted the coarse
 /// tags while describing the expanded list. The two numbers are different
 /// quantities and the arm-grained section of the module doc above is where the
-/// distinction is set out.)
+/// distinction is set out. It is 20 again now for a different reason, which is
+/// exactly why the two quantities have to be named apart.)
 ///
 /// 20 coarse tags until 4b's Task 1 implemented `INTERPRET` and deleted its
 /// row -- pinned item 4 in `owners.rs`'s own list: a witness for a variant that
@@ -202,19 +202,6 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
     },
     // ---- `Call`, arm-grained (Step 2): see the module doc ----
     Witness {
-        tag: "Call::Named",
-        owner: "4b",
-        source: "call sub\n",
-        category: Category::Instruction,
-    },
-    Witness {
-        tag: "Call::Dynamic",
-        owner: "4b",
-        // `CALL (expr) args`, whose target is only known at run time.
-        source: "call (x)\n",
-        category: Category::Instruction,
-    },
-    Witness {
         tag: "Call::Qualified",
         owner: "Phase 5",
         // `CALL ns:name args`, restricted to public routines of that
@@ -229,12 +216,6 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
         // `CALL ON`/`CALL OFF`. The `OFF` form needs no `NAME` clause, the
         // shortest way to construct this arm.
         source: "call off error\n",
-        category: Category::Instruction,
-    },
-    Witness {
-        tag: "Return",
-        owner: "4b",
-        source: "return 1\n",
         category: Category::Instruction,
     },
     Witness {
@@ -493,12 +474,12 @@ fn walk_exprs<'a>(kind: &'a InstructionKind, f: &mut impl FnMut(&'a rexx_parse::
 fn assert_witness_set_is_complete() {
     // `flat_map(expand_for_witnesses)`, not a bare `.map`: `Call` and
     // `Signal` each expand to more than one expected tag (Step 2, the
-    // module doc's "Arm-grained ownership"), so the coarse 20 phase-owned
-    // `InstructionKind` tags become 24 expected witness tags -- `Call`'s
-    // one row becomes four (`Named`/`Dynamic`/`Qualified`/`Trap`) and
-    // `Signal`'s one becomes two (`Signal`/`Signal::Trap`), net +3 +1 = +4.
-    // 19 coarse phase-owned tags since 4b's Task 1 (20 before it moved
-    // `Interpret` in scope), so 23 expected witness tags.
+    // module doc's "Arm-grained ownership"). 18 coarse phase-owned
+    // `InstructionKind` tags since 4b's Task 3 moved `Return` in scope (19
+    // after Task 1's `Interpret`, 20 at the 4a gate); `Call`'s one row
+    // becomes two (`Qualified`/`Trap`, its other two arms being Task 3's)
+    // and `Signal`'s one becomes two (`Signal`/`Signal::Trap`), net +1 +1,
+    // so 20 expected witness tags.
     let expected_instructions: Vec<&str> = INSTRUCTION_TAGS
         .iter()
         .filter(|(_, o)| matches!(o, Owner::Phase(_)))
@@ -514,7 +495,7 @@ fn assert_witness_set_is_complete() {
          InstructionKind variant (per arm, for Call/Signal), no more and no \
          fewer"
     );
-    assert_eq!(expected_instructions.len(), 23);
+    assert_eq!(expected_instructions.len(), 20);
 
     let expected_exprs: Vec<&str> = EXPR_TAGS
         .iter()
@@ -535,14 +516,15 @@ fn assert_witness_set_is_complete() {
 
 #[test]
 fn in_scope_counts_match_the_audited_split() {
-    // 21 since 4b's Task 1 moved `Interpret` in scope; see `owners.rs`'s own
+    // 22 since 4b's Task 3 moved `Return` in scope, 21 after Task 1 moved
+    // `Interpret`; see `owners.rs`'s own
     // `variant_counts_match_the_audited_split` for the full split.
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        21
+        22
     );
     assert_eq!(
         EXPR_TAGS

@@ -278,10 +278,39 @@ above.
   answer is a documented minimum stack or a sized entry point in rexx-parse
   itself rather than a smarter counter.
 
+  4b TASK 3 MEASURED THE SAME THING FOR ACTIVATIONS, and the numbers say
+  something the paragraph above does not: a fixed counter cannot be a
+  guarantee even ON the sized thread, because the budget is shared with
+  run_bounded, which costs a Rust frame per LEXICAL nesting level. Bisected
+  with rexx-run on the 512 MiB interpreter thread, unbounded CALL recursion:
+
+    enclosing DO blocks per activation | deepest surviving (debug) | (release)
+    ----------------------------------+---------------------------+----------
+                                    0 |                    22,534 |   133,150
+                                    1 |                    14,062 |    94,518
+                                    5 |                     5,616 |         -
+                                   25 |                     1,403 |         -
+
+  That is ~23.8 KB for a bare activation and ~14.4 KB per further run_bounded
+  level, in debug (the "0" row already includes one, since the recursion is
+  guarded by an IF). MAX_ACTIVATION_DEPTH is 10,000, which fires before the
+  abort in the first two rows and NOT in the last two: a body with about four
+  or more block levels around its own recursive CALL still dies natively. The
+  oracle's own limit is 27,314 activations, above every debug row here, so
+  matching it would mean shipping a counter that never fires. A real fix is a
+  shared budget over both kinds of frame, or a headroom check; neither is
+  Task 3's.
+
+  On a default 2 MiB thread this crate's debug build survives fewer than 90
+  activations (measured: 80 survives, 90 aborts) -- two orders below the
+  counter, and the reason tests/spike.rs owns the recursion test rather than
+  run.rs's own unit tests, which run on exactly such a thread.
+
   A raised condition's report prints one clause echo per ACTIVATION-LIKE LEVEL,
-  innermost first, and 4b Task 2 closed the INTERPRET half of this row. The
-  CALL half is still open and belongs to 4b Task 3. The measured rule, in full,
-  because the first version of this row said only "one echo per nesting level,
+  innermost first. 4b Task 2 closed the INTERPRET half of this row and 4b
+  Task 3 closed the CALL half; BOTH HALVES ARE NOW MEASURED MATCHING and the
+  row is kept only as the record of what the rule is. The rule in full, because
+  the first version of this row said only "one echo per nesting level,
   innermost first" and that is not enough to implement from:
 
   * The unit is a level, NOT a block. An error three nested DOs deep echoes
@@ -330,10 +359,33 @@ above.
   seal_site_level closes a level), and with it the INTERPRET half is measured
   matching on: a raise inside fragment text, a raise inside a fragment inside
   a fragment, a LEAVE/ITERATE that escapes fragment text, and the same shapes
-  under TRACE where nothing is raised at all. WHAT REMAINS is CALL: Task 3 owns
-  pushing a level with the +2 base above, and the mechanism is already there
-  (Interp::indent_offset for the base, Interp::clause_line_override for the
-  line, seal_site_level for the first-wins boundary).
+  under TRACE where nothing is raised at all.
+
+  4b TASK 3 CLOSED THE CALL HALF. exec_call sets Interp::activation_indent to
+  the calling clause's printed indent PLUS TWO, zeroes indent_offset alongside
+  it, and calls seal_site_level before a failure leaves the callee. All four
+  rows of the table above reproduce byte-identically, as do the two-deep and
+  three-deep echo stacks and the two COMPOSITION shapes nobody had measured
+  before: a CALL inside an INTERPRET fragment, and an INTERPRET inside a
+  called routine, each three levels deep on the error path.
+
+  ONE CORRECTION TO THE MECHANISM LIST THIS ROW USED TO CARRY. It named
+  "Interp::clause_line_override for the line", which is the wrong direction:
+  a CALL must CLEAR that field for the duration of the callee, not set it.
+  Each activation's echo carries its OWN line, unlike a fragment's, and
+  measured -- interpret "call sub" on line 1 echoes the fragment's clause at
+  line 1 and the callee's three clauses at their own lines 3, 4 and 5.
+  Leaving the enclosing fragment's override in force prints all five as
+  line 1. Not setting it is not enough when a fragment already has.
+
+  A SECOND CORRECTION, same shape and found the same way. A named CALL
+  resolves its label against the running ACTIVATION's body, not against the
+  body being stepped: inside a fragment those differ, and a fragment's own
+  `labels` is always empty (a label in interpreted text is error 47.1), so
+  resolving against the stepped body makes every CALL inside an INTERPRET
+  unresolvable. Both corrections came from running the composition, not from
+  reading the code; the first implementation of each passed every test that
+  had no INTERPRET in it.
 
   HISTORY, kept because the reason this row gave for being unreachable was
   falsified once already. It was recorded as unreachable from any corpus
