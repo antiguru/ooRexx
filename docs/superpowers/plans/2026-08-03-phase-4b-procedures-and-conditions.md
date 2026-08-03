@@ -413,6 +413,15 @@ Do **not** resolve the stack at report time by walking `Interp::activations`. `r
 
 Measured: the fragment shares its caller's indent and carries the enclosing clause's line.
 
+**Task 1 tried the obvious version of this and proved it wrong, and an independent reviewer reproduced the failure by building it.** Passing `Some(&fragment.source)` into the fragment's execution does **not** supplement the enclosing echo -- it *replaces* it, and it moves the reported error line off the one the oracle names. Measured: on a raise inside fragment text the oracle reports line 3 and the naive fix reports line 1. Two independent causes, and both must be handled here:
+
+* The fragment's own source carries the fragment's line numbering, where the oracle prints the **enclosing `INTERPRET` clause's** line for both echoes.
+* `record_failure_site` is **first-wins** (`self.failure_site.is_none()` guards both callers). A fragment entry that records first therefore takes the report off the enclosing clause. The site stack is what lets both exist without racing.
+
+So this step is not "pass the source down". It is the reason the stack exists. Do not reach for the one-line version -- it has already been built twice and it fails both ways.
+
+The missing clause echo for a traced `INTERPRET` is the other half of a divergence Task 1 half-fixed: Task 1 landed the `>>>` on the interpreted text, and this step lands the `*-*` echo. Under `trace r` with `x='nop'` and `interpret x`, the oracle prints `>>> "nop"` then `3 *-* nop`.
+
 - [ ] **Step 5: Clamp the `*-*` echo at 40 columns, and only the `*-*` echo**
 
 - [ ] **Step 5b: Raise the oracle's condition when a fragment fails to parse**
