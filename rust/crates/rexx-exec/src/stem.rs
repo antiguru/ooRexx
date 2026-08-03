@@ -64,7 +64,7 @@
 //! no `PROCEDURE EXPOSE` at all and is reachable in a two-line pure-4a
 //! program.
 
-use crate::{Code, Interp};
+use crate::{Code, Interp, Novalue};
 use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
 use rexx_parse::{SymbolId, Tail, compound_parts};
 use std::collections::HashMap;
@@ -224,14 +224,21 @@ impl Interp {
     /// g.1='x'; h.=g.; k.=h.;      say k.9  ->  G.9   (two hops, still G)
     /// m.1='x'; n.2='y'; m.=n.;    say m.1  ->  N.1   (m.'s own object discarded)
     /// ```
-    pub(crate) fn stem_get(&mut self, stem_name: &[u8], key: &[u8]) -> ObjRef {
+    /// **Returns the `Novalue` flag alongside the value since 4b's Task 7**,
+    /// the same pair `Interp::read` has always returned and for the same
+    /// reader: `SIGNAL ON NOVALUE`. `Novalue::Unset` is precisely the two
+    /// derived-name exits below -- no object at all, or an object with
+    /// nothing at this key -- and measured against the oracle both count,
+    /// since `signal on novalue` traps on `say zunset.1` whether or not the
+    /// stem itself has ever been assigned.
+    pub(crate) fn stem_get(&mut self, stem_name: &[u8], key: &[u8]) -> (ObjRef, Novalue) {
         let slot = self.slot_of(stem_name);
         let frame = self.activation().frame;
         let stem_value = match self.roots.slot(frame, slot) {
             Some(v) => v,
             // No object at all: the read site's own spelling is all there
             // is to derive from.
-            None => return self.derived_tail_name(stem_name, key),
+            None => return (self.derived_tail_name(stem_name, key), Novalue::Unset),
         };
 
         // `resolved` and `object_name` are both computed, fully, before any
@@ -260,11 +267,11 @@ impl Interp {
         };
 
         match resolved {
-            Some(value) => value,
+            Some(value) => (value, Novalue::Set),
             // An object exists but this key does not resolve: derive from
             // the OBJECT's own name, not the read site's -- see this
             // function's doc comment for why the two can differ.
-            None => self.derived_tail_name(&object_name, key),
+            None => (self.derived_tail_name(&object_name, key), Novalue::Unset),
         }
     }
 
@@ -596,9 +603,9 @@ mod tests {
         interp.stem_set(b"U.", b"1", one);
         interp.stem_drop_tail(b"U.", b"1");
 
-        let u1 = interp.stem_get(b"U.", b"1");
+        let u1 = interp.stem_get(b"U.", b"1").0;
         assert_eq!(&*interp.to_text(u1), b"U.1");
-        let u2 = interp.stem_get(b"U.", b"2");
+        let u2 = interp.stem_get(b"U.", b"2").0;
         assert_eq!(&*interp.to_text(u2), b"d");
     }
 
@@ -617,7 +624,7 @@ mod tests {
         let two = interp.number(Number::parse("2").unwrap(), 9, Form::Scientific);
         interp.stem_set(b"A.", b"1", two);
 
-        let b1 = interp.stem_get(b"B.", b"1");
+        let b1 = interp.stem_get(b"B.", b"1").0;
         assert_eq!(&*interp.to_text(b1), b"2");
 
         let nine = interp.number(Number::parse("9").unwrap(), 9, Form::Scientific);
@@ -625,7 +632,7 @@ mod tests {
 
         let b_bare = interp.read_stem(b"B.");
         assert_eq!(&*interp.to_text(b_bare), b"1");
-        let b1_again = interp.stem_get(b"B.", b"1");
+        let b1_again = interp.stem_get(b"B.", b"1").0;
         assert_eq!(&*interp.to_text(b1_again), b"2");
     }
 
@@ -714,9 +721,9 @@ mod tests {
         let five = interp.number(Number::parse("5").unwrap(), 9, Form::Scientific);
         interp.stem_set(b"A.", b"1", five);
 
-        let b1 = interp.stem_get(b"B.", b"1");
+        let b1 = interp.stem_get(b"B.", b"1").0;
         assert_eq!(&*interp.to_text(b1), b"5");
-        let b7 = interp.stem_get(b"B.", b"7");
+        let b7 = interp.stem_get(b"B.", b"7").0;
         assert_eq!(&*interp.to_text(b7), b"A.7");
     }
 
@@ -747,7 +754,7 @@ mod tests {
 
         let x = interp.text(b"x");
         interp.stem_set(b"V.", &key, x);
-        let v_i = interp.stem_get(b"V.", b"I");
+        let v_i = interp.stem_get(b"V.", b"I").0;
         assert_eq!(&*interp.to_text(v_i), b"x");
 
         let i_slot = interp.slot_of(b"I");
@@ -779,12 +786,12 @@ mod tests {
         let val = interp.text(b"val");
         interp.stem_set(b"V.", &key, val);
 
-        let v_i = interp.stem_get(b"V.", &key);
+        let v_i = interp.stem_get(b"V.", &key).0;
         assert_eq!(&*interp.to_text(v_i), b"val");
         // The literal piece "ABC" stands for itself, verbatim -- a
         // different key from the resolved "abc", so this is genuinely a
         // different tail, not a case-insensitive hit on the same one.
-        let v_abc = interp.stem_get(b"V.", b"ABC");
+        let v_abc = interp.stem_get(b"V.", b"ABC").0;
         assert_eq!(&*interp.to_text(v_abc), b"V.ABC");
     }
 
@@ -827,7 +834,7 @@ mod tests {
         let key2 = interp.tail_key(&code2, id2);
         assert_eq!(key2, key);
 
-        let value = interp.stem_get(b"A.", &key2);
+        let value = interp.stem_get(b"A.", &key2).0;
         assert_eq!(&*interp.to_text(value), b"deep");
     }
 
@@ -836,7 +843,7 @@ mod tests {
         // say never_touched.5 -> NEVER_TOUCHED.5
         let mut interp = Interp::new();
         activated(&mut interp);
-        let value = interp.stem_get(b"NEVER_TOUCHED.", b"5");
+        let value = interp.stem_get(b"NEVER_TOUCHED.", b"5").0;
         assert_eq!(&*interp.to_text(value), b"NEVER_TOUCHED.5");
     }
 }

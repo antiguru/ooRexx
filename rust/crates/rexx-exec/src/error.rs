@@ -30,43 +30,210 @@ use crate::Loud;
 use rexx_core::ObjRef;
 use rexx_num::ArithError;
 use rexx_parse::ParseError;
+use std::borrow::Cow;
+
+/// Which activations may trap one raise, walking outward from the one that
+/// raised it.
+///
+/// **Three answers, not one, and the differences are measured rather than
+/// derived from the grammar.** Nothing about `RAISE`'s syntax says that its
+/// tail decides who is allowed to catch it, and every one of these was found
+/// by running the three-level shape that tells them apart -- a two-level
+/// program gives the same bytes for all three.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Search {
+    /// From the activation that raised, outward level by level. Every
+    /// ordinary condition (`say 1/0`, an unset variable under `SIGNAL ON
+    /// NOVALUE`), and `RAISE SYNTAX ... RETURN`.
+    ///
+    /// Measured for the ordinary case: `say 1/0` inside a `PROCEDURE`d
+    /// routine, with `SIGNAL ON SYNTAX` enabled only in its caller, traps
+    /// *in the routine* -- the handler reads the routine's own isolated
+    /// pool, and `SIGL` is the routine's raising line. Turning the trap off
+    /// in the routine makes the same condition trap in the caller instead,
+    /// with `SIGL` set to the caller's `call` clause, which is the outward
+    /// half.
+    #[default]
+    Here,
+    /// From the **caller** of the activation that raised, outward -- the
+    /// raising activation's own (inherited) trap is skipped.
+    ///
+    /// `RAISE <anything but SYNTAX> ... RETURN`. Measured: `raise user foo
+    /// return 'RETVAL'` inside `fun`, with `signal on user foo` in the main
+    /// body, traps with `SIGL` set to the main body's own clause -- not to
+    /// `fun`'s `raise` line, which is what `Here` gives and which is exactly
+    /// what the identical program with `raise syntax 40.4 return` does
+    /// report. The two spellings differ in nothing but the condition.
+    Caller,
+    /// The **outermost** activation only; every level it unwinds through
+    /// skips its own trap check.
+    ///
+    /// `RAISE SYNTAX` with no `RETURN`/`EXIT` tail, and `RAISE SYNTAX ...
+    /// EXIT`. Measured at three levels: with `SIGNAL ON SYNTAX` enabled in
+    /// the *middle* routine and nowhere else, a tail-less `raise syntax
+    /// 40.4` in the innermost is **not** trapped -- it is the ordinary fatal
+    /// report at rc 216. Enable it in the main body as well and the main
+    /// body's trap is the one that fires, with `SIGL` set to the main body's
+    /// own `call` clause, the middle routine's trap still untouched.
+    Top,
+    /// No activation at all may trap this -- it is already the condition's
+    /// default action, on its way to the report.
+    ///
+    /// Two producers, both measured. `RAISE HALT` with no `RETURN` tail:
+    /// `signal on halt` on the line immediately above it does **not** fire,
+    /// and the program gets the fatal `Error 4.1` at rc 252 -- which is what
+    /// separates this from [`Search::Top`], since at top level `Top` would
+    /// have offered it to exactly that trap. And `RAISE PROPAGATE`, which is
+    /// trapped by no enclosing handler at either of the two depths it was
+    /// measured at.
+    Nobody,
+}
+
+/// How one raise in flight must be delivered, beside the payload it carries.
+///
+/// Every field is at its default for every condition an *expression* or an
+/// ordinary instruction raises, which is every raiser in the crate except
+/// `RAISE` itself -- so [`Raised::syntax`] supplies the default and the
+/// thirty-odd raiser functions never mention it. Only `run.rs`'s own
+/// `exec_raise` ever sets any of them.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Delivery {
+    pub(crate) search: Search,
+    /// Render the major line as `Error 42:  ...` rather than
+    /// `Error 42 running <path> line 8:  ...`.
+    ///
+    /// `RAISE PROPAGATE`'s own form, measured at two nesting depths: the
+    /// clause echoes above it are unchanged (one per level, innermost
+    /// first), and only the ` running <path> line <n>` span is dropped.
+    pub(crate) positionless: bool,
+}
 
 /// A real Rexx condition raised during evaluation.
 #[derive(Clone, Debug)]
 pub(crate) struct Raised {
     /// The condition name a trapped Rexx program would see from
-    /// `condition('c')`. Every raiser this task produces is `SYNTAX`, and
-    /// it is carried as a field rather than hardcoded at each call site
-    /// because the spec's own shape includes it and later tasks (4b's
-    /// `NOVALUE`, `NOMETHOD`, ...) need to set it to something else.
+    /// `condition('c')`, and the exact bytes an activation's trap table is
+    /// keyed by (`Activation::traps`). It is carried as a field rather than
+    /// hardcoded at each call site because the spec's own shape includes it
+    /// and 4b's `NOVALUE` and `RAISE` do set it to something else.
     ///
-    /// **Nothing reads it yet**, and until `execute` was wired to
-    /// `Raised::report` that was hidden: the placeholder stderr line printed
-    /// this field, so it had a reader that existed only because the real
-    /// rendering did not. The oracle's report names the *number*, not the
-    /// condition, so the first genuine reader is 4b's `SIGNAL ON` and
-    /// `condition('c')`.
+    /// **`Cow` rather than `&'static str` since 4b's Task 7**, and for
+    /// exactly one condition family: `RAISE USER foo` names the condition
+    /// `USER FOO`, built from the program's own text, where every other
+    /// condition name in the language is one of a fixed set. The borrowed
+    /// case stays allocation-free, which is every raise the crate makes on
+    /// its own.
     ///
-    /// `expect` rather than `allow` on purpose: it is itself a warning once
-    /// the lint stops firing, so the day 4b reads this field the annotation
-    /// asks to be deleted instead of quietly outliving its reason.
-    #[expect(
-        dead_code,
-        reason = "no reader until 4b's SIGNAL ON and condition('c'); expect self-expires"
-    )]
-    pub(crate) condition: &'static str,
+    /// The `#[expect(dead_code)]` that used to sit here is **deleted rather
+    /// than moved**: `SIGNAL ON`/`CALL ON` read this field to decide whether
+    /// a trap matches, which is the reader it was waiting for.
+    pub(crate) condition: Cow<'static, str>,
     pub(crate) number: u16,
     pub(crate) sub: u16,
     pub(crate) additional: Vec<String>,
+    /// What a trapping handler reads back from `RC`, or `None` to leave `RC`
+    /// alone.
+    ///
+    /// Measured, three rows, and the third is what makes this a field rather
+    /// than "always the major":
+    ///
+    /// ```text
+    /// signal on syntax  ; say 1/0            -> handler sees RC = 42
+    /// signal on syntax  ; raise syntax 40.4  -> handler sees RC = 40  (not 40.4)
+    /// signal on novalue ; say zunset         -> handler sees RC = RC  (untouched)
+    /// ```
+    ///
+    /// So it is the *major* for every `SYNTAX` condition however it arose --
+    /// which is why [`Raised::syntax`] fills this in from `number` and no
+    /// raiser has to think about it -- and it is untouched for a condition
+    /// with no catalogue number. `RAISE ERROR n`/`RAISE FAILURE n` is the one
+    /// case that is neither: `n` is the value, measured at `rc= 5` for `raise
+    /// error 5`, and `exec_raise` sets it there.
+    pub(crate) rc: Option<Vec<u8>>,
+    pub(crate) delivery: Delivery,
 }
 
 impl Raised {
-    fn syntax(number: u16, sub: u16, additional: Vec<String>) -> Raised {
+    /// A `SYNTAX` condition with an ordinary delivery -- the shape every
+    /// raiser outside `RAISE` itself has.
+    ///
+    /// `pub(crate)` since 4b's Task 7, which is when `Raised` gained a field
+    /// no raiser cares about: `run.rs` and `trace.rs` each built their own
+    /// `Raised { condition: "SYNTAX", .. }` literals, twenty-one copies of
+    /// the same two constant fields, and every one of them would have had to
+    /// name `delivery` too. Calling this instead means a field added here is
+    /// free for all of them, which is the same argument `ClauseState` makes
+    /// one level up.
+    pub(crate) fn syntax(number: u16, sub: u16, additional: Vec<String>) -> Raised {
         Raised {
-            condition: "SYNTAX",
+            condition: Cow::Borrowed("SYNTAX"),
             number,
             sub,
             additional,
+            rc: Some(number.to_string().into_bytes()),
+            delivery: Delivery::default(),
+        }
+    }
+
+    /// A condition that is not `SYNTAX`, carrying no catalogue entry.
+    ///
+    /// **`number`/`sub` are `0` and can never be rendered**, which is a
+    /// property of how these are raised rather than a hope. Measured, the
+    /// untrapped default action for `USER`, `ERROR`, `FAILURE`, `NOVALUE`,
+    /// `NOSTRING`, `NOTREADY` and `LOSTDIGITS` is to *ignore* the condition
+    /// -- `raise error 5` at top level with no trap prints nothing and exits
+    /// 0 -- so `exec_raise` applies that default itself and one of these
+    /// never reaches `execute`'s reporting arm. `HALT` is the one non-syntax
+    /// condition whose default *is* fatal (`Error 4.1`, rc 252, measured),
+    /// and it is built through [`Raised::syntax`]'s numbered path instead,
+    /// precisely so it has a catalogue entry to render.
+    pub(crate) fn condition(name: Cow<'static, str>) -> Raised {
+        Raised {
+            condition: name,
+            number: 0,
+            sub: 0,
+            additional: Vec::new(),
+            rc: None,
+            delivery: Delivery::default(),
+        }
+    }
+
+    /// Whether this condition would *report* if nothing traps it.
+    ///
+    /// `false` is exactly [`Raised::condition`]'s own zero-numbered kind,
+    /// whose untrapped default action is measured to be silence. The check
+    /// is spelled on `number` rather than on the condition name because the
+    /// name is open-ended (`USER anything`) while the numbering is not, and
+    /// because `HALT` -- the one non-`SYNTAX` condition whose default action
+    /// *is* a report -- is built through the numbered path precisely so this
+    /// answers `true` for it.
+    pub(crate) fn reportable(&self) -> bool {
+        self.number != 0
+    }
+
+    /// 4.1, `HALT`'s own untrapped default action: "Program interrupted with
+    /// HALT condition", measured at rc 252 for `raise halt` with no trap
+    /// enabled, and measured *again* with `signal on halt` enabled in the
+    /// same (top-level) activation -- the tail-less `RAISE` terminates that
+    /// activation before its own trap can see the condition, so the trap
+    /// does not fire.
+    pub(crate) fn halt() -> Raised {
+        Raised {
+            condition: Cow::Borrowed("HALT"),
+            number: 4,
+            sub: 1,
+            // The `(4, 1)` catalogue entry is "Program interrupted with &1
+            // condition.", so the condition's own name is the substitution
+            // -- measured, the oracle prints `HALT`, and a version with no
+            // substitution prints the literal `&1`.
+            additional: vec!["HALT".to_string()],
+            // `None` rather than `4`: `RC` is measured to carry the major
+            // only for `SYNTAX` (42 for `say 1/0`, 40 for `raise syntax
+            // 40.4`) and to be left untouched for a trapped `NOVALUE`. A
+            // trapped `HALT` is not measured either way, so this follows the
+            // non-`SYNTAX` row rather than inventing a third rule.
+            rc: None,
+            delivery: Delivery::default(),
         }
     }
 
@@ -465,6 +632,7 @@ impl From<Raised> for Failure {
 /// three times. `Interp::failure_site` stays first-wins *within* a level and
 /// `run.rs`'s own `seal_site_level` is what closes one off and starts the
 /// next.
+#[derive(Clone)]
 pub(crate) struct FailureSite {
     pub(crate) line: usize,
     pub(crate) text: Vec<u8>,
@@ -570,6 +738,12 @@ impl Raised {
     /// line 2, and a raise on line 8 of a routine called from line 3 names
     /// line 8, not 3.
     ///
+    /// **One raise renders the major line without its position span**, and
+    /// only one: `RAISE PROPAGATE`, whose report reads `Error 42:  ...` where
+    /// every other raise reads `Error 42 running <path> line 8:  ...`. See
+    /// [`Delivery::positionless`], which is the flag, and the loop above,
+    /// which is unaffected -- the echo lines are the same either way.
+    ///
     /// `SAY` output goes to stdout and all of this to stderr, so their
     /// relative order is not observable (D17).
     pub(crate) fn report(&self, site: &ClauseSite<'_>) -> Vec<u8> {
@@ -589,25 +763,40 @@ impl Raised {
         // entry for that case, so this fallback is unreachable from there and
         // exists so this function has no panic on the error path.
         let line = site.sites.first().map_or(0, |entry| entry.line);
+        // `RAISE PROPAGATE` drops the position span and nothing else
+        // (`Delivery::positionless`). Measured against the same program with
+        // and without the `raise propagate`: the echo lines, the sub line and
+        // the exit code are identical, and only ` running <path> line <n>`
+        // goes.
+        let position = if self.delivery.positionless {
+            String::new()
+        } else {
+            format!(" running {} line {line}", site.path)
+        };
         out.extend_from_slice(
             format!(
-                "Error {} running {} line {}:  {}\n",
+                "Error {}{}:  {}\n",
                 self.number,
-                site.path,
-                line,
+                position,
                 self.message(self.number, 0)
             )
             .as_bytes(),
         );
-        out.extend_from_slice(
-            format!(
-                "Error {}.{}:  {}\n",
-                self.number,
-                self.sub,
-                self.message(self.number, self.sub)
-            )
-            .as_bytes(),
-        );
+        // **Sub `0` prints no second line at all**, measured: `raise syntax
+        // 40` gives the major line and stops, where `raise syntax 40.4`
+        // gives both. Reachable only through `RAISE` -- every raiser in the
+        // crate names a real sub -- which is why 4a never had to know.
+        if self.sub != 0 {
+            out.extend_from_slice(
+                format!(
+                    "Error {}.{}:  {}\n",
+                    self.number,
+                    self.sub,
+                    self.message(self.number, self.sub)
+                )
+                .as_bytes(),
+            );
+        }
         out
     }
 

@@ -39,6 +39,32 @@ use rexx_parse::{CodeBody, DirectiveKind, Program};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+/// One enabled condition trap: `SIGNAL ON cond NAME label` or `CALL ON cond
+/// NAME label`.
+///
+/// The two differ only in this `bool`, and the difference is entirely in
+/// *when* and *how* the handler runs -- measured, and the two answers are
+/// not variations of one another:
+///
+/// * `SIGNAL ON` transfers control the instant the condition is raised. The
+///   rest of the clause never runs: `signal on novalue` with `say zunset`
+///   prints nothing before the handler.
+/// * `CALL ON` runs the handler as an ordinary internal call at the **next
+///   clause boundary**, and the clause that raised completes first. Measured
+///   with `zres = one(1)` where `one` raises a trapped `USER` condition and
+///   the handler assigns `zres` itself: the program prints the *handler's*
+///   value, so the assignment had already stored the routine's before the
+///   handler ran.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Trap {
+    /// `CALL ON` rather than `SIGNAL ON`.
+    pub(crate) call: bool,
+    /// The label to transfer (or call) to -- `NAME label`, or the condition's
+    /// own name when `NAME` is omitted. `USER foo`'s own default is `FOO`,
+    /// measured: `signal on user foo` with a `foo:` label traps there.
+    pub(crate) label: Box<[u8]>,
+}
+
 /// One activation: everything about the frame currently executing.
 pub(crate) struct Activation {
     /// The program this frame is running.
@@ -203,6 +229,36 @@ pub(crate) struct Activation {
     /// the caller's value at call time; nothing writes back on the way out,
     /// which is the whole of that behaviour.
     pub(crate) trace_mode: TraceMode,
+    /// The condition traps enabled in this activation, keyed by the exact
+    /// condition name a raise carries (`Raised::condition`) -- `SYNTAX`,
+    /// `NOVALUE`, `USER FOO`, ...
+    ///
+    /// **Per activation, inherited by copy at call time, and never written
+    /// back** -- all three measured, and each one separately:
+    ///
+    /// * *Inherited.* `signal on syntax` in the main body with `say 1/0`
+    ///   inside a `PROCEDURE`d routine traps, and the handler reads the
+    ///   *routine's* isolated variable pool, so the trap fired in the callee
+    ///   rather than after unwinding to the caller. `SIGL` is the callee's
+    ///   own raising line there (9 in that probe), not the caller's `call`
+    ///   clause.
+    /// * *By copy.* The same program with `signal off syntax` as the callee's
+    ///   first clause still traps -- in the *caller*, with `SIGL` set to the
+    ///   caller's `call` clause -- so turning a trap off in a callee leaves
+    ///   the caller's own enabled.
+    /// * *Never written back.* Symmetric with [`trace_mode`] and [`settings`]
+    ///   just above, and for the same reason: the callee's map dies with its
+    ///   frame.
+    ///
+    /// A trap is **removed when it fires** (measured: a `SIGNAL ON SYNTAX`
+    /// handler whose own clause divides by zero gets the ordinary fatal
+    /// report, not a second trap; and a `NOVALUE` handler reading a second
+    /// unset variable gets that variable's derived name). `SIGNAL ON` inside
+    /// the handler re-arms it, also measured.
+    ///
+    /// [`trace_mode`]: Activation::trace_mode
+    /// [`settings`]: Activation::settings
+    pub(crate) traps: HashMap<Box<[u8]>, Trap>,
 }
 
 impl Activation {
@@ -228,14 +284,22 @@ impl Activation {
             pc: 0,
             settings: Settings::default(),
             trace_mode: TraceMode::OFF,
+            traps: HashMap::new(),
         }
     }
 
     /// The activation a `CALL` pushes: it starts at `pc`, and it **inherits**
-    /// `settings` and `trace_mode` from the caller rather than defaulting
-    /// them.
+    /// `settings`, `trace_mode` and `traps` from the caller rather than
+    /// defaulting them.
     ///
-    /// Both inheritances are measured, and both are one-way -- the callee
+    /// `traps` joined the other two at 4b's Task 7 and follows the identical
+    /// one-way rule for the identical reason -- see [`Activation::traps`] for
+    /// the three probes that pin it, including the one that separates
+    /// "inherited" from "checked in the caller after unwinding", which every
+    /// two-level program answers the same way and only a `PROCEDURE`d callee
+    /// tells apart.
+    ///
+    /// All three inheritances are measured, and all are one-way -- the callee
     /// starts from the caller's value and never writes back. `numeric digits
     /// 7` in a caller, `numeric digits 3` in the callee: the callee sees 7 on
     /// entry, reports 3 after its own instruction, and the caller still
@@ -259,8 +323,7 @@ impl Activation {
         plan: Rc<Plan>,
         frame: SlotFrame,
         pc: usize,
-        settings: Settings,
-        trace_mode: TraceMode,
+        inherited: Inherited,
     ) -> Activation {
         Activation {
             program,
@@ -272,10 +335,31 @@ impl Activation {
             entered_by_call: true,
             first_instruction_pending: true,
             pc,
-            settings,
-            trace_mode,
+            settings: inherited.settings,
+            trace_mode: inherited.trace_mode,
+            traps: inherited.traps,
         }
     }
+}
+
+/// Everything a callee starts from its caller's copy of, gathered so
+/// [`Activation::nested`] takes one argument for the lot.
+///
+/// **The grouping is the concept and not a parameter-count workaround**,
+/// though the count is what forced it: `traps` was the third field of this
+/// shape, and three separate parameters sitting between `pc` and the end of
+/// an eight-argument list said nothing about what the three have in common.
+/// Each is measured to be inherited at call time and measured *not* to be
+/// written back on return -- the callee's copy simply dies with its frame --
+/// and each field's own doc comment on `Activation` carries the transcript.
+///
+/// A field belongs here when both halves hold. `extra` deliberately does not:
+/// it is moved back into the caller on return for a shared-pool callee
+/// (`owns_frame`'s own doc comment), which is the opposite of one-way.
+pub(crate) struct Inherited {
+    pub(crate) settings: Settings,
+    pub(crate) trace_mode: TraceMode,
+    pub(crate) traps: HashMap<Box<[u8]>, Trap>,
 }
 
 /// The code body a `(program, selector)` pair denotes: `None` is

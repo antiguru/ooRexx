@@ -773,12 +773,12 @@ mod tests {
              not the names themselves"
         );
 
-        let uninit = interp.stem_get(b"A.", &key);
+        let uninit = interp.stem_get(b"A.", &key).0;
         assert_eq!(&*interp.to_text(uninit), b"A.2");
 
         let hit = interp.text(b"hit");
         interp.stem_set(b"A.", &key, hit);
-        let after = interp.stem_get(b"A.", &key);
+        let after = interp.stem_get(b"A.", &key).0;
         assert_eq!(&*interp.to_text(after), b"hit");
     }
 

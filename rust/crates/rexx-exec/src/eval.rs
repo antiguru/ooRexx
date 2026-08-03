@@ -271,7 +271,8 @@ impl Interp {
             // observable rather than incidental: `say 1e5` prints `1E5`.
             ExprKind::Constant(id) => Ok(self.text(code.symbols.name(*id).as_bytes())),
             ExprKind::Variable(id) => {
-                let (value, _novalue) = self.read(code, *id);
+                let (value, novalue) = self.read(code, *id);
+                self.novalue_check(novalue)?;
                 Ok(value)
             }
             // A bare stem read is NOT the same operation a simple variable's
@@ -296,7 +297,17 @@ impl Interp {
             ExprKind::Compound(id) => {
                 let (stem_name, _tails) = compound_parts(code.symbols.name(*id));
                 let key = self.tail_key(code, *id);
-                Ok(self.stem_get(stem_name.as_bytes(), &key))
+                // A compound with no value raises `NOVALUE` exactly as a
+                // simple variable does, measured: `signal on novalue` with
+                // `say zunset.1` traps, with `SIGL` set to the reading
+                // clause. A **bare stem** does not -- `say zunsetstem.`
+                // under the same trap prints the derived name and carries
+                // on, rc unchanged -- which is why `ExprKind::Stem` above
+                // has no equivalent line and why this could not be done by
+                // routing all three reads through one place.
+                let (value, novalue) = self.stem_get(stem_name.as_bytes(), &key);
+                self.novalue_check(novalue)?;
+                Ok(value)
             }
 
             // The three admissible names (D15, "Expression evaluation"):

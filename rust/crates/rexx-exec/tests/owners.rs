@@ -112,14 +112,21 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     InstructionKind::Interpret { .. } => ("Interpret", Owner::InScope),
     // In scope since 4b's Task 3, with `CALL`.
     InstructionKind::Return { .. } => ("Return", Owner::InScope),
-    // ---- 4b's seven ----
-    // **Still `Phase("4b")` after Task 3 implemented `Call::Named` and
-    // `Call::Dynamic`**, and that is not a stale label: this table is
-    // variant-grained, and `Call::Trap` (`CALL ON`/`CALL OFF`) is still owed
-    // to 4b's own Task 7. `loud.rs` is where the arms are told apart -- see
-    // its `expand_for_witnesses`, which now expands this one tag to the two
-    // arms that still fail loudly rather than to all four.
-    InstructionKind::Call(_) => ("Call", Owner::Phase("4b")),
+    // ---- what was 4b's seven: two left, plus `Call`, which is now
+    // ---- Phase 5's, and `Signal`/`Raise`/`Procedure`/`Use`/`Return`,
+    // ---- which are in scope. The heading counts the block below it,
+    // ---- and the block shrinks as 4b lands; `variant_counts_match_the_
+    // ---- audited_split` is what actually pins the numbers.
+    // **`Phase("Phase 5")` since 4b's Task 7, not `Phase("4b")`**, and the
+    // change of *phase* is the point rather than an edit in passing: this
+    // table is variant-grained, three of `rexx_parse::Call`'s four arms are
+    // implemented (`Named`/`Dynamic` at Task 3, `Trap` at Task 7), and the
+    // one that is not is `Call::Qualified` (`CALL ns:name`), which is Phase
+    // 5's. Leaving "4b" here would have named a phase that owes nothing.
+    // `loud.rs` is where the arms are told apart -- see its
+    // `expand_for_witnesses`, which now expands this one tag to the single
+    // arm that still fails loudly rather than to two.
+    InstructionKind::Call(_) => ("Call", Owner::Phase("Phase 5")),
     // **In scope since 4b's Task 5**, both of them, and both fully rather
     // than arm-grained the way `Call` above is. `PROCEDURE` isolates the
     // callee's pool and aliases the exposed names; `USE ARG`/`USE STRICT
@@ -129,14 +136,20 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // instruction answering the right bytes and not a gap.
     InstructionKind::Procedure { .. } => ("Procedure", Owner::InScope),
     InstructionKind::Use(_) => ("Use", Owner::InScope),
-    // **Still `Phase("4b")` after Task 6 implemented `Signal::Label` and
-    // `Signal::Value`**, and that is not a stale label: this table is
-    // variant-grained, and `Signal::Trap` (`SIGNAL ON`/`SIGNAL OFF`) is
-    // still owed to 4b's own Task 7. `loud.rs` is where the arms are told
-    // apart -- see its `expand_for_witnesses`, which now expands this one
-    // tag to the single arm that still fails loudly rather than to both.
-    InstructionKind::Signal(_) => ("Signal", Owner::Phase("4b")),
-    InstructionKind::Raise(_) => ("Raise", Owner::Phase("4b")),
+    // **In scope since 4b's Task 7**, both of them, and both fully rather
+    // than arm-grained the way `Call` above is. All three `Signal` arms are
+    // implemented (`Label`/`Value` at Task 6, `Trap` here), so nothing is
+    // left inside the variant for `expand_for_witnesses` to split out.
+    // `Raise` is whole for a subtler reason worth stating, since it is the
+    // shape that would justify an arm-grained entry: `RAISE ... ADDITIONAL
+    // (a, b)` does still fail loudly, but through `ExprKind::List`'s own
+    // `Phase 5` owner -- the parenthesised list is an *expression* this
+    // crate cannot evaluate, reported against that expression, and `RAISE
+    // ... ARRAY (a, b)` reaches the identical oracle bytes with no gap at
+    // all (measured, the two spellings' reports are byte-identical). So
+    // there is no `RAISE` shape whose gap belongs to `RAISE`.
+    InstructionKind::Signal(_) => ("Signal", Owner::InScope),
+    InstructionKind::Raise(_) => ("Raise", Owner::InScope),
     InstructionKind::Push { .. } => ("Push", Owner::Phase("4b")),
     InstructionKind::Queue { .. } => ("Queue", Owner::Phase("4b")),
     // ---- 4c's four ----
@@ -144,7 +157,7 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     InstructionKind::Arg(_) => ("Arg", Owner::Phase("4c")),
     InstructionKind::Pull(_) => ("Pull", Owner::Phase("4c")),
     InstructionKind::Address(_) => ("Address", Owner::Phase("4c")),
-    // ---- Phase 5's six ----
+    // ---- Phase 5's six here, seven counting `Call` above ----
     InstructionKind::Expose { .. } => ("Expose", Owner::Phase("Phase 5")),
     InstructionKind::Options { .. } => ("Options", Owner::Phase("Phase 5")),
     InstructionKind::Message { .. } => ("Message", Owner::Phase("Phase 5")),
@@ -307,9 +320,12 @@ impl Coverage {
 /// pinned here") tracks for Step 5's own purposes.
 pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("InstructionKind", "Command", "Phase 7"),
-    ("InstructionKind", "Call", "4b"),
-    ("InstructionKind", "Signal", "4b"),
-    ("InstructionKind", "Raise", "4b"),
+    // `Call`'s owner changed phase at 4b's Task 7 rather than leaving this
+    // list: `Call::Trap` moved in scope with `Signal::Trap`, leaving
+    // `Call::Qualified` (`CALL ns:name`) as the only loud arm, and that one
+    // is Phase 5's. `Signal` and `Raise` left the list outright in the same
+    // task.
+    ("InstructionKind", "Call", "Phase 5"),
     ("InstructionKind", "Push", "4b"),
     ("InstructionKind", "Queue", "4b"),
     ("InstructionKind", "Parse", "4c"),
@@ -417,10 +433,14 @@ fn variant_counts_match_the_audited_split() {
     // design spec's criterion 1. The InstructionKind split was 20/9/4/6/1 at
     // the 4a gate; 4b's Task 1 moved `Interpret` from 4b's column into the
     // implemented one (21/8/4/6/1), Task 3 moved `Return` (22/7/4/6/1) and
-    // Task 5 moved `Procedure` and `Use` together (24/5/4/6/1).
-    // `InstructionKind::Call` did **not** move with them: the table is
-    // variant-grained and `Call::Trap` is still 4b's, so the variant stays in
-    // that column while two of its four arms are implemented.
+    // Task 5 moved `Procedure` and `Use` together (24/5/4/6/1). Task 7 moves
+    // `Signal` and `Raise` (26/3/4/6/1) and then moves `Call` *sideways*, out
+    // of 4b's column into Phase 5's (26/2/4/7/1) rather than into the
+    // implemented one: the table is variant-grained, and three of `Call`'s
+    // four arms are implemented while `Call::Qualified` is Phase 5's. That
+    // sideways step is the one this comment would previously have got wrong,
+    // since through Task 5 the same variant sat in 4b's column for
+    // `Call::Trap`'s sake.
     // `ExprKind::Call` is different -- unlike the instruction, it has no
     // later-phase arm hiding inside its own `CallTarget`, so Task 4 moves the
     // whole variant, and only it, from 6 to 5 in the ExprKind row below (9 to
@@ -442,14 +462,14 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        24
+        26
     );
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("4b"))
             .count(),
-        5
+        2
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -463,7 +483,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("Phase 5"))
             .count(),
-        6
+        7
     );
     assert_eq!(
         INSTRUCTION_TAGS

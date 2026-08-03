@@ -64,21 +64,24 @@
 //! `clause_line_override` where the other *sets* it) is measured and stated
 //! at both.
 
-use crate::activation::{Activation, body_of};
-use crate::error::{FailureSite, Raised};
+use crate::activation::{Activation, Inherited, Trap, body_of};
+use crate::error::{FailureSite, Raised, Search};
 use crate::eval::logical_value;
 use crate::trace::{
     is_whole_number, mode_from_setting, raised_invalid_trace_letter,
     raised_numeric_trace_interactive_only,
 };
-use crate::{Argument, CallContext, Code, Failure, Interp, Loud};
+use crate::{
+    ActiveCondition, Argument, CallContext, Code, Failure, Interp, Loud, Novalue, PendingTrap,
+};
 use rexx_core::{ObjRef, SlotFrame, SlotRef};
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
-    ControlExpr, Controlled, EndStyle, Expr, ExprKind, Fragment, Instruction, InstructionKind,
-    Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource, SymbolId, Trace, Use,
-    UseTarget, VariableRef, compound_parts, parse_interpret,
+    ConditionTrap, ControlExpr, Controlled, EndStyle, Expr, ExprKind, Fragment, Instruction,
+    InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource, Raise,
+    SymbolId, Trace, Use, UseTarget, VariableRef, compound_parts, parse_interpret,
 };
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -661,8 +664,20 @@ impl Interp {
             // three lines rather than its first two, and `run.rs`'s own
             // `interpret_traces_the_text_it_is_about_to_run` asserts the
             // whole transcript instead of stopping one line short.
+            // The condition-trap boundary (4b's Task 7), and the reason it
+            // is *here* rather than inside `step_in_temps_frame`: one offer
+            // per activation, made by the activation that is unwinding. A
+            // nested `run_bounded` (an `IF` branch, a `WHEN` body) shares
+            // this activation's traps and must not get a second offer, and
+            // a callee's own offer already happened in its own copy of this
+            // loop before `resolve_and_run_call` re-threw. See
+            // `offer_to_trap` for the search rules and for why only a
+            // `SIGNAL ON` trap can take a failure at all.
             let flow =
-                self.step_in_temps_frame(&code, index, instruction, Some(&program.source))?;
+                match self.step_in_temps_frame(&code, index, instruction, Some(&program.source)) {
+                    Ok(flow) => flow,
+                    Err(failure) => self.offer_to_trap(failure)?,
+                };
             match flow {
                 Flow::Next => self.activation_mut().pc += 1,
                 Flow::Goto(target) => self.activation_mut().pc = target,
@@ -710,6 +725,20 @@ impl Interp {
                     };
                     return Err(raised.into());
                 }
+            }
+            // The clause boundary a `CALL ON` trap's handler waits for, and
+            // the reason `pending_trap` lives on `Interp` rather than on the
+            // raising activation: the routine that raised has usually
+            // already returned by now (`RAISE ... RETURN` is what sets it),
+            // so the activation that delivers is the one still running here.
+            // Measured -- `raise user foo return 'ONEVAL'` inside `one`,
+            // trapped by a `CALL ON` in the main body, runs the handler after
+            // the main body's whole `say 'a' one(1) two(2)` clause has
+            // printed, with `SIGL` set to that clause's line.
+            if self.pending_trap.is_some()
+                && let Some(ended) = self.deliver_pending_trap(&code)?
+            {
+                return Ok(ended);
             }
             debug_assert_eq!(
                 self.activations.len(),
@@ -1641,7 +1670,14 @@ impl Interp {
                     self.trace_result(self.clause_state.current_value_indent, &name);
                     self.exec_call(code, &name, true, args)
                 }
-                rexx_parse::Call::Qualified { .. } | rexx_parse::Call::Trap(_) => {
+                // `CALL ON cond NAME label` / `CALL OFF cond`. Shares every
+                // line of its implementation with `SIGNAL ON`/`OFF` except
+                // the one `bool` that decides how the handler runs -- see
+                // `exec_condition_trap`, and `Trap`'s own doc comment
+                // (`activation.rs`) for the two measured behaviours that
+                // `bool` selects between.
+                rexx_parse::Call::Trap(trap) => self.exec_condition_trap(trap, true),
+                rexx_parse::Call::Qualified { .. } => {
                     Err(Loud::instruction(&instruction.kind).into())
                 }
             },
@@ -1713,7 +1749,12 @@ impl Interp {
                     self.set_sigl(self.clause_state.current_clause_line);
                     Ok(Flow::Signal(target))
                 }
-                rexx_parse::Signal::Trap(_) => Err(Loud::instruction(&instruction.kind).into()),
+                // `SIGNAL ON cond NAME label` / `SIGNAL OFF cond`. Unlike the
+                // two arms above it transfers no control of its own: it edits
+                // this activation's trap table and falls through to the next
+                // clause, and the transfer happens later, if the condition is
+                // ever raised.
+                rexx_parse::Signal::Trap(trap) => self.exec_condition_trap(trap, false),
             },
 
             // `PROCEDURE`, bare or with an `EXPOSE` list (D9r). Isolates the
@@ -1729,6 +1770,11 @@ impl Interp {
                 self.exec_use(code, use_, first_instruction)?;
                 Ok(Flow::Next)
             }
+
+            // `RAISE`, in all of its forms. See `exec_raise`, whose doc
+            // comment carries the delivery table -- which is the whole of
+            // this instruction and is not derivable from the grammar.
+            InstructionKind::Raise(raise) => self.exec_raise(code, raise),
 
             other => Err(Loud::instruction(other).into()),
         }
@@ -2218,6 +2264,571 @@ impl Interp {
         self.assign_by_name(b"SIGL", value);
     }
 
+    /// `SIGNAL ON`/`OFF` and `CALL ON`/`OFF`, which are one instruction with
+    /// one flag between them.
+    ///
+    /// **Neither form transfers control here**, which is the whole reason
+    /// this arm is three lines: `ON` records a trap in the running
+    /// activation's table and `OFF` removes one, and the transfer -- or the
+    /// call -- happens later, in `run_activation`, if the condition is ever
+    /// raised.
+    ///
+    /// `label` rather than `on` is what tells the two apart, following
+    /// `ConditionTrap`'s own doc comment (`rexx-parse`): the parser has
+    /// already defaulted an `ON` with no `NAME` clause to the condition's own
+    /// name (`USER foo`'s default label is `FOO`, not `USER FOO`, measured),
+    /// and leaves `None` for `OFF` alone. Reading `on` as well would be two
+    /// sources for one fact.
+    ///
+    /// **`ON` over an already-enabled trap replaces it rather than being an
+    /// error**, and that is load-bearing rather than incidental: a trap is
+    /// removed when it fires, and re-arming inside the handler is how a
+    /// program traps the same condition twice. Measured -- a `SIGNAL ON
+    /// SYNTAX` handler that runs `signal on syntax name second` and then
+    /// divides by zero reaches `second`, where the same handler without the
+    /// re-arm gets the ordinary fatal report.
+    fn exec_condition_trap(&mut self, trap: &ConditionTrap, call: bool) -> Result<Flow, Failure> {
+        match &trap.label {
+            Some(label) => {
+                let entry = Trap {
+                    call,
+                    label: label.clone(),
+                };
+                self.activation_mut()
+                    .traps
+                    .insert(trap.condition.clone(), entry);
+            }
+            None => {
+                self.activation_mut().traps.remove(&trap.condition);
+            }
+        }
+        Ok(Flow::Next)
+    }
+
+    /// The trap the running activation has enabled for `condition`, if any.
+    ///
+    /// **`ANY` is a fallback key, consulted only when the condition's own
+    /// name is not in the table.** Measured: `signal on any` traps a plain
+    /// `say 1/0`, with `SIGL` set exactly as a `signal on syntax` would set
+    /// it. The parser already accepts `ANY` for both `CALL ON` and `SIGNAL
+    /// ON` (`condition_trap`'s own comment records that measurement), so
+    /// without this lookup an `ANY` trap would be recorded and never fire.
+    ///
+    /// Returns a clone rather than a borrow: every caller goes on to call a
+    /// `&mut self` method in the same breath (`remove` the trap, then
+    /// `set_sigl`), which a borrow of `self.activations` held across would
+    /// make the `E0502` `run_activation`'s own doc comment writes out.
+    pub(crate) fn trap_for(&self, condition: &[u8]) -> Option<Trap> {
+        let traps = &self.activation().traps;
+        traps
+            .get(condition)
+            .or_else(|| traps.get(b"ANY".as_slice()))
+            .cloned()
+    }
+
+    /// Turns an uninitialised variable read into a `NOVALUE` condition --
+    /// but only when this activation has a `NOVALUE` trap that could take
+    /// it.
+    ///
+    /// **Inherited item I13, and `Novalue::Unset`'s first reader.** D16 put
+    /// the flag on the read path from the start rather than have 4b retrofit
+    /// a raise into it, and this is the retrofit that did not have to happen.
+    ///
+    /// **Gated on the trap rather than raised unconditionally**, for two
+    /// reasons that both matter. An untrapped `NOVALUE` has no effect
+    /// whatever -- the read yields the derived name, measured, and that is
+    /// what every program in the corpus already depends on -- so raising and
+    /// then discarding would build a condition per uninitialised read on the
+    /// hottest path there is. And a `Raised::condition` carries no catalogue
+    /// entry, so one escaping untrapped would report `Error 0`; the gate is
+    /// what makes that unreachable rather than merely unlikely.
+    ///
+    /// The gate is the same test `offer_to_trap` will apply a moment later
+    /// -- same activation, same table, and a `call` trap excluded from both
+    /// -- so a condition raised here always finds the trap that let it be
+    /// raised. `CALL ON NOVALUE` is a parse error anyway; the `call` half is
+    /// reachable only through `CALL ON ANY`, which is measured not to catch
+    /// a condition that has no resumption point.
+    pub(crate) fn novalue_check(&mut self, novalue: Novalue) -> Result<(), Failure> {
+        if novalue == Novalue::Set {
+            return Ok(());
+        }
+        if self.trap_for(b"NOVALUE").is_none_or(|trap| trap.call) {
+            return Ok(());
+        }
+        Err(Raised::condition(Cow::Borrowed("NOVALUE")).into())
+    }
+
+    /// Offers a failure escaping the running activation to that activation's
+    /// trap table, and either transfers control or hands the failure back to
+    /// keep unwinding.
+    ///
+    /// Called from `run_activation`'s own loop, once per instruction, on the
+    /// `Err` path alone -- so the *innermost* activation gets first refusal
+    /// and each enclosing one gets its turn as the failure propagates,
+    /// which is the outward walk [`Search::Here`] describes. `resolve_and_
+    /// run_call` has already restored the caller's `clause_state` by the time
+    /// the caller's own loop sees the failure, so `SIGL` below reads the
+    /// trapping activation's own clause line rather than the callee's --
+    /// measured, and the two really do differ: the same `say 1/0` reports
+    /// `SIGL` 9 when the callee traps it and 3 when the callee's trap is off
+    /// and the caller's fires instead.
+    ///
+    /// **Only a `SIGNAL ON` trap ever takes a failure here.** A `CALL ON`
+    /// trap resumes execution, and there is nothing to resume into once a
+    /// clause has failed -- measured rather than assumed, and measurable
+    /// only because `CALL ON ANY` is legal where `CALL ON SYNTAX` is a parse
+    /// error: `call on any name uh` with `say 1/0` is **not** trapped, it is
+    /// the ordinary fatal 42.3 at rc 214. So a `call` trap declines here and
+    /// the failure keeps unwinding. Every condition a `CALL ON` trap really
+    /// does catch reaches it through `Interp::pending_trap` instead, without
+    /// ever becoming a failure.
+    ///
+    /// Returns a `Flow` rather than a bare target so that
+    /// `run_activation`'s existing `match` does the transfer: `Flow::Signal`
+    /// is exactly "set this activation's `pc`", which is what a trap does.
+    fn offer_to_trap(&mut self, failure: Failure) -> Result<Flow, Failure> {
+        let Failure::Raised(raised) = &failure else {
+            return Err(failure);
+        };
+        match raised.delivery.search {
+            Search::Here => {}
+            // One level up, and this is that level's turn to decline. The
+            // rewrite is what makes the *next* loop out offer it: without
+            // it, `Caller` would skip every activation rather than one.
+            Search::Caller => {
+                let Failure::Raised(mut raised) = failure else {
+                    unreachable!("matched Failure::Raised immediately above")
+                };
+                raised.delivery.search = Search::Here;
+                return Err(raised.into());
+            }
+            // The outermost activation is the only one allowed to look.
+            Search::Top if self.activations.len() > 1 => return Err(failure),
+            Search::Top => {}
+            Search::Nobody => return Err(failure),
+        }
+        let Some(trap) = self.trap_for(raised.condition.as_bytes()) else {
+            return Err(failure);
+        };
+        if trap.call {
+            return Err(failure);
+        }
+        // Resolved **before** anything is cleared or removed, because a
+        // label that does not exist is not a trap that fired: measured,
+        // `signal on syntax name nosuchlabel` with `say 1/0` on line 3
+        // reports `Error 16.1 Label "NOSUCHLABEL" not found` against line 3
+        // -- the raising clause's own site, which is still the one
+        // `step_in_temps_frame` recorded a moment ago and which the clearing
+        // below would have thrown away.
+        let target = self.resolve_signal_target(&trap.label)?;
+        let Failure::Raised(raised) = failure else {
+            unreachable!("matched Failure::Raised immediately above")
+        };
+        // Removed when it fires (`Activation::traps`' own doc comment has
+        // the two probes). Removed by the condition's *own* name and by
+        // `ANY`, since `trap_for` may have matched either and leaving the
+        // one that matched enabled would re-trap.
+        let traps = &mut self.activation_mut().traps;
+        traps.remove(raised.condition.as_bytes());
+        traps.remove(b"ANY".as_slice());
+        // **Inherited item I11, and the reason it is this task's.** Both
+        // halves of the echo stack are dropped: a trapped condition prints
+        // no report at all, so the sites it accumulated must not survive to
+        // be printed against a *later*, untrapped one. Measured -- `say 1/0`
+        // trapped on line 3 and `say 2/0` untrapped on line 8 inside the
+        // handler reports line 8, alone, and a version that kept the first
+        // site reports line 3.
+        //
+        // Dropped from the *interpreter* but kept on the condition, because
+        // `RAISE PROPAGATE` re-raises this condition with its original
+        // clause echoed rather than the `raise propagate` clause --
+        // `ActiveCondition`'s own doc comment (`lib.rs`) has that transcript.
+        let site = self.failure_site.take();
+        let sites = std::mem::take(&mut self.failure_sites);
+        self.set_sigl(self.clause_state.current_clause_line);
+        if let Some(rc) = &raised.rc {
+            let value = self.text(rc);
+            self.assign_by_name(b"RC", value);
+        }
+        // What a later `RAISE PROPAGATE` re-raises. See `exec_raise_
+        // propagate` for what is and is not measured about it.
+        self.active_condition = Some(ActiveCondition {
+            raised,
+            site,
+            sites,
+        });
+        Ok(Flow::Signal(target))
+    }
+
+    /// Runs a `CALL ON` trap's handler, at the clause boundary the condition
+    /// has been waiting for.
+    ///
+    /// **The wait is the measured part.** `zres = one(1)`, where `one`
+    /// raises a `CALL ON`-trapped condition and the handler assigns `zres`
+    /// itself, prints the *handler's* value -- so the assignment had already
+    /// stored the routine's result before the handler ran. `say 'a' one(1)
+    /// two(2)` in the same shape prints the whole line, `two`'s value
+    /// included, and only then the handler. Neither is what a trap that
+    /// fired at the raise would print.
+    ///
+    /// The trap is removed for the handler's duration and **put back
+    /// afterwards**, unlike a `SIGNAL ON` trap, which stays removed.
+    /// Measured: a handler that itself calls a routine raising the same
+    /// condition does not re-enter, and the program then carries on
+    /// normally rather than running the handler a second time later.
+    fn deliver_pending_trap(&mut self, code: &Code<'_>) -> Result<Option<Ended>, Failure> {
+        // Only the activation whose trap table matched delivers, and only
+        // once it is running again -- `PendingTrap::depth`'s own doc comment
+        // has the transcript that separates this from "the next clause
+        // boundary anyone reaches", which is what a deeper activation
+        // stepping its own first clause would otherwise be.
+        if self.pending_trap.as_ref().map(|pending| pending.depth) != Some(self.activations.len()) {
+            return Ok(None);
+        }
+        let Some(pending) = self.pending_trap.take() else {
+            return Ok(None);
+        };
+        let Some(trap) = self.trap_for(&pending.condition) else {
+            return Ok(None);
+        };
+        if !trap.call {
+            // A `SIGNAL ON` trap never gets here: `exec_raise` throws for
+            // that half instead, so the transfer happens where the raise is
+            // rather than one clause later. Declining rather than asserting
+            // keeps a future raiser that forgets the distinction from
+            // silently running a `SIGNAL` handler as a call.
+            return Ok(None);
+        }
+        self.set_sigl(self.clause_state.current_clause_line);
+        if let Some(rc) = &pending.rc {
+            let value = self.text(rc);
+            self.assign_by_name(b"RC", value);
+        }
+        // A `CALL ON` handler is running a condition too, and `RAISE
+        // PROPAGATE` inside one asks for it -- measured, `raise propagate`
+        // in a `CALL ON USER FOO` handler ends the program silently at rc 0,
+        // where the same clause with no handler running at all is 98.918.
+        // Recording nothing here would give the second answer for the first
+        // program. No sites travel with it: nothing failed, so nothing was
+        // cleared.
+        let mut raised = Raised::condition(condition_name(&pending.condition));
+        raised.rc = pending.rc.clone();
+        self.active_condition = Some(ActiveCondition {
+            raised,
+            site: None,
+            sites: Vec::new(),
+        });
+        let key: Box<[u8]> = pending.condition.clone();
+        let removed = self.activation_mut().traps.remove(&key);
+        let ended = self.resolve_and_run_call(code, &trap.label, true, &[]);
+        if let Some(trap) = removed {
+            self.activation_mut().traps.insert(key, trap);
+        }
+        match ended? {
+            // The handler returned; execution resumes at the clause after
+            // the one that finished.
+            Ended::Returned(_) => Ok(None),
+            // `EXIT` inside the handler ends the program, exactly as it does
+            // inside any other called routine.
+            Ended::Exited(value) => Ok(Some(Ended::Exited(value))),
+        }
+    }
+
+    /// The trap the running activation's **caller** has enabled, or `None`
+    /// at top level.
+    ///
+    /// `exec_raise`'s own lookup for the non-`SYNTAX` conditions, whose
+    /// search starts one level out ([`Search::Caller`]). Separate from
+    /// `trap_for` rather than parameterised by depth because these are the
+    /// only two depths anything asks about, and a depth parameter would read
+    /// as though arbitrary ones were meaningful.
+    fn caller_trap_for(&self, condition: &[u8]) -> Option<Trap> {
+        let caller = self.activations.len().checked_sub(2)?;
+        let traps = &self.activations[caller].traps;
+        traps
+            .get(condition)
+            .or_else(|| traps.get(b"ANY".as_slice()))
+            .cloned()
+    }
+
+    /// `RAISE`, in all of its forms.
+    ///
+    /// # The delivery table, which is the whole instruction
+    ///
+    /// Nothing about `RAISE`'s grammar says that its tail decides *who* may
+    /// trap it, and that is what it does. Measured, against a three-level
+    /// call chain -- a two-level program gives identical bytes for the first
+    /// and third rows, which is why the first version of this table was
+    /// wrong:
+    ///
+    /// ```text
+    /// RAISE SYNTAX n.m RETURN [e]   search from the raising activation outward
+    /// RAISE SYNTAX n.m             \  the OUTERMOST activation's trap only;
+    /// RAISE SYNTAX n.m EXIT [e]    /  every level in between skips its own
+    /// RAISE other ... RETURN [e]      search from the raising activation's CALLER
+    /// RAISE other ...              \  no trap at all -- the program ends, and
+    /// RAISE other ... EXIT [e]     /  the condition's default action applies
+    /// ```
+    ///
+    /// The three transcripts that force each row apart, each run twice, once
+    /// with the trap enabled in the middle routine and once with it enabled
+    /// in the main body as well:
+    ///
+    /// * `raise syntax 40.4` in `lev2`, `signal on syntax name mid` in
+    ///   `lev1`: **not trapped**, rc 216, `mid` never runs. Add `signal on
+    ///   syntax name outer` to the main body and `outer` runs, with `SIGL`
+    ///   set to the main body's `call lev1` clause -- so it skipped `lev1`
+    ///   and landed at the top.
+    /// * `say 1/0` in the same place: `mid` runs, with `SIGL` set to
+    ///   `lev2`'s own line. The ordinary search is not the `RAISE` one.
+    /// * `raise user foo return 'RETVAL'` in `fun` with `signal on user foo`
+    ///   in the main body: trapped, `SIGL` the main body's clause. The
+    ///   identical program with `raise syntax 40.4 return` reports `SIGL` as
+    ///   `fun`'s own `raise` line instead.
+    ///
+    /// # What the untrapped default action is, per condition
+    ///
+    /// Measured at top level with no trap enabled: `raise halt` is the fatal
+    /// `Error 4.1` at rc 252; `raise error 5`, `raise user foo` and friends
+    /// print nothing and exit 0. So `HALT` reports and the rest are silent,
+    /// and [`Raised::reportable`] is where that split lives.
+    ///
+    /// **A `SIGNAL ON HALT` in the same activation does not change that**,
+    /// which is the measurement that stops the last two rows above being
+    /// `Search::Top`: `signal on halt` immediately above `raise halt` still
+    /// gives the fatal report, where `signal on syntax` above `raise syntax
+    /// 40.4` traps. Hence [`Search::Nobody`] for one and [`Search::Top`] for
+    /// the other.
+    ///
+    /// # Evaluation order
+    ///
+    /// `rc`, then `DESCRIPTION`, then `ADDITIONAL`/`ARRAY`, then the
+    /// `RETURN`/`EXIT` value -- source order, and every one of them is
+    /// evaluated even when its value is then discarded, because an
+    /// expression that raises has to raise.
+    ///
+    /// `DESCRIPTION`'s value is evaluated and dropped: it is observable only
+    /// through `condition('D')`, a builtin this crate does not have, and the
+    /// untrapped report is measured to be byte-identical with and without it.
+    fn exec_raise(&mut self, code: &Code<'_>, raise: &Raise) -> Result<Flow, Failure> {
+        if raise.propagate {
+            return self.exec_raise_propagate();
+        }
+        // Each option traces a `>K>` line as it is evaluated, in source
+        // order, at this clause's own indent. Measured, all five spellings:
+        //
+        // ```text
+        // raise syntax 40.4 description 'zdesc' additional 'zadd'
+        //   >K>   "SYNTAX" => "40.4"
+        //   >K>   "DESCRIPTION" => "zdesc"
+        //   >K>   "ADDITIONAL" => "zadd"
+        // raise syntax 40.4 array ('ZORKROUTINE', 7)
+        //   >K>   "SYNTAX" => "40.4"
+        //   >K>   "ARRAY" => "an Array"
+        // raise user marker description 'zdesc' return 'zret'
+        //   >K>   "DESCRIPTION" => "zdesc"
+        //   >K>   "RESULT" => "zret"
+        // ```
+        //
+        // The **condition's own name** is the first keyword, and only for
+        // the three conditions that take a value after it -- `raise user
+        // marker` traces no line for the condition at all, which is why this
+        // is keyed on the value's presence rather than written out
+        // unconditionally.
+        let indent = self.clause_state.current_value_indent;
+        let rc_text = match &raise.rc {
+            Some(expr) => {
+                let value = self.eval(code, expr)?;
+                self.roots.push_temp(value);
+                let rendered = self.to_text(value).to_vec();
+                let keyword = String::from_utf8_lossy(&raise.condition).into_owned();
+                self.trace_keyword(indent, &keyword, &rendered);
+                Some(rendered)
+            }
+            None => None,
+        };
+        if let Some(expr) = &raise.description {
+            let value = self.eval(code, expr)?;
+            self.roots.push_temp(value);
+            let rendered = self.to_text(value).to_vec();
+            self.trace_keyword(indent, "DESCRIPTION", &rendered);
+        }
+        // `ADDITIONAL expr` and `ARRAY (a, b)` produce the identical
+        // substitution list -- measured, `additional ('MYROUTINE', 3)` and
+        // `array ('MYROUTINE', 3)` give byte-identical reports -- so they
+        // share one `Vec` here rather than being kept apart to no end. A
+        // single non-array `ADDITIONAL` value is one substitution, also
+        // measured: `additional 'JUSTONE'` fills `&1` and leaves `&2` as the
+        // literal `&2`.
+        let mut additional: Vec<String> = Vec::new();
+        if let Some(expr) = &raise.additional {
+            let value = self.eval(code, expr)?;
+            self.roots.push_temp(value);
+            let rendered = self.to_text(value).to_vec();
+            self.trace_keyword(indent, "ADDITIONAL", &rendered);
+            additional.push(String::from_utf8_lossy(&rendered).into_owned());
+        }
+        if let Some(items) = &raise.array {
+            // **`an Array`, verbatim and regardless of the elements** --
+            // it is the Array class's own default string form, which is
+            // what the oracle traces here (measured for `array
+            // ('ZORKROUTINE', 7)`). This crate has no array object to render,
+            // and building one purely to print a constant would be the
+            // longer way to the same two words. Traced before the elements
+            // are evaluated, matching the oracle's own ordering: the `>K>`
+            // line is the option's, and the elements produce no lines of
+            // their own.
+            self.trace_keyword(indent, "ARRAY", b"an Array");
+            for item in items {
+                // An omitted position (`array (1,,3)`) contributes nothing
+                // rather than an empty string: it holds no value to
+                // substitute. Unmeasured, and the only unmeasured choice in
+                // this function -- stated here rather than left silent.
+                let Some(expr) = item else { continue };
+                let value = self.eval(code, expr)?;
+                self.roots.push_temp(value);
+                additional.push(String::from_utf8_lossy(&self.to_text(value)).into_owned());
+            }
+        }
+        // The `RETURN`/`EXIT` value, and its own `>K>` line -- measured for
+        // both tails: `raise user foo return 'ONEVAL'` under `trace r`
+        // traces `>K>     "RESULT" => "ONEVAL"`, and the same with `exit`
+        // traces the identical line. `RETURN`'s own instruction arm traces
+        // `>>>` instead, so this is not that path with a different indent.
+        let result = match &raise.result {
+            Some(result) => match &result.value {
+                Some(expr) => {
+                    let value = self.eval(code, expr)?;
+                    self.roots.push_temp(value);
+                    let rendered = self.to_text(value).to_vec();
+                    self.trace_keyword(indent, "RESULT", &rendered);
+                    Some(value)
+                }
+                None => None,
+            },
+            None => None,
+        };
+        let returns = raise.result.as_ref().is_some_and(|result| !result.exit);
+
+        if raise.condition.as_ref() == b"SYNTAX" {
+            let (number, sub) = split_error_number(rc_text.as_deref().unwrap_or(b""));
+            let mut raised = Raised::syntax(number, sub, additional);
+            raised.delivery.search = if returns { Search::Here } else { Search::Top };
+            return Err(raised.into());
+        }
+
+        // Every other condition. `HALT` is the one whose untrapped default
+        // action reports; the rest are silent, and both halves are below.
+        let halt = raise.condition.as_ref() == b"HALT";
+        if raise.result.is_none() || !returns {
+            // No tail, or `EXIT`: the program ends here and no trap is
+            // consulted at any level. `Flow::Exit` carries `EXIT`'s own
+            // value, which is `None` for the tail-less form.
+            if halt {
+                let mut raised = Raised::halt();
+                raised.delivery.search = Search::Nobody;
+                return Err(raised.into());
+            }
+            return Ok(Flow::Exit(result));
+        }
+
+        // `RETURN`: this routine returns `result`, and the condition is
+        // offered to the caller.
+        let name: Box<[u8]> = raise.condition.clone();
+        // `RC` for `ERROR`/`FAILURE` is the raise's own argument, measured at
+        // `rc= 5` for `raise error 5` trapped one level up. `SYNTAX`'s own
+        // `RC` is the major and is filled in by `Raised::syntax` above.
+        let rc = match raise.condition.as_ref() {
+            b"ERROR" | b"FAILURE" => rc_text,
+            _ => None,
+        };
+        match self.caller_trap_for(&name) {
+            // A `CALL ON` trap resumes, so the condition waits for the
+            // caller's current clause to finish -- `deliver_pending_trap`
+            // has the two transcripts that pin the wait.
+            Some(trap) if trap.call => {
+                self.pending_trap = Some(PendingTrap {
+                    condition: name,
+                    rc,
+                    // The caller's own depth: this activation is about to be
+                    // popped, so that is `len() - 1`. See the field's own doc
+                    // comment for the transcript that made it necessary.
+                    depth: self.activations.len() - 1,
+                });
+                Ok(Flow::Return(result))
+            }
+            // A `SIGNAL ON` trap transfers, so the caller's clause is
+            // abandoned rather than finished: measured, `say fun(1)` with a
+            // trapped `raise user foo return 'RETVAL'` inside `fun` prints
+            // nothing at all before the handler. That needs a real failure
+            // unwinding this activation, not a value returned from it.
+            Some(_) => {
+                let mut raised = Raised::condition(condition_name(&name));
+                raised.rc = rc;
+                raised.delivery.search = Search::Caller;
+                Err(raised.into())
+            }
+            // Nothing traps it. `HALT` reports; everything else is ignored
+            // outright and the routine simply returns its value -- measured,
+            // `raise user foo return 'RETVAL-88'` with no trap anywhere
+            // prints `RETVAL-88` and the caller carries on.
+            None if halt => {
+                let mut raised = Raised::halt();
+                raised.delivery.search = Search::Nobody;
+                Err(raised.into())
+            }
+            None => Ok(Flow::Return(result)),
+        }
+    }
+
+    /// `RAISE PROPAGATE`: re-raise the condition whose handler is running.
+    ///
+    /// **Measured, and it is not "raise it again in the caller".** From
+    /// inside a `SIGNAL ON SYNTAX` handler, with another `SIGNAL ON SYNTAX`
+    /// enabled one and two levels out, `raise propagate` is trapped by
+    /// *neither* -- it is fatal, at the same rc the untrapped condition
+    /// would have had, with the whole echo stack printed and the major line
+    /// missing its ` running <path> line <n>` span
+    /// ([`Delivery::positionless`]). So it goes to nobody.
+    ///
+    /// With no handler running at all it is `98.918`, "No active condition
+    /// available for PROPAGATE", at rc 158 -- also measured, and the reason
+    /// `active_condition` is an `Option` rather than something assumed
+    /// present.
+    ///
+    /// A condition with no report to give ends the program silently instead,
+    /// which is the `USER` half: measured, `raise propagate` inside a `CALL
+    /// ON USER FOO` handler prints nothing more and exits 0.
+    ///
+    /// **The residual, stated rather than hidden.** `active_condition` is
+    /// set when a trap fires and is never cleared, so a `RAISE PROPAGATE`
+    /// reached *after* a handler has finished re-raises that handler's
+    /// condition where the oracle may well answer 98.918. Nothing measured
+    /// pins that shape either way, and the two probes that do pin something
+    /// (inside a handler, and before any condition at all) are both
+    /// reproduced.
+    fn exec_raise_propagate(&mut self) -> Result<Flow, Failure> {
+        let Some(active) = &self.active_condition else {
+            return Err(Raised::syntax(98, 918, Vec::new()).into());
+        };
+        if !active.raised.reportable() {
+            return Ok(Flow::Exit(None));
+        }
+        let mut raised = active.raised.clone();
+        raised.delivery.search = Search::Nobody;
+        raised.delivery.positionless = true;
+        // The original condition's echo stack, put back exactly as it stood
+        // when the trap cleared it. `record_failure_at` is first-wins, so
+        // restoring a full `failure_site` is also what stops this `raise
+        // propagate` clause recording itself over the clause that actually
+        // raised -- measured, the oracle echoes line 8 (`say 1/0`), not line
+        // 12 (`raise propagate`).
+        self.failure_site = active.site.clone();
+        self.failure_sites = active.sites.clone();
+        Err(raised.into())
+    }
+
     /// Resolves a `SIGNAL`/`SIGNAL VALUE` target against the running
     /// *activation's* own body -- not `code.body`, which differs inside an
     /// `INTERPRET` fragment (whose own `labels` is always empty, a label in
@@ -2392,8 +3003,23 @@ impl Interp {
         let settings = caller.settings.clone();
         let trace_mode = caller.trace_mode;
         let extra = caller.extra.clone();
-        let mut callee =
-            Activation::nested(program, selector, plan, frame, target, settings, trace_mode);
+        // Cloned in and never written back, exactly like `settings` and
+        // `trace_mode` beside it -- `Activation::traps`' own doc comment has
+        // the three probes that measure the inheritance and its one-way
+        // direction.
+        let traps = caller.traps.clone();
+        let mut callee = Activation::nested(
+            program,
+            selector,
+            plan,
+            frame,
+            target,
+            Inherited {
+                settings,
+                trace_mode,
+                traps,
+            },
+        );
         callee.extra = extra;
         self.activations.push(callee);
 
@@ -2671,11 +3297,18 @@ impl Interp {
     /// calls `record_failure_site` directly, past `code.body.instructions[
     /// when_index]`, on exactly that path -- see its own call sites there.
     ///
-    /// `self.failure_site.is_none()` is the guard, in both callers, that
-    /// makes the *first* resolution win, which is always the most specific
-    /// one available: the deepest `step_in_temps_frame` call, or `Select`'s
-    /// own direct call for a `When`/`WhenCase` condition, always runs before
-    /// any enclosing propagation reaches an outer wrapper.
+    /// An early `if self.failure_site.is_some() { return; }` at the top of
+    /// [`Interp::record_failure_at`] is the guard that makes the *first*
+    /// resolution win, which is always the most specific one available: the
+    /// deepest `step_in_temps_frame` call, or `Select`'s own direct call for
+    /// a `When`/`WhenCase` condition, always runs before any enclosing
+    /// propagation reaches an outer wrapper.
+    ///
+    /// **This paragraph said "`self.failure_site.is_none()` is the guard, in
+    /// both callers" and was wrong about the expression and about where it
+    /// lives** -- corrected at 4b's Task 7, whose own brief flagged it,
+    /// because a task told to clear that field would otherwise go looking in
+    /// the callers and find nothing.
     ///
     /// **First-wins is per *level*, and an `INTERPRET` fragment is a level**
     /// (4b's Task 2). The guard is unchanged; what changed is that
@@ -2774,8 +3407,14 @@ impl Interp {
     }
 
     /// Resolves `instruction`'s own clause (and its statically-derived
-    /// indent, `static_indent`) into `self.failure_site`, first call wins
-    /// (`self.failure_site.is_none()`), when `source` is `Some`.
+    /// indent, `static_indent`) into `self.failure_site`, first call wins,
+    /// when `source` is `Some`.
+    ///
+    /// **The guard is not here and is not spelled `is_none()`** -- this line
+    /// used to say it was both. It is an early `if self.failure_site.
+    /// is_some() { return; }` at the top of [`Interp::record_failure_at`],
+    /// which this function's own last line delegates to. Corrected at 4b's
+    /// Task 7, the task that had to clear the field.
     ///
     /// The shared half of `step_in_temps_frame`'s own resolution (its doc
     /// comment has the full argument for why the *first* caller to run this
@@ -4265,10 +4904,16 @@ impl Interp {
     /// is a no-op, which is what gives a fragment that failed to parse one
     /// echo instead of two.
     ///
-    /// **Nothing here clears either field, and that is inherited item I11.**
-    /// A raise is still always fatal, so a stale stack cannot be observed;
-    /// the day a trap can resume after a raise -- **Task 7** -- both this
-    /// stack and the slot need emptying, and Task 7 owns that.
+    /// **Nothing here clears either field, and that is deliberate**: this
+    /// function is the *unwinding* half, and a level that seals still has a
+    /// report to give. Clearing is the *trapping* half, which is
+    /// `offer_to_trap`'s (4b's Task 7, inherited item I11) -- it empties both
+    /// the slot and this stack, because a trapped condition prints no report
+    /// at all and its sites must not survive to be printed against a later,
+    /// untrapped one. Through 4a a raise was always fatal, so a stale stack
+    /// could not be observed; the two-raise transcript in
+    /// `a_second_raise_after_a_trapped_one_reports_its_own_site` is what
+    /// observes it now.
     fn seal_site_level(&mut self) {
         if let Some(site) = self.failure_site.take() {
             self.failure_sites.push(site);
@@ -5050,32 +5695,17 @@ fn validate_indirect_word(word: &[u8]) -> Result<Vec<u8>, Failure> {
 /// byte outside `is_symbol_byte`'s set, which is also what a parenthesised
 /// entry like `"(w)"` fails on).
 fn raised_symbol_expected(found: &[u8]) -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 20,
-        sub: 928,
-        additional: vec![String::from_utf8_lossy(found).into_owned()],
-    }
+    Raised::syntax(20, 928, vec![String::from_utf8_lossy(found).into_owned()])
 }
 
 /// 31.2: a subsidiary-list word starts with a digit.
 fn raised_digit_led(found: &[u8]) -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 31,
-        sub: 2,
-        additional: vec![String::from_utf8_lossy(found).into_owned()],
-    }
+    Raised::syntax(31, 2, vec![String::from_utf8_lossy(found).into_owned()])
 }
 
 /// 31.3: a subsidiary-list word starts with a period.
 fn raised_dot_led(found: &[u8]) -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 31,
-        sub: 3,
-        additional: vec![String::from_utf8_lossy(found).into_owned()],
-    }
+    Raised::syntax(31, 3, vec![String::from_utf8_lossy(found).into_owned()])
 }
 
 /// 34.1: a single (non-list) `IF` condition is not exactly `0` or `1`.
@@ -5083,12 +5713,7 @@ fn raised_dot_led(found: &[u8]) -> Raised {
 /// IF keyword must be exactly \"0\" or \"1\"; found \"...\"", one
 /// substitution, the operand's own rendered text.
 fn raised_if_not_logical(found: &[u8]) -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 34,
-        sub: 1,
-        additional: vec![String::from_utf8_lossy(found).into_owned()],
-    }
+    Raised::syntax(34, 1, vec![String::from_utf8_lossy(found).into_owned()])
 }
 
 /// 34.2: a single (non-list) `WHEN` condition is not exactly `0` or `1`.
@@ -5098,12 +5723,7 @@ fn raised_if_not_logical(found: &[u8]) -> Raised {
 /// since `eval_condition` only calls it when `condition.kind` is not
 /// `ExprKind::Logical`.
 fn raised_when_not_logical(found: &[u8]) -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 34,
-        sub: 2,
-        additional: vec![String::from_utf8_lossy(found).into_owned()],
-    }
+    Raised::syntax(34, 2, vec![String::from_utf8_lossy(found).into_owned()])
 }
 
 /// 7.3: a `SELECT` reached its `END` with every `WHEN` false and no
@@ -5119,12 +5739,7 @@ fn raised_when_not_logical(found: &[u8]) -> Raised {
 /// match/no `OTHERWISE`), so the clause `run_activation`'s failure path
 /// echoes is the `END`'s own, matching the oracle (measured, rc 249).
 fn raised_select_no_when() -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 7,
-        sub: 3,
-        additional: Vec::new(),
-    }
+    Raised::syntax(7, 3, Vec::new())
 }
 
 /// Converts a `rexx-num` settings failure into a `Raised`.
@@ -5134,9 +5749,48 @@ fn raised_select_no_when() -> Raised {
 /// `SettingsError`'s equivalent is still private, and nothing asked for it to
 /// change for this one caller. The `(major, sub)` pairs below are copied from
 /// `settings.rs`'s own doc comments on each variant rather than read through
-/// an accessor that does not exist yet. `Raised`'s fields are `pub(crate)`,
-/// which is what lets this build one directly, with no constructor of its
-/// own needed in `error.rs`.
+/// an accessor that does not exist yet. The pair then goes through
+/// `Raised::syntax`, like every other raiser in this file since 4b's Task 7.
+/// Splits `RAISE SYNTAX`'s own argument into `(major, sub)`.
+///
+/// The text as the expression rendered it, so `40.4` is `(40, 4)` and
+/// `40.912` is `(40, 912)` -- the part after the point is read as a decimal
+/// integer in its own right, not as a fraction, measured both ways. A bare
+/// `40` is `(40, 0)`, and sub `0` is what makes `Raised::report` print the
+/// major line alone (measured: `raise syntax 40` gives one line where `raise
+/// syntax 40.4` gives two).
+///
+/// A part that does not parse becomes `0`. Reachable only through a
+/// `RAISE SYNTAX` whose argument is not a number at all, which the oracle
+/// answers with an error of its own that this crate does not reproduce; `0`
+/// keeps that case a visible wrong answer rather than a panic on the error
+/// path, following this crate's standing rule for the reporting path.
+fn split_error_number(text: &[u8]) -> (u16, u16) {
+    let text = String::from_utf8_lossy(text);
+    let (major, sub) = match text.split_once('.') {
+        Some((major, sub)) => (major, sub),
+        None => (text.as_ref(), ""),
+    };
+    (
+        major.parse().unwrap_or(0),
+        if sub.is_empty() {
+            0
+        } else {
+            sub.parse().unwrap_or(0)
+        },
+    )
+}
+
+/// A `RAISE`'s condition name as `Raised::condition` carries it.
+///
+/// Always owned: the name comes from the program's own text (`USER FOO` is
+/// built by the parser from the symbol after `USER`), which is exactly the
+/// case `Cow` is there for. Every condition this crate raises on its own
+/// stays on the borrowed side.
+fn condition_name(name: &[u8]) -> Cow<'static, str> {
+    Cow::Owned(String::from_utf8_lossy(name).into_owned())
+}
+
 fn raised_from_settings(error: SettingsError) -> Raised {
     let additional = error.additional();
     let (number, sub): (u16, u16) = match &error {
@@ -5145,12 +5799,7 @@ fn raised_from_settings(error: SettingsError) -> Raised {
         SettingsError::FuzzNotWhole { .. } => (26, 6),
         SettingsError::FuzzNotBelowDigits { .. } => (33, 1),
     };
-    Raised {
-        condition: "SYNTAX",
-        number,
-        sub,
-        additional,
-    }
+    Raised::syntax(number, sub, additional)
 }
 
 /// 34.3: a single (non-list) `WHILE` condition is not exactly `0` or `1`.
@@ -5158,22 +5807,12 @@ fn raised_from_settings(error: SettingsError) -> Raised {
 /// `WHILE`'s own sub-number; a comma-list condition never reaches this
 /// raiser (34.6 instead, `eval_logical_list`'s own answer).
 fn raised_while_not_logical(found: &[u8]) -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 34,
-        sub: 3,
-        additional: vec![String::from_utf8_lossy(found).into_owned()],
-    }
+    Raised::syntax(34, 3, vec![String::from_utf8_lossy(found).into_owned()])
 }
 
 /// 34.4: `UNTIL`'s own version of `raised_while_not_logical`.
 fn raised_until_not_logical(found: &[u8]) -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 34,
-        sub: 4,
-        additional: vec![String::from_utf8_lossy(found).into_owned()],
-    }
+    Raised::syntax(34, 4, vec![String::from_utf8_lossy(found).into_owned()])
 }
 
 /// 26.2: a bare `DO`'s own repetition-count expression is not zero or a
@@ -5181,45 +5820,25 @@ fn raised_until_not_logical(found: &[u8]) -> Raised {
 /// 'a'`/`do -1`/`do 2.5` all give this, `found` the operand's own
 /// unmodified text (`"a"`/`"-1"`/`"2.5"`).
 fn raised_repetition_count_not_whole(found: &[u8]) -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 26,
-        sub: 2,
-        additional: vec![String::from_utf8_lossy(found).into_owned()],
-    }
+    Raised::syntax(26, 2, vec![String::from_utf8_lossy(found).into_owned()])
 }
 
 /// 26.3: a `DO`/`LOOP`'s `FOR` expression is not zero or a positive whole
 /// number. Measured: `do i = 1 to 3 for 'x'`/`for -1`/`for 1.5`.
 fn raised_for_count_not_whole(found: &[u8]) -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 26,
-        sub: 3,
-        additional: vec![String::from_utf8_lossy(found).into_owned()],
-    }
+    Raised::syntax(26, 3, vec![String::from_utf8_lossy(found).into_owned()])
 }
 
 /// 28.1: a bare `LEAVE` found no repetitive loop or labeled block
 /// instruction anywhere on the enclosing chain. No substitution.
 fn raised_leave_no_loop() -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 28,
-        sub: 1,
-        additional: Vec::new(),
-    }
+    Raised::syntax(28, 1, Vec::new())
 }
 
 /// 28.2: a bare `ITERATE` found no repetitive loop anywhere on the
 /// enclosing chain. No substitution.
 fn raised_iterate_no_loop() -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 28,
-        sub: 2,
-        additional: Vec::new(),
-    }
+    Raised::syntax(28, 2, Vec::new())
 }
 
 /// 28.3: a named `LEAVE name` found nothing on the enclosing chain whose own
@@ -5228,22 +5847,12 @@ fn raised_iterate_no_loop() -> Raised {
 /// `outer: do i = 1 to 3` then `leave outer` is this, not a hit. `found` is
 /// the symbol's own (already-upcased) spelling.
 fn raised_leave_no_match(found: &[u8]) -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 28,
-        sub: 3,
-        additional: vec![String::from_utf8_lossy(found).into_owned()],
-    }
+    Raised::syntax(28, 3, vec![String::from_utf8_lossy(found).into_owned()])
 }
 
 /// 28.4: `ITERATE`'s own version of `raised_leave_no_match`.
 fn raised_iterate_no_match(found: &[u8]) -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 28,
-        sub: 4,
-        additional: vec![String::from_utf8_lossy(found).into_owned()],
-    }
+    Raised::syntax(28, 4, vec![String::from_utf8_lossy(found).into_owned()])
 }
 
 /// 28.5: a named `ITERATE name` matched a block on the enclosing chain by
@@ -5252,12 +5861,7 @@ fn raised_iterate_no_match(found: &[u8]) -> Raised {
 /// `LEAVE`). Measured: `do label x / say 1 / iterate x / end` gives this,
 /// not 28.4, because `x` *did* match something.
 fn raised_iterate_wrong_kind(found: &[u8]) -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 28,
-        sub: 5,
-        additional: vec![String::from_utf8_lossy(found).into_owned()],
-    }
+    Raised::syntax(28, 5, vec![String::from_utf8_lossy(found).into_owned()])
 }
 
 /// Whether `a < b`, numerically, through `rexx-num`'s own `compare_decoded`
@@ -5316,7 +5920,6 @@ mod tests {
     use crate::Activation;
     use crate::plan::{BodyKey, ProgramId};
     use rexx_parse::{Program, parse_program};
-    use std::collections::HashMap;
 
     /// Pushes a fresh top-level activation for `program`, the same setup
     /// `Interp::run` does, so a test can drive `step` through a live
@@ -5362,70 +5965,25 @@ mod tests {
 
     /// `run_source`'s second half, split out so `run_source_traced` can put a
     /// `TRACE` setting on the activation between the push and the run.
-    fn run_activated(interp: &mut Interp, program: &Program) -> Result<Option<ObjRef>, Failure> {
-        let code = Code {
-            body: &program.main,
-            symbols: &program.symbols,
-            slots: &HashMap::new(),
-        };
-        // A loop rather than one `run_bounded` call, since 4b's Task 6:
-        // `Flow::Signal` escapes all the way to here exactly like
-        // `run_activation`'s own real dispatch (that variant's own doc
-        // comment) and has to resume stepping from its own target instead of
-        // ending the test program -- the one thing this miniature could not
-        // do as a single call, since nothing here tracks a real `pc` the way
-        // an activation does. Every other arm below still fires at most
-        // once, unchanged from before this loop wrapped them.
-        let mut start = 0;
-        loop {
-            match interp.run_bounded(
-                &code,
-                start,
-                code.body.instructions.len(),
-                Some(&program.source),
-            )? {
-                Flow::Next => return Ok(None),
-                Flow::Exit(value) => return Ok(value),
-                Flow::Goto(_) => {
-                    unreachable!(
-                        "run_bounded never escapes a top-level program's own [0, len) range"
-                    )
-                }
-                // `run_activation`'s own top-level conversion for this
-                // variant is `self.activation_mut().pc = target`; nothing
-                // here tracks a real `pc`, so resuming `run_bounded` from
-                // `target` is the identical effect.
-                Flow::Signal(target) => start = target,
-                // A miniature of `run_activation`'s own top-level conversion
-                // (its doc comment on the same two arms has the full argument):
-                // nothing anywhere in this test program's own body consumed
-                // the `LEAVE`/`ITERATE`, so it becomes the exhausted-search
-                // error, at whatever residual indent the search's own walk
-                // back up already left in `origin`.
-                Flow::Leave(name, origin) => {
-                    interp.record_leave_failure(&origin);
-                    let raised = match name {
-                        None => raised_leave_no_loop(),
-                        Some(n) => raised_leave_no_match(code.symbols.name(n).as_bytes()),
-                    };
-                    return Err(raised.into());
-                }
-                Flow::Iterate(name, origin) => {
-                    interp.record_leave_failure(&origin);
-                    let raised = match name {
-                        None => raised_iterate_no_loop(),
-                        Some(n) => raised_iterate_no_match(code.symbols.name(n).as_bytes()),
-                    };
-                    return Err(raised.into());
-                }
-                // The main body's own `RETURN`, with no active call: it ends the
-                // program with its value, exactly like `EXIT`, which is what
-                // `Interp::run` does with `Ended::Returned` at the top too.
-                // Measured: `say 'a'` / `return 5` / `say 'b'` prints `a` and
-                // exits 5.
-                Flow::Return(value) => return Ok(value),
-            }
-        }
+    ///
+    /// **`run_activation` itself since 4b's Task 7, not a miniature of it.**
+    /// This used to be a hand-rolled `run_bounded` loop that reproduced
+    /// `run_activation`'s own `Flow` dispatch arm by arm, and it drifted
+    /// exactly the way a second copy does: Task 6 had to teach it about
+    /// `Flow::Signal`, and Task 7's condition traps -- which live in
+    /// `run_activation`'s loop, one offer per activation -- did not exist
+    /// here at all, so eleven trap tests written against this helper failed
+    /// against a harness that could not trap while every one of the same
+    /// programs matched the oracle byte for byte through `run_program`. A
+    /// test harness that cannot reach the code under test is the sharpest
+    /// version of a test that cannot fail.
+    ///
+    /// `activate` above already pushes exactly the activation `Interp::run`
+    /// pushes, so there was never anything for the copy to supply. The
+    /// activation is deliberately **not** popped afterwards, matching what
+    /// this helper did before: several tests read `interp` after the run.
+    fn run_activated(interp: &mut Interp, _program: &Program) -> Result<Option<ObjRef>, Failure> {
+        interp.run_activation().map(Ended::value)
     }
 
     fn say_output(interp: &mut Interp, source: &[u8]) -> Vec<u8> {
@@ -10074,6 +10632,552 @@ mod tests {
             loud.message.contains("A.1"),
             "the message must name the tail it refused: {}",
             loud.message
+        );
+    }
+
+    // ---- 4b Task 7: condition traps, RAISE and NOVALUE ----
+    //
+    // Every trap test below asserts a value the *handler set*, never that
+    // the program exited 0: a criterion of the second kind is satisfied by a
+    // program that never raised at all. The values are chosen so that a
+    // handler which did not run prints an unset variable's derived name --
+    // `ZWITNESS`, not something that reads like data.
+
+    /// The base case, and the one every other test here is a variation of.
+    ///
+    /// `sigl` is asserted alongside the handler's own value because the two
+    /// fail independently: a trap that fires with the wrong `SIGL` looks
+    /// exactly like a correct one to any test that only checks the handler
+    /// ran. Measured, `SIGL` is the **raising** clause's line (3), not the
+    /// `SIGNAL ON` clause's (1) and not the handler's (5).
+    #[test]
+    fn a_signal_on_syntax_trap_runs_its_handler_and_sets_sigl_to_the_raising_clause() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"signal on syntax\nzwitness = 'BEFORE'\nsay 1/0\nexit\nsyntax:\nzwitness = 'TRAPPED'\nsay zwitness sigl\n",
+            ),
+            b"TRAPPED 3\n".to_vec()
+        );
+    }
+
+    /// The adjacent success for the test above: the identical program with
+    /// the `SIGNAL ON` clause removed is the ordinary fatal 42.3, so the
+    /// handler's output in that test is caused by the trap and not by
+    /// anything else in the program.
+    #[test]
+    fn the_same_program_without_the_trap_is_the_ordinary_fatal_condition() {
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"zwitness = 'BEFORE'\nsay 1/0\nexit\nsyntax:\nzwitness = 'TRAPPED'\nsay zwitness sigl\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (42, 3));
+        assert!(
+            interp.out.is_empty(),
+            "the handler must not have run: {:?}",
+            String::from_utf8_lossy(&interp.out)
+        );
+    }
+
+    /// `SIGNAL OFF` really removes the trap, and the pair is what pins it to
+    /// `SIGNAL OFF` rather than to anything about where the raise sits.
+    #[test]
+    fn signal_off_removes_a_trap_that_signal_on_had_enabled() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"signal on syntax\nsignal on novalue\nsignal off syntax\nsay zunset\nexit\nsyntax:\nsay 'SYNTAX-HANDLER'\nexit\nnovalue:\nsay 'NOVALUE-HANDLER'\n",
+            ),
+            b"NOVALUE-HANDLER\n".to_vec(),
+            "NOVALUE is still enabled and SYNTAX is not, so the read traps \
+             and nothing reaches the SYNTAX handler"
+        );
+
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"signal on syntax\nsignal off syntax\nsay 1/0\nexit\nsyntax:\nsay 'SYNTAX-HANDLER'\n",
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&failure, Failure::Raised(raised) if raised.number == 42),
+            "after SIGNAL OFF the same raise is fatal, got {failure:?}"
+        );
+    }
+
+    /// The trap that fired is gone from the table by the time the handler
+    /// runs.
+    ///
+    /// **A direct assertion on the table rather than on behaviour, and the
+    /// mutation record is why.** The behavioural pair below -- re-arm under
+    /// a new label, and a second raise with no re-arm -- was written first,
+    /// and deleting the removal left the first of the two *green*: its
+    /// handler re-arms before raising again, and `insert` over a live entry
+    /// looks exactly like `insert` over an absent one. The second test does
+    /// go red, but by looping until the harness kills it, which is a poor
+    /// signal to leave as the only one. This one fails in microseconds and
+    /// names the property.
+    #[test]
+    fn the_trap_that_fired_is_removed_from_the_table() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"signal on syntax\nsignal on novalue\nsay 1/0\nexit\nsyntax:\nsay 'TRAPPED'\n",
+            ),
+            b"TRAPPED\n".to_vec()
+        );
+        let traps = &interp.activation().traps;
+        assert!(
+            !traps.contains_key(b"SYNTAX".as_slice()),
+            "the SYNTAX trap fired and must be gone"
+        );
+        assert!(
+            traps.contains_key(b"NOVALUE".as_slice()),
+            "the NOVALUE trap did not fire and must be untouched -- without \
+             this half the assertion above is satisfied by clearing the whole \
+             table, or by never filling it"
+        );
+    }
+
+    /// `SIGNAL ON` inside the handler re-arms the condition, under a new
+    /// label: the first raise reaches `first` and the second reaches
+    /// `second`.
+    ///
+    /// This one is about the re-arm and **not** about the removal -- see
+    /// `the_trap_that_fired_is_removed_from_the_table` above, which is the
+    /// test that actually pins that, and the note there for how this one was
+    /// measured not to.
+    #[test]
+    fn a_trap_can_be_re_armed_inside_its_own_handler() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"signal on syntax name first\nsay 1/0\nexit\nfirst:\nsay 'FIRST' sigl\nsignal on syntax name second\nsay 2/0\nexit\nsecond:\nsay 'SECOND' sigl\n",
+            ),
+            b"FIRST 2\nSECOND 7\n".to_vec()
+        );
+    }
+
+    /// Without the re-arm the second raise is fatal -- the adjacent case
+    /// that pins the test above to "the trap was disabled" rather than to
+    /// "the second raise happened to reach a different label".
+    ///
+    /// Against an implementation that leaves the fired trap armed this
+    /// program does not fail, it *loops*: the handler raises again, is
+    /// trapped again, and prints `FIRST` forever.
+    /// `the_trap_that_fired_is_removed_from_the_table` is the bounded
+    /// version of the same property.
+    #[test]
+    fn a_second_raise_inside_a_handler_is_fatal_without_a_re_arm() {
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"signal on syntax name first\nsay 1/0\nexit\nfirst:\nsay 'FIRST'\nsay 2/0\n",
+        )
+        .unwrap_err();
+        assert!(matches!(&failure, Failure::Raised(raised) if raised.number == 42));
+        assert_eq!(interp.out, b"FIRST\n".to_vec());
+    }
+
+    /// **Inherited item I11.** `Interp::failure_site` is first-wins, so a
+    /// second raise after a trapped first one reported the *first* site
+    /// until `offer_to_trap` began clearing it. The report must name line 6,
+    /// the second raise's own clause, and a version without the clearing
+    /// names line 2.
+    #[test]
+    fn a_second_raise_after_a_trapped_one_reports_its_own_site() {
+        let mut interp = Interp::new();
+        run_source(
+            &mut interp,
+            b"signal on syntax\nsay 1/0\nexit\nsyntax:\nsay 'HANDLER'\nsay 2/0\n",
+        )
+        .unwrap_err();
+        let mut sites = std::mem::take(&mut interp.failure_sites);
+        sites.extend(interp.failure_site.take());
+        let lines: Vec<usize> = sites.iter().map(|site| site.line).collect();
+        assert_eq!(
+            lines,
+            vec![6],
+            "exactly one echo, naming the second raise's own clause -- the \
+             first raise's site (line 2) must not have survived being trapped"
+        );
+        assert_eq!(sites[0].text, b"say 2/0".to_vec());
+    }
+
+    /// `SIGNAL ON NOVALUE` fires for a simple variable and for a compound,
+    /// and **not** for a bare stem. The third row is the one that cannot be
+    /// guessed: measured, `say zstem.` under the same trap prints the
+    /// derived name and the program carries on, where `say zstem.1` traps.
+    #[test]
+    fn novalue_fires_for_a_simple_variable_and_a_compound_but_not_a_bare_stem() {
+        for (source, expected) in [
+            (
+                &b"signal on novalue\nsay zprobe\nexit\nnovalue:\nsay 'TRAPPED' sigl\n"[..],
+                &b"TRAPPED 2\n"[..],
+            ),
+            (
+                &b"signal on novalue\nsay zprobe.1\nexit\nnovalue:\nsay 'TRAPPED' sigl\n"[..],
+                &b"TRAPPED 2\n"[..],
+            ),
+            (
+                &b"signal on novalue\nsay zprobe.\nsay 'RESUMED'\nexit\nnovalue:\nsay 'TRAPPED'\n"
+                    [..],
+                &b"ZPROBE.\nRESUMED\n"[..],
+            ),
+        ] {
+            let mut interp = Interp::new();
+            assert_eq!(
+                say_output(&mut interp, source),
+                expected.to_vec(),
+                "{}",
+                String::from_utf8_lossy(source)
+            );
+        }
+    }
+
+    /// An untrapped `NOVALUE` costs nothing and changes nothing -- the read
+    /// still yields the derived name. The neighbouring case that pins
+    /// `novalue_check`'s gate to "there is a trap" rather than to anything
+    /// about the variable.
+    #[test]
+    fn an_untrapped_novalue_still_reads_the_derived_name() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(&mut interp, b"say zprobe\nsay zprobe.1\n"),
+            b"ZPROBE\nZPROBE.1\n".to_vec()
+        );
+    }
+
+    /// A trap label that does not exist is `16.1`, reported against the
+    /// **raising** clause rather than against the `SIGNAL ON` clause or the
+    /// missing label -- so the site the raise had already recorded survives,
+    /// which is why `offer_to_trap` resolves the label before it clears
+    /// anything.
+    #[test]
+    fn a_trap_label_that_does_not_exist_is_16_1_at_the_raising_clause() {
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"signal on syntax name nosuchlabel\nsay 'a'\nsay 1/0\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (16, 1));
+        assert_eq!(raised.additional, vec!["NOSUCHLABEL".to_string()]);
+        let site = interp.failure_site.expect("a site was resolved");
+        assert_eq!((site.line, site.text), (3, b"say 1/0".to_vec()));
+    }
+
+    /// A trap is inherited by a callee and fires **there**, in the callee's
+    /// own activation -- which is observable only because `PROCEDURE`
+    /// isolates the pool: the handler reads the callee's `ZOWNER`, not the
+    /// caller's. `SIGL` is the callee's raising line for the same reason.
+    #[test]
+    fn a_trap_is_inherited_by_a_callee_and_fires_in_the_callees_own_activation() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"signal on syntax\nzowner = 'CALLER-POOL'\ncall sub\nexit\nsub: procedure\nzowner = 'CALLEE-POOL'\nsay 1/0\nreturn\nsyntax:\nsay zowner sigl\n",
+            ),
+            b"CALLEE-POOL 7\n".to_vec()
+        );
+    }
+
+    /// The other half: turning the trap off *in the callee* leaves the
+    /// caller's own enabled, so the condition propagates outward and is
+    /// trapped there instead -- with `SIGL` now the caller's `call` clause.
+    /// Together the two tests say the table is inherited **by copy**.
+    #[test]
+    fn a_callees_signal_off_leaves_the_callers_trap_enabled() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"signal on syntax\nzowner = 'CALLER-POOL'\ncall sub\nexit\nsub: procedure\nsignal off syntax\nsay 1/0\nreturn\nsyntax:\nsay zowner sigl\n",
+            ),
+            b"CALLER-POOL 3\n".to_vec()
+        );
+    }
+
+    /// **The mid-clause resumption shape, and the one route that could still
+    /// have created two activations within one clause.** `zz = one(1)
+    /// two(2)`: `one` raises, the inherited trap transfers to a handler that
+    /// `RETURN`s, so `one(1)` yields the handler's value and evaluation
+    /// resumes *inside the enclosing clause*, which then calls `two`.
+    ///
+    /// `two` reports `SIGL`, which is the quantity Tasks 4 and 6 each shipped
+    /// a defect on: it must be the enclosing clause's line (2), not `one`'s
+    /// raise line (6), not the handler's (11). It is right because
+    /// `clause_state` lives in `ClauseState` and `resolve_and_run_call`
+    /// restores it whole -- the mechanism the brief asked this route to
+    /// test, verified rather than assumed.
+    #[test]
+    fn a_trap_that_resumes_mid_clause_leaves_the_enclosing_clauses_state_intact() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"signal on syntax\nzz = one(1) two(2)\nsay 'zz=' zz\nexit\none:\nsay 1/0\nreturn 'ONEVAL'\ntwo:\nreturn 'SIGLIS' sigl\nsyntax:\nreturn 'FROMHANDLER'\n",
+            ),
+            b"zz= FROMHANDLER SIGLIS 2\n".to_vec()
+        );
+    }
+
+    /// **A `CALL ON` handler runs at the clause boundary, not at the raise.**
+    /// `one` raises a trapped `USER` condition and returns its `RAISE ...
+    /// RETURN` value; the enclosing clause finishes -- `two(2)` and the
+    /// assignment included -- and only then does the handler run and
+    /// overwrite `zz`.
+    ///
+    /// The `SIGL` in the handler's own output is what caught the first
+    /// implementation, which delivered at the next clause boundary reached by
+    /// *any* activation and so ran the handler inside `two`, reporting `two`'s
+    /// label line instead of the enclosing clause's.
+    #[test]
+    fn a_call_trap_waits_for_the_raising_clause_to_finish() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call on user marker name uh\nzz = one(1) two(2)\nsay 'zz=' zz\nexit\none:\nraise user marker return 'ONEVAL'\ntwo:\nreturn 'TWOVAL'\nuh:\nzz = 'HANDLER-RAN-AT' sigl\nreturn\n",
+            ),
+            b"zz= HANDLER-RAN-AT 2\n".to_vec(),
+            "the assignment stored ONEVAL TWOVAL first, then the handler \
+             overwrote it -- a handler that fired at the raise would leave \
+             `zz` as the routine's own value"
+        );
+    }
+
+    /// `RAISE`'s delivery table, the part that a two-level program cannot
+    /// tell apart. Each row is a three-level chain with the trap enabled in
+    /// exactly one place; the expected value names which handler ran.
+    #[test]
+    fn raise_delivery_depends_on_the_tail_and_on_the_condition() {
+        // `RAISE SYNTAX ... RETURN` searches from the raising activation, so
+        // the trap `lev2` inherited from `lev1` is the one that fires.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call lev1\nexit\nlev1:\nsignal on syntax name mid\ncall lev2\nreturn\nlev2:\nraise syntax 40.4 return\nmid:\nsay 'MID' sigl\nexit\n",
+            ),
+            b"MID 8\n".to_vec()
+        );
+
+        // The same raise with no tail skips every level but the outermost,
+        // so `mid` never runs and the condition is fatal.
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"call lev1\nexit\nlev1:\nsignal on syntax name mid\ncall lev2\nreturn\nlev2:\nraise syntax 40.4\nmid:\nsay 'MID' sigl\nexit\n",
+        )
+        .unwrap_err();
+        assert!(matches!(&failure, Failure::Raised(raised) if raised.number == 40));
+        assert!(interp.out.is_empty(), "`mid` must not have run");
+
+        // ... and enabling it at the top as well is what catches it, with
+        // `SIGL` the main body's own clause.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"signal on syntax name outer\ncall lev1\nexit\nlev1:\nsignal on syntax name mid\ncall lev2\nreturn\nlev2:\nraise syntax 40.4\nmid:\nsay 'MID' sigl\nexit\nouter:\nsay 'OUTER' sigl\nexit\n",
+            ),
+            b"OUTER 2\n".to_vec()
+        );
+
+        // A non-`SYNTAX` condition with a `RETURN` tail searches from the
+        // *caller*, so the raising routine's own inherited trap is skipped:
+        // `SIGL` is the caller's clause, not the `raise` line.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"signal on user marker\ncall sub\nexit\nsub:\nraise user marker return\nmarker:\nsay 'MARKER' sigl\nexit\n",
+            ),
+            b"MARKER 2\n".to_vec()
+        );
+    }
+
+    /// An untrapped condition's default action: `HALT` reports, everything
+    /// else is silent. The pair is what makes `Raised::reportable`'s split
+    /// mean something rather than being a spelling.
+    #[test]
+    fn an_untrapped_raise_reports_for_halt_and_is_silent_for_the_rest() {
+        let mut interp = Interp::new();
+        let failure = run_source(&mut interp, b"say 'a'\nraise halt\nsay 'b'\n").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (4, 1));
+
+        for source in [
+            &b"say 'a'\nraise user marker\nsay 'b'\n"[..],
+            &b"say 'a'\nraise error 5\nsay 'b'\n"[..],
+        ] {
+            let mut interp = Interp::new();
+            assert_eq!(
+                say_output(&mut interp, source),
+                b"a\n".to_vec(),
+                "{}: silent, and `b` is not reached because the tail-less \
+                 RAISE ends the program",
+                String::from_utf8_lossy(source)
+            );
+        }
+    }
+
+    /// `RC` is the major for a trapped `SYNTAX` however it arose, the raise's
+    /// own argument for `ERROR`, and untouched for `NOVALUE` -- three rows
+    /// that no two of which share a rule.
+    #[test]
+    fn rc_is_set_from_the_condition_when_a_trap_fires() {
+        for (source, expected) in [
+            (
+                &b"signal on syntax\nsay 1/0\nexit\nsyntax:\nsay rc\n"[..],
+                &b"42\n"[..],
+            ),
+            (
+                &b"signal on syntax\nraise syntax 40.4\nexit\nsyntax:\nsay rc\n"[..],
+                &b"40\n"[..],
+            ),
+            (
+                &b"signal on error\ncall sub\nexit\nsub:\nraise error 5 return\nerror:\nsay rc\n"[..],
+                &b"5\n"[..],
+            ),
+            (
+                &b"signal on novalue\nsay zprobe\nexit\nnovalue:\nsay rc\n"[..],
+                &b"RC\n"[..],
+            ),
+        ] {
+            let mut interp = Interp::new();
+            assert_eq!(
+                say_output(&mut interp, source),
+                expected.to_vec(),
+                "{}",
+                String::from_utf8_lossy(source)
+            );
+        }
+    }
+
+    /// **Inherited item I16, re-verified against a real trap rather than
+    /// argued.** 4a concluded that `SIGNAL ON SYNTAX` cannot accumulate a
+    /// temps leak, resting entirely on `step_in_temps_frame` being the single
+    /// chokepoint that heals the six `?`-skipped `pop_frame` sites in
+    /// `eval.rs`. This is the first task where a trap actually acts, so the
+    /// conclusion is measured here: two hundred trap-and-resume cycles and
+    /// four hundred must leave the same number of live temps, and a leak of
+    /// even one root per cycle would make the second number two hundred
+    /// larger.
+    ///
+    /// The raise fires from inside a parenthesised expression on purpose --
+    /// that is what puts `eval`'s own frame-opening sites on the path, which
+    /// is what the chokepoint claim is about; a raise from a bare clause
+    /// would exercise nothing.
+    #[test]
+    fn a_trap_that_resumes_does_not_accumulate_temps_frames() {
+        fn live_temps_after(cycles: usize) -> usize {
+            let source = format!(
+                "signal on novalue name h\nzcount = 0\ntop:\nzcount = zcount + 1\nsay ((zprobe))\nh:\nsignal on novalue name h\nif zcount < {cycles} then signal top\nsay 'done' zcount\n"
+            );
+            let mut interp = Interp::new();
+            let out = say_output(&mut interp, source.as_bytes());
+            assert_eq!(
+                out,
+                format!("done {cycles}\n").into_bytes(),
+                "the loop must actually have trapped {cycles} times"
+            );
+            interp.roots.temps_len()
+        }
+        assert_eq!(
+            live_temps_after(200),
+            live_temps_after(400),
+            "a temps root retained per trapped-and-resumed cycle would make \
+             the four-hundred-cycle run exactly two hundred larger"
+        );
+    }
+
+    /// `RAISE PROPAGATE` re-raises the condition whose handler is running,
+    /// past every enclosing trap, and the report names the **original**
+    /// raising clause rather than the `raise propagate` clause -- which is
+    /// why the echo stack travels on `ActiveCondition` rather than being
+    /// dropped when the trap cleared it.
+    #[test]
+    fn raise_propagate_re_raises_the_original_condition_and_its_site() {
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"signal on syntax name outer\ncall sub\nexit\nsub:\nsignal on syntax name inner\nsay 1/0\nreturn\ninner:\nraise propagate\nouter:\nsay 'OUTER-MUST-NOT-RUN'\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (42, 3));
+        assert!(
+            raised.delivery.positionless,
+            "the major line drops its ` running <path> line <n>` span"
+        );
+        assert!(interp.out.is_empty(), "`outer` must not have run");
+        let mut sites = std::mem::take(&mut interp.failure_sites);
+        sites.extend(interp.failure_site.take());
+        let lines: Vec<usize> = sites.iter().map(|site| site.line).collect();
+        assert_eq!(
+            lines,
+            vec![6, 2],
+            "the original `say 1/0` clause and the `call sub` above it, not \
+             the `raise propagate` clause on line 9"
+        );
+    }
+
+    /// With no handler running, `RAISE PROPAGATE` is `98.918` -- the
+    /// adjacent case that pins the test above to "there was an active
+    /// condition" rather than to anything about `PROPAGATE` itself.
+    #[test]
+    fn raise_propagate_with_no_active_condition_is_98_918() {
+        let mut interp = Interp::new();
+        let failure = run_source(&mut interp, b"say 'a'\nraise propagate\n").unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (98, 918));
+        assert!(!raised.delivery.positionless);
+    }
+
+    /// A `CALL ON` trap does not catch a condition that has no resumption
+    /// point, even through `ANY` -- the one spelling that makes the question
+    /// askable at all, since `CALL ON SYNTAX` is a parse error. And `SIGNAL
+    /// ON ANY` does catch it, which is the pair that keeps this a statement
+    /// about `CALL` rather than about `ANY` not working.
+    #[test]
+    fn a_call_trap_declines_a_condition_with_nowhere_to_resume_but_a_signal_trap_takes_it() {
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"call on any name uh\nsay 1/0\nexit\nuh:\nsay 'UH-MUST-NOT-RUN'\nreturn\n",
+        )
+        .unwrap_err();
+        assert!(matches!(&failure, Failure::Raised(raised) if raised.number == 42));
+        assert!(interp.out.is_empty());
+
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"signal on any\nsay 1/0\nexit\nany:\nsay 'ANY-TRAPPED' sigl\n",
+            ),
+            b"ANY-TRAPPED 2\n".to_vec()
         );
     }
 }

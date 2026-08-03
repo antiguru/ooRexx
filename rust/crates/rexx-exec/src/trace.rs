@@ -178,18 +178,13 @@ pub(crate) fn is_whole_number(text: &[u8]) -> bool {
 /// interactive debugging at all for a nonzero skip count to be valid *from*.
 /// No substitution value, matching the catalogue's `(24, 901)` entry.
 ///
-/// A bare struct literal, not a named `error.rs` constructor, following
-/// `raised_select_no_when`/`raised_from_settings`'s own precedent
-/// (`run.rs`): `Raised`'s fields are `pub(crate)`, which is what lets any
-/// module in this crate build one directly, and `error.rs` is outside this
-/// task's permitted files.
+/// Through `Raised::syntax` rather than a bare struct literal, which is what
+/// this and its neighbour were until 4b's Task 7 gave `Raised` a field no
+/// raiser cares about (`Delivery`). That constructor's own doc comment has
+/// the argument; the short version is that twenty-one copies of `condition:
+/// "SYNTAX"` each had to name the new field, and one call does not.
 pub(crate) fn raised_numeric_trace_interactive_only() -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 24,
-        sub: 901,
-        additional: Vec::new(),
-    }
+    Raised::syntax(24, 901, Vec::new())
 }
 
 /// 24.1, "TRACE request letter must be one of \"ACEFILNOR\"; found \"&1\"."
@@ -201,12 +196,7 @@ pub(crate) fn raised_numeric_trace_interactive_only() -> Raised {
 /// uppercased, matching `TraceSetting.cpp`'s own `badOption = value->
 /// getChar(pos)`, which records the character as typed.
 pub(crate) fn raised_invalid_trace_letter(found: u8) -> Raised {
-    Raised {
-        condition: "SYNTAX",
-        number: 24,
-        sub: 1,
-        additional: vec![String::from_utf8_lossy(&[found]).into_owned()],
-    }
+    Raised::syntax(24, 1, vec![String::from_utf8_lossy(&[found]).into_owned()])
 }
 
 // ---- byte-level formatting ----

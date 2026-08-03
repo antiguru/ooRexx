@@ -66,7 +66,7 @@ use activation::Activation;
 // `Loud` not-implemented marker or a `Raised` condition, the one type
 // `step` and everything above it propagate).
 mod error;
-use error::{ClauseSite, Failure, FailureSite};
+use error::{ClauseSite, Failure, FailureSite, Raised};
 
 // Expression evaluation (`eval`/`eval_node`): terms, arithmetic and
 // concatenation.
@@ -663,14 +663,13 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
 /// each witness's own declared owner.
 ///
 /// **Arm-grained for `InstructionKind::Call`, matching `loud.rs`'s own
-/// witness table (Step 2)**: every arm of `rexx_parse::Call` is `"4b"`
-/// except `Call::Qualified`, which is genuinely Phase 5's (a namespace-
-/// qualified `CALL`, mirroring `ExprKind::QualifiedCall`'s own ownership
-/// below). Every other variant here stays coarse -- in particular
-/// `InstructionKind::Signal` is `"4b"` regardless of arm, because `Signal::
-/// Trap` is 4b's own too (Task 7), just a later task within it than
-/// `Signal::Value`/`Label` (Task 6) -- so no nested match is needed there
-/// the way `Call` needs one.
+/// witness table (Step 2)**: three of `rexx_parse::Call`'s four arms are
+/// implemented and answer `None`, and `Call::Qualified` is genuinely Phase
+/// 5's (a namespace-qualified `CALL`, mirroring `ExprKind::QualifiedCall`'s
+/// own ownership below). Every other variant here stays coarse.
+/// `InstructionKind::Signal` was the second arm-grained one until 4b's Task 7
+/// implemented `Signal::Trap`; all three of its arms answer `None` now, so it
+/// needs no nested match either.
 ///
 /// Exhaustive with no `_` arm, matching `Loud::instruction`'s own match: a
 /// new `InstructionKind` variant is a compile error here, not a silent
@@ -705,18 +704,20 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // it ends the program with its value exactly as `EXIT` does.
         | InstructionKind::Return { .. }
         | InstructionKind::Nop => None,
-        // **Arm-grained, and two of the four arms are now `None`.**
-        // `Call::Named` and `Call::Dynamic` are implemented (Task 3), so
-        // "4b" would be a false statement in a table whose only job is to be
-        // true -- `Loud::instruction` is no longer reached for either, and
-        // an owner string nothing reads is exactly how the third copy of
-        // this data drifts. A named call that resolves to no internal label
-        // still fails loudly, through `Loud::unresolved_call`, naming `4c`:
-        // the builtin and external steps behind the label search are that
-        // phase's, not a residual claim on the `CALL` keyword itself.
+        // **Arm-grained, and three of the four arms are now `None`.**
+        // `Call::Named` and `Call::Dynamic` are implemented (Task 3) and
+        // `Call::Trap` is (Task 7), so "4b" would be a false statement in a
+        // table whose only job is to be true -- `Loud::instruction` is no
+        // longer reached for any of the three, and an owner string nothing
+        // reads is exactly how the third copy of this data drifts. A named
+        // call that resolves to no internal label still fails loudly,
+        // through `Loud::unresolved_call`, naming `4c`: the builtin and
+        // external steps behind the label search are that phase's, not a
+        // residual claim on the `CALL` keyword itself.
         InstructionKind::Call(call) => match &**call {
-            rexx_parse::Call::Named { .. } | rexx_parse::Call::Dynamic { .. } => None,
-            rexx_parse::Call::Trap(_) => Some("4b"),
+            rexx_parse::Call::Named { .. }
+            | rexx_parse::Call::Dynamic { .. }
+            | rexx_parse::Call::Trap(_) => None,
             rexx_parse::Call::Qualified { .. } => Some("Phase 5"),
         },
         // In scope since 4b's Task 5, both of them. `Use` is `None` even
@@ -728,10 +729,15 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // `Loud::compound_expose` rather than through this table, because it
         // is a sub-case of a variant and this table is per variant.
         InstructionKind::Procedure { .. } | InstructionKind::Use(_) => None,
-        InstructionKind::Signal(_)
-        | InstructionKind::Raise(_)
-        | InstructionKind::Push { .. }
-        | InstructionKind::Queue { .. } => Some("4b"),
+        // In scope since 4b's Task 7. All three `Signal` arms are
+        // implemented (`Label`/`Value` at Task 6, `Trap` here), so unlike
+        // `Call` above this one needs no arm-grained match. `RAISE` is
+        // likewise whole: its one shape that still fails loudly, `ADDITIONAL
+        // (a, b)`, does so through `ExprKind::List`'s own `Phase 5` owner --
+        // a sub-case of an *expression*, reported where that expression is,
+        // not a residual claim on the `RAISE` keyword.
+        InstructionKind::Signal(_) | InstructionKind::Raise(_) => None,
+        InstructionKind::Push { .. } | InstructionKind::Queue { .. } => Some("4b"),
         InstructionKind::Parse(_)
         | InstructionKind::Arg(_)
         | InstructionKind::Pull(_)
@@ -811,12 +817,72 @@ struct Code<'a> {
 /// D16 requires the read path to answer this from the start rather than gain
 /// it later: `SIGNAL ON NOVALUE` in 4b changes what an uninitialised read
 /// does, and retrofitting a raise into the hottest path is what naming it here
-/// prevents. The spike reads the flag and does nothing with it, which is the
-/// correct amount of nothing.
+/// prevents. Through 4a and most of 4b the flag was read and discarded,
+/// which was the correct amount of nothing; `Interp::novalue_check`
+/// (`run.rs`) is the reader D16 was holding it for, added at 4b's Task 7,
+/// and the retrofit that would otherwise have been needed never happened.
+///
+/// **Both producers matter and they are not the same code.** `Interp::read`
+/// answers it for a simple variable and `Interp::stem_get` for a compound;
+/// `Interp::read_stem`, the bare-stem read, deliberately answers nothing at
+/// all, because measured, `say zstem.` under `SIGNAL ON NOVALUE` does not
+/// trap where `say zstem.1` does.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Novalue {
     Set,
     Unset,
+}
+
+/// The condition a running handler was entered for, kept so `RAISE
+/// PROPAGATE` can re-raise it (4b's Task 7).
+///
+/// **The echo stack travels with it**, which is the part that is measured
+/// rather than obvious. A trapped condition clears `failure_site` and
+/// `failure_sites` (inherited item I11), so by the time a handler runs there
+/// is nothing left to echo -- yet the oracle's report for a `RAISE
+/// PROPAGATE` from inside that handler names the *original* raising clause,
+/// not the `raise propagate` clause:
+///
+/// ```text
+///      8 *-*   say 1/0          <- line 8 raised; line 12 propagated
+///      3 *-* call fun
+/// Error 42:  Arithmetic overflow/underflow.
+/// ```
+///
+/// So the two fields are saved here at the moment they are cleared and put
+/// back if `PROPAGATE` ever asks. Putting `site` back full is also what
+/// keeps the `raise propagate` clause itself out of the report, since
+/// `record_failure_at` is first-wins.
+struct ActiveCondition {
+    raised: Raised,
+    site: Option<FailureSite>,
+    sites: Vec<FailureSite>,
+}
+
+/// A condition waiting for the current clause to finish before its `CALL ON`
+/// handler runs (4b's Task 7).
+///
+/// Carries only what the handler needs that cannot be looked up again at
+/// delivery time: the condition's name is the trap-table key, and `rc` is the
+/// `RAISE ERROR n`/`RAISE FAILURE n` argument, held as its rendered text
+/// rather than as an `ObjRef` because the raising clause's temps frame is
+/// popped long before the handler runs and a handle into it would be
+/// unrooted. `set_sigl` already takes the same approach for the same reason.
+struct PendingTrap {
+    condition: Box<[u8]>,
+    rc: Option<Vec<u8>>,
+    /// The `activations.len()` at which this may be delivered: the raising
+    /// activation's **caller**, which is the level whose trap table matched.
+    ///
+    /// **Found by measurement, not by design.** The first version had no
+    /// such field and delivered at the next clause boundary reached by any
+    /// activation, which is a different thing entirely the moment the
+    /// raising clause goes on to call something else: `say 'a' one(1)
+    /// two(2)`, with `one` raising, ran the handler inside `two` -- `SIGL` 8,
+    /// the `two:` label's own line, against the oracle's 3 -- and printed it
+    /// before the `SAY` rather than after. Pinned by
+    /// `a_call_trap_waits_for_the_raising_clause_to_finish`.
+    depth: usize,
 }
 
 /// Every piece of state `step_in_temps_frame` sets fresh, unconditionally, on
@@ -938,6 +1004,29 @@ struct Interp {
     /// that decides what belongs alongside them, and why they are one field
     /// rather than two.
     clause_state: ClauseState,
+    /// A condition raised by `RAISE` whose `CALL ON` handler has not run yet
+    /// (4b's Task 7).
+    ///
+    /// **Deliberately not part of `ClauseState`**, checked against that
+    /// struct's own membership rule rather than placed by analogy: this is
+    /// not set per clause by `step_in_temps_frame`, it is set once by a
+    /// `RAISE` and *consumed* at the next clause boundary, so a nested
+    /// activation overwriting it is not the hazard `ClauseState` exists to
+    /// close -- the hazard would be a nested activation that failed to
+    /// deliver it, and `run_activation`'s check runs in every activation.
+    ///
+    /// One slot rather than a queue, which is what the oracle's own
+    /// behaviour describes: measured, a condition raised while a `CALL ON`
+    /// handler is running is dropped rather than delivered after the handler
+    /// returns.
+    pending_trap: Option<PendingTrap>,
+    /// The condition whose handler is running, for `RAISE PROPAGATE` to
+    /// re-raise.
+    ///
+    /// Set when a trap fires and never cleared -- `run.rs`'s own
+    /// `exec_raise_propagate` states what that costs and what is measured
+    /// either side of it.
+    active_condition: Option<ActiveCondition>,
     /// **F3, found by review.** The innermost `SELECT CASE`'s own evaluated
     /// `case` text, or `None` inside a plain `SELECT` (or before any
     /// `SELECT`/`SELECT CASE` has run at all) -- the one piece of state an
@@ -1108,12 +1197,16 @@ struct Interp {
     /// the top: by then the frame is gone.
     ///
     /// **First-wins *within one level*, and 4b's Task 2 left that unchanged
-    /// on purpose (inherited item I11).** The `is_none()` guard in
-    /// `record_failure_at` still means the most specific clause at this level
-    /// wins, and it still never clears. Clearing it matters only once a trap
-    /// can resume after a raise, which is **Task 7's** to own -- for both this
-    /// field and [`Interp::failure_sites`] below, since a resumed trap would
-    /// have to empty the stack as well as the slot.
+    /// on purpose (inherited item I11).** The early-return guard at the top
+    /// of `record_failure_at` still means the most specific clause at this
+    /// level wins.
+    ///
+    /// **Task 7 is what made it clear**, and it empties
+    /// [`Interp::failure_sites`] alongside it: a trapped condition prints no
+    /// report, so the sites it accumulated must not be printed against a
+    /// later, untrapped one. `run.rs`'s `offer_to_trap` is the one place that
+    /// clears either, and `a_second_raise_after_a_trapped_one_reports_its_
+    /// own_site` is the transcript.
     failure_site: Option<FailureSite>,
     /// The levels that have already finished failing, innermost first --
     /// `Raised::report`'s echo stack minus its last entry.
@@ -1122,7 +1215,7 @@ struct Interp {
     /// currently unwinding and is first-wins; this is the record of levels
     /// already sealed. `run.rs`'s `seal_site_level` moves one into the other
     /// and is called by exactly the constructs that open a level -- today
-    /// `run_fragment`, and Task 3's `CALL` next. Keeping the two apart is
+    /// `run_fragment` and (since Task 3) `resolve_and_run_call`. Keeping the two apart is
     /// what lets the guard stay a plain `is_none()` rather than a "did
     /// anything get recorded since the current level opened" watermark, and
     /// it is why the pre-Task-2 single-site behaviour falls out unchanged
@@ -1327,6 +1420,8 @@ impl Interp {
                 current_value_indent: 0,
                 current_clause_line: 0,
             },
+            pending_trap: None,
+            active_condition: None,
             current_case_text: None,
             indent_offset: 0,
             activation_indent: 0,
