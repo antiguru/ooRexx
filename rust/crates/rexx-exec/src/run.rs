@@ -65,6 +65,7 @@
 //! at both.
 
 use crate::activation::{Activation, Inherited, Trap, body_of};
+use crate::clause::ClauseEnd;
 use crate::error::{FailureSite, Raised, Search};
 use crate::eval::logical_value;
 use crate::trace::{
@@ -86,7 +87,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 /// Where control goes after one instruction (the design's "Control flow").
-enum Flow {
+pub(crate) enum Flow {
     Next,
     /// Live since Task 10: `If`/`Select` each resolve to one `Goto` that
     /// skips straight to their construct's true resume point, and
@@ -349,7 +350,7 @@ const MAX_ACTIVATION_DEPTH: usize = 10_000;
 /// five re-measured and added afterward) falsified seven of the fourteen
 /// under that rule and fits all fourteen under this one; the report has
 /// every transcript.
-struct LeaveOrigin {
+pub(crate) struct LeaveOrigin {
     /// `None` only when `source` was `None` at the moment this instruction
     /// stepped, which **no caller now produces**: `run_fragment` was the one
     /// that did, and since 4b's Task 2 it passes its own fragment source, so
@@ -676,28 +677,12 @@ impl Interp {
             let flow =
                 match self.step_in_temps_frame(&code, index, instruction, Some(&program.source)) {
                     Ok(flow) => flow,
-                    Err(failure) => self.offer_to_trap(failure)?,
+                    Err(failure) => self.offer_to_trap(&code, failure)?,
                 };
-            // **The clause has finished; a `CALL ON` handler waiting on it
-            // runs here, before `flow` is acted on.** Fix round 1's Critical:
-            // this check used to sit at the *bottom* of the loop body, past a
-            // `match` two of whose arms `return`, so an activation whose
-            // clause resolved to `RETURN` or `EXIT` never reached it -- the
-            // condition was dropped outright, or picked up later by an
-            // unrelated activation. Measured, `call aa` into `aa: return
-            // bb()` with `bb` raising a trapped `USER` condition: the oracle
-            // runs the handler at that `return bb()` clause's own boundary
-            // and we ran it never.
-            //
-            // Placed before the `match` rather than repeated inside two of
-            // its arms, so no `Flow` arm can skip it: `Flow::Return` means
-            // the clause *was* a `RETURN`, not that the clause did not
-            // happen. `clause_boundary` is the rule itself, shared with
-            // `run_bounded` -- see its own doc comment for why both callers
-            // are needed and why there are exactly two.
-            if let Some(ended) = self.clause_boundary(&code, &flow)? {
-                return Ok(ended);
-            }
+            // **No clause boundary here any more** (fix round 3). It moved
+            // inside `step_in_temps_frame`, which is the one place a clause
+            // is stepped -- so this loop, `run_bounded`, and every future
+            // caller get it without being enumerated. See `clause.rs`.
             match flow {
                 Flow::Next => self.activation_mut().pc += 1,
                 Flow::Goto(target) => self.activation_mut().pc = target,
@@ -1732,7 +1717,7 @@ impl Interp {
                     // unresolved `SIGNAL` (16.1) ends the program regardless,
                     // matching the oracle's own `signalTo`, which a caller
                     // only ever invokes with an already-resolved target.
-                    self.set_sigl(self.clause_state.current_clause_line);
+                    self.set_sigl(self.clause_state.line());
                     Ok(Flow::Signal(target))
                 }
                 // `SIGNAL VALUE expr`. Its own `>K>` -- `"VALUE" => text`, at
@@ -1752,7 +1737,7 @@ impl Interp {
                     let text = self.to_text(value).to_vec();
                     self.trace_keyword(self.clause_state.current_value_indent, "VALUE", &text);
                     let target = self.resolve_signal_target(&text)?;
-                    self.set_sigl(self.clause_state.current_clause_line);
+                    self.set_sigl(self.clause_state.line());
                     Ok(Flow::Signal(target))
                 }
                 // `SIGNAL ON cond NAME label` / `SIGNAL OFF cond`. Unlike the
@@ -2393,7 +2378,7 @@ impl Interp {
     /// Returns a `Flow` rather than a bare target so that
     /// `run_activation`'s existing `match` does the transfer: `Flow::Signal`
     /// is exactly "set this activation's `pc`", which is what a trap does.
-    fn offer_to_trap(&mut self, failure: Failure) -> Result<Flow, Failure> {
+    fn offer_to_trap(&mut self, code: &Code<'_>, failure: Failure) -> Result<Flow, Failure> {
         let Failure::Raised(raised) = &failure else {
             return Err(failure);
         };
@@ -2452,7 +2437,7 @@ impl Interp {
         // `ActiveCondition`'s own doc comment (`lib.rs`) has that transcript.
         let site = self.failure_site.take();
         let sites = std::mem::take(&mut self.failure_sites);
-        self.set_sigl(self.clause_state.current_clause_line);
+        self.set_sigl(self.clause_state.line());
         if let Some(rc) = &raised.rc {
             let value = self.text(rc);
             self.assign_by_name(b"RC", value);
@@ -2464,6 +2449,24 @@ impl Interp {
             site,
             sites,
         });
+        // **The failed clause's own boundary, and the one place it can
+        // happen** (fix round 3). `step_in_temps_frame` ends a *completing*
+        // clause; a clause that raised has not completed, and at that moment
+        // nothing yet knows whether it will be trapped here or unwind the
+        // activation. This is the point where that is decided in favour of
+        // "trapped here, execution continues", so it is the point where a
+        // `CALL ON` handler queued by the same clause is owed its run.
+        //
+        // Measured, and the pair is what places it here rather than in
+        // `step_in_temps_frame`'s `Err` arm: `zq = sub() + 1/0` with both a
+        // `CALL ON USER` and a `SIGNAL ON SYNTAX` trap prints `UH ran` then
+        // `SH ran` -- so the queued handler runs even though its clause
+        // failed -- while the same clause in a routine whose own `SIGNAL OFF`
+        // sends the failure out of the activation entirely delivers nothing
+        // at all. One completes here; the other never does.
+        if let Some(ended) = self.deliver_pending_trap(code)? {
+            return Ok(Flow::Exit(ended.value()));
+        }
         Ok(Flow::Signal(target))
     }
 
@@ -2483,40 +2486,10 @@ impl Interp {
     /// Measured: a handler that itself calls a routine raising the same
     /// condition does not re-enter, and the program then carries on
     /// normally rather than running the handler a second time later.
-    /// One Rexx clause has just finished: run a `CALL ON` handler waiting on
-    /// this activation, if there is one.
-    ///
-    /// **The whole delivery rule, in one function, called from every place
-    /// that steps a clause** -- and there are exactly two, which is what
-    /// makes that checkable rather than aspirational: `run_activation`'s loop
-    /// and `run_bounded`'s are the only callers of `step_in_temps_frame` in
-    /// the crate. A clause inside a `DO` body, a `WHEN`/`THEN` body or an
-    /// `INTERPRET` fragment is stepped only by the second, so a rule applied
-    /// only in the first is a rule that does not hold for any of them (fix
-    /// round 2's NEW 5, three oracle DIFFs).
-    ///
-    /// Returns `Some` only when the handler itself ended the program; both
-    /// callers forward that outward in their own return type.
-    ///
-    /// **The rooting is part of the rule and not of either caller.** `flow`
-    /// may carry an `ObjRef` whose one-clause temps frame
-    /// `step_in_temps_frame` has already popped, and the handler below runs a
-    /// whole nested activation that allocates. Measured rather than reasoned
-    /// about: with the `push_temp` deleted, a `Flow::Return` and a
-    /// `Flow::Exit` program each panic on `a live value` under
-    /// collect-on-every-allocation, and with it they pass through 70-79 real
-    /// collections.
-    fn clause_boundary(&mut self, code: &Code<'_>, flow: &Flow) -> Result<Option<Ended>, Failure> {
-        if self.pending_trap.is_none() {
-            return Ok(None);
-        }
-        if let Flow::Return(Some(value)) | Flow::Exit(Some(value)) = flow {
-            self.roots.push_temp(*value);
-        }
-        self.deliver_pending_trap(code)
-    }
-
-    fn deliver_pending_trap(&mut self, code: &Code<'_>) -> Result<Option<Ended>, Failure> {
+    pub(crate) fn deliver_pending_trap(
+        &mut self,
+        code: &Code<'_>,
+    ) -> Result<Option<Ended>, Failure> {
         // Only the activation whose trap table matched delivers, and only
         // once it is running again -- `PendingTrap::activation`'s own doc
         // comment has the three transcripts this identity check answers,
@@ -2540,7 +2513,7 @@ impl Interp {
             // silently running a `SIGNAL` handler as a call.
             return Ok(None);
         }
-        self.set_sigl(self.clause_state.current_clause_line);
+        self.set_sigl(self.clause_state.line());
         if let Some(rc) = &pending.rc {
             let value = self.text(rc);
             self.assign_by_name(b"RC", value);
@@ -2601,13 +2574,21 @@ impl Interp {
                 self.active_condition = enclosing;
                 Ok(None)
             }
-            // The handler failed rather than returned. The restore is the
-            // same: whatever an outer trap goes on to do, this handler's own
-            // condition is finished, and leaving it in place would make a
-            // later `PROPAGATE` re-raise it. Unmeasured -- no probe
-            // constructs a failing `CALL ON` handler under an outer trap --
-            // and done this way because the alternative is the state the
-            // arm above exists to prevent, not because a transcript says so.
+            // The handler failed rather than returned. **Reachable but
+            // unobservable, kept deliberately** (fix round 3). The
+            // re-review's panic probe found four programs that take this
+            // arm and no test that does, and established why nothing can see
+            // it: every path that goes on to read `active_condition` passes
+            // through `offer_to_trap` first, which overwrites the field
+            // wholesale. So this line changes no output today.
+            //
+            // Kept rather than deleted because the alternative is not
+            // "nothing" but "a wrong value that happens not to be read":
+            // leaving this handler's own condition in place is exactly the
+            // state the arm above exists to prevent, and it would become
+            // observable the day a read reaches it without passing through
+            // `offer_to_trap`. One line to be right by construction is
+            // cheaper than a comment explaining why being wrong is safe.
             Err(failure) => {
                 self.active_condition = enclosing;
                 Err(failure)
@@ -3069,7 +3050,7 @@ impl Interp {
         // and `sub`'s own `SIGL` as the `CALL`'s line -- a version setting
         // `SIGL` before evaluating arguments would report the argument as
         // the `CALL`'s own line instead.
-        self.set_sigl(self.clause_state.current_clause_line);
+        self.set_sigl(self.clause_state.line());
 
         // D19/I6: one Rust frame per activation, plus this counter, so an
         // unbounded recursion becomes a reportable condition instead of a
@@ -3462,9 +3443,13 @@ impl Interp {
         // correct whether or not `TRACE` is on, and this is the one place
         // every stepped instruction, `SIGNAL`/`CALL` included, passes
         // through before its own `step` call runs.
-        if let Some(line) = self.clause_line(source, instruction) {
-            self.clause_state.current_clause_line = line;
-        }
+        // `enter_clause` rather than a bare assignment: the clause line and
+        // the clause boundary are one operation now (`clause.rs`), and this
+        // call is what obliges the `end_clause` at the bottom of the function.
+        let line = self
+            .clause_line(source, instruction)
+            .unwrap_or_else(|| self.clause_state.line());
+        let token = self.enter_clause(line);
         if self.trace_mode().all
             && let Some((line, text)) = self.clause_site(source, instruction)
         {
@@ -3502,6 +3487,32 @@ impl Interp {
         self.roots.pop_frame(frame);
         if flow.is_err() {
             self.record_failure_site(code, index, source, instruction);
+        }
+        // The clause is over on both paths, so the token is consumed on both.
+        // Nothing is delivered on the `Err` path -- an unwinding clause never
+        // reached a boundary -- but `end_clause` is still the only way to
+        // discharge the obligation, which is what stops "the error path" being
+        // the fourth place this rule quietly did not apply.
+        let ended = match &flow {
+            Ok(flow) => self.end_clause(token, code, ClauseEnd::Completed(Some(flow))),
+            Err(_) => self.end_clause(token, code, ClauseEnd::Failed),
+        };
+        let ended = match ended {
+            Ok(ended) => ended,
+            // The handler run at this clause's boundary failed. The clause
+            // the oracle blames is **this** one -- the one whose boundary
+            // ran it -- not the enclosing instruction: measured, a failing
+            // `CALL ON` handler queued by `call sub` inside a `DO` echoes
+            // `3 *-* call sub`, where without this it echoed
+            // `2 *-* do i = 1 to 1`, the `DO` clause's own site recorded one
+            // level out. Fix round 3's NEW-B.
+            Err(failure) => {
+                self.record_failure_site(code, index, source, instruction);
+                return Err(failure);
+            }
+        };
+        if let Some(ended) = ended {
+            return Ok(Flow::Exit(ended.value()));
         }
         flow
     }
@@ -3892,25 +3903,6 @@ impl Interp {
         while pc < end {
             let instruction = &code.body.instructions[pc];
             let flow = self.step_in_temps_frame(code, pc, instruction, source)?;
-            // The clause boundary, exactly as `run_activation`'s own loop
-            // applies it -- fix round 2's NEW 5. A clause inside a `DO` body,
-            // a `WHEN`/`THEN` body or an `INTERPRET` fragment is stepped
-            // *here* and nowhere else, so a check only in `run_activation`
-            // deferred every such clause's pending handler to the boundary of
-            // the whole enclosing instruction. Measured, `call sub` then
-            // `say` inside a two-iteration `DO`: the oracle runs the handler
-            // after the `call` on both passes and we ran it once, after the
-            // `END`.
-            if let Some(ended) = self.clause_boundary(code, &flow)? {
-                // `run_bounded` answers in `Flow`, so the one outcome
-                // `clause_boundary` reports -- the handler itself exited --
-                // travels as `Flow::Exit`, which this function already
-                // forwards outward unchanged through its catch-all.
-                let Ended::Exited(value) = ended else {
-                    unreachable!("clause_boundary reports only Ended::Exited")
-                };
-                return Ok(Flow::Exit(value));
-            }
             match flow {
                 Flow::Next => pc += 1,
                 Flow::Goto(target) if target >= start && target <= end => pc = target,
@@ -4235,6 +4227,13 @@ impl Interp {
         // which of the two echo sites is live for this call, never both.
         let is_until_loop = matches!(conditional, Some(cond) if cond.until);
         let mut first_pass = true;
+        // Which clause the loop header's own evaluation belongs to: the
+        // `DO` clause on the first pass, the `END` clause on every re-test
+        // after it. Measured, `do while zn < sub()`: `SIGL` 4 then 7.
+        let mut header_pass = true;
+        let end_line = self
+            .clause_line(source, &code.body.instructions[end_index])
+            .unwrap_or(0);
 
         loop {
             if !first_pass
@@ -4246,7 +4245,33 @@ impl Interp {
             }
             first_pass = false;
 
-            if !self.loop_advance(code, &mut state)? {
+            // **The `DO` clause, entered and ended like any other** (fix
+            // round 3). The header's control expressions and a `WHILE` test
+            // are Rexx clauses in their own right: measured, `do while zn <
+            // sub()` reports `SIGL` 4 -- the `DO` clause's own line -- for
+            // the first test, and delivers a `CALL ON` handler queued by
+            // `sub()` right there rather than after the whole loop.
+            //
+            // On iterations after the first the re-test belongs to the `END`
+            // clause instead, which is the block further down; `do_line` is
+            // whichever of the two is in force for this pass.
+            let do_line = self
+                .clause_line(source, do_instruction)
+                .unwrap_or_else(|| self.clause_state.line());
+            let header_line = if header_pass { do_line } else { end_line };
+            let token = self.enter_clause(header_line);
+            let advanced = self.loop_advance(code, &mut state);
+            let advanced = match advanced {
+                Ok(advanced) => advanced,
+                Err(failure) => {
+                    self.end_clause(token, code, ClauseEnd::Failed)?;
+                    return Err(failure);
+                }
+            };
+            if !advanced {
+                if let Some(ended) = self.end_clause(token, code, ClauseEnd::Completed(None))? {
+                    return Ok(Flow::Exit(ended.value()));
+                }
                 return Ok(Flow::Goto(resume));
             }
             if let Some(cond) = conditional
@@ -4265,13 +4290,25 @@ impl Interp {
                     raised_while_not_logical,
                 ) {
                     Ok(true) => {}
-                    Ok(false) => return Ok(Flow::Goto(resume)),
+                    Ok(false) => {
+                        if let Some(ended) =
+                            self.end_clause(token, code, ClauseEnd::Completed(None))?
+                        {
+                            return Ok(Flow::Exit(ended.value()));
+                        }
+                        return Ok(Flow::Goto(resume));
+                    }
                     Err(failure) => {
                         self.record_failure_at(source, do_instruction, loop_indent);
+                        self.end_clause(token, code, ClauseEnd::Failed)?;
                         return Err(failure);
                     }
                 }
             }
+            if let Some(ended) = self.end_clause(token, code, ClauseEnd::Completed(None))? {
+                return Ok(Flow::Exit(ended.value()));
+            }
+            header_pass = false;
 
             let flow = self.run_bounded(code, body_start, end_index, source)?;
             if let Some(escape) = self.do_body_outcome(code, do_index, label, true, resume, flow)? {
@@ -4323,12 +4360,23 @@ impl Interp {
                 // call does not set it), so without this `UNTIL`'s
                 // intermediates would otherwise still read `do_indent`.
                 self.clause_state.current_value_indent = loop_indent;
-                match self.eval_condition(
+                // `UNTIL`'s test is the `END` clause's own -- same rule as
+                // `WHILE`'s re-test above, and measured the same way.
+                let until_token = self.enter_clause(end_line);
+                let tested = self.eval_condition(
                     code,
                     &cond.condition,
                     ConditionTrace::Keyword(loop_indent, "UNTIL"),
                     raised_until_not_logical,
-                ) {
+                );
+                if tested.is_err() {
+                    self.end_clause(until_token, code, ClauseEnd::Failed)?;
+                } else if let Some(ended) =
+                    self.end_clause(until_token, code, ClauseEnd::Completed(None))?
+                {
+                    return Ok(Flow::Exit(ended.value()));
+                }
+                match tested {
                     Ok(true) => return Ok(Flow::Goto(resume)),
                     Ok(false) => {}
                     Err(failure) => {
@@ -11705,23 +11753,87 @@ mod tests {
         assert_eq!(interp.out, b"UH ran 3\nSH ran 3\n".to_vec());
     }
 
-    /// The adjacent case, which is what keeps the restore from being a
-    /// disguised "never clear": with nothing active before the handler ran,
-    /// the restore puts `None` back and a later `RAISE PROPAGATE` is
-    /// `98.918`. Round 1's own test for this still passes unchanged --
-    /// `a_returned_call_handler_leaves_no_active_condition_to_propagate` --
-    /// and this comment exists so the pair is findable from either side.
+    // ---- fix round 3: a loop header is a clause too ----
+
+    /// **Fix round 3's NEW-A.** A `DO` header is a Rexx clause: its control
+    /// expressions run in it, and its boundary is its own, not the whole
+    /// loop's. `do i = 1 to sub()` must report `SIGL` 3 -- the `DO` clause --
+    /// and deliver the handler before the body's first pass.
+    ///
+    /// Before this the handler ran after the `END`, so this test pins the
+    /// *boundary*. It does **not** pin the header's line: measured, a
+    /// mutation that leaves `header_line` at whatever was already current
+    /// keeps this test green, because the `DO` instruction's own
+    /// `step_in_temps_frame` has already set line 3. The sibling below is
+    /// what pins the line, since only a re-test can be on a different clause
+    /// from the header. Two tests, two properties, stated because the
+    /// mutation said so rather than assumed because they look related.
     #[test]
-    fn restoring_none_is_still_the_common_case() {
+    fn a_loop_header_is_a_clause_with_its_own_boundary() {
         let mut interp = Interp::new();
-        let failure = run_source(
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call on user foo name uh\nzmark = 'NOMARK'\ndo i = 1 to sub()\nsay 'body' i 'mark=' zmark\nend\nsay 'end mark=' zmark\nexit\nsub:\nraise user foo return 1\nuh:\nzmark = 'HANDLER-AT' sigl\nreturn\n",
+            ),
+            b"body 1 mark= HANDLER-AT 3\nend mark= HANDLER-AT 3\n".to_vec()
+        );
+    }
+
+    /// `WHILE` and `UNTIL` are re-tested once per pass, and **which clause
+    /// that test belongs to changes**: the `DO` clause on the first pass, the
+    /// `END` clause on every one after. Measured, and it is the detail that
+    /// makes this a clause question rather than a delivery question --
+    /// `SIGL` 4 then 7 for `do while zn < sub()` on lines 4 and 7.
+    #[test]
+    fn a_while_retest_belongs_to_the_do_clause_then_to_the_end_clause() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call on user foo name uh\nzmark = 'NOMARK'\nzn = 0\ndo while zn < sub()\nzn = zn + 1\nsay 'body' zn 'mark=' zmark\nend\nsay 'end mark=' zmark\nexit\nsub:\nraise user foo return 2\nuh:\nzmark = 'HANDLER-AT' sigl\nreturn\n",
+            ),
+            b"body 1 mark= HANDLER-AT 4\nbody 2 mark= HANDLER-AT 7\nend mark= HANDLER-AT 7\n".to_vec()
+        );
+
+        // `UNTIL` is tested only after a pass, so every one of its tests is
+        // the `END` clause's -- the same rule with the first-pass case
+        // absent, which is why it needs its own row rather than being
+        // assumed to follow.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call on user foo name uh\nzmark = 'NOMARK'\nzn = 0\ndo until zn >= sub()\nzn = zn + 1\nsay 'body' zn 'mark=' zmark\nend\nsay 'end mark=' zmark\nexit\nsub:\nraise user foo return 2\nuh:\nzmark = 'HANDLER-AT' sigl\nreturn\n",
+            ),
+            b"body 1 mark= NOMARK\nbody 2 mark= HANDLER-AT 7\nend mark= HANDLER-AT 7\n".to_vec()
+        );
+    }
+
+    /// **Fix round 3's NEW-B.** When the handler run at a clause's boundary
+    /// itself fails, the clause the report blames is the one whose boundary
+    /// ran it -- `call sub` -- not the enclosing `DO`.
+    ///
+    /// The neighbouring case is what pins it to the boundary rather than to
+    /// anything about `DO`: the same program with no trap at all, failing
+    /// directly inside `sub`, already blamed `call sub` correctly.
+    #[test]
+    fn a_handler_that_fails_at_a_clause_boundary_blames_that_clause() {
+        let mut interp = Interp::new();
+        run_source(
             &mut interp,
-            b"call on user foo name uh\ncall sub\nraise propagate\nexit\nsub:\nraise user foo return 'SV'\nuh:\nsay 'UH ran'\nreturn\n",
+            b"call on user foo name uh\ndo i = 1 to 1\ncall sub\nsay 'after'\nend\nexit\nsub:\nraise user foo return 'SV'\nuh:\nsay 1/0\nreturn\n",
         )
         .unwrap_err();
-        let Failure::Raised(raised) = failure else {
-            panic!("expected Raised, got {failure:?}");
-        };
-        assert_eq!((raised.number, raised.sub), (98, 918));
+        let mut sites = std::mem::take(&mut interp.failure_sites);
+        sites.extend(interp.failure_site.take());
+        assert!(
+            sites.iter().any(|site| site.text == b"call sub".to_vec()),
+            "expected the `call sub` clause among the echoes, got {:?}",
+            sites
+                .iter()
+                .map(|site| String::from_utf8_lossy(&site.text).into_owned())
+                .collect::<Vec<_>>()
+        );
     }
 }

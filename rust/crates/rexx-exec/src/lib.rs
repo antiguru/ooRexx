@@ -61,6 +61,7 @@ use plan::{BodyKey, Plan, ProgramId};
 // One activation: everything about the frame currently executing (D16).
 mod activation;
 use activation::{Activation, ActivationId};
+use clause::ClauseState;
 
 // `Raised` (the payload of a real Rexx condition) and `Failure` (either a
 // `Loud` not-implemented marker or a `Raised` condition, the one type
@@ -77,6 +78,7 @@ mod eval;
 // down to prove (Task 3's spike). Extended task by task with the branches and
 // calls later tasks add; Task 9 is the first to extend it, with the seven
 // instructions that do not branch.
+mod clause;
 mod run;
 use run::Ended;
 
@@ -894,91 +896,6 @@ struct PendingTrap {
     activation: ActivationId,
 }
 
-/// Every piece of state `step_in_temps_frame` sets fresh, unconditionally, on
-/// **every** instruction it steps -- and so every field a caller pushing a
-/// nested activation (`resolve_and_run_call`, `run.rs`) must save before the
-/// callee runs and restore after it returns, because the callee's own
-/// `step_in_temps_frame` calls overwrite these exactly as the caller's own
-/// next clause would.
-///
-/// **The property that decides membership**, so the next field can be
-/// checked against it rather than added by analogy: set per clause by
-/// `step_in_temps_frame`, *and* read somewhere that can run after a nested
-/// activation has already run and returned within the same clause. `say
-/// f(1) + g(2)` is what makes the second half observable at all -- at most
-/// one activation could be entered per clause before Task 4 (`ExprKind::
-/// Call`), and the *next* clause's own `step_in_temps_frame` re-set these
-/// fields before anything read them, so a version missing the restore
-/// passed every test with no more than one call per clause in it.
-///
-/// A field failing either half does not belong here. `resolve_and_run_
-/// call`'s own five (`activation_indent`/`indent_offset`/
-/// `clause_line_override`/`call_context`, plus this whole struct) are not
-/// all one shape: those four are level state *for the callee*, each set
-/// once per call to a value the callee computes (`activation_indent` to
-/// the calling clause's indent plus two, `call_context` to that call's own
-/// name and arguments, ...), never refreshed per clause the way this
-/// struct's own fields are -- each already has its own reason, stated at
-/// that save/restore block rather than here.
-///
-/// **Bundled into one field, `Interp::clause_state`, rather than left as
-/// separate fields each needing its own save/restore line at a nested-
-/// activation boundary.** `current_value_indent` is Task 4's own C1;
-/// `current_clause_line` is Task 6's, and it shipped *without* the restore
-/// its own sibling field already carried -- the second time in a row the
-/// newer field of this exact shape went in without it, which is the same
-/// "a hand-maintained list eventually drops an entry" shape this project's
-/// own owner tables were already burned by three times. One `Copy` struct
-/// and one assignment at the save/restore site (`let saved = self.
-/// clause_state; ...; self.clause_state = saved;`) is what makes a third
-/// omission structurally impossible rather than merely against the rules:
-/// a field added *here* is restored by that existing assignment with no
-/// second edit anywhere, where a field added directly to `Interp` needs
-/// someone to have read this comment first.
-#[derive(Copy, Clone)]
-struct ClauseState {
-    /// The indent (Task 11's `static_indent` quantity, spaces already
-    /// doubled) an intermediate value line traces at right now -- the one
-    /// piece of state `eval`'s own single insertion point needs that
-    /// `eval`'s signature does not otherwise carry, mirroring the oracle's
-    /// own `settings.traceIndent` (a persistent field every `traceValue`/
-    /// `traceVariable`/... call reads, never threaded as a parameter
-    /// through `evaluate`). Set once per traced clause, at whichever call
-    /// site already computed that clause's own indent for the `*-*` echo
-    /// or a `>K>` line -- `run.rs`'s own doc comments name each site.
-    ///
-    /// **Why a field and not an `eval` parameter.** Threading an indent
-    /// through `eval`/`eval_node`'s entire recursive call graph would touch
-    /// every arm in `eval.rs`, exactly the "eighteen arms" retrofit the
-    /// design's own withdrawn note wrongly predicted for the value events
-    /// themselves -- reading the oracle's own field-not-parameter design
-    /// avoids inventing that threading here instead.
-    current_value_indent: usize,
-    /// The line the clause currently being stepped starts at -- **`SIGL`'s**
-    /// own value, one control transfer away from being read, and the exact
-    /// analogue of `current_value_indent` just above: `resolve_and_run_call`
-    /// (`CALL`, and `ExprKind::Call`'s expression form through `eval_call`,
-    /// `eval.rs`) and `SIGNAL`'s own two `step` arms all need "which line is
-    /// this transfer's own", and `eval_call` reaches `resolve_and_run_call`
-    /// from arbitrarily deep inside an expression tree with no `source`/
-    /// `instruction` of its own to compute it from -- threading either
-    /// through `eval`/`eval_node`'s entire recursive call graph is exactly
-    /// the "every arm in `eval.rs`" retrofit `current_value_indent`'s own
-    /// doc comment already declined for the identical reason. Set
-    /// unconditionally by `step_in_temps_frame`, via `clause_line`, which
-    /// honours `clause_line_override` the same way `clause_site` does -- so
-    /// a `SIGNAL`/`CALL` fired from inside an `INTERPRET` fragment reads the
-    /// *enclosing* `INTERPRET` clause's own line, matching the oracle's own
-    /// `RexxActivation::signalTo`, read directly: an interpret-created
-    /// activation delegates a `SIGNAL` to its parent rather than setting
-    /// `SIGL` itself, so what ends up in `SIGL` is the parent's own
-    /// currently-executing instruction -- the `INTERPRET` clause -- and this
-    /// field reproduces that observable answer without this crate adopting
-    /// the C++ architecture that produces it (`run_fragment` still runs
-    /// inside the creating activation, not a nested one of its own).
-    current_clause_line: usize,
-}
-
 /// The interpreter. Owns the heap, the root set, the activation stack, the
 /// plan cache and the two sinks, and **does not own the AST**.
 struct Interp {
@@ -1449,10 +1366,7 @@ impl Interp {
             plans: HashMap::new(),
             out: Vec::new(),
             trace: Vec::new(),
-            clause_state: ClauseState {
-                current_value_indent: 0,
-                current_clause_line: 0,
-            },
+            clause_state: ClauseState::new(),
             pending_trap: None,
             active_condition: None,
             next_activation_id: 0,
