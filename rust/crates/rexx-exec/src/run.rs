@@ -4576,8 +4576,9 @@ impl Interp {
                 // boundaries fires first delivers at the same line. With
                 // `in_clause` there is no half to remove -- the mutation
                 // "keep the line, drop the boundary" is not expressible, and
-                // dropping both is what `a_until_retest_reports_the_end_
-                // clauses_line` fails on.
+                // dropping both is what `a_while_retest_belongs_to_the_do_
+                // clause_then_to_the_end_clause` and `a_loop_retest_after_
+                // an_iterate_belongs_to_the_iterate_clause` fail on.
                 let tested = self.in_clause(code, until_line, |it| {
                     it.eval_condition(
                         code,

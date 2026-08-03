@@ -86,16 +86,27 @@
 //!   `debug_assert` covers, and it covers it by behaviour rather than by
 //!   type: it fires only when such a site is actually reached with a
 //!   condition waiting.
-//! * **`run.rs` can reset the whole state to its zero value** --
-//!   `self.clause_state = ClauseState::new()` compiles, because `Interp::new`
-//!   needs `ClauseState::new` to be `pub(crate)` and Rust visibility cannot
-//!   grant that to `lib.rs` while withholding it from `lib.rs`'s other
-//!   children. What it *cannot* do any more is set the line to an arbitrary
-//!   value: `ClauseState` is no longer `Copy`, the line field is private, and
-//!   the save/restore `resolve_and_run_call` needs goes through
-//!   [`SavedClauseState`], which can only put back a value some `in_clause`
-//!   produced. So the reachable spellings are `in_clause` and "reset to line
-//!   0", and the second one is loud in its own right (`SIGL` 0 is not a line).
+//! * **What this module has to expose to its own legitimate callers is also
+//!   what a caller could misuse, and that is not closed by a type the way
+//!   the "two halves came apart" family above is.** `self.clause_state =
+//!   ClauseState::new()` compiles, because `Interp::new` needs
+//!   `ClauseState::new` to be `pub(crate)` and Rust visibility cannot grant
+//!   that to `lib.rs` while withholding it from `lib.rs`'s other children --
+//!   that reset is loud in its own right (`SIGL` 0 is not a line).
+//!   `save_clause_state`/`restore_clause_state` are `pub(crate)` for the
+//!   same reason, so `resolve_and_run_call` can put a callee's caller state
+//!   back after the callee returns; nothing stops `run.rs` from restoring a
+//!   *stale* [`SavedClauseState`] at a moment other than the one it was
+//!   taken from, which sets a nonzero line with no boundary attached at
+//!   that moment -- measured: builds, passes clippy, and passes all 296 lib
+//!   tests, undetected. `deliver_pending_trap` is `pub(crate)` for the
+//!   mirror reason (a failed clause's own boundary runs from
+//!   `offer_to_trap`, not from `in_clause`), and nothing in the type system
+//!   stops it running a boundary paired with no line set at all. **This is
+//!   what is reachable through this module's own `pub(crate)` surface
+//!   today, not a proof that nothing else is** -- the property behind all
+//!   three is that a function this module must expose for one legitimate
+//!   caller is a function every other `pub(crate)` caller can also reach.
 
 use crate::run::Flow;
 use crate::{Code, Ended, Failure, Interp, ObjRef};
@@ -246,7 +257,16 @@ impl SavedClauseState {
 /// could pass `None` and silently drop the rooting -- measured, that
 /// mutation panicked `a live value` under collect-on-every-allocation while
 /// clippy and all 970 tests stayed green. Here the value comes from the
-/// closure's own return type, so the site cannot choose.
+/// closure's own return type, which narrows the *shape* a site can hand
+/// back -- but does not decide the question by itself. A site can still
+/// compute the `Flow` inside the closure, write it to a captured
+/// `&mut Option<Flow>`, and return `Ok(())`, landing on `ClauseValue for
+/// ()` and dropping the rooting the same way `Completed(None)` did:
+/// measured, build 0, clippy 0, all 296 lib tests green, and it is
+/// `a_clause_value_survives_the_handler_its_boundary_runs`
+/// (`tests/collect_stress.rs`) that catches it, panicking `a live value`.
+/// The type narrows what a site can return; that test is what actually
+/// pins the rooting.
 pub(crate) trait ClauseValue {
     /// The value to root across a delivered handler, if any.
     fn rooted(&self) -> Option<ObjRef>;
