@@ -425,7 +425,11 @@ Run: `cargo test -p rexx-exec`, then `REXX_CORPUS_GATE=1 cargo test -p rexx-exec
 
 - [ ] **Step 7: Add the deep-nesting program to the 4a corpus subset**
 
-It has no 4b construct in it, so it belongs in `phase-4a.txt` -- it pins a rule 4a should always have had.
+It has no 4b construct in it -- 25 nested `DO`s around a failing clause -- so it belongs in `phase-4a.txt` rather than `phase-4b.txt`. It pins a rule 4a should always have had.
+
+**This is an authorised plan amendment, and it takes two edits, not one.** `phase_4a_subset_matches_the_committed_list` (`tests/coverage.rs:514`) asserts the file against the `EXPECTED_SUBSET` literal (`:481`), and its message says adding or removing a line "is a plan amendment, and must change both the file and this list together, so a line cannot be silently dropped or silently added". Change both in the same commit. Do not widen or delete the assertion.
+
+Expect the corpus figure to move from `30 of 30` to `31 of 31`. Confirm the new program is genuinely **compared** and not merely counted: append a program you know diverges, check the report names it, then revert. Task 1 established that pattern after finding that a count moving by one does not by itself prove the new slot was exercised.
 
 - [ ] **Step 8: Amend the KNOWN GAP row, add a DEVIATIONS or fixed-defect note for the cap, commit**
 
