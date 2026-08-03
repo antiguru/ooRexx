@@ -1037,6 +1037,17 @@ struct Interp {
     /// The first property makes the condition reach its activation; the
     /// second stops it reaching anyone else's.
     ///
+    /// **"Every clause" means every clause, and that took a third go**
+    /// (fix round 2's NEW 5). The check lives in `run.rs`'s
+    /// `clause_boundary`, which is called from both -- and only both -- of
+    /// the places that step a clause: `run_activation`'s loop and
+    /// `run_bounded`'s. `run_bounded` is where a `DO` body, a `WHEN`/`THEN`
+    /// body and an `INTERPRET` fragment execute, so while the rule lived in
+    /// `run_activation` alone it did not hold for any clause inside one of
+    /// those, and three oracle probes said so. The two callers are the two
+    /// callers of `step_in_temps_frame`, which is what makes "every clause"
+    /// checkable rather than aspirational.
+    ///
     /// One slot rather than a queue, which is what the oracle's own
     /// behaviour describes: measured, a condition raised while a `CALL ON`
     /// handler is running is dropped rather than delivered after the handler

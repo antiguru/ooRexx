@@ -689,27 +689,14 @@ impl Interp {
             // runs the handler at that `return bb()` clause's own boundary
             // and we ran it never.
             //
-            // **Placed before the `match` rather than repeated inside two of
-            // its arms**, which is the difference between fixing the defect
-            // and fixing its two instances: there is now no path at all
-            // between "the clause finished" and this check, so a third `Flow`
-            // arm that returns cannot reintroduce it. It is also the honest
-            // reading of what a clause boundary *is* -- `Flow::Return` means
-            // the clause was a `RETURN`, not that the clause did not happen.
-            if self.pending_trap.is_some() {
-                // `flow` may carry an `ObjRef` whose one-clause temps frame
-                // `step_in_temps_frame` has already popped, and the handler
-                // below runs a whole nested activation that allocates. Rooted
-                // across it rather than reasoned about: the same window the
-                // `Exit` arm's own comment describes, but now with arbitrary
-                // user code inside it instead of a straight line to
-                // `exit_code_for`.
-                if let Flow::Return(Some(value)) | Flow::Exit(Some(value)) = &flow {
-                    self.roots.push_temp(*value);
-                }
-                if let Some(ended) = self.deliver_pending_trap(&code)? {
-                    return Ok(ended);
-                }
+            // Placed before the `match` rather than repeated inside two of
+            // its arms, so no `Flow` arm can skip it: `Flow::Return` means
+            // the clause *was* a `RETURN`, not that the clause did not
+            // happen. `clause_boundary` is the rule itself, shared with
+            // `run_bounded` -- see its own doc comment for why both callers
+            // are needed and why there are exactly two.
+            if let Some(ended) = self.clause_boundary(&code, &flow)? {
+                return Ok(ended);
             }
             match flow {
                 Flow::Next => self.activation_mut().pc += 1,
@@ -2496,6 +2483,39 @@ impl Interp {
     /// Measured: a handler that itself calls a routine raising the same
     /// condition does not re-enter, and the program then carries on
     /// normally rather than running the handler a second time later.
+    /// One Rexx clause has just finished: run a `CALL ON` handler waiting on
+    /// this activation, if there is one.
+    ///
+    /// **The whole delivery rule, in one function, called from every place
+    /// that steps a clause** -- and there are exactly two, which is what
+    /// makes that checkable rather than aspirational: `run_activation`'s loop
+    /// and `run_bounded`'s are the only callers of `step_in_temps_frame` in
+    /// the crate. A clause inside a `DO` body, a `WHEN`/`THEN` body or an
+    /// `INTERPRET` fragment is stepped only by the second, so a rule applied
+    /// only in the first is a rule that does not hold for any of them (fix
+    /// round 2's NEW 5, three oracle DIFFs).
+    ///
+    /// Returns `Some` only when the handler itself ended the program; both
+    /// callers forward that outward in their own return type.
+    ///
+    /// **The rooting is part of the rule and not of either caller.** `flow`
+    /// may carry an `ObjRef` whose one-clause temps frame
+    /// `step_in_temps_frame` has already popped, and the handler below runs a
+    /// whole nested activation that allocates. Measured rather than reasoned
+    /// about: with the `push_temp` deleted, a `Flow::Return` and a
+    /// `Flow::Exit` program each panic on `a live value` under
+    /// collect-on-every-allocation, and with it they pass through 70-79 real
+    /// collections.
+    fn clause_boundary(&mut self, code: &Code<'_>, flow: &Flow) -> Result<Option<Ended>, Failure> {
+        if self.pending_trap.is_none() {
+            return Ok(None);
+        }
+        if let Flow::Return(Some(value)) | Flow::Exit(Some(value)) = flow {
+            self.roots.push_temp(*value);
+        }
+        self.deliver_pending_trap(code)
+    }
+
     fn deliver_pending_trap(&mut self, code: &Code<'_>) -> Result<Option<Ended>, Failure> {
         // Only the activation whose trap table matched delivers, and only
         // once it is running again -- `PendingTrap::activation`'s own doc
@@ -2534,6 +2554,18 @@ impl Interp {
         // cleared.
         let mut raised = Raised::condition(condition_name(&pending.condition));
         raised.rc = pending.rc.clone();
+        // **Saved and restored, not cleared** (fix round 2's NEW 1). Round 1
+        // set this back to `None` when the handler returned, which is right
+        // only when nothing was active before -- and one clause can queue a
+        // `CALL ON` condition *and* raise a `SIGNAL ON`-trapped one, so a
+        // `SIGNAL` handler can be running when a `CALL` handler is delivered
+        // inside it. Measured: `zq = sub() + 1/0` under both traps, with the
+        // `SIGNAL` handler ending in `raise propagate`, is the original 42.3
+        // at rc 214 on the oracle; clearing to `None` gave 98.918 at rc 158,
+        // and never clearing at all gave silence at rc 0. Restoring gives the
+        // oracle's answer in all three measured shapes, the "nothing was
+        // active, restore `None`" one included.
+        let enclosing = self.active_condition.take();
         self.active_condition = Some(ActiveCondition {
             raised,
             site: None,
@@ -2545,30 +2577,45 @@ impl Interp {
         if let Some(trap) = removed {
             self.activation_mut().traps.insert(key, trap);
         }
-        match ended? {
+        match ended {
             // The handler returned; execution resumes at the clause after
             // the one that finished.
             //
-            // **And the condition stops being active here** (fix round 1).
-            // A `RAISE PROPAGATE` after this point has nothing to re-raise:
-            // measured, `call sub` (trapped, handler returns) followed by
-            // `raise propagate` is `98.918` at rc 158, where leaving
-            // `active_condition` set gave silence at rc 0.
+            // **And the enclosing condition comes back here** (fix round 1,
+            // corrected by round 2). A `RAISE PROPAGATE` after this point
+            // must see whatever was active *before* this handler ran, which
+            // is `None` in the common case -- measured, `call sub` (trapped,
+            // handler returns) followed by `raise propagate` is `98.918` at
+            // rc 158, where leaving this handler's own condition in place
+            // gave silence at rc 0 -- and is a real condition when a `SIGNAL`
+            // handler is running around it. See the `take` above.
             //
             // **Only on this arm, which is the measured half.** A `SIGNAL ON`
             // handler that runs on -- `SIGNAL`s to another label and then
             // propagates -- must still find the original condition, also
             // measured (both interpreters re-raise the original 42.3 at rc
-            // 214). So the clearing belongs to the point a *call* handler
+            // 214). So the restore belongs to the point a *call* handler
             // returns, not to handlers in general, and `offer_to_trap`
             // deliberately has no equivalent.
-            Ended::Returned(_) => {
-                self.active_condition = None;
+            Ok(Ended::Returned(_)) => {
+                self.active_condition = enclosing;
                 Ok(None)
             }
+            // The handler failed rather than returned. The restore is the
+            // same: whatever an outer trap goes on to do, this handler's own
+            // condition is finished, and leaving it in place would make a
+            // later `PROPAGATE` re-raise it. Unmeasured -- no probe
+            // constructs a failing `CALL ON` handler under an outer trap --
+            // and done this way because the alternative is the state the
+            // arm above exists to prevent, not because a transcript says so.
+            Err(failure) => {
+                self.active_condition = enclosing;
+                Err(failure)
+            }
             // `EXIT` inside the handler ends the program, exactly as it does
-            // inside any other called routine.
-            Ended::Exited(value) => Ok(Some(Ended::Exited(value))),
+            // inside any other called routine. Nothing will read
+            // `active_condition` again, so it is left as it is.
+            Ok(Ended::Exited(value)) => Ok(Some(Ended::Exited(value))),
         }
     }
 
@@ -3844,7 +3891,27 @@ impl Interp {
         let mut pc = start;
         while pc < end {
             let instruction = &code.body.instructions[pc];
-            match self.step_in_temps_frame(code, pc, instruction, source)? {
+            let flow = self.step_in_temps_frame(code, pc, instruction, source)?;
+            // The clause boundary, exactly as `run_activation`'s own loop
+            // applies it -- fix round 2's NEW 5. A clause inside a `DO` body,
+            // a `WHEN`/`THEN` body or an `INTERPRET` fragment is stepped
+            // *here* and nowhere else, so a check only in `run_activation`
+            // deferred every such clause's pending handler to the boundary of
+            // the whole enclosing instruction. Measured, `call sub` then
+            // `say` inside a two-iteration `DO`: the oracle runs the handler
+            // after the `call` on both passes and we ran it once, after the
+            // `END`.
+            if let Some(ended) = self.clause_boundary(code, &flow)? {
+                // `run_bounded` answers in `Flow`, so the one outcome
+                // `clause_boundary` reports -- the handler itself exited --
+                // travels as `Flow::Exit`, which this function already
+                // forwards outward unchanged through its catch-all.
+                let Ended::Exited(value) = ended else {
+                    unreachable!("clause_boundary reports only Ended::Exited")
+                };
+                return Ok(Flow::Exit(value));
+            }
+            match flow {
                 Flow::Next => pc += 1,
                 Flow::Goto(target) if target >= start && target <= end => pc = target,
                 other => return Ok(other),
@@ -5809,74 +5876,87 @@ fn raised_select_no_when() -> Raised {
 ///
 /// **Three outcomes, all measured, and 4a never had to know about two of them
 /// because `RAISE` is the first construct that lets a program name an
-/// arbitrary error number.** Fix round 1's finding 5: this used to parse the
-/// text and use whatever fell out, which produced a `<no message N.M in the
-/// catalogue>` placeholder on the user's stderr for an unknown code, an
-/// unrelated catalogue entry at rc 25 for `999`, and -- worst -- `Error 0` at
-/// **rc 0** for a non-numeric argument, a report on stderr beside a
-/// successful exit status.
+/// arbitrary error number.**
 ///
 /// ```text
 /// raise syntax 40.4       -> 40.4       the catalogue entry
 /// raise syntax 40         -> 40.0       ditto, major line only (sub 0)
 /// raise syntax 40.001     -> 40.1       ".001" is the integer 1
+/// raise syntax '4E1'      -> 40.0       each half is a Rexx number, not an int literal
+/// raise syntax '40.1E2'   -> 98.941     found "40100"
 /// raise syntax 40.10      -> 98.941     found "40010"
 /// raise syntax 1          -> 98.941     found "1.0"
 /// raise syntax 3.5        -> 98.941     found "3005"
-/// raise syntax 0 / 100 / 999 / 'abc'  -> 33.904
+/// raise syntax 0 / 100 / 999 / 'abc' / 40.1000 / '40.'  -> 33.904
 /// ```
 ///
-/// **The major must be 1..=99**; anything else -- including a non-number and
-/// zero -- is `33.904`, "Incorrect expression result following SYNTAX keyword
-/// of RAISE instruction", rc 223. Measured at the boundary: `99` is accepted
-/// (it renders `(99, 0)`, "Translation error"), `100` is 33.904, and so are
-/// `0`, `0.5` and `'abc'`.
+/// **The major must be 1..=99 and the sub 0..=999**; anything else -- a
+/// non-number, zero, `100`, `40.1000` -- is `33.904`, "Incorrect expression
+/// result following SYNTAX keyword of RAISE instruction", rc 223. Both bounds
+/// measured at their boundary: `99` is accepted and `100` is not, `40.999` is
+/// accepted and `40.1000` is not.
 ///
-/// **The sub is the digits after the point read as a plain integer**, not as
-/// a fraction: `.4` is 4, `.001` is 1, `.10` is 10, `.912` is 912. Measured
-/// through `raise syntax 40.001`, which renders `(40, 1)`.
+/// **Each half is a Rexx number, not a Rust integer literal** (fix round 2's
+/// NEW 4). `Number::parse` then `whole_value` is what the oracle's own
+/// `RexxString::numberValue` does, and it is observable: `'4E1'` is major 40,
+/// and `'40.1E2'` has sub 100. A decimal point with nothing after it is
+/// rejected outright, where no decimal point at all means sub 0 -- measured,
+/// `raise syntax '40.'` is 33.904 and `raise syntax 40` is the `(40, 0)`
+/// entry.
+///
+/// **The sub is the digits after the point as a number in their own right**,
+/// not as a fraction: `.4` is 4, `.001` is 1, `.10` is 10. Measured through
+/// `raise syntax 40.001`, which renders `(40, 1)`.
 ///
 /// **A well-formed pair the catalogue does not know is `98.941`**, rc 158,
 /// and its own `&1` is the *composed* number `major * 1000 + sub` -- except
 /// when the catalogue has no `(major, 0)` entry at all, where it is the
 /// original `major.sub`. Measured: `40.10` gives `"40010"` and `3.5` gives
-/// `"3005"`, while `1` gives `"1.0"` and `2.1` gives `"2.1"`. That is not a
-/// rule fitted to two odd rows -- majors 1 and 2 are the only ones in 1..=99
-/// with no `(major, 0)` entry in the generated catalogue, confirmed by
-/// looking them up, so "the major itself is unknown" and "the major is known
-/// but this sub is not" really are the two cases, and they render
-/// differently.
+/// `"3005"`, while `1` gives `"1.0"` and `2.1` gives `"2.1"`.
+///
+/// That exception is the oracle's own structure rather than a curve fit, and
+/// the re-review confirmed it in the C++: `createExceptionObject` raises
+/// 98.941 with a dot-formatted substitution when the *primary* message is
+/// missing, `buildMessage` raises it with the integer form when only the
+/// *secondary* is. Two call sites, two forms. The branch below asks
+/// `lookup(major, 0)`, which is exactly "is the primary message there".
+///
+/// **How many majors take the dot form is not two.** An earlier version of
+/// this comment said majors 1 and 2 were the only ones in 1..=99 with no
+/// `(major, 0)` entry; counted from the generated catalogue there are 45 (1,
+/// 2, 12, 32, 50-87, 94, 95, 96). The code was never wrong -- it looks the
+/// major up rather than hard-coding a pair -- but the claim was asserted
+/// from two probes rather than counted, which is the error the round it
+/// appeared in was supposed to be about.
 fn raise_syntax_condition(text: &[u8], additional: Vec<String>) -> Raised {
+    /// One half of the argument as a Rexx number: `numberValue`, then a
+    /// whole-number check. `None` for anything that is not a whole number,
+    /// which the caller turns into 33.904.
+    fn whole(text: &str) -> Option<i64> {
+        Number::parse(text)?.whole_value(rexx_num::DEFAULT_DIGITS as usize)
+    }
+
     let text = String::from_utf8_lossy(text);
-    let (major_text, sub_text) = match text.split_once('.') {
-        Some((major, sub)) => (major, sub),
-        None => (text.as_ref(), ""),
-    };
-    // `u32` rather than `u16` for the sub: `raise syntax 40.99999` must reach
-    // the "unknown code" answer rather than wrap into a code that happens to
-    // exist, and the composed number below can exceed `u16` besides.
-    let major: Option<u32> = major_text.parse().ok();
-    let sub: Option<u32> = if sub_text.is_empty() {
-        Some(0)
-    } else {
-        sub_text.parse().ok()
+    let (major, sub) = match text.split_once('.') {
+        // A decimal point with an empty tail is rejected rather than read as
+        // zero: `'40.'` is 33.904 where `40` is the `(40, 0)` entry.
+        Some((_, "")) => return Raised::syntax(33, 904, Vec::new()),
+        Some((major, sub)) => (whole(major), whole(sub)),
+        None => (whole(text.as_ref()), Some(0)),
     };
     let (Some(major), Some(sub)) = (major, sub) else {
         return Raised::syntax(33, 904, Vec::new());
     };
-    if !(1..=99).contains(&major) {
+    if !(1..=99).contains(&major) || !(0..=999).contains(&sub) {
         return Raised::syntax(33, 904, Vec::new());
     }
-    // Narrowing is safe under the guard above; the sub is checked by the
-    // catalogue lookup, which a too-wide value simply misses.
-    let narrow = u16::try_from(sub).ok();
-    if let Some(narrow) = narrow
-        && rexx_inventory::errors::lookup(major as u16, narrow).is_some()
-    {
-        return Raised::syntax(major as u16, narrow, additional);
+    // Both bounds are checked above, so neither narrowing can lose anything.
+    let (major, sub) = (major as u16, sub as u16);
+    if rexx_inventory::errors::lookup(major, sub).is_some() {
+        return Raised::syntax(major, sub, additional);
     }
-    let found = if rexx_inventory::errors::lookup(major as u16, 0).is_some() {
-        (major * 1000 + sub).to_string()
+    let found = if rexx_inventory::errors::lookup(major, 0).is_some() {
+        (u32::from(major) * 1000 + u32::from(sub)).to_string()
     } else {
         format!("{major}.{sub}")
     };
@@ -11484,10 +11564,28 @@ mod tests {
             (&b"99"[..], (99, 0), None),
             (&b"40.10"[..], (98, 941), Some("40010")),
             (&b"3.5"[..], (98, 941), Some("3005")),
-            // Majors 1 and 2 are the only ones in range with no `(major, 0)`
-            // catalogue entry, and they render the original `major.sub`.
+            // A major with no `(major, 0)` catalogue entry renders the
+            // original `major.sub` instead of the composed number. There are
+            // 45 such majors in 1..=99, not the two an earlier version of
+            // this comment claimed -- `50.1` below is one of the others, and
+            // is here so the row set does not accidentally describe a
+            // two-element special case.
             (&b"1"[..], (98, 941), Some("1.0")),
             (&b"2.1"[..], (98, 941), Some("2.1")),
+            (&b"50.1"[..], (98, 941), Some("50.1")),
+            (&b"87"[..], (98, 941), Some("87.0")),
+            // Fix round 2's NEW 2: the sub is bounded at 1000, and the
+            // boundary is what pins it -- `40.999` is a well-formed unknown
+            // code and `40.1000` is not a code at all.
+            (&b"40.999"[..], (98, 941), Some("40999")),
+            (&b"40.1000"[..], (33, 904), None),
+            (&b"40.99999"[..], (33, 904), None),
+            // Fix round 2's NEW 4: each half is a Rexx number, and a bare
+            // decimal point is not one.
+            (&b"'4E1'"[..], (40, 0), None),
+            (&b"'40.1E2'"[..], (98, 941), Some("40100")),
+            (&b"'40.'"[..], (33, 904), None),
+            (&b"'+40'"[..], (40, 0), None),
             (&b"0"[..], (33, 904), None),
             (&b"100"[..], (33, 904), None),
             (&b"999"[..], (33, 904), None),
@@ -11525,5 +11623,105 @@ mod tests {
                 String::from_utf8_lossy(argument)
             );
         }
+    }
+
+    // ---- fix round 2: the clause boundary inside nested bodies ----
+
+    /// **Fix round 2's NEW 5.** A clause inside a `DO` body reaches its own
+    /// boundary, not the `END`'s. Both iterations must see the handler's
+    /// value, and `SIGL` must be the `call sub` clause's line (4), not the
+    /// `say`'s.
+    ///
+    /// While the delivery check lived only in `run_activation`'s loop this
+    /// printed `NOMARK` on both passes and `HANDLER-AT 5` once, after the
+    /// loop -- wrong in timing and in `SIGL`. `run_bounded` is where a loop
+    /// body's clauses are actually stepped.
+    #[test]
+    fn a_pending_trap_is_delivered_inside_a_do_body() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call on user foo name uh\nzmark = 'NOMARK'\ndo i = 1 to 2\ncall sub\nsay 'after call' i 'mark=' zmark\nend\nsay 'end mark=' zmark\nexit\nsub:\nraise user foo return 'SV'\nuh:\nzmark = 'HANDLER-AT' sigl\nreturn\n",
+            ),
+            b"after call 1 mark= HANDLER-AT 4\nafter call 2 mark= HANDLER-AT 4\nend mark= HANDLER-AT 4\n".to_vec()
+        );
+    }
+
+    /// The same property for the other two constructs `run_bounded` serves:
+    /// a `WHEN`'s body and an `INTERPRET` fragment. Three callers, one rule
+    /// -- and all three were wrong together, which is what made this a
+    /// mechanism rather than a `DO` quirk.
+    #[test]
+    fn a_pending_trap_is_delivered_inside_a_when_body_and_a_fragment() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call on user foo name uh\nzmark = 'NOMARK'\nselect\nwhen 1 = 1 then do\ncall sub\nsay 'in when mark=' zmark\nend\notherwise nop\nend\nsay 'end mark=' zmark\nexit\nsub:\nraise user foo return 'SV'\nuh:\nzmark = 'HANDLER-AT' sigl\nreturn\n",
+            ),
+            b"in when mark= HANDLER-AT 5\nend mark= HANDLER-AT 5\n".to_vec()
+        );
+
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call on user foo name uh\nzmark = 'NOMARK'\ninterpret \"call sub; say 'inside mark=' zmark\"\nsay 'end mark=' zmark\nexit\nsub:\nraise user foo return 'SV'\nuh:\nzmark = 'HANDLER-AT' sigl\nreturn\n",
+            ),
+            b"inside mark= HANDLER-AT 3\nend mark= HANDLER-AT 3\n".to_vec()
+        );
+    }
+
+    /// **Fix round 2's NEW 1.** A `CALL ON` handler can be delivered while a
+    /// `SIGNAL ON` handler is already running -- one clause can queue the
+    /// first and raise the second -- and when it returns, the condition it
+    /// interrupted must come back.
+    ///
+    /// `zq = sub() + 1/0` does both: `sub` queues a trapped `USER`
+    /// condition, then `1/0` raises a trapped `SYNTAX` one. The `SYNTAX`
+    /// handler ends in `raise propagate`, which must re-raise **42.3**.
+    /// Round 1 set `active_condition = None` when the call handler returned
+    /// and got `98.918`; before round 1 nothing was cleared and it was
+    /// silence at rc 0. Both interpreters agree on the delivery order (`UH`
+    /// then `SH`), so the assertion isolates to the propagate.
+    #[test]
+    fn a_call_handler_restores_the_condition_it_interrupted() {
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"signal on syntax name sh\ncall on user foo name uh\nzq = sub() + 1/0\nsay 'not reached'\nexit\nsub:\nraise user foo return 'SV'\nuh:\nsay 'UH ran' sigl\nreturn\nsh:\nsay 'SH ran' sigl\nraise propagate\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!(
+            (raised.number, raised.sub),
+            (42, 3),
+            "the SYNTAX condition the SIGNAL handler is running for, not the \
+             USER one the CALL handler was delivered with, and not 98.918"
+        );
+        assert_eq!(interp.out, b"UH ran 3\nSH ran 3\n".to_vec());
+    }
+
+    /// The adjacent case, which is what keeps the restore from being a
+    /// disguised "never clear": with nothing active before the handler ran,
+    /// the restore puts `None` back and a later `RAISE PROPAGATE` is
+    /// `98.918`. Round 1's own test for this still passes unchanged --
+    /// `a_returned_call_handler_leaves_no_active_condition_to_propagate` --
+    /// and this comment exists so the pair is findable from either side.
+    #[test]
+    fn restoring_none_is_still_the_common_case() {
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"call on user foo name uh\ncall sub\nraise propagate\nexit\nsub:\nraise user foo return 'SV'\nuh:\nsay 'UH ran'\nreturn\n",
+        )
+        .unwrap_err();
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (98, 918));
     }
 }
