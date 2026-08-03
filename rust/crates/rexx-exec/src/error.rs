@@ -152,6 +152,24 @@ impl Raised {
         Raised::syntax(44, 1, vec![String::from_utf8_lossy(name).into_owned()])
     }
 
+    /// 16.1: `SIGNAL`/`SIGNAL VALUE` named a target that matches no label in
+    /// the running activation's own body. `name` is the resolved target's
+    /// own bytes -- already upcased for a bare symbol, verbatim for a quoted
+    /// literal or a `SIGNAL VALUE` expression's rendered text.
+    ///
+    /// **No fallback exists, unlike `CALL`'s own builtin/external search**:
+    /// a `SIGNAL` target is only ever a label, so this is the oracle's real
+    /// answer and not a placeholder for a table a later phase owns. Measured
+    /// in a clean directory: `signal nowhere` gives rc 240 and
+    /// `Label "NOWHERE" not found.`; `signal "sub"` (quoted, lowercase) with
+    /// `sub:` present gives the same error naming `"sub"` verbatim, because
+    /// the label itself is stored upcased and a quoted target is matched
+    /// case-sensitively rather than upcased on the way in -- `signal Sub`
+    /// (a bare, mixed-case symbol) and `signal "SUB"` both resolve.
+    pub(crate) fn label_not_found(name: &[u8]) -> Raised {
+        Raised::syntax(16, 1, vec![String::from_utf8_lossy(name).into_owned()])
+    }
+
     /// 17.1: a `PROCEDURE` that is not the first instruction executed after
     /// an internal `CALL` or function invocation. No substitutions.
     ///

@@ -63,28 +63,34 @@
 //! `Call::Dynamic` are both in scope from Task 3; `Call::Qualified` is
 //! genuinely Phase 5's (a namespace-qualified `CALL`, mirroring `ExprKind::
 //! QualifiedCall`'s own ownership); `Call::Trap` (`CALL ON`/`CALL OFF`) and
-//! `Signal::Trap` (`SIGNAL ON`/`SIGNAL OFF`) are not in scope until Task 7,
-//! after `Signal::Value`/`Signal::Label` already are (Task 6). A single
+//! `Signal::Trap` (`SIGNAL ON`/`SIGNAL OFF`) is not in scope until Task 7;
+//! `Signal::Value`/`Signal::Label` moved together, Task 6. A single
 //! `"Call"`/`"Signal"` witness row cannot survive that: the moment Task 3
 //! implements `Call::Named`, the witness naming it has to be deleted, and a
 //! single shared row would take `Call::Qualified` and `Call::Trap`'s own
 //! loudness coverage down with it, with nothing left to catch that `CALL
-//! ON`/`CALL OFF` and `CALL ns:name` are still unimplemented.
+//! ON`/`CALL OFF` and `CALL ns:name` are still unimplemented. Task 6 is the
+//! same shape for `Signal`: once `Label`/`Value` landed, the combined
+//! `"Signal"` row (covering both at once, since they moved in scope
+//! together) had to go, leaving `"Signal::Trap"` alone to catch that
+//! `SIGNAL ON`/`SIGNAL OFF` still is not.
 //!
-//! So `INSTRUCTION_WITNESSES` below carries **one row per arm** for the two
-//! split variants -- `"Call::Named"`, `"Call::Dynamic"`, `"Call::Qualified"`,
-//! `"Call::Trap"`, and `"Signal"` (still combined, for `Value`/`Label`
-//! together, since both move in scope in the same task) plus `"Signal::
-//! Trap"` -- rather than the coarse `"Call"`/`"Signal"` `assert_constructs`
-//! would otherwise check against. [`instruction_arm`] is what resolves a
-//! witness's tag against the program it parses: the coarse `owners::
-//! instruction_tag` for every variant except these two, and the inner arm's
-//! own name for them. [`assert_witness_set_is_complete`]'s own expected set
-//! is built the same way, through [`expand_for_witnesses`] -- a hand-
-//! maintained expansion of `owners.rs`'s coarse tag list, the same "pin it
-//! as a literal, not as whatever the code currently computes" device
-//! `EXPECTED_OUT_OF_SCOPE` already uses one level up, because nothing here
-//! can enumerate `rexx_parse::Call`'s/`Signal`'s own arms at compile time.
+//! So `INSTRUCTION_WITNESSES` below carries **one row per still-loud arm**
+//! for the two split variants -- `"Call::Qualified"` and `"Call::Trap"`
+//! (`Call::Named`/`Call::Dynamic` moved in scope at Task 3 and their own
+//! rows went with them) plus `"Signal::Trap"` (`Signal::Label`/`Signal::
+//! Value` moved in scope together at Task 6, the combined row going with
+//! them the same way) -- rather than the coarse `"Call"`/`"Signal"`
+//! `assert_constructs` would otherwise check against. [`instruction_arm`]
+//! is what resolves a witness's tag against the program it parses: the
+//! coarse `owners::instruction_tag` for every variant except these two, and
+//! the inner arm's own name for them. [`assert_witness_set_is_complete`]'s
+//! own expected set is built the same way, through [`expand_for_witnesses`]
+//! -- a hand-maintained expansion of `owners.rs`'s coarse tag list, the same
+//! "pin it as a literal, not as whatever the code currently computes"
+//! device `EXPECTED_OUT_OF_SCOPE` already uses one level up, because
+//! nothing here can enumerate `rexx_parse::Call`'s/`Signal`'s own arms at
+//! compile time.
 //!
 //! # Witness programs
 //!
@@ -137,7 +143,8 @@ fn instruction_arm(kind: &InstructionKind) -> String {
         },
         InstructionKind::Signal(s) => match &**s {
             rexx_parse::Signal::Trap(_) => "Signal::Trap".to_string(),
-            rexx_parse::Signal::Value(_) | rexx_parse::Signal::Label(_) => "Signal".to_string(),
+            rexx_parse::Signal::Label(_) => "Signal::Label".to_string(),
+            rexx_parse::Signal::Value(_) => "Signal::Value".to_string(),
         },
         other => instruction_tag(other).0.to_string(),
     }
@@ -157,7 +164,11 @@ fn expand_for_witnesses(coarse: &'static str) -> Vec<&'static str> {
         // shrink with them. The coarse tag stays phase-owned in `owners.rs`
         // because `Call::Trap` is still 4b's.
         "Call" => vec!["Call::Qualified", "Call::Trap"],
-        "Signal" => vec!["Signal", "Signal::Trap"],
+        // One, not two: Task 6 implemented `Signal::Label` and `Signal::
+        // Value` together, so the combined `"Signal"` row is gone. The
+        // coarse tag stays phase-owned in `owners.rs` because `Signal::
+        // Trap` is still 4b's own, owed to Task 7.
+        "Signal" => vec!["Signal::Trap"],
         other => vec![other],
     }
 }
@@ -179,18 +190,26 @@ enum Category {
     Expr,
 }
 
-/// Every out-of-scope `InstructionKind`, one witness each. **20 entries**, one
-/// per `Owner::Phase` arm after `Call` and `Signal` expand -- 18 coarse
+/// Every out-of-scope `InstructionKind`, one witness each. **17 entries**, one
+/// per `Owner::Phase` arm after `Call` and `Signal` expand -- 16 coarse
 /// phase-owned tags in `INSTRUCTION_TAGS` above, of which `Call` becomes two
-/// rows and `Signal` two, so 18 + 1 + 1 = 20. (Review finding M1: this line
-/// said "19 entries" and, before that, "20", both of which counted the coarse
-/// tags while describing the expanded list. The two numbers are different
-/// quantities and the arm-grained section of the module doc above is where the
-/// distinction is set out. It is 20 again now for a different reason, which is
-/// exactly why the two quantities have to be named apart.)
+/// rows and `Signal` becomes one, so 14 + 2 + 1 = 17. (Review finding M1: this
+/// line said "19 entries" and, before that, "20", both of which counted the
+/// coarse tags while describing the expanded list -- the two numbers are
+/// different quantities and the arm-grained section of the module doc above
+/// is where the distinction is set out. **This line itself then went stale
+/// the identical way a second time**: Task 5 moved `Procedure` and `Use` in
+/// scope, shrinking the coarse count from 18 to 16, and nothing here followed
+/// -- it sat at "20 entries -- 18 coarse" through Tasks 4 and 5 while
+/// `assert_witness_set_is_complete`'s own copy of this same arithmetic, a few
+/// dozen lines down, was correctly kept at 16/18. Task 6 fixes both numbers
+/// here together with `Signal`'s own new count, rather than leaving the
+/// coarse-count drift for whoever next has reason to read this line
+/// carefully.)
 ///
-/// 20 coarse tags until 4b's Task 1 implemented `INTERPRET` and deleted its
-/// row -- pinned item 4 in `owners.rs`'s own list: a witness for a variant that
+/// 16 coarse tags since 4b's Task 5 moved `Procedure` and `Use` in scope (18
+/// after Task 3's `Return`, 19 after Task 1's `Interpret`, 20 at the 4a gate)
+/// -- pinned item 4 in `owners.rs`'s own list: a witness for a variant that
 /// moved in scope must be *deleted*, not left stale, or
 /// `assert_witness_set_is_complete` fails the other way.
 /// `assert_witness_set_is_complete` checks the two lists against each other so
@@ -230,16 +249,11 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
     // measured, and `exec_procedure`'s doc has the four-shape table -- so
     // keeping the row would assert a loud failure that correctly no longer
     // happens.
-    // ---- `Signal`, arm-grained (Step 2) for `Trap` only: `Value`/`Label`
-    // both move in scope in the same task (6), so they stay one row; `Trap`
-    // (`SIGNAL ON`/`SIGNAL OFF`) does not move until Task 7 -- see the
-    // module doc ----
-    Witness {
-        tag: "Signal",
-        owner: "4b",
-        source: "signal there\nthere: nop\n",
-        category: Category::Instruction,
-    },
+    // **No combined `Signal` row since 4b's Task 6.** `Signal::Label` and
+    // `Signal::Value` moved into scope together (`owners.rs`'s own
+    // `INSTRUCTION_TAGS`), the same shape Task 3 gave `Call::Named`/
+    // `Call::Dynamic` above -- only `Trap` (`SIGNAL ON`/`SIGNAL OFF`)
+    // remains, owed to Task 7, and its own row is the one below.
     Witness {
         tag: "Signal::Trap",
         owner: "4b",
@@ -463,14 +477,16 @@ fn walk_exprs<'a>(kind: &'a InstructionKind, f: &mut impl FnMut(&'a rexx_parse::
 
 #[test]
 fn assert_witness_set_is_complete() {
-    // `flat_map(expand_for_witnesses)`, not a bare `.map`: `Call` and
-    // `Signal` each expand to more than one expected tag (Step 2, the
-    // module doc's "Arm-grained ownership"). 16 coarse phase-owned
-    // `InstructionKind` tags since 4b's Task 5 moved `Procedure` and `Use`
-    // in scope (18 after Task 3's `Return`, 19 after Task 1's `Interpret`,
-    // 20 at the 4a gate); `Call`'s one row becomes two (`Qualified`/`Trap`,
-    // its other two arms being Task 3's) and `Signal`'s one becomes two
-    // (`Signal`/`Signal::Trap`), net +1 +1, so 18 expected witness tags.
+    // `flat_map(expand_for_witnesses)`, not a bare `.map`: `Call` (still)
+    // and `Signal` (again, since Task 6) each expand to more than one
+    // expected tag (Step 2, the module doc's "Arm-grained ownership"). 16
+    // coarse phase-owned `InstructionKind` tags since 4b's Task 5 moved
+    // `Procedure` and `Use` in scope (18 after Task 3's `Return`, 19 after
+    // Task 1's `Interpret`, 20 at the 4a gate); `Call`'s one row becomes two
+    // (`Qualified`/`Trap`, its other two arms being Task 3's) and `Signal`'s
+    // one becomes **one** (`Signal::Trap` alone, `Label`/`Value` being
+    // Task 6's, down from two before this task), net +1 +0, so 17 expected
+    // witness tags.
     let expected_instructions: Vec<&str> = INSTRUCTION_TAGS
         .iter()
         .filter(|(_, o)| matches!(o, Owner::Phase(_)))
@@ -486,7 +502,7 @@ fn assert_witness_set_is_complete() {
          InstructionKind variant (per arm, for Call/Signal), no more and no \
          fewer"
     );
-    assert_eq!(expected_instructions.len(), 18);
+    assert_eq!(expected_instructions.len(), 17);
 
     let expected_exprs: Vec<&str> = EXPR_TAGS
         .iter()

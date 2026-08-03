@@ -1,0 +1,41 @@
+count 40
+/* SIGNAL to a label and SIGNAL VALUE (4b Task 6), under trace r throughout,
+   like call_return.rex.
+
+   `signal past_loop` fires on the loop's *first* pass, deliberately: a
+   second pass through this `DO i = 1 TO 3` would retrace two further `>>>`
+   lines this crate does not yet reproduce (the documented "KNOWN GAP" at
+   run.rs's own `loop_advance`, `LoopState::Controlled` arm -- unrelated to
+   SIGNAL and out of this task's scope). A witness that reached a second
+   pass would be pinning that gap's own wrong output rather than SIGNAL's,
+   exactly the trap interpret_error_echo.rex's own header already names for
+   a different construct.
+
+   What this program's differential run pins: SIGNAL unwinds the DO
+   unconditionally (the loop's own later iterations and the clause right
+   after END never run), the SIGNAL clause itself traces with no `>>>` line
+   (it produces nothing, unlike CALL's dynamic form or RETURN with a value),
+   SIGNAL VALUE traces its own `>K>   "VALUE" => text` line before searching
+   the label table with the rendered text, and an unresolved target is Error
+   16.1 at rc 240, which ends the program -- so it comes last, after every
+   successful transfer is already demonstrated (the same shape
+   interpret_error_echo.rex uses for its own single failing block). */
+trace r
+say 'before nested do'
+do i = 1 to 3
+  if i = 1 then signal past_loop
+  say 'looping i=' i
+end
+say 'not reached, the do never completes'
+past_loop:
+say 'past the loop, i=' i
+
+target = 'PAST_VALUE'
+signal value target
+say 'not reached, value form jumps too'
+
+past_value:
+say 'value form landed'
+
+signal nowhere
+say 'not reached'

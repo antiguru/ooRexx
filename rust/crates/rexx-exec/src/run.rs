@@ -179,6 +179,41 @@ enum Flow {
     /// one that matches its own label but is not a loop is 28.5, not simply
     /// "not mine, keep looking").
     Iterate(Option<SymbolId>, LeaveOrigin),
+    /// `SIGNAL label` and `SIGNAL VALUE`, once the target resolves to an
+    /// instruction index. Live since 4b's Task 6.
+    ///
+    /// **A distinct variant from `Goto`, and that is not merely for
+    /// clarity.** `Goto`'s own contract (`run_bounded`'s doc comment) is "in
+    /// range for the body currently being stepped", which is exactly wrong
+    /// for `SIGNAL`: the target always resolves against the running
+    /// *activation's* own body (`resolve_signal_target`, mirroring
+    /// `resolve_and_run_call`'s identical fix for `CALL`, `run.rs:2153-
+    /// 2154`), and inside an `INTERPRET` fragment that body is a completely
+    /// different `Code` from the one `run_fragment` is stepping. A bare
+    /// `Flow::Goto(target)` there would have `run_fragment`'s own
+    /// `run_bounded(&code, 0, fragment.len())` range-check `target` against
+    /// the *fragment's* own tiny index space -- coincidental overlap is the
+    /// common case, not the exception, since both index spaces start at 0 --
+    /// and a match would silently resume stepping the fragment's own
+    /// unrelated instruction at that position instead of escaping to the
+    /// real target. Measured: `interpret "signal there"` reaches an
+    /// enclosing `there:` (the report has the transcript), which only holds
+    /// if nothing along the way can mistake the escaping jump for one of its
+    /// own.
+    ///
+    /// **Nesting inside `DO`/`LOOP` or `IF` needs no equivalent care**, a
+    /// fact worth recording because it looks like it should: `rexx-parse`
+    /// already rejects a label written inside either (47.2, 47.3, measured),
+    /// so a `SIGNAL` target can never sit strictly inside a range
+    /// `run_bounded` is currently absorbing a `Goto` into. Reusing `Goto`
+    /// there would very likely have worked by construction; it is the
+    /// fragment boundary alone that cannot tolerate it.
+    ///
+    /// Forwarded exactly like `Exit`/`Return` by every `run_bounded`/
+    /// `do_body_outcome`/`leave_select`/`run_fragment` catch-all -- nothing
+    /// in any of those needed its own arm for it -- and consumed only by
+    /// `run_activation`'s own top-level dispatch, the same way `Goto` is.
+    Signal(usize),
 }
 
 /// How one activation finished, which is not the same question as what value
@@ -618,6 +653,14 @@ impl Interp {
             match flow {
                 Flow::Next => self.activation_mut().pc += 1,
                 Flow::Goto(target) => self.activation_mut().pc = target,
+                // `SIGNAL`, once its target has escaped every nested
+                // construct and every `INTERPRET` fragment it fired from
+                // (`Flow::Signal`'s own doc comment has why it cannot ride
+                // `Goto` to get here). The only consumer, matching `Goto`'s
+                // own arm exactly: `target` already resolved against this
+                // activation's own body (`resolve_signal_target`), which is
+                // exactly the body `code` above is bound to.
+                Flow::Signal(target) => self.activation_mut().pc = target,
                 Flow::Exit(value) => return Ok(Ended::Exited(value)),
                 // The activation boundary `Flow::Return` was added to reach.
                 // Every construct between the `RETURN` and here forwarded it
@@ -1614,6 +1657,46 @@ impl Interp {
                 Ok(Flow::Return(value))
             }
 
+            // `SIGNAL label` and `SIGNAL VALUE`. `Signal::Trap` (`SIGNAL
+            // ON`/`SIGNAL OFF`) stays loud, Task 7's own owner
+            // (`instruction_owner`, `lib.rs`).
+            InstructionKind::Signal(signal) => match &**signal {
+                // `name` is already upcased for a bare symbol and verbatim
+                // for a quoted one (`rexx-parse`'s own `Signal` doc), and
+                // **both forms search the label table** -- unlike `CALL
+                // "name"`, which never does, because `SIGNAL` has no
+                // builtin/external fallback for a literal spelling to
+                // deliberately bypass into. Measured: `signal "sub"` with
+                // `sub:` present still raises 16.1 (case-sensitive against
+                // the label's own upcased spelling, so the lowercase quoted
+                // form does not match), while `signal Sub` (bare, mixed
+                // case) and `signal "SUB"` both run it.
+                rexx_parse::Signal::Label(name) => {
+                    let target = self.resolve_signal_target(name)?;
+                    Ok(Flow::Signal(target))
+                }
+                // `SIGNAL VALUE expr`. Its own `>K>` -- `"VALUE" => text`, at
+                // this clause's own indent with no `+2` the way `WHILE`/
+                // `UNTIL` carry (measured one `DO` deep: `signal value
+                // target` traces `>K>     "VALUE" => "THERE"` at the same
+                // indent as its own clause echo, unlike those two, which are
+                // evaluated as part of the *enclosing* `DO`/`LOOP`'s own
+                // step). The rendered text is then searched exactly like
+                // `Label`'s own bytes, with **no shape check on the value at
+                // all** -- measured, a number, an empty string and an
+                // ordinary non-label string all raise 16.1 naming that exact
+                // text, none of them a different error.
+                rexx_parse::Signal::Value(expr) => {
+                    let value = self.eval(code, expr)?;
+                    self.roots.push_temp(value);
+                    let text = self.to_text(value).to_vec();
+                    self.trace_keyword(self.current_value_indent, "VALUE", &text);
+                    let target = self.resolve_signal_target(&text)?;
+                    Ok(Flow::Signal(target))
+                }
+                rexx_parse::Signal::Trap(_) => Err(Loud::instruction(&instruction.kind).into()),
+            },
+
             // `PROCEDURE`, bare or with an `EXPOSE` list (D9r). Isolates the
             // callee's variable pool and aliases the exposed names back into
             // the pool they came from. See `exec_procedure`.
@@ -2082,6 +2165,37 @@ impl Interp {
                 let (stem_name, key) = name.split_at(dot + 1);
                 self.stem_set(stem_name, key, value);
             }
+        }
+    }
+
+    /// Resolves a `SIGNAL`/`SIGNAL VALUE` target against the running
+    /// *activation's* own body -- not `code.body`, which differs inside an
+    /// `INTERPRET` fragment (whose own `labels` is always empty, a label in
+    /// interpreted text being 47.1). Mirrors `resolve_and_run_call`'s
+    /// identical fix for `CALL`, immediately below (`run.rs:2153-2154` in
+    /// the tree this task started from) -- found there by running the
+    /// composition rather than reading the code, and true of `SIGNAL` for
+    /// the same reason: measured, `interpret "signal there"` reaches an
+    /// enclosing `there:`, and `call sub` into `sub:` containing `signal
+    /// caller_label` reaches a label back in the caller's own text, because
+    /// at this phase every internal `CALL` target shares its caller's exact
+    /// body (no `::routine` directive gives it one of its own yet) -- not
+    /// because `SIGNAL` reaches across an activation boundary on its own.
+    ///
+    /// **No fallback, unlike `CALL`'s builtin/external search.** A `SIGNAL`
+    /// target is only ever a label; the oracle's own answer when nothing
+    /// matches is Error 16.1, and this crate can raise it directly rather
+    /// than deferring to a later phase's table the way `resolve_and_run_
+    /// call`'s own unresolved-name path has to.
+    fn resolve_signal_target(&self, name: &[u8]) -> Result<usize, Failure> {
+        let program = Rc::clone(&self.activation().program);
+        let selector = self.activation().body;
+        let Some(activation_body) = body_of(&program, selector) else {
+            return Err(Loud::missing_body().into());
+        };
+        match activation_body.labels.get(name) {
+            Some(target) => Ok(*target),
+            None => Err(Raised::label_not_found(name).into()),
         }
     }
 
@@ -5148,45 +5262,63 @@ mod tests {
             symbols: &program.symbols,
             slots: &HashMap::new(),
         };
-        match interp.run_bounded(
-            &code,
-            0,
-            code.body.instructions.len(),
-            Some(&program.source),
-        )? {
-            Flow::Next => Ok(None),
-            Flow::Exit(value) => Ok(value),
-            Flow::Goto(_) => {
-                unreachable!("run_bounded never escapes a top-level program's own [0, len) range")
+        // A loop rather than one `run_bounded` call, since 4b's Task 6:
+        // `Flow::Signal` escapes all the way to here exactly like
+        // `run_activation`'s own real dispatch (that variant's own doc
+        // comment) and has to resume stepping from its own target instead of
+        // ending the test program -- the one thing this miniature could not
+        // do as a single call, since nothing here tracks a real `pc` the way
+        // an activation does. Every other arm below still fires at most
+        // once, unchanged from before this loop wrapped them.
+        let mut start = 0;
+        loop {
+            match interp.run_bounded(
+                &code,
+                start,
+                code.body.instructions.len(),
+                Some(&program.source),
+            )? {
+                Flow::Next => return Ok(None),
+                Flow::Exit(value) => return Ok(value),
+                Flow::Goto(_) => {
+                    unreachable!(
+                        "run_bounded never escapes a top-level program's own [0, len) range"
+                    )
+                }
+                // `run_activation`'s own top-level conversion for this
+                // variant is `self.activation_mut().pc = target`; nothing
+                // here tracks a real `pc`, so resuming `run_bounded` from
+                // `target` is the identical effect.
+                Flow::Signal(target) => start = target,
+                // A miniature of `run_activation`'s own top-level conversion
+                // (its doc comment on the same two arms has the full argument):
+                // nothing anywhere in this test program's own body consumed
+                // the `LEAVE`/`ITERATE`, so it becomes the exhausted-search
+                // error, at whatever residual indent the search's own walk
+                // back up already left in `origin`.
+                Flow::Leave(name, origin) => {
+                    interp.record_leave_failure(&origin);
+                    let raised = match name {
+                        None => raised_leave_no_loop(),
+                        Some(n) => raised_leave_no_match(code.symbols.name(n).as_bytes()),
+                    };
+                    return Err(raised.into());
+                }
+                Flow::Iterate(name, origin) => {
+                    interp.record_leave_failure(&origin);
+                    let raised = match name {
+                        None => raised_iterate_no_loop(),
+                        Some(n) => raised_iterate_no_match(code.symbols.name(n).as_bytes()),
+                    };
+                    return Err(raised.into());
+                }
+                // The main body's own `RETURN`, with no active call: it ends the
+                // program with its value, exactly like `EXIT`, which is what
+                // `Interp::run` does with `Ended::Returned` at the top too.
+                // Measured: `say 'a'` / `return 5` / `say 'b'` prints `a` and
+                // exits 5.
+                Flow::Return(value) => return Ok(value),
             }
-            // A miniature of `run_activation`'s own top-level conversion
-            // (its doc comment on the same two arms has the full argument):
-            // nothing anywhere in this test program's own body consumed
-            // the `LEAVE`/`ITERATE`, so it becomes the exhausted-search
-            // error, at whatever residual indent the search's own walk
-            // back up already left in `origin`.
-            Flow::Leave(name, origin) => {
-                interp.record_leave_failure(&origin);
-                let raised = match name {
-                    None => raised_leave_no_loop(),
-                    Some(n) => raised_leave_no_match(code.symbols.name(n).as_bytes()),
-                };
-                Err(raised.into())
-            }
-            Flow::Iterate(name, origin) => {
-                interp.record_leave_failure(&origin);
-                let raised = match name {
-                    None => raised_iterate_no_loop(),
-                    Some(n) => raised_iterate_no_match(code.symbols.name(n).as_bytes()),
-                };
-                Err(raised.into())
-            }
-            // The main body's own `RETURN`, with no active call: it ends the
-            // program with its value, exactly like `EXIT`, which is what
-            // `Interp::run` does with `Ended::Returned` at the top too.
-            // Measured: `say 'a'` / `return 5` / `say 'b'` prints `a` and
-            // exits 5.
-            Flow::Return(value) => Ok(value),
         }
     }
 
@@ -8283,6 +8415,335 @@ mod tests {
             "the unupcased value must not match the upcased label: {failure:?}"
         );
         assert!(interp.out.is_empty(), "the label must not have run");
+    }
+
+    /// `SIGNAL` out of a `DO`, landing on a label past it. Unlike `LEAVE`,
+    /// there is no search and no name to match -- every enclosing construct
+    /// is abandoned unconditionally, so the loop's own later iterations
+    /// never happen and neither does the clause right after `END`.
+    ///
+    /// **Fires on the loop's first pass, deliberately** -- a second pass
+    /// through a `Controlled` (`TO`-style) `DO`/`LOOP` retraces two further
+    /// `>>>` lines this crate does not yet reproduce (the documented "KNOWN
+    /// GAP" at `loop_advance`'s own `Controlled` arm, unrelated to `SIGNAL`
+    /// and out of this task's scope), and a witness that reached a second
+    /// pass would be asserting that gap's own wrong output rather than
+    /// `SIGNAL`'s. Measured (source with a leading `trace r` clause, every
+    /// line number then decremented by one to match `run_source_traced`'s
+    /// own externally-set mode -- `current_value_indent_is_restored_after_a_
+    /// nested_expression_call`'s own doc comment has the transformation):
+    /// the `SIGNAL` clause itself traces with no `>>>` line, unlike `CALL`'s
+    /// dynamic form or `RETURN` with a value, because it produces nothing.
+    #[test]
+    fn signal_unwinds_a_nested_do_and_lands_on_its_label() {
+        let mut interp = Interp::new();
+        run_source_traced(
+            &mut interp,
+            b"say 'before'\n\
+              do i = 1 to 3\n\
+              \x20 if i = 1 then signal there\n\
+              \x20 say 'i=' i\n\
+              end\n\
+              say 'after loop, not reached'\n\
+              exit\n\
+              there:\n\
+              say 'reached there'\n",
+        )
+        .expect("the program runs");
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* say 'before'\n\
+              \x20      >>>   \"before\"\n\
+              \x20    2 *-* do i = 1 to 3\n\
+              \x20      >K>   \"TO\" => \"3\"\n\
+              \x20    3 *-*   if i = 1 \n\
+              \x20      >>>     \"1\"\n\
+              \x20    3 *-*     then\n\
+              \x20    3 *-*       signal there\n\
+              \x20    8 *-* there:\n\
+              \x20    9 *-* say 'reached there'\n\
+              \x20      >>>   \"reached there\"\n"
+                .to_vec()
+        );
+        assert_eq!(interp.out, b"before\nreached there\n".to_vec());
+    }
+
+    /// A `SIGNAL` target that matches no label in the running activation's
+    /// own body is Error 16.1, "Label not found" -- unlike `CALL`'s own
+    /// unresolved name, which still has a builtin/external fallback to defer
+    /// to (`resolve_and_run_call`'s own doc), `SIGNAL` has none, so this is
+    /// the oracle's real answer and not a loud gap.
+    #[test]
+    fn signal_to_an_undefined_label_raises_16_1() {
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"say 'before'\nsignal nowhere\nsay 'not reached'\n",
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                &failure,
+                Failure::Raised(raised)
+                    if raised.number == 16
+                        && raised.sub == 1
+                        && raised.additional == vec!["NOWHERE".to_string()]
+            ),
+            "expected 16.1 naming \"NOWHERE\", got {failure:?}"
+        );
+        assert_eq!(
+            interp.out,
+            b"before\n".to_vec(),
+            "the clause after SIGNAL must not run"
+        );
+    }
+
+    /// A quoted `SIGNAL` target searches the label table -- unlike a quoted
+    /// `CALL` target, which never does at all (`a_quoted_call_name_never_
+    /// reaches_the_label_table`, above) -- but case-sensitively against the
+    /// label's own upcased spelling, so a lowercase quoted spelling still
+    /// misses and raises 16.1 naming the verbatim quoted text, rather than
+    /// taking `CALL`'s own loud 4c fallback. A bare symbol is upcased at
+    /// parse time regardless of its own case, and an uppercase quoted
+    /// spelling matches for the same reason a lowercase one does not.
+    #[test]
+    fn a_quoted_signal_label_searches_case_sensitively_unlike_a_quoted_call() {
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"signal \"sub\"\nsay 'not reached'\nsub:\nsay 'reached'\n",
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                &failure,
+                Failure::Raised(raised)
+                    if raised.number == 16
+                        && raised.sub == 1
+                        && raised.additional == vec!["sub".to_string()]
+            ),
+            "expected 16.1 naming the verbatim quoted text \"sub\": {failure:?}"
+        );
+
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"signal Sub\nsay 'not reached'\nsub:\nsay 'reached'\n"
+            ),
+            b"reached\n".to_vec(),
+            "a bare, mixed-case symbol is upcased at parse time and matches"
+        );
+
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"signal \"SUB\"\nsay 'not reached'\nsub:\nsay 'reached'\n"
+            ),
+            b"reached\n".to_vec(),
+            "the uppercase quoted spelling matches -- it is the case, not the quoting"
+        );
+    }
+
+    /// The composition nobody had measured: `SIGNAL` from inside a called
+    /// routine, targeting a label written back in the *caller's* own text.
+    ///
+    /// **It reaches, and that is not `SIGNAL` crossing an activation
+    /// boundary on its own.** At this phase every internal `CALL` target
+    /// shares its caller's exact body and label table (`resolve_and_run_
+    /// call`'s own D9r comment: no `::routine` directive gives a callee one
+    /// of its own yet), so `resolve_signal_target`'s "search the running
+    /// activation's own body" finds `caller_label:` from inside `sub` for
+    /// the mundane reason that `sub`'s own body *is* the caller's. Measured
+    /// against the oracle rather than assumed, per this phase's own method.
+    ///
+    /// **And it never returns to the original `CALL`'s own next clause.**
+    /// `SIGNAL`, unlike `RETURN`, never pops the activation it fires in --
+    /// so once the label's own code runs out of further instructions, the
+    /// *callee's* activation falls off the end, which ends the whole
+    /// program (`Ended::Exited`'s own doc comment), not merely the call.
+    #[test]
+    fn signal_from_a_called_routine_reaches_a_label_in_the_shared_body_and_never_returns() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call sub\n\
+                  say 'after call, not reached'\n\
+                  exit\n\
+                  \n\
+                  sub:\n\
+                  say 'in sub'\n\
+                  signal caller_label\n\
+                  say 'sub not reached'\n\
+                  return\n\
+                  \n\
+                  caller_label:\n\
+                  say 'caller label reached'\n",
+            ),
+            b"in sub\ncaller label reached\n".to_vec()
+        );
+    }
+
+    /// `SIGNAL` out of an `INTERPRET` fragment reaches an enclosing label --
+    /// unlike `LEAVE`/`ITERATE`, whose own search stops dead at the fragment
+    /// boundary (`run_fragment`'s own doc comment has that transcript
+    /// table), `SIGNAL` is forwarded like `Exit`/`Return` because it is a
+    /// new `Flow` variant with no arm of its own at that boundary
+    /// (`Flow::Signal`'s own doc comment). Measured (source with a leading
+    /// `trace r` clause, lines decremented by one to match `run_source_
+    /// traced`, as above): the fragment's own clause echoes at the enclosing
+    /// `INTERPRET`'s line, then control resumes at the enclosing label's own
+    /// line, exactly like `interpret "call sub"` already does for `CALL`.
+    #[test]
+    fn signal_escapes_an_interpret_fragment_to_reach_an_enclosing_label() {
+        let mut interp = Interp::new();
+        run_source_traced(
+            &mut interp,
+            b"say 'before'\n\
+              interpret \"signal there\"\n\
+              say 'not reached'\n\
+              exit\n\
+              there:\n\
+              say 'reached there'\n",
+        )
+        .expect("the program runs");
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* say 'before'\n\
+              \x20      >>>   \"before\"\n\
+              \x20    2 *-* interpret \"signal there\"\n\
+              \x20      >>>   \"signal there\"\n\
+              \x20    2 *-* signal there\n\
+              \x20    5 *-* there:\n\
+              \x20    6 *-* say 'reached there'\n\
+              \x20      >>>   \"reached there\"\n"
+                .to_vec()
+        );
+        assert_eq!(interp.out, b"before\nreached there\n".to_vec());
+    }
+
+    /// The failure twin of the test above: a `SIGNAL` inside an `INTERPRET`
+    /// fragment that matches no label reports **both** clauses, innermost
+    /// first, each carrying the enclosing `INTERPRET`'s own line -- the same
+    /// shape `run_fragment`'s own doc comment tables for `LEAVE`/`ITERATE`,
+    /// now measured for `SIGNAL` too.
+    #[test]
+    fn signal_to_an_undefined_label_inside_a_fragment_reports_both_clauses() {
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"say 'before'\ninterpret \"signal nowhere\"\nsay 'not reached'\n",
+        )
+        .unwrap_err();
+        assert!(matches!(
+            &failure,
+            Failure::Raised(raised) if raised.number == 16 && raised.sub == 1
+        ));
+        let sealed: Vec<(usize, Vec<u8>)> = interp
+            .failure_sites
+            .iter()
+            .chain(interp.failure_site.iter())
+            .map(|s| (s.line, s.text.clone()))
+            .collect();
+        assert_eq!(
+            sealed,
+            vec![
+                (2, b"signal nowhere".to_vec()),
+                (2, b"interpret \"signal nowhere\"".to_vec()),
+            ]
+        );
+        assert_eq!(interp.out, b"before\n".to_vec());
+    }
+
+    /// `SIGNAL VALUE`'s own `>K>` line -- `"VALUE" => text`, at the clause's
+    /// own indent with no extra `+2` the way `WHILE`/`UNTIL` carry, since
+    /// nothing here is evaluated as part of an *enclosing* instruction's own
+    /// step the way a loop's condition is. Measured one `DO` deep (lines
+    /// decremented by one as above): once traced, the rendered value is
+    /// searched exactly like a bare `SIGNAL label`'s own bytes.
+    #[test]
+    fn signal_value_traces_its_own_keyword_line_and_then_searches_like_label() {
+        let mut interp = Interp::new();
+        run_source_traced(
+            &mut interp,
+            b"target = 'THERE'\n\
+              do i = 1 to 1\n\
+              \x20 signal value target\n\
+              end\n\
+              say 'not reached'\n\
+              exit\n\
+              there:\n\
+              say 'reached, one do deep'\n",
+        )
+        .expect("the program runs");
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* target = 'THERE'\n\
+              \x20      >>>   \"THERE\"\n\
+              \x20    2 *-* do i = 1 to 1\n\
+              \x20      >K>   \"TO\" => \"1\"\n\
+              \x20    3 *-*   signal value target\n\
+              \x20      >K>     \"VALUE\" => \"THERE\"\n\
+              \x20    7 *-* there:\n\
+              \x20    8 *-* say 'reached, one do deep'\n\
+              \x20      >>>   \"reached, one do deep\"\n"
+                .to_vec()
+        );
+        assert_eq!(interp.out, b"reached, one do deep\n".to_vec());
+    }
+
+    /// `SIGNAL VALUE`'s target gets **no shape check at all** before the
+    /// label search: a number, an empty string and an ordinary non-label
+    /// string all raise 16.1 naming that exact rendered text, none of them a
+    /// different error -- and the search is case-sensitive exactly like a
+    /// quoted `SIGNAL label`'s own (`a_quoted_signal_label_searches_case_
+    /// sensitively_unlike_a_quoted_call`, above), so a lowercase value does
+    /// not match a label stored upcased even under the identical spelling.
+    #[test]
+    fn signal_value_targets_that_match_no_label_all_raise_16_1_naming_the_rendered_text() {
+        for (expr, expected) in [
+            ("123", "123"),
+            ("''", ""),
+            ("'no such label'", "no such label"),
+        ] {
+            let mut interp = Interp::new();
+            let source = format!("target = {expr}\nsignal value target\nsay 'not reached'\n");
+            let failure = run_source(&mut interp, source.as_bytes()).unwrap_err();
+            assert!(
+                matches!(
+                    &failure,
+                    Failure::Raised(raised)
+                        if raised.number == 16
+                            && raised.sub == 1
+                            && raised.additional == vec![expected.to_string()]
+                ),
+                "{expr}: expected 16.1 naming {expected:?}, got {failure:?}"
+            );
+        }
+
+        let mut interp = Interp::new();
+        let failure = run_source(
+            &mut interp,
+            b"target = 'there'\n\
+              signal value target\n\
+              say 'not reached'\n\
+              exit\n\
+              there:\n\
+              say 'reached'\n",
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                &failure,
+                Failure::Raised(raised)
+                    if raised.number == 16
+                        && raised.sub == 1
+                        && raised.additional == vec!["there".to_string()]
+            ),
+            "a lowercase value must not match the upcased label THERE: {failure:?}"
+        );
     }
 
     /// The body selector's `Some(index)` half, which no execution path can

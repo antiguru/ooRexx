@@ -129,6 +129,12 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // instruction answering the right bytes and not a gap.
     InstructionKind::Procedure { .. } => ("Procedure", Owner::InScope),
     InstructionKind::Use(_) => ("Use", Owner::InScope),
+    // **Still `Phase("4b")` after Task 6 implemented `Signal::Label` and
+    // `Signal::Value`**, and that is not a stale label: this table is
+    // variant-grained, and `Signal::Trap` (`SIGNAL ON`/`SIGNAL OFF`) is
+    // still owed to 4b's own Task 7. `loud.rs` is where the arms are told
+    // apart -- see its `expand_for_witnesses`, which now expands this one
+    // tag to the single arm that still fails loudly rather than to both.
     InstructionKind::Signal(_) => ("Signal", Owner::Phase("4b")),
     InstructionKind::Raise(_) => ("Raise", Owner::Phase("4b")),
     InstructionKind::Push { .. } => ("Push", Owner::Phase("4b")),
