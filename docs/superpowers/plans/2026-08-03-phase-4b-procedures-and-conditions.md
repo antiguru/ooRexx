@@ -31,6 +31,11 @@ Every task's requirements implicitly include this section. **It is not extracted
 * **Never probe `select; when 1 = 0 then; when 2 = 2 then nop; end`.** It segfaults the oracle (upstream SF #2018).
 * **Beware Rexx literal syntax in probes.** A symbol named `x` or `b` immediately followed by a quoted string parses as a hex or binary literal, so `say '['x']'` is error 15.3, not concatenation. This cost a probe in planning. Use other names.
 * Scratch files go in the session scratchpad, never in the repository.
+* **Run every oracle probe from a fresh empty subdirectory of the scratchpad, not the scratchpad root.** The scratchpad is **on the oracle's external-routine search path**, and it holds hundreds of `.rex` files left by every agent across this phase and the last. A probe calling any name that does not resolve internally will find a stale file and run it.
+
+  Measured 2026-08-03, and it produced a confidently wrong answer before it was caught: `say "f"(1)` with an internal `f:` label reported **44.1 rc 212 "No data returned from function"** in the scratchpad root, because a leftover `f.rex` was found and executed -- its output appeared on stdout and went unexplained for one turn. The same program in a clean directory reports **43.1 rc 213 "Routine not found"**, which is the real answer. Different error number, different rc, different meaning.
+
+  This bites hardest on exactly the constructs 4b and 4c implement -- `CALL`, function calls, `::routine` resolution -- because those are what reach the external search. `mkdir` a fresh directory per probe session and `cd` into it.
 * **No `unsafe`.** The workspace sets `unsafe_code = "forbid"`. If a task appears to need it, stop and report BLOCKED.
 * **Never `git add -A`.** Stage the exact paths the task names. Do not run `git reset --hard`, do not force-push.
 * Comments state the contract at the top and the reasoning at the decision point. Never delete an existing comment to make a change easier. Prefer `--` over an em-dash. The "no structuring semicolons" rule does **not** apply to this repository; it was imported by mistake in 4a and withdrawn. Reviewers should not raise it.
@@ -655,7 +660,13 @@ If any moved, the site stack or the indent base is wrong. Do not adjust the expe
 
 **Why:** I25. `ExprKind::Call`'s owner string is `4b`, and the owner named is the phase after which the variant stops failing loudly *for some target*. Whichever sub-phase runs first builds the arm; 4b runs first.
 
-**Check `ExprKind::Call`'s own target field before writing the arm.** If it carries a target enum with forms owned by different phases, the same one-row-per-form treatment Task 0 gave `InstructionKind::Call` applies here, and the arm must fail loudly per form.
+**The target field is checked, and the answer changes what this task owes the owner tables.** `ExprKind::Call { target: CallTarget, args: Vec<Option<Expr>> }`, and `CallTarget` has exactly two forms -- `Symbol(SymbolId)` and `Literal(Box<[u8]>)` -- **both of which are 4b's**. There is no later-phase arm hiding inside it.
+
+That makes this variant unlike `InstructionKind::Call`, which keeps its out-of-scope tag because `Call::Trap` and `Call::Qualified` are still loud and carry their own arm-grained witness rows. **`ExprKind::Call` has no such survivor**, so this task moves it fully in scope: delete its loud witness rather than splitting it, tag it `None` in `tests/owners.rs`, update `EXPECTED_OUT_OF_SCOPE` and the pinned counts, and provide a witness program in a corpus subset or `every_in_scope_variant_is_witnessed_by_the_subsets` fails.
+
+**The two forms differ semantically and the difference is measured.** `CallTarget::Literal`'s own doc says it is never an internal label; confirmed on the oracle in a clean directory: `say "f"(1)` with an internal `f:` label present is **Error 43.1, rc 213, "Routine not found"**, while `say f(1)` runs the label and prints its value. So the literal form's 4b answer is the loud 4c/Phase 7 fallback, exactly as `CALL "SUB"` was in Task 3 -- do not wire it into the label table for symmetry.
+
+**Measure that yourself in a fresh empty directory.** The first attempt at this measurement was taken in the scratchpad root, found a leftover `f.rex` on the external-routine search path, ran it, and reported 44.1 rc 212 instead. See the probe rule in Global Constraints.
 
 **I25's split goes into `eval.rs`'s arm as a comment**, not only into `phase-4-exclusions.txt`. It is currently in the exclusions file and two test-file comments, and a 4c implementer reading `eval.rs` sees none of them. The comment says: internal routine first (4b), builtin second (4c), external third (Phase 7), and that a name reaching the fallback fails loudly naming `4c`.
 
