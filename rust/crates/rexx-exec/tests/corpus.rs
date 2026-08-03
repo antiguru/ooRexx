@@ -161,15 +161,23 @@
 //! normalisation cannot reach a unit test, since it lives only in this
 //! file's and `trace_oracle.rs`'s own comparison functions, so pinning
 //! them here is a matter of naming them rather than adding anything new:
-//! `one_two_and_three_enclosing_dos_indent_by_two_four_and_six` (precisely
-//! DEVIATION 0's own oracle-counter shape), `the_corrected_28x_indent_rule_
-//! matches_all_fourteen_probed_shapes`, and `an_absorbed_whencases_
-//! escaping_false_branch_reports_end_at_its_own_residual_indent`. **Not**
-//! `the_indent_after_a_loop_has_already_exited_is_not_left_over_from_it`:
-//! that one runs at top level, where the oracle's counter is already
-//! clamped at 0 and the correct and incorrect models agree, so it is not
-//! a witness for the gap this deviation carves out even though its own
-//! name suggests it is.
+//! `one_two_and_three_enclosing_dos_indent_by_two_four_and_six`,
+//! `the_corrected_28x_indent_rule_matches_all_fourteen_probed_shapes`, and
+//! `an_absorbed_whencases_escaping_false_branch_reports_end_at_its_own_
+//! residual_indent`. **Not** `the_indent_after_a_loop_has_already_exited_
+//! is_not_left_over_from_it`: that one runs at top level, where the
+//! oracle's counter is already clamped at 0 and the correct and incorrect
+//! models agree, so it is not a witness for the gap this deviation carves
+//! out even though its own name suggests it is.
+//!
+//! **None of the three pinned witnesses demonstrates the counter defect
+//! itself** (review round 1, I2) -- that requires a completed loop pass
+//! followed by a failing control test, and all three raise on a *first*
+//! iteration, before any pass completes and before the loop the failure
+//! sits inside ever ends. They are correct pinned witnesses for lexical
+//! nesting depth, which is what DEVIATION 0's own "must still fail"
+//! requirement asks for; nothing pinned here exercises the counter gap
+//! itself, and no claim to the contrary should be read into their names.
 
 mod support;
 

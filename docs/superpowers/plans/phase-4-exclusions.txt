@@ -133,14 +133,24 @@ DEVIATIONS -- permanent, chosen
      tests asserting an exact indent -- pinned by name rather than
      duplicated, since a unit test's own `assert_eq!` is outside either
      harness's comparison function and normalisation cannot reach it:
-     `one_two_and_three_enclosing_dos_indent_by_two_four_and_six` (precisely
-     this row's own oracle-counter shape), `the_corrected_28x_indent_rule_
-     matches_all_fourteen_probed_shapes`, and `an_absorbed_whencases_
-     escaping_false_branch_reports_end_at_its_own_residual_indent`. NOT
+     `one_two_and_three_enclosing_dos_indent_by_two_four_and_six`,
+     `the_corrected_28x_indent_rule_matches_all_fourteen_probed_shapes`, and
+     `an_absorbed_whencases_escaping_false_branch_reports_end_at_its_own_
+     residual_indent`. NOT
      `the_indent_after_a_loop_has_already_exited_is_not_left_over_from_it`:
      it runs at top level, where the oracle's counter is already clamped at
      0 and the correct and incorrect models agree, so it looks like a
      witness for this row's own gap and is not one.
+
+     NONE OF THE THREE PINNED WITNESSES DEMONSTRATES THE COUNTER DEFECT
+     ITSELF (review round 1, I2 -- an error introduced by this row's own
+     wording, not by the task that pinned the names). The defect needs a
+     completed loop pass followed by a failing control test; all three
+     pinned witnesses raise on a FIRST iteration, before any pass completes
+     and before the loop the failure sits inside ever ends. They are
+     correct witnesses for lexical nesting depth, which is what "must still
+     fail" above asks for -- nothing pinned anywhere exercises the counter
+     gap itself, and that is the honest state, not a further gap to close.
 
      WHAT THIS DOES NOT CLOSE. The re-tested pass's two missing >>> lines
      (the KNOWN GAP below) is a CONTENT difference -- lines absent, not lines

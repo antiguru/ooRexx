@@ -46,6 +46,43 @@
 //! and order of every line in `stderr`. A line with no known marker at
 //! that offset (a `SAY`, or an `error.rs::report` banner line such as
 //! `Error 42 running ... line 8:  ...`) is returned exactly as given.
+//!
+//! **A traced value can itself contain a raw newline, and a naive
+//! per-line scan gets fooled by it.** `trace.rs`'s `push_quoted` wraps a
+//! value in `"..."` with no escaping at all, so if the *value itself*
+//! contains a `0x0A` byte, splitting `stderr` on `\n` cuts that one
+//! logical record into two physical lines -- and the second one starts
+//! wherever the value's own bytes happened to leave off, which can by
+//! coincidence look exactly like a fresh trace line. Measured, not
+//! inferred (found by review): `trace i` then
+//! `x = '0a'x || "       >>>   z"` makes the oracle emit, among others,
+//! the physical line `       >>>   z"` on its own -- not a `>>>` record,
+//! but the tail of the *previous* record's own quoted value, which
+//! happens to place `>>>` at [`PREFIX_OFFSET`] purely by chance. Treating
+//! that as a fresh trace line and collapsing its leading run would alter
+//! bytes that are `push_quoted`'s own literal, unescaped value content --
+//! precisely the "value lines' CONTENT... stay byte-exact" guarantee
+//! DEVIATION 0's SCOPE paragraph promises.
+//!
+//! The fix is one bit of state, carried across lines in
+//! [`normalize_stderr`]: a genuine (marker-recognised) trace line whose
+//! own byte count of `"` is odd has opened a quote its own physical line
+//! did not close, so every following physical line is a raw continuation
+//! -- returned untouched and never itself eligible to open or close
+//! anything -- until a continuation line's own `"` count is odd in turn,
+//! closing it. This is exactly `push_quoted`/`push_quoted_tag`'s own
+//! pairing rule (open, then close, always in twos), so it tracks the
+//! format precisely for the case that matters here: a value with an
+//! embedded newline and no embedded quote character. A value that embeds
+//! a literal `"` instead (without a newline) still parses as a complete
+//! single-physical-line record, but can leave this count looking odd for
+//! a reason other than "unterminated"; the only failure mode that causes
+//! is a following genuine trace line being conservatively left
+//! un-normalised (a stricter comparison, never a looser one) -- it cannot
+//! make two genuinely different transcripts compare equal, which is the
+//! one property this module exists to guarantee. The oracle's own trace
+//! format has this same embedded-quote ambiguity; nothing here resolves
+//! it, only refuses to let it hide a divergence.
 
 /// `RexxActivation.cpp:3567`-`3587`'s `trace_prefix_table`, all nineteen --
 /// not only the ten this crate can emit yet. See the module doc for why
@@ -88,8 +125,11 @@ const PREFIX_LENGTH: usize = 3;
 
 /// Collapses the run of ASCII space bytes between a trace line's prefix
 /// marker and its content down to one canonical space, in every line of
-/// `stderr` that has a known marker at [`PREFIX_OFFSET`]. See the module
-/// doc for the full scope statement.
+/// `stderr` that has a known marker at [`PREFIX_OFFSET`] and is not
+/// itself the raw continuation of a value opened on an earlier physical
+/// line. See the module doc for the full scope statement, including the
+/// "a traced value can itself contain a raw newline" paragraph this
+/// continuation tracking exists for.
 ///
 /// Lines are split on `\n` and rejoined the same way, one at a time, so
 /// this can only reshape the inside of a line that already qualifies; it
@@ -104,11 +144,29 @@ pub fn normalize_stderr(bytes: &[u8]) -> Vec<u8> {
     }
 
     let mut out = Vec::with_capacity(bytes.len());
+    // True while a genuine trace line opened a `"` (`push_quoted`/
+    // `push_quoted_tag`) that its own physical line did not close --
+    // every line read in that state is a raw continuation of that
+    // value's own bytes, not a fresh record, so it is copied through
+    // untouched and cannot itself open or close anything. See the module
+    // doc for why only a *recognised* trace line, never an arbitrary
+    // line, is allowed to arm this.
+    let mut inside_open_quote = false;
     for (i, line) in lines.iter().enumerate() {
         if i > 0 {
             out.push(b'\n');
         }
-        out.extend_from_slice(&normalize_line(line));
+        if inside_open_quote {
+            out.extend_from_slice(line);
+            if has_odd_quote_count(line) {
+                inside_open_quote = false;
+            }
+        } else {
+            out.extend_from_slice(&normalize_line(line));
+            if is_trace_line(line) && has_odd_quote_count(line) {
+                inside_open_quote = true;
+            }
+        }
     }
     if had_trailing_newline {
         out.push(b'\n');
@@ -116,23 +174,38 @@ pub fn normalize_stderr(bytes: &[u8]) -> Vec<u8> {
     out
 }
 
-/// One line of [`normalize_stderr`]. Returns `line` untouched unless bytes
-/// `PREFIX_OFFSET..PREFIX_OFFSET + PREFIX_LENGTH` are one of
-/// [`TRACE_PREFIXES`], in which case the run of spaces immediately after
-/// the marker -- and *only* that first run, stopping at the first
-/// non-space byte -- is collapsed to exactly one space.
-fn normalize_line(line: &[u8]) -> Vec<u8> {
+/// Whether `line` has a recognised prefix marker at
+/// `PREFIX_OFFSET..PREFIX_OFFSET + PREFIX_LENGTH` -- shared between
+/// [`normalize_line`] (what to do with such a line) and
+/// [`normalize_stderr`] (whether such a line's own quote parity may arm
+/// the continuation tracking there).
+fn is_trace_line(line: &[u8]) -> bool {
     let marker_end = PREFIX_OFFSET + PREFIX_LENGTH;
-    if line.len() < marker_end {
+    line.len() >= marker_end
+        && TRACE_PREFIXES
+            .iter()
+            .any(|known| known.as_slice() == &line[PREFIX_OFFSET..marker_end])
+}
+
+/// Whether `line` contains an odd number of `"` bytes. `push_quoted`/
+/// `push_quoted_tag` (`trace.rs`) always emit `"` in a pair -- open, then
+/// close -- so a physical line carrying only one of the pair is exactly
+/// the signal that the value it belongs to continues onto the next
+/// physical line.
+fn has_odd_quote_count(line: &[u8]) -> bool {
+    line.iter().filter(|&&b| b == b'"').count() % 2 == 1
+}
+
+/// One line of [`normalize_stderr`], for a line already known not to be a
+/// continuation. Returns `line` untouched unless [`is_trace_line`], in
+/// which case the run of spaces immediately after the marker -- and
+/// *only* that first run, stopping at the first non-space byte -- is
+/// collapsed to exactly one space.
+fn normalize_line(line: &[u8]) -> Vec<u8> {
+    if !is_trace_line(line) {
         return line.to_vec();
     }
-    let marker = &line[PREFIX_OFFSET..marker_end];
-    if !TRACE_PREFIXES
-        .iter()
-        .any(|known| known.as_slice() == marker)
-    {
-        return line.to_vec();
-    }
+    let marker_end = PREFIX_OFFSET + PREFIX_LENGTH;
 
     let after_marker = &line[marker_end..];
     let space_run = after_marker.iter().take_while(|&&b| b == b' ').count();
@@ -261,6 +334,36 @@ mod tests {
             normalize_stderr(&base),
             normalize_stderr(&changed_value),
             "a changed value must not normalise away"
+        );
+    }
+
+    /// Negative control 4 -- the review-round-1 finding (I1). Real oracle
+    /// stderr, captured (not hand-written) from `trace i` /
+    /// `x = '0a'x || "       >>>   z"` (`'0a'x` is one raw byte, 0x0A):
+    /// the value's own embedded newline splits its `>O>`/`>>>`/`>=>`
+    /// records' quoted content across two physical lines each, and the
+    /// tail of each -- `       >>>   z"` -- lines up with `PREFIX_OFFSET`
+    /// exactly like a fresh `>>>` record purely by chance.
+    ///
+    /// `mutated` is `correct` with one space dropped from the *value's
+    /// own* continuation text after the `>O>` record specifically (`>>>
+    /// z"` instead of `>>>   z"`) -- the shape a real concatenation bug
+    /// would produce, entirely inside what `normalize_line` alone would
+    /// have mistaken for indentation on an unrelated fresh trace line.
+    /// Before the continuation-tracking fix, both collapsed that
+    /// coincidental run down to one space and compared equal; this must
+    /// keep failing.
+    #[test]
+    fn a_traced_values_own_embedded_newline_does_not_let_its_continuation_absorb_a_content_change()
+    {
+        let correct: &[u8] = b"     2 *-* x = '0a'x || \"       >>>   z\"\n       >L>   \"\n\"\n       >L>   \"       >>>   z\"\n       >O>   \"||\" => \"\n       >>>   z\"\n       >>>   \"\n       >>>   z\"\n       >=>   X <= \"\n       >>>   z\"\n";
+        let mutated: &[u8] = b"     2 *-* x = '0a'x || \"       >>>   z\"\n       >L>   \"\n\"\n       >L>   \"       >>>   z\"\n       >O>   \"||\" => \"\n       >>>  z\"\n       >>>   \"\n       >>>   z\"\n       >=>   X <= \"\n       >>>   z\"\n";
+        assert_ne!(correct, mutated, "sanity: byte-exact still differs");
+        assert_ne!(
+            normalize_stderr(correct),
+            normalize_stderr(mutated),
+            "a content change inside a value's own embedded-newline \
+             continuation must not normalise away"
         );
     }
 }
