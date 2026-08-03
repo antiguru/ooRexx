@@ -682,15 +682,6 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
 /// own doc for why this is a third copy of `owners.rs`'s `EXPR_TAGS` (there,
 /// `EXPR_TAGS`), and for the completeness guarantee the exhaustive match
 /// below carries.
-///
-/// **`ExprKind::VariableReference`'s arm is not checked by anything today
-/// (review finding I3).** Its only legal position is a call argument list,
-/// so `loud.rs`'s witness for it (`call sub >x\n`) always fails on the
-/// `CALL` *instruction* first -- `instruction_owner`'s `Call::Named` arm,
-/// never this function's `VariableReference` arm. `owners.rs`'s "What is
-/// pinned here" section names this as the one arm the drift check does not
-/// cover; Task 3 (which implements `Call::Named`) is what makes this
-/// witness actually reach the expression and this arm's own owner real.
 fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
     match kind {
         ExprKind::Literal(_)

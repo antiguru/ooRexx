@@ -96,13 +96,17 @@
 //! written as a bare top-level clause instead, which also avoids depending on
 //! `CALL` (itself out of scope) ever succeeding.
 //!
-//! `ExprKind::VariableReference` (`>x`/`<x`) is the one exception: its only
-//! legal position is a call or message argument list (`ast.rs`: "anything
-//! else is error 20.930"), so its witness necessarily sits inside a `CALL`
-//! instruction's argument list. That call is loud regardless of what its
-//! arguments are, so the loudness observed is not confounded with anything
-//! `VariableReference` itself would need to do differently -- both `Call`
-//! (the instruction) and `VariableReference` are 4b's.
+//! **`ExprKind::VariableReference` (`>x`/`<x`) needs no `CALL` at all --
+//! `say >x` reaches the arm directly.** An earlier version of this
+//! paragraph claimed the opposite (that a call or message argument list is
+//! `VariableReference`'s only legal position, citing `ast.rs`'s 20.930),
+//! and that was wrong: 20.930 is about which *token* may follow `>`/`<`
+//! (a variable or a stem, not a literal or a number, `expr.rs`'s own
+//! `parseVariableReferenceTerm` doc), not about which instruction context
+//! the whole reference may sit in. `eval.rs`'s own module doc already says
+//! `VariableReference` fails loudly on *any* evaluation. Measured: `say
+//! >x\n` gives `rexx-exec: a variable reference is not implemented (4b)`,
+//! with no `CALL` anywhere in the program.
 
 use std::path::Path;
 
@@ -340,9 +344,9 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
     },
 ];
 
-/// Every out-of-scope `ExprKind`, one witness each. Wrapped in `SAY` (4a's
-/// own) except `VariableReference`, whose only legal position is a call
-/// argument list -- see the module doc.
+/// Every out-of-scope `ExprKind`, one witness each, every one wrapped in
+/// `SAY` (4a's own) -- see the module doc's corrected note on
+/// `VariableReference`.
 const EXPR_WITNESSES: &[Witness] = &[
     Witness {
         tag: "Call",
@@ -377,22 +381,9 @@ const EXPR_WITNESSES: &[Witness] = &[
     Witness {
         tag: "VariableReference",
         owner: "4b",
-        // `Call` itself is 4b's too, so the loudness this produces is not
-        // confounded: nothing here depends on `VariableReference` doing
-        // anything differently for the exit code to be `NOT_IMPLEMENTED_EXIT`.
-        //
-        // **That argument does not transfer to the owner half of this
-        // witness's own check, and does not hold for it (review finding
-        // I3).** `CALL` fails first here, so the stderr `every_out_of_
-        // scope_variant_fails_loudly` inspects for this row comes from
-        // `instruction_owner`'s `Call::Named` arm (`lib.rs`), never from
-        // `expr_owner`'s `VariableReference` arm -- the two copies agreeing
-        // on `"4b"` here is coincidence, not verification. `expr_owner`'s
-        // own doc comment names this the one arm `owners.rs`'s pinned
-        // drift check does not cover. Task 3 (which implements
-        // `Call::Named`) is what makes this witness actually reach the
-        // expression and the check here real.
-        source: "call sub >x\n",
+        // `say >x` reaches this arm directly -- see the module doc's
+        // corrected note. No `CALL` needed.
+        source: "say >x\n",
         category: Category::Expr,
     },
 ];
