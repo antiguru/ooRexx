@@ -34,8 +34,10 @@
 //! with a one-line snippet would be strictly weaker evidence covering the
 //! same code path, not new evidence. What this file checks for the in-scope
 //! side is only that the classification below -- the same `match` shape
-//! `coverage.rs` uses -- has a total of 20 `InstructionKind` and 9 `ExprKind`
-//! entries, so an in-scope variant cannot go unlisted by omission.
+//! `coverage.rs` uses -- has a total of 22 `InstructionKind` and 10
+//! `ExprKind` entries (20 and 9 at the 4a gate; 4b's Task 1 moved
+//! `Interpret` in scope, Task 3 moved `Return`, and Task 4 moved
+//! `ExprKind::Call`), so an in-scope variant cannot go unlisted by omission.
 //!
 //! # The owner table lives in `owners.rs`
 //!
@@ -334,13 +336,15 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
 /// Every out-of-scope `ExprKind`, one witness each, every one wrapped in
 /// `SAY` (4a's own) -- see the module doc's corrected note on
 /// `VariableReference`.
+///
+/// **No `Call` row since 4b's Task 4.** `ExprKind::Call` moved fully into
+/// scope (`owners.rs`'s own `EXPR_TAGS`, and see `eval_call`'s doc,
+/// `eval.rs`, for the resolution order): a name that is not an internal
+/// label -- `foo` in this row's own former witness, `say foo(1)` -- now
+/// runs through `eval_call` and fails loudly naming `4c`, not `4b`, so the
+/// row this list used to carry would assert the wrong owner rather than
+/// disappearing quietly.
 const EXPR_WITNESSES: &[Witness] = &[
-    Witness {
-        tag: "Call",
-        owner: "4b",
-        source: "say foo(1)\n",
-        category: Category::Expr,
-    },
     Witness {
         tag: "QualifiedCall",
         owner: "Phase 5",
@@ -511,7 +515,9 @@ fn assert_witness_set_is_complete() {
         "EXPR_WITNESSES must have exactly one entry per out-of-scope ExprKind \
          variant, no more and no fewer"
     );
-    assert_eq!(expected_exprs.len(), 6);
+    // 5 since 4b's Task 4 moved `ExprKind::Call` in scope and deleted its
+    // row (6 before it).
+    assert_eq!(expected_exprs.len(), 5);
 }
 
 #[test]
@@ -526,12 +532,13 @@ fn in_scope_counts_match_the_audited_split() {
             .count(),
         22
     );
+    // 10 since 4b's Task 4 moved `ExprKind::Call` in scope (9 before it).
     assert_eq!(
         EXPR_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        9
+        10
     );
 }
 

@@ -27,6 +27,7 @@
 //! an expression can do either, so the propagation type has to carry both.
 
 use crate::Loud;
+use rexx_core::ObjRef;
 use rexx_num::ArithError;
 use rexx_parse::ParseError;
 
@@ -127,6 +128,29 @@ impl Raised {
     pub(crate) fn logical_list_element(found: &[u8]) -> Raised {
         Raised::syntax(34, 6, vec![String::from_utf8_lossy(found).into_owned()])
     }
+
+    /// 44.1: an internal routine reached through `ExprKind::Call`'s
+    /// expression form (`f(...)`, Task 4, `eval.rs`'s `eval_call`) ran to
+    /// completion without a value to hand back -- a bare `RETURN`, measured
+    /// against the oracle in a clean directory: `say f(1)` into `f: return`
+    /// gives rc 212 and
+    ///
+    /// ```text
+    /// Error 44 running .../f.rex line 1:  Function or message did not return data.
+    /// Error 44.1:  No data returned from function "F".
+    /// ```
+    ///
+    /// `name` is the resolved label's own spelling (already upcased for a
+    /// `CallTarget::Symbol`, which is the only target this can ever fire
+    /// for -- a `CallTarget::Literal` never resolves at all in this phase,
+    /// see `eval_call`'s own doc). **Not** the same path as running off the
+    /// end of the routine with no `RETURN` at all: that is `Ended::Exited`,
+    /// measured to end the whole program silently (rc 0, no stdout) rather
+    /// than raise anything, exactly as falling off the end of a `CALL`ed
+    /// routine already does (`resolve_and_run_call`'s own doc, `run.rs`).
+    pub(crate) fn no_data_returned(name: &[u8]) -> Raised {
+        Raised::syntax(44, 1, vec![String::from_utf8_lossy(name).into_owned()])
+    }
 }
 
 /// Converts a `rexx-num` arithmetic failure into a `Raised`.
@@ -186,12 +210,34 @@ impl From<&ParseError> for Raised {
 /// implement (`Loud`) or a real Rexx condition (`Raised`). `step` and
 /// everything above it propagate this rather than either alone, since a
 /// clause containing an expression can fail either way -- `eval`'s own
-/// `ExprKind::Call` arm is `Loud` (not implemented), its `1 / 0` arm is
-/// `Raised` (implemented, and this is what it does).
+/// `ExprKind::Message` arm is `Loud` (not implemented, Phase 5's), its
+/// `1 / 0` arm is `Raised` (implemented, and this is what it does).
 #[derive(Debug)]
 pub(crate) enum Failure {
     Loud(Loud),
     Raised(Raised),
+    /// **Not a failure at all** -- `EXIT` inside a routine reached through
+    /// `ExprKind::Call`'s expression form (Task 4), or that routine falling
+    /// off its own end, either of which ends the whole program exactly as
+    /// the same event does when reached through `CALL` (`resolve_and_run_
+    /// call`'s own doc, `run.rs`). `CALL`'s own instruction form carries
+    /// this through `Flow::Exit`/`Ended::Exited` instead, entirely through
+    /// `Ok` returns, because `step` and `run_activation` both return a
+    /// `Flow`/`Ended` that has room for "the program is exiting" as a
+    /// successful outcome. `eval`'s own return type is a plain `ObjRef`, with
+    /// no such room, so this variant is what lets the same event travel
+    /// through an expression instead: constructed once, in `eval_call`
+    /// (`eval.rs`), and then propagated by every intervening `?` completely
+    /// unremarked -- `step_in_temps_frame`'s and `resolve_and_run_call`'s own
+    /// generic "an `Err` escaped, record a site and re-throw" paths do not
+    /// need to know this variant exists, because sealing a site nothing
+    /// prints is harmless (`execute`, `lib.rs`, never calls `Raised::report`
+    /// for it) and re-throwing is exactly what unwinding every nested `CALL`
+    /// to end the whole program needs regardless of how many levels deep the
+    /// `EXIT` was. `execute`'s own top-level match is the one place this is
+    /// finally read, and there it is handled exactly like an ordinary
+    /// `Ok(value)`: same `exit_code_for`, no stderr report.
+    Exited(Option<ObjRef>),
 }
 
 impl From<Loud> for Failure {

@@ -27,6 +27,12 @@
 #   two CALL arms: CALL ON/OFF is Task 7's and CALL ns:name is Phase 5's, and
 #   both still fail loudly.
 #
+#   ExprKind::Call, the internal-function expression form (4b Task 4) -- f(...)
+#   resolved against the calling activation's own labels and evaluated for its
+#   value, reusing the same nested-activation machinery CALL uses. NOT
+#   CallTarget::Literal ("f"(...)), which never searches the label table and
+#   still fails loudly naming 4c, symmetric with CALL "SUB".
+#
 # The INTERPRET row's third clause is stated carefully because it was wrong
 # twice (it was "the third clause" until the CALL row landed between them; a
 # positional reference to a list that grows goes stale by construction). It
@@ -81,3 +87,11 @@ lang/interpret_error_echo.rex
 # decoration either -- a witness with none in it passes against an
 # implementation that wrongly gives every callee its own pool.
 lang/call_return.rex
+
+# New for 4b Task 4 -- ExprKind::Call, the internal-function expression form.
+# Under trace r for the same reason call_return.rex is: the D2r indent rule
+# applies to a routine reached from an expression exactly as it does to one
+# reached by CALL, which the unit tests in eval.rs do not check (none of them
+# inspect stderr this closely). RESULT is pinned too -- set before the call
+# and read back unchanged after it, unlike CALL, which settles it on return.
+lang/call_expression.rex

@@ -141,7 +141,7 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
 });
 
 tags!(expr_tag, EXPR_TAGS, ExprKind, {
-    // ---- 4a's own nine ----
+    // ---- 4a's own nine, plus Call (4b's Task 4) ----
     ExprKind::Literal(_) => ("Literal", Owner::InScope),
     ExprKind::Constant(_) => ("Constant", Owner::InScope),
     ExprKind::Variable(_) => ("Variable", Owner::InScope),
@@ -151,8 +151,14 @@ tags!(expr_tag, EXPR_TAGS, ExprKind, {
     ExprKind::Prefix { .. } => ("Prefix", Owner::InScope),
     ExprKind::Binary { .. } => ("Binary", Owner::InScope),
     ExprKind::Logical(_) => ("Logical", Owner::InScope),
-    // ---- the six that fail loudly; see coverage.rs's module doc's ownership section ----
-    ExprKind::Call { .. } => ("Call", Owner::Phase("4b")),
+    // In scope since 4b's Task 4: unlike `InstructionKind::Call`, which
+    // keeps its `Owner::Phase("4b")` because `Call::Trap`/`Call::Qualified`
+    // are still loud, `ExprKind::Call`'s own `CallTarget` has exactly two
+    // forms and both are 4b's, so there is no later-phase arm left hiding
+    // inside it -- see `eval_call`'s own doc (`eval.rs`) for the resolution
+    // order a name still falls through to the loud `4c` fallback for.
+    ExprKind::Call { .. } => ("Call", Owner::InScope),
+    // ---- the five that still fail loudly; see coverage.rs's module doc's ownership section ----
     ExprKind::VariableReference(_) => ("VariableReference", Owner::Phase("4b")),
     ExprKind::QualifiedCall { .. } => ("QualifiedCall", Owner::Phase("Phase 5")),
     ExprKind::ClassResolver { .. } => ("ClassResolver", Owner::Phase("Phase 5")),
@@ -301,7 +307,6 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("InstructionKind", "Guard", "Phase 5"),
     ("InstructionKind", "Reply", "Phase 5"),
     ("InstructionKind", "Forward", "Phase 5"),
-    ("ExprKind", "Call", "4b"),
     ("ExprKind", "VariableReference", "4b"),
     ("ExprKind", "QualifiedCall", "Phase 5"),
     ("ExprKind", "ClassResolver", "Phase 5"),
@@ -394,15 +399,20 @@ fn out_of_scope_set_matches_the_committed_expectation() {
 #[test]
 fn variant_counts_match_the_audited_split() {
     // Re-derived here rather than trusted: 40 InstructionKind variants and 15
-    // ExprKind (9 in scope, 6 failing loudly), per the design spec's criterion
-    // 1. The InstructionKind split was 20/9/4/6/1 at the 4a gate; 4b's Task 1
-    // moved `Interpret` from 4b's column into the implemented one (21/8/4/6/1)
-    // and Task 3 moved `Return` (22/7/4/6/1). `Call` did **not** move with it:
-    // the table is variant-grained and `Call::Trap` is still 4b's, so the
-    // variant stays in that column while two of its four arms are
-    // implemented. This number is the *implemented* count, not "4a's own":
-    // every later 4b/4c task moves another variant across the same line, and
-    // relabelling the column each time would be churn without information.
+    // ExprKind (10 in scope, 5 failing loudly since 4b's Task 4), per the
+    // design spec's criterion 1. The InstructionKind split was 20/9/4/6/1 at
+    // the 4a gate; 4b's Task 1 moved `Interpret` from 4b's column into the
+    // implemented one (21/8/4/6/1) and Task 3 moved `Return` (22/7/4/6/1).
+    // `InstructionKind::Call` did **not** move with it: the table is
+    // variant-grained and `Call::Trap` is still 4b's, so the variant stays in
+    // that column while two of its four arms are implemented.
+    // `ExprKind::Call` is different -- unlike the instruction, it has no
+    // later-phase arm hiding inside its own `CallTarget`, so Task 4 moves the
+    // whole variant, and only it, from 6 to 5 in the ExprKind row below (9 to
+    // 10 in scope). These numbers are the *implemented* counts, not "4a's
+    // own": every later 4b/4c task moves another variant across the same
+    // line, and relabelling the column each time would be churn without
+    // information.
     assert_eq!(INSTRUCTION_TAGS.len(), 40);
     assert_eq!(
         INSTRUCTION_TAGS
@@ -446,14 +456,14 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        9
+        10
     );
     assert_eq!(
         EXPR_TAGS
             .iter()
             .filter(|(_, o)| matches!(o, Owner::Phase(_)))
             .count(),
-        6
+        5
     );
 
     assert_eq!(LOOP_TAGS.len(), 6);
@@ -510,7 +520,8 @@ fn the_two_harnesses_include_this_exact_file() {
 //    counts**, now living in this file's own
 //    [`variant_counts_match_the_audited_split`]: the four hardcoded
 //    `InstructionKind` phase counts (22/7/4/6/1 since 4b's Task 3, 21/8/…
-//    after Task 1, 20/9/… at the 4a gate) and the two `ExprKind` ones (9/6). A variant moving in
+//    after Task 1, 20/9/… at the 4a gate) and the two `ExprKind` ones
+//    (10/5 since 4b's Task 4, 9/6 before it). A variant moving in
 //    scope changes the `InScope` count and whichever phase count it left,
 //    and both sides of that move must be edited together. `loud.rs`'s own
 //    `in_scope_counts_match_the_audited_split` carries a copy of the

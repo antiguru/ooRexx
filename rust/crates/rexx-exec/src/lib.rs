@@ -718,7 +718,20 @@ fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
         | ExprKind::Prefix { .. }
         | ExprKind::Binary { .. }
         | ExprKind::Logical(_) => None,
-        ExprKind::Call { .. } | ExprKind::VariableReference(_) => Some("4b"),
+        // **`None` since Task 4, not `Some("4b")`.** `ExprKind::Call` has
+        // exactly two `CallTarget` forms and both are 4b's own (the target
+        // field is checked, per this task's own brief) -- unlike
+        // `InstructionKind::Call`, which keeps an owner string because
+        // `Call::Trap`/`Call::Qualified` are still loud, this variant has no
+        // later-phase arm hiding inside it, so it moves fully in scope. A
+        // name that resolves to no internal label (or a `CallTarget::
+        // Literal`, which never searches labels at all) still fails loudly
+        // through `Loud::unresolved_call`, naming `4c` -- the builtin and
+        // external steps behind the label search are that phase's, exactly
+        // the same shape `InstructionKind::Call`'s own comment above
+        // describes for `CALL`.
+        ExprKind::Call { .. } => None,
+        ExprKind::VariableReference(_) => Some("4b"),
         ExprKind::QualifiedCall { .. }
         | ExprKind::ClassResolver { .. }
         | ExprKind::Message { .. }
@@ -1456,7 +1469,14 @@ fn execute(path: &str, text: Vec<u8>, collect_every_alloc: bool) -> Outcome {
     // as a whole value, and every other call above this one only reads or
     // takes a single field, never the whole struct.
     let exit_code = match result {
-        Ok(value) => interp.exit_code_for(value),
+        // `Failure::Exited` is not a failure -- it is `EXIT` (or falling off
+        // the routine's own end) reached through `ExprKind::Call`'s
+        // expression form, tunnelled here through `Err`/`?` only because
+        // `eval`'s own return type has no `Flow` to carry it through instead
+        // (`Failure::Exited`'s own doc, `error.rs`, has the full argument).
+        // Treated exactly like an ordinary `Ok(value)`: same exit-code rule,
+        // no stderr report, because it is not one.
+        Ok(value) | Err(Failure::Exited(value)) => interp.exit_code_for(value),
         Err(Failure::Loud(loud)) => {
             interp
                 .trace

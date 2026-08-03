@@ -56,27 +56,36 @@
 //!   same device `phase-4-exclusions.txt` uses for the builtin exclusion set,
 //!   one level down.
 //!
-//! `ExprKind`'s six out-of-scope variants split five ways across four phases,
-//! and five of those six assignments are not in the design spec at all --
-//! the spec names only `Message` outright. The other five (`Call`,
-//! `QualifiedCall`, `ClassResolver`, `List`, `VariableReference`) were a
-//! judgement call made at Task 16 gate time by the team lead ("main"), on
-//! request, because the spec's only other relevant sentence ("argument
-//! attachment inside Call, QualifiedCall, Message, List and VariableReference
-//! is exercised by 4b and 4c") names two phases jointly for five variants,
-//! which is not an owner a `match` arm can return. The reasoning for each is
-//! recorded in `docs/superpowers/plans/phase-4-exclusions.txt`'s "EXPRKIND
-//! OWNERSHIP" section; this file's [`tags!`] invocation for `ExprKind` must
-//! stay in sync with that section by hand, the same relationship
-//! `tests/assertions.rs`'s `EXEMPT` list has with the exclusions file's own
-//! builtin set.
+//! `ExprKind` had six out-of-scope variants at Task 16 gate time, five of
+//! which were not in the design spec at all -- the spec names only `Message`
+//! outright. The other five (`Call`, `QualifiedCall`, `ClassResolver`,
+//! `List`, `VariableReference`) were a judgement call made at Task 16 gate
+//! time by the team lead ("main"), on request, because the spec's only other
+//! relevant sentence ("argument attachment inside Call, QualifiedCall,
+//! Message, List and VariableReference is exercised by 4b and 4c") names two
+//! phases jointly for five variants, which is not an owner a `match` arm can
+//! return. The reasoning for each is recorded in `docs/superpowers/plans/
+//! phase-4-exclusions.txt`'s "EXPRKIND OWNERSHIP" section; this file's
+//! [`tags!`] invocation for `ExprKind` must stay in sync with that section by
+//! hand, the same relationship `tests/assertions.rs`'s `EXEMPT` list has with
+//! the exclusions file's own builtin set.
 //!
-//! `Call` is the one genuinely split variant: 4b delivers the internal-routine
-//! resolution half, 4c the builtin half, and `"4b"` is named here because that
-//! is the phase after which the variant stops failing loudly for *some* call
-//! target (an internal-routine call), not because 4c has no claim on it. A
-//! reader who reaches the end of 4b and finds a builtin-named call still loud
-//! is seeing exactly this, not a regression.
+//! **`Call` moved fully in scope at 4b's Task 4, and is no longer one of the
+//! five below.** Unlike `InstructionKind::Call`, which keeps its owner string
+//! because two of `rexx_parse::Call`'s four arms (`Trap`, `Qualified`) are
+//! still loud, `ExprKind::Call`'s own `CallTarget` has exactly two forms and
+//! both are 4b's -- there is no later-phase arm left hiding inside it, so the
+//! variant closes outright rather than staying split. `"4b"` had been named
+//! here (through Task 3) because that was the phase after which the variant
+//! stopped failing loudly for *some* call target (an internal-routine call),
+//! not because 4c had no claim on it; a reader who reaches the end of 4b and
+//! finds a builtin-named call still loud is seeing exactly that claim, still
+//! true, just no longer recorded as an `ExprKind` ownership row -- see
+//! `eval_call`'s own doc (`eval.rs`) for the resolution order.
+//!
+//! The five that remain (`QualifiedCall`, `ClassResolver`, `List`,
+//! `VariableReference`, `Message`) split across two phases, `4b` and
+//! `Phase 5`.
 //!
 //! # `Operator::Backslash` is not owed to anyone
 //!

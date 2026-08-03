@@ -1595,11 +1595,30 @@ impl Interp {
         }
     }
 
-    /// Runs one named call: resolve, evaluate the arguments, run the callee
-    /// in its own activation, and settle `RESULT`.
+    /// Resolves `name`, evaluates the arguments and runs the resolved target
+    /// in its own nested activation -- the whole middle of a call, shared
+    /// between `exec_call` (`CALL`, which settles `RESULT` and translates
+    /// the outcome into a `Flow`) and `eval_call` (`ExprKind::Call`'s
+    /// expression form, `eval.rs`, Task 4, which never touches `RESULT` and
+    /// has no `Flow` to report through since `eval` returns a value, not a
+    /// step outcome).
     ///
-    /// `search_labels` is false for exactly one caller, `CALL "name"`, and
-    /// its own call site has the measurement.
+    /// **Extracted rather than duplicated, by Task 4.** Both callers need
+    /// the identical resolution order, the identical argument-evaluation
+    /// discard, the identical `MAX_ACTIVATION_DEPTH` guard and the identical
+    /// three-piece indent bookkeeping around the nested `run_activation` --
+    /// measured to matter for the expression form too (`trace r` under a
+    /// flat `zz = f(1) + 1` echoes `f`'s own clauses at the calling clause's
+    /// indent plus two, the same D2r rule `CALL` already carries) -- and a
+    /// second hand-copied version of this is exactly the drift this crate's
+    /// other shared tables (`owners.rs`, `phase-4-exclusions.txt`) exist to
+    /// avoid one level up. Task 3's own logic is unchanged by the split: the
+    /// text moved, nothing about what it does did, and `exec_call`'s own
+    /// extensive test suite is what confirms that rather than a claim about
+    /// the diff.
+    ///
+    /// `search_labels` is false for `CALL "name"` and for `ExprKind::Call`'s
+    /// `CallTarget::Literal`, and its own call sites have the measurements.
     ///
     /// **Resolution order is internal label, then builtin, then external**,
     /// and 4b builds only the front of it: a name that is not a label of the
@@ -1620,13 +1639,13 @@ impl Interp {
     /// failing-loudly rule exists to exclude. `Activation::body`'s own doc
     /// has what that costs, what whoever closes it inherits, and why the
     /// `max` probe alone could not tell "deferred" from "unreachable".
-    fn exec_call(
+    pub(crate) fn resolve_and_run_call(
         &mut self,
         code: &Code<'_>,
         name: &[u8],
         search_labels: bool,
         args: &[Option<Expr>],
-    ) -> Result<Flow, Failure> {
+    ) -> Result<Ended, Failure> {
         // **Resolved against the running *activation's* body, not against
         // `code.body`, and the two differ inside an `INTERPRET` fragment.**
         // A fragment's `labels` is always empty -- a label in interpreted
@@ -1744,21 +1763,42 @@ impl Interp {
         self.indent_offset = saved_offset;
         self.clause_line_override = saved_line;
 
-        let ended = match ended {
-            Ok(ended) => ended,
+        match ended {
+            Ok(ended) => Ok(ended),
             Err(failure) => {
                 // Seal before the failure leaves the callee, never after --
                 // `seal_site_level`'s own rule, and the same one
                 // `run_fragment` follows. Without it the callee's clause
                 // would win `record_failure_at`'s first-wins race outright
-                // and the `CALL` would never be echoed. Measured, the oracle
+                // and the call would never be echoed. Measured, the oracle
                 // prints one echo per level, innermost first: a `say 1/0` in
                 // a routine called from a routine called from a `DO` gives
                 // three lines, at indents 6, 4 and 2.
                 self.seal_site_level();
-                return Err(failure);
+                Err(failure)
             }
-        };
+        }
+    }
+
+    /// Runs one named `CALL`: `resolve_and_run_call`, then settle `RESULT`
+    /// and translate the outcome into this instruction's own `Flow`. See
+    /// `resolve_and_run_call`'s own doc for the resolution order, the
+    /// argument-evaluation and indent-bookkeeping detail this used to carry
+    /// directly, and why it is shared with `eval_call` (`eval.rs`, Task 4)
+    /// rather than duplicated.
+    fn exec_call(
+        &mut self,
+        code: &Code<'_>,
+        name: &[u8],
+        search_labels: bool,
+        args: &[Option<Expr>],
+    ) -> Result<Flow, Failure> {
+        // Captured before `resolve_and_run_call` runs the callee, which
+        // overwrites `current_value_indent` with its own clauses' -- this is
+        // the `CALL` clause's own printed indent, needed below for the
+        // caller-side `RESULT` trace.
+        let base_indent = self.current_value_indent;
+        let ended = self.resolve_and_run_call(code, name, search_labels, args)?;
 
         let value = match ended {
             // `EXIT` inside the callee ends the program rather than the

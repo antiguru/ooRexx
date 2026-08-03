@@ -19,10 +19,12 @@
 //! operators (through `rexx-num`'s `compare_decoded`, never a hand-written
 //! string comparison), the three binary logical operators `&`/`|`/`&&`, and
 //! `ExprKind::Logical` (the comma-separated conditional list `IF a, b THEN`
-//! desugars to). Every other `ExprKind` -- `Call`, `QualifiedCall`,
-//! `Message`, `ClassResolver`, `List`, `VariableReference`, and any
-//! `DotVariable` beyond the three -- still fails loudly through the
-//! existing, exhaustive `form_name`.
+//! desugars to), and (Task 4, 4b) `ExprKind::Call`, the internal-function
+//! form (`f(...)`/`"f"(...)`) -- see `eval_call`'s own doc for the
+//! resolution order and what still falls through to the loud `4c` fallback.
+//! Every other `ExprKind` -- `QualifiedCall`, `Message`, `ClassResolver`,
+//! `List`, `VariableReference`, and any `DotVariable` beyond the three --
+//! still fails loudly through the existing, exhaustive `form_name`.
 //!
 //! **Six functions here open a temps frame and then use `?`, so a raised
 //! condition leaves their own `pop_frame` unreached. That is deliberate, and
@@ -56,10 +58,11 @@
 //! `Failure`.
 
 use crate::error::Raised;
+use crate::run::Ended;
 use crate::{Code, Failure, Interp, Loud, StackSpan};
 use rexx_core::{NotNumeric, ObjRef};
 use rexx_num::{CompareOp, DivOp, Number, compare_decoded};
-use rexx_parse::{Expr, ExprKind, Operator, PrefixOp, compound_parts};
+use rexx_parse::{CallTarget, Expr, ExprKind, Operator, PrefixOp, compound_parts};
 
 /// D19's evaluation-depth limit: `eval`'s own recursion, one level per
 /// left-deep term, refuses anything past this depth with 11.1 ("Insufficient
@@ -392,7 +395,71 @@ impl Interp {
             // short-circuit and sub-number this arm alone can give it.
             ExprKind::Logical(items) => self.eval_logical_list(code, items),
 
+            // `f(...)`/`"f"(...)` (Task 4, 4b) -- see `eval_call`'s own doc.
+            ExprKind::Call { target, args } => self.eval_call(code, target, args),
+
             other => Err(Loud::expression(other).into()),
+        }
+    }
+
+    /// `ExprKind::Call`: the internal-function form, evaluated for its
+    /// value rather than run as a clause of its own.
+    ///
+    /// **I25's split, restated here because a 4c implementer reading this
+    /// arm will not otherwise see it: resolution is internal routine first
+    /// (4b, this function), builtin second (4c), external third (Phase 7).
+    /// A name that reaches neither this function's own label search nor
+    /// (once it exists) 4c's builtin table fails loudly naming `4c` --
+    /// `resolve_and_run_call`'s (`run.rs`) `Loud::unresolved_call` is
+    /// already that fallback, and the builtin lookup belongs *between* the
+    /// label search and that call, not after it.**
+    ///
+    /// **`CallTarget::Literal` never searches the label table, symmetric
+    /// with `CALL "SUB"` (Task 3).** Its own doc in `rexx-parse` already
+    /// says so; confirmed here, on the oracle, in a clean directory (the
+    /// scratchpad root is on the external-routine search path and a stale
+    /// `f.rex` there gives a different, wrong answer): with an internal
+    /// `f:` label present, `say f(1)` runs it, while `say "f"(1)` is Error
+    /// 43.1 rc 213, "Routine not found". 4b has not built the builtin/
+    /// external steps that answer would need to tell "not a label" apart
+    /// from "not anything", so this stays the same loud `4c` fallback
+    /// `CALL "SUB"` already gets (`search_labels = false` below), not a
+    /// fabricated 43.1.
+    ///
+    /// **`RESULT` is never touched here**, unlike `CALL`: measured, a
+    /// caller's `RESULT` is unaffected by `f(1)` appearing in an
+    /// expression. Nor does this emit `TRACE I`'s own `>F>`/`>A>` lines --
+    /// `eval`'s own `trace_intermediate` hook has no arm for `ExprKind::
+    /// Call` yet, and Task 9 is who adds one; this function must not
+    /// anticipate it.
+    fn eval_call(
+        &mut self,
+        code: &Code<'_>,
+        target: &CallTarget,
+        args: &[Option<Expr>],
+    ) -> Result<ObjRef, Failure> {
+        let (name, search_labels): (&[u8], bool) = match target {
+            CallTarget::Symbol(id) => (code.symbols.name(*id).as_bytes(), true),
+            CallTarget::Literal(bytes) => (bytes, false),
+        };
+        match self.resolve_and_run_call(code, name, search_labels, args)? {
+            // `EXIT` inside the routine, or the routine falling off its own
+            // end, ends the whole program exactly as it does when the same
+            // routine is reached through `CALL` (`resolve_and_run_call`'s
+            // own doc, `run.rs`). Propagated as `Failure::Exited` because
+            // `eval`'s own return type is a plain `ObjRef` with no `Flow` to
+            // carry the event through instead -- see that variant's own doc
+            // (`error.rs`) for why every intervening `?` needs no special
+            // handling to still unwind every nested `CALL` correctly.
+            Ended::Exited(value) => Err(Failure::Exited(value)),
+            Ended::Returned(Some(value)) => Ok(value),
+            // Measured on the oracle: a routine reached through the
+            // expression form and returning nothing (a bare `RETURN`) is
+            // Error 44.1 rc 212, "No data returned from function "NAME""
+            // -- the expression form's own answer to "nothing to use here",
+            // which `CALL` never has to give since its own value only ever
+            // reaches `RESULT`, unset or not.
+            Ended::Returned(None) => Err(Raised::no_data_returned(name).into()),
         }
     }
 
@@ -1561,5 +1628,133 @@ mod tests {
             "SAY never runs: the whole expression must finish evaluating first, \
              and this one cannot"
         );
+    }
+
+    // ---- ExprKind::Call (Task 4, 4b): the internal-function expression
+    // form ----
+
+    /// The task brief's own Step 1: an internal routine called from inside
+    /// an expression, not a `CALL` clause of its own, returns its value into
+    /// the enclosing arithmetic.
+    #[test]
+    fn an_internal_function_returns_its_value_into_an_expression() {
+        let outcome = crate::run_program(
+            "call-expr-basic.rex",
+            b"say f(1) + 1\nexit\nf: return 41\n".to_vec(),
+        );
+        assert_eq!(
+            outcome.exit_code,
+            0,
+            "stderr: {:?}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(outcome.stdout, b"42\n");
+    }
+
+    /// The task brief's own Step 4: a name that is not a label of the
+    /// calling body -- `length` here, a builtin 4c has not wired in yet --
+    /// still falls through to the loud `4c` fallback rather than succeeding
+    /// or crashing. This depends on Task 0's owner-suffix message shape
+    /// (`owned_message`, `lib.rs`).
+    #[test]
+    fn a_builtin_name_still_fails_loudly_naming_4c() {
+        let outcome = crate::run_program("call-expr-builtin.rex", b"say length('abc')\n".to_vec());
+        assert_eq!(outcome.exit_code, crate::NOT_IMPLEMENTED_EXIT);
+        assert!(
+            String::from_utf8_lossy(&outcome.stderr).contains("4c"),
+            "stderr: {:?}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+    }
+
+    /// **`CallTarget::Literal` never searches the label table**, symmetric
+    /// with `CALL "SUB"` (Task 3). Measured independently on the oracle in a
+    /// clean directory (never the scratchpad root, which sits on the
+    /// external-routine search path and holds a stale `f.rex` -- the first
+    /// attempt at exactly this measurement found it and reported the wrong
+    /// answer): `say "f"(1)` with `f:` present is Error 43.1 rc 213, "Routine
+    /// not found", where `say f(1)` runs the label instead. 4b's own answer
+    /// is the loud `4c` fallback, not a fabricated 43.1 -- there is no
+    /// builtin/external step yet to distinguish "not a label" from "not
+    /// anything at all".
+    #[test]
+    fn a_literal_call_target_never_reaches_the_label_table() {
+        let outcome = crate::run_program(
+            "call-expr-literal.rex",
+            b"say \"f\"(1)\nexit\nf: return 41\n".to_vec(),
+        );
+        assert_eq!(outcome.exit_code, crate::NOT_IMPLEMENTED_EXIT);
+        assert!(
+            String::from_utf8_lossy(&outcome.stderr).contains("4c"),
+            "stderr: {:?}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(outcome.stdout, b"", "the label must not have run");
+    }
+
+    /// **Step 3's own measurement**: a routine reached through the
+    /// expression form and returning nothing -- a bare `RETURN`, not the
+    /// same event as falling off the routine's own end without one (the next
+    /// test) -- raises Error 44.1 at rc 212. Measured on the oracle in a
+    /// clean directory: `say f(1)` into `f: return` gives exactly this,
+    /// "No data returned from function "F"." with the label's own upcased
+    /// spelling.
+    #[test]
+    fn a_routine_returning_no_value_in_expression_form_raises_44_1() {
+        let outcome = crate::run_program(
+            "call-expr-no-data.rex",
+            b"say f(1)\nexit\nf: return\n".to_vec(),
+        );
+        assert_eq!(outcome.exit_code, 212, "256 - 44");
+        let stderr = String::from_utf8_lossy(&outcome.stderr);
+        assert!(
+            stderr.contains("Function or message did not return data.")
+                && stderr.contains("No data returned from function \"F\"."),
+            "stderr: {stderr:?}"
+        );
+        assert_eq!(
+            outcome.stdout, b"",
+            "SAY never runs: the argument raises before the clause completes"
+        );
+    }
+
+    /// **Measured on the oracle**, in a clean directory: `EXIT` inside a
+    /// routine reached through the expression form ends the whole program
+    /// exactly as it does through `CALL`, at rc 5, with no stdout (`SAY`
+    /// never completes) and no stderr (an `EXIT` is not a condition, so
+    /// nothing is reported). This exercises `Failure::Exited`'s whole reason
+    /// for existing (`error.rs`): `eval`'s own return type has no `Flow` to
+    /// carry the event through the way `CALL`'s instruction form does, so it
+    /// travels as this `Failure` variant instead, unwound by every
+    /// enclosing `?` with no special handling needed, until `execute`
+    /// (`lib.rs`) reads it back as an ordinary successful exit.
+    #[test]
+    fn an_exit_inside_a_routine_reached_by_expression_call_ends_the_whole_program() {
+        let outcome = crate::run_program(
+            "call-expr-exit.rex",
+            b"say f(1)\nexit 9\nf: exit 5\n".to_vec(),
+        );
+        assert_eq!(outcome.exit_code, 5, "stderr: {:?}", outcome.stderr);
+        assert_eq!(outcome.stdout, b"");
+        assert_eq!(outcome.stderr, b"");
+    }
+
+    /// **Measured**: a caller's `RESULT` is unaffected by `f(1)` appearing in
+    /// an expression, unlike `CALL`, which settles it on every return
+    /// (`resolve_and_run_call`'s own doc, `run.rs`). `result = 'before'`
+    /// survives `zz = f(1)` untouched.
+    #[test]
+    fn an_internal_functions_expression_form_does_not_touch_result() {
+        let outcome = crate::run_program(
+            "call-expr-result.rex",
+            b"result = 'before'\nzz = f(1)\nsay result\nexit\nf: return 99\n".to_vec(),
+        );
+        assert_eq!(
+            outcome.exit_code,
+            0,
+            "stderr: {:?}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(outcome.stdout, b"before\n");
     }
 }
