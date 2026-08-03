@@ -865,6 +865,29 @@ struct Interp {
     /// themselves -- reading the oracle's own field-not-parameter design
     /// avoids inventing that threading here instead.
     current_value_indent: usize,
+    /// The line the clause currently being stepped starts at -- **`SIGL`'s**
+    /// own value, one control transfer away from being read, and the exact
+    /// analogue of `current_value_indent` just above: `resolve_and_run_call`
+    /// (`CALL`, and `ExprKind::Call`'s expression form through `eval_call`,
+    /// `eval.rs`) and `SIGNAL`'s own two `step` arms all need "which line is
+    /// this transfer's own", and `eval_call` reaches `resolve_and_run_call`
+    /// from arbitrarily deep inside an expression tree with no `source`/
+    /// `instruction` of its own to compute it from -- threading either
+    /// through `eval`/`eval_node`'s entire recursive call graph is exactly
+    /// the "every arm in `eval.rs`" retrofit `current_value_indent`'s own
+    /// doc comment already declined for the identical reason. Set
+    /// unconditionally by `step_in_temps_frame`, via `clause_line`, which
+    /// honours `clause_line_override` the same way `clause_site` does -- so
+    /// a `SIGNAL`/`CALL` fired from inside an `INTERPRET` fragment reads the
+    /// *enclosing* `INTERPRET` clause's own line, matching the oracle's own
+    /// `RexxActivation::signalTo`, read directly: an interpret-created
+    /// activation delegates a `SIGNAL` to its parent rather than setting
+    /// `SIGL` itself, so what ends up in `SIGL` is the parent's own
+    /// currently-executing instruction -- the `INTERPRET` clause -- and this
+    /// field reproduces that observable answer without this crate adopting
+    /// the C++ architecture that produces it (`run_fragment` still runs
+    /// inside the creating activation, not a nested one of its own).
+    current_clause_line: usize,
     /// **F3, found by review.** The innermost `SELECT CASE`'s own evaluated
     /// `case` text, or `None` inside a plain `SELECT` (or before any
     /// `SELECT`/`SELECT CASE` has run at all) -- the one piece of state an
@@ -1251,6 +1274,7 @@ impl Interp {
             out: Vec::new(),
             trace: Vec::new(),
             current_value_indent: 0,
+            current_clause_line: 0,
             current_case_text: None,
             indent_offset: 0,
             activation_indent: 0,

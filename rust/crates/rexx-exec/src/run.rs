@@ -187,32 +187,45 @@ enum Flow {
     /// range for the body currently being stepped", which is exactly wrong
     /// for `SIGNAL`: the target always resolves against the running
     /// *activation's* own body (`resolve_signal_target`, mirroring
-    /// `resolve_and_run_call`'s identical fix for `CALL`, `run.rs:2153-
-    /// 2154`), and inside an `INTERPRET` fragment that body is a completely
-    /// different `Code` from the one `run_fragment` is stepping. A bare
-    /// `Flow::Goto(target)` there would have `run_fragment`'s own
-    /// `run_bounded(&code, 0, fragment.len())` range-check `target` against
-    /// the *fragment's* own tiny index space -- coincidental overlap is the
-    /// common case, not the exception, since both index spaces start at 0 --
-    /// and a match would silently resume stepping the fragment's own
-    /// unrelated instruction at that position instead of escaping to the
-    /// real target. Measured: `interpret "signal there"` reaches an
-    /// enclosing `there:` (the report has the transcript), which only holds
-    /// if nothing along the way can mistake the escaping jump for one of its
-    /// own.
+    /// `resolve_and_run_call`'s identical fix for `CALL`), and inside an
+    /// `INTERPRET` fragment that body is a completely different `Code` from
+    /// the one `run_fragment` is stepping.
     ///
-    /// **Nesting inside `DO`/`LOOP` or `IF` needs no equivalent care**, a
-    /// fact worth recording because it looks like it should: `rexx-parse`
-    /// already rejects a label written inside either (47.2, 47.3, measured),
-    /// so a `SIGNAL` target can never sit strictly inside a range
-    /// `run_bounded` is currently absorbing a `Goto` into. Reusing `Goto`
-    /// there would very likely have worked by construction; it is the
-    /// fragment boundary alone that cannot tolerate it.
+    /// **The risk is real, and reusing `Goto` does not always fail -- which
+    /// is exactly why this needed a program built to collide, not a doc
+    /// comment alone (I1/I2, review round 1).** `run_fragment`'s own
+    /// `run_bounded(&code, 0, fragment.len())` absorbs any escaping
+    /// `Flow::Goto(target)` with `target <= fragment.len()` (`run_bounded`'s
+    /// own guard, `start == 0` here) as if it were its own, silently
+    /// resuming the fragment's own unrelated instruction at that position
+    /// instead of escaping -- and whether a given program collides depends
+    /// only on whether the target's index happens to be no greater than the
+    /// fragment's own instruction count, which has nothing to do with where
+    /// the label actually is. This file's own witness, `interpret "signal
+    /// there"`, does **not** collide even under a `Goto`-reuse build,
+    /// because `there:` sits well past that one-instruction fragment's own
+    /// length -- so that measurement alone was never evidence for this
+    /// decision. `signal_out_of_a_fragment_does_not_collide_with_the_
+    /// fragments_own_index_space` (this file's own tests) is a program
+    /// built to collide instead (a label at index 2, a three-instruction
+    /// fragment) and does fail under the reuse, printing a wrong branch's
+    /// own output silently rather than crashing or hanging.
+    ///
+    /// **Nesting inside `DO`/`LOOP`, `IF` or `SELECT` needs no equivalent
+    /// care**, a fact worth recording because it looks like it should:
+    /// `rexx-parse` already rejects a label written inside any of the three
+    /// (47.2, 47.3, 47.4, measured), so a `SIGNAL` target can never sit
+    /// strictly inside a range `run_bounded` is currently absorbing a
+    /// `Goto` into. Reusing `Goto` there would very likely have worked by
+    /// construction; it is the fragment boundary alone that cannot
+    /// tolerate it.
     ///
     /// Forwarded exactly like `Exit`/`Return` by every `run_bounded`/
-    /// `do_body_outcome`/`leave_select`/`run_fragment` catch-all -- nothing
-    /// in any of those needed its own arm for it -- and consumed only by
-    /// `run_activation`'s own top-level dispatch, the same way `Goto` is.
+    /// `do_body_outcome`/`leave_select`/`run_fragment` catch-all, and by
+    /// `If`'s own true-branch arm (`step`'s `InstructionKind::If` handling)
+    /// -- nothing in any of those needed its own arm for it -- and consumed
+    /// only by `run_activation`'s own top-level dispatch, the same way
+    /// `Goto` is.
     Signal(usize),
 }
 
@@ -1673,6 +1686,11 @@ impl Interp {
                 // case) and `signal "SUB"` both run it.
                 rexx_parse::Signal::Label(name) => {
                     let target = self.resolve_signal_target(name)?;
+                    // Set only once the target actually resolves -- an
+                    // unresolved `SIGNAL` (16.1) ends the program regardless,
+                    // matching the oracle's own `signalTo`, which a caller
+                    // only ever invokes with an already-resolved target.
+                    self.set_sigl(self.current_clause_line);
                     Ok(Flow::Signal(target))
                 }
                 // `SIGNAL VALUE expr`. Its own `>K>` -- `"VALUE" => text`, at
@@ -1692,6 +1710,7 @@ impl Interp {
                     let text = self.to_text(value).to_vec();
                     self.trace_keyword(self.current_value_indent, "VALUE", &text);
                     let target = self.resolve_signal_target(&text)?;
+                    self.set_sigl(self.current_clause_line);
                     Ok(Flow::Signal(target))
                 }
                 rexx_parse::Signal::Trap(_) => Err(Loud::instruction(&instruction.kind).into()),
@@ -2168,6 +2187,37 @@ impl Interp {
         }
     }
 
+    /// `SIGL`, set at the point of every control transfer -- `SIGNAL`'s own
+    /// two `step` arms and `resolve_and_run_call` (`CALL`, and `ExprKind::
+    /// Call` through `eval_call`, `eval.rs`) -- to `line`, always `self.
+    /// current_clause_line` at the call site (`lib.rs`'s own doc comment on
+    /// that field has why it is a field and not a parameter here).
+    ///
+    /// **A plain string, not a `Number`.** The oracle's own `RexxActivation::
+    /// signalTo`/`internalCall` (read directly, `execution/RexxActivation.
+    /// cpp`) both call `new_integer(lineNum)`, an integer object that always
+    /// renders in full decimal, never in exponential form -- measured here
+    /// too: `numeric digits 1` in force does not turn a two-digit `SIGL`
+    /// value into `2E+1` the way the identical magnitude would if it reached
+    /// the program as an arithmetic result. `self.text` gives that directly,
+    /// with no `created_digits` to reason about at all, matching how this
+    /// crate already renders an ordinary literal.
+    ///
+    /// Through `assign_by_name`, so `SIGL` gets exactly the pool-sharing
+    /// behaviour every other variable does: shared with the caller's frame
+    /// by default (measured, a callee with no `PROCEDURE` sees the value the
+    /// `CALL`/`SIGNAL` that reached it just set), isolated and starting
+    /// uninitialised once `PROCEDURE` allocates a frame of its own (measured,
+    /// `SIGL` reads back as the derived name `SIGL` inside a `PROCEDURE`d
+    /// callee that has not yet transferred control itself), and never
+    /// restored on the way out (measured, an inner `CALL`'s own `SIGL`
+    /// outlives that call's own return, all the way up to the main body,
+    /// exactly like any other shared-pool variable).
+    fn set_sigl(&mut self, line: usize) {
+        let value = self.text(line.to_string().as_bytes());
+        self.assign_by_name(b"SIGL", value);
+    }
+
     /// Resolves a `SIGNAL`/`SIGNAL VALUE` target against the running
     /// *activation's* own body -- not `code.body`, which differs inside an
     /// `INTERPRET` fragment (whose own `labels` is always empty, a label in
@@ -2299,6 +2349,18 @@ impl Interp {
                 }
             }
         }
+
+        // `SIGL`, set here rather than before the argument loop above: the
+        // oracle's own `internalCall` (`RexxActivation.cpp`, read directly)
+        // receives its arguments already evaluated by its caller, so they
+        // are evaluated under whatever `SIGL` was already in force, and only
+        // then does the transfer overwrite it. Measured: `signal there` /
+        // `there: call sub sigl` into `sub: use arg a` reports the argument
+        // as `1` (the `SIGNAL`'s own line, still in force during evaluation)
+        // and `sub`'s own `SIGL` as the `CALL`'s line -- a version setting
+        // `SIGL` before evaluating arguments would report the argument as
+        // the `CALL`'s own line instead.
+        self.set_sigl(self.current_clause_line);
 
         // D19/I6: one Rust frame per activation, plus this counter, so an
         // unbounded recursion becomes a reportable condition instead of a
@@ -2646,6 +2708,15 @@ impl Interp {
         // comment for what it adds and why open-coding it was a defect.
         let indent = self.printed_indent(&code.body.instructions, index);
         self.current_value_indent = indent;
+        // Set unconditionally, exactly like `current_value_indent` just
+        // above and for the identical reason (that field's own doc comment):
+        // `SIGL` (`lib.rs`'s doc on `current_clause_line`) has to stay
+        // correct whether or not `TRACE` is on, and this is the one place
+        // every stepped instruction, `SIGNAL`/`CALL` included, passes
+        // through before its own `step` call runs.
+        if let Some(line) = self.clause_line(source, instruction) {
+            self.current_clause_line = line;
+        }
         if self.trace_mode().all
             && let Some((line, text)) = self.clause_site(source, instruction)
         {
@@ -4512,10 +4583,10 @@ impl Interp {
         source: Option<&ProgramSource>,
         instruction: &Instruction,
     ) -> Option<(usize, Vec<u8>)> {
+        let line = self.clause_line(source, instruction)?;
         let source = source?;
         Some((
-            self.clause_line_override
-                .unwrap_or_else(|| source.line_of(instruction.clause_span.start)),
+            line,
             source
                 .join_span(instruction.clause_span.clone())
                 .map_or_else(
@@ -4527,6 +4598,26 @@ impl Interp {
                     |bytes| bytes.into_owned(),
                 ),
         ))
+    }
+
+    /// `clause_site`'s own line half, alone -- extracted so `current_clause_
+    /// line` (`lib.rs`'s own doc comment on the field) can be kept fresh on
+    /// every step without paying for `clause_site`'s own `join_span` text
+    /// extraction, which nothing needs when only `SIGL`'s value is being
+    /// computed. Identical rule, same `clause_line_override` honoured the
+    /// same way, so a `SIGNAL`/`CALL` fired from inside an `INTERPRET`
+    /// fragment reads the enclosing clause's own line here exactly as
+    /// `clause_site` already gives the trace/error paths.
+    fn clause_line(
+        &self,
+        source: Option<&ProgramSource>,
+        instruction: &Instruction,
+    ) -> Option<usize> {
+        let source = source?;
+        Some(
+            self.clause_line_override
+                .unwrap_or_else(|| source.line_of(instruction.clause_span.start)),
+        )
     }
 
     // `fragment_plan` and `slot_of` live in `plan.rs` (Task 6), beside `Plan`
@@ -8422,6 +8513,201 @@ mod tests {
     /// is abandoned unconditionally, so the loop's own later iterations
     /// never happen and neither does the clause right after `END`.
     ///
+    /// I1 (Task 6 fix round 1): a direct regression for `Flow::Signal`
+    /// versus reusing `Flow::Goto`. Collapsing the two `Ok(Flow::Signal(
+    /// target))` sites in the `Signal` step arm to `Ok(Flow::Goto(target))`
+    /// left every test in this file, and the whole workspace, green --
+    /// including every other `SIGNAL` test above and below this one, none
+    /// of which happens to have a fragment whose own instruction count
+    /// reaches the enclosing label's own index. This one does, on purpose:
+    /// `here:` sits at enclosing body index 2 (`say 'A'` is 0, `interpret`
+    /// is 1), and the fragment `"nop; signal here; say 'WRONG BRANCH RAN'"`
+    /// has 3 instructions, so the escaping target (2) satisfies
+    /// `run_bounded`'s own absorption guard (`target >= start(0) && target
+    /// <= end(3)`) against the *fragment's* range. A `Goto`-collapsed build
+    /// -- verified directly, reverted before committing -- absorbs the jump
+    /// as its own, resumes stepping the fragment's own third instruction,
+    /// and prints `WRONG BRANCH RAN` in the middle; the correct build
+    /// escapes past the fragment entirely and never prints it.
+    ///
+    /// **No second, self-referential ("g2") variant is added here.** The
+    /// review that found this also found a shape where the escaping target
+    /// lands on the fragment's *own* `SIGNAL` instruction (a label at
+    /// enclosing index 0, a one-instruction fragment `"signal top"`) --
+    /// under `Goto` reuse that does not print a wrong answer, it spins
+    /// forever: `run_bounded`'s `while pc < end` loop has no iteration
+    /// budget, and landing back on the same deterministic instruction
+    /// reproduces the identical `Goto` every pass. That is true of *any*
+    /// collision where the absorbed target is at or before the `SIGNAL`'s
+    /// own position inside the fragment, not only the minimal one -- moving
+    /// the target forward past the `SIGNAL` (this test's own shape) is what
+    /// makes the wrong run terminate at all. There is no bounded encoding of
+    /// the backward/self-referential shape as a live-executed test, only a
+    /// choice between not testing it and risking a hang the moment this
+    /// regression guard itself regresses; this crate's own precedent
+    /// (`MAX_ACTIVATION_DEPTH`, D19/I6) is to convert an unbounded case into
+    /// a bounded, reportable one rather than accept an unbounded test, and
+    /// nothing here does that for a bare `while` loop's own iteration count.
+    /// Documented instead of encoded: this doc comment and `Flow::Signal`'s
+    /// own are where the fact lives.
+    #[test]
+    fn signal_out_of_a_fragment_does_not_collide_with_the_fragments_own_index_space() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"say 'A'\n\
+                  interpret \"nop; signal here; say 'WRONG BRANCH RAN'\"\n\
+                  here: say 'landed correctly'\n",
+            ),
+            b"A\nlanded correctly\n".to_vec()
+        );
+    }
+
+    /// I3 (Task 6 fix round 1): `SIGNAL` out of a `SELECT`, the one Step 1
+    /// shape the original landing measured for `DO` and `INTERPRET` but
+    /// never for `SELECT` -- `leave_select` (`run.rs`) is one of the
+    /// forwarding sites `Flow::Signal`'s own design argument depends on, and
+    /// it was the only one with no witness. Measured (source with a leading
+    /// `trace r` clause, lines decremented by one as every other traced test
+    /// in this file already does): `SELECT` is abandoned exactly like `DO`
+    /// is, unconditionally, and `SIGL` (C1, this same fix round) reads back
+    /// the `WHEN`'s own line, all three sub-clauses (`WHEN`, `THEN`,
+    /// `SIGNAL`) sharing that one source line.
+    #[test]
+    fn signal_out_of_a_select_unwinds_it_and_lands_on_its_label() {
+        let mut interp = Interp::new();
+        run_source_traced(
+            &mut interp,
+            b"say 'before'\n\
+              select\n\
+              \x20 when 1 = 1 then signal there\n\
+              \x20 otherwise\n\
+              \x20   say 'not reached'\n\
+              end\n\
+              say 'after select, not reached'\n\
+              exit\n\
+              there:\n\
+              say 'reached there sigl:' sigl\n",
+        )
+        .expect("the program runs");
+        assert_eq!(
+            interp.trace,
+            b"     1 *-* say 'before'\n\
+              \x20      >>>   \"before\"\n\
+              \x20    2 *-* select\n\
+              \x20    3 *-*   when 1 = 1 \n\
+              \x20      >>>     \"1\"\n\
+              \x20    3 *-*     then\n\
+              \x20    3 *-*       signal there\n\
+              \x20    9 *-* there:\n\
+              \x20   10 *-* say 'reached there sigl:' sigl\n\
+              \x20      >>>   \"reached there sigl: 3\"\n"
+                .to_vec()
+        );
+        assert_eq!(interp.out, b"before\nreached there sigl: 3\n".to_vec());
+    }
+
+    /// C1 (Task 6 fix round 1): `SIGL`. The oracle's own `RexxActivation::
+    /// signalTo`/`internalCall` (`execution/RexxActivation.cpp`, read
+    /// directly) both call `new_integer(lineNum)` at the point of transfer
+    /// -- an integer object, which is why `set_sigl` uses `self.text`
+    /// rather than `self.number`: measured, a `SIGL` value of `22` still
+    /// renders `22` under `NUMERIC DIGITS 1`, where the identical magnitude
+    /// as an arithmetic result would round to `2E+1`.
+    ///
+    /// Five shapes, each measured against the oracle in a clean directory
+    /// before being pinned here:
+    #[test]
+    fn sigl_is_set_at_every_control_transfer() {
+        // Uninitialised until the first transfer, like any other variable;
+        // `SIGNAL` sets it to its own line.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"say 'sigl before:' sigl\nsignal there\nsay 'no'\nthere:\nsay 'sigl after:' sigl\n",
+            ),
+            b"sigl before: SIGL\nsigl after: 2\n".to_vec()
+        );
+
+        // `CALL` sets it too, visible inside the callee (D9r's shared pool)
+        // and left set after the callee returns -- an ordinary variable,
+        // never restored at the activation boundary.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"say 'before:' sigl\n\
+                  call sub\n\
+                  say 'after call:' sigl\n\
+                  exit\n\
+                  \n\
+                  sub:\n\
+                  say 'in sub sigl:' sigl\n\
+                  return\n",
+            ),
+            b"before: SIGL\nin sub sigl: 2\nafter call: 2\n".to_vec()
+        );
+
+        // From inside an `INTERPRET` fragment, `SIGL` reads the *enclosing*
+        // `INTERPRET` clause's own line, not any line internal to the
+        // fragment -- matching the oracle's own `signalTo`, which delegates
+        // a `SIGNAL` fired inside an interpret-created activation to its
+        // parent, whose own currently-executing instruction is the
+        // `INTERPRET` itself (this crate reproduces the observable answer
+        // through `current_clause_line`/`clause_line_override` instead,
+        // without adopting that nested-activation architecture).
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"say 'before:' sigl\n\
+                  interpret \"signal there\"\n\
+                  say 'no'\n\
+                  there:\n\
+                  say 'sigl after signal-in-fragment:' sigl\n",
+            ),
+            b"before: SIGL\nsigl after signal-in-fragment: 2\n".to_vec()
+        );
+
+        // The expression-call form (`f(1)`, Task 4) sets it exactly like
+        // `CALL` does.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"say 'before:' sigl\n\
+                  say f(1)\n\
+                  say 'after:' sigl\n\
+                  exit\n\
+                  f: return 'called, sigl=' || sigl\n",
+            ),
+            b"before: SIGL\ncalled, sigl=2\nafter: 2\n".to_vec()
+        );
+
+        // `PROCEDURE` isolates it exactly like any other variable: the
+        // callee's own `SIGL` starts uninitialised in its own frame, and
+        // the caller's `SIGL` (already set by the `CALL` itself, before the
+        // callee ever ran) is unaffected by whatever the isolated callee
+        // does with its own copy.
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"call sub\n\
+                  say 'main sigl after sub returns:' sigl\n\
+                  exit\n\
+                  \n\
+                  sub:\n\
+                  procedure\n\
+                  say 'sub sigl (isolated):' sigl\n\
+                  return\n",
+            ),
+            b"sub sigl (isolated): SIGL\nmain sigl after sub returns: 1\n".to_vec()
+        );
+    }
+
     /// **Fires on the loop's first pass, deliberately** -- a second pass
     /// through a `Controlled` (`TO`-style) `DO`/`LOOP` retraces two further
     /// `>>>` lines this crate does not yet reproduce (the documented "KNOWN

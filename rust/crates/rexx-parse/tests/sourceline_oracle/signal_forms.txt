@@ -1,4 +1,4 @@
-count 40
+count 64
 /* SIGNAL to a label and SIGNAL VALUE (4b Task 6), under trace r throughout,
    like call_return.rex.
 
@@ -9,14 +9,28 @@ count 40
    SIGNAL and out of this task's scope). A witness that reached a second
    pass would be pinning that gap's own wrong output rather than SIGNAL's,
    exactly the trap interpret_error_echo.rex's own header already names for
-   a different construct.
+   a different construct. Confirmed rather than assumed (review round 1):
+   running the second-pass shape (`if i = 2`) end to end against the oracle
+   shows stdout and rc both matching and the stderr diff is *only* the two
+   known `>>>` lines -- no missing END echo, no wrong landing line, nothing
+   SIGNAL-shaped -- so routing around it here loses no coverage of an actual
+   SIGNAL defect, only of the pre-existing, already-disclosed gap.
 
-   What this program's differential run pins: SIGNAL unwinds the DO
-   unconditionally (the loop's own later iterations and the clause right
-   after END never run), the SIGNAL clause itself traces with no `>>>` line
-   (it produces nothing, unlike CALL's dynamic form or RETURN with a value),
-   SIGNAL VALUE traces its own `>K>   "VALUE" => text` line before searching
-   the label table with the rendered text, and an unresolved target is Error
+   `signal past_select` (review round 1, I3) is the identical unwind through
+   a SELECT instead of a DO -- `leave_select` is one of the forwarding sites
+   SIGNAL's own design depends on, and this is its witness.
+
+   SIGL (review round 1, C1): every successful transfer below also prints
+   it, pinning that a control transfer sets SIGL to its own line as a plain
+   decimal value, not a NUMERIC-DIGITS-bound one.
+
+   What this program's differential run pins: SIGNAL unwinds a DO or a
+   SELECT unconditionally (the construct's own later iterations/branches and
+   the clause right after it never run), the SIGNAL clause itself traces
+   with no `>>>` line (it produces nothing, unlike CALL's dynamic form or
+   RETURN with a value), SIGNAL VALUE traces its own `>K>   "VALUE" => text`
+   line before searching the label table with the rendered text, every
+   transfer sets SIGL to its own line, and an unresolved target is Error
    16.1 at rc 240, which ends the program -- so it comes last, after every
    successful transfer is already demonstrated (the same shape
    interpret_error_echo.rex uses for its own single failing block). */
@@ -28,14 +42,24 @@ do i = 1 to 3
 end
 say 'not reached, the do never completes'
 past_loop:
-say 'past the loop, i=' i
+say 'past the loop, i=' i 'sigl=' sigl
+
+select
+  when 1 = 1 then signal past_select
+  otherwise
+    say 'not reached, the select never completes'
+end
+say 'not reached, after select'
+
+past_select:
+say 'past the select, sigl=' sigl
 
 target = 'PAST_VALUE'
 signal value target
 say 'not reached, value form jumps too'
 
 past_value:
-say 'value form landed'
+say 'value form landed, sigl=' sigl
 
 signal nowhere
 say 'not reached'
