@@ -58,6 +58,13 @@
 #   parenthesised list is ExprKind::List, which is Phase 5's and still fails
 #   loudly -- RAISE ... ARRAY (a, b) reaches the identical oracle bytes.
 #
+#   PUSH and QUEUE (4b Task 8, I15) -- an expression evaluated to string form
+#   and traced exactly like SAY, and a bare PUSH/QUEUE tracing a null string.
+#   The one thing no program in this subset can witness is the queue's own
+#   storage or interleaved order, since nothing that reads it back (PULL,
+#   PARSE PULL, QUEUED()) exists before 4c -- see lang/push_queue.rex's own
+#   header and queue.rs's unit tests, which is where that order is pinned.
+#
 # The INTERPRET row's third clause is stated carefully because it was wrong
 # twice (it was "the third clause" until the CALL row landed between them; a
 # positional reference to a list that grows goes stale by construction). It
@@ -73,10 +80,10 @@
 #
 # WHAT IT STILL EXCLUDES. Everything phase-4a.txt excludes except INTERPRET,
 # CALL (including CALL ON/OFF), RETURN, PROCEDURE, USE ARG, SIGNAL (all three
-# forms) and RAISE, which is to say: no builtin function calls -- condition()
-# included, which is why no program here reads a trapped condition's name --
-# no PARSE/ARG/PULL/PUSH/QUEUE, no message sends, no :: directives, no command
-# clauses, no DO WITH, and no DO OVER on a stem. The
+# forms), RAISE, PUSH and QUEUE, which is to say: no builtin function calls --
+# condition() included, which is why no program here reads a trapped
+# condition's name -- no PARSE/ARG/PULL, no message sends, no :: directives,
+# no command clauses, no DO WITH, and no DO OVER on a stem. The
 # authoritative, machine-checked list is tests/owners.rs's INSTRUCTION_TAGS/
 # EXPR_TAGS: anything still carrying an `Owner::Phase` there fails loudly and
 # cannot appear in any program listed in this file. Later 4b tasks move their
@@ -167,3 +174,14 @@ lang/signal_forms.rex
 # leaving it unchanged -- and no segment equals any variable's derived name,
 # which is what stops an unset flag reading as data.
 lang/condition_traps.rex
+
+# New for 4b Task 8 -- PUSH and QUEUE, under trace r throughout. Its own
+# header states what it can and cannot pin: nothing here can differentially
+# witness the queue's own storage or interleaved order, since nothing that
+# reads it back (PULL, PARSE PULL, QUEUED()) exists before 4c, so without
+# TRACE R this program would pass against any implementation including one
+# that discards every line. What TRACE R adds is real: each PUSH/QUEUE's own
+# >>> line, matching SAY's own evaluate-render-trace path, plus a bare
+# PUSH/QUEUE tracing a null string rather than being skipped. The
+# interleaved order itself is pinned by queue.rs's own unit tests instead.
+lang/push_queue.rex

@@ -150,8 +150,13 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // there is no `RAISE` shape whose gap belongs to `RAISE`.
     InstructionKind::Signal(_) => ("Signal", Owner::InScope),
     InstructionKind::Raise(_) => ("Raise", Owner::InScope),
-    InstructionKind::Push { .. } => ("Push", Owner::Phase("4b")),
-    InstructionKind::Queue { .. } => ("Queue", Owner::Phase("4b")),
+    // **In scope since 4b's Task 8** (I15), both whole: `queue.rs` stores
+    // every line either writes and neither has a shape this crate cannot
+    // express, so unlike `Call` there is nothing left for `expand_for_
+    // witnesses` to split out. This was 4b's last own row -- `Owner::
+    // Phase("4b")` no longer appears anywhere in this table.
+    InstructionKind::Push { .. } => ("Push", Owner::InScope),
+    InstructionKind::Queue { .. } => ("Queue", Owner::InScope),
     // ---- 4c's four ----
     InstructionKind::Parse(_) => ("Parse", Owner::Phase("4c")),
     InstructionKind::Arg(_) => ("Arg", Owner::Phase("4c")),
@@ -326,8 +331,10 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     // is Phase 5's. `Signal` and `Raise` left the list outright in the same
     // task.
     ("InstructionKind", "Call", "Phase 5"),
-    ("InstructionKind", "Push", "4b"),
-    ("InstructionKind", "Queue", "4b"),
+    // **No `Push` or `Queue` row since 4b's Task 8.** Both moved in scope
+    // (`INSTRUCTION_TAGS` above) -- the same "delete, don't leave stale"
+    // rule `Procedure`/`Use`/`Signal`/`Raise` already followed at their own
+    // tasks.
     ("InstructionKind", "Parse", "4c"),
     ("InstructionKind", "Arg", "4c"),
     ("InstructionKind", "Pull", "4c"),
@@ -440,7 +447,10 @@ fn variant_counts_match_the_audited_split() {
     // four arms are implemented while `Call::Qualified` is Phase 5's. That
     // sideways step is the one this comment would previously have got wrong,
     // since through Task 5 the same variant sat in 4b's column for
-    // `Call::Trap`'s sake.
+    // `Call::Trap`'s sake. Task 8 moves `Push` and `Queue`, 4b's last two,
+    // into the implemented column (28/0/4/7/1) -- `Owner::Phase("4b")` is
+    // still a valid split-table phase (`SPLIT_TABLE_PHASES` below), it is
+    // simply owed by nothing left in this table.
     // `ExprKind::Call` is different -- unlike the instruction, it has no
     // later-phase arm hiding inside its own `CallTarget`, so Task 4 moves the
     // whole variant, and only it, from 6 to 5 in the ExprKind row below (9 to
@@ -462,14 +472,14 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        26
+        28
     );
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("4b"))
             .count(),
-        2
+        0
     );
     assert_eq!(
         INSTRUCTION_TAGS

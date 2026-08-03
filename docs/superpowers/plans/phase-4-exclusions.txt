@@ -759,6 +759,61 @@ above.
   TRACE claims interactivity it cannot deliver; failing loudly on `?` is the
   cheaper alternative the spec already sanctioned.
 
+  PUSH/QUEUE's own queue storage has no differential witness (4b Task 8,
+  I15). Every construct that can read the queue back -- PULL, PARSE PULL,
+  QUEUED() -- is 4c's, so no corpus program can distinguish a correct
+  PUSH/QUEUE from `Push | Queue => Ok(Flow::Next)`, a pure no-op: measured,
+  a program whose whole body is `push "X"` / `queue "Y"` gives empty
+  stdout, empty stderr, rc 0, whether the queue stores anything or not.
+
+  UNLIKE THE REST OF THIS SECTION, this is not a measured divergence from
+  the oracle -- nothing is known to be wrong. It is recorded here anyway,
+  per Task 8's own brief, because a reader who sees `PUSH`/`QUEUE` marked
+  in scope and a green gate would otherwise have no way to learn that the
+  differential harness cannot see the one thing PUSH/QUEUE actually do.
+
+  WHAT COVERAGE EXISTS INSTEAD. `lang/push_queue.rex` (new for this task,
+  `phase-4b.txt`) runs under TRACE R and differentially pins the half the
+  harness CAN reach: PUSH/QUEUE evaluate their expression, render it to
+  string form and trace the result exactly like SAY, and a bare PUSH/QUEUE
+  traces a null string rather than being skipped or erroring. `queue.rs`'s
+  own `#[cfg(test)] mod tests` (`rust/crates/rexx-exec/src/queue.rs`) is
+  where the storage order itself is pinned, against values measured from
+  the oracle with a 4c-shaped probe this crate cannot run end to end yet
+  (`push "a"; queue "b"; push "c"`, then three bare `PULL`s into
+  `v1`/`v2`/`v3`, each `SAY`n): the oracle prints `C`, `A`, `B` -- `PULL`
+  upcases what it reads -- so the queue's own order, before that
+  transform, is `c`, `a`, `b` (`PUSH` lands at the head/LIFO, `QUEUE` at
+  the tail/FIFO). That probe is not a corpus program and does not go in
+  the subset, by the brief's own instruction: it needs `PULL`, which does
+  not exist yet.
+
+  CLOSES when 4c lands its first `PARSE PULL` (or `PULL`, or `QUEUED()`)
+  corpus program: that is the first point a differential run can actually
+  observe what this crate's queue stored, rather than only what was
+  written to it.
+
+  THE CROSS-PROCESS CAVEAT, CORRECTED. The scoping document (I15,
+  `2026-08-01-phase-4bc-scoping.md`) recorded the oracle's rxapi-backed
+  queue as making a cross-process differential run of `QUEUED`/`PULL`
+  impossible, "live rather than theoretical" on the strength of `rxapi`
+  being confirmed running (pid 857, `rxqueue('G')` = `SESSION`). That
+  conflates two different questions -- whether a daemon is reachable, and
+  whether two separate process invocations actually observe each other's
+  pushes. Measured instead, 2026-08-04: a program whose whole body is
+  `push "X"` / `queue "Y"` exits 0 with empty stdout and empty stderr
+  (nothing in 4b reads the queue, so there is nothing to print), and a
+  SECOND, SEPARATE `rexx` process run afterward reports `queued()` as `0`.
+  So on this host, right now, a plain queue push does not survive past the
+  process that made it -- the single-program rule this task's own probe
+  already follows (everything above runs in one program) is still correct,
+  but for that measured reason, not for "a live daemon's state permanently
+  diverges from ours". Being host/session-state dependent rather than
+  architectural, a different host or an explicit named queue could behave
+  differently, and the rule should be re-measured rather than assumed if
+  that ever matters -- 4c's own `QUEUED` row (EXCLUSIONS -- partial,
+  above) inherits the same single-program rule and the same caveat.
+
 
 CLOSED DEFECTS -- measured wrong, measured again, now matching
 -------------------------------------------------------------

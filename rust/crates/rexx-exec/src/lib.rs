@@ -52,6 +52,11 @@ mod value;
 // and the "replace the object, mutate a tail in place" split.
 mod stem;
 
+// The in-process external data queue (I15) `PUSH`/`QUEUE` write to (4b's
+// Task 8). Nothing reads it yet -- `PULL`/`PARSE PULL`/`QUEUED()` are 4c's.
+mod queue;
+use queue::Queue;
+
 // The per-body resolution plan (D16): `Plan`, `BodyKey`, `ProgramId`, the
 // plan cache, and the full name-resolution order (plan, then `extra`, then
 // growth).
@@ -739,7 +744,10 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // a sub-case of an *expression*, reported where that expression is,
         // not a residual claim on the `RAISE` keyword.
         InstructionKind::Signal(_) | InstructionKind::Raise(_) => None,
-        InstructionKind::Push { .. } | InstructionKind::Queue { .. } => Some("4b"),
+        // In scope since 4b's Task 8. Both keywords are whole: `queue.rs`
+        // stores every line either writes, and neither has a shape this
+        // crate cannot express the way `Procedure`'s `expose a.1` does.
+        InstructionKind::Push { .. } | InstructionKind::Queue { .. } => None,
         InstructionKind::Parse(_)
         | InstructionKind::Arg(_)
         | InstructionKind::Pull(_)
@@ -1271,6 +1279,11 @@ struct Interp {
     /// right one -- measured, `use arg p` as a program's own first clause
     /// binds nothing and `p` reads as `P`.
     call_context: CallContext,
+    /// The in-process external data queue (I15, 4b's Task 8): every line
+    /// `PUSH`/`QUEUE` has written. See `queue.rs`'s own module doc for the
+    /// LIFO/FIFO split and why nothing here reads it back yet -- `PULL`,
+    /// `PARSE PULL` and `QUEUED()` are all 4c's.
+    queue: Queue,
 }
 
 /// The name and arguments of one call in progress.
@@ -1386,6 +1399,7 @@ impl Interp {
             stack_deepest: 0,
             procedure_permitted: false,
             call_context: CallContext::default(),
+            queue: Queue::new(),
         }
     }
 

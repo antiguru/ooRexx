@@ -34,12 +34,12 @@
 //! with a one-line snippet would be strictly weaker evidence covering the
 //! same code path, not new evidence. What this file checks for the in-scope
 //! side is only that the classification below -- the same `match` shape
-//! `coverage.rs` uses -- has a total of 26 `InstructionKind` and 11
+//! `coverage.rs` uses -- has a total of 28 `InstructionKind` and 11
 //! `ExprKind` entries (20 and 9 at the 4a gate; 4b's Task 1 moved
 //! `Interpret` in scope, Task 3 moved `Return`, Task 4 moved
 //! `ExprKind::Call`, Task 5 moved `Procedure`/`Use`/`ExprKind::
-//! VariableReference` and Task 7 moved `Signal`/`Raise`), so an in-scope
-//! variant cannot go unlisted by omission.
+//! VariableReference`, Task 7 moved `Signal`/`Raise` and Task 8 moved
+//! `Push`/`Queue`), so an in-scope variant cannot go unlisted by omission.
 //!
 //! # The owner table lives in `owners.rs`
 //!
@@ -191,24 +191,32 @@ enum Category {
     Expr,
 }
 
-/// Every out-of-scope `InstructionKind`, one witness each. **17 entries**, one
-/// per `Owner::Phase` arm after `Call` and `Signal` expand -- 16 coarse
-/// phase-owned tags in `INSTRUCTION_TAGS` above, of which `Call` becomes two
-/// rows and `Signal` becomes one, so 14 + 2 + 1 = 17. (Review finding M1: this
-/// line said "19 entries" and, before that, "20", both of which counted the
-/// coarse tags while describing the expanded list -- the two numbers are
-/// different quantities and the arm-grained section of the module doc above
-/// is where the distinction is set out. **This line itself then went stale
-/// the identical way a second time**: Task 5 moved `Procedure` and `Use` in
-/// scope, shrinking the coarse count from 18 to 16, and nothing here followed
-/// -- it sat at "20 entries -- 18 coarse" through Tasks 4 and 5 while
-/// `assert_witness_set_is_complete`'s own copy of this same arithmetic, a few
-/// dozen lines down, was correctly kept at 16/18. Task 6 fixes both numbers
-/// here together with `Signal`'s own new count, rather than leaving the
-/// coarse-count drift for whoever next has reason to read this line
-/// carefully.)
+/// Every out-of-scope `InstructionKind`, one witness each. **12 entries**, one
+/// per `Owner::Phase` arm after `Call` expands -- 12 coarse phase-owned tags
+/// in `INSTRUCTION_TAGS` above, and `Call`'s own single tag still expands to
+/// its one remaining loud arm (`Call::Qualified`), so coarse and expanded
+/// counts are equal. (Review finding M1: this line said "19 entries" and,
+/// before that, "20", both of which counted the coarse tags while describing
+/// the expanded list -- the two numbers are different quantities and the
+/// arm-grained section of the module doc above is where the distinction is
+/// set out. **This line went stale the identical way twice more after
+/// that.** Task 5 moved `Procedure` and `Use` in scope and nothing here
+/// followed, sitting at "20 entries -- 18 coarse" through Tasks 4 and 5
+/// while `assert_witness_set_is_complete`'s own copy of this same
+/// arithmetic, a few dozen lines down, was correctly kept at 16/18 --
+/// Task 6 fixed both numbers here, together with `Signal`'s own new count
+/// ("17 entries -- 16 coarse... `Call` becomes two rows and `Signal`
+/// becomes one"). **Then Task 7 moved `Signal` and `Raise` in scope and
+/// moved `Call::Trap` in scope alongside `Signal`'s own arm, dropping
+/// `Call`'s own expansion from two rows to one and leaving coarse and
+/// expanded counts equal for the first time (16/17 to 14/14), and this line
+/// sat at Task 6's stale "17/16/two rows" text through that whole task**,
+/// uncorrected -- exactly the drift the parenthetical above already warned
+/// about, found only now, by Task 8, which fixes it a third time alongside
+/// its own change: `Push` and `Queue` move in scope, 14 to 12 both ways.)
 ///
-/// 16 coarse tags since 4b's Task 5 moved `Procedure` and `Use` in scope (18
+/// 12 coarse tags since 4b's Task 8 moved `Push` and `Queue` in scope (14
+/// after Task 7's `Signal`/`Raise`, 16 after Task 5's `Procedure`/`Use`, 18
 /// after Task 3's `Return`, 19 after Task 1's `Interpret`, 20 at the 4a gate)
 /// -- pinned item 4 in `owners.rs`'s own list: a witness for a variant that
 /// moved in scope must be *deleted*, not left stale, or
@@ -252,18 +260,12 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
     // tag is `Owner::InScope`; `RAISE` is implemented whole (`owners.rs`'s
     // own entry has why its one remaining loud shape belongs to
     // `ExprKind::List` rather than to `RAISE`).
-    Witness {
-        tag: "Push",
-        owner: "4b",
-        source: "push 'x'\n",
-        category: Category::Instruction,
-    },
-    Witness {
-        tag: "Queue",
-        owner: "4b",
-        source: "queue 'x'\n",
-        category: Category::Instruction,
-    },
+    // **No `Push` or `Queue` row since 4b's Task 8 (I15).** Both moved into
+    // scope: `queue.rs` stores every line either writes. This is 4b's own
+    // last pair of rows -- no `owner: "4b"` witness remains anywhere in
+    // this list, and `SPLIT_TABLE_PHASES` keeping `"4b"` as a valid phase
+    // name is not stale, since a phase can still owe nothing right now and
+    // owe something again if a later task's audit finds otherwise.
     Witness {
         tag: "Parse",
         owner: "4c",
@@ -464,14 +466,15 @@ fn assert_witness_set_is_complete() {
     // `flat_map(expand_for_witnesses)`, not a bare `.map`, and since 4b's
     // Task 7 there is exactly one coarse tag left that expands to anything
     // other than itself (Step 2, the module doc's "Arm-grained ownership").
-    // 14 coarse phase-owned `InstructionKind` tags since Task 7 moved
-    // `Signal` and `Raise` in scope (16 after Task 5's `Procedure`/`Use`, 18
-    // after Task 3's `Return`, 19 after Task 1's `Interpret`, 20 at the 4a
-    // gate); `Call`'s one row becomes **one** (`Qualified` alone, its other
-    // three arms being Tasks 3 and 7's), net +0, so 14 expected witness
-    // tags. The `flat_map` stays rather than collapsing to `.map`: it is
-    // still doing real work for `Call`, and it is what a later task adding a
-    // second split variant needs already in place.
+    // 12 coarse phase-owned `InstructionKind` tags since Task 8 moved `Push`
+    // and `Queue` in scope (14 after Task 7's `Signal`/`Raise`, 16 after
+    // Task 5's `Procedure`/`Use`, 18 after Task 3's `Return`, 19 after Task
+    // 1's `Interpret`, 20 at the 4a gate); `Call`'s one row becomes **one**
+    // (`Qualified` alone, its other three arms being Tasks 3 and 7's), net
+    // +0, so 12 expected witness tags. The `flat_map` stays rather than
+    // collapsing to `.map`: it is still doing real work for `Call`, and it
+    // is what a later task adding a second split variant needs already in
+    // place.
     let expected_instructions: Vec<&str> = INSTRUCTION_TAGS
         .iter()
         .filter(|(_, o)| matches!(o, Owner::Phase(_)))
@@ -487,7 +490,7 @@ fn assert_witness_set_is_complete() {
          InstructionKind variant (per arm, for Call), no more and no \
          fewer"
     );
-    assert_eq!(expected_instructions.len(), 14);
+    assert_eq!(expected_instructions.len(), 12);
 
     let expected_exprs: Vec<&str> = EXPR_TAGS
         .iter()
@@ -511,18 +514,18 @@ fn assert_witness_set_is_complete() {
 
 #[test]
 fn in_scope_counts_match_the_audited_split() {
-    // 26 since 4b's Task 7 moved `Signal` and `Raise` in scope (24 after
-    // Task 5's `Procedure`/`Use`, 22 after Task 3's `Return`, 21 after Task
-    // 1's `Interpret`); see `owners.rs`'s own
-    // `variant_counts_match_the_audited_split` for the full split, including
-    // `Call`'s sideways move from 4b's column into Phase 5's, which changes
-    // no count here.
+    // 28 since 4b's Task 8 moved `Push` and `Queue` in scope (26 after Task
+    // 7's `Signal`/`Raise`, 24 after Task 5's `Procedure`/`Use`, 22 after
+    // Task 3's `Return`, 21 after Task 1's `Interpret`); see `owners.rs`'s
+    // own `variant_counts_match_the_audited_split` for the full split,
+    // including `Call`'s sideways move from 4b's column into Phase 5's,
+    // which changes no count here.
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        26
+        28
     );
     // 11 since 4b's Task 5 moved `ExprKind::VariableReference` in scope (10
     // after Task 4 moved `ExprKind::Call`, 9 before that).
