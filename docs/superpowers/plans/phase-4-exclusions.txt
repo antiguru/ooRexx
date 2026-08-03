@@ -116,7 +116,33 @@ DEVIATIONS -- permanent, chosen
      DERIVED from the clause sequence and block structure the harness already
      compares byte-for-byte. A matching indent proves nothing that a matching
      clause sequence does not already prove -- except that we have reproduced
-     a C++ counter defect. Value lines are the opposite case and stay exact:
+     a C++ counter defect.
+
+     *** THAT ARGUMENT IS TOO BROAD, AND 4b TASK 4 PROVED IT. ***
+
+     It holds for an indent divergence caused by the ORACLE's counter defect,
+     which is what this row was written about. It does NOT hold for an indent
+     divergence caused by OUR OWN state management, and the harness cannot
+     tell the two apart.
+
+     Measured: Task 4's C1 was a failure to restore Interp::current_value_
+     indent across a nested activation, so a second call in one clause
+     computed its base from the first callee's last clause. With no TRACE in
+     the program at all, an ordinary error report read
+
+       oracle        4 *-*   say 1/0
+       ours          4 *-*     say 1/0
+
+     -- a real bug, user-visible, and the clause sequence is IDENTICAL, so
+     nothing else in the comparison carries the information. Under this
+     deviation the corpus reported 34 of 34 with that bug live.
+
+     SO THE PINNED UNNORMALISED WITNESSES ARE NOT A FORMALITY. They are the
+     only instrument that catches our own indent bugs, and the list below is
+     load-bearing rather than decorative. A task that adds activation or
+     block-level state must add a raw-bytes unit test beside them; the corpus
+     will not do it. Task 4's own regression test says so in its comment,
+     which is the pattern to copy. Value lines are the opposite case and stay exact:
      >>> , >V>, >O>, >L>, >F> and >A> carry intermediate results and
      evaluation order that NOTHING else in the output exposes, which is what
      makes trace the densest differential instrument this project has.
