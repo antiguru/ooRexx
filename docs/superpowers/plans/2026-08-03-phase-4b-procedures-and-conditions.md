@@ -852,6 +852,12 @@ At minimum: `SIGNAL` out of a nested block; `SIGNAL` to a label not in the curre
 
 **The vacuity hazard specific to this task.** A trap criterion asserting "the handler ran" by checking that the program exited 0 is satisfied by a program that never raised. Assert a **value the handler sets**, and pick one that is neither the flag's derived name nor its unset rendering -- an unset read yields the derived name, so a flag left unset renders as plausible data.
 
+**An open question this task is the most likely to make answerable.** Task 4's Critical was that `resolve_and_run_call` failed to restore `Interp::current_value_indent` across a nested activation; it saved the other three pieces of level state and not that one. Before Task 4 the omission was unobservable, because at most one activation could be entered per clause and the next clause re-set the field. `say f(1) + g(2)` enters two, and the second computed its base from the first callee's last clause -- a user-visible wrong indent in an ordinary error report.
+
+**The `INTERPRET` arm has the same omission today** (`src/run.rs:1005-1011` saves and restores `activation_indent`, `indent_offset` and `clause_line_override`; the call path additionally restores `current_value_indent` at `:1781`). Whether it is reachable is **unknown and must not be assumed either way**: two fragments cannot run in one clause at instruction level, and a call inside a fragment is already covered by the call path's own restore -- but "unobservable because at most one per clause" is exactly the reasoning that was true for the call path until Task 4 made it false, and a trap that resumes execution mid-clause is the most plausible thing to break it next.
+
+So: **measure it, do not reason about it.** Construct a program where a condition trap resumes and a second fragment or activation runs within one clause, and compare stderr. If it diverges, it is a one-line restore beside the others and belongs in this task. If it does not, say what you tried, because the next reader needs to know the question was asked rather than skipped.
+
 - [ ] **Step 1: Measure the trap transcripts, stdout, stderr and rc separately**
 
 At minimum: `SIGNAL ON SYNTAX` with a raise, trapped; `CALL ON ERROR NAME handler` with no command (measured, handler not invoked, rc 0); `SIGNAL ON NOVALUE` reading an unset variable; `RAISE SYNTAX 40.4`; `RAISE ... RETURN` and `RAISE ... EXIT`; `RAISE PROPAGATE` from inside a trap; a trap in a **caller** for a condition raised in a **callee**; `SIGNAL ON` inside an `INTERPRET` fragment.
