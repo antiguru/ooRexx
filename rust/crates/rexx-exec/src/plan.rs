@@ -72,8 +72,10 @@ pub(crate) struct BodyKey {
     /// into a `&CodeBody`.
     ///
     /// Still only ever `None` in practice, and that field's doc has the
-    /// measured reason: a `::routine` is reachable only past the builtin
-    /// resolution step, which is 4c's.
+    /// measured reason: a `::routine` **is** reachable for any non-builtin
+    /// name, and dispatching to one is deferred because the builtin
+    /// resolution step in front of it is 4c's -- a name colliding with a
+    /// builtin would otherwise silently run the wrong routine.
     pub(crate) directive: Option<usize>,
 }
 

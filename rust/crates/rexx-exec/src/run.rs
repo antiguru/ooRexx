@@ -1609,10 +1609,17 @@ impl Interp {
     /// nothing outside the label table matched either, which is knowledge
     /// this phase does not have.
     ///
-    /// A same-file `::routine` is behind the builtin step and so is
-    /// unreachable here too: measured, `::routine max` alongside `call max
-    /// 1,2` still calls the builtin. `Activation::body`'s own doc has what
-    /// that costs and what whoever closes it inherits.
+    /// **A same-file `::routine` is reachable for any non-builtin name, and
+    /// is deferred rather than out of reach.** Measured: `call zorkolo` into
+    /// `::routine zorkolo` dispatches on the oracle, where this falls through
+    /// to the loud `4c` answer. What stops 4b dispatching is the step in
+    /// front: a name that *collides* with a builtin must go to the builtin
+    /// (measured, `::routine max` alongside `call max 1,2` still calls the
+    /// builtin), and without 4c's table this arm would silently run the wrong
+    /// routine instead of failing loudly -- which is the one outcome the
+    /// failing-loudly rule exists to exclude. `Activation::body`'s own doc
+    /// has what that costs, what whoever closes it inherits, and why the
+    /// `max` probe alone could not tell "deferred" from "unreachable".
     fn exec_call(
         &mut self,
         code: &Code<'_>,

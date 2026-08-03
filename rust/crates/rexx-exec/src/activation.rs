@@ -68,16 +68,30 @@ pub(crate) struct Activation {
     /// [`body_of`] is the one function that turns the pair into a
     /// `&CodeBody`, so the two spellings cannot come apart.
     ///
-    /// **Always `None` today, and that is a resolution-order fact rather than
-    /// an unfinished field.** A `::routine`'s body is present in the AST
-    /// (`DirectiveKind::Routine`'s own `body: Option<CodeBody>`, `Some` for
-    /// every non-external routine), so `Some(i)` is representable and
-    /// [`body_of`] resolves it -- but nothing in 4b's `CALL` can *construct*
-    /// one, because a named call resolves internal label, then builtin, then
-    /// external, and a same-file `::routine` sits behind the builtin step.
-    /// Measured on the oracle: `::routine max` alongside `call max 1,2` still
-    /// calls the builtin and reports `2`, so a `::routine` cannot be reached
-    /// without first answering "is this name a builtin", which is 4c's.
+    /// **Always `None` today, and that is a deliberate scope call rather than
+    /// something being out of reach.** A `::routine`'s body is present in the
+    /// AST (`DirectiveKind::Routine`'s own `body: Option<CodeBody>`, `Some`
+    /// for every non-external routine), so `Some(i)` is representable, and
+    /// [`body_of`] resolves it. A `::routine` **is reachable for any
+    /// non-builtin name** -- measured, `call zorkolo` into `::routine
+    /// zorkolo` dispatches on the oracle and prints its `RETURN` value, where
+    /// this crate answers the loud 4c fallback.
+    ///
+    /// What is deferred is the resolution step *in front* of it. A named call
+    /// resolves internal label, then builtin, then external, and the builtin
+    /// table is 4c's -- so a name that **collides** with a builtin has to go
+    /// to the builtin, and getting that wrong silently runs the wrong routine
+    /// instead of failing loudly. Measured: `::routine max` alongside `call
+    /// max 1,2` still calls the builtin and reports `2`. Dispatching
+    /// non-builtin names here today would mean shipping a rule that is right
+    /// until someone names a routine `MAX`, which is the trade this defers
+    /// rather than a limit it hits.
+    ///
+    /// **An earlier version of this comment said a `::routine` "cannot be
+    /// reached", inferred from the `max` probe alone.** That probe is the one
+    /// shape where "behind the builtin step" and "unreachable entirely"
+    /// predict identical bytes, so it could not separate them; the
+    /// non-builtin name is what does.
     ///
     /// Task 3's report records the three ways a `::routine` activation is
     /// measurably *not* an internal label's -- its own variable pool, `TRACE`
