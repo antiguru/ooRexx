@@ -246,7 +246,9 @@ above.
   * Each echo's indent is ABSOLUTE and is NOT 2 x the depth of the stack. A
     fragment's clauses sit at the enclosing INTERPRET clause's own printed
     indent -- delta 0 -- plus whatever nests them INSIDE the fragment, EXCEPT
-    after an exhausted controlled or repeat DO (the separate row below):
+    after any repetitive DO/LOOP that completed a pass and then ended on a
+    failing control test, whose decrement also accumulates and also crosses
+    the fragment boundary outward (the separate row below):
     interpret "do jj = 1 to 1; say 2 & 1; end" at top level echoes the inner
     clause at 2 and the INTERPRET at 0, and the identical fragment two DOs
     deep echoes them at 6 and 4.
@@ -357,25 +359,49 @@ above.
   Which preceding block shapes do it, `say 1/0` one `do` deep, all seven
   measured against the oracle:
 
-      preceding block                    | oracle | ours
-      -----------------------------------+--------+------
-      do jj = 1 to 1 ... end (controlled)|   0    |  2
-      do 2 ... end (repeat count)        |   0    |  2
-      do forever ... leave ... end       |   2    |  2
-      do while 0 = 1 ... end             |   2    |  2
-      do jj = 1 to 0 ... end (zero-trip) |   2    |  2
-      if 1 = 1 then nop                  |   2    |  2
-      select ... end                     |   2    |  2
+      preceding block                        | oracle | ours
+      ---------------------------------------+--------+------
+      do jj = 1 to 1 ... end (controlled)    |   0    |  2
+      do 2 ... end (repeat count)            |   0    |  2
+      n=0; do while n = 0; n = 1; end        |   0    |  2
+      n=0; do until n = 1; n = 1; end        |   0    |  2
+      do jj = 1 to 1 while jj < 5 ... end    |   0    |  2
+      do label q jj = 1 to 1 ... end         |   0    |  2
+      do forever ... leave ... end           |   2    |  2
+      n=0; do while n = 0; n = 1; leave; end |   2    |  2
+      do while 0 = 1 ... end (zero-trip)     |   2    |  2
+      do jj = 1 to 0 ... end (zero-trip)     |   2    |  2
+      do 0 ... end (zero-trip)               |   2    |  2
+      do jj = 1 to 3; leave; end             |   2    |  2
+      if 1 = 1 then nop                      |   2    |  2
+      select ... end                         |   2    |  2
+      plain do ... end                       |   2    |  2
 
-  So it is exactly the two shapes that run out of iterations. A zero-trip
-  controlled DO does NOT do it, which is the row that shows the decrement
-  belongs to the re-test that fails rather than to the construct.
+  THE RULE: any repetitive DO/LOOP that COMPLETES AT LEAST ONE BODY PASS and
+  then ends because a CONTROL TEST FAILS decrements once. Count exhausted,
+  WHILE false and UNTIL true all qualify. A zero-trip loop, a loop left by
+  LEAVE, and a non-repetitive block do not.
+
+  THE DISTINGUISHING PROPERTY IS "A PASS COMPLETED", NOT "A RE-TEST FAILED."
+  An earlier revision of this row said "exactly the two shapes that run out of
+  iterations" and cited the zero-trip row as showing the decrement belongs to
+  a failing re-test. Both are wrong, and in the same way: a zero-trip loop's
+  FIRST test also fails, so that row cannot separate the two hypotheses. The
+  WHILE and UNTIL rows above are what separate them, and they were measured
+  only after the narrow rule had been written into four places in the tree.
+
+  THE DECREMENTS ACCUMULATE: two exhausted controlled DOs in sequence, two
+  DOs deep, give oracle 0 against our 4.
 
   IT REACHES 4b TASK 2's OWN DELIVERABLE, which is why it is recorded now
   rather than left to whoever meets it: interpret "do jj = 1 to 1; nop; end;
   say 1/0" one DO deep reports its innermost echo at 2 against the oracle's 0,
-  and two DOs deep at 4 against 2. The fragment base is right; the lexical
-  indent it is added to is not.
+  and two DOs deep at 4 against 2. The WHILE and UNTIL spellings do the same.
+
+  AND IT CROSSES A FRAGMENT BOUNDARY OUTWARD: a completed loop INSIDE a
+  fragment lowers the ENCLOSING program's later clauses. So "the fragment base
+  is right, the lexical indent it is added to is not" is only half of it -- the
+  base itself is computed from an indent that has already drifted.
 
   Not 4a-fixable by making static_indent impure -- that function's own doc
   comment argues at length for why a running counter was rejected, and the

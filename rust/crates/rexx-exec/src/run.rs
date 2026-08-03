@@ -803,17 +803,24 @@ impl Interp {
                 // a flat routine echoes the callee's clause at 6), and which
                 // is Task 3's to add.
                 //
-                // **The rule above is complete except after an exhausted
-                // controlled or repeat `DO`.** `static_indent` is a pure
-                // function of lexical nesting and the oracle's own counter is
-                // not: a `DO name = a TO b` or `DO n` that ends by running out
-                // of iterations leaves every later clause at that level two
-                // spaces lower. That is a 4a divergence with nothing to do
-                // with fragments, but it reaches straight through this base --
+                // **The rule above is complete except after a repetitive
+                // `DO`/`LOOP` that completed a body pass and then ended on a
+                // failing control test** -- count exhausted, `WHILE` false or
+                // `UNTIL` true alike. `static_indent` is a pure function of
+                // lexical nesting and the oracle's own counter is not: such a
+                // loop leaves every later clause at that level two spaces
+                // lower, and the effect accumulates. A zero-trip loop and one
+                // left by `LEAVE` do not do it, so the property is "a pass
+                // completed", not "a re-test failed".
+                //
+                // That is a 4a divergence with nothing to do with fragments,
+                // but it reaches this base from both sides --
                 // `interpret "do jj = 1 to 1; nop; end; say 1/0"` one `DO`
-                // deep reports 2 against the oracle's 0. See
-                // `phase-4-exclusions.txt`'s KNOWN GAP row on the re-tested
-                // pass, which owns both symptoms.
+                // deep reports 2 against the oracle's 0, and a completed loop
+                // *inside* a fragment lowers the **enclosing** program's later
+                // clauses, so the base is computed from an indent that has
+                // already drifted. See `phase-4-exclusions.txt`'s KNOWN GAP
+                // row on the re-tested pass, which owns every symptom.
                 //
                 // `activation_indent` is the mechanism (`lib.rs`'s own doc
                 // comment on the field), **set rather than added**, and
@@ -1529,16 +1536,20 @@ impl Interp {
     /// anywhere else.
     ///
     /// **An earlier version of this paragraph said the escape elevation "is
-    /// always `0` here in practice", and 4b's Task 2 falsified the reasoning
-    /// behind that without noticing.** The argument was sound about
-    /// `indent_offset` alone -- an absorbed `SELECT`'s escape dispatch is
-    /// always closed (`run_otherwise`'s restore, or `END`'s fatal 7.3)
-    /// before another `SELECT`'s `whens` scan runs -- but it was read as
-    /// "the addend is always zero here", and once the same machinery carried
-    /// an `INTERPRET` fragment's base that was flatly wrong: the base is
-    /// non-zero for the whole life of the fragment, `Select`'s direct calls
-    /// included. The base has its own field now (`activation_indent`), the
-    /// addend is emphatically **not** always zero, and nothing below may
+    /// always `0` here in practice". That was false about `indent_offset`
+    /// alone, before any fragment base existed.** Measured with the addend
+    /// dropped from this function and no `INTERPRET` in the program: a `WHEN`
+    /// *condition* that raises, inside a nested `SELECT` inside an escaped
+    /// `OTHERWISE`, reports at 6 where the oracle prints 10 -- which is
+    /// exactly the `Select`-direct-call case the claim was about. So the
+    /// conclusion was retracted correctly and the premise behind it was kept
+    /// and is also wrong; both go.
+    ///
+    /// Once the same machinery carried an `INTERPRET` fragment's base it was
+    /// wrong more often rather than newly wrong: the base is non-zero for the
+    /// whole life of the fragment, `Select`'s direct calls included. The base
+    /// has its own field now (`activation_indent`), the addend is emphatically
+    /// **not** always zero, and nothing below may
     /// assume it is.
     fn record_failure_site(
         &mut self,
@@ -1791,15 +1802,23 @@ impl Interp {
     /// **The one place either offset is applied, and it exists because
     /// open-coding it was a defect.** Through 4a the six sites that needed
     /// `+ self.indent_offset` each wrote it out, and one of them -- the
-    /// `WHEN` scan in `Select`'s own arm -- did not. That was invisible while
-    /// `indent_offset` was a transient escape elevation whose own doc bounded
-    /// the consequence with "no corpus or spec example nests this deeply",
-    /// and it became a live divergence the moment 4b's Task 2 gave the same
-    /// machinery an activation base to carry: measured under `trace r`, `do z
-    /// = 1 to 1` around `interpret "select; when 1 = 1 then nop; end; nop"`
-    /// printed the `WHEN` at 2 where the oracle prints 4. A missing addend is
-    /// not something a reader notices, so the fix is to leave nothing to
-    /// notice.
+    /// `WHEN` scan in `Select`'s own arm -- did not.
+    ///
+    /// **That was a live 4a divergence, not one 4b created.** The missing
+    /// addend was already wrong for a nested `SELECT` inside an escaped
+    /// `OTHERWISE`, with no `INTERPRET` anywhere: measured under `trace r`,
+    /// `select case 2` / `when 2 then` / `when 3 then nop` / `otherwise` /
+    /// `select` / `when 1 = 1 then nop` / `end` / `end` printed the inner
+    /// `WHEN` at 6 where the oracle prints 10. What 4b's Task 2 changed was
+    /// only how easy it is to reach -- a plain `SELECT` inside an `INTERPRET`
+    /// inside one `DO` also hits it, and that is not deep nesting.
+    ///
+    /// The distinction matters because the old doc bounded the consequence
+    /// with "no corpus or spec example nests this deeply", and that false
+    /// bound is why nobody looked. Replacing it with a narrower false bound
+    /// -- "it only became live once a fragment base rode the field" -- would
+    /// set the same trap for the next reader. A missing addend is not
+    /// something a reader notices, so the fix is to leave nothing to notice.
     ///
     /// `static_indent` itself is untouched and stays a pure function of
     /// `(instructions, target)` -- see its own doc comment for why that
@@ -3357,27 +3376,38 @@ impl Interp {
 /// information `If`'s `false_target`, `Select`'s `whens`/`otherwise`/`end`
 /// and `Loop`'s `end` already carry, with nothing further to add.
 ///
-/// # That last paragraph is measurably false, in exactly one shape
+/// # That last paragraph is measurably false
 ///
-/// **The oracle's indent is not a pure function of lexical nesting.** A
-/// `DO name = a TO b` or a `DO n` that ends by *exhausting its iterations*
-/// decrements the oracle's own counter one time too many, so every later
-/// clause at that level prints two spaces lower. Measured, no `INTERPRET`
-/// and no `CALL` anywhere -- `do` / `do jj = 1 to 1` / `nop` / `end` /
-/// `say 1/0` / `end` reports the `say` at **0** on the oracle and at 2 here.
-/// Only the two exhausting shapes do it; a `DO FOREVER` left by `LEAVE`, a
-/// `DO WHILE` whose condition goes false, a zero-trip `DO jj = 1 TO 0`, an
-/// `IF` and a `SELECT` all leave the counter alone (all seven measured,
-/// `phase-4-exclusions.txt`'s KNOWN GAP row has the table).
+/// **The oracle's indent is not a pure function of lexical nesting.** Any
+/// repetitive `DO`/`LOOP` that **completes at least one body pass** and then
+/// ends because a **control test fails** decrements the oracle's own counter
+/// one time too many, so every later clause at that level prints two spaces
+/// lower. Count exhausted, `WHILE` false and `UNTIL` true all qualify.
+/// Measured, no `INTERPRET` and no `CALL` anywhere -- `do` / `do jj = 1 to 1`
+/// / `nop` / `end` / `say 1/0` / `end` reports the `say` at **0** on the
+/// oracle and at 2 here, and `n=0; do while n = 0; n = 1; end` in the same
+/// position does the same.
+///
+/// A **zero-trip** loop (`do while 0 = 1`, `do jj = 1 to 0`, `do 0`), a loop
+/// left by **`LEAVE`**, and a non-repetitive block (`IF`, `SELECT`, plain
+/// `DO`) do not. **The distinguishing property is whether a body pass
+/// completed, not whether a re-test failed** -- a zero-trip loop's first test
+/// also fails, and an earlier revision of this comment drew exactly that
+/// wrong conclusion from the zero-trip row.
+///
+/// Two further properties: the decrements **accumulate** (two exhausted
+/// controlled `DO`s in sequence two `do`s deep give oracle 0 against our 4),
+/// and they cross an `INTERPRET` boundary **outward**, so a completed loop
+/// inside a fragment lowers the enclosing program's later clauses.
+/// `phase-4-exclusions.txt`'s KNOWN GAP row carries the full table.
 ///
 /// It is the same re-tested-pass mechanism as the two missing `>>>` value
 /// lines that row already records, and it is 4a's, not this function's to
 /// fix under any task that has run so far. **What matters here is that the
 /// paragraph above reads as settled and is not**, so a later reader does not
-/// build on it: this function computes the *lexical* indent, that is the
-/// right answer everywhere except after an exhausted controlled or repeat
-/// `DO`, and closing the gap means modelling the oracle's counter rather
-/// than making this function impure.
+/// build on it: this function computes the *lexical* indent, and closing the
+/// gap means modelling the oracle's counter rather than making this function
+/// impure.
 ///
 /// `the_indent_after_a_loop_has_already_exited_is_not_left_over_from_it`
 /// (this file's own tests) does not catch it, and the reason is worth

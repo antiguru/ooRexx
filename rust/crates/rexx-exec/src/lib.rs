@@ -875,9 +875,13 @@ struct Interp {
     /// `step_in_temps_frame` and `run_otherwise` added this offset, that the
     /// `WHEN` scan and the `WHILE`/`UNTIL` overrides did not, and bounded the
     /// consequence with "no corpus or spec example nests this deeply". The
-    /// bound was false as soon as a fragment base rode the same field: a
-    /// plain `SELECT` inside an `INTERPRET` inside one `DO` reached it, and
-    /// the `WHEN` scan printed 2 where the oracle prints 4. Every site that
+    /// bound was false **before any fragment base existed**: a nested
+    /// `SELECT` inside an escaped `OTHERWISE`, with no `INTERPRET` in the
+    /// program, printed its inner `WHEN` at 6 where the oracle prints 10.
+    /// A fragment base widened the reach -- a plain `SELECT` inside an
+    /// `INTERPRET` inside one `DO` printed 2 against the oracle's 4 -- but it
+    /// did not create the defect, and saying it did would be the same false
+    /// bound one notch narrower. Every site that
     /// applies either offset now goes through `Interp::printed_indent`, the
     /// `WHEN` scan included, so there is no per-site list left to go stale.
     /// The `WHILE`/`UNTIL` sites were never really exceptions -- they read
@@ -1781,11 +1785,15 @@ mod tests {
     ///
     /// `Select`'s arm computed `when_indent` from `static_indent` alone --
     /// the one clause-echo indent in `run.rs` that added neither offset.
-    /// Invisible while `indent_offset` was a transient escape elevation whose
-    /// own doc bounded it with "no corpus or spec example nests this deeply",
-    /// and a divergence the moment a fragment base went through the same
-    /// machinery: a plain `SELECT` inside an `INTERPRET` inside one `DO` is
-    /// not deep nesting.
+    /// **Already a live 4a divergence before any fragment base existed**: a
+    /// nested `SELECT` inside an escaped `OTHERWISE` reaches it with no
+    /// `INTERPRET` in the program at all, printing the inner `WHEN` at 6
+    /// where the oracle prints 10. The fragment base only made it easy to
+    /// hit -- a plain `SELECT` inside an `INTERPRET` inside one `DO` is not
+    /// deep nesting either. The old doc bounded this with "no corpus or spec
+    /// example nests this deeply", and that false bound is why nobody looked;
+    /// "it only became live with a fragment base" would be the same trap one
+    /// notch narrower.
     ///
     /// Oracle, verbatim and byte-identical below (rc 0, empty stdout). The
     /// `WHEN` line is the one that was wrong, at 2 instead of 4; the whole
