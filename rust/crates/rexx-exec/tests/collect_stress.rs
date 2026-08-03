@@ -194,3 +194,65 @@ fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
          a real pass from a vacuous one"
     );
 }
+
+/// **Fix round 4's NEW-4.** The value a clause resolves to is rooted across
+/// the `CALL ON` handler its boundary runs, and *this* is what fails when
+/// that rooting goes: the corpus subset above does not contain the shape,
+/// which is why deleting the `push_temp` left 970 tests and this whole file
+/// green while panicking on `a live value` under a hand-run program.
+///
+/// The shape is a clause whose value is created *and consumed* across an
+/// activation boundary: `return bb() || 'TAIL'`, where `bb` queues the
+/// condition. By the time the boundary runs, the concatenation's own
+/// one-clause temps frame is already popped, and the handler is a nested
+/// activation that allocates -- so the only thing keeping the returned
+/// `ObjRef` alive is the boundary's own `push_temp`.
+///
+/// Three rows because the crate has two `Flow` variants that carry a value
+/// and both must be rooted: a `RETURN` at top level, the same inside a `DO`
+/// body (a different `run_bounded` drives it), and an `EXIT`.
+///
+/// **Checked by deleting its subject**, which is the only thing that makes
+/// this a test rather than a re-run of the plain interpreter: with
+/// `ClauseValue for Flow` returning `None`, all three rows panic on
+/// `a live value` at `value.rs`, and the plain (non-stress) run of the same
+/// three programs still passes, so nothing but the collector sees it.
+#[test]
+fn a_clause_value_survives_the_handler_its_boundary_runs() {
+    let rows: [(&str, &str, &str); 3] = [
+        (
+            "return-at-an-activation-boundary",
+            "call on user foo name uh\nzmark = 'NOMARK'\nzr = aa()\nsay zr zmark\nexit\naa:\nreturn bb() || 'TAIL'\nbb:\nraise user foo return 'HEAD'\nuh:\nzmark = 'HANDLER-AT' sigl\nreturn\n",
+            "HEADTAIL HANDLER-AT 7\n",
+        ),
+        (
+            "the same inside a DO body",
+            "call on user foo name uh\nzmark = 'NOMARK'\ndo i = 1 to 1\nzr = aa()\nend\nsay zr zmark\nexit\naa:\nreturn bb() || 'TAIL'\nbb:\nraise user foo return 'HEAD'\nuh:\nzmark = 'HANDLER-AT' sigl\nreturn\n",
+            "HEADTAIL HANDLER-AT 9\n",
+        ),
+        (
+            "EXIT rather than RETURN",
+            "call on user foo name uh\nzmark = 'NOMARK'\nsay 'go'\nexit bb() || 'TAIL'\nbb:\nraise user foo return 'HEAD'\nuh:\nzmark = 'HANDLER-AT' sigl\nsay 'handler' zmark\nreturn\n",
+            "go\nhandler HANDLER-AT 4\n",
+        ),
+    ];
+    let mut total_collections: u64 = 0;
+    for (name, text, expected) in rows {
+        let path = format!("<clause-value-rooting: {name}>");
+        let stress = run_program_collect_every_alloc(&path, text.as_bytes().to_vec());
+        assert_eq!(
+            String::from_utf8_lossy(&stress.stdout),
+            expected,
+            "{name}, under collect-on-every-allocation"
+        );
+        // Anti-vacuity: a program that never collects cannot observe a
+        // dropped root, so a green row with zero collections would prove
+        // nothing at all.
+        assert!(
+            stress.collections > 0,
+            "{name} performed zero collections, so it cannot see a dropped root"
+        );
+        total_collections += stress.collections;
+    }
+    assert!(total_collections > 0);
+}

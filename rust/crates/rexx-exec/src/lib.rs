@@ -946,24 +946,26 @@ struct Interp {
     ///
     /// **The real hazard is delivery into the wrong activation, and it took
     /// two goes to close** (fix round 1's finding 7 corrects the sentence
-    /// that used to assert it was already closed). `run_activation`'s check
-    /// runs once per *clause*, on every path out of one -- placed before the
-    /// `Flow` dispatch precisely so a `RETURN` or `EXIT` cannot skip it --
-    /// and it delivers only to the activation named by
-    /// [`PendingTrap::activation`], an identity rather than a stack depth.
-    /// The first property makes the condition reach its activation; the
-    /// second stops it reaching anyone else's.
+    /// that used to assert it was already closed). Delivery happens at a
+    /// clause boundary, on every path out of a clause -- a `RETURN` or an
+    /// `EXIT` cannot skip it, because `Flow::Return` means the clause *was* a
+    /// `RETURN`, not that it did not happen -- and it delivers only to the
+    /// activation named by [`PendingTrap::activation`], an identity rather
+    /// than a stack depth. The first property makes the condition reach its
+    /// activation; the second stops it reaching anyone else's.
     ///
-    /// **"Every clause" means every clause, and that took a third go**
-    /// (fix round 2's NEW 5). The check lives in `run.rs`'s
-    /// `clause_boundary`, which is called from both -- and only both -- of
-    /// the places that step a clause: `run_activation`'s loop and
-    /// `run_bounded`'s. `run_bounded` is where a `DO` body, a `WHEN`/`THEN`
-    /// body and an `INTERPRET` fragment execute, so while the rule lived in
-    /// `run_activation` alone it did not hold for any clause inside one of
-    /// those, and three oracle probes said so. The two callers are the two
-    /// callers of `step_in_temps_frame`, which is what makes "every clause"
-    /// checkable rather than aspirational.
+    /// **"Every clause" means every clause, and four rounds each named a set
+    /// of sites that was short by one.** The lists are gone: the boundary is
+    /// now inseparable from the clause's own line, in `clause.rs`'s
+    /// [`Interp::in_clause`], whose closure body *is* the clause. Where the
+    /// call sites are is a derived question rather than an enumerated one --
+    /// the oracle's boundary sits after every instruction of the
+    /// activation's flat list, and this crate diverges only where `IF`,
+    /// `SELECT`, `DO`/`LOOP` and `INTERPRET` resolve other instructions
+    /// inside their own `step`. `in_clause`'s own `debug_assert` is what
+    /// makes a fifth such construct announce itself; `clause.rs`'s module doc
+    /// has the rule, what the shape does and does not guarantee, and the
+    /// residual.
     ///
     /// One slot rather than a queue, which is what the oracle's own
     /// behaviour describes: measured, a condition raised while a `CALL ON`
