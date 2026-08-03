@@ -441,7 +441,7 @@ impl Loud {
             | InstructionKind::WhenCase { .. } => kind.keyword().unwrap_or("an instruction"),
         };
         Loud {
-            message: format!("{name} is not implemented"),
+            message: owned_message(name, instruction_owner(kind)),
         }
     }
 
@@ -465,7 +465,7 @@ impl Loud {
     /// gone rather than corrected.
     fn expression(kind: &ExprKind) -> Loud {
         Loud {
-            message: format!("{} is not implemented", form_name(kind)),
+            message: owned_message(&form_name(kind), expr_owner(kind)),
         }
     }
 
@@ -558,6 +558,128 @@ fn form_name(kind: &ExprKind) -> String {
         ExprKind::VariableReference(_) => "a variable reference",
     };
     name.to_string()
+}
+
+/// Task 0's Step 3: appends the owner phase to a loud message, `"{name} is
+/// not implemented ({owner})"`, unless `owner` is `"4a"` -- 4a's own name
+/// for itself, which [`instruction_owner`]/[`expr_owner`] answer for a
+/// variant this crate already implements. That case is reachable here only
+/// through two documented edge cases in `run.rs` (`run_loop`'s `DO`/`LOOP`
+/// COUNTER/`DO WITH` check, and its stem-target `DO OVER` deviation) where
+/// the outer `InstructionKind`/`ExprKind` is 4a's own but the specific
+/// reason that call happened is not. Printing "(4a)" there would read as
+/// self-contradictory -- the construct plainly *is* implemented -- so this
+/// leaves the message exactly as it was before this task whenever
+/// `instruction_owner`/`expr_owner` cannot attribute the failure to a later
+/// phase, and is the only reason this function exists rather than a bare
+/// `format!` at each of the two call sites.
+fn owned_message(name: &str, owner: &'static str) -> String {
+    if owner == "4a" {
+        format!("{name} is not implemented")
+    } else {
+        format!("{name} is not implemented ({owner})")
+    }
+}
+
+/// Who is responsible for an `InstructionKind` that is not (yet) 4a's own,
+/// spelled exactly as the split table spells it
+/// (`docs/superpowers/specs/2026-07-30-phase-4a-executor-design.md`, "The
+/// split") -- `"4a"` for a variant 4a already implements.
+///
+/// **A third copy of `tests/owners.rs`'s `INSTRUCTION_TAGS`, unavoidably**:
+/// production code cannot depend on anything under `tests/`, so the two
+/// cannot be merged the way `coverage.rs` and `loud.rs` were (Task 0's Step
+/// 1). Any variant that moves in scope, or changes owner, has to be edited
+/// in both places -- `owners.rs`'s own module doc names this function as
+/// the fifth of its five pinned items for exactly that reason, and
+/// `loud.rs`'s `every_out_of_scope_variant_fails_loudly` is what would
+/// catch the two drifting apart: it asserts the emitted stderr contains
+/// each witness's own declared owner.
+///
+/// **Arm-grained for `InstructionKind::Call`, matching `loud.rs`'s own
+/// witness table (Step 2)**: every arm of `rexx_parse::Call` is `"4b"`
+/// except `Call::Qualified`, which is genuinely Phase 5's (a namespace-
+/// qualified `CALL`, mirroring `ExprKind::QualifiedCall`'s own ownership
+/// below). Every other variant here stays coarse -- in particular
+/// `InstructionKind::Signal` is `"4b"` regardless of arm, because `Signal::
+/// Trap` is 4b's own too (Task 7), just a later task within it than
+/// `Signal::Value`/`Label` (Task 6) -- so no nested match is needed there
+/// the way `Call` needs one.
+///
+/// Exhaustive with no `_` arm, matching `Loud::instruction`'s own match: a
+/// new `InstructionKind` variant is a compile error here, not a silent
+/// omission from the loud message's owner.
+fn instruction_owner(kind: &InstructionKind) -> &'static str {
+    match kind {
+        InstructionKind::Assignment { .. }
+        | InstructionKind::Label { .. }
+        | InstructionKind::Do(_)
+        | InstructionKind::Loop(_)
+        | InstructionKind::If { .. }
+        | InstructionKind::Then
+        | InstructionKind::Else { .. }
+        | InstructionKind::Select { .. }
+        | InstructionKind::When { .. }
+        | InstructionKind::WhenCase { .. }
+        | InstructionKind::Otherwise
+        | InstructionKind::Leave { .. }
+        | InstructionKind::Iterate { .. }
+        | InstructionKind::End { .. }
+        | InstructionKind::Drop { .. }
+        | InstructionKind::Say { .. }
+        | InstructionKind::Exit { .. }
+        | InstructionKind::Numeric { .. }
+        | InstructionKind::Trace(_)
+        | InstructionKind::Nop => "4a",
+        InstructionKind::Call(call) => match &**call {
+            rexx_parse::Call::Named { .. }
+            | rexx_parse::Call::Dynamic { .. }
+            | rexx_parse::Call::Trap(_) => "4b",
+            rexx_parse::Call::Qualified { .. } => "Phase 5",
+        },
+        InstructionKind::Return { .. }
+        | InstructionKind::Procedure { .. }
+        | InstructionKind::Use(_)
+        | InstructionKind::Signal(_)
+        | InstructionKind::Raise(_)
+        | InstructionKind::Interpret { .. }
+        | InstructionKind::Push { .. }
+        | InstructionKind::Queue { .. } => "4b",
+        InstructionKind::Parse(_)
+        | InstructionKind::Arg(_)
+        | InstructionKind::Pull(_)
+        | InstructionKind::Address(_) => "4c",
+        InstructionKind::Expose { .. }
+        | InstructionKind::Options { .. }
+        | InstructionKind::Message { .. }
+        | InstructionKind::Guard(_)
+        | InstructionKind::Reply { .. }
+        | InstructionKind::Forward(_) => "Phase 5",
+        InstructionKind::Command { .. } => "Phase 7",
+    }
+}
+
+/// [`instruction_owner`]'s counterpart for `ExprKind`. See that function's
+/// own doc for why this is a third copy of `owners.rs`'s `EXPR_TAGS` (there,
+/// `EXPR_TAGS`), and for the completeness guarantee the exhaustive match
+/// below carries.
+fn expr_owner(kind: &ExprKind) -> &'static str {
+    match kind {
+        ExprKind::Literal(_)
+        | ExprKind::Constant(_)
+        | ExprKind::Variable(_)
+        | ExprKind::Stem(_)
+        | ExprKind::Compound(_)
+        | ExprKind::DotVariable(_)
+        | ExprKind::Prefix { .. }
+        | ExprKind::Binary { .. }
+        | ExprKind::Logical(_) => "4a",
+        ExprKind::Call { .. } | ExprKind::VariableReference(_) => "4b",
+        ExprKind::QualifiedCall { .. }
+        | ExprKind::ClassResolver { .. }
+        | ExprKind::Message { .. }
+        | ExprKind::List(_) => "Phase 5",
+    }
 }
 
 /// The code a step is executing, all of it borrowed from the caller's local

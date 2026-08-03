@@ -179,18 +179,34 @@ fn oracle() -> Oracle {
     Oracle { binary, lib_dir }
 }
 
-/// Reads `phase-4a.txt`: one corpus-relative path per line, `#` comments and
-/// blank lines skipped. Neither the list nor its count is assumed anywhere
-/// else in this file; both come from the file itself, so the subset can grow
-/// or shrink with no change here.
-fn read_subset(list_path: &Path) -> Vec<String> {
-    let text = fs::read_to_string(list_path)
-        .unwrap_or_else(|e| panic!("cannot read {}: {e}", list_path.display()));
-    text.lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .map(str::to_string)
-        .collect()
+/// The union of every non-comment, non-blank line across `list_paths`, in
+/// first-seen order, each entry appearing once even if two files name the
+/// same corpus program. Neither the list nor its count is assumed anywhere
+/// else in this file; both come from the files themselves, so the subset can
+/// grow or shrink with no change here.
+///
+/// **Task 0's Step 4.** Was a single-file reader (`&Path`); widened to `&[&Path]`
+/// so a later task's own subset file can run *alongside* `phase-4a.txt`
+/// rather than replacing it -- see `coverage.rs`'s own copy of this function
+/// for the fuller argument. Today's caller passes a one-element slice
+/// containing only `phase-4a.txt`, so the union is that file's own content
+/// unchanged.
+fn read_subset(list_paths: &[&Path]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut union = Vec::new();
+    for list_path in list_paths {
+        let text = fs::read_to_string(list_path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", list_path.display()));
+        for line in text.lines().map(str::trim) {
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if seen.insert(line.to_string()) {
+                union.push(line.to_string());
+            }
+        }
+    }
+    union
 }
 
 /// Runs the executor in process, on `path`.
@@ -459,7 +475,7 @@ fn emit_uncaptured(text: &str) {
 fn corpus_differential() {
     let oracle = oracle();
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
-    let subset = read_subset(&corpus_dir.join("phase-4a.txt"));
+    let subset = read_subset(&[&corpus_dir.join("phase-4a.txt")]);
     assert!(
         !subset.is_empty(),
         "phase-4a.txt named no programs -- that is a corpus defect, not an empty pass"

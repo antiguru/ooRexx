@@ -15,6 +15,16 @@
 //! or carries the phase that owns it. The differential half -- the subset
 //! runs with zero divergences against the oracle -- is `tests/corpus.rs`.
 //!
+//! # The owner table lives in `owners.rs`
+//!
+//! `Owner`, the `tags!` macro, the seven `*_TAGS` tables and their tag
+//! functions, `Coverage`, `EXPECTED_OUT_OF_SCOPE` and `SPLIT_TABLE_PHASES`
+//! all live in `owners.rs` now, `#[path]`-included below as `mod owners`,
+//! rather than being defined here by hand. `loud.rs` includes the identical
+//! file the same way. See `owners.rs`'s own module doc for why (item I36)
+//! and for what still has to be kept in sync by hand regardless (Step 5's
+//! five pinned items).
+//!
 //! # Variant identity, never `keyword()`
 //!
 //! `InstructionKind::keyword()` maps both `When` and `WhenCase` to `"WHEN"`
@@ -112,214 +122,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use rexx_parse::{
-    EndTarget, Expr, ExprKind, Instruction, InstructionKind, Loop, LoopKind, Operator, PrefixOp,
-    Program, Trace, parse_program,
+    EndTarget, Expr, ExprKind, Instruction, InstructionKind, Loop, LoopKind, Program, Trace,
+    parse_program,
 };
 
-/// Who is responsible for a variant this file enumerates.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-enum Owner {
-    /// 4a's own: must be witnessed by at least one program in the subset.
-    InScope,
-    /// Owed to a later phase, spelled exactly as the split table spells it.
-    Phase(&'static str),
-    /// Structurally impossible in this position for either implementation.
-    /// Nothing is owed. `Operator::Backslash` only -- see the module doc.
-    Unreachable,
-}
-
-/// Expands to a tag-and-owner function whose `match` has no wildcard arm,
-/// plus the list of every `(tag, owner)` pair it can produce. One invocation
-/// is the source of both, so the compiled tag list and the checked owner
-/// cannot drift apart the way two separate `match`es over the same enum
-/// could. Phase 3's `tags!` (`rexx-parse/tests/variants.rs`) produced only
-/// the tag; this is that macro widened to also carry ownership, because
-/// criterion 1 here needs both from one invocation for the same reason
-/// Phase 3's needed the tag alone from one.
-macro_rules! tags {
-    ($fn_name:ident, $list:ident, $ty:ty, { $($pat:pat => ($name:literal, $owner:expr)),+ $(,)? }) => {
-        fn $fn_name(k: &$ty) -> (&'static str, Owner) {
-            match k {
-                $($pat => ($name, $owner)),+
-            }
-        }
-        const $list: &[(&str, Owner)] = &[$(($name, $owner)),+];
-    };
-}
-
-tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
-    // ---- 4a's own twenty ----
-    InstructionKind::Assignment { .. } => ("Assignment", Owner::InScope),
-    InstructionKind::Label { .. } => ("Label", Owner::InScope),
-    InstructionKind::Command { .. } => ("Command", Owner::Phase("Phase 7")),
-    InstructionKind::Do(_) => ("Do", Owner::InScope),
-    InstructionKind::Loop(_) => ("Loop", Owner::InScope),
-    InstructionKind::If { .. } => ("If", Owner::InScope),
-    InstructionKind::Then => ("Then", Owner::InScope),
-    InstructionKind::Else { .. } => ("Else", Owner::InScope),
-    InstructionKind::Select { .. } => ("Select", Owner::InScope),
-    InstructionKind::When { .. } => ("When", Owner::InScope),
-    InstructionKind::WhenCase { .. } => ("WhenCase", Owner::InScope),
-    InstructionKind::Otherwise => ("Otherwise", Owner::InScope),
-    InstructionKind::Leave { .. } => ("Leave", Owner::InScope),
-    InstructionKind::Iterate { .. } => ("Iterate", Owner::InScope),
-    InstructionKind::End { .. } => ("End", Owner::InScope),
-    InstructionKind::Drop { .. } => ("Drop", Owner::InScope),
-    InstructionKind::Say { .. } => ("Say", Owner::InScope),
-    InstructionKind::Exit { .. } => ("Exit", Owner::InScope),
-    InstructionKind::Numeric { .. } => ("Numeric", Owner::InScope),
-    InstructionKind::Trace(_) => ("Trace", Owner::InScope),
-    InstructionKind::Nop => ("Nop", Owner::InScope),
-    // ---- 4b's nine ----
-    InstructionKind::Call(_) => ("Call", Owner::Phase("4b")),
-    InstructionKind::Return { .. } => ("Return", Owner::Phase("4b")),
-    InstructionKind::Procedure { .. } => ("Procedure", Owner::Phase("4b")),
-    InstructionKind::Use(_) => ("Use", Owner::Phase("4b")),
-    InstructionKind::Signal(_) => ("Signal", Owner::Phase("4b")),
-    InstructionKind::Raise(_) => ("Raise", Owner::Phase("4b")),
-    InstructionKind::Interpret { .. } => ("Interpret", Owner::Phase("4b")),
-    InstructionKind::Push { .. } => ("Push", Owner::Phase("4b")),
-    InstructionKind::Queue { .. } => ("Queue", Owner::Phase("4b")),
-    // ---- 4c's four ----
-    InstructionKind::Parse(_) => ("Parse", Owner::Phase("4c")),
-    InstructionKind::Arg(_) => ("Arg", Owner::Phase("4c")),
-    InstructionKind::Pull(_) => ("Pull", Owner::Phase("4c")),
-    InstructionKind::Address(_) => ("Address", Owner::Phase("4c")),
-    // ---- Phase 5's six ----
-    InstructionKind::Expose { .. } => ("Expose", Owner::Phase("Phase 5")),
-    InstructionKind::Options { .. } => ("Options", Owner::Phase("Phase 5")),
-    InstructionKind::Message { .. } => ("Message", Owner::Phase("Phase 5")),
-    InstructionKind::Guard(_) => ("Guard", Owner::Phase("Phase 5")),
-    InstructionKind::Reply { .. } => ("Reply", Owner::Phase("Phase 5")),
-    InstructionKind::Forward(_) => ("Forward", Owner::Phase("Phase 5")),
-});
-
-tags!(expr_tag, EXPR_TAGS, ExprKind, {
-    // ---- 4a's own nine ----
-    ExprKind::Literal(_) => ("Literal", Owner::InScope),
-    ExprKind::Constant(_) => ("Constant", Owner::InScope),
-    ExprKind::Variable(_) => ("Variable", Owner::InScope),
-    ExprKind::Stem(_) => ("Stem", Owner::InScope),
-    ExprKind::Compound(_) => ("Compound", Owner::InScope),
-    ExprKind::DotVariable(_) => ("DotVariable", Owner::InScope),
-    ExprKind::Prefix { .. } => ("Prefix", Owner::InScope),
-    ExprKind::Binary { .. } => ("Binary", Owner::InScope),
-    ExprKind::Logical(_) => ("Logical", Owner::InScope),
-    // ---- the six that fail loudly; see the module doc's ownership section ----
-    ExprKind::Call { .. } => ("Call", Owner::Phase("4b")),
-    ExprKind::VariableReference(_) => ("VariableReference", Owner::Phase("4b")),
-    ExprKind::QualifiedCall { .. } => ("QualifiedCall", Owner::Phase("Phase 5")),
-    ExprKind::ClassResolver { .. } => ("ClassResolver", Owner::Phase("Phase 5")),
-    ExprKind::List(_) => ("List", Owner::Phase("Phase 5")),
-    ExprKind::Message { .. } => ("Message", Owner::Phase("Phase 5")),
-});
-
-tags!(loop_tag, LOOP_TAGS, LoopKind, {
-    LoopKind::Simple => ("Simple", Owner::InScope),
-    LoopKind::Forever => ("Forever", Owner::InScope),
-    LoopKind::Count(_) => ("Count", Owner::InScope),
-    LoopKind::Controlled(_) => ("Controlled", Owner::InScope),
-    LoopKind::Over { .. } => ("Over", Owner::InScope),
-    // `DO WITH ... OVER` sends SUPPLIER, which nothing in 4a answers.
-    LoopKind::With { .. } => ("With", Owner::Phase("Phase 5")),
-});
-
-tags!(prefix_op_tag, PREFIX_OP_TAGS, PrefixOp, {
-    PrefixOp::Plus => ("Plus", Owner::InScope),
-    PrefixOp::Minus => ("Minus", Owner::InScope),
-    PrefixOp::Not => ("Not", Owner::InScope),
-});
-
-tags!(end_style_tag, END_STYLE_TAGS, rexx_parse::EndStyle, {
-    rexx_parse::EndStyle::Do => ("Do", Owner::InScope),
-    rexx_parse::EndStyle::LabeledDo => ("LabeledDo", Owner::InScope),
-    rexx_parse::EndStyle::Loop => ("Loop", Owner::InScope),
-    rexx_parse::EndStyle::Select => ("Select", Owner::InScope),
-    rexx_parse::EndStyle::Otherwise => ("Otherwise", Owner::InScope),
-    rexx_parse::EndStyle::LabeledOtherwise => ("LabeledOtherwise", Owner::InScope),
-});
-
-tags!(trace_tag, TRACE_TAGS, Trace, {
-    Trace::Default => ("Default", Owner::InScope),
-    Trace::Setting(_) => ("Setting", Owner::InScope),
-    Trace::Skip(_) => ("Skip", Owner::InScope),
-    Trace::Value(_) => ("Value", Owner::InScope),
-});
-
-tags!(operator_tag, OPERATOR_TAGS, Operator, {
-    Operator::Plus => ("Plus", Owner::InScope),
-    Operator::Subtract => ("Subtract", Owner::InScope),
-    Operator::Multiply => ("Multiply", Owner::InScope),
-    Operator::Divide => ("Divide", Owner::InScope),
-    Operator::IntDiv => ("IntDiv", Owner::InScope),
-    Operator::Remainder => ("Remainder", Owner::InScope),
-    Operator::Power => ("Power", Owner::InScope),
-    Operator::Abuttal => ("Abuttal", Owner::InScope),
-    Operator::Concatenate => ("Concatenate", Owner::InScope),
-    Operator::Blank => ("Blank", Owner::InScope),
-    Operator::Equal => ("Equal", Owner::InScope),
-    Operator::BackslashEqual => ("BackslashEqual", Owner::InScope),
-    Operator::GreaterThan => ("GreaterThan", Owner::InScope),
-    Operator::BackslashGreaterThan => ("BackslashGreaterThan", Owner::InScope),
-    Operator::LessThan => ("LessThan", Owner::InScope),
-    Operator::BackslashLessThan => ("BackslashLessThan", Owner::InScope),
-    Operator::GreaterThanEqual => ("GreaterThanEqual", Owner::InScope),
-    Operator::LessThanEqual => ("LessThanEqual", Owner::InScope),
-    Operator::StrictEqual => ("StrictEqual", Owner::InScope),
-    Operator::StrictBackslashEqual => ("StrictBackslashEqual", Owner::InScope),
-    Operator::StrictGreaterThan => ("StrictGreaterThan", Owner::InScope),
-    Operator::StrictBackslashGreaterThan => ("StrictBackslashGreaterThan", Owner::InScope),
-    Operator::StrictLessThan => ("StrictLessThan", Owner::InScope),
-    Operator::StrictBackslashLessThan => ("StrictBackslashLessThan", Owner::InScope),
-    Operator::StrictGreaterThanEqual => ("StrictGreaterThanEqual", Owner::InScope),
-    Operator::StrictLessThanEqual => ("StrictLessThanEqual", Owner::InScope),
-    Operator::LessThanGreaterThan => ("LessThanGreaterThan", Owner::InScope),
-    Operator::GreaterThanLessThan => ("GreaterThanLessThan", Owner::InScope),
-    Operator::And => ("And", Owner::InScope),
-    Operator::Or => ("Or", Owner::InScope),
-    Operator::Xor => ("Xor", Owner::InScope),
-    // `\` is prefix-only; a dyadic one is error 35.1 in both implementations.
-    Operator::Backslash => ("Backslash", Owner::Unreachable),
-});
-
-/// One category's seen-set against its full `(tag, owner)` list.
-struct Coverage {
-    category: &'static str,
-    all: &'static [(&'static str, Owner)],
-    seen: HashSet<&'static str>,
-}
-
-impl Coverage {
-    fn new(category: &'static str, all: &'static [(&'static str, Owner)]) -> Self {
-        Coverage {
-            category,
-            all,
-            seen: HashSet::new(),
-        }
-    }
-
-    /// In-scope variants with no witness -- the failure this criterion
-    /// exists to catch.
-    fn unwitnessed(&self) -> Vec<&'static str> {
-        self.all
-            .iter()
-            .filter(|(name, owner)| *owner == Owner::InScope && !self.seen.contains(name))
-            .map(|(name, _)| *name)
-            .collect()
-    }
-
-    /// `(category, tag, phase)` for every out-of-scope variant, used to build
-    /// the set this file pins against [`EXPECTED_OUT_OF_SCOPE`].
-    fn out_of_scope(&self) -> Vec<(&'static str, &'static str, &'static str)> {
-        self.all
-            .iter()
-            .filter_map(|(name, owner)| match owner {
-                Owner::Phase(p) => Some((self.category, *name, *p)),
-                Owner::InScope | Owner::Unreachable => None,
-            })
-            .collect()
-    }
-}
+#[path = "owners.rs"]
+mod owners;
+use owners::{
+    Coverage, END_STYLE_TAGS, EXPR_TAGS, INSTRUCTION_TAGS, LOOP_TAGS, OPERATOR_TAGS,
+    PREFIX_OP_TAGS, TRACE_TAGS, end_style_tag, expr_tag, instruction_tag, loop_tag, operator_tag,
+    prefix_op_tag, trace_tag,
+};
 
 // ---------------------------------------------------------------------------
 // The walk. Trimmed from `rexx-parse/tests/gate_walk/mod.rs` to what the 4a
@@ -582,201 +395,38 @@ fn each_expr<'a>(p: &'a Program, visit: &mut impl FnMut(&'a Expr)) {
     });
 }
 
-/// One path per non-comment, non-blank line of `phase-4a.txt`.
-fn read_subset(list_path: &Path) -> Vec<String> {
-    let text = fs::read_to_string(list_path)
-        .unwrap_or_else(|e| panic!("cannot read {}: {e}", list_path.display()));
-    text.lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .map(str::to_string)
-        .collect()
+/// The union of every non-comment, non-blank line across `list_paths`, in
+/// first-seen order, each entry appearing once even if two files name the
+/// same corpus program.
+///
+/// **Task 0's Step 4.** Was a single-file reader (`&Path`); widened to `&[&Path]`
+/// so a later task's own subset file (4b's, say) can run *alongside*
+/// `phase-4a.txt` rather than replacing it -- every earlier-phase witness
+/// stays exercised as later phases add their own subset files, instead of
+/// each phase's own harness run choosing between "4a's programs" and "my
+/// own programs" and losing the other's coverage. Today's callers all pass
+/// a one-element slice containing only `phase-4a.txt`, so the union is that
+/// file's own content unchanged -- this task ships no behaviour change.
+fn read_subset(list_paths: &[&Path]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut union = Vec::new();
+    for list_path in list_paths {
+        let text = fs::read_to_string(list_path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", list_path.display()));
+        for line in text.lines().map(str::trim) {
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if seen.insert(line.to_string()) {
+                union.push(line.to_string());
+            }
+        }
+    }
+    union
 }
 
 fn corpus_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus")
-}
-
-/// The out-of-4a variant set this file's `tags!` tables are allowed to
-/// produce, as a literal rather than "whatever the tables say" -- the same
-/// device `phase-4-exclusions.txt` uses for the builtin set. Any edit to an
-/// owner arm above that is not also made here is a test failure, which is
-/// the point: relabelling a variant is a plan amendment, not a drive-by
-/// `match` edit.
-const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
-    ("InstructionKind", "Command", "Phase 7"),
-    ("InstructionKind", "Call", "4b"),
-    ("InstructionKind", "Return", "4b"),
-    ("InstructionKind", "Procedure", "4b"),
-    ("InstructionKind", "Use", "4b"),
-    ("InstructionKind", "Signal", "4b"),
-    ("InstructionKind", "Raise", "4b"),
-    ("InstructionKind", "Interpret", "4b"),
-    ("InstructionKind", "Push", "4b"),
-    ("InstructionKind", "Queue", "4b"),
-    ("InstructionKind", "Parse", "4c"),
-    ("InstructionKind", "Arg", "4c"),
-    ("InstructionKind", "Pull", "4c"),
-    ("InstructionKind", "Address", "4c"),
-    ("InstructionKind", "Expose", "Phase 5"),
-    ("InstructionKind", "Options", "Phase 5"),
-    ("InstructionKind", "Message", "Phase 5"),
-    ("InstructionKind", "Guard", "Phase 5"),
-    ("InstructionKind", "Reply", "Phase 5"),
-    ("InstructionKind", "Forward", "Phase 5"),
-    ("ExprKind", "Call", "4b"),
-    ("ExprKind", "VariableReference", "4b"),
-    ("ExprKind", "QualifiedCall", "Phase 5"),
-    ("ExprKind", "ClassResolver", "Phase 5"),
-    ("ExprKind", "List", "Phase 5"),
-    ("ExprKind", "Message", "Phase 5"),
-    ("LoopKind", "With", "Phase 5"),
-];
-
-/// Every phase name the split table names, spelled exactly as it spells them.
-/// `docs/superpowers/specs/2026-07-30-phase-4a-executor-design.md`, "The
-/// split" table and its "assigned elsewhere" paragraph.
-const SPLIT_TABLE_PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
-
-#[test]
-fn assert_owner_strings_are_split_table_phases() {
-    for (category, all) in [
-        ("InstructionKind", INSTRUCTION_TAGS),
-        ("ExprKind", EXPR_TAGS),
-        ("LoopKind", LOOP_TAGS),
-        ("PrefixOp", PREFIX_OP_TAGS),
-        ("EndStyle", END_STYLE_TAGS),
-        ("Trace", TRACE_TAGS),
-        ("Operator", OPERATOR_TAGS),
-    ] {
-        for (name, owner) in all {
-            if let Owner::Phase(p) = owner {
-                assert!(
-                    SPLIT_TABLE_PHASES.contains(p),
-                    "{category}::{name} names owner {p:?}, which is not one of \
-                     the split table's phases {SPLIT_TABLE_PHASES:?} -- an owner \
-                     string outside that set is an unpoliced escape, exactly \
-                     what this assertion exists to close off"
-                );
-            }
-        }
-    }
-}
-
-#[test]
-fn only_backslash_is_unreachable() {
-    for (category, all) in [
-        ("InstructionKind", INSTRUCTION_TAGS),
-        ("ExprKind", EXPR_TAGS),
-        ("LoopKind", LOOP_TAGS),
-        ("PrefixOp", PREFIX_OP_TAGS),
-        ("EndStyle", END_STYLE_TAGS),
-        ("Trace", TRACE_TAGS),
-        ("Operator", OPERATOR_TAGS),
-    ] {
-        for (name, owner) in all {
-            if *owner == Owner::Unreachable {
-                assert_eq!(
-                    (category, *name),
-                    ("Operator", "Backslash"),
-                    "only Operator::Backslash is structurally unreachable; a \
-                     second Unreachable arm needs its own justification, not \
-                     a copy of this one"
-                );
-            }
-        }
-    }
-}
-
-#[test]
-fn out_of_scope_set_matches_the_committed_expectation() {
-    let mut actual: Vec<(&str, &str, &str)> = Vec::new();
-    for cov in [
-        Coverage::new("InstructionKind", INSTRUCTION_TAGS),
-        Coverage::new("ExprKind", EXPR_TAGS),
-        Coverage::new("LoopKind", LOOP_TAGS),
-        Coverage::new("PrefixOp", PREFIX_OP_TAGS),
-        Coverage::new("EndStyle", END_STYLE_TAGS),
-        Coverage::new("Trace", TRACE_TAGS),
-        Coverage::new("Operator", OPERATOR_TAGS),
-    ] {
-        actual.extend(cov.out_of_scope());
-    }
-    actual.sort();
-    let mut expected = EXPECTED_OUT_OF_SCOPE.to_vec();
-    expected.sort();
-    assert_eq!(
-        actual, expected,
-        "the set of out-of-4a variants drifted from EXPECTED_OUT_OF_SCOPE -- \
-         relabelling a variant's owner (or adding/removing one) is a plan \
-         amendment and must be made in both places, the same rule \
-         phase-4-exclusions.txt applies to the builtin set"
-    );
-}
-
-#[test]
-fn variant_counts_match_the_audited_split() {
-    // Re-derived here rather than trusted: 40 InstructionKind variants (20 in
-    // 4a, 9 in 4b, 4 in 4c, 6 in Phase 5, 1 in Phase 7) and 15 ExprKind (9 in
-    // scope, 6 failing loudly), per the design spec's criterion 1.
-    assert_eq!(INSTRUCTION_TAGS.len(), 40);
-    assert_eq!(
-        INSTRUCTION_TAGS
-            .iter()
-            .filter(|(_, o)| *o == Owner::InScope)
-            .count(),
-        20
-    );
-    assert_eq!(
-        INSTRUCTION_TAGS
-            .iter()
-            .filter(|(_, o)| *o == Owner::Phase("4b"))
-            .count(),
-        9
-    );
-    assert_eq!(
-        INSTRUCTION_TAGS
-            .iter()
-            .filter(|(_, o)| *o == Owner::Phase("4c"))
-            .count(),
-        4
-    );
-    assert_eq!(
-        INSTRUCTION_TAGS
-            .iter()
-            .filter(|(_, o)| *o == Owner::Phase("Phase 5"))
-            .count(),
-        6
-    );
-    assert_eq!(
-        INSTRUCTION_TAGS
-            .iter()
-            .filter(|(_, o)| *o == Owner::Phase("Phase 7"))
-            .count(),
-        1
-    );
-
-    assert_eq!(EXPR_TAGS.len(), 15);
-    assert_eq!(
-        EXPR_TAGS
-            .iter()
-            .filter(|(_, o)| *o == Owner::InScope)
-            .count(),
-        9
-    );
-    assert_eq!(
-        EXPR_TAGS
-            .iter()
-            .filter(|(_, o)| matches!(o, Owner::Phase(_)))
-            .count(),
-        6
-    );
-
-    assert_eq!(LOOP_TAGS.len(), 6);
-    assert_eq!(PREFIX_OP_TAGS.len(), 3);
-    assert_eq!(END_STYLE_TAGS.len(), 6);
-    assert_eq!(TRACE_TAGS.len(), 4);
-    assert_eq!(OPERATOR_TAGS.len(), 32);
 }
 
 /// `phase-4a.txt`'s exact line list, one entry per non-comment, non-blank
@@ -831,7 +481,7 @@ const EXPECTED_SUBSET: &[&str] = &[
 #[test]
 fn phase_4a_subset_matches_the_committed_list() {
     let corpus_dir = corpus_dir();
-    let subset = read_subset(&corpus_dir.join("phase-4a.txt"));
+    let subset = read_subset(&[&corpus_dir.join("phase-4a.txt")]);
     assert_eq!(
         subset, EXPECTED_SUBSET,
         "phase-4a.txt's entries drifted from EXPECTED_SUBSET -- adding or \
@@ -853,7 +503,7 @@ fn every_in_scope_variant_is_witnessed_by_the_phase_4a_subset() {
     let mut operators = Coverage::new("Operator", OPERATOR_TAGS);
 
     let corpus_dir = corpus_dir();
-    let subset = read_subset(&corpus_dir.join("phase-4a.txt"));
+    let subset = read_subset(&[&corpus_dir.join("phase-4a.txt")]);
     assert!(
         !subset.is_empty(),
         "phase-4a.txt named no programs -- that is a corpus defect, not an \

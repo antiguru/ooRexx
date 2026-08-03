@@ -37,17 +37,52 @@
 //! `coverage.rs` uses -- has a total of 20 `InstructionKind` and 9 `ExprKind`
 //! entries, so an in-scope variant cannot go unlisted by omission.
 //!
-//! # The owner table
+//! # The owner table lives in `owners.rs`
 //!
-//! Duplicated from `coverage.rs` rather than shared through a common module:
-//! an integration test file cannot `mod` another crate's `tests/` directory,
-//! and this crate's own permitted-file list for this task does not include a
-//! new shared module. The two tables must be kept in sync by hand; see
-//! `coverage.rs`'s module doc for the full reasoning behind each owner
-//! string, in particular the five `ExprKind` assignments that are a Task 16
-//! gate-time judgement call rather than a spec citation, recorded in
+//! `Owner`, the seven `*_TAGS` tables and their tag functions all live in
+//! `owners.rs` now, `#[path]`-included below as `mod owners` -- `coverage.rs`
+//! includes the identical file the same way, so the two can no longer
+//! diverge by hand-editing only one (item I36; see `owners.rs`'s own module
+//! doc). See `coverage.rs`'s module doc for the full reasoning behind each
+//! owner string, in particular the five `ExprKind` assignments that are a
+//! Task 16 gate-time judgement call rather than a spec citation, recorded in
 //! `docs/superpowers/plans/phase-4-exclusions.txt`'s "EXPRKIND OWNERSHIP"
 //! section.
+//!
+//! # Arm-grained ownership (Task 0's Step 2)
+//!
+//! `InstructionKind::Call` and `InstructionKind::Signal` are each one row in
+//! `owners.rs`'s `INSTRUCTION_TAGS` (`"Call"` -> `"4b"`, `"Signal"` ->
+//! `"4b"`), which is right for criterion 1's parse-only coverage question
+//! ("was some `Call`/`Signal` constructed") but wrong for this file's own
+//! question, because both wrap an inner enum (`rexx_parse::Call`,
+//! `rexx_parse::Signal`) whose *arms* do not all become in-scope, or even
+//! all belong to the same owner, at the same moment: `Call::Named` and
+//! `Call::Dynamic` are both in scope from Task 3; `Call::Qualified` is
+//! genuinely Phase 5's (a namespace-qualified `CALL`, mirroring `ExprKind::
+//! QualifiedCall`'s own ownership); `Call::Trap` (`CALL ON`/`CALL OFF`) and
+//! `Signal::Trap` (`SIGNAL ON`/`SIGNAL OFF`) are not in scope until Task 7,
+//! after `Signal::Value`/`Signal::Label` already are (Task 6). A single
+//! `"Call"`/`"Signal"` witness row cannot survive that: the moment Task 3
+//! implements `Call::Named`, the witness naming it has to be deleted, and a
+//! single shared row would take `Call::Qualified` and `Call::Trap`'s own
+//! loudness coverage down with it, with nothing left to catch that `CALL
+//! ON`/`CALL OFF` and `CALL ns:name` are still unimplemented.
+//!
+//! So `INSTRUCTION_WITNESSES` below carries **one row per arm** for the two
+//! split variants -- `"Call::Named"`, `"Call::Dynamic"`, `"Call::Qualified"`,
+//! `"Call::Trap"`, and `"Signal"` (still combined, for `Value`/`Label`
+//! together, since both move in scope in the same task) plus `"Signal::
+//! Trap"` -- rather than the coarse `"Call"`/`"Signal"` `assert_constructs`
+//! would otherwise check against. [`instruction_arm`] is what resolves a
+//! witness's tag against the program it parses: the coarse `owners::
+//! instruction_tag` for every variant except these two, and the inner arm's
+//! own name for them. [`assert_witness_set_is_complete`]'s own expected set
+//! is built the same way, through [`expand_for_witnesses`] -- a hand-
+//! maintained expansion of `owners.rs`'s coarse tag list, the same "pin it
+//! as a literal, not as whatever the code currently computes" device
+//! `EXPECTED_OUT_OF_SCOPE` already uses one level up, because nothing here
+//! can enumerate `rexx_parse::Call`'s/`Signal`'s own arms at compile time.
 //!
 //! # Witness programs
 //!
@@ -74,85 +109,50 @@ use std::path::Path;
 use rexx_exec::{NOT_IMPLEMENTED_EXIT, run_program};
 use rexx_parse::{ExprKind, InstructionKind, parse_program};
 
-/// Who is responsible for a variant. Mirrors `coverage.rs`'s `Owner`; see
-/// that file's module doc for why each `Phase` string is what it is.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-enum Owner {
-    InScope,
-    Phase(&'static str),
+#[path = "owners.rs"]
+mod owners;
+use owners::{EXPR_TAGS, INSTRUCTION_TAGS, Owner, SPLIT_TABLE_PHASES, expr_tag, instruction_tag};
+
+/// The fully arm-qualified tag for one `InstructionKind`: the coarse
+/// `owners::instruction_tag` for every variant except `Call` and `Signal`,
+/// whose own inner arm this returns instead. See the module doc's "Arm-
+/// grained ownership" section for why those two specifically need this and
+/// the rest do not.
+fn instruction_arm(kind: &InstructionKind) -> String {
+    match kind {
+        InstructionKind::Call(c) => match &**c {
+            rexx_parse::Call::Named { .. } => "Call::Named".to_string(),
+            rexx_parse::Call::Dynamic { .. } => "Call::Dynamic".to_string(),
+            rexx_parse::Call::Qualified { .. } => "Call::Qualified".to_string(),
+            rexx_parse::Call::Trap(_) => "Call::Trap".to_string(),
+        },
+        InstructionKind::Signal(s) => match &**s {
+            rexx_parse::Signal::Trap(_) => "Signal::Trap".to_string(),
+            rexx_parse::Signal::Value(_) | rexx_parse::Signal::Label(_) => "Signal".to_string(),
+        },
+        other => instruction_tag(other).0.to_string(),
+    }
 }
 
-macro_rules! tags {
-    ($fn_name:ident, $list:ident, $ty:ty, { $($pat:pat => ($name:literal, $owner:expr)),+ $(,)? }) => {
-        fn $fn_name(k: &$ty) -> (&'static str, Owner) {
-            match k {
-                $($pat => ($name, $owner)),+
-            }
-        }
-        const $list: &[(&str, Owner)] = &[$(($name, $owner)),+];
-    };
+/// `owners::INSTRUCTION_TAGS`'s coarse, phase-owned tag names, expanded to
+/// the fine-grained witness tags `INSTRUCTION_WITNESSES` actually carries
+/// for `Call` and `Signal` (`instruction_arm`'s own inverse, in effect) --
+/// every other coarse tag expands to itself. Hand-maintained rather than
+/// derived from `rexx_parse::Call`/`Signal`, which nothing here can
+/// enumerate at compile time -- the same device `EXPECTED_OUT_OF_SCOPE`
+/// already uses for a different set, one level up.
+fn expand_for_witnesses(coarse: &'static str) -> Vec<&'static str> {
+    match coarse {
+        "Call" => vec![
+            "Call::Named",
+            "Call::Dynamic",
+            "Call::Qualified",
+            "Call::Trap",
+        ],
+        "Signal" => vec!["Signal", "Signal::Trap"],
+        other => vec![other],
+    }
 }
-
-tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
-    InstructionKind::Assignment { .. } => ("Assignment", Owner::InScope),
-    InstructionKind::Label { .. } => ("Label", Owner::InScope),
-    InstructionKind::Command { .. } => ("Command", Owner::Phase("Phase 7")),
-    InstructionKind::Do(_) => ("Do", Owner::InScope),
-    InstructionKind::Loop(_) => ("Loop", Owner::InScope),
-    InstructionKind::If { .. } => ("If", Owner::InScope),
-    InstructionKind::Then => ("Then", Owner::InScope),
-    InstructionKind::Else { .. } => ("Else", Owner::InScope),
-    InstructionKind::Select { .. } => ("Select", Owner::InScope),
-    InstructionKind::When { .. } => ("When", Owner::InScope),
-    InstructionKind::WhenCase { .. } => ("WhenCase", Owner::InScope),
-    InstructionKind::Otherwise => ("Otherwise", Owner::InScope),
-    InstructionKind::Leave { .. } => ("Leave", Owner::InScope),
-    InstructionKind::Iterate { .. } => ("Iterate", Owner::InScope),
-    InstructionKind::End { .. } => ("End", Owner::InScope),
-    InstructionKind::Drop { .. } => ("Drop", Owner::InScope),
-    InstructionKind::Say { .. } => ("Say", Owner::InScope),
-    InstructionKind::Exit { .. } => ("Exit", Owner::InScope),
-    InstructionKind::Numeric { .. } => ("Numeric", Owner::InScope),
-    InstructionKind::Trace(_) => ("Trace", Owner::InScope),
-    InstructionKind::Nop => ("Nop", Owner::InScope),
-    InstructionKind::Call(_) => ("Call", Owner::Phase("4b")),
-    InstructionKind::Return { .. } => ("Return", Owner::Phase("4b")),
-    InstructionKind::Procedure { .. } => ("Procedure", Owner::Phase("4b")),
-    InstructionKind::Use(_) => ("Use", Owner::Phase("4b")),
-    InstructionKind::Signal(_) => ("Signal", Owner::Phase("4b")),
-    InstructionKind::Raise(_) => ("Raise", Owner::Phase("4b")),
-    InstructionKind::Interpret { .. } => ("Interpret", Owner::Phase("4b")),
-    InstructionKind::Push { .. } => ("Push", Owner::Phase("4b")),
-    InstructionKind::Queue { .. } => ("Queue", Owner::Phase("4b")),
-    InstructionKind::Parse(_) => ("Parse", Owner::Phase("4c")),
-    InstructionKind::Arg(_) => ("Arg", Owner::Phase("4c")),
-    InstructionKind::Pull(_) => ("Pull", Owner::Phase("4c")),
-    InstructionKind::Address(_) => ("Address", Owner::Phase("4c")),
-    InstructionKind::Expose { .. } => ("Expose", Owner::Phase("Phase 5")),
-    InstructionKind::Options { .. } => ("Options", Owner::Phase("Phase 5")),
-    InstructionKind::Message { .. } => ("Message", Owner::Phase("Phase 5")),
-    InstructionKind::Guard(_) => ("Guard", Owner::Phase("Phase 5")),
-    InstructionKind::Reply { .. } => ("Reply", Owner::Phase("Phase 5")),
-    InstructionKind::Forward(_) => ("Forward", Owner::Phase("Phase 5")),
-});
-
-tags!(expr_tag, EXPR_TAGS, ExprKind, {
-    ExprKind::Literal(_) => ("Literal", Owner::InScope),
-    ExprKind::Constant(_) => ("Constant", Owner::InScope),
-    ExprKind::Variable(_) => ("Variable", Owner::InScope),
-    ExprKind::Stem(_) => ("Stem", Owner::InScope),
-    ExprKind::Compound(_) => ("Compound", Owner::InScope),
-    ExprKind::DotVariable(_) => ("DotVariable", Owner::InScope),
-    ExprKind::Prefix { .. } => ("Prefix", Owner::InScope),
-    ExprKind::Binary { .. } => ("Binary", Owner::InScope),
-    ExprKind::Logical(_) => ("Logical", Owner::InScope),
-    ExprKind::Call { .. } => ("Call", Owner::Phase("4b")),
-    ExprKind::VariableReference(_) => ("VariableReference", Owner::Phase("4b")),
-    ExprKind::QualifiedCall { .. } => ("QualifiedCall", Owner::Phase("Phase 5")),
-    ExprKind::ClassResolver { .. } => ("ClassResolver", Owner::Phase("Phase 5")),
-    ExprKind::List(_) => ("List", Owner::Phase("Phase 5")),
-    ExprKind::Message { .. } => ("Message", Owner::Phase("Phase 5")),
-});
 
 /// One out-of-scope variant's witness: source text, which category owns the
 /// tag it must construct, and the tag itself. Checked against the parsed AST
@@ -184,10 +184,35 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
         source: "'date'\n",
         category: Category::Instruction,
     },
+    // ---- `Call`, arm-grained (Step 2): see the module doc ----
     Witness {
-        tag: "Call",
+        tag: "Call::Named",
         owner: "4b",
         source: "call sub\n",
+        category: Category::Instruction,
+    },
+    Witness {
+        tag: "Call::Dynamic",
+        owner: "4b",
+        // `CALL (expr) args`, whose target is only known at run time.
+        source: "call (x)\n",
+        category: Category::Instruction,
+    },
+    Witness {
+        tag: "Call::Qualified",
+        owner: "Phase 5",
+        // `CALL ns:name args`, restricted to public routines of that
+        // namespace -- genuinely Phase 5's, unlike `Call::Named`/`Dynamic`/
+        // `Trap`, all "4b".
+        source: "call ns:sub\n",
+        category: Category::Instruction,
+    },
+    Witness {
+        tag: "Call::Trap",
+        owner: "4b",
+        // `CALL ON`/`CALL OFF`. The `OFF` form needs no `NAME` clause, the
+        // shortest way to construct this arm.
+        source: "call off error\n",
         category: Category::Instruction,
     },
     Witness {
@@ -211,10 +236,22 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
         source: "use arg x\n",
         category: Category::Instruction,
     },
+    // ---- `Signal`, arm-grained (Step 2) for `Trap` only: `Value`/`Label`
+    // both move in scope in the same task (6), so they stay one row; `Trap`
+    // (`SIGNAL ON`/`SIGNAL OFF`) does not move until Task 7 -- see the
+    // module doc ----
     Witness {
         tag: "Signal",
         owner: "4b",
         source: "signal there\nthere: nop\n",
+        category: Category::Instruction,
+    },
+    Witness {
+        tag: "Signal::Trap",
+        owner: "4b",
+        // `SIGNAL ON`/`SIGNAL OFF`. The `OFF` form needs no `NAME` clause,
+        // mirroring `Call::Trap`'s own witness above.
+        source: "signal off error\n",
         category: Category::Instruction,
     },
     Witness {
@@ -351,6 +388,11 @@ const EXPR_WITNESSES: &[Witness] = &[
 /// Confirms `path`'s program actually constructs `witness.tag` in the
 /// category it claims, before running it. A snippet that parses into the
 /// wrong shape would otherwise let a passing exit-code check mean nothing.
+///
+/// `instruction_arm`, not the coarse `owners::instruction_tag`, for the
+/// `Category::Instruction` half: a witness's `tag` may name a specific
+/// `Call`/`Signal` arm (Step 2), and only `instruction_arm` can tell those
+/// apart.
 fn assert_constructs(witness: &Witness) {
     let program = parse_program(witness.source.as_bytes().to_vec())
         .unwrap_or_else(|e| panic!("witness for {} failed to parse: {e:?}", witness.tag));
@@ -359,7 +401,7 @@ fn assert_constructs(witness: &Witness) {
             .main
             .instructions
             .iter()
-            .any(|i| instruction_tag(&i.kind).0 == witness.tag),
+            .any(|i| instruction_arm(&i.kind) == witness.tag),
         Category::Expr => {
             let mut found = false;
             for i in &program.main.instructions {
@@ -440,10 +482,16 @@ fn walk_exprs<'a>(kind: &'a InstructionKind, f: &mut impl FnMut(&'a rexx_parse::
 
 #[test]
 fn assert_witness_set_is_complete() {
+    // `flat_map(expand_for_witnesses)`, not a bare `.map`: `Call` and
+    // `Signal` each expand to more than one expected tag (Step 2, the
+    // module doc's "Arm-grained ownership"), so the coarse 20 phase-owned
+    // `InstructionKind` tags become 24 expected witness tags -- `Call`'s
+    // one row becomes four (`Named`/`Dynamic`/`Qualified`/`Trap`) and
+    // `Signal`'s one becomes two (`Signal`/`Signal::Trap`), net +3 +1 = +4.
     let expected_instructions: Vec<&str> = INSTRUCTION_TAGS
         .iter()
         .filter(|(_, o)| matches!(o, Owner::Phase(_)))
-        .map(|(name, _)| *name)
+        .flat_map(|(name, _)| expand_for_witnesses(name))
         .collect();
     let mut got_instructions: Vec<&str> = INSTRUCTION_WITNESSES.iter().map(|w| w.tag).collect();
     got_instructions.sort();
@@ -452,9 +500,10 @@ fn assert_witness_set_is_complete() {
     assert_eq!(
         got_instructions, expected_sorted,
         "INSTRUCTION_WITNESSES must have exactly one entry per out-of-scope \
-         InstructionKind variant, no more and no fewer"
+         InstructionKind variant (per arm, for Call/Signal), no more and no \
+         fewer"
     );
-    assert_eq!(expected_instructions.len(), 20);
+    assert_eq!(expected_instructions.len(), 24);
 
     let expected_exprs: Vec<&str> = EXPR_TAGS
         .iter()
@@ -491,8 +540,6 @@ fn in_scope_counts_match_the_audited_split() {
     );
 }
 
-const SPLIT_TABLE_PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
-
 #[test]
 fn every_out_of_scope_variant_fails_loudly() {
     let mut failures = String::new();
@@ -523,11 +570,30 @@ fn every_out_of_scope_variant_fails_loudly() {
                 String::from_utf8_lossy(&outcome.stderr)
             )
             .unwrap();
+            continue;
+        }
+        // Task 0's Step 3: the loud message now names an owner
+        // (`src/lib.rs`'s `instruction_owner`/`expr_owner`), and this is
+        // where that is proved rather than merely formatted -- a stderr
+        // that does not name the witness's own owner would mean production
+        // and this table drifted apart, exactly the drift Step 5's fifth
+        // pinned item warns about.
+        let stderr = String::from_utf8_lossy(&outcome.stderr);
+        if !stderr.contains(witness.owner) {
+            use std::fmt::Write as _;
+            writeln!(
+                failures,
+                "{} ({}): stderr does not name this owner: {stderr:?}",
+                witness.tag, witness.owner
+            )
+            .unwrap();
         }
     }
     assert!(
         failures.is_empty(),
-        "an out-of-scope variant did not fail loudly -- an implementation gap \
-         must never be able to produce a passing test:\n{failures}"
+        "an out-of-scope variant did not fail loudly, or failed loudly \
+         without naming its owner -- an implementation gap must never be \
+         able to produce a passing test, and a loud message that does not \
+         name who owns it is exactly the property Step 3 exists to add:\n{failures}"
     );
 }
