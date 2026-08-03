@@ -3816,20 +3816,24 @@ impl Interp {
 /// also fails, and an earlier revision of this comment drew exactly that
 /// wrong conclusion from the zero-trip row.
 ///
-/// **Scope: siblings accumulate, nesting does not.** Two qualifying loops in
-/// sequence decrement twice; two *nested* qualifying loops decrement **once**.
-/// A decrement propagates into blocks opened after it and outward through the
-/// `END` of a plain `DO` or an `IF`-branch `DO`, but is **discarded** at the
-/// `END` of an enclosing repetitive `DO`/`LOOP` and at the `END` of an
-/// enclosing `SELECT` -- the inner loop does decrement there, visibly, and the
-/// decrement is thrown away at that construct's `END`. They also cross an
-/// `INTERPRET` boundary **outward**.
+/// **The cause is a C++ defect, and naming the cause is the only version of
+/// this that has not needed correcting.** `settings.traceIndent` is a mutable
+/// counter. A loop ending normally restores the value `DoBlock` saved at
+/// construction (`BaseDoInstruction.cpp:161`); a loop whose control test fails
+/// takes a different exit path that bare-decrements it (`:377`). So a stray
+/// decrement survives until some enclosing construct restores from its own
+/// saved block, and is discarded there.
 ///
-/// **Do not extend any of this without measuring.** Three revisions have now
-/// each written a rule reaching further than the rows measured under it: the
-/// qualification predicate, then the scope, then accumulation.
-/// `phase-4-exclusions.txt`'s KNOWN GAP row carries every measured table and
-/// the list of shapes still unmeasured.
+/// **An earlier revision of this paragraph enumerated the discarding
+/// constructs and was falsified by `do label q ... end`** -- a plain,
+/// non-repetitive `DO` carrying a `LABEL` discards it too, because
+/// `SimpleDoInstruction.cpp:78-89` creates the saved block only when a `LABEL`
+/// is present. That was the fourth construct-shaped rule here to drift, after
+/// the qualification predicate, the scope, and accumulation.
+///
+/// **Do not write a fifth.** If a shape is not in a measured table, work out
+/// which exit path it takes. `phase-4-exclusions.txt`'s row carries the C++
+/// citations and every table.
 ///
 /// It is the same re-tested-pass mechanism as the two missing `>>>` value
 /// lines that row already records, and it is 4a's, not this function's to

@@ -78,6 +78,18 @@ DEVIATIONS -- permanent, chosen
 
   0. LEADING INDENTATION ON STDERR IS NORMALISED BEFORE COMPARISON.
 
+     *** NOT YET IMPLEMENTED. DECIDED AND WRITTEN DOWN, NOT IN FORCE. ***
+     The harness still compares stderr byte-for-byte, leading indentation
+     included. 4b Task 2b implements it; until that lands, every figure in
+     this project was obtained under EXACT comparison and an indent
+     expectation is load-bearing.
+
+     DO NOT WEAKEN AN INDENT EXPECTATION ON THE BELIEF THAT NORMALISATION
+     PROTECTS IT. It does not yet. That inversion -- a deviation documented
+     ahead of its implementation, read as already in force -- is the specific
+     risk this notice exists to stop, and it was caught by an implementer who
+     checked the harness rather than the row.
+
      SCOPE, and it is deliberately narrow. The differential harness collapses
      the run of spaces between a line's prefix field and its content, on BOTH
      sides, for stderr only. Everything else stays byte-exact: exit status,
