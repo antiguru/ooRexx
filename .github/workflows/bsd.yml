@@ -118,7 +118,7 @@ jobs:
           release: '11.4'
           usesh: true
           prepare: |
-            pkg install --accept cmake gcc gnu-make subversion gdb
+            pkg install --accept cmake gcc gnu-make developer/versioning/subversion gdb
           run: |
             sh .github/ci-solaris.sh
 

@@ -121,55 +121,52 @@ jobs:
           path: testresults.txt
           if-no-files-found: warn
 
-  # Ubuntu 16.04 ships CMake 3.5.1, which is where the IPO block first broke:
-  # CMP0069 and CheckIPOSupported both arrived in 3.9. GitHub retired the native
-  # 16.04 runner, so this runs in the ubuntu:16.04 container to get that CMake
-  # back. This job is build-only on purpose: the regression is in configure, so
-  # reaching a built rexx is the whole test.
-  ubuntu1604:
-    name: Ubuntu 16.04 (CMake 3.5)
+  # Ubuntu 16.04 shipped CMake 3.5.1, which is where the IPO/CMP0069 guard first
+  # mattered. The 16.04 container is a dead end (xenial moved to ESM and is not
+  # on old-releases), so this fetches a CMake 3.5 binary onto a current runner
+  # instead. It reproduces the same "policy CMP0069 is not known" path a modern
+  # CMake never takes. Build-only: the regression is in configure, so reaching a
+  # built rexx is the whole test.
+  oldcmake:
+    name: Oldest CMake (3.5.2)
     runs-on: ubuntu-24.04
-    container: ubuntu:16.04
     timeout-minutes: 45
     steps:
-      # 16.04 is end of life, so its apt archives have moved to old-releases.
-      - name: Install the toolchain
-        shell: bash
-        run: |
-          set -eux
-          sed -i 's|//archive.ubuntu.com|//old-releases.ubuntu.com|g; s|//security.ubuntu.com|//old-releases.ubuntu.com|g' /etc/apt/sources.list
-          apt-get update
-          apt-get install -y --no-install-recommends cmake g++ make git ca-certificates
+      - uses: actions/checkout@v4
 
-      # actions/checkout needs a Node newer than this container's glibc 2.23 can
-      # run, so the source is cloned by hand at the same ref instead.
-      - name: Check out the source
+      - name: Install build prerequisites
         shell: bash
         run: |
           set -eux
-          git config --global --add safe.directory '*'
-          git clone --depth 1 --branch "$GITHUB_REF_NAME" \
-            "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" src
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends g++ make
+
+      # A current runner's CMake never takes the old-policy path, so drop a
+      # CMake 3.5 binary in front of it. The old binary was linked against a much
+      # older glibc and runs fine on the newer one.
+      - name: Fetch CMake 3.5.2
+        shell: bash
+        run: |
+          set -eux
+          curl -fsSL https://cmake.org/files/v3.5/cmake-3.5.2-Linux-x86_64.tar.gz | tar xz
+          echo "$PWD/cmake-3.5.2-Linux-x86_64/bin" >> "$GITHUB_PATH"
 
       - name: Report toolchain
         shell: bash
-        run: cd src && cmake --version && g++ --version
+        run: cmake --version && g++ --version
 
       - name: Configure (CMake 3.5 must get through the IPO guard)
         shell: bash
-        run: >
-          cd src &&
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         shell: bash
-        run: cd src && cmake --build build --parallel "$(nproc)"
+        run: cmake --build build --parallel "$(nproc)"
 
       - name: Smoke test
         shell: bash
         run: |
           set -eux
-          cd src
           build/bin/rexx -v
           echo 'say .rexxinfo~version' > hello.rex
           build/bin/rexx hello.rex
