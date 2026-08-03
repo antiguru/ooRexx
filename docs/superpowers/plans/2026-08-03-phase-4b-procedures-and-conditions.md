@@ -356,11 +356,12 @@ Measure both, record the transcripts in the report, and implement what the oracl
 
 The witness already exists and is already correctly absent from the 4a subset: **`rust/corpus/lang/interpret_dynamic.rex`**. It exercises a dynamic fragment, a fragment that binds a name the enclosing body never mentions, and a fragment inside a `DO` body. List it in `phase-4b.txt` with a header in the same shape as `phase-4a.txt`'s, saying which constructs the 4b subset admits and which it still excludes (the corpus rules in Task 10 are the list).
 
-Then point the harnesses at the union. Task 0 made `read_subset` take a list, but every call site still passes a one-element slice. **Two of them must change and one must not:**
+Then point the harnesses at the union. Task 0 made `read_subset` take a list, but every call site still passes a one-element slice. There are **four** call sites; three change and one must not:
 
-* `every_in_scope_variant_is_witnessed_by_the_phase_4a_subset` (`:538`) reads the **union**, and its name is now wrong -- rename it to say "subsets".
-* `collect_stress`'s call site reads the **union**.
-* The `EXPECTED_SUBSET` pin (`:516`) stays **`phase-4a.txt` only**. It exists to catch drift in that one file's line list, and widening it would destroy that.
+* `every_in_scope_variant_is_witnessed_by_the_phase_4a_subset` (`tests/coverage.rs:552`) reads the **union**, and its name is now wrong -- rename it to say "subsets".
+* `collect_stress`'s call site (`tests/collect_stress.rs:127`) reads the **union**.
+* **`tests/corpus.rs:478` reads the union.** This is the harness that actually runs both interpreters and compares them, so a 4b witness it does not read is a witness in name only -- it would be enumerated by the coverage harness and never differentially tested. Nothing pins the program count: the "29 of 29" figure is computed, and the harness's own banner says `REPORT MODE, NOT THE GATE`. Expect it to read `30 of 30` after this task.
+* The `EXPECTED_SUBSET` pin (`tests/coverage.rs:516`) stays **`phase-4a.txt` only**. It exists to catch drift in that one file's line list, and widening it would destroy what it checks. `coverage.rs:538`'s doc already says so.
 
 - [ ] **Step 9: Move `Interpret` in scope in `tests/owners.rs`, and update `EXPECTED_OUT_OF_SCOPE` and the four counts Task 0's module doc names**
 
@@ -411,6 +412,12 @@ Do **not** resolve the stack at report time by walking `Interp::activations`. `r
 Measured: the fragment shares its caller's indent and carries the enclosing clause's line.
 
 - [ ] **Step 5: Clamp the `*-*` echo at 40 columns, and only the `*-*` echo**
+
+- [ ] **Step 5b: Raise the oracle's condition when a fragment fails to parse**
+
+Found by Task 1 and measured there: a fragment whose text does not parse raises **27.901 at rc 229** on the oracle, and we exit 120 with a loud not-implemented message instead. Like the echo stack, this was unreachable before Task 1 gave `run_program` a real `INTERPRET`, so it is a newly reachable divergence rather than a regression.
+
+The fix is a `ParseError`-to-`Raised` conversion. **A top-level syntax error wants the same conversion**, so build it once and check whether the top-level path can use it -- if it cannot, say why in the report rather than duplicating the mapping.
 
 - [ ] **Step 6: Run the full suite and the corpus gate**
 
