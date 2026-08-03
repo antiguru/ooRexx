@@ -143,9 +143,17 @@ say 1/0
 end
 ```
 
-The oracle prints `5 *-* say 1/0` at indent **0**; we print it at **2**. A controlled or repeat `DO` that terminates by **exhausting its count** decrements the oracle's running counter for every subsequent clause at that level. Measured, `do jj = 1 to 1` and `do 2` do it; `do forever`+`leave`, `do while 0 = 1`, a zero-trip `do jj = 1 to 0`, `if`, and `select` do not.
+The oracle prints `5 *-* say 1/0` at indent **0**; we print it at **2**.
 
-This is a **pre-existing 4a divergence**, not 4b's to fix, and it is the same re-tested-pass mechanism as I31's two missing `>>>` lines -- a second symptom of one cause. But do not write, or leave standing, any statement that the fragment or activation base is the enclosing clause's printed indent *exactly*: that is true except after an exhausted controlled or repeat `DO`. `static_indent`'s own doc comment states the contrary as its central design decision and is wrong; the existing test that looks for this runs at top level, where the oracle's counter is already clamped at 0 and the two models agree.
+**The rule, measured, and stated wrongly twice before this.** Any repetitive `DO`/`LOOP` that **completes at least one body pass** and then ends because a **control test fails** decrements the oracle's running counter once, and the decrements **stack**. Count exhausted, `WHILE` false and `UNTIL` true all do it: `do jj = 1 to 1`, `do 2`, `n=0; do while n = 0; n = 1; end`, `n=0; do until n = 1; n = 1; end`, and `do jj = 1 to 1 while jj < 5` all decrement. Two exhausted controlled `DO`s in sequence two `do`s deep give oracle 0 against our 4.
+
+A **zero-trip** loop (`do while 0 = 1`, `do jj = 1 to 0`, `do 0`), a loop left by **`LEAVE`**, and a non-repetitive block (`if`, `select`, plain `do`) do **not**.
+
+An earlier revision said "exactly the shapes that run out of iterations" and listed `do while 0 = 1` among the non-decrementing ones. Both are wrong in the same way: the `WHILE` row that does not decrement is zero-trip, and **a zero-trip loop's first test also fails** -- so the distinguishing property is not "a re-test failed", it is "a body pass completed". That distinction is the whole rule, and getting it wrong makes the record describe a narrower gap than exists.
+
+**It also crosses the fragment boundary outward.** A completed loop *inside* an `INTERPRET` fragment lowers the **enclosing program's** later clauses, so "the fragment base is right, the lexical indent it is added to is not" is only half of it -- the base itself is computed from an indent that has already drifted.
+
+This is a **pre-existing 4a divergence**, not 4b's to fix, and it is the same re-tested-pass mechanism as I31's two missing `>>>` lines. But do not write, or leave standing, any statement that the fragment or activation base is the enclosing clause's printed indent *exactly*. `static_indent`'s own doc comment states the contrary as its central design decision and is wrong; the existing test that looks for this runs at top level, where the oracle's counter is already clamped at 0 and the two models agree.
 
 **The clause echo saturates at 40 columns, and this is a live 4a defect.** Measured on the oracle with nested `DO`s and no calls at all: depth 18 gives 36, depth 19 gives 38, depth 20 gives 40, and depths 21 and 25 give 40. Our binary is uncapped -- at 25 nested `DO`s the oracle prints the echo at 40 and `rexx-run` prints it at 50, verified by `diff` with the echo as the only differing line. **This ships today**; 4a's gate passed because none of the 29 corpus programs nests past 20.
 
