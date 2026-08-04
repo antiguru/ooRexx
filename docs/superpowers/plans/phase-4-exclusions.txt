@@ -1101,9 +1101,15 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
 
   WHAT WE USED TO DO: nothing at all under trace l. WITNESS:
   rust/crates/rexx-exec/tests/trace_oracle/trace_labels.rex, whose committed
-  expectation is three *-* lines and whose stdout proves the constructs
-  between them ran silently. Reverting L to TraceMode::OFF fails it, and so
-  does treating L as "echo everything".
+  expectation carries one *-* line per label actually reached, and whose
+  stdout proves the constructs between them ran silently. Reverting L to
+  TraceMode::OFF fails it, and so does treating L as "echo everything".
+
+  The count that stood here was wrong within its own commit: the sentence
+  said three while the expectation this row documents had four, the fourth
+  being the function-call route added the same day. It is stated as a
+  property now, per the rule in rust/CLAUDE.md -- a mutable in-repo count in
+  prose is exactly the shape that rots.
 
   NOT CLOSED WITH IT, and still open: TRACE ?L. The oracle emits two further
   +++ banner lines for the interactive prefix (the TRACE ? row above, owner
