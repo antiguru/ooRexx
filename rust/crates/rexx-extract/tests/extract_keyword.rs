@@ -370,9 +370,60 @@ fn an_assertion_inside_a_comment_is_accounted_as_a_drop_not_rewritten() {
     let out = one_body(source);
     assert_eq!((out.rows(), out.dropped()), (1, 1));
     assert!(out.blocked[0].reason.contains("inside a comment"));
+
+    // The comment itself survives into the program verbatim -- a Rexx
+    // comment ends a token without inserting a blank, so a rewriter that
+    // deleted it would join two tokens and one that replaced it with a
+    // space would concatenate them with a blank. What must not survive is
+    // any *rewrite* of the call inside it.
+    let program = &out.bodies[0].program;
+    assert!(program.contains("/* nnn *-* self~assertSame(\"?A\", trace())"));
+    assert_eq!(
+        program
+            .matches(rexx_extract::keyword::ASSERTION_MARKER)
+            .count(),
+        1,
+        "the commented-out call was rewritten as if it were code: {program}"
+    );
+}
+
+/// The measurement behind keeping comments rather than stripping them, as a
+/// test rather than only as prose in [`rexx_extract::keyword`]'s own doc.
+///
+/// `ITERATE.testGroup`'s `test_11` and `LEAVE.testGroup`'s `test_10` both
+/// write an expected value as `(11/**/ 1/**irrelevant**/05  10/*...*/)`,
+/// relying on the comment to end a token *without* contributing a blank.
+/// Measured on the oracle: `say '['1/**/05']'` prints `[105]` and
+/// `say '['1 /**/ 05']'` prints `[1 05]`. So the two rewrites below must
+/// differ, and the first must keep the operand's bytes exactly as written --
+/// an earlier draft replaced each comment with a space, and both of those
+/// two bodies then disagreed with the oracle.
+#[test]
+fn a_comment_inside_an_operand_is_kept_verbatim_not_turned_into_a_blank() {
+    let abutted = one_body("::method test_1\n   self~assertSame(x, (1/**/05))\n");
+    assert_eq!(abutted.rows(), 1, "{:?}", abutted.blocked);
     assert!(
-        !out.bodies[0].program.contains("?A"),
-        "the commented-out call was rewritten as if it were code"
+        abutted.bodies[0].program.contains("((1/**/05))"),
+        "{}",
+        abutted.bodies[0].program
+    );
+
+    let spaced = one_body("::method test_1\n   self~assertSame(x, (1 /**/ 05))\n");
+    assert!(spaced.bodies[0].program.contains("((1 /**/ 05))"));
+}
+
+/// A comment cannot smuggle structure into a call: a comma or a paren
+/// inside one belongs to the comment, not to the argument list. The
+/// structural scan runs on the blanked view for exactly this reason, while
+/// the emitted text comes from the original.
+#[test]
+fn a_comma_inside_a_comment_is_not_an_argument_separator() {
+    let out = one_body("::method test_1\n   self~assertSame(a /* , ) */, b)\n");
+    assert_eq!(out.rows(), 1, "{:?}", out.blocked);
+    assert!(
+        out.bodies[0].program.contains("((a /* , ) */) == (b))"),
+        "{}",
+        out.bodies[0].program
     );
 }
 

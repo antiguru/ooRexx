@@ -192,8 +192,8 @@ pub fn extract_keyword(group: &str, source: &str) -> KeywordExtraction {
         }
         accounted += raw;
 
-        let code = strip_comments(&method.body);
-        let in_code = count_assert_same(&code);
+        let blanked = blank_comments(&method.body);
+        let in_code = count_assert_same(&blanked);
         if in_code < raw {
             // Not calls at all: `TRACE.testGroup` quotes two of them inside
             // a block comment showing that method's own expected trace
@@ -210,7 +210,7 @@ pub fn extract_keyword(group: &str, source: &str) -> KeywordExtraction {
             continue;
         }
 
-        match rewrite_body(&code) {
+        match rewrite_body(&method.body, &blanked) {
             Ok((program, assertions)) => out.bodies.push(KeywordBody {
                 group: group.to_string(),
                 method: method.name,
@@ -240,17 +240,38 @@ pub fn extract_keyword(group: &str, source: &str) -> KeywordExtraction {
     out
 }
 
-/// Rewrites a comment-stripped method body into a standalone program, or
-/// says why it cannot be one.
+/// Rewrites a method body into a standalone program, or says why it cannot
+/// be one.
 ///
 /// All-or-nothing, unlike the row-shaped extractor's per-assertion
 /// blocking: the result runs as a single program, so one unrunnable line
 /// takes the whole body with it.
-fn rewrite_body(code: &str) -> Result<(String, usize), String> {
+///
+/// **Two views of the same bytes.** `blanked` ([`blank_comments`]) is what
+/// every structural decision is made against -- where the calls are, where
+/// their arguments end, whether a `~` is code -- and `body` is what is
+/// *emitted*, verbatim apart from the substitutions. The comments therefore
+/// survive into the program, which is not cosmetic: a Rexx comment ends a
+/// token **without** inserting a blank, so deleting one joins two tokens and
+/// replacing one with a space concatenates them with a blank instead of
+/// abutting them, and neither is what the source meant. Measured on the
+/// oracle: `say '['1/**/05']'` prints `[105]` while `say '['1 /**/ 05']'`
+/// prints `[1 05]`, and `zz = 1; say '['zz/**/05']'` prints `[105]`, so the
+/// comment separates the tokens and contributes nothing between them.
+/// `ITERATE.testGroup`'s `test_11` and `LEAVE.testGroup`'s `test_10` both
+/// turn on exactly this (`(11/**/ 1/**irrelevant**/05  10/*...*/)`), and an
+/// earlier draft that stripped comments to spaces made both of them
+/// disagree with the oracle -- caught by running the rewritten programs
+/// under both interpreters, not by reading the code.
+///
+/// The two views stay byte-aligned because `blank_comments` replaces each
+/// comment byte with a space and leaves everything else, newlines included,
+/// exactly where it was.
+fn rewrite_body(body: &str, blanked: &str) -> Result<(String, usize), String> {
     let mut program = String::new();
     let mut assertions = 0usize;
     let mut previous_continues = false;
-    for line in code.lines() {
+    for (line, blanked) in body.lines().zip(blanked.lines()) {
         // A call on a continued line is not a clause of its own, whichever
         // side the join is on: `clause_boundary` would see an empty prefix
         // and wave through a `SAY` spliced into the middle of someone else's
@@ -258,8 +279,8 @@ fn rewrite_body(code: &str) -> Result<(String, usize), String> {
         // one into its `SAY`. Zero calls in this group sit on either side of
         // a join today (measured) -- this is the guard that keeps that from
         // being an assumption the extractor silently depends on.
-        let continues = ends_with_continuation(line);
-        if count_assert_same(line) > 0 && (previous_continues || continues) {
+        let continues = ends_with_continuation(blanked);
+        if count_assert_same(blanked) > 0 && (previous_continues || continues) {
             return Err(format!(
                 "assertSame on a continued line, so it is not a clause of its own: {}",
                 line.trim()
@@ -267,14 +288,16 @@ fn rewrite_body(code: &str) -> Result<(String, usize), String> {
         }
         previous_continues = continues;
 
-        let rewritten = rewrite_line(line, &mut assertions)?;
-        // Checked after rewriting, so that an `assertSame`'s own operands
-        // are inspected too: `self~assertSame(x~y, 1)` leaves a message send
-        // behind and must block exactly like a bare one would.
-        if let Some(offender) = unquoted(&rewritten, '~') {
+        // The message-send check runs on the *blanked* line with the calls
+        // taken out, so it sees neither a `~` that is only a character in a
+        // comment nor the `self~` of an assertion this module rewrites --
+        // and still sees one hidden in an assertion's own argument, since
+        // `blank_calls` removes only the call's name and parentheses, not
+        // its operands.
+        if let Some(offender) = unquoted(&blank_calls(blanked), '~') {
             return Err(format!("message send this body cannot run: {offender}"));
         }
-        program.push_str(&rewritten);
+        program.push_str(&rewrite_line(line, blanked, &mut assertions)?);
         program.push('\n');
     }
     Ok((program, assertions))
@@ -282,24 +305,30 @@ fn rewrite_body(code: &str) -> Result<(String, usize), String> {
 
 /// Rewrites every `self~assertSame` call on one line, advancing `index`.
 ///
+/// `blanked` is `line` with its comments turned to spaces and is what every
+/// position is found in; the emitted text always comes from `line`, so an
+/// argument that contains a comment keeps it. See [`rewrite_body`] for why
+/// that matters.
+///
 /// Line at a time because a Rexx clause is: a clause ends at end of line
-/// unless continued with a trailing comma, no string spans a line, and no
-/// comment survives [`strip_comments`]. Measured across this group: **zero**
-/// `assertSame` calls sit on a continued line, so nothing needs a
-/// multi-line parse and a call whose closing paren is not on its own line is
-/// a shape this has never seen, reported rather than guessed at.
-fn rewrite_line(line: &str, index: &mut usize) -> Result<String, String> {
-    let lower = line.to_ascii_lowercase();
+/// unless continued, no string spans a line, and [`blank_comments`] has
+/// already resolved every block comment that does. Measured across this
+/// group: **zero** `assertSame` calls sit on a continued line, so nothing
+/// needs a multi-line parse, and a call whose closing paren is not on its
+/// own line is a shape this has never seen -- reported rather than guessed
+/// at.
+fn rewrite_line(line: &str, blanked: &str, index: &mut usize) -> Result<String, String> {
+    let lower = blanked.to_ascii_lowercase();
     let mut out = String::new();
     let mut emitted = 0usize;
     let mut pos = 0usize;
     let mut in_str: Option<char> = None;
 
-    while pos < line.len() {
-        let c = line[pos..]
+    while pos < blanked.len() {
+        let c = blanked[pos..]
             .chars()
             .next()
-            .expect("pos is a char boundary inside line");
+            .expect("pos is a char boundary inside blanked");
         let width = c.len_utf8();
         if let Some(quote) = in_str {
             // A doubled quote closes and immediately reopens, which leaves
@@ -326,15 +355,15 @@ fn rewrite_line(line: &str, index: &mut usize) -> Result<String, String> {
             continue;
         }
 
-        if !clause_boundary(&line[..pos]) {
+        if !clause_boundary(&blanked[..pos]) {
             return Err(format!(
                 "assertSame is not a clause of its own, so a SAY cannot stand in its place: \
                  {}",
                 line.trim()
             ));
         }
-        let rest = &line[pos + ASSERT_SAME.len()..];
-        let Some((left, right, consumed)) = parse_two_args(rest) else {
+        let at = pos + ASSERT_SAME.len();
+        let Some((left, right, consumed)) = parse_two_args(&blanked[at..], &line[at..]) else {
             return Err(format!(
                 "assertSame call shape this scanner has not seen: {}",
                 line.trim()
@@ -346,12 +375,32 @@ fn rewrite_line(line: &str, index: &mut usize) -> Result<String, String> {
         out.push_str(&format!(
             "say '{ASSERTION_MARKER} {index}' (({left}) == ({right}))"
         ));
-        pos += ASSERT_SAME.len() + consumed;
+        pos = at + consumed;
         emitted = pos;
     }
 
     out.push_str(&line[emitted..]);
     Ok(out)
+}
+
+/// `blanked` with every exact-spelling `self~assertSame` turned to spaces,
+/// so that the leftover-message-send check does not trip over the `~` of the
+/// very calls this module rewrites away. Length-preserving, like
+/// [`blank_comments`], and for the same reason.
+fn blank_calls(blanked: &str) -> String {
+    let lower = blanked.to_ascii_lowercase();
+    let mut out = blanked.to_string();
+    for (at, _) in lower.match_indices(ASSERT_SAME) {
+        if lower[at + ASSERT_SAME.len()..]
+            .chars()
+            .next()
+            .is_some_and(is_symbol_char)
+        {
+            continue;
+        }
+        out.replace_range(at..at + ASSERT_SAME.len(), &" ".repeat(ASSERT_SAME.len()));
+    }
+    out
 }
 
 /// Whether `before` -- the text preceding a call on its own line -- leaves
@@ -394,8 +443,13 @@ fn clause_boundary(before: &str) -> bool {
 /// to the end of the line, fewer than two arguments, or more than three --
 /// `use strict arg` would itself reject a fourth, so a call with one is not
 /// a shape to guess at.
-fn parse_two_args(rest: &str) -> Option<(&str, &str, usize)> {
-    let mut chars = rest.char_indices();
+///
+/// `blanked` is where the structure is found -- so a comma or a paren
+/// inside a comment cannot be mistaken for one in the argument list -- and
+/// `text` is the byte-aligned original the returned slices come from, so an
+/// argument keeps any comment written inside it.
+fn parse_two_args<'a>(blanked: &str, text: &'a str) -> Option<(&'a str, &'a str, usize)> {
+    let mut chars = blanked.char_indices();
     if chars.next()?.1 != '(' {
         return None;
     }
@@ -418,8 +472,8 @@ fn parse_two_args(rest: &str) -> Option<(&str, &str, usize)> {
                     let first = *commas.first()?;
                     let second = commas.get(1).copied().unwrap_or(at);
                     return Some((
-                        rest[1..first].trim(),
-                        rest[first + 1..second].trim(),
+                        text[1..first].trim(),
+                        text[first + 1..second].trim(),
                         at + c.len_utf8(),
                     ));
                 }
@@ -473,66 +527,79 @@ fn unquoted(line: &str, target: char) -> Option<&str> {
     None
 }
 
-/// Removes Rexx comments, preserving every newline so the result has the
-/// same line structure as its input.
+/// `body` with every comment byte replaced by a space, newlines excepted.
 ///
 /// Both forms: `/* … */`, which **nests** in Rexx, and `--` to end of line.
-/// A block comment leaves a space behind rather than nothing, because a
-/// comment is a token separator -- deleting it outright would join `a/*x*/b`
-/// into one symbol.
 ///
-/// Stripping before scanning is what keeps `TRACE.testGroup`'s two
-/// commented-out `self~assertSame` lines from being rewritten as if they
-/// were code, and keeps a `~` inside a comment from blocking a body that
-/// does not actually send a message.
-fn strip_comments(body: &str) -> String {
-    let mut out = String::new();
+/// Blanking rather than removing, and byte for byte, so that the result is
+/// exactly as long as its input and every offset found in it addresses the
+/// same character of the original. That is what lets one pass decide
+/// structure from this view and emit text from the untouched one, which
+/// [`rewrite_body`] needs because a comment is not something a rewriter may
+/// silently resolve on the interpreter's behalf.
+///
+/// Since every replaced byte becomes an ASCII space and every other byte is
+/// left alone, the result is valid UTF-8 whatever the comment contained.
+/// Works on an owned byte copy because `String` has no safe mutable byte
+/// view (`str::as_bytes_mut` is `unsafe`, which this workspace forbids). The
+/// `from_utf8` at the end cannot fail: a comment region is blanked in full,
+/// so no multi-byte sequence is ever half-replaced, and every byte written
+/// is an ASCII space.
+fn blank_comments(body: &str) -> String {
+    let source = body.as_bytes();
+    let mut out = source.to_vec();
     let mut depth = 0usize;
-    let mut in_str: Option<char> = None;
-    let mut chars = body.chars().peekable();
+    let mut in_str: Option<u8> = None;
+    let mut at = 0usize;
 
-    while let Some(c) = chars.next() {
+    while at < source.len() {
+        let byte = source[at];
+        let next = source.get(at + 1).copied();
         if depth > 0 {
-            match c {
-                '*' if chars.peek() == Some(&'/') => {
-                    chars.next();
+            let step = match (byte, next) {
+                (b'*', Some(b'/')) => {
                     depth -= 1;
-                    if depth == 0 {
-                        out.push(' ');
-                    }
+                    2
                 }
-                '/' if chars.peek() == Some(&'*') => {
-                    chars.next();
+                (b'/', Some(b'*')) => {
                     depth += 1;
+                    2
                 }
-                '\n' => out.push('\n'),
-                _ => {}
+                _ => 1,
+            };
+            for blank_at in at..(at + step).min(source.len()) {
+                if source[blank_at] != b'\n' {
+                    out[blank_at] = b' ';
+                }
             }
+            at += step;
             continue;
         }
-        if let Some(quote) = in_str {
-            out.push(c);
-            if c == quote {
-                in_str = None;
+        match (in_str, byte, next) {
+            (Some(quote), _, _) => {
+                if byte == quote {
+                    in_str = None;
+                }
+                at += 1;
             }
-            continue;
-        }
-        match c {
-            '\'' | '"' => {
-                in_str = Some(c);
-                out.push(c);
+            (None, b'\'' | b'"', _) => {
+                in_str = Some(byte);
+                at += 1;
             }
-            '/' if chars.peek() == Some(&'*') => {
-                chars.next();
+            (None, b'/', Some(b'*')) => {
                 depth = 1;
+                out[at] = b' ';
+                out[at + 1] = b' ';
+                at += 2;
             }
-            '-' if chars.peek() == Some(&'-') => {
-                while chars.peek().is_some_and(|&n| n != '\n') {
-                    chars.next();
+            (None, b'-', Some(b'-')) => {
+                while at < source.len() && source[at] != b'\n' {
+                    out[at] = b' ';
+                    at += 1;
                 }
             }
-            _ => out.push(c),
+            _ => at += 1,
         }
     }
-    out
+    String::from_utf8(out).expect("only whole comment regions are replaced, and only by spaces")
 }
