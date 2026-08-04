@@ -38,7 +38,7 @@
 //!
 //! # The owner arm is not free-form
 //!
-//! A variant outside 4a's scope does not get a witness; it gets an owner
+//! A variant this crate does not implement does not get a witness; it gets an owner
 //! string instead. Left unchecked that is an escape hatch -- a variant that
 //! turns out hard to implement could be relabelled someone else's rather than
 //! given a witness -- so two things are enforced here rather than assumed:
@@ -49,7 +49,7 @@
 //!   split") spells them. [`Owner::Phase`] is the only constructor that can
 //!   hold a string at all, and [`assert_owner_strings_are_split_table_phases`]
 //!   checks every one actually used.
-//! * The **set** of out-of-4a variants is pinned against a hardcoded literal
+//! * The **set** of out-of-scope variants is pinned against a hardcoded literal
 //!   ([`EXPECTED_OUT_OF_SCOPE`]) rather than merely "whatever the `tags!`
 //!   tables currently say", so relabelling a variant shows up as a diff
 //!   against a committed expectation and not as a silent pass. This is the
@@ -81,8 +81,8 @@
 //! steps rather than on the variant -- see `eval_call`'s own doc
 //! (`eval.rs`) for the order.
 //!
-//! The four that remain (`QualifiedCall`, `ClassResolver`, `List`,
-//! `Message`) are all `Phase 5`'s.
+//! Which variants remain, and who owns each, is `owners.rs`'s `EXPR_TAGS` and
+//! [`EXPECTED_OUT_OF_SCOPE`]; both are asserted here rather than described.
 //!
 //! # `Operator::Backslash` is not owed to anyone
 //!
@@ -102,7 +102,7 @@
 //! subset's *programs* construct, not about running them -- the differential
 //! half in `tests/corpus.rs` is what proves they execute correctly. The walk
 //! below is `rexx-parse/tests/gate_walk`'s shared module, trimmed to what the
-//! 4a subset actually contains (no directives -- `assert_program_has_no_directives`
+//! subset actually contains (no directives -- `assert_program_has_no_directives`
 //! guards that assumption rather than silently ignoring one) and reproduced
 //! here rather than imported, because an integration test cannot reach
 //! another crate's `tests/` module and this crate's own `Cargo.toml`
@@ -141,7 +141,7 @@ use owners::{
 };
 
 // ---------------------------------------------------------------------------
-// The walk. Trimmed from `rexx-parse/tests/gate_walk/mod.rs` to what the 4a
+// The walk. Trimmed from `rexx-parse/tests/gate_walk/mod.rs` to what the
 // subset actually contains: no directives. `assert_program_has_no_directives`
 // guards that assumption at every parse rather than silently under-walking a
 // program that gained one.
@@ -405,16 +405,11 @@ fn each_expr<'a>(p: &'a Program, visit: &mut impl FnMut(&'a Expr)) {
 /// first-seen order, each entry appearing once even if two files name the
 /// same corpus program.
 ///
-/// **Task 0's Step 4.** Was a single-file reader (`&Path`); widened to `&[&Path]`
-/// so a later task's own subset file (4b's, say) can run *alongside*
-/// `phase-4a.txt` rather than replacing it -- every earlier-phase witness
-/// stays exercised as later phases add their own subset files, instead of
-/// each phase's own harness run choosing between "4a's programs" and "my
-/// own programs" and losing the other's coverage. Task 0 shipped the
-/// widened signature with every caller still passing a one-element slice
-/// containing only `phase-4a.txt`, so Step 4 itself was a signature change
-/// with no behaviour change; 4b's Task 1 (`a462e3e9`) is where a second
-/// file was first passed, `phase-4b.txt` alongside it.
+/// A slice rather than one `&Path`, so a later phase's own subset file can run
+/// *alongside* `phase-4a.txt` rather than replacing it -- every earlier-phase
+/// witness stays exercised as later phases add their own subset files, instead
+/// of each phase's own harness run choosing between the earlier programs and
+/// its own and losing the other's coverage.
 fn read_subset(list_paths: &[&Path]) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut union = Vec::new();
@@ -520,11 +515,10 @@ const EXPECTED_SUBSET: &[&str] = &[
     "lang/mutation_digits_at_render.rex",
     "lang/mutation_form_at_render.rex",
     "lang/mutation_controlled_order.rex",
-    // 4b Task 2's own addition, and the plan amendment this assertion exists
-    // to make visible. The program is 4a by content -- 25 plain `DO` blocks
-    // around a failing clause -- and pins the error report's 40-column indent
-    // saturation, which 4a diverged on and no other program in this list
-    // nests deeply enough to reach.
+    // The plan amendment this assertion exists to make visible. The program is
+    // 25 plain `DO` blocks around a failing clause, and pins the error
+    // report's 40-column indent saturation, which no other program in this
+    // list nests deeply enough to reach.
     "lang/deep_nesting_indent_cap.rex",
 ];
 
@@ -543,9 +537,9 @@ fn phase_4a_subset_matches_the_committed_list() {
 }
 
 /// `phase-4b.txt`'s exact line list, the same device [`EXPECTED_SUBSET`] is
-/// for `phase-4a.txt` and added for the same reason, one sub-phase later.
+/// for `phase-4a.txt`, and added for the same reason.
 ///
-/// **4b's gate review measured what its absence cost, and it was not
+/// **What its absence costs was measured, and it was not
 /// theoretical.** Removing **one entry at a time** from `phase-4b.txt` and
 /// running this file: for **nine of the twelve, that one deletion leaves it
 /// green**, because [`every_in_scope_variant_is_witnessed_by_the_phase_subsets`]
@@ -600,13 +594,11 @@ fn phase_4b_subset_matches_the_committed_list() {
 /// Criterion 1's coverage property, read against the **union** of every
 /// phase's subset file rather than `phase-4a.txt` alone.
 ///
-/// Renamed from `..._by_the_phase_4a_subset` at 4b's Task 1, which is the
-/// first task to make the name wrong: `Interpret` moved into scope, and its
-/// witness cannot live in `phase-4a.txt`, whose own header excludes
-/// `INTERPRET` by definition. Reading the union rather than swapping the file
-/// is what keeps every 4a witness exercised as later phases add their own
-/// subsets -- the reason `read_subset` takes a slice at all (Task 0's Step 4),
-/// and this is the first call site to pass more than one path.
+/// A later phase's witness cannot live in `phase-4a.txt`, whose own header
+/// excludes those constructs by definition -- `INTERPRET` is the first such
+/// case. Reading the union rather than swapping the file
+/// is what keeps every earlier witness exercised as later phases add their own
+/// subsets, which is why `read_subset` takes a slice at all.
 ///
 /// [`EXPECTED_SUBSET`]'s own test deliberately does **not** widen with this
 /// one: it pins `phase-4a.txt`'s exact line list, and a union would destroy
