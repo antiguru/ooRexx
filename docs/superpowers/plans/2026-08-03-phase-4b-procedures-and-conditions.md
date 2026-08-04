@@ -946,7 +946,7 @@ Report the verification with the program used. "It still holds" without a progra
 **Files:**
 - Modify: `rust/crates/rexx-exec/src/trace.rs` (`>A>`, `>F>`, `>R>`, the activation indent base)
 - Modify: `rust/crates/rexx-exec/src/run.rs` (the two missing `>>>` lines on a Controlled loop's re-tested pass)
-- Modify: `rust/crates/rexx-exec/tests/trace_oracle.rs` -- including **`CLAIMED_PREFIXES` at `:233`**, which is asserted against the witness union and breaks the moment a prefix lands
+- Modify: `rust/crates/rexx-exec/tests/trace_oracle.rs` -- including **`CLAIMED_PREFIXES`**, which is asserted against the witness union and breaks the moment a prefix lands. It was at `:233` when this plan was written and `:254` at `e72cc19f`; find it rather than trusting either number.
 - Modify: `docs/superpowers/plans/phase-4-exclusions.txt`
 
 **Interfaces:**
@@ -993,9 +993,9 @@ Four things to read off it: the callee's `sub:` **label clause is echoed**, and 
 
 So these two prefixes are out of scope **by decision**, not by unreachability, and the row must say which. Write it as "`::routine`/`::method` under TRACE LABELS, deferred with `::routine` dispatch itself to 4c", and carry Task 3's three measured differences that 4c will meet: a `::routine` activation has its own variable pool, builtins shadow it, and **`TRACE` does not cross into it at all** -- a caller's `trace r` echoes none of its clauses.
 
-Task 3 also measured three ways a `::routine` activation is not an internal label's, which the row should carry because 4c will meet them: it has its own variable pool, builtins shadow it, and **`TRACE` does not cross into it at all** -- a caller's `trace r` echoes none of its clauses.
+Not as "method invocation", and not as "Phase 5's".
 
-Write the exclusions row as "`::routine`/`::method` under TRACE LABELS, unreachable until 4c's builtin step exists", not as "method invocation" and not as "Phase 5's".
+**Corrected 2026-08-04, before Task 9 was dispatched.** This step previously ended with a third instruction to write the row as "unreachable until 4c's builtin step exists" -- which contradicts the paragraph above it, contradicts the measurement that settled the question, and is the exact error the next paragraph warns against. It was removed rather than reconciled. A duplicate of the three-measured-differences sentence went with it.
 
 The first revision of this plan reached a wrong conclusion here by probing `trace i` on an internal label, an instrument that could never have produced these prefixes. The lesson generalises and is worth keeping in the row: absence under one instrument is not evidence of ownership.
 
@@ -1010,6 +1010,24 @@ The base is the **calling clause's printed indent** plus the delta, not two time
 - [ ] **Step 6: Close I31's two missing `>>>` lines, and re-verify bound-before-test, `FOR` and `ITERATE`**
 
 **Still yours after DEVIATION 0.** That deviation normalises leading *indentation*; I31 is two value lines that are **absent**, which is a content difference normalisation does not touch. Same C++ path -- the failing-control-test exit -- different symptom. A note earlier in this phase wrongly claimed the two closed together.
+
+**Two more absent-value-line gaps arrived from Task 7 and are also this task's.** Added 2026-08-04; without this they lived only in a review summary, and one of them had already gone missing once that way.
+
+*`EXIT <expr>` emits no `>>>` value line.* Measured at `e72cc19f`, both sides rc 0:
+
+```text
+trace r          oracle stderr:              ours:
+say 'a'               2 *-* say 'a'               2 *-* say 'a'
+exit 0                  >>>   "a"                   >>>   "a"
+                      3 *-* exit 0                3 *-* exit 0
+                        >>>   "0"                  (nothing)
+```
+
+Task 7 reproduced this on a three-line program containing no conditions, which places it in `InstructionKind::Exit`'s arm. **It constrains corpus programs**: any `trace r` witness containing `exit <value>` will diverge until it is closed, which is why `condition_traps.rex` deliberately contains none.
+
+*Four both-DIFF probes in Task 7's round-4 A/B*, described there as a controlled `DO`'s per-pass `>>>` control-variable lines under `trace r`. **Determine by measurement whether these are I31 or a third gap, assuming neither.** "Same C++ path, different symptom" has already been wrong once on this exact pair.
+
+Closing fewer than three is allowed. Whatever is not closed gets a KNOWN GAP row with an owner and a measured transcript, and the choice is stated -- the failure mode here is a gap dropping silently, not a gap deferred.
 
 - [ ] **Step 7: Add a coverage measure to the trace table**
 
