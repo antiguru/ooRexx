@@ -29,11 +29,21 @@
 //! # Arity and implementation are one row
 //!
 //! [`IMPLEMENTED`] carries the `(min, max)` pair beside the function pointer
-//! rather than in a table of its own. That is what makes the argument
-//! guarantee structural: [`dispatch`] runs [`check_arity`] from the same row
-//! it is about to call, so an implementation cannot be reached with an
-//! argument list it did not ask for, and a new builtin cannot be added
-//! without an arity. `max` is `None` for a variadic builtin.
+//! rather than in a table of its own. That is what makes the count check
+//! structural: [`dispatch`] runs [`check_arity`] from the same row it is
+//! about to call, so a new builtin cannot be added without an arity.
+//! `max` is `None` for a variadic builtin.
+//!
+//! **The guarantee is a count, not a shape, and the difference is real.**
+//! `(min, max)` can say how many arguments are acceptable; it cannot say
+//! *which positions* must be filled, because required-ness is conditional on
+//! what comes after. Measured: `date()` and `date('S')` both succeed, so
+//! `DATE`'s minimum is 0 -- yet `date('S',,'S')` is `40.5`, "argument 2 is
+//! required", because supplying position 3 makes position 2 mandatory.
+//! A model in which the required positions are a prefix of length `min`
+//! cannot express that, so an implementation *can* still be reached with an
+//! interior omission it would reject, and each one that cares must check its
+//! own positions.
 //!
 //! # What the builtin path does *not* do
 //!

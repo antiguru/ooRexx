@@ -366,6 +366,16 @@ An earlier revision listed it among the 40.x probes to take, which would have sh
 Measured: `q(1,,2,,)` gives `arg()` = **3**, so `length('abc',)` prints `3` while `length(,)` is 40.3.
 Only **interior** omissions reach `dispatch` as `None`; trailing ones are dropped before it sees them.
 
+**`check_arity` is a count check, not a shape check, and your builtin must check its own positions.**
+`(min, max)` cannot express which positions are required, because required-ness is **conditional on what comes after**.
+Measured: `date()` and `date('S')` both succeed, so `DATE`'s minimum is 0 -- yet `date('S',,'S')` is **40.5**, "argument 2 is required", because supplying position 3 makes position 2 mandatory.
+The shared machinery will not raise this for you.
+**Probe each of your builtins with an interior omission before every optional position**, and raise 40.5 where the oracle does.
+
+**Measure whether a 40.12 or 40.23 message substitutes the rendered value or the source spelling.**
+The neighbouring 88.928 raiser in `error.rs` documents having measured exactly this distinction, and it is invisible until an argument's two forms differ -- `'007'` against `7`, or a number whose `DIGITS` rendering is not its literal text.
+Task 2 did not record which it is, and the first family task that raises a typed error owes the measurement.
+
 **A quoted literal target reaches the builtin table, and it is case-sensitive.**
 Measured: `"LENGTH"('abc')` is `3`; `"length"('abc')` is **43.1 rc 213**, `Could not find routine "length"`.
 So the caller upcases a *symbol* target and does **not** upcase a quoted one -- `dispatch` receives the name already upcased only on the symbol path.
@@ -1121,6 +1131,9 @@ Four traps specific to 4c:
 
 * **"Each of the 66 names is recognised" is satisfied by 66 stubs returning `''`.** The criterion must assert a value per builtin against the oracle. Task 1's differential harness is what makes this real rather than nominal.
 * **A `PARSE` criterion asserting "exited 0" passes for a program that parsed nothing.** Assert the assigned values, chosen so an unset target renders as its own derived name and is recognisably wrong.
+* **No builtin is under the collector at all until this task fixes it.**
+  Measured at Task 2: the 42-program stress subset calls **no builtin**, so every allocation the 66 add is outside `run_program_collect_every_alloc`'s reach.
+  The union must gain at least one program per family that allocates, or criterion 4 passes over a subset that never exercises the code 4c added -- the same defect 4a's version had when it ran 29 programs and zero call frames.
 * **Criterion 4's collector control must delete a root a *builtin* holds.**
   Because builtins reuse `resolve_and_run_call`'s argument evaluation, the obvious root in that window is `run.rs:3259`'s `push_temp(argument.value())` -- which is **verbatim `mutate-4b.sh` row 9**.
   Re-running it re-tests 4b, which is what the criterion's own second sentence forbids.
