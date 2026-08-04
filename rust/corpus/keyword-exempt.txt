@@ -7,11 +7,27 @@
 # passing is as red as a body not here that starts failing, so an improvement
 # shows up in a diff rather than being quietly absorbed.
 #
-# The `unblocked_by` column is NOT hand-written. For a body that fails
-# loudly it is the owning phase `rexx-exec`'s own message names, and the test
-# re-derives it on every run -- so this file cannot drift from
-# `instruction_owner`/`expr_owner`, and a blocker moving between phases goes
-# red here.
+# The `unblocked_by` column is NOT hand-written FOR A BODY THAT FAILS LOUDLY:
+# there it is the owning phase `rexx-exec`'s own message names, re-derived on
+# every run, so this file cannot drift from `instruction_owner`/`expr_owner`
+# and a blocker moving between phases goes red here.
+#
+# Two limits on that, both real:
+#
+#   * A derived owner says what a body hits FIRST, not what would make it
+#     pass. Four bodies are known to have a second blocker behind the first
+#     -- worse, they are not equivalent to the method they came from at all:
+#     CALL::test_expression, CALL::test_literal and CALL::test_on_name fail
+#     under the C++ oracle itself (Error 43, Routine not found) because they
+#     call ::routines the standalone program does not carry, and
+#     NUMERIC::test_42 exits 3 because the body falls through into its own
+#     `dig: Return digits()`. All four read 4c today only because rexx-exec
+#     blocks on a builtin first.
+#   * The `defect:` rows below are NOT derived -- every assertion failure is
+#     mapped to one constant. What has teeth for them is membership, not the
+#     label: a body that starts failing its assertions and is not listed here
+#     goes red as an unaccounted failure. A second defect class would need
+#     the constant split by hand.
 #
 #   4c  790 bodies. Every phase gap in this group is 4c's and nothing else's:
 #       PARSE (656 bodies), the builtin routines ARG/COPIES/DIGITS/FORM/FUZZ/

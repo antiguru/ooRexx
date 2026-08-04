@@ -44,13 +44,50 @@
 //! # The committed exempt set, and why its attribution cannot rot
 //!
 //! `rust/corpus/keyword-exempt.txt` names every body that does not pass, with
-//! the phase that would unblock it. The `unblocked_by` column is **derived,
-//! not asserted by hand**: for a body that fails loudly it is the owner
-//! string `rexx-exec`'s own message carries (`instruction_owner` /
-//! `expr_owner`), re-read on every run and compared against the file. So a
-//! blocker moving between phases goes red here rather than leaving a stale
-//! sentence behind, and the file cannot disagree with the interpreter's own
-//! tables.
+//! what stands between it and passing. For a body that fails **loudly** that
+//! column is **derived, not asserted by hand**: it is the owner string
+//! `rexx-exec`'s own message carries (`instruction_owner` / `expr_owner`),
+//! re-read on every run and compared against the file, so it cannot disagree
+//! with the interpreter's own tables.
+//!
+//! **Two limits on that, both understated by an earlier version of this
+//! paragraph.**
+//!
+//! First, a derived owner says **what blocks the body first**, not what would
+//! make it pass. Those differ whenever a second blocker stands behind the
+//! first, and here they are known to differ for at least four bodies (see
+//! "Bodies that are not their method" below). So a `4c` row means "4c is what
+//! it hits today", and the group's pass rate is a **lower bound** on what 4c
+//! would leave, not a measure of it.
+//!
+//! Second, the `defect:` rows are **not** derived: [`RunOutcome::attribution`]
+//! maps every [`RunOutcome::AssertionFailed`] to one constant string, so for
+//! those rows the set test compares a constant against a file holding the
+//! same constant. What still has teeth there is *membership*, not the label:
+//! a body that starts failing its assertions and is not already listed goes
+//! red as an unaccounted failure, so a new one cannot be quietly absorbed
+//! under the existing tag. Anyone adding a second defect class has to split
+//! the constant by hand, and nothing here will remind them.
+//!
+//! # Bodies that are not their method
+//!
+//! Extraction lifts a body out of its `.testGroup` and runs it alone, which
+//! is not always faithful. Four are known not to be, found by running every
+//! extracted program under the C++ oracle:
+//!
+//! * `CALL::test_expression`, `CALL::test_literal`, `CALL::test_on_name` --
+//!   the oracle itself fails these at `Error 43, Routine not found` (rc 213),
+//!   because the body calls `::routine`s defined elsewhere in the file that a
+//!   standalone program does not carry.
+//! * `NUMERIC::test_42` -- exits **3** under the oracle, because the body
+//!   falls through into its own `dig: Return digits()` and a program's
+//!   `RETURN` value becomes its exit status.
+//!
+//! All four are listed `4c` today only because `rexx-exec` blocks on a
+//! builtin first, so nothing here is currently wrong -- but when 4c lands
+//! they will not simply start passing, and their labels will need revisiting
+//! rather than deleting. The exempt-set test is what forces that: their
+//! measured attribution will stop matching the file and go red.
 //!
 //! [`the_exempt_set_matches_the_current_failures`] asserts the set in both
 //! directions, in every mode: a listed body that starts passing is as red as
@@ -167,7 +204,16 @@ fn collect() -> (Vec<KeywordBody>, BTreeMap<DropReason, (usize, usize)>) {
 #[derive(Debug)]
 enum RunOutcome {
     /// Exited 0, emitted at least one marker, and every marker read `1`.
-    Pass,
+    ///
+    /// `verified` is how many **distinct** `self~assertSame` calls actually
+    /// ran, counted by marker index, not how many the body contains and not
+    /// how many marker lines it printed. Those three differ: an assertion
+    /// inside a loop prints once per pass (730 lines across the passing
+    /// bodies today, against 713 distinct assertions), and an assertion in a
+    /// branch that is not taken prints nothing at all. Crediting the static
+    /// count would report an unexecuted assertion as verified; crediting the
+    /// line count would report one assertion as several.
+    Pass { verified: usize },
     /// Emitted markers and at least one read `0`: an assertion the ooTest
     /// suite asserts holds does not hold here.
     AssertionFailed { failed: usize, total: usize },
@@ -191,7 +237,7 @@ impl RunOutcome {
     /// committed exempt file uses. `None` for a passing body.
     fn attribution(&self) -> Option<String> {
         match self {
-            RunOutcome::Pass => None,
+            RunOutcome::Pass { .. } => None,
             RunOutcome::Blocked { owner, construct } => Some(
                 owner
                     .clone()
@@ -264,7 +310,15 @@ fn classify(outcome: Outcome) -> RunOutcome {
     // not have to trust the comparison to render only those two.
     let failed = markers.iter().filter(|line| !line.ends_with(" 1")).count();
     if failed == 0 {
-        RunOutcome::Pass
+        // Distinct assertion indices, so a loop's repeats collapse to the
+        // one assertion they re-run. `@@ASSERTSAME <n> <0|1>` -- take `<n>`.
+        let verified: std::collections::BTreeSet<&str> = markers
+            .iter()
+            .filter_map(|line| line.split_whitespace().nth(1))
+            .collect();
+        RunOutcome::Pass {
+            verified: verified.len(),
+        }
     } else {
         RunOutcome::AssertionFailed {
             failed,
@@ -320,7 +374,11 @@ fn measured_failures() -> (BTreeMap<String, String>, usize, usize) {
     for body in &bodies {
         let outcome = evaluate(body);
         match outcome.attribution() {
-            None => passing_assertions += body.assertions,
+            None => {
+                if let RunOutcome::Pass { verified } = outcome {
+                    passing_assertions += verified;
+                }
+            }
             Some(attribution) => {
                 failures.insert(format!("{}::{}", body.group, body.method), attribution);
             }
@@ -395,6 +453,7 @@ fn keyword_assertions_differential() {
     let mut per_group: BTreeMap<String, (usize, usize, usize, usize)> = BTreeMap::new();
     let mut unaccounted = Vec::new();
     let mut divergences = Vec::new();
+    let mut partial = Vec::new();
 
     for body in &bodies {
         total_assertions += body.assertions;
@@ -421,10 +480,20 @@ fn keyword_assertions_differential() {
         }
         match outcome.attribution() {
             None => {
+                let verified = match outcome {
+                    RunOutcome::Pass { verified } => verified,
+                    _ => 0,
+                };
+                if verified != body.assertions {
+                    partial.push(format!(
+                        "  {key}: {verified} of {} assertions actually ran",
+                        body.assertions
+                    ));
+                }
                 passing_bodies += 1;
-                passing_assertions += body.assertions;
+                passing_assertions += verified;
                 group.2 += 1;
-                group.3 += body.assertions;
+                group.3 += verified;
             }
             Some(attribution) => {
                 *by_attribution.entry(attribution.clone()).or_insert(0) += 1;
@@ -446,6 +515,7 @@ fn keyword_assertions_differential() {
         &by_construct,
         &per_group,
         &divergences,
+        &partial,
         &unaccounted,
         gate,
     ));
@@ -473,6 +543,7 @@ fn build_report(
     by_construct: &BTreeMap<String, usize>,
     per_group: &BTreeMap<String, (usize, usize, usize, usize)>,
     divergences: &[String],
+    partial: &[String],
     unaccounted: &[String],
     gate: bool,
 ) -> String {
@@ -549,6 +620,21 @@ fn build_report(
             writeln!(w, "{line}").unwrap();
         }
     }
+    // Zero entries today, and the line is printed only when there are any.
+    // A passing body whose assertions did not all run is credited only what
+    // ran, so this cannot inflate the headline -- it exists so the
+    // difference is visible rather than merely handled.
+    if !partial.is_empty() {
+        writeln!(
+            w,
+            "passing bodies that did not run every assertion ({}) -- credited only what ran:",
+            partial.len()
+        )
+        .unwrap();
+        for line in partial {
+            writeln!(w, "{line}").unwrap();
+        }
+    }
     if !unaccounted.is_empty() {
         writeln!(
             w,
@@ -606,19 +692,22 @@ fn emit_uncaptured(text: &str) {
 /// The falsification proof: perturbing one passing body's assertion must
 /// make exactly that body fail.
 ///
-/// Rewrites the marker's comparison to one that cannot hold rather than
-/// editing the operands, because a body's operands are ordinary program text
-/// and appending to them can regroup an expression instead of changing its
-/// value (`assertions.rs`'s own falsification proof hit this and wraps in
-/// parens for the same reason). Appending `|| 'ZZZ'` inside the already
-/// -parenthesised right operand is safe for exactly that reason: the parens
-/// are grouping only, so nothing outside them regroups.
+/// Perturbs the **left** operand of the first marker's comparison, by
+/// prepending `'ZZZ-FALSIFICATION-MARKER' ||` immediately inside its opening
+/// parenthesis. Prepending inside the existing parens rather than appending
+/// to the raw operand text is what keeps this safe: a body's operands are
+/// ordinary program text, concatenation binds tighter than comparison in
+/// Rexx, and appending to text that itself contains a top-level comparison
+/// would regroup the expression instead of changing its value
+/// (`assertions.rs`'s own falsification proof hit exactly that and wraps in
+/// parens for the same reason). The parens here are grouping only, so
+/// nothing outside them is regrouped.
 #[test]
 fn the_falsification_proof() {
     let bodies = collect_bodies();
     let body = bodies
         .iter()
-        .find(|b| matches!(evaluate(b), RunOutcome::Pass))
+        .find(|b| matches!(evaluate(b), RunOutcome::Pass { .. }))
         .expect("at least one body passes; if none does, this harness is measuring nothing");
 
     let mut perturbed = body.clone();
@@ -644,7 +733,7 @@ fn the_falsification_proof() {
 
     // The other direction: the unperturbed body still passes, so the failure
     // above is the perturbation and not something leaking between runs.
-    assert!(matches!(evaluate(body), RunOutcome::Pass));
+    assert!(matches!(evaluate(body), RunOutcome::Pass { .. }));
 }
 
 /// A body that emits no marker has verified nothing and must not pass.
@@ -675,7 +764,7 @@ fn a_body_whose_assertions_never_run_is_not_a_pass() {
         program: never.program.replace("to 0", "to 1"),
         ..never.clone()
     };
-    assert!(matches!(evaluate(&runs), RunOutcome::Pass));
+    assert!(matches!(evaluate(&runs), RunOutcome::Pass { .. }));
 }
 
 /// An assertion inside a loop is checked on **every** pass, not once.

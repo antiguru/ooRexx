@@ -628,3 +628,220 @@ fn an_assertion_used_as_an_operand_blocks_rather_than_producing_invalid_rexx() {
     assert_eq!((out.rows(), out.dropped()), (0, 1));
     assert_eq!(out.blocked[0].reason, DropReason::NotAClause);
 }
+
+/// Conservation has exactly one hole, and this pins that it is **loud**.
+///
+/// `count_assert_same` counts a substring and does not know what a string
+/// literal is; `rewrite_line` tracks string state and skips one. No
+/// [`DropReason`] covers the difference, so such an occurrence makes
+/// `rows + dropped` come out short. That is a red conservation test naming
+/// the group, not a wrong number reported quietly -- which is the behaviour
+/// to want from a hole -- but it is a hole, and
+/// `count_assert_same`'s own doc now says so rather than claiming the
+/// accounting is total.
+///
+/// No such literal exists in `base/keyword` at r13178, which is why
+/// `every_assert_same_is_a_row_or_an_accounted_for_drop` passes over the
+/// real corpus. This constructs one so the property is checked rather than
+/// merely believed.
+#[test]
+fn a_call_inside_a_string_literal_breaks_conservation_loudly() {
+    let source = "::method test_1\n   s = 'self~assertSame(1, 2)'\n   self~assertSame(1, 1)\n";
+    assert_eq!(
+        count_assert_same(source),
+        2,
+        "the counter counts substrings, including the one in the literal"
+    );
+    let out = one_body(source);
+    assert_eq!(
+        (out.rows(), out.dropped()),
+        (1, 0),
+        "the scanner sees only the real call, and has no drop reason for the literal"
+    );
+    assert_ne!(
+        out.rows() + out.dropped(),
+        count_assert_same(source),
+        "conservation must FAIL here -- if this ever holds, either the counter learned about \
+         strings or a DropReason was added, and this test should be replaced by the ordinary \
+         accounting rather than deleted"
+    );
+
+    // The adjacent success: the same body without the literal conserves.
+    let clean = "::method test_1\n   self~assertSame(1, 1)\n";
+    let out = one_body(clean);
+    assert_eq!(out.rows() + out.dropped(), count_assert_same(clean));
+}
+
+/// [`DropReason::UnparsedCallShape`] is pinned at zero against the corpus,
+/// and a category pinned at zero proves nothing unless it can fire. Three
+/// shapes reach it.
+///
+/// This is the same requirement `assert_same_list_is_neither_counted_nor_
+/// rewritten` meets for the other zero-valued category. `NotAClause` has
+/// its own witness in
+/// `an_assertion_used_as_an_operand_blocks_rather_than_producing_invalid_rexx`.
+#[test]
+fn the_unparsed_call_shape_category_is_reachable() {
+    for source in [
+        "::method test_1\n   self~assertSame(a)\n", // too few arguments
+        "::method test_1\n   self~assertSame(a,b,c,d)\n", // too many
+        "::method test_1\n   self~assertSame\n",    // no argument list at all
+    ] {
+        let out = one_body(source);
+        assert_eq!((out.rows(), out.dropped()), (0, 1), "{source:?}");
+        assert_eq!(
+            out.blocked[0].reason,
+            DropReason::UnparsedCallShape,
+            "{source:?}"
+        );
+    }
+
+    // The adjacent success, so this is pinned to the argument count and not
+    // to "anything unusual blocks": two and three arguments both parse.
+    for source in [
+        "::method test_1\n   self~assertSame(a,b)\n",
+        "::method test_1\n   self~assertSame(a,b,\"msg\")\n",
+    ] {
+        assert_eq!(one_body(source).rows(), 1, "{source:?}");
+    }
+}
+
+/// The population choice's price, re-derived by a **different rule** and
+/// checked against the committed [`DropReason::OtherAssertion`] column.
+///
+/// The extractor decides that column with a per-body cascade over blanked
+/// lines (`classify_sends`). This re-derives the same quantity the way the
+/// pre-implementation estimate did: split methods with `extract`, strip
+/// comments with a local stripper, and ask whether deleting every
+/// `self~assert*`/`self~expect*` token leaves a `~` behind. Two independent
+/// routes to one number is what makes it a cross-check rather than the same
+/// rule reported twice -- which is precisely the objection this answers.
+///
+/// The wider population is the set of bodies whose only sends are ooTest
+/// assertions of any spelling; the narrower one, which this extractor takes,
+/// requires the only send to be `assertSame` exactly. The difference is what
+/// admitting the wider rule would buy, and it must equal the committed
+/// column.
+#[test]
+fn the_population_choices_price_is_reproduced_by_an_independent_rule() {
+    fn strip(body: &str) -> String {
+        let (mut out, mut depth, mut in_str) = (String::new(), 0usize, None::<char>);
+        let mut chars = body.chars().peekable();
+        while let Some(c) = chars.next() {
+            if depth > 0 {
+                match c {
+                    '*' if chars.peek() == Some(&'/') => {
+                        chars.next();
+                        depth -= 1;
+                    }
+                    '/' if chars.peek() == Some(&'*') => {
+                        chars.next();
+                        depth += 1;
+                    }
+                    '\n' => out.push('\n'),
+                    _ => {}
+                }
+                continue;
+            }
+            if let Some(q) = in_str {
+                out.push(c);
+                if c == q {
+                    in_str = None;
+                }
+                continue;
+            }
+            match c {
+                '\'' | '"' => {
+                    in_str = Some(c);
+                    out.push(c);
+                }
+                '/' if chars.peek() == Some(&'*') => {
+                    chars.next();
+                    depth = 1;
+                }
+                '-' if chars.peek() == Some(&'-') => {
+                    while chars.peek().is_some_and(|&n| n != '\n') {
+                        chars.next();
+                    }
+                }
+                _ => out.push(c),
+            }
+        }
+        out
+    }
+
+    let (mut narrow_m, mut narrow_c, mut wide_m, mut wide_c) = (0usize, 0usize, 0usize, 0usize);
+    for path in find_test_groups(&suite_root()) {
+        let bytes =
+            std::fs::read(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+        let source = String::from_utf8_lossy(&bytes);
+        for method in rexx_extract::extract(&source) {
+            let body = strip(&method.body);
+            let calls = count_assert_same(&body);
+            if calls == 0 {
+                continue;
+            }
+            let lower = body.to_ascii_lowercase();
+            // Narrow: nothing but `self~assertSame` sends anything. The
+            // `\u{1}` stand-in keeps `assertSameList` from being consumed by
+            // its own prefix, which would wrongly admit the body.
+            let narrow = lower
+                .replace("self~assertsamelist", "\u{1}")
+                .split("self~assertsame")
+                .collect::<Vec<_>>()
+                .join(" ");
+            if !narrow.contains('~') && !narrow.contains('\u{1}') {
+                narrow_m += 1;
+                narrow_c += calls;
+            }
+            // Wide: nothing but ooTest assertions of any spelling.
+            let mut wide = lower.clone();
+            for token in ["self~assert", "self~expect"] {
+                wide = wide.split(token).collect::<Vec<_>>().join(" ");
+            }
+            if !wide.contains('~') {
+                wide_m += 1;
+                wide_c += calls;
+            }
+        }
+    }
+
+    assert_eq!(
+        narrow_c,
+        TOTAL_ROWS,
+        "the independent narrow rule should reproduce the extractor's own row total{}",
+        provenance()
+    );
+
+    let committed = PER_GROUP.len();
+    assert!(committed > 0);
+    let gain_methods = wide_m - narrow_m;
+    let gain_calls = wide_c - narrow_c;
+    assert_eq!(
+        (gain_methods, gain_calls),
+        (138, 169),
+        "the wider population's gain over the narrower one moved{}",
+        provenance()
+    );
+
+    // And that gain is exactly what the extractor's own cascade attributes
+    // to OtherAssertion -- the two rules agreeing is the whole point.
+    let mut other = 0usize;
+    for path in find_test_groups(&suite_root()) {
+        let bytes = std::fs::read(&path).unwrap();
+        let source = String::from_utf8_lossy(&bytes);
+        let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("group");
+        for blocked in extract_keyword(name, &source).blocked {
+            if blocked.reason == DropReason::OtherAssertion {
+                other += blocked.dropped;
+            }
+        }
+    }
+    assert_eq!(
+        other,
+        gain_calls,
+        "the extractor's OtherAssertion column and the independent rule disagree, so one of \
+         them is wrong{}",
+        provenance()
+    );
+}

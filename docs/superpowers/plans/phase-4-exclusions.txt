@@ -936,8 +936,26 @@ above.
 
 
   A COMPOUND VARIABLE AS A DO CONTROL VARIABLE IS NOT SUPPORTED (found 4b
-  Task 11, by the base/keyword L1 table; DO is 4a's, so this is a 4a defect
-  that a 4b instrument surfaced rather than anything 4b introduced).
+  Task 11, by the base/keyword L1 table).
+
+  PROVENANCE IS 4a'S; THE GAP IS UNOWNED, and those are different claims. The
+  defective code is `bind_control` in rexx-exec/src/run.rs, the executor's
+  controlled-DO path, and `instruction_owner` returns None for
+  InstructionKind::Do -- meaning implemented, not deferred to a later phase --
+  so 4a is where the code came from, and a 4b instrument merely surfaced it.
+  Nothing schedules compound control variables, so no phase owns the fix.
+  That is what puts this row here rather than in EXCLUSIONS, per this
+  section's own definition.
+
+  NOT A rexx-parse GAP, which is the alternative worth ruling out. Measured:
+  parsing `do cv.j = 1 to 5` yields Controlled { control: SymbolId(129), ... }
+  whose symbol name is "CV.J" -- `cv.j` is a single symbol token in Rexx, so
+  the entire compound name is interned and reaches the executor intact.
+  bind_control then takes those name bytes and looks up a flat slot with no
+  tail resolution, while the same executor resolves the same name correctly
+  in `say cv.j` one line later. The parse delivers what a correct
+  implementation needs; the DO path does not use the compound resolution the
+  crate already has.
 
   `Do cv.j = 1 To 5` names a compound variable as the control variable, which
   ooRexx allows and which this crate gets wrong in two distinct ways.

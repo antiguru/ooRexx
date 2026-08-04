@@ -255,18 +255,6 @@ impl KeywordExtraction {
     pub fn dropped(&self) -> usize {
         self.blocked.iter().map(|b| b.dropped).sum()
     }
-
-    /// Occurrences dropped for one particular reason. Summing this over
-    /// [`DropReason::ALL`] gives [`KeywordExtraction::dropped`] exactly,
-    /// which is what makes the breakdown an accounting rather than a
-    /// sample.
-    pub fn dropped_for(&self, reason: DropReason) -> usize {
-        self.blocked
-            .iter()
-            .filter(|b| b.reason == reason)
-            .map(|b| b.dropped)
-            .sum()
-    }
 }
 
 /// The number of `self~assertSame` occurrences in `source`, case-insensitive
@@ -279,6 +267,18 @@ impl KeywordExtraction {
 /// must not share any judgement with the scanner it checks -- an occurrence
 /// this counts and the scanner cannot use has to show up as a drop with a
 /// reason, which is the whole point.
+///
+/// **That independence has exactly one hole, and it is loud rather than
+/// silent.** An occurrence inside a *string literal* is counted here and
+/// skipped by [`rewrite_line`] (which tracks string state), and no
+/// [`DropReason`] covers it -- so `rows + dropped` comes out one short and
+/// the conservation test fails, naming the group. It is a red test and not
+/// a wrong number, which is the behaviour to want from a hole; but this
+/// function guarantees "counts a substring", not "counts calls", and the
+/// difference is only invisible because `base/keyword` contains no such
+/// literal at r13178. `a_call_inside_a_string_literal_breaks_conservation_
+/// loudly` in `tests/extract_keyword.rs` pins that, so the day one appears
+/// the failure is diagnosable instead of mysterious.
 pub fn count_assert_same(source: &str) -> usize {
     let lower = source.to_ascii_lowercase();
     lower
@@ -406,9 +406,10 @@ fn rewrite_body(body: &str, blanked: &str) -> Result<(String, usize), (DropReaso
         // side the join is on: `clause_boundary` would see an empty prefix
         // and wave through a `SAY` spliced into the middle of someone else's
         // clause, and a call whose own line continues would swallow the next
-        // one into its `SAY`. Zero calls in this group sit on either side of
-        // a join today (measured) -- this is the guard that keeps that from
-        // being an assumption the extractor silently depends on.
+        // one into its `SAY`. This guard **fires** against the corpus rather
+        // than standing by for a case that never comes -- see
+        // [`DropReason::ContinuedLine`]'s own count in the committed drop
+        // table.
         let continues = ends_with_continuation(blanked);
         if count_assert_same(blanked) > 0 && (previous_continues || continues) {
             return Err((DropReason::ContinuedLine, line.trim().to_string()));
@@ -421,7 +422,7 @@ fn rewrite_body(body: &str, blanked: &str) -> Result<(String, usize), (DropReaso
         // and still sees one hidden in an assertion's own argument, since
         // `blank_calls` removes only the call's name and parentheses, not
         // its operands.
-        if unquoted(&blank_calls(blanked, ASSERT_SAME), '~').is_some() {
+        if contains_unquoted(&blank_calls(blanked, ASSERT_SAME), '~') {
             // Which *kind* of send is asked of the whole body, not of this
             // line, even though this line is the one named in `detail`. The
             // question the category answers is "what would it take to
@@ -446,11 +447,12 @@ fn rewrite_body(body: &str, blanked: &str) -> Result<(String, usize), (DropReaso
 ///
 /// Line at a time because a Rexx clause is: a clause ends at end of line
 /// unless continued, no string spans a line, and [`blank_comments`] has
-/// already resolved every block comment that does. Measured across this
-/// group: **zero** `assertSame` calls sit on a continued line, so nothing
-/// needs a multi-line parse, and a call whose closing paren is not on its
-/// own line is a shape this has never seen -- reported rather than guessed
-/// at.
+/// already resolved every block comment that does. A call that *is* on a
+/// continued line is therefore outside what this can rewrite -- the caller
+/// catches those before this runs and drops them as
+/// [`DropReason::ContinuedLine`], which is a category with real occurrences
+/// in this group, not a forward guard. A call whose closing paren is not on
+/// its own line lands in [`DropReason::UnparsedCallShape`] the same way.
 fn rewrite_line(
     line: &str,
     blanked: &str,
@@ -545,11 +547,15 @@ fn blank_calls(blanked: &str, name: &str) -> String {
 /// with a `SAY` instruction is legal where replacing a sub-expression would
 /// not be.
 ///
-/// Measured over all 2,441 exact-spelling calls in this group, every one is
-/// preceded by exactly one of these: nothing (2,038), `;` (263), `THEN`
-/// (128), a label's `:` (8), `ELSE` (2). The list is checked rather than
-/// assumed, so a call used as an operand (`x = self~assertSame(...)`) blocks
-/// its body instead of being turned into a syntactically invalid program.
+/// Measured over the 2,441 exact-spelling occurrences in this group: 2,439
+/// of them are preceded by exactly one of these -- nothing (2,038), `;`
+/// (263), `THEN` (128), a label's `:` (8), `ELSE` (2). The remaining **2**
+/// are preceded by `*-*` and are not code at all: `TRACE.testGroup` quotes
+/// them inside a block comment showing that method's own expected trace
+/// output, so they never reach this function. The list is checked rather
+/// than assumed, so a call used as an operand (`x = self~assertSame(...)`)
+/// blocks its body instead of being turned into a syntactically invalid
+/// program.
 fn clause_boundary(before: &str) -> bool {
     let before = before.trim_end();
     if before.is_empty() {
@@ -573,7 +579,10 @@ fn clause_boundary(before: &str) -> bool {
 /// The signature is `use strict arg expected, actual, msg = ""`
 /// (`framework/OOREXXUNIT.CLS`), so a third argument is legal and is a
 /// failure-report message only: it is read and discarded here, never
-/// compared. Two calls in this group pass one.
+/// compared. **38** calls in this group pass one, of which exactly **one**
+/// (`ADDRESS.testGroup`'s `test_environment_path_null`) sits in a body this
+/// module extracts -- the other 37 are in bodies blocked for other reasons,
+/// so supporting the third argument buys one row and costs nothing.
 ///
 /// `None` for anything else: no `(` immediately after the method name (a
 /// blank there means it is not an argument list at all), unbalanced parens
@@ -656,22 +665,27 @@ fn ends_with_continuation(line: &str) -> bool {
 ///   spelling, and nothing else. These bodies are plain classic Rexx apart
 ///   from assertions this module does not model.
 ///
-/// Only reached once a `~` is known to survive the `assertSame` rewrite, so
-/// the fall-through is a body with a send this cascade did not name; it
-/// takes `MessageSend`, the conservative end.
+/// **The strong end returns early and the fall-through is the weak one.**
+/// `MessageSend` is returned from inside the loop the moment any line shows
+/// a send that is neither an `assertSame` nor an `assertSameList` nor
+/// another `self~assert*`; only if no line ever does that does control reach
+/// the end, which then picks `AssertSameList` or `OtherAssertion`. So the
+/// ordering is carried by the early return, not by the tail -- and the tail
+/// is deliberately *not* the conservative choice, because by the time it is
+/// reached the body has been shown to contain nothing stronger.
 fn classify_sends(blanked: &str) -> DropReason {
     let mut saw_assert_same_list = false;
     for line in blanked.lines() {
         let without_calls = blank_calls(line, ASSERT_SAME);
-        if unquoted(&without_calls, '~').is_none() {
+        if !contains_unquoted(&without_calls, '~') {
             continue;
         }
         let without_list = blank_calls(&without_calls, ASSERT_SAME_LIST);
-        if unquoted(&without_list, '~').is_none() {
+        if !contains_unquoted(&without_list, '~') {
             saw_assert_same_list = true;
             continue;
         }
-        if unquoted(&blank_self_assertions(&without_list), '~').is_some() {
+        if contains_unquoted(&blank_self_assertions(&without_list), '~') {
             return DropReason::MessageSend;
         }
     }
@@ -712,10 +726,13 @@ fn blank_self_assertions(line: &str) -> String {
     out
 }
 
-/// The first clause of `line` containing `target` outside any string, or
-/// `None`. Used to name the offending text in a block reason rather than
-/// only reporting that something offended.
-fn unquoted(line: &str, target: char) -> Option<&str> {
+/// Whether `line` contains `target` outside any string literal.
+///
+/// A predicate, and every caller wants only the yes/no: the offending text
+/// a block reason reports comes from the *unblanked* line at the call site,
+/// which is what a reader needs to find it again, not from the blanked copy
+/// this is given.
+fn contains_unquoted(line: &str, target: char) -> bool {
     let mut in_str: Option<char> = None;
     for c in line.chars() {
         if let Some(quote) = in_str {
@@ -726,11 +743,11 @@ fn unquoted(line: &str, target: char) -> Option<&str> {
         }
         match c {
             '\'' | '"' => in_str = Some(c),
-            _ if c == target => return Some(line.trim()),
+            _ if c == target => return true,
             _ => {}
         }
     }
-    None
+    false
 }
 
 /// `body` with every comment byte replaced by a space, newlines excepted.

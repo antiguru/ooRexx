@@ -624,8 +624,20 @@ alone is the coverage figure.
 ### The list 4c and Phase 5 inherit
 
 **Every phase gap here is 4c's. Not one body is blocked by Phase 5.** So 4b
-owes this table nothing further, and its pass rate is a direct measure of
-4c's remaining surface.
+owes this table nothing further.
+
+**But read the pass rate as a lower bound on what 4c would leave, not as a
+measure of it.** A `4c` attribution is derived from the loud message and says
+what a body hits *first*, not what would make it pass, and a second blocker
+can stand behind the first. Four bodies are known to be in that position, and
+they are not merely blocked -- they are **not equivalent to the method they
+came from**, found by running every extracted program under the C++ oracle:
+`CALL::test_expression`, `CALL::test_literal` and `CALL::test_on_name` fail
+under the oracle itself with `Error 43, Routine not found`, because the body
+calls `::routine`s defined elsewhere in the file that a standalone program
+does not carry; `NUMERIC::test_42` exits 3, because the body falls through
+into its own `dig: Return digits()` and a program's `RETURN` value is its
+exit status. When 4c lands these four will not simply start passing.
 
 Blocked bodies by first construct hit: `PARSE` 656, `routine "ARG"` 51,
 `routine "COPIES"` 19, `routine "DIGITS"` 11, `ADDRESS` (the instruction) 10,
@@ -639,15 +651,33 @@ and one each of `ARG`, `PULL`, `routine "ABS"/"ADDRESS"/"CHARIN"/"LINEIN"/
 rather than as execution work: `DoOver` (4 calls), `DoWith` (6), `EXPOSE`
 (24), `GUARD` (15), `LoopOver` (3), `LoopWith` (6), `RAISE` (1), `REPLY`
 (11), `SAY` (3), `SIGNAL` (27), `TRACE_TraceObject` (11), `USE` (20),
-`USELOCAL` (14). Each is blocked by a message send in the body, which is
-Phase 5's, not by the keyword the group is named for.
+`USELOCAL` (14). None is blocked by the keyword the group is named for.
+
+**They do not all need Phase 5, and 26 of the 145 need nothing from it.**
+Measured by drop reason:
+
+| | calls |
+|---|---|
+| body uses a message send (Phase 5) | 119 |
+| body uses another `assert*` spelling | 24 |
+| outside any `test`-prefixed method | 2 |
+
+The 24 are all `SIGNAL`'s, blocked only by this extractor's own population
+choice rather than by anything unimplemented -- modelling the other assertion
+spellings would reach them today. The 2 are `GUARD`'s, in `waiter_multiple`,
+a method whose name does not begin `test`. `SIGNAL`'s remaining 3 calls and
+every other group's are the message-send 119.
 
 **11 groups contain no exact-spelling `assertSame` at all**, so they are
 outside this table's population entirely rather than failing it:
 `Assignments`, `DoControlled`, `DoOther`, `FORWARD`, `LABEL`, `LOOP`,
 `LOSTDIGITS`, `LabelOption`, `LoopControlled`, `LoopOther`,
 `ShortCircuitAnd`. `DoControlled` and `LoopControlled` are the notable pair:
-each has 24 assertions and every one of them is `assertSameList`.
+each has 92 `self~assert*` calls -- 49 `assertSyntaxError`, 24
+`assertSameList`, 15 `assertEquals`, 4 `assertTrue` -- and **not one exact
+`assertSame`**, so they are outside this population entirely despite being
+densely asserted. The 24 `assertSameList` calls are what a prefix-matched
+reading of "assertSame" would have counted.
 
 **4 groups have extractable bodies and pass none of them**: `ADDRESS`,
 `PARSE`, `TRACE`, `VarRef`.
@@ -669,9 +699,25 @@ a.=0; i=1; Do a.i=1 To 3; If i>7 Then Leave; i=i+1; End; say '['i']'
 ```
 
 `DO::test_DO_standardTest2B`, `2P`, `2Q`, `5-69`, `ITERATE::test_12`,
-`LEAVE::test_11`. **`DO` is 4a's**, so this is a 4a defect that 4b's L1 table
-surfaced; it is recorded here and in `phase-4-exclusions.txt` rather than
-fixed by the measuring task.
+`LEAVE::test_11`.
+
+**The defective code is 4a's; the gap is unowned.** Those are different
+claims and only the first names 4a. `bind_control` (`rexx-exec/src/run.rs`)
+is the executor's controlled-`DO` path, and `instruction_owner` returns
+`None` for `InstructionKind::Do`, meaning *implemented*, not *deferred* -- so
+4a is where the code came from. Nothing schedules compound control
+variables, so no phase owns the fix, which is why the row sits in
+`phase-4-exclusions.txt`'s `KNOWN GAPS` (its own definition: "a real
+divergence with no owner assigned") rather than in `EXCLUSIONS`. It is
+recorded rather than fixed by the measuring task.
+
+**Not a `rexx-parse` gap**, which was the alternative worth ruling out.
+Measured: parsing `do cv.j = 1 to 5` yields `Controlled { control:
+SymbolId(129), ... }` with that symbol's name being `"CV.J"` -- `cv.j` is one
+symbol token in Rexx, so the whole compound name reaches the executor intact.
+`bind_control` then takes those name bytes and looks up a flat slot with no
+tail resolution, while the same executor resolves the same name correctly in
+`say cv.j` one line later.
 
 ### Re-running this section
 
