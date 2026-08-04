@@ -15,10 +15,12 @@
 # operators.rex:8, `say (-2) ** 3 , (-2) ** 2`), and List is not 4a's --
 # the oracle prints two lines at rc 0, 4a fails loudly, so criterion 1's
 # zero-divergence requirement cannot hold while they are in this subset.
-# They stay in corpus/num/ for 4b or 4c, once List exists; this is a
-# subset-membership exclusion, not a deletion (measured 2026-07-31: the
-# variant-coverage gap list is unchanged with them excluded, so nothing
-# about coverage was lost by dropping them).
+# They stay in corpus/num/ for Phase 5, once List exists (D7/I26: List
+# builds an Array, which is Phase 5's object model, not a 4b or 4c one --
+# see docs/superpowers/plans/phase-4-exclusions.txt's "EXPRKIND OWNERSHIP"
+# section); this is a subset-membership exclusion, not a deletion (measured
+# 2026-07-31: the variant-coverage gap list is unchanged with them excluded,
+# so nothing about coverage was lost by dropping them).
 lang/arith_digits.rex
 lang/no_trailing_newline.rex
 lang/select_when.rex

@@ -116,7 +116,10 @@ by any program above; these three close every one of them.
 `digits_rounding.rex`, `exponential.rex` and `operators.rex` are listed here
 as corpus programs but are **not** in the Phase 4a subset (`phase-4a.txt`):
 all three build `ExprKind::List` from a comma in a `SAY`, which is out of
-4a's scope. They stay in this directory for 4b or 4c, once `List` exists.
+4a's scope. They stay in this directory for Phase 5, once `List` exists --
+the general form builds an Array, which is Phase 5's object model, not a 4b
+or 4c one (`docs/superpowers/plans/phase-4-exclusions.txt`, "EXPRKIND
+OWNERSHIP").
 
 | File | Covers |
 |---|---|

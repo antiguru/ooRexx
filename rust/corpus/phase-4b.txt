@@ -211,3 +211,29 @@ lang/raise_array_substitution.rex
 # ITERATE is two blocks deep so that "the ITERATE's own indent" and "the loop
 # body's indent" are different numbers.
 lang/loop_retest_blame.rex
+
+# New for 4b Task 10 -- three combinations, each crossing constructs Tasks 5,
+# 6 and 7 built separately rather than exercising one at a time. Every
+# in-scope variant already had a witness before this task; what none of the
+# existing programs pinned was a construct *combined* with another, which is
+# the shape 4a's own whole-branch review found two Criticals inside (`Stem`
+# had a witness, arithmetic had a witness, `Stem` as an arithmetic operand
+# had none). Each program's own header states which line of interpreter code
+# it was checked against by mutation, and what wrong answer that mutation
+# produces.
+#
+#   raise_in_routine_in_loop.rex   -- PROCEDURE (Task 5) and RAISE/CALL ON
+#                                      (Task 7) inside a loop (4a): a raise
+#                                      inside a called routine, called from
+#                                      every pass of a three-pass loop.
+#   expose_stem_across_calls.rex   -- PROCEDURE EXPOSE (Task 5) of a stem
+#                                      mutated by the same callee across
+#                                      three separate calls, not one.
+#   call_on_trap_rearms.rex        -- SIGNAL to a label (Task 6) between two
+#                                      raises of the same CALL ON-trapped
+#                                      condition (Task 7), pinning that a
+#                                      CALL ON trap, unlike SIGNAL ON's, does
+#                                      not disarm when it fires.
+lang/raise_in_routine_in_loop.rex
+lang/expose_stem_across_calls.rex
+lang/call_on_trap_rearms.rex
