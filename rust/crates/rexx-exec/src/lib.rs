@@ -780,9 +780,10 @@ fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
         // **`None` since Task 4, not `Some("4b")`.** `ExprKind::Call` has
         // exactly two `CallTarget` forms and both are 4b's own (the target
         // field is checked, per this task's own brief) -- unlike
-        // `InstructionKind::Call`, which keeps an owner string because
-        // `Call::Trap`/`Call::Qualified` are still loud, this variant has no
-        // later-phase arm hiding inside it, so it moves fully in scope. A
+        // `InstructionKind::Call`, which stays arm-grained because
+        // `Call::Qualified` is still loud (`Call::Trap` moved in scope at
+        // Task 7, and the arm-grained match above says so), this variant has
+        // no later-phase arm hiding inside it, so it moves fully in scope. A
         // name that resolves to no internal label (or a `CallTarget::
         // Literal`, which never searches labels at all) still fails loudly
         // through `Loud::unresolved_call`, naming `4c` -- the builtin and
