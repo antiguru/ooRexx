@@ -1,0 +1,17 @@
+RC 0
+===STDOUT===
+after
+===STDERR===
+     3 *-* orig = 'before'
+       >>>   "before"
+     4 *-* call sub >orig
+     7 *-*   sub:
+     8 *-*   procedure
+     9 *-*   use arg >qq
+       >R>     "ORIG" => "QQ"
+    10 *-*   qq = 'after'
+       >>>     "after"
+    11 *-*   return
+     5 *-* say orig
+       >>>   "after"
+     6 *-* exit

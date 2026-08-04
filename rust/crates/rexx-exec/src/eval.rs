@@ -165,7 +165,10 @@ impl Interp {
         value
     }
 
-    /// `>L>`/`>V>`/`>E>`/`>C>`/`>O>`/`>P>`, dispatched on `expr.kind` --
+    /// `>L>`/`>V>`/`>E>`/`>C>`/`>O>`/`>P>`/`>F>`, dispatched on `expr.kind`
+    /// (`>A>` is not here: an argument's line belongs to the *call site*
+    /// that evaluated it, not to the argument expression's own node --
+    /// `resolve_and_run_call`, `run.rs`, owns it) --
     /// `eval`'s own hook, called once per node with `value` already
     /// computed. A no-op immediately when `!self.tracing_intermediates()`
     /// (`TRACE I` only; `TRACE R` never reaches any of these, measured),
@@ -254,6 +257,48 @@ impl Interp {
             ExprKind::Binary { op, .. } => {
                 let text = self.to_text(value).to_vec();
                 self.trace_operator(indent, op.spelling().as_bytes(), &text);
+            }
+            // `>name`/`<name` traces as an **operator**, not as the read of
+            // the variable it names: `>O>   ">" => "PQ"`, the referenced
+            // variable's own *name* as the operator's value
+            // (`VariableReferenceOp::evaluate`, `VariableReferenceOp.cpp:110`
+            // -`118`, read directly -- `getVariableReference` never reads the
+            // variable's value at all, so there is no `>V>` line to go with
+            // it). Measured at both spellings and in both positions: `say
+            // >pq`, `say <pq`, `call sub >pq` and `call sub <pq` all trace
+            // `>O>   ">" => "PQ"`, the `<` form included -- the oracle's own
+            // call passes the literal `">"` regardless of which byte was
+            // written.
+            //
+            // Reached because `eval_argument` (`run.rs`) evaluates a
+            // reference argument through `eval` on the *whole* reference
+            // node rather than on its inner variable: doing the latter
+            // traced `>V>   PQ => "val"` here instead, which is this arm's
+            // own adjacent measured failure.
+            ExprKind::VariableReference(inner) => {
+                let (ExprKind::Variable(id) | ExprKind::Stem(id)) = &inner.kind else {
+                    // `rexx-parse` admits nothing else inside a reference
+                    // (20.930 at parse time), and `eval_node`'s own arm
+                    // fails loudly on anything that arrives regardless, so
+                    // there is no value here to have traced.
+                    return;
+                };
+                let name = code.symbols.name(*id).as_bytes().to_vec();
+                self.trace_operator(indent, b">", &name);
+            }
+            // `>F>`, the **function form only** -- `trace_function`'s own
+            // doc comment has the measured pair that separates it from
+            // `CALL`. The tag is the name as the call site spells it: a
+            // symbol target arrives already upcased and a literal one
+            // verbatim (`rexx-parse`'s own `CallTarget`), which is the same
+            // pair of spellings `eval_call` resolves against.
+            ExprKind::Call { target, .. } => {
+                let name = match target {
+                    CallTarget::Symbol(id) => code.symbols.name(*id).as_bytes().to_vec(),
+                    CallTarget::Literal(bytes) => bytes.to_vec(),
+                };
+                let text = self.to_text(value).to_vec();
+                self.trace_function(indent, &name, &text);
             }
             // A comma list (`ExprKind::Logical`) has no value line of its
             // own -- each element is a full `eval` call in its own right

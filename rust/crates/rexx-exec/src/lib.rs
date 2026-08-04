@@ -2158,9 +2158,11 @@ mod tests {
     /// `WHEN` line is the one that was wrong, at 2 instead of 4; the whole
     /// transcript is asserted so that fixing it by moving the error elsewhere
     /// fails too. A plain `do` block rather than `do z = 1 to 1` on purpose:
-    /// a `Controlled` loop's re-tested pass omits two `>>>` lines this crate
-    /// does not yet emit (the KNOWN GAP row on the re-tested pass), and this
-    /// test is not the place to encode that.
+    /// a `Controlled` loop's re-tested pass traces its own control-variable
+    /// value lines, which this test is not the place to encode. That used to
+    /// read "omits two `>>>` lines this crate does not yet emit"; the omission
+    /// was fixed at 4b Task 9 and the reason for the plain `do` is now only
+    /// that this test is about a fragment's own indent.
     #[test]
     fn a_when_scan_inside_a_fragment_echoes_at_the_fragments_own_indent() {
         let program = "trace r\n\

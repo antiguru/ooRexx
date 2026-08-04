@@ -478,6 +478,16 @@ enum LoopState {
         to: Option<Number>,
         by: Number,
         for_remaining: Option<u64>,
+        /// Whether at least one candidate iteration has already been
+        /// decided, which is exactly the oracle's own `!first` argument to
+        /// `DoBlock::checkControl` (`ControlledDoInstruction.cpp:162`): it
+        /// selects between "read the value the header computed" and
+        /// "increment it, tracing on both sides of the addition". A `bool`
+        /// on the state rather than a flag threaded through `run_repeating`
+        /// because `loop_advance` is the only reader and the only writer,
+        /// and because it has to survive an `ITERATE`, which re-enters that
+        /// function without passing through the top of the driver's loop.
+        stepped: bool,
     },
 }
 
@@ -1038,6 +1048,21 @@ impl Interp {
                         // on `Interp` -- rather than the one-clause
                         // `push_temp` every other instruction result gets.
                         self.roots.push_temp(value);
+                        // `>>>`, at this `EXIT`'s own clause indent (Task 9).
+                        // Measured on a three-line program with no condition
+                        // and no call in it -- `trace r` / `say 'a'` /
+                        // `exit 0` traces `>>>   "0"` after the `exit 0`
+                        // echo -- so this belongs to the instruction, not to
+                        // anything around it, and the bare form (`expression:
+                        // None`) traces no line at all because there is no
+                        // value: `RexxInstructionExit::execute`
+                        // (`ExitInstruction.cpp`) evaluates through
+                        // `RexxInstructionExpression::evaluateExpression`
+                        // (`RexxInstruction.cpp:223`-`235`, read directly),
+                        // whose own `traceResult` runs only inside the
+                        // `expression != OREF_NULL` arm.
+                        let rendered = self.to_text(value).to_vec();
+                        self.trace_result(self.clause_state.current_value_indent, &rendered);
                         Some(value)
                     }
                     None => None,
@@ -1159,7 +1184,9 @@ impl Interp {
                 // *inside* a fragment lowers the **enclosing** program's later
                 // clauses, so the base is computed from an indent that has
                 // already drifted. See `phase-4-exclusions.txt`'s KNOWN GAP
-                // row on the re-tested pass, which owns every symptom.
+                // row on the re-tested pass's own *indent*, which is where
+                // this symptom lives -- the same pass's missing value lines
+                // were a different mechanism and closed separately at Task 9.
                 //
                 // `activation_indent` is the mechanism (`lib.rs`'s own doc
                 // comment on the field), **set rather than added**, and
@@ -2196,6 +2223,14 @@ impl Interp {
                 return Err(Raised::variable_reference_not_uninitialised(&name).into());
             }
             self.roots.alias_slot(frame, index, slot);
+            // `>R>`, the alias's own line and the **only** trace line this
+            // branch emits: no `>>>` and no `>=>`, because nothing was
+            // evaluated and nothing was assigned (`UseInstruction.cpp:164`-
+            // `167`, `aliasVariable` then `traceVariableAlias`, and
+            // `handleArgument` `return`s before its own `traceResult` for
+            // this case). Caller's name first, target's second -- see
+            // `trace_alias`.
+            self.trace_alias(self.clause_state.current_value_indent, &reference, &name);
             return Ok(());
         }
 
@@ -2215,7 +2250,31 @@ impl Interp {
         };
         let name = self.use_target_name(code, target)?;
         match value {
-            Some(value) => self.assign_by_name(&name, value),
+            Some(value) => {
+                // `>>>` then `>=>`, in that order and both at this `USE`
+                // clause's own indent -- `handleArgument`'s own
+                // `traceResult(argument)` immediately before
+                // `retriever->assign(context, argument)`, whose own
+                // `traceAssignment` is the second line
+                // (`UseInstruction.cpp:74`-`77`, and the default-value arm
+                // ten lines below it does the identical pair). Measured
+                // under `trace r`: `use arg a, b` on a two-argument call
+                // traces `>>>     "1"` and `>>>     "2"` and no `>=>`, which
+                // is the gating -- `>>>` is `results`, `>=>` is
+                // `intermediates`, so the pair is not one line's worth of
+                // conditional.
+                //
+                // **A dropped target traces neither**, which is the adjacent
+                // measured case rather than an omission here: `call sub 1,,3`
+                // into `use arg p, q, r` traces `>>>`/`>=>` for `P` and `R`
+                // and nothing at all for `Q` (`variable->drop(context)` has
+                // no trace call of its own).
+                let indent = self.clause_state.current_value_indent;
+                let rendered = self.to_text(value).to_vec();
+                self.trace_result(indent, &rendered);
+                self.assign_by_name(&name, value);
+                self.trace_assignment(indent, &name, &rendered);
+            }
             None => self.drop_by_name(&name),
         }
         Ok(())
@@ -2790,6 +2849,11 @@ impl Interp {
         //   >K>   "RESULT" => "zret"
         // ```
         //
+        // Those five are `trace r` transcripts, where `>A>` is invisible
+        // (`intermediates` only). `ARRAY`'s own element lines, and the fact
+        // that its `>K>` comes *after* them rather than before, are under
+        // `trace i` -- see the `raise.array` arm below.
+        //
         // The **condition's own name** is the first keyword, and only for
         // the three conditions that take a value after it -- `raise user
         // marker` traces no line for the condition at all, which is why this
@@ -2829,26 +2893,60 @@ impl Interp {
             additional.push(String::from_utf8_lossy(&rendered).into_owned());
         }
         if let Some(items) = &raise.array {
+            // **The elements first, then the `>K>` line** -- corrected at
+            // Task 9, which owns `>A>` and measured the ordering while
+            // adding it. An earlier version of this arm traced the `>K>`
+            // first and said so in a comment that claimed "the elements
+            // produce no lines of their own"; both halves are false.
+            // Measured, `trace i` / `raise syntax 40.4 array('R',,'X')`:
+            //
+            // ```text
+            //   >L>   "R"
+            //   >A>   "R"
+            //   >A>   "R"
+            //   >A>   ""
+            //   >L>   "X"
+            //   >A>   "X"
+            //   >A>   "X"
+            //   >K>   "ARRAY" => "an Array"
+            // ```
+            //
+            // **`>A>` twice per supplied element, once for an omitted one**,
+            // which is the oracle's own shape rather than a transcription
+            // slip here: `RaiseInstruction.cpp:229`-`237` calls
+            // `traceArgument(arg)` on both sides of the `put` into the
+            // array, and the omitted arm calls it once with the null string.
+            // Reproduced as measured rather than "cleaned up" to one line,
+            // because criterion 2 is byte-for-byte agreement, not agreement
+            // with what the C++ ought to have done.
+            for item in items {
+                let Some(expr) = item else {
+                    // An omitted position (`array (1,,3)`) **holds its
+                    // place** in the substitution list rather than closing
+                    // up, and substitutes as empty. Measured -- this used to
+                    // `continue`, on a stated-as-unmeasured guess, and the
+                    // guess was wrong: `raise syntax 40.4 array('R',,'X')`
+                    // reports "maximum expected is ." on the oracle (`&2` is
+                    // the hole) where closing up reported "maximum expected
+                    // is X." here.
+                    self.trace_argument(indent, b"");
+                    additional.push(String::new());
+                    continue;
+                };
+                let value = self.eval(code, expr)?;
+                self.roots.push_temp(value);
+                let rendered = self.to_text(value).to_vec();
+                self.trace_argument(indent, &rendered);
+                self.trace_argument(indent, &rendered);
+                additional.push(String::from_utf8_lossy(&rendered).into_owned());
+            }
             // **`an Array`, verbatim and regardless of the elements** --
             // it is the Array class's own default string form, which is
             // what the oracle traces here (measured for `array
             // ('ZORKROUTINE', 7)`). This crate has no array object to render,
             // and building one purely to print a constant would be the
-            // longer way to the same two words. Traced before the elements
-            // are evaluated, matching the oracle's own ordering: the `>K>`
-            // line is the option's, and the elements produce no lines of
-            // their own.
+            // longer way to the same two words.
             self.trace_keyword(indent, "ARRAY", b"an Array");
-            for item in items {
-                // An omitted position (`array (1,,3)`) contributes nothing
-                // rather than an empty string: it holds no value to
-                // substitute. Unmeasured, and the only unmeasured choice in
-                // this function -- stated here rather than left silent.
-                let Some(expr) = item else { continue };
-                let value = self.eval(code, expr)?;
-                self.roots.push_temp(value);
-                additional.push(String::from_utf8_lossy(&self.to_text(value)).into_owned());
-            }
         }
         // The `RETURN`/`EXIT` value, and its own `>K>` line -- measured for
         // both tails: `raise user foo return 'ONEVAL'` under `trace r`
@@ -3122,13 +3220,32 @@ impl Interp {
         // unset instead of shifting the ones after it. Task 3 evaluated and
         // discarded these; Task 5 keeps them, which is what that comment
         // said whoever landed `USE ARG` would do.
+        //
+        // **`>A>` fires here, once per position, omitted ones included**
+        // (Task 9). The indent is the *calling* clause's own, read fresh on
+        // each pass rather than captured once, because an argument
+        // expression can itself contain a call whose callee overwrites
+        // `current_value_indent` -- `resolve_and_run_call` restores it on
+        // the way out, so re-reading it is what keeps a second argument's
+        // own line at the caller's indent rather than at the first
+        // argument's callee's. Measured (`trace i`): `call sub 1,,3` traces
+        // `>A>   "1"`, `>A>   ""`, `>A>   "3"`, in that order, each right
+        // after its own argument's `>L>`/`>V>` lines.
         let mut arguments: Vec<Option<Argument>> = Vec::with_capacity(args.len());
         for arg in args {
             match arg {
-                None => arguments.push(None),
+                None => {
+                    // An omitted position traces an **empty** value line, not
+                    // no line: `traceArgument(GlobalNames::NULLSTRING)`,
+                    // `RexxInstruction.cpp:161`, and measured above.
+                    self.trace_argument(self.clause_state.current_value_indent, b"");
+                    arguments.push(None);
+                }
                 Some(expr) => {
                     let argument = self.eval_argument(code, expr)?;
                     self.roots.push_temp(argument.value());
+                    let rendered = self.to_text(argument.value()).to_vec();
+                    self.trace_argument(self.clause_state.current_value_indent, &rendered);
                     arguments.push(Some(argument));
                 }
             }
@@ -3337,6 +3454,15 @@ impl Interp {
     /// belt-and-braces shape the `Assignment` arm's own comment describes: a
     /// guarantee the grammar makes is not one the type system enforces, and
     /// this crate fails loudly rather than trusting it blindly.
+    ///
+    /// **The value is computed by evaluating the reference node itself, not
+    /// its inner variable** (Task 9). Both spellings reach the identical
+    /// value either way -- `eval_node`'s own `VariableReference` arm is
+    /// `self.eval_node(code, inner)` -- but only the outer call reaches
+    /// `trace_intermediate`'s own `VariableReference` arm, and the two
+    /// differ by a measured line: the oracle traces `>O>   ">" => "PQ"`
+    /// here, where evaluating the inner node through `eval` traced
+    /// `>V>   PQ => "val"` instead.
     fn eval_argument(&mut self, code: &Code<'_>, expr: &Expr) -> Result<Argument, Failure> {
         let ExprKind::VariableReference(inner) = &expr.kind else {
             return Ok(Argument::Value(self.eval(code, expr)?));
@@ -3355,7 +3481,7 @@ impl Interp {
         // uses, and what makes `>p` work when the caller's own `p` is
         // already exposed from *its* caller.
         let target = self.roots.slot_ref(frame, slot);
-        let value = self.eval(code, inner)?;
+        let value = self.eval(code, expr)?;
         // The referenced variable's own spelling travels with the reference:
         // it is the reference's *kind* (`P` against `P.`) for the
         // 88.929/88.930 check, and it is what those two errors substitute.
@@ -4486,7 +4612,7 @@ impl Interp {
                 HeaderClause::Iterate(line) => line,
             };
             let header = self.in_clause(code, header_line, |it| {
-                if !it.loop_advance(code, &mut state)? {
+                if !it.loop_advance(code, &mut state, do_indent, loop_indent)? {
                     return Ok(HeaderOutcome::Stop);
                 }
                 if let Some(cond) = conditional
@@ -4627,8 +4753,13 @@ impl Interp {
                     }
                 }
             }
-
-            self.loop_step(&mut state)?;
+            // Nothing happens at the bottom of a pass any more. A
+            // `Controlled` loop's `BY` increment used to, as `loop_step`;
+            // Task 9 moved it into `loop_advance`, where the oracle does it,
+            // because the two `>>>` lines the oracle traces straddle that
+            // addition and the value on the near side of it is gone by the
+            // time the next `loop_advance` runs. `loop_advance`'s own doc
+            // comment has the citation and why nothing else moved with it.
         }
     }
 
@@ -4732,7 +4863,40 @@ impl Interp {
     /// measured, `do i = 5 to 3 / say never / end / say i` prints `5`: the
     /// control variable is bound to its own value even for a loop that ends
     /// up running zero iterations.
-    fn loop_advance(&mut self, code: &Code<'_>, state: &mut LoopState) -> Result<bool, Failure> {
+    ///
+    /// **Also where a `Controlled` loop's `BY` increment happens**, moved
+    /// here from a separate bottom-of-pass `loop_step` at Task 9, because
+    /// the oracle traces the value on *both* sides of that addition and a
+    /// split that had already added it could not name the pre-increment
+    /// value at all (the KNOWN GAP this closes, `DoBlock::checkControl`,
+    /// `DoBlock.cpp:182`-`205`, read directly). Nothing else moved with it:
+    /// no instruction runs between the old site and this one -- the only
+    /// events in between are `END`'s or an `ITERATE`'s own transfer -- so
+    /// the settings the addition runs under are the same ones it ran under
+    /// before.
+    ///
+    /// The two indents are the **same clause's**, and which one a line takes
+    /// is measured rather than derived. `do_indent` is the `DO`/`LOOP`
+    /// clause's own printed indent and `loop_indent` is two further in:
+    ///
+    /// * A `Controlled` loop's **first** control assignment is the oracle's
+    ///   own loop *setup*, before the block is pushed, so it prints at
+    ///   `do_indent` -- measured, `trace i` / `do ii = 1 to 2` shows
+    ///   `>=>   II <= "1"` at the same indent as `>K>   "TO" => "2"`.
+    /// * Everything on a re-tested pass prints at `loop_indent`: `>V>`,
+    ///   `>>>`, `>>>`, `>=>`, all four two spaces further in than the
+    ///   `DO`'s own echo, in the same column as the body's clauses.
+    /// * A `DO OVER`'s assignment prints at `loop_indent` even though it
+    ///   only ever happens once (`checkOver` runs with the block already
+    ///   pushed, unlike a controlled loop's setup) -- measured, `do qq over
+    ///   'ab'` shows `>=>     QQ <= "ab"` two in from its own `>K>`.
+    fn loop_advance(
+        &mut self,
+        code: &Code<'_>,
+        state: &mut LoopState,
+        do_indent: usize,
+        loop_indent: usize,
+    ) -> Result<bool, Failure> {
         match state {
             LoopState::Forever => Ok(true),
             LoopState::Count { remaining } => {
@@ -4759,7 +4923,7 @@ impl Interp {
                     *r -= 1;
                 }
                 *done = true;
-                self.bind_control(code, *control, *value);
+                self.bind_control(code, *control, loop_indent, *value);
                 Ok(true)
             }
             LoopState::Controlled {
@@ -4768,36 +4932,36 @@ impl Interp {
                 to,
                 by,
                 for_remaining,
+                stepped,
             } => {
-                // **KNOWN GAP, disclosed rather than fixed under this
-                // task's own time budget.** `DoBlock::checkControl`
-                // (`DoBlock.cpp:182`, read directly) traces two `>>>`
-                // lines on every pass after the first: the control
-                // variable's own pre-increment value, then `value + by`,
-                // both via plain `traceResult` -- measured, this task's
-                // report, `do i = 1 to 2`'s own second pass shows `>>>
-                // "1"` then `>>>   "2"` with nothing else around them.
-                // This function does not reproduce that pair: `current`
-                // here already holds `loop_step`'s own pre-computed
-                // `current + by` from the *previous* pass (this arm only
-                // binds and tests it), so the pre-increment value is gone
-                // by the time this runs, and recovering it would mean
-                // moving the increment out of `loop_step` and into this
-                // arm -- restructuring already-reviewed, working control
-                // flow (`the_corrected_28x_indent_rule_matches_all_
-                // fourteen_probed_shapes` and the whole `Flow::Leave`/
-                // `run_bounded` absorption discipline both sit downstream
-                // of this exact split) for a formatting concern, under
-                // less time than that would need to be done safely. Every
-                // `>K>` (`TO`/`BY`/`FOR`, fires once, matches the oracle
-                // exactly because these headers are evaluated once here
-                // too) and every `WHILE`/`UNTIL` `>K>` (fires every pass,
-                // matches because the condition is genuinely re-evaluated
-                // every pass here too) is unaffected -- this gap is
-                // narrowly the two-line pair for a `Controlled`
-                // (`TO`-style) loop's own re-tested pass, nothing else.
-                // This task's report names it explicitly rather than
-                // choosing a witness that cannot see it.
+                // **The re-tested pass's own four lines** (Task 9, closing
+                // the KNOWN GAP this arm used to disclose).
+                // `DoBlock::checkControl` (`DoBlock.cpp:182`-`205`, read
+                // directly) is called as `checkControl(context, stack,
+                // !first)` (`ControlledDoInstruction.cpp:162`), and its
+                // `increment` arm does four traceable things in this order:
+                // read the control variable (`control->evaluate`, which
+                // traces `>V>`), `traceResult` that value, add `BY`,
+                // `traceResult` the sum, then `control->assign` (`>=>`).
+                // The `!first` is exactly `stepped` here. Measured, `trace
+                // i` / `do ii = 1 to 2`'s own second pass:
+                //
+                // ```text
+                //   >V>     II => "1"
+                //   >>>     "1"
+                //   >>>     "2"
+                //   >=>     II <= "2"
+                // ```
+                //
+                // and the same program under `trace r` shows only the two
+                // `>>>` lines, which is the gating: `>V>`/`>=>` are
+                // `intermediates`, both `>>>` are `results`.
+                //
+                // **The pair is emitted before either termination test**, on
+                // the failing pass as well -- measured, `do ii = 1 to 3`
+                // traces `>>>     "3"` then `>>>     "4"` on the pass that
+                // ends the loop, so these are not "the values of an
+                // iteration that ran".
                 //
                 // **Bound before the decision, not after** -- measured
                 // against the oracle, `do i = 5 to 3 / say never / end /
@@ -4808,9 +4972,31 @@ impl Interp {
                 let digits = self.activation().settings.digits();
                 let fuzz = self.activation().settings.fuzz();
                 let form = self.activation().settings.form();
+                let re_tested = std::mem::replace(stepped, true);
+                if re_tested {
+                    let previous =
+                        self.number(current.clone(), crate::eval::saturate_digits(digits), form);
+                    self.roots.push_temp(previous);
+                    let rendered = self.to_text(previous).to_vec();
+                    let name = code.symbols.name(*control).as_bytes().to_vec();
+                    self.trace_variable(loop_indent, &name, &rendered);
+                    self.trace_result(loop_indent, &rendered);
+                    *current = current.add(by, digits).map_err(Raised::from)?;
+                }
+                // The first pass takes the value the header already computed,
+                // unincremented and with no line of its own beyond the `>=>`
+                // below -- `checkControl`'s own `else` arm reads it with
+                // `getValue`, whose comment says why: the initial assignment
+                // was already traced during setup, and tracing here too
+                // "prevents getting an extra add looking item traced".
                 let value =
                     self.number(current.clone(), crate::eval::saturate_digits(digits), form);
-                self.bind_control(code, *control, value);
+                let bind_indent = if re_tested { loop_indent } else { do_indent };
+                if re_tested {
+                    let rendered = self.to_text(value).to_vec();
+                    self.trace_result(loop_indent, &rendered);
+                }
+                self.bind_control(code, *control, bind_indent, value);
 
                 if let Some(r) = for_remaining
                     && *r == 0
@@ -4835,19 +5021,6 @@ impl Interp {
                 Ok(true)
             }
         }
-    }
-
-    /// Advances `state` for the *next* candidate iteration, once this one
-    /// has fully finished (fallen through, or an `ITERATE` was consumed) --
-    /// only `Controlled` has anything to do here: `current = current + by`,
-    /// under the settings active *now*, matching every other arithmetic
-    /// operation in this crate (`eval_arithmetic`'s own doc comment).
-    fn loop_step(&mut self, state: &mut LoopState) -> Result<(), Failure> {
-        if let LoopState::Controlled { current, by, .. } = state {
-            let digits = self.activation().settings.digits();
-            *current = current.add(by, digits).map_err(Raised::from)?;
-        }
-        Ok(())
     }
 
     /// Evaluates a `Controlled` loop's header: `initial` first, then
@@ -4947,17 +5120,41 @@ impl Interp {
             to,
             by,
             for_remaining,
+            stepped: false,
         })
     }
 
     /// Writes `value` into `control`'s own slot -- the same read-the-name,
     /// resolve-a-slot, write path `Assignment`'s `Variable` target already
     /// uses (`step`'s own `Assignment` arm), reused rather than duplicated.
-    fn bind_control(&mut self, code: &Code<'_>, control: SymbolId, value: ObjRef) {
+    ///
+    /// **Traces its own `>=>`, at `indent`** (Task 9). Every write to a
+    /// control variable is an assignment to the oracle and traces like one:
+    /// `control->assign(context, result)` in both `DoBlock::checkOver`
+    /// (`DoBlock.cpp:165`) and `DoBlock::checkControl` (`:197`), and again
+    /// in a controlled loop's own setup. `indent` is the caller's, not this
+    /// function's to derive, because the same write is traced at two
+    /// different indents depending on which of those three events it is --
+    /// `loop_advance`'s own arms have the measured rule.
+    ///
+    /// **A compound control variable (`do aa.1 = 1 to 2`) is already stored
+    /// wrongly here** -- `rexx_parse::Controlled::control` is a bare
+    /// `SymbolId`, so `slot_of` makes a simple variable literally named
+    /// `AA.1` instead of resolving the compound -- and the `>C>` line the
+    /// oracle traces before each of these `>=>`s is missing for the same
+    /// reason. Measured and recorded as a KNOWN GAP in
+    /// `phase-4-exclusions.txt`; not introduced by the tracing added here,
+    /// and not fixable inside this crate alone.
+    fn bind_control(&mut self, code: &Code<'_>, control: SymbolId, indent: usize, value: ObjRef) {
         let name = code.symbols.name(control).as_bytes();
         let slot = self.slot_of(name);
         let frame = self.activation().frame;
         self.roots.set_slot(frame, slot, value);
+        if self.tracing_intermediates() {
+            let name = code.symbols.name(control).as_bytes().to_vec();
+            let rendered = self.to_text(value).to_vec();
+            self.trace_assignment(indent, &name, &rendered);
+        }
     }
 
     /// Validates `value` as "zero or a positive whole number" -- the rule a
@@ -5753,9 +5950,12 @@ impl Interp {
 /// which exit path it takes. `phase-4-exclusions.txt`'s row carries the C++
 /// citations and every table.
 ///
-/// It is the same re-tested-pass mechanism as the two missing `>>>` value
-/// lines that row already records, and it is 4a's, not this function's to
-/// fix under any task that has run so far. **What matters here is that the
+/// It happens on the same *occasion* as the control variable's own value
+/// lines -- a re-tested pass -- but **not by the same mechanism, and they do
+/// not close together.** That row once said they did; 4b Task 9 closed the
+/// value lines alone, by moving the `BY` increment into `loop_advance`, and
+/// nothing about this indent changed. It is 4a's, not this function's to fix
+/// under any task that has run so far. **What matters here is that the
 /// paragraph above reads as settled and is not**, so a later reader does not
 /// build on it: this function computes the *lexical* indent, and closing the
 /// gap means modelling the oracle's counter rather than making this function

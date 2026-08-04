@@ -73,6 +73,78 @@ whole name would overstate the gap; ignoring the split would understate it.
              caveat on a delivered builtin rather than undelivered work.
 
 
+EXCLUSIONS -- trace prefixes, with an owner
+-------------------------------------------
+
+The oracle has nineteen trace prefixes (RexxActivation.cpp:3567-3587). Thirteen
+have a committed witness at the end of 4b and six do not; all nineteen are
+enumerated with their owner in rexx-exec/tests/trace_oracle.rs's own
+PREFIX_COVERAGE, which is asserted rather than described (that file's coverage
+test is what fails if this paragraph and the table drift apart). Four of the
+six -- +++ and >.> (4c), >M> and >N> (Phase 5) -- follow directly from the
+construct that emits them being that phase's. The fifth and sixth need a row
+of their own, because their answer was got wrong twice before it was measured.
+
+  >I> / <I<   4c, deferred alongside ::routine dispatch itself.
+
+              BY DECISION, NOT BY UNREACHABILITY, and the distinction is the
+              whole reason this row exists. 4b Task 3 first recorded ">I> is
+              not reachable at all"; its own review caught that. The witness
+              that made the wrong answer look right was `::routine max`
+              beside `call max 1,2`, where the builtin wins -- the one shape
+              in which "behind 4c's builtin step" and "unreachable entirely"
+              predict identical bytes. With a non-builtin name they part
+              company: measured, `call zorkolo` with a `::routine zorkolo`
+              present runs on the oracle at rc 0. So a ::routine IS reachable
+              in 4b for any non-builtin name; 4b declines to implement it
+              because getting builtin-colliding names right needs 4c's table,
+              and a wrong answer there would silently run the wrong routine
+              rather than fail loudly. Today the construct fails loudly
+              naming 4c, which is the correct behaviour.
+
+              THE GATE IS TWO CONDITIONS, both of which 4b fails:
+              `tracingLabels() && isMethodOrRoutine()` (RexxActivation.cpp
+              :3655, read directly, in RexxActivation::traceEntry). Re-
+              measured at Task 9 rather than carried forward:
+
+                * `trace l` in the CALLER, targeting a ::routine -> nothing
+                  at all. The caller's setting does not cross into it.
+                * `::options trace labels` in the package, or a non-dynamic
+                  `trace l` as the routine's own first instruction (the
+                  `earlyTraceEntry` path at :3629-:3640) -> both lines fire.
+                * The content is NOT a clause echo. It is, verbatim:
+                      >I> Routine "ZORKOLO" in package "<absolute path>".
+                      <I< Routine "ZORKOLO" in package "<absolute path>".
+                  so reproducing it needs the package object as well, and an
+                  absolute path makes it host-dependent for any committed
+                  expectation -- a witness for these belongs in the live
+                  corpus, not in tests/trace_oracle/.
+
+              THREE MEASURED WAYS A ::ROUTINE ACTIVATION IS NOT AN INTERNAL
+              LABEL'S, which 4c will have to meet:
+
+                * It has its own variable pool. Measured: a caller with
+                  `nn = 5` calling a ::routine that says `nn` prints the
+                  derived name NN, not 5.
+                * Builtins shadow it. Measured: `call max 1, 9` with a
+                  `::routine max` present sets RESULT to 9 and the routine
+                  never runs.
+                * TRACE DOES NOT CROSS INTO IT AT ALL. Measured: a caller's
+                  `trace r` echoes its own clauses and none of the routine's.
+                  An internal label's clauses ARE echoed under the same
+                  setting, which is what 4b implements.
+
+              THE LESSON THAT GENERALISES, and it is why the first answer was
+              wrong: absence under one instrument is not evidence of
+              ownership. The first revision probed `trace i` on an internal
+              label -- an instrument that could never have produced these two
+              prefixes whatever the answer was.
+
+              `::method` travels with `::routine` here (`isMethodOrRoutine`
+              is one predicate) but is Phase 5's by the object model, not
+              4c's. The row is named for both because the C++ gate is.
+
+
 DEVIATIONS -- permanent, chosen
 -------------------------------
 
@@ -178,11 +250,13 @@ DEVIATIONS -- permanent, chosen
      fail" above asks for -- nothing pinned anywhere exercises the counter
      gap itself, and that is the honest state, not a further gap to close.
 
-     WHAT THIS DOES NOT CLOSE. The re-tested pass's two missing >>> lines
-     (the KNOWN GAP below) is a CONTENT difference -- lines absent, not lines
-     indented -- so normalisation does not touch it and it must still be
-     fixed. Same C++ path, different symptom; an earlier note in this session
-     wrongly claimed the two closed together.
+     WHAT THIS DOES NOT CLOSE. The re-tested pass's missing >>> lines were a
+     CONTENT difference -- lines absent, not lines indented -- so
+     normalisation never touched them and they had to be fixed. They were,
+     at 4b Task 9 (see CLOSED DEFECTS). Same C++ path, different symptom; an
+     earlier note in this session wrongly claimed the two closed together,
+     and Task 9 is the measurement that settles it -- the content half is
+     fixed and this deviation is still in force for the indent half.
 
      TRACE'S *SETTING* REMAINS EXECUTION SEMANTICS and stays byte-exact in
      behaviour: TRACE() is readable by the program, the setting is
@@ -503,43 +577,20 @@ above.
   error.rs module note has the measurement behind that decision and records
   that Phase 4 owes them for condition('o')~additional regardless.
 
-  A Controlled (TO-style) loop's re-tested pass omits two >>> value lines that
-  the oracle emits for its control variable. Measured, and read from the C++
-  rather than inferred: DoBlock::checkControl (DoBlock.cpp:182) traces the
-  control variable's current value and then the computed value+by on every
-  pass AFTER the first, the first pass being skipped explicitly because the
-  initial assignment was already traced during setup. Our loop_advance/loop_step
-  split has the increment already computed by the time loop_advance would need
-  the pre-increment value, so emitting the pair means moving the
-  increment into loop_advance behind a not-first-pass flag, mirroring
-  checkControl's own shape. COSTED, because an earlier version of this row said
-  "restructuring a split that review rounds and a mutation suite have certified"
-  and that overstates it enough to deter someone who should simply do it: the
-  edit is roughly twenty lines, and the real cost is re-verifying
-  bound-before-test, FOR and ITERATE semantics against the existing suite. Half
-  a day, not a rewrite.
-
-  Everything else about loop tracing is complete and byte-identical: the
-  DO/LOOP clause re-echoes every pass, END re-echoes only on a pass that falls
-  through the bottom and not on the pass where LEAVE fires, >K> fires once for
-  TO/BY/FOR/COUNTER and every pass for WHILE/UNTIL, and DO OVER and DO FOREVER
-  both match.
-
-  Recorded here rather than left in a report because the implementer could not
-  write to this file and flagged it, and because a measured divergence that
-  lives only in a source comment and a task report is one nobody meets again.
-  The committed >K> witness (keyword_while.rex) is a complete answer for a
-  different LoopKind, chosen because it fully exercises re-echo and per-pass
-  >K>. It is NOT a witness selected to avoid this gap: the gap is stated here,
-  and criterion 3's assessment should say the Controlled pair is unwitnessed.
+  A Controlled loop's control variable is now traced on every re-tested pass.
+  *** THIS ROW IS CLOSED (4b Task 9). *** Its measured record is in CLOSED
+  DEFECTS below; the paragraphs kept here are the ones the SECOND symptom
+  still needs, because that one is a different divergence with a different
+  answer and used to be stated as this row's tail.
 
   A SECOND SYMPTOM OF THE SAME RE-TESTED PASS. *** THIS HALF IS NO LONGER A
-  GAP: IT IS COVERED BY DEVIATION 0, WHICH NORMALISES LEADING INDENTATION ON
-  STDERR. *** Everything below is retained as the measured record of why that
-  deviation exists, and because the pinned shallow-depth indent witnesses
-  named there still compare without normalisation. Do not reopen it as work.
-  The FIRST symptom above -- the two missing >>> value lines -- is a CONTENT
-  difference and is NOT covered by the deviation; it remains open.
+  GAP EITHER, BUT FOR A DIFFERENT REASON: IT IS COVERED BY DEVIATION 0, WHICH
+  NORMALISES LEADING INDENTATION ON STDERR. *** Everything below is retained
+  as the measured record of why that deviation exists, and because the pinned
+  shallow-depth indent witnesses named there still compare without
+  normalisation. Do not reopen it as work. The FIRST symptom above -- the
+  missing value lines -- was a CONTENT difference that the deviation never
+  covered, and it was closed by fixing it rather than by normalising it.
 
   The measured record: the *-* indent is NOT a pure function of lexical
   nesting. A repetitive
@@ -688,8 +739,16 @@ above.
   THE REAL FIX, and it is cheaper than this row: port the counter. A saved
   indent on the block plus the two exit paths reproduces every row exactly,
   where deriving a declarative rule has failed four times because the oracle
-  has no declarative rule to derive. See the KNOWN GAP on the re-tested pass's
-  two missing >>> lines -- same root cause, same fix, and both close together.
+  has no declarative rule to derive.
+
+  "SEE THE KNOWN GAP ON THE RE-TESTED PASS'S TWO MISSING >>> LINES -- SAME
+  ROOT CAUSE, SAME FIX, AND BOTH CLOSE TOGETHER" STOOD HERE AND IS FALSE.
+  Task 9 closed that one on its own, by moving the BY increment into
+  loop_advance so the pre-increment value survives to be traced. Nothing
+  about the indent counter changed, and nothing needed to: the two share the
+  re-tested pass as an *occasion*, not a mechanism. Whoever ports the counter
+  should expect no help from that fix, and can read it as the evidence that
+  the two are separable.
 
   IT REACHES 4b TASK 2's OWN DELIVERABLE, which is why it is recorded now
   rather than left to whoever meets it: interpret "do jj = 1 to 1; nop; end;
@@ -704,9 +763,10 @@ above.
   Not 4a-fixable by making static_indent impure -- that function's own doc
   comment argues at length for why a running counter was rejected, and the
   argument still holds. Closing this means modelling the oracle's counter as
-  its own quantity, alongside the >>> pair above, since both come from the
-  same re-tested pass. static_indent's doc now states the exception directly
-  instead of stating purity as settled.
+  its own quantity. It does NOT mean touching the >>> pair, which used to be
+  named here as coming with it and was closed separately at Task 9 (see the
+  correction two paragraphs up). static_indent's doc states the exception
+  directly instead of stating purity as settled.
 
   The existing test the_indent_after_a_loop_has_already_exited_is_not_left_
   over_from_it does not catch it, and the reason generalises: it runs at top
@@ -738,6 +798,55 @@ above.
   the gap is specific to a stem correctly becoming a real object where it
   used to be a plain `Text`, which is the same shape F4 itself is: object
   identity becoming observable once it exists to be observed.
+
+  TRACE L (LABELS) echoes nothing. `mode_from_setting` classifies L, like
+  C/E/F/N/O, as "recognised, and this crate has nothing to show for it"
+  (TraceMode::OFF). The oracle shows something: every label clause it
+  EXECUTES is echoed with the ordinary *-* prefix. Measured, 2026-08-04, one
+  program with a SIGNAL target and a CALL target in it:
+
+           5 *-* there:
+           9 *-*   sub:
+
+  stdout and rc match on both sides; only these lines are missing here. Note
+  the indent -- the called routine's label sits at the calling clause's own
+  printed indent plus two, exactly as it does under trace a/r/i, so this is
+  the existing echo path with a different gate rather than a new formatter.
+
+  FOUND WHILE PROBING FOR >I>/<I<, not by a task that owned it, which is why
+  it is here rather than in a report: `trace l` was the instrument for that
+  question and its own output turned out to be a divergence in its own right.
+  An earlier statement of the >I>/<I< question asserted that "an internal-
+  label call with trace l first emits nothing, with or without PROCEDURE".
+  That is false, and this is the transcript that falsifies it.
+
+  Owner unassigned, and the reason is worth a line: the fix is a fourth
+  TraceMode field plus a gate at the one clause-echo call site (which already
+  has the instruction and so can already ask "is this a Label"), which is
+  small -- but TRACE()'s own reported setting, D17's three-field TraceMode
+  argument, and 4c's >I>/<I< row all read the same classification, and
+  changing it without them is how a fourth thing goes wrong.
+
+  A COMPOUND CONTROL VARIABLE IS STORED IN THE WRONG PLACE. `do aa.1 = 1 to
+  2` is legal Rexx and the oracle iterates it, assigning the compound AA.1 on
+  every pass. rexx_parse::Controlled::control is a bare SymbolId, so
+  bind_control resolves `AA.1` through slot_of and creates a SIMPLE variable
+  whose name happens to contain a dot. Measured, 2026-08-04, `do aa.1 = 1 to
+  2 ; nop ; end ; say aa.1`: the oracle prints 3 and this crate prints AA.1
+  (the derived name of a compound nothing ever wrote). Under trace i the same
+  program is also missing the >C> line the oracle emits before each of the
+  control variable's >V>/>=> lines, for the same reason -- there is no
+  compound to resolve.
+
+  NOT INTRODUCED BY THE TRACING ADDED AT TASK 9, and measurably so: the
+  stdout difference above is present on e72cc19f too. It became *visible*
+  there, because the >=> and >V> lines Task 9 added are the first thing that
+  prints the control variable's name at all.
+
+  Closing it needs a rexx-parse change (Controlled::control carrying the same
+  VariableRef shape an assignment target does), so it is not fixable inside
+  rexx-exec alone, which is the other reason it is recorded rather than
+  fixed: no 4b task's file list reaches the parser.
 
   TRACE ? (the interactive prefix) is silently ignored. `mode_from_setting`
   accepts the letter and drops the `?`, so `trace ?r` behaves exactly as
@@ -865,3 +974,92 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   the_clause_echo_saturates_at_forty_columns pins 36/38/40/42/50 directly.
   Setting MAX_CLAUSE_INDENT back to usize::MAX takes the corpus from 31 of 31
   to 30 of 31, naming that program.
+
+  A CONTROLLED LOOP'S RE-TESTED PASS OMITTED ITS CONTROL VARIABLE'S VALUE
+  LINES (fixed, 4b Task 9 -- this was the KNOWN GAP row above, moved here).
+  DoBlock::checkControl (DoBlock.cpp:182-205, read directly) is called as
+  checkControl(context, stack, !first) (ControlledDoInstruction.cpp:162), and
+  on every pass AFTER the first its increment arm reads the control variable
+  (tracing >V>), traces that value (>>>), adds BY, traces the sum (>>>) and
+  assigns (>=>). Measured, trace i, `do ii = 1 to 2`, second pass:
+
+           >V>     II => "1"
+           >>>     "1"
+           >>>     "2"
+           >=>     II <= "2"
+
+  and under trace r only the two >>> lines, which is the gating: >V>/>=> are
+  intermediates, both >>> are results. The pair is emitted on the FAILING
+  pass too -- `do ii = 1 to 3` traces "3" then "4" on the pass that ends the
+  loop -- so these are not the values of an iteration that ran.
+
+  THREE MORE LINES CAME WITH IT, all measured, none of them in the original
+  row: the setup assignment (>=>, at the DO clause's own indent rather than
+  the body's, because the oracle's setup runs before the block is pushed); a
+  zero-trip loop's setup assignment (`do ii = 5 to 3` still traces
+  >=> II <= "5"); and a DO OVER's own single >=>, which sits at the BODY's
+  indent because checkOver runs with the block already pushed. That indent
+  split is why bind_control takes an indent from its caller rather than
+  deriving one.
+
+  WHAT WE USED TO DO: nothing at any of those points. The fix moved the BY
+  increment out of a bottom-of-pass `loop_step` into loop_advance, where the
+  oracle does it, because the two >>> lines straddle that addition and the
+  value on the near side of it was already gone; `loop_step` no longer exists.
+  Costed at "roughly twenty lines, half a day" by the row this replaces, which
+  was accurate.
+
+  WITNESS: rust/crates/rexx-exec/tests/trace_oracle/controlled_loop.rex, whose
+  committed expectation covers both modes, an ITERATE, a negative BY and the
+  DO OVER case beside it. Reverting the increment to a bottom-of-pass step
+  fails it. A/B against e72cc19f over 20 probes: 18 DIFF -> MATCH, 2 MATCH on
+  both, 0 MATCH -> DIFF, and the four probes Task 7's round-4 review left as
+  "DIFF on both" (q11, y4, z6, w29) are all four MATCH now -- re-run at Task 9
+  from the same files, which is how "one gap, not two" was settled rather than
+  assumed.
+
+  EXIT <expr> EMITTED NO >>> VALUE LINE (fixed, 4b Task 9). Measured on a
+  three-line program with no condition, no call and no loop in it:
+
+      trace r          oracle stderr:            ours, before:
+      say 'a'               2 *-* say 'a'             2 *-* say 'a'
+      exit 0                  >>>   "a"                 >>>   "a"
+                            3 *-* exit 0             3 *-* exit 0
+                              >>>   "0"              (nothing)
+
+  Both rc 0. The oracle's own path is RexxInstructionExit::execute ->
+  RexxInstructionExpression::evaluateExpression (RexxInstruction.cpp:223-235),
+  whose traceResult sits inside the `expression != OREF_NULL` arm -- so a bare
+  EXIT correctly traces nothing, and that half was already right.
+
+  IT CONSTRAINED A CORPUS PROGRAM, which is how a formatting gap becomes a
+  planning cost: lang/condition_traps.rex deliberately contains no
+  `exit <value>` and its header said why. Both that header and phase-4b.txt's
+  own entry for it are corrected in the same change as the fix. WITNESS:
+  tests/trace_oracle/exit_value.rex. Deleting the trace_result call in the
+  Exit arm fails it.
+
+  RAISE ... ARRAY TRACED ITS OWN >K> BEFORE THE ELEMENTS, AND CLOSED UP AN
+  OMITTED ONE (fixed, 4b Task 9, found while adding >A> at the same site).
+  Two defects in three lines, and one of them was a stdout/stderr content
+  difference rather than a trace one:
+
+    * ORDER. The oracle traces the elements first and the >K> "ARRAY" line
+      last. We had it first. Invisible under trace r (the elements' own lines
+      are intermediates), which is why every existing witness missed it --
+      lang/condition_traps.rex runs under trace r and contains a RAISE ARRAY.
+    * THE OMITTED POSITION HOLDS ITS PLACE. `raise syntax 40.4
+      array('R',,'X')` leaves &2 a hole: the oracle prints "maximum expected
+      is ." and never uses 'X'. We closed the gap up and printed "maximum
+      expected is X." -- readable, plausible and wrong. The code comment at
+      that site had stated this choice as "unmeasured, and the only unmeasured
+      choice in this function", which is exactly the label that made it cheap
+      to check.
+    * >A> FIRES TWICE PER SUPPLIED ELEMENT and once, empty, for an omitted
+      one (RaiseInstruction.cpp:229-237 calls traceArgument on both sides of
+      the array put). Reproduced as measured rather than tidied to one line.
+
+  WITNESS: rust/corpus/lang/raise_array_substitution.rex, which runs live
+  against the oracle under trace i and is the one program in the 4b subset
+  that does. Its raise is untrapped because the substituted message is only
+  observable in the report, condition('o') being 4c's.

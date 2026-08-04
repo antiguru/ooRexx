@@ -37,11 +37,14 @@
  *      fatal report, and an implementation that ignored SIGNAL OFF would
  *      print the handler's output and exit 0 instead of 214.
  *
- * NOT here, deliberately: `exit <value>` anywhere under `trace r`. That
- * clause's own `>>>` value line is missing from this crate (a pre-existing
- * gap in the EXIT arm, unrelated to conditions), so a program containing one
- * would diverge for a reason that has nothing to do with what it is
- * witnessing. The program ends on an untrapped raise instead.
+ * NOT here: `exit <value>` anywhere under `trace r`. That was originally a
+ * refusal -- the clause's own `>>>` value line was missing from this crate
+ * (a gap in the EXIT arm, unrelated to conditions) and a program containing
+ * one would have diverged for a reason that had nothing to do with what it
+ * is witnessing. **That gap is closed as of 4b Task 9**, and this program
+ * simply has no use for one: it ends on an untrapped raise, which is what
+ * its last block is for. The witness for the EXIT value line is
+ * tests/trace_oracle/exit_value.rex.
  */
 trace r
 signal on syntax name trap_syntax

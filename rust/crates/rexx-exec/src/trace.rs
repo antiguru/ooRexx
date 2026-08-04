@@ -9,8 +9,10 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! `TRACE` (D17): the mode, the byte-level formatting of each of the nine
-//! prefixes reachable from pure-4a code, and the classification a
+//! `TRACE` (D17): the mode, the byte-level formatting of each prefix
+//! reachable from the code this crate runs -- 4a's own ten (`*-*`, `>>>`,
+//! `>=>`, `>L>`, `>V>`, `>O>`, `>K>`, `>C>`, `>P>`, `>E>`) plus the three
+//! 4b's calls add (`>A>`, `>F>`, `>R>`, Task 9) -- and the classification a
 //! `TRACE`/`TRACE VALUE` setting goes through to become one.
 //!
 //! **What lives here is formatting and classification, never *when* to
@@ -469,6 +471,75 @@ impl Interp {
         push_tagged(&mut self.trace, ">=>", indent, false, tag, " <= ", value);
     }
 
+    /// `>A>` (`TRACE_PREFIX_ARGUMENT`): one call argument's own evaluated
+    /// value, untagged, emitted at the *call site* once the argument
+    /// expression has produced a value (`RexxInstruction::evaluateArguments`,
+    /// `RexxInstruction.cpp:144`-`162`, read directly: `traceArgument` right
+    /// after each `evaluate`, and `traceArgument(NULLSTRING)` -- an empty
+    /// value line, not a skipped one -- for an omitted position).
+    ///
+    /// Gated on `intermediates` (`traceArgument`'s own
+    /// `if (settings.intermediateTrace)`), measured both ways: `trace i` /
+    /// `call sub 1,,3` shows `>A>   "1"`, `>A>   ""`, `>A>   "3"`, and the
+    /// same program under `trace r` shows none of the three.
+    pub(crate) fn trace_argument(&mut self, indent: usize, value: &[u8]) {
+        if !self.trace_mode().intermediates {
+            return;
+        }
+        push_value(&mut self.trace, ">A>", indent, value);
+    }
+
+    /// `>F>` (`TRACE_PREFIX_FUNCTION`): a **function-form** call's own
+    /// returned value, tagged with the routine's name, unquoted
+    /// (`traceFunction`/`RexxActivation.hpp:347`-`348`, `quoteTag = false`,
+    /// like `>V>` and unlike `>K>`).
+    ///
+    /// **The instruction form has no equivalent line**, which is measured
+    /// rather than inferred from the C++ alone: `zz = sub(1, 2)` traces
+    /// `>F>   SUB => "3"` after the callee's own two `>>>` lines, while
+    /// `call sub 1, 2` traces no `>F>` anywhere -- the oracle's own
+    /// `traceFunction` call sits in `ExpressionFunction::evaluate`
+    /// (`ExpressionFunction.cpp:228`), which the `CALL` instruction does not
+    /// go through at all.
+    ///
+    /// `indent` is the **caller's** own clause indent, not the callee's:
+    /// measured, the `>F>` line above sits at the enclosing assignment's
+    /// indent while the callee's `>>>` lines sit two further in.
+    pub(crate) fn trace_function(&mut self, indent: usize, name: &[u8], value: &[u8]) {
+        if !self.trace_mode().intermediates {
+            return;
+        }
+        push_tagged(&mut self.trace, ">F>", indent, false, name, " => ", value);
+    }
+
+    /// `>R>` (`TRACE_PREFIX_ALIAS`): a `USE ARG >name` target has just been
+    /// aliased onto the caller's variable. `tag` is the **caller's** own
+    /// variable name and the value is the **callee's** target name
+    /// (`UseInstruction.cpp:167`, `traceVariableAlias(reference->getName(),
+    /// useRef->getName())`, that order), so `orig = 'PP'; call sub >orig`
+    /// into `use arg >q` traces `>R>     "ORIG" => "Q"` -- names on both
+    /// sides, no value anywhere on the line.
+    ///
+    /// **Gated on `results`, not `intermediates`** (`traceVariableAlias`'s
+    /// own `if (tracingResults())`, unlike every other prefix this task
+    /// added): measured, the same program under `trace r` still shows the
+    /// `>R>` line with no other value line around it, and under `trace l`
+    /// shows nothing at all.
+    pub(crate) fn trace_alias(&mut self, indent: usize, reference: &[u8], target: &[u8]) {
+        if !self.trace_mode().results {
+            return;
+        }
+        push_tagged(
+            &mut self.trace,
+            ">R>",
+            indent,
+            true,
+            reference,
+            " => ",
+            target,
+        );
+    }
+
     /// `>C>` (`TRACE_PREFIX_COMPOUND`): announces which fully-resolved
     /// compound name a read or write just used, before `>V>`/`>=>` shows
     /// what is actually stored there -- `tag` is the compound's own
@@ -565,6 +636,73 @@ mod tests {
         let mut out = Vec::new();
         push_value(&mut out, ">L>", 4, b"big");
         assert_eq!(out, b"       >L>       \"big\"\n");
+
+        // 4b's three, each from this task's own oracle transcript.
+        // `>A>`, indent 0: `call sub 1,,3` under `trace i`.
+        let mut out = Vec::new();
+        push_value(&mut out, ">A>", 0, b"1");
+        assert_eq!(out, b"       >A>   \"1\"\n");
+
+        // The omitted position's own line, which is empty rather than
+        // absent -- the same formatter with no value.
+        let mut out = Vec::new();
+        push_value(&mut out, ">A>", 0, b"");
+        assert_eq!(out, b"       >A>   \"\"\n");
+
+        // `>F>`, indent 0, tag *unquoted*: `zz = sub(1, 2)` under `trace i`.
+        let mut out = Vec::new();
+        push_tagged(&mut out, ">F>", 0, false, b"SUB", " => ", b"3");
+        assert_eq!(out, b"       >F>   SUB => \"3\"\n");
+
+        // `>R>`, indent 2, tag *quoted* -- the callee's own indent, since a
+        // `USE ARG` sits inside a called routine by construction.
+        let mut out = Vec::new();
+        push_tagged(&mut out, ">R>", 2, true, b"ORIG", " => ", b"Q");
+        assert_eq!(out, b"       >R>     \"ORIG\" => \"Q\"\n");
+    }
+
+    /// The 4b prefixes' own gates, which are **not** all the same one:
+    /// `>A>`/`>F>` are `intermediates` and `>R>` is `results`
+    /// (`traceArgument`/`traceFunction` against `traceVariableAlias`,
+    /// `RexxActivation.hpp:340`/`:347`/`:370`, and measured -- `trace r` on
+    /// an aliasing `USE ARG >q` shows `>R>` and nothing else).
+    ///
+    /// Written as three modes against three prefixes rather than one
+    /// assertion per prefix, because the failure this catches is a gate
+    /// copied from the neighbouring method: under `RESULTS` a wrongly
+    /// `intermediates`-gated `>R>` disappears, and under `RESULTS` a wrongly
+    /// `results`-gated `>A>`/`>F>` appear.
+    #[test]
+    fn the_two_argument_prefixes_are_intermediates_and_the_alias_prefix_is_results() {
+        let mut interp = Interp::new();
+        activate_empty(&mut interp);
+        interp.set_trace_mode(TraceMode::RESULTS);
+        interp.trace_argument(0, b"1");
+        interp.trace_function(0, b"SUB", b"3");
+        interp.trace_alias(0, b"ORIG", b"Q");
+        assert_eq!(
+            interp.trace, b"       >R>   \"ORIG\" => \"Q\"\n",
+            "under RESULTS only the alias line is shown"
+        );
+
+        let mut interp = Interp::new();
+        activate_empty(&mut interp);
+        interp.set_trace_mode(TraceMode::INTERMEDIATES);
+        interp.trace_argument(0, b"1");
+        interp.trace_function(0, b"SUB", b"3");
+        interp.trace_alias(0, b"ORIG", b"Q");
+        assert_eq!(
+            interp.trace,
+            b"       >A>   \"1\"\n       >F>   SUB => \"3\"\n       >R>   \"ORIG\" => \"Q\"\n",
+            "under INTERMEDIATES all three are shown"
+        );
+
+        let mut interp = Interp::new();
+        activate_empty(&mut interp);
+        interp.trace_argument(0, b"1");
+        interp.trace_function(0, b"SUB", b"3");
+        interp.trace_alias(0, b"ORIG", b"Q");
+        assert!(interp.trace.is_empty(), "TraceMode::OFF is silent");
     }
 
     /// `Interp::trace_clause`/`trace_result`/`trace_keyword` are each

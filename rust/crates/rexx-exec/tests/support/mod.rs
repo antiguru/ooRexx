@@ -90,7 +90,7 @@
 /// one: the alternative is a list that has to be remembered and extended
 /// each time a later phase adds an emitter, which is exactly the kind of
 /// silent-drift risk this project keeps finding in its own harnesses.
-const TRACE_PREFIXES: &[[u8; 3]] = &[
+pub const TRACE_PREFIXES: &[[u8; 3]] = &[
     *b"*-*", // TRACE_PREFIX_CLAUSE
     *b"+++", // TRACE_PREFIX_ERROR
     *b">>>", // TRACE_PREFIX_RESULT

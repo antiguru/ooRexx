@@ -8,12 +8,13 @@
    effect: they print in the order each keyword is actually evaluated, once,
    at loop setup, regardless of what value each keyword holds.
 
-   `LEAVE` on the first pass is deliberate: a Controlled loop's own re-tested
-   pass has a separate, already-recorded gap (two missing `>>>` lines, see
-   phase-4-exclusions.txt), and this witness must not also trip over that one
-   -- leaving before the bound is ever re-checked keeps this program clean of
-   it, so a divergence here can only mean the order defect this witness
-   targets.
+   `LEAVE` on the first pass was originally a refusal: a Controlled loop's
+   own re-tested pass had a separate, recorded gap (two missing `>>>`
+   lines), and this witness must not also trip over that one. **That gap is
+   closed as of 4b Task 9** (tests/trace_oracle/controlled_loop.rex is its
+   witness), so the `LEAVE` no longer routes around anything -- it stays
+   because keeping this program to exactly one loop pass keeps a divergence
+   here attributable to the order defect it targets and to nothing else.
 
    Measured: the oracle prints `>K>` for TO, then BY, then FOR, in that
    written order. Mutating the evaluation loop to iterate `ctrl.order` in

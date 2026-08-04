@@ -1,0 +1,56 @@
+RC 0
+===STDOUT===
+ended 4 0 ab
+===STDERR===
+     3 *-* do ii = 1 to 3
+       >K>   "TO" => "3"
+     4 *-*   if ii = 2 
+       >>>     "0"
+     5 *-* end
+     3 *-* do ii = 1 to 3
+       >>>     "1"
+       >>>     "2"
+     4 *-*   if ii = 2 
+       >>>     "1"
+     4 *-*     then
+     4 *-*       iterate
+     3 *-* do ii = 1 to 3
+       >>>     "2"
+       >>>     "3"
+     4 *-*   if ii = 2 
+       >>>     "0"
+     5 *-* end
+     3 *-* do ii = 1 to 3
+       >>>     "3"
+       >>>     "4"
+     6 *-* trace i
+     7 *-* do jj = 2 to 1 by -1
+       >L>   "2"
+       >L>   "1"
+       >K>   "TO" => "1"
+       >L>   "1"
+       >P>   "-" => "-1"
+       >K>   "BY" => "-1"
+       >=>   JJ <= "2"
+     8 *-*   nop
+     9 *-* end
+     7 *-* do jj = 2 to 1 by -1
+       >V>     JJ => "2"
+       >>>     "2"
+       >>>     "1"
+       >=>     JJ <= "1"
+     8 *-*   nop
+     9 *-* end
+     7 *-* do jj = 2 to 1 by -1
+       >V>     JJ => "1"
+       >>>     "1"
+       >>>     "0"
+       >=>     JJ <= "0"
+    10 *-* do kk over 'ab'
+       >L>   "ab"
+       >K>   "OVER" => "ab"
+       >=>     KK <= "ab"
+    11 *-*   nop
+    12 *-* end
+    10 *-* do kk over 'ab'
+    13 *-* trace off

@@ -159,16 +159,18 @@ lang/use_arg_forms.rex
 
 # New for 4b Task 6 -- SIGNAL to a label and SIGNAL VALUE, under trace r
 # throughout. Its own header states why SIGNAL fires on the loop's first
-# pass rather than its second (the documented KNOWN GAP in a Controlled
-# DO/LOOP's own retrace, unrelated to SIGNAL) and why the final unresolved
-# SIGNAL comes last (a raise ends the program).
+# pass rather than its second -- originally a KNOWN GAP in a Controlled
+# DO/LOOP's own retrace, closed at Task 9 and re-measured there, so the
+# first-pass form is now a choice rather than a requirement -- and why the
+# final unresolved SIGNAL comes last (a raise ends the program).
 lang/signal_forms.rex
 
 # New for 4b Task 7 -- condition traps, RAISE and NOVALUE, under trace r
 # throughout. Its own header states, per block, which wrong answer each would
-# print, and why it contains no `exit <value>`: that clause's `>>>` line is a
-# pre-existing gap in this crate's EXIT arm, unrelated to conditions, so a
-# program with one in it would diverge for the wrong reason. The witness value
+# print, and why it contains no `exit <value>`: that clause's `>>>` line was
+# a gap in this crate's EXIT arm, unrelated to conditions, so a program with
+# one in it would have diverged for the wrong reason. Closed at Task 9, whose
+# witness is tests/trace_oracle/exit_value.rex. The witness value
 # is a single accumulated string rather than a per-block flag, so a block that
 # silently did not run removes its own segment from the output instead of
 # leaving it unchanged -- and no segment equals any variable's derived name,
@@ -185,3 +187,13 @@ lang/condition_traps.rex
 # PUSH/QUEUE tracing a null string rather than being skipped. The
 # interleaved order itself is pinned by queue.rs's own unit tests instead.
 lang/push_queue.rex
+
+# New for 4b Task 9 -- RAISE SYNTAX ... ARRAY's substitution list and its own
+# trace lines, under trace i (the one program in this subset that is: >A> is
+# an intermediates-level prefix and invisible under trace r, which is what
+# every other 4b program uses). Its raise is deliberately untrapped, because
+# the thing it pins -- an omitted array element holding its place in the
+# substitution list rather than closing up -- is observable only in the error
+# report, condition('o') being 4c's. Its own header states which wrong answer
+# a gap-closing implementation prints.
+lang/raise_array_substitution.rex

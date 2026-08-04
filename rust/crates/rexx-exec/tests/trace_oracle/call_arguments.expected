@@ -1,0 +1,37 @@
+RC 0
+===STDOUT===
+2 BB three refval
+===STDERR===
+     3 *-* zref = 'refval'
+       >L>   "refval"
+       >>>   "refval"
+       >=>   ZREF <= "refval"
+     4 *-* call sub 1+1,,'three',>zref
+       >L>   "1"
+       >L>   "1"
+       >O>   "+" => "2"
+       >A>   "2"
+       >A>   ""
+       >L>   "three"
+       >A>   "three"
+       >O>   ">" => "ZREF"
+       >A>   "refval"
+     6 *-*   sub:
+     7 *-*   use arg aa, bb, cc, dd
+       >>>     "2"
+       >=>     AA <= "2"
+       >>>     "three"
+       >=>     CC <= "three"
+       >>>     "refval"
+       >=>     DD <= "refval"
+     8 *-*   say aa bb cc dd
+       >V>     AA => "2"
+       >V>     BB => "BB"
+       >O>     " " => "2 BB"
+       >V>     CC => "three"
+       >O>     " " => "2 BB three"
+       >V>     DD => "refval"
+       >O>     " " => "2 BB three refval"
+       >>>     "2 BB three refval"
+     9 *-*   return
+     5 *-* exit

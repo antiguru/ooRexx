@@ -1,19 +1,21 @@
 /* SIGNAL to a label and SIGNAL VALUE (4b Task 6), under trace r throughout,
    like call_return.rex.
 
-   `signal past_loop` fires on the loop's *first* pass, deliberately: a
-   second pass through this `DO i = 1 TO 3` would retrace two further `>>>`
-   lines this crate does not yet reproduce (the documented "KNOWN GAP" at
-   run.rs's own `loop_advance`, `LoopState::Controlled` arm -- unrelated to
-   SIGNAL and out of this task's scope). A witness that reached a second
-   pass would be pinning that gap's own wrong output rather than SIGNAL's,
-   exactly the trap interpret_error_echo.rex's own header already names for
-   a different construct. Confirmed rather than assumed (review round 1):
-   running the second-pass shape (`if i = 2`) end to end against the oracle
-   shows stdout and rc both matching and the stderr diff is *only* the two
-   known `>>>` lines -- no missing END echo, no wrong landing line, nothing
-   SIGNAL-shaped -- so routing around it here loses no coverage of an actual
-   SIGNAL defect, only of the pre-existing, already-disclosed gap.
+   `signal past_loop` fires on the loop's *first* pass. That was originally
+   a refusal: a second pass through this `DO i = 1 TO 3` retraces two
+   further `>>>` lines that this crate did not reproduce until 4b Task 9
+   (the "KNOWN GAP" then documented at run.rs's own `loop_advance`,
+   `LoopState::Controlled` arm -- unrelated to SIGNAL), so a witness
+   reaching a second pass would have pinned that gap's own wrong output
+   rather than SIGNAL's. **The gap is closed and the reason no longer
+   holds.** Re-measured at Task 9 rather than assumed closed: the
+   second-pass shape (this program with `if i = 2`) now agrees with the
+   oracle on stdout, stderr and rc 240, byte for byte and with no
+   normalisation. The first-pass form is kept because it is what every
+   `.expected`-free differential run in this file's history has compared,
+   not because a second pass would still diverge; the control variable's
+   own re-tested-pass lines are witnessed by
+   tests/trace_oracle/controlled_loop.rex.
 
    `signal past_select` (review round 1, I3) is the identical unwind through
    a SELECT instead of a DO -- `leave_select` is one of the forwarding sites
