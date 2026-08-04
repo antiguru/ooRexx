@@ -1,0 +1,127 @@
+# One differential probe per in-scope builtin function. Read by
+# `crates/rexx-exec/tests/builtin_status.rs`, which runs each program through
+# both interpreters and writes the result into `builtin-status.txt`.
+#
+# FORMAT. `NAME<TAB>program`, one row per line; the name is a builtin from
+# `rexx_inventory::builtins::NAMES` and the program is a complete Rexx program
+# on a single physical line (clauses separated by `;` where more than one is
+# needed). Lines starting with # are comments; blank lines are ignored. A tab
+# is the separator, so no program may contain one.
+#
+# WHICH NAMES GET A ROW. Every name that is not one of the whole exclusions in
+# `docs/superpowers/plans/phase-4-exclusions.txt` -- including the three names
+# that file excludes only partially (VALUE, ADDRESS, QUEUED), each probed in
+# the form that is in scope. The harness derives that set and asserts this
+# file matches it in both directions, so a missing row and a spurious one are
+# both red; do not maintain the membership by hand from this comment.
+#
+# THE THREE PARTIAL ROWS ARE PROBED ON THEIR IN-SCOPE HALF, and getting that
+# wrong is easy: a first draft probed ADDRESS as `say address()`, which is the
+# platform-supplied default and is the half the exclusions file assigns to
+# Phase 7 ("say address()" with no ADDRESS instruction prints "sh"). The row
+# below sets the environment with an ADDRESS instruction first, which is the
+# half that is 4c's. VALUE is probed on the variable-access form, not the
+# external-selector form. QUEUED is probed within a single program, which is
+# what its own row permits -- the oracle's queue is rxapi-backed and shared
+# across processes, so nothing that spans two programs could ever match.
+#
+# WHY EACH PROGRAM COMPUTES SOMETHING. A zero-argument probe such as
+# `say substr()` compares two error messages. That is a real comparison, but
+# it tests the 40.x incorrect-call family rather than the builtin, and it is
+# satisfied by an implementation that exists and computes nothing. Each row
+# below therefore elicits a *value*: it prints a non-empty result the builtin
+# had to compute, and the harness compares that result against the oracle's
+# byte for byte.
+#
+# NO PROBE NESTS ONE BUILTIN INSIDE ANOTHER. A first draft rendered the
+# bit-operation results with `c2x(...)`; measured, the executor then reported
+# `routine "C2X" is not implemented` for BITAND, BITOR, BITXOR, D2C and
+# XRANGE, so five rows would have been answering for a name other than their
+# own. The operands below were chosen so each result is printable ASCII on its
+# own -- `bitand('cat','DOG')` is `@AD`, `bitor` of the same pair is `gow`,
+# `bitxor('cat','   ')` is `CAT`, `d2c(16706)` is `AB`, `xrange('a','e')` is
+# `abcde`.
+#
+# EVERY PROGRAM IS DETERMINISTIC. The status this file feeds only means
+# something if a matching run stays matching, so nothing here may read the
+# clock, the process's identity or an entropy source. The three builtins that
+# otherwise would -- DATE, TIME, RANDOM -- are probed through their
+# deterministic forms: DATE and TIME converting a *given* value between
+# formats rather than reporting now, and RANDOM over a one-element range.
+# Measured: all 66 programs below were run through the oracle twice, from two
+# freshly created empty directories, and stdout, stderr and exit status were
+# identical on both passes for every one.
+#
+# EVERY PROGRAM IS SELF-CONTAINED. None reads stdin, needs a terminal, or
+# writes a file: measured with stdin redirected from /dev/null, no probe left
+# anything in its own run directory beyond the program and the captured
+# descriptors. That is what lets the harness run them unattended.
+#
+# ORDER is `NAMES` order, which is `BuiltinFunctions.cpp`'s own table order.
+
+ABBREV	say abbrev('Print','Pri') abbrev('Print','Pro')
+ABS	say abs(-4.5)
+ADDRESS	address zork; say address()
+ARG	call f 7, 8; exit; f: say arg(2)
+B2X	say b2x('11000011')
+BITAND	say bitand('cat','DOG')
+BITOR	say bitor('cat','DOG')
+BITXOR	say bitxor('cat','   ')
+C2D	say c2d('81'x)
+C2X	say c2x('Ab')
+CENTER	say '['center('ab',6,'-')']'
+CENTRE	say '['centre('ab',6,'-')']'
+CHANGESTR	say changestr('a','banana','X')
+COMPARE	say compare('abcde','abXde')
+CONDITION	signal on syntax name h; say 1/0; h: say condition('C')
+COPIES	say copies('ab',3)
+COUNTSTR	say countstr('a','banana')
+D2C	say d2c(16706)
+D2X	say d2x(129)
+DATATYPE	say datatype('12.5')
+DATE	say date('S','2026-08-04','I')
+DELSTR	say delstr('abcdef',3,2)
+DELWORD	say delword('a b c d',2,2)
+DIGITS	numeric digits 12; say digits()
+ERRORTEXT	say errortext(40)
+FORM	numeric form engineering; say form()
+FORMAT	say '['format(3.14159,2,3)']'
+FUZZ	numeric fuzz 3; say fuzz()
+INSERT	say insert('-','abc',1)
+LASTPOS	say lastpos('a','banana')
+LEFT	say '['left('ab',5,'.')']'
+LENGTH	say length('abcdef')
+MAX	say max(3,17,8)
+MIN	say min(3,17,8)
+OVERLAY	say overlay('XY','abcdef',3)
+POS	say pos('an','banana')
+QUEUED	queue 'a'; queue 'b'; say queued()
+RANDOM	say random(5,5)
+REVERSE	say reverse('abcdef')
+RIGHT	say '['right('ab',5,'.')']'
+SIGN	say sign(-12)
+SOURCELINE	say sourceline(1)
+SPACE	say '['space('a   b  c',2)']'
+STRIP	say '['strip('  ab  ')']'
+SUBSTR	say substr('abcdef',2,3)
+SUBWORD	say subword('a b c d',2,2)
+SYMBOL	zz = 4; say symbol('zz')
+TIME	say time('N','12:34:56','N')
+TRACE	trace off; say trace()
+TRANSLATE	say translate('abcdef','123','abc')
+TRUNC	say trunc(12.987,2)
+VALUE	zz = 41; say value('zz')
+VAR	zz = 1; say var('zz')
+VERIFY	say verify('abcde','abc')
+WORD	say word('a b c d',3)
+WORDINDEX	say wordindex('a b c d',3)
+WORDLENGTH	say wordlength('ab cde f',2)
+WORDPOS	say wordpos('c','a b c d')
+WORDS	say words('a b c d')
+X2B	say x2b('c3')
+X2C	say x2c('616263')
+X2D	say x2d('81')
+XRANGE	say xrange('a','e')
+LOWER	say lower('ABCdef')
+UPPER	say upper('abcDEF')
+GC	say gc('Force')

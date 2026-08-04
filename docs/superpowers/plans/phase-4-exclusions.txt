@@ -38,16 +38,70 @@ condition, which is the worse failure. The specific integer is Task 12's to
 confirm, and this file is a gate artifact that nothing recompiles -- writing the
 number here is how it goes stale silently while still reading as true.
 
+Each row says WHY it is blocked, not only who owes it (D4). "The platform
+layer" names a phase; it does not tell Phase 7 what it is walking into, and
+for three of these rows what it is walking into is a decision rather than a
+task. Every measurement below was taken on this host from a fresh empty
+directory, with the oracle under the standard ulimit.
+
   Phase 7, the stream model and the platform layer:
 
-    CHARIN      CHAROUT     CHARS
-    LINEIN      LINEOUT     LINES
-    STREAM      QUALIFY     USERID
-    SETLOCAL    ENDLOCAL
+    CHARIN      Reads characters from a stream.
+    CHAROUT     Writes characters to a stream.
+    CHARS       Reports the characters available on a stream.
+    LINEIN      Reads a line from a stream.
+    LINEOUT     Writes a line to a stream.
+    LINES       Reports the lines available on a stream.
+    STREAM      Opens, closes, queries and repositions a stream.
+
+                All seven are blocked on the same absence and there is no
+                argument about any of them: Phase 4 has no stream model, and
+                none of these means anything without one. Measured,
+                stream('nosuch.txt','C','QUERY EXISTS') returns empty.
+
+    QUALIFY     Resolves a name against the current directory. NOT ACTUALLY
+                BLOCKED, and this row exists to say so: measured,
+                qualify('foo.txt') returns an absolute path for a file that
+                does not exist, so it is pure path manipulation and
+                std::path with std::env::current_dir covers it. It is
+                excluded because it is unscheduled, not because it cannot be
+                written. D4 weighed moving it into 4c (which would read 67 of
+                81) and chose not to; what would force the move is an L1
+                base/bif group 4c must pass turning out to need it.
+
+    USERID      Returns the invoking user's name; measured, "moritz" here.
+                Blocked, but weakly: Rust's std has no username API, so a
+                faithful answer needs getpwuid through libc -- which is
+                unsafe, and this workspace sets unsafe_code = "forbid" -- or
+                an external crate. Its value is also host-dependent, so a
+                differential run of it is single-machine, the same caveat the
+                QUEUED row below carries.
+
+    SETLOCAL    Saves the process environment; ENDLOCAL restores the most
+    ENDLOCAL    recently saved one. Measured, `s = setlocal(); say s
+                endlocal()` prints "1 1" -- and an unpaired `say endlocal()`
+                prints 0, so the pair, not the call, is what returns 1.
+                Blocked, and harder than "the platform layer" implies:
+                restoring an environment means std::env::set_var, which is
+                unsafe in edition 2024. Verified by compiling it under this
+                toolchain (rustc 1.97.1): error[E0133], "call to unsafe
+                function `set_var` is unsafe and requires unsafe block".
+                Against unsafe_code = "forbid", Phase 7 needs either a shadow
+                environment or a lint exception, and that is a decision, not
+                a task. Written down here so Phase 7 does not meet it cold.
 
   Phase 10, the RXAPI daemon:
 
-    RXQUEUE     RXFUNCADD   RXFUNCDROP  RXFUNCQUERY
+    RXQUEUE     Creates, deletes and selects external data queues.
+    RXFUNCADD   Registers an external function by name.
+    RXFUNCDROP  Deregisters one.
+    RXFUNCQUERY Reports whether one is registered.
+
+                All four are blocked on the rxapi daemon protocol, which
+                nothing in Phase 4 speaks. Measured, rxqueue('G') returns
+                SESSION -- an answer that comes from a live rxapi, which is
+                also why the QUEUED row's single-program caveat below is real
+                rather than theoretical.
 
 Fifteen names. 81 - 15 = 66 in scope.
 
@@ -80,10 +134,42 @@ The oracle has nineteen trace prefixes (RexxActivation.cpp:3567-3587). Thirteen
 have a committed witness at the end of 4b and six do not; all nineteen are
 enumerated with their owner in rexx-exec/tests/trace_oracle.rs's own
 PREFIX_COVERAGE, which is asserted rather than described (that file's coverage
-test is what fails if this paragraph and the table drift apart). Four of the
-six -- +++ and >.> (4c), >M> and >N> (Phase 5) -- follow directly from the
-construct that emits them being that phase's. The fifth and sixth need a row
-of their own, because their answer was got wrong twice before it was measured.
+test is what fails if this paragraph and the table drift apart). Three of the
+six -- >.> (4c), >M> and >N> (Phase 5) -- follow directly from the construct
+that emits them being that phase's. The other three need a row of their own,
+because their answer was got wrong before it was measured.
+
+  +++         Phase 7, not 4c.
+
+              A +++-prefixed line has four producers in the C++:
+              RexxActivation.cpp:4468, a command's non-zero RC, measured
+              live as
+
+                       1 *-* 'exit 3'
+                         >>>   "exit 3"
+                         +++   "RC(3)"
+
+              from `trace e` followed by `address sh` and 'exit 3' -- and
+              the trace setting is load-bearing, since the same program
+              under `trace n` emits nothing at all; :4024
+              (traceSourceString, whose caller is guarded by inDebug() at
+              :4305), the first banner line; :4237, the debug prompt, the
+              second, whose message text begins "+++"; and Activity.cpp
+              :1496, displayDebug, whose message text likewise begins
+              "+++". Three are interactive debug and one is command
+              dispatch, both Phase 7's under D18 and under the TRACE ? row
+              below.
+
+              THE REASON IS THAT SPLIT RATHER THAN THE ABSENCE OF ANY PATH,
+              and this is what the earlier "4c" answer missed.
+              AddressInstruction.cpp:163 IS a 4c instruction, and it is one
+              of RexxActivation::command's two callers (the other is
+              CommandInstruction.cpp:89). So 4c does reach the function
+              that emits the RC line -- it is ADDRESS's own 4c/Phase 7
+              division, the instruction being 4c's and issuing the command
+              being Phase 7's, that keeps the prefix out of 4c's reach. An
+              owner argued from "no path exists" would have been wrong; the
+              argument has to be about which half of ADDRESS lands when.
 
   >I> / <I<   4c, deferred alongside ::routine dispatch itself.
 
@@ -101,6 +187,21 @@ of their own, because their answer was got wrong twice before it was measured.
               and a wrong answer there would silently run the wrong routine
               rather than fail loudly. Today the construct fails loudly
               naming 4c, which is the correct behaviour.
+
+              THE SENTENCE ABOVE IS THIS ROW'S OWNERSHIP CLAIM -- "4b
+              declines to implement it because getting builtin-colliding
+              names right needs 4c's table" -- and it is the one to cite for
+              who owns ::routine. Cited by line number rather than by
+              content, that claim has already been fetched from the wrong
+              place once: the 4c plan's D-R quoted "which 4c will have to
+              meet", which heads the THREE MEASURED WAYS list further down.
+              That list is about what a ::routine ACTIVATION looks like, an
+              obligation on whoever implements it, and it would read the
+              same whichever phase owned the work. Neither it nor the
+              two-condition trace gate between here and it assigns anything.
+              (The row header's own "4c, deferred alongside ::routine
+              dispatch itself" states the conclusion; this paragraph is the
+              reason for it, which is what a citation usually wants.)
 
               THE GATE IS TWO CONDITIONS, both of which 4b fails:
               `tracingLabels() && isMethodOrRoutine()` (RexxActivation.cpp
@@ -541,6 +642,12 @@ one place a wrong call quietly breaks criterion 5's policing.
                     object; namespaces come from `::REQUIRES`, and "every
                     directive... [is] Phase 5's" per the split table's
                     assigned-elsewhere paragraph.
+                    That quoted phrase now carries a carve-out -- the design
+                    spec reads "every directive except ::ROUTINE, which is
+                    4c's" -- and this row is unaffected by it, because what
+                    a QualifiedCall needs is a namespace, namespaces come
+                    from ::REQUIRES, and ::REQUIRES is on the Phase 5 side of
+                    the carve-out.
 
   ClassResolver     Phase 5. Explicitly: "environment symbols beyond .nil,
                     .true and .false are Phase 5's", and this variant is how a
@@ -999,6 +1106,37 @@ above.
   what the oracle does with `?` and no tty and then either reproducing it or
   failing loudly, and neither happened.
 
+  "ONLY STDERR DIFFERS" HOLDS ONLY AT /dev/null, and that qualifier is the
+  whole reason this row has the owner it now has. With non-empty stdin,
+  `trace ?r` DRAINS STDIN AND ISSUES EACH LINE AS A SHELL COMMAND -- it is
+  the interactive debug reader, and /dev/null merely gives it nothing to
+  read. Measured, three runs of the same program -- `say 'A'` then `pull v`
+  then `say '<'v'>'` -- with stdin two lines reading `echo ONE` and
+  `echo TWO`:
+
+    * with `trace ?r` and that stdin: stderr carries the two banner lines
+      plus `/bin/sh: 1: ECHO: not found` twice (the reader uppercases each
+      line and runs it), and stdout is `A` then `<>`.
+    * with no TRACE instruction and the same stdin: stdout is `A` then
+      `<ECHO ONE>`, because PULL reads the line the debug reader would
+      otherwise have eaten.
+    * with `trace ?r` and stdin at /dev/null: stdout is `A` then `<>`, and
+      only the two banner lines differ.
+
+  So an implementation that reproduced the banner and did not drain stdin
+  would be byte-exact at /dev/null and WRONG ON STDOUT for every program
+  that reads the queue or the console -- the divergence would be invisible
+  to exactly the harness shape this project runs and visible to every real
+  user. Reproducing the banner alone is not a partial fix; it is a fix that
+  hides the remaining half.
+
+  THE SAME PATH IS REACHED WITH NO TRACE INSTRUCTION IN THE PROGRAM AT ALL.
+  Measured, `RXTRACE=ON` in the environment and a program containing only
+  the three clauses above: identical two banner lines, identical drained
+  PULL. So "we do not implement `TRACE ?`" is not a statement about a
+  keyword; the environment variable reaches it too, and anything that gates
+  on the parsed TRACE setting alone will miss it.
+
   THE REASON IT WENT MISSING IS THE POINT, and it is the sixth instance of one
   mechanism in this phase: the requirement lived only in the spec's Risks
   section and never reached any task body. Briefs are extracted per task, so a
@@ -1006,9 +1144,18 @@ above.
   who would act on it. Recording it here rather than in a report because this
   file is where an owner looks.
 
-  Owner unassigned. Reproducing the banner needs a decision about whether 4a's
-  TRACE claims interactivity it cannot deliver; failing loudly on `?` is the
-  cheaper alternative the spec already sanctioned.
+  Owner: Phase 7, with the rest of interactive debug. What the measurements
+  above establish is that `?` is not a trace-formatting flag at all: it is
+  an interactive session that reads the console and issues what it reads as
+  commands, and command dispatch is Phase 7's under D18. Reproducing the
+  banner alone would be byte-exact at /dev/null and wrong on stdout for
+  every PULL program, so there is no cheap partial delivery for 4c to make;
+  failing loudly on `?` remains the alternative the spec already sanctioned,
+  and it is the honest one until Phase 7 has a console to read.
+
+  This is also why the `+++` prefix's row above assigns that prefix to
+  Phase 7: three of its four producers are this same interactive-debug
+  path.
 
   PUSH/QUEUE's own queue storage has no *differential* witness -- no
   corpus program run against the oracle can distinguish a correct

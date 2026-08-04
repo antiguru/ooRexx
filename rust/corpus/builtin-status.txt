@@ -1,0 +1,121 @@
+# Where the builtin implemented/not-implemented boundary sits, measured.
+# One `NAME<TAB>STATUS` row per name in `rexx_inventory::builtins::NAMES`, in
+# that table's own order (which is `BuiltinFunctions.cpp`'s order, not
+# alphabetical). Lines starting with # are comments; blank lines are ignored.
+#
+# NOT HAND-MAINTAINED. `crates/rexx-exec/tests/builtin_status.rs` derives every
+# row by running `builtin-probes.txt`'s program for that name through both
+# interpreters, and asserts the derivation equals this file in both
+# directions. A row that disagrees is red whichever way it disagrees, so this
+# file cannot drift ahead of the executor or lag behind it. To change a row:
+# make the executor behave differently, re-run
+#
+#     cargo test --offline -p rexx-exec --test builtin_status
+#
+# and copy the measured table the failure names. Editing a row on its own only
+# moves the failure.
+#
+# THE FOUR STATUSES.
+#
+#   excluded     Excluded outright from Phase 4 by
+#                docs/superpowers/plans/phase-4-exclusions.txt. No probe, and
+#                nothing is run. The three names that file excludes only
+#                partially are NOT here: they are in scope in their other
+#                form and are probed on it.
+#
+#   loud         The executor exited NOT_IMPLEMENTED_EXIT. The gap is
+#                declared, with a message naming the construct -- the
+#                contract every unimplemented construct in this crate holds
+#                to, and the harness additionally checks that the message
+#                names this row's own builtin rather than some other one the
+#                probe happened to reach first.
+#
+#   implemented  stdout, stderr and exit status all matched the oracle.
+#
+#   divergent    Neither: the executor ran, returned, and disagreed. A wrong
+#                answer rather than a missing one, which is the failure this
+#                project is organised to prevent. Committing such a row needs
+#                a `KNOWN GAP: <NAME>` row in the exclusions file naming it;
+#                the harness refuses the row without one.
+
+ABBREV	loud
+ABS	loud
+ADDRESS	loud
+ARG	loud
+B2X	loud
+BITAND	loud
+BITOR	loud
+BITXOR	loud
+C2D	loud
+C2X	loud
+CENTER	loud
+CENTRE	loud
+CHANGESTR	loud
+CHARIN	excluded
+CHAROUT	excluded
+CHARS	excluded
+COMPARE	loud
+CONDITION	loud
+COPIES	loud
+COUNTSTR	loud
+D2C	loud
+D2X	loud
+DATATYPE	loud
+DATE	loud
+DELSTR	loud
+DELWORD	loud
+DIGITS	loud
+ERRORTEXT	loud
+FORM	loud
+FORMAT	loud
+FUZZ	loud
+INSERT	loud
+LASTPOS	loud
+LEFT	loud
+LENGTH	loud
+LINEIN	excluded
+LINEOUT	excluded
+LINES	excluded
+MAX	loud
+MIN	loud
+OVERLAY	loud
+POS	loud
+QUEUED	loud
+RANDOM	loud
+REVERSE	loud
+RIGHT	loud
+RXQUEUE	excluded
+SIGN	loud
+SOURCELINE	loud
+SPACE	loud
+STREAM	excluded
+STRIP	loud
+SUBSTR	loud
+SUBWORD	loud
+SYMBOL	loud
+TIME	loud
+TRACE	loud
+TRANSLATE	loud
+TRUNC	loud
+VALUE	loud
+VAR	loud
+VERIFY	loud
+WORD	loud
+WORDINDEX	loud
+WORDLENGTH	loud
+WORDPOS	loud
+WORDS	loud
+X2B	loud
+X2C	loud
+X2D	loud
+XRANGE	loud
+USERID	excluded
+LOWER	loud
+UPPER	loud
+RXFUNCADD	excluded
+RXFUNCDROP	excluded
+RXFUNCQUERY	excluded
+ENDLOCAL	excluded
+SETLOCAL	excluded
+QUALIFY	excluded
+GC	loud

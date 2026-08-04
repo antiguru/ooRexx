@@ -38,36 +38,15 @@
 //! outlives the phase; the subset size does not either, which is why every
 //! figure this runner reports is computed from `subset.len()` at run time.
 //!
-//! # The oracle
+//! # The oracle, the memory limit, and the three-descriptor comparison
 //!
-//! `/home/moritz/dev/repos/ooRexx/build/bin/rexx`, hardcoded rather than made
-//! configurable: the entire point of this test is "does the executor agree
-//! with *this* build", and an env var that could point it at a different one
-//! would let a stale binary answer for the current oracle with nothing to
-//! notice. If that binary is missing, the test **fails**, loudly, rather than
-//! skipping: a machine without the oracle reporting "0 of 0 matching" and
-//! going green would be indistinguishable from a machine with the oracle and
-//! a fully-passing corpus, which is exactly the silent-vacuous-harness shape
-//! this project keeps finding in its own instruments. A failure names the
-//! missing path and what to do about it; nothing here can go green by
-//! accident.
-//!
-//! # The memory limit
-//!
-//! Every oracle invocation is wrapped as `sh -c 'ulimit -v <KiB> && exec "$0"
-//! "$@"' <binary> <args...>`, matching the `( ulimit -v 1048576; ... )` this
-//! project runs by hand everywhere else it touches the oracle (the
-//! sourceline-oracle regeneration recipe, this phase's own ad hoc corpus
-//! loop). `std::process::Command` has no direct rlimit hook; the alternative
-//! is an `unsafe` `pre_exec` closure calling `setrlimit`, which the workspace
-//! forbids (`unsafe_code = "forbid"`) and which buys nothing a shell builtin
-//! does not already do for free. Verified directly, outside this test: `sh -c
-//! 'ulimit -v 1048576 && exec "$0" "$@"' python3 -c 'bytearray(2 * 1024 *
-//! 1024 * 1024)'` raises `MemoryError` under the limit and does not without
-//! it, and the same wrapper still runs an ordinary corpus program (`say
-//! 1/3`-shaped `arith_digits.rex`) to rc 0. The `"$0" "$@"` form passes the
-//! binary and its arguments as separate `argv` entries rather than
-//! interpolating them into the shell string, so no path needs escaping.
+//! All three live in `tests/support/oracle.rs`, whose own module doc carries
+//! them in full: why the oracle path is hardcoded, why a missing binary is a
+//! loud failure rather than a skip, how the `ulimit -v` wrapper is built and
+//! how it was verified, and what [`support::oracle::descriptor_diffs`]
+//! compares. This file wrote them first and was their only user;
+//! `tests/builtin_status.rs` needs the identical behaviour, and one copy is
+//! what keeps the two harnesses' results comparable.
 //!
 //! # Owner grouping
 //!
@@ -140,9 +119,10 @@
 //!
 //! # DEVIATION 0: leading indentation on stderr is normalised
 //!
-//! `check_case`'s own stderr comparison runs both sides through
-//! `support::normalize_stderr` first (`tests/support/mod.rs` has the full
-//! scope statement and its own negative-control tests). Exit status,
+//! The stderr comparison inside `support::oracle::descriptor_diffs` runs
+//! both sides through `support::normalize_stderr` first
+//! (`tests/support/mod.rs` has the full scope statement and its own
+//! negative-control tests). Exit status,
 //! stdout, and every other byte of stderr -- the clause text, the line
 //! numbers, a value line's own content, and the presence, absence and
 //! order of every line -- stay byte-exact; only the run of spaces between
@@ -186,21 +166,11 @@ use std::env;
 use std::fmt::Write as _;
 use std::fs;
 use std::io::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 use rexx_exec::Outcome;
-
-/// Address-space ceiling imposed on every oracle invocation, in KiB. 1 GiB:
-/// the figure this project has used by hand throughout Phase 4a, restated
-/// here as a named constant rather than a magic number in the format string.
-const ORACLE_MEMORY_LIMIT_KIB: u64 = 1_048_576;
-
-/// Root of the built C++ oracle. See the module doc for why this is
-/// hardcoded rather than read from an env var.
-fn oracle_root() -> PathBuf {
-    PathBuf::from("/home/moritz/dev/repos/ooRexx/build")
-}
+use support::oracle::{Oracle, descriptor_diffs, wrapped_exit_code};
 
 /// Env var that flips this test from a progress report into the phase gate.
 /// See the module doc's "REPORT vs STRICT" section.
@@ -211,33 +181,6 @@ fn gate_mode() -> bool {
         Ok(value) => !value.is_empty() && value != "0",
         Err(_) => false,
     }
-}
-
-/// The oracle binary and the library directory it needs on `LD_LIBRARY_PATH`.
-struct Oracle {
-    binary: PathBuf,
-    lib_dir: PathBuf,
-}
-
-/// Locates the oracle, or fails the test naming exactly what is missing.
-///
-/// A failure here, not a skip: see the module doc's "The oracle" section for
-/// why a missing binary must never let this test go green having compared
-/// nothing.
-fn oracle() -> Oracle {
-    let root = oracle_root();
-    let binary = root.join("bin/rexx");
-    let lib_dir = root.join("lib");
-    assert!(
-        binary.is_file(),
-        "the oracle binary is missing at {}. This test compares the executor \
-         against a built ooRexx C++ interpreter; without it there is nothing \
-         to compare against, and a machine reporting \"0 of 0 matching\" here \
-         would look identical to one where every program actually passed. \
-         Build ooRexx there first.",
-        binary.display()
-    );
-    Oracle { binary, lib_dir }
 }
 
 /// The union of every non-comment, non-blank line across `list_paths`, in
@@ -285,51 +228,6 @@ fn run_rust(path: &Path) -> Outcome {
     rexx_exec::run_program(path_str, text)
 }
 
-/// What one oracle run produced. Deliberately not `rexx_exec::Outcome`: that
-/// type carries a `stack: StackSpan` field this process never measures, and
-/// reusing it would invite comparing a field that was never filled in.
-struct CppOutcome {
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-    exit_code: i32,
-}
-
-/// Runs the oracle under the memory limit. See the module doc for the
-/// mechanism and how it was verified.
-fn run_oracle(oracle: &Oracle, path: &Path) -> CppOutcome {
-    let cwd = path.parent().unwrap_or(Path::new("."));
-    let output = Command::new("sh")
-        .arg("-c")
-        .arg(format!(
-            "ulimit -v {ORACLE_MEMORY_LIMIT_KIB} && exec \"$0\" \"$@\""
-        ))
-        .arg(&oracle.binary)
-        .arg(path)
-        .current_dir(cwd)
-        .env("LD_LIBRARY_PATH", &oracle.lib_dir)
-        .output()
-        .unwrap_or_else(|e| panic!("failed to spawn the oracle for {}: {e}", path.display()));
-    CppOutcome {
-        stdout: output.stdout,
-        stderr: output.stderr,
-        exit_code: output.status.code().unwrap_or(-1),
-    }
-}
-
-/// Truncates an in-process exit code to the single byte a real process's
-/// status would carry.
-///
-/// `rexx_exec::Outcome::exit_code` can be wider than a byte (`EXIT`'s own
-/// expression result, before `rexx-run`'s `as u8` wraps it for the OS), while
-/// the oracle subprocess's exit status is already a byte by construction --
-/// `std::process::ExitStatus::code` only ever returns what `WEXITSTATUS`
-/// gives. Comparing the two without this would make `exit 256` (in-process
-/// `256`, real process `0`) look like a divergence that `rexx-run`'s own
-/// wrapping already resolves.
-fn wrapped_exit_code(code: i32) -> i32 {
-    i32::from(code as u8)
-}
-
 /// One corpus program that disagreed with the oracle.
 struct Mismatch {
     rel_path: String,
@@ -370,23 +268,13 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
         .unwrap_or_else(|e| panic!("cannot resolve corpus entry {rel_path}: {e}"));
 
     let rust = run_rust(&abs);
-    let cpp = run_oracle(oracle, &abs);
+    let cpp = oracle.run(&abs);
     let rust_exit = wrapped_exit_code(rust.exit_code);
 
-    let mut diffs = Vec::new();
-    if rust.stdout != cpp.stdout {
-        diffs.push("stdout");
-    }
-    // DEVIATION 0: compared after collapsing each side's own trace-line
-    // indent run, not byte-exact -- see this file's own module doc for the
-    // scope and `tests/support/mod.rs` for the normalising function itself.
-    if support::normalize_stderr(&rust.stderr) != support::normalize_stderr(&cpp.stderr) {
-        diffs.push("stderr");
-    }
-    let exit_differs = rust_exit != cpp.exit_code;
-    if exit_differs {
-        diffs.push("exit code");
-    }
+    // DEVIATION 0 applies to the stderr comparison inside `descriptor_diffs`
+    // -- see this file's own module doc for the scope and
+    // `tests/support/mod.rs` for the normalising function itself.
+    let diffs = descriptor_diffs(&rust, &cpp);
     if diffs.is_empty() {
         return None;
     }
@@ -543,7 +431,7 @@ fn emit_uncaptured(text: &str) {
 /// (review's ruling on the dated figure).
 #[test]
 fn corpus_differential() {
-    let oracle = oracle();
+    let oracle = support::oracle::locate();
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
     let subset = read_subset(&[
         &corpus_dir.join("phase-4a.txt"),

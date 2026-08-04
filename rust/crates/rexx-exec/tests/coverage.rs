@@ -693,34 +693,19 @@ fn every_in_scope_variant_is_witnessed_by_the_phase_subsets() {
 }
 
 /// `phase-4-exclusions.txt`'s 15 whole exclusions plus the 3 partial rows
-/// (`VALUE`, `ADDRESS`, `QUEUED`), copied here as a literal rather than
-/// parsed from the prose file -- the same choice `tests/assertions.rs`'s
-/// `EXEMPT` list makes against that file's builtin set. Changing a name here
-/// without changing the file (or vice versa) is exactly the drift this test
-/// exists to catch.
-const EXCLUDED_BUILTINS: &[&str] = &[
-    // Phase 7, streams and platform.
-    "CHARIN",
-    "CHAROUT",
-    "CHARS",
-    "LINEIN",
-    "LINEOUT",
-    "LINES",
-    "STREAM",
-    "QUALIFY",
-    "USERID",
-    "SETLOCAL",
-    "ENDLOCAL",
-    // Phase 10, RXAPI.
-    "RXQUEUE",
-    "RXFUNCADD",
-    "RXFUNCDROP",
-    "RXFUNCQUERY",
-    // Partial: in scope in one form, excluded in another.
-    "VALUE",
-    "ADDRESS",
-    "QUEUED",
-];
+/// (`VALUE`, `ADDRESS`, `QUEUED`), written as a literal rather than parsed
+/// from the prose file -- the same choice `tests/assertions.rs`'s `EXEMPT`
+/// list makes against that file's builtin set. Changing a name there without
+/// changing the file (or vice versa) is exactly the drift this test exists to
+/// catch.
+///
+/// **The literal lives in `rexx_inventory::builtins`, not here.** A private
+/// `const` in this file is unreachable from any other test binary and from
+/// `src/`, and the same list is what a builtin dispatch consults and what
+/// `tests/builtin_status.rs` derives its `excluded` rows from. One copy, in
+/// the crate that already holds the generated builtin table, is what keeps
+/// those three readers agreeing.
+use rexx_inventory::builtins::EXCLUDED as EXCLUDED_BUILTINS;
 
 #[test]
 fn the_builtin_exclusion_set_matches_the_committed_file() {
@@ -750,14 +735,33 @@ fn the_builtin_exclusion_set_matches_the_committed_file() {
         "15 whole exclusions plus 3 partial rows"
     );
 
+    // Every partial row must also be an excluded row, or `wholly_excluded`
+    // subtracts a name that was never in the set and silently returns 16.
+    for partial in rexx_inventory::builtins::PARTIALLY_EXCLUDED {
+        assert!(
+            EXCLUDED_BUILTINS.contains(partial),
+            "{partial} is a partial exclusion but is not in EXCLUDED at all"
+        );
+    }
+    assert_eq!(
+        rexx_inventory::builtins::wholly_excluded().len(),
+        15,
+        "the whole exclusions are EXCLUDED less the partial rows"
+    );
+
     // Derived, not asserted: this is the number phase-4-exclusions.txt's own
     // header reads out ("66 of the 81 builtins ... are in scope, three of
     // them partially"), and this line is how that phrasing stays synced to
     // the actual table rather than to a copy-pasted figure.
-    let in_scope = names.len() - (EXCLUDED_BUILTINS.len() - 3);
+    let in_scope = names.len() - rexx_inventory::builtins::wholly_excluded().len();
     assert_eq!(
         in_scope, 66,
         "66 of the 81 builtins are in scope, three of them partially -- see \
          phase-4-exclusions.txt"
+    );
+    assert_eq!(
+        rexx_inventory::builtins::in_scope().len(),
+        in_scope,
+        "in_scope() must enumerate exactly the names that arithmetic counts"
     );
 }

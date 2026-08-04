@@ -88,6 +88,13 @@
 //! format has this same embedded-quote ambiguity; nothing here resolves
 //! it, only refuses to let it hide a divergence.
 
+/// Running a program through the C++ oracle and comparing the three
+/// observable channels. Its own module doc carries the memory limit, the
+/// missing-binary rule and why an invocation count is kept there. Shared for
+/// the same reason [`normalize_stderr`] is: every differential harness has
+/// to invoke the oracle identically or their results are not comparable.
+pub mod oracle;
+
 /// `RexxActivation.cpp:3567`-`3587`'s `trace_prefix_table`, all nineteen --
 /// not only the subset this crate has an emitter for. See the module doc
 /// for why the markers nothing here has ever produced are carried anyway:

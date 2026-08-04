@@ -505,13 +505,19 @@ enum Coverage {
 /// Every one of the oracle's nineteen prefixes appears exactly once, either
 /// as [`Coverage::Witnessed`] or with the phase that owns it. The owners:
 ///
-/// * `+++` -- 4c. Two producers, and this row is the *command* one: a
-///   non-zero `RC(n)` after an `ADDRESS`-issued command
-///   (`RexxActivation.cpp:4468`), and `ADDRESS` is 4c's. The other producer
-///   is `traceSourceString`'s own interactive-trace banner (`:4024`), which
-///   `TRACE ?` reaches and which has its own, deliberately
-///   owner-unassigned KNOWN GAP row in `phase-4-exclusions.txt`; this row
-///   does not claim to settle that one.
+/// * `+++` -- Phase 7. Four producers in the C++, and every one of them is
+///   behind something D18 defers. `RexxActivation.cpp:4468` is a command's
+///   non-zero `RC`, reached through `RexxActivation::command`, whose only
+///   two callers are `AddressInstruction.cpp:163` and
+///   `CommandInstruction.cpp:89` -- command dispatch, which D18 assigns to
+///   Phase 7 even though the `ADDRESS` *instruction* itself is not. The
+///   other three are interactive debug: `:4024` (`traceSourceString`, whose
+///   caller is guarded by `inDebug()` at `:4305`), `:4237` (the debug
+///   prompt, whose message text begins `+++`), and `Activity.cpp:1496`
+///   (`displayDebug`, likewise). So an `ADDRESS` instruction alone does not
+///   bring this prefix into reach; issuing a command does, and that is the
+///   half of `ADDRESS` that is not 4c's. See `phase-4-exclusions.txt`'s own
+///   `+++` row for the transcripts.
 /// * `>.>` -- 4c. The `PARSE` template's placeholder (`.`) variable, and
 ///   only that (`ParseTrigger.cpp:285`, read directly). `PARSE` is 4c's.
 /// * `>M>` -- Phase 5. Message sends; `ExprKind::Message` is Phase 5's in
@@ -526,7 +532,7 @@ enum Coverage {
 ///   by unreachability.
 const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
     ("*-*", Coverage::Witnessed),
-    ("+++", Coverage::Owned("4c")),
+    ("+++", Coverage::Owned("Phase 7")),
     (">>>", Coverage::Witnessed),
     (">.>", Coverage::Owned("4c")),
     (">V>", Coverage::Witnessed),

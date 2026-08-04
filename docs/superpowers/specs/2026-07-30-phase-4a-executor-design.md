@@ -68,7 +68,7 @@ Phase 3's four handovers bind this phase: `resolveCalls` (`LanguageParser.cpp:16
 
 The parent plan's Phase 4 row closes when 4c closes.
 
-Explicitly assigned elsewhere, so that no instruction is merely absent: **`LoopKind::With` is Phase 5's**, because `DO WITH ... OVER` sends `SUPPLIER` to its target and nothing in 4a answers a message — measured, `do with index i item v over 'abc'` is `Error 97.1`, "Object \"abc\" does not understand message \"SUPPLIER\"", rc 159; `Expose` and `Options` are Phase 5's, since neither is reachable outside a method or a package context; `Message`, `Guard`, `Reply`, `Forward`, every directive, and environment symbols beyond `.nil`, `.true` and `.false` are Phase 5's; `Command` dispatch and the rest of `Address` are Phase 7's under D18.
+Explicitly assigned elsewhere, so that no instruction is merely absent: **`LoopKind::With` is Phase 5's**, because `DO WITH ... OVER` sends `SUPPLIER` to its target and nothing in 4a answers a message — measured, `do with index i item v over 'abc'` is `Error 97.1`, "Object \"abc\" does not understand message \"SUPPLIER\"", rc 159; `Expose` and `Options` are Phase 5's, since neither is reachable outside a method or a package context; `Message`, `Guard`, `Reply`, `Forward`, every directive except `::ROUTINE`, which is 4c's (see the 4c plan's D-R), and environment symbols beyond `.nil`, `.true` and `.false` are Phase 5's; `Command` dispatch and the rest of `Address` are Phase 7's under D18.
 `Label` is 4a's rather than 4b's even though nothing jumps to one in 4a, because a label is a traced no-op that any program may contain, and making it fail loudly would silently exclude every labelled program from the gate's subset.
 
 ## Decisions
