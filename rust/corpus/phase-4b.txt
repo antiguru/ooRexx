@@ -212,28 +212,35 @@ lang/raise_array_substitution.rex
 # body's indent" are different numbers.
 lang/loop_retest_blame.rex
 
-# New for 4b Task 10 -- three combinations, each crossing constructs Tasks 5,
-# 6 and 7 built separately rather than exercising one at a time. Every
-# in-scope variant already had a witness before this task; what none of the
-# existing programs pinned was a construct *combined* with another, which is
-# the shape 4a's own whole-branch review found two Criticals inside (`Stem`
-# had a witness, arithmetic had a witness, `Stem` as an arithmetic operand
-# had none). Each program's own header states which line of interpreter code
-# it was checked against by mutation, and what wrong answer that mutation
-# produces.
+# New for 4b Task 10 -- a combination crossing constructs Tasks 6 and 7 built
+# separately rather than exercising one at a time. Every in-scope variant
+# already had a witness before this task; what no existing program pinned
+# was a construct *combined* with another, which is the shape 4a's own
+# whole-branch review found two Criticals inside (`Stem` had a witness,
+# arithmetic had a witness, `Stem` as an arithmetic operand had none).
 #
-#   raise_in_routine_in_loop.rex   -- PROCEDURE (Task 5) and RAISE/CALL ON
-#                                      (Task 7) inside a loop (4a): a raise
-#                                      inside a called routine, called from
-#                                      every pass of a three-pass loop.
-#   expose_stem_across_calls.rex   -- PROCEDURE EXPOSE (Task 5) of a stem
-#                                      mutated by the same callee across
-#                                      three separate calls, not one.
-#   call_on_trap_rearms.rex        -- SIGNAL to a label (Task 6) between two
-#                                      raises of the same CALL ON-trapped
-#                                      condition (Task 7), pinning that a
-#                                      CALL ON trap, unlike SIGNAL ON's, does
-#                                      not disarm when it fires.
-lang/raise_in_routine_in_loop.rex
-lang/expose_stem_across_calls.rex
+#   call_on_trap_rearms.rex -- SIGNAL to a label (Task 6) between two raises
+#     of the same CALL ON-trapped condition (Task 7), pinning that a CALL ON
+#     trap, unlike SIGNAL ON's, does not disarm when it fires. Its own
+#     header states which line of interpreter code it was checked against
+#     by mutation, and what wrong output that mutation produces.
+#
+# Task 10's own first round shipped two more programs here --
+# raise_in_routine_in_loop.rex (PROCEDURE+RAISE/CALL ON inside a loop) and
+# expose_stem_across_calls.rex (PROCEDURE EXPOSE of a stem mutated across
+# three separate calls). Fix round 1's review found both redundant: every
+# mutation that made either fail also failed an *existing* single-construct
+# program (condition_traps.rex's own single `call raiser`, and
+# call_procedure_expose.rex's own "stem" block, respectively), so neither
+# added coverage a simpler witness did not already have. Removed rather than
+# kept as decoration, per the same review's own standard. The task-10-report
+# records the mutations tried (a frame-leak skip, an indent-restore skip, a
+# SIGL-set skip -- all either caught elsewhere already or inert) and the
+# architectural reason none of the three discriminates: `DO`/`LOOP`'s own
+# control-variable bookkeeping lives in a Rust local on `run_repeating`'s own
+# stack frame, never in interpreter state a nested `CALL` could reach, and
+# `PROCEDURE EXPOSE`'s aliasing (`exec_procedure`, `run.rs`) re-resolves the
+# caller's frame and every exposed name fresh on every single call, with no
+# cache or other cross-call state for a repeat call to expose that a first
+# call would not.
 lang/call_on_trap_rearms.rex

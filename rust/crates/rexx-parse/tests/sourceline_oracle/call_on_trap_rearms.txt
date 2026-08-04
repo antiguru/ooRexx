@@ -1,4 +1,4 @@
-count 61
+count 71
 /* A trap that resumes and then raises again (4b Task 10), under trace r
  * throughout. `condition_traps.rex`'s own CALL ON block fires exactly once;
  * this program raises the *same* trapped condition twice and pins that
@@ -13,25 +13,35 @@ count 61
  *
  * ZLOG accumulates one segment per event, so a missing or extra handler
  * firing changes a different, individually visible part of the string
- * rather than only a final count:
+ * rather than only a final count. Line numbers below are cited from a live
+ * oracle run of this file exactly as committed, not from an earlier draft,
+ * per this corpus's own README on why an edit invalidates a stale citation:
  *
  *   'S'          the starting segment.
- *   '[H4]'       the first handler firing, SIGL 4 -- `raiser`'s own RAISE
- *                line, not the calling clause's.
+ *   '[H54]'      the first handler firing. SIGL is the *calling* clause's
+ *                own line (the `call raiser` at line 54) -- **not** `raiser`'s
+ *                own RAISE line (66) -- because `RAISE ... RETURN` already
+ *                unwound `raiser` like a `RETURN` before the handler is
+ *                delivered, so by the time SIGL is read the interpreter has
+ *                already returned to the calling activation. Measured
+ *                directly against the oracle, not assumed: an earlier draft
+ *                of this file stated the opposite claim.
  *   '1:V'        RESULT read back after `call raiser` resumes, proving the
  *                handler ran and returned *before* this clause, not after
  *                the whole program unwound.
  *   'K'          reached only by the `SIGNAL skip` two lines above jumping
  *                over the UNREACHABLE segment -- an implementation that let
  *                SIGNAL fall through would prepend that segment instead.
- *   '[H10]'      the *second* handler firing, from the *same* `call on`
- *                with no intervening re-arm -- this is the segment that
- *                does not exist if CALL ON traps disarm like SIGNAL ON's.
+ *   '[H60]'      the *second* handler firing, SIGL again the calling
+ *                clause's own line (the second `call raiser`, line 60) --
+ *                from the *same* `call on` with no intervening re-arm, which
+ *                is the segment that does not exist if CALL ON traps disarm
+ *                like SIGNAL ON's.
  *   '2:V'        RESULT read back after the second `call raiser` resumes.
  *
  * Checked against a mutation: with `deliver_pending_trap`'s re-insertion of
  * the fired trap (run.rs, the `if let Some(trap) = removed` arm run after
- * the handler call) skipped, ZLOG reads `S[H4]1:VK2:V` -- the '[H10]'
+ * the handler call) skipped, ZLOG reads `S[H54]1:VK2:V` -- the '[H60]'
  * segment is simply gone, because the second `raise user zx return 'V'`
  * finds no trap armed and returns 'V' to its caller unhandled, exactly the
  * "nothing traps it" arm `exec_raise` already has for an unarmed condition.
