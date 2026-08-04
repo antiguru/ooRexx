@@ -53,6 +53,10 @@ The tasks below that need a constraint restate it in their own bodies; that dupl
   `grep` here is a function wrapping `ugrep --ignore-files -I`; `-I` drops files with non-UTF-8 bytes and says nothing about having done so.
   Measured 2026-08-04: over `base/bif` it reports 5,441 `assertSame` where the true figure is **6,293**.
   Six groups trip it -- `C2X`, `COPIES`, `D2C`, `DATATYPE`, `DELSTR`, `INSERT` -- and they are the byte-conversion groups, so **the risk is highest exactly where 4c's work is**.
+* **Cite `phase-4-exclusions.txt` by quoted phrase, never by line number.**
+  Tasks 1 and 13 both edit it, and Task 1 alone moved every line below its first edit -- one row's citation shifted from `:1009` to `:1147`.
+  A line number into a file this plan itself rewrites is stale before the task that reads it runs.
+  The 4b gate cites `keyword_assertions.rs` the same way, by the fragments `now PASSES` and `is not on the committed`, for the same reason.
 * **State which scan produced any count.** Measured over `base/bif`: `^::method` gives **5,397**, `^[[:space:]]*::method` case-insensitively gives **5,462**.
   Both are right, for different questions.
   `DATE.testGroup` and `TIME.testGroup` alone spell 50 directives `::METHOD`.
@@ -174,9 +178,18 @@ Both halves of the two-file contradiction were fixed during 4b.
 ### D-R -- `::routine` is 4c's, and the design spec's line 71 is amended
 
 **The tree contradicts itself.**
-`2026-07-30-phase-4a-executor-design.md:71` says "every directive ... [is] Phase 5's", and `phase-4-exclusions.txt:540` leans on that sentence to place `QualifiedCall` in Phase 5.
-But the `>I>`/`<I<` row at `phase-4-exclusions.txt:88-103` assigns `::routine` to 4c -- **cite `:99-100`**, "4b declines to implement it because getting builtin-colliding names right needs 4c's table", which is the ownership sentence; `:124`'s "which 4c will have to meet" is about the trace gate, not ownership -- and `trace_oracle.rs:542,546` **machine-assert** `Coverage::Owned("4c")`.
+`2026-07-30-phase-4a-executor-design.md:71` says "every directive ... [is] Phase 5's", and the `QualifiedCall` row in `phase-4-exclusions.txt` leans on that sentence to place `QualifiedCall` in Phase 5.
+But the `>I>`/`<I<` row in the same file assigns `::routine` to 4c, in **two** places, and `trace_oracle.rs:542,546` **machine-assert** `Coverage::Owned("4c")`.
 `::routine` is a directive. Both cannot hold.
+
+**Cite that row by its own words, not by line number.**
+Task 1 edits this file and every later line moves; the durable citations are the phrases themselves, which is how the 4b gate cites `keyword_assertions.rs`. The two ownership sentences are:
+
+* "**4b declines to implement it because getting builtin-colliding names right needs 4c's table**" -- the reason for the deferral.
+* "**THREE MEASURED WAYS A ::ROUTINE ACTIVATION IS NOT AN INTERNAL LABEL'S, which 4c will have to meet**" -- a direct statement that 4c implements the activation.
+
+An earlier revision of this plan dismissed the second as "about the trace gate, not ownership".
+**That was wrong and it understated the record**: the trace gate is the separate "THE GATE IS TWO CONDITIONS" paragraph, and the sentence dismissed is the strongest ownership statement in the file.
 
 **Ruling: 4c owns `::routine` dispatch.** Line 71 is amended to "every directive except `::ROUTINE`".
 
@@ -229,7 +242,7 @@ The weaker phrasing is needed because `AddressInstruction.cpp:163` -- a 4c *inst
 4c implements `ADDRESS`'s environment tracking and **not** its command dispatch, so the prefix stays out of reach, but the reason is the split inside `ADDRESS`, not the absence of any path.
 
 **The `TRACE ?` row is a gap that has drifted unowned since 4a, and this closes it.**
-`phase-4-exclusions.txt:989-1011` records that the oracle emits two `+++` banner lines under `trace ?r` with stdin at `/dev/null`, which this crate does not, and ends "**Owner unassigned**".
+The `TRACE ?` row in `phase-4-exclusions.txt` -- find it by the phrase "**TRACE ? (the interactive prefix) is silently ignored**" -- records that the oracle emits two `+++` banner lines under `trace ?r` with stdin at `/dev/null`, which this crate does not, and ends "**Owner unassigned**".
 
 **Ruling: `TRACE ?` is Phase 7's, with the rest of interactive debug.**
 The evidence that settles it is a probe the first revision did not run: **with non-empty stdin, `trace ?r` drains stdin and issues each line as a shell command** (`/bin/sh: 1: LINE2: not found`), so a following `PULL` reads `""` instead of the line.
@@ -448,7 +461,7 @@ In `tests/trace_oracle.rs`, change `("+++", Coverage::Owned("4c"))` at `:529` to
 `OWNER_PHASES` already admits `"Phase 7"`.
 **`WITNESSED_PREFIX_COUNT` and `OUT_OF_SCOPE_PREFIX_COUNT` at `:551` and `:555` are not touched here** -- the prefix moves owner, not witnessed-ness.
 
-In `phase-4-exclusions.txt`, correct the paragraph at `:84`, which currently reads "Four of the six -- +++ and >.> (4c)". The corrected statement, with its evidence:
+In `phase-4-exclusions.txt`, correct the paragraph containing "**Four of the six -- +++ and >.> (4c)**". The corrected statement, with its evidence:
 
 > `+++` is Phase 7's. A `+++`-prefixed line has four producers in the C++:
 > `RexxActivation.cpp:4468`, a command's non-zero `RC`, measured live as
@@ -463,7 +476,7 @@ In `phase-4-exclusions.txt`, correct the paragraph at `:84`, which currently rea
 
 - [ ] **Step 6: Give the `TRACE ?` row an owner and correct two of its claims (D-P)**
 
-Replace "Owner unassigned" at `:1009` with `Owner: Phase 7, with the rest of interactive debug.`, and add:
+Replace that row's "Owner unassigned" with `Owner: Phase 7, with the rest of interactive debug.`, and add:
 
 * the reason -- measured, **with non-empty stdin `trace ?r` drains stdin and issues each line as a shell command**, so a following `PULL` reads `""`; reproducing the banner alone would be byte-exact at `/dev/null` and wrong on stdout for every `PULL` program;
 * that the row's "only stderr differs" holds **only** at `/dev/null`;
@@ -475,7 +488,8 @@ Replace "Owner unassigned" at `:1009` with `Owner: Phase 7, with the rest of int
 
 In `2026-07-30-phase-4a-executor-design.md:71`, change "every directive" to "every directive except `::ROUTINE`, which is 4c's (see the 4c plan's D-R)".
 
-In `phase-4-exclusions.txt`, correct the `>I>`/`<I<` row so the ownership claim cites `:99-100` rather than `:124` (`:124` is about the trace gate), and add one line to `:540`'s `QualifiedCall` row noting that its "every directive" citation now carries the `::ROUTINE` carve-out and that `QualifiedCall` is unaffected because namespaces come from `::REQUIRES`.
+In `phase-4-exclusions.txt`, add one line to the `QualifiedCall` row noting that its "every directive" citation now carries the `::ROUTINE` carve-out, and that `QualifiedCall` is unaffected because namespaces come from `::REQUIRES`.
+Leave the `>I>`/`<I<` row's own wording alone: both of its ownership sentences are correct as written (see D-R).
 
 - [ ] **Step 8: Add the D4 reason sentences**
 
