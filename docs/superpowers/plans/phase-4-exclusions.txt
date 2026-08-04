@@ -935,6 +935,52 @@ above.
   above) inherits the same single-program rule and the same caveat.
 
 
+  A COMPOUND VARIABLE AS A DO CONTROL VARIABLE IS NOT SUPPORTED (found 4b
+  Task 11, by the base/keyword L1 table; DO is 4a's, so this is a 4a defect
+  that a 4b instrument surfaced rather than anything 4b introduced).
+
+  `Do cv.j = 1 To 5` names a compound variable as the control variable, which
+  ooRexx allows and which this crate gets wrong in two distinct ways.
+  Measured against the oracle, both from a clean directory:
+
+    c=0; j=1; Do cv.j=1 To 5 ; c=c+1; End; say '['c cv.j']'
+      oracle    [5 6]
+      rexx-exec [5 CV.1]
+
+  -- the loop runs the right number of times, but the control variable is
+  never assigned at all: `CV.1` is the derived name of an unset compound,
+  which is what an unset variable renders as. So the count is right and the
+  variable is untouched.
+
+    a.=0; i=1; Do a.i=1 To 3; If i>7 Then Leave; i=i+1; End; say '['i']'
+      oracle    [8]
+      rexx-exec [4]
+
+  -- and the tail is re-resolved on each iteration, so *which* variable
+  controls the loop changes as `i` does, and the loop runs seven times rather
+  than three. These are two symptoms of one gap, not two gaps: nothing binds
+  a compound control variable per pass.
+
+  SIX ooTest BODIES TURN ON THIS, and they are the only assertion failures in
+  the whole base/keyword table -- every other non-passing body there fails
+  loudly with an unimplemented construct, all of them 4c's.
+  `DO::test_DO_standardTest2B`, `2P`, `2Q`, `5-69`, `ITERATE::test_12` and
+  `LEAVE::test_11`, listed in rust/corpus/keyword-exempt.txt under
+  `defect:compound-do-control-variable`. Each was re-run under the C++ oracle
+  in its rewritten form, which passes all six, so these are divergences and
+  not an artefact of the rewrite -- two bodies beside them *were* such an
+  artefact and are not in this row (see the comment-handling commit).
+
+  `LEAVE`/`ITERATE`/`END` naming a compound (`End i.j`, `Leave I.J`) is part
+  of the same shape and is exercised by the same six.
+
+  No owner is assigned. Closing this row needs either an owner, which moves
+  it into EXCLUSIONS, or a measurement showing the divergence is gone -- at
+  which point those six bodies start passing and
+  `the_exempt_set_matches_the_current_failures` goes red until they are
+  removed from the committed set, which is the intended way to notice.
+
+
 CLOSED DEFECTS -- measured wrong, measured again, now matching
 -------------------------------------------------------------
 

@@ -101,8 +101,14 @@ pub const ASSERTION_MARKER: &str = "@@ASSERTSAME";
 pub struct KeywordBody {
     pub group: String,
     pub method: String,
-    /// The rewritten body, comments removed and every `self~assertSame`
-    /// replaced by its `SAY`. Contains no `~` at all.
+    /// The method's own source, verbatim, with every `self~assertSame`
+    /// replaced by its `SAY`. Comments are **kept** -- see [`rewrite_body`]
+    /// for the measurement that says removing one changes what the code
+    /// around it means.
+    ///
+    /// No `~` survives as *code*: a body where one would is blocked rather
+    /// than extracted. One can still appear inside a string literal or a
+    /// comment, where it is data.
     pub program: String,
     /// How many `self~assertSame` calls this program checks -- statically,
     /// as written. A loop can execute one of them many times.

@@ -528,6 +528,129 @@ groups) carry most of the remaining `expose` risk, not the corpus broadly.
   the shipped binary emits all 11 shim methods. Worth confirming that
   reading was intended.
 
+## Phase 4b's own L1 obligation: `base/keyword` (Task 11, 2026-08-04)
+
+**This section measures something different from the table above, and the two
+numbers must not be read as comparable.** Everything above counts *methods
+that could be lifted out as standalone programs* -- a static property of the
+extractor. This section counts `self~assertSame` calls that a lifted body
+actually **runs and satisfies** under `rexx-exec`, which is the L1 rung
+itself. A group can be 100% extractable above and 0% passing here.
+
+Measured at ooTest **r13178** (`svn info ootest`; `ootest/` is git-ignored and
+is an SVN working copy, not checked-in test data, so it can move with nothing
+in this repository changing).
+
+### Extraction
+
+39 `.testGroup` files, **2,441** exact-spelling `self~assertSame` calls. The
+denominator is deliberately the exact spelling and not the 2,561 that match
+the *prefix* `self~assertSame`: the other 120 are `assertSameList`, a
+different method, and counting them would report a shortfall against a
+population that never existed. Of the group's 4,567 `self~assert*` calls of
+all spellings, **2,126 (46.6%) are outside this population by construction**
+-- `assertTrue` (797), `assertSyntaxError` (400), `assertEquals` (361) and
+the rest -- and nothing here claims anything about them.
+
+**1,773 of the 2,441 (72.6%) were extracted**, in 896 method bodies; 668 were
+dropped, every one with a reason (`rows + dropped == calls` is asserted per
+group, in `rexx-extract/tests/extract_keyword.rs`, against a call count
+computed by a substring counter that does not parse Rexx). A body is taken
+only when nothing but `self~assertSame` sends a message in it, so every
+assertion in an extracted body is one that is actually checked.
+
+### Pass rate
+
+**100 of 896 bodies pass, carrying 713 of 1,773 assertSame calls (40.2%).**
+
+| Group | bodies passing/total | assertions passing/total |
+|---|---|---|
+| ADDRESS | 0/10 | 0/11 |
+| ASSIGNMENT | 2/8 | 206/265 |
+| CALL | 2/8 | 2/50 |
+| DO | 33/85 | 432/507 |
+| IF | 20/25 | 24/29 |
+| INTERPRET | 1/2 | 2/3 |
+| ITERATE | 17/18 | 19/20 |
+| LEAVE | 14/15 | 16/17 |
+| NOP | 2/2 | 3/3 |
+| NUMERIC | 1/51 | 1/63 |
+| PARSE | 0/659 | 0/778 |
+| SELECT | 7/8 | 7/8 |
+| SelectCase | 1/1 | 1/1 |
+| TRACE | 0/3 | 0/13 |
+| VarRef | 0/1 | 0/5 |
+
+The body count and the assertion count diverge sharply for `ASSIGNMENT` (2 of
+8 bodies but 206 of 265 assertions) because that group writes hundreds of
+assertions into a handful of very long methods, and one unrunnable line takes
+a whole body with it. Both columns are reported for that reason; neither
+alone is the coverage figure.
+
+### The list 4c and Phase 5 inherit
+
+**Every phase gap here is 4c's. Not one body is blocked by Phase 5.** So 4b
+owes this table nothing further, and its pass rate is a direct measure of
+4c's remaining surface.
+
+Blocked bodies by first construct hit: `PARSE` 656, `routine "ARG"` 51,
+`routine "COPIES"` 19, `routine "DIGITS"` 11, `ADDRESS` (the instruction) 10,
+`routine "FORM"` 10, `routine "FUZZ"` 9, `routine "SUBSTR"` 4, `routine
+"SIGN"` 3, `routine "TRACE"` 3, `routine "LENGTH"` 2, `routine "RANDOM"` 2,
+and one each of `ARG`, `PULL`, `routine "ABS"/"ADDRESS"/"CHARIN"/"LINEIN"/
+"MAX"/"XRANGE"` and two unresolved names.
+
+**13 groups contain `assertSame` calls but yield no extractable body at all**
+(145 calls), and these are the ones a later phase inherits as extraction work
+rather than as execution work: `DoOver` (4 calls), `DoWith` (6), `EXPOSE`
+(24), `GUARD` (15), `LoopOver` (3), `LoopWith` (6), `RAISE` (1), `REPLY`
+(11), `SAY` (3), `SIGNAL` (27), `TRACE_TraceObject` (11), `USE` (20),
+`USELOCAL` (14). Each is blocked by a message send in the body, which is
+Phase 5's, not by the keyword the group is named for.
+
+**11 groups contain no exact-spelling `assertSame` at all**, so they are
+outside this table's population entirely rather than failing it:
+`Assignments`, `DoControlled`, `DoOther`, `FORWARD`, `LABEL`, `LOOP`,
+`LOSTDIGITS`, `LabelOption`, `LoopControlled`, `LoopOther`,
+`ShortCircuitAnd`. `DoControlled` and `LoopControlled` are the notable pair:
+each has 24 assertions and every one of them is `assertSameList`.
+
+**4 groups have extractable bodies and pass none of them**: `ADDRESS`,
+`PARSE`, `TRACE`, `VarRef`.
+
+### Six confirmed divergences, not gaps
+
+Six bodies ran to completion and disagreed. Each was re-run under the C++
+oracle, which passes all six, so these are defects rather than unimplemented
+constructs. All six use a **compound variable as a `DO` control variable**:
+
+```
+c=0; j=1; Do cv.j=1 To 5; c=c+1; End; say '['c cv.j']'
+  oracle [5 6], rexx-exec [5 CV.1]   -- never assigned when compound
+
+a.=0; i=1; Do a.i=1 To 3; If i>7 Then Leave; i=i+1; End; say '['i']'
+  oracle [8], rexx-exec [4]          -- the oracle re-resolves the compound
+                                        name each iteration, so which
+                                        variable controls the loop changes
+```
+
+`DO::test_DO_standardTest2B`, `2P`, `2Q`, `5-69`, `ITERATE::test_12`,
+`LEAVE::test_11`. **`DO` is 4a's**, so this is a 4a defect that 4b's L1 table
+surfaced; it is recorded here and in `phase-4-exclusions.txt` rather than
+fixed by the measuring task.
+
+### Re-running this section
+
+```bash
+cd /home/moritz/dev/repos/ooRexx-rust-rewrite/rust
+cargo test -p rexx-extract --test extract_keyword          # the four pins
+cargo test -p rexx-exec --test keyword_assertions          # report mode
+REXX_KEYWORD_GATE=1 cargo test -p rexx-exec --test keyword_assertions   # gate
+```
+
+The report reaches the terminal under a plain `cargo test`, with no
+`--nocapture`; see `corpus.rs`'s module doc for why that needs a subprocess.
+
 ## Re-running this measurement
 
 ```bash
