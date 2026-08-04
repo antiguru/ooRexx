@@ -43,6 +43,10 @@ Each rule below has already cost this project a session, a wrong measurement, or
 * Comments state the contract at the top and the reasoning at the decision point.
   Never delete a true comment to make a change easier -- but a comment that states something **false** must be corrected or removed, not hedged.
   Prefer `--` over an em-dash. There is no rule against semicolons in comments here.
+* **A comment may say what the oracle does, what the C++ does, and what was measured. It may not say how many call sites there are, what every other site does, or what a gate currently totals.**
+  Those change without the sentence being reread. **If such a claim is load-bearing, assert it in a test; if it is not, delete it.**
+  Measured across one task: comments pointing at *immutable* referents -- oracle bytes, C++ citations, benchmark numbers -- needed **zero** corrections over four commits, while every false comment was a *mutable repo aggregate*. Six shipped, and each arrived in a commit correcting the previous one; corrections are this defect's habitat, because correcting a comment means writing about the code's context, which is exactly what you cannot see from the line you are editing.
+* **A claim must not be falsifiable by the act of committing it.** Never quote a search command inside the file it searches: a comment reading ``grep -c 'foo()' this_file.rs`` -> 1 makes the answer 2 the moment it lands. Assertions are the one mechanism here with a clean record -- they are re-run, and a mutation proves they can fail.
 
 ## Method
 
