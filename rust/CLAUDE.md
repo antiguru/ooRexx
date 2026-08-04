@@ -45,8 +45,9 @@ Each rule below has already cost this project a session, a wrong measurement, or
 
 ## Method
 
-Three habits, each earned the expensive way.
+Four habits, each earned the expensive way.
 
 * **When tempted to explain why something cannot happen, run it instead.** Six confident "X cannot be reached" claims have been wrong here, every one a sound inference from a *true* premise missing a second premise nobody knew to look for. More care produces the same answer with more confidence; only running separates them.
 * **A test that cannot fail is a defect.** Eight have shipped, two of them fixes for earlier such findings. For every assertion ask: what degenerate implementation satisfies this, and would deleting its subject leave it green?
 * **Pair a refusal with its adjacent success.** Three times the test that made a fix *correct* was not the failing case but the neighbouring passing one, because that is what pins the rule to the property you think it is rather than to something coincidental.
+* **When a plan or brief is wrong, correct the plan -- not the message that carries the work.** A correction written into a dispatch, a review summary, or a chat reply is read once and then lost, because briefs regenerate from the plan, reviewers review against the brief, and a later fix round hands a *fresh* worker the same brief path. Measured here: a `trace r` divergence found during Task 7 was recorded only in a review summary, was absent from Task 9's brief when it arrived, and survived solely because it happened to be re-measured. The same applies to anything one task discovers that another task owns -- write it into the receiving task's text at the moment it is found. If a correction is worth making, it is worth making where the next reader will see it, and if the plan itself contradicts the tree or itself, fix the plan and say in it what was removed and why.
