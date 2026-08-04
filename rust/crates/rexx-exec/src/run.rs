@@ -384,8 +384,12 @@ enum DoOutcome {
     /// that `ITERATE` clause's own -- what the loop's next re-test is
     /// attributed to, because the oracle re-enters the loop from inside
     /// `RexxActivation::iterate`, with the `ITERATE` still the current
-    /// instruction.
-    Iterated(usize),
+    /// instruction. `site` is the same clause's echo site, for the case
+    /// where that re-test fails -- see [`HeaderClause::Iterate`].
+    Iterated {
+        line: usize,
+        site: Option<(usize, Vec<u8>)>,
+    },
     /// Stop: this `Flow` is the whole construct's final answer.
     Escaped(Flow),
 }
@@ -436,8 +440,22 @@ enum HeaderClause {
     Do,
     /// The previous pass fell through to `END`.
     End,
-    /// The previous pass ended in an `ITERATE`, whose own line this is.
-    Iterate(usize),
+    /// The previous pass ended in an `ITERATE`.
+    Iterate {
+        /// That `ITERATE` clause's own line -- `SIGL`'s quantity, which
+        /// honours `clause_line_override` inside an `INTERPRET`.
+        line: usize,
+        /// The same clause's `(line, text)` echo site, carried so that a
+        /// re-test which *fails* can be blamed on it. `LeaveOrigin` captured
+        /// this the instant the `ITERATE` stepped; without carrying it here
+        /// the pair is gone by the time the next header runs, and the
+        /// failure is misattributed to the `DO` clause (review round 1, F2).
+        /// **Not** `LeaveOrigin::indent`, which is that clause's own lexical
+        /// one: measured, an `ITERATE` nested two blocks deep inside the body
+        /// echoes at its own depth when it steps and at the *loop body's*
+        /// depth on the failure path.
+        site: Option<(usize, Vec<u8>)>,
+    },
 }
 
 /// What drives one repeating `DO`/`LOOP`'s own iteration, once its header
@@ -3444,9 +3462,11 @@ impl Interp {
     /// target -- measured, `say >p` prints `p`'s value, and `call sub2 >p`
     /// into a plain `use arg q` binds that value and leaves the caller's `p`
     /// alone. So the value is computed here for both variants, by evaluating
-    /// the inner expression through the ordinary path rather than by reading
-    /// the slot directly, which is what keeps a stem reference rendering the
-    /// way a bare stem read does.
+    /// an expression through the ordinary path rather than by reading the
+    /// slot directly, which is what keeps a stem reference rendering the way
+    /// a bare stem read does. **Which** expression is the paragraph below --
+    /// the reference node, not the inner variable; this sentence used to say
+    /// "the inner expression" and contradicted it (review round 1, F6).
     ///
     /// The inner node is always a `Variable` or a `Stem` (`rexx-parse`'s own
     /// doc on `ExprKind::VariableReference`; anything else is error 20.930 at
@@ -3675,10 +3695,24 @@ impl Interp {
             .clause_line(source, instruction)
             .unwrap_or_else(|| self.clause_state.line());
         let outcome = self.in_clause(code, line, |it| {
-            if it.trace_mode().all
+            // **`is_label` is what makes `TRACE L` produce anything at all**
+            // (review round 1, F8): the oracle's `RexxInstructionLabel::
+            // execute` traces through `traceLabel` and nothing else, and
+            // that gate is `tracingLabels()`, true under `L` as well as
+            // `A`/`R`/`I`. This is the only clause-echo site a `LABEL` ever
+            // reaches, so it is the only one that has to ask. Measured under
+            // `trace l`: a fallen-through label, a `CALL` target and a
+            // `SIGNAL` target all echo, in that one program's whole stderr,
+            // and every other clause is silent.
+            //
+            // The guard is `tracing_clause` rather than `trace_mode().all`
+            // so that the decision lives in one place -- `clause_site`
+            // allocates the clause's text, which is why it is guarded at all.
+            let is_label = matches!(instruction.kind, InstructionKind::Label { .. });
+            if it.tracing_clause(is_label)
                 && let Some((line, text)) = it.clause_site(source, instruction)
             {
-                it.trace_clause(line, indent, &text);
+                it.trace_stepped_clause(is_label, line, indent, &text);
             }
             // The debug tripwire I22 scheduled in 4a and left unbuilt, added
             // here by 4b's Task 1 along with `RootSet::temps_len`, its one
@@ -3872,15 +3906,22 @@ impl Interp {
     /// `leave_select`) for where the residual is actually updated, and
     /// `LeaveOrigin`'s own doc comment for the rule in full.
     fn record_leave_failure(&mut self, origin: &LeaveOrigin) {
+        self.record_failure_site_at(origin.site.clone(), origin.indent);
+    }
+
+    /// The same first-wins record from an already-resolved `(line, text)`
+    /// pair rather than from an `&Instruction`, for the one caller that has
+    /// no instruction left to resolve: a loop re-test blamed on the
+    /// `ITERATE` that transferred control back to it, whose site was
+    /// captured a pass earlier (`HeaderClause::Iterate`). `indent` is the
+    /// caller's, because that blame prints at the loop body's indent rather
+    /// than at the `ITERATE`'s own -- see that variant's doc comment.
+    fn record_failure_site_at(&mut self, site: Option<(usize, Vec<u8>)>, indent: usize) {
         if self.failure_site.is_some() {
             return;
         }
-        if let Some((line, text)) = &origin.site {
-            self.failure_site = Some(FailureSite {
-                line: *line,
-                text: text.clone(),
-                indent: origin.indent,
-            });
+        if let Some((line, text)) = site {
+            self.failure_site = Some(FailureSite { line, text, indent });
         }
     }
 
@@ -4316,7 +4357,7 @@ impl Interp {
                     // means a future `LoopKind` that does reach it echoes
                     // `END` once, which is what a fall-through does, rather
                     // than aborting.
-                    DoOutcome::FellThrough | DoOutcome::Iterated(_) => {
+                    DoOutcome::FellThrough | DoOutcome::Iterated { .. } => {
                         if self.trace_mode().all
                             && let Some((line, text)) =
                                 self.clause_site(source, &code.body.instructions[end_index])
@@ -4581,6 +4622,11 @@ impl Interp {
         let end_line = self
             .clause_line(source, &code.body.instructions[end_index])
             .unwrap_or(0);
+        // Hoisted out of the loop body (review round 1, F2): the header's own
+        // failure path needs it one statement *before* the body that used to
+        // bind it. Derived from `code`, so it borrows nothing this function
+        // mutates.
+        let end_instruction = &code.body.instructions[end_index];
 
         loop {
             if !first_pass
@@ -4606,13 +4652,48 @@ impl Interp {
             let do_line = self
                 .clause_line(source, do_instruction)
                 .unwrap_or_else(|| self.clause_state.line());
-            let header_line = match header_clause {
+            let header_line = match &header_clause {
                 HeaderClause::Do => do_line,
                 HeaderClause::End => end_line,
-                HeaderClause::Iterate(line) => line,
+                HeaderClause::Iterate { line, .. } => *line,
             };
             let header = self.in_clause(code, header_line, |it| {
-                if !it.loop_advance(code, &mut state, do_indent, loop_indent)? {
+                // **A header that fails is blamed on the clause that
+                // transferred control back here, at the loop body's indent**
+                // -- not on the `DO` clause, which is where the enclosing
+                // `step_in_temps_frame` would put it (review round 1, F2).
+                // Reachable since the control variable is genuinely re-read:
+                // a body that leaves it non-numeric fails the `BY` addition
+                // on the next re-test. Measured, three shapes, all `trace r`
+                // with `ii = 'abc'` in a `do ii = 1 to 3` body:
+                //
+                // * falling through to `END` -> `     4 *-*   end`, then
+                //   `Error 41 ... line 4`;
+                // * an `ITERATE` in the body -> `     5 *-*   iterate`, line 5;
+                // * that same `ITERATE` two blocks deeper -> still its own
+                //   line, and still at the *body's* indent rather than its
+                //   own lexical one, which is why `loop_indent` is passed
+                //   here rather than `LeaveOrigin::indent` being reused.
+                //
+                // The first pass is deliberately left alone: it is reached
+                // from the `DO` clause itself, which is exactly what the
+                // enclosing `step_in_temps_frame` already blames.
+                let advanced = match it.loop_advance(code, &mut state, do_indent, loop_indent) {
+                    Ok(advanced) => advanced,
+                    Err(failure) => {
+                        match &header_clause {
+                            HeaderClause::Do => {}
+                            HeaderClause::End => {
+                                it.record_failure_at(source, end_instruction, loop_indent);
+                            }
+                            HeaderClause::Iterate { site, .. } => {
+                                it.record_failure_site_at(site.clone(), loop_indent);
+                            }
+                        }
+                        return Err(failure);
+                    }
+                };
+                if !advanced {
                     return Ok(HeaderOutcome::Stop);
                 }
                 if let Some(cond) = conditional
@@ -4648,7 +4729,6 @@ impl Interp {
             }
 
             let flow = self.run_bounded(code, body_start, end_index, source)?;
-            let end_instruction = &code.body.instructions[end_index];
             match self.do_body_outcome(code, do_index, label, true, resume, flow)? {
                 DoOutcome::Escaped(escape) => return Ok(escape),
                 // **`END` is not reached at all when an `ITERATE` ended the
@@ -4662,7 +4742,9 @@ impl Interp {
                 // what calls `reExecute` on a fall-through, and
                 // `RexxActivation::iterate` is what calls it for an
                 // `ITERATE` -- `END` is jumped straight over.
-                DoOutcome::Iterated(line) => header_clause = HeaderClause::Iterate(line),
+                DoOutcome::Iterated { line, site } => {
+                    header_clause = HeaderClause::Iterate { line, site };
+                }
                 // Reached only when the body fell off its end. **Not**
                 // reached on a matched `LEAVE`, which returns above instead
                 // -- measured, this task's report (`DO FOREVER` with a
@@ -4717,10 +4799,10 @@ impl Interp {
                 // candidates apart -- `do until zs() >= 2` with `if zn = 1
                 // then iterate` on line 4 reports `4` for the first test and
                 // `6` (the `END` line) for the second.
-                let until_line = match header_clause {
+                let until_line = match &header_clause {
                     HeaderClause::Do => do_line,
                     HeaderClause::End => end_line,
-                    HeaderClause::Iterate(line) => line,
+                    HeaderClause::Iterate { line, .. } => *line,
                 };
                 // **This clause's boundary is currently unobservable, and it
                 // is here because it cannot be separated from the line.**
@@ -4851,7 +4933,10 @@ impl Interp {
                         raised_iterate_wrong_kind(code.symbols.name(name).as_bytes()).into(),
                     );
                 }
-                Ok(DoOutcome::Iterated(origin.clause_line))
+                Ok(DoOutcome::Iterated {
+                    line: origin.clause_line,
+                    site: origin.site,
+                })
             }
             other => Ok(DoOutcome::Escaped(other)),
         }
@@ -4963,6 +5048,28 @@ impl Interp {
                 // ends the loop, so these are not "the values of an
                 // iteration that ran".
                 //
+                // **`control->evaluate` is a genuine READ of the variable,
+                // not a look at the loop's own saved value, and the two part
+                // company the moment a body writes to the control variable**
+                // (review round 1, F2). Measured: `do ii = 1 to 3 ; ii = 10 ;
+                // end ; say ii` prints `11` on the oracle -- it reads `10`
+                // back, adds `1`, and `11 > 3` ends the loop after one pass.
+                // Reusing `current` here instead ran three passes and printed
+                // `4`, and the `>V>` line above then positively stated a
+                // value the oracle contradicts. So the read below goes
+                // through `read_by_name`, exactly where `bind_control`'s own
+                // write goes, and `current` is only ever the *header's* value
+                // now -- on the first pass, and never again.
+                //
+                // Two adjacent shapes fall out of that read rather than
+                // needing their own handling, and both are measured: a body
+                // that `DROP`s the control variable reads the derived name
+                // (`>>>   "II"`, then 41.1 `Nonnumeric value ("II")`), and a
+                // body that assigns a non-numeric reads it and fails the same
+                // way (41.1, `("abc")`). `read_by_name`'s own miss answer and
+                // `arith_operand`'s own raiser produce both without a special
+                // case here.
+                //
                 // **Bound before the decision, not after** -- measured
                 // against the oracle, `do i = 5 to 3 / say never / end /
                 // say i` prints `5`: the control variable takes its own
@@ -4974,14 +5081,14 @@ impl Interp {
                 let form = self.activation().settings.form();
                 let re_tested = std::mem::replace(stepped, true);
                 if re_tested {
-                    let previous =
-                        self.number(current.clone(), crate::eval::saturate_digits(digits), form);
+                    let name = code.symbols.name(*control).as_bytes().to_vec();
+                    let previous = self.read_by_name(&name);
                     self.roots.push_temp(previous);
                     let rendered = self.to_text(previous).to_vec();
-                    let name = code.symbols.name(*control).as_bytes().to_vec();
                     self.trace_variable(loop_indent, &name, &rendered);
                     self.trace_result(loop_indent, &rendered);
-                    *current = current.add(by, digits).map_err(Raised::from)?;
+                    let read = self.arith_operand(previous)?;
+                    *current = read.add(by, digits).map_err(Raised::from)?;
                 }
                 // The first pass takes the value the header already computed,
                 // unincremented and with no line of its own beyond the `>=>`
@@ -5150,6 +5257,14 @@ impl Interp {
         let slot = self.slot_of(name);
         let frame = self.activation().frame;
         self.roots.set_slot(frame, slot, value);
+        // `trace_assignment` carries its own `intermediates` gate, so this
+        // one is not a second decision -- it is the same "do not build the
+        // two `Vec`s below unless anything will read them" shape every other
+        // tracing site in this file uses (`step`'s own `Assignment` arm, the
+        // `Controlled` arm above). Review round 1, F9, noted the duplication;
+        // it is kept because the alternative is two allocations per loop
+        // pass under `TRACE OFF`, and named here so that a future divergence
+        // between the two gates cannot hide in it.
         if self.tracing_intermediates() {
             let name = code.symbols.name(control).as_bytes().to_vec();
             let rendered = self.to_text(value).to_vec();
@@ -9468,6 +9583,89 @@ mod tests {
               \x20    3 *-* exit\n"
                 .to_vec(),
             "the callee's `trace off` must silence only the callee"
+        );
+    }
+
+    /// **The two trace-line indents Task 9 added, pinned here because
+    /// nothing else in the tree can pin them** (review round 1, F1).
+    /// `tests/trace_oracle.rs`'s witnesses and `tests/corpus.rs` both
+    /// compare through DEVIATION 0's `normalize_stderr`, which collapses
+    /// exactly the space run these lines differ in -- measured, replacing
+    /// the `do_indent`/`loop_indent` split in `loop_advance` with
+    /// `loop_indent` alone, or emitting `>F>` two columns in, leaves both
+    /// harnesses green while diverging from the oracle byte for byte. A
+    /// unit test's own `assert_eq!` is outside either comparison function,
+    /// which is what makes this the instrument for the job -- the same
+    /// argument `phase-4-exclusions.txt`'s DEVIATION 0 already makes for
+    /// the pinned shallow-depth indent witnesses.
+    ///
+    /// Every byte below is the oracle's, captured with `cat -A` from the
+    /// two programs run verbatim. They carry their own `TRACE I`
+    /// instruction rather than having a mode forced onto the activation, so
+    /// that the first clause is untraced on both sides and the two
+    /// transcripts are directly comparable.
+    #[test]
+    fn task_9s_two_new_indents_are_the_oracles_own_and_normalisation_cannot_see_them() {
+        // A `Controlled` loop: the setup assignment prints at the `DO`
+        // clause's own indent (3 blanks after `>=>`) and every re-tested
+        // pass's four lines print two further in (5 blanks). Collapsing the
+        // two to one number is what this fails on.
+        let mut interp = Interp::new();
+        run_source(&mut interp, b"trace i\ndo ii = 1 to 2\n  nop\nend\n")
+            .expect("the program runs");
+        assert_eq!(
+            String::from_utf8(interp.trace.clone()).expect("trace is UTF-8"),
+            concat!(
+                "     2 *-* do ii = 1 to 2\n",
+                "       >L>   \"1\"\n",
+                "       >L>   \"2\"\n",
+                "       >K>   \"TO\" => \"2\"\n",
+                "       >=>   II <= \"1\"\n",
+                "     3 *-*   nop\n",
+                "     4 *-* end\n",
+                "     2 *-* do ii = 1 to 2\n",
+                "       >V>     II => \"1\"\n",
+                "       >>>     \"1\"\n",
+                "       >>>     \"2\"\n",
+                "       >=>     II <= \"2\"\n",
+                "     3 *-*   nop\n",
+                "     4 *-* end\n",
+                "     2 *-* do ii = 1 to 2\n",
+                "       >V>     II => \"2\"\n",
+                "       >>>     \"2\"\n",
+                "       >>>     \"3\"\n",
+                "       >=>     II <= \"3\"\n",
+            )
+        );
+
+        // `>F>`: the caller's own indent, where the callee's own `>>>` for
+        // the same value sits two further in on the line above it.
+        let mut interp = Interp::new();
+        run_source(
+            &mut interp,
+            b"trace i\nzz = twice(2)\nexit\ntwice:\nuse arg nn\nreturn nn + nn\n",
+        )
+        .expect("the program runs");
+        assert_eq!(
+            String::from_utf8(interp.trace.clone()).expect("trace is UTF-8"),
+            concat!(
+                "     2 *-* zz = twice(2)\n",
+                "       >L>   \"2\"\n",
+                "       >A>   \"2\"\n",
+                "     4 *-*   twice:\n",
+                "     5 *-*   use arg nn\n",
+                "       >>>     \"2\"\n",
+                "       >=>     NN <= \"2\"\n",
+                "     6 *-*   return nn + nn\n",
+                "       >V>     NN => \"2\"\n",
+                "       >V>     NN => \"2\"\n",
+                "       >O>     \"+\" => \"4\"\n",
+                "       >>>     \"4\"\n",
+                "       >F>   TWICE => \"4\"\n",
+                "       >>>   \"4\"\n",
+                "       >=>   ZZ <= \"4\"\n",
+                "     3 *-* exit\n",
+            )
         );
     }
 

@@ -1,0 +1,34 @@
+/* A Controlled loop's re-test is blamed on the clause that transferred
+ * control back to it, not on the DO clause (4b Task 9, review round 1 F2).
+ *
+ * Reachable because the control variable is genuinely re-read: the body
+ * leaves it non-numeric, so the BY addition on the next re-test raises
+ * 41.1. The oracle echoes the ITERATE clause -- its own line, at the loop
+ * BODY's indent rather than at its own lexical depth -- and reports the
+ * error against that line. Blaming the DO clause instead reports line 28
+ * here rather than line 31.
+ *
+ * The ITERATE sits two blocks deep on purpose: at body level, "the
+ * ITERATE's own indent" and "the loop body's indent" are the same number
+ * and a wrong rule passes. DEVIATION 0 normalises the indent out of this
+ * comparison, so what this program pins is the LINE and the clause TEXT;
+ * the indent itself is pinned by the raw A/B probes in the task report.
+ *
+ * The first loop is the adjacent passing case: an ordinary loop whose body
+ * leaves the control variable numeric must still run to completion and
+ * blame nothing.
+ *
+ * Determinism: no clock, no PID, no filesystem state. The error report
+ * names this program's own path, which both interpreters are given. */
+trace r
+do ii = 1 to 3
+  nop
+end
+say 'first loop ended at' ii
+do jj = 1 to 3
+  jj = 'abc'
+  if 1 = 1 then do
+    iterate
+  end
+end
+say 'unreachable'

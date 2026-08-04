@@ -1,0 +1,10 @@
+RC 0
+===STDOUT===
+before any label
+if body ran
+in the callee
+after the signal
+===STDERR===
+    24 *-* fellthrough:
+    39 *-*   sub:
+    36 *-* there:

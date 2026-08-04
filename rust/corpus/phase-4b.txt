@@ -197,3 +197,13 @@ lang/push_queue.rex
 # report, condition('o') being 4c's. Its own header states which wrong answer
 # a gap-closing implementation prints.
 lang/raise_array_substitution.rex
+
+# New for 4b Task 9, review round 1 (F2) -- a Controlled loop's re-test blamed
+# on the clause that transferred control back to it. Reachable only because
+# the control variable is genuinely re-read: the body leaves it non-numeric
+# and the BY addition on the next re-test raises 41.1. Untrapped, because the
+# blame line is only observable in the report. Its first loop is the adjacent
+# passing case (an ordinary loop that must still run to completion), and its
+# ITERATE is two blocks deep so that "the ITERATE's own indent" and "the loop
+# body's indent" are different numbers.
+lang/loop_retest_blame.rex

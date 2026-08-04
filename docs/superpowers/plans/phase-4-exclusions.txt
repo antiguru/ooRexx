@@ -799,34 +799,6 @@ above.
   used to be a plain `Text`, which is the same shape F4 itself is: object
   identity becoming observable once it exists to be observed.
 
-  TRACE L (LABELS) echoes nothing. `mode_from_setting` classifies L, like
-  C/E/F/N/O, as "recognised, and this crate has nothing to show for it"
-  (TraceMode::OFF). The oracle shows something: every label clause it
-  EXECUTES is echoed with the ordinary *-* prefix. Measured, 2026-08-04, one
-  program with a SIGNAL target and a CALL target in it:
-
-           5 *-* there:
-           9 *-*   sub:
-
-  stdout and rc match on both sides; only these lines are missing here. Note
-  the indent -- the called routine's label sits at the calling clause's own
-  printed indent plus two, exactly as it does under trace a/r/i, so this is
-  the existing echo path with a different gate rather than a new formatter.
-
-  FOUND WHILE PROBING FOR >I>/<I<, not by a task that owned it, which is why
-  it is here rather than in a report: `trace l` was the instrument for that
-  question and its own output turned out to be a divergence in its own right.
-  An earlier statement of the >I>/<I< question asserted that "an internal-
-  label call with trace l first emits nothing, with or without PROCEDURE".
-  That is false, and this is the transcript that falsifies it.
-
-  Owner unassigned, and the reason is worth a line: the fix is a fourth
-  TraceMode field plus a gate at the one clause-echo call site (which already
-  has the instruction and so can already ask "is this a Label"), which is
-  small -- but TRACE()'s own reported setting, D17's three-field TraceMode
-  argument, and 4c's >I>/<I< row all read the same classification, and
-  changing it without them is how a fourth thing goes wrong.
-
   A COMPOUND CONTROL VARIABLE IS STORED IN THE WRONG PLACE. `do aa.1 = 1 to
   2` is legal Rexx and the oracle iterates it, assigning the compound AA.1 on
   every pass. rexx_parse::Controlled::control is a bare SymbolId, so
@@ -1063,3 +1035,72 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   against the oracle under trace i and is the one program in the 4b subset
   that does. Its raise is untrapped because the substituted message is only
   observable in the report, condition('o') being 4c's.
+
+  TRACE L (LABELS) ECHOED NOTHING (fixed, 4b Task 9 review round 1 -- this
+  was a KNOWN GAP row added earlier in the same task, closed inside it after
+  the review pointed out that mode_from_setting sits in the task's own file
+  list). mode_from_setting classified L with C/E/F/N/O as "recognised, and
+  this crate has nothing to show for it" (TraceMode::OFF). The oracle shows
+  something: every label clause it EXECUTES echoes, with the ordinary *-*
+  prefix and nothing else. Measured, all three ways a label is reached:
+
+           3 *-* fellthrough:        <- fallen into
+          10 *-*   sub:              <- a CALL target, at the callee's indent
+           8 *-* there:              <- a SIGNAL target
+
+  READ FROM THE C++ RATHER THAN GENERALISED FROM THOSE THREE:
+  RexxInstructionLabel::execute (LabelInstruction.cpp) traces through
+  traceLabel and nothing else, and traceLabel's gate is tracingLabels() --
+  which TraceSetting.cpp:52-54 sets in traceAllFlags, traceResultsFlags and
+  traceIntermediatesFlags as well as in setTraceLabels. So the fix is a
+  fourth TraceMode field that is TRUE wherever `all` already is, and the
+  echo site's gate becomes `all || (labels && is_label)`. That reduces to
+  `all` in every mode but L, which is what keeps the blast radius to one
+  letter -- asserted directly in trace.rs's own letter-classification test.
+
+  WHAT WE USED TO DO: nothing at all under trace l. WITNESS:
+  rust/crates/rexx-exec/tests/trace_oracle/trace_labels.rex, whose committed
+  expectation is three *-* lines and whose stdout proves the constructs
+  between them ran silently. Reverting L to TraceMode::OFF fails it, and so
+  does treating L as "echo everything".
+
+  NOT CLOSED WITH IT, and still open: TRACE ?L. The oracle emits two further
+  +++ banner lines for the interactive prefix (the TRACE ? row above, owner
+  unassigned); measured after this fix, `trace ?l` agrees on the label line
+  and differs by exactly those two banner lines, so that row is unchanged and
+  this one does not touch it.
+
+  A CONTROLLED LOOP READ ITS CONTROL VARIABLE FROM ITS OWN SAVED VALUE
+  (fixed, 4b Task 9 review round 1, F2). DoBlock::checkControl re-reads the
+  variable through control->evaluate on every re-tested pass -- which is why
+  it traces >V> at all -- where this crate rendered LoopState::Controlled's
+  own `current`, a value the body cannot reach. Measured:
+
+    trace i ; do ii = 1 to 3 ; ii = 10 ; end ; say ii
+
+  oracle 11 (it reads 10 back, adds 1, and 11 > 3 ends the loop after ONE
+  pass), ours 4 (three passes). Pre-existing -- e72cc19f prints 4 as well --
+  but Task 9's own new >V> line turned it from two absent lines into a line
+  positively stating a value the oracle contradicts, which is how the review
+  found it.
+
+  TWO ADJACENT SHAPES CAME WITH THE READ and needed no special case: a body
+  that DROPs the control variable reads the derived name and fails 41.1 on
+  ("II"), and a body that assigns a non-numeric fails 41.1 on ("abc"). Both
+  match byte for byte now.
+
+  AND THE BLAME MOVED WITH THEM. Those failures are attributed to the clause
+  that transferred control back to the loop, not to the DO clause: measured,
+  falling through gives `4 *-*   end` and `line 4`, an ITERATE gives its own
+  line, and an ITERATE nested two blocks deep still prints at the loop
+  BODY's indent rather than its own lexical one. The same correction fixes
+  the overflow case the review named as a milder instance
+  (`do ii = 9E999999999 by 9E999999999 to 9E999999999`, oracle line 4, ours
+  line 2 before the fix). HeaderClause::Iterate carries the ITERATE's own
+  echo site for exactly this, since LeaveOrigin captured it a pass earlier
+  and nothing else can recover it afterwards.
+
+  WITNESSES: tests/trace_oracle/control_variable_reread.rex (the read-back
+  and the trip count, with an ordinary loop beside it as the adjacent
+  passing case) and corpus/lang/loop_retest_blame.rex (the blame line, live,
+  untrapped because the blame is only observable in the report).

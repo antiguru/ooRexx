@@ -43,19 +43,26 @@ use rexx_num::Number;
 /// interactive debug pausing does not exist on this non-interactive runtime
 /// at all).
 ///
-/// **A three-field struct, not the oracle's `FlagSet<TraceFlag, 32>`.**
-/// `TraceSetting.cpp:49`-`54`'s own flag combinations reduce to exactly
-/// three observable questions for a program 4a can run: is every clause
+/// **A four-field struct, not the oracle's `FlagSet<TraceFlag, 32>`.**
+/// `TraceSetting.cpp:49`-`54`'s own flag combinations reduce to four
+/// observable questions for a program this crate can run: is every clause
 /// echoed (`all`, `TRACE_PREFIX_CLAUSE`), is a traced instruction's own
-/// computed value shown (`results`, `TRACE_PREFIX_RESULT`/`_KEYWORD`), and
-/// is *every* intermediate step of evaluating it shown too (`intermediates`,
-/// every other value prefix plus `TRACE_PREFIX_ASSIGNMENT`). `results` is
-/// true whenever `intermediates` is (measured: `TRACE I`'s own flag set is
-/// `TRACE R`'s plus one more bit, `traceIntermediatesFlags` a strict
-/// superset of `traceResultsFlags`), so this is not three independent
-/// booleans in practice, but naming a fourth invariant type over three
-/// checked-together fields would be D16's own `Novalue` shape solving a
-/// problem this struct does not have.
+/// computed value shown (`results`, `TRACE_PREFIX_RESULT`/`_KEYWORD`), is
+/// *every* intermediate step of evaluating it shown too (`intermediates`,
+/// every other value prefix plus `TRACE_PREFIX_ASSIGNMENT`), and is a
+/// `LABEL` clause echoed (`labels`)? `results` is true whenever
+/// `intermediates` is (measured: `TRACE I`'s own flag set is `TRACE R`'s
+/// plus one more bit, `traceIntermediatesFlags` a strict superset of
+/// `traceResultsFlags`) and `labels` is true whenever `all` is, so these are
+/// not four independent booleans in practice, but naming an invariant type
+/// over fields that are always checked together would be D16's own
+/// `Novalue` shape solving a problem this struct does not have.
+///
+/// **It said "a three-field struct... exactly three observable questions
+/// for a program 4a can run" and that was right for 4a and wrong here**:
+/// 4b's Task 9 review round 1 measured the fourth, `TRACE L`, which this
+/// crate answered with silence. The count in a sentence like that is a
+/// claim about the language, and it goes stale the way a table does.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub(crate) struct TraceMode {
     /// `TRACE_PREFIX_CLAUSE` (`*-*`): every stepped instruction's own clause
@@ -69,6 +76,20 @@ pub(crate) struct TraceMode {
     /// traced instruction's expression is shown, not only its final value.
     /// `tracingIntermediates`.
     pub(crate) intermediates: bool,
+    /// `TraceSetting::tracingLabels`: a `LABEL` clause is echoed, with the
+    /// ordinary `*-*` prefix. **A fourth field, added at 4b Task 9's review
+    /// round 1 (F8) because 4b measured a fourth observable question this
+    /// struct's own "three for a program 4a can run" argument did not
+    /// cover.** `RexxInstructionLabel::execute` (`LabelInstruction.cpp`,
+    /// read directly) traces through `traceLabel` and nothing else, and
+    /// `traceLabel`'s gate is `tracingLabels()` -- which
+    /// `TraceSetting.cpp:52`-`54` sets in `traceAllFlags`,
+    /// `traceResultsFlags` and `traceIntermediatesFlags` as well as in
+    /// `setTraceLabels`. So this is `true` under `A`/`R`/`I` too, where
+    /// `all` already covers it, and the only mode it decides anything in is
+    /// `L`. Measured: `trace l` echoes a fallen-through label, a `CALL`
+    /// target and a `SIGNAL` target, and nothing else at all.
+    pub(crate) labels: bool,
 }
 
 impl TraceMode {
@@ -76,15 +97,31 @@ impl TraceMode {
     /// `setTraceLabels`/`setTraceErrors`/`setTraceFailures`, and the initial
     /// state before any `TRACE` instruction runs at all -- every one of
     /// these sets a flag this crate's own scope has nothing to show for
-    /// (D18 excludes commands; labels/errors/failures are interactive-debug
-    /// or command-condition machinery, neither built here), so all six
-    /// collapse to this crate's one silent answer. `#[derive(Default)]`
-    /// picks this automatically (`false`/`false`/`false`), which is also
+    /// (D18 excludes commands; errors/failures are command-condition
+    /// machinery, not built here), so all five collapse to this crate's one
+    /// silent answer. `#[derive(Default)]`
+    /// picks this automatically (all four `false`), which is also
     /// `Interp::new`'s own starting state.
+    ///
+    /// **`setTraceLabels` no longer collapses into this** and the sentence
+    /// above no longer names it: `TRACE L` has something to show -- the
+    /// label clauses it echoes -- and [`TraceMode::LABELS`] is where it goes
+    /// now. Five, not six.
     pub(crate) const OFF: TraceMode = TraceMode {
         all: false,
         results: false,
         intermediates: false,
+        labels: false,
+    };
+    /// `TRACE L` (`setTraceLabels`, which resets every other flag and sets
+    /// `traceLabels` alone). The one mode where `labels` decides anything:
+    /// every executed `LABEL` clause echoes and nothing else does, measured
+    /// across all three ways a label is reached.
+    const LABELS: TraceMode = TraceMode {
+        all: false,
+        results: false,
+        intermediates: false,
+        labels: true,
     };
     /// `TRACE A` (`setTraceAll`, `traceAllFlags`): every clause echoes, but
     /// `traceAllFlags` deliberately omits `traceResults` -- measured
@@ -96,18 +133,21 @@ impl TraceMode {
         all: true,
         results: false,
         intermediates: false,
+        labels: true,
     };
     /// `TRACE R` (`setTraceResults`, `traceResultsFlags`).
     const RESULTS: TraceMode = TraceMode {
         all: true,
         results: true,
         intermediates: false,
+        labels: true,
     };
     /// `TRACE I` (`setTraceIntermediates`, `traceIntermediatesFlags`).
     const INTERMEDIATES: TraceMode = TraceMode {
         all: true,
         results: true,
         intermediates: true,
+        labels: true,
     };
 }
 
@@ -137,12 +177,16 @@ pub(crate) fn mode_from_setting(bytes: &[u8]) -> Result<TraceMode, u8> {
             b'A' => Ok(TraceMode::ALL),
             b'R' => Ok(TraceMode::RESULTS),
             b'I' => Ok(TraceMode::INTERMEDIATES),
-            // `C`/`L`/`E`/`F`/`N`/`O`: all nine of `check_trace_setting`'s
-            // accepted letters are recognised here, not only the three with
-            // a visible effect in 4a's scope -- `TRACE C x = 1` must not be
-            // treated as an unrecognised setting, it must be treated as
-            // "recognised, and this crate has nothing to show for it".
-            b'C' | b'L' | b'E' | b'F' | b'N' | b'O' => Ok(TraceMode::OFF),
+            // `L` was in the silent group below until 4b Task 9's review
+            // round 1 measured what it actually does. It echoes every
+            // executed `LABEL` clause -- see `TraceMode::labels`.
+            b'L' => Ok(TraceMode::LABELS),
+            // `C`/`E`/`F`/`N`/`O`: all nine of `check_trace_setting`'s
+            // accepted letters are recognised here, not only the ones with
+            // a visible effect in this crate's scope -- `TRACE C x = 1` must
+            // not be treated as an unrecognised setting, it must be treated
+            // as "recognised, and this crate has nothing to show for it".
+            b'C' | b'E' | b'F' | b'N' | b'O' => Ok(TraceMode::OFF),
             _ => Err(byte),
         };
     }
@@ -341,15 +385,42 @@ pub(crate) fn push_operator(
 }
 
 impl Interp {
-    /// Appends `*-*`'s own line to the trace sink, gated on `trace_mode.all`
-    /// -- `run.rs`'s single clause-echo insertion point, `step_in_temps_
-    /// frame`, calls this once per instruction position it visits, and the
-    /// loop drivers call it again for a `DO`/`LOOP`'s own re-executed
-    /// clause (see `run.rs`'s own doc comments on both call sites for why
-    /// a `DO`/`LOOP` needs the second one and nothing else built so far
-    /// does).
+    /// Whether a `*-*` line would print for a clause of this kind -- the
+    /// **one** decision behind both formatters below, and behind the
+    /// `run.rs` call site's own guard against building a clause's text when
+    /// nothing will print it.
+    ///
+    /// `all` covers every clause; `labels` covers a `LABEL` clause only, and
+    /// is the only field that decides anything under `TRACE L`. The `||`
+    /// reduces to `all` in every other mode, because `labels` is true
+    /// wherever `all` is (`TraceMode::labels`'s own doc comment has the
+    /// flag sets that make that so).
+    pub(crate) fn tracing_clause(&self, is_label: bool) -> bool {
+        let mode = self.trace_mode();
+        mode.all || (mode.labels && is_label)
+    }
+
+    /// Appends `*-*`'s own line for a clause that is **never** a `LABEL`:
+    /// the loop drivers' own re-echo of a `DO`/`LOOP`/`END`, and a
+    /// `WHEN`/`OTHERWISE` header (see `run.rs`'s own doc comments on those
+    /// call sites for why a `DO`/`LOOP` needs a second echo and nothing else
+    /// built so far does). A label cannot appear at any of them -- one
+    /// inside a `DO` block is error 47.2 at parse time, measured.
     pub(crate) fn trace_clause(&mut self, line: usize, indent: usize, text: &[u8]) {
-        if !self.trace_mode().all {
+        self.trace_stepped_clause(false, line, indent, text);
+    }
+
+    /// The same line for a *stepped* instruction, which is the one place a
+    /// `LABEL` reaches the sink: `run.rs`'s `step_in_temps_frame`. Under
+    /// `TRACE L` this is the only echo the whole run produces.
+    pub(crate) fn trace_stepped_clause(
+        &mut self,
+        is_label: bool,
+        line: usize,
+        indent: usize,
+        text: &[u8],
+    ) {
+        if !self.tracing_clause(is_label) {
             return;
         }
         push_clause(&mut self.trace, line, indent, text);
@@ -524,7 +595,10 @@ impl Interp {
     /// own `if (tracingResults())`, unlike every other prefix this task
     /// added): measured, the same program under `trace r` still shows the
     /// `>R>` line with no other value line around it, and under `trace l`
-    /// shows nothing at all.
+    /// shows **no `>R>`** -- not "nothing at all", which this sentence said
+    /// and which the same task's own measurements falsify (review round 1,
+    /// F5): under `trace l` both sides echo the callee's `sub:` label
+    /// clause and neither emits a value line of any kind.
     pub(crate) fn trace_alias(&mut self, indent: usize, reference: &[u8], target: &[u8]) {
         if !self.trace_mode().results {
             return;
@@ -574,7 +648,24 @@ mod tests {
         assert_eq!(mode_from_setting(b"?R"), Ok(TraceMode::RESULTS));
         assert_eq!(mode_from_setting(b"i"), Ok(TraceMode::INTERMEDIATES));
         assert_eq!(mode_from_setting(b"results"), Ok(TraceMode::RESULTS));
-        for letter in b"CLEFNO" {
+        // `L` left this group at review round 1 (F8): it is the one letter
+        // here that has something to show, and this assertion is what went
+        // red when it moved. Both spellings, since `TRACE VALUE 'l'` reaches
+        // the same classifier as `TRACE ?L` does.
+        assert_eq!(mode_from_setting(b"L"), Ok(TraceMode::LABELS));
+        assert_eq!(mode_from_setting(b"?l"), Ok(TraceMode::LABELS));
+        assert_eq!(
+            (TraceMode::LABELS.labels, TraceMode::LABELS.all),
+            (true, false),
+            "L echoes labels and nothing else"
+        );
+        // `labels` is set wherever `all` is, so the `||` in `tracing_clause`
+        // reduces to `all` in every mode but `L` -- the property that keeps
+        // this a change to one letter's behaviour rather than to four.
+        for mode in [TraceMode::ALL, TraceMode::RESULTS, TraceMode::INTERMEDIATES] {
+            assert!(mode.labels && mode.all, "{mode:?}");
+        }
+        for letter in b"CEFNO" {
             assert_eq!(
                 mode_from_setting(&[*letter]),
                 Ok(TraceMode::OFF),

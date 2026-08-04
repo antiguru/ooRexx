@@ -50,13 +50,14 @@
 //! | `>F>` | `function_call.rex` |
 //! | `>R>` | `use_arg_alias.rex` |
 //!
-//! Two witnesses below carry no prefix of their own and are here for a
-//! *content* difference instead -- a value line that was **absent**, which
-//! no prefix table can express: `controlled_loop.rex` (the control
-//! variable's own lines on a re-tested pass) and `exit_value.rex` (`EXIT
-//! <expr>`'s own `>>>`). Both are listed in [`WITNESS_PREFIXES`] for the
-//! prefixes they do emit, which is what keeps them inside this file's own
-//! drift check.
+//! Three witnesses below carry no prefix of their own and are here for a
+//! *content* difference instead -- something no prefix table can express:
+//! `controlled_loop.rex` (value lines that were **absent** on a re-tested
+//! pass), `exit_value.rex` (`EXIT <expr>`'s own `>>>`, likewise absent) and
+//! `control_variable_reread.rex` (a value line that was present and
+//! **wrong**, along with the trip count that produced it). All three are
+//! listed in [`WITNESS_PREFIXES`] for the prefixes they do emit, which is
+//! what keeps them inside this file's own drift check.
 //!
 //! **This table used to be prose only, and a branch review (H3,
 //! `branch-review-harness.md`) showed exactly what that cost**: replacing
@@ -69,9 +70,30 @@
 //! [`every_witness_still_emits_every_prefix_it_is_named_for`] turn the
 //! table above into an assertion: each witness's committed `.expected`
 //! stderr must contain every prefix this table claims for it, checked as a
-//! byte substring, and the union across all five must be exactly the ten
-//! prefixes claimed. A witness can still be swapped for a better one, but
-//! not for one that silently covers less.
+//! byte substring, and the union across every witness must be exactly the
+//! thirteen prefixes claimed. A witness can still be swapped for a better
+//! one, but not for one that silently covers less.
+//!
+//! **NOTHING IN THIS FILE PINS A TRACE LINE'S INDENT, and no witness here
+//! can** (review round 1, F1). `check_witness` compares both sides through
+//! `support::normalize_stderr` (DEVIATION 0), which collapses exactly the
+//! space run between a trace line's marker and its content -- so a value
+//! line emitted at the wrong indent compares equal to one emitted at the
+//! right one. Measured rather than reasoned: replacing the `do_indent`/
+//! `loop_indent` split in `run.rs`'s own `LoopState::Controlled` arm with
+//! `loop_indent` alone leaves this file green and the workspace at 986/0
+//! while diverging from the oracle byte for byte, and the same holds for
+//! `>F>` emitted two columns in.
+//!
+//! What *does* hold trace indents to the oracle: the `run.rs`/`lib.rs`/
+//! `error.rs` unit tests that assert an exact stderr string, which is
+//! outside either harness's comparison function, plus raw A/B probes in each
+//! task's own report. For Task 9's own two indents specifically that is
+//! `run.rs`'s `task_9s_two_new_indents_are_the_oracles_own_and_
+//! normalisation_cannot_see_them`, which asserts both transcripts byte for
+//! byte and goes red under exactly the mutation that leaves this file green.
+//! **A comment in this file must not claim otherwise**; two did, and this
+//! paragraph replaces them.
 //!
 //! **The gap this file used to disclose here is closed, and
 //! `controlled_loop.rex` is the witness** (Task 9). A `Controlled`
@@ -79,12 +101,10 @@
 //! (the control variable's pre- and post-increment value, `DoBlock::
 //! checkControl`, `DoBlock.cpp:182`-`205`) plus, under `TRACE I`, the `>V>`
 //! that reads it and the `>=>` that writes it back. That witness covers all
-//! four, in both modes, across an `ITERATE` and a negative `BY`, and it also
-//! pins a `DO OVER`'s own single `>=>` -- the neighbouring *passing* case,
-//! which is what separates "traces the control variable" from "traces it at
-//! the right indent": the controlled loop's setup assignment prints at the
-//! `DO`'s own indent and every other control-variable line prints two
-//! further in. `keyword_while.rex` remains the `>K>` witness on its own
+//! four, in both modes, across an `ITERATE` and a negative `BY`, and it
+//! carries a `DO OVER` beside them as the neighbouring *passing* case --
+//! which pins that a `DO OVER` traces its own `>=>` at all, not the indent
+//! it traces it at. `keyword_while.rex` remains the `>K>` witness on its own
 //! merits (a real repeating construct, re-echoing its clause every pass,
 //! `>K>` re-firing every pass), not because it once dodged this gap.
 //!
@@ -251,11 +271,14 @@ fn call_arguments_covers_the_argument_prefix_at_every_position_shape() {
     check_witness("call_arguments", &path);
 }
 
-/// `>F>`: two expression-form calls in one clause, so the second one's own
-/// line has to come back to the *caller's* indent after the first callee
-/// moved it.
+/// `>F>`: two expression-form calls in one clause, which pins that the
+/// second one is emitted **at all** after the first callee's own lines --
+/// not the column it lands in. An earlier version of this comment said the
+/// second line "has to come back to the caller's indent"; nothing here makes
+/// it, because DEVIATION 0 normalises that difference away (review round 1,
+/// F1, and the module doc's own paragraph on what does pin an indent).
 #[test]
-fn function_call_covers_the_function_prefix_at_the_callers_indent() {
+fn function_call_covers_the_function_prefix_after_the_callees_own_lines() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/trace_oracle/function_call.rex");
     check_witness("function_call", &path);
 }
@@ -279,6 +302,27 @@ fn use_arg_alias_covers_the_alias_prefix_and_its_results_level_gate() {
 fn controlled_loop_covers_the_control_variables_own_value_lines() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/trace_oracle/controlled_loop.rex");
     check_witness("controlled_loop", &path);
+}
+
+/// `TRACE L`: every executed `LABEL` clause echoes and nothing else does.
+/// The program's own header says why all three ways of reaching a label are
+/// in it and why the silent constructs between them are the other half of
+/// the claim.
+#[test]
+fn trace_labels_covers_the_labels_only_mode() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/trace_oracle/trace_labels.rex");
+    check_witness("trace_labels", &path);
+}
+
+/// The control variable is **re-read** on every re-tested pass, not taken
+/// from the loop's own saved value (review round 1, F2). The program's own
+/// header has the measured pair; the visible difference is a trip count and
+/// a `>V>` value, neither of which normalisation touches.
+#[test]
+fn control_variable_reread_covers_a_body_that_writes_the_control_variable() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/trace_oracle/control_variable_reread.rex");
+    check_witness("control_variable_reread", &path);
 }
 
 /// `EXIT <expr>`'s own `>>>`, which this crate did not emit at all before
@@ -314,6 +358,14 @@ const WITNESS_PREFIXES: &[(&str, &[&str])] = &[
     ),
     ("use_arg_alias", &["*-*", ">>>", ">R>"]),
     ("exit_value", &["*-*", ">>>"]),
+    (
+        "control_variable_reread",
+        &["*-*", ">>>", ">=>", ">L>", ">V>", ">K>"],
+    ),
+    // `TRACE L`'s whole output is three `*-*` lines: no value line of any
+    // kind can appear, so this witness claims exactly one prefix and that
+    // is not an oversight.
+    ("trace_labels", &["*-*"]),
     (
         "controlled_loop",
         &["*-*", ">>>", ">=>", ">L>", ">V>", ">K>", ">P>"],
