@@ -316,8 +316,13 @@ Measured: a **796-row derived file** that computes those facts at runtime and po
 
 ## Shared facts every builtin task needs
 
-**Tasks 2, 3, 4, 5, 6, 10, 11 and 12 each restate this block in their own body.**
-It is here once so the eight agree; it is *in* each task because briefs are extracted per heading and nothing outside a task's own section is visible to its implementer.
+**This block is a controller obligation, not a task's own text, and that distinction is load-bearing.**
+Briefs are extracted per heading, so nothing outside a task's own section reaches its implementer.
+Tasks 2, 3, 4, 5, 6, 10, 11 and 12 each say "restated in your brief" -- **the controller makes that true by appending this section to the generated brief file before dispatching.**
+An earlier revision said each task "restates this block in their own body", which was false: no task body contained it and the extractor could not supply it.
+That is the same mechanism that cost this project five decisions recorded where the implementer never read them.
+
+The append is bounded by this heading and the next `## `, and asserts the block still contains `pub(crate) fn dispatch(`, `not_enough_arguments` and `REXX_CORPUS_GATE=1` before writing -- so a reorganisation of this section fails loudly rather than shipping a brief with a silently truncated span.
 
 **The dispatch interface.**
 
