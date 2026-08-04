@@ -887,6 +887,17 @@ hand-maintained expansion table the new single point of truth and moves the
 duplication rather than removing it. **Estimated at half a day, and it buys less
 than it costs** — the data is already guarded.
 
+> **Superseded at `337217da`** (pre-4c consolidation, Task 1). The assessment
+> above is left as written, because it records what was true of the tree the
+> gate ran against. Three of its present-tense claims are no longer true of the
+> tree: `owners.rs` is arm-grained where `lib.rs` is (a `tags!` `split` section
+> gives each `rexx_parse::Call` arm its own row), the reconciliation is gone
+> (`instruction_arm` and `expand_for_witnesses` are both deleted, and nothing
+> hand-maintained replaced them), and the straight equality assertion **is**
+> available and in place. The shape mismatch this step priced was one variant.
+> `T0-M2` and `T0-M4` in the deferred-minors table below are moot for the same
+> reason — their subjects no longer exist.
+
 **2. Are the phase strings load-bearing at all?** Mostly not, and the
 differential corpus does make the "4b is done" claim better and more directly —
 42 of 42 against the oracle says more than any owner string. What would actually

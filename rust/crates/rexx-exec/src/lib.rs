@@ -667,11 +667,22 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
 /// `owners.rs` itself. `owners.rs`'s own module doc names this function as
 /// the fifth of its five pinned items.
 ///
-/// The comparison reaches the `Some` arms only. `Loud::instruction` is not
-/// called for a variant this crate executes, so a phase string written onto
-/// one would be data nothing reads; `corpus.rs`'s byte-for-byte run against
-/// the oracle is what covers that direction, by failing as soon as an
-/// implemented construct prints a gap.
+/// **The comparison reaches the `Some` arms only, and almost nothing covers
+/// the rest.** `Loud::instruction` is not called for a variant this crate
+/// executes, so a phase written onto one is data no path reads: measured,
+/// giving `InstructionKind::Say` an owner leaves the whole workspace suite
+/// green. Nothing catches that and nothing needs to, the value being
+/// unreachable -- but the reason is unreachability, not some other test
+/// standing guard, and an edit here should not expect one to.
+///
+/// The exception is `Do`/`Loop`, because `run_loop` reaches this function
+/// for them through the two edge cases described below, where the
+/// instruction is implemented and only the specific reason is not. Measured:
+/// giving that arm an owner turns `run.rs`'s `do_with_takes_the_loud_path`,
+/// `do_counter_takes_the_loud_path_regardless_of_which_other_kind_it_rides_on`,
+/// `do_over_a_stem_target_takes_the_loud_path` and
+/// `do_over_a_parenthesised_stem_target_is_also_caught` red, all four
+/// asserting the exact unsuffixed message.
 ///
 /// **Arm-grained for `InstructionKind::Call`, matching `owners.rs`'s own
 /// `split` section row for row**: three of `rexx_parse::Call`'s four arms are

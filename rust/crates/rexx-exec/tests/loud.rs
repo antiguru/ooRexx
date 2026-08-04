@@ -469,10 +469,15 @@ fn every_out_of_scope_variant_fails_loudly() {
         // What it does **not** cover: the `None` arms. `Loud::instruction`
         // is only reached for a variant the executor declines, so an owner
         // wrongly written as `None` for something loud shows up here, while
-        // a phase wrongly written *onto* an implemented variant is
-        // unreachable data that no assertion can see. `corpus.rs`'s
-        // byte-for-byte differential run is what covers that direction, by
-        // failing the moment an implemented construct starts printing a gap.
+        // a phase wrongly written *onto* an implemented variant is data no
+        // path reads. **Nothing covers that, and this comment does not
+        // point anywhere claiming otherwise**, because a disclaimer naming
+        // a test that is not in fact watching is worse than none -- it
+        // stops the next reader looking. Measured: giving
+        // `InstructionKind::Say` an owner leaves the whole workspace suite
+        // green. The one exception is `Do`/`Loop`, which `run_loop` does
+        // reach here, and whose four `run.rs` tests on the exact unsuffixed
+        // message go red; `lib.rs`'s `instruction_owner` names them.
         //
         // **Pins the exact trailing shape, not merely the owner's presence
         // (review finding I2).** An earlier version checked

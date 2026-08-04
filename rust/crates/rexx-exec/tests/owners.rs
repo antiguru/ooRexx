@@ -461,8 +461,9 @@ fn variant_counts_match_the_audited_split() {
     // it joined, and this test is what makes that a pair rather than a
     // choice.
     //
-    // **`INSTRUCTION_TAGS` is one row per owner, not one per variant**, so
-    // its length exceeds `InstructionKind`'s 40 variants by the 3 extra rows
+    // **`INSTRUCTION_TAGS` is one row per separately owned unit, not one per
+    // variant**: a variant, or an arm where a variant is split. So its
+    // length exceeds `InstructionKind`'s 40 variants by the 3 extra rows
     // `Call`'s `split` section contributes. `only_backslash_is_unreachable`
     // and `out_of_scope_set_matches_the_committed_expectation` are what
     // police the rows themselves; these are the totals.
@@ -597,7 +598,10 @@ fn the_two_harnesses_include_this_exact_file() {
 //    is what fails if it does not: the owner it requires the emitted
 //    message to end with is read straight out of the tables above, so the
 //    two are compared to each other rather than each to a copy. That
-//    comparison covers the phase-owned rows, which are the reachable ones;
-//    an owner written onto a variant this crate implements is data no
-//    execution path reads, and `corpus.rs`'s differential run is what
-//    covers that direction.
+//    comparison covers the phase-owned rows, which are the reachable ones.
+//    An owner written onto a variant this crate implements is data no
+//    execution path reads, and **nothing covers it** -- measured, giving
+//    `InstructionKind::Say` an owner leaves the whole suite green. It needs
+//    no cover, being unreachable, but an edit there should not expect any.
+//    `lib.rs`'s own doc has the one exception, `Do`/`Loop`, and names the
+//    four `run.rs` tests that pin it.

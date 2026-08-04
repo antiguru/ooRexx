@@ -90,16 +90,15 @@
 # own construct across that line and delete its name from the paragraph above
 # in the same change.
 #
-# **That rule is per *arm* where a variant is split, and CALL is the one case
-# left.** owners.rs's table is variant-grained, so `InstructionKind::Call`
-# reads `Owner::Phase("Phase 5")` -- for `Call::Qualified` (`CALL ns:name`)
-# alone, since Task 3 implemented `Call::Named`/`Call::Dynamic` and Task 7
-# implemented `Call::Trap`. A program using any of those three belongs here.
-# `InstructionKind::Signal` is `Owner::InScope` outright since Task 7, all
-# three of its arms being implemented. loud.rs's `expand_for_witnesses` is
-# where the arm-level truth is machine-checked; reading the coarse `Call` tag
-# alone would say that no program here may contain a `CALL` at all, which is
-# not what the table means.
+# **The rule is read off that table directly, with no caveat, because the
+# table is grained the way the rule is.** A variant whose arms do not share
+# an owner gets one row per arm, through owners.rs's `tags!` `split` section,
+# so `INSTRUCTION_TAGS` carries `Call::Named`, `Call::Dynamic` and
+# `Call::Trap` as `Owner::InScope` and `Call::Qualified` (`CALL ns:name`) as
+# `Owner::Phase`. A program using any of the first three belongs here; one
+# using a qualified CALL does not. There is no coarser `Call` tag to
+# misread, and nothing hand-maintained standing between this rule and the
+# table.
 #
 # A program listed here must also obey the corpus's one standing rule
 # (README.md, "The one rule: determinism"): same bytes on every run, on every
