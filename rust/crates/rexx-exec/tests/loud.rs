@@ -430,11 +430,11 @@ fn in_scope_counts_match_the_audited_split() {
 fn every_out_of_scope_variant_fails_loudly() {
     let mut failures = String::new();
     for witness in INSTRUCTION_WITNESSES.iter().chain(EXPR_WITNESSES.iter()) {
-        // No `SPLIT_TABLE_PHASES` check here any more: the owner now comes
-        // from `owners.rs`'s own table, and that file's
-        // `assert_owner_strings_are_split_table_phases` already holds every
-        // row of every one of its seven tables to that set -- including
-        // these, and including the rows this file never asks about.
+        // This loop does not check the owner against `SPLIT_TABLE_PHASES`,
+        // because `owners.rs`'s own
+        // `assert_owner_strings_are_split_table_phases` holds every row of
+        // every one of its seven tables to that set -- including these, and
+        // including the rows this file never asks about.
         let owner = table_owner(witness);
         assert_constructs(witness);
 
