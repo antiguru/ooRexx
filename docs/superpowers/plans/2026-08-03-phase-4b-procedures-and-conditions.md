@@ -1188,7 +1188,12 @@ The convention is `corpus.rs`'s `REXX_CORPUS_GATE` and `assertions.rs`'s `REXX_A
 
 **State up front rather than discover:** criterion 2's exempt list cannot light up at this gate or 4c's.
 
-**There are now two exempt lists, and only one of them is inert.** That sentence was written when `tests/assertions.rs`'s 35 rows were the only exempt set, and it remains true of them -- all 35 are `unblocked_by: "Phase 5"`. Task 11 added a second, `rust/corpus/keyword-exempt.txt`, 796 rows of **790 `4c` and 6 `defect:compound-do-control-variable`**, and that one **can** light up: the 6 defect rows go red the moment anyone fixes compound `DO` control variables, which is the behaviour they were committed for. Name the file whenever a criterion refers to "the exempt list", because the two now behave oppositely and a criterion that names neither is ambiguous about which property it is claiming.
+**There are now two exempt lists, and only one of them is inert.** That sentence was written when `tests/assertions.rs`'s 35 rows were the only exempt set, and it remains true of them -- all 35 are `unblocked_by: "Phase 5"`. Task 11 added a second, `rust/corpus/keyword-exempt.txt`, and it is the opposite: **it is designed to fire at 4c's gate.** The contrast to carry:
+
+* `tests/assertions.rs`, 35 rows, all `unblocked_by: "Phase 5"` -- **cannot** light up at this gate or 4c's.
+* `rust/corpus/keyword-exempt.txt`, 796 rows -- **790 of them are `4c` and fire at 4c's own gate**, each body starting to pass and failing the set with `now PASSES but is still on the committed exempt list -- remove it` (`keyword_assertions.rs:364`; the opposite direction is `:352`). The other **6** are `defect:compound-do-control-variable` and fire whenever that defect is fixed, which is unscheduled.
+
+The 790 are the point, not the 6. A criterion phrased around the defect rows would leave a reader thinking the file is inert at 4c's gate when 790 of its rows are precisely what fires there. Name the file whenever a criterion refers to "the exempt list": the two behave oppositely, and a criterion naming neither is ambiguous about which property it claims.
 
 **I27 is not this gate's criterion.** The 342 expected trace-output lines in `TRACE.testGroup` are 4b's and 4c's to satisfy, but the group is not runnable as extracted, and the same file yields 239, 342, 374, 393 and 437 under five defensible anchorings -- three recounts have already gone astray. If this gate uses any figure from that file, **state which scan produced it**. Prefer a named, measured subset.
 
