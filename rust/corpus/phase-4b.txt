@@ -236,11 +236,26 @@ lang/loop_retest_blame.rex
 # kept as decoration, per the same review's own standard. The task-10-report
 # records the mutations tried (a frame-leak skip, an indent-restore skip, a
 # SIGL-set skip -- all either caught elsewhere already or inert) and the
-# architectural reason none of the three discriminates: `DO`/`LOOP`'s own
-# control-variable bookkeeping lives in a Rust local on `run_repeating`'s own
-# stack frame, never in interpreter state a nested `CALL` could reach, and
-# `PROCEDURE EXPOSE`'s aliasing (`exec_procedure`, `run.rs`) re-resolves the
-# caller's frame and every exposed name fresh on every single call, with no
-# cache or other cross-call state for a repeat call to expose that a first
-# call would not.
+# architectural reason none of the three discriminates.
+#
+# `DO`/`LOOP`'s loop *bookkeeping* -- the limit, the increment and the
+# direction -- lives in a Rust local on `run_repeating`'s own stack frame,
+# where no nested `CALL` can reach it. The control variable's live *value*
+# does not: `run.rs`'s re-test reads it back out of the interpreter's
+# variable pool every pass (`self.read(code, *control)`, the re-read Task 9
+# added so `do ii = 1 to 3 ; ii = 10 ; end` ends after one pass as the oracle
+# does), so a callee can reach it through ordinary `PROCEDURE EXPOSE` --
+# demonstrated by this task's own re-review, which built exactly that
+# program.
+#
+# That pathway is generic slot aliasing, already witnessed with no loop
+# present at all, and there is no loop-specific or call-specific branch that
+# fires only when the two are combined. That is what makes the combination
+# add nothing, and it is a narrower claim than "unreachable" -- which was the
+# wording here until the re-review falsified it.
+#
+# `PROCEDURE EXPOSE`'s aliasing (`exec_procedure`, `run.rs`) separately
+# re-resolves the caller's frame and every exposed name fresh on every single
+# call, with no cache or other cross-call state for a repeat call to expose
+# that a first call would not.
 lang/call_on_trap_rearms.rex
