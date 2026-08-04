@@ -10,7 +10,8 @@
 /*----------------------------------------------------------------------------*/
 
 //! The 4a exit gate's criterion 5: every `InstructionKind` and `ExprKind`
-//! variant either belongs to 4a's named set, or a program constructing it
+//! variant either belongs to the set this crate implements (`owners.rs`), or a
+//! program constructing it
 //! exits [`NOT_IMPLEMENTED_EXIT`] rather than succeeding, crashing, or
 //! producing a plausible Rexx condition. "An implementation gap must never be
 //! able to produce a passing test" is the design spec's own statement of what
@@ -24,12 +25,12 @@
 //! variant through [`rexx_exec::run_program`] and checks the actual exit
 //! code. Nothing else in this gate runs a single out-of-scope construct
 //! through the executor at all -- `tests/corpus.rs`'s subset is defined to
-//! contain none of them, by `phase-4a.txt`'s own header -- so this is
+//! contain none of them, by its subset files' own headers -- so this is
 //! genuinely the wider surface the design spec calls out ("one criterion
 //! closes a surface larger than 4a's own").
 //!
-//! For the in-scope variants, this file does not re-run a program: `4a
-//! executes it` is already established, more thoroughly, by `corpus.rs`'s
+//! For the in-scope variants, this file does not re-run a program: `this
+//! crate executes it` is already established, more thoroughly, by `corpus.rs`'s
 //! byte-for-byte differential run against the oracle. Re-deriving that here
 //! with a one-line snippet would be strictly weaker evidence covering the
 //! same code path, not new evidence. What this file checks for the in-scope
@@ -79,22 +80,17 @@
 //! a label reached by `CALL` (`EXPOSE`, `GUARD`, `REPLY`, `FORWARD`) --
 //! nothing in the grammar requires that context, so each is written as a
 //! bare top-level clause instead, which also avoids depending on `CALL`
-//! (itself out of scope) ever succeeding. `PROCEDURE` was on that list until
-//! 4b's Task 5 moved it in scope and deleted its row; a bare top-level
-//! `procedure` is now the oracle's error 17.1, not a gap.
+//! (itself out of scope) ever succeeding.
 //!
-//! **`ExprKind::VariableReference` (`>x`/`<x`) also has no row since Task
-//! 5.** The fact this paragraph existed to record is still worth keeping,
-//! because it was got wrong once: `ast.rs`'s 20.930 is about which *token*
-//! may follow `>`/`<` (a variable or a stem, not a literal or a number,
-//! `expr.rs`'s own `parseVariableReferenceTerm` doc), **not** about which
-//! instruction context the whole reference may sit in -- so `say >x` is
-//! legal on its own and needs no `CALL` around it. What has changed is the
-//! outcome: `say >x` now prints the referenced variable's value, measured
-//! against the oracle, where it used to answer `rexx-exec: a variable
-//! reference is not implemented (4b)`. One position where `>` is *not* a
-//! reference, also measured: `say 'text' >x` is a comparison, because a `>`
-//! following a complete term is the operator.
+//! **`ExprKind::VariableReference` (`>x`/`<x`) has no row, and the reason is
+//! worth keeping because it was got wrong once:** `ast.rs`'s 20.930 is about
+//! which *token* may follow `>`/`<` (a variable or a stem, not a literal or a
+//! number, `expr.rs`'s own `parseVariableReferenceTerm` doc), **not** about
+//! which instruction context the whole reference may sit in -- so `say >x` is
+//! legal on its own and needs no `CALL` around it, and it prints the
+//! referenced variable's value, measured against the oracle. One position
+//! where `>` is *not* a reference, also measured: `say 'text' >x` is a
+//! comparison, because a `>` following a complete term is the operator.
 
 use std::path::Path;
 
@@ -190,29 +186,10 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
         source: "call ns:sub\n",
         category: Category::Instruction,
     },
-    // **No `Call::Trap` row since 4b's Task 7.** `CALL ON`/`CALL OFF` is
-    // implemented, so a row here would assert a loud failure that correctly
-    // no longer happens -- the same way `Procedure`'s and `Use`'s rows had
-    // to go at Task 5.
-    // **No `Procedure` or `Use` row since 4b's Task 5.** Both moved into
-    // scope (`owners.rs`'s own `INSTRUCTION_TAGS`). The `Procedure` row's
-    // own witness, `sub: procedure` reached by falling through the label,
-    // is now the oracle's error 17.1 at rc 239 rather than a loud gap --
-    // measured, and `exec_procedure`'s doc has the four-shape table -- so
-    // keeping the row would assert a loud failure that correctly no longer
-    // happens.
-    // **No `Signal` row of any grain since 4b's Task 7, and no `Raise` row.**
-    // `Signal::Label`/`Signal::Value` moved into scope at Task 6 and
-    // `Signal::Trap` here, so all three arms are implemented and the coarse
-    // tag is `Owner::InScope`; `RAISE` is implemented whole (`owners.rs`'s
-    // own entry has why its one remaining loud shape belongs to
-    // `ExprKind::List` rather than to `RAISE`).
-    // **No `Push` or `Queue` row since 4b's Task 8 (I15).** Both moved into
-    // scope: `queue.rs` stores every line either writes. Nothing in
-    // `owners.rs`'s tables is owned by `"4b"` any more, and
-    // `SPLIT_TABLE_PHASES` keeping `"4b"` as a valid phase name is not
-    // stale, since a phase can still owe nothing right now and owe
-    // something again if a later task's audit finds otherwise.
+    // Which variants need a row here is `owners.rs`'s to say, and the
+    // assertion below reads it: a variant this crate implements must not
+    // carry one, because the row would assert a loud failure that does not
+    // happen.
     Witness {
         tag: "Parse",
         source: "parse value 'a' with v\n",
@@ -266,16 +243,8 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
 ];
 
 /// Every out-of-scope `ExprKind`, one witness each, every one wrapped in
-/// `SAY` (4a's own) -- see the module doc's corrected note on
-/// `VariableReference`.
-///
-/// **No `Call` row since 4b's Task 4.** `ExprKind::Call` moved fully into
-/// scope (`owners.rs`'s own `EXPR_TAGS`, and see `eval_call`'s doc,
-/// `eval.rs`, for the resolution order): a name that is not an internal
-/// label -- `foo` in this row's own former witness, `say foo(1)` -- now
-/// runs through `eval_call` and fails loudly naming `4c`, not `4b`, so the
-/// row this list used to carry would assert the wrong owner rather than
-/// disappearing quietly.
+/// `SAY`, which is implemented, so the wrapper is never itself the gap -- see
+/// the module doc's note on `VariableReference`.
 const EXPR_WITNESSES: &[Witness] = &[
     Witness {
         tag: "QualifiedCall",
@@ -431,9 +400,6 @@ fn assert_witness_set_is_complete() {
         "EXPR_WITNESSES must have exactly one entry per out-of-scope ExprKind \
          variant, no more and no fewer"
     );
-    // 4 since 4b's Task 5 moved `ExprKind::VariableReference` in scope and
-    // deleted its row (5 after Task 4 did the same for `ExprKind::Call`, 6
-    // before that).
     assert_eq!(expected_exprs.len(), 4);
 }
 
