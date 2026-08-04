@@ -446,6 +446,13 @@ Four assertions, and the third is the one that stops a classifier that consults 
 4. `divergent` is empty unless the row is committed as such.
    A divergent builtin is a defect, not a status; committing one requires a `KNOWN GAP` row naming it.
 
+**One consequence for Task 13, recorded here because this file is where it is visible.**
+`divergent` is the classification for "ran, and disagreed with the oracle".
+While the loud fallback exists, an unimplemented name exits `NOT_IMPLEMENTED_EXIT` and classifies `loud`.
+**When Task 13 replaces that fallback with a real 43.1 raise, every still-unimplemented name stops being `loud` and becomes `divergent`** -- 43.1 is a plausible Rexx condition, not a loud exit, so the harness can no longer tell it from a wrong answer.
+The failure is loud rather than silent, which is the design working, but it means **Task 13 must land after every builtin task**, and any name still unimplemented at that point needs its own `KNOWN GAP` row.
+The task order already places Task 13 after Tasks 2-12; this is why, and it is not free to reorder.
+
 - [ ] **Step 4: Falsify it three ways, two of them against the interpreter**
 
 The first revision falsified only by editing the committed file, which cannot detect a classifier that never runs anything.
