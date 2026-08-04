@@ -205,7 +205,9 @@ return a + 1
 
 The C++ gate is `tracingLabels() && isMethodOrRoutine()`. An **internal label** call with `trace l` as its first clause emits nothing, with or without `PROCEDURE`; `trace l` in the *caller* targeting a `::routine` emits nothing, because the caller's trace setting does not reach a `::routine` activation. So whether these are 4b's depends entirely on whether 4b calls a `::routine`, which Task 3 leaves open. The exclusions row must say "`::routine`/`::method` under TRACE LABELS", not "method invocation".
 
-4b's other prefixes, measured: `>A>` (ARGUMENT) in both call forms; `>F>` (FUNCTION) in the expression form only; `>R>` (ALIAS) in the callee for `USE ARG >`, and it is a **RESULTS**-level prefix, not intermediates-only -- at `trace i` the call site shows `>O>   ">" => "PP"` and `>A>   "orig"` (the *value*, not the name), then the callee shows `>R>     "PP" => "Q"`.
+4b's other prefixes, measured: `>A>` (ARGUMENT) in both call forms; `>F>` (FUNCTION) in the expression form only; `>R>` (ALIAS) in the callee for `USE ARG >`, and it is a **RESULTS**-level prefix, not intermediates-only.
+
+**Corrected 2026-08-04, after Task 9 measured it and its review confirmed independently.** This paragraph and I14's copy below both had `>O>` and `>A>` **swapped**, and both said `trace l` on an internal-label call emits nothing. The measured truth: at a reference call site `>O>   ">" => "ORIG"` carries the **name** and `>A>   "PP"` the **value**; `>R>   "ORIG" => "QQ"` is names on **both** sides, not a value; and `trace l` **does** echo the label clause of an internal-label call, with and without `PROCEDURE`. Task 9 built what it measured rather than what these lines said.
 
 ### I17 is reclassified: the `stem_drop` mutant is genuinely equivalent
 
@@ -976,7 +978,11 @@ Four things to read off it: the callee's `sub:` **label clause is echoed**, and 
 
 **Inherited items this task pays for:**
 
-* **I14, corrected twice.** 4b's prefixes are `>A>` (ARGUMENT, both call forms), `>F>` (FUNCTION, expression form only) and `>R>` (ALIAS). `>R>` is a **RESULTS**-level prefix, not intermediates-only: at `trace i` the call site shows `>O>   ">" => "PP"` and `>A>   "orig"` (the *value*, not the name), then the callee shows `>R>     "PP" => "Q"`; at `trace r` the `>R>` line is still emitted; at `trace l` only the label clause appears. **`>I>`/`<I<` are real and belong to `::routine`/`::method` under `TRACE LABELS`** -- the C++ gate is `tracingLabels() && isMethodOrRoutine()`. An internal-label call with `trace l` first emits nothing, with or without `PROCEDURE`; `trace l` in the caller targeting a `::routine` emits nothing. So their owner follows Task 3 Step 4's answer about whether 4b reaches a `::routine`. **Write the answer into `phase-4-exclusions.txt` as "`::routine`/`::method` under TRACE LABELS", not "method invocation".**
+* **I14, corrected three times -- the third after Task 9 measured it.** 4b's prefixes are `>A>` (ARGUMENT, both call forms), `>F>` (FUNCTION, expression form only) and `>R>` (ALIAS). `>R>` is a **RESULTS**-level prefix, not intermediates-only, and is still emitted at `trace r`.
+
+  **The measured shapes, which two earlier revisions of this row had wrong:** at a reference call site `>O>   ">" => "ORIG"` carries the **name** and `>A>   "PP"` the **value** -- these were swapped here until 2026-08-04 -- and `>R>   "ORIG" => "QQ"` is names on **both** sides. `trace l` on an internal-label call **echoes the label clause**, with and without `PROCEDURE`; the earlier "emits nothing" was false and is what the separate `TRACE L` KNOWN GAP now records against our own output.
+
+  **`>I>`/`<I<` are real and belong to `::routine`/`::method` under `TRACE LABELS`** -- the C++ gate is `tracingLabels() && isMethodOrRoutine()`. `trace l` in the caller targeting a `::routine` emits nothing, because the caller's trace setting does not reach a `::routine` activation. Write the exclusions row as "`::routine`/`::method` under TRACE LABELS", not "method invocation".
 * **I31.** A Controlled (`TO`-style) loop's re-tested pass omits two `>>>` value lines. Measured, cause read from `DoBlock::checkControl` (`interpreter/.../DoBlock.cpp`) rather than inferred, and costed at about twenty lines plus re-verification of bound-before-test, `FOR` and `ITERATE` -- half a day, not a rewrite. **Close it here.** An overstated cost is how a cheap fix stays open, and this row was corrected once for exactly that.
 
 - [ ] **Step 1: Regenerate the five existing trace expectations to prove the harness still round-trips**
