@@ -141,7 +141,7 @@ because their answer was got wrong before it was measured.
 
   +++         Phase 7, not 4c.
 
-              A +++-prefixed line has four producers in the C++:
+              A +++-prefixed line has five producers in the C++:
               RexxActivation.cpp:4468, a command's non-zero RC, measured
               live as
 
@@ -155,10 +155,17 @@ because their answer was got wrong before it was measured.
               (traceSourceString, whose caller is guarded by inDebug() at
               :4305), the first banner line; :4237, the debug prompt, the
               second, whose message text begins "+++"; and Activity.cpp
-              :1496, displayDebug, whose message text likewise begins
-              "+++". Three are interactive debug and one is command
-              dispatch, both Phase 7's under D18 and under the TRACE ? row
-              below.
+              :1496 and :1507, whose message text likewise begins "+++".
+              Those last two are ONE function, displayDebug, and they are
+              counted separately because each fetches the message and makes
+              its own displayUsingTraceOutput call -- :1496 for the primary
+              message and :1507 for the secondary, guarded on the exception
+              object carrying one. Counting displayDebug once gives four
+              and is the answer to a different question: how many functions
+              emit the prefix, rather than how many sites do.
+
+              Four are interactive debug and one is command dispatch, both
+              Phase 7's under D18 and under the TRACE ? row below.
 
               THE REASON IS THAT SPLIT RATHER THAN THE ABSENCE OF ANY PATH,
               and this is what the earlier "4c" answer missed.
@@ -1154,7 +1161,7 @@ above.
   and it is the honest one until Phase 7 has a console to read.
 
   This is also why the `+++` prefix's row above assigns that prefix to
-  Phase 7: three of its four producers are this same interactive-debug
+  Phase 7: four of its five producers are this same interactive-debug
   path.
 
   PUSH/QUEUE's own queue storage has no *differential* witness -- no

@@ -190,6 +190,8 @@ struct Measured {
     /// The executor's stderr. Only read for a `loud` row, where it must name
     /// the builtin the row is about.
     rust_stderr: Vec<u8>,
+    /// The executor's whole reply, for `Run::rust_outcomes`.
+    rust_outcome: (Vec<u8>, Vec<u8>, i32),
     /// A bounded rendering of both sides and which channels disagreed, for
     /// the report a flipped or divergent row prints.
     detail: String,
@@ -250,6 +252,7 @@ fn measure(oracle: &Oracle, run_root: &Path, name: &str, program: &str) -> Measu
 
     Measured {
         status,
+        rust_outcome: (rust.stdout, rust.stderr.clone(), rust.exit_code),
         rust_stderr: rust.stderr,
         detail,
     }
@@ -282,6 +285,16 @@ struct Run {
     derived: Vec<(String, Status)>,
     measured: BTreeMap<String, Measured>,
     oracle_invocations: usize,
+    /// Every distinct `(stdout, stderr, exit)` this crate's executor produced.
+    ///
+    /// Counted rather than collected into a flag because the question it
+    /// answers is whether the executor *read the program it was given*. An
+    /// invocation counter cannot answer it: a `run_program` replaced by a
+    /// canned `Outcome` is still called once per name, so the count is right
+    /// and the measurement is worthless. A constant reply collapses this set
+    /// to one entry whatever the probes say, which is the shape the
+    /// assertion tests for.
+    rust_outcomes: usize,
     in_scope: Vec<&'static str>,
 }
 
@@ -334,10 +347,17 @@ fn classify() -> Run {
     // Only on success: a failing run's probe directories are the evidence.
     let _ = fs::remove_dir_all(&run_root);
 
+    let rust_outcomes = measured
+        .values()
+        .map(|m| &m.rust_outcome)
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+
     Run {
         derived,
         measured,
         oracle_invocations: oracle.invocations(),
+        rust_outcomes,
         in_scope,
     }
 }
@@ -481,6 +501,37 @@ fn the_status_file_matches_a_live_differential_run() {
     assert_eq!(
         run.oracle_invocations, 66,
         "one oracle run per in-scope name"
+    );
+
+    // The other side's guard, and it is not an invocation count: a
+    // `run_program` replaced by a canned reply is still called once per
+    // name, so counting calls proves nothing. What proves the executor read
+    // its input is that its replies differ across inputs.
+    //
+    // This assertion adds no coverage today and is kept for two other
+    // reasons, stated because "it can fail" is not "it catches something".
+    // Measured by mutation: a constant loud reply fails this AND
+    // `every_loud_row_is_loud_about_its_own_builtin`, and an executor run on
+    // a fixed program fails set equality with 66 `divergent` rows. Both
+    // mutations die without this line. What it adds is (a) a failure whose
+    // message names the actual defect -- the alternative diagnosis is "a
+    // loud row named the wrong builtin", which sends a reader after the
+    // message text rather than the harness -- and (b) coverage that does not
+    // shrink: the loud-row test covers only `loud` rows, so its reach falls
+    // to nothing as the builtins land, while this holds for every status.
+    //
+    // The floor is 2 rather than 66 so the assertion keeps its meaning as
+    // builtins land. Two builtins may legitimately agree on all three
+    // descriptors -- `say gc()` and some future probe could both print `0`
+    // at exit 0 -- and an assertion that breaks when correct code is added
+    // gets weakened by whoever meets it.
+    assert!(
+        run.rust_outcomes >= 2,
+        "this crate's executor produced the same (stdout, stderr, exit) for \
+         all {} in-scope probes; a constant reply satisfies every other \
+         assertion in this test, so the differential is only a measurement \
+         if the executor's answer depends on the program it was given",
+        run.in_scope.len()
     );
 }
 
