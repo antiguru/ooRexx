@@ -24,15 +24,12 @@
 //! regenerate by a driver script" shape.
 //!
 //! **The prefix table**, all 19 from `RexxActivation.hpp:90`-`110`, and which
-//! witness (if any) below reaches it. Measured reachable from pure-4a code:
-//! `*-*`, `>>>`, `>=>`, `>L>`, `>V>`, `>O>`, `>K>`, `>C>`, `>P>` -- the design
-//! spec's own list, all nine covered here. `>E>` is *not* on that list but
-//! is, in fact, reachable (`dotvariable_beyond_the_list.rex`, 4a's own task
-//! report has the correction and the reasoning). 4b's calls add three more
-//! (`>A>`, `>F>`, `>R>`, Task 9), witnessed below. The remaining six
-//! (`+++`/`>.>`/`>M>`/`>I>`/`>N>`/`<I<`) are later phases' and have no
-//! witness here; [`PREFIX_COVERAGE`] is where each of those six names its
-//! owner, and it is asserted rather than described.
+//! witness (if any) below reaches it. Which of them a witness reaches, and who
+//! owns each of the rest, is [`PREFIX_COVERAGE`]'s -- asserted, not described
+//! here. One correction to the design spec's own "measured reachable from
+//! pure-4a code" list is worth keeping, because it was got wrong once: `>E>`
+//! is not on that list and is nevertheless reachable
+//! (`dotvariable_beyond_the_list.rex`).
 //!
 //! | prefix | witness |
 //! |---|---|
@@ -135,8 +132,8 @@
 //!   echo "===STDERR==="; cat /tmp/err; } > PROGRAM.expected
 //! ```
 //!
-//! `trace_output.rex` itself lives in `rust/corpus/lang/` (Task 14a's own
-//! file, already a Phase 4a subset member) rather than being duplicated here
+//! `trace_output.rex` itself lives in `rust/corpus/lang/` (already a corpus
+//! subset member) rather than being duplicated here
 //! -- this test reads it from there by relative path, and only its own
 //! `.expected` lives in this directory.
 //!
@@ -231,9 +228,7 @@ fn check_witness(name: &str, program_path: &Path) {
 }
 
 /// `>L>`/`>V>`/`>O>`/`>>>`/`>=>`/`*-*`: `TRACE I` over two assignments and an
-/// `IF`/`THEN`/`SAY` -- the exact program that closed this task's own four
-/// remaining corpus failures (`rust/corpus/phase-4a.txt`), read from
-/// `rust/corpus/` rather than duplicated here.
+/// `IF`/`THEN`/`SAY`, read from `rust/corpus/` rather than duplicated here.
 #[test]
 fn trace_output_covers_clause_result_assignment_literal_variable_and_operator() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/lang/trace_output.rex");
@@ -258,7 +253,7 @@ fn compound_read_write_covers_the_resolved_compound_name() {
     check_witness("compound_read_write", &path);
 }
 
-/// `>P>`: the two prefix operators 4a implements, `+` and `\`.
+/// `>P>`: the prefix operators this witness covers, `+` and `\`.
 #[test]
 fn prefix_operators_covers_plus_and_backslash() {
     let path =
@@ -267,10 +262,10 @@ fn prefix_operators_covers_plus_and_backslash() {
 }
 
 /// `>E>`, a bonus beyond the design spec's own nine-prefix "measured
-/// reachable from pure-4a code" list -- a correction this task found
-/// (`.nil` is one of `ExprKind::DotVariable`'s own three 4a-admissible
-/// names, D15, so it is reachable), not required by criterion 3's own
-/// table but kept because it is real and cheap to pin.
+/// reachable from pure-4a code" list -- a correction worth keeping because it
+/// was got wrong once (`.nil` is one of `ExprKind::DotVariable`'s own three
+/// admissible names, D15, so it is reachable), not required by criterion 3's
+/// own table but kept because it is real and cheap to pin.
 #[test]
 fn dotvariable_beyond_the_list_covers_the_spec_correction() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -400,9 +395,7 @@ const WITNESS_PREFIXES: &[(&str, &[&str])] = &[
     ),
 ];
 
-/// The nine prefixes the design spec's own "measured reachable from pure-4a
-/// code" list names, plus `>E>` (4a's own correction) and the three 4b's
-/// calls add (`>A>`/`>F>`/`>R>`, Task 9) -- thirteen total.
+/// Every prefix a witness below is expected to reach, between them.
 /// `WITNESS_PREFIXES`'s union must equal this set exactly: not a subset (a
 /// prefix could otherwise be claimed by the module doc's own table and never
 /// checked at all) and not a superset (a typo'd prefix that no witness could
@@ -505,10 +498,9 @@ enum Coverage {
     Owned(&'static str),
 }
 
-/// **Criterion 3's coverage measure** (D14 amendment 3, delivered by 4b's
-/// Task 9). Before this table the honest statement was that the witnesses
-/// verify what they cover and *how much of the trace surface that is* was
-/// measured by nothing.
+/// **Criterion 3's coverage measure** (D14 amendment 3). Without this table
+/// the honest statement is that the witnesses verify what they cover and
+/// *how much of the trace surface that is* is measured by nothing.
 ///
 /// Every one of the oracle's nineteen prefixes appears exactly once, either
 /// as [`Coverage::Witnessed`] or with the phase that owns it. The owners:
@@ -517,7 +509,7 @@ enum Coverage {
 ///   non-zero `RC(n)` after an `ADDRESS`-issued command
 ///   (`RexxActivation.cpp:4468`), and `ADDRESS` is 4c's. The other producer
 ///   is `traceSourceString`'s own interactive-trace banner (`:4024`), which
-///   `TRACE ?` reaches today and which has its own, deliberately
+///   `TRACE ?` reaches and which has its own, deliberately
 ///   owner-unassigned KNOWN GAP row in `phase-4-exclusions.txt`; this row
 ///   does not claim to settle that one.
 /// * `>.>` -- 4c. The `PARSE` template's placeholder (`.`) variable, and
@@ -529,9 +521,9 @@ enum Coverage {
 /// * `>I>`/`<I<` -- 4c, alongside `::routine` dispatch itself. Measured
 ///   rather than assumed, and the exclusions file's own row carries the
 ///   transcripts: the gate is `tracingLabels() && isMethodOrRoutine()`
-///   (`RexxActivation.cpp:3655`), so **both** halves are needed, and 4b
-///   reaches neither -- `::routine` is deferred to 4c by decision, not by
-///   unreachability.
+///   (`RexxActivation.cpp:3655`), so **both** halves are needed, and this
+///   crate reaches neither -- `::routine` is deferred to 4c by decision, not
+///   by unreachability.
 const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
     ("*-*", Coverage::Witnessed),
     ("+++", Coverage::Owned("4c")),
@@ -556,17 +548,15 @@ const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
 
 /// The coverage number itself, committed so that a change to it is a change
 /// to this file rather than a change to a printed line nobody reads.
-/// **Thirteen of nineteen at the end of 4b**, up from ten at the 4a gate:
-/// `>A>`, `>F>` and `>R>` are Task 9's.
 const WITNESSED_PREFIX_COUNT: usize = 13;
 
 /// The other six, each with an owner. `WITNESSED_PREFIX_COUNT` plus this is
 /// asserted to be the whole table, so neither number can drift on its own.
 const OUT_OF_SCOPE_PREFIX_COUNT: usize = 6;
 
-/// The phases an owner may name. Same four strings `coverage.rs`/`loud.rs`
-/// police for `ExprKind` ownership, minus `4b` -- a prefix this phase owns
-/// is witnessed by now, not owned by a phase that has finished.
+/// The phases an owner may name. A phase that has finished cannot own a
+/// prefix -- whatever it owned is witnessed by then -- so a finished phase's
+/// name does not appear here.
 const OWNER_PHASES: &[&str] = &["4c", "Phase 5", "Phase 7"];
 
 /// Criterion 3's coverage measure, asserted rather than printed.
