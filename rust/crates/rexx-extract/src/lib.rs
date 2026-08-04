@@ -26,6 +26,15 @@
 //! established first -- so a later harness with a real evaluator can check
 //! each one directly, without ever running the extracted text as a program.
 
+//! [`keyword`] is a third mode again, for `base/keyword`. Neither of the two
+//! above transfers to it: that group tests *statements*, so its assertions
+//! sit after loops, `IF`s and `SIGNAL`s rather than after a prelude of
+//! assignments, and it lifts whole method bodies rather than individual
+//! assertions. See that module's own doc for the measurement behind the
+//! split.
+
+pub mod keyword;
+
 /// The set of `self~` messages that are assertions rather than fixture access.
 const ASSERTIONS: &[&str] = &[
     "assertequals",

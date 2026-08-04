@@ -15,10 +15,24 @@
 //!
 //! This is a reporting tool, not a data-file generator: the row set is
 //! meant to be produced by calling `rexx_extract::extract_assertions`
-//! directly against the `.testGroup` sources at the point of use (they are
-//! already checked into the tree, so there is nothing to serialise), not by
-//! reading a pre-baked file this binary would write. Building that consumer
-//! needs a real evaluator and is a later task's job.
+//! directly against the `.testGroup` sources at the point of use, not by
+//! reading a pre-baked file this binary would write.
+//!
+//! The reason given for that used to be that the sources "are already
+//! checked into the tree". **They are not**, and Task 11 corrected it:
+//! `ootest/` is git-ignored (`.gitignore:6`), has zero tracked files, and is
+//! an SVN working copy of `svn.code.sf.net/p/oorexx/code-0/test/trunk`. The
+//! conclusion survives the correction -- serialising a row set would add a
+//! second thing to keep in step with that checkout rather than removing the
+//! dependency on it -- but anything pinning absolute counts against these
+//! files has to name the revision it measured, which
+//! `rexx-extract/tests/extract_keyword.rs` does and this tool, reporting
+//! whatever it finds today, does not need to.
+//!
+//! **This tool models `base/expressions` only.** Pointed at
+//! `base/keyword` it panics on the second file, because that group's
+//! assertions are not the shape `extract_assertions` scans for; see
+//! `rexx_extract::keyword` for the extractor that group needs.
 
 use rexx_extract::{extract_assertions, find_test_groups};
 use std::path::PathBuf;

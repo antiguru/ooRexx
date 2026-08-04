@@ -164,10 +164,19 @@ fn gate_mode() -> bool {
 
 /// `ootest/ooRexx/base/expressions/`, hardcoded relative to this crate.
 ///
-/// Not an env var: unlike `corpus.rs`'s oracle, this is checked-in test data
-/// in the same repository, not an external build a machine might be missing
-/// -- there is nothing here for a configurable path to usefully point at
-/// instead.
+/// Not an env var: there is exactly one checkout this can usefully point at,
+/// and a configurable path could only aim it at a different one with nothing
+/// to notice.
+///
+/// **`ootest/` is not checked-in test data**, and a doc comment here said it
+/// was until Task 11 corrected it. It is git-ignored (`.gitignore:6`), has
+/// zero tracked files, and exists only as an SVN working copy of
+/// `svn.code.sf.net/p/oorexx/code-0/test/trunk`; the C++ worktree next door
+/// has no `ootest` at all. So it *can* move under `svn up` with nothing in
+/// this repository changing, and a machine can indeed be missing it. The
+/// revision this file's own committed [`EXEMPT`] set was measured at is
+/// **r13178** -- read it back with `svn info ootest`, and check it first if
+/// the set ever goes red.
 fn suite_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../ootest/ooRexx/base/expressions")
 }

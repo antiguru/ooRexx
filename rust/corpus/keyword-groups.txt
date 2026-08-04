@@ -1,0 +1,51 @@
+# The 39 `.testGroup` files `base/keyword`'s L1 extractor scans, one relative
+# path per line, sorted exactly as `find_test_groups` returns them. Lines
+# starting with # are comments; blank lines are ignored.
+#
+# Pinned the way `phase-4a.txt` is pinned, and for the same reason: the
+# extractor's absolute row/drop literals are only meaningful against a known
+# input set. Measured at ooTest **r13178** (`svn info ootest`). `ootest/` is
+# NOT checked-in test data -- it is git-ignored (`.gitignore:6`), has zero
+# tracked files, and exists only as an SVN working copy of
+# `svn.code.sf.net/p/oorexx/code-0/test/trunk`. So a red count here is
+# diagnosable: if this list disagrees with the checkout, the checkout moved
+# (`svn up`), and the fix is to re-measure and re-commit, not to relax a test.
+ADDRESS.testGroup
+ASSIGNMENT.testGroup
+Assignments.testGroup
+CALL.testGroup
+DO.testGroup
+DoControlled.testGroup
+DoOther.testGroup
+DoOver.testGroup
+DoWith.testGroup
+EXPOSE.testGroup
+FORWARD.testGroup
+GUARD.testGroup
+IF.testGroup
+INTERPRET.testGroup
+ITERATE.testGroup
+LABEL.testGroup
+LEAVE.testGroup
+LOOP.testGroup
+LOSTDIGITS.testGroup
+LabelOption.testGroup
+LoopControlled.testGroup
+LoopOther.testGroup
+LoopOver.testGroup
+LoopWith.testGroup
+NOP.testGroup
+NUMERIC.testGroup
+PARSE.testGroup
+RAISE.testGroup
+REPLY.testGroup
+SAY.testGroup
+SELECT.testGroup
+SIGNAL.testGroup
+SelectCase.testGroup
+ShortCircuitAnd.testGroup
+TRACE.testGroup
+TRACE_TraceObject.testGroup
+USE.testGroup
+USELOCAL.testGroup
+VarRef.testGroup
