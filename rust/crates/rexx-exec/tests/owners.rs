@@ -597,10 +597,13 @@ fn the_two_harnesses_include_this_exact_file() {
 //    also has to shrink `loud.rs`'s own `expand_for_witnesses`, which is
 //    what says how many rows the coarse tag is owed.
 // 5. **`src/lib.rs`'s `instruction_owner`/`expr_owner`**: the third copy of
-//    this same ownership data, unavoidably separate because production
+//    this same ownership data, separate by construction because production
 //    code cannot depend on anything under `tests/` -- see that file's own
-//    doc comment on those two functions. A variant moving in scope (or
-//    changing owner) must move here too, or `loud.rs`'s
+//    doc comment on those two functions. Separate by construction, not
+//    unavoidable: `docs/superpowers/plans/phase-4b-gate.md`'s Step 3b costs
+//    the avoidance at half a day and declines it on value, the data being
+//    guarded already. A variant moving in scope (or changing owner) must
+//    move here too, or `loud.rs`'s
 //    `every_out_of_scope_variant_fails_loudly` fails: the owner text it
 //    asserts stderr contains would no longer match what `instruction_owner`/
 //    `expr_owner` actually produce.

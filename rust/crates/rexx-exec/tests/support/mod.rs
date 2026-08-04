@@ -31,13 +31,17 @@
 //! qualifies at all if its own bytes 7..10 (`PREFIX_OFFSET`/`PREFIX_LENGTH`,
 //! `rexx-exec/src/trace.rs`'s own constants, re-derived from
 //! `RexxActivation.cpp:3567`-`3611`) are one of the nineteen markers
-//! `trace_prefix_table` lists. That is deliberately generous -- covering the
-//! ten prefixes this crate can emit today (D17's own reachable-from-4a
-//! list) plus the nine it cannot reach yet -- so a later phase that adds an
-//! emitter for one of the other nine gets the same normalisation from the
-//! day it lands, rather than silently comparing byte-exact (and looking
-//! "done" for the wrong reason) until someone remembers to extend this
-//! list.
+//! `trace_prefix_table` lists. That is deliberately generous -- the
+//! qualifying set is the oracle's whole table, **not** the subset this
+//! crate has an emitter for, so a later phase that adds an emitter gets the
+//! same normalisation from the day it lands, rather than silently comparing
+//! byte-exact (and looking "done" for the wrong reason) until someone
+//! remembers to extend this list. Whether a given marker is reachable from
+//! this crate today is deliberately not stated here: it moves every time a
+//! phase adds an emitter, and nothing in this file would go red when it
+//! did. Criterion 3 of `docs/superpowers/plans/phase-4b-gate.md` is where
+//! the witnessed-versus-owed split is measured and kept current, against
+//! `tests/trace_oracle.rs`'s `PREFIX_COVERAGE`.
 //!
 //! Everything else is untouched: the line-number field, the marker itself,
 //! the fixed `" => "`/`" <= "` tag markers, a quoted value's own bytes
@@ -85,11 +89,15 @@
 //! it, only refuses to let it hide a divergence.
 
 /// `RexxActivation.cpp:3567`-`3587`'s `trace_prefix_table`, all nineteen --
-/// not only the ten this crate can emit yet. See the module doc for why
-/// the extra nine are included even though nothing here has ever produced
-/// one: the alternative is a list that has to be remembered and extended
-/// each time a later phase adds an emitter, which is exactly the kind of
+/// not only the subset this crate has an emitter for. See the module doc
+/// for why the markers nothing here has ever produced are carried anyway:
+/// the alternative is a list that has to be remembered and extended each
+/// time a later phase adds an emitter, which is exactly the kind of
 /// silent-drift risk this project keeps finding in its own harnesses.
+/// `tests/trace_oracle.rs`'s
+/// `the_trace_surfaces_coverage_is_thirteen_of_nineteen_with_owners_for_the_rest`
+/// asserts its own `PREFIX_COVERAGE` equals this list, so the two cannot
+/// drift and neither can be shortened quietly.
 pub const TRACE_PREFIXES: &[[u8; 3]] = &[
     *b"*-*", // TRACE_PREFIX_CLAUSE
     *b"+++", // TRACE_PREFIX_ERROR

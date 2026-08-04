@@ -659,10 +659,16 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
 /// split") -- `None` for a variant 4a already implements (see
 /// [`owned_message`]'s doc for why that is `None` and not a `"4a"` string).
 ///
-/// **A third copy of `tests/owners.rs`'s `INSTRUCTION_TAGS`, unavoidably**:
-/// production code cannot depend on anything under `tests/`, so the two
-/// cannot be merged the way `coverage.rs` and `loud.rs` were (Task 0's Step
-/// 1). Any variant that moves in scope, or changes owner, has to be edited
+/// **A third copy of `tests/owners.rs`'s `INSTRUCTION_TAGS`, separate by
+/// construction**: production code cannot depend on anything under
+/// `tests/`, so the two cannot be merged the way `coverage.rs` and
+/// `loud.rs` were (Task 0's Step 1). Separate by construction is not the
+/// same as unavoidable, and the 4b gate settles which this is: Step 3b of
+/// `docs/superpowers/plans/phase-4b-gate.md` costs the avoidance concretely
+/// -- assert this match equals `owners.rs` expanded through `loud.rs`'s
+/// `expand_for_witnesses` -- puts it at half a day, and declines it on
+/// value rather than on possibility, because the data is guarded already.
+/// Any variant that moves in scope, or changes owner, has to be edited
 /// in both places -- `owners.rs`'s own module doc names this function as
 /// the fifth of its five pinned items for exactly that reason, and
 /// `loud.rs`'s `every_out_of_scope_variant_fails_loudly` is what would

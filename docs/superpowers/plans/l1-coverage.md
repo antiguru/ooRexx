@@ -701,15 +701,29 @@ a.=0; i=1; Do a.i=1 To 3; If i>7 Then Leave; i=i+1; End; say '['i']'
 `DO::test_DO_standardTest2B`, `2P`, `2Q`, `5-69`, `ITERATE::test_12`,
 `LEAVE::test_11`.
 
-**The defective code is 4a's; the gap is unowned.** Those are different
+**The defective code is 4a's; the fix is 4c's.** Those are different
 claims and only the first names 4a. `bind_control` (`rexx-exec/src/run.rs`)
 is the executor's controlled-`DO` path, and `instruction_owner` returns
 `None` for `InstructionKind::Do`, meaning *implemented*, not *deferred* -- so
-4a is where the code came from. Nothing schedules compound control
-variables, so no phase owns the fix, which is why the row sits in
-`phase-4-exclusions.txt`'s `KNOWN GAPS` (its own definition: "a real
-divergence with no owner assigned") rather than in `EXCLUSIONS`. It is
-recorded rather than fixed by the measuring task.
+4a is where the code came from. The owner was assigned by 4b Task 12's Step
+3c ruling (`phase-4b-gate.md`, "Step 3c: the ruling on the compound-`DO`
+gap"), which merged the two rows describing this one mechanism and moved
+them into `phase-4-exclusions.txt`'s `EXCLUSIONS`, as "EXCLUSIONS -- a
+compound variable as a DO control variable, owned by 4c". They were in
+`KNOWN GAPS` before that ruling, whose rows are described there as "a real
+divergence with no owner assigned"; the exclusions file records the move as
+leaving that section "for the one reason this section's own rules allow: an
+owner was assigned". `KNOWN GAPS` keeps a pointer to where they went rather
+than deleting them, so a reader who knows the defect as a gap can still find
+it. It is recorded rather than fixed by the measuring task.
+
+**Until 4b's final whole-branch review, this paragraph still said the gap
+was unowned.** The ruling corrected the two other prose copies of the same
+fact -- `bind_control`'s own doc comment and the exclusions file -- and this
+one, written earlier by the task that measured the divergence, was not
+revisited. Left recorded here rather than silently repaired, because one
+fact in three places with one copy missed is the geometry `phase-4b-gate.md`
+names as the phase's most-repeated defect.
 
 **Not a `rexx-parse` gap**, which was the alternative worth ruling out.
 Measured: parsing `do cv.j = 1 to 5` yields a `Controlled` whose `control`

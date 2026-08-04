@@ -212,12 +212,17 @@ enum RunOutcome {
     ///
     /// `verified` is how many **distinct** `self~assertSame` calls actually
     /// ran, counted by marker index, not how many the body contains and not
-    /// how many marker lines it printed. Those three differ: an assertion
-    /// inside a loop prints once per pass (730 lines across the passing
-    /// bodies today, against 713 distinct assertions), and an assertion in a
-    /// branch that is not taken prints nothing at all. Crediting the static
-    /// count would report an unexecuted assertion as verified; crediting the
-    /// line count would report one assertion as several.
+    /// how many marker lines it printed. Those three differ, in both
+    /// directions: an assertion inside a loop prints one line per pass while
+    /// remaining a single distinct assertion, and an assertion in a branch
+    /// that is not taken prints nothing at all while still being one the
+    /// body contains. Crediting the static count would report an unexecuted
+    /// assertion as verified; crediting the line count would report one
+    /// assertion as several. The totals the run reports are in
+    /// `docs/superpowers/plans/l1-coverage.md` and in criterion 10 of
+    /// `docs/superpowers/plans/phase-4b-gate.md`, which is where they can be
+    /// re-measured; quoting one here would be a gate total that nothing in
+    /// this file asserts.
     Pass { verified: usize },
     /// Emitted markers and at least one read `0`: an assertion the ooTest
     /// suite asserts holds does not hold here.

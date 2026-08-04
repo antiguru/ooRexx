@@ -413,9 +413,11 @@ fn each_expr<'a>(p: &'a Program, visit: &mut impl FnMut(&'a Expr)) {
 /// `phase-4a.txt` rather than replacing it -- every earlier-phase witness
 /// stays exercised as later phases add their own subset files, instead of
 /// each phase's own harness run choosing between "4a's programs" and "my
-/// own programs" and losing the other's coverage. Today's callers all pass
-/// a one-element slice containing only `phase-4a.txt`, so the union is that
-/// file's own content unchanged -- this task ships no behaviour change.
+/// own programs" and losing the other's coverage. Task 0 shipped the
+/// widened signature with every caller still passing a one-element slice
+/// containing only `phase-4a.txt`, so Step 4 itself was a signature change
+/// with no behaviour change; 4b's Task 1 (`a462e3e9`) is where a second
+/// file was first passed, `phase-4b.txt` alongside it.
 fn read_subset(list_paths: &[&Path]) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut union = Vec::new();
@@ -435,12 +437,16 @@ fn read_subset(list_paths: &[&Path]) -> Vec<String> {
 }
 
 /// Review finding I5: `read_subset`'s multi-file union and de-duplication
-/// -- the only new runtime logic Task 0 shipped -- had no test, because
-/// every real call site today passes a one-element slice (Step 4 ships no
-/// behaviour change on purpose). Two files with an overlapping entry are
-/// the direct exercise of the union path a one-element slice cannot reach:
+/// -- the only new runtime logic Task 0 shipped -- had no test. Two files
+/// with an overlapping entry are the direct exercise of the union path:
 /// first-seen order across files, and a name repeated in the second file
-/// appearing only once, at its *first* position.
+/// appearing only once, at its *first* position. Still worth keeping now
+/// that the real call sites pass two files, and the reason is measured:
+/// `phase-4a.txt` and `phase-4b.txt` do **not** overlap -- 30 entries and
+/// 12, union 42, which is criterion 1's own headline -- so a run over the
+/// committed files never takes the `seen.insert` false branch at all,
+/// whatever it passes. Hand-written overlapping inputs are the only way to
+/// reach the de-duplication half.
 #[test]
 fn read_subset_unions_two_files_first_seen_order_deduplicated() {
     let dir = std::env::temp_dir();
