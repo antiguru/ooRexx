@@ -553,11 +553,45 @@ all spellings, **2,126 (46.6%) are outside this population by construction**
 the rest -- and nothing here claims anything about them.
 
 **1,773 of the 2,441 (72.6%) were extracted**, in 896 method bodies; 668 were
-dropped, every one with a reason (`rows + dropped == calls` is asserted per
-group, in `rexx-extract/tests/extract_keyword.rs`, against a call count
-computed by a substring counter that does not parse Rexx). A body is taken
-only when nothing but `self~assertSame` sends a message in it, so every
-assertion in an extracted body is one that is actually checked.
+dropped. `rows + dropped == calls` is asserted per group, in
+`rexx-extract/tests/extract_keyword.rs`, against a call count computed by a
+substring counter that does not parse Rexx.
+
+The 668 are accounted for by **reason**, not as one bucket, and the
+breakdown is committed:
+
+| Reason | methods | calls |
+|---|---|---|
+| body uses a message send | 96 | 491 |
+| body uses another `assert*` spelling | 138 | 169 |
+| inside a comment, not a call | 3 | 3 |
+| on a continued line | 2 | 3 |
+| outside any `test`-prefixed method | 1 | 2 |
+| body's only send is `assertSameList` | 0 | 0 |
+| unparsed call shape | 0 | 0 |
+| not a clause of its own | 0 | 0 |
+| **total** | | **668** |
+
+Two rows carry more than bookkeeping.
+
+**`body uses a message send` (491) is the Phase 5 share** — these bodies do
+object-oriented things and no amount of assertion modelling reaches them.
+
+**`body uses another assert* spelling` (169) is the measured price of this
+extractor's population choice.** A body is taken only when nothing but
+`self~assertSame` sends a message in it, so every assertion in an extracted
+body is one that is actually checked. Admitting these 169 would mean
+rewriting the other `self~assert*` calls in those 138 bodies to `NOP` — and
+then reporting the bodies as passing having deleted the checks they were
+written to make. The choice is deliberate and this number is its cost.
+
+The three zero rows are kept and counted rather than dropped: a category
+pinned at zero fails the first time the corpus grows one.
+`assertSameList` reading zero is **not** "no body mixes the two spellings" —
+five do (`DoOver`'s `test_do_over`, `DoWith`'s `test_do_with`, `LoopOver`'s
+`test_loop_over`, `LoopWith`'s `test_loop_with`, `REPLY`'s
+`test_reply_same_replyAssert`), and every one also sends a real message, so
+the stronger category claims them.
 
 ### Pass rate
 

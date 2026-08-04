@@ -35,7 +35,7 @@
 //! (361). Nothing here claims anything about them.
 
 use rexx_extract::find_test_groups;
-use rexx_extract::keyword::{count_assert_same, extract_keyword};
+use rexx_extract::keyword::{DropReason, count_assert_same, extract_keyword};
 use std::path::{Path, PathBuf};
 
 /// The ooTest revision every absolute literal below was measured at. Named
@@ -233,16 +233,21 @@ fn every_assert_same_is_a_row_or_an_accounted_for_drop() {
 ///
 /// `> 0` would call a 54-row extraction a pass, and 54 is exactly what the
 /// `base/expressions` extractor already yields on this group -- so a floor
-/// that low would certify the very result this task exists to replace. The
-/// number below is the measured ceiling's own scale rather than the measured
-/// value: it is deliberately *not* [`TOTAL_ROWS`], because a floor equal to
-/// the committed literal would be that literal a second time and would move
-/// whenever it moved. This one survives an intentional re-measurement and
-/// only fires if the extractor collapses.
+/// that low would certify the very result this task exists to replace.
+///
+/// **Derived from what is actually achieved, and set just under it.** The
+/// extractor carries [`TOTAL_ROWS`] = 1,773 of 2,441 calls (72.6%); the
+/// floor is 1,750, about 1.3% below. It is deliberately *not* `TOTAL_ROWS`
+/// itself, which would be that literal a second time and would move
+/// whenever it moved -- the point of a separate floor is that it survives a
+/// deliberate re-measurement of the exact counts while still failing on any
+/// real collapse. A gap this narrow means the two tests fail together for a
+/// large regression and the absolute one fails alone for a small
+/// deliberate change, which is the intended division of labour.
 #[test]
 fn the_row_floor() {
     /// Below this, the body-shaped extractor has failed rather than drifted.
-    const ROW_FLOOR: usize = 1500;
+    const ROW_FLOOR: usize = 1750;
 
     let rows: usize = measure().iter().map(|m| m.2).sum();
     assert!(
@@ -252,6 +257,81 @@ fn the_row_floor() {
          the prelude-shaped one it replaces (54) has not under-performed, it has failed{}",
         provenance()
     );
+}
+
+/// **The 668 calls outside the population, accounted for by reason.**
+///
+/// `calls - rows` as a single number says only that something was lost.
+/// This pins what kind and how much of each, so a category that starts
+/// growing is visible on its own rather than absorbed into a total that was
+/// always going to be large. Every variant is listed, including the ones at
+/// zero: a category pinned at zero fails the first time the corpus grows
+/// one.
+///
+/// Two rows here are load-bearing beyond bookkeeping.
+///
+/// `OtherAssertion` (169) is exactly the price of this extractor's
+/// population choice -- the calls a wider rule would admit by rewriting
+/// other `self~assert*` spellings to `NOP`, which would report those bodies
+/// as passing after deleting the checks they were written to make. Having
+/// it as a committed number rather than a claim is the point.
+///
+/// `AssertSameList` reads zero, and **not** because no body mixes the two
+/// spellings -- five do. See [`DropReason::AssertSameList`]'s own doc for
+/// which, and why `MessageSend` claims them first.
+#[test]
+fn the_drop_reasons_account_for_every_call_outside_the_population() {
+    /// `(reason, methods, calls)`, measured at [`OOTEST_REVISION`].
+    const BY_REASON: &[(DropReason, usize, usize)] = &[
+        (DropReason::OutsideTestMethod, 1, 2),
+        (DropReason::InsideComment, 3, 3),
+        (DropReason::ContinuedLine, 2, 3),
+        (DropReason::AssertSameList, 0, 0),
+        (DropReason::OtherAssertion, 138, 169),
+        (DropReason::MessageSend, 96, 491),
+        (DropReason::UnparsedCallShape, 0, 0),
+        (DropReason::NotAClause, 0, 0),
+    ];
+
+    let mut methods: std::collections::BTreeMap<DropReason, usize> = Default::default();
+    let mut calls: std::collections::BTreeMap<DropReason, usize> = Default::default();
+    for path in find_test_groups(&suite_root()) {
+        let bytes =
+            std::fs::read(&path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+        let source = String::from_utf8_lossy(&bytes);
+        let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("group");
+        for blocked in extract_keyword(name, &source).blocked {
+            *methods.entry(blocked.reason).or_default() += 1;
+            *calls.entry(blocked.reason).or_default() += blocked.dropped;
+        }
+    }
+
+    // Every variant is covered by the committed table, so a new one cannot
+    // be added to the enum and left unmeasured here.
+    let listed: Vec<DropReason> = BY_REASON.iter().map(|&(r, ..)| r).collect();
+    assert_eq!(listed, DropReason::ALL.to_vec());
+
+    for &(reason, want_methods, want_calls) in BY_REASON {
+        let got = (
+            methods.get(&reason).copied().unwrap_or(0),
+            calls.get(&reason).copied().unwrap_or(0),
+        );
+        assert_eq!(
+            got,
+            (want_methods, want_calls),
+            "{}: measured {} entries / {} calls, committed {want_methods} / {want_calls}{}",
+            reason.label(),
+            got.0,
+            got.1,
+            provenance()
+        );
+    }
+
+    // The accounting closes: the breakdown is the whole of `calls - rows`,
+    // not a sample of it.
+    let total: usize = BY_REASON.iter().map(|&(.., c)| c).sum();
+    assert_eq!(total, TOTAL_DROPPED);
+    assert_eq!(TOTAL_ROWS + TOTAL_DROPPED, TOTAL_CALLS);
 }
 
 /// **Criterion 4, revision pinning.** The literals above are only meaningful
@@ -356,6 +436,38 @@ fn assert_same_list_is_neither_counted_nor_rewritten() {
     assert_eq!(count_assert_same(mixed), 1);
     let out = one_body(mixed);
     assert_eq!((out.rows(), out.dropped()), (0, 1));
+    // And it lands in its own category rather than the general message-send
+    // bucket. This matters because that category reads zero against the
+    // corpus: a category at zero has to be demonstrably *reachable*, or it
+    // is indistinguishable from one that can never fire, and pinning it at
+    // zero would then prove nothing.
+    assert_eq!(out.blocked[0].reason, DropReason::AssertSameList);
+}
+
+/// A body blocked only by *other* `self~assert*` spellings is its own
+/// category, not a message send. That column is the measured price of this
+/// extractor's population choice, so it has to mean exactly "modelling more
+/// assertions would unblock this body" and nothing looser.
+#[test]
+fn a_body_blocked_only_by_other_assertion_spellings_is_its_own_category() {
+    let out = one_body("::method test_1\n   self~assertTrue(a)\n   self~assertSame(1, c)\n");
+    assert_eq!((out.rows(), out.dropped()), (0, 1));
+    assert_eq!(out.blocked[0].reason, DropReason::OtherAssertion);
+
+    // The adjacent case that pins it to the whole body rather than to the
+    // first offending line: an `assertTrue` first, a real message send
+    // later. Modelling assertions would not unblock this one, so it must
+    // read `MessageSend` even though the line named in `detail` is the
+    // assertion.
+    let later = one_body(
+        "::method test_1\n   self~assertTrue(a)\n   b = c~copies(2)\n   self~assertSame(1, b)\n",
+    );
+    assert_eq!(later.blocked[0].reason, DropReason::MessageSend);
+    assert!(
+        later.blocked[0].detail.contains("assertTrue"),
+        "detail should still name the first offending line: {:?}",
+        later.blocked[0].detail
+    );
 }
 
 /// An `assertSame` written inside a comment is text, not a call.
@@ -369,7 +481,7 @@ fn an_assertion_inside_a_comment_is_accounted_as_a_drop_not_rewritten() {
     assert_eq!(count_assert_same(source), 2);
     let out = one_body(source);
     assert_eq!((out.rows(), out.dropped()), (1, 1));
-    assert!(out.blocked[0].reason.contains("inside a comment"));
+    assert_eq!(out.blocked[0].reason, DropReason::InsideComment);
 
     // The comment itself survives into the program verbatim -- a Rexx
     // comment ends a token without inserting a blank, so a rewriter that
@@ -437,7 +549,8 @@ fn a_message_send_anywhere_blocks_the_whole_body_including_earlier_assertions() 
         "::method test_1\n   self~assertSame(1, a)\n   b = c~copies(2)\n   self~assertSame(2, b)\n",
     );
     assert_eq!((out.rows(), out.dropped()), (0, 2));
-    assert!(out.blocked[0].reason.contains("c~copies(2)"));
+    assert_eq!(out.blocked[0].reason, DropReason::MessageSend);
+    assert!(out.blocked[0].detail.contains("c~copies(2)"));
 }
 
 /// The operands are inspected too: a send hidden inside an assertion's own
@@ -482,7 +595,7 @@ fn the_optional_third_message_argument_is_discarded_not_compared() {
 fn an_assertion_on_a_continued_line_blocks_from_either_side() {
     let before = one_body("::method test_1\n   x = 1 -\n   self~assertSame(1, x)\n");
     assert_eq!((before.rows(), before.dropped()), (0, 1));
-    assert!(before.blocked[0].reason.contains("continued line"));
+    assert_eq!(before.blocked[0].reason, DropReason::ContinuedLine);
 
     let after = one_body("::method test_1\n   self~assertSame(1, x) ,\n   y\n");
     assert_eq!((after.rows(), after.dropped()), (0, 1));
@@ -513,5 +626,5 @@ fn calls_outside_a_test_prefixed_method_are_accounted_as_drops() {
 fn an_assertion_used_as_an_operand_blocks_rather_than_producing_invalid_rexx() {
     let out = one_body("::method test_1\n   x = self~assertSame(1, a)\n");
     assert_eq!((out.rows(), out.dropped()), (0, 1));
-    assert!(out.blocked[0].reason.contains("not a clause of its own"));
+    assert_eq!(out.blocked[0].reason, DropReason::NotAClause);
 }

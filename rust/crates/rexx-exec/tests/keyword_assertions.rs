@@ -71,7 +71,7 @@
 
 use rexx_exec::{NOT_IMPLEMENTED_EXIT, Outcome, run_program};
 use rexx_extract::find_test_groups;
-use rexx_extract::keyword::{ASSERTION_MARKER, KeywordBody, extract_keyword};
+use rexx_extract::keyword::{ASSERTION_MARKER, DropReason, KeywordBody, extract_keyword};
 use std::collections::BTreeMap;
 use std::env;
 use std::fmt::Write as _;
@@ -119,6 +119,18 @@ fn exempt_path() -> PathBuf {
 /// second copy would be one more thing to drift rather than a cross-check.
 /// What this asserts is only that the extraction is not silently empty.
 fn collect_bodies() -> Vec<KeywordBody> {
+    collect().0
+}
+
+/// Every extracted body, plus the per-reason accounting for the calls that
+/// did **not** become one.
+///
+/// The report shows both halves because they answer different questions and
+/// a reader given only the second would mistake the pass rate's denominator
+/// for the group's assertion count. The counts themselves are pinned on the
+/// extractor's side (`rexx-extract/tests/extract_keyword.rs`); here they are
+/// reported, not asserted.
+fn collect() -> (Vec<KeywordBody>, BTreeMap<DropReason, (usize, usize)>) {
     let dir = suite_root();
     let groups = find_test_groups(&dir);
     assert!(
@@ -129,19 +141,26 @@ fn collect_bodies() -> Vec<KeywordBody> {
     );
 
     let mut bodies = Vec::new();
+    let mut dropped: BTreeMap<DropReason, (usize, usize)> = BTreeMap::new();
     for path in &groups {
         let bytes =
             fs::read(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
         let source = String::from_utf8_lossy(&bytes);
         let group = path.file_stem().and_then(|s| s.to_str()).unwrap_or("group");
-        bodies.extend(extract_keyword(group, &source).bodies);
+        let extraction = extract_keyword(group, &source);
+        for blocked in &extraction.blocked {
+            let entry = dropped.entry(blocked.reason).or_default();
+            entry.0 += 1;
+            entry.1 += blocked.dropped;
+        }
+        bodies.extend(extraction.bodies);
     }
     assert!(
         !bodies.is_empty(),
         "extract_keyword produced no bodies at all -- that is an extraction defect, not an \
          empty pass"
     );
-    bodies
+    (bodies, dropped)
 }
 
 /// What running one body decided.
@@ -365,7 +384,7 @@ fn the_exempt_set_matches_the_current_failures() {
 /// non-zero exit for a caller that wants one.
 #[test]
 fn keyword_assertions_differential() {
-    let bodies = collect_bodies();
+    let (bodies, dropped) = collect();
     let committed = committed_exempt();
 
     let mut passing_bodies = 0usize;
@@ -422,6 +441,7 @@ fn keyword_assertions_differential() {
         passing_bodies,
         total_assertions,
         passing_assertions,
+        &dropped,
         &by_attribution,
         &by_construct,
         &per_group,
@@ -448,6 +468,7 @@ fn build_report(
     passing_bodies: usize,
     total_assertions: usize,
     passing_assertions: usize,
+    dropped: &BTreeMap<DropReason, (usize, usize)>,
     by_attribution: &BTreeMap<String, usize>,
     by_construct: &BTreeMap<String, usize>,
     per_group: &BTreeMap<String, (usize, usize, usize, usize)>,
@@ -496,6 +517,16 @@ fn build_report(
             "  {group:<20} {ok_bodies:>4}/{bodies:<4}  {ok_assertions:>5}/{assertions}"
         )
         .unwrap();
+    }
+
+    writeln!(
+        w,
+        "outside the extracted population, by reason (methods, assertSame calls):"
+    )
+    .unwrap();
+    for reason in DropReason::ALL {
+        let (methods, calls) = dropped.get(reason).copied().unwrap_or((0, 0));
+        writeln!(w, "  {:<40} {methods:>5} {calls:>7}", reason.label()).unwrap();
     }
 
     writeln!(w, "not passing, by what would unblock it:").unwrap();

@@ -81,14 +81,24 @@
 //!
 //! A body is extracted only when the **only** `~` left after rewriting is
 //! none at all. In particular a body containing any *other* `self~assert*`
-//! spelling is blocked rather than having those calls stripped. Rewriting
-//! them to `NOP` instead would admit 138 more methods carrying 169 more
-//! `assertSame` calls, but only by deleting 659 real checks from bodies then
-//! reported as passing. Every assertion in an extracted body is one this
-//! module actually checks.
+//! spelling is blocked rather than having those calls stripped: rewriting
+//! them to `NOP` would admit more bodies only by deleting the checks they
+//! were written to make, and then reporting them as passing. Every
+//! assertion in an extracted body is one this module actually checks.
+//!
+//! That decision has a price, and it is measured rather than asserted in
+//! prose: it is exactly [`DropReason::OtherAssertion`]'s own column in the
+//! drop table, pinned by `tests/extract_keyword.rs`'s
+//! `the_drop_reasons_account_for_every_call_outside_the_population`.
 
 /// The exact method name this module recognises, lowercased.
 const ASSERT_SAME: &str = "self~assertsame";
+
+/// The near-miss that shares the whole of [`ASSERT_SAME`] as a prefix. A
+/// different method taking a list, not modelled here, and counted under its
+/// own [`DropReason`] so the shortfall it causes is visible rather than
+/// merged into the general message-send bucket.
+const ASSERT_SAME_LIST: &str = "self~assertsamelist";
 
 /// The literal every rewritten assertion prints, followed by its 1-based
 /// index within its own body and then `0` or `1`. A consumer reads one such
@@ -115,6 +125,100 @@ pub struct KeywordBody {
     pub assertions: usize,
 }
 
+/// Why a `self~assertSame` occurrence is outside the extracted population.
+///
+/// A closed set rather than a free-text string, because these are the
+/// accounting for `calls - rows`: reporting that difference as one bucket
+/// says only that something was lost, while a counted breakdown says what
+/// kind of thing and how much of each, and a category that starts growing
+/// is then visible on its own rather than hidden inside a total that was
+/// always going to be large.
+///
+/// Some variants stand at zero against `base/keyword` today. They are kept
+/// and counted rather than dropped: a category pinned at zero fails loudly
+/// the first time the corpus grows one, which is exactly when a reader
+/// needs to know. Which ones are at zero is asserted in
+/// `tests/extract_keyword.rs` rather than stated here, since that is a fact
+/// about a checkout that can move under `svn up`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DropReason {
+    /// In a `::method` whose name does not begin `test`, so [`crate::extract`]
+    /// never yields its body and nothing downstream can see it at all.
+    OutsideTestMethod,
+    /// Inside a `/* */` or `--` comment: text that looks like a call and is
+    /// not one. [`count_assert_same`] does not know what a comment is,
+    /// deliberately, so these have to be subtracted somewhere.
+    InsideComment,
+    /// On a line joined to its neighbour by a trailing `,` or `-`, so the
+    /// call is part of a larger clause and a `SAY` cannot stand in its
+    /// place.
+    ContinuedLine,
+    /// The enclosing body's strongest blocker is `self~assertSameList`, a
+    /// different method this module does not model. Split out because it is
+    /// the shape that silently poisoned the row-shaped extractor -- there,
+    /// a prefix test claimed each one and then rejected it, blocking every
+    /// later assertion in the same method.
+    ///
+    /// **This reads zero against `base/keyword` for a reason worth knowing,
+    /// and it is not "no body mixes the two".** Five methods do contain both
+    /// an exact `assertSame` and an `assertSameList` (`DoOver`'s
+    /// `test_do_over`, `DoWith`'s `test_do_with`, `LoopOver`'s
+    /// `test_loop_over`, `LoopWith`'s `test_loop_with`, `REPLY`'s
+    /// `test_reply_same_replyAssert`), and every one of them also sends a
+    /// real message, so [`DropReason::MessageSend`] claims them first.
+    AssertSameList,
+    /// The enclosing body's only other sends are ooTest assertions of some
+    /// **other** spelling -- `assertTrue`, `assertEquals`,
+    /// `assertSyntaxError` and the rest. Distinct from
+    /// [`DropReason::MessageSend`] because these bodies are plain classic
+    /// Rexx otherwise, and are exactly the population that could be admitted
+    /// by rewriting those calls to `NOP`. That is measured and declined: it
+    /// would report a body as passing after deleting the checks it was
+    /// written to make. This category is what that decision costs, stated as
+    /// a number rather than left as a claim.
+    OtherAssertion,
+    /// The enclosing body sends a real message, which this module cannot run
+    /// and will not delete. Unblocking these needs message dispatch, which
+    /// is Phase 5's.
+    MessageSend,
+    /// An argument list this scanner has not seen -- not two or three
+    /// arguments, or not closed on its own line.
+    UnparsedCallShape,
+    /// Used as an operand rather than standing as a clause of its own
+    /// (`x = self~assertSame(...)`), so a `SAY` cannot replace it.
+    NotAClause,
+}
+
+impl DropReason {
+    /// A short stable label for reports and for the tests that pin the
+    /// per-reason counts.
+    pub fn label(self) -> &'static str {
+        match self {
+            DropReason::OutsideTestMethod => "outside any test-prefixed method",
+            DropReason::InsideComment => "inside a comment, not a call",
+            DropReason::ContinuedLine => "on a continued line",
+            DropReason::AssertSameList => "body's only send is assertSameList",
+            DropReason::OtherAssertion => "body uses another assert* spelling",
+            DropReason::MessageSend => "body uses a message send",
+            DropReason::UnparsedCallShape => "unparsed call shape",
+            DropReason::NotAClause => "not a clause of its own",
+        }
+    }
+
+    /// Every variant, so a caller reporting a breakdown lists the ones
+    /// standing at zero too rather than only those it happened to hit.
+    pub const ALL: &'static [DropReason] = &[
+        DropReason::OutsideTestMethod,
+        DropReason::InsideComment,
+        DropReason::ContinuedLine,
+        DropReason::AssertSameList,
+        DropReason::OtherAssertion,
+        DropReason::MessageSend,
+        DropReason::UnparsedCallShape,
+        DropReason::NotAClause,
+    ];
+}
+
 /// One method (or one file's worth of stray text) whose `self~assertSame`
 /// calls could not become a runnable body, and why.
 ///
@@ -125,7 +229,11 @@ pub struct KeywordBody {
 pub struct BlockedBody {
     pub group: String,
     pub method: String,
-    pub reason: String,
+    pub reason: DropReason,
+    /// The offending source text, trimmed. Kept beside the category rather
+    /// than folded into it: the category is what gets counted, and this is
+    /// what a reader needs to find the line again.
+    pub detail: String,
     pub dropped: usize,
 }
 
@@ -146,6 +254,18 @@ impl KeywordExtraction {
     /// `self~assertSame` occurrences that did not become part of any body.
     pub fn dropped(&self) -> usize {
         self.blocked.iter().map(|b| b.dropped).sum()
+    }
+
+    /// Occurrences dropped for one particular reason. Summing this over
+    /// [`DropReason::ALL`] gives [`KeywordExtraction::dropped`] exactly,
+    /// which is what makes the breakdown an accounting rather than a
+    /// sample.
+    pub fn dropped_for(&self, reason: DropReason) -> usize {
+        self.blocked
+            .iter()
+            .filter(|b| b.reason == reason)
+            .map(|b| b.dropped)
+            .sum()
     }
 }
 
@@ -208,7 +328,8 @@ pub fn extract_keyword(group: &str, source: &str) -> KeywordExtraction {
             out.blocked.push(BlockedBody {
                 group: group.to_string(),
                 method: method.name.clone(),
-                reason: "occurrence inside a comment, not a call".to_string(),
+                reason: DropReason::InsideComment,
+                detail: "an assertSame written inside a comment".to_string(),
                 dropped: raw - in_code,
             });
         }
@@ -223,10 +344,11 @@ pub fn extract_keyword(group: &str, source: &str) -> KeywordExtraction {
                 program,
                 assertions,
             }),
-            Err(reason) => out.blocked.push(BlockedBody {
+            Err((reason, detail)) => out.blocked.push(BlockedBody {
                 group: group.to_string(),
                 method: method.name,
                 reason,
+                detail,
                 dropped: in_code,
             }),
         }
@@ -237,7 +359,8 @@ pub fn extract_keyword(group: &str, source: &str) -> KeywordExtraction {
         out.blocked.push(BlockedBody {
             group: group.to_string(),
             method: "<outside any test-prefixed method>".to_string(),
-            reason: "not inside a `test`-prefixed ::method, so `extract` never yields it"
+            reason: DropReason::OutsideTestMethod,
+            detail: "not inside a `test`-prefixed ::method, so `extract` never yields it"
                 .to_string(),
             dropped: calls - accounted,
         });
@@ -273,10 +396,11 @@ pub fn extract_keyword(group: &str, source: &str) -> KeywordExtraction {
 /// The two views stay byte-aligned because `blank_comments` replaces each
 /// comment byte with a space and leaves everything else, newlines included,
 /// exactly where it was.
-fn rewrite_body(body: &str, blanked: &str) -> Result<(String, usize), String> {
+fn rewrite_body(body: &str, blanked: &str) -> Result<(String, usize), (DropReason, String)> {
     let mut program = String::new();
     let mut assertions = 0usize;
     let mut previous_continues = false;
+    let all_blanked = blanked;
     for (line, blanked) in body.lines().zip(blanked.lines()) {
         // A call on a continued line is not a clause of its own, whichever
         // side the join is on: `clause_boundary` would see an empty prefix
@@ -287,10 +411,7 @@ fn rewrite_body(body: &str, blanked: &str) -> Result<(String, usize), String> {
         // being an assumption the extractor silently depends on.
         let continues = ends_with_continuation(blanked);
         if count_assert_same(blanked) > 0 && (previous_continues || continues) {
-            return Err(format!(
-                "assertSame on a continued line, so it is not a clause of its own: {}",
-                line.trim()
-            ));
+            return Err((DropReason::ContinuedLine, line.trim().to_string()));
         }
         previous_continues = continues;
 
@@ -300,8 +421,15 @@ fn rewrite_body(body: &str, blanked: &str) -> Result<(String, usize), String> {
         // and still sees one hidden in an assertion's own argument, since
         // `blank_calls` removes only the call's name and parentheses, not
         // its operands.
-        if let Some(offender) = unquoted(&blank_calls(blanked), '~') {
-            return Err(format!("message send this body cannot run: {offender}"));
+        if unquoted(&blank_calls(blanked, ASSERT_SAME), '~').is_some() {
+            // Which *kind* of send is asked of the whole body, not of this
+            // line, even though this line is the one named in `detail`. The
+            // question the category answers is "what would it take to
+            // unblock this body", and the answer is the strongest blocker
+            // anywhere in it: a body whose first offending line is an
+            // `assertTrue` but which sends a real message ten lines later
+            // is not unblocked by modelling assertions.
+            return Err((classify_sends(all_blanked), line.trim().to_string()));
         }
         program.push_str(&rewrite_line(line, blanked, &mut assertions)?);
         program.push('\n');
@@ -323,7 +451,11 @@ fn rewrite_body(body: &str, blanked: &str) -> Result<(String, usize), String> {
 /// needs a multi-line parse, and a call whose closing paren is not on its
 /// own line is a shape this has never seen -- reported rather than guessed
 /// at.
-fn rewrite_line(line: &str, blanked: &str, index: &mut usize) -> Result<String, String> {
+fn rewrite_line(
+    line: &str,
+    blanked: &str,
+    index: &mut usize,
+) -> Result<String, (DropReason, String)> {
     let lower = blanked.to_ascii_lowercase();
     let mut out = String::new();
     let mut emitted = 0usize;
@@ -362,18 +494,11 @@ fn rewrite_line(line: &str, blanked: &str, index: &mut usize) -> Result<String, 
         }
 
         if !clause_boundary(&blanked[..pos]) {
-            return Err(format!(
-                "assertSame is not a clause of its own, so a SAY cannot stand in its place: \
-                 {}",
-                line.trim()
-            ));
+            return Err((DropReason::NotAClause, line.trim().to_string()));
         }
         let at = pos + ASSERT_SAME.len();
         let Some((left, right, consumed)) = parse_two_args(&blanked[at..], &line[at..]) else {
-            return Err(format!(
-                "assertSame call shape this scanner has not seen: {}",
-                line.trim()
-            ));
+            return Err((DropReason::UnparsedCallShape, line.trim().to_string()));
         };
 
         *index += 1;
@@ -389,22 +514,28 @@ fn rewrite_line(line: &str, blanked: &str, index: &mut usize) -> Result<String, 
     Ok(out)
 }
 
-/// `blanked` with every exact-spelling `self~assertSame` turned to spaces,
-/// so that the leftover-message-send check does not trip over the `~` of the
-/// very calls this module rewrites away. Length-preserving, like
-/// [`blank_comments`], and for the same reason.
-fn blank_calls(blanked: &str) -> String {
+/// `blanked` with every exact-spelling occurrence of `name` turned to
+/// spaces, so that the leftover-message-send check does not trip over the
+/// `~` of a call the caller has already accounted for. Length-preserving,
+/// like [`blank_comments`], and for the same reason.
+///
+/// "Exact-spelling" matters in both directions here. Blanking
+/// [`ASSERT_SAME`] must not consume an `assertSameList`, or the two
+/// categories would collapse into one; blanking [`ASSERT_SAME_LIST`] on a
+/// line where [`ASSERT_SAME`] was already blanked is unaffected, since
+/// nothing of the shorter name is left to match.
+fn blank_calls(blanked: &str, name: &str) -> String {
     let lower = blanked.to_ascii_lowercase();
     let mut out = blanked.to_string();
-    for (at, _) in lower.match_indices(ASSERT_SAME) {
-        if lower[at + ASSERT_SAME.len()..]
+    for (at, _) in lower.match_indices(name) {
+        if lower[at + name.len()..]
             .chars()
             .next()
             .is_some_and(is_symbol_char)
         {
             continue;
         }
-        out.replace_range(at..at + ASSERT_SAME.len(), &" ".repeat(ASSERT_SAME.len()));
+        out.replace_range(at..at + name.len(), &" ".repeat(name.len()));
     }
     out
 }
@@ -510,6 +641,75 @@ fn parse_two_args<'a>(blanked: &str, text: &'a str) -> Option<(&'a str, &'a str,
 /// literal's own closing quote.
 fn ends_with_continuation(line: &str) -> bool {
     matches!(line.trim_end().chars().last(), Some(',') | Some('-'))
+}
+
+/// Which kind of send blocks a whole body, given its comment-blanked text.
+///
+/// The strongest blocker present anywhere wins, because the category exists
+/// to answer "what would unblock this body" and the weaker ones are moot
+/// while a stronger one stands. In order:
+///
+/// * [`DropReason::MessageSend`] -- a real message send. Needs dispatch,
+///   which is Phase 5's, and no amount of assertion modelling touches it.
+/// * [`DropReason::AssertSameList`] -- otherwise, a `self~assertSameList`.
+/// * [`DropReason::OtherAssertion`] -- otherwise, some other `self~assert*`
+///   spelling, and nothing else. These bodies are plain classic Rexx apart
+///   from assertions this module does not model.
+///
+/// Only reached once a `~` is known to survive the `assertSame` rewrite, so
+/// the fall-through is a body with a send this cascade did not name; it
+/// takes `MessageSend`, the conservative end.
+fn classify_sends(blanked: &str) -> DropReason {
+    let mut saw_assert_same_list = false;
+    for line in blanked.lines() {
+        let without_calls = blank_calls(line, ASSERT_SAME);
+        if unquoted(&without_calls, '~').is_none() {
+            continue;
+        }
+        let without_list = blank_calls(&without_calls, ASSERT_SAME_LIST);
+        if unquoted(&without_list, '~').is_none() {
+            saw_assert_same_list = true;
+            continue;
+        }
+        if unquoted(&blank_self_assertions(&without_list), '~').is_some() {
+            return DropReason::MessageSend;
+        }
+    }
+    if saw_assert_same_list {
+        DropReason::AssertSameList
+    } else {
+        DropReason::OtherAssertion
+    }
+}
+
+/// `line` with every `self~assert…`/`self~expect…` send turned to spaces,
+/// message name included, so that what is left is only the sends that are
+/// *not* ooTest assertions.
+///
+/// The names are not enumerated. Anything after `self~` beginning `assert`
+/// or `expect` counts, which is deliberate: `OOREXXUNIT.CLS` defines the
+/// set and this repository cannot see it change, so a list here would be an
+/// exhaustiveness claim over an enumeration living somewhere else. The
+/// prefix rule needs no list and cannot go stale as the framework adds an
+/// assertion.
+fn blank_self_assertions(line: &str) -> String {
+    const SELF: &str = "self~";
+    let lower = line.to_ascii_lowercase();
+    let mut out = line.to_string();
+    for (at, _) in lower.match_indices(SELF) {
+        let message = &lower[at + SELF.len()..];
+        if !message.starts_with("assert") && !message.starts_with("expect") {
+            continue;
+        }
+        let name_len: usize = message
+            .chars()
+            .take_while(|&c| is_symbol_char(c))
+            .map(char::len_utf8)
+            .sum();
+        let end = at + SELF.len() + name_len;
+        out.replace_range(at..end, &" ".repeat(end - at));
+    }
+    out
 }
 
 /// The first clause of `line` containing `target` outside any string, or
