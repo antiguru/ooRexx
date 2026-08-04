@@ -32,6 +32,7 @@ Each rule below has already cost this project a session, a wrong measurement, or
   `--edition 2024` belongs to the standalone `rustfmt` binary.
 * **`cargo clippy --workspace --all-targets -- -D warnings`** must be clean.
 * **Read every exit status unpiped, and confirm the command actually ran.** A pipeline reports the last command's status, and a misspelled flag exits non-zero before doing any work -- which reads as failure in one context and is silently skipped in another.
+* **`cargo test <name>` exits 0 when it matches nothing** -- `0 passed; 0 failed; N filtered out`, status 0. So a mutation harness that runs a test by name and reads only the status **cannot tell "passed" from "does not exist"**. Measured here after a harness restored a file with `git checkout --`, silently discarding uncommitted work, and then reported STAYED GREEN for a test that had ceased to exist. Assert that the run count is non-zero, restore from a copy rather than from git, and never let a mutation harness be the only thing that decides a test is load-bearing.
 
 ## Repository hygiene
 
