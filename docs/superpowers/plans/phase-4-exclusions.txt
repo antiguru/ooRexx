@@ -948,9 +948,12 @@ above.
   section's own definition.
 
   NOT A rexx-parse GAP, which is the alternative worth ruling out. Measured:
-  parsing `do cv.j = 1 to 5` yields Controlled { control: SymbolId(129), ... }
-  whose symbol name is "CV.J" -- `cv.j` is a single symbol token in Rexx, so
-  the entire compound name is interned and reaches the executor intact.
+  parsing `do cv.j = 1 to 5` yields a Controlled whose control symbol is named
+  "CV.J" -- `cv.j` is a single symbol token in Rexx, so the entire compound
+  name is interned and reaches the executor intact. The SymbolId number is
+  deliberately not quoted: it counts symbols interned before it, so the same
+  loop reads 125, 127 or 129 depending on what precedes it, while the name
+  reproduces in every spelling.
   bind_control then takes those name bytes and looks up a flat slot with no
   tail resolution, while the same executor resolves the same name correctly
   in `say cv.j` one line later. The parse delivers what a correct

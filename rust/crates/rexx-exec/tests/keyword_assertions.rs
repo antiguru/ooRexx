@@ -57,8 +57,8 @@
 //! make it pass. Those differ whenever a second blocker stands behind the
 //! first, and here they are known to differ for at least four bodies (see
 //! "Bodies that are not their method" below). So a `4c` row means "4c is what
-//! it hits today", and the group's pass rate is a **lower bound** on what 4c
-//! would leave, not a measure of it.
+//! it hits today", and the **790 `4c` rows are an upper bound on what landing
+//! 4c would fix** -- at least four of them would still not pass.
 //!
 //! Second, the `defect:` rows are **not** derived: [`RunOutcome::attribution`]
 //! maps every [`RunOutcome::AssertionFailed`] to one constant string, so for
@@ -83,9 +83,14 @@
 //!   falls through into its own `dig: Return digits()` and a program's
 //!   `RETURN` value becomes its exit status.
 //!
-//! All four are listed `4c` today only because `rexx-exec` blocks on a
-//! builtin first, so nothing here is currently wrong -- but when 4c lands
-//! they will not simply start passing, and their labels will need revisiting
+//! All four are listed `4c` today because `rexx-exec` blocks on an
+//! **unresolved routine call** first -- measured, in order: `routine
+//! "label"`, `routine ""`, `routine "CHARIN"`, `routine "DIGITS"`. Only the
+//! last two are builtins; the first two are precisely the `::routine`s the
+//! bullets above say the standalone program does not carry, so for those the
+//! `4c` label and the real problem are the same missing routine seen from
+//! two sides. Nothing here is currently wrong -- but when 4c lands these
+//! four will not simply start passing, and their labels will need revisiting
 //! rather than deleting. The exempt-set test is what forces that: their
 //! measured attribution will stop matching the file and go red.
 //!
@@ -809,4 +814,43 @@ fn every_exempt_attribution_is_a_known_phase_or_a_declared_defect() {
              `defect:` tag"
         );
     }
+}
+
+/// A body can pass having run only *some* of its assertions, and the credit
+/// it gets is what ran -- not its static count.
+///
+/// This is the witness for the reporting category that names such bodies,
+/// which stands at **zero** against the corpus today. A category at zero
+/// asserts nothing unless it can fire, which is the gap review finding M8
+/// was raised for; the same requirement applies to a report line as to a
+/// `DropReason`, so it gets the same treatment.
+///
+/// The shape is real rather than contrived: an assertion inside a branch
+/// that is not taken. Under the ooTest framework such a method also passes
+/// having checked less than it contains, so the outcome is right -- what
+/// would be wrong is crediting it the two assertions it was written with.
+#[test]
+fn a_body_that_runs_only_some_of_its_assertions_is_credited_only_those() {
+    let partial = KeywordBody {
+        group: "SYNTHETIC".to_string(),
+        method: "partial".to_string(),
+        program: format!(
+            "say '{ASSERTION_MARKER} 1' ((1) == (1))\n\
+             if 0 then say '{ASSERTION_MARKER} 2' ((2) == (2))\n"
+        ),
+        assertions: 2,
+    };
+    assert!(
+        matches!(evaluate(&partial), RunOutcome::Pass { verified: 1 }),
+        "expected a pass credited 1 of its 2 assertions, got {:?}",
+        evaluate(&partial)
+    );
+
+    // The adjacent success, so this is pinned to "only some ran" rather than
+    // to the `IF`: with the branch taken, both are credited.
+    let whole = KeywordBody {
+        program: partial.program.replace("if 0 then ", "if 1 then "),
+        ..partial.clone()
+    };
+    assert!(matches!(evaluate(&whole), RunOutcome::Pass { verified: 2 }));
 }

@@ -626,7 +626,7 @@ alone is the coverage figure.
 **Every phase gap here is 4c's. Not one body is blocked by Phase 5.** So 4b
 owes this table nothing further.
 
-**But read the pass rate as a lower bound on what 4c would leave, not as a
+**The 790 `4c` rows are an upper bound on what landing 4c would fix, not a
 measure of it.** A `4c` attribution is derived from the loud message and says
 what a body hits *first*, not what would make it pass, and a second blocker
 can stand behind the first. Four bodies are known to be in that position, and
@@ -712,9 +712,11 @@ divergence with no owner assigned") rather than in `EXCLUSIONS`. It is
 recorded rather than fixed by the measuring task.
 
 **Not a `rexx-parse` gap**, which was the alternative worth ruling out.
-Measured: parsing `do cv.j = 1 to 5` yields `Controlled { control:
-SymbolId(129), ... }` with that symbol's name being `"CV.J"` -- `cv.j` is one
-symbol token in Rexx, so the whole compound name reaches the executor intact.
+Measured: parsing `do cv.j = 1 to 5` yields a `Controlled` whose `control`
+symbol is named `"CV.J"` -- `cv.j` is one symbol token in Rexx, so the whole
+compound name reaches the executor intact. (The `SymbolId` number itself is
+not quoted here: it depends on how many symbols were interned before it, so
+the same loop reads 125, 127 or 129 depending on what precedes it.)
 `bind_control` then takes those name bytes and looks up a flat slot with no
 tail resolution, while the same executor resolves the same name correctly in
 `say cv.j` one line later.

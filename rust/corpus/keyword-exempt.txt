@@ -21,8 +21,11 @@
 #     under the C++ oracle itself (Error 43, Routine not found) because they
 #     call ::routines the standalone program does not carry, and
 #     NUMERIC::test_42 exits 3 because the body falls through into its own
-#     `dig: Return digits()`. All four read 4c today only because rexx-exec
-#     blocks on a builtin first.
+#     `dig: Return digits()`. All four read 4c because rexx-exec blocks on an
+#     unresolved routine call first -- measured: routine "label", routine "",
+#     routine "CHARIN", routine "DIGITS". Only the last two are builtins; the
+#     first two are the very ::routines the standalone program does not
+#     carry.
 #   * The `defect:` rows below are NOT derived -- every assertion failure is
 #     mapped to one constant. What has teeth for them is membership, not the
 #     label: a body that starts failing its assertions and is not listed here

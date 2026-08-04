@@ -667,8 +667,10 @@ fn ends_with_continuation(line: &str) -> bool {
 ///
 /// **The strong end returns early and the fall-through is the weak one.**
 /// `MessageSend` is returned from inside the loop the moment any line shows
-/// a send that is neither an `assertSame` nor an `assertSameList` nor
-/// another `self~assert*`; only if no line ever does that does control reach
+/// a send that is none of `assertSame`, `assertSameList`, another
+/// `self~assert*` **or a `self~expect*`** -- [`blank_self_assertions`] blanks
+/// both prefixes, so an `expectSyntax` is no more a `MessageSend` than an
+/// `assertTrue` is; only if no line ever does that does control reach
 /// the end, which then picks `AssertSameList` or `OtherAssertion`. So the
 /// ordering is carried by the early return, not by the tail -- and the tail
 /// is deliberately *not* the conservative choice, because by the time it is
