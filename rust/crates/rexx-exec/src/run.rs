@@ -5082,7 +5082,32 @@ impl Interp {
                 let re_tested = std::mem::replace(stepped, true);
                 if re_tested {
                     let name = code.symbols.name(*control).as_bytes().to_vec();
-                    let previous = self.read_by_name(&name);
+                    // **`read`, not `read_by_name`: this is an evaluation and
+                    // it can raise `NOVALUE`** (review round 1 re-review,
+                    // NEW-1 -- a defect this arm shipped with, not a
+                    // pre-existing one). The oracle's own `control->evaluate`
+                    // is a full expression evaluation, so a body that
+                    // `DROP`s the control variable makes the next re-test
+                    // raise `NOVALUE` rather than read a derived name.
+                    // Measured, `signal on novalue name nv` around
+                    // `do ii = 1 to 3 ; drop ii ; end`: the oracle runs the
+                    // handler and exits 0, where `read_by_name` here gave a
+                    // spurious 41.1 at rc 215. `read_by_name` reports
+                    // nothing to its caller and cannot express that.
+                    //
+                    // **And `novalue_check` runs before any tracing**, which
+                    // is measured rather than tidy: under `trace i` the
+                    // oracle's failing re-test emits the `DO` re-echo and
+                    // then nothing at all -- no `>V>`, no `>>>` -- because
+                    // the raise happens inside the evaluation, before
+                    // `traceResult` is reached.
+                    //
+                    // With no `NOVALUE` trap armed, `novalue_check` is a
+                    // no-op and the derived name flows on to fail 41.1 on
+                    // `("II")`, which is the untrapped shape and still
+                    // matches.
+                    let (previous, novalue) = self.read(code, *control);
+                    self.novalue_check(novalue)?;
                     self.roots.push_temp(previous);
                     let rendered = self.to_text(previous).to_vec();
                     self.trace_variable(loop_indent, &name, &rendered);
@@ -5258,13 +5283,21 @@ impl Interp {
         let frame = self.activation().frame;
         self.roots.set_slot(frame, slot, value);
         // `trace_assignment` carries its own `intermediates` gate, so this
-        // one is not a second decision -- it is the same "do not build the
-        // two `Vec`s below unless anything will read them" shape every other
-        // tracing site in this file uses (`step`'s own `Assignment` arm, the
-        // `Controlled` arm above). Review round 1, F9, noted the duplication;
-        // it is kept because the alternative is two allocations per loop
-        // pass under `TRACE OFF`, and named here so that a future divergence
-        // between the two gates cannot hide in it.
+        // one is not a second decision: it decides whether to *build* the
+        // two `Vec`s below, not whether to print. Kept because this runs once
+        // per loop pass and would otherwise allocate twice per pass under
+        // `TRACE OFF`, and named here so a future divergence between the two
+        // gates cannot hide in it (review round 1, F9).
+        //
+        // **It is the only pre-gate of its kind in this file**, which the
+        // first version of this note got wrong in the other direction --
+        // it claimed the shape was one "every other tracing site in this
+        // file uses" and named two that do not have it (re-review NEW-5).
+        // `grep -c 'tracing_intermediates()' crates/rexx-exec/src/run.rs`
+        // is `1`, and it is this line; `step`'s own `Assignment` arm builds
+        // its `rendered` unconditionally because `trace_result` and the
+        // write both need it. Do not generalise from this site -- it is
+        // here for its own measured reason and for no other.
         if self.tracing_intermediates() {
             let name = code.symbols.name(control).as_bytes().to_vec();
             let rendered = self.to_text(value).to_vec();
@@ -5769,11 +5802,16 @@ impl Interp {
     /// assume they stay equal.
     /// `TRACE`'s four forms (D17). `Trace::Default` (bare `TRACE`) and a
     /// `Trace::Setting` letter that recognises but has nothing visible to
-    /// show in this crate's scope (`C`/`L`/`E`/`F`/`N`/`O`) both land on
+    /// show in this crate's scope (`C`/`E`/`F`/`N`/`O`) both land on
     /// `TraceMode::OFF` -- `mode_from_setting` draws no distinction between
     /// them because this crate cannot observe one (measured: `trace` alone
     /// and `trace value 'N'` are both silent, this task's own report has
     /// the transcript).
+    ///
+    /// **`L` is not in that list** and was until Task 9's review round 1:
+    /// it lands on `TraceMode::LABELS` and echoes every executed `LABEL`
+    /// clause. Corrected at the re-review (NEW-2), which found this arm
+    /// still naming the old answer one commit after the behaviour changed.
     ///
     /// `Trace::Setting`'s own bytes were already validated by `rexx-parse`'s
     /// `check_trace_setting` at parse time, so `.expect()` rather than

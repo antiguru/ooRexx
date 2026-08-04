@@ -36,8 +36,9 @@
 //!
 //! | prefix | witness |
 //! |---|---|
-//! | `*-*` | every witness below |
-//! | `>>>` | every witness below |
+//! | `*-*` | every witness below (asserted, not claimed -- see below) |
+//! | `>>>` | every witness below **except `trace_labels.rex`**, whose whole
+//!   output is three `*-*` lines (asserted) |
 //! | `>=>` | `compound_read_write.rex` (and `trace_output.rex`'s simple form) |
 //! | `>L>` | `trace_output.rex` |
 //! | `>V>` | `trace_output.rex`, `compound_read_write.rex` |
@@ -50,20 +51,31 @@
 //! | `>F>` | `function_call.rex` |
 //! | `>R>` | `use_arg_alias.rex` |
 //!
-//! Three witnesses below carry no prefix of their own and are here for a
-//! *content* difference instead -- something no prefix table can express:
-//! `controlled_loop.rex` (value lines that were **absent** on a re-tested
-//! pass), `exit_value.rex` (`EXIT <expr>`'s own `>>>`, likewise absent) and
-//! `control_variable_reread.rex` (a value line that was present and
-//! **wrong**, along with the trip count that produced it). All three are
-//! listed in [`WITNESS_PREFIXES`] for the prefixes they do emit, which is
-//! what keeps them inside this file's own drift check.
+//! **Several witnesses below claim no prefix the table above does not
+//! already cover, and are here for a *content* difference instead** --
+//! something no prefix table can express. No count is given, deliberately:
+//! the sentence that stood here carried one, and it was stale within a
+//! commit of being written (re-review NEW-4). [`WITNESS_PREFIXES`] is the
+//! list, and it is the one this file's own test reads. The kinds, which is
+//! what a reader actually needs:
+//!
+//! * a value line that was **absent** -- `controlled_loop.rex` (a
+//!   `Controlled` loop's re-tested pass) and `exit_value.rex`
+//!   (`EXIT <expr>`'s own `>>>`);
+//! * a value line that was present and **wrong** --
+//!   `control_variable_reread.rex` (with the trip count that produced it);
+//! * a whole mode that emitted **nothing** -- `trace_labels.rex`;
+//! * a **condition** that was not raised -- `control_variable_novalue.rex`.
+//!
+//! Every one of them is listed in [`WITNESS_PREFIXES`] for the prefixes it
+//! does emit, which is what keeps it inside this file's own drift check.
 //!
 //! **This table used to be prose only, and a branch review (H3,
 //! `branch-review-harness.md`) showed exactly what that cost**: replacing
 //! `keyword_while.rex` with a straight-line program emitting no `>K>` at
 //! all, regenerating its `.expected` from the live oracle with this file's
-//! own documented recipe, still passed all five tests -- the byte-for-byte
+//! own documented recipe, still passed all five tests that existed then --
+//! the byte-for-byte
 //! check compares this crate's output to the committed file and nothing
 //! else, so a witness that stopped witnessing its own prefix went
 //! unnoticed. [`WITNESS_PREFIXES`] and
@@ -81,9 +93,13 @@
 //! line emitted at the wrong indent compares equal to one emitted at the
 //! right one. Measured rather than reasoned: replacing the `do_indent`/
 //! `loop_indent` split in `run.rs`'s own `LoopState::Controlled` arm with
-//! `loop_indent` alone leaves this file green and the workspace at 986/0
-//! while diverging from the oracle byte for byte, and the same holds for
-//! `>F>` emitted two columns in.
+//! `loop_indent` alone leaves this file green while diverging from the
+//! oracle byte for byte, and the same holds for `>F>` emitted two columns
+//! in. **This file green, not the workspace**: the paragraph below names
+//! the unit test that catches both, and it is in the same workspace, so a
+//! sentence claiming the workspace stays green would contradict it twelve
+//! lines later. (It did, with a gate number that was stale as well --
+//! re-review NEW-3.)
 //!
 //! What *does* hold trace indents to the oracle: the `run.rs`/`lib.rs`/
 //! `error.rs` unit tests that assert an exact stderr string, which is
@@ -304,6 +320,17 @@ fn controlled_loop_covers_the_control_variables_own_value_lines() {
     check_witness("controlled_loop", &path);
 }
 
+/// The re-test is an **evaluation**, so it raises `NOVALUE` when the body
+/// has dropped the control variable -- the hole the first version of the
+/// re-read left, which used a `NOVALUE`-blind reader. The program's own
+/// header has the pair and says what the first loop is doing there.
+#[test]
+fn control_variable_novalue_covers_a_dropped_control_variable_under_a_trap() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/trace_oracle/control_variable_novalue.rex");
+    check_witness("control_variable_novalue", &path);
+}
+
 /// `TRACE L`: every executed `LABEL` clause echoes and nothing else does.
 /// The program's own header says why all three ways of reaching a label are
 /// in it and why the silent constructs between them are the other half of
@@ -366,6 +393,7 @@ const WITNESS_PREFIXES: &[(&str, &[&str])] = &[
     // kind can appear, so this witness claims exactly one prefix and that
     // is not an oversight.
     ("trace_labels", &["*-*"]),
+    ("control_variable_novalue", &["*-*", ">>>", ">K>"]),
     (
         "controlled_loop",
         &["*-*", ">>>", ">=>", ">L>", ">V>", ">K>", ">P>"],
@@ -425,6 +453,32 @@ fn every_witness_still_emits_every_prefix_it_is_named_for() {
         failures.is_empty(),
         "a witness stopped witnessing a prefix this file's own table \
          claims for it:\n{failures}"
+    );
+
+    // **The module doc's two *universal* rows, turned into assertions** --
+    // "every witness below" is exactly the shape of claim that went stale
+    // the moment `trace_labels.rex` landed (re-review NEW-4), and prose
+    // cannot notice that. `grep -c '>>>' tests/trace_oracle/*.expected` is
+    // the command behind the second one: 0 for `trace_labels.expected` and
+    // non-zero for all twelve others.
+    let without_clause: Vec<&str> = WITNESS_PREFIXES
+        .iter()
+        .filter(|(_, prefixes)| !prefixes.contains(&"*-*"))
+        .map(|(name, _)| *name)
+        .collect();
+    assert!(
+        without_clause.is_empty(),
+        "the module doc's `*-*` row says every witness; these do not claim it:          {without_clause:?}"
+    );
+    let without_result: Vec<&str> = WITNESS_PREFIXES
+        .iter()
+        .filter(|(_, prefixes)| !prefixes.contains(&">>>"))
+        .map(|(name, _)| *name)
+        .collect();
+    assert_eq!(
+        without_result,
+        ["trace_labels"],
+        "the module doc's `>>>` row names exactly one exception; the set of          witnesses with no `>>>` has changed"
     );
 
     covered.sort_unstable();

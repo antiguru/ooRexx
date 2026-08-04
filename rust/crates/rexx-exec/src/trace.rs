@@ -94,19 +94,20 @@ pub(crate) struct TraceMode {
 
 impl TraceMode {
     /// `TraceSetting::setTraceOff`/`setTraceNormal`/`setTraceCommands`/
-    /// `setTraceLabels`/`setTraceErrors`/`setTraceFailures`, and the initial
-    /// state before any `TRACE` instruction runs at all -- every one of
-    /// these sets a flag this crate's own scope has nothing to show for
-    /// (D18 excludes commands; errors/failures are command-condition
-    /// machinery, not built here), so all five collapse to this crate's one
-    /// silent answer. `#[derive(Default)]`
-    /// picks this automatically (all four `false`), which is also
-    /// `Interp::new`'s own starting state.
+    /// `setTraceErrors`/`setTraceFailures`, and the initial state before any
+    /// `TRACE` instruction runs at all -- every one of these sets a flag
+    /// this crate's own scope has nothing to show for (D18 excludes
+    /// commands; errors/failures are command-condition machinery, not built
+    /// here), so all five collapse to this crate's one silent answer.
+    /// `#[derive(Default)]` picks this automatically (all four `false`),
+    /// which is also `Interp::new`'s own starting state.
     ///
-    /// **`setTraceLabels` no longer collapses into this** and the sentence
-    /// above no longer names it: `TRACE L` has something to show -- the
-    /// label clauses it echoes -- and [`TraceMode::LABELS`] is where it goes
-    /// now. Five, not six.
+    /// **`setTraceLabels` used to be the sixth name in that list and is
+    /// not any more**: `TRACE L` has something to show -- the label clauses
+    /// it echoes -- and [`TraceMode::LABELS`] is where it goes now. Round 1
+    /// changed the count in the sentence above and left the name in it, so
+    /// the two contradicted each other; the re-review (NEW-6) caught that
+    /// and this is the corrected pair.
     pub(crate) const OFF: TraceMode = TraceMode {
         all: false,
         results: false,

@@ -259,10 +259,19 @@ DEVIATIONS -- permanent, chosen
      fixed and this deviation is still in force for the indent half.
 
      TRACE'S *SETTING* REMAINS EXECUTION SEMANTICS and stays byte-exact in
-     behaviour: TRACE() is readable by the program, the setting is
-     per-activation with measured inheritance rules, TRACE ? changes control
-     flow, and a trapped SIGNAL ON SYNTAX under trace r suppresses the error
-     report entirely. Only the rendering's leading whitespace is normalised.
+     behaviour: the setting is per-activation with measured inheritance
+     rules, TRACE ? changes control flow, and a trapped SIGNAL ON SYNTAX
+     under trace r suppresses the error report entirely. Only the
+     rendering's leading whitespace is normalised.
+
+     "TRACE() IS READABLE BY THE PROGRAM" STOOD IN THAT LIST AND IS NOT A
+     PROPERTY THIS CRATE HAS. Measured 2026-08-04, `say trace()`: the oracle
+     prints N at rc 0; this crate prints `rexx-exec: routine "TRACE" is not
+     implemented (4c)` at rc 120. The builtin is 4c's, so the sentence
+     described the oracle rather than the agreement, which is the opposite
+     of what a "stays byte-exact" list is for. Noted by 4b Task 9's own
+     re-review while checking a different row's coupling argument against a
+     live reader and finding there was none.
 
   1. DO OVER on a stem does not reproduce the oracle's traversal order.
 
@@ -607,6 +616,23 @@ above.
     end
     say 1/0          <- oracle prints at 0; we print at 2
     end
+
+  IT IS NOT ONLY AN ERROR-REPORT SHAPE, and every example in this row being
+  one is why a reviewer re-found it in 2026-08-04 and reported it as
+  unrecorded. The identical divergence shows on an ORDINARY traced clause
+  under trace r, with nothing raising anywhere:
+
+    trace r
+    do
+    do jj = 1 to 1
+    nop
+    end
+    say 'after'      <- oracle echoes at 0 and its >>> at 0; we print 2 and 2
+    end
+
+  Same mechanism, same two spaces, two different instruments. A reader
+  looking for "my ordinary trace output is indented wrong" will not
+  recognise a row whose every example raises.
 
   Which preceding block shapes do it, `say 1/0` one `do` deep, every row
   measured against the oracle:
@@ -1084,10 +1110,13 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   positively stating a value the oracle contradicts, which is how the review
   found it.
 
-  TWO ADJACENT SHAPES CAME WITH THE READ and needed no special case: a body
-  that DROPs the control variable reads the derived name and fails 41.1 on
-  ("II"), and a body that assigns a non-numeric fails 41.1 on ("abc"). Both
-  match byte for byte now.
+  TWO ADJACENT SHAPES CAME WITH THE READ: a body that assigns a non-numeric
+  fails 41.1 on ("abc"), and a body that DROPs the control variable fails
+  41.1 on ("II") -- the latter ONLY WHEN NOVALUE IS NOT TRAPPED, which the
+  first version of this row did not say and which made its "both match byte
+  for byte" an overclaim. With `signal on novalue` armed, the re-test raises
+  NOVALUE instead: the read is an evaluation, not a lookup. Measured, and
+  the correction cost a second fix -- see the row below.
 
   AND THE BLAME MOVED WITH THEM. Those failures are attributed to the clause
   that transferred control back to the loop, not to the DO clause: measured,
@@ -1104,3 +1133,40 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   and the trip count, with an ordinary loop beside it as the adjacent
   passing case) and corpus/lang/loop_retest_blame.rex (the blame line, live,
   untrapped because the blame is only observable in the report).
+
+  THE CONTROL-VARIABLE RE-READ BYPASSED NOVALUE (fixed, 4b Task 9 review
+  round 2 -- a defect the row above introduced, found by its own re-review
+  and fixed in the round after). The first version of that read used
+  `read_by_name`, which returns the derived name on a miss and reports
+  nothing to its caller. The oracle's control->evaluate is a full
+  evaluation, so a dropped control variable raises NOVALUE. Measured,
+  `signal on novalue name nv` around `do ii = 1 to 3 ; drop ii ; end`:
+
+    oracle:  stdout "handler II", rc 0, handler runs
+    ours:    Error 41.1 Nonnumeric value ("II"), rc 215
+
+  The fix is the crate's own NOVALUE-aware reader (`Interp::read`, which
+  returns `(ObjRef, Novalue)`) plus `novalue_check`, which every other read
+  site in this crate already pairs with it.
+
+  AND THE ORDER IS MEASURED, not tidy: `novalue_check` runs BEFORE the >V>
+  and >>> lines. Under trace i the oracle's failing re-test emits the DO
+  re-echo and then nothing at all, because the raise happens inside the
+  evaluation and never reaches traceResult. A version that traced first and
+  raised second would agree on stdout and rc and differ on stderr.
+
+  WHAT STAYS THE SAME: with no NOVALUE trap armed, `novalue_check` is a
+  no-op and the derived name flows on to fail 41.1 on ("II") exactly as
+  before. Both halves are witnessed --
+  tests/trace_oracle/control_variable_novalue.rex for the trapped one (with
+  an ordinary loop beside it, so an implementation raising NOVALUE on every
+  re-test fails too), and the untrapped one by the probes the row above
+  names.
+
+  THE LESSON, because it is the second time in this task that a fix's own
+  adjacent shape was the defect: "reads the variable" and "evaluates the
+  variable" are not the same operation in this crate, and the difference is
+  a whole condition. `read_by_name` exists for `PROCEDURE EXPOSE`-shaped
+  lookups that must not raise; `Interp::read` exists for evaluations that
+  must. Picking the first because it took a name rather than a SymbolId is
+  what went wrong.

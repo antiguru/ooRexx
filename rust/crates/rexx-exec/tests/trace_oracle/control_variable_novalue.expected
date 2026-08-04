@@ -1,0 +1,35 @@
+RC 0
+===STDOUT===
+ordinary loop ended at 4
+handler at 30
+===STDERR===
+    23 *-* signal on novalue name nv
+    24 *-* do ii = 1 to 3
+       >K>   "TO" => "3"
+    25 *-*   nop
+    26 *-* end
+    24 *-* do ii = 1 to 3
+       >>>     "1"
+       >>>     "2"
+    25 *-*   nop
+    26 *-* end
+    24 *-* do ii = 1 to 3
+       >>>     "2"
+       >>>     "3"
+    25 *-*   nop
+    26 *-* end
+    24 *-* do ii = 1 to 3
+       >>>     "3"
+       >>>     "4"
+    27 *-* say 'ordinary loop ended at' ii
+       >>>   "ordinary loop ended at 4"
+    28 *-* do jj = 1 to 3
+       >K>   "TO" => "3"
+    29 *-*   drop jj
+    30 *-* end
+    28 *-* do jj = 1 to 3
+    33 *-* nv:
+    34 *-* say 'handler at' sigl
+       >>>   "handler at 30"
+    35 *-* exit 0
+       >>>   "0"
