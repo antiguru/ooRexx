@@ -332,9 +332,9 @@ fn control_variable_novalue_covers_a_dropped_control_variable_under_a_trap() {
 }
 
 /// `TRACE L`: every executed `LABEL` clause echoes and nothing else does.
-/// The program's own header says why all three ways of reaching a label are
-/// in it and why the silent constructs between them are the other half of
-/// the claim.
+/// The program's own header says which routes to a label it probes, why
+/// they are examples rather than an enumeration, and why the silent
+/// constructs between them are the other half of the claim.
 #[test]
 fn trace_labels_covers_the_labels_only_mode() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/trace_oracle/trace_labels.rex");

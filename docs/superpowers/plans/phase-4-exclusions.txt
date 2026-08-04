@@ -1068,11 +1068,14 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   list). mode_from_setting classified L with C/E/F/N/O as "recognised, and
   this crate has nothing to show for it" (TraceMode::OFF). The oracle shows
   something: every label clause it EXECUTES echoes, with the ordinary *-*
-  prefix and nothing else. Measured, all three ways a label is reached:
+  prefix and nothing else. Probed routes -- EXAMPLES, NOT AN ENUMERATION,
+  see the correction below:
 
            3 *-* fellthrough:        <- fallen into
           10 *-*   sub:              <- a CALL target, at the callee's indent
            8 *-* there:              <- a SIGNAL target
+                                     <- and an internal FUNCTION call, found
+                                        by a later review attacking the count
 
   READ FROM THE C++ RATHER THAN GENERALISED FROM THOSE THREE:
   RexxInstructionLabel::execute (LabelInstruction.cpp) traces through
@@ -1083,6 +1086,18 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   echo site's gate becomes `all || (labels && is_label)`. That reduces to
   `all` in every mode but L, which is what keeps the blast radius to one
   letter -- asserted directly in trace.rs's own letter-classification test.
+
+  THE ROUTE COUNT IN THIS ROW WAS WRONG AND IS WORTH KEEPING AS A LESSON.
+  "All three ways a label is reached" invited exactly the attack that broke
+  it: a reviewer found a fourth (an internal function call, `zz = sub()`)
+  by probing the sentence rather than the code. The rule has one referent
+  and it is not a list of routes -- RexxInstructionLabel::execute calls
+  traceLabel, so a label echoes when it is EXECUTED, however control
+  arrived. The witness now carries four probed routes and says in its own
+  header that they are examples. NO BEHAVIOUR WAS WRONG AT ANY POINT: this
+  crate matched the oracle on the fourth route before anyone knew it was
+  one, because the implementation gates on the instruction's kind rather
+  than on how it was reached. The false sentence was the whole defect.
 
   WHAT WE USED TO DO: nothing at all under trace l. WITNESS:
   rust/crates/rexx-exec/tests/trace_oracle/trace_labels.rex, whose committed

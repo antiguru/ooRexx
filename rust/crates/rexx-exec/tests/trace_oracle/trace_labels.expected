@@ -3,8 +3,10 @@ RC 0
 before any label
 if body ran
 in the callee
+function call returns ZF-VALUE
 after the signal
 ===STDERR===
-    24 *-* fellthrough:
-    39 *-*   sub:
-    36 *-* there:
+    36 *-* fellthrough:
+    52 *-*   sub:
+    56 *-*   zf:
+    49 *-* there:

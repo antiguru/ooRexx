@@ -87,8 +87,15 @@ pub(crate) struct TraceMode {
     /// `traceResultsFlags` and `traceIntermediatesFlags` as well as in
     /// `setTraceLabels`. So this is `true` under `A`/`R`/`I` too, where
     /// `all` already covers it, and the only mode it decides anything in is
-    /// `L`. Measured: `trace l` echoes a fallen-through label, a `CALL`
-    /// target and a `SIGNAL` target, and nothing else at all.
+    /// `L`.
+    ///
+    /// **The condition is "the `LABEL` instruction executed", not any list
+    /// of ways control can arrive**, and that distinction cost a wrong
+    /// sentence here: this said `trace l` echoes "a fallen-through label, a
+    /// `CALL` target and a `SIGNAL` target", which reads as a closed set and
+    /// is not one -- an internal *function* call reaches a label too. The
+    /// C++ site above enumerates the whole condition in one line; nothing
+    /// enumerates the routes, so nothing here should count them.
     pub(crate) labels: bool,
 }
 
@@ -116,8 +123,9 @@ impl TraceMode {
     };
     /// `TRACE L` (`setTraceLabels`, which resets every other flag and sets
     /// `traceLabels` alone). The one mode where `labels` decides anything:
-    /// every executed `LABEL` clause echoes and nothing else does, measured
-    /// across all three ways a label is reached.
+    /// every executed `LABEL` clause echoes and nothing else does.
+    /// `tests/trace_oracle/trace_labels.rex` carries the probed routes and
+    /// says why they are examples rather than an enumeration.
     const LABELS: TraceMode = TraceMode {
         all: false,
         results: false,
