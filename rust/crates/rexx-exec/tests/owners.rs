@@ -9,21 +9,15 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! Task 0's Step 1: the single owner table `coverage.rs` (criterion 1,
-//! parse coverage) and `loud.rs` (criterion 5, loud failures) both read,
-//! instead of each hand-maintaining its own copy.
+//! The single owner table `coverage.rs` (criterion 1, parse coverage) and
+//! `loud.rs` (criterion 5, loud failures) both read, instead of each
+//! hand-maintaining its own copy (inherited item I36).
 //!
-//! # Why this used to be two copies (inherited item I36)
-//!
-//! An integration test cannot `mod` another test binary's directory, and no
-//! shared module was in scope when `coverage.rs` and `loud.rs` were written
-//! in 4a, so each carried its own `Owner` enum, its own `tags!` macro and its
-//! own seven tag tables, kept in sync by hand. Nothing caught a divergence
-//! between them. This file is read by both instead, through `#[path =
-//! "owners.rs"] mod owners;` -- see `coverage.rs`'s and `loud.rs`'s own top
-//! for that line, and [`the_two_harnesses_include_this_exact_file`] below for
-//! the regression guard that a divergent private copy cannot silently
-//! reappear.
+//! An integration test cannot `mod` another test binary's directory, so the
+//! sharing goes through `#[path = "owners.rs"] mod owners;` -- see
+//! `coverage.rs`'s and `loud.rs`'s own top for that line, and
+//! [`the_two_harnesses_include_this_exact_file`] below for the regression
+//! guard that a divergent private copy cannot silently reappear.
 //!
 //! This file is itself a normal, cargo-discovered integration test (it lives
 //! directly under `tests/`, like `coverage.rs` and `loud.rs`), so its own
@@ -56,7 +50,8 @@ use rexx_parse::{ExprKind, InstructionKind, LoopKind, Operator, PrefixOp, Trace}
 /// Who is responsible for a variant this file enumerates.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) enum Owner {
-    /// 4a's own: must be witnessed by at least one program in the subset.
+    /// Implemented here: must be witnessed by at least one program in the
+    /// subset.
     InScope,
     /// Owed to a later phase, spelled exactly as the split table spells it.
     Phase(&'static str),
@@ -117,7 +112,7 @@ macro_rules! tags {
 }
 
 tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
-    // ---- 4a's own twenty, plus Interpret (4b's Task 1) ----
+    // ---- implemented here ----
     InstructionKind::Assignment { .. } => ("Assignment", Owner::InScope),
     InstructionKind::Label { .. } => ("Label", Owner::InScope),
     InstructionKind::Command { .. } => ("Command", Owner::Phase("Phase 7")),
@@ -139,10 +134,7 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     InstructionKind::Numeric { .. } => ("Numeric", Owner::InScope),
     InstructionKind::Trace(_) => ("Trace", Owner::InScope),
     InstructionKind::Nop => ("Nop", Owner::InScope),
-    // In scope since 4b's Task 1: 4a built the fragment machinery and that
-    // task built the keyword on top of it.
     InstructionKind::Interpret { .. } => ("Interpret", Owner::InScope),
-    // In scope since 4b's Task 3, with `CALL`.
     InstructionKind::Return { .. } => ("Return", Owner::InScope),
     // `PROCEDURE` isolates the callee's pool and aliases the exposed names;
     // `USE ARG`/`USE STRICT ARG` bind the call's arguments. `USE LOCAL` can
@@ -169,7 +161,7 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // left to split out.
     InstructionKind::Push { .. } => ("Push", Owner::InScope),
     InstructionKind::Queue { .. } => ("Queue", Owner::InScope),
-    // ---- 4c's four ----
+    // ---- 4c's ----
     InstructionKind::Parse(_) => ("Parse", Owner::Phase("4c")),
     InstructionKind::Arg(_) => ("Arg", Owner::Phase("4c")),
     InstructionKind::Pull(_) => ("Pull", Owner::Phase("4c")),
@@ -202,7 +194,7 @@ split InstructionKind::Call(c) in (&**c) {
 });
 
 tags!(expr_tag, EXPR_TAGS, ExprKind, {
-    // ---- 4a's own nine, plus Call (4b's Task 4) ----
+    // ---- implemented here ----
     ExprKind::Literal(_) => ("Literal", Owner::InScope),
     ExprKind::Constant(_) => ("Constant", Owner::InScope),
     ExprKind::Variable(_) => ("Variable", Owner::InScope),
@@ -212,25 +204,18 @@ tags!(expr_tag, EXPR_TAGS, ExprKind, {
     ExprKind::Prefix { .. } => ("Prefix", Owner::InScope),
     ExprKind::Binary { .. } => ("Binary", Owner::InScope),
     ExprKind::Logical(_) => ("Logical", Owner::InScope),
-    // In scope since 4b's Task 4: unlike `InstructionKind::Call`, which
-    // stays split -- `Owner::Phase("4b")` at the time this comment was
-    // written, because `Call::Trap`/`Call::Qualified` were both still loud;
-    // `Owner::Phase("Phase 5")` since Task 7 moved `Call::Trap` in scope,
-    // leaving only `Call::Qualified` loud (review round 1's M6 corrects
-    // this comment, which went stale the same way `loud.rs`'s own
-    // `INSTRUCTION_WITNESSES` doc did at the same task and for the same
-    // reason: an edit at line 129 below was not propagated here) --
-    // `ExprKind::Call`'s own `CallTarget` has exactly two forms and both are
-    // 4b's, so there is no later-phase arm left hiding inside it -- see
-    // `eval_call`'s own doc (`eval.rs`) for the resolution order a name
-    // still falls through to the loud `4c` fallback for.
+    // `ExprKind::Call`'s own `CallTarget` has exactly two forms and this crate
+    // evaluates both, so unlike `InstructionKind::Call` there is no
+    // later-phase arm left hiding inside it -- see `eval_call`'s own doc
+    // (`eval.rs`) for the resolution order a name still falls through to the
+    // loud fallback for.
     ExprKind::Call { .. } => ("Call", Owner::InScope),
-    // ---- the five that still fail loudly; see coverage.rs's module doc's ownership section ----
-    // In scope since 4b's Task 5: `>x`/`<x` evaluates to the referenced
-    // variable's value in every ordinary position (measured, `say >p` prints
-    // `p`'s value), and its load-bearing use is as the argument half of `USE
-    // ARG >name`, which `run.rs`'s `eval_argument` handles at the call site.
+    // `>x`/`<x` evaluates to the referenced variable's value in every ordinary
+    // position (measured, `say >p` prints `p`'s value), and its load-bearing
+    // use is as the argument half of `USE ARG >name`, which `run.rs`'s
+    // `eval_argument` handles at the call site.
     ExprKind::VariableReference(_) => ("VariableReference", Owner::InScope),
+    // ---- the ones that still fail loudly; see coverage.rs's module doc's ownership section ----
     ExprKind::QualifiedCall { .. } => ("QualifiedCall", Owner::Phase("Phase 5")),
     ExprKind::ClassResolver { .. } => ("ClassResolver", Owner::Phase("Phase 5")),
     ExprKind::List(_) => ("List", Owner::Phase("Phase 5")),
@@ -243,7 +228,7 @@ tags!(loop_tag, LOOP_TAGS, LoopKind, {
     LoopKind::Count(_) => ("Count", Owner::InScope),
     LoopKind::Controlled(_) => ("Controlled", Owner::InScope),
     LoopKind::Over { .. } => ("Over", Owner::InScope),
-    // `DO WITH ... OVER` sends SUPPLIER, which nothing in 4a answers.
+    // `DO WITH ... OVER` sends SUPPLIER, which nothing in this crate answers.
     LoopKind::With { .. } => ("With", Owner::Phase("Phase 5")),
 });
 
@@ -350,7 +335,7 @@ impl Coverage {
     }
 }
 
-/// The out-of-4a variant set this file's `tags!` tables are allowed to
+/// The out-of-scope variant set this file's `tags!` tables are allowed to
 /// produce, as a literal rather than "whatever the tables say" -- the same
 /// device `phase-4-exclusions.txt` uses for the builtin set. Any edit to an
 /// owner arm above that is not also made here is a test failure, which is
@@ -384,6 +369,12 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
 /// Every phase name the split table names, spelled exactly as it spells them.
 /// `docs/superpowers/specs/2026-07-30-phase-4a-executor-design.md`, "The
 /// split" table and its "assigned elsewhere" paragraph.
+///
+/// **A name stays here because the split table names it, not because some row
+/// above currently uses it.** This is the set of spellings an owner is allowed
+/// to have; a phase that owes nothing right now can owe something again if a
+/// later audit reassigns a variant, and dropping its name would turn that
+/// reassignment into a test failure with no defect behind it.
 pub(crate) const SPLIT_TABLE_PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
 
 #[test]
@@ -544,7 +535,7 @@ fn variant_counts_match_the_audited_split() {
 
 /// The regression guard for item I36 itself: `coverage.rs` and `loud.rs`
 /// must both include *this exact file*, not a private copy that happens to
-/// agree with it today. Checked at the source level, not the value level,
+/// agree with it. Checked at the source level, not the value level,
 /// because the two consumers compile into two separate test binaries with
 /// no way for one process to inspect another's constants at run time --
 /// `#[path = "owners.rs"] mod owners;`, appearing verbatim in both files'
@@ -570,14 +561,14 @@ fn the_two_harnesses_include_this_exact_file() {
 }
 
 // ---------------------------------------------------------------------------
-// What is pinned here, for Step 5: any task moving an `InstructionKind`,
-// `ExprKind` or `LoopKind` variant into 4a's scope (or otherwise changing
+// What is pinned here: any task moving an `InstructionKind`,
+// `ExprKind` or `LoopKind` variant into scope (or otherwise changing
 // which phase owns it) must update every one of the five items below in the
 // same change, or one of the tests above (or in `coverage.rs`/`loud.rs`)
 // fails.
 //
 // 1. **`EXPECTED_OUT_OF_SCOPE`**, above: the pinned `(category, tag, phase)`
-//    set every out-of-4a variant must appear in exactly once. Checked by
+//    set every out-of-scope variant must appear in exactly once. Checked by
 //    `out_of_scope_set_matches_the_committed_expectation`.
 // 2. **`coverage.rs`'s `EXPECTED_SUBSET`**: the exact line list of
 //    `phase-4a.txt`, checked by that file's own
