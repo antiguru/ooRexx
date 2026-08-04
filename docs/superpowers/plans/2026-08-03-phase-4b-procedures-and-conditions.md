@@ -1188,6 +1188,8 @@ The convention is `corpus.rs`'s `REXX_CORPUS_GATE` and `assertions.rs`'s `REXX_A
 
 **State up front rather than discover:** criterion 2's exempt list cannot light up at this gate or 4c's.
 
+**There are now two exempt lists, and only one of them is inert.** That sentence was written when `tests/assertions.rs`'s 35 rows were the only exempt set, and it remains true of them -- all 35 are `unblocked_by: "Phase 5"`. Task 11 added a second, `rust/corpus/keyword-exempt.txt`, 796 rows of **790 `4c` and 6 `defect:compound-do-control-variable`**, and that one **can** light up: the 6 defect rows go red the moment anyone fixes compound `DO` control variables, which is the behaviour they were committed for. Name the file whenever a criterion refers to "the exempt list", because the two now behave oppositely and a criterion that names neither is ambiguous about which property it is claiming.
+
 **I27 is not this gate's criterion.** The 342 expected trace-output lines in `TRACE.testGroup` are 4b's and 4c's to satisfy, but the group is not runnable as extracted, and the same file yields 239, 342, 374, 393 and 437 under five defensible anchorings -- three recounts have already gone astray. If this gate uses any figure from that file, **state which scan produced it**. Prefer a named, measured subset.
 
 - [ ] **Step 1: Write the gate document before running anything**
