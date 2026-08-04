@@ -543,20 +543,27 @@ fn phase_4a_subset_matches_the_committed_list() {
 /// for `phase-4a.txt` and added for the same reason, one sub-phase later.
 ///
 /// **4b's gate review measured what its absence cost, and it was not
-/// theoretical.** Removing one entry at a time from `phase-4b.txt` and running
-/// this file: **nine of the twelve leave it green**, because
-/// [`every_in_scope_variant_is_witnessed_by_the_phase_subsets`] only needs
-/// *some* program to construct each variant, and by the end of 4b most
-/// variants have several witnesses. Only `call_expression`, `use_arg_forms`
-/// and `push_queue` construct something nothing else in the union does.
+/// theoretical.** Removing **one entry at a time** from `phase-4b.txt` and
+/// running this file: for **nine of the twelve, that one deletion leaves it
+/// green**, because [`every_in_scope_variant_is_witnessed_by_the_phase_subsets`]
+/// only needs *some* program to construct each variant, and by the end of 4b
+/// most variants have several witnesses. Only `call_expression`,
+/// `use_arg_forms` and `push_queue` construct something nothing else in the
+/// union does.
+///
+/// **Distributively, not collectively**: removing all nine at once *does* fail
+/// this file (`3 in-scope variant(s) unwitnessed: Interpret, Signal, Raise`).
+/// The single silent deletion is what this pin is for.
 ///
 /// The worst case is `lang/condition_traps.rex`, the 4b gate's criterion 8
-/// witness and the declared corpus catcher for three of `mutate-4b.sh`'s
-/// mutations: with its line removed the corpus reported `41 of 41 matching`
-/// at exit 0, this file passed, and `collect_stress` passed -- three criteria
-/// reporting MET with one criterion's entire subject deleted, and the
-/// headline count shrinking silently. A "N of N matching" harness cannot
-/// notice a missing program; only a committed list can.
+/// witness and the declared corpus catcher for **one** of `mutate-4b.sh`'s
+/// mutations (row 6, `SIGL` off by one -- each corpus-catching mutation
+/// diverges on exactly one program, so none can claim more): with its line
+/// removed the corpus reported `41 of 41 matching` at exit 0, this file
+/// passed, and `collect_stress` passed -- three criteria reporting MET with
+/// one criterion's entire subject deleted, and the headline count shrinking
+/// silently. A "N of N matching" harness cannot notice a missing program;
+/// only a committed list can.
 const EXPECTED_SUBSET_4B: &[&str] = &[
     "lang/interpret_dynamic.rex",
     "lang/interpret_error_echo.rex",

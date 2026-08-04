@@ -69,18 +69,38 @@ real under criterion 6.
 **The second of those two pins did not exist when this criterion was first
 written, and the falsification claimed here was false without it.** The original
 wording said a deleted `phase-4b.txt` entry would "leave a variant unwitnessed".
-Measured, one line at a time across all twelve: **nine of the twelve leave
-`coverage.rs` green**, because the coverage property needs only *some* program to
-construct each variant and by the end of 4b most variants have several
-witnesses. Only `call_expression`, `use_arg_forms` and `push_queue` construct
-something nothing else in the union does. The worst case was
-`lang/condition_traps.rex` — **criterion 8's only named witness, and the declared
-corpus catcher for three of criterion 6's mutations** — whose deletion left the
-corpus reporting `41 of 41 matching` at exit 0, `coverage.rs` green and
-`collect_stress` green: three criteria still reporting MET with one criterion's
-entire subject removed, and the headline shrinking 42 → 41 while still reading
-as a clean sweep. **A "N of N matching" harness cannot notice a missing program.**
-The pin closes it, and is verified to fail by name.
+Measured, **removing one line at a time**: for **nine of the twelve, that one
+deletion leaves `coverage.rs` green**, because the coverage property needs only
+*some* program to construct each variant and by the end of 4b most variants have
+several witnesses. Only `call_expression`, `use_arg_forms` and `push_queue`
+construct something nothing else in the union does.
+
+**That is a claim about each deletion separately, and the collective version is
+false** — measured, removing all nine at once *does* fail `coverage.rs`, exit
+101, `3 in-scope variant(s) unwitnessed by the phase subsets: Interpret, Signal,
+Raise`. The nine are individually unpinned, not collectively invisible, and the
+distinction matters because it is the *single silent deletion* the pin exists to
+stop.
+
+The worst case was `lang/condition_traps.rex` — **criterion 8's only named
+witness, and the declared corpus catcher for one of criterion 6's mutations
+(row 6, `SIGL` off by one)** — whose deletion left the corpus reporting
+`41 of 41 matching` at exit 0, `coverage.rs` green and `collect_stress` green:
+three criteria still reporting MET with one criterion's entire subject removed,
+and the headline shrinking 42 → 41 while still reading as a clean sweep. That
+whole-suite check was run for `condition_traps.rex` specifically; for the other
+eight, only `coverage.rs` was measured. **A "N of N matching" harness cannot
+notice a missing program.** The pin closes it, and is verified to fail by name.
+
+*One is the measured number, and an earlier version of this paragraph said
+three.* Each of the six corpus-catching mutations diverges on exactly one
+program (`41 of 42` in every case), so no program can be the declared catcher
+for more than one; row 6 names `lang/condition_traps.rex` and rows 1 and 7 are
+structurally out of its reach — it contains no `PROCEDURE`, and its single
+`call raiser` fires the trap once where row 7 needs a second raise, which is
+why `call_on_trap_rearms.rex` exists. **This was C1's own defect repeating one
+round later**, in the paragraph whose entire subject is a falsification clause
+that was reasoned rather than measured.
 
 ### 2. The `base/expressions` assertion table, `tests/assertions.rs`, with D14's Phase 5 amendment
 
@@ -239,10 +259,12 @@ document and the script it grades.
 here would test 4a. Every mutation in `mutate-4b.sh` targets code that did not
 exist before this sub-phase.
 
-**Five mutations deliberately do not go through the corpus,** four of them for a
-correct reason — the queue's storage and order (criterion 9), a dropped GC root
-(criterion 4), and an omitted argument's `>A>` line, none of which a differential
-run can observe. Classifying those against the corpus would report `PASSED` —
+**Five mutations do not go through the corpus. Four of those are by design; the
+fifth, row 2, was declared to be caught there and was measured surviving** —
+this gate found that the corpus cannot see trap inheritance, rather than
+choosing not to look. The four by design are the queue's storage and order
+(criterion 9), a dropped GC root (criterion 4), and an omitted argument's `>A>`
+line — none of which a differential run can observe. Classifying those against the corpus would report `PASSED` —
 not caught — which is a true statement about the corpus and a misleading one
 about the tree. They are classified against the crate's own unit suite instead,
 which **asserts a non-zero test-run count per target and requires every target
@@ -470,6 +492,16 @@ between an argument's evaluation and the callee's own `USE ARG` — leaves
 `REXX_CORPUS_GATE=1` at **42 of 42** and fails the suite. That asymmetry is the
 whole point: a dropped root is invisible to a differential run, so the corpus's
 silence here is correct and the collector is the only instrument that can speak.
+
+**And "the collector" is now observed rather than inferred**, which it was not
+in the first two rounds of this document. `mutate-4b.sh` reports the failing
+**target binary** for every suite divergence, and row 9's is
+**`tests/collect_stress.rs` and nothing else** — not `unittests src/lib.rs`,
+not `tests/trace_oracle.rs`. Before that, a `DIVERGED` verdict named only the
+failing test functions, and this criterion's central claim rested on reading
+those names and concluding which instrument they belonged to. The same output
+now separates the two queue rows the same way: row 8's failing target is
+`tests/trace_oracle.rs` alone, and row 10's is `unittests src/lib.rs` alone.
 
 `a_clause_value_survives_the_handler_its_boundary_runs` (Task 7's fix round 4)
 covers the other activation-shaped rooting window — a clause value created and
@@ -744,8 +776,9 @@ consolidation budget on the third copy's *prose* instead. Do not act on this in
 **The third row is the tree that was assessed, not the commit this document
 lands in, and the fourth row exists because those are different.** The gate's
 own work moves both totals: `bind_control`'s corrected doc comment adds 3
-interpreter lines, and the fix round's `phase_4b_subset_matches_the_committed_
-list` adds 48 harness lines. The fraction moves 12.2% → 12.5%, which changes
+interpreter lines, and the fix round's new
+`phase_4b_subset_matches_the_committed_list` adds 48 harness lines. The
+fraction moves 12.2% → 12.5%, which changes
 nothing about the argument — a gate's own instrument growing is not the
 attribution surface tracking construct count — but labelling the third row with
 a commit at which its numbers are false would be the same defect this step is
@@ -760,11 +793,14 @@ exactly those paths is empty.
 overreached it in two ways that a reader would have taken as fact.** It said the
 ten are "plan and documentation edits, including three that corrected this very
 step's own framing". Neither half survives checking. **Two of the ten change
-`rust/` source**: `8d6790c6` touches `keyword_assertions.rs`, `keyword.rs`,
-`extract_keyword.rs` and `keyword-exempt.txt` across 480 insertions, and
-`b23986d9` four of the same paths. The tree moved substantially between Task 11
-and this gate — just not in the six files this ratio measures, which is the only
-thing the empty diff shows. And **exactly one** commit corrected this step's
+`rust/` source**: `8d6790c6` touches `keyword-exempt.txt`,
+`keyword_assertions.rs`, `keyword.rs` and `extract_keyword.rs` across **406**
+insertions — its 480 is the six-file commit total, and the other 74 are
+`l1-coverage.md` and this exclusions file — and `b23986d9` touches **three** of
+those same four, all but `extract_keyword.rs`. The tree moved substantially
+between Task 11 and this gate — just not in the six files this ratio measures,
+which is the only thing the empty diff shows. And **exactly one** commit
+corrected this step's
 framing (`ceabe481`, which re-measured the ratio); of the remaining plan edits,
 four rewrite the two-exempt-lists preamble and one corrects an unrelated
 line-continuation claim.
@@ -901,8 +937,11 @@ gate figure between here and now.
   differential witness (`phase-4-exclusions.txt`, `KNOWN GAPS`). Found by
   mutation row 2 declaring the wrong thing and being measured.
 * **One harness hole found by this gate's own review and closed**:
-  `phase-4b.txt`'s twelve entries were pinned by nothing, so nine of them could
-  be deleted with the whole suite staying green.
+  `phase-4b.txt`'s twelve entries were pinned by nothing, so **any one of nine
+  of them could be deleted on its own and leave `coverage.rs` green** — and for
+  `lang/condition_traps.rex`, measured across the corpus and `collect_stress`
+  too, the whole suite. (Deleting all nine *together* does fail `coverage.rs`;
+  the hole is the single silent deletion, not the collective one.)
   `coverage.rs`'s `phase_4b_subset_matches_the_committed_list` closes it, the
   4b equivalent of the pin 4a's own branch review added for `phase-4a.txt` — the
   same hole, one sub-phase later, found the same way.

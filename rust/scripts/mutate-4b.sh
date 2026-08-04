@@ -11,7 +11,21 @@
 #------------------------------------------------------------------------------
 
 # The 4b exit gate's criterion 6: a committed list of one-line mutations to the
-# code Phase 4b added, each of which some instrument in this gate must catch.
+# code Phase 4b added, **each of which declares in advance what each of two
+# instruments should say about it, and is measured against that declaration**.
+# An unexpected survival and an unexpected catch are both failures.
+#
+# THAT WORDING IS THE CRITERION'S, AND IT IS NOT THE OBVIOUS ONE. "Each of
+# which some instrument in this gate must catch" is what both this header and
+# criterion 6 said first, and row 12 below contradicts it on purpose: it is
+# I17's genuinely equivalent mutant, declared to survive BOTH instruments,
+# which the gate's brief asked for explicitly. Under the old wording that row
+# is a rule break; under this one it is a falsifiable claim, because being
+# caught now fails this script as loudly as an unexpected survival does. The
+# gate document carries the same amendment beside criteria 2 and 4 -- and it
+# says the amendment is recorded "rather than left as a contradiction between
+# a document and the script it grades", which was itself false for one round
+# while this header still had the old sentence.
 #
 # THE MUTATIONS ARE NOT 4a's, AND THAT IS THE POINT. `mutate-4a.sh`'s nine
 # target the value model and 4a's control flow; re-running them here would
@@ -319,6 +333,26 @@ suite_totals() {
     suite_counts | awk '{p += $1; f += $2} END {if (NR == 0) exit 0; print p, f}'
 }
 
+# WHICH TARGET BINARY actually failed, by name -- `unittests src/lib.rs`,
+# `tests/trace_oracle.rs`, `tests/collect_stress.rs`. Cargo prints a
+# `Running <target> (...)` banner before each binary's own report, so the last
+# banner seen before a `test result: FAILED` names the binary that produced it.
+#
+# ADDED BY 4b's OWN GATE REVIEW, and it closes a real gap in what this script
+# can support rather than tidying its output. A bare "suite DIVERGED" does not
+# say which instrument spoke, so criterion 4's central claim -- that the
+# COLLECTOR is what sees a dropped argument-list root, which no differential
+# run can -- rested on inference from the test names. Printing the target makes
+# it an observation: row 9 must name `tests/collect_stress.rs`, and row 10 must
+# name `unittests src/lib.rs`, or the asymmetry those rows are declared for is
+# not the asymmetry that happened.
+suite_failing_targets() {
+    awk '
+        /^ *Running / { target = $0; sub(/^ *Running /, "", target); sub(/ \(.*/, "", target) }
+        /^test result: FAILED/ { if (target != "") print target }
+    ' "${SUITE_OUTPUT}" | sort -u | tr '\n' ' '
+}
+
 # Both instruments must report a clean unmutated tree before the first
 # mutation and after the last restore. A compile failure, a missing oracle or
 # an interrupted revert is caught here rather than being mistaken for a
@@ -405,6 +439,7 @@ run_one() {
         grep -E "matching|FAILED" "${CORPUS_OUTPUT}" || true
     fi
     if [ "${suite_actual}" = "DIVERGED" ]; then
+        echo "  failing target(s): $(suite_failing_targets)"
         grep -E "^test .* FAILED|^failures:$" -A 20 "${SUITE_OUTPUT}" | grep -E "^    [a-z_0-9:]+$" | head -n 10 || true
     fi
 

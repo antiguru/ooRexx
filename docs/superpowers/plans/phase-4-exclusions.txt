@@ -185,9 +185,13 @@ EXCLUSIONS -- a compound variable as a DO control variable, owned by 4c
 
   THE NOTICE MECHANISM ALREADY EXISTS AND NEEDS NOTHING NEW. When the fix
   lands, the six ooTest bodies enumerated below (see "SIX ooTest BODIES TURN
-  ON THIS") all start passing, and `the_exempt_set_matches_the_current_
-  failures` goes red until they are removed from the committed set. That is
-  4c's gate criterion for this row, and it is automatic.
+  ON THIS") all start passing, and
+  `the_exempt_set_matches_the_current_failures` goes red until they are
+  removed from the committed set. That is 4c's gate criterion for this row,
+  and it is automatic. (That identifier is kept on one line deliberately:
+  wrapping it mid-name defeats the `grep` a reader would use to find it,
+  which is the same reason this plan already prefers short greppable
+  fragments to whole sentences.)
 
   The six are NOT re-listed here on purpose. An earlier version of this
   paragraph named all six, called them the only assertion failures in
