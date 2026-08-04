@@ -70,22 +70,19 @@
 //! hand, the same relationship `tests/assertions.rs`'s `EXEMPT` list has with
 //! the exclusions file's own builtin set.
 //!
-//! **`Call` moved fully in scope at 4b's Task 4, and is no longer one of the
-//! five below.** Unlike `InstructionKind::Call`, which keeps its owner string
-//! because two of `rexx_parse::Call`'s four arms (`Trap`, `Qualified`) are
-//! still loud, `ExprKind::Call`'s own `CallTarget` has exactly two forms and
-//! both are 4b's -- there is no later-phase arm left hiding inside it, so the
-//! variant closes outright rather than staying split. `"4b"` had been named
-//! here (through Task 3) because that was the phase after which the variant
-//! stopped failing loudly for *some* call target (an internal-routine call),
-//! not because 4c had no claim on it; a reader who reaches the end of 4b and
-//! finds a builtin-named call still loud is seeing exactly that claim, still
-//! true, just no longer recorded as an `ExprKind` ownership row -- see
-//! `eval_call`'s own doc (`eval.rs`) for the resolution order.
+//! **`ExprKind::Call` is in scope, and is not one of the four below.**
+//! Unlike `InstructionKind::Call`, whose arms `owners.rs` gives a row each
+//! because `Call::Qualified` alone is still loud, `ExprKind::Call`'s own
+//! `CallTarget` has exactly two forms and this crate evaluates both -- there
+//! is no later-phase arm hiding inside it, so the variant closes outright
+//! rather than staying split. That is not a claim that every call target
+//! runs: a builtin-named call still fails loudly, through
+//! `Loud::unresolved_call` naming `4c`, which is a claim on the resolution
+//! steps rather than on the variant -- see `eval_call`'s own doc
+//! (`eval.rs`) for the order.
 //!
-//! The five that remain (`QualifiedCall`, `ClassResolver`, `List`,
-//! `VariableReference`, `Message`) split across two phases, `4b` and
-//! `Phase 5`.
+//! The four that remain (`QualifiedCall`, `ClassResolver`, `List`,
+//! `Message`) are all `Phase 5`'s.
 //!
 //! # `Operator::Backslash` is not owed to anyone
 //!

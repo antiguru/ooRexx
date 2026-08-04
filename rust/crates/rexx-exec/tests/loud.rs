@@ -208,11 +208,11 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
     // own entry has why its one remaining loud shape belongs to
     // `ExprKind::List` rather than to `RAISE`).
     // **No `Push` or `Queue` row since 4b's Task 8 (I15).** Both moved into
-    // scope: `queue.rs` stores every line either writes. This is 4b's own
-    // last pair of rows -- no `owner: "4b"` witness remains anywhere in
-    // this list, and `SPLIT_TABLE_PHASES` keeping `"4b"` as a valid phase
-    // name is not stale, since a phase can still owe nothing right now and
-    // owe something again if a later task's audit finds otherwise.
+    // scope: `queue.rs` stores every line either writes. Nothing in
+    // `owners.rs`'s tables is owned by `"4b"` any more, and
+    // `SPLIT_TABLE_PHASES` keeping `"4b"` as a valid phase name is not
+    // stale, since a phase can still owe nothing right now and owe
+    // something again if a later task's audit finds otherwise.
     Witness {
         tag: "Parse",
         source: "parse value 'a' with v\n",
