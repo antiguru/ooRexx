@@ -9,7 +9,7 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The Phase 4a executor, at the size Task 3's borrow-shape spike needs it.
+//! The executor.
 //!
 //! This crate is a spike, and the thing it exists to prove is one sentence
 //! from the design's "The borrow shape": **the instruction loop clones the
@@ -52,8 +52,8 @@ mod value;
 // and the "replace the object, mutate a tail in place" split.
 mod stem;
 
-// The in-process external data queue (I15) `PUSH`/`QUEUE` write to (4b's
-// Task 8). Nothing reads it yet -- `PULL`/`PARSE PULL`/`QUEUED()` are 4c's.
+// The in-process external data queue (I15) `PUSH`/`QUEUE` write to. Reading it
+// back is `PULL`/`PARSE PULL`/`QUEUED()`'s, none of which this crate has.
 mod queue;
 use queue::Queue;
 
@@ -94,7 +94,7 @@ use run::Ended;
 // only the bytes.
 mod trace;
 
-/// The exit code for a construct Phase 4a does not implement.
+/// The exit code for a construct this crate does not implement.
 ///
 /// It has to sit outside 157..=253, where a Rexx error's `256 - major` lives,
 /// or a not-implemented failure is indistinguishable from error 11 and a
@@ -274,7 +274,7 @@ pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 ///
 /// That measurement, at exactly 100,000, is still real and still runs on
 /// every `cargo test` -- it is what the two-sided bound above is checked
-/// against today, and it needed no external bisection to begin with, only a
+/// against, and it needed no external bisection to begin with, only a
 /// division. What is gone is the ability to go *past* 100,000 through the
 /// public API to independently confirm the extrapolation still holds at
 /// higher depths, the way the external bisection to ~685,000 once did.
@@ -298,8 +298,8 @@ pub const INTERPRETER_STACK_BYTES: usize = 512 * 1024 * 1024;
 ///
 /// The cost, recorded here rather than discovered by Task 14: a program that
 /// prints and then runs for a long time buffers all of it instead of
-/// streaming. Nothing in 4a's corpus does that, and Phase 7's stream model
-/// replaces this whole shape.
+/// streaming. Nothing in the corpus does that, and a streaming model would
+/// replace this whole shape.
 #[derive(Debug)]
 pub struct Outcome {
     pub exit_code: i32,
@@ -369,20 +369,20 @@ impl StackSpan {
     }
 }
 
-/// A construct 4a does not implement, on its way to becoming an exit code and
-/// a line on stderr.
+/// A construct this crate does not implement, on its way to becoming an exit
+/// code and a line on stderr.
 ///
 /// Not a Rexx condition and never convertible into one: the whole point of
 /// `NOT_IMPLEMENTED_EXIT` is that an implementation gap cannot produce a
-/// passing differential test. Task 12 gives the real errors their own type,
-/// `Raised`, which is a different thing entirely.
+/// passing differential test. Real errors have their own type, `Raised`, which
+/// is a different thing entirely.
 #[derive(Debug)]
 struct Loud {
     message: String,
 }
 
 impl Loud {
-    /// An instruction 4a does not execute. `keyword()` is `None` for the four
+    /// An instruction this crate does not execute. `keyword()` is `None` for the four
     /// clause shapes no keyword introduces, and their names come from the
     /// shape rather than from a keyword table.
     ///
@@ -451,7 +451,7 @@ impl Loud {
         }
     }
 
-    /// An expression form 4a does not evaluate.
+    /// An expression form this crate does not evaluate.
     ///
     /// Names the **form** and never formats the node. An earlier version wrote
     /// `{kind:?}` and produced 364 KB of stderr for one clause of
@@ -522,7 +522,7 @@ impl Loud {
     /// 'other'`, `sub: procedure expose a.1` writing both tails leaves the
     /// caller printing `changed other` -- tail 1 is shared and tail 2 is the
     /// callee's own. So this is aliasing *inside* a stem object, at one tail,
-    /// and 4b's exposure mechanism aliases whole slots: the stem lives in a
+    /// and this crate's exposure mechanism aliases whole slots: the stem lives in a
     /// slot and its tails do not. Exposing the whole stem instead would make
     /// `a.2` shared as well, which is a wrong answer found by chasing a wrong
     /// value rather than a message that says why.
@@ -544,7 +544,7 @@ impl Loud {
     /// An activation's body selector named something that is not a routine
     /// body -- an internal inconsistency, never a program error.
     ///
-    /// Unreachable through any program today, since nothing constructs a
+    /// Unreachable through any program, since nothing constructs a
     /// `Some(index)` selector at all (`Activation::body`'s own doc has the
     /// measured reason). Kept, and kept as a `Loud` rather than an
     /// `unreachable!`, for the same reason `Loud::instruction`'s own doc
@@ -558,21 +558,17 @@ impl Loud {
         }
     }
 
-    // **There is no `Loud::parse` any more, and its absence is the fix.** A
-    // fragment that did not parse used to become a loud `INTERPRET text did
-    // not parse: ...` at rc 120, with a doc comment recording that the
-    // oracle raises 27.901 at rc 229 instead and that closing the gap needed
-    // a `ParseError`-to-`Raised` conversion "built once for both, not here
-    // for one caller". 4b's Task 2 built it -- `impl From<&ParseError> for
-    // Raised` in `error.rs`, which `run_fragment` now uses. What the *top
-    // level* could and could not take from it is written out at `execute`'s
-    // own parse arm, below.
+    // **There is no `Loud::parse`, and its absence is the fix.** A fragment
+    // that does not parse raises the oracle's own 27.901 at rc 229, through
+    // `impl From<&ParseError> for Raised` (`error.rs`), which `run_fragment`
+    // uses. What the *top level* can and cannot take from it is written out
+    // at `execute`'s own parse arm, below.
 }
 
 /// Names an expression form in **bounded** text, for a loud failure to quote.
 ///
 /// The bound is the whole point and it is a contract, not a preference: this is
-/// called on nodes 4a cannot evaluate, and those nodes carry arbitrarily large
+/// called on nodes this crate cannot evaluate, and those nodes carry arbitrarily large
 /// subtrees. Everything returned here is either a `&'static str` or one
 /// `Operator::spelling`, which is also `&'static`, so no input can make the
 /// answer long. **Never format a node into a message.**
@@ -614,11 +610,10 @@ fn form_name(kind: &ExprKind) -> String {
     name.to_string()
 }
 
-/// Task 0's Step 3: appends the owner phase to a loud message, `"{name} is
-/// not implemented ({owner})"`, or leaves it exactly as it was before this
-/// task (`"{name} is not implemented"`) when [`instruction_owner`]/
-/// [`expr_owner`] answer `None` -- meaning "this crate already implements
-/// that variant", not "the owner is some particular phase".
+/// Appends the owner phase to a loud message, `"{name} is not implemented
+/// ({owner})"`, or leaves it unsuffixed (`"{name} is not implemented"`) when
+/// [`instruction_owner`]/[`expr_owner`] answer `None` -- meaning "this crate
+/// implements that variant", not "the owner is some particular phase".
 ///
 /// **Review finding I6.** An earlier version keyed this on the literal
 /// `"4a"`, which doubles a phase *name* as a sentinel for a different
@@ -635,10 +630,10 @@ fn form_name(kind: &ExprKind) -> String {
 /// `None` is reachable here only through two documented edge cases in
 /// `run.rs` (`run_loop`'s `DO`/`LOOP` COUNTER/`DO WITH` check, and its
 /// stem-target `DO OVER` deviation) where the outer `InstructionKind`/
-/// `ExprKind` is 4a's own but the specific reason that call happened is
+/// `ExprKind` is implemented but the specific reason that call happened is
 /// not. Printing an owner there would read as self-contradictory -- the
 /// construct plainly *is* implemented -- so this leaves the message
-/// exactly as it was before this task on that path, and is the only
+/// without a suffix on that path, and is the only
 /// reason this function exists rather than a bare `format!` at each of the
 /// two call sites. `run.rs`'s `do_with_takes_the_loud_path`,
 /// `do_counter_takes_the_loud_path_regardless_of_which_other_kind_it_rides_on`,
@@ -653,10 +648,10 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
     }
 }
 
-/// Who is responsible for an `InstructionKind` that is not (yet) 4a's own,
+/// Who is responsible for an `InstructionKind` this crate does not implement,
 /// spelled exactly as the split table spells it
 /// (`docs/superpowers/specs/2026-07-30-phase-4a-executor-design.md`, "The
-/// split") -- `None` for a variant 4a already implements (see
+/// split") -- `None` for a variant this crate implements (see
 /// [`owned_message`]'s doc for why that is `None` and not a `"4a"` string).
 ///
 /// **A third copy of `tests/owners.rs`'s `INSTRUCTION_TAGS`, separate by
@@ -683,9 +678,6 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
 /// implemented and answer `None`, and `Call::Qualified` is genuinely Phase
 /// 5's (a namespace-qualified `CALL`, mirroring `ExprKind::QualifiedCall`'s
 /// own ownership below). Every other variant here stays coarse.
-/// `InstructionKind::Signal` was the second arm-grained one until 4b's Task 7
-/// implemented `Signal::Trap`; all three of its arms answer `None` now, so it
-/// needs no nested match either.
 ///
 /// Exhaustive with no `_` arm, matching `Loud::instruction`'s own match: a
 /// new `InstructionKind` variant is a compile error here, not a silent
@@ -711,20 +703,16 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         | InstructionKind::Exit { .. }
         | InstructionKind::Numeric { .. }
         | InstructionKind::Trace(_)
-        // In scope since 4b's Task 1: the fragment machinery was 4a's and the
-        // keyword is this task's, so `Interpret` is `None` here (implemented
-        // in this crate) rather than `Some("4b")`.
         | InstructionKind::Interpret { .. }
-        // In scope since Task 3, alongside `Call::Named`/`Call::Dynamic`
-        // below. A `RETURN` in the main body is not a gap either: measured,
-        // it ends the program with its value exactly as `EXIT` does.
+        // A `RETURN` in the main body is not a gap either: measured, it ends
+        // the program with its value exactly as `EXIT` does.
         | InstructionKind::Return { .. }
         | InstructionKind::Nop => None,
-        // **Arm-grained, and three of the four arms are now `None`.**
-        // `Call::Named` and `Call::Dynamic` are implemented (Task 3) and
-        // `Call::Trap` is (Task 7), so "4b" would be a false statement in a
-        // table whose only job is to be true -- `Loud::instruction` is no
-        // longer reached for any of the three, and an owner string nothing
+        // **Arm-grained, and three of the four arms are `None`.**
+        // `Call::Named`, `Call::Dynamic` and `Call::Trap` are all implemented,
+        // so any owner string on them would be a false statement in a
+        // table whose only job is to be true -- `Loud::instruction` is not
+        // reached for any of the three, and an owner string nothing
         // reads is exactly how the third copy of this data drifts. A named
         // call that resolves to no internal label still fails loudly,
         // through `Loud::unresolved_call`, naming `4c`: the builtin and
@@ -736,7 +724,7 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
             | rexx_parse::Call::Trap(_) => None,
             rexx_parse::Call::Qualified { .. } => Some("Phase 5"),
         },
-        // In scope since 4b's Task 5, both of them. `Use` is `None` even
+        // `Use` is `None` even
         // though `USE LOCAL` can only ever fail here: it fails with the
         // oracle's own two errors (98.993/99.910), measured, which is an
         // implemented instruction answering the same bytes the oracle
@@ -745,15 +733,14 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // `Loud::compound_expose` rather than through this table, because it
         // is a sub-case of a variant and this table is per variant.
         InstructionKind::Procedure { .. } | InstructionKind::Use(_) => None,
-        // In scope since 4b's Task 7. All three `Signal` arms are
-        // implemented (`Label`/`Value` at Task 6, `Trap` here), so unlike
+        // All three `Signal` arms are implemented, so unlike
         // `Call` above this one needs no arm-grained match. `RAISE` is
         // likewise whole: its one shape that still fails loudly, `ADDITIONAL
         // (a, b)`, does so through `ExprKind::List`'s own `Phase 5` owner --
         // a sub-case of an *expression*, reported where that expression is,
         // not a residual claim on the `RAISE` keyword.
         InstructionKind::Signal(_) | InstructionKind::Raise(_) => None,
-        // In scope since 4b's Task 8. Both keywords are whole: `queue.rs`
+        // Both keywords are whole: `queue.rs`
         // stores every line either writes, and neither has a shape this
         // crate cannot express the way `Procedure`'s `expose a.1` does.
         InstructionKind::Push { .. } | InstructionKind::Queue { .. } => None,
@@ -786,20 +773,18 @@ fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
         | ExprKind::Prefix { .. }
         | ExprKind::Binary { .. }
         | ExprKind::Logical(_) => None,
-        // **`None` since Task 4, not `Some("4b")`.** `ExprKind::Call` has
-        // exactly two `CallTarget` forms and both are 4b's own (the target
-        // field is checked, per this task's own brief) -- unlike
-        // `InstructionKind::Call`, which stays arm-grained because
-        // `Call::Qualified` is still loud (`Call::Trap` moved in scope at
-        // Task 7, and the arm-grained match above says so), this variant has
-        // no later-phase arm hiding inside it, so it moves fully in scope. A
+        // **`ExprKind::Call` is `None`, not an owner string.** It has
+        // exactly two `CallTarget` forms and this crate evaluates both --
+        // unlike `InstructionKind::Call`, which stays arm-grained because
+        // `Call::Qualified` is loud, this variant has
+        // no later-phase arm hiding inside it, so it closes outright. A
         // name that resolves to no internal label (or a `CallTarget::
         // Literal`, which never searches labels at all) still fails loudly
         // through `Loud::unresolved_call`, naming `4c` -- the builtin and
         // external steps behind the label search are that phase's, exactly
         // the same shape `InstructionKind::Call`'s own comment above
         // describes for `CALL`.
-        // `None` since Task 5. `>name`/`<name` decays to the referenced
+        // `>name`/`<name` decays to the referenced
         // variable's value in every ordinary position (measured, `say >p`
         // prints `p`'s value), and its one load-bearing use, as the argument
         // half of `USE ARG >name`, is handled at the call site by
@@ -835,11 +820,10 @@ struct Code<'a> {
 /// Whether a variable read found a value or derived one from the name.
 ///
 /// D16 requires the read path to answer this from the start rather than gain
-/// it later: `SIGNAL ON NOVALUE` in 4b changes what an uninitialised read
+/// it later: `SIGNAL ON NOVALUE` changes what an uninitialised read
 /// does, and retrofitting a raise into the hottest path is what naming it here
-/// prevents. Through 4a and most of 4b the flag was read and discarded,
-/// which was the correct amount of nothing; `Interp::novalue_check`
-/// (`run.rs`) is the reader D16 was holding it for, added at 4b's Task 7,
+/// prevents. `Interp::novalue_check`
+/// (`run.rs`) is the reader D16 was holding it for,
 /// and the retrofit that would otherwise have been needed never happened.
 ///
 /// **Both producers matter and they are not the same code.** `Interp::read`
@@ -854,7 +838,7 @@ enum Novalue {
 }
 
 /// The condition a running handler was entered for, kept so `RAISE
-/// PROPAGATE` can re-raise it (4b's Task 7).
+/// PROPAGATE` can re-raise it.
 ///
 /// **The echo stack travels with it**, which is the part that is measured
 /// rather than obvious. A trapped condition clears `failure_site` and
@@ -880,7 +864,7 @@ struct ActiveCondition {
 }
 
 /// A condition waiting for the current clause to finish before its `CALL ON`
-/// handler runs (4b's Task 7).
+/// handler runs.
 ///
 /// Carries only what the handler needs that cannot be looked up again at
 /// delivery time: the condition's name is the trap-table key, and `rc` is the
@@ -952,8 +936,7 @@ struct Interp {
     /// that decides what belongs alongside them, and why they are one field
     /// rather than two.
     clause_state: ClauseState,
-    /// A condition raised by `RAISE` whose `CALL ON` handler has not run yet
-    /// (4b's Task 7).
+    /// A condition raised by `RAISE` whose `CALL ON` handler has not run yet.
     ///
     /// **Deliberately not part of `ClauseState`**, checked against that
     /// struct's own membership rule rather than placed by analogy: this is
@@ -1087,9 +1070,9 @@ struct Interp {
     /// explicit restore: 7.3 is fatal, so nothing runs afterward to see a
     /// stale value (`execute`, `lib.rs`, gives every run a fresh `Interp`).
     ///
-    /// **This field means exactly one thing again, and briefly did not.**
-    /// 4b's Task 2 was told to carry an `INTERPRET` fragment's activation
-    /// base here as well, on the reasoning that both are "an indent added on
+    /// **This field means exactly one thing, and the mistake it invites is
+    /// carrying an `INTERPRET` fragment's activation base here as well**, on
+    /// the reasoning that both are "an indent added on
     /// top of `static_indent`". They are not the same quantity and the
     /// difference is lifetime: this one is transient and its two producers
     /// write it **absolutely** (`= 4` at the absorbed escape, `= 0` at
@@ -1127,9 +1110,9 @@ struct Interp {
     ///
     /// Added to `static_indent` alongside [`Interp::indent_offset`] by
     /// `Interp::printed_indent`, which is the one place either is applied.
-    /// **`0` throughout every 4a program**, which is what makes adding it at
-    /// a site incapable of moving a 4a expectation: nothing but a fragment
-    /// (and, next, `CALL`) ever sets it.
+    /// **`0` for every program with no fragment and no call**, which is what
+    /// makes adding it at a site incapable of moving such a program's
+    /// expectation: nothing but a fragment or a `CALL` ever sets it.
     ///
     /// **Measured delta 0 for a fragment, +2 for a called routine**, and
     /// that is why this is the activation's base rather than "one more
@@ -1166,12 +1149,11 @@ struct Interp {
     /// from. That teardown is why the site cannot simply be reconstructed at
     /// the top: by then the frame is gone.
     ///
-    /// **First-wins *within one level*, and 4b's Task 2 left that unchanged
-    /// on purpose (inherited item I11).** The early-return guard at the top
-    /// of `record_failure_at` still means the most specific clause at this
-    /// level wins.
+    /// **First-wins *within one level* (inherited item I11).** The
+    /// early-return guard at the top of `record_failure_at` means the most
+    /// specific clause at this level wins.
     ///
-    /// **Task 7 is what made it clear**, and it empties
+    /// **A trap is what clears it**, and it empties
     /// [`Interp::failure_sites`] alongside it: a trapped condition prints no
     /// report, so the sites it accumulated must not be printed against a
     /// later, untrapped one. `run.rs`'s `offer_to_trap` is the one place that
@@ -1184,11 +1166,11 @@ struct Interp {
     /// **Why two fields and not one `Vec`.** `failure_site` is the level
     /// currently unwinding and is first-wins; this is the record of levels
     /// already sealed. `run.rs`'s `seal_site_level` moves one into the other
-    /// and is called by exactly the constructs that open a level -- today
-    /// `run_fragment` and (since Task 3) `resolve_and_run_call`. Keeping the two apart is
+    /// and is called by exactly the constructs that open a level --
+    /// `run_fragment` and `resolve_and_run_call`. Keeping the two apart is
     /// what lets the guard stay a plain `is_none()` rather than a "did
     /// anything get recorded since the current level opened" watermark, and
-    /// it is why the pre-Task-2 single-site behaviour falls out unchanged
+    /// it is why the single-site behaviour falls out unchanged
     /// when nothing ever seals: this stays empty and `execute` builds a
     /// one-entry stack.
     ///
@@ -1289,10 +1271,10 @@ struct Interp {
     /// right one -- measured, `use arg p` as a program's own first clause
     /// binds nothing and `p` reads as `P`.
     call_context: CallContext,
-    /// The in-process external data queue (I15, 4b's Task 8): every line
+    /// The in-process external data queue (I15): every line
     /// `PUSH`/`QUEUE` has written. See `queue.rs`'s own module doc for the
-    /// LIFO/FIFO split and why nothing here reads it back yet -- `PULL`,
-    /// `PARSE PULL` and `QUEUED()` are all 4c's.
+    /// LIFO/FIFO split and why nothing here reads it back -- that is
+    /// `PULL`/`PARSE PULL`/`QUEUED()`'s, none of which this crate has.
     queue: Queue,
 }
 
@@ -1375,13 +1357,6 @@ impl Interp {
     /// [`Interp::stress_collect`] flips it after construction instead,
     /// which is exactly as inert for every existing caller as adding a
     /// field with a fixed default already is.
-    ///
-    /// **This took an `interpret_spike: bool` until 4b's Task 1**, and the
-    /// hundred-plus callers that argument's removal touched are the direct
-    /// cost the paragraph above was weighing. `INTERPRET` is implemented
-    /// now, so there is no mode left to select between: every caller passed
-    /// `false` except the two spike tests, and all of them now say
-    /// `Interp::new()`.
     fn new() -> Interp {
         Interp {
             heap: Heap::new(),
@@ -1498,7 +1473,7 @@ impl Interp {
     /// that fits a signed 32-bit integer (`Numerics::objectToSignedInteger`'s
     /// own bound, `INT32_MIN..=INT32_MAX`, both inclusive); anything else --
     /// fractional, non-numeric, or simply too wide -- leaves the exit code at
-    /// 0, which is where it already sits on every path 4a can reach. Measured:
+    /// 0, which is where it already sits on every path here. Measured:
     /// `exit 5.9` and `exit 'abc'` and `exit 2147483648` (one past
     /// `INT32_MAX`) all give rc 0.
     ///
@@ -1662,10 +1637,8 @@ pub fn run_program(path: &str, text: Vec<u8>) -> Outcome {
 /// been requested.
 ///
 /// `#[doc(hidden)]` because it is `pub` only so `tests/` can reach it, not a
-/// second front-door choice beside `run_program`. (Task 3's own
-/// `run_program_interpret_spike` carried the identical note until 4b's Task 1
-/// deleted it, `INTERPRET` being implemented; this is now the crate's only
-/// hidden entry point.)
+/// second front-door choice beside `run_program`. It is the crate's only
+/// hidden entry point.
 ///
 /// **This mode was built at Task 16 gate time, not during the phase, and
 /// this is the first time anything has run the L0 subset under it.** The
@@ -1710,10 +1683,9 @@ fn on_interpreter_thread(body: impl FnOnce() -> Outcome + Send + 'static) -> Out
 fn execute(path: &str, text: Vec<u8>, collect_every_alloc: bool) -> Outcome {
     let program = match parse_program(text) {
         Ok(program) => program,
-        // **A top-level parse failure stays loud, and 4b's Task 2 checked
-        // whether it could stop being loud rather than assuming either way.**
-        // Task 2 built the `ParseError`-to-`Raised` conversion the old
-        // `Loud::parse` doc comment asked for and used it for `INTERPRET`
+        // **A top-level parse failure stays loud, and that was checked rather
+        // than assumed either way.** The `ParseError`-to-`Raised` conversion
+        // exists and `INTERPRET` uses it
         // (`run_fragment`). This arm can have the *mapping* -- it is one
         // `impl From` and nothing about it is fragment-specific -- but not
         // the *report*, and the obstacle is concrete rather than a
@@ -1786,7 +1758,7 @@ fn execute(path: &str, text: Vec<u8>, collect_every_alloc: bool) -> Outcome {
         Err(Failure::Raised(raised)) => {
             // `run_activation` records the site on the way out. An empty
             // stack here would mean a condition escaped without passing an
-            // instruction loop, which nothing in 4a or 4b-so-far can do; it
+            // instruction loop, which nothing in this crate can do; it
             // renders visibly rather than panicking, on the error path's
             // standing rule that a reportable condition must never become a
             // crash.
@@ -1862,11 +1834,10 @@ mod tests {
     /// **This lives here rather than in `tests/spike.rs` because the runtime
     /// test cannot reach these two arms for long.** A test that observes a
     /// loud failure needs a form the executor does not evaluate, and every
-    /// operator, prefix and dyadic, is implemented within Phase 4a -- the
-    /// spike's witness had to move from `+` to `=` when Task 7 landed and
-    /// would have moved again for Task 8. Calling `form_name` directly needs
-    /// no unimplemented form at all, so nothing a later task does can take
-    /// this coverage away.
+    /// operator, prefix and dyadic, is implemented here -- a witness picked
+    /// from the operators has to move each time one lands. Calling
+    /// `form_name` directly needs no unimplemented form at all, so nothing a
+    /// later task does can take this coverage away.
     #[test]
     fn the_two_formatting_arms_do_not_grow_with_the_subtree() {
         let deep = nest(200);
@@ -1892,32 +1863,20 @@ mod tests {
         assert_eq!(form_name(&deep.kind), "the prefix operator `-`");
     }
 
-    // ---- the fragment's lifetime (moved here from `tests/spike.rs`, I7) ----
+    // ---- the fragment's lifetime (I7) ----
     //
-    // These three arrived with Task 3's borrow-shape spike and ran through
-    // `run_program_interpret_spike`, a `pub` entry point that existed for one
-    // reason: `INTERPRET` was not implemented, so an *integration* test could
-    // not reach a fragment at all through the public API. That entry point's
-    // own doc comment named the trade it was making -- a `#[cfg(test)] mod
-    // tests` in this file could prove the same lifetime with no public
-    // surface -- and asked 4b to re-make it rather than inherit it.
-    //
-    // Re-made here, and the argument that once favoured the integration test
-    // now settles it the other way. That argument was "a unit test with
-    // privileged access to private internals proves less about the shape
-    // callers actually get". These tests need no privileged access: they call
-    // `run_program`, the same public entry point on the same sized thread
-    // that `tests/spike.rs` would use, because `INTERPRET` is implemented and
-    // a fragment is reachable through the front door. So the public spike
-    // surface is deleted and nothing about what these tests exercise changed
-    // -- only which file they live in, and that they no longer need a second
-    // `pub fn` to exist.
+    // Here rather than in `tests/spike.rs`, and the usual argument against a
+    // unit test does not apply: "a unit test with privileged access to
+    // private internals proves less about the shape callers actually get".
+    // These need no privileged access. They call `run_program`, the same
+    // public entry point on the same sized thread an integration test would
+    // use, because a fragment is reachable through the front door.
 
     /// Step 4's test, and the one property `INTERPRET` has that no other
     /// instruction does: a name bound inside fragment text outlives the
     /// fragment, so a *later, separate* fragment reads it back.
     ///
-    /// Measured on the oracle in 4a: the binding outlives the fragment.
+    /// Measured on the oracle: the binding outlives the fragment.
     #[test]
     fn interpret_binds_a_name_the_enclosing_body_never_mentions() {
         let outcome = run_program(
@@ -2002,7 +1961,7 @@ mod tests {
         assert_eq!(outcome.stdout, b"before\ninside\n");
     }
 
-    /// 4b Task 2: a condition raised inside an `INTERPRET` fragment reports
+    /// A condition raised inside an `INTERPRET` fragment reports
     /// **both** clauses, and this is the whole report, byte for byte, at the
     /// one level `run_program` can see it.
     ///
@@ -2153,7 +2112,7 @@ mod tests {
     ///
     /// `Select`'s arm computed `when_indent` from `static_indent` alone --
     /// the one clause-echo indent in `run.rs` that added neither offset.
-    /// **Already a live 4a divergence before any fragment base existed**: a
+    /// **The divergence does not need a fragment base**: a
     /// nested `SELECT` inside an escaped `OTHERWISE` reaches it with no
     /// `INTERPRET` in the program at all, printing the inner `WHEN` at 6
     /// where the oracle prints 10. The fragment base only made it easy to
@@ -2168,10 +2127,8 @@ mod tests {
     /// transcript is asserted so that fixing it by moving the error elsewhere
     /// fails too. A plain `do` block rather than `do z = 1 to 1` on purpose:
     /// a `Controlled` loop's re-tested pass traces its own control-variable
-    /// value lines, which this test is not the place to encode. That used to
-    /// read "omits two `>>>` lines this crate does not yet emit"; the omission
-    /// was fixed at 4b Task 9 and the reason for the plain `do` is now only
-    /// that this test is about a fragment's own indent.
+    /// value lines, which this test is not the place to encode: this test is
+    /// about a fragment's own indent.
     #[test]
     fn a_when_scan_inside_a_fragment_echoes_at_the_fragments_own_indent() {
         let program = "trace r\n\
@@ -2198,14 +2155,11 @@ mod tests {
         );
     }
 
-    /// 4b Task 2, Step 5b: a fragment that does not parse raises the oracle's
-    /// own condition instead of failing loudly.
+    /// A fragment that does not parse raises the oracle's own condition
+    /// instead of failing loudly.
     ///
     /// Measured: `interpret "do forever then"` is **27.901 at rc 229** on the
-    /// oracle, and `interpret "if"` is 35.929 at rc 221. Through 4a and 4b's
-    /// Task 1 both were `Loud::parse` at rc 120 -- correct-but-loud while
-    /// `INTERPRET` was unreachable, and a live divergence once Task 1 made it
-    /// reachable.
+    /// oracle, and `interpret "if"` is 35.929 at rc 221.
     ///
     /// **What is asserted and what is deliberately not.** The exit code and
     /// the enclosing clause echo are the oracle's exactly, so this fails for
