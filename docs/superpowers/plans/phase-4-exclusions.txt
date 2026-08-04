@@ -1146,8 +1146,16 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
     ours:    Error 41.1 Nonnumeric value ("II"), rc 215
 
   The fix is the crate's own NOVALUE-aware reader (`Interp::read`, which
-  returns `(ObjRef, Novalue)`) plus `novalue_check`, which every other read
-  site in this crate already pairs with it.
+  returns `(ObjRef, Novalue)`) plus `novalue_check`.
+
+  PAIRING THE TWO IS A PER-SITE DECISION HERE, NOT A CONVENTION, and the
+  first version of this paragraph said the opposite ("every other read site
+  in this crate already pairs with it"). Enumerated rather than assumed at
+  the next re-review: of the other callers of that reader, one pairs and the
+  rest bind the flag to `_` on purpose, because a lookup that must not raise
+  is a different operation from an evaluation that must. So "use the reader
+  that returns the flag" is only half the rule; the other half is deciding,
+  per site, whether an unset read is an error there.
 
   AND THE ORDER IS MEASURED, not tidy: `novalue_check` runs BEFORE the >V>
   and >>> lines. Under trace i the oracle's failing re-test emits the DO
@@ -1166,7 +1174,14 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   THE LESSON, because it is the second time in this task that a fix's own
   adjacent shape was the defect: "reads the variable" and "evaluates the
   variable" are not the same operation in this crate, and the difference is
-  a whole condition. `read_by_name` exists for `PROCEDURE EXPOSE`-shaped
-  lookups that must not raise; `Interp::read` exists for evaluations that
-  must. Picking the first because it took a name rather than a SymbolId is
-  what went wrong.
+  a whole condition.
+
+  THE DIFFERENCE IS VISIBLE IN THE SIGNATURES, which is the durable way to
+  say it: one reader returns a bare value and *cannot* report that the
+  variable was unset, the other returns the value alongside a flag that says
+  so. Picking the first because it took a name where `bind_control` also
+  took a name is what went wrong -- a similarity of parameter type, not of
+  meaning. An earlier version of this paragraph justified the two by naming
+  the constructs each was "for", and got that wrong too (the first's other
+  caller is not the one it named); the signatures do not need naming
+  constructs and do not go stale when callers move.

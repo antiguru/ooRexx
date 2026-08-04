@@ -5056,19 +5056,23 @@ impl Interp {
                 // back, adds `1`, and `11 > 3` ends the loop after one pass.
                 // Reusing `current` here instead ran three passes and printed
                 // `4`, and the `>V>` line above then positively stated a
-                // value the oracle contradicts. So the read below goes
-                // through `read_by_name`, exactly where `bind_control`'s own
-                // write goes, and `current` is only ever the *header's* value
-                // now -- on the first pass, and never again.
+                // value the oracle contradicts. So the value below is read
+                // out of the variable pool, and `current` is only ever the
+                // *header's* value now -- on the first pass, and never
+                // again.
                 //
                 // Two adjacent shapes fall out of that read rather than
                 // needing their own handling, and both are measured: a body
                 // that `DROP`s the control variable reads the derived name
                 // (`>>>   "II"`, then 41.1 `Nonnumeric value ("II")`), and a
                 // body that assigns a non-numeric reads it and fails the same
-                // way (41.1, `("abc")`). `read_by_name`'s own miss answer and
+                // way (41.1, `("abc")`). The reader's own miss answer and
                 // `arith_operand`'s own raiser produce both without a special
-                // case here.
+                // case here. **Which reader, and why it is not the obvious
+                // one, is the paragraph below** -- this one said
+                // `read_by_name` until round 2 changed it and left the
+                // sentence behind, which is the same defect twice on one
+                // arm.
                 //
                 // **Bound before the decision, not after** -- measured
                 // against the oracle, `do i = 5 to 3 / say never / end /
@@ -5282,22 +5286,26 @@ impl Interp {
         let slot = self.slot_of(name);
         let frame = self.activation().frame;
         self.roots.set_slot(frame, slot, value);
-        // `trace_assignment` carries its own `intermediates` gate, so this
-        // one is not a second decision: it decides whether to *build* the
-        // two `Vec`s below, not whether to print. Kept because this runs once
-        // per loop pass and would otherwise allocate twice per pass under
-        // `TRACE OFF`, and named here so a future divergence between the two
-        // gates cannot hide in it (review round 1, F9).
+        // `trace_assignment` carries its own `intermediates` gate, so the
+        // check below is not a second decision about whether to *print*: it
+        // decides whether to *build* the two `Vec`s, and it exists because
+        // this function runs once per loop pass.
         //
-        // **It is the only pre-gate of its kind in this file**, which the
-        // first version of this note got wrong in the other direction --
-        // it claimed the shape was one "every other tracing site in this
-        // file uses" and named two that do not have it (re-review NEW-5).
-        // `grep -c 'tracing_intermediates()' crates/rexx-exec/src/run.rs`
-        // is `1`, and it is this line; `step`'s own `Assignment` arm builds
-        // its `rendered` unconditionally because `trace_result` and the
-        // write both need it. Do not generalise from this site -- it is
-        // here for its own measured reason and for no other.
+        // **Kept on a measurement, not on a pattern.** A 2,000,000-pass
+        // `do ii = 1 to 2000000` under `TRACE OFF`, release build, three
+        // runs each: 3.13/3.13/3.15 s with this check and 3.22/3.22/3.23 s
+        // without it -- about 40 ns per pass, which is the two allocations.
+        // Small, real, and a fixed number that stays true however the rest
+        // of the file changes.
+        //
+        // Two earlier versions of this note argued from sibling sites
+        // instead and were false both times (review round 1 F9, re-reviews
+        // NEW-5 and NEW-F1): first that other tracing sites share the shape,
+        // then that this is the only one -- the second sentence quoted a
+        // search command whose own search term it contained, so committing
+        // the evidence changed the answer. Neither claim was load-bearing.
+        // Do not restore either; if the question ever matters, the compiler
+        // and the profiler answer it, and this comment should not try to.
         if self.tracing_intermediates() {
             let name = code.symbols.name(control).as_bytes().to_vec();
             let rendered = self.to_text(value).to_vec();

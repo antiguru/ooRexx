@@ -189,9 +189,13 @@ lang/condition_traps.rex
 lang/push_queue.rex
 
 # New for 4b Task 9 -- RAISE SYNTAX ... ARRAY's substitution list and its own
-# trace lines, under trace i (the one program in this subset that is: >A> is
-# an intermediates-level prefix and invisible under trace r, which is what
-# every other 4b program uses). Its raise is deliberately untrapped, because
+# trace lines. It runs under trace i because >A> is an intermediates-level
+# prefix and nothing shows it under trace r; that is a property of the prefix
+# and of this program, not a census of the others. (The sentence here used to
+# add "the one program in this subset that is, which is what every other 4b
+# program uses"; enumerating the subset showed the second half already false
+# -- four of the others set no trace at all.) Its raise is deliberately
+# untrapped, because
 # the thing it pins -- an omitted array element holding its place in the
 # substitution list rather than closing up -- is observable only in the error
 # report, condition('o') being 4c's. Its own header states which wrong answer
