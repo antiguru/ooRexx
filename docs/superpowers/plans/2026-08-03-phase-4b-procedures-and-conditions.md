@@ -1225,6 +1225,30 @@ This is a real question, not a rhetorical one, and 4c is the last sub-phase that
 
 **Do not act on the answer in 4b.** This step produces a costed recommendation for the 4c plan. Consolidating the harness while ten tasks depend on it is the collision D5 warns about, and it would move every gate figure between here and now.
 
+- [ ] **Step 3c: Rule on the compound-`DO` gap. Do not inherit it.**
+
+4b closes with **one known divergence from the oracle that is not a missing feature**: a compound variable used as a `DO` control variable is never bound. `bind_control` (`rexx-exec/src/run.rs`, find it by name) writes the control variable through `slot_of`, a flat name-to-slot lookup, so `cv.j` becomes the literal name of one variable and no tail is resolved -- while the same executor resolves the same name correctly one line later. It is **not** a parse gap: `cv.j` is a single symbol token and the parser interns `"CV.J"` whole. Provenance is 4a's; `instruction_owner` returns `None` for `InstructionKind::Do`, meaning implemented, not deferred. **Ownership is unassigned**, which is why it has drifted this far.
+
+Six ooTest bodies turn on it and they are the only assertion failures in the whole `base/keyword` table. `phase-4-exclusions.txt`'s `KNOWN GAPS` row carries the two-line witness and the three probes narrowing it to exactly one mechanism.
+
+Every previous task was right to record rather than fix it, because `DO` was not in their file lists. **This gate has no such excuse**: a sub-phase that ships a known, witnessed, unowned divergence in a construct it claims to have delivered must say so in its own gate document, in one of three forms. Pick one and justify it:
+
+1. **Fix it here.** One function, and the six bodies become the regression test that proves it.
+2. **Assign it an owner** -- 4c or Phase 5 -- which moves the row from `KNOWN GAPS` into `EXCLUSIONS` and makes it that phase's gate criterion.
+3. **Ship it as an open gap**, named in the gate document as a criterion **met weakly**, with the reason no owner was assigned.
+
+What is not acceptable is a gate document that does not mention it. That is the failure this step exists to prevent, and the reason it is a step rather than a note: an obligation recorded only in a controller's ledger reaches nobody.
+
+- [ ] **Step 3d: Record Task 11's L1 result correctly, and do not gate on it**
+
+The `base/keyword` table is a **measurement this gate reports**, not a threshold it passes. Report: **1,773 of 2,441 exact-spelling `assertSame` calls extracted into 896 bodies (72.6%); 100 bodies pass, carrying 713 assertions.** The remaining 796 bodies are 790 `4c` plus the 6 above.
+
+Three qualifications belong beside that number, all measured during Task 11's review and each one weakening it:
+
+* **A `4c` attribution says what a body hits *first*, not what would make it pass.** Four bodies are known to differ: `CALL::test_expression`, `CALL::test_literal` and `CALL::test_on_name` fail under the **C++ oracle itself** (`Error 43, Routine not found`) because they call `::routine`s the standalone program does not carry, and `NUMERIC::test_42` exits 3 because its body falls through into `dig: Return digits()`.
+* So the 790 are an **upper bound on what landing 4c would fix**, not a measure of 4c's remaining surface. Do not restate the stronger claim; it was in `l1-coverage.md` and was corrected.
+* `base/keyword` has **zero Phase 5 dependency**. That is a genuine finding and safe to report.
+
 - [ ] **Step 4: Assess each criterion honestly, including the ones met weakly**
 
 4a's gate recorded five met, one met with an inherited criterion defect, and one met weakly with an open gap. That is what an honest gate looks like. A seven-of-seven with no qualifications, after a sub-phase this size, is a claim about the instruments rather than the code.
