@@ -992,7 +992,7 @@ fn scan_always_answers_with_tokens_or_an_error_number() {
     let nibbles = b"4g1 \t0";
     let mut count = 0;
     for_every_string(nibbles, 5, |bytes| {
-        for marker in [b'x', b'b'] {
+        for marker in *b"xb" {
             count += 1;
             let mut text = vec![b'\''];
             text.extend_from_slice(bytes);
