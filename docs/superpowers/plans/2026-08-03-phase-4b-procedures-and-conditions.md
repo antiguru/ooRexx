@@ -1045,6 +1045,25 @@ Removing a KNOWN GAP row needs the gap closed and a witness in the tree.
 
 ---
 
+## Review discipline for Tasks 10-12, measured from Tasks 7, 8 and 9
+
+Added 2026-08-04. Tasks 7 and 9 each ran four review passes and four or five fix rounds. **The measurement says the early passes paid and the late ones did not**, and the reason is specific enough to act on.
+
+**What the reviews caught that nothing else did.** Task 7's first review: a Critical dropping a pending condition on `RETURN`/`EXIT`, and a `RAISE SYNTAX` path answering at **rc 0** where the oracle gives 33.904/223. Task 8's: the degenerate no instrument reached -- deleting both queue writes left the whole suite green. Task 9's: a wrong answer (`do ii = 1 to 3; ii = 10; end; say ii` giving 4 against the oracle's 11), and then, in the *second* pass, a defect the first fix introduced (`read_by_name` bypassing `NOVALUE`). **Every one of those is a silent wrong answer, and none was reachable from the gates.** Keep the first review and the first re-review at full strength.
+
+**What the late rounds caught.** Task 9's rounds 3 and 4 found **zero behavioural defects** and **nine false statements**, and every one of the nine arrived in a commit correcting a previous one. Corrections are this defect's habitat: correcting a comment means writing about the code's *context* -- what other sites do, what the gates total, how many things there are -- which is exactly what is not visible from the line being edited. The loop generated its own work.
+
+**So, binding on Tasks 10, 11 and 12:**
+
+* **Prose findings do not enter the fix loop.** A finding whose subject is a comment, a doc, a report or a plan sentence -- with no behavioural claim attached -- is collected, not dispatched. They are fixed **once**, in a single pass at the end of the task, after the last behavioural fix has landed. Task 9's rounds 2 through 4 would have been one pass.
+* **That pass sweeps the neighbourhood, not the diff.** Task 9's ninth false statement sat three paragraphs below the commit's own new text, in a sentence the commit never touched: it said the expectation "is three `*-*` lines" while that commit added the fourth. **The sentence a change falsifies need not be the sentence the change edits.**
+* **Write comments under `rust/CLAUDE.md`'s three rules from the start.** They exist because of these tasks: no mutable in-repo aggregate in prose (assert it or delete it); no claim falsifiable by the act of committing it; no exhaustiveness claim without an enumeration that lives *outside* this repository. Applied at authoring time, they would have prevented most of the nine.
+* **A re-review verifies its named findings and asks one further question** -- did this round introduce a new false statement, in its own text or its neighbourhood. It is not a fresh full review of the task.
+* **Size the review to the risk, and say so when dispatching.** These three tasks are not Task 7. Task 10 is corpus programs and a sweep; Task 11 is an extractor with three tests; Task 12 is a document. Their behavioural surface is small, and the first review should be told where the real risk is rather than sent to look everywhere.
+* **What is *not* relaxed:** every criterion, witness and test must still be able to fail, and each is still checked by deleting or inverting the thing it protects. That discipline found all four Criticals in this phase. It is the fix loop's uniformity being cut, not the standard of evidence.
+
+---
+
 ### Task 10: The 4b corpus and the collector
 
 **Files:**
@@ -1170,6 +1189,8 @@ This is a real question, not a rhetorical one, and 4c is the last sub-phase that
 * **The third copy.** Ownership data lives in `tests/owners.rs`, in `loud.rs`'s witness rows, and in a match in `src/lib.rs` -- production code cannot reach a test module. Task 0 flagged this and it is still hand-maintained. It is *guarded* (the stderr assertion catches drift, verified by mutation), so it is duplication rather than rot. Cost the fix: make `owners.rs` the single source and assert `src/lib.rs`'s match equal to it, rather than maintaining both.
 * **Whether the phase strings are load-bearing at all.** They exist so a gate can say "4b is done" -- but the differential corpus makes that claim better and more directly. A binary implemented/not-implemented, with the reason in the message and no phase attribution, would delete most of this surface. Say what would actually break.
 * **Which defects the attribution caused.** By this point the phase's record will show it. The ones visible at Task 2 were: `loud.rs` deleting the witness covering `Call::Qualified` and `Call::Trap` when `Call` lands; four occurrences of a witness implemented out from under a test; the `>I>`/`<I<` owner question, whose *existence* is an attribution artifact; and the corpus-subset union plumbing.
+
+  **Added 2026-08-04, and it is the sharpest instance so far because it was measured rather than predicted.** One stale fact -- "`Call::Trap` is loud", false since Task 7 -- had **three** prose copies, and they were found by three different agents across two tasks: `tests/owners.rs` (Task 8's review), `tests/loud.rs`'s `INSTRUCTION_WITNESSES` doc (Task 8's implementer, while fixing the first), and `src/lib.rs` under `ExprKind::Call` (Task 8's re-review). **Task 7's own five review passes saw none of them**, because each copy sits in a file Task 7 never had to touch. The stderr assertion guards the *data*; nothing guards the *prose about* the data, and the prose is where all three copies were. Cost the consolidation against this: the guarded duplication is cheap, and the unguarded commentary around it is what actually rotted.
 
 **Do not act on the answer in 4b.** This step produces a costed recommendation for the 4c plan. Consolidating the harness while ten tasks depend on it is the collision D5 warns about, and it would move every gate figure between here and now.
 
