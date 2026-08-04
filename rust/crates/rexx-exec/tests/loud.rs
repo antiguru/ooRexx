@@ -33,13 +33,9 @@
 //! byte-for-byte differential run against the oracle. Re-deriving that here
 //! with a one-line snippet would be strictly weaker evidence covering the
 //! same code path, not new evidence. What this file checks for the in-scope
-//! side is only that the classification below -- the same `match` shape
-//! `coverage.rs` uses -- has a total of 28 `InstructionKind` and 11
-//! `ExprKind` entries (20 and 9 at the 4a gate; 4b's Task 1 moved
-//! `Interpret` in scope, Task 3 moved `Return`, Task 4 moved
-//! `ExprKind::Call`, Task 5 moved `Procedure`/`Use`/`ExprKind::
-//! VariableReference`, Task 7 moved `Signal`/`Raise` and Task 8 moved
-//! `Push`/`Queue`), so an in-scope variant cannot go unlisted by omission.
+//! side is only that `owners.rs`'s two tables hold the in-scope totals
+//! [`in_scope_counts_match_the_audited_split`] asserts, so an in-scope
+//! variant cannot go unlisted by omission.
 //!
 //! # The owner table lives in `owners.rs`
 //!
@@ -53,43 +49,25 @@
 //! `docs/superpowers/plans/phase-4-exclusions.txt`'s "EXPRKIND OWNERSHIP"
 //! section.
 //!
-//! # Arm-grained ownership (Task 0's Step 2)
+//! # Arm-grained ownership, and why this file no longer reconciles anything
 //!
-//! `InstructionKind::Call` is one row in `owners.rs`'s `INSTRUCTION_TAGS`
-//! (`"Call"` -> `"Phase 5"`), which is right for criterion 1's parse-only
-//! coverage question ("was some `Call` constructed") but wrong for this
-//! file's own question, because it wraps an inner enum (`rexx_parse::Call`)
-//! whose *arms* do not all become in-scope, or even all belong to the same
-//! owner, at the same moment: `Call::Named` and `Call::Dynamic` are in scope
-//! from Task 3 and `Call::Trap` (`CALL ON`/`CALL OFF`) from Task 7, while
-//! `Call::Qualified` is genuinely Phase 5's (a namespace-qualified `CALL`,
-//! mirroring `ExprKind::QualifiedCall`'s own ownership). A single `"Call"`
-//! witness row could not survive that: the moment Task 3 implemented
-//! `Call::Named`, the witness naming it had to be deleted, and a shared row
-//! would have taken `Call::Qualified`'s own loudness coverage down with it,
-//! with nothing left to catch that `CALL ns:name` is still unimplemented.
+//! `InstructionKind::Call` wraps an inner enum (`rexx_parse::Call`) whose
+//! arms do not share an owner: a namespace-qualified `CALL ns:name` needs
+//! the object model and is Phase 5's, mirroring `ExprKind::QualifiedCall`,
+//! while the other three arms are this crate's. `owners.rs`'s
+//! `INSTRUCTION_TAGS` therefore gives each arm its own row, through that
+//! file's `tags!` `split` section, and `owners::instruction_tag` answers
+//! `"Call::Qualified"` rather than `"Call"` for the one that is still loud.
 //!
-//! **`InstructionKind::Signal` was the second such variant and no longer is.**
-//! `Signal::Label`/`Signal::Value` moved in scope together at Task 6, leaving
-//! `"Signal::Trap"` alone to catch that `SIGNAL ON`/`SIGNAL OFF` still was
-//! not; Task 7 implemented that arm too, so the coarse tag is
-//! `Owner::InScope` and nothing about `Signal` is arm-grained any more. The
-//! history is kept here because it is the clearest illustration of why the
-//! split exists at all: one row would have gone silently dead at Task 6.
-//!
-//! So `INSTRUCTION_WITNESSES` below carries **one row per still-loud arm**
-//! for the one split variant left -- `"Call::Qualified"` alone.
-//! [`instruction_arm`] is what resolves a witness's tag against the program
-//! it parses: the coarse `owners::instruction_tag` for every variant except
-//! `Call` and `Signal`, and the inner arm's own name for those two (it still
-//! names `Signal`'s arms, harmlessly, since a tag it produces for an
-//! in-scope variant is never looked up).
-//! [`assert_witness_set_is_complete`]'s own expected set is built the same
-//! way, through [`expand_for_witnesses`] -- a hand-maintained expansion of
-//! `owners.rs`'s coarse tag list, the same "pin it as a literal, not as
-//! whatever the code currently computes" device `EXPECTED_OUT_OF_SCOPE`
-//! already uses one level up, because nothing here can enumerate
-//! `rexx_parse::Call`'s own arms at compile time.
+//! **Everything below is keyed by exactly the tags that table produces.**
+//! There is no expansion step, no second grain and no owner string written
+//! down here: [`table_owner`] reads the owner out of `owners.rs`, and
+//! [`assert_witness_set_is_complete`] holds this file's witness tags equal
+//! to that table's phase-owned rows as literal sets. That is what lets
+//! [`every_out_of_scope_variant_fails_loudly`] compare `src/lib.rs`'s
+//! `instruction_owner`/`expr_owner` against `owners.rs` directly, rather
+//! than against a hand-maintained reconciliation of it -- which would only
+//! move the duplication into the reconciler.
 //!
 //! # Witness programs
 //!
@@ -125,64 +103,60 @@ use rexx_parse::{ExprKind, InstructionKind, parse_program};
 
 #[path = "owners.rs"]
 mod owners;
-use owners::{EXPR_TAGS, INSTRUCTION_TAGS, Owner, SPLIT_TABLE_PHASES, expr_tag, instruction_tag};
-
-/// The fully arm-qualified tag for one `InstructionKind`: the coarse
-/// `owners::instruction_tag` for every variant except `Call` and `Signal`,
-/// whose own inner arm this returns instead. See the module doc's "Arm-
-/// grained ownership" section for why those two specifically need this and
-/// the rest do not.
-fn instruction_arm(kind: &InstructionKind) -> String {
-    match kind {
-        InstructionKind::Call(c) => match &**c {
-            rexx_parse::Call::Named { .. } => "Call::Named".to_string(),
-            rexx_parse::Call::Dynamic { .. } => "Call::Dynamic".to_string(),
-            rexx_parse::Call::Qualified { .. } => "Call::Qualified".to_string(),
-            rexx_parse::Call::Trap(_) => "Call::Trap".to_string(),
-        },
-        InstructionKind::Signal(s) => match &**s {
-            rexx_parse::Signal::Trap(_) => "Signal::Trap".to_string(),
-            rexx_parse::Signal::Label(_) => "Signal::Label".to_string(),
-            rexx_parse::Signal::Value(_) => "Signal::Value".to_string(),
-        },
-        other => instruction_tag(other).0.to_string(),
-    }
-}
-
-/// `owners::INSTRUCTION_TAGS`'s coarse, phase-owned tag names, expanded to
-/// the fine-grained witness tags `INSTRUCTION_WITNESSES` actually carries
-/// for `Call` and `Signal` (`instruction_arm`'s own inverse, in effect) --
-/// every other coarse tag expands to itself. Hand-maintained rather than
-/// derived from `rexx_parse::Call`/`Signal`, which nothing here can
-/// enumerate at compile time -- the same device `EXPECTED_OUT_OF_SCOPE`
-/// already uses for a different set, one level up.
-fn expand_for_witnesses(coarse: &'static str) -> Vec<&'static str> {
-    match coarse {
-        // One, not four: Task 3 implemented `Call::Named` and
-        // `Call::Dynamic` and Task 7 implemented `Call::Trap`, so three rows
-        // are gone and this expansion shrank with them. The coarse tag stays
-        // phase-owned in `owners.rs` -- as `Phase 5` now, not `4b` -- because
-        // `Call::Qualified` is the arm still left.
-        "Call" => vec!["Call::Qualified"],
-        // **No `"Signal"` arm at all since Task 7.** `Signal::Trap` was the
-        // last of the three, so the coarse tag is `Owner::InScope` in
-        // `owners.rs` and never reaches this function: only phase-owned tags
-        // are expanded. A stale `"Signal" => vec!["Signal::Trap"]` here
-        // would be dead rather than wrong, which is exactly the kind of
-        // entry that survives a rename and then misleads.
-        other => vec![other],
-    }
-}
+use owners::{EXPR_TAGS, INSTRUCTION_TAGS, Owner, expr_tag, instruction_tag};
 
 /// One out-of-scope variant's witness: source text, which category owns the
 /// tag it must construct, and the tag itself. Checked against the parsed AST
 /// before it is ever run, so a snippet that silently parses into the wrong
 /// shape cannot pass by accident.
+///
+/// **No owner field.** A witness names a tag and `owners.rs` says who owns
+/// it; see [`table_owner`].
 struct Witness {
     tag: &'static str,
-    owner: &'static str,
     source: &'static str,
     category: Category,
+}
+
+/// The phase `owners.rs` records for `witness`'s own tag.
+///
+/// This is the only place an owner string enters this file, and that is the
+/// point rather than tidiness: the string it returns is what
+/// [`every_out_of_scope_variant_fails_loudly`] then requires `src/lib.rs` to
+/// have emitted, so the two tables are compared to each other rather than
+/// each to a copy kept here. A witness that named its own owner could agree
+/// with `lib.rs` while both disagreed with `owners.rs`, and nothing would
+/// say so.
+///
+/// Panics rather than returns an `Option` for a tag the table does not
+/// carry, or carries as in-scope: both mean this file and `owners.rs`
+/// disagree about what is loud, which is a harness defect and not a result.
+/// [`assert_witness_set_is_complete`] is what makes that unreachable in
+/// practice, by pinning the two tag sets equal.
+fn table_owner(witness: &Witness) -> &'static str {
+    let table = match witness.category {
+        Category::Instruction => INSTRUCTION_TAGS,
+        Category::Expr => EXPR_TAGS,
+    };
+    let (_, owner) = table
+        .iter()
+        .find(|(name, _)| *name == witness.tag)
+        .unwrap_or_else(|| {
+            panic!(
+                "witness {:?} names no row in owners.rs's table for {:?}",
+                witness.tag, witness.category
+            )
+        });
+    match owner {
+        Owner::Phase(p) => p,
+        Owner::InScope | Owner::Unreachable => panic!(
+            "witness {:?} is owned by {owner:?} in owners.rs, so it must not \
+             have a witness row here at all -- a row asserting a loud failure \
+             for something this crate implements would fail for the right \
+             reason and the wrong cause",
+            witness.tag
+        ),
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -191,55 +165,28 @@ enum Category {
     Expr,
 }
 
-/// Every out-of-scope `InstructionKind`, one witness each. **12 entries**, one
-/// per `Owner::Phase` arm after `Call` expands -- 12 coarse phase-owned tags
-/// in `INSTRUCTION_TAGS` above, and `Call`'s own single tag still expands to
-/// its one remaining loud arm (`Call::Qualified`), so coarse and expanded
-/// counts are equal. (Review finding M1: this line said "19 entries" and,
-/// before that, "20", both of which counted the coarse tags while describing
-/// the expanded list -- the two numbers are different quantities and the
-/// arm-grained section of the module doc above is where the distinction is
-/// set out. **This line went stale the identical way twice more after
-/// that.** Task 5 moved `Procedure` and `Use` in scope and nothing here
-/// followed, sitting at "20 entries -- 18 coarse" through Tasks 4 and 5
-/// while `assert_witness_set_is_complete`'s own copy of this same
-/// arithmetic, a few dozen lines down, was correctly kept at 16/18 --
-/// Task 6 fixed both numbers here, together with `Signal`'s own new count
-/// ("17 entries -- 16 coarse... `Call` becomes two rows and `Signal`
-/// becomes one"). **Then Task 7 moved `Signal` and `Raise` in scope and
-/// moved `Call::Trap` in scope alongside `Signal`'s own arm, dropping
-/// `Call`'s own expansion from two rows to one and leaving coarse and
-/// expanded counts equal for the first time (16/17 to 14/14), and this line
-/// sat at Task 6's stale "17/16/two rows" text through that whole task**,
-/// uncorrected -- exactly the drift the parenthetical above already warned
-/// about, found only now, by Task 8, which fixes it a third time alongside
-/// its own change: `Push` and `Queue` move in scope, 14 to 12 both ways.)
+/// One witness per phase-owned row of `owners.rs`'s `INSTRUCTION_TAGS`.
 ///
-/// 12 coarse tags since 4b's Task 8 moved `Push` and `Queue` in scope (14
-/// after Task 7's `Signal`/`Raise`, 16 after Task 5's `Procedure`/`Use`, 18
-/// after Task 3's `Return`, 19 after Task 1's `Interpret`, 20 at the 4a gate)
-/// -- pinned item 4 in `owners.rs`'s own list: a witness for a variant that
-/// moved in scope must be *deleted*, not left stale, or
-/// `assert_witness_set_is_complete` fails the other way.
-/// `assert_witness_set_is_complete` checks the two lists against each other so
-/// a variant cannot be silently dropped from this list while staying in the tag
-/// table.
+/// **The count is not written here**, in either grain, because
+/// [`assert_witness_set_is_complete`] asserts this list's tag set equal to
+/// that table's phase-owned rows and a number beside it would be a second,
+/// unchecked statement of the same thing. It went stale three times as
+/// exactly that. The rule the assertion enforces in both directions: a
+/// variant that moves in scope must have its row *deleted* here, and a row
+/// here with no phase-owned tag fails just as loudly as a missing one.
 const INSTRUCTION_WITNESSES: &[Witness] = &[
     Witness {
         tag: "Command",
-        owner: "Phase 7",
         // A clause that is only an expression, and not any other shape, is
         // dispatched as a command through the current ADDRESS.
         source: "'date'\n",
         category: Category::Instruction,
     },
-    // ---- `Call`, arm-grained (Step 2): see the module doc ----
+    // The one arm-grained tag; see the module doc.
     Witness {
         tag: "Call::Qualified",
-        owner: "Phase 5",
         // `CALL ns:name args`, restricted to public routines of that
-        // namespace -- genuinely Phase 5's, unlike `Call::Named`/`Dynamic`/
-        // `Trap`, all "4b".
+        // namespace.
         source: "call ns:sub\n",
         category: Category::Instruction,
     },
@@ -268,61 +215,51 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
     // owe something again if a later task's audit finds otherwise.
     Witness {
         tag: "Parse",
-        owner: "4c",
         source: "parse value 'a' with v\n",
         category: Category::Instruction,
     },
     Witness {
         tag: "Arg",
-        owner: "4c",
         source: "arg x\n",
         category: Category::Instruction,
     },
     Witness {
         tag: "Pull",
-        owner: "4c",
         source: "pull x\n",
         category: Category::Instruction,
     },
     Witness {
         tag: "Address",
-        owner: "4c",
         source: "address cmd\n",
         category: Category::Instruction,
     },
     Witness {
         tag: "Expose",
-        owner: "Phase 5",
         source: "expose x\n",
         category: Category::Instruction,
     },
     Witness {
         tag: "Options",
-        owner: "Phase 5",
         source: "options 'x'\n",
         category: Category::Instruction,
     },
     Witness {
         tag: "Message",
-        owner: "Phase 5",
         source: "a~b\n",
         category: Category::Instruction,
     },
     Witness {
         tag: "Guard",
-        owner: "Phase 5",
         source: "guard on\n",
         category: Category::Instruction,
     },
     Witness {
         tag: "Reply",
-        owner: "Phase 5",
         source: "reply 5\n",
         category: Category::Instruction,
     },
     Witness {
         tag: "Forward",
-        owner: "Phase 5",
         source: "forward\n",
         category: Category::Instruction,
     },
@@ -342,25 +279,21 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
 const EXPR_WITNESSES: &[Witness] = &[
     Witness {
         tag: "QualifiedCall",
-        owner: "Phase 5",
         source: "say ns:foo(1)\n",
         category: Category::Expr,
     },
     Witness {
         tag: "ClassResolver",
-        owner: "Phase 5",
         source: "say ns:Bar\n",
         category: Category::Expr,
     },
     Witness {
         tag: "Message",
-        owner: "Phase 5",
         source: "say a~b\n",
         category: Category::Expr,
     },
     Witness {
         tag: "List",
-        owner: "Phase 5",
         source: "say (1, 2)\n",
         category: Category::Expr,
     },
@@ -370,10 +303,9 @@ const EXPR_WITNESSES: &[Witness] = &[
 /// category it claims, before running it. A snippet that parses into the
 /// wrong shape would otherwise let a passing exit-code check mean nothing.
 ///
-/// `instruction_arm`, not the coarse `owners::instruction_tag`, for the
-/// `Category::Instruction` half: a witness's `tag` may name a specific
-/// `Call`/`Signal` arm (Step 2), and only `instruction_arm` can tell those
-/// apart.
+/// `owners::instruction_tag` needs no help telling a `Call` arm from its
+/// variant: that table is arm-grained where `lib.rs` is, so the tag it
+/// answers for a parsed node is already the tag a witness names.
 fn assert_constructs(witness: &Witness) {
     let program = parse_program(witness.source.as_bytes().to_vec())
         .unwrap_or_else(|e| panic!("witness for {} failed to parse: {e:?}", witness.tag));
@@ -382,7 +314,7 @@ fn assert_constructs(witness: &Witness) {
             .main
             .instructions
             .iter()
-            .any(|i| instruction_arm(&i.kind) == witness.tag),
+            .any(|i| instruction_tag(&i.kind).0 == witness.tag),
         Category::Expr => {
             let mut found = false;
             for i in &program.main.instructions {
@@ -463,22 +395,15 @@ fn walk_exprs<'a>(kind: &'a InstructionKind, f: &mut impl FnMut(&'a rexx_parse::
 
 #[test]
 fn assert_witness_set_is_complete() {
-    // `flat_map(expand_for_witnesses)`, not a bare `.map`, and since 4b's
-    // Task 7 there is exactly one coarse tag left that expands to anything
-    // other than itself (Step 2, the module doc's "Arm-grained ownership").
-    // 12 coarse phase-owned `InstructionKind` tags since Task 8 moved `Push`
-    // and `Queue` in scope (14 after Task 7's `Signal`/`Raise`, 16 after
-    // Task 5's `Procedure`/`Use`, 18 after Task 3's `Return`, 19 after Task
-    // 1's `Interpret`, 20 at the 4a gate); `Call`'s one row becomes **one**
-    // (`Qualified` alone, its other three arms being Tasks 3 and 7's), net
-    // +0, so 12 expected witness tags. The `flat_map` stays rather than
-    // collapsing to `.map`: it is still doing real work for `Call`, and it
-    // is what a later task adding a second split variant needs already in
-    // place.
+    // A plain `.map`: `owners.rs`'s table is arm-grained, so its phase-owned
+    // rows are already the tags this file's witnesses are keyed by, one for
+    // one. Nothing expands, and the absence of an expansion step is what
+    // makes `table_owner`'s lookup below a comparison against `owners.rs`
+    // rather than against a reconciliation of it.
     let expected_instructions: Vec<&str> = INSTRUCTION_TAGS
         .iter()
         .filter(|(_, o)| matches!(o, Owner::Phase(_)))
-        .flat_map(|(name, _)| expand_for_witnesses(name))
+        .map(|(name, _)| *name)
         .collect();
     let mut got_instructions: Vec<&str> = INSTRUCTION_WITNESSES.iter().map(|w| w.tag).collect();
     got_instructions.sort();
@@ -514,21 +439,18 @@ fn assert_witness_set_is_complete() {
 
 #[test]
 fn in_scope_counts_match_the_audited_split() {
-    // 28 since 4b's Task 8 moved `Push` and `Queue` in scope (26 after Task
-    // 7's `Signal`/`Raise`, 24 after Task 5's `Procedure`/`Use`, 22 after
-    // Task 3's `Return`, 21 after Task 1's `Interpret`); see `owners.rs`'s
-    // own `variant_counts_match_the_audited_split` for the full split,
-    // including `Call`'s sideways move from 4b's column into Phase 5's,
-    // which changes no count here.
+    // The in-scope halves of `owners.rs`'s two tables, so that an in-scope
+    // variant cannot go unlisted by omission. `owners.rs`'s own
+    // `variant_counts_match_the_audited_split` carries the full split these
+    // two figures are a part of; the rows themselves, including `Call`'s
+    // arm-grained three, are policed there.
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        28
+        31
     );
-    // 11 since 4b's Task 5 moved `ExprKind::VariableReference` in scope (10
-    // after Task 4 moved `ExprKind::Call`, 9 before that).
     assert_eq!(
         EXPR_TAGS
             .iter()
@@ -542,13 +464,12 @@ fn in_scope_counts_match_the_audited_split() {
 fn every_out_of_scope_variant_fails_loudly() {
     let mut failures = String::new();
     for witness in INSTRUCTION_WITNESSES.iter().chain(EXPR_WITNESSES.iter()) {
-        assert!(
-            SPLIT_TABLE_PHASES.contains(&witness.owner),
-            "{} names owner {:?}, which is not one of the split table's \
-             phases {SPLIT_TABLE_PHASES:?}",
-            witness.tag,
-            witness.owner
-        );
+        // No `SPLIT_TABLE_PHASES` check here any more: the owner now comes
+        // from `owners.rs`'s own table, and that file's
+        // `assert_owner_strings_are_split_table_phases` already holds every
+        // row of every one of its seven tables to that set -- including
+        // these, and including the rows this file never asks about.
+        let owner = table_owner(witness);
         assert_constructs(witness);
 
         let outcome = run_program(
@@ -562,7 +483,7 @@ fn every_out_of_scope_variant_fails_loudly() {
                 "{} ({}): expected exit {NOT_IMPLEMENTED_EXIT}, got {} \
                  (stdout {:?}, stderr {:?})",
                 witness.tag,
-                witness.owner,
+                owner,
                 outcome.exit_code,
                 String::from_utf8_lossy(&outcome.stdout),
                 String::from_utf8_lossy(&outcome.stderr)
@@ -570,31 +491,40 @@ fn every_out_of_scope_variant_fails_loudly() {
             .unwrap();
             continue;
         }
-        // Task 0's Step 3: the loud message now names an owner
-        // (`src/lib.rs`'s `instruction_owner`/`expr_owner`), and this is
-        // where that is proved rather than merely formatted -- a stderr
-        // that does not name the witness's own owner would mean production
-        // and this table drifted apart, exactly the drift Step 5's fifth
-        // pinned item warns about.
+        // **This line is the equality between `src/lib.rs`'s
+        // `instruction_owner`/`expr_owner` and `owners.rs`'s tables.**
+        // `owner` came out of `owners.rs`; the suffix came out of the
+        // running executor, which built it from `lib.rs`'s own answer. The
+        // third copy of the ownership data is therefore checked against the
+        // first on every run, per row, with no hand-maintained table
+        // between them -- which is what makes `lib.rs`'s match a derived
+        // fact rather than one more place to remember to edit.
+        //
+        // What it does **not** cover: the `None` arms. `Loud::instruction`
+        // is only reached for a variant the executor declines, so an owner
+        // wrongly written as `None` for something loud shows up here, while
+        // a phase wrongly written *onto* an implemented variant is
+        // unreachable data that no assertion can see. `corpus.rs`'s
+        // byte-for-byte differential run is what covers that direction, by
+        // failing the moment an implemented construct starts printing a gap.
         //
         // **Pins the exact trailing shape, not merely the owner's presence
         // (review finding I2).** An earlier version checked
-        // `stderr.contains(witness.owner)`, which a message reading
-        // `[4b] CALL: unimplemented` also satisfies -- `contains` cannot
-        // tell "names the owner in the documented shape" from "mentions the
-        // owner's bytes somewhere". `ends_with` on the exact suffix
-        // `owned_message` (`lib.rs`) produces is what actually pins the
-        // shape later tasks are told to rely on
-        // (`" is not implemented (OWNER)"`, `trim_end` first since every
-        // message ends in `\n`).
+        // `stderr.contains(..)`, which a message reading `[4b] CALL:
+        // unimplemented` also satisfies -- `contains` cannot tell "names the
+        // owner in the documented shape" from "mentions the owner's bytes
+        // somewhere". `ends_with` on the exact suffix `owned_message`
+        // (`lib.rs`) produces is what actually pins the shape later tasks
+        // are told to rely on (`" is not implemented (OWNER)"`, `trim_end`
+        // first since every message ends in `\n`).
         let stderr = String::from_utf8_lossy(&outcome.stderr);
-        let want_suffix = format!(" is not implemented ({})", witness.owner);
+        let want_suffix = format!(" is not implemented ({owner})");
         if !stderr.trim_end().ends_with(&want_suffix) {
             use std::fmt::Write as _;
             writeln!(
                 failures,
                 "{} ({}): stderr does not end with {want_suffix:?}: {stderr:?}",
-                witness.tag, witness.owner
+                witness.tag, owner
             )
             .unwrap();
         }

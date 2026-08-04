@@ -662,21 +662,24 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
 /// **A third copy of `tests/owners.rs`'s `INSTRUCTION_TAGS`, separate by
 /// construction**: production code cannot depend on anything under
 /// `tests/`, so the two cannot be merged the way `coverage.rs` and
-/// `loud.rs` were (Task 0's Step 1). Separate by construction is not the
-/// same as unavoidable, and the 4b gate settles which this is: Step 3b of
-/// `docs/superpowers/plans/phase-4b-gate.md` costs the avoidance concretely
-/// -- assert this match equals `owners.rs` expanded through `loud.rs`'s
-/// `expand_for_witnesses` -- puts it at half a day, and declines it on
-/// value rather than on possibility, because the data is guarded already.
-/// Any variant that moves in scope, or changes owner, has to be edited
-/// in both places -- `owners.rs`'s own module doc names this function as
-/// the fifth of its five pinned items for exactly that reason, and
-/// `loud.rs`'s `every_out_of_scope_variant_fails_loudly` is what would
-/// catch the two drifting apart: it asserts the emitted stderr contains
-/// each witness's own declared owner.
+/// `loud.rs` were. Separate, but not unchecked, and the difference is worth
+/// stating because it decides how much care an edit here needs: a variant
+/// that moves in scope or changes owner must be edited in both places, and
+/// `loud.rs`'s `every_out_of_scope_variant_fails_loudly` fails if it is
+/// not. That test requires each witness's emitted message to end with the
+/// owner `owners.rs` records for that witness's tag, read out of the table
+/// rather than restated in `loud.rs`, so this match is compared against
+/// `owners.rs` itself. `owners.rs`'s own module doc names this function as
+/// the fifth of its five pinned items.
 ///
-/// **Arm-grained for `InstructionKind::Call`, matching `loud.rs`'s own
-/// witness table (Step 2)**: three of `rexx_parse::Call`'s four arms are
+/// The comparison reaches the `Some` arms only. `Loud::instruction` is not
+/// called for a variant this crate executes, so a phase string written onto
+/// one would be data nothing reads; `corpus.rs`'s byte-for-byte run against
+/// the oracle is what covers that direction, by failing as soon as an
+/// implemented construct prints a gap.
+///
+/// **Arm-grained for `InstructionKind::Call`, matching `owners.rs`'s own
+/// `split` section row for row**: three of `rexx_parse::Call`'s four arms are
 /// implemented and answer `None`, and `Call::Qualified` is genuinely Phase
 /// 5's (a namespace-qualified `CALL`, mirroring `ExprKind::QualifiedCall`'s
 /// own ownership below). Every other variant here stays coarse.

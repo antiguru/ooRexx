@@ -73,6 +73,22 @@ pub(crate) enum Owner {
 /// the tag; this is that macro widened to also carry ownership, because
 /// criterion 1 and criterion 5 both need ownership from one invocation for
 /// the same reason Phase 3's needed the tag alone from one.
+///
+/// # The `split` form
+///
+/// A variant whose arms do not share one owner takes the trailing `split
+/// PATTERN in (EXPR) { .. }` section, which expands to a nested `match` on
+/// `EXPR` and contributes one row per arm to `$list`. Both matches stay
+/// wildcard-free, so a new variant of either enum is a compile error here.
+///
+/// `split` rather than an ordinary row because the arms live behind a `Box`
+/// (`InstructionKind::Call(Box<Call>)`) and box patterns are unstable, so
+/// `InstructionKind::Call(Call::Named { .. })` is not a pattern that can be
+/// written; the arms are only reachable by dereferencing into a second
+/// `match`. The section is trailing, and the rows it contributes therefore
+/// land at the end of `$list`, because a matcher cannot alternate two row
+/// shapes inside one repetition without a token muncher. Every consumer
+/// sorts or counts, so `$list`'s order carries nothing.
 macro_rules! tags {
     ($fn_name:ident, $list:ident, $ty:ty, { $($pat:pat => ($name:literal, $owner:expr)),+ $(,)? }) => {
         pub(crate) fn $fn_name(k: &$ty) -> (&'static str, Owner) {
@@ -81,6 +97,22 @@ macro_rules! tags {
             }
         }
         pub(crate) const $list: &[(&str, Owner)] = &[$(($name, $owner)),+];
+    };
+    ($fn_name:ident, $list:ident, $ty:ty,
+     { $($pat:pat => ($name:literal, $owner:expr)),+ $(,)? },
+     split $outer:pat in ($inner:expr) {
+         $($arm:pat => ($arm_name:literal, $arm_owner:expr)),+ $(,)?
+     }) => {
+        pub(crate) fn $fn_name(k: &$ty) -> (&'static str, Owner) {
+            match k {
+                $($pat => ($name, $owner),)+
+                $outer => match $inner {
+                    $($arm => ($arm_name, $arm_owner)),+
+                },
+            }
+        }
+        pub(crate) const $list: &[(&str, Owner)] =
+            &[$(($name, $owner),)+ $(($arm_name, $arm_owner)),+];
     };
 }
 
@@ -112,34 +144,16 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     InstructionKind::Interpret { .. } => ("Interpret", Owner::InScope),
     // In scope since 4b's Task 3, with `CALL`.
     InstructionKind::Return { .. } => ("Return", Owner::InScope),
-    // ---- what was 4b's seven: two left, plus `Call`, which is now
-    // ---- Phase 5's, and `Signal`/`Raise`/`Procedure`/`Use`/`Return`,
-    // ---- which are in scope. The heading counts the block below it,
-    // ---- and the block shrinks as 4b lands; `variant_counts_match_the_
-    // ---- audited_split` is what actually pins the numbers.
-    // **`Phase("Phase 5")` since 4b's Task 7, not `Phase("4b")`**, and the
-    // change of *phase* is the point rather than an edit in passing: this
-    // table is variant-grained, three of `rexx_parse::Call`'s four arms are
-    // implemented (`Named`/`Dynamic` at Task 3, `Trap` at Task 7), and the
-    // one that is not is `Call::Qualified` (`CALL ns:name`), which is Phase
-    // 5's. Leaving "4b" here would have named a phase that owes nothing.
-    // `loud.rs` is where the arms are told apart -- see its
-    // `expand_for_witnesses`, which now expands this one tag to the single
-    // arm that still fails loudly rather than to two.
-    InstructionKind::Call(_) => ("Call", Owner::Phase("Phase 5")),
-    // **In scope since 4b's Task 5**, both of them, and both fully rather
-    // than arm-grained the way `Call` above is. `PROCEDURE` isolates the
-    // callee's pool and aliases the exposed names; `USE ARG`/`USE STRICT
-    // ARG` bind the call's arguments. `USE LOCAL` can only ever fail here,
-    // since this crate has no method invocations -- but it fails with the
-    // oracle's own 98.993/99.910, measured, which is an implemented
-    // instruction answering the right bytes and not a gap.
+    // `PROCEDURE` isolates the callee's pool and aliases the exposed names;
+    // `USE ARG`/`USE STRICT ARG` bind the call's arguments. `USE LOCAL` can
+    // only ever fail here, since this crate has no method invocations -- but
+    // it fails with the oracle's own 98.993/99.910, measured, which is an
+    // implemented instruction answering the right bytes and not a gap.
     InstructionKind::Procedure { .. } => ("Procedure", Owner::InScope),
     InstructionKind::Use(_) => ("Use", Owner::InScope),
-    // **In scope since 4b's Task 7**, both of them, and both fully rather
-    // than arm-grained the way `Call` above is. All three `Signal` arms are
-    // implemented (`Label`/`Value` at Task 6, `Trap` here), so nothing is
-    // left inside the variant for `expand_for_witnesses` to split out.
+    // Whole rather than arm-grained the way `Call` is, both of them. All
+    // three `Signal` arms are in scope, so nothing is left inside the
+    // variant to split out.
     // `Raise` is whole for a subtler reason worth stating, since it is the
     // shape that would justify an arm-grained entry: `RAISE ... ADDITIONAL
     // (a, b)` does still fail loudly, but through `ExprKind::List`'s own
@@ -150,11 +164,9 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // there is no `RAISE` shape whose gap belongs to `RAISE`.
     InstructionKind::Signal(_) => ("Signal", Owner::InScope),
     InstructionKind::Raise(_) => ("Raise", Owner::InScope),
-    // **In scope since 4b's Task 8** (I15), both whole: `queue.rs` stores
-    // every line either writes and neither has a shape this crate cannot
-    // express, so unlike `Call` there is nothing left for `expand_for_
-    // witnesses` to split out. This was 4b's last own row -- `Owner::
-    // Phase("4b")` no longer appears anywhere in this table.
+    // Both whole: `queue.rs` stores every line either writes and neither has
+    // a shape this crate cannot express, so unlike `Call` there is nothing
+    // left to split out.
     InstructionKind::Push { .. } => ("Push", Owner::InScope),
     InstructionKind::Queue { .. } => ("Queue", Owner::InScope),
     // ---- 4c's four ----
@@ -162,13 +174,31 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     InstructionKind::Arg(_) => ("Arg", Owner::Phase("4c")),
     InstructionKind::Pull(_) => ("Pull", Owner::Phase("4c")),
     InstructionKind::Address(_) => ("Address", Owner::Phase("4c")),
-    // ---- Phase 5's six here, seven counting `Call` above ----
+    // ---- Phase 5's ----
     InstructionKind::Expose { .. } => ("Expose", Owner::Phase("Phase 5")),
     InstructionKind::Options { .. } => ("Options", Owner::Phase("Phase 5")),
     InstructionKind::Message { .. } => ("Message", Owner::Phase("Phase 5")),
     InstructionKind::Guard(_) => ("Guard", Owner::Phase("Phase 5")),
     InstructionKind::Reply { .. } => ("Reply", Owner::Phase("Phase 5")),
     InstructionKind::Forward(_) => ("Forward", Owner::Phase("Phase 5")),
+},
+// ---- `CALL`, arm-grained, because its arms do not share one owner ----
+// The only variant in this table that needs the `split` form, and the
+// language is what forces it rather than a preference: a qualified call
+// resolves a public routine of a named namespace, which needs the object
+// model, so `Call`'s arms cannot all land in one phase however the rest of
+// `CALL` is implemented.
+//
+// This grain is what lets `src/lib.rs`'s `instruction_owner` -- which has
+// always had to split `Call`, for the same reason -- be compared against
+// this table row for row, with nothing hand-maintained in between.
+// `loud.rs`'s `every_out_of_scope_variant_fails_loudly` is that comparison.
+split InstructionKind::Call(c) in (&**c) {
+    rexx_parse::Call::Named { .. } => ("Call::Named", Owner::InScope),
+    rexx_parse::Call::Dynamic { .. } => ("Call::Dynamic", Owner::InScope),
+    rexx_parse::Call::Trap(_) => ("Call::Trap", Owner::InScope),
+    // `CALL ns:name`, mirroring `ExprKind::QualifiedCall`'s own ownership.
+    rexx_parse::Call::Qualified { .. } => ("Call::Qualified", Owner::Phase("Phase 5")),
 });
 
 tags!(expr_tag, EXPR_TAGS, ExprKind, {
@@ -331,16 +361,9 @@ impl Coverage {
 /// pinned here") tracks for Step 5's own purposes.
 pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("InstructionKind", "Command", "Phase 7"),
-    // `Call`'s owner changed phase at 4b's Task 7 rather than leaving this
-    // list: `Call::Trap` moved in scope with `Signal::Trap`, leaving
-    // `Call::Qualified` (`CALL ns:name`) as the only loud arm, and that one
-    // is Phase 5's. `Signal` and `Raise` left the list outright in the same
-    // task.
-    ("InstructionKind", "Call", "Phase 5"),
-    // **No `Push` or `Queue` row since 4b's Task 8.** Both moved in scope
-    // (`INSTRUCTION_TAGS` above) -- the same "delete, don't leave stale"
-    // rule `Procedure`/`Use`/`Signal`/`Raise` already followed at their own
-    // tasks.
+    // The one arm-grained row: `CALL`'s other three arms are in scope, so
+    // they appear in `INSTRUCTION_TAGS` and not here.
+    ("InstructionKind", "Call::Qualified", "Phase 5"),
     ("InstructionKind", "Parse", "4c"),
     ("InstructionKind", "Arg", "4c"),
     ("InstructionKind", "Pull", "4c"),
@@ -441,44 +464,31 @@ fn out_of_scope_set_matches_the_committed_expectation() {
 
 #[test]
 fn variant_counts_match_the_audited_split() {
-    // Re-derived here rather than trusted: 40 InstructionKind variants and 15
-    // ExprKind (11 in scope, 4 failing loudly since 4b's Task 5), per the
-    // design spec's criterion 1. The InstructionKind split was 20/9/4/6/1 at
-    // the 4a gate; 4b's Task 1 moved `Interpret` from 4b's column into the
-    // implemented one (21/8/4/6/1), Task 3 moved `Return` (22/7/4/6/1) and
-    // Task 5 moved `Procedure` and `Use` together (24/5/4/6/1). Task 7 moves
-    // `Signal` and `Raise` (26/3/4/6/1) and then moves `Call` *sideways*, out
-    // of 4b's column into Phase 5's (26/2/4/7/1) rather than into the
-    // implemented one: the table is variant-grained, and three of `Call`'s
-    // four arms are implemented while `Call::Qualified` is Phase 5's. That
-    // sideways step is the one this comment would previously have got wrong,
-    // since through Task 5 the same variant sat in 4b's column for
-    // `Call::Trap`'s sake. Task 8 moves `Push` and `Queue`, 4b's last two,
-    // into the implemented column (28/0/4/7/1) -- `Owner::Phase("4b")` is
-    // still a valid split-table phase (`SPLIT_TABLE_PHASES` below), it is
-    // simply owed by nothing left in this table.
-    // `ExprKind::Call` is different -- unlike the instruction, it has no
-    // later-phase arm hiding inside its own `CallTarget`, so Task 4 moves the
-    // whole variant, and only it, from 6 to 5 in the ExprKind row below (9 to
-    // 10 in scope); Task 5 then moves `VariableReference` the same way, 5 to
-    // 4 and 10 to 11. These numbers are the *implemented* counts, not "4a's
-    // own": every later 4b/4c task moves another variant across the same
-    // line, and relabelling the column each time would be churn without
-    // information.
+    // The design spec's criterion 1 counts, re-derived here rather than
+    // trusted. These are the *implemented* counts: a task that moves a
+    // variant across the line edits both the column it left and the column
+    // it joined, and this test is what makes that a pair rather than a
+    // choice.
     //
-    // `Use` moving in scope is not a claim that every `USE` runs: `USE LOCAL`
-    // can only ever fail here, because this crate has no method invocations
-    // for it to be legal in. It fails with the oracle's own 98.993/99.910
-    // rather than with a loud gap, which is what "in scope" means for this
-    // table -- the same distinction `Procedure` draws for a misplaced
-    // `PROCEDURE`, which is error 17.1 and not a gap either.
-    assert_eq!(INSTRUCTION_TAGS.len(), 40);
+    // **`INSTRUCTION_TAGS` is one row per owner, not one per variant**, so
+    // its length exceeds `InstructionKind`'s 40 variants by the 3 extra rows
+    // `Call`'s `split` section contributes. `only_backslash_is_unreachable`
+    // and `out_of_scope_set_matches_the_committed_expectation` are what
+    // police the rows themselves; these are the totals.
+    //
+    // "In scope" means this crate answers the same bytes the oracle answers,
+    // not that every spelling of the keyword runs. `USE LOCAL` can only ever
+    // fail here, because this crate has no method invocations for it to be
+    // legal in -- but it fails with the oracle's own 98.993/99.910,
+    // measured, which is the same distinction `Procedure` draws for a
+    // misplaced `PROCEDURE`: error 17.1, and not a gap.
+    assert_eq!(INSTRUCTION_TAGS.len(), 43);
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        28
+        31
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -575,35 +585,28 @@ fn the_two_harnesses_include_this_exact_file() {
 //    ownership directly, but a task that widens the L0 subset (adding a
 //    program) has to extend this list in the same change, or the test
 //    fails on the new, unlisted line.
-// 3. **`coverage.rs`'s `variant_counts_match_the_audited_split`-style
-//    counts**, now living in this file's own
-//    [`variant_counts_match_the_audited_split`]: the four hardcoded
-//    `InstructionKind` phase counts (22/7/4/6/1 since 4b's Task 3, 21/8/…
-//    after Task 1, 20/9/… at the 4a gate) and the two `ExprKind` ones
-//    (10/5 since 4b's Task 4, 9/6 before it). A variant moving in
-//    scope changes the `InScope` count and whichever phase count it left,
-//    and both sides of that move must be edited together. `loud.rs`'s own
-//    `in_scope_counts_match_the_audited_split` carries a copy of the
-//    `InScope` figure and moves with it.
+// 3. **This file's own [`variant_counts_match_the_audited_split`]**: the
+//    hardcoded `InstructionKind` phase counts and the two `ExprKind` ones.
+//    A variant moving in scope changes the `InScope` count and whichever
+//    phase count it left, and both sides of that move must be edited
+//    together. `loud.rs`'s own `in_scope_counts_match_the_audited_split`
+//    carries a copy of the `InScope` figure and moves with it.
 // 4. **`loud.rs`'s `INSTRUCTION_WITNESSES`/`EXPR_WITNESSES`**: one witness
-//    row per out-of-scope tag this file's tables produce -- per *arm*, not
-//    per outer variant, for `InstructionKind::Call` and `InstructionKind::
-//    Signal` specifically (Step 2; see `loud.rs`'s own module doc, "Arm-
-//    grained ownership"). The moment a variant (or arm) moves in scope, its
-//    row must be *deleted*, not merely left stale, or
-//    `assert_witness_set_is_complete` fails the other way (an extra
-//    witness with no matching phase-owned tag). An *arm* moving in scope
-//    while its variant does not -- Task 3, `Call::Named`/`Call::Dynamic` --
-//    also has to shrink `loud.rs`'s own `expand_for_witnesses`, which is
-//    what says how many rows the coarse tag is owed.
+//    row per phase-owned row of this file's tables, at this file's grain --
+//    so `Call`'s witness names an arm, because the `split` section gives
+//    each arm its own row here. The moment a variant or arm moves in scope,
+//    its witness must be *deleted*, not merely left stale, or
+//    `assert_witness_set_is_complete` fails the other way (an extra witness
+//    with no matching phase-owned tag).
 // 5. **`src/lib.rs`'s `instruction_owner`/`expr_owner`**: the third copy of
 //    this same ownership data, separate by construction because production
-//    code cannot depend on anything under `tests/` -- see that file's own
-//    doc comment on those two functions. Separate by construction, not
-//    unavoidable: `docs/superpowers/plans/phase-4b-gate.md`'s Step 3b costs
-//    the avoidance at half a day and declines it on value, the data being
-//    guarded already. A variant moving in scope (or changing owner) must
-//    move here too, or `loud.rs`'s
-//    `every_out_of_scope_variant_fails_loudly` fails: the owner text it
-//    asserts stderr contains would no longer match what `instruction_owner`/
-//    `expr_owner` actually produce.
+//    code cannot depend on anything under `tests/`. **Separate is no longer
+//    unchecked.** A variant moving in scope, or changing owner, must move
+//    there too, and `loud.rs`'s `every_out_of_scope_variant_fails_loudly`
+//    is what fails if it does not: the owner it requires the emitted
+//    message to end with is read straight out of the tables above, so the
+//    two are compared to each other rather than each to a copy. That
+//    comparison covers the phase-owned rows, which are the reachable ones;
+//    an owner written onto a variant this crate implements is data no
+//    execution path reads, and `corpus.rs`'s differential run is what
+//    covers that direction.
