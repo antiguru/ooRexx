@@ -346,7 +346,29 @@ The `Reference` variant's alias data is `USE ARG >`'s business and no builtin ta
 
 **The 40.x raisers already half exist.** `error.rs` has `not_enough_arguments` (40.3) and `too_many_arguments` (40.4) from 4b's `USE STRICT ARG`.
 **Reuse them; do not write a second pair.**
-What is new is the *type* family -- 40.12 whole number, 40.23 single character, and the others Task 2 measures.
+What is new is the *type* family.
+
+**The argument-error families, measured 2026-08-05 by Task 2. An earlier revision of this block got the third row's family wrong.**
+
+| probe | error | rc |
+|---|---|---|
+| `substr('abc')` | 40.3 `Not enough arguments in invocation of SUBSTR; minimum expected is 2.` | 216 |
+| `substr('abc',,2)` | **40.5** `Missing argument in invocation of SUBSTR; argument 2 is required.` | 216 |
+| `substr('abc',2,-1)` | **93.923** `Invalid length argument specified; found "-1".` | **163** |
+| `substr('abc','x')` | 40.12 `SUBSTR argument 2 must be a whole number; found "x".` | 216 |
+| `substr('abc',2,3,'pq')` | 40.23 `SUBSTR argument 4 must be a single character; found "pq".` | 216 |
+
+**A negative where a non-negative is required is not a 40.x error at all** -- it is **93.923**, "Incorrect call to method", at **rc 163** rather than 216.
+An earlier revision listed it among the 40.x probes to take, which would have shipped the wrong code and the wrong exit status across all seven family tasks.
+**Probe the family, do not assume it from the neighbouring row.**
+
+**Trailing omitted arguments are not arguments, and this changes the argument model.**
+Measured: `q(1,,2,,)` gives `arg()` = **3**, so `length('abc',)` prints `3` while `length(,)` is 40.3.
+Only **interior** omissions reach `dispatch` as `None`; trailing ones are dropped before it sees them.
+
+**A quoted literal target reaches the builtin table, and it is case-sensitive.**
+Measured: `"LENGTH"('abc')` is `3`; `"length"('abc')` is **43.1 rc 213**, `Could not find routine "length"`.
+So the caller upcases a *symbol* target and does **not** upcase a quoted one -- `dispatch` receives the name already upcased only on the symbol path.
 
 **Allocation.** Every builtin returning a string allocates, and every such site goes through `Interp::alloc_with`, never `Heap::alloc_with_uncollected` or `Heap::alloc`.
 **A builtin's result must be rooted before any subsequent allocation.**
@@ -537,8 +559,9 @@ Error 40.3:  Not enough arguments in invocation of SUBSTR; minimum expected is 2
 | `substr('abc','x')` | 40.12 | `SUBSTR argument 2 must be a whole number; found "x".` |
 | `substr('abc',2,3,'pq')` | 40.23 | `SUBSTR argument 4 must be a single character; found "pq".` |
 
-Probe further, because guessing a sub-code ships a whole family wrong: too many arguments; a missing *required* argument in a middle position (`substr('abc',,2)`); a negative where non-negative is required; and the same type error on a builtin **not** named `SUBSTR`, to confirm the name is interpolated.
+Probe further, because guessing a sub-code ships a whole family wrong: too many arguments; a missing *required* argument in a middle position (`substr('abc',,2)`, which is **40.5**, not 40.3); a negative where non-negative is required (**93.923 at rc 163**, not a 40.x error at all); and the same type error on a builtin **not** named `SUBSTR`, to confirm the name is interpolated.
 The name in the message is uppercased while the `*-*` echo carries the source spelling -- confirm both.
+The full measured table is in "Shared facts every builtin task needs".
 
 - [ ] **Step 2: Write the failing tests**
 
