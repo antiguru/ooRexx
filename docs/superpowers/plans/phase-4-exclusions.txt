@@ -992,8 +992,23 @@ above.
   not an artefact of the rewrite -- two bodies beside them *were* such an
   artefact and are not in this row (see the comment-handling commit).
 
-  `LEAVE`/`ITERATE`/`END` naming a compound (`End i.j`, `Leave I.J`) is part
-  of the same shape and is exercised by the same six.
+  `LEAVE`/`ITERATE`/`END` naming a compound (`End i.j`, `Leave I.J`) is
+  exercised by the same six, and MEASURED, THOSE THREE DISPATCH CORRECTLY --
+  they are not a second thing to fix. Printing the control variable beside
+  the loop counter separates them:
+
+    c=0; j=1; Do i.j=0 to 2; c=c+1; End i.j;                say '['c']' '['i.1']'
+      oracle [3] [3]   rexx-exec [3] [I.1]
+    c=0; j=1; Do i.j=0 to 6; c=c+1; If c=2 Then Leave i.j;   End i.j; ...
+      oracle [2] [1]   rexx-exec [2] [I.1]
+    c=0; j=1; Do i.j=0 to 6; c=c+1; If c=2 Then Iterate i.j; End i.j; ...
+      oracle [7] [7]   rexx-exec [7] [I.1]
+
+  Every loop-control count agrees -- the loop ends, leaves and iterates the
+  right number of times in all three. Only the control variable's value
+  diverges, and it is `I.1` every time: the literal name, never bound. So the
+  gap is exactly one mechanism, and a fixer should not spend time on
+  `LEAVE`/`ITERATE`/`END` name resolution.
 
   No owner is assigned. Closing this row needs either an owner, which moves
   it into EXCLUSIONS, or a measurement showing the divergence is gone -- at
