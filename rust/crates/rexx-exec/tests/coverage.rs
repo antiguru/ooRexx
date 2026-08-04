@@ -539,6 +539,54 @@ fn phase_4a_subset_matches_the_committed_list() {
     );
 }
 
+/// `phase-4b.txt`'s exact line list, the same device [`EXPECTED_SUBSET`] is
+/// for `phase-4a.txt` and added for the same reason, one sub-phase later.
+///
+/// **4b's gate review measured what its absence cost, and it was not
+/// theoretical.** Removing one entry at a time from `phase-4b.txt` and running
+/// this file: **nine of the twelve leave it green**, because
+/// [`every_in_scope_variant_is_witnessed_by_the_phase_subsets`] only needs
+/// *some* program to construct each variant, and by the end of 4b most
+/// variants have several witnesses. Only `call_expression`, `use_arg_forms`
+/// and `push_queue` construct something nothing else in the union does.
+///
+/// The worst case is `lang/condition_traps.rex`, the 4b gate's criterion 8
+/// witness and the declared corpus catcher for three of `mutate-4b.sh`'s
+/// mutations: with its line removed the corpus reported `41 of 41 matching`
+/// at exit 0, this file passed, and `collect_stress` passed -- three criteria
+/// reporting MET with one criterion's entire subject deleted, and the
+/// headline count shrinking silently. A "N of N matching" harness cannot
+/// notice a missing program; only a committed list can.
+const EXPECTED_SUBSET_4B: &[&str] = &[
+    "lang/interpret_dynamic.rex",
+    "lang/interpret_error_echo.rex",
+    "lang/call_return.rex",
+    "lang/call_expression.rex",
+    "lang/call_procedure_expose.rex",
+    "lang/use_arg_forms.rex",
+    "lang/signal_forms.rex",
+    "lang/condition_traps.rex",
+    "lang/push_queue.rex",
+    "lang/raise_array_substitution.rex",
+    "lang/loop_retest_blame.rex",
+    "lang/call_on_trap_rearms.rex",
+];
+
+#[test]
+fn phase_4b_subset_matches_the_committed_list() {
+    let corpus_dir = corpus_dir();
+    let subset = read_subset(&[&corpus_dir.join("phase-4b.txt")]);
+    assert_eq!(
+        subset, EXPECTED_SUBSET_4B,
+        "phase-4b.txt's entries drifted from EXPECTED_SUBSET_4B -- adding or \
+         removing a line from the 4b subset is a plan amendment, and must \
+         change both the file and this list together. Nine of the twelve are \
+         witnessed by no other check at all: see EXPECTED_SUBSET_4B's own doc \
+         comment for the measurement, and for the case where deleting one \
+         program left three gate criteria still reporting MET"
+    );
+}
+
 /// Criterion 1's coverage property, read against the **union** of every
 /// phase's subset file rather than `phase-4a.txt` alone.
 ///

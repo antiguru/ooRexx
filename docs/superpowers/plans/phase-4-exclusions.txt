@@ -183,19 +183,19 @@ EXCLUSIONS -- a compound variable as a DO control variable, owned by 4c
   would do so with no review round behind it, which is the collision D5
   warns about. The gate reports the tree 4b ships; it does not move it.
 
-  THE NOTICE MECHANISM ALREADY EXISTS AND NEEDS NOTHING NEW. Six ooTest
-  bodies turn on this, and they are the only assertion failures in the whole
-  base/keyword table -- every other non-passing body there fails loudly with
-  an unimplemented construct. `DO::test_DO_standardTest2B`, `2P`, `2Q`,
-  `5-69`, `ITERATE::test_12` and `LEAVE::test_11`, listed in
-  rust/corpus/keyword-exempt.txt under `defect:compound-do-control-variable`.
-  Each was re-run under the C++ oracle in its rewritten form, which passes
-  all six, so these are divergences and not an artefact of the rewrite -- two
-  bodies beside them *were* such an artefact and are not in this row (see the
-  comment-handling commit). When the fix lands, all six start passing and
-  `the_exempt_set_matches_the_current_failures` goes red until they are
-  removed from the committed set. That is 4c's gate criterion for this row,
-  and it is automatic.
+  THE NOTICE MECHANISM ALREADY EXISTS AND NEEDS NOTHING NEW. When the fix
+  lands, the six ooTest bodies enumerated below (see "SIX ooTest BODIES TURN
+  ON THIS") all start passing, and `the_exempt_set_matches_the_current_
+  failures` goes red until they are removed from the committed set. That is
+  4c's gate criterion for this row, and it is automatic.
+
+  The six are NOT re-listed here on purpose. An earlier version of this
+  paragraph named all six, called them the only assertion failures in
+  base/keyword, and cited the oracle re-run -- all of which the row's own body
+  already said, a few paragraphs down. That made two near-verbatim copies of
+  one fact inside the row whose own ruling closes with "recording a gap twice
+  is worse than recording it once, and the second copy is the one that hides
+  the first's incompleteness". Found by this row's own review.
 
   *** ASSIGNING THIS OWNER DOES NOT CHANGE keyword-exempt.txt, AND MUST NOT.
   *** Those six rows read `defect:compound-do-control-variable` and stay that

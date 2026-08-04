@@ -48,17 +48,29 @@
 #           of `corpus/phase-4a.txt` and `corpus/phase-4b.txt`. Classified by
 #           its own "N of M matching" line.
 #   SUITE   `cargo test -p rexx-exec --lib --test trace_oracle --test
-#           collect_stress` -- the in-crate instruments the corpus cannot be:
-#           the queue's own order tests, the pinned unnormalised indent
-#           witnesses, the committed trace expectations, and the
-#           collect-on-every-allocation mode. Classified by libtest's own
-#           "test result:" lines, WITH A NON-ZERO RUN COUNT REQUIRED.
+#           collect_stress --no-fail-fast` -- the in-crate instruments the
+#           corpus cannot be: the queue's own order tests, the pinned
+#           unnormalised indent witnesses, the committed trace expectations,
+#           and the collect-on-every-allocation mode. Classified by libtest's
+#           own "test result:" lines, PER TARGET, with every target required
+#           to have reported and to have run a non-zero number of tests.
 #
 # WHY THE RUN COUNT IS ASSERTED: `cargo test <name>` exits 0 when it matches
 # nothing (`0 passed; 0 failed; N filtered out`, status 0), so a harness that
 # runs a test by name and reads only the status CANNOT TELL "passed" from
 # "does not exist". That has already produced a STAYED GREEN report on this
 # project for a test that had ceased to exist.
+#
+# AND WHY IT IS ASSERTED PER TARGET RATHER THAN IN AGGREGATE (4b's own gate
+# review, M5): summing the three targets' counts and requiring the sum to be
+# non-zero is satisfied by one busy target plus two that matched nothing --
+# `300 passed / 0 failed` alongside `0 passed; 0 failed; 2 filtered out`
+# classifies PASSED. The per-target check is what makes "the collector saw
+# it" a claim this script can actually support, which criterion 4's negative
+# control depends on. `--no-fail-fast` belongs to the same fix: without it
+# cargo stops at the first failing target and the later ones print no report
+# at all, so a per-target check would silently cover fewer instruments than
+# it names.
 #
 # EXPECTED SURVIVORS ARE FIRST-CLASS ROWS, NOT OMISSIONS. Two mutations below
 # are expected to leave an instrument green, and for each one the survival is
@@ -72,18 +84,38 @@
 #     corpus, the queue has gained a differential witness and criterion 9's
 #     "ships undifferentiated" wording is stale.
 #   * `i17-stem-drop-as-slot-clear` is expected to PASS BOTH. It is inherited
-#     item I17, and this script runs it rather than citing it. The scoping
-#     document predicted the mutant would become pinnable once 4b landed,
-#     on the grounds that nothing in 4a could hold a second reference to a
-#     stem. THE PREMISE IS FALSE -- measured, `b. = a.` shares the object in
-#     4a on both interpreters -- and so is the conclusion, for a different
-#     reason: `a.1 = 'orig'; b. = a.; drop a.; say a.1 b.1` prints `A.1 orig`
-#     under both the current code and the mutant, because "the slot holds a
-#     fresh empty stem" and "the slot is unset" are not distinguishable
-#     through a second reference. It is genuinely equivalent, and the
-#     mechanism -- not just the verdict -- is why. If this row ever starts
-#     being caught, something has made the two states distinguishable and
-#     I17's reclassification needs revisiting.
+#     item I17, and this script runs it rather than citing it.
+#
+#     *** A DELIBERATE DEPARTURE FROM WHAT stem.rs ASKED FOR, NOTED RATHER
+#     *** THAN MADE SILENTLY. `Interp::stem_drop`'s own doc comment
+#     (`crates/rexx-exec/src/stem.rs`) carries the full reclassification and
+#     tells whoever writes this script to "copy this paragraph into it and
+#     drop the mutant rather than list it as uncaught". This script does the
+#     opposite: it KEEPS the mutant, as a declared survivor, and does not
+#     copy the argument. Two reasons. Dropping it would leave the
+#     equivalence unfalsifiable -- an equivalent mutant nobody runs is a
+#     claim, and running it is what turns "no distinguishing program exists"
+#     into something that can go red. And copying the paragraph would make a
+#     fourth prose copy of an argument whose evidence is in `stem.rs`; this
+#     gate's own Step 3b recommends deleting prose that restates guarded
+#     data, so producing more of it here would be the same defect wearing
+#     this script's clothes.
+#
+#     THE SHORT VERSION, with the citation rather than the reproduction: the
+#     scoping document predicted the mutant would become pinnable once 4b
+#     landed, on the grounds that nothing in 4a could hold a second reference
+#     to a stem. Both halves are false -- `b. = a.` already shares the object,
+#     and it still does not discriminate, because `read_stem` vivifies a fresh
+#     stem on a miss, so a cleared slot and a slot holding a fresh empty stem
+#     answer identically **at every observation point this phase has**. That
+#     last qualifier is `stem.rs`'s, and it is deliberately weaker than "no
+#     distinguishing program exists": what is claimed is equivalence under
+#     what 4b can observe, not a proof about Rexx. Read `stem.rs` for the
+#     transcripts, including the exposure case and the two `drop a.` rows of
+#     `an_exposed_stem_aliases_the_callers_entry_not_the_object` re-run under
+#     the mutant. If this row ever starts being caught, a new observation
+#     point has appeared and I17 needs revisiting -- which is precisely the
+#     event keeping the mutant here is meant to catch.
 #
 # So a mutation is a FAILURE of this script when its observed pair of statuses
 # differs from its declared pair, in either direction. An unexpected catch is
@@ -190,6 +222,16 @@ corpus_status() {
         return
     fi
     read -r matched total <<<"${line}"
+    # "0 of 0 matching" at exit 0 is an EMPTY SUBSET, not a pass, and it is the
+    # corpus's own version of `cargo test` matching no tests. It cannot happen
+    # today only because `corpus.rs` asserts its subset is non-empty -- an
+    # assertion in a file this script does not own and does not check. Reading
+    # it as PASSED would make every mutation below look like an expected
+    # survivor.
+    if [ "${total}" -eq 0 ]; then
+        echo "INFRA_FAILURE"
+        return
+    fi
     if [ "${exit_code}" -eq 0 ]; then
         if [ "${matched}" -eq "${total}" ]; then echo "PASSED"; else echo "INFRA_FAILURE"; fi
     else
@@ -207,40 +249,74 @@ corpus_status() {
 # a dropped GC root.
 # ---------------------------------------------------------------------------
 
+# The three target binaries `run_suite` builds. Named as a count so
+# `suite_status` can require a report from EVERY one of them -- see below.
+SUITE_TARGET_COUNT=3
+
+# `--no-fail-fast` IS LOAD-BEARING HERE, not tidiness. Without it cargo stops
+# after the first target that fails, so the later targets print no `test
+# result:` line at all and any per-target check silently covers fewer
+# instruments than it claims. That matters most for exactly the row it would
+# hide: criterion 4's negative control asserts that the COLLECTOR sees a
+# dropped root, and if `--lib` failed first, `collect_stress` would never run
+# and the script would still say "suite DIVERGED".
 run_suite() {
     cargo test --offline -p rexx-exec --lib --test trace_oracle --test collect_stress \
-        > "${SUITE_OUTPUT}" 2>&1
+        --no-fail-fast > "${SUITE_OUTPUT}" 2>&1
 }
 
-# Total tests actually RUN (passed + failed) across every `test result:` line,
-# as "PASSED FAILED", or nothing if libtest printed no such line at all.
-# The run count is what makes "passed" distinguishable from "matched no
-# tests" -- see the header.
+# One "PASSED FAILED" pair per `test result:` line, in order -- NOT a sum.
+# The per-line shape is what lets `suite_status` require every target to have
+# reported and every target to have run something; a sum cannot distinguish
+# "three targets ran" from "one ran 300 tests and two matched nothing".
 suite_counts() {
     grep -oE '^test result: [a-zA-Z]+\. [0-9]+ passed; [0-9]+ failed' "${SUITE_OUTPUT}" |
-        sed -E 's/^test result: [a-zA-Z]+\. ([0-9]+) passed; ([0-9]+) failed$/\1 \2/' |
-        awk '{p += $1; f += $2} END {if (NR == 0) exit 0; print p, f}'
+        sed -E 's/^test result: [a-zA-Z]+\. ([0-9]+) passed; ([0-9]+) failed$/\1 \2/'
 }
 
+# Classifies a `run_suite` call. Three ways to be INFRA_FAILURE before the
+# pass/fail question is even asked, and the first two were added by 4b's own
+# gate review (M5), which showed the aggregate version could be satisfied by
+# `300 passed / 0 failed` from one target plus `0 passed; 0 failed` from
+# another:
+#
+#   * fewer `test result:` lines than targets -- a target did not report;
+#   * ANY target reporting zero tests run -- `cargo test` exits 0 when it
+#     matches nothing, which is the defect this whole guard exists for, and it
+#     has to be checked PER TARGET or a busy target masks an empty one;
+#   * no lines at all -- nothing compiled or ran.
 suite_status() {
-    local exit_code="$1" counts passed failed
+    local exit_code="$1" counts total_passed=0 total_failed=0 lines=0 passed failed
     counts="$(suite_counts)"
     if [ -z "${counts}" ]; then
         echo "INFRA_FAILURE"
         return
     fi
-    read -r passed failed <<<"${counts}"
-    # A run that executed nothing is an infrastructure failure, never a pass:
-    # this is the `0 passed; 0 failed; N filtered out`, status 0 case.
-    if [ "$((passed + failed))" -eq 0 ]; then
+    while read -r passed failed; do
+        lines=$((lines + 1))
+        # This target matched no tests. Never a pass, whatever the others did.
+        if [ "$((passed + failed))" -eq 0 ]; then
+            echo "INFRA_FAILURE"
+            return
+        fi
+        total_passed=$((total_passed + passed))
+        total_failed=$((total_failed + failed))
+    done <<<"${counts}"
+    if [ "${lines}" -ne "${SUITE_TARGET_COUNT}" ]; then
         echo "INFRA_FAILURE"
         return
     fi
     if [ "${exit_code}" -eq 0 ]; then
-        if [ "${failed}" -eq 0 ]; then echo "PASSED"; else echo "INFRA_FAILURE"; fi
+        if [ "${total_failed}" -eq 0 ]; then echo "PASSED"; else echo "INFRA_FAILURE"; fi
     else
-        if [ "${failed}" -gt 0 ]; then echo "DIVERGED"; else echo "INFRA_FAILURE"; fi
+        if [ "${total_failed}" -gt 0 ]; then echo "DIVERGED"; else echo "INFRA_FAILURE"; fi
     fi
+}
+
+# The aggregate, for the baseline's own progress line only -- never for a
+# decision, which `suite_status` above makes per target.
+suite_totals() {
+    suite_counts | awk '{p += $1; f += $2} END {if (NR == 0) exit 0; print p, f}'
 }
 
 # Both instruments must report a clean unmutated tree before the first
@@ -272,7 +348,7 @@ require_baseline_pass() {
         cat "${SUITE_OUTPUT}" >&2
         exit 1
     fi
-    read -r passed failed <<<"$(suite_counts)"
+    read -r passed failed <<<"$(suite_totals)"
     echo "baseline suite ok (${label}): ${passed} passed, ${failed} failed"
     echo
 }
@@ -529,17 +605,15 @@ run_one "11. PUSH/QUEUE evaluate and trace but store nothing" "${RUN_RS}" PASSED
 
 # --- the equivalent mutant, run rather than cited (I17) --------------------
 
-# INHERITED ITEM I17, AND ITS RECLASSIFICATION. `drop_by_name`'s Stem arm
-# rerouted to a plain slot clear. The scoping document expected this to become
-# pinnable once 4b landed, because nothing in 4a could hold a second reference
-# to a stem. Both halves of that are wrong: `b. = a.` already shares the object
-# in 4a on both interpreters, AND the mutant is equivalent anyway, because
-# "the slot holds a fresh empty stem" and "the slot is unset" are not
-# distinguishable through a second reference -- `a.1 = 'orig'; b. = a.;
-# drop a.; say a.1 b.1` prints `A.1 orig` either way. Declared to survive both
-# instruments; if it ever stops surviving, something has made the two states
-# distinguishable and I17 needs revisiting rather than this row being edited
-# to match.
+# INHERITED ITEM I17. `drop_by_name`'s Stem arm rerouted to a plain slot
+# clear, equivalent **at every observation point this phase has**. The
+# evidence, the transcripts and that qualifier are all in
+# `Interp::stem_drop`'s doc comment (`crates/rexx-exec/src/stem.rs`) and are
+# cited rather than copied here; the header's own entry for this row explains
+# why keeping the mutant departs from what that comment asked for. Declared to
+# survive both instruments; if it ever stops surviving, a new observation
+# point has appeared and I17 needs revisiting rather than this row being
+# edited to match.
 run_one "12. I17: DROP of a stem as a plain slot clear (equivalent mutant)" "${RUN_RS}" PASSED PASSED \
 '            NameShape::Stem => self.stem_drop(name),' \
 '            NameShape::Stem => {
