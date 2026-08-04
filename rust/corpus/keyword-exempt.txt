@@ -32,7 +32,7 @@
 #     goes red as an unaccounted failure. A second defect class would need
 #     the constant split by hand.
 #
-#   4c  790 bodies. Every phase gap in this group is 4c's and nothing else's:
+#   4c  789 bodies. Every phase gap in this group is 4c's and nothing else's:
 #       PARSE (656 bodies), the builtin routines ARG/COPIES/DIGITS/FORM/FUZZ/
 #       SUBSTR/SIGN/..., ADDRESS, PULL. No body here is blocked by Phase 5,
 #       so 4b owes this table nothing further.
@@ -152,7 +152,6 @@ NUMERIC::test_15	4c
 NUMERIC::test_16	4c
 NUMERIC::test_19	4c
 NUMERIC::test_20	4c
-NUMERIC::test_26	4c
 NUMERIC::test_27	4c
 NUMERIC::test_34	4c
 NUMERIC::test_36	4c

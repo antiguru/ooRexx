@@ -78,6 +78,11 @@ use error::{ClauseSite, Failure, FailureSite, Raised};
 // concatenation.
 mod eval;
 
+// The builtin functions: the name set (read from `rexx_inventory`, never
+// copied), the per-name arity, and the `dispatch` `resolve_and_run_call`
+// reaches after an internal label misses.
+mod builtin;
+
 // The instruction loop (D16's "Control flow"): `Flow`, and `step` and its two
 // callers, together with the borrow discipline `run_activation` is written
 // down to prove (Task 3's spike). Extended task by task with the branches and

@@ -72,7 +72,7 @@ FUZZ	loud
 INSERT	loud
 LASTPOS	loud
 LEFT	loud
-LENGTH	loud
+LENGTH	implemented
 LINEIN	excluded
 LINEOUT	excluded
 LINES	excluded

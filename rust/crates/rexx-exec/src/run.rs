@@ -65,6 +65,7 @@
 //! at both.
 
 use crate::activation::{Activation, Inherited, Trap, body_of};
+use crate::builtin;
 use crate::clause::{ClauseOutcome, ClauseValue, HandlerExit};
 use crate::error::{FailureSite, Raised, Search};
 use crate::eval::logical_value;
@@ -266,6 +267,25 @@ impl Ended {
             Ended::Returned(value) | Ended::Exited(value) => value,
         }
     }
+}
+
+/// What a called name resolved to, decided in one place before any argument
+/// is evaluated.
+///
+/// The third outcome -- neither a label nor a builtin -- is not a variant: it
+/// returns this crate's declared gap at the point of decision, so nothing
+/// downstream can hold a `Resolved` that has nothing to run. Two variants,
+/// two paths, and the paths differ in more than which code runs:
+/// `resolve_and_run_call`'s own doc comment has what the builtin path
+/// deliberately skips.
+enum Resolved {
+    /// A label in the *running activation's* body, at this instruction index.
+    Label(usize),
+    /// A builtin function name. Which builtin is `builtin::dispatch`'s own
+    /// lookup rather than something carried here: the arity check and the
+    /// code live on one row there, and splitting the row across a resolution
+    /// result would be the second copy that drifts.
+    Builtin,
 }
 
 /// How many activations may be live at once before `CALL` raises 11.1
@@ -3171,24 +3191,36 @@ impl Interp {
     /// `CallTarget::Literal`, and its own call sites have the measurements.
     ///
     /// **Resolution order is internal label, then builtin, then external**,
-    /// and this crate builds only the front of it: a name that is not a label
-    /// of the calling body fails loudly naming `4c`, which owns the builtin
-    /// table. That is the right answer for `CALL "SUB"` even with `sub:` in
-    /// the program -- the oracle's own Error 43.1 there is a statement that
+    /// and the name is settled against all three *before* an argument is
+    /// evaluated, at the top of this function -- [`Resolved`]'s two variants
+    /// for the two that run something, and an immediate return for the third.
+    /// The order matters both ways round: a label wins over a builtin of the
+    /// same name, and a builtin wins over anything behind it.
+    ///
+    /// A name that is neither is this crate's own declared gap, naming `4c`.
+    /// That is still the right answer for `CALL "SUB"` with `sub:` in the
+    /// program -- the oracle's own Error 43.1 there is a statement that
     /// nothing outside the label table matched either, which is knowledge
     /// this crate does not have.
     ///
-    /// **A same-file `::routine` is reachable for any non-builtin name, and
-    /// is deferred rather than out of reach.** Measured: `call zorkolo` into
+    /// **A same-file `::routine` is what remains behind the builtin step**,
+    /// deferred rather than out of reach. Measured: `call zorkolo` into
     /// `::routine zorkolo` dispatches on the oracle, where this falls through
-    /// to the loud `4c` answer. What stops this crate dispatching is the step
-    /// in front: a name that *collides* with a builtin must go to the builtin
-    /// (measured, `::routine max` alongside `call max 1,2` still calls the
-    /// builtin), and without the builtin table this arm would silently run the
-    /// wrong routine instead of failing loudly -- which is the one outcome the
-    /// failing-loudly rule exists to exclude. `Activation::body`'s own doc
-    /// has what that costs, what whoever closes it inherits, and why the
-    /// `max` probe alone could not tell "deferred" from "unreachable".
+    /// to the loud answer. Whoever wires that step reads `builtin::dispatch`'s
+    /// `None` as the go-ahead, and it is a real answer rather than a
+    /// formality: a name that *collides* with a builtin must go to the
+    /// builtin, measured -- `::routine max` alongside `call max 1,2` still
+    /// calls the builtin -- so a `::routine` search placed in front of this
+    /// one would silently run the wrong routine. `Activation::body`'s own doc
+    /// has what that costs and what whoever closes it inherits.
+    ///
+    /// **The builtin outcome runs no activation at all**, which is measured
+    /// and is why it returns from the middle of this function rather than
+    /// joining the label path below: `builtin`'s own module doc has the three
+    /// observables -- `SIGL`, the `>A>` argument lines and the activation
+    /// level -- with the probe for each. The arguments are evaluated for it by
+    /// exactly the same loop the label path uses, which is what makes those
+    /// `>A>` lines identical without anything here arranging it.
     pub(crate) fn resolve_and_run_call(
         &mut self,
         code: &Code<'_>,
@@ -3210,13 +3242,22 @@ impl Interp {
         let Some(activation_body) = body_of(&program, selector) else {
             return Err(Loud::missing_body().into());
         };
-        let target = if search_labels {
+        let label = if search_labels {
             activation_body.labels.get(name).copied()
         } else {
             None
         };
-        let Some(target) = target else {
-            return Err(Loud::unresolved_call(name).into());
+        // **The whole resolution happens here, upstream of the argument loop
+        // below**, and the shape is load-bearing rather than tidy. The
+        // builtin step needs its arguments already evaluated, so it cannot
+        // sit where the loud return sits; putting the lookup between the
+        // label miss and the loud return would have placed it upstream of the
+        // evaluation it consumes. Deciding all three outcomes first is what
+        // lets one argument loop serve two of them.
+        let resolved = match label {
+            Some(target) => Resolved::Label(target),
+            None if builtin::is_builtin(name) => Resolved::Builtin,
+            None => return Err(Loud::unresolved_call(name).into()),
         };
 
         // **Evaluated in the caller, before anything is pushed**, which is
@@ -3263,6 +3304,33 @@ impl Interp {
                 }
             }
         }
+
+        // **The builtin outcome ends here**, before `SIGL`, before the depth
+        // guard and before any activation is pushed -- each of those three is
+        // the label path's, and the oracle answers that the builtin path has
+        // none of them (`builtin`'s own module doc carries the probe for
+        // each). Every argument is still rooted by the loop above, so the
+        // allocation a builtin's result costs happens with the inputs
+        // reachable, and the value handed back is rooted by whichever caller
+        // receives it exactly as a callee's `RETURN` value already is.
+        let target = match resolved {
+            Resolved::Builtin => {
+                let values: Vec<Option<ObjRef>> = arguments
+                    .iter()
+                    .map(|argument| argument.as_ref().map(Argument::value))
+                    .collect();
+                let Some(result) = builtin::dispatch(self, name, &values) else {
+                    // `is_builtin` said yes above and `dispatch` reads the
+                    // same set, so the two cannot actually disagree -- and
+                    // this is an ordinary loud answer rather than a panic
+                    // because failing loudly is the rule even where the
+                    // reasoning says the arm is dead.
+                    return Err(Loud::unresolved_call(name).into());
+                };
+                return Ok(Ended::Returned(Some(result?)));
+            }
+            Resolved::Label(target) => target,
+        };
 
         // `SIGL`, set here rather than before the argument loop above: the
         // oracle's own `internalCall` (`RexxActivation.cpp`, read directly)
@@ -12726,6 +12794,125 @@ mod tests {
                 .iter()
                 .map(|site| String::from_utf8_lossy(&site.text).into_owned())
                 .collect::<Vec<_>>()
+        );
+    }
+
+    // ---- builtin dispatch ----
+
+    /// A builtin reached through every call form the resolution serves, and
+    /// the one form that must **not** reach it.
+    ///
+    /// Every line is the oracle's, measured in a clean directory:
+    ///
+    /// ```text
+    /// say length('abc')      3            rc 0
+    /// say Length('abcd')     4            rc 0     (a symbol target upcases)
+    /// say "LENGTH"('abc')    3            rc 0     (a literal target matches verbatim)
+    /// say "length"('abc')    Error 43.1   rc 213   (and so does not match)
+    /// call length 'abc'      RESULT 3     rc 0
+    /// call "LENGTH" 'abc'    RESULT 3     rc 0
+    /// ```
+    ///
+    /// The lowercase literal is the neighbouring failure that pins the
+    /// match to the bytes rather than to a case-insensitive compare: this
+    /// crate cannot answer 43.1 yet, so it answers the same declared gap a
+    /// name it resolves to nothing has always answered.
+    #[test]
+    fn length_dispatches_from_every_call_form_that_reaches_the_builtin_table() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(&mut interp, b"say length('abc')\nsay Length('abcd')"),
+            b"3\n4\n".to_vec(),
+            "the expression form, at both source spellings of the symbol"
+        );
+
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(&mut interp, b"say \"LENGTH\"('abc')"),
+            b"3\n".to_vec(),
+            "a literal target matches the table verbatim"
+        );
+
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(&mut interp, b"call length 'abc'\nsay result"),
+            b"3\n".to_vec(),
+            "`CALL` settles RESULT from the builtin's own value"
+        );
+
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(&mut interp, b"call \"LENGTH\" 'abc'\nsay result"),
+            b"3\n".to_vec(),
+            "and so does `CALL` with a literal target"
+        );
+
+        let mut interp = Interp::new();
+        let failure = run_source(&mut interp, b"say \"length\"('abc')").unwrap_err();
+        assert!(
+            matches!(failure, Failure::Loud(_)),
+            "a lowercase literal target matches no builtin, so it stays the \
+             unresolved-name gap; got {failure:?}"
+        );
+    }
+
+    /// A builtin's result is a value whose rendering `NUMERIC DIGITS` cannot
+    /// reach, and D15 is still visible on it from the other side.
+    ///
+    /// The whole program below is the oracle's, measured in a clean
+    /// directory, rc 0, printing `16`, `2E+1`, `10`. Each line is doing
+    /// separate work:
+    ///
+    /// * `nn` is built under `DIGITS 3` and read back under `DIGITS 1`, which
+    ///   is the change D15 says a probe needs before it can see anything at
+    ///   all. It still prints `16`.
+    /// * `nn + 0` under `DIGITS 1` prints `2E+1`, because the addition is a
+    ///   new operation creating a new number under the digits then in force.
+    ///   Without this line the first would also pass against a value that had
+    ///   simply captured `DIGITS 3`.
+    /// * `length('abcdefghij')` under `DIGITS 1` prints `10` and not `1E+1`,
+    ///   which is what rules out creating the result through
+    ///   `Interp::number` with the current settings.
+    #[test]
+    fn a_builtins_result_renders_independently_of_the_digits_in_force() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"numeric digits 3\nnn = length('abcdefghijklmnop')\nnumeric digits 1\n\
+                  say nn\nsay nn + 0\nsay length('abcdefghij')"
+            ),
+            b"16\n2E+1\n10\n".to_vec()
+        );
+    }
+
+    /// `say length()` produces the oracle's own 40.3 report, byte for byte.
+    ///
+    /// Measured in a clean directory, rc 216:
+    ///
+    /// ```text
+    ///      1 *-* say length()
+    /// Error 40 running /.../p09.rex line 1:  Incorrect call to routine.
+    /// Error 40.3:  Not enough arguments in invocation of LENGTH; minimum expected is 1.
+    /// ```
+    ///
+    /// **Driven through `run_program`**, because the bytes under test are the
+    /// whole report -- the clause echo, the major line's path and line number,
+    /// and the secondary line's two substitutions -- and only the real entry
+    /// point assembles all three.
+    #[test]
+    fn a_builtin_called_with_too_few_arguments_reports_the_oracles_40_3() {
+        let path = "/tmp/length-arity.rex";
+        let outcome = crate::run_program(path, b"say length()\n".to_vec());
+        assert_eq!(outcome.exit_code, 216, "256 - 40");
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stderr),
+            format!(
+                "     1 *-* say length()\n\
+                 Error 40 running {path} line 1:  Incorrect call to routine.\n\
+                 Error 40.3:  Not enough arguments in invocation of LENGTH; \
+                 minimum expected is 1.\n"
+            )
         );
     }
 }

@@ -1736,14 +1736,19 @@ mod tests {
         assert_eq!(outcome.stdout, b"42\n");
     }
 
-    /// The task brief's own Step 4: a name that is not a label of the
-    /// calling body -- `length` here, a builtin 4c has not wired in yet --
-    /// still falls through to the loud `4c` fallback rather than succeeding
-    /// or crashing. This depends on Task 0's owner-suffix message shape
-    /// (`owned_message`, `lib.rs`).
+    /// A name that resolves to nothing -- not a label of the calling body
+    /// and not a builtin -- falls through to the loud `4c` fallback rather
+    /// than succeeding or crashing. This depends on Task 0's owner-suffix
+    /// message shape (`owned_message`, `lib.rs`).
+    ///
+    /// The witness is a name no table can ever hold, not a builtin waiting
+    /// its turn: the builtin step reads `rexx_inventory`'s own name set, so
+    /// any real builtin here would assert where the implemented boundary sits
+    /// and go red the day that name landed. Where the boundary sits is
+    /// `corpus/builtin-status.txt`'s to record, over every builtin at once.
     #[test]
-    fn a_builtin_name_still_fails_loudly_naming_4c() {
-        let outcome = crate::run_program("call-expr-builtin.rex", b"say length('abc')\n".to_vec());
+    fn an_unresolvable_name_still_fails_loudly_naming_4c() {
+        let outcome = crate::run_program("call-expr-builtin.rex", b"say zorkolo('abc')\n".to_vec());
         assert_eq!(outcome.exit_code, crate::NOT_IMPLEMENTED_EXIT);
         assert!(
             String::from_utf8_lossy(&outcome.stderr).contains("4c"),

@@ -405,6 +405,33 @@ impl Raised {
         )
     }
 
+    /// 40.5: a required argument was **omitted in place** rather than left
+    /// off the end -- `substr('abc',,2)`. `routine` is the callee's own name,
+    /// upcased, and `position` is 1-based.
+    ///
+    /// Measured, rc 216: `say substr('abc',,2)` gives
+    /// `Missing argument in invocation of SUBSTR; argument 2 is required.`
+    ///
+    /// **A distinct answer from 40.3, and the two are told apart by where the
+    /// omission is, not by how many arguments were written.** Measured, an
+    /// omission at the *end* of the list is not an argument at all: `q(1,)`
+    /// into `q: return arg()` answers 1, `q(1,,2,,)` answers 3, and `q(,)`
+    /// answers 0 -- so `say length('abc',)` runs and prints 3 where `say
+    /// length(,)` is 40.3 with a minimum of 1, not 40.5. `rexx-parse` already
+    /// drops those trailing positions (`ExprKind::List`'s own doc comment,
+    /// citing `parseArgList`'s `realcount`), so an argument list arriving here
+    /// has interior omissions only.
+    pub(crate) fn missing_argument(routine: &[u8], position: usize) -> Raised {
+        Raised::syntax(
+            40,
+            5,
+            vec![
+                String::from_utf8_lossy(routine).into_owned(),
+                position.to_string(),
+            ],
+        )
+    }
+
     /// 88.928: `USE ARG >name` where the caller did not pass a variable
     /// reference. `position` is 1-based; `found` is the argument's own
     /// **rendered value**.
