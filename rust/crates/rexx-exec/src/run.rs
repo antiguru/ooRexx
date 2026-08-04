@@ -5278,9 +5278,12 @@ impl Interp {
     /// `SymbolId`, so `slot_of` makes a simple variable literally named
     /// `AA.1` instead of resolving the compound -- and the `>C>` line the
     /// oracle traces before each of these `>=>`s is missing for the same
-    /// reason. Measured and recorded as a KNOWN GAP in
-    /// `phase-4-exclusions.txt`; not introduced by the tracing added here,
-    /// and not fixable inside this crate alone.
+    /// reason. Measured, and **owned by 4c** since 4b's Task 12 ruled on it
+    /// (`phase-4-exclusions.txt`, "EXCLUSIONS -- a compound variable as a DO
+    /// control variable, owned by 4c"; it was a KNOWN GAP, in two separate
+    /// rows, until that ruling merged them and assigned the owner). Not
+    /// introduced by the tracing added here, and not fixable inside this
+    /// crate alone.
     fn bind_control(&mut self, code: &Code<'_>, control: SymbolId, indent: usize, value: ObjRef) {
         let name = code.symbols.name(control).as_bytes();
         let slot = self.slot_of(name);
