@@ -57,8 +57,10 @@ Each rule below has already cost this project a session, a wrong measurement, or
 
 ## Method
 
-Four habits, each earned the expensive way.
+Habits, each earned the expensive way.
 
+* **A summary of a measurement is a new claim, and it needs the measurement re-run -- not the prose reread.** Restating a result in different words is authorship, not quotation, and the restatement can be false while every word around it is true. Measured here: a correction commit compressed "blocks on an unresolved routine call" into "blocks on a builtin", which contradicted a sentence two lines above it in the same paragraph and survived because it was locally plausible. Neither more care nor rereading the diff reaches this; only re-running does.
+* **"Can fail" is not "adds coverage."** A mutation going red proves a test can fail. It does not prove the test catches anything the existing suite would have missed. The extra step costs one run: apply the candidate mutation to the suite *without* the new test. Two corpus programs were deleted here after that check showed existing programs caught their mutations identically -- the suite got smaller and stronger, which is the opposite of what a coverage count rewards.
 * **When tempted to explain why something cannot happen, run it instead.** Six confident "X cannot be reached" claims have been wrong here, every one a sound inference from a *true* premise missing a second premise nobody knew to look for. More care produces the same answer with more confidence; only running separates them.
 * **A test that cannot fail is a defect.** Eight have shipped, two of them fixes for earlier such findings. For every assertion ask: what degenerate implementation satisfies this, and would deleting its subject leave it green?
 * **Pair a refusal with its adjacent success.** Three times the test that made a fix *correct* was not the failing case but the neighbouring passing one, because that is what pins the rule to the property you think it is rather than to something coincidental.
