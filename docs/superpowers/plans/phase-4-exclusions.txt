@@ -1462,6 +1462,39 @@ above.
 
 
 
+  THE ORACLE BINARY THIS PROJECT MEASURES AGAINST CARRIES A LOCAL,
+  UNCOMMITTED FIX, AND NO RESULT HERE RECORDS WHICH BINARY PRODUCED IT.
+
+  On 2026-08-05 at 16:02 the oracle at /home/moritz/dev/repos/ooRexx was
+  patched and rebuilt outside this project: NumberStringClass.cpp's
+  copyIfNecessary now forces a copy when a cached string value is present,
+  and compares form against the Numerics constants rather than testing
+  isScientific() against it -- the two have opposite polarity. Moritz has
+  confirmed the change is his and it stays.
+
+  WHAT IT CHANGED HERE. It retires the abs/ENGINEERING divergence Task 6
+  found: `numeric form engineering; say abs(1.5e10)` was 1.5E10 on the oracle
+  (the literal's own spelling, ignoring FORM and dropping the exponent sign)
+  and is now 15E+9, which is what this crate already answered. The crate was
+  right and the oracle was wrong. Re-probed after the rebuild: plain
+  rendering, FORM handling, D15's captured-rendering rule and the corpus gate
+  (42 of 42) all unchanged.
+
+  WHAT A READER MUST NOT ASSUME. The fix is NOT upstream. Anyone building
+  from a clean ooRexx checkout gets the old behaviour, and this crate will
+  then appear to diverge on abs under ENGINEERING -- correctly. A divergence
+  report from a fresh build is evidence about the build, not about this
+  crate.
+
+  AND THE GENERAL HAZARD, RECORDED BECAUSE IT IS DECIDED RATHER THAN
+  OVERSIGHT. A rebuilt oracle silently reprices every differential result in
+  this project, and nothing stores a build identity beside any number: Task
+  6's sweep moved from 18 mismatches to 12 without its own code changing,
+  and no harness noticed. Adding a fingerprint to the corpus harness was
+  considered and DECLINED -- rebuilds are rare and are Moritz's own -- so the
+  cost is that any recorded figure is a claim about the binary present when
+  it was taken. Re-measure rather than trust a number across a rebuild.
+
 CLOSED DEFECTS -- measured wrong, measured again, now matching
 -------------------------------------------------------------
 
