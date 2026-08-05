@@ -228,7 +228,23 @@ The first revision listed three; an implementer copying `run.rs:3304-3313` gets 
 | trace | caller's setting crosses in | **does not cross** |
 | `NUMERIC` | inherited | **not inherited** (`digits=9 fuzz=0 form=SCIENTIFIC` under a caller at 5/2/ENGINEERING) |
 | `ADDRESS` | inherited | **not inherited** (`sh`, not the caller's `ZORKENV`) |
-| condition traps | inherited | **not inherited** (routine with its own `shared:` label; the caller's trap still fires) |
+| condition traps | inherited | **not armed** -- but the caller's trap still **fires**, see below |
+| `SIGL` | inherited | **not inherited** -- reads as the uninitialised `SIGL` inside |
+| elapsed timer `time('E')` | inherited | **not inherited** -- reads `0` after the caller's `time('R')` *(flagged: read from a single `0`, no delay constructed to separate "own clock" from "shared clock reading ~0")* |
+| **`.local` environment** | shared | **SHARED -- the one thing that crosses** |
+
+**`.local` being shared is the trap in this table.** A crate that isolates *everything* at the `::routine` frontier breaks it: `.local~myentry` set by the caller is visible inside.
+
+**The condition-trap row needs its nuance stated, because "not inherited" read carelessly is wrong.**
+The routine does not *arm* the caller's trap, but a condition raised inside it **propagates and the caller's trap fires**:
+
+```
+caller: signal on syntax name caught ; zz = boom()
+::routine boom: return 1 / 0
+->  caller's trap fires, C=SYNTAX, I=SIGNAL
+    CONDITION('O')['PROGRAM'] is the CALLER's file
+    control lands in the CALLER at the call-site line
+```
 
 **The resolution order is two orders, not one.**
 A **quoted** target skips the internal label but still finds the `::routine`: `call 'ZORKOLO'` reaches the routine, while the builtin still wins over both.
@@ -418,6 +434,22 @@ Worth stating because "the oracle is at `/home/moritz/dev/repos/ooRexx`" and "re
 **A builtin's test group is not the only place its behaviour is asserted.**
 Measured at Task 4: `DELWORD`'s whitespace rule -- the deleted word takes the run *after* it while the run *before* it survives byte for byte, tab-vs-blank identity included -- is asserted in `base/source.file/whiteSpace.testGroup`, **not** in `DELWORD.testGroup`.
 So `/bin/grep -a` the whole of `ootest/ooRexx/base/` for your builtin's name, not just its own file.
+
+**A fourth shape, and the only one that silently corrupted work already committed: the suite has TWO syntax-assertion forms.**
+`~expectSyntax(` asserts a **run-time** error; `~assertSyntaxError(` compiles a fragment and asserts a **translation-time** one.
+Measured across `ootest/ooRexx/base`: **4,654 and 733**.
+The split is by error timing, not by taste -- `bif/` groups test run-time errors and carry **zero** `assertSyntaxError`, while directive and keyword groups carry many:
+
+| group | `expectSyntax` | `assertSyntaxError` |
+|---|---|---|
+| `bif/MAX`, and every other `bif/` group surveyed | as reported | **0** |
+| `keyword/PARSE` | 19 | 0 |
+| `keyword/ADDRESS` | 20 | **16** |
+| `directives/ROUTINE` | **0** | **22** |
+
+**Every `bif/` figure in this plan therefore stands**, including "`MAX`/`MIN` have zero error coverage".
+`keyword/ADDRESS`'s real total is **36, not the 20 recorded earlier**, and `directives/ROUTINE` would have read as "zero error cases" on the wrong scan alone.
+**Scan for both forms whenever the subject is a directive or a keyword.**
 
 **A third shape of false lead: looking in `bif/` alone, for anything that is both an instruction and a function.**
 Measured at Task 9/10: `bif/ADDRESS.testGroup` has **1 method and 2 assertions**, which reads as "essentially untested" -- while `keyword/ADDRESS.testGroup` has **97 methods and 222 assertions**, and tests the swap explicitly at `:1028`.
@@ -1386,11 +1418,29 @@ So this task must:
 
 `eval.rs:507`'s own comment argues against an unconditional substitution here -- read it before changing it.
 
-- [ ] **Step 4: Fail loudly on every non-`::ROUTINE` directive**
+- [ ] **Step 4: Fail on directive RESOLUTION failure, not on directive presence**
 
-Implementing `::routine` removes the loud fallback that currently masks the fact that **no directive is ever installed**.
-Measured: the oracle aborts before `main` on `::class foo subclass zzznotaclass` (98.909, rc 158) and on a missing `::requires` (43.901, rc 213), while `rexx-run` prints `main ran`.
-Add a loud failure naming Phase 5 for any directive that is not `::ROUTINE`.
+An earlier revision of this step said "add a loud failure naming Phase 5 for any directive that is not `::ROUTINE`".
+**That is too aggressive and would diverge from the oracle on programs it runs fine.** Measured 2026-08-05:
+
+```
+::class foo                              -> rc 0, "main ran"
+::class foo + ::method bar               -> rc 0, "main ran"
+::class foo + ::attribute baz            -> rc 0, "main ran"
+::requires 'helper.rex'   (file present) -> rc 0, "main ran"
+a loose ::method with no ::class         -> rc 0, "main ran"
+
+::class foo subclass zzznotaclass        -> 98.909, rc 158, stdout EMPTY
+::requires 'no_such_file_zz.rex'         -> 43.901, rc 213, stdout EMPTY
+```
+
+**The oracle fails only when a directive fails to RESOLVE, never on mere presence**, and it fails **before `main` runs** -- stdout is empty in both failing cases.
+
+So the rule is: a program that *contains* a well-formed directive it never uses must run identically on both interpreters.
+A program that *uses* one must not silently do the wrong thing.
+The boundary case that shows the difference: `::requires 'helper.rex'` where the helper holds `::routine helperfn public` makes `helperfn()` callable and returning `HELPED` -- so `::REQUIRES` **imports names into the resolution chain**, and ignoring it changes which routine a call finds.
+
+**Detect use, not presence.** Failing loudly on presence rejects valid programs; ignoring resolution failure runs a program the oracle refuses.
 
 - [ ] **Step 5: Trace does not cross into a `::routine`**
 
@@ -1412,9 +1462,23 @@ Measured:
        <I< Routine "ZORKOLO" in package "<absolute path>".
 ```
 
+**The exact bytes, confirmed with `cat -A` so trailing whitespace is visible:**
+
+```
+       >I> Routine "RTN" in package "/abs/path/own_a.rex".$
+       <I< Routine "RTN" in package "/abs/path/own_a.rex".$
+```
+
+**Seven leading spaces**, the routine name **uppercased** and double-quoted, the package an **absolute path**, a **trailing period outside the quotes**, and no trailing whitespace. `<I<` is identical in form. All on **stderr**.
+
+Fires for exactly **A, I, L, R** -- verified by running the same routine under all nine letters; `n`, `c`, `e`, `f`, `o` produce zero stderr.
+
 The absolute path makes any committed expectation host-dependent, so **the witness lives in the live corpus, not in `tests/trace_oracle/`**.
 The package field is **one `String` on `Interp`**, not a package object.
-`::options` is confirmed unnecessary.
+
+**`::options trace labels` IS a second reachable route, and an earlier revision of this step said it was not.**
+Measured: a routine with **no `trace` instruction of its own**, in a file carrying `::options trace labels`, emits both lines with identical bytes.
+So "the routine's own trace is the only path" is false; record the `::options` route rather than implementing it, but do not write that it does not exist.
 
 - [ ] **Step 7: Let a `::routine` program into the corpus**
 
