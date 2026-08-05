@@ -49,10 +49,22 @@ The tasks below that need a constraint restate it in their own bodies; that dupl
 * **The C++ tree is the oracle and is never modified.** `interpreter/`, `samples/`, `build/`, `ootest/` are read-only.
 * **Wrap every oracle invocation** as `( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib /home/moritz/dev/repos/ooRexx/build/bin/rexx FILE )`.
   Without the ulimit the interpreter requests gigabytes mid-range and is OOM-killed, which has already cost a session and the machine's memory.
-* **Use `/bin/grep -a`, not `grep`, for any count.**
+* **Use `/bin/grep -a`, not `grep`, for any count or any search.**
   `grep` here is a function wrapping `ugrep --ignore-files -I`; `-I` drops files with non-UTF-8 bytes and says nothing about having done so.
   Measured 2026-08-04: over `base/bif` it reports 5,441 `assertSame` where the true figure is **6,293**.
-  Six groups trip it -- `C2X`, `COPIES`, `D2C`, `DATATYPE`, `DELSTR`, `INSERT` -- and they are the byte-conversion groups, so **the risk is highest exactly where 4c's work is**.
+  Seven groups trip it -- `C2X`, `COPIES`, `D2C`, `DATATYPE`, `DELSTR`, `DELWORD`, `INSERT` -- and they are the byte-handling groups, so **the risk is highest exactly where 4c's work is**.
+
+  **"Silently skips" understates it, and the true failure mode is worse than a wrong number.**
+  Measured on `DELWORD.testGroup`, which carries five NUL bytes at line 136:
+
+  ```
+  grep -c 'delword' DELWORD.testGroup          ->  no output at all, exit 1
+  /bin/grep -ac 'delword' DELWORD.testGroup    ->  1, exit 0
+  ```
+
+  It prints **nothing** and exits **1** -- which in a shell is indistinguishable from a legitimate "no matches".
+  So it fails in the direction that looks like a valid negative result, and any "X is absent" conclusion drawn with `grep` over these files is worthless.
+  **Pair every absence claim with a positive control** that finds the same pattern somewhere it does exist.
 * **Cite `phase-4-exclusions.txt` by quoted phrase, never by line number.**
   Tasks 1 and 13 both edit it, and Task 1 alone moved every line below its first edit -- one row's citation shifted from `:1009` to `:1147`.
   A line number into a file this plan itself rewrites is stale before the task that reads it runs.
@@ -406,6 +418,14 @@ Worth stating because "the oracle is at `/home/moritz/dev/repos/ooRexx`" and "re
 **A builtin's test group is not the only place its behaviour is asserted.**
 Measured at Task 4: `DELWORD`'s whitespace rule -- the deleted word takes the run *after* it while the run *before* it survives byte for byte, tab-vs-blank identity included -- is asserted in `base/source.file/whiteSpace.testGroup`, **not** in `DELWORD.testGroup`.
 So `/bin/grep -a` the whole of `ootest/ooRexx/base/` for your builtin's name, not just its own file.
+
+**And the bytes those cases test are not in the source, which matters to Task 15's extractor.**
+Measured: `whiteSpace.testGroup` contains **zero 0x09 bytes**.
+`TAB` is a Rexx *variable* -- `TAB = "09"x` at `:63`, `PLANK = " "` at `:66`, `TAB2 = TAB||TAB` -- so the tab exists only in the data at run time.
+A scan for whitespace **literals** finds nothing there and silently concludes the tab-separator corpus does not exist.
+
+For a probe author: build separator probes from `"09"x` and the other byte values directly, and never read "no literal tabs in the suite" as evidence about the oracle's separator set.
+**For the `base/bif` extractor: whole-body extraction over a file like this needs the variable assignments resolved, not just the assertion lines matched** -- the same class of modelling requirement as `base/expressions` needing the `NUMERIC DIGITS` setting carried forward, and it must be handled or the affected bodies dropped explicitly rather than extracted wrongly.
 
 **Argument *type* and argument *range* are validated in different layers and raise different errors.**
 Measured: `word('a b c',1.5)` is **40.12 at rc 216** from the BIF wrapper's integer conversion, while `word('a b c',0)` and `word('a b c',-12)` are **93.924 at rc 163** from the String method's `positionArgument`.
