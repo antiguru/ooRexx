@@ -372,6 +372,18 @@ Measured: `date()` and `date('S')` both succeed, so `DATE`'s minimum is 0 -- yet
 The shared machinery will not raise this for you.
 **Probe each of your builtins with an interior omission before every optional position**, and raise 40.5 where the oracle does.
 
+**Rexx strings are byte strings, and every probe alphabet must say so.**
+Measured at Task 3, and it cost two Critical findings: the error raisers rendered a value through UTF-8, so a byte `>= 0x80` in `found "..."` became U+FFFD where the oracle emits the raw byte, and control bytes stayed raw where the oracle emits `?`.
+**A 62,144-program differential sweep reported zero mismatches and could not have found it**: its operand corpus was seven printable-ASCII strings, with zero hex literals and zero bytes above `0x7F`.
+Nine committed ooTest cases already reached the defect.
+
+So: **every probe set in this phase includes a byte `>= 0x80`, a control byte, and the null string**, and any sweep reports **the alphabet it drew from** beside the case count.
+A count without its alphabet is not a coverage claim -- the same shape as a count without its scan.
+This binds Task 5 hardest, since `B2X`, `C2X`, `X2C` and `D2C` are *about* bytes above `0x7F`.
+
+**Never render a Rexx value through `String::from_utf8_lossy` on a path whose bytes are compared.**
+It is silent, it is lossy in exactly one direction, and it looks correct in every ASCII test.
+
 **Measure whether a 40.12 or 40.23 message substitutes the rendered value or the source spelling.**
 The neighbouring 88.928 raiser in `error.rs` documents having measured exactly this distinction, and it is invisible until an argument's two forms differ -- `'007'` against `7`, or a number whose `DIGITS` rendering is not its literal text.
 Task 2 did not record which it is, and the first family task that raises a typed error owes the measurement.
