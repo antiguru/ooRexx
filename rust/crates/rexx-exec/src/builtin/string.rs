@@ -963,6 +963,14 @@ pub(crate) fn translate(
 /// range**, which is the one place a zero range does not mean "no answer":
 /// measured, `verify('abc','',,,0)` is 1 and `verify('abc','',,2,0)` is 2,
 /// where the same calls with a non-empty reference are 0.
+///
+/// **The two branches test different letters, and collapsing them into one
+/// flag is wrong.** An empty reference asks `opt == VERIFY_MATCH` and a
+/// non-empty one asks `opt == VERIFY_NOMATCH` (`StringUtil::verify`), so an
+/// option that is neither -- the `0x00` byte [`option_letter`] admits -- takes
+/// the *second* arm of both. Measured, and this pair is what separates them:
+/// `verify('abcde','','00'x)` is 1, the answer `'N'` gives, while
+/// `verify('abcde','abc','00'x)` is 1, the answer `'M'` gives.
 pub(crate) fn verify(
     interp: &mut Interp,
     name: &[u8],
@@ -988,17 +996,12 @@ pub(crate) fn verify(
         return Ok(interp.text(b"0"));
     }
     let range = range.min(string.len() - start + 1);
-    // **`N` is the branch that is tested for, not `M`**, so an option that is
-    // neither answers `M`'s question. That matters only for the `0x00` option
-    // `option_letter` admits, and it is the C++'s own shape
-    // (`if (opt == VERIFY_NOMATCH) ... else ...`) rather than a choice here:
-    // measured, `verify('abcde','abc','00'x)` is 1 and
-    // `verify('abcde','xyz','00'x)` is 0, both `'M'`'s answers.
-    let nomatch = option == b'N';
     let answer = if reference.is_empty() {
-        if nomatch { start } else { 0 }
+        // `if (opt == VERIFY_MATCH) return 0; else return startPos;`
+        if option == b'M' { 0 } else { start }
     } else {
-        let matching = !nomatch;
+        // `if (opt == VERIFY_NOMATCH) ... else ...`, the other letter.
+        let matching = option != b'N';
         string[start - 1..start - 1 + range]
             .iter()
             .position(|&byte| in_set(byte, &reference) == matching)
@@ -1812,12 +1815,22 @@ mod tests {
         assert_eq!(answer(b"STRIP", &[b"  ab  ", &[0x00]]), b"  ab  ");
         assert_eq!(answer(b"STRIP", &[b"  ab  ", &[0x00, b'L']]), b"  ab  ");
         assert_eq!(answer(b"STRIP", &[b"  ab  ", &[b'L', 0x00]]), b"ab  ");
-        // `VERIFY` answers `M`'s question, not `N`'s, because `N` is the
-        // branch that is tested for.
+        // `VERIFY`'s two branches test different letters, so the option that
+        // is neither takes the second arm of each -- and the two arms give
+        // *opposite* letters' answers. With a non-empty reference the test is
+        // for `N`, so `0x00` answers as `M` does; with an empty one the test
+        // is for `M`, so `0x00` answers as `N` does. A single flag for both
+        // gets exactly one of these two lines wrong.
         assert_eq!(answer(b"VERIFY", &[b"abcde", b"abc", &[0x00]]), b"1");
+        assert_eq!(answer(b"VERIFY", &[b"abcde", b"", &[0x00]]), b"1");
+        assert_eq!(answer(b"VERIFY", &[b"abcde", b"", &[0x00], b"3"]), b"3");
         assert_eq!(answer(b"VERIFY", &[b"abcde", b"xyz", &[0x00]]), b"0");
+        // The four letter cases either side of them, which is what pins each
+        // arm to the letter it actually tests.
         assert_eq!(answer(b"VERIFY", &[b"abcde", b"abc", b"M"]), b"1");
         assert_eq!(answer(b"VERIFY", &[b"abcde", b"abc", b"N"]), b"4");
+        assert_eq!(answer(b"VERIFY", &[b"abcde", b"", b"M"]), b"0");
+        assert_eq!(answer(b"VERIFY", &[b"abcde", b"", b"N"]), b"1");
 
         assert_eq!(
             raised(b"STRIP", &[Some(b"ab"), Some(&[0x01])]),

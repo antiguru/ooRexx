@@ -1100,7 +1100,24 @@ fn substitute(text: &str, values: &[Substitution]) -> Vec<u8> {
 ///
 /// The echo obeys the same rule, measured with a raw `0x01` inside a source
 /// literal: the oracle echoes `say copies('a?b','x')`.
-fn displayable(bytes: &mut [u8]) {
+///
+/// # The two callers, and the one C++ function they both correspond to
+///
+/// `processTraceInfo` is the single sink, and the oracle reaches it two ways.
+/// This crate has one application per way, so the pairing can be checked
+/// rather than taken on trust:
+///
+/// | this crate | oracle |
+/// |---|---|
+/// | [`Raised::report`] | `Activity::display` (`concurrency/Activity.cpp:1414`) -> `RexxActivation::displayUsingTraceOutput` (`execution/RexxActivation.cpp:5262`) -> `processTraceInfo` |
+/// | `trace.rs`'s line formatters | `RexxActivation::processTraceInfo` (`execution/RexxActivation.cpp:5249`) directly, for every live `TRACE` line |
+///
+/// Applying it twice to the same bytes is harmless and happens on a report's
+/// clause echoes, which `push_clause` has already sanitised: `?` is `0x3f`,
+/// above the threshold, so a second pass is the identity.
+///
+/// [`Raised::report`]: Raised::report
+pub(crate) fn displayable(bytes: &mut [u8]) {
     for byte in bytes {
         if *byte < 0x20 && !matches!(*byte, b'\t' | b'\n' | b'\r') {
             *byte = b'?';

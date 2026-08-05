@@ -263,6 +263,29 @@ fn push_indent(out: &mut Vec<u8>, indent: usize) {
     out.extend(std::iter::repeat_n(b' ', indent));
 }
 
+/// Runs the oracle's display rule over the trace line that starts at
+/// `line_start`, which is the last thing each formatter below does.
+///
+/// **This is `RexxActivation::processTraceInfo`'s own
+/// `traceLine->stringTrace()`** (`execution/RexxActivation.cpp:5249`), which
+/// every live trace line passes through on its way to `traceOutput`. The
+/// rule itself and its 256-value measurement live in `error.rs`'s
+/// `displayable`, beside the other route to the same C++ function.
+///
+/// Applied per completed line rather than once over `self.trace`, because
+/// the trace buffer is appended to across a whole run and a single pass at
+/// the end would have no moment to run at. The three formatters that finish
+/// a line each call this; `push_operator` does not, since it delegates to
+/// `push_tagged`, which does.
+///
+/// Measured, and the reason this exists separately from the report's own
+/// application: `trace r` over `say 'p'||'02'x||'q'` prints `"p?q"` on the
+/// oracle's `>>>` line and agrees with us on stdout, where the raw byte
+/// belongs.
+fn make_displayable(out: &mut [u8], line_start: usize) {
+    crate::error::displayable(&mut out[line_start..]);
+}
+
 /// The widest indent a `*-*` clause echo ever prints, in spaces.
 ///
 /// **The cap is on the `*-*` echo alone, and it is on the total printed
@@ -296,10 +319,12 @@ pub(crate) const MAX_CLAUSE_INDENT: usize = 40;
 /// two formatters agreeing is to have one of them; `report` calls this now,
 /// so the clamp is applied once because there is one place to apply it.
 pub(crate) fn push_clause(out: &mut Vec<u8>, line: usize, indent: usize, text: &[u8]) {
+    let line_start = out.len();
     out.extend_from_slice(format!("{line:>6} *-* ").as_bytes());
     push_indent(out, indent.min(MAX_CLAUSE_INDENT));
     out.extend_from_slice(text);
     out.push(b'\n');
+    make_displayable(out, line_start);
 }
 
 /// `TRACE_PREFIX_RESULT` (`>>>`) or `TRACE_PREFIX_LITERAL`/`_VARIABLE`/
@@ -310,8 +335,10 @@ pub(crate) fn push_clause(out: &mut Vec<u8>, line: usize, indent: usize, text: &
 /// Measured (this task's report, Step 2, `trace_output.rex`): `>L>   "1"`
 /// is 7 blanks, `>L>`, 3 blanks, `"1"`.
 pub(crate) fn push_value(out: &mut Vec<u8>, prefix: &str, indent: usize, value: &[u8]) {
+    let line_start = out.len();
     push_prefixed_blanks(out, prefix, indent);
     push_quoted(out, value);
+    make_displayable(out, line_start);
 }
 
 /// The shared header every formatter in this module builds first: 7 blanks
@@ -359,6 +386,7 @@ pub(crate) fn push_tagged(
     marker: &str,
     value: &[u8],
 ) {
+    let line_start = out.len();
     push_prefixed_blanks(out, prefix, indent);
     if quote_tag {
         push_quoted_tag(out, tag);
@@ -367,6 +395,7 @@ pub(crate) fn push_tagged(
     }
     out.extend_from_slice(marker.as_bytes());
     push_quoted(out, value);
+    make_displayable(out, line_start);
 }
 
 /// `"tag"` with no trailing newline -- `push_tagged`'s own quoted-tag case,
@@ -644,6 +673,42 @@ impl Interp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every formatter that finishes a line puts it through the oracle's
+    /// display rule, and the rule reaches the whole line rather than the
+    /// quoted value alone.
+    ///
+    /// Measured: `trace r` over `say 'p'||'02'x||'q'` prints `>>>   "p?q"`
+    /// on the oracle, with the raw byte still on stdout where it belongs.
+    /// The clause echo carries source bytes and obeys the same rule; the
+    /// tag does too, which is why `push_tagged` is checked separately from
+    /// `push_value` rather than assumed to follow from it.
+    #[test]
+    fn every_completed_trace_line_is_made_displayable() {
+        let mut out = Vec::new();
+        push_value(&mut out, ">>>", 0, b"p\x02q");
+        assert_eq!(out, b"       >>>   \"p?q\"\n");
+
+        out.clear();
+        push_clause(&mut out, 2, 0, b"say 'p'\x02'q'");
+        assert_eq!(out, b"     2 *-* say 'p'?'q'\n");
+
+        out.clear();
+        push_tagged(&mut out, ">V>", 0, false, b"Z\x03Z", " => ", b"a\x04b");
+        assert_eq!(out, b"       >V>   Z?Z => \"a?b\"\n");
+
+        out.clear();
+        push_operator(&mut out, ">O>", 0, b"|\x05|", b"a\x06b");
+        assert_eq!(out, b"       >O>   \"|?|\" => \"a?b\"\n");
+
+        // A byte at or above 0x80 is not sanitised, and neither are the
+        // three control bytes the rule spares. Without these the rule could
+        // be "every byte outside printable ASCII" and every line above would
+        // still pass.
+        out.clear();
+        push_value(&mut out, ">>>", 0, b"\xff\x09\x0d\x80");
+        assert_eq!(out, b"       >>>   \"\xff\x09\x0d\x80\"\n");
+    }
 
     /// `mode_from_setting`'s own nine-letter table plus the two silent
     /// defaults (empty, all-`?`) -- every arm this function has, asserted
