@@ -60,16 +60,12 @@
 
 use rexx_core::ObjRef;
 
+use super::{
+    buffer, count_of, length_of, optional_string, pad_byte, position_of, required_string,
+    whole_number,
+};
 use crate::Interp;
 use crate::error::{Failure, Raised};
-
-/// The precision the oracle converts a builtin's numeric arguments under.
-///
-/// `Numerics::ARGUMENT_DIGITS` (`runtime/Numerics.hpp`), 18 on a 64-bit
-/// build and deliberately not the current `NUMERIC DIGITS` --
-/// `Raised::argument_not_whole` carries the pair of measurements that
-/// separates the two.
-const ARGUMENT_DIGITS: usize = 18;
 
 /// What `STRIP` strips when no character set is given: blank and horizontal
 /// tab (`RexxString::strip`, `classes/StringClassSub.cpp`). Measured, a tab
@@ -107,107 +103,6 @@ pub(crate) fn length(
     Ok(interp.text(bytes.to_string().as_bytes()))
 }
 
-// ---- reading arguments ----
-
-/// The argument at 1-based `position`, or `None` if the call did not supply
-/// one there.
-///
-/// The two ways a position can be absent are one answer here on purpose: a
-/// list shorter than `position` and an interior `None` mean the same thing to
-/// every builtin below, since the oracle's `optional_*` macros test
-/// `argcount >= position` and then read a slot that may itself be null.
-/// `check_arity` guarantees positions `1..=min` are all `Some`, having
-/// turned any omission there into 40.5, so those are the positions the
-/// `expect`ing helpers below may be asked about -- and only those.
-fn arg(args: &[Option<ObjRef>], position: usize) -> Option<ObjRef> {
-    args.get(position - 1).copied().flatten()
-}
-
-/// The rendered bytes of the argument at 1-based `position`, which the
-/// caller knows is present.
-fn required_string(interp: &mut Interp, args: &[Option<ObjRef>], position: usize) -> Vec<u8> {
-    let value = arg(args, position).expect("check_arity admitted this required argument");
-    interp.to_text(value).into_owned()
-}
-
-/// The rendered bytes of an optional argument.
-fn optional_string(
-    interp: &mut Interp,
-    args: &[Option<ObjRef>],
-    position: usize,
-) -> Option<Vec<u8>> {
-    let value = arg(args, position)?;
-    Some(interp.to_text(value).into_owned())
-}
-
-/// An argument the builtin declared as an integer, converted the way the
-/// oracle's `optional_integer`/`required_integer` macros do.
-///
-/// `Ok(None)` is "the call supplied nothing here"; the caller then applies
-/// that argument's own default, which differs per builtin and is never a
-/// single shared value.
-fn whole_number(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-    position: usize,
-) -> Result<Option<i64>, Failure> {
-    let Some(value) = arg(args, position) else {
-        return Ok(None);
-    };
-    // `to_number` hands back an owned `Number`, so the borrow of `interp` is
-    // over before `to_text` below needs its own.
-    if let Ok(number) = interp.to_number(value)
-        && let Some(whole) = number.whole_value(ARGUMENT_DIGITS)
-    {
-        return Ok(Some(whole));
-    }
-    let found = interp.to_text(value).into_owned();
-    Err(Raised::argument_not_whole(name, position, &found).into())
-}
-
-/// An argument the builtin declared as a pad, which must be exactly one
-/// byte.
-fn pad_byte(
-    interp: &mut Interp,
-    name: &[u8],
-    args: &[Option<ObjRef>],
-    position: usize,
-) -> Result<Option<u8>, Failure> {
-    let Some(value) = arg(args, position) else {
-        return Ok(None);
-    };
-    let found = interp.to_text(value).into_owned();
-    match found.as_slice() {
-        [byte] => Ok(Some(*byte)),
-        _ => Err(Raised::argument_not_a_pad(name, position, &found).into()),
-    }
-}
-
-// ---- range-checking converted arguments ----
-
-/// A converted argument used as a length: zero or positive.
-fn length_of(value: i64) -> Result<usize, Failure> {
-    usize::try_from(value).map_err(|_| Raised::invalid_length(value.to_string().as_bytes()).into())
-}
-
-/// A converted argument used as a position: strictly positive.
-fn position_of(value: i64) -> Result<usize, Failure> {
-    match usize::try_from(value) {
-        Ok(position) if position > 0 => Ok(position),
-        _ => Err(Raised::invalid_position(value.to_string().as_bytes()).into()),
-    }
-}
-
-/// A converted argument used as a repetition or replacement count: zero or
-/// positive. `method_position` is the position the oracle's message names,
-/// which is the *operation's* own numbering rather than the call's.
-fn count_of(value: i64, method_position: usize) -> Result<usize, Failure> {
-    usize::try_from(value).map_err(|_| {
-        Raised::argument_not_non_negative(method_position, value.to_string().as_bytes()).into()
-    })
-}
-
 /// The upper-cased first letter of an option argument, checked against the
 /// set the builtin accepts.
 ///
@@ -238,18 +133,6 @@ fn option_letter(option: Option<&[u8]>, valid: &str) -> Result<Option<u8>, Failu
 }
 
 // ---- building results ----
-
-/// A result buffer of exactly `len` bytes' capacity, or the condition the
-/// oracle raises when the allocator refuses.
-///
-/// See `Raised::system_resources` for why the refusal is asked of the
-/// allocator rather than of a size limit.
-fn buffer(len: usize) -> Result<Vec<u8>, Failure> {
-    let mut out = Vec::new();
-    out.try_reserve_exact(len)
-        .map_err(|_| Failure::from(Raised::system_resources()))?;
-    Ok(out)
-}
 
 /// `len` copies of `byte`, appended.
 fn push_pad(out: &mut Vec<u8>, byte: u8, len: usize) {
@@ -324,15 +207,6 @@ fn count_occurrences(haystack: &[u8], needle: &[u8], limit: usize) -> usize {
 /// Whether `byte` is one of `set`'s.
 fn in_set(byte: u8, set: &[u8]) -> bool {
     set.contains(&byte)
-}
-
-/// The word boundaries `SPACE` uses: blank and horizontal tab only
-/// (`RexxString::WordIterator::skipBlanks`). Measured, a newline is *not* a
-/// separator -- `space('a'||'0a'x||'b')` keeps the newline inside one word.
-fn words(text: &[u8]) -> Vec<&[u8]> {
-    text.split(|&byte| byte == b' ' || byte == b'\t')
-        .filter(|word| !word.is_empty())
-        .collect()
 }
 
 // ---- the builtins ----
@@ -728,7 +602,9 @@ pub(crate) fn space(
         Some(value) => length_of(value)?,
         None => 1,
     };
-    let words = words(&string);
+    // The same scan the seven word builtins use, so `SPACE`'s idea of a word
+    // boundary is not a second statement of the rule free to disagree.
+    let words = super::word::word_slices(&string);
     if words.is_empty() {
         return Ok(interp.text(b""));
     }

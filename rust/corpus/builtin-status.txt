@@ -63,7 +63,7 @@ D2X	loud
 DATATYPE	loud
 DATE	loud
 DELSTR	implemented
-DELWORD	loud
+DELWORD	implemented
 DIGITS	loud
 ERRORTEXT	loud
 FORM	loud
@@ -91,7 +91,7 @@ SPACE	implemented
 STREAM	excluded
 STRIP	implemented
 SUBSTR	implemented
-SUBWORD	loud
+SUBWORD	implemented
 SYMBOL	loud
 TIME	loud
 TRACE	loud
@@ -100,11 +100,11 @@ TRUNC	loud
 VALUE	loud
 VAR	loud
 VERIFY	implemented
-WORD	loud
-WORDINDEX	loud
-WORDLENGTH	loud
-WORDPOS	loud
-WORDS	loud
+WORD	implemented
+WORDINDEX	implemented
+WORDLENGTH	implemented
+WORDPOS	implemented
+WORDS	implemented
 X2B	loud
 X2C	loud
 X2D	loud

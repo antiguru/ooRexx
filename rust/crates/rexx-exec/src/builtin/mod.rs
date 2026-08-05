@@ -75,6 +75,7 @@ use crate::error::{Failure, Raised};
 use crate::{Interp, Loud};
 
 mod string;
+mod word;
 
 /// What a builtin's code looks like: the interpreter, the row's own name and
 /// the already-evaluated arguments.
@@ -181,6 +182,15 @@ const IMPLEMENTED: &[Builtin] = &[
         run: string::delstr,
     },
     Builtin {
+        // A minimum of 2 where `DELSTR`'s is 1: `DELWORD`'s start word is
+        // required, so measured, `say delword('a b')` is 40.3 naming a
+        // minimum of 2 where `say delstr('abcdef')` succeeds.
+        name: b"DELWORD",
+        min: 2,
+        max: Some(3),
+        run: word::delword,
+    },
+    Builtin {
         name: b"INSERT",
         min: 2,
         max: Some(5),
@@ -256,6 +266,12 @@ const IMPLEMENTED: &[Builtin] = &[
         run: string::substr,
     },
     Builtin {
+        name: b"SUBWORD",
+        min: 2,
+        max: Some(3),
+        run: word::subword,
+    },
+    Builtin {
         // Six, not four: `start` and `range` are ooRexx's own extension to
         // the classic four-argument `TRANSLATE`, and measured, a seventh
         // argument is 40.4 naming a maximum of 6.
@@ -275,6 +291,41 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 2,
         max: Some(5),
         run: string::verify,
+    },
+    Builtin {
+        name: b"WORD",
+        min: 2,
+        max: Some(2),
+        run: word::word,
+    },
+    Builtin {
+        name: b"WORDINDEX",
+        min: 2,
+        max: Some(2),
+        run: word::word_index,
+    },
+    Builtin {
+        name: b"WORDLENGTH",
+        min: 2,
+        max: Some(2),
+        run: word::word_length,
+    },
+    Builtin {
+        // The search phrase is argument 1 and the string searched is argument
+        // 2, which is the reverse of every other builtin here that takes both
+        // (`BUILTIN(WORDPOS)`, `expression/BuiltinFunctions.cpp`). Measured,
+        // the message numbers them the same way round: `wordpos('a','a b','q')`
+        // is `WORDPOS argument 3 must be a whole number`.
+        name: b"WORDPOS",
+        min: 2,
+        max: Some(3),
+        run: word::word_pos,
+    },
+    Builtin {
+        name: b"WORDS",
+        min: 1,
+        max: Some(1),
+        run: word::words,
     },
 ];
 
@@ -378,6 +429,139 @@ fn check_arity(builtin: &Builtin, args: &[Option<ObjRef>]) -> Result<(), Failure
         Some(index) => Err(Raised::missing_argument(builtin.name, index + 1).into()),
         None => Ok(()),
     }
+}
+
+// ---- reading arguments ----
+//
+// The conversions every family of builtins shares, in the shape the oracle's
+// `required_*`/`optional_*` macros have: one per argument *kind* a builtin can
+// declare, each naming the routine and the call's own argument position in the
+// 40.x message it raises.
+
+/// The precision the oracle converts a builtin's numeric arguments under.
+///
+/// `Numerics::ARGUMENT_DIGITS` (`runtime/Numerics.hpp`), 18 on a 64-bit
+/// build and deliberately not the current `NUMERIC DIGITS` --
+/// `Raised::argument_not_whole` carries the pair of measurements that
+/// separates the two.
+const ARGUMENT_DIGITS: usize = 18;
+
+/// The argument at 1-based `position`, or `None` if the call did not supply
+/// one there.
+///
+/// The two ways a position can be absent are one answer here on purpose: a
+/// list shorter than `position` and an interior `None` mean the same thing to
+/// every builtin, since the oracle's `optional_*` macros test
+/// `argcount >= position` and then read a slot that may itself be null.
+/// [`check_arity`] guarantees positions `1..=min` are all `Some`, having
+/// turned any omission there into 40.5, so those are the positions the
+/// `expect`ing helpers below may be asked about -- and only those.
+fn arg(args: &[Option<ObjRef>], position: usize) -> Option<ObjRef> {
+    args.get(position - 1).copied().flatten()
+}
+
+/// The rendered bytes of the argument at 1-based `position`, which the
+/// caller knows is present.
+fn required_string(interp: &mut Interp, args: &[Option<ObjRef>], position: usize) -> Vec<u8> {
+    let value = arg(args, position).expect("check_arity admitted this required argument");
+    interp.to_text(value).into_owned()
+}
+
+/// The rendered bytes of an optional argument.
+fn optional_string(
+    interp: &mut Interp,
+    args: &[Option<ObjRef>],
+    position: usize,
+) -> Option<Vec<u8>> {
+    let value = arg(args, position)?;
+    Some(interp.to_text(value).into_owned())
+}
+
+/// An argument the builtin declared as an integer, converted the way the
+/// oracle's `optional_integer`/`required_integer` macros do.
+///
+/// `Ok(None)` is "the call supplied nothing here"; the caller then applies
+/// that argument's own default, which differs per builtin and is never a
+/// single shared value.
+fn whole_number(
+    interp: &mut Interp,
+    name: &[u8],
+    args: &[Option<ObjRef>],
+    position: usize,
+) -> Result<Option<i64>, Failure> {
+    let Some(value) = arg(args, position) else {
+        return Ok(None);
+    };
+    // `to_number` hands back an owned `Number`, so the borrow of `interp` is
+    // over before `to_text` below needs its own.
+    if let Ok(number) = interp.to_number(value)
+        && let Some(whole) = number.whole_value(ARGUMENT_DIGITS)
+    {
+        return Ok(Some(whole));
+    }
+    let found = interp.to_text(value).into_owned();
+    Err(Raised::argument_not_whole(name, position, &found).into())
+}
+
+/// An argument the builtin declared as a pad, which must be exactly one
+/// byte.
+fn pad_byte(
+    interp: &mut Interp,
+    name: &[u8],
+    args: &[Option<ObjRef>],
+    position: usize,
+) -> Result<Option<u8>, Failure> {
+    let Some(value) = arg(args, position) else {
+        return Ok(None);
+    };
+    let found = interp.to_text(value).into_owned();
+    match found.as_slice() {
+        [byte] => Ok(Some(*byte)),
+        _ => Err(Raised::argument_not_a_pad(name, position, &found).into()),
+    }
+}
+
+// ---- range-checking converted arguments ----
+//
+// The operation layer's 93.9xx checks, which run after every conversion above
+// and name neither the routine nor the call position. `string.rs`'s own module
+// doc carries the three oracle transcripts that fix the order between the two
+// layers.
+
+/// A converted argument used as a length: zero or positive.
+fn length_of(value: i64) -> Result<usize, Failure> {
+    usize::try_from(value).map_err(|_| Raised::invalid_length(value.to_string().as_bytes()).into())
+}
+
+/// A converted argument used as a position: strictly positive.
+fn position_of(value: i64) -> Result<usize, Failure> {
+    match usize::try_from(value) {
+        Ok(position) if position > 0 => Ok(position),
+        _ => Err(Raised::invalid_position(value.to_string().as_bytes()).into()),
+    }
+}
+
+/// A converted argument used as a repetition or replacement count: zero or
+/// positive. `method_position` is the position the oracle's message names,
+/// which is the *operation's* own numbering rather than the call's.
+fn count_of(value: i64, method_position: usize) -> Result<usize, Failure> {
+    usize::try_from(value).map_err(|_| {
+        Raised::argument_not_non_negative(method_position, value.to_string().as_bytes()).into()
+    })
+}
+
+// ---- building results ----
+
+/// A result buffer of exactly `len` bytes' capacity, or the condition the
+/// oracle raises when the allocator refuses.
+///
+/// See `Raised::system_resources` for why the refusal is asked of the
+/// allocator rather than of a size limit.
+fn buffer(len: usize) -> Result<Vec<u8>, Failure> {
+    let mut out = Vec::new();
+    out.try_reserve_exact(len)
+        .map_err(|_| Failure::from(Raised::system_resources()))?;
+    Ok(out)
 }
 
 #[cfg(test)]

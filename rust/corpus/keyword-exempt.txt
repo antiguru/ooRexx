@@ -32,7 +32,7 @@
 #     goes red as an unaccounted failure. A second defect class would need
 #     the constant split by hand.
 #
-#   4c  772 bodies. Every phase gap in this group is 4c's and nothing else's:
+#   4c  771 bodies. Every phase gap in this group is 4c's and nothing else's:
 #       PARSE (656 bodies), the builtin routines ARG/DIGITS/FORM/FUZZ/SIGN/
 #       ..., ADDRESS, PULL. No body here is blocked by Phase 5, so 4b owes
 #       this table nothing further. Which builtins are still blockers is the
@@ -65,7 +65,6 @@ ADDRESS::test_environment_value_with	4c
 ADDRESS::test_environment_expression_with	4c
 ADDRESS::test_environment_path_null	4c
 ASSIGNMENT::test_3	4c
-ASSIGNMENT::test_4	4c
 ASSIGNMENT::test_6	4c
 ASSIGNMENT::test_7	4c
 ASSIGNMENT::test_8	4c
