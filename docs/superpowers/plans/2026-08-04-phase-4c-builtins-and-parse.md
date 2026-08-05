@@ -738,6 +738,65 @@ Probe leading, trailing and repeated blanks, and tabs.
 
 **Read "Shared facts every builtin task needs", restated in your brief.**
 
+- [ ] **Step 0: Eight measured behaviours the reference does not give you -- read before writing any code**
+
+Surveyed and re-verified 2026-08-05. Each is a **silent wrong answer** if missed, and the obvious implementation is wrong for most of them.
+
+**(a) `NUMERIC DIGITS` bounds the RESULT, not the input length.** This is the one most likely to be got wrong in both directions:
+
+```rexx
+numeric digits 9;  say c2d(copies('00'x,10)||'01'x)   -- 1,  eleven bytes, fine
+numeric digits 9;  say c2d('ffffffff'x)               -- 93.936, four bytes
+numeric digits 1;  say c2d('ff'x,1)                   -- -1, fits
+numeric digits 1;  say c2d('7f'x,1)                   -- 93.936, 127 does not
+```
+
+Eleven bytes succeed and four fail under the same setting.
+`C2D`/`X2D` are sensitive on **output** (93.936 / 93.935); `D2X`/`D2C` on **input** (93.928 / 93.929), where the *argument* must be a valid whole number under the current setting before conversion starts.
+For all-`FF` input the bound is `floor(DIGITS / log10(256))` -- so **`DIGITS 1` admits zero bytes**, since one byte is already 255.
+Both message texts name the setting.
+
+**(b) The length argument is a right-aligned window that truncates from the LEFT, silently.**
+`c2d('01020304'x,2)` is **772** (`0x0304`), `d2x(4096,2)` is `00`, `x2d('80',1)` is `0`. **No error.** An implementation that raises one breaks all of them.
+
+**(c) The length argument also switches the read to SIGNED, and the window sets the sign bit.**
+
+| | no length | `,1` | `,2` |
+|---|---|---|---|
+| `c2d('80'x)` | 128 | **-128** | 128 |
+| `x2d('80')` | 128 | **0** | **-128** |
+
+Same bytes, three answers, and **`C2D` and `X2D` disagree with each other**.
+`d2x(-1)` and `d2c(-1)` without a length are 93.927, "Length must be specified to convert a negative value."
+
+**(d) `BITAND`/`BITOR`/`BITXOR` with unequal lengths and no pad pass the longer string's tail through UNCHANGED.**
+`c2x(bitand('ffff'x,'00'x))` is **`00FF`** -- the tail survives. Supply a pad and it is combined: `c2x(bitand('ffff'x,'00'x,'00'x))` is `0000`. One argument is legal: `bitand('ffff'x)` is `FFFF`.
+**There is no default pad; there is a passthrough.** Defaulting to `'00'x` for `BITAND` is the obvious implementation and it is wrong.
+
+**(e) Hex and binary string whitespace is `{0x20, 0x09}` -- blank and tab only**, the same set as the word separators. `x2c('41'||'09'x||'42')` is `4142`; LF is 93.933. Leading or trailing whitespace is 93.931.
+
+**(f) Grouping: the FIRST group sets the residue, every LATER group must be an exact multiple** (2 for hex, 4 for binary), and the first group is left-padded rather than rejected.
+`x2c('414')` is `0414`; `x2c('4 1424')` is `041424`; `x2c('414 2434')` is `04142434`; `x2c('414 243')` is 93.976.
+*This rule is inferred from eight cases, not read from `validateGroupedSet` -- confirm it against the C++ before relying on it.*
+
+**(g) `X2C` and `X2B` disagree on odd input.** `x2c('414')` pads to a whole byte (`0414`); `x2b('414')` gives 12 bits, unpadded. `b2x` pads to a multiple of 4 bits.
+
+**(h) `XRANGE` is variadic over PAIRS and a class name consumes one slot.**
+`xrange('a','b','c','d')` is `abcd` -- two ranges concatenated. `xrange('digit','z')` is **not** digits-through-`z`: `'z'` starts a *new* range running to `0xFF`. `length(xrange())` is 256.
+The 12 POSIX class names are case-insensitive (`BuiltinFunctions.cpp:1639-1648`), and **`cntrl` contains a leading NUL** -- `length(xrange('cntrl'))` is 33 and it begins `00010203`, so anything using `strlen` truncates it to nothing.
+Argument asymmetry: argument 1 takes a class name **or** a single character (40.28); argument 2 takes a single character **only** (40.23).
+
+**Validation order: every `40.x` argument-conversion check precedes every `93.9xx` content check, on all arguments.**
+`d2c('abc','def')` is **40.12**, not 93.929 -- the *length*'s type error beats the *value*'s. `x2d('ZZ','zz')` is 40.12 while `x2d('ZZ',4)` is 93.933.
+`40.x` is rc **216**; `93.9xx` is rc **163**.
+
+**What the suite checks, so you know what it cannot catch.** 212 `expectSyntax` calls over 17 distinct numbers across the twelve groups, against 899 `assertSame`.
+Gaps, each established with a positive control: **`93.977` (binary grouping) is raised by the implementation and tested nowhere** in `ootest/base`, though its hex twin 93.976 is tested in four places; `BITAND`/`BITOR` test exactly one error number each and nothing asserts their 40.4 at four arguments; `C2X` tests only 40.4.
+
+**Two behaviours are asserted outside these groups**: `class/RexxInteger.testGroup:276-359` requires `d2x`/`c2d`/`x2d` to return a **RexxInteger** and `RexxInteger~d2x` to equal `NumberString~d2x`; `expressions/Literals.testGroup:162` ties `.String~xdigit~x2c` to the character classes.
+
+**A probe warning from this survey, arriving from an unexpected direction.** `bitor ('0000'x,...)` **with a space** parses as concatenation with the uninitialised symbol `BITOR`, and produces plausible-looking output (`4249544F52…` is `"BITOR "`). The literal-syntax trap is not confined to `x` and `b`; any builtin name followed by a space and a parenthesis is a symbol, not a call.
+
 - [ ] **Step 1: Build the probe table, with two hazards specific to this family**
 
 * **Rexx literal syntax will silently change your probe.** A symbol named `x` or `b` immediately followed by a quoted string parses as a hex or binary literal.
