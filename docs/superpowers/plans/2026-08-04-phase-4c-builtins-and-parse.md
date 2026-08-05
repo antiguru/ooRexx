@@ -1159,10 +1159,44 @@ D12: no third extractor. Preserve the conservation invariant `rows + dropped == 
 Measured population: **6,293 `assertSame`** across 73 of 76 files, 5 `assertSameList`, 1,230 `expectSyntax`, and a 424-call `assertTrue`/`assertEquals`/`assertFalse` tail the extractor drops.
 State the drop in the header and let the conservation invariant carry the number.
 
-- [ ] **Step 2: Measure whether `expectSyntax` couples to a later `assertSame` here**
+- [ ] **Step 2: `expectSyntax` couples, more sharply than in `base/expressions` -- measured 2026-08-05, do not re-derive**
 
-It does in `base/expressions`, where an `expectSyntax` marker changed what a later `assertSame` *meant*.
-1,230 calls here. **Measure it; do not inherit the answer either way.**
+**The mechanism, read from `ootest/framework/OOREXXUNIT.CLS` rather than inferred.**
+`expectSyntax` (`:1322`) **wraps nothing**; it is a pure state-setter on the TestCase instance.
+The checking is a frame up in the framework's own `doTheTest` (`:1563`), which installs `signal on any name exceptionHandler` **in the framework method, not in the test method**, then runs the body as `.message~new(self, methodName)~send`.
+A matching condition returns immediately (`:1599`); `check4ConditionFailure` (`:1589`) is reached only if the body ran to completion.
+
+**So a raise inside a test body abandons the rest of that body.**
+The expectation is method-scoped, not file-scoped -- `clearCondition` is called only from `Assert~init` and `TestSuite` builds one instance per test method -- so the coupling is strictly intra-body.
+
+**The consequence for the extractor.** The dominant shape puts the raiser **inside `assertSame`'s own argument list**, so arguments evaluate, the raise fires, and `assertSame` is never entered:
+
+```rexx
+::method "test_21"                       -- C2D.testGroup:129
+   self~expectSyntax(40.5)
+   self~assertSame(C2D(,-1), '-1')
+```
+
+Verified on the oracle: `c2d(,-1)` is **40.5 at rc 216**. **`'-1'` is not an expected value** -- nothing ever compares anything to it. The body asserts one thing: that the call raises 40.5.
+
+An extractor that ignores `expectSyntax` emits *"`C2D(,-1)` equals `'-1'`"* -- **confidently backwards**, and `rows + dropped == calls` balances, so the conservation invariant certifies it.
+That is worse than a dropped row: it points an implementer at a return value where the required behaviour is a raise.
+
+**The rule: a `::method` body containing `expectSyntax` yields no `assertSame` rows from any call at or after that line.**
+Route those bodies to an error-expectation path keyed on the syntax code, and count the suppressed calls as **dropped** so the invariant still closes over them.
+
+**The bound: 200 bodies contain both; 199 have the `assertSame` at or after the `expectSyntax`, carrying 205 calls.**
+Of the 199, **189** have the raiser inside `assertSame`'s argument list and **10** are a separate `ret = <call>` clause.
+Exactly one body asserts before expecting (`LINEOUT.testGroup:207`), which is the correct ordering and the only instance of it.
+No body has more than one `expectSyntax`.
+
+**Segment bodies at the next `::` directive of ANY kind, not at the next `::method`.**
+Getting this wrong is how the count above was first got wrong, by me: `CONDITION.testGroup`'s `test_novalue_override` is three lines, and a `^::method` scan swallows the three following `::routine` bodies into it, inventing a 201st coupled body and five phantom reachable calls.
+`assertSame` inside a `::routine` is a **trap handler's** assertion and genuinely runs.
+
+**The unreachability is conditional; the hazard is not.**
+If an expected condition failed to raise, the body would run on and the `assertSame` would execute -- but `check4ConditionFailure` then fails the test anyway.
+So in neither case is that `(expected, actual)` pair a statement about correct behaviour.
 
 - [ ] **Step 3: Build the harness, with the set assertion ungated**
 
