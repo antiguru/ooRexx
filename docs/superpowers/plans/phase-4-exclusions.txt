@@ -1324,9 +1324,25 @@ above.
   from one probe per name, and TRANSLATE's probe
   (`say translate('abcdef','123','abc')`) matches. Measured -- committing the
   row as `divergent` makes the_status_file_matches_a_live_differential_run
-  red with "committed divergent, measured implemented". The file cannot hold
-  a divergence its own probe does not reproduce, so this row is where the
-  record has to live.
+  red with "committed divergent, measured implemented", BECAUSE THE PROBE
+  CHOSEN FOR TRANSLATE DOES NOT EXERCISE THE DIVERGENCE.
+
+  AN EARLIER VERSION OF THIS PARAGRAPH GENERALISED THAT INTO "the file
+  cannot hold a divergence its own probe does not reproduce", AND THAT IS
+  FALSE. Measured: replacing TRANSLATE's probe with one that DOES reproduce
+  the divergence and committing the row as `divergent` leaves the derivation
+  test PASSING and makes the KNOWN GAP marker fire exactly as designed --
+  only `every_string_builtin_is_implemented` then fails, which is a
+  different assertion with a different purpose. So the harness never
+  prevented recording this as a divergence; the probe did, and a probe is a
+  choice.
+
+  THE STATUS STAYS `implemented` AS A DELIBERATE CHOICE, NOT A FORCED ONE.
+  The probe file's job is one representative call per builtin, and rewriting
+  TRANSLATE's to chase a null-string-identity edge would make the status
+  table's most-read column answer a rarer question than it does for the
+  other 65. The divergence is recorded here, with its producers, and
+  `every_divergent_row_has_a_known_gap` is not what is holding it.
 
   KNOWN GAP: A LARGE RESULT ABORTS WHERE THE ORACLE RETURNS, AND RAISES
   Error 5 EARLIER THAN IT. Two independent causes, both measured at the
@@ -1345,12 +1361,35 @@ above.
   path does the same at its own `>>>` render. Both are unconditional, and
   neither is guarded by try_reserve, so the copy aborts the process rather
   than raising. The builtins' own result allocation is single and fallible;
-  the abort backtrace names resolve_and_run_call, not the builtin. MEASURED
-  AS THE WHOLE OF THIS CAUSE: with the argument render placed behind
-  `if self.trace_mode().intermediates`, 300000000 and 400000000 both return
-  rc 0 with the oracle's answer and no size aborts at all. That experiment
-  was reverted, not shipped -- it is one of about fifteen similar sites and
-  choosing the guard wrongly silently drops a trace line.
+  the abort backtrace names resolve_and_run_call, not the builtin. MEASURED:
+  with the argument render placed behind `if self.trace_mode().intermediates`,
+  `say length(copies('a',N))` at 300000000 and 400000000 both return rc 0
+  with the oracle's answer. That experiment was reverted, not shipped -- it
+  is one of about fifteen similar sites and choosing the guard wrongly
+  silently drops a trace line.
+
+  THAT MEASUREMENT WAS FIRST RECORDED HERE AS "THE WHOLE OF THIS CAUSE",
+  WHICH IS FALSE, AND THE CORRECTION IS THE USEFUL PART OF THIS ROW. With
+  the same experiment applied, four one-line neighbours still SIGABRT at
+  400 MB where the oracle returns rc 0:
+
+    say length(strip(copies('a',400000000)))
+    say length(reverse(copies('a',400000000)))
+    say length(copies('a',400000000) || 'x')
+    x = copies('a',400000000)
+
+  The first two are `required_string`'s infallible `into_owned()`, the third
+  is `Interp::concat`, the fourth the assignment path's own render. So the
+  argument render is one instance of a pattern -- an unguarded owned copy on
+  a path that may discard it -- and not the pattern's only member. Whoever
+  fixes this is looking for that shape, not for one line.
+
+  The generalisation was made from a single probe shape (`length` of a
+  `copies`) and repeated into two other documents before anyone varied the
+  surrounding expression. A probe set drawn from one shape cannot show that a
+  second shape exists, which is this project's most-repeated measurement
+  error and is why the four lines above are written out rather than
+  summarised.
 
   SECOND CAUSE, the early Error 5: `ulimit -v` limits ADDRESS SPACE, and
   INTERPRETER_STACK_BYTES reserves 512 MiB of it for the sized interpreter

@@ -1047,8 +1047,22 @@ Relax it to permit `::ROUTINE` and keep the panic for the rest.
 A value of any size is therefore copied whether or not anything will print it, the copy is unguarded, and it **aborts the process** rather than raising.
 Measured at the project's own `ulimit -v 1048576`: `say length(copies('a',400000000))` is `400000000` at rc 0 on the oracle and **SIGABRT at rc 134** here.
 
-**Measured as the whole of this cause:** with the argument render placed behind `if self.trace_mode().intermediates`, both 300000000 and 400000000 return rc 0 with the oracle's answer and no size aborts at all.
+**Measured:** with the argument render placed behind `if self.trace_mode().intermediates`, `say length(copies('a',N))` at both 300000000 and 400000000 returns rc 0 with the oracle's answer.
 That experiment was run and reverted, not shipped.
+
+**It is not the whole of the cause, and an earlier revision of this step said it was.**
+With the same experiment applied, four one-line neighbours still SIGABRT at 400 MB where the oracle returns rc 0:
+
+```rexx
+say length(strip(copies('a',400000000)))
+say length(reverse(copies('a',400000000)))
+say length(copies('a',400000000) || 'x')
+x = copies('a',400000000)
+```
+
+The first two are `required_string`'s infallible `into_owned()`, the third is `Interp::concat`, the fourth the assignment path's own render.
+**You are looking for a shape -- an unguarded owned copy on a path that may discard it -- not for one line.**
+The false generalisation came from probing a single expression shape (`length` of a `copies`); vary the surrounding expression before believing any fix is complete.
 
 **It costs real memory, not only address space, and that is the stronger reason to fix it.**
 Measured at a 4 GiB limit where both sides succeed, peak RSS for `say length(copies('a',500000000))` is **978,460 kB here against the oracle's 495,860 kB** -- the oracle holds one copy of the result and this crate holds two.
