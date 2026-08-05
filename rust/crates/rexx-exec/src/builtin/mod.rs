@@ -75,6 +75,7 @@ use crate::error::{Failure, Raised};
 use crate::{Interp, Loud};
 
 mod convert;
+mod numeric;
 mod string;
 mod word;
 
@@ -133,6 +134,12 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 2,
         max: Some(3),
         run: string::abbrev,
+    },
+    Builtin {
+        name: b"ABS",
+        min: 1,
+        max: Some(1),
+        run: numeric::abs,
     },
     Builtin {
         name: b"B2X",
@@ -243,6 +250,12 @@ const IMPLEMENTED: &[Builtin] = &[
         run: word::delword,
     },
     Builtin {
+        name: b"FORMAT",
+        min: 1,
+        max: Some(5),
+        run: numeric::format,
+    },
+    Builtin {
         name: b"INSERT",
         min: 2,
         max: Some(5),
@@ -276,6 +289,21 @@ const IMPLEMENTED: &[Builtin] = &[
         run: string::lower,
     },
     Builtin {
+        // `max: None` for the same reason `XRANGE`'s row gives -- `MAX_Max`
+        // is `argcount` (`BUILTIN(MAX)`) -- and measured,
+        // `max(1,2,3,4,5,6,7,8)` is 8 rather than 40.4.
+        name: b"MAX",
+        min: 1,
+        max: None,
+        run: numeric::max,
+    },
+    Builtin {
+        name: b"MIN",
+        min: 1,
+        max: None,
+        run: numeric::min,
+    },
+    Builtin {
         name: b"OVERLAY",
         min: 2,
         max: Some(5),
@@ -288,6 +316,14 @@ const IMPLEMENTED: &[Builtin] = &[
         run: string::pos,
     },
     Builtin {
+        // A minimum of 0: `random()` is a call with no arguments at all and
+        // answers a number in 0..999.
+        name: b"RANDOM",
+        min: 0,
+        max: Some(3),
+        run: numeric::random,
+    },
+    Builtin {
         name: b"REVERSE",
         min: 1,
         max: Some(1),
@@ -298,6 +334,12 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 2,
         max: Some(3),
         run: string::right,
+    },
+    Builtin {
+        name: b"SIGN",
+        min: 1,
+        max: Some(1),
+        run: numeric::sign,
     },
     Builtin {
         name: b"SPACE",
@@ -331,6 +373,12 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 1,
         max: Some(6),
         run: string::translate,
+    },
+    Builtin {
+        name: b"TRUNC",
+        min: 1,
+        max: Some(2),
+        run: numeric::trunc,
     },
     Builtin {
         name: b"UPPER",

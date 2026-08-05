@@ -28,7 +28,7 @@
 
 use crate::Loud;
 use rexx_core::ObjRef;
-use rexx_num::ArithError;
+use rexx_num::{ArithError, FormatError};
 use rexx_parse::ParseError;
 use std::borrow::Cow;
 
@@ -774,6 +774,125 @@ impl Raised {
         Raised::syntax(93, sub, Vec::new())
     }
 
+    /// 40.13: `RANDOM`'s seed is negative. `routine` is the builtin's own
+    /// name, `position` is 1-based in the call's argument list, and `found`
+    /// is the argument's rendered value.
+    ///
+    /// **The negative argument this reports is the seed and never the
+    /// range**, which is the pair worth keeping together: measured,
+    /// `random(1,2,-1)` is this error naming `argument 3`, while
+    /// `random(-1)` -- also a negative argument, also `RANDOM` -- is
+    /// [`random_bounds_reversed`]'s 40.33 instead, because a lone argument is
+    /// the *maximum* and a maximum below the default minimum of zero is a
+    /// reversed range rather than a bad value.
+    ///
+    /// [`random_bounds_reversed`]: Raised::random_bounds_reversed
+    pub(crate) fn argument_not_non_negative_call(
+        routine: &[u8],
+        position: usize,
+        found: &[u8],
+    ) -> Raised {
+        Raised::syntax(
+            40,
+            13,
+            vec![
+                routine.to_vec(),
+                position.to_string().into_bytes(),
+                found.to_vec(),
+            ],
+        )
+    }
+
+    /// 40.32: `RANDOM`'s range is wider than the generator's own limit of
+    /// 999,999,999. The two substitutions are the *arguments as written*,
+    /// and an omitted one is the null string.
+    ///
+    /// Measured, rc 216: `random(0,1000000000)` is `RANDOM difference
+    /// between argument 1 ("0") and argument 2 ("1000000000") must not
+    /// exceed 999,999,999.`, and `random(999999999999999999)` -- one
+    /// argument, which is the *maximum* -- reports `argument 1 ("999999999999999999")`
+    /// and `argument 2 ("")`, echoing the position the call used rather than
+    /// the role the value played.
+    pub(crate) fn random_range_too_wide(minimum: &[u8], maximum: &[u8]) -> Raised {
+        Raised::syntax(40, 32, vec![minimum.to_vec(), maximum.to_vec()])
+    }
+
+    /// 40.33: `RANDOM`'s minimum is above its maximum. Substitutions as
+    /// [`random_range_too_wide`]'s, including the null string for an omitted
+    /// argument -- measured, `random(-1)` reports `argument 1 ("-1")` and
+    /// `argument 2 ("")`.
+    ///
+    /// [`random_range_too_wide`]: Raised::random_range_too_wide
+    pub(crate) fn random_bounds_reversed(minimum: &[u8], maximum: &[u8]) -> Raised {
+        Raised::syntax(40, 33, vec![minimum.to_vec(), maximum.to_vec()])
+    }
+
+    /// 93.903: a `MAX`/`MIN` argument was omitted in place on the path where
+    /// the target is an integer object. **`position` is 0-based**, which is
+    /// measured rather than mistranscribed: `max(1,,3)` reports `argument 0`,
+    /// `max(1,2,,4)` reports `argument 1` and `max(1,2,3,,5)` reports
+    /// `argument 2`.
+    ///
+    /// Two separate off-by-ones make that so, and the C++ has both.
+    /// `RexxInteger::Max` (`classes/IntegerClass.cpp:1578`) passes the
+    /// arguments *after* the target, so its index 0 is the call's argument 2;
+    /// and it hands that index to `requiredArgument(argument, arg)`
+    /// (`runtime/MethodArguments.hpp:99`) unincremented, where that helper's
+    /// parameter is documented as "the position of the argument for the error
+    /// message" and the neighbouring `NumberString::maxMin` passes `arg + 1`
+    /// for the identical loop.
+    ///
+    /// The non-integer path raises [`missing_argument`]'s 40.5 at rc 216 for
+    /// the same shape, one higher and naming the routine -- see
+    /// `builtin/numeric.rs` for which target reaches which.
+    ///
+    /// [`missing_argument`]: Raised::missing_argument
+    pub(crate) fn missing_method_argument(position: usize) -> Raised {
+        Raised::syntax(93, 903, vec![position.to_string().into_bytes()])
+    }
+
+    /// 93.904: a `MAX`/`MIN` argument is not a number. `position` is 1-based
+    /// **in the underlying method's argument list**, so it is one lower than
+    /// the call's own numbering -- measured, `max(1,'a',3)` reports `Method
+    /// argument 1` for the call's argument 2, and `max(1,2,'a')` reports
+    /// `Method argument 2`.
+    ///
+    /// `found` is the argument's rendered value, at rc 163.
+    pub(crate) fn method_argument_not_a_number(position: usize, found: &[u8]) -> Raised {
+        Raised::syntax(
+            93,
+            904,
+            vec![position.to_string().into_bytes(), found.to_vec()],
+        )
+    }
+
+    /// 93.943: the value a numeric builtin was handed as its *target* is not
+    /// a number. `method` is the name the message uses, which is the
+    /// builtin's own; `found` is the value's rendered bytes.
+    ///
+    /// Measured at rc 163 for all of `ABS`, `SIGN`, `TRUNC`, `FORMAT`, `MAX`
+    /// and `MIN`: `abs('abc')` is `ABS method target must be a number; found
+    /// "abc".`, and `max('a',1,3)` names `MAX` while `max(1,'a',3)` is
+    /// [`method_argument_not_a_number`]'s 93.904 instead. So argument 1 and
+    /// arguments 2+ answer with different numbers for the same offending
+    /// value, which is the split `RexxString`'s `ArithmeticMethod` macro
+    /// (`classes/StringClass.cpp:1060`) makes: the target goes through it and
+    /// the rest do not.
+    ///
+    /// The null string and a lone blank reach it too -- `abs('')` reports
+    /// `found ""` and `abs(' ')` reports `found " "`.
+    ///
+    /// **Not 41.1.** A non-numeric value only reaches arithmetic here after
+    /// the builtin has been entered, and the two are told apart by where the
+    /// conversion happens: measured, `sign('-1E1234567890')` is this error at
+    /// rc 163, while `sign(-1E1234567890)` is 41.1 at rc 215 because the
+    /// unary minus converts the value before `SIGN` is ever called.
+    ///
+    /// [`method_argument_not_a_number`]: Raised::method_argument_not_a_number
+    pub(crate) fn method_target_not_a_number(method: &[u8], found: &[u8]) -> Raised {
+        Raised::syntax(93, 943, vec![method.to_vec(), found.to_vec()])
+    }
+
     /// 88.928: `USE ARG >name` where the caller did not pass a variable
     /// reference. `position` is 1-based; `found` is the argument's own
     /// **rendered value**.
@@ -907,6 +1026,26 @@ impl From<ArithError> for Raised {
     fn from(error: ArithError) -> Raised {
         // `additional()` and `sub_code()` both borrow, so either can run
         // first; ordered to match the doc comment's own telling.
+        let additional = error.additional();
+        let (number, sub) = error.sub_code();
+        Raised::syntax(number, sub, into_substitutions(additional))
+    }
+}
+
+/// Converts a `rexx-num` `FORMAT` failure into a `Raised`, the same way
+/// [`From<ArithError>`] converts an arithmetic one.
+///
+/// `FormatError`'s two variants are 93.941 and 93.942, and both carry their
+/// substitution *values* rather than rendered text -- which matters, because
+/// what each substitutes is not the argument the program wrote. `format(1,0)`
+/// reports the rounded value `"1"` and the requested width `"0"`, and
+/// `format(1e10,,,1,0)` reports the *reframed mantissa* `"1"` rather than the
+/// number itself. Both are `rexx-num`'s own measurements; nothing here
+/// re-derives them.
+///
+/// [`From<ArithError>`]: Raised
+impl From<FormatError> for Raised {
+    fn from(error: FormatError) -> Raised {
         let additional = error.additional();
         let (number, sub) = error.sub_code();
         Raised::syntax(number, sub, into_substitutions(additional))

@@ -32,9 +32,9 @@
 #     goes red as an unaccounted failure. A second defect class would need
 #     the constant split by hand.
 #
-#   4c  770 bodies. Every phase gap in this group is 4c's and nothing else's:
-#       PARSE (656 bodies), the builtin routines ARG/DIGITS/FORM/FUZZ/SIGN/
-#       ..., ADDRESS, PULL. No body here is blocked by Phase 5, so 4b owes
+#   4c  766 bodies. Every phase gap in this group is 4c's and nothing else's:
+#       PARSE (656 bodies), the builtin routines ARG/DIGITS/FORM/FUZZ/...,
+#       ADDRESS, PULL. No body here is blocked by Phase 5, so 4b owes
 #       this table nothing further. Which builtins are still blockers is the
 #       derived half of this file and moves as they land; the run's own
 #       breakdown is the current answer, never this sentence.
@@ -70,7 +70,6 @@ ASSIGNMENT::test_7	4c
 CALL::test_literal	4c
 CALL::test_expression	4c
 CALL::test_on_name	4c
-CALL::test_args	4c
 CALL::test_7	4c
 CALL::test_9	4c
 DO::test_DO_standardTest2A	4c
@@ -127,9 +126,6 @@ DO::test_DO_standardTest5-70	4c
 DO::test_DO_standardTest5-71	4c
 IF::test_13	4c
 IF::test_14	4c
-IF::test_15	4c
-IF::test_16	4c
-IF::test_17	4c
 INTERPRET::test_interpret_call	4c
 ITERATE::test_12	defect:compound-do-control-variable
 LEAVE::test_11	defect:compound-do-control-variable

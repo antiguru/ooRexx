@@ -1292,6 +1292,27 @@ struct Interp {
     /// LIFO/FIFO split and why nothing here reads it back -- that is
     /// `PULL`/`PARSE PULL`/`QUEUED()`'s, none of which this crate has.
     queue: Queue,
+    /// `RANDOM`'s generator state: the seed the next call will scramble, or
+    /// `None` before any call has drawn one.
+    ///
+    /// **One field for the whole interpreter, where the oracle keeps it per
+    /// activation and forwards.** `RexxActivation::getRandomSeed`
+    /// (`execution/RexxActivation.cpp:3453`) opens with `if
+    /// (isInternalLevelCall()) return parent->getRandomSeed(seed)`, so an
+    /// internal routine and an `INTERPRET` share their caller's stream rather
+    /// than starting one of their own -- which is what
+    /// `bif/RANDOM.testGroup`'s stream test needs, since it seeds once and
+    /// then makes 99 further unseeded calls and requires the whole run to
+    /// repeat. Holding it here reproduces that sharing directly.
+    ///
+    /// `None` rather than a fixed starting value, because the oracle's first
+    /// unseeded number is genuinely process-random: measured, the same
+    /// program's first `random()` was 894, 152 and 414 on three consecutive
+    /// runs, while every number *after* a seeded call repeated exactly. So
+    /// this is drawn once, from the clock and the process id, and never from
+    /// a constant that would make an unseeded program reproducible where the
+    /// oracle's is not.
+    random_seed: Option<u64>,
 }
 
 /// The name and arguments of one call in progress.
@@ -1401,6 +1422,7 @@ impl Interp {
             procedure_permitted: false,
             call_context: CallContext::default(),
             queue: Queue::new(),
+            random_seed: None,
         }
     }
 

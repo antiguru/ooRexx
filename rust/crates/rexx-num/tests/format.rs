@@ -170,7 +170,8 @@ fn before_too_narrow_for_the_integer_part_is_error_93() {
     ));
     assert_eq!(
         FormatError::BeforeOversize {
-            value: n("0"),
+            reported: n("0"),
+            form: Form::Scientific,
             digits: 9,
             before: 1
         }

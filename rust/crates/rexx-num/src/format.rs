@@ -32,17 +32,40 @@ use crate::{Form, Number};
 pub enum FormatError {
     /// `before` is too narrow for the integer part actually produced (which,
     /// in exponential form, means the mantissa's integer digits). Error
-    /// 93.942; `additional()` is `[value.format(digits), before]`. `value`
-    /// is `self` rounded to `digits` -- *not* the reframed mantissa this
-    /// error's own padding works with, and not affected by which `form`/
-    /// `expt` the call uses. Confirmed by provoking the exponential-mantissa
-    /// case (ENGINEERING, before too narrow for a reframed "123.456789")
-    /// and getting back the un-reframed "123456.789" instead, and separately
-    /// by lowering DIGITS until rounding changes the value and seeing *that*
-    /// show up rather than the original literal text.
+    /// 93.942; `additional()` is `[reported.format(digits), before]`.
+    ///
+    /// **`reported` is the number as `formatInternal` has it at the moment it
+    /// raises**, not the original operand: the interpreter substitutes bare
+    /// `this`, which by then has been reframed by the exponential decision
+    /// *and* rounded by `after`. Both halves are visible, and an earlier
+    /// version of this comment claimed the opposite for the first -- its
+    /// cited witness (`format(123456.789,2)`) simply never triggers
+    /// exponential form, so nothing was reframed for it to see. Measured
+    /// against `build/bin/rexx`:
+    ///
+    /// ```text
+    /// format(1.5,0)                            "1.5"          no `after`, nothing rounded
+    /// format(1.5,0,0)                          "2"            `after` rounded it, and carried
+    /// format(99.996,2,2)                       "100.0"        `mathRound`'s digit count, not four
+    /// format(-0.5,1,0)                         "-1"           the sign survives a full round-away
+    /// format(123456.789,2)                     "123456.789"   plain: not reframed
+    /// ENGINEERING format(123456.789,2,,,0)     "123.456789"   reframed by the engineering exponent
+    /// ENGINEERING format(123456.789,2,3,,0)    "123.457"      reframed and then rounded
+    /// format(1e10,2,,0)                        "1E+10"        rendered through `stringValue()`
+    /// ENGINEERING format(1e10,0,,0)            "10E+9"        ...which honours FORM too
+    /// ```
+    ///
+    /// The last two rows are why `digits` and `form` are carried rather than a
+    /// plain rendering: the substitution goes through the same `stringValue()`
+    /// any number's display does, so it honours both. `expp == 0` suppresses
+    /// exponential form in the *result* and the substitution still comes out
+    /// exponential, and under ENGINEERING it comes out grouped -- measured,
+    /// `numeric form engineering ; format(1e10,0,,0)` reports `"10E+9"` where
+    /// the same call under SCIENTIFIC reports `"1E+10"`.
     BeforeOversize {
-        value: Number,
+        reported: Number,
         digits: u64,
+        form: Form,
         before: u32,
     },
     /// `expp` is too narrow to hold the exponent's digits. Error 93.941;
@@ -70,20 +93,38 @@ impl FormatError {
         }
     }
 
+    /// The full `(major, sub)` pair, for a caller that has to build the
+    /// interpreter's own condition object rather than a message.
+    ///
+    /// `ArithError::sub_code` exists for exactly the same reason and is the
+    /// shape this follows: without it a caller outside this crate can read
+    /// the major from [`code`] and the text from [`message`] but has no way
+    /// to name the row, and the alternative is a hand-copied table that can
+    /// disagree with [`sub`].
+    ///
+    /// [`code`]: FormatError::code
+    /// [`message`]: FormatError::message
+    /// [`sub`]: FormatError::sub
+    pub fn sub_code(&self) -> (u16, u16) {
+        (93, self.sub())
+    }
+
     /// The substitution values in the interpreter's own order -- what
     /// `condition('o')~additional` would return for this failure.
     pub fn additional(&self) -> Vec<String> {
         match self {
             FormatError::BeforeOversize {
-                value,
+                reported,
                 digits,
+                form,
                 before,
             } => {
-                vec![value.format(*digits), before.to_string()]
+                vec![reported.format_form(*digits, *form), before.to_string()]
             }
             FormatError::ExponentOversize { mantissa, width } => {
-                let rendered = render_integer_padded(mantissa, None, None, mantissa, 0)
-                    .expect("`before` is None, so the width check cannot fail");
+                let rendered =
+                    render_integer_padded(mantissa, None, None, mantissa, 0, Form::Scientific)
+                        .expect("`before` is None, so the width check cannot fail");
                 vec![rendered, width.to_string()]
             }
         }
@@ -231,14 +272,19 @@ impl Number {
         }
 
         let (eng_exp, rounded) = resolve_exponential_state(&n1, form, expt, after);
+        // What `BeforeOversize` substitutes, computed here rather than at the
+        // raise site because it needs both exponent choices -- see
+        // `reported_value`.
+        let reported = reported_value(&n1, initial_eng_exp, eng_exp, after);
 
         match eng_exp {
-            None => render_integer_padded(&rounded, before, after, &n1, digits),
+            None => render_integer_padded(&rounded, before, after, &reported, digits, form),
             Some(exp) => {
                 // The exponent check comes before the `before` check -- an
                 // exponent that doesn't fit is reported even when `before`
                 // would have been wide enough for the mantissa.
-                let mantissa = render_integer_padded(&rounded, before, after, &n1, digits)?;
+                let mantissa =
+                    render_integer_padded(&rounded, before, after, &reported, digits, form)?;
 
                 if exp == 0 {
                     // A displayed exponent of exactly zero is never written
@@ -274,8 +320,15 @@ impl Number {
         let truncated = truncate_to_places(&n, places);
         // `before` is always `None` here, so the oversize check can never
         // run and the placeholder `value`/`digits` are never read.
-        render_integer_padded(&truncated, None, Some(places), &truncated, 0)
-            .expect("`before` is None, so the width check cannot fail")
+        render_integer_padded(
+            &truncated,
+            None,
+            Some(places),
+            &truncated,
+            0,
+            Form::Scientific,
+        )
+        .expect("`before` is None, so the width check cannot fail")
     }
 }
 
@@ -479,6 +532,78 @@ fn post_carry_exponent_error(
     })
 }
 
+/// The number `formatInternal` is holding by the time it reports
+/// `BeforeOversize`, which is neither the operand nor the rendered result.
+///
+/// Three things have happened to `this` by then, in this order, and each is
+/// visible in the substitution (see `FormatError::BeforeOversize` for the
+/// transcripts): it was reframed by the exponent the **first** trigger chose,
+/// it was cut to `after` decimal places by `mathRound`, and -- when that cut
+/// carried far enough to move the exponent -- it was rescaled to the exponent
+/// the **final** trigger chose. Rounding at the final exponent instead would
+/// be a different number: the interpreter really does round first and reframe
+/// afterwards (`NumberStringClass.cpp:2126-2193`).
+fn reported_value(
+    n1: &Number,
+    eng_exp0: Option<i32>,
+    eng_exp: Option<i32>,
+    after: Option<u32>,
+) -> Number {
+    let framed = reframe(n1, eng_exp0.unwrap_or(0));
+    let cut = match after {
+        None => framed,
+        Some(places) => math_round_places(&framed, places),
+    };
+    let true_scale = Number {
+        negative: cut.negative,
+        digits: cut.digits,
+        exponent: cut.exponent + eng_exp0.unwrap_or(0),
+    };
+    reframe(&true_scale, eng_exp.unwrap_or(0))
+}
+
+/// The decimals cut `formatInternal` makes, digit for digit.
+///
+/// This is not [`round_to_places`], though both land on the same *value*, and
+/// the difference is exactly what the substitution exposes. The interpreter
+/// shortens the digit count by the number of places it is dropping and then
+/// calls `mathRound`, whose carry-out bumps the exponent and leaves the digit
+/// count alone -- which is `Number::round_to`'s rule, not
+/// `round_to_places`'s. Measured: `format(99.996,2,2)` reports `"100.0"`,
+/// four digits, where `round_to_places` would give the five of `"100.00"`.
+///
+/// The branch for a cut that reaches past every stored digit is the
+/// interpreter's own (`NumberStringClass.cpp:2100-2118`) rather than a
+/// delegation: it collapses to a single digit, `1` when the leading digit
+/// rounds up and the cut lands exactly on it, and an unsigned plain zero
+/// otherwise -- measured, `format(0.005,0,2)` reports `"0.01"`,
+/// `format(0.05,0,0)` reports `"0"`, and `format(-0.5,1,0)` reports `"-1"`
+/// with its sign intact.
+fn math_round_places(n: &Number, places: u32) -> Number {
+    if n.exponent >= 0 {
+        return n.clone();
+    }
+    let adjusted_decimals = -i64::from(n.exponent);
+    if adjusted_decimals <= i64::from(places) {
+        return n.clone();
+    }
+    let excess = adjusted_decimals - i64::from(places);
+    let len = n.digits.len() as i64;
+    if excess < len {
+        return n.round_to((len - excess) as u64);
+    }
+    if excess == len && n.digits[0] >= 5 {
+        // `excess < adjusted_decimals` always holds here, and
+        // `adjusted_decimals` is within `MAX_EXPONENT`, so `places` fits i32.
+        return Number {
+            negative: n.negative,
+            digits: vec![1],
+            exponent: -(places as i32),
+        };
+    }
+    Number::zero()
+}
+
 /// Rounds (half up) `n` to exactly `places` digits after the decimal point --
 /// the cut FORMAT's `after` and TRUNC both make, just at a fixed decimal
 /// position rather than a fixed significant-digit count. `Number::round_to`
@@ -634,8 +759,13 @@ fn render_integer_padded(
     n: &Number,
     before: Option<u32>,
     after: Option<u32>,
-    oversize_value: &Number,
+    reported: &Number,
     oversize_digits: u64,
+    // Only ever read to build `BeforeOversize`, which renders `reported`
+    // through `stringValue()` and so honours `NUMERIC FORM` as well as
+    // `DIGITS`. Every call that passes `before: None` can never reach that
+    // raise and passes `Form::Scientific` as an unread placeholder.
+    oversize_form: Form,
 ) -> Result<String, FormatError> {
     let sign = if n.negative { "-" } else { "" };
     let d: String = n.digits.iter().map(|x| (b'0' + x) as char).collect();
@@ -686,8 +816,9 @@ fn render_integer_padded(
             let available = i64::from(before) - i64::from(n.negative);
             if available < needed {
                 return Err(FormatError::BeforeOversize {
-                    value: oversize_value.clone(),
+                    reported: reported.clone(),
                     digits: oversize_digits,
+                    form: oversize_form,
                     before,
                 });
             }

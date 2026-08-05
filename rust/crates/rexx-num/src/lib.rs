@@ -427,6 +427,40 @@ impl Number {
         self.digits.iter().all(|d| *d == 0)
     }
 
+    /// The same magnitude with the sign cleared, which is what `ABS` needs
+    /// and nothing here could otherwise express: `negative` is private to
+    /// this crate.
+    ///
+    /// `NumberString::abs` (`NumberStringClass.cpp:3700`) clears the sign of
+    /// a copy and leaves everything else alone; the rounding that goes with
+    /// it in the interpreter (`copyForCurrentSettings`) is the caller's, so
+    /// that a caller wanting the raw magnitude is not forced through a
+    /// precision it did not ask for.
+    pub fn abs(&self) -> Self {
+        Number {
+            negative: false,
+            digits: self.digits.clone(),
+            exponent: self.exponent,
+        }
+    }
+
+    /// `-1`, `0` or `1`, which is what `SIGN` answers.
+    ///
+    /// Every spelling of zero answers `0`, including `-0.0`: [`is_zero`] is
+    /// the test, not the sign flag, and measured, `sign(-0.0)` is `0` on the
+    /// interpreter.
+    ///
+    /// [`is_zero`]: Number::is_zero
+    pub fn signum(&self) -> i8 {
+        if self.is_zero() {
+            0
+        } else if self.negative {
+            -1
+        } else {
+            1
+        }
+    }
+
     /// Parses a Rexx number, or `None` if the string is not one.
     ///
     /// Accepts surrounding blanks, an optional sign (itself followed by

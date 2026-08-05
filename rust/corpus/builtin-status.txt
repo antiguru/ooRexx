@@ -39,7 +39,7 @@
 #                the harness refuses the row without one.
 
 ABBREV	implemented
-ABS	loud
+ABS	implemented
 ADDRESS	loud
 ARG	loud
 B2X	implemented
@@ -67,7 +67,7 @@ DELWORD	implemented
 DIGITS	loud
 ERRORTEXT	loud
 FORM	loud
-FORMAT	loud
+FORMAT	implemented
 FUZZ	loud
 INSERT	implemented
 LASTPOS	implemented
@@ -76,16 +76,16 @@ LENGTH	implemented
 LINEIN	excluded
 LINEOUT	excluded
 LINES	excluded
-MAX	loud
-MIN	loud
+MAX	implemented
+MIN	implemented
 OVERLAY	implemented
 POS	implemented
 QUEUED	loud
-RANDOM	loud
+RANDOM	implemented
 REVERSE	implemented
 RIGHT	implemented
 RXQUEUE	excluded
-SIGN	loud
+SIGN	implemented
 SOURCELINE	loud
 SPACE	implemented
 STREAM	excluded
@@ -96,7 +96,7 @@ SYMBOL	loud
 TIME	loud
 TRACE	loud
 TRANSLATE	implemented
-TRUNC	loud
+TRUNC	implemented
 VALUE	loud
 VAR	loud
 VERIFY	implemented
