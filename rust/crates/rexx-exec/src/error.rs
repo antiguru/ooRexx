@@ -199,6 +199,21 @@ pub(crate) struct Raised {
     pub(crate) delivery: Delivery,
 }
 
+/// Which of the two grouped digit notations a validation error is about.
+///
+/// The oracle carries the same distinction as a `bool hex` parameter threaded
+/// through `StringUtil::validateGroupedSet` (`classes/support/StringUtil.cpp`),
+/// which picks between paired catalogue entries at each of its three
+/// failures. It is a type here so that a caller validating a binary string
+/// cannot name the hexadecimal message: the three raisers below take this and
+/// choose the sub-code themselves, rather than each call site writing a
+/// number down.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Notation {
+    Hex,
+    Binary,
+}
+
 impl Raised {
     /// A `SYNTAX` condition with an ordinary delivery -- the shape every
     /// raiser outside `RAISE` itself has.
@@ -618,6 +633,145 @@ impl Raised {
     /// raising anything.
     pub(crate) fn system_resources() -> Raised {
         Raised::syntax(5, 0, Vec::new())
+    }
+
+    /// 40.28: an argument that has to be either a character class name or a
+    /// single character is neither. Substitutions as [`argument_not_whole`]'s.
+    ///
+    /// The neighbour of [`argument_not_a_pad`]'s 40.23, and the two really do
+    /// split by argument position rather than by value: measured,
+    /// `xrange('a','zz')` is 40.23 naming argument 2 where `xrange('zz','a')`
+    /// is this one naming argument 1, for the same offending string.
+    ///
+    /// The null string reaches it too -- `xrange('')` is 40.28 with
+    /// `found ""` -- because the oracle tests for a length of exactly one and
+    /// treats everything else as a class name to look up.
+    ///
+    /// [`argument_not_whole`]: Raised::argument_not_whole
+    /// [`argument_not_a_pad`]: Raised::argument_not_a_pad
+    pub(crate) fn argument_not_a_pad_or_class_name(
+        routine: &[u8],
+        position: usize,
+        found: &[u8],
+    ) -> Raised {
+        Raised::syntax(
+            40,
+            28,
+            vec![
+                routine.to_vec(),
+                position.to_string().into_bytes(),
+                found.to_vec(),
+            ],
+        )
+    }
+
+    /// 93.927: `D2X`/`D2C` were asked to convert a negative value without a
+    /// length to hold the sign extension. No substitutions.
+    ///
+    /// Measured, both at rc 163: `say d2x(-1)` and `say d2c(-1)` are
+    /// `Length must be specified to convert a negative value.`, and the same
+    /// calls with any length at all succeed -- `d2x(-1,1)` is `F`.
+    pub(crate) fn length_required_for_negative() -> Raised {
+        Raised::syntax(93, 927, Vec::new())
+    }
+
+    /// 93.928: `D2X`'s value argument is not a whole number the current
+    /// `NUMERIC DIGITS` can hold. `found` is the argument's own **rendered
+    /// value**, which is the pair with [`argument_not_whole`]'s measurement:
+    /// `numeric digits 3 ; zz = 2 / 3 ; numeric digits 9 ; say d2x(zz)`
+    /// reports `found "0.667"`.
+    ///
+    /// **The setting bounds the value, not the text**, measured in both
+    /// directions at `DIGITS 3`: `d2x('000123')` is `7B`, since the leading
+    /// zeros are not digits of the value, while `d2x('1E3')` and `d2x(1000)`
+    /// are both this error -- one thousand needs four digits however it is
+    /// spelled.
+    ///
+    /// [`argument_not_whole`]: Raised::argument_not_whole
+    pub(crate) fn d2x_value_not_whole(found: &[u8]) -> Raised {
+        Raised::syntax(93, 928, vec![found.to_vec()])
+    }
+
+    /// 93.929: [`d2x_value_not_whole`]'s twin for `D2C`, measured to be the
+    /// same rule with a different number -- `d2c('abc')` and `d2x('abc')`
+    /// differ only in the sub-code and the routine the text names.
+    ///
+    /// [`d2x_value_not_whole`]: Raised::d2x_value_not_whole
+    pub(crate) fn d2c_value_not_whole(found: &[u8]) -> Raised {
+        Raised::syntax(93, 929, vec![found.to_vec()])
+    }
+
+    /// 93.935: `X2D`'s *result* does not fit the current `NUMERIC DIGITS`.
+    /// The substitution is the setting itself, not the value.
+    ///
+    /// **The bound is on the result and not on how many bytes went in**,
+    /// which is what separates this from [`d2x_value_not_whole`]'s check.
+    /// Measured at `DIGITS 3`: `x2d('ff')` is 255 and `x2d('ffff')` is this
+    /// error naming 3.
+    ///
+    /// [`d2x_value_not_whole`]: Raised::d2x_value_not_whole
+    pub(crate) fn x2d_result_too_large(digits: u64) -> Raised {
+        Raised::syntax(93, 935, vec![digits.to_string().into_bytes()])
+    }
+
+    /// 93.936: [`x2d_result_too_large`]'s twin for `C2D`.
+    ///
+    /// The pair of measurements that shows the bound is the result's:
+    /// `numeric digits 9 ; c2d(copies('00'x,10)||'01'x)` is `1` from eleven
+    /// bytes, while `numeric digits 9 ; c2d('ffffffff'x)` is this error from
+    /// four.
+    ///
+    /// [`x2d_result_too_large`]: Raised::x2d_result_too_large
+    pub(crate) fn c2d_result_too_large(digits: u64) -> Raised {
+        Raised::syntax(93, 936, vec![digits.to_string().into_bytes()])
+    }
+
+    /// 93.931/93.932: a hexadecimal or binary string carries whitespace where
+    /// it may not -- at the very start, or at the very end. `position` is
+    /// 1-based.
+    ///
+    /// Measured, all rc 163: `x2c(' 4142')` names position 1, `x2c('4142 ')`
+    /// names 5, and `x2c('41 42  ')` names 7 -- the *last* of a trailing run,
+    /// not the first. The binary twin is the same shape: `b2x(' 1010')` names
+    /// position 1 and `b2x('1010 ')` names 5.
+    pub(crate) fn misplaced_whitespace(notation: Notation, position: usize) -> Raised {
+        let sub = match notation {
+            Notation::Hex => 931,
+            Notation::Binary => 932,
+        };
+        Raised::syntax(93, sub, vec![position.to_string().into_bytes()])
+    }
+
+    /// 93.933/93.934: a byte that is neither a digit of the notation nor one
+    /// of the two bytes that may separate its groups. The substitution is the
+    /// offending byte itself.
+    ///
+    /// It is a byte and not text: measured, `x2c('41'||'ff'x)` reports the
+    /// raw `0xff` and `x2c('41'||'01'x)` reports `?`, which is
+    /// [`displayable`]'s rule applied to the finished line rather than
+    /// anything this raiser does.
+    ///
+    /// [`displayable`]: crate::error::displayable
+    pub(crate) fn invalid_digit(notation: Notation, character: u8) -> Raised {
+        let sub = match notation {
+            Notation::Hex => 933,
+            Notation::Binary => 934,
+        };
+        Raised::syntax(93, sub, vec![vec![character]])
+    }
+
+    /// 93.976/93.977: the groups of a hexadecimal or binary string are not
+    /// sized as the notation requires. No substitutions.
+    ///
+    /// Measured: `x2c('414 243')` is 93.976, where `x2c('414 2434')` and
+    /// `b2x('101 0000')` both convert. The rule those three share is written
+    /// out where it is enforced, in `builtin/convert.rs`'s module doc.
+    pub(crate) fn invalid_grouping(notation: Notation) -> Raised {
+        let sub = match notation {
+            Notation::Hex => 976,
+            Notation::Binary => 977,
+        };
+        Raised::syntax(93, sub, Vec::new())
     }
 
     /// 88.928: `USE ARG >name` where the caller did not pass a variable

@@ -74,6 +74,7 @@ use rexx_core::ObjRef;
 use crate::error::{Failure, Raised};
 use crate::{Interp, Loud};
 
+mod convert;
 mod string;
 mod word;
 
@@ -134,6 +135,45 @@ const IMPLEMENTED: &[Builtin] = &[
         run: string::abbrev,
     },
     Builtin {
+        name: b"B2X",
+        min: 1,
+        max: Some(1),
+        run: convert::b2x,
+    },
+    Builtin {
+        // A minimum of 1, not 2: the second string is optional and the pad
+        // does the work on its own, so measured, `c2x(bitand('ffff'x))` is
+        // `FFFF`.
+        name: b"BITAND",
+        min: 1,
+        max: Some(3),
+        run: convert::bitand,
+    },
+    Builtin {
+        name: b"BITOR",
+        min: 1,
+        max: Some(3),
+        run: convert::bitor,
+    },
+    Builtin {
+        name: b"BITXOR",
+        min: 1,
+        max: Some(3),
+        run: convert::bitxor,
+    },
+    Builtin {
+        name: b"C2D",
+        min: 1,
+        max: Some(2),
+        run: convert::c2d,
+    },
+    Builtin {
+        name: b"C2X",
+        min: 1,
+        max: Some(1),
+        run: convert::c2x,
+    },
+    Builtin {
         // Two rows, one implementation: see `Builtin::run` for why the name
         // travels as an argument and what a program can see of the
         // difference.
@@ -180,6 +220,18 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 1,
         max: Some(3),
         run: string::delstr,
+    },
+    Builtin {
+        name: b"D2C",
+        min: 1,
+        max: Some(2),
+        run: convert::d2c,
+    },
+    Builtin {
+        name: b"D2X",
+        min: 1,
+        max: Some(2),
+        run: convert::d2x,
     },
     Builtin {
         // A minimum of 2 where `DELSTR`'s is 1: `DELWORD`'s start word is
@@ -326,6 +378,35 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 1,
         max: Some(1),
         run: word::words,
+    },
+    Builtin {
+        name: b"X2B",
+        min: 1,
+        max: Some(1),
+        run: convert::x2b,
+    },
+    Builtin {
+        name: b"X2C",
+        min: 1,
+        max: Some(1),
+        run: convert::x2c,
+    },
+    Builtin {
+        name: b"X2D",
+        min: 1,
+        max: Some(2),
+        run: convert::x2d,
+    },
+    Builtin {
+        // The one variadic row: `XRANGE_Max` is `argcount` itself
+        // (`BUILTIN(XRANGE)`), so no call is ever too long, and measured,
+        // `xrange('a','b','c','d','e','f','g','h')` is eight bytes rather
+        // than 40.4. Its minimum is 0, so `xrange()` is a call with no
+        // arguments and answers all 256 bytes.
+        name: b"XRANGE",
+        min: 0,
+        max: None,
+        run: convert::xrange,
     },
 ];
 
