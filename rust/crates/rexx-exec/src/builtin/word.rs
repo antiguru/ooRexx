@@ -27,8 +27,8 @@
 //! `words('a'||'a0'x||'b')` is 1 and `words('a'||'00'x||'b')` is 1, while
 //! `words('a'||'09'x||'b')` is 2.
 //!
-//! Every one of the seven scans through [`Words`], so that rule is stated
-//! once; `SPACE` (`string.rs`) shares it through [`word_slices`].
+//! [`Words`] is the single scanner the rule lives in, and
+//! `only_blank_and_tab_separate_words` asserts it over all 256 bytes.
 //!
 //! # Six of the seven turn on a position, and the boundaries are measured
 //!
@@ -55,9 +55,15 @@
 //! `WORDS`, `WORDINDEX`, `WORDLENGTH` and `WORDPOS` answer counts and
 //! offsets, and each is created as text for the reason `string.rs`'s own
 //! module doc gives. Measured with `DIGITS` changed between creation and
-//! rendering, which is the only way to see it: built under `numeric digits
-//! 12` and read back under `numeric digits 1`, `say words('a b c d e f g h i
-//! j')` is still `10` while `say n + 0` on the same value is `1E+1`.
+//! rendering, which is the only way to see it:
+//!
+//! ```rexx
+//! numeric digits 12
+//! n = words('a b c d e f g h i j')   -- created here, renders as 10
+//! numeric digits 1
+//! say n                              -- still 10: the pair is captured
+//! say n + 0                          -- 1E+1: a new value, new pair
+//! ```
 
 use std::ops::Range;
 
@@ -155,8 +161,9 @@ impl<'a> Words<'a> {
 
 /// Every word of `text`, in order.
 ///
-/// For the callers that want the words themselves rather than a position in
-/// them: `WORDS`, `WORDPOS`, and `SPACE` over in `string.rs`.
+/// For a caller that wants the words themselves rather than a position in
+/// them. A caller needing only a count or an index scans [`Words`] directly
+/// and allocates nothing.
 pub(super) fn word_slices(text: &[u8]) -> Vec<&[u8]> {
     let mut scan = Words::new(text);
     let mut found = Vec::new();

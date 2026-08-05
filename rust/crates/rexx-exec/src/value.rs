@@ -54,7 +54,7 @@ impl Interp {
     /// difference between running and aborting.** A `Vec` that cannot be
     /// allocated aborts the process rather than returning an error, so a
     /// builtin sizing its result from user input has to reserve fallibly
-    /// (`builtin/string.rs`'s own `buffer`) *and* hand the reservation over
+    /// (`builtin::buffer`) *and* hand the reservation over
     /// rather than have it copied. Measured at the project's own
     /// `ulimit -v 1048576`: `say length(copies('a',400000000))` needs 400 MB
     /// once, which fits, and twice, which does not.
