@@ -384,6 +384,20 @@ This binds Task 5 hardest, since `B2X`, `C2X`, `X2C` and `D2C` are *about* bytes
 **Never render a Rexx value through `String::from_utf8_lossy` on a path whose bytes are compared.**
 It is silent, it is lossy in exactly one direction, and it looks correct in every ASCII test.
 
+**Cross the axes; widening one is not enough.**
+Measured at Task 3, and it cost a **silent wrong answer** that two separate corpora both reported clean.
+`verify('abcde','','00'x)` is `1` on the oracle and was `0` here, because two C++ branch tests ask *opposite* questions -- an empty reference asks `VERIFY_MATCH`, a non-empty one `VERIFY_NOMATCH`.
+Corpus A had **8** empty-reference `verify` programs and no `0x00` option; corpus C had **384** `0x00` options and no empty reference.
+**Neither axis was missing. Each corpus varied one and held the other at a safe value**, so the defect at their intersection was invisible to both while their case counts summed to something that looked like coverage.
+
+So a family task's corpus must **cross every argument position's alphabet with every option value**, not vary one position at a time.
+And prove the crossing earns its place the way Task 3 did: **run the new corpus against the build that had the bug.**
+Its 72 mismatches, against 0 from the two older corpora on that same build, is what turned "this corpus can fail" into "this corpus catches something the others could not".
+
+**Enumerate a builtin's branches from the C++, not from its documentation or from probing.**
+Task 3 found 14 empty-argument branches across the string builtins that way.
+A branch you did not know exists is one your probes cannot be varied against.
+
 **Measure whether a 40.12 or 40.23 message substitutes the rendered value or the source spelling.**
 The neighbouring 88.928 raiser in `error.rs` documents having measured exactly this distinction, and it is invisible until an argument's two forms differ -- `'007'` against `7`, or a number whose `DIGITS` rendering is not its literal text.
 Task 2 did not record which it is, and the first family task that raises a typed error owes the measurement.
