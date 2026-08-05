@@ -1170,6 +1170,45 @@ When the fix lands, all six start passing and `the_exempt_set_matches_the_curren
 * Create: `crates/rexx-extract/src/bif.rs`, `crates/rexx-exec/tests/bif_assertions.rs`, `rust/corpus/bif-exempt.txt`, `rust/scripts/mutate-4c.sh`, `docs/superpowers/plans/phase-4c-gate.md`
 * Modify: `rust/corpus/phase-4c.txt`, `rust/corpus/README.md`, `crates/rexx-exec/tests/coverage.rs`, `crates/rexx-exec/tests/corpus.rs`, `crates/rexx-exec/tests/collect_stress.rs`
 
+- [ ] **Step 0: What the extractor must model, measured 2026-08-05 -- read this before writing any code**
+
+**D12's reuse decision holds, but not as a drop-in.** Without the three additions below, only **39.9% of calls extract correctly and the rest are silently wrong rather than dropped**, which the conservation invariant cannot see.
+
+**The denominator is not what a naive scan gives.** `^[[:space:]]*::method` case-insensitively gives 5,462; **three of those sit inside `/* … */` block comments** (`CHARS.testGroup`, `LINES.testGroup` ×2), so live method directives are **5,459**.
+All 6,293 `assertSame` calls reconcile by location: roughly **6,150-6,170 in live method bodies, 120-135 inside block comments, 5 in `::routine` bodies, 1 behind a `--`**.
+The block-comment band is a range because ooRexx block comments **nest** and a same-line `/* … */` is easy to mis-detect; the total reconciles exactly either way.
+**A line-oriented scan extracts over a hundred assertions that never run.**
+
+**The composition, by body (a body counts in every category it touches):**
+
+| category | bodies | calls |
+|---|---|---|
+| total live | 4,237 | 6,169 |
+| **self-contained, no dependency** | **2,169 (51.2%)** | **2,464 (39.9%)** |
+| local variable, simple literal RHS | 402 | 1,474 |
+| local variable, computed RHS | 372 | 922 |
+| `.local~` fixture set in another body | 962 | 969 |
+| `self~` attribute | 24 | 126 |
+| in-file `::routine` | 4 | 7 |
+| `NUMERIC` in body | 363 | 565 |
+| loop or conditional around the assertion | 113 | 531 |
+| `expectSyntax` present | 200 | 210 |
+
+**Add exactly three capabilities, all lookup or carry-forward -- no expression evaluator:**
+
+1. **File-scoped fixture resolution.** Collect `.local~NAME =` per file and resolve `.NAME`, **stem-aware**: `WORD.testGroup:276` does `v8. = .v8` then `word((v8.10),4)`, and exact-name matching misses it. That case defeated the classifier that produced these numbers on its first pass and overstated self-contained by 25 bodies. Buys 962 bodies.
+2. **`NUMERIC` carry-forward within the body.** 363 bodies, and **362 of them set `NUMERIC` *before* the first `assertSame`** -- the dangerous ordering. `base/expressions` already needed this and it is the category with a precedent for being got wrong silently, because such bodies' operands are literals and they therefore *look* self-contained. `ABBREV.testGroup:526` is the shape: both operands literal, `Numeric Digits 1` the only thing that changes the answer.
+3. **`expectSyntax` routing**, per Step 2.
+
+**Then drop the rest explicitly and count it: 418 bodies / 1,103 calls (17.9%)** -- computed local RHS, loops, `self~` attributes, in-file `::routine` calls. Bounded, nameable, covered by `rows + dropped == calls`. Drop the block-comment calls too, and rule deliberately on the 5 in `::routine` bodies.
+
+**Two categories nobody thought to ask about, and the first is the larger risk:**
+
+* **`::options novalue` is a file-level directive that inverts body semantics.** **38 of the 76 files** carry it. Under it an unassigned symbol **raises**; in the other 38 files it evaluates to its own uppercased name. **Same body text, opposite meaning, and the deciding directive is outside the body.** Roughly 1,325 bodies / 2,027 calls live under it. Verified: none of the seven word groups carry it, which is exactly why they can write `word(nv,1)` = `'NV'`.
+* **The NOVALUE idiom itself** -- assertions that read a never-assigned symbol and rely on symbol-equals-own-name, e.g. `BITAND.testGroup:185`'s `assertSame(bitand('3', nv2.3), '02'x||'V2.3')`. Resolvable from the body's own bytes **only if the extractor knows the rule**; to a naive reader it looks like unresolved indirection. **Bounded at ≥178 firm, ≤307 loose** -- the residue contains false positives from instruction forms (a `PARSE` target read later), and the gap was not closed.
+
+**Confidence, stated so it can be checked rather than trusted.** Firm: the reconciliation, the 5,459/5,462 split, the 362-of-363 `NUMERIC` ordering, the 38-of-76 `::options` split, the `expectSyntax` 200/210. Softer: the resolvable/not split turns on a "simple versus computed RHS" rule, and that rule is conservative, so the mechanically-resolvable set is probably slightly larger than stated.
+
 - [ ] **Step 1: Extract `base/bif` by reuse**
 
 D12: no third extractor. Preserve the conservation invariant `rows + dropped == calls` and the `DropReason` detail field.
