@@ -1290,6 +1290,78 @@ above.
   owned by 4c", above. It left this section for the one reason this section's
   own rules allow: an owner was assigned.
 
+  KNOWN GAP: TRANSLATE -- A NULL STRING'S IDENTITY DECIDES WHETHER TABLEIN WAS
+  SUPPLIED. TRANSLATE's third argument has two meanings and the oracle tells
+  them apart by the argument's ADDRESS, not its contents:
+  RexxString::translate tests `tablei != GlobalNames::NULLSTRING`, and
+  optionalStringArgument substitutes that same singleton for an omitted one.
+  A null string that came from a builtin returning the singleton therefore
+  takes the "omitted" path -- byte value as its own index into tableout --
+  while a null string written as a literal takes the "supplied" path, where
+  no byte is found and nothing is translated. Measured, one line each:
+
+    zz = ''             ; say '['translate('abcdef','123',zz)']'  ->  [abcdef]
+    zz = left('abc',0)  ; say '['translate('abcdef','123',zz)']'  ->  [      ]
+
+  The producers among the string builtins, each measured on that same second
+  line and each answering [      ]: LEFT, RIGHT, CENTER and CENTRE with a
+  width of 0; SUBSTR with a length of 0; DELSTR deleting the whole string;
+  STRIP with everything stripped; COPIES with a count of 0 or a null subject;
+  SPACE with no words. REVERSE('') and a CHANGESTR that changes nothing do
+  NOT produce it -- both return their receiver rather than the singleton --
+  and neither does a literal ''. Concatenating the singleton with a literal
+  '' still yields it.
+
+  rexx-exec answers [abcdef] in every one of these, which is the literal's
+  answer. Closing this needs a string's IDENTITY to be observable, which
+  nothing else in the language makes so and which the value model (D15) has
+  no room for: two values with the same bytes are the same value there. No
+  owner is assigned, and a fix should be weighed against reproducing an
+  upstream artefact nothing else depends on.
+
+  WHY THE STATUS ROW STAYS `implemented` RATHER THAN `divergent`, which is a
+  fact about the harness and not a judgement: builtin-status.txt is DERIVED
+  from one probe per name, and TRANSLATE's probe
+  (`say translate('abcdef','123','abc')`) matches. Measured -- committing the
+  row as `divergent` makes the_status_file_matches_a_live_differential_run
+  red with "committed divergent, measured implemented". The file cannot hold
+  a divergence its own probe does not reproduce, so this row is where the
+  record has to live.
+
+  KNOWN GAP: A LARGE RESULT ABORTS WHERE THE ORACLE RETURNS, AND RAISES
+  Error 5 EARLIER THAN IT. Two independent causes, both measured at the
+  project's own `ulimit -v 1048576`, with `say length(copies('a',N))`:
+
+    N            oracle          rexx-exec
+    300000000    N, rc 0         SIGABRT, rc 134
+    400000000    N, rc 0         SIGABRT, rc 134
+    500000000    N, rc 0         Error 5, rc 251
+    900000000    N, rc 0         Error 5, rc 251
+
+  FIRST CAUSE, the abort: resolve_and_run_call renders every evaluated
+  argument to an owned Vec purely to hand it to trace_argument, which then
+  discards it unless the trace mode asks for intermediates -- so a value of
+  any size is copied whether or not anything will print it. The assignment
+  path does the same at its own `>>>` render. Both are unconditional, and
+  neither is guarded by try_reserve, so the copy aborts the process rather
+  than raising. The builtins' own result allocation is single and fallible;
+  the abort backtrace names resolve_and_run_call, not the builtin. MEASURED
+  AS THE WHOLE OF THIS CAUSE: with the argument render placed behind
+  `if self.trace_mode().intermediates`, 300000000 and 400000000 both return
+  rc 0 with the oracle's answer and no size aborts at all. That experiment
+  was reverted, not shipped -- it is one of about fifteen similar sites and
+  choosing the guard wrongly silently drops a trace line.
+
+  SECOND CAUSE, the early Error 5: `ulimit -v` limits ADDRESS SPACE, and
+  INTERPRETER_STACK_BYTES reserves 512 MiB of it for the sized interpreter
+  thread (D19) before any program runs. Under a 1 GiB limit the oracle has
+  about 1000 MiB to allocate a result in and this crate has about 500, which
+  is exactly where the table turns over. MEASURED: rerun with the limit
+  raised by precisely that 512 MiB and 500000000 succeeds, matching the
+  oracle at its own 1 GiB. Nothing about the allocator or a threshold is
+  involved, and no re-derivation from the oracle can close it -- the two
+  processes have different amounts of address space to spend, by design.
+
 
 
 CLOSED DEFECTS -- measured wrong, measured again, now matching

@@ -251,7 +251,7 @@ pub(crate) fn raised_numeric_trace_interactive_only() -> Raised {
 /// uppercased, matching `TraceSetting.cpp`'s own `badOption = value->
 /// getChar(pos)`, which records the character as typed.
 pub(crate) fn raised_invalid_trace_letter(found: u8) -> Raised {
-    Raised::syntax(24, 1, vec![String::from_utf8_lossy(&[found]).into_owned()])
+    Raised::syntax(24, 1, vec![vec![found]])
 }
 
 // ---- byte-level formatting ----

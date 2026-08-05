@@ -1210,7 +1210,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (34, 901));
-        assert_eq!(raised.additional, vec!["abc".to_string()]);
+        assert_eq!(raised.additional, vec![b"abc".to_vec()]);
     }
 
     // ---- arithmetic ----
@@ -1258,7 +1258,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (41, 1));
-        assert_eq!(raised.additional, vec!["abc".to_string()]);
+        assert_eq!(raised.additional, vec![b"abc".to_vec()]);
     }
 
     #[test]
@@ -1271,7 +1271,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (26, 8));
-        assert_eq!(raised.additional, vec!["x".to_string()]);
+        assert_eq!(raised.additional, vec![b"x".to_vec()]);
 
         let base_failure = eval_source(&mut interp, b"say 'y'**2").unwrap_err();
         let Failure::Raised(base_raised) = base_failure else {
@@ -1478,7 +1478,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (34, 901));
-        assert_eq!(raised.additional, vec![" 1 ".to_string()]);
+        assert_eq!(raised.additional, vec![b" 1 ".to_vec()]);
     }
 
     #[test]
@@ -1508,7 +1508,7 @@ mod tests {
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
         };
-        assert_eq!(raised.additional, vec!["y".to_string()]);
+        assert_eq!(raised.additional, vec![b"y".to_vec()]);
     }
 
     // ---- ExprKind::Logical (the comma list) ----
@@ -1573,13 +1573,13 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (34, 6));
-        assert_eq!(raised.additional, vec!["x".to_string()]);
+        assert_eq!(raised.additional, vec![b"x".to_vec()]);
 
         let first_bad = eval_condition(&mut interp, b"if 'x', 1 then nop").unwrap_err();
         let Failure::Raised(first_bad) = first_bad else {
             panic!("expected Raised, got {first_bad:?}");
         };
-        assert_eq!(first_bad.additional, vec!["x".to_string()]);
+        assert_eq!(first_bad.additional, vec![b"x".to_vec()]);
     }
 
     #[test]

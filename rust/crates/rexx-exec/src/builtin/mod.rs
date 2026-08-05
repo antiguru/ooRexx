@@ -484,10 +484,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (40, 3));
-        assert_eq!(
-            raised.additional,
-            vec!["SUBSTR".to_string(), "2".to_string()]
-        );
+        assert_eq!(raised.additional, vec![b"SUBSTR".to_vec(), b"2".to_vec()]);
 
         let five = [Some(value); 5];
         let failure = check_arity(&substr_arity(), &five).expect_err("five arguments are too many");
@@ -495,10 +492,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (40, 4));
-        assert_eq!(
-            raised.additional,
-            vec!["SUBSTR".to_string(), "4".to_string()]
-        );
+        assert_eq!(raised.additional, vec![b"SUBSTR".to_vec(), b"4".to_vec()]);
 
         let failure = check_arity(&substr_arity(), &[Some(value), None, Some(value)])
             .expect_err("argument 2 is required");
@@ -506,10 +500,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (40, 5));
-        assert_eq!(
-            raised.additional,
-            vec!["SUBSTR".to_string(), "2".to_string()]
-        );
+        assert_eq!(raised.additional, vec![b"SUBSTR".to_vec(), b"2".to_vec()]);
 
         // The adjacent success: an omission *past* the required positions is
         // not an error at all -- measured, `say substr('abc',2,)` prints

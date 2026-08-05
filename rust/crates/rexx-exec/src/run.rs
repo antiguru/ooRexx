@@ -2918,13 +2918,13 @@ impl Interp {
         // single non-array `ADDITIONAL` value is one substitution, also
         // measured: `additional 'JUSTONE'` fills `&1` and leaves `&2` as the
         // literal `&2`.
-        let mut additional: Vec<String> = Vec::new();
+        let mut additional: Vec<Vec<u8>> = Vec::new();
         if let Some(expr) = &raise.additional {
             let value = self.eval(code, expr)?;
             self.roots.push_temp(value);
             let rendered = self.to_text(value).to_vec();
             self.trace_keyword(indent, "ADDITIONAL", &rendered);
-            additional.push(String::from_utf8_lossy(&rendered).into_owned());
+            additional.push(rendered);
         }
         if let Some(items) = &raise.array {
             // **The elements first, then the `>K>` line** -- corrected at
@@ -2964,7 +2964,7 @@ impl Interp {
                     // the hole) where closing up reported "maximum expected
                     // is X." here.
                     self.trace_argument(indent, b"");
-                    additional.push(String::new());
+                    additional.push(Vec::new());
                     continue;
                 };
                 let value = self.eval(code, expr)?;
@@ -2972,7 +2972,7 @@ impl Interp {
                 let rendered = self.to_text(value).to_vec();
                 self.trace_argument(indent, &rendered);
                 self.trace_argument(indent, &rendered);
-                additional.push(String::from_utf8_lossy(&rendered).into_owned());
+                additional.push(rendered);
             }
             // **`an Array`, verbatim and regardless of the elements** --
             // it is the Array class's own default string form, which is
@@ -6521,17 +6521,17 @@ fn validate_indirect_word(word: &[u8]) -> Result<Vec<u8>, Failure> {
 /// byte outside `is_symbol_byte`'s set, which is also what a parenthesised
 /// entry like `"(w)"` fails on).
 fn raised_symbol_expected(found: &[u8]) -> Raised {
-    Raised::syntax(20, 928, vec![String::from_utf8_lossy(found).into_owned()])
+    Raised::syntax(20, 928, vec![found.to_vec()])
 }
 
 /// 31.2: a subsidiary-list word starts with a digit.
 fn raised_digit_led(found: &[u8]) -> Raised {
-    Raised::syntax(31, 2, vec![String::from_utf8_lossy(found).into_owned()])
+    Raised::syntax(31, 2, vec![found.to_vec()])
 }
 
 /// 31.3: a subsidiary-list word starts with a period.
 fn raised_dot_led(found: &[u8]) -> Raised {
-    Raised::syntax(31, 3, vec![String::from_utf8_lossy(found).into_owned()])
+    Raised::syntax(31, 3, vec![found.to_vec()])
 }
 
 /// 34.1: a single (non-list) `IF` condition is not exactly `0` or `1`.
@@ -6539,7 +6539,7 @@ fn raised_dot_led(found: &[u8]) -> Raised {
 /// IF keyword must be exactly \"0\" or \"1\"; found \"...\"", one
 /// substitution, the operand's own rendered text.
 fn raised_if_not_logical(found: &[u8]) -> Raised {
-    Raised::syntax(34, 1, vec![String::from_utf8_lossy(found).into_owned()])
+    Raised::syntax(34, 1, vec![found.to_vec()])
 }
 
 /// 34.2: a single (non-list) `WHEN` condition is not exactly `0` or `1`.
@@ -6549,7 +6549,7 @@ fn raised_if_not_logical(found: &[u8]) -> Raised {
 /// since `eval_condition` only calls it when `condition.kind` is not
 /// `ExprKind::Logical`.
 fn raised_when_not_logical(found: &[u8]) -> Raised {
-    Raised::syntax(34, 2, vec![String::from_utf8_lossy(found).into_owned()])
+    Raised::syntax(34, 2, vec![found.to_vec()])
 }
 
 /// 7.3: a `SELECT` reached its `END` with every `WHEN` false and no
@@ -6633,7 +6633,7 @@ fn raised_select_no_when() -> Raised {
 /// major up rather than hard-coding a pair -- but the claim was asserted
 /// from two probes rather than counted, which is the error the round it
 /// appeared in was supposed to be about.
-fn raise_syntax_condition(text: &[u8], additional: Vec<String>) -> Raised {
+fn raise_syntax_condition(text: &[u8], additional: Vec<Vec<u8>>) -> Raised {
     /// One half of the argument as a Rexx number: `numberValue`, then a
     /// whole-number check. `None` for anything that is not a whole number,
     /// which the caller turns into 33.904.
@@ -6665,7 +6665,7 @@ fn raise_syntax_condition(text: &[u8], additional: Vec<String>) -> Raised {
     } else {
         format!("{major}.{sub}")
     };
-    Raised::syntax(98, 941, vec![found])
+    Raised::syntax(98, 941, vec![found.into_bytes()])
 }
 
 /// A `RAISE`'s condition name as `Raised::condition` carries it.
@@ -6679,7 +6679,7 @@ fn condition_name(name: &[u8]) -> Cow<'static, str> {
 }
 
 fn raised_from_settings(error: SettingsError) -> Raised {
-    let additional = error.additional();
+    let additional = crate::error::into_substitutions(error.additional());
     let (number, sub): (u16, u16) = match &error {
         SettingsError::InvalidForm { .. } => (25, 11),
         SettingsError::DigitsNotWhole { .. } => (26, 5),
@@ -6694,12 +6694,12 @@ fn raised_from_settings(error: SettingsError) -> Raised {
 /// `WHILE`'s own sub-number; a comma-list condition never reaches this
 /// raiser (34.6 instead, `eval_logical_list`'s own answer).
 fn raised_while_not_logical(found: &[u8]) -> Raised {
-    Raised::syntax(34, 3, vec![String::from_utf8_lossy(found).into_owned()])
+    Raised::syntax(34, 3, vec![found.to_vec()])
 }
 
 /// 34.4: `UNTIL`'s own version of `raised_while_not_logical`.
 fn raised_until_not_logical(found: &[u8]) -> Raised {
-    Raised::syntax(34, 4, vec![String::from_utf8_lossy(found).into_owned()])
+    Raised::syntax(34, 4, vec![found.to_vec()])
 }
 
 /// 26.2: a bare `DO`'s own repetition-count expression is not zero or a
@@ -6707,13 +6707,13 @@ fn raised_until_not_logical(found: &[u8]) -> Raised {
 /// 'a'`/`do -1`/`do 2.5` all give this, `found` the operand's own
 /// unmodified text (`"a"`/`"-1"`/`"2.5"`).
 fn raised_repetition_count_not_whole(found: &[u8]) -> Raised {
-    Raised::syntax(26, 2, vec![String::from_utf8_lossy(found).into_owned()])
+    Raised::syntax(26, 2, vec![found.to_vec()])
 }
 
 /// 26.3: a `DO`/`LOOP`'s `FOR` expression is not zero or a positive whole
 /// number. Measured: `do i = 1 to 3 for 'x'`/`for -1`/`for 1.5`.
 fn raised_for_count_not_whole(found: &[u8]) -> Raised {
-    Raised::syntax(26, 3, vec![String::from_utf8_lossy(found).into_owned()])
+    Raised::syntax(26, 3, vec![found.to_vec()])
 }
 
 /// 28.1: a bare `LEAVE` found no repetitive loop or labeled block
@@ -6734,12 +6734,12 @@ fn raised_iterate_no_loop() -> Raised {
 /// `outer: do i = 1 to 3` then `leave outer` is this, not a hit. `found` is
 /// the symbol's own (already-upcased) spelling.
 fn raised_leave_no_match(found: &[u8]) -> Raised {
-    Raised::syntax(28, 3, vec![String::from_utf8_lossy(found).into_owned()])
+    Raised::syntax(28, 3, vec![found.to_vec()])
 }
 
 /// 28.4: `ITERATE`'s own version of `raised_leave_no_match`.
 fn raised_iterate_no_match(found: &[u8]) -> Raised {
-    Raised::syntax(28, 4, vec![String::from_utf8_lossy(found).into_owned()])
+    Raised::syntax(28, 4, vec![found.to_vec()])
 }
 
 /// 28.5: a named `ITERATE name` matched a block on the enclosing chain by
@@ -6748,7 +6748,7 @@ fn raised_iterate_no_match(found: &[u8]) -> Raised {
 /// `LEAVE`). Measured: `do label x / say 1 / iterate x / end` gives this,
 /// not 28.4, because `x` *did* match something.
 fn raised_iterate_wrong_kind(found: &[u8]) -> Raised {
-    Raised::syntax(28, 5, vec![String::from_utf8_lossy(found).into_owned()])
+    Raised::syntax(28, 5, vec![found.to_vec()])
 }
 
 /// Whether `a < b`, numerically, through `rexx-num`'s own `compare_decoded`
@@ -7087,7 +7087,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (31, 2));
-        assert_eq!(raised.additional, vec!["9".to_string()]);
+        assert_eq!(raised.additional, vec![b"9".to_vec()]);
 
         // A dot-led word: 31.3.
         let mut interp = Interp::new();
@@ -7096,7 +7096,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (31, 3));
-        assert_eq!(raised.additional, vec![".x".to_string()]);
+        assert_eq!(raised.additional, vec![b".x".to_vec()]);
 
         // A parenthesised word: 20.928, not a second round of indirection --
         // proves the list is not recursive.
@@ -7106,7 +7106,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (20, 928));
-        assert_eq!(raised.additional, vec!["(w)".to_string()]);
+        assert_eq!(raised.additional, vec![b"(w)".to_vec()]);
 
         // **A newline does not separate.** It is not whitespace for this
         // purpose: the whole of `a`, the newline and `b` form ONE word, which
@@ -7126,7 +7126,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (20, 928));
-        assert_eq!(raised.additional, vec!["a\nb".to_string()]);
+        assert_eq!(raised.additional, vec![b"a\nb".to_vec()]);
     }
 
     #[test]
@@ -7141,7 +7141,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (31, 2));
-        assert_eq!(raised.additional, vec!["9".to_string()]);
+        assert_eq!(raised.additional, vec![b"9".to_vec()]);
 
         // The activation is still on the stack (`run_source` does not pop
         // on error), so `a`'s slot is still directly inspectable.
@@ -7207,7 +7207,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (33, 1));
-        assert_eq!(raised.additional, vec!["9".to_string(), "15".to_string()]);
+        assert_eq!(raised.additional, vec![b"9".to_vec(), b"15".to_vec()]);
     }
 
     #[test]
@@ -7519,7 +7519,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (34, 1));
-        assert_eq!(raised.additional, vec!["x".to_string()]);
+        assert_eq!(raised.additional, vec![b"x".to_vec()]);
     }
 
     /// A comma list is 34.6 regardless of which element fails, never 34.1 --
@@ -7533,7 +7533,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (34, 6));
-        assert_eq!(raised.additional, vec!["x".to_string()]);
+        assert_eq!(raised.additional, vec![b"x".to_vec()]);
     }
 
     #[test]
@@ -7738,7 +7738,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (7, 3));
-        assert_eq!(raised.additional, Vec::<String>::new());
+        assert_eq!(raised.additional, Vec::<Vec<u8>>::new());
     }
 
     /// F3's own perimeter, found by review: an absorbed `WhenCase`'s
@@ -7867,7 +7867,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (34, 2));
-        assert_eq!(raised.additional, vec!["x".to_string()]);
+        assert_eq!(raised.additional, vec![b"x".to_vec()]);
     }
 
     /// **The coordinator's own finding, fixed after the first round.** A
@@ -8038,7 +8038,7 @@ mod tests {
             (34, 6),
             "plain SELECT: 2 is not a logical value, an AND-with-a-check, not an OR-of-=="
         );
-        assert_eq!(raised.additional, vec!["2".to_string()]);
+        assert_eq!(raised.additional, vec![b"2".to_vec()]);
     }
 
     /// `==` is strict: byte-for-byte, no padding, no numeric awareness.
@@ -8495,7 +8495,11 @@ mod tests {
                 panic!("expected Raised, got {failure:?}");
             };
             assert_eq!((raised.number, raised.sub), (41, 1), "{source:?}");
-            assert_eq!(raised.additional, vec![found.to_string()], "{source:?}");
+            assert_eq!(
+                raised.additional,
+                vec![found.as_bytes().to_vec()],
+                "{source:?}"
+            );
         }
     }
 
@@ -8512,7 +8516,11 @@ mod tests {
                 panic!("expected Raised, got {failure:?}");
             };
             assert_eq!((raised.number, raised.sub), (26, 3), "{source:?}");
-            assert_eq!(raised.additional, vec![found.to_string()], "{source:?}");
+            assert_eq!(
+                raised.additional,
+                vec![found.as_bytes().to_vec()],
+                "{source:?}"
+            );
         }
     }
 
@@ -8529,7 +8537,11 @@ mod tests {
                 panic!("expected Raised, got {failure:?}");
             };
             assert_eq!((raised.number, raised.sub), (26, 2), "{source:?}");
-            assert_eq!(raised.additional, vec![found.to_string()], "{source:?}");
+            assert_eq!(
+                raised.additional,
+                vec![found.as_bytes().to_vec()],
+                "{source:?}"
+            );
         }
     }
 
@@ -8593,7 +8605,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (34, 3));
-        assert_eq!(raised.additional, vec!["x".to_string()]);
+        assert_eq!(raised.additional, vec![b"x".to_vec()]);
     }
 
     #[test]
@@ -8604,7 +8616,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (34, 4));
-        assert_eq!(raised.additional, vec!["x".to_string()]);
+        assert_eq!(raised.additional, vec![b"x".to_vec()]);
     }
 
     /// A comma-list `WHILE`/`UNTIL` condition is 34.6, never 34.3/34.4 --
@@ -8750,7 +8762,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (28, 3));
-        assert_eq!(raised.additional, vec!["OUTER".to_string()]);
+        assert_eq!(raised.additional, vec![b"OUTER".to_vec()]);
 
         let mut interp = Interp::new();
         let failure =
@@ -8759,7 +8771,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (28, 4));
-        assert_eq!(raised.additional, vec!["OUTER".to_string()]);
+        assert_eq!(raised.additional, vec![b"OUTER".to_vec()]);
     }
 
     /// **What does name a loop for `LEAVE`/`ITERATE`**: a controlled loop's
@@ -8816,7 +8828,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (28, 3));
-        assert_eq!(raised.additional, vec!["SEL".to_string()]);
+        assert_eq!(raised.additional, vec![b"SEL".to_vec()]);
     }
 
     /// A named `LEAVE` reaching a `SELECT LABEL` from inside its
@@ -8850,7 +8862,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (28, 5));
-        assert_eq!(raised.additional, vec!["X".to_string()]);
+        assert_eq!(raised.additional, vec![b"X".to_vec()]);
     }
 
     #[test]
@@ -8865,7 +8877,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (28, 5));
-        assert_eq!(raised.additional, vec!["S".to_string()]);
+        assert_eq!(raised.additional, vec![b"S".to_vec()]);
     }
 
     #[test]
@@ -9071,13 +9083,13 @@ mod tests {
                 &b"do label outer while 1\ninterpret \"leave outer\"\nend\n"[..],
                 28,
                 3,
-                vec!["OUTER".to_string()],
+                vec![b"OUTER".to_vec()],
             ),
             (
                 &b"do label outer kk = 1 to 3\ninterpret \"iterate outer\"\nend\n"[..],
                 28,
                 4,
-                vec!["OUTER".to_string()],
+                vec![b"OUTER".to_vec()],
             ),
         ] {
             let mut interp = Interp::new();
@@ -9111,7 +9123,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (28, 3));
-        assert_eq!(raised.additional, vec!["FOO".to_string()]);
+        assert_eq!(raised.additional, vec![b"FOO".to_vec()]);
     }
 
     /// Review finding I1(a): `INTERPRET` traces `>>>` on the text it is about
@@ -10349,7 +10361,7 @@ mod tests {
                 Failure::Raised(raised)
                     if raised.number == 16
                         && raised.sub == 1
-                        && raised.additional == vec!["NOWHERE".to_string()]
+                        && raised.additional == vec![b"NOWHERE".to_vec()]
             ),
             "expected 16.1 naming \"NOWHERE\", got {failure:?}"
         );
@@ -10382,7 +10394,7 @@ mod tests {
                 Failure::Raised(raised)
                     if raised.number == 16
                         && raised.sub == 1
-                        && raised.additional == vec!["sub".to_string()]
+                        && raised.additional == vec![b"sub".to_vec()]
             ),
             "expected 16.1 naming the verbatim quoted text \"sub\": {failure:?}"
         );
@@ -10579,7 +10591,7 @@ mod tests {
                     Failure::Raised(raised)
                         if raised.number == 16
                             && raised.sub == 1
-                            && raised.additional == vec![expected.to_string()]
+                            && raised.additional == vec![expected.as_bytes().to_vec()]
                 ),
                 "{expr}: expected 16.1 naming {expected:?}, got {failure:?}"
             );
@@ -10602,7 +10614,7 @@ mod tests {
                 Failure::Raised(raised)
                     if raised.number == 16
                         && raised.sub == 1
-                        && raised.additional == vec!["there".to_string()]
+                        && raised.additional == vec![b"there".to_vec()]
             ),
             "a lowercase value must not match the upcased label THERE: {failure:?}"
         );
@@ -11036,7 +11048,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (40, 4));
-        assert_eq!(raised.additional, vec!["SUB2".to_string(), "1".to_string()]);
+        assert_eq!(raised.additional, vec![b"SUB2".to_vec(), b"1".to_vec()]);
 
         // Too few: 40.3, naming the minimum.
         let mut interp = Interp::new();
@@ -11049,7 +11061,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (40, 3));
-        assert_eq!(raised.additional, vec!["SUB2".to_string(), "2".to_string()]);
+        assert_eq!(raised.additional, vec![b"SUB2".to_vec(), b"2".to_vec()]);
 
         // A trailing `...` suppresses the maximum check only.
         let mut interp = Interp::new();
@@ -11146,7 +11158,7 @@ mod tests {
         assert_eq!((raised.number, raised.sub), (88, 928));
         assert_eq!(
             raised.additional,
-            vec!["1".to_string(), "orig".to_string()],
+            vec![b"1".to_vec(), b"orig".to_vec()],
             "the substitution is the argument's value, not the variable's spelling -- \
              a probe naming the variable `caller` could not tell those apart"
         );
@@ -11162,7 +11174,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (88, 931));
-        assert_eq!(raised.additional, vec!["2".to_string()]);
+        assert_eq!(raised.additional, vec![b"2".to_vec()]);
     }
 
     /// `USE ARG >name` requires its target to be **currently unset**, and
@@ -11191,7 +11203,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (98, 995));
-        assert_eq!(raised.additional, vec!["Q".to_string()]);
+        assert_eq!(raised.additional, vec![b"Q".to_vec()]);
 
         // Exposed AND holding a value: still refused. Exposure is not the
         // trigger, but this case on its own cannot show that.
@@ -11278,7 +11290,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (88, 929));
-        assert_eq!(raised.additional, vec!["1".to_string(), "P".to_string()]);
+        assert_eq!(raised.additional, vec![b"1".to_vec(), b"P".to_vec()]);
 
         // ...and the adjacent success: a STEM reference into the same stem
         // target. Without this, "stem targets are always refused" passes.
@@ -11305,7 +11317,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (88, 930));
-        assert_eq!(raised.additional, vec!["1".to_string(), "P.".to_string()]);
+        assert_eq!(raised.additional, vec![b"1".to_vec(), b"P.".to_vec()]);
 
         // ...and its adjacent success: a simple reference into a simple
         // target.
@@ -11335,7 +11347,7 @@ mod tests {
         assert_eq!((raised.number, raised.sub), (88, 928));
         assert_eq!(
             raised.additional,
-            vec!["1".to_string(), "value-not-name".to_string()]
+            vec![b"1".to_vec(), b"value-not-name".to_vec()]
         );
 
         // The position substitution is the argument's own, not always 1.
@@ -11348,7 +11360,7 @@ mod tests {
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
         };
-        assert_eq!(raised.additional, vec!["2".to_string(), "P".to_string()]);
+        assert_eq!(raised.additional, vec![b"2".to_vec(), b"P".to_vec()]);
 
         // STRICT does not change the kind rule.
         let mut interp = Interp::new();
@@ -11466,7 +11478,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (98, 995));
-        assert_eq!(raised.additional, vec!["Q.".to_string()]);
+        assert_eq!(raised.additional, vec![b"Q.".to_vec()]);
 
         // An assigned default initialises it too, with no tails written.
         let mut interp = Interp::new();
@@ -11513,7 +11525,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (98, 995));
-        assert_eq!(raised.additional, vec!["ZZ".to_string()]);
+        assert_eq!(raised.additional, vec![b"ZZ".to_vec()]);
     }
 
     /// A variable reference in an ordinary value position is worth the
@@ -11841,7 +11853,7 @@ mod tests {
             panic!("expected Raised, got {failure:?}");
         };
         assert_eq!((raised.number, raised.sub), (16, 1));
-        assert_eq!(raised.additional, vec!["NOSUCHLABEL".to_string()]);
+        assert_eq!(raised.additional, vec![b"NOSUCHLABEL".to_vec()]);
         let site = interp.failure_site.expect("a site was resolved");
         assert_eq!((site.line, site.text), (3, b"say 1/0".to_vec()));
     }
@@ -12386,7 +12398,7 @@ mod tests {
             if let Some(substitution) = substitution {
                 assert_eq!(
                     raised.additional,
-                    vec![substitution.to_string()],
+                    vec![substitution.as_bytes().to_vec()],
                     "{}",
                     String::from_utf8_lossy(argument)
                 );

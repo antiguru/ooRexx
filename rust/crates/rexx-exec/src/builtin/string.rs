@@ -214,13 +214,25 @@ fn count_of(value: i64, method_position: usize) -> Result<usize, Failure> {
 /// `None` for an omitted argument, so the caller supplies the default; an
 /// argument that is present but empty is an error rather than a default,
 /// which is measured (`strip('ab','')` is 93.915).
+///
+/// **A first byte of `0x00` is accepted and is not any of the letters**,
+/// which is the oracle's own answer and not a kindness of this one. The
+/// check there is `strchr(validOptions, option) == NULL` over an ASCII-Z
+/// string (`optionArgument`, `classes/StringClassUtil.cpp`), and `strchr`
+/// finds the terminating NUL, so a NUL option passes a test written to
+/// reject anything outside the set. Measured, and the callers below then
+/// answer whatever their own "none of the letters" branch says:
+/// `strip('  ab  ','00'x)` is `  ab  ` unstripped, `verify('abcde','abc','00'x)`
+/// is 1 -- the answer `'M'` gives, not `'N'`'s. Only the first byte decides:
+/// `strip('  ab  ','00'x||'L')` is unstripped and `strip('  ab  ','L'||'00'x)`
+/// strips leading. Every other control byte is refused as usual.
 fn option_letter(option: Option<&[u8]>, valid: &str) -> Result<Option<u8>, Failure> {
     let Some(option) = option else {
         return Ok(None);
     };
     let letter = option.first().map(|byte| byte.to_ascii_uppercase());
     match letter {
-        Some(letter) if valid.as_bytes().contains(&letter) => Ok(Some(letter)),
+        Some(letter) if letter == 0 || valid.as_bytes().contains(&letter) => Ok(Some(letter)),
         _ => Err(Raised::invalid_option(valid, option).into()),
     }
 }
@@ -351,7 +363,7 @@ pub(crate) fn center(
 
     let len = string.len();
     if width == len {
-        return Ok(interp.text(&string));
+        return Ok(interp.text_owned(string));
     }
     if width == 0 {
         return Ok(interp.text(b""));
@@ -366,7 +378,7 @@ pub(crate) fn center(
     } else {
         string[(len - width) / 2..][..width].to_vec()
     };
-    Ok(interp.text(&out))
+    Ok(interp.text_owned(out))
 }
 
 /// `LEFT(string, length [,pad])`: the leading `length` bytes, padded on the
@@ -388,7 +400,7 @@ pub(crate) fn left(
     let mut out = buffer(size)?;
     out.extend_from_slice(&string[..kept]);
     push_pad(&mut out, pad, size - kept);
-    Ok(interp.text(&out))
+    Ok(interp.text_owned(out))
 }
 
 /// `RIGHT(string, length [,pad])`: the trailing `length` bytes, padded on the
@@ -410,7 +422,7 @@ pub(crate) fn right(
     let mut out = buffer(size)?;
     push_pad(&mut out, pad, size - kept);
     out.extend_from_slice(&string[string.len() - kept..]);
-    Ok(interp.text(&out))
+    Ok(interp.text_owned(out))
 }
 
 /// `SUBSTR(string, n [,length] [,pad])`.
@@ -442,7 +454,7 @@ pub(crate) fn substr(
     let mut out = buffer(length)?;
     out.extend_from_slice(&string[start.min(string.len())..][..kept]);
     push_pad(&mut out, pad, length - kept);
-    Ok(interp.text(&out))
+    Ok(interp.text_owned(out))
 }
 
 /// `DELSTR(string [,n] [,length])`.
@@ -473,7 +485,7 @@ pub(crate) fn delstr(
     };
 
     if start > string.len() {
-        return Ok(interp.text(&string));
+        return Ok(interp.text_owned(string));
     }
     if start == 1 && deleted >= string.len() {
         return Ok(interp.text(b""));
@@ -484,7 +496,7 @@ pub(crate) fn delstr(
     if tail < string.len() {
         out.extend_from_slice(&string[tail..]);
     }
-    Ok(interp.text(&out))
+    Ok(interp.text_owned(out))
 }
 
 /// `INSERT(new, target [,n] [,length] [,pad])`.
@@ -533,7 +545,7 @@ pub(crate) fn insert(
     out.extend_from_slice(&new[..copied]);
     push_pad(&mut out, pad, insert_len - copied);
     out.extend_from_slice(&target[front..front + back]);
-    Ok(interp.text(&out))
+    Ok(interp.text_owned(out))
 }
 
 /// `OVERLAY(new, target [,n] [,length] [,pad])`.
@@ -596,7 +608,7 @@ pub(crate) fn overlay(
         // is no tail, so the index is only ever formed when it is in range.
         out.extend_from_slice(&target[span_end..span_end + back]);
     }
-    Ok(interp.text(&out))
+    Ok(interp.text_owned(out))
 }
 
 /// `POS(needle, haystack [,start] [,range])`.
@@ -666,7 +678,7 @@ pub(crate) fn reverse(
 ) -> Result<ObjRef, Failure> {
     let mut string = required_string(interp, args, 1);
     string.reverse();
-    Ok(interp.text(&string))
+    Ok(interp.text_owned(string))
 }
 
 /// `STRIP(string [,option] [,chars])`.
@@ -732,7 +744,7 @@ pub(crate) fn space(
         }
         out.extend_from_slice(word);
     }
-    Ok(interp.text(&out))
+    Ok(interp.text_owned(out))
 }
 
 /// `COPIES(string, n)`.
@@ -756,7 +768,7 @@ pub(crate) fn copies(
     for _ in 0..count {
         out.extend_from_slice(&string);
     }
-    Ok(interp.text(&out))
+    Ok(interp.text_owned(out))
 }
 
 /// `ABBREV(information, info [,length])`: whether `info` is a prefix of
@@ -854,7 +866,7 @@ pub(crate) fn changestr(
     };
     let changes = count_occurrences(&haystack, &needle, limit);
     if changes == 0 {
-        return Ok(interp.text(&haystack));
+        return Ok(interp.text_owned(haystack));
     }
     let mut out = Vec::new();
     let mut next = 0;
@@ -865,7 +877,7 @@ pub(crate) fn changestr(
         next = found - 1 + needle.len();
     }
     out.extend_from_slice(&haystack[next..]);
-    Ok(interp.text(&out))
+    Ok(interp.text_owned(out))
 }
 
 /// `TRANSLATE(string [,tableout] [,tablein] [,pad] [,start] [,range])`.
@@ -925,7 +937,7 @@ pub(crate) fn translate(
         None => string.len().saturating_sub(start) + 1,
     };
     if start > string.len() || range == 0 {
-        return Ok(interp.text(&string));
+        return Ok(interp.text_owned(string));
     }
     let range = range.min(string.len() - start + 1);
 
@@ -939,7 +951,7 @@ pub(crate) fn translate(
             *byte = out_table.get(index).copied().unwrap_or(pad);
         }
     }
-    Ok(interp.text(&result))
+    Ok(interp.text_owned(result))
 }
 
 /// `VERIFY(string, reference [,option] [,start] [,range])`.
@@ -976,10 +988,17 @@ pub(crate) fn verify(
         return Ok(interp.text(b"0"));
     }
     let range = range.min(string.len() - start + 1);
+    // **`N` is the branch that is tested for, not `M`**, so an option that is
+    // neither answers `M`'s question. That matters only for the `0x00` option
+    // `option_letter` admits, and it is the C++'s own shape
+    // (`if (opt == VERIFY_NOMATCH) ... else ...`) rather than a choice here:
+    // measured, `verify('abcde','abc','00'x)` is 1 and
+    // `verify('abcde','xyz','00'x)` is 0, both `'M'`'s answers.
+    let nomatch = option == b'N';
     let answer = if reference.is_empty() {
-        if option == b'M' { 0 } else { start }
+        if nomatch { start } else { 0 }
     } else {
-        let matching = option == b'M';
+        let matching = !nomatch;
         string[start - 1..start - 1 + range]
             .iter()
             .position(|&byte| in_set(byte, &reference) == matching)
@@ -1050,7 +1069,7 @@ fn case_shifted(
     for byte in &mut result[start..start + range] {
         *byte = shift(byte);
     }
-    Ok(interp.text(&result))
+    Ok(interp.text_owned(result))
 }
 
 #[cfg(test)]
@@ -1082,7 +1101,7 @@ mod tests {
     }
 
     /// The `(major, sub)` and substitutions of the condition `name` raises.
-    fn raised(name: &[u8], arguments: &[Option<&[u8]>]) -> (u16, u16, Vec<String>) {
+    fn raised(name: &[u8], arguments: &[Option<&[u8]>]) -> (u16, u16, Vec<Vec<u8>>) {
         let failure = call(name, arguments).expect_err("this call raises");
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -1419,21 +1438,29 @@ mod tests {
     fn a_bad_argument_kind_names_the_routine_and_the_call_position() {
         assert_eq!(
             raised(b"LEFT", &[Some(b"ab"), Some(b"q")]),
-            (40, 12, vec!["LEFT".into(), "2".into(), "q".into()])
+            (40, 12, vec![b"LEFT".to_vec(), b"2".to_vec(), b"q".to_vec()])
         );
         assert_eq!(
             raised(
                 b"SUBSTR",
                 &[Some(b"abc"), Some(b"2"), Some(b"3"), Some(b"pq")]
             ),
-            (40, 23, vec!["SUBSTR".into(), "4".into(), "pq".into()])
+            (
+                40,
+                23,
+                vec![b"SUBSTR".to_vec(), b"4".to_vec(), b"pq".to_vec()]
+            )
         );
         assert_eq!(
             raised(
                 b"TRANSLATE",
                 &[Some(b"abc"), None, None, Some(b"$"), Some(b"1"), Some(b"q")]
             ),
-            (40, 12, vec!["TRANSLATE".into(), "6".into(), "q".into()])
+            (
+                40,
+                12,
+                vec![b"TRANSLATE".to_vec(), b"6".to_vec(), b"q".to_vec()]
+            )
         );
         assert_eq!(
             raised(
@@ -1446,32 +1473,52 @@ mod tests {
                     Some(b"pq")
                 ]
             ),
-            (40, 23, vec!["INSERT".into(), "5".into(), "pq".into()])
+            (
+                40,
+                23,
+                vec![b"INSERT".to_vec(), b"5".to_vec(), b"pq".to_vec()]
+            )
         );
         // A pad is refused whether or not it could be used, and a value
         // needing more than ARGUMENT_DIGITS is not a whole number.
         assert_eq!(
             raised(b"LEFT", &[Some(b""), Some(b"0"), Some(b"xx")]),
-            (40, 23, vec!["LEFT".into(), "3".into(), "xx".into()])
+            (
+                40,
+                23,
+                vec![b"LEFT".to_vec(), b"3".to_vec(), b"xx".to_vec()]
+            )
         );
         assert_eq!(
             raised(b"LEFT", &[Some(b"ab"), Some(b"1E18")]),
-            (40, 12, vec!["LEFT".into(), "2".into(), "1E18".into()])
+            (
+                40,
+                12,
+                vec![b"LEFT".to_vec(), b"2".to_vec(), b"1E18".to_vec()]
+            )
         );
         assert_eq!(
             raised(b"COPIES", &[Some(b"ab"), Some(b"")]),
-            (40, 12, vec!["COPIES".into(), "2".into(), String::new()])
+            (40, 12, vec![b"COPIES".to_vec(), b"2".to_vec(), Vec::new()])
         );
 
         // `CENTRE` is `CENTER`'s implementation under its own name, and the
         // message is where the two are told apart.
         assert_eq!(
             raised(b"CENTRE", &[Some(b"ab"), Some(b"6"), Some(b"--")]),
-            (40, 23, vec!["CENTRE".into(), "3".into(), "--".into()])
+            (
+                40,
+                23,
+                vec![b"CENTRE".to_vec(), b"3".to_vec(), b"--".to_vec()]
+            )
         );
         assert_eq!(
             raised(b"CENTER", &[Some(b"ab"), Some(b"6"), Some(b"--")]),
-            (40, 23, vec!["CENTER".into(), "3".into(), "--".into()])
+            (
+                40,
+                23,
+                vec![b"CENTER".to_vec(), b"3".to_vec(), b"--".to_vec()]
+            )
         );
     }
 
@@ -1481,44 +1528,44 @@ mod tests {
     fn a_bad_argument_range_reports_the_converted_value() {
         assert_eq!(
             raised(b"LEFT", &[Some(b"ab"), Some(b"-1.0")]),
-            (93, 923, vec!["-1".into()])
+            (93, 923, vec![b"-1".to_vec()])
         );
         assert_eq!(
             raised(b"SUBSTR", &[Some(b"abc"), Some(b"0.0")]),
-            (93, 924, vec!["0".into()])
+            (93, 924, vec![b"0".to_vec()])
         );
         assert_eq!(
             raised(b"SUBSTR", &[Some(b"abc"), Some(b"2"), Some(b"-1")]),
-            (93, 923, vec!["-1".into()])
+            (93, 923, vec![b"-1".to_vec()])
         );
         assert_eq!(
             raised(b"COPIES", &[Some(b"ab"), Some(b"-1.0")]),
-            (93, 906, vec!["1".into(), "-1".into()])
+            (93, 906, vec![b"1".to_vec(), b"-1".to_vec()])
         );
         assert_eq!(
             raised(b"INSERT", &[Some(b"a"), Some(b"b"), Some(b"-1")]),
-            (93, 906, vec!["2".into(), "-1".into()])
+            (93, 906, vec![b"2".to_vec(), b"-1".to_vec()])
         );
         assert_eq!(
             raised(
                 b"CHANGESTR",
                 &[Some(b"a"), Some(b"b"), Some(b"c"), Some(b"-1")]
             ),
-            (93, 906, vec!["3".into(), "-1".into()])
+            (93, 906, vec![b"3".to_vec(), b"-1".to_vec()])
         );
         assert_eq!(
             raised(b"STRIP", &[Some(b"ab"), Some(b"Xyz")]),
-            (93, 915, vec!["BLT".into(), "Xyz".into()])
+            (93, 915, vec![b"BLT".to_vec(), b"Xyz".to_vec()])
         );
         assert_eq!(
             raised(b"VERIFY", &[Some(b"a"), Some(b"b"), Some(b"")]),
-            (93, 915, vec!["MN".into(), String::new()])
+            (93, 915, vec![b"MN".to_vec(), Vec::new()])
         );
         // A range error inside a builtin whose start is out of range is
         // still raised, which is the ordering `delstr`'s own comment names.
         assert_eq!(
             raised(b"DELSTR", &[Some(b"abc"), Some(b"9"), Some(b"-1")]),
-            (93, 923, vec!["-1".into()])
+            (93, 923, vec![b"-1".to_vec()])
         );
     }
 
@@ -1534,14 +1581,18 @@ mod tests {
                 b"SUBSTR",
                 &[Some(b"abc"), Some(b"0"), Some(b"5"), Some(b"xx")]
             ),
-            (40, 23, vec!["SUBSTR".into(), "4".into(), "xx".into()])
+            (
+                40,
+                23,
+                vec![b"SUBSTR".to_vec(), b"4".to_vec(), b"xx".to_vec()]
+            )
         );
         assert_eq!(
             raised(
                 b"SUBSTR",
                 &[Some(b"abc"), Some(b"0"), Some(b"5"), Some(b"x")]
             ),
-            (93, 924, vec!["0".into()])
+            (93, 924, vec![b"0".to_vec()])
         );
 
         assert_eq!(
@@ -1549,23 +1600,31 @@ mod tests {
                 b"TRANSLATE",
                 &[Some(b"abc"), None, None, Some(b"$"), Some(b"0"), Some(b"q")]
             ),
-            (40, 12, vec!["TRANSLATE".into(), "6".into(), "q".into()])
+            (
+                40,
+                12,
+                vec![b"TRANSLATE".to_vec(), b"6".to_vec(), b"q".to_vec()]
+            )
         );
         assert_eq!(
             raised(
                 b"TRANSLATE",
                 &[Some(b"abc"), None, None, Some(b"$"), Some(b"0"), Some(b"1")]
             ),
-            (93, 924, vec!["0".into()])
+            (93, 924, vec![b"0".to_vec()])
         );
 
         assert_eq!(
             raised(b"VERIFY", &[Some(b"a"), Some(b"b"), Some(b"X"), Some(b"q")]),
-            (40, 12, vec!["VERIFY".into(), "4".into(), "q".into()])
+            (
+                40,
+                12,
+                vec![b"VERIFY".to_vec(), b"4".to_vec(), b"q".to_vec()]
+            )
         );
         assert_eq!(
             raised(b"VERIFY", &[Some(b"a"), Some(b"b"), Some(b"X"), Some(b"1")]),
-            (93, 915, vec!["MN".into(), "X".into()])
+            (93, 915, vec![b"MN".to_vec(), b"X".to_vec()])
         );
     }
 
@@ -1622,7 +1681,11 @@ mod tests {
     fn the_whole_number_conversion_uses_the_argument_precision() {
         assert_eq!(
             raised(b"LEFT", &[Some(b"ab"), Some(b"1.0000001")]),
-            (40, 12, vec!["LEFT".into(), "2".into(), "1.0000001".into()])
+            (
+                40,
+                12,
+                vec![b"LEFT".to_vec(), b"2".to_vec(), b"1.0000001".to_vec()]
+            )
         );
         assert_eq!(answer(b"LEFT", &[b"ab", b"1.0000000000000000000004"]), b"a");
         // The generous spellings the oracle accepts, each measured.
@@ -1684,6 +1747,86 @@ mod tests {
             panic!("expected Raised");
         };
         assert_eq!(kind.exit_code(), 216);
+    }
+
+    /// A substitution carries the argument's own bytes, and the report
+    /// applies the oracle's display rule to them.
+    ///
+    /// The two halves are separate defects and each needs its own witness. A
+    /// byte at or above `0x80` reaches the message intact -- a `String`-shaped
+    /// substitution would turn `FF` into U+FFFD's three bytes -- while a
+    /// control byte reaches it as `?`. Both measured, and both live in the
+    /// committed ooTest groups: `COPIES` test095/231/372/538, `DELSTR`
+    /// test17, `INSERT` test035/066 and `SUBSTR` test019/048 pass a
+    /// high-byte argument where a whole number is required.
+    #[test]
+    fn a_substitution_carries_bytes_and_the_report_makes_them_displayable() {
+        assert_eq!(
+            raised(b"COPIES", &[Some(b"ab"), Some(&[0xff])]),
+            (40, 12, vec![b"COPIES".to_vec(), b"2".to_vec(), vec![0xff]])
+        );
+        assert_eq!(
+            raised(b"LEFT", &[Some(b"ab"), Some(b"5"), Some(&[0x00, 0x12])]),
+            (
+                40,
+                23,
+                vec![b"LEFT".to_vec(), b"3".to_vec(), vec![0x00, 0x12]]
+            )
+        );
+
+        // The rule is applied by `Raised::report`, so the check is on the
+        // rendered line rather than on the stored substitution.
+        let site = crate::error::ClauseSite {
+            sites: &[],
+            path: "/p.rex",
+        };
+        let high = Raised::argument_not_whole(b"COPIES", 2, &[0xff]);
+        assert!(
+            high.report(&site)
+                .windows(4)
+                .any(|w| w == [b'"', 0xff, b'"', b'.']),
+            "a byte at or above 0x80 must reach the report unchanged"
+        );
+        let control = Raised::argument_not_a_pad(b"LEFT", 3, &[0x00, 0x12]);
+        assert!(
+            control.report(&site).windows(5).any(|w| w == *b"\"??\"."),
+            "a control byte must reach the report as a question mark"
+        );
+        // Tab, carriage return and line feed are the three that stay, and
+        // without them this rule would be "every byte below 0x20".
+        let kept = Raised::argument_not_a_pad(b"LEFT", 3, b"\t\r\n");
+        assert!(
+            kept.report(&site).windows(5).any(|w| w == *b"\"\t\r\n\""),
+            "tab, carriage return and line feed are not sanitised"
+        );
+    }
+
+    /// A `0x00` first byte is an accepted option letter that is none of the
+    /// letters, and each caller answers with its own "neither" branch.
+    ///
+    /// See [`option_letter`] for the `strchr` reading this comes from. The
+    /// adjacent refusal is what pins it to the NUL rather than to control
+    /// bytes generally.
+    #[test]
+    fn a_null_option_byte_is_accepted_and_matches_no_letter() {
+        assert_eq!(answer(b"STRIP", &[b"  ab  ", &[0x00]]), b"  ab  ");
+        assert_eq!(answer(b"STRIP", &[b"  ab  ", &[0x00, b'L']]), b"  ab  ");
+        assert_eq!(answer(b"STRIP", &[b"  ab  ", &[b'L', 0x00]]), b"ab  ");
+        // `VERIFY` answers `M`'s question, not `N`'s, because `N` is the
+        // branch that is tested for.
+        assert_eq!(answer(b"VERIFY", &[b"abcde", b"abc", &[0x00]]), b"1");
+        assert_eq!(answer(b"VERIFY", &[b"abcde", b"xyz", &[0x00]]), b"0");
+        assert_eq!(answer(b"VERIFY", &[b"abcde", b"abc", b"M"]), b"1");
+        assert_eq!(answer(b"VERIFY", &[b"abcde", b"abc", b"N"]), b"4");
+
+        assert_eq!(
+            raised(b"STRIP", &[Some(b"ab"), Some(&[0x01])]),
+            (93, 915, vec![b"BLT".to_vec(), vec![0x01]])
+        );
+        assert_eq!(
+            raised(b"VERIFY", &[Some(b"a"), Some(b"b"), Some(&[0x01])]),
+            (93, 915, vec![b"MN".to_vec(), vec![0x01]])
+        );
     }
 
     /// A raiser this module owns renders through the catalogue, so a wrong

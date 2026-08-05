@@ -44,13 +44,24 @@ impl Interp {
     /// has converted yet, which is the whole reason the cache is a tri-state
     /// rather than a plain `Option<Number>`.
     pub(crate) fn text(&mut self, bytes: &[u8]) -> ObjRef {
-        self.alloc_with(
-            BehaviourId::STRING,
-            Body::Text {
-                bytes: bytes.to_vec(),
-                num: None,
-            },
-        )
+        self.text_owned(bytes.to_vec())
+    }
+
+    /// [`text`], for a caller that already owns the bytes.
+    ///
+    /// **The copy `text` makes is a second allocation of the result's full
+    /// size, and for a result whose size comes from an argument that is the
+    /// difference between running and aborting.** A `Vec` that cannot be
+    /// allocated aborts the process rather than returning an error, so a
+    /// builtin sizing its result from user input has to reserve fallibly
+    /// (`builtin/string.rs`'s own `buffer`) *and* hand the reservation over
+    /// rather than have it copied. Measured at the project's own
+    /// `ulimit -v 1048576`: `say length(copies('a',400000000))` needs 400 MB
+    /// once, which fits, and twice, which does not.
+    ///
+    /// [`text`]: Interp::text
+    pub(crate) fn text_owned(&mut self, bytes: Vec<u8>) -> ObjRef {
+        self.alloc_with(BehaviourId::STRING, Body::Text { bytes, num: None })
     }
 
     /// Creates a number value, applying D15's `SmallInt` admissibility rule.
@@ -341,6 +352,28 @@ mod tests {
     /// so a parse failure is this test's own bug, not a case to handle.
     fn n(text: &str) -> Number {
         Number::parse(text).expect("test literal parses")
+    }
+
+    /// `text_owned` keeps the caller's buffer instead of copying it.
+    ///
+    /// **Asserted on the allocation's own address, because that is the only
+    /// thing that distinguishes the two.** The bytes come out equal either
+    /// way; what a caller sizing a result from user input needs is that the
+    /// buffer it reserved *fallibly* is the buffer the value ends up holding,
+    /// and a copy would be a second allocation of the same size that no
+    /// `try_reserve` can catch. A `text_owned` rewritten as
+    /// `self.text(&bytes)` fails here and nowhere else.
+    #[test]
+    fn text_owned_takes_the_buffer_rather_than_copying_it() {
+        let mut interp = Interp::new();
+        let mut bytes = Vec::new();
+        bytes.try_reserve_exact(64).expect("64 bytes are available");
+        bytes.extend_from_slice(b"the buffer this test follows");
+        let address = bytes.as_ptr();
+
+        let value = interp.text_owned(bytes);
+        assert_eq!(interp.to_text(value).as_ptr(), address);
+        assert_eq!(&*interp.to_text(value), b"the buffer this test follows");
     }
 
     // The plan's own draft sketched these five tests as calls to

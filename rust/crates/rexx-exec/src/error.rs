@@ -126,6 +126,31 @@ pub(crate) struct Delivery {
     pub(crate) positionless: bool,
 }
 
+/// One value a catalogue message interpolates: **bytes, not text**.
+///
+/// A Rexx string is a byte string, and a substitution is usually one --
+/// `left('ab', zz)` puts `zz`'s own rendering into 40.12's `found "&3"`, and
+/// nothing constrains it to UTF-8. Passing it through `String` costs the
+/// bytes that are not: measured, `say copies('ab','FF'x)` reports
+/// `found "\377"` from the oracle, where a lossy conversion reports
+/// `found "\357\277\275"` -- U+FFFD, three bytes for one, on a channel the
+/// differential harness compares byte for byte.
+///
+/// The sanitising the oracle *does* apply is a different thing and happens
+/// later, at [`displayable`], on the whole line rather than on the value.
+type Substitution = Vec<u8>;
+
+/// The substitutions a sibling crate's error carries, as bytes.
+///
+/// `rexx-num` and `rexx-parse` build their own substitution lists as
+/// `String`, which is right for them: every value they interpolate is a
+/// number's rendering or a catalogue-supplied fragment, never arbitrary
+/// program data. This is the one-way widening at the boundary, so the field
+/// itself can stay [`Substitution`]s.
+pub(crate) fn into_substitutions(values: Vec<String>) -> Vec<Substitution> {
+    values.into_iter().map(String::into_bytes).collect()
+}
+
 /// A real Rexx condition raised during evaluation.
 #[derive(Clone, Debug)]
 pub(crate) struct Raised {
@@ -148,7 +173,10 @@ pub(crate) struct Raised {
     pub(crate) condition: Cow<'static, str>,
     pub(crate) number: u16,
     pub(crate) sub: u16,
-    pub(crate) additional: Vec<String>,
+    /// What `&1`, `&2`, ... in this error's catalogue entry stand for.
+    ///
+    /// See [`Substitution`] for why these are bytes.
+    pub(crate) additional: Vec<Substitution>,
     /// What a trapping handler reads back from `RC`, or `None` to leave `RC`
     /// alone.
     ///
@@ -182,7 +210,7 @@ impl Raised {
     /// name `delivery` too. Calling this instead means a field added here is
     /// free for all of them, which is the same argument `ClauseState` makes
     /// one level up.
-    pub(crate) fn syntax(number: u16, sub: u16, additional: Vec<String>) -> Raised {
+    pub(crate) fn syntax(number: u16, sub: u16, additional: Vec<Substitution>) -> Raised {
         Raised {
             condition: Cow::Borrowed("SYNTAX"),
             number,
@@ -244,7 +272,7 @@ impl Raised {
             // condition.", so the condition's own name is the substitution
             // -- measured, the oracle prints `HALT`, and a version with no
             // substitution prints the literal `&1`.
-            additional: vec!["HALT".to_string()],
+            additional: vec![b"HALT".to_vec()],
             // `None` rather than `4`: `RC` is measured to carry the major
             // only for `SYNTAX` (42 for `say 1/0`, 40 for `raise syntax
             // 40.4`) and to be left untouched for a trapped `NOVALUE`. A
@@ -260,7 +288,7 @@ impl Raised {
     /// `Nonnumeric value ("abc")`, the operand as it renders, not upcased
     /// or otherwise transformed.
     pub(crate) fn nonnumeric(value: &[u8]) -> Raised {
-        Raised::syntax(41, 1, vec![String::from_utf8_lossy(value).into_owned()])
+        Raised::syntax(41, 1, vec![value.to_vec()])
     }
 
     /// 26.8: `**`'s right operand is not a whole number, **including not
@@ -275,7 +303,7 @@ impl Raised {
     /// a number, so there is no `Number` for `rexx-num`'s own
     /// `ArithError::PowerExponentNotWhole` to carry.
     pub(crate) fn power_exponent_not_whole(found: &[u8]) -> Raised {
-        Raised::syntax(26, 8, vec![String::from_utf8_lossy(found).into_owned()])
+        Raised::syntax(26, 8, vec![found.to_vec()])
     }
 
     /// 34.901: the prefix `\` operator's operand is not a logical value.
@@ -285,7 +313,7 @@ impl Raised {
     /// anything from `to_number`. Measured: `say \'abc'` gives 34.901,
     /// `Logical value must be exactly "0" or "1"; found "abc"`.
     pub(crate) fn not_logical(found: &[u8]) -> Raised {
-        Raised::syntax(34, 901, vec![String::from_utf8_lossy(found).into_owned()])
+        Raised::syntax(34, 901, vec![found.to_vec()])
     }
 
     /// 11.1: "Insufficient control stack space" -- D19's evaluation-depth
@@ -311,7 +339,7 @@ impl Raised {
     /// prefer one of those over 34.6, so 34.6 is `ExprKind::Logical`'s own
     /// answer regardless of which keyword built the list.
     pub(crate) fn logical_list_element(found: &[u8]) -> Raised {
-        Raised::syntax(34, 6, vec![String::from_utf8_lossy(found).into_owned()])
+        Raised::syntax(34, 6, vec![found.to_vec()])
     }
 
     /// 44.1: an internal routine reached through `ExprKind::Call`'s
@@ -334,7 +362,7 @@ impl Raised {
     /// than raise anything, exactly as falling off the end of a `CALL`ed
     /// routine already does (`resolve_and_run_call`'s own doc, `run.rs`).
     pub(crate) fn no_data_returned(name: &[u8]) -> Raised {
-        Raised::syntax(44, 1, vec![String::from_utf8_lossy(name).into_owned()])
+        Raised::syntax(44, 1, vec![name.to_vec()])
     }
 
     /// 16.1: `SIGNAL`/`SIGNAL VALUE` named a target that matches no label in
@@ -352,7 +380,7 @@ impl Raised {
     /// case-sensitively rather than upcased on the way in -- `signal Sub`
     /// (a bare, mixed-case symbol) and `signal "SUB"` both resolve.
     pub(crate) fn label_not_found(name: &[u8]) -> Raised {
-        Raised::syntax(16, 1, vec![String::from_utf8_lossy(name).into_owned()])
+        Raised::syntax(16, 1, vec![name.to_vec()])
     }
 
     /// 17.1: a `PROCEDURE` that is not the first instruction executed after
@@ -380,10 +408,7 @@ impl Raised {
         Raised::syntax(
             40,
             3,
-            vec![
-                String::from_utf8_lossy(routine).into_owned(),
-                minimum.to_string(),
-            ],
+            vec![routine.to_vec(), minimum.to_string().into_bytes()],
         )
     }
 
@@ -398,10 +423,7 @@ impl Raised {
         Raised::syntax(
             40,
             4,
-            vec![
-                String::from_utf8_lossy(routine).into_owned(),
-                maximum.to_string(),
-            ],
+            vec![routine.to_vec(), maximum.to_string().into_bytes()],
         )
     }
 
@@ -425,10 +447,7 @@ impl Raised {
         Raised::syntax(
             40,
             5,
-            vec![
-                String::from_utf8_lossy(routine).into_owned(),
-                position.to_string(),
-            ],
+            vec![routine.to_vec(), position.to_string().into_bytes()],
         )
     }
 
@@ -468,9 +487,9 @@ impl Raised {
             40,
             12,
             vec![
-                String::from_utf8_lossy(routine).into_owned(),
-                position.to_string(),
-                String::from_utf8_lossy(found).into_owned(),
+                routine.to_vec(),
+                position.to_string().into_bytes(),
+                found.to_vec(),
             ],
         )
     }
@@ -492,9 +511,9 @@ impl Raised {
             40,
             23,
             vec![
-                String::from_utf8_lossy(routine).into_owned(),
-                position.to_string(),
-                String::from_utf8_lossy(found).into_owned(),
+                routine.to_vec(),
+                position.to_string().into_bytes(),
+                found.to_vec(),
             ],
         )
     }
@@ -515,7 +534,7 @@ impl Raised {
     /// the argument's text instead, so the two families genuinely disagree
     /// about what they name.
     pub(crate) fn invalid_length(found: &[u8]) -> Raised {
-        Raised::syntax(93, 923, vec![String::from_utf8_lossy(found).into_owned()])
+        Raised::syntax(93, 923, vec![found.to_vec()])
     }
 
     /// 93.924: a position argument converted to a whole number but is zero
@@ -531,7 +550,7 @@ impl Raised {
     /// [`invalid_length`]: Raised::invalid_length
     /// [`argument_not_non_negative`]: Raised::argument_not_non_negative
     pub(crate) fn invalid_position(found: &[u8]) -> Raised {
-        Raised::syntax(93, 924, vec![String::from_utf8_lossy(found).into_owned()])
+        Raised::syntax(93, 924, vec![found.to_vec()])
     }
 
     /// 93.906: a count argument converted to a whole number but is negative.
@@ -552,10 +571,7 @@ impl Raised {
         Raised::syntax(
             93,
             906,
-            vec![
-                position.to_string(),
-                String::from_utf8_lossy(found).into_owned(),
-            ],
+            vec![position.to_string().into_bytes(), found.to_vec()],
         )
     }
 
@@ -575,14 +591,7 @@ impl Raised {
     /// leading blanks only, and `verify('abcde','abc','Nope')` is 4, the
     /// same as `'N'`.
     pub(crate) fn invalid_option(valid: &str, found: &[u8]) -> Raised {
-        Raised::syntax(
-            93,
-            915,
-            vec![
-                valid.to_string(),
-                String::from_utf8_lossy(found).into_owned(),
-            ],
-        )
+        Raised::syntax(93, 915, vec![valid.as_bytes().to_vec(), found.to_vec()])
     }
 
     /// 5: a result string too large to allocate. No sub-number and no
@@ -626,10 +635,7 @@ impl Raised {
         Raised::syntax(
             88,
             928,
-            vec![
-                position.to_string(),
-                String::from_utf8_lossy(found).into_owned(),
-            ],
+            vec![position.to_string().into_bytes(), found.to_vec()],
         )
     }
 
@@ -645,7 +651,7 @@ impl Raised {
     ///
     /// [`not_a_variable_reference`]: Raised::not_a_variable_reference
     pub(crate) fn variable_reference_omitted(position: usize) -> Raised {
-        Raised::syntax(88, 931, vec![position.to_string()])
+        Raised::syntax(88, 931, vec![position.to_string().into_bytes()])
     }
 
     /// 88.929: `USE ARG >name` where the target is a **stem** and the caller
@@ -662,10 +668,7 @@ impl Raised {
         Raised::syntax(
             88,
             929,
-            vec![
-                position.to_string(),
-                String::from_utf8_lossy(reference).into_owned(),
-            ],
+            vec![position.to_string().into_bytes(), reference.to_vec()],
         )
     }
 
@@ -682,10 +685,7 @@ impl Raised {
         Raised::syntax(
             88,
             930,
-            vec![
-                position.to_string(),
-                String::from_utf8_lossy(reference).into_owned(),
-            ],
+            vec![position.to_string().into_bytes(), reference.to_vec()],
         )
     }
 
@@ -703,7 +703,7 @@ impl Raised {
     /// `run.rs`'s `target_is_uninitialised` has that pair and is where the
     /// rule lives.
     pub(crate) fn variable_reference_not_uninitialised(name: &[u8]) -> Raised {
-        Raised::syntax(98, 995, vec![String::from_utf8_lossy(name).into_owned()])
+        Raised::syntax(98, 995, vec![name.to_vec()])
     }
 
     /// 98.993: `USE LOCAL` as the first instruction executed of a top-level
@@ -755,7 +755,7 @@ impl From<ArithError> for Raised {
         // first; ordered to match the doc comment's own telling.
         let additional = error.additional();
         let (number, sub) = error.sub_code();
-        Raised::syntax(number, sub, additional)
+        Raised::syntax(number, sub, into_substitutions(additional))
     }
 }
 
@@ -997,30 +997,28 @@ impl Raised {
         } else {
             format!(" running {} line {line}", site.path)
         };
-        out.extend_from_slice(
-            format!(
-                "Error {}{}:  {}\n",
-                self.number,
-                position,
-                self.message(self.number, 0)
-            )
-            .as_bytes(),
-        );
+        out.extend_from_slice(format!("Error {}{}:  ", self.number, position).as_bytes());
+        out.extend_from_slice(&self.message(self.number, 0));
+        out.push(b'\n');
         // **Sub `0` prints no second line at all**, measured: `raise syntax
         // 40` gives the major line and stops, where `raise syntax 40.4`
         // gives both. Reachable only through `RAISE` -- every raiser in the
         // crate names a real sub -- which is why 4a never had to know.
         if self.sub != 0 {
-            out.extend_from_slice(
-                format!(
-                    "Error {}.{}:  {}\n",
-                    self.number,
-                    self.sub,
-                    self.message(self.number, self.sub)
-                )
-                .as_bytes(),
-            );
+            out.extend_from_slice(format!("Error {}.{}:  ", self.number, self.sub).as_bytes());
+            out.extend_from_slice(&self.message(self.number, self.sub));
+            out.push(b'\n');
         }
+        // **Applied once, to the whole report, and that is the oracle's own
+        // shape rather than a shortcut.** `Activity::display` sends each
+        // traceback echo and each `Error ...` line through
+        // `displayUsingTraceOutput`, which sanitises the line it is handed;
+        // the rule is per byte and leaves `\n` alone, so sanitising the
+        // concatenation is the same bytes as sanitising each line. It
+        // therefore covers the clause echoes too, which carry the program's
+        // own source and can hold any byte -- measured, a raw `0x01` inside a
+        // source literal echoes as `?`.
+        displayable(&mut out);
         out
     }
 
@@ -1036,10 +1034,10 @@ impl Raised {
     /// this crate's numbering, and the error path is the worst possible place
     /// to abort: it would turn a reportable condition into a crash, which is
     /// the outcome the whole failing-loudly rule exists to prevent.
-    fn message(&self, major: u16, sub: u16) -> String {
+    fn message(&self, major: u16, sub: u16) -> Vec<u8> {
         match rexx_inventory::errors::lookup(major, sub) {
             Some(entry) => substitute(entry.text, &self.additional),
-            None => format!("<no message {major}.{sub} in the catalogue>"),
+            None => format!("<no message {major}.{sub} in the catalogue>").into_bytes(),
         }
     }
 }
@@ -1054,29 +1052,60 @@ impl Raised {
 ///
 /// An `&` not followed by a digit, and a digit with no matching value, are
 /// both passed through unchanged rather than swallowed.
-fn substitute(text: &str, values: &[String]) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c != '&' {
-            out.push(c);
+///
+/// Bytes out, not text: see [`Substitution`]. The catalogue's own template is
+/// `&str` because `rexxmsg.xml` is, and only the values can be arbitrary.
+fn substitute(text: &str, values: &[Substitution]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(text.len());
+    let mut bytes = text.as_bytes().iter().copied().peekable();
+    while let Some(byte) = bytes.next() {
+        if byte != b'&' {
+            out.push(byte);
             continue;
         }
-        match chars.peek().and_then(|d| d.to_digit(10)) {
-            Some(index) if index >= 1 => {
-                chars.next();
-                match values.get(index as usize - 1) {
-                    Some(value) => out.push_str(value),
-                    None => {
-                        out.push('&');
-                        out.push_str(&index.to_string());
-                    }
+        match bytes.peek().copied() {
+            Some(digit @ b'1'..=b'9') => {
+                bytes.next();
+                match values.get(usize::from(digit - b'1')) {
+                    Some(value) => out.extend_from_slice(value),
+                    None => out.extend_from_slice(&[b'&', digit]),
                 }
             }
-            _ => out.push('&'),
+            _ => out.push(b'&'),
         }
     }
     out
+}
+
+/// The oracle's own rule for putting arbitrary Rexx bytes on a report line.
+///
+/// **A byte below `0x20` other than tab, carriage return and line feed
+/// becomes `?`; every other byte, including every byte at or above `0x80`,
+/// is written through unchanged.** That is `RexxString::stringTrace`
+/// (`classes/StringClass.cpp`), which the oracle applies to *whole output
+/// lines* rather than to the values inside them: `Activity::display` sends
+/// every traceback echo, the major line and the secondary line through
+/// `displayUsingTraceOutput` -> `processTraceInfo`, whose first act is
+/// `traceLine->stringTrace()`.
+///
+/// Measured independently of the source, by driving all 256 byte values
+/// through a builtin that reports the offending argument
+/// (`say copies('ab','NN'x)` for the ones that are not valid counts, and
+/// `say left('ab',5,'NNNN'x)` for the digits, which are):
+///
+/// ```text
+/// rendered as ?  :  00-08  0b-0c  0e-1f
+/// rendered raw   :  09-0a  0d     20-ff
+/// ```
+///
+/// The echo obeys the same rule, measured with a raw `0x01` inside a source
+/// literal: the oracle echoes `say copies('a?b','x')`.
+fn displayable(bytes: &mut [u8]) {
+    for byte in bytes {
+        if *byte < 0x20 && !matches!(*byte, b'\t' | b'\n' | b'\r') {
+            *byte = b'?';
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1245,7 +1274,7 @@ mod tests {
         let raised = Raised::nonnumeric(b"&1");
         assert_eq!(
             raised.message(41, 1),
-            "Nonnumeric value (\"&1\") used in arithmetic operation."
+            b"Nonnumeric value (\"&1\") used in arithmetic operation."
         );
     }
 
@@ -1253,9 +1282,9 @@ mod tests {
     /// through rather than being swallowed.
     #[test]
     fn a_bare_ampersand_and_a_missing_value_pass_through() {
-        assert_eq!(substitute("a & b", &[]), "a & b");
-        assert_eq!(substitute("x &1 y", &[]), "x &1 y");
-        assert_eq!(substitute("&1 and &2", &["one".into()]), "one and &2");
+        assert_eq!(substitute("a & b", &[]), b"a & b");
+        assert_eq!(substitute("x &1 y", &[]), b"x &1 y");
+        assert_eq!(substitute("&1 and &2", &[b"one".to_vec()]), b"one and &2");
     }
 
     /// A catalogue miss renders visibly instead of panicking or rendering
@@ -1266,7 +1295,7 @@ mod tests {
         let raised = Raised::syntax(999, 999, vec![]);
         assert_eq!(
             raised.message(999, 999),
-            "<no message 999.999 in the catalogue>"
+            b"<no message 999.999 in the catalogue>"
         );
     }
 
