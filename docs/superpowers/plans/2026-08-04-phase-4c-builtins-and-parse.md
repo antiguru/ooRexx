@@ -398,6 +398,25 @@ Its 72 mismatches, against 0 from the two older corpora on that same build, is w
 Task 3 found 14 empty-argument branches across the string builtins that way.
 A branch you did not know exists is one your probes cannot be varied against.
 
+**The ooTest suite lives in *this* repo, not under the oracle.**
+`/home/moritz/dev/repos/ooRexx/ootest` **does not exist**; the C++ tree carries no suite at all beyond three stray `.testGroup` files under `extensions/`.
+The path is `ootest/ooRexx/base/<group>/` relative to the repository root.
+Worth stating because "the oracle is at `/home/moritz/dev/repos/ooRexx`" and "read the ooTest group" sit next to each other in every brief, and an absolute path built from the two is wrong.
+
+**A builtin's test group is not the only place its behaviour is asserted.**
+Measured at Task 4: `DELWORD`'s whitespace rule -- the deleted word takes the run *after* it while the run *before* it survives byte for byte, tab-vs-blank identity included -- is asserted in `base/source.file/whiteSpace.testGroup`, **not** in `DELWORD.testGroup`.
+So `/bin/grep -a` the whole of `ootest/ooRexx/base/` for your builtin's name, not just its own file.
+
+**Argument *type* and argument *range* are validated in different layers and raise different errors.**
+Measured: `word('a b c',1.5)` is **40.12 at rc 216** from the BIF wrapper's integer conversion, while `word('a b c',0)` and `word('a b c',-12)` are **93.924 at rc 163** from the String method's `positionArgument`.
+Different number, different exit code, same argument.
+**Probe a bad *type* and a bad *range* for every numeric position you take** -- a probe set testing only one kind cannot see the other.
+
+**Validation order is observable, and the C++ order is often structural rather than intended.**
+Measured: `subword('SUBWORD','30'x,'30'x)` -- position 0 *and* length 0 -- raises 93.924 rather than returning `''`, because `positionArgument` is called before the `count == 0` test.
+An implementation that early-returns on a zero length gets it wrong at rc 0.
+Read the function body for the order; it is documented nowhere else.
+
 **Measure whether a 40.12 or 40.23 message substitutes the rendered value or the source spelling.**
 The neighbouring 88.928 raiser in `error.rs` documents having measured exactly this distinction, and it is invisible until an argument's two forms differ -- `'007'` against `7`, or a number whose `DIGITS` rendering is not its literal text.
 Task 2 did not record which it is, and the first family task that raises a typed error owes the measurement.
