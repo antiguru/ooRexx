@@ -48,6 +48,13 @@
 # otherwise would -- DATE, TIME, RANDOM -- are probed through their
 # deterministic forms: DATE and TIME converting a *given* value between
 # formats rather than reporting now, and RANDOM over a one-element range.
+#
+# A ONE-ELEMENT RANGE IS NOT ENOUGH ON ITS OWN. RANDOM's row also sets a
+# precision the answer would not survive being re-rendered under. The oracle
+# returns a RexxInteger, whose spelling is fixed; a value carrying the
+# DIGITS/FORM pair instead renders `1.23E+4` at `DIGITS 3`. `random(5,5)`
+# cannot see that -- 5 is 5 at every setting -- and it was this row for one
+# task, during which the executor really did answer `1.23E+4` here.
 # Measured: all 66 programs below were run through the oracle twice, from two
 # freshly created empty directories, and stdout, stderr and exit status were
 # identical on both passes for every one.
@@ -96,7 +103,7 @@ MIN	say min(3,17,8)
 OVERLAY	say overlay('XY','abcdef',3)
 POS	say pos('an','banana')
 QUEUED	queue 'a'; queue 'b'; say queued()
-RANDOM	say random(5,5)
+RANDOM	numeric digits 3; say random(12345,12345)
 REVERSE	say reverse('abcdef')
 RIGHT	say '['right('ab',5,'.')']'
 SIGN	say sign(-12)

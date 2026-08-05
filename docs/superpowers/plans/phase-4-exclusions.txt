@@ -1733,3 +1733,141 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   the constructs each was "for", and got that wrong too (the first's other
   caller is not the one it named); the signatures do not need naming
   constructs and do not go stale when callers move.
+
+
+  KNOWN GAP: MAX/MIN -- WHICH OF TWO IMPLEMENTATIONS RUNS DEPENDS ON A TYPE
+  THIS CRATE DOES NOT HAVE. The oracle dispatches MAX and MIN as a method on
+  argument 1 (BUILTIN(MAX), interpreter/expression/BuiltinFunctions.cpp:1993),
+  and there are two receivers with different behaviour. RexxInteger::Max
+  (classes/IntegerClass.cpp:1578) is a fast path over integer objects;
+  NumberString::maxMin (classes/NumberStringMath.cpp:240) is the general one.
+  They disagree about an OMITTED argument -- a different major number, a
+  different position base, and a different exit code:
+
+    say max(1,,3)      93.903  Missing argument in method; argument 0 ...  rc 163
+    say max(1.0,,3)    40.5    Missing argument in invocation of MAX; ...  rc 216
+
+  and RexxInteger::Min additionally returns a lone argument BEFORE testing it
+  against the precision where ::Max tests first, with a source comment saying
+  the move is deliberate:
+
+    numeric digits 3 ; say min(12345)   ->  12345
+    numeric digits 3 ; say max(12345)   ->  1.23E+4
+
+  WHICH RECEIVER a value has is decided at parse time: LanguageParser.cpp:2373
+  builds an integer object exactly when the token isIntegerConstant(), which
+  Scanner.cpp:1546 sets for a run of digits no longer than
+  Numerics::REXXINTEGER_DIGITS (18) with no leading zero unless the whole
+  symbol is `0`. RexxInteger::Max then re-tests Numerics::isValid(value,
+  number_digits()), so the precision in force can push a value back onto the
+  general path.
+
+  rexx-exec reproduces the split by reading the value's own rendering
+  (builtin/numeric.rs, `integer_object`/`valid_under`), which agrees with the
+  oracle on 18 of the 21 measured discriminating probes. Two shapes fall the
+  wrong way, both answering 93.903 rc 163 where the oracle answers 40.5 rc
+  216:
+
+    max('1',,3)   x='1'; max(x,,3)   max(word('1 2',1),,3)
+    numeric digits 1 ; max(-1.5,,3)
+
+  The first three are a RexxString that reads as an integer; the fourth is a
+  computed non-integer whose rounded rendering is one. Closing this needs a
+  literal's parse-time-attached number told apart from a runtime string's,
+  which the value model (D15) has no room for: eval.rs builds every source
+  literal as text, and an arithmetic result is inlined by its value rather
+  than by what its operands were. Keying on the SmallInt tag instead -- this
+  crate's nearest RexxInteger analogue -- agrees on only 14 of the 21,
+  because a source literal is never one. No owner is assigned.
+
+  MEASURED: 12 of the 92,880 crossed programs in Task 6's differential sweep,
+  all of them an INTERIOR OMISSION in a MAX/MIN call, which is a shape with
+  zero coverage in the whole ooTest suite.
+
+
+  KNOWN GAP: ABS OF A POSITIVE LITERAL UNDER NUMERIC FORM ENGINEERING ANSWERS
+  THE LITERAL'S OWN SPELLING. This one is an UPSTREAM ooRexx DEFECT, recorded
+  rather than reproduced, and the decision whether to file it is Moritz's.
+
+  READ THE PARAGRAPH AT THE END OF THIS ROW BEFORE TRUSTING THE TRANSCRIPTS:
+  the oracle's own working tree was patched for exactly this defect and
+  rebuilt on 2026-08-05 at 16:02, part-way through the task that measured it,
+  so the transcripts below reproduce only against the unpatched build.
+
+    numeric form engineering ; say abs(1e10)        ->  1E10
+    numeric form engineering ; say abs(01)          ->  01
+    numeric form engineering ; say abs(9.996E+20)   ->  9.996E+20
+                               say abs(1e10)        ->  1E+10
+    numeric form engineering ; say abs(-1e10)       ->  10E+9
+    numeric form engineering ; say abs('1e10')      ->  10E+9
+    numeric digits 3 ;         say abs(1e10)        ->  1E+10
+
+  THE CAUSE is a sign inversion in NumberString::copyIfNecessary
+  (classes/NumberStringClass.cpp:3652), which decides whether to clone with
+
+      digitsCount > digits || createdDigits != digits || isScientific() != form
+
+  where `form` is number_form() and Numerics::FORM_SCIENTIFIC is `false`
+  while FORM_ENGINEERING is `true` (runtime/Numerics.cpp:108). For a
+  scientific-created number that reads `true != false` under SCIENTIFIC --
+  always clone -- and `true != true` under ENGINEERING -- never clone. It
+  wants `isScientific() != (form == Numerics::FORM_SCIENTIFIC)`. When it
+  declines to clone it returns the object itself, whose cached stringObject
+  is the literal's own text, and that is what prints.
+
+  Only ABS reaches it among the numeric builtins: MAX, MIN, TRUNC and FORMAT
+  all go through prepareNumber(digits, ROUND), which always clones, and SIGN
+  discards the copy. Reproducing it would need the same thing the MAX/MIN row
+  above needs -- a literal's parse-time-attached number told apart from a
+  runtime string's -- plus the inversion itself. No owner is assigned, and a
+  fix should be weighed against reproducing an upstream defect deliberately.
+
+  MEASURED: 6 of the 92,880 crossed programs in Task 6's differential sweep,
+  run against the unpatched build.
+
+  THE ORACLE'S WORKING TREE HAS SINCE BEEN PATCHED FOR THIS, AND THAT MATTERS
+  MORE THAN THE ROW ITSELF. `git status` in /home/moritz/dev/repos/ooRexx
+  shows interpreter/classes/NumberStringClass.cpp modified, uncommitted, with
+  copyIfNecessary's condition rewritten to compare through the FORM constants
+  (and to force a copy whenever a cached stringObject exists); build/bin/rexx
+  and build/lib/rexx.img were rebuilt at 2026-08-05 16:02:20. The change was
+  not made by Task 6, which treats that tree as read-only.
+
+  AGAINST THE PATCHED BUILD THE DIVERGENCE IS GONE, and it is gone because the
+  reference moved rather than because rexx-exec did: this crate answered the
+  canonical `10E+9` throughout, which is what the patched oracle now answers
+  too. Task 6's second full sweep, run after the rebuild, reports 12
+  mismatches where the first reported 18, and those 6 are these.
+
+  THE ROW STAYS because the patch is uncommitted in a tree this project does
+  not own: reverting it brings the divergence back, and a reader comparing
+  against a pristine ooRexx checkout will see the transcripts above. It also
+  stays as the record of what the defect WAS, which the patch itself no longer
+  shows. If the patch is upstreamed or committed, this row can be closed by
+  the second thing this section's rules allow -- a measurement showing the
+  divergence is gone -- and that measurement already exists.
+
+  ANY MEASUREMENT IN THIS PROJECT TAKEN BEFORE 2026-08-05 16:02 IS AGAINST A
+  DIFFERENT INTERPRETER FROM THE ONE IN THE TREE NOW. Only NumberString::abs
+  and NumberString::Sign reach copyIfNecessary, and Sign discards its result,
+  so ABS is the only builtin whose behaviour the patch can change -- but the
+  general point is not about this patch. A rebuilt oracle silently reprices
+  every differential result recorded against the old one, and nothing in the
+  harnesses notices.
+
+
+  KNOWN GAP: A RESULT SIZED FROM A VALUE'S OWN MAGNITUDE IS NOT RESERVED
+  FALLIBLY. TRUNC and FORMAT reserve every width that comes from an ARGUMENT
+  through builtin::buffer, so an unallocatable `before`, `after` or `expp` is
+  Error 5 at rc 251 exactly as the oracle answers it. A result whose size
+  comes from the VALUE instead is not:
+
+    say length(trunc(1e999999999))   ->  1000000000, rc 0 on the oracle
+
+  goes through rexx-num's infallible String allocation here. Under the memory
+  asymmetry rust/CLAUDE.md records -- the oracle reserves 512 MiB for its
+  interpreter stack, so the same `ulimit -v` leaves this crate roughly half
+  the room -- the two sides cannot agree at that scale anyway, so no threshold
+  is quotable and none is claimed. Closing this needs rexx-num's rendering
+  path to reserve fallibly and a FormatError variant carrying major 5. No
+  owner is assigned.

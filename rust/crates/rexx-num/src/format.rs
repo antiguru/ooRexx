@@ -123,7 +123,7 @@ impl FormatError {
             }
             FormatError::ExponentOversize { mantissa, width } => {
                 let rendered =
-                    render_integer_padded(mantissa, None, None, mantissa, 0, Form::Scientific)
+                    render_integer_padded(mantissa, None, None, None, 0, Form::Scientific)
                         .expect("`before` is None, so the width check cannot fail");
                 vec![rendered, width.to_string()]
             }
@@ -204,18 +204,7 @@ impl Number {
         // full plain digits instead (verified with 1E100 at expp 0, which
         // prints all 101 digits). Everything else about it -- notably the
         // `before` check -- then operates on that plain rendering.
-        let expt = if expp == Some(0) {
-            None
-        } else {
-            // The `digits` default is saturated into i64, not narrowed: a
-            // bare u64 past 2^63 must stay a huge trigger threshold, and
-            // every adjusted exponent it is compared against is within
-            // +/-`MAX_EXPONENT`, so saturation decides identically.
-            Some(
-                expt.map(|e| e as i64)
-                    .unwrap_or_else(|| i64::try_from(digits).unwrap_or(i64::MAX)),
-            )
-        };
+        let expt = trigger(digits, expp, expt);
 
         // The C++ side checks `expp` *twice*. The first check
         // (`NumberStringClass.cpp:2021-2062`) runs against the exponent it
@@ -274,17 +263,24 @@ impl Number {
         let (eng_exp, rounded) = resolve_exponential_state(&n1, form, expt, after);
         // What `BeforeOversize` substitutes, computed here rather than at the
         // raise site because it needs both exponent choices -- see
-        // `reported_value`.
-        let reported = reported_value(&n1, initial_eng_exp, eng_exp, after);
+        // `reported_value` -- and computed only when `before` is supplied,
+        // since nothing else can reach that raise.
+        let reported = before.map(|_| reported_value(&n1, initial_eng_exp, eng_exp, after));
 
         match eng_exp {
-            None => render_integer_padded(&rounded, before, after, &reported, digits, form),
+            None => render_integer_padded(&rounded, before, after, reported.as_ref(), digits, form),
             Some(exp) => {
                 // The exponent check comes before the `before` check -- an
                 // exponent that doesn't fit is reported even when `before`
                 // would have been wide enough for the mantissa.
-                let mantissa =
-                    render_integer_padded(&rounded, before, after, &reported, digits, form)?;
+                let mantissa = render_integer_padded(
+                    &rounded,
+                    before,
+                    after,
+                    reported.as_ref(),
+                    digits,
+                    form,
+                )?;
 
                 if exp == 0 {
                     // A displayed exponent of exactly zero is never written
@@ -301,15 +297,51 @@ impl Number {
                     });
                 }
                 let e_sign = if exp < 0 { '-' } else { '+' };
+                let bare = exp.unsigned_abs().to_string();
+                // **Not `format!("{:0width$}", ..)`.** Rust's format width is
+                // a `u16`, so that spelling panics with "Formatting argument
+                // out of range" at `expp == 65536`, where the interpreter
+                // answers a 65,539-byte result. Measured both sides:
+                // `length(format(1e10,,,65535))` is 65538 and
+                // `length(format(1e10,,,65536))` is 65539.
                 let exp_digits = match expp {
                     Some(width) => {
-                        format!("{:0width$}", exp.unsigned_abs(), width = width as usize)
+                        let pad = (width as usize).saturating_sub(bare.len());
+                        format!("{}{bare}", "0".repeat(pad))
                     }
-                    None => exp.unsigned_abs().to_string(),
+                    None => bare,
                 };
                 Ok(format!("{mantissa}E{e_sign}{exp_digits}"))
             }
         }
+    }
+
+    /// The exponent a [`format_with`] call with these same arguments would
+    /// display, or `None` when the result is plain and no exponent field is
+    /// written at all.
+    ///
+    /// Exposed because a caller has to know **whether the `expp` field is
+    /// materialised** before it hands that width to an allocator. `expp` is
+    /// the one FORMAT width that is not always used: the interpreter writes
+    /// the field only when there is an exponent to pad. Measured against
+    /// `build/bin/rexx`, the same width either side of that line --
+    /// `format(1,,,3000000000)` is `1` at rc 0, and `format(1,,,3000000000,0)`
+    /// is `System resources exhausted.` at rc 251.
+    ///
+    /// Answered by the same two functions [`format_with`] runs over the same
+    /// rounded value, so the two cannot decide differently.
+    ///
+    /// [`format_with`]: Number::format_with
+    pub fn format_exponent(
+        &self,
+        digits: u64,
+        form: Form,
+        after: Option<u32>,
+        expp: Option<u32>,
+        expt: Option<u32>,
+    ) -> Option<i32> {
+        let n1 = self.round_to(digits);
+        resolve_exponential_state(&n1, form, trigger(digits, expp, expt), after).0
     }
 
     /// Implements `TRUNC(number, places)`. Truncates, does not round, and
@@ -320,16 +352,32 @@ impl Number {
         let truncated = truncate_to_places(&n, places);
         // `before` is always `None` here, so the oversize check can never
         // run and the placeholder `value`/`digits` are never read.
-        render_integer_padded(
-            &truncated,
-            None,
-            Some(places),
-            &truncated,
-            0,
-            Form::Scientific,
-        )
-        .expect("`before` is None, so the width check cannot fail")
+        render_integer_padded(&truncated, None, Some(places), None, 0, Form::Scientific)
+            .expect("`before` is None, so the width check cannot fail")
     }
+}
+
+/// The exponential trigger `format_with` compares against, with `expp`'s
+/// suppression folded in. `None` means "never exponential".
+///
+/// `expp == 0` is not "no padding": it suppresses exponential form
+/// altogether, so a number that would otherwise trigger it renders in full
+/// plain digits instead (verified with 1E100 at expp 0, which prints all 101
+/// digits). Everything else about it -- notably the `before` check -- then
+/// operates on that plain rendering.
+///
+/// The `digits` default is saturated into i64, not narrowed: a bare u64 past
+/// 2^63 must stay a huge threshold, and every adjusted exponent it is
+/// compared against is within +/-`MAX_EXPONENT`, so saturation decides
+/// identically.
+fn trigger(digits: u64, expp: Option<u32>, expt: Option<u32>) -> Option<i64> {
+    if expp == Some(0) {
+        return None;
+    }
+    Some(
+        expt.map(i64::from)
+            .unwrap_or_else(|| i64::try_from(digits).unwrap_or(i64::MAX)),
+    )
 }
 
 /// Chooses ENGINEERING's exponent for a value whose most significant digit
@@ -759,7 +807,9 @@ fn render_integer_padded(
     n: &Number,
     before: Option<u32>,
     after: Option<u32>,
-    reported: &Number,
+    // `Some` exactly when `before` is, which is the only way the oversize
+    // raise below can be reached.
+    reported: Option<&Number>,
     oversize_digits: u64,
     // Only ever read to build `BeforeOversize`, which renders `reported`
     // through `stringValue()` and so honours `NUMERIC FORM` as well as
@@ -816,7 +866,9 @@ fn render_integer_padded(
             let available = i64::from(before) - i64::from(n.negative);
             if available < needed {
                 return Err(FormatError::BeforeOversize {
-                    reported: reported.clone(),
+                    reported: reported
+                        .expect("`before` is Some here, and the caller pairs the two")
+                        .clone(),
                     digits: oversize_digits,
                     form: oversize_form,
                     before,

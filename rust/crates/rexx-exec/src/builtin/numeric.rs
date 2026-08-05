@@ -48,9 +48,13 @@
 //!
 //! `FORMAT` and `TRUNC` build a `RexxString` (`formatInternal` and
 //! `truncInternal` both end in `raw_string`), so their results are text and a
-//! later `NUMERIC DIGITS` cannot reshape them. `ABS`, `SIGN`, `MAX`, `MIN`
-//! and `RANDOM` produce numbers, and those capture the `DIGITS`/`FORM` pair
-//! in force at the call (D15). Measured with the setting changed in between:
+//! later `NUMERIC DIGITS` cannot reshape them. `RANDOM` answers a
+//! `RexxInteger` (`new_integer`), whose spelling is likewise its own and
+//! fixed -- measured, `numeric digits 3 ; say random(12345,12345)` is
+//! `12345` and not `1.23E+4` -- so it is built as text here too, the rule
+//! `WORDS` and `LENGTH` already follow. `ABS`, `SIGN`, `MAX` and `MIN`
+//! produce numbers, and those capture the `DIGITS`/`FORM` pair in force at
+//! the call (D15). Measured with the setting changed in between:
 //!
 //! ```rexx
 //! numeric digits 5 ; x = max(123456789,1) ; numeric digits 12 ; say x
@@ -253,25 +257,46 @@ pub(crate) fn format(
     // `before` and `after` are always materialised -- the interpreter's
     // `leadingSpaces` and `trailingDecimalZeros` are computed on every path
     // -- so both are reserved from the allocator before anything is built.
-    //
-    // The other two are widths of nothing. `expt` is a *threshold* and never
-    // occupies a byte, so a value past `u32::MAX` saturates there rather than
-    // being refused: every exponent it is compared against is bounded by
-    // `MAX_EXPONENT` (999,999,999), so `u32::MAX` and nine quintillion decide
-    // every comparison identically. Measured, `format(1,,,,999999999999999999)`
-    // is `1`.
-    //
-    // `expp` pads only an exponent that is actually *displayed*, so it too is
-    // usually a width of nothing -- measured, `format(1,,,999999999999999999)`
-    // is `1` at rc 0. It is refused here anyway, because deciding whether the
-    // padding would be reached needs the render the width would break. That
-    // is this crate's answer and not the oracle's for that one shape.
     let before = before.map(padding_width).transpose()?;
     let after = after.map(padding_width).transpose()?;
-    let expp = expp
-        .map(|value| u32::try_from(value).map_err(|_| Failure::from(Raised::system_resources())))
-        .transpose()?;
+
+    // `expt` is a *threshold* and never occupies a byte, so a value past
+    // `u32::MAX` saturates there rather than being refused: every exponent it
+    // is compared against is bounded by `MAX_EXPONENT` (999,999,999), so
+    // `u32::MAX` and nine quintillion decide every comparison identically.
+    // Measured, `format(1,,,,999999999999999999)` is `1`.
     let expt = expt.map(|value| u32::try_from(value).unwrap_or(u32::MAX));
+
+    // `expp` is the one width the interpreter does not always write: it pads
+    // an exponent, and there is not always an exponent. So it is reserved
+    // only once `rexx-num` says the field will be written, which is the same
+    // line the oracle draws -- measured, at the identical width,
+    // `format(1,,,3000000000)` is `1` at rc 0 while `format(1,,,3000000000,0)`
+    // is `System resources exhausted.` at rc 251.
+    //
+    // Saturating into `u32` to *ask* the question is exact, because only
+    // `expp == 0` changes the answer and zero is never saturated.
+    let displayed = value
+        .format_exponent(
+            digits,
+            form,
+            after,
+            expp.map(|width| u32::try_from(width).unwrap_or(u32::MAX)),
+            expt,
+        )
+        .is_some();
+    let expp = match expp {
+        None => None,
+        // Not a width at all: zero is the sentinel that suppresses
+        // exponential form, and it has to survive to `rexx-num`.
+        Some(0) => Some(0),
+        Some(width) if displayed => Some(padding_width(width)?),
+        // A width that is never written changes nothing about the result, so
+        // it is dropped rather than narrowed. `rexx-num` reads `expp` only
+        // through that zero test and through the exponential branch, and
+        // `format_exponent` has just said the second is not taken.
+        Some(_) => None,
+    };
 
     let text = value
         .format_with(digits, form, before, after, expp, expt)
@@ -558,7 +583,6 @@ pub(crate) fn random(
     name: &'static [u8],
     args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
-    let Numeric { digits, form, .. } = current(interp);
     let minimum = whole_number(interp, name, args, 1)?;
     let maximum = whole_number(interp, name, args, 2)?;
     let seed = whole_number(interp, name, args, 3)?;
@@ -615,8 +639,14 @@ pub(crate) fn random(
         let spread = u64::try_from(high - low + 1).expect("the range check bounded this");
         low += i64::try_from(reverse_bits(scrambled) % spread).expect("a value below the spread");
     }
-    let answer = Number::parse(&low.to_string()).expect("an i64's spelling is a number");
-    Ok(interp.number(answer, saturate(digits), form))
+    // **Text, not a number.** `RexxActivation::random` answers
+    // `new_integer(minimum)`, a `RexxInteger`, whose spelling is its own
+    // decimal digits and is never re-rendered under a later `DIGITS` or
+    // `FORM`. Measured: `numeric digits 3 ; say random(12345,12345)` is
+    // `12345`, where a value carrying the D15 pair would render `1.23E+4` --
+    // and `say random(12345,12345) + 0` at the same setting *is* `1.23E+4`,
+    // because that is the addition's own result rather than this one.
+    Ok(interp.text_owned(low.to_string().into_bytes()))
 }
 
 /// `RexxActivation::getRandomSeed`: install a supplied seed, then advance the
@@ -1340,6 +1370,37 @@ mod tests {
         assert_eq!(run(), (first, rest));
     }
 
+    /// `RANDOM`'s answer keeps its own spelling whatever `DIGITS` and `FORM`
+    /// say, because the oracle answers a `RexxInteger` and not a value
+    /// carrying the D15 pair.
+    ///
+    /// **The probe varies `DIGITS` *and* uses a value whose rendering can
+    /// change, and it needs both.** Three separate instruments were blind to
+    /// this for three separate reasons: the differential sweep excludes
+    /// `RANDOM` by rule (D11); every other test in this module runs at
+    /// `DIGITS 9`, where no answer in range can go exponential; and
+    /// `builtin-probes.txt` asked `random(5,5)`, which matches at every
+    /// setting. `random(12345,12345)` at `DIGITS 3` is the whole test.
+    #[test]
+    fn a_random_answer_keeps_its_own_spelling_at_every_precision() {
+        let degenerate = [Some(b"12345".as_slice()), Some(b"12345")];
+        for digits in ["1", "3", "9", "12"] {
+            assert_eq!(
+                call_with(digits, "SCIENTIFIC", b"RANDOM", &degenerate).expect("legal"),
+                b"12345",
+                "DIGITS {digits} reshaped the answer"
+            );
+        }
+        assert_eq!(
+            call_with("3", "ENGINEERING", b"RANDOM", &degenerate).expect("legal"),
+            b"12345"
+        );
+        // The adjacent contrast, so this cannot pass on an implementation
+        // where *nothing* is ever reshaped: `ABS` answers a real number and
+        // the same precision does move it.
+        assert_eq!(answer_at("3", b"ABS", &[b"-12345"]), b"1.23E+4");
+    }
+
     /// A padded result the allocator refuses is Error 5 at rc 251 rather
     /// than an abort, for both builtins that pad.
     #[test]
@@ -1367,5 +1428,58 @@ mod tests {
         // The adjacent success: a width that is merely large is honoured.
         assert_eq!(answer(b"TRUNC", &[b"1", b"1000"]).len(), 1002);
         assert_eq!(answer(b"FORMAT", &[b"1", b"1000"]).len(), 1000);
+
+        // `expp` is the third width, and it is the one that is reserved
+        // only when the exponent field is actually written -- the same line
+        // the oracle draws. The two calls below differ *only* in `expt`,
+        // which is what decides whether there is an exponent to pad, and
+        // measured they answer `1` at rc 0 and `System resources exhausted.`
+        // at rc 251 respectively.
+        //
+        // The width is nine quintillion rather than a merely huge one on
+        // purpose: a `cargo test` process has no `ulimit -v`, so a 3 GB
+        // reservation can genuinely succeed here and then build a 3 GB
+        // string. Only a width no allocator anywhere can supply makes this
+        // assertion mean the same thing on every machine.
+        assert_eq!(
+            call(
+                b"FORMAT",
+                &[Some(b"1"), None, None, Some(b"999999999999999999")]
+            )
+            .expect("a width that is never written is never allocated"),
+            b"1"
+        );
+        let failure = call(
+            b"FORMAT",
+            &[
+                Some(b"1"),
+                None,
+                None,
+                Some(b"999999999999999999"),
+                Some(b"0"),
+            ],
+        )
+        .expect_err("that exponent field cannot be allocated");
+        let Failure::Raised(raised) = failure else {
+            panic!("expected Raised, got {failure:?}");
+        };
+        assert_eq!((raised.number, raised.sub), (5, 0));
+
+        // And a width Rust's own formatter cannot express is still a
+        // result, not a panic: `format!("{:0width$}", ..)` takes a `u16`.
+        // Measured, `length(format(1e10,,,65535))` is 65538 and
+        // `length(format(1e10,,,65536))` is 65539.
+        assert_eq!(
+            call(b"FORMAT", &[Some(b"1e10"), None, None, Some(b"65535")])
+                .expect("legal")
+                .len(),
+            65538
+        );
+        assert_eq!(
+            call(b"FORMAT", &[Some(b"1e10"), None, None, Some(b"65536")])
+                .expect("legal")
+                .len(),
+            65539
+        );
     }
 }
