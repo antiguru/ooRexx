@@ -419,6 +419,11 @@ Worth stating because "the oracle is at `/home/moritz/dev/repos/ooRexx`" and "re
 Measured at Task 4: `DELWORD`'s whitespace rule -- the deleted word takes the run *after* it while the run *before* it survives byte for byte, tab-vs-blank identity included -- is asserted in `base/source.file/whiteSpace.testGroup`, **not** in `DELWORD.testGroup`.
 So `/bin/grep -a` the whole of `ootest/ooRexx/base/` for your builtin's name, not just its own file.
 
+**A third shape of false lead: looking in `bif/` alone, for anything that is both an instruction and a function.**
+Measured at Task 9/10: `bif/ADDRESS.testGroup` has **1 method and 2 assertions**, which reads as "essentially untested" -- while `keyword/ADDRESS.testGroup` has **97 methods and 222 assertions**, and tests the swap explicitly at `:1028`.
+`TRACE` has **no `bif/` group at all** and 77 methods under `keyword/`.
+The three shapes now seen are **bare-word inflation** (`ADDRESS` 707 hits against 208 for the syntax), **harness boilerplate** (407 of 440 `parse source`), and **this one**. All three inflate or deflate a coverage claim by more than an order of magnitude.
+
 **And the bytes those cases test are not in the source, which matters to Task 15's extractor.**
 Measured: `whiteSpace.testGroup` contains **zero 0x09 bytes**.
 `TAB` is a Rexx *variable* -- `TAB = "09"x` at `:63`, `PLANK = " "` at `:66`, `TAB2 = TAB||TAB` -- so the tab exists only in the data at run time.
@@ -1176,6 +1181,33 @@ Both `owners.rs` rows, both `EXPECTED_OUT_OF_SCOPE` rows, `lib.rs:758`'s arm, an
 This task implements `environment` and `dynamic`.
 **`command` and `io` are Phase 7's under D18 and must still fail loudly naming Phase 7.**
 
+- [ ] **Step 0: Measured, 2026-08-05 -- read before writing any code**
+
+**(a) The constant form UPPERCASES the name; the `VALUE` form does not.** This is the cheap one to get wrong:
+
+```
+address()  before anything  ->  sh
+address envC               ->  ENVC
+nm = 'envC'; address value nm  ->  envC
+```
+
+Same intent, different `ADDRESS()`.
+
+**(b) Bare `ADDRESS` is a TOGGLE, not a stack.** Measured: `envA`, `envB`, bare -> `ENVA`, bare -> `ENVB`, bare -> `ENVA`. It swaps between the current and the previous, forever. A stack implementation is wrong from the third bare `ADDRESS` onward.
+
+**(c) It is per-activation state, like `NUMERIC` -- inherited on call, discarded on return.** Confirmed rather than inferred: a called internal routine sees the caller's environment, changes it, and the caller still sees its own after the return. **Task 13 depends on this.**
+
+**(d) `DIGITS`/`FORM`/`FUZZ`: an internal routine inherits, a `::routine` does not.** Measured with the caller at `12 ENGINEERING 3`:
+
+```
+internal (call shownum)   ->  12 ENGINEERING 3
+::routine showint         ->   9 SCIENTIFIC  0
+```
+
+`TRACE()` behaves the same way. **This is the measurement Task 13's non-inheritance table needs**, taken from the builtins' side rather than inferred from the trace.
+
+*Not isolated, flagged:* bare `ADDRESS` with **no** prior environment was never probed -- every probe set one first.
+
 - [ ] **Step 1: Measure the default and the swap semantics**
 
 Measured: `say address()` with no `ADDRESS` instruction prints `sh` on this host.
@@ -1215,6 +1247,34 @@ Deleting the row removes the witness for a half that is still out of scope, and 
 `GC()` returns 0, measured.
 `TRACE()` with no argument returns the current setting, which `rexxcps.rex` depends on.
 `QUEUED()` reads 4b's queue, and **its differential is single-program only**: `rxapi` is running on this host and `rxqueue('G')` returns `SESSION`, so a cross-process comparison can never match.
+
+- [ ] **Step 0: The `CONDITION()` hole is exactly two fields wide -- measured 2026-08-05**
+
+For the **same** raise, a `CALL ON` handler and a `SIGNAL ON` handler differ in **`I` and `S` only**:
+
+| option | SYNTAX (`1/0`) | NOVALUE | USER via SIGNAL ON | USER via CALL ON | outside a handler |
+|---|---|---|---|---|---|
+| `CONDITION()` | `SIGNAL` | `SIGNAL` | `SIGNAL` | **`CALL`** | `''` |
+| `A` | `<Array 0>` | **`.NIL`** | the `ADDITIONAL` value | same | **`.NIL`** |
+| `C` | `SYNTAX` | `NOVALUE` | `USER UC` | same | `''` |
+| `D` | **`''`** | the variable name | the `DESCRIPTION` value | same | `''` |
+| `I` | `SIGNAL` | `SIGNAL` | `SIGNAL` | **`CALL`** | `''` |
+| `O` | `<Directory 14>` | `<Directory 9>` | `<Directory 10>` | same | **`.NIL`** |
+| `S` | `OFF` | `OFF` | `OFF` | **`DELAY`** | `''` |
+
+**So `A`, `C`, `D` and `O` come from the existing condition object and only `I`/`S` need new state.** Verified here for the `CALL ON` column (`I=CALL`, `S=DELAY`).
+
+Four things a natural implementation gets wrong:
+
+* **`CONDITION()` with no argument is `CONDITION('I')`**, not `'C'`.
+* **`A`'s type varies by condition** -- an empty `Array` for SYNTAX, `.NIL` for NOVALUE, a plain string when `ADDITIONAL` was given one. Returning `''` uniformly is wrong three ways.
+* **`D` is empty for interpreter-raised SYNTAX** but carries the variable name for NOVALUE.
+* **Outside any handler the options are not uniform**: `A` and `O` are `.NIL` while the four string options are `''`.
+* `C` for a user condition is **two words**, `USER UC`.
+
+*Flagged as inference:* `I` and `S` were perfectly correlated in every case measured (`SIGNAL`->`OFF`, `CALL`->`DELAY`), so one bit **may** suffice -- but no case was constructed with a trap re-armed or nested inside its own handler, which is where they could diverge. **Carry both fields unless you can show otherwise.**
+
+**A probing note that cost the survey three silent failures:** a top-level `raise user x` **exits the program at rc 0 with no stderr and never reaches the handler**. The raise must sit inside a `::routine` with the trap armed in the caller, which is how the suite writes it (`bif/CONDITION.testGroup:439`). An empty result here is a broken probe, not a measurement.
 
 - [ ] **Step 2: `CONDITION()`'s `I` and `S` options have no state to read, and this task adds it**
 
