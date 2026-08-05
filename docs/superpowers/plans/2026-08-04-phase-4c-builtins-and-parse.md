@@ -497,6 +497,14 @@ So the caller upcases a *symbol* target and does **not** upcase a quoted one -- 
 A builtin producing a number captures the `DIGITS`/`FORM` pair in force at creation; formatting it later with `settings.digits()` is wrong.
 **A probe cannot see this unless `DIGITS` or `FORM` changes between creation and rendering** -- construct at least one probe per numeric builtin that does.
 
+**A probe's own scaffolding can change the answer without failing, and this has now happened three times in this phase.**
+
+* A helper `::routine` is **not neutral scaffolding**: it has its own variable pool, so evaluating `SYMBOL`/`VAR` inside one reported `LIT`/`0` for every name including assigned ones -- silently inverting every result rather than erroring. **Anything variable-pool-sensitive must be probed in the pool under test.**
+* `TRACE()` reports the setting it is running under, so a probe wrapped in `trace i` reports the wrapper.
+* A builtin name followed by a space and a parenthesis is a *symbol*, and `b`/`x` before a quoted string is a *literal* -- both return plausible bytes from a program that never made the call.
+
+**The common shape: the harness changes the answer instead of failing.** Ask what your scaffolding contributes before trusting any probe whose result looks uniform.
+
 **Probe safety, restated because these are the two that bite this work:**
 
 * **Run every probe from a fresh empty subdirectory of the scratchpad, with absolute paths.**
@@ -1344,6 +1352,38 @@ Add the field where the trap fires and read it here.
 `DATATYPE`'s option letters are its whole surface -- probe every one.
 `DATATYPE.testGroup` is one of the six groups containing non-UTF-8 bytes; use `/bin/grep -a` on it.
 
+- [ ] **Step 0: Measured 2026-08-05 -- read before writing any code**
+
+**(a) `VALUE`'s phase split is decided by the third argument's PRESENCE, not its value, and getting this wrong is silent.**
+
+```
+myvar = 'ORIGINAL'
+value('myvar')             -> ORIGINAL
+value('myvar','NEWVAL')    -> ORIGINAL     returns the OLD value
+value('myvar')             -> NEWVAL       the assignment took effect
+value('myvar',,'')         -> .MYVAR       <-- an EMPTY third argument is still a pool lookup
+value('myvar','N','')      -> .MYVAR
+value('zz',,'NOSUCHPOOL')  -> 40.914
+```
+
+**A crate that ignores the third argument returns `NEWVAL` where the oracle returns `.MYVAR`** -- a wrong answer, not a loud one. The discriminator at the call site is **purely arity**.
+Also: `value('nosuchvar')` returns the **uppercased name** with no error, and lookup is caseless.
+
+**(b) `DATATYPE` is strictly ASCII, and only the option's FIRST character is read.**
+The authoritative option set comes from the error insert, not the documentation: `datatype(1,'Z')` gives `93.915`, *"Method option must be one of "ABILMNOSUVWX9""*.
+
+```
+datatype(123,'n') = 1     datatype(123,'NUM') = 1     datatype(123,'NX') = 1
+datatype(123,'')  = 93.915                            datatype(123,'Z')  = 93.915
+```
+
+So `'NUM'` and `'NX'` are accepted silently; only an empty string or a bad *first* character raises.
+**Swept over all 256 bytes: every byte from `0x80` to `0xFF` returns 0 for `A`, `U`, `L`, `W` and `M`.** Nothing above `0x7F` is ever a letter.
+
+**The trap: the empty string is `CHAR` in the one-argument form, but `datatype('','B')` is `1`** -- the empty string is a valid binary string.
+
+**(c) `SYMBOL`/`VAR`: a stem with a default value makes EVERY tail report `VAR`**, including tails never assigned. `BAD` is reserved for genuinely malformed names -- `1abc` is `LIT`, not `BAD`.
+
 - [ ] **Step 2: `VALUE` is split, and its two-argument form writes the pool**
 
 The variable-access form (`value('name')`, `value('name', newval)`) is 4c's.
@@ -1369,6 +1409,36 @@ An implementer who writes "if not in plan, grow" instead leaks one slot per call
 **The 2 names:** `DATE TIME`.
 
 **Read "Shared facts every builtin task needs", restated in your brief.**
+
+- [ ] **Step 0: The clock is cached per clause -- measured 2026-08-05**
+
+**Two `time('L')` calls in ONE clause return identical values across a real CPU burn; in two clauses they differ.**
+
+```
+say time("L") burn() time("L")   ->  14:47:06.798648 | 14:47:06.798648
+n1 = time("L"); zz = burn(); n2 = time("L")  ->  14:47:06.866899 | 14:47:06.918360
+```
+
+Same burn, same resolution; only the clause boundary changes the answer. `DATE('T')` is cached the same way.
+**The probe must put both reads inside one clause** -- a version with the burn between two statements cannot distinguish caching from a live read, and my first attempt at this probe made exactly that mistake.
+
+**`TIME('R')` semantics, measured across real burns:** the **first** `TIME('R')` in a program returns **0**; a later one returns **elapsed since the last reset**, not since program start, and resets the clock.
+
+```
+first time('R')            0
+time('E') after ~0.11s     0.109014
+time('R') after another    0.219483   = the sum of BOTH burns
+time('E') immediately      0.000023   so that R did reset
+```
+
+The `0.219 ≈ 0.109 + 0.110` arithmetic is what pins "since last reset"; since-start would have read ~0.33 by the third sample.
+
+**`TIME('C')` is `2:43pm`** -- lowercase meridiem, no leading zero. `TIME('Z')` and `TIME('')` are 40.904.
+
+**`DATE`: pin the CONVERSION form, which is deterministic, not any no-argument form.**
+`date('S','2026-08-05','I')` is `20260805`; `date('W','20260805','S')` is `Wednesday`; a malformed or impossible input is **40.19**.
+Host- or locale-dependent: `L`, `M`, `W` (names), `T`, `F` (absolute clocks). Deterministic given a fixed date: `B`, `D`, `E`, `I`, `N`, `O`, `S`, `U`.
+**`DATE('C')` and `DATE('J')` are rejected with 40.904 on this build** despite existing in other Rexx dialects -- pin that, because an implementer working from a generic reference will add them.
 
 - [ ] **Step 1: Neither may appear in a corpus program (D11), so the unit tests are the whole gate**
 
