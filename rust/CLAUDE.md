@@ -11,6 +11,12 @@ Each rule below has already cost this project a session, a wrong measurement, or
 * **Wrap every oracle run** as
   `( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib /home/moritz/dev/repos/ooRexx/build/bin/rexx FILE )`.
   Without the `ulimit` the interpreter requests gigabytes mid-range and is OOM-killed; that has already ended a session and taken the machine's memory with it.
+* **`ulimit -v` caps address space, not memory used, and that difference has already produced a misleading finding.**
+  It charges a process for memory it merely *reserves*: `INTERPRETER_STACK_BYTES` reserves 512 MiB for the sized interpreter thread before any program runs, so under a 1 GiB cap this crate has ~500 MiB to allocate in where the oracle has ~1000, and a large-result comparison turns over exactly there.
+  Measured 2026-08-05: raising the cap by precisely that 512 MiB makes the two sides agree again.
+  **A cgroup memory limit is the right instrument** -- `systemd-run --user -p MemoryMax=`, or `memory.max` in a delegated cgroup -- because it charges RSS and would cost a reservation nothing.
+  It is unavailable here: there is no user systemd manager ("offline"), no user bus, and `/sys` is a tmpfs with no cgroup filesystem mounted, so `systemd-run` cannot run and no cgroup can be created. Linux's `RLIMIT_RSS` (`ulimit -m`) is documented as having no effect.
+  So `ulimit -v` stays, and any memory finding taken under it must say whether it survives the reservation being free.
 * **Read stdout, stderr and exit status as three separate descriptors.** Never capture `2>&1` as one string: the trace sink and stdout interleave undefinedly by design, and comparing them together produced two false regressions.
 * Run `rexx-run` from `rust/`.
 

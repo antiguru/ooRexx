@@ -1362,6 +1362,45 @@ above.
   involved, and no re-derivation from the oracle can close it -- the two
   processes have different amounts of address space to spend, by design.
 
+    ulimit -v      rexx-exec          oracle
+    1048576        Error 5, rc 251    500000000, rc 0
+    1572864        500000000, rc 0    500000000, rc 0
+    4194304        500000000, rc 0    500000000, rc 0
+
+  1572864 is 1048576 + the 512 MiB reservation, and it is exactly where the
+  two sides agree again.
+
+  BUT THE FIRST CAUSE IS ALSO A REAL MEMORY COST, NOT ONLY AN ADDRESS-SPACE
+  ONE, AND AN EARLIER VERSION OF THIS ROW LET A READER MISS THAT. Measured
+  at a 4 GiB limit where both sides succeed, peak RSS for
+  `say length(copies('a',500000000))`:
+
+    rexx-exec   978460 kB
+    oracle      495860 kB
+
+  The oracle holds one copy of the result; this crate holds two, and the
+  second is the unconditional argument render of the FIRST cause. So the
+  arithmetic of the first cause is visible in RSS as well as in address
+  space, and it is the dominant term: 482 MB of the 483 MB difference is one
+  redundant copy of a 500 MB string. Whoever fixes the first cause should
+  re-measure this pair and expect parity; that expectation is arithmetic,
+  not a measurement, and is stated so it can be falsified.
+
+  ON THE INSTRUMENT ITSELF: `ulimit -v` is the wrong tool for this question
+  and is used because it is the only one available here. It cannot separate
+  memory a process RESERVES from memory it USES, which is what makes the
+  second cause look like a defect of this crate rather than a property of
+  the measurement. A cgroup memory limit -- `systemd-run --user -p
+  MemoryMax=`, or writing memory.max in a delegated cgroup -- limits RSS and
+  would charge the 512 MiB reservation nothing, making the comparison
+  apples-to-apples. NEITHER IS AVAILABLE IN THIS ENVIRONMENT: measured
+  2026-08-05, there is no user systemd manager ("offline") and no user bus,
+  and /sys is a tmpfs with no cgroup filesystem mounted at all, so
+  systemd-run fails and no cgroup can be created. Linux's RLIMIT_RSS
+  (`ulimit -m`) is documented as having no effect. If this project ever runs
+  where cgroups exist, the wrapper should move to a memory limit and this
+  row's second cause should be re-measured before being believed.
+
   OWNERS, because the two causes have different ones and a gap with no owner
   is how the compound-DO defect drifted across two phases before the 4b gate
   had to rule on it.

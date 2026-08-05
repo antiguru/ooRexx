@@ -1050,6 +1050,12 @@ Measured at the project's own `ulimit -v 1048576`: `say length(copies('a',400000
 **Measured as the whole of this cause:** with the argument render placed behind `if self.trace_mode().intermediates`, both 300000000 and 400000000 return rc 0 with the oracle's answer and no size aborts at all.
 That experiment was run and reverted, not shipped.
 
+**It costs real memory, not only address space, and that is the stronger reason to fix it.**
+Measured at a 4 GiB limit where both sides succeed, peak RSS for `say length(copies('a',500000000))` is **978,460 kB here against the oracle's 495,860 kB** -- the oracle holds one copy of the result and this crate holds two.
+482 MB of the 483 MB difference is one redundant copy of a 500 MB string.
+**Re-measure that pair after your fix and expect parity.**
+That expectation is arithmetic rather than a measurement, so treat a non-parity result as a finding rather than as noise.
+
 **What the measurement does not say is which of the roughly fifteen similar sites need the same guard, and a wrong guard silently drops a trace line.**
 So: **owe a trace witness for every site you change**, and change no site you cannot witness.
 The assignment path's own `>>>` render is the same shape.
