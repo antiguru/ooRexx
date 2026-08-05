@@ -32,10 +32,12 @@
 #     goes red as an unaccounted failure. A second defect class would need
 #     the constant split by hand.
 #
-#   4c  789 bodies. Every phase gap in this group is 4c's and nothing else's:
-#       PARSE (656 bodies), the builtin routines ARG/COPIES/DIGITS/FORM/FUZZ/
-#       SUBSTR/SIGN/..., ADDRESS, PULL. No body here is blocked by Phase 5,
-#       so 4b owes this table nothing further.
+#   4c  772 bodies. Every phase gap in this group is 4c's and nothing else's:
+#       PARSE (656 bodies), the builtin routines ARG/DIGITS/FORM/FUZZ/SIGN/
+#       ..., ADDRESS, PULL. No body here is blocked by Phase 5, so 4b owes
+#       this table nothing further. Which builtins are still blockers is the
+#       derived half of this file and moves as they land; the run's own
+#       breakdown is the current answer, never this sentence.
 #
 #   defect:compound-do-control-variable  6 bodies. NOT a phase gap: a real
 #       divergence, confirmed by running each rewritten program under the C++
@@ -62,7 +64,6 @@ ADDRESS::test_environment_expression_extra	4c
 ADDRESS::test_environment_value_with	4c
 ADDRESS::test_environment_expression_with	4c
 ADDRESS::test_environment_path_null	4c
-ASSIGNMENT::test_2	4c
 ASSIGNMENT::test_3	4c
 ASSIGNMENT::test_4	4c
 ASSIGNMENT::test_6	4c
@@ -134,20 +135,6 @@ IF::test_17	4c
 INTERPRET::test_interpret_call	4c
 ITERATE::test_12	defect:compound-do-control-variable
 LEAVE::test_11	defect:compound-do-control-variable
-NUMERIC::test_1	4c
-NUMERIC::test_2	4c
-NUMERIC::test_3	4c
-NUMERIC::test_4	4c
-NUMERIC::test_5	4c
-NUMERIC::test_6	4c
-NUMERIC::test_7	4c
-NUMERIC::test_8	4c
-NUMERIC::test_9	4c
-NUMERIC::test_10	4c
-NUMERIC::test_11	4c
-NUMERIC::test_12	4c
-NUMERIC::test_13	4c
-NUMERIC::test_14	4c
 NUMERIC::test_15	4c
 NUMERIC::test_16	4c
 NUMERIC::test_19	4c
@@ -842,8 +829,6 @@ PARSE::Test_668	4c
 PARSE::Test_669	4c
 PARSE::Test_670	4c
 PARSE::Test_671	4c
-SELECT::test_14	4c
 TRACE::test_trace_option_none	4c
 TRACE::test_trace_nullstring	4c
 TRACE::test_trace_?o	4c
-VarRef::test_unknown	4c

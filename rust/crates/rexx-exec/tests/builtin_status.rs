@@ -568,6 +568,71 @@ fn every_loud_row_is_loud_about_its_own_builtin() {
     );
 }
 
+/// The names `src/builtin/string.rs` runs, which must every one read
+/// `implemented`.
+///
+/// **A written-down list, and deliberately so.** Which builtins share a file
+/// is not derivable from anything the status harness can see, and a *derived*
+/// check -- "every row in `IMPLEMENTED` reads implemented" -- cannot catch
+/// the failure this exists for: a family delivered three names short has
+/// three fewer table rows, three rows still reading `loud`, and passes. So
+/// the list is the assertion, and the cost of it going stale is a failing
+/// test naming the exact name.
+const STRING_FAMILY: &[&str] = &[
+    "ABBREV",
+    "CENTER",
+    "CENTRE",
+    "CHANGESTR",
+    "COMPARE",
+    "COPIES",
+    "COUNTSTR",
+    "DELSTR",
+    "INSERT",
+    "LASTPOS",
+    "LEFT",
+    "LENGTH",
+    "LOWER",
+    "OVERLAY",
+    "POS",
+    "REVERSE",
+    "RIGHT",
+    "SPACE",
+    "STRIP",
+    "SUBSTR",
+    "TRANSLATE",
+    "UPPER",
+    "VERIFY",
+];
+
+/// Every name in [`STRING_FAMILY`] is committed `implemented`.
+///
+/// `the_status_file_matches_a_live_differential_run` above already refuses a
+/// row that disagrees with a live run, so this adds the one thing that check
+/// cannot: that these particular names are the ones that agree, rather than
+/// however many happen to be finished.
+#[test]
+fn every_string_builtin_is_implemented() {
+    let committed: BTreeMap<_, _> = read_tab_rows(&status_path()).into_iter().collect();
+    let mut wrong = String::new();
+    for name in STRING_FAMILY {
+        match committed.get(*name).map(String::as_str) {
+            Some("implemented") => {}
+            Some(other) => {
+                writeln!(wrong, "  {name}: {other}").expect("writing to a String cannot fail");
+            }
+            None => {
+                writeln!(wrong, "  {name}: no row at all")
+                    .expect("writing to a String cannot fail");
+            }
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "these string builtins are not committed as implemented in {}:\n{wrong}",
+        status_path().display()
+    );
+}
+
 /// Committing a `divergent` row requires a `KNOWN GAP: <NAME>` marker in the
 /// exclusions file. See the module doc: a divergence is a wrong answer, and
 /// absorbing one into the status file must cost more than a one-line edit.

@@ -432,6 +432,185 @@ impl Raised {
         )
     }
 
+    /// 40.12: a builtin argument that has to be a whole number is not one.
+    /// `routine` is the builtin's own name as its table row spells it,
+    /// `position` is 1-based **in the call's own argument list**, and `found`
+    /// is the argument's own **rendered value**.
+    ///
+    /// That `found` is the rendered value -- not the source spelling, and not
+    /// a re-rendering under the `DIGITS` in force at the call -- is measured
+    /// rather than assumed, with a program in which all three differ:
+    ///
+    /// ```text
+    /// numeric digits 3 ; zz = 2 / 3 ; numeric digits 9 ; say left('ab', zz)
+    /// ->  40.12  LEFT argument 2 must be a whole number; found "0.667".
+    /// ```
+    ///
+    /// The spelling is `zz`; the current-`DIGITS` rendering would be
+    /// `0.666666667`; `0.667` is the value's own rendering, fixed by the
+    /// `DIGITS 3` in force when the division created it (D15). The same
+    /// program with the same value in a *pad* position reports `found
+    /// "0.667"` under [`argument_not_a_pad`]'s 40.23, so the two sub-codes
+    /// answer the question the same way.
+    ///
+    /// **What counts as a whole number here is not the current `NUMERIC
+    /// DIGITS`.** The oracle converts through `Numerics::ARGUMENT_DIGITS`,
+    /// which is 18 on a 64-bit build, and measured in both directions:
+    /// `numeric digits 2 ; left('ab','1.0000001')` is 40.12 where a
+    /// two-digit conversion would have rounded it to a whole `1`, and
+    /// `left('ab','1.0000000000000000000004')` succeeds, because rounding
+    /// *that* to 18 digits leaves `1`. A value needing more than 18 digits is
+    /// rejected however it is spelled -- `left('ab','1E18')` is 40.12.
+    ///
+    /// [`argument_not_a_pad`]: Raised::argument_not_a_pad
+    pub(crate) fn argument_not_whole(routine: &[u8], position: usize, found: &[u8]) -> Raised {
+        Raised::syntax(
+            40,
+            12,
+            vec![
+                String::from_utf8_lossy(routine).into_owned(),
+                position.to_string(),
+                String::from_utf8_lossy(found).into_owned(),
+            ],
+        )
+    }
+
+    /// 40.23: a builtin's pad argument is not exactly one character.
+    /// Substitutions as [`argument_not_whole`]'s, and `found` is the
+    /// rendered value for the same measured reason.
+    ///
+    /// **A pad is checked whether or not it could ever be used**, measured:
+    /// `left('',0,'xx')` and `right('',0,'xx')` are both 40.23 though the
+    /// result is the null string either way, and `substr('abc',0,5,'xx')` is
+    /// 40.23 rather than the 93.924 its zero position would otherwise give.
+    /// The null string is not a pad either -- `space('a b c',1,'')` is 40.23
+    /// with `found ""`.
+    ///
+    /// [`argument_not_whole`]: Raised::argument_not_whole
+    pub(crate) fn argument_not_a_pad(routine: &[u8], position: usize, found: &[u8]) -> Raised {
+        Raised::syntax(
+            40,
+            23,
+            vec![
+                String::from_utf8_lossy(routine).into_owned(),
+                position.to_string(),
+                String::from_utf8_lossy(found).into_owned(),
+            ],
+        )
+    }
+
+    /// 93.923: a length argument converted to a whole number but is
+    /// negative. No routine name and no position in the message, only the
+    /// value.
+    ///
+    /// **A different major from the 40.x family, and a different exit code**:
+    /// measured, `say substr('abc',2,-1)` is `Error 93 ... Incorrect call to
+    /// method.` / `Error 93.923:  Invalid length argument specified; found
+    /// "-1".` at **rc 163**, where every 40.x above is rc 216.
+    ///
+    /// `found` is the value **after** conversion to a whole number, not the
+    /// argument's own text, and that is measured with the two spellings
+    /// apart: `left('ab','-1.0')`, `left('ab',' -1 ')` and
+    /// `left('ab','-1e0')` all report `found "-1"`. The 40.12 above reports
+    /// the argument's text instead, so the two families genuinely disagree
+    /// about what they name.
+    pub(crate) fn invalid_length(found: &[u8]) -> Raised {
+        Raised::syntax(93, 923, vec![String::from_utf8_lossy(found).into_owned()])
+    }
+
+    /// 93.924: a position argument converted to a whole number but is zero
+    /// or negative. Same shape and same rc 163 as [`invalid_length`], and
+    /// `found` is likewise the converted value -- measured,
+    /// `substr('abc','0.0')` reports `found "0"`.
+    ///
+    /// Which of the two a builtin raises is per argument, not per
+    /// constraint: measured, `substr('abc',0)` is 93.924 while
+    /// `substr('abc',2,-1)` is 93.923, and `insert('-','abc',-1)` is neither
+    /// (see [`argument_not_non_negative`]).
+    ///
+    /// [`invalid_length`]: Raised::invalid_length
+    /// [`argument_not_non_negative`]: Raised::argument_not_non_negative
+    pub(crate) fn invalid_position(found: &[u8]) -> Raised {
+        Raised::syntax(93, 924, vec![String::from_utf8_lossy(found).into_owned()])
+    }
+
+    /// 93.906: a count argument converted to a whole number but is negative.
+    /// `position` is 1-based **in the underlying method's argument list**,
+    /// which is the builtin's own list less the positions the method takes
+    /// as its receiver and its earlier operands -- measured,
+    /// `copies('ab',-1)` reports `Method argument 1`, `insert('-','abc',-1)`
+    /// reports `Method argument 2` and `changestr('a','banana','X',-1)`
+    /// reports `Method argument 3`, from builtin positions 2, 3 and 4.
+    ///
+    /// The third of the trio with [`invalid_length`] and
+    /// [`invalid_position`], at the same rc 163 and with `found` likewise
+    /// the converted value: `copies('ab','-1.0')` reports `found "-1"`.
+    ///
+    /// [`invalid_length`]: Raised::invalid_length
+    /// [`invalid_position`]: Raised::invalid_position
+    pub(crate) fn argument_not_non_negative(position: usize, found: &[u8]) -> Raised {
+        Raised::syntax(
+            93,
+            906,
+            vec![
+                position.to_string(),
+                String::from_utf8_lossy(found).into_owned(),
+            ],
+        )
+    }
+
+    /// 93.915: an option argument's first letter is not one of the ones the
+    /// builtin accepts. `valid` is the accepted set as the oracle spells it
+    /// in the message, and `found` is the **whole option string**, not the
+    /// letter that was rejected.
+    ///
+    /// Measured, both parts: `strip('ab','Xyz')` gives `Method option must
+    /// be one of "BLT"; found "Xyz".` and `verify('a','b','Xyz')` gives the
+    /// same shape with `"MN"`. The null string is rejected too, with `found
+    /// ""` -- `strip('ab','')` and `verify('abcde','abc','')` are both
+    /// 93.915 -- so an empty option is not "omitted".
+    ///
+    /// Only the first letter is examined, and case-insensitively: measured,
+    /// `strip('  ab  ','Leading')` and `strip('  ab  ','l')` both strip
+    /// leading blanks only, and `verify('abcde','abc','Nope')` is 4, the
+    /// same as `'N'`.
+    pub(crate) fn invalid_option(valid: &str, found: &[u8]) -> Raised {
+        Raised::syntax(
+            93,
+            915,
+            vec![
+                valid.to_string(),
+                String::from_utf8_lossy(found).into_owned(),
+            ],
+        )
+    }
+
+    /// 5: a result string too large to allocate. No sub-number and no
+    /// substitution, which is why this is the one raiser here built with a
+    /// sub of `0`: measured, `say left('ab','999999999999999999')` prints
+    ///
+    /// ```text
+    ///      1 *-* say left('ab','999999999999999999')
+    /// Error 5 running /abs/p.rex line 1:  System resources exhausted.
+    /// ```
+    ///
+    /// at rc 251, with **no** `Error 5.x:` second line -- exactly what
+    /// `Raised::report` already writes for a zero sub.
+    ///
+    /// The oracle reaches this by asking the allocator and being refused,
+    /// not by testing the requested size against a limit: `right`, `center`,
+    /// `space`, `substr`, `copies`, `insert` and `overlay` were each
+    /// measured reporting it for a length argument of `123456789012345678`,
+    /// the same value at which `left` above succeeds in converting the
+    /// argument and fails to allocate. Reproducing the *mechanism* rather than a
+    /// threshold is why the call sites ask `Vec::try_reserve_exact` -- a
+    /// chosen cut-off would be a number this project could not measure, and
+    /// an unguarded allocation of that size aborts the process rather than
+    /// raising anything.
+    pub(crate) fn system_resources() -> Raised {
+        Raised::syntax(5, 0, Vec::new())
+    }
+
     /// 88.928: `USE ARG >name` where the caller did not pass a variable
     /// reference. `position` is 1-based; `found` is the argument's own
     /// **rendered value**.

@@ -76,6 +76,15 @@ use crate::{Interp, Loud};
 
 mod string;
 
+/// What a builtin's code looks like: the interpreter, the row's own name and
+/// the already-evaluated arguments.
+///
+/// A named type rather than the signature spelled inline, because it is
+/// spelled in three places -- [`Builtin::run`], every implementation in
+/// `string.rs`, and the tests' own stand-in -- and those three cannot drift
+/// while they name this.
+type Run = fn(&mut Interp, &'static [u8], &[Option<ObjRef>]) -> Result<ObjRef, Failure>;
+
 /// One builtin this crate runs: its name, its arity, and the code.
 struct Builtin {
     /// The name as `BuiltinFunctions.cpp` spells it, which is upper case.
@@ -88,7 +97,19 @@ struct Builtin {
     min: usize,
     /// The most the oracle accepts, or `None` for a variadic builtin.
     max: Option<usize>,
-    run: fn(&mut Interp, &[Option<ObjRef>]) -> Result<ObjRef, Failure>,
+    /// The code, taking this row's own [`name`] as its second argument.
+    ///
+    /// **The name is passed rather than written down again inside the
+    /// implementation**, and that is what lets `CENTER` and `CENTRE` be one
+    /// function: the oracle's two bodies are identical except for the name
+    /// they report, and measured, they really do report differently --
+    /// `centre('ab',6,'--')` is `CENTRE argument 3 must be a single
+    /// character` where `center('ab',6,'--')` is `CENTER argument 3`. An
+    /// implementation naming itself would be a second copy of the string in
+    /// this row, free to disagree with it.
+    ///
+    /// [`name`]: Builtin::name
+    run: Run,
 }
 
 /// Every builtin this crate runs, with the arity `check_arity` enforces
@@ -98,14 +119,164 @@ struct Builtin {
 /// being answered wrongly; `corpus/builtin-status.txt` is where the
 /// implemented/not-implemented boundary is recorded and policed, so this
 /// table does not describe it in prose.
-const IMPLEMENTED: &[Builtin] = &[Builtin {
-    // `say length()` is 40.3 with a minimum of 1 and `say length('abc','x')`
-    // is 40.4 with a maximum of 1, both measured, rc 216.
-    name: b"LENGTH",
-    min: 1,
-    max: Some(1),
-    run: string::length,
-}];
+///
+/// Every `(min, max)` pair below is the oracle's own, taken from the
+/// `x_Min`/`x_Max` constants each `BUILTIN(x)` body opens with
+/// (`interpreter/expression/BuiltinFunctions.cpp`) and confirmed against the
+/// interpreter at both ends -- one argument short is 40.3 naming that
+/// minimum and one too many is 40.4 naming that maximum.
+const IMPLEMENTED: &[Builtin] = &[
+    Builtin {
+        name: b"ABBREV",
+        min: 2,
+        max: Some(3),
+        run: string::abbrev,
+    },
+    Builtin {
+        // Two rows, one implementation: see `Builtin::run` for why the name
+        // travels as an argument and what a program can see of the
+        // difference.
+        name: b"CENTER",
+        min: 2,
+        max: Some(3),
+        run: string::center,
+    },
+    Builtin {
+        name: b"CENTRE",
+        min: 2,
+        max: Some(3),
+        run: string::center,
+    },
+    Builtin {
+        name: b"CHANGESTR",
+        min: 3,
+        max: Some(4),
+        run: string::changestr,
+    },
+    Builtin {
+        name: b"COMPARE",
+        min: 2,
+        max: Some(3),
+        run: string::compare,
+    },
+    Builtin {
+        name: b"COPIES",
+        min: 2,
+        max: Some(2),
+        run: string::copies,
+    },
+    Builtin {
+        name: b"COUNTSTR",
+        min: 2,
+        max: Some(2),
+        run: string::countstr,
+    },
+    Builtin {
+        // A minimum of 1, not 2: `DELSTR`'s start position is optional and
+        // defaults to 1, so measured, `say delstr('abcdef')` deletes the
+        // whole string rather than raising.
+        name: b"DELSTR",
+        min: 1,
+        max: Some(3),
+        run: string::delstr,
+    },
+    Builtin {
+        name: b"INSERT",
+        min: 2,
+        max: Some(5),
+        run: string::insert,
+    },
+    Builtin {
+        name: b"LASTPOS",
+        min: 2,
+        max: Some(4),
+        run: string::lastpos,
+    },
+    Builtin {
+        name: b"LEFT",
+        min: 2,
+        max: Some(3),
+        run: string::left,
+    },
+    Builtin {
+        // `say length()` is 40.3 with a minimum of 1 and `say
+        // length('abc','x')` is 40.4 with a maximum of 1, both measured, rc
+        // 216.
+        name: b"LENGTH",
+        min: 1,
+        max: Some(1),
+        run: string::length,
+    },
+    Builtin {
+        name: b"LOWER",
+        min: 1,
+        max: Some(3),
+        run: string::lower,
+    },
+    Builtin {
+        name: b"OVERLAY",
+        min: 2,
+        max: Some(5),
+        run: string::overlay,
+    },
+    Builtin {
+        name: b"POS",
+        min: 2,
+        max: Some(4),
+        run: string::pos,
+    },
+    Builtin {
+        name: b"REVERSE",
+        min: 1,
+        max: Some(1),
+        run: string::reverse,
+    },
+    Builtin {
+        name: b"RIGHT",
+        min: 2,
+        max: Some(3),
+        run: string::right,
+    },
+    Builtin {
+        name: b"SPACE",
+        min: 1,
+        max: Some(3),
+        run: string::space,
+    },
+    Builtin {
+        name: b"STRIP",
+        min: 1,
+        max: Some(3),
+        run: string::strip,
+    },
+    Builtin {
+        name: b"SUBSTR",
+        min: 2,
+        max: Some(4),
+        run: string::substr,
+    },
+    Builtin {
+        // Six, not four: `start` and `range` are ooRexx's own extension to
+        // the classic four-argument `TRANSLATE`, and measured, a seventh
+        // argument is 40.4 naming a maximum of 6.
+        name: b"TRANSLATE",
+        min: 1,
+        max: Some(6),
+        run: string::translate,
+    },
+    Builtin {
+        name: b"UPPER",
+        min: 1,
+        max: Some(3),
+        run: string::upper,
+    },
+    Builtin {
+        name: b"VERIFY",
+        min: 2,
+        max: Some(5),
+        run: string::verify,
+    },
+];
 
 /// The builtin names Phase 4 dispatches, as a set built once.
 ///
@@ -168,7 +339,7 @@ pub(crate) fn dispatch(
     if let Err(failure) = check_arity(builtin, args) {
         return Some(Err(failure));
     }
-    Some((builtin.run)(interp, args))
+    Some((builtin.run)(interp, builtin.name, args))
 }
 
 /// The 40.x incorrect-call checks every builtin shares, in the order the
@@ -273,21 +444,33 @@ mod tests {
         );
     }
 
-    fn never_run(_: &mut Interp, _: &[Option<ObjRef>]) -> Result<ObjRef, Failure> {
+    fn never_run(
+        _: &mut Interp,
+        _: &'static [u8],
+        _: &[Option<ObjRef>],
+    ) -> Result<ObjRef, Failure> {
         unreachable!("check_arity never runs the builtin")
     }
 
-    /// Stand-in for a builtin with a required argument in a middle position,
-    /// which is the only shape that can reach 40.5. `LENGTH` takes one
-    /// argument and a lone omitted argument is a trailing omission that never
-    /// arrives, so its own row cannot produce that sub-code. The numbers are
-    /// `SUBSTR`'s own, measured.
-    const SUBSTR: Builtin = Builtin {
-        name: b"SUBSTR",
-        min: 2,
-        max: Some(4),
-        run: never_run,
-    };
+    /// A builtin with a required argument in a middle position, which is the
+    /// only shape that can reach 40.5. `LENGTH` takes one argument and a lone
+    /// omitted argument is a trailing omission that never arrives, so its own
+    /// row cannot produce that sub-code.
+    ///
+    /// The arity is [`IMPLEMENTED`]'s own row rather than a copy of its
+    /// numbers, so this test cannot go on asserting a `(2, 4)` the table has
+    /// stopped saying; only `run` is replaced, since `check_arity` must never
+    /// reach it.
+    fn substr_arity() -> Builtin {
+        let row = IMPLEMENTED
+            .iter()
+            .find(|builtin| builtin.name == b"SUBSTR")
+            .expect("SUBSTR has a row");
+        Builtin {
+            run: never_run,
+            ..*row
+        }
+    }
 
     /// The three incorrect-call sub-codes and their substitutions, against
     /// the oracle transcripts in [`check_arity`]'s own doc.
@@ -295,7 +478,8 @@ mod tests {
     fn the_arity_checks_answer_the_oracles_own_sub_codes() {
         let value = ObjRef::small_int(1).expect("1 is a small int");
 
-        let failure = check_arity(&SUBSTR, &[Some(value)]).expect_err("one argument is too few");
+        let failure =
+            check_arity(&substr_arity(), &[Some(value)]).expect_err("one argument is too few");
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
         };
@@ -306,7 +490,7 @@ mod tests {
         );
 
         let five = [Some(value); 5];
-        let failure = check_arity(&SUBSTR, &five).expect_err("five arguments are too many");
+        let failure = check_arity(&substr_arity(), &five).expect_err("five arguments are too many");
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
         };
@@ -316,7 +500,7 @@ mod tests {
             vec!["SUBSTR".to_string(), "4".to_string()]
         );
 
-        let failure = check_arity(&SUBSTR, &[Some(value), None, Some(value)])
+        let failure = check_arity(&substr_arity(), &[Some(value), None, Some(value)])
             .expect_err("argument 2 is required");
         let Failure::Raised(raised) = failure else {
             panic!("expected Raised, got {failure:?}");
@@ -330,7 +514,8 @@ mod tests {
         // The adjacent success: an omission *past* the required positions is
         // not an error at all -- measured, `say substr('abc',2,)` prints
         // `bc`.
-        check_arity(&SUBSTR, &[Some(value), Some(value), None]).expect("that call is legal");
+        check_arity(&substr_arity(), &[Some(value), Some(value), None])
+            .expect("that call is legal");
     }
 
     /// The maximum is checked before the required positions, which is the one
@@ -342,7 +527,7 @@ mod tests {
     fn too_many_arguments_wins_over_a_missing_required_one() {
         let value = ObjRef::small_int(1).expect("1 is a small int");
         let failure = check_arity(
-            &SUBSTR,
+            &substr_arity(),
             &[None, Some(value), Some(value), Some(value), Some(value)],
         )
         .expect_err("five arguments are too many");
