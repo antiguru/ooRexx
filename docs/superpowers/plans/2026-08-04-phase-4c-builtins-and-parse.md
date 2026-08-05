@@ -842,6 +842,78 @@ Also: the bit builtins take a pad character; `XRANGE`'s arguments are single cha
 
 **Read "Shared facts every builtin task needs", restated in your brief -- in particular D15, which this family is the one most exposed to.**
 
+- [ ] **Step 0: Measured behaviours the reference does not give you -- read before writing any code**
+
+Surveyed and re-verified 2026-08-05. **Three rc values in this family where earlier ones had two:** `40.x` -> 216, `93.x` -> 163, **`41.1` -> 215**.
+
+**(a) `MAX`/`MIN` have ZERO error coverage in the whole suite, and their error depends on argument POSITION.**
+Zero `expectSyntax` in `bif/MAX.testGroup`, `bif/MIN.testGroup`, `class/String/max.testGroup` or `class/String/min.testGroup` -- verified with a positive control, since 93.903/93.904 *are* asserted at `directives/METHOD.testGroup:278` and `keyword/VarRef.testGroup:127,143`. **Your probes are the only evidence for all of it.**
+
+```
+max()          -> 40.3
+max(5)         -> 5
+max('a',1,3)   -> 93.943   MAX method target must be a number; found "a".
+max(1,'a',3)   -> 93.904   Method argument 1 must be a number; found "a".
+max(1,2,'a')   -> 93.904
+max(1,,3)      -> 93.903   Missing argument in method; argument 0 is required.
+```
+
+Three things to get right: **argument 1 raises a different number from arguments 2+**; the `93.904` insert is **off by one against Rexx's own numbering** (the bad value in `max(1,'a',3)` is argument *2* and the message says *1*); and `93.903` says **"argument 0 is required"**, literally zero, measured rather than mistranscribed.
+
+*Flagged as inference, not measurement:* the "method target" wording suggests dispatch as `arg1~max(arg2,…)`, which would explain both the split and the off-by-one. The behaviour is measured; **the mechanism is unconfirmed in the C++ -- read it rather than trusting this.**
+
+**(b) `41.1` is never these builtins' own error.** `SIGN.testGroup`'s two `41.1` cases raise *before* `SIGN` is entered:
+
+```
+sign(-1E1234567890)   -> 41.1    rc 215   the unary minus is arithmetic, raised first
+sign('-1E1234567890') -> 93.943  rc 163   quoted, no arithmetic, reaches SIGN
+abs(17+'c')           -> 41.1    rc 215   the addition raises; nothing to do with ABS
+```
+
+**Wiring `41.1` into `SIGN` because its test group asserts it is wrong.**
+
+**(c) `FORMAT` rounds half-up away from zero, not banker's.** `format(2.5,,0)` is **3**, `format(3.5,,0)` is 4, `format(-2.5,,0)` is -3, `format(1.245,,2)` is 1.25.
+A banker's-rounding implementation gives 2 for the first.
+
+**(d) `FORMAT`'s `before=0` always fails, even for zero.** `format(1,0)` and `format(0,0)` are both **93.942**, "Integer part of "0" is too large for 0 spaces" -- while `format(0)` is `0`.
+
+**(e) `expp=0` suppresses exponential and BEATS `expt=0`, which forces it.**
+
+```
+format(12345,,,0)     = 12345          format(12345,,,,0)   = 1.2345E+4
+format(12345,,,0,0)   = 12345          format(12345,,,2,0)  = 1.2345E+04
+format(12345,,,4,0)   = 1.2345E+0004   format(1e10,,,,20)   = 10000000000
+```
+
+`FORMAT` also honours `NUMERIC FORM`: `format(1e10,,,,0)` is `1E+10` under SCIENTIFIC and `10E+9` under ENGINEERING.
+All four optional arguments reject negatives with 93.906, and `format(1,,,,)` with every optional explicitly omitted is legal at rc 0.
+
+**(f) `TRUNC` rounds its input to `DIGITS` FIRST, and never raises LOSTDIGITS.**
+Measured: `numeric digits 3; trunc(123456,2)` is **123000.00**. `trunc(1e20)` at digits 9 is `100000000000000000000` -- never exponential.
+`keyword/LOSTDIGITS.testGroup:388-391` asserts TRUNC does **not** raise LOSTDIGITS, with the reason in a source comment: the arithmetic builtins round their arguments before processing. **Nothing in `TRUNC.testGroup` says either thing.**
+
+**(g) `RANDOM`'s negative first argument is 40.33, not 40.13.**
+`random(-1)` is **40.33**, "RANDOM argument 1 ("-1") must be less than or equal to argument 2 ("")" -- and argument 2's insert is the **empty string** because it was omitted. The zero-or-positive argument (40.13) is the **seed**: `random(1,2,-1)`.
+Degenerate ranges are legal: `random(5,5)` is 5, `random(0,0)` is 0. `random(5,1)` is 40.33; `random(1.5)` is 40.12.
+
+**(h) Validation order, measured for `TRUNC` and `FORMAT` only: argument-2 TYPE > argument-1 TARGET > argument-2 RANGE.**
+
+```
+trunc('AB.CD','V') -> 40.12     format(1,'x')  -> 40.12
+trunc('AB.CD',-1)  -> 93.943    format('a',-1) -> 93.943
+trunc(1.5,-1)      -> 93.906    format(1,-1)   -> 93.906
+```
+
+*Flagged:* measured for those two only. No value-before-length inversion was found like `D2X`/`D2C`'s, but the analogous probe could not be constructed here -- **establish the order per builtin, as Task 5 had to.**
+
+**(i) D15 holds across `FORM` as well as `DIGITS`.** A value created under `DIGITS 9`/`SCIENTIFIC` keeps `1.23456789E+11` after either setting changes; recomputing gives `123456789012` or `123.456789E+9`.
+The exponential trigger is `exp >= DIGITS` positive and `exp >= 2*DIGITS+1` negative -- *flagged: a fit to four data points, not read from the source.*
+
+**What the suite checks:** 181 `expectSyntax` calls, 8 distinct numbers, against 876 `assertSame`. `111×93.942 · 34×93.906 · 19×93.943 · 11×40.12 · 2×41.1 · 1×40.33 · 1×40.3 · 1×40.13`. Per group: ABS `40.3 93.943` · FORMAT `93.906 93.942` · **MAX none** · **MIN none** · RANDOM `40.12 40.13 40.33` · SIGN `41.1 93.943` (both of which do not exercise SIGN) · TRUNC `40.12 93.943`.
+
+**Cross-file, and one false lead killed:** `class/RexxInteger.testGroup:301-307` requires `number~trunc` to be a RexxInteger equal to `integer~trunc(0)`, and `:415` requires MIN's result to contain no `E`; neither is in `TRUNC.testGroup`.
+**`bif/DATE.testGroup` has 725 word-boundary hits for `FORMAT` and zero `format(` calls** -- they are the English word and the date-option name. **A bare name grep is badly misleading for `FORMAT` and `MIN`; require the `(`.**
+
 - [ ] **Step 1: Build the probe table, including at least one D15 probe per numeric builtin**
 
 Every result here obeys D15: a value's rendering is fixed when the value is created.
