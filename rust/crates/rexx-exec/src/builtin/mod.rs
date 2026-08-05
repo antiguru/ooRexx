@@ -398,11 +398,11 @@ const IMPLEMENTED: &[Builtin] = &[
         run: convert::x2d,
     },
     Builtin {
-        // The one variadic row: `XRANGE_Max` is `argcount` itself
-        // (`BUILTIN(XRANGE)`), so no call is ever too long, and measured,
+        // `max: None` because `XRANGE_Max` is `argcount` itself
+        // (`BUILTIN(XRANGE)`), so no call is ever too long -- measured,
         // `xrange('a','b','c','d','e','f','g','h')` is eight bytes rather
         // than 40.4. Its minimum is 0, so `xrange()` is a call with no
-        // arguments and answers all 256 bytes.
+        // arguments at all and answers all 256 bytes.
         name: b"XRANGE",
         min: 0,
         max: None,

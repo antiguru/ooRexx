@@ -975,10 +975,11 @@ pub(crate) fn xrange(
             let Some(table) = character_class(text) else {
                 return Err(Raised::argument_not_a_pad_or_class_name(name, position, text).into());
             };
-            // A call that is nothing but one class name answers it directly.
-            if count == 1 {
-                return Ok(interp.text(table));
-            }
+            // The oracle answers a lone class name from here without running
+            // its second pass. That shortcut is not reproduced: it is an
+            // allocation the two-pass path makes anyway, and unlike the
+            // start/end shortcut below it changes no answer -- a one-argument
+            // call leaves the loop immediately and builds the same bytes.
             pieces.push(Piece::Class(table));
             continue;
         }
@@ -1185,6 +1186,50 @@ mod tests {
         assert_eq!(raised(b"B2X", &[Some(b"101 000")]), (93, 977, Vec::new()));
         assert_eq!(raised(b"B2X", &[Some(b"10 10")]), (93, 977, Vec::new()));
         assert_eq!(raised(b"B2X", &[Some(b"1 0 0000")]), (93, 977, Vec::new()));
+    }
+
+    /// The residue is checked **at every gap**, not only once at the end, and
+    /// these are the strings that can tell the two apart.
+    ///
+    /// Every string below ends on the residue its first group set, so the
+    /// end-of-string check passes on all of them; each breaks the residue at
+    /// an *interior* gap and is refused for that alone. Without a separate
+    /// case of this shape the interior check is unwatched -- deleting it
+    /// leaves every other assertion in this module green, and these strings
+    /// then convert where the oracle raises.
+    ///
+    /// The counts, for a reader checking the arithmetic against
+    /// [`validate_grouped`]: `41 4 1 42` reaches the gaps at totals 2, 3 and
+    /// 4 against a residue of 0, and ends at 6; `414 2 434` reaches them at
+    /// 3 and 4 against a residue of 1, and ends at 7; `1010 10 10` reaches
+    /// them at 4 and 6 against a residue of 0, and ends at 8.
+    ///
+    /// [`validate_grouped`]: super::validate_grouped
+    #[test]
+    fn the_residue_is_checked_at_every_gap_and_not_only_at_the_end() {
+        for subject in [b"41 4 1 42".as_slice(), b"414 2 434", b"41 4 1 4 2"] {
+            assert_eq!(
+                raised(b"X2C", &[Some(subject)]),
+                (93, 976, Vec::new()),
+                "{} broke the residue at an interior gap and was not refused",
+                String::from_utf8_lossy(subject)
+            );
+        }
+        for subject in [b"1010 10 10".as_slice(), b"1010 101 0101"] {
+            assert_eq!(
+                raised(b"B2X", &[Some(subject)]),
+                (93, 977, Vec::new()),
+                "{} broke the residue at an interior gap and was not refused",
+                String::from_utf8_lossy(subject)
+            );
+        }
+        // The adjacent successes, which is what pins the refusals to the
+        // interior gap rather than to having more than two groups: each of
+        // these holds the same residue at every gap it has.
+        assert_eq!(answer(b"X2C", &[b"4 14 24"]), b"\x04\x14\x24");
+        assert_eq!(answer(b"X2C", &[b"41 42 43"]), b"ABC");
+        assert_eq!(answer(b"B2X", &[b"101 0000 0000"]), b"500");
+        assert_eq!(answer(b"B2X", &[b"1010 1010 1010"]), b"AAA");
     }
 
     /// Whitespace is blank and tab; every other byte below `0x20`, and every
