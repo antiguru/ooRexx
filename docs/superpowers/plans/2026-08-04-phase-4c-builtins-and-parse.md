@@ -451,6 +451,14 @@ The split is by error timing, not by taste -- `bif/` groups test run-time errors
 `keyword/ADDRESS`'s real total is **36, not the 20 recorded earlier**, and `directives/ROUTINE` would have read as "zero error cases" on the wrong scan alone.
 **Scan for both forms whenever the subject is a directive or a keyword.**
 
+**Scope of the doubt, checked rather than assumed, because a justified retraction that is not bounded turns into blanket loss of confidence.**
+Per directory: `base/bif` **1,230 / 0**, `base/expressions` **405 / 33**, and `base/keyword` **282 / 400** -- the keyword group carries *more* of the unscanned form than the scanned one.
+
+**The committed L1 infrastructure is nevertheless sound, and this was verified rather than hoped.**
+`rexx-extract`'s keyword extractor already names `assertSyntaxError` as a `DropReason`: such bodies are **dropped and counted**, so `rows + dropped == calls` closes over them.
+Its own comment records that rewriting those calls to `NOP` to admit the bodies was measured and **declined**, because it "would report a body as passing after deleting the checks it was written to make."
+So the defect is confined to **survey prose in this plan**; `corpus/keyword-exempt.txt`'s 772 rows and Task 15's `base/bif` model are unaffected, the latter because `base/bif` carries none of the second form at all.
+
 **A third shape of false lead: looking in `bif/` alone, for anything that is both an instruction and a function.**
 Measured at Task 9/10: `bif/ADDRESS.testGroup` has **1 method and 2 assertions**, which reads as "essentially untested" -- while `keyword/ADDRESS.testGroup` has **97 methods and 222 assertions**, and tests the swap explicitly at `:1028`.
 `TRACE` has **no `bif/` group at all** and 77 methods under `keyword/`.
