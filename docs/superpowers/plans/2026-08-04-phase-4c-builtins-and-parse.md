@@ -771,24 +771,40 @@ Same bytes, three answers, and **`C2D` and `X2D` disagree with each other**.
 
 **(d) `BITAND`/`BITOR`/`BITXOR` with unequal lengths and no pad pass the longer string's tail through UNCHANGED.**
 `c2x(bitand('ffff'x,'00'x))` is **`00FF`** -- the tail survives. Supply a pad and it is combined: `c2x(bitand('ffff'x,'00'x,'00'x))` is `0000`. One argument is legal: `bitand('ffff'x)` is `FFFF`.
-**There is no default pad; there is a passthrough.** Defaulting to `'00'x` for `BITAND` is the obvious implementation and it is wrong.
+
+**The mechanism is a default pad equal to the operation's IDENTITY element** -- `0xff` for `BITAND`, `0x00` for `BITOR` and `BITXOR` -- which is *why* the tail survives.
+Measured: `bitor('ffff'x,'00'x)` and `bitxor('ffff'x,'00'x)` are both `FFFF`, and `bitand('0000'x,'ff'x)` is `0000`.
+Defaulting `BITAND`'s pad to `'00'x` is the obvious implementation and it is wrong; defaulting it to `'ff'x` is right.
+*An earlier revision of this step said "there is no default pad, there is a passthrough" -- right about the behaviour, wrong about the mechanism, and wrong in a way that misleads anyone reading the C++.*
 
 **(e) Hex and binary string whitespace is `{0x20, 0x09}` -- blank and tab only**, the same set as the word separators. `x2c('41'||'09'x||'42')` is `4142`; LF is 93.933. Leading or trailing whitespace is 93.931.
 
-**(f) Grouping: the FIRST group sets the residue, every LATER group must be an exact multiple** (2 for hex, 4 for binary), and the first group is left-padded rather than rejected.
+**(f) Grouping, read from `StringUtil::validateGroupedSet`: the scanner keeps a CUMULATIVE digit total**, records `total % modulus` as a residue at the first whitespace run, and requires that same residue at every later run and at end of string.
+Modulus is 2 for hex, 4 for binary; the first group is left-padded rather than rejected.
 `x2c('414')` is `0414`; `x2c('4 1424')` is `041424`; `x2c('414 2434')` is `04142434`; `x2c('414 243')` is 93.976.
-*This rule is inferred from eight cases, not read from `validateGroupedSet` -- confirm it against the C++ before relying on it.*
+*Outcome-equivalent to "the first group sets the residue and later groups are exact multiples", which is how an earlier revision inferred it from eight cases -- but the state is a running total, not a per-group check, and an implementation written from the inferred rule will diverge on inputs the eight cases did not reach.*
 
 **(g) `X2C` and `X2B` disagree on odd input.** `x2c('414')` pads to a whole byte (`0414`); `x2b('414')` gives 12 bits, unpadded. `b2x` pads to a multiple of 4 bits.
 
 **(h) `XRANGE` is variadic over PAIRS and a class name consumes one slot.**
-`xrange('a','b','c','d')` is `abcd` -- two ranges concatenated. `xrange('digit','z')` is **not** digits-through-`z`: `'z'` starts a *new* range running to `0xFF`. `length(xrange())` is 256.
+`xrange('a','b','c','d')` is `abcd` -- two ranges concatenated. `length(xrange())` is 256.
+
+**`xrange('digit','z')` is 134 bytes, `0x7A` through `0xFF`, and the digits are DISCARDED** -- not prepended, not a range from `0`.
+Measured: the result begins `7A7B7C7D`, which is `0x7A..0xFF` exactly.
+`BUILTIN(XRANGE)`'s `argcount <= 2` early return throws away everything accumulated before the final pair; **three arguments keep them** (`length(xrange('digit','z','a','c'))` is 399).
+*An earlier revision said `'z'` "starts a new range to `0xFF`", which reads as though the digits survive in front of it. They do not.*
 The 12 POSIX class names are case-insensitive (`BuiltinFunctions.cpp:1639-1648`), and **`cntrl` contains a leading NUL** -- `length(xrange('cntrl'))` is 33 and it begins `00010203`, so anything using `strlen` truncates it to nothing.
 Argument asymmetry: argument 1 takes a class name **or** a single character (40.28); argument 2 takes a single character **only** (40.23).
 
 **Validation order: every `40.x` argument-conversion check precedes every `93.9xx` content check, on all arguments.**
 `d2c('abc','def')` is **40.12**, not 93.929 -- the *length*'s type error beats the *value*'s. `x2d('ZZ','zz')` is 40.12 while `x2d('ZZ',4)` is 93.933.
 `40.x` is rc **216**; `93.9xx` is rc **163**.
+
+**But within the `93.9xx` family the two pairs order oppositely, so there is no single rule to carry.**
+Measured: `d2c('abc',-1)` is **93.929** -- `D2X`/`D2C` check the *value* before the *length*, where `C2D`/`X2D` do the reverse.
+Establish the order per builtin rather than per family.
+
+**A `(min, max)` of `(1, 1)` can never reach 40.5.** `b2x(,'x')` is **40.4**, too many arguments, because the omitted first position is still a position. Do not write a 40.5 path for a single-argument builtin.
 
 **What the suite checks, so you know what it cannot catch.** 212 `expectSyntax` calls over 17 distinct numbers across the twelve groups, against 899 `assertSame`.
 Gaps, each established with a positive control: **`93.977` (binary grouping) is raised by the implementation and tested nowhere** in `ootest/base`, though its hex twin 93.976 is tested in four places; `BITAND`/`BITOR` test exactly one error number each and nothing asserts their 40.4 at four arguments; `C2X` tests only 40.4.
