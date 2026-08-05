@@ -1362,6 +1362,26 @@ above.
   involved, and no re-derivation from the oracle can close it -- the two
   processes have different amounts of address space to spend, by design.
 
+  OWNERS, because the two causes have different ones and a gap with no owner
+  is how the compound-DO defect drifted across two phases before the 4b gate
+  had to rule on it.
+
+  FIRST CAUSE: 4c Task 13, which restructures resolve_and_run_call anyway
+  for the ::routine step and is the only remaining 4c task whose file list
+  already contains run.rs. The fix is to render an argument only when
+  something will print it. The measurement above says that closes the abort
+  entirely; what it does not say is which of the ~15 sites need the same
+  guard, and a wrong guard silently drops a trace line, so the task owes a
+  trace witness per site it changes rather than a blanket edit.
+
+  SECOND CAUSE: NOT 4c's, and not closable inside Phase 4. It is a direct
+  consequence of D19's sized-thread choice, so it belongs to whoever
+  reopens D19 -- which the 4b plan records as a decision that also carries
+  the Rc<Program> risk, so it is not reopened casually. Stated here rather
+  than left unassigned: Phase 4 ships this deliberately, and the honest
+  summary is that under an identical `ulimit -v` this crate has about half
+  the oracle's allocatable address space.
+
 
 
 CLOSED DEFECTS -- measured wrong, measured again, now matching

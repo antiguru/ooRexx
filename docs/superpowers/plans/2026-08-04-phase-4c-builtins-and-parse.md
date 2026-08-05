@@ -1039,7 +1039,24 @@ Relax it to permit `::ROUTINE` and keep the panic for the rest.
 
 `WITNESSED_PREFIX_COUNT` (`:551`) and `OUT_OF_SCOPE_PREFIX_COUNT` (`:555`) each move by two.
 
-- [ ] **Step 9: Run the shared verify block and commit**
+- [ ] **Step 9: Stop rendering an argument nobody will print**
+
+**Inherited from Task 3's fix round, and assigned here because this task restructures `resolve_and_run_call` anyway and is the last 4c task whose file list already contains `run.rs`.**
+
+`resolve_and_run_call` renders every evaluated argument to an owned `Vec` purely to hand it to `trace_argument`, which discards it unless the trace mode asks for intermediates.
+A value of any size is therefore copied whether or not anything will print it, the copy is unguarded, and it **aborts the process** rather than raising.
+Measured at the project's own `ulimit -v 1048576`: `say length(copies('a',400000000))` is `400000000` at rc 0 on the oracle and **SIGABRT at rc 134** here.
+
+**Measured as the whole of this cause:** with the argument render placed behind `if self.trace_mode().intermediates`, both 300000000 and 400000000 return rc 0 with the oracle's answer and no size aborts at all.
+That experiment was run and reverted, not shipped.
+
+**What the measurement does not say is which of the roughly fifteen similar sites need the same guard, and a wrong guard silently drops a trace line.**
+So: **owe a trace witness for every site you change**, and change no site you cannot witness.
+The assignment path's own `>>>` render is the same shape.
+
+The **second** cause in that gap row -- `ulimit -v` limiting address space while `INTERPRETER_STACK_BYTES` reserves 512 MiB of it -- is **not yours and not closable in Phase 4**. It follows from D19's sized-thread choice. Do not attempt it, and do not let its presence stop you closing the first.
+
+- [ ] **Step 10: Run the shared verify block and commit**
 
 ---
 
