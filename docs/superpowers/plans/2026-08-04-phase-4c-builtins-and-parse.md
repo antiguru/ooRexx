@@ -1785,6 +1785,13 @@ So do `tests/coverage.rs` and `tests/collect_stress.rs`.
 
 Add `phase_4c_subset_matches_the_committed_list` to `coverage.rs` -- the pin 4b's gate found missing for `phase-4b.txt`, where **nine of twelve entries were deletable with everything green**, including one criterion's only witness.
 
+**Two thirds of this step are already done, by the tasks that needed them.**
+Task 7 added the `coverage.rs` pin when it created `phase-4c.txt`.
+Task 9 added `phase-4c.txt` to `tests/corpus.rs` after finding that Tasks 7 and 8's witnesses were being *parsed* by `coverage.rs` and *run* by nothing, while `corpus.rs`'s own module doc said otherwise -- one of its mutations was invisible to the whole suite until the wiring landed.
+Deferring the wiring to this task was the error: a witness that does not run is not a witness, and four of them sat inert across three tasks.
+**What is left here is `tests/collect_stress.rs`**, plus confirming the other two rather than redoing them.
+The corpus gate moved **42 -> 47** at Task 9; any criterion quoting 42 is pre-Task-9.
+
 **Corpus rules for 4c, written into `corpus/README.md` beside the `DO OVER` one:** no `RANDOM`, no `DATE`, no `TIME` (D11); `QUEUED()` single-program only; no dependence on external routine resolution (Task 13); no `DO OVER` on a stem (D3).
 
 - [ ] **Step 5: Write `mutate-4c.sh`**
