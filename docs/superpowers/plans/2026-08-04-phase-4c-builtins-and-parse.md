@@ -1798,6 +1798,16 @@ The corpus gate moved **42 -> 47** at Task 9; any criterion quoting 42 is pre-Ta
 
 Carry 4a's and 4b's guard: exact-match, exactly-once application; a baseline before the first mutation and after the last restore; three-way `PASSED`/`DIVERGED`/`INFRA_FAILURE` that never folds an infrastructure failure into either bucket; a non-zero test-run count per target, because `cargo test <name>` exits 0 when it matches nothing.
 
+**`--no-fail-fast` is mandatory, and its absence has already produced false coverage claims in this phase.**
+`cargo test --workspace` stops after the first test binary that fails, so under a mutation the run is **truncated at the first catcher** and every later binary silently never executes.
+That is invisible in a green baseline -- the truncation only happens when a mutation bites -- so the flag looks unnecessary right up to the moment it matters.
+Measured at Task 9: three of six "caught by this test and nothing else" claims were false, and re-running with `--no-fail-fast` found `corpus_differential` catching two of them and `keyword_assertions::the_exempt_set_matches_the_current_failures` catching a third.
+**Assert the binary count**, baseline against mutated, so a truncated run is an `INFRA_FAILURE` rather than a survivor or a clean catch.
+
+**Earlier tasks' uniqueness claims were taken with the truncating command and are not to be trusted as stated.**
+Tasks 5, 6 and 7 each recorded a "nothing else catches this" result; Task 8's scoped re-review used `--no-fail-fast` and stands, and Task 9's were re-run.
+Re-verify the rest here rather than inheriting them -- the failure is one-directional (it over-credits a new test with unique coverage, never under-credits), so no *correctness* conclusion rests on it, but the coverage story does.
+
 **Declare each mutation's outcome per instrument in advance**, so an unexpected catch fails as loudly as an unexpected survival.
 
 **A `PASSED`/`PASSED` declaration needs a written justification in the script**, naming the instrument that *should* have caught it and why it cannot.
