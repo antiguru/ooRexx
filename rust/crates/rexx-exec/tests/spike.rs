@@ -51,7 +51,11 @@ const SPIKE_PATH: &str = "/nonexistent/spike-program.rex";
 /// Oracle, `say 'hello'`: stdout `hello\n`, rc 0.
 #[test]
 fn say_hello_prints_hello() {
-    let outcome = run_program(SPIKE_PATH, b"say 'hello'\n".to_vec());
+    let outcome = run_program(
+        SPIKE_PATH,
+        b"say 'hello'\n".to_vec(),
+        rexx_exec::Invocation::none(),
+    );
     assert_eq!(outcome.stdout, b"hello\n");
     assert_eq!(outcome.stderr, b"");
     assert_eq!(outcome.exit_code, 0);
@@ -73,6 +77,7 @@ fn a_variable_round_trips_through_its_slot() {
     let outcome = run_program(
         SPIKE_PATH,
         b"greeting = 'hello'\nsay greeting || ', world'\n".to_vec(),
+        rexx_exec::Invocation::none(),
     );
     assert_eq!(outcome.stdout, b"hello, world\n");
     assert_eq!(outcome.exit_code, 0);
@@ -83,7 +88,11 @@ fn a_variable_round_trips_through_its_slot() {
 /// Oracle, `say nosuchvariable`: stdout `NOSUCHVARIABLE\n`, rc 0.
 #[test]
 fn an_unset_variable_reads_as_its_own_name() {
-    let outcome = run_program(SPIKE_PATH, b"say nosuchvariable\n".to_vec());
+    let outcome = run_program(
+        SPIKE_PATH,
+        b"say nosuchvariable\n".to_vec(),
+        rexx_exec::Invocation::none(),
+    );
     assert_eq!(outcome.stdout, b"NOSUCHVARIABLE\n");
     assert_eq!(outcome.exit_code, 0);
 }
@@ -113,7 +122,11 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
         !(157..=253).contains(&NOT_IMPLEMENTED_EXIT),
         "256 - major lives in 157..=253 for majors 3 to 99"
     );
-    let outcome = run_program(SPIKE_PATH, b"q~append(1)\n".to_vec());
+    let outcome = run_program(
+        SPIKE_PATH,
+        b"q~append(1)\n".to_vec(),
+        rexx_exec::Invocation::none(),
+    );
     assert_eq!(outcome.exit_code, NOT_IMPLEMENTED_EXIT);
     assert_eq!(
         String::from_utf8(outcome.stderr).expect("the loud message is ASCII"),
@@ -176,7 +189,11 @@ fn the_loud_failure_code_cannot_be_confused_with_a_rexx_error() {
 fn a_loud_failure_message_does_not_grow_with_the_expression() {
     const BOUND: usize = 300;
 
-    let small = run_program(SPIKE_PATH, b"say 1~a\n".to_vec());
+    let small = run_program(
+        SPIKE_PATH,
+        b"say 1~a\n".to_vec(),
+        rexx_exec::Invocation::none(),
+    );
     assert_eq!(small.exit_code, NOT_IMPLEMENTED_EXIT);
 
     let mut deep = b"say 1".to_vec();
@@ -184,7 +201,7 @@ fn a_loud_failure_message_does_not_grow_with_the_expression() {
         deep.extend_from_slice(b"~a");
     }
     deep.push(b'\n');
-    let deep = run_program(SPIKE_PATH, deep);
+    let deep = run_program(SPIKE_PATH, deep, rexx_exec::Invocation::none());
     assert_eq!(deep.exit_code, NOT_IMPLEMENTED_EXIT);
 
     assert_eq!(
@@ -252,7 +269,7 @@ fn records_the_stack_cost_of_one_eval_frame() {
     }
     program.push(b'\n');
 
-    let outcome = run_program(SPIKE_PATH, program);
+    let outcome = run_program(SPIKE_PATH, program, rexx_exec::Invocation::none());
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
         outcome.stdout, b"a\n",
@@ -337,7 +354,11 @@ fn records_the_stack_cost_of_one_eval_frame() {
 /// well-formed report.
 #[test]
 fn a_raised_condition_reports_the_failing_clause() {
-    let outcome = run_program(SPIKE_PATH, b"say 'a'\nsay 'b'\nsay 2 & 1\n".to_vec());
+    let outcome = run_program(
+        SPIKE_PATH,
+        b"say 'a'\nsay 'b'\nsay 2 & 1\n".to_vec(),
+        rexx_exec::Invocation::none(),
+    );
 
     assert_eq!(outcome.stdout, b"a\nb\n");
     assert_eq!(outcome.exit_code, 256 - 34);
@@ -372,6 +393,7 @@ fn unbounded_call_recursion_raises_11_1_rather_than_overflowing() {
     let outcome = run_program(
         SPIKE_PATH,
         b"n = 0\ncall sub\nexit\nsub:\nn = n + 1\ncall sub\nreturn\n".to_vec(),
+        rexx_exec::Invocation::none(),
     );
 
     assert_eq!(outcome.exit_code, 256 - 11);

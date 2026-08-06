@@ -1013,7 +1013,11 @@ mod tests {
         ];
         for (template, expected) in rows {
             let source = format!("{d}{template}{show3}");
-            let outcome = crate::run_program("/tmp/parse-dispatch.rex", source.into_bytes());
+            let outcome = crate::run_program(
+                "/tmp/parse-dispatch.rex",
+                source.into_bytes(),
+                crate::Invocation::none(),
+            );
             assert_eq!(
                 String::from_utf8_lossy(&outcome.stdout),
                 *expected,
@@ -1042,7 +1046,11 @@ mod tests {
         ];
         for (template, expected) in pairs {
             let source = format!("{d}{template}{show2}");
-            let outcome = crate::run_program("/tmp/parse-dispatch.rex", source.into_bytes());
+            let outcome = crate::run_program(
+                "/tmp/parse-dispatch.rex",
+                source.into_bytes(),
+                crate::Invocation::none(),
+            );
             assert_eq!(
                 String::from_utf8_lossy(&outcome.stdout),
                 *expected,
@@ -1070,6 +1078,7 @@ mod tests {
         let outcome = crate::run_program(
             "/tmp/parse-source.rex",
             b"parse source s\nsay s\nparse version v\nsay v\n".to_vec(),
+            crate::Invocation::none(),
         );
         let mut expected = b"LINUX COMMAND /tmp/parse-source.rex\n".to_vec();
         expected.extend_from_slice(VERSION);
@@ -1093,7 +1102,11 @@ mod tests {
             "numeric digits 2\nparse value 'abc' with p +(100) q\n",
         ];
         for source in refused {
-            let outcome = crate::run_program("/tmp/parse-26-4.rex", source.as_bytes().to_vec());
+            let outcome = crate::run_program(
+                "/tmp/parse-26-4.rex",
+                source.as_bytes().to_vec(),
+                crate::Invocation::none(),
+            );
             assert_eq!(outcome.exit_code, 230, "{source}");
             assert!(
                 String::from_utf8_lossy(&outcome.stderr).contains(
@@ -1106,6 +1119,7 @@ mod tests {
         let accepted = crate::run_program(
             "/tmp/parse-26-4.rex",
             b"parse value 'abcdefghij' with p +(100) q\nsay '['||p||']'\n".to_vec(),
+            crate::Invocation::none(),
         );
         assert_eq!(accepted.exit_code, 0);
         assert_eq!(

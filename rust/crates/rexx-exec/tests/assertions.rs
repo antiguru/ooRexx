@@ -660,7 +660,7 @@ fn exempt_entry(row: &AssertionRow, occurrence: usize) -> Option<&'static Exempt
 
 /// Runs one row's program and classifies what happened.
 fn evaluate_row(row: &AssertionRow) -> RowOutcome {
-    let outcome = run_program(ROW_PATH, program_for(row));
+    let outcome = run_program(ROW_PATH, program_for(row), rexx_exec::Invocation::none());
     classify(row, outcome)
 }
 

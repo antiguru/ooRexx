@@ -216,7 +216,11 @@ fn check_witness(name: &str, program_path: &Path) {
 
     let source = std::fs::read(program_path)
         .unwrap_or_else(|e| panic!("{}: unreadable ({e})", program_path.display()));
-    let outcome = run_program(&program_path.to_string_lossy(), source);
+    let outcome = run_program(
+        &program_path.to_string_lossy(),
+        source,
+        rexx_exec::Invocation::none(),
+    );
 
     assert_eq!(outcome.stdout, expected.stdout, "{name}: stdout");
     // DEVIATION 0: normalised on this comparison only, never on the

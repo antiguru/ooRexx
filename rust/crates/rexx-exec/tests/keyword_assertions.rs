@@ -289,7 +289,11 @@ fn parse_loud(stderr: &[u8]) -> (String, Option<String>) {
 
 /// Runs one body and classifies what happened.
 fn evaluate(body: &KeywordBody) -> RunOutcome {
-    classify(run_program(BODY_PATH, body.program.clone().into_bytes()))
+    classify(run_program(
+        BODY_PATH,
+        body.program.clone().into_bytes(),
+        rexx_exec::Invocation::none(),
+    ))
 }
 
 /// The classification step alone, so the constructed witnesses below can

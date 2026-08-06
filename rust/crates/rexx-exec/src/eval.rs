@@ -1680,7 +1680,11 @@ mod tests {
     /// survivable levels at that per-level cost).
     #[test]
     fn eval_survives_exactly_max_eval_depth_terms_and_prints_the_oracles_own_answer() {
-        let outcome = crate::run_program("depth-boundary-at.rex", chain(MAX_EVAL_DEPTH));
+        let outcome = crate::run_program(
+            "depth-boundary-at.rex",
+            chain(MAX_EVAL_DEPTH),
+            crate::Invocation::none(),
+        );
         assert_eq!(
             outcome.exit_code,
             0,
@@ -1701,7 +1705,11 @@ mod tests {
     /// this one.
     #[test]
     fn eval_raises_11_1_exactly_one_term_past_max_eval_depth() {
-        let outcome = crate::run_program("depth-boundary-past.rex", chain(MAX_EVAL_DEPTH + 1));
+        let outcome = crate::run_program(
+            "depth-boundary-past.rex",
+            chain(MAX_EVAL_DEPTH + 1),
+            crate::Invocation::none(),
+        );
         assert_eq!(
             outcome.exit_code,
             245,
@@ -1726,6 +1734,7 @@ mod tests {
         let outcome = crate::run_program(
             "call-expr-basic.rex",
             b"say f(1) + 1\nexit\nf: return 41\n".to_vec(),
+            crate::Invocation::none(),
         );
         assert_eq!(
             outcome.exit_code,
@@ -1748,7 +1757,11 @@ mod tests {
     /// `corpus/builtin-status.txt`'s to record, over every builtin at once.
     #[test]
     fn an_unresolvable_name_still_fails_loudly_naming_4c() {
-        let outcome = crate::run_program("call-expr-builtin.rex", b"say zorkolo('abc')\n".to_vec());
+        let outcome = crate::run_program(
+            "call-expr-builtin.rex",
+            b"say zorkolo('abc')\n".to_vec(),
+            crate::Invocation::none(),
+        );
         assert_eq!(outcome.exit_code, crate::NOT_IMPLEMENTED_EXIT);
         assert!(
             String::from_utf8_lossy(&outcome.stderr).contains("4c"),
@@ -1772,6 +1785,7 @@ mod tests {
         let outcome = crate::run_program(
             "call-expr-literal.rex",
             b"say \"f\"(1)\nexit\nf: return 41\n".to_vec(),
+            crate::Invocation::none(),
         );
         assert_eq!(outcome.exit_code, crate::NOT_IMPLEMENTED_EXIT);
         assert!(
@@ -1794,6 +1808,7 @@ mod tests {
         let outcome = crate::run_program(
             "call-expr-no-data.rex",
             b"say f(1)\nexit\nf: return\n".to_vec(),
+            crate::Invocation::none(),
         );
         assert_eq!(outcome.exit_code, 212, "256 - 44");
         let stderr = String::from_utf8_lossy(&outcome.stderr);
@@ -1823,6 +1838,7 @@ mod tests {
         let outcome = crate::run_program(
             "call-expr-exit.rex",
             b"say f(1)\nexit 9\nf: exit 5\n".to_vec(),
+            crate::Invocation::none(),
         );
         assert_eq!(outcome.exit_code, 5, "stderr: {:?}", outcome.stderr);
         assert_eq!(outcome.stdout, b"");
@@ -1850,6 +1866,7 @@ mod tests {
         let outcome = crate::run_program(
             "call-expr-fall-off.rex",
             b"say f(1)\nexit\nf: nop\n".to_vec(),
+            crate::Invocation::none(),
         );
         assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
         assert_eq!(outcome.stdout, b"");
@@ -1865,6 +1882,7 @@ mod tests {
         let outcome = crate::run_program(
             "call-expr-result.rex",
             b"result = 'before'\nzz = f(1)\nsay result\nexit\nf: return 99\n".to_vec(),
+            crate::Invocation::none(),
         );
         assert_eq!(
             outcome.exit_code,

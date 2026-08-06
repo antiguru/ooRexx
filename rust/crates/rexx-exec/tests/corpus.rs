@@ -225,7 +225,7 @@ fn run_rust(path: &Path) -> Outcome {
     let path_str = path
         .to_str()
         .unwrap_or_else(|| panic!("corpus path {} is not valid UTF-8", path.display()));
-    rexx_exec::run_program(path_str, text)
+    rexx_exec::run_program(path_str, text, rexx_exec::Invocation::none())
 }
 
 /// One corpus program that disagreed with the oracle.

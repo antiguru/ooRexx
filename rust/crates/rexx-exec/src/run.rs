@@ -11622,7 +11622,11 @@ mod tests {
     /// directory: rc 158 and these two lines.
     #[test]
     fn use_local_as_a_programs_first_instruction_raises_98_993() {
-        let outcome = crate::run_program("/tmp/use-local.rex", b"use local outer\n".to_vec());
+        let outcome = crate::run_program(
+            "/tmp/use-local.rex",
+            b"use local outer\n".to_vec(),
+            crate::Invocation::none(),
+        );
         assert_eq!(outcome.exit_code, 158, "256 - 98");
         let stderr = String::from_utf8_lossy(&outcome.stderr);
         assert!(
@@ -12960,7 +12964,8 @@ mod tests {
     #[test]
     fn a_builtin_called_with_too_few_arguments_reports_the_oracles_40_3() {
         let path = "/tmp/length-arity.rex";
-        let outcome = crate::run_program(path, b"say length()\n".to_vec());
+        let outcome =
+            crate::run_program(path, b"say length()\n".to_vec(), crate::Invocation::none());
         assert_eq!(outcome.exit_code, 216, "256 - 40");
         assert_eq!(
             String::from_utf8_lossy(&outcome.stderr),

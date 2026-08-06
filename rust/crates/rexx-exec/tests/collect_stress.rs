@@ -145,8 +145,8 @@ fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
             .to_str()
             .unwrap_or_else(|| panic!("corpus path {} is not valid UTF-8", abs.display()));
 
-        let plain = run_program(path_str, text.clone());
-        let stress = run_program_collect_every_alloc(path_str, text);
+        let plain = run_program(path_str, text.clone(), rexx_exec::Invocation::none());
+        let stress = run_program_collect_every_alloc(path_str, text, rexx_exec::Invocation::none());
 
         if stress.collections == 0 {
             zero_collection_programs.push(rel_path.clone());
@@ -239,7 +239,11 @@ fn a_clause_value_survives_the_handler_its_boundary_runs() {
     let mut total_collections: u64 = 0;
     for (name, text, expected) in rows {
         let path = format!("<clause-value-rooting: {name}>");
-        let stress = run_program_collect_every_alloc(&path, text.as_bytes().to_vec());
+        let stress = run_program_collect_every_alloc(
+            &path,
+            text.as_bytes().to_vec(),
+            rexx_exec::Invocation::none(),
+        );
         assert_eq!(
             String::from_utf8_lossy(&stress.stdout),
             expected,

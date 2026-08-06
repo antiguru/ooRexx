@@ -57,6 +57,11 @@ mod stem;
 mod queue;
 use queue::Queue;
 
+// What a command line supplies to a top-level program: the one argument string
+// it can carry, and how a list of words becomes that string.
+mod invocation;
+pub use invocation::{Invocation, join_command_line};
+
 // The per-body resolution plan (D16): `Plan`, `BodyKey`, `ProgramId`, the
 // plan cache, and the full name-resolution order (plan, then `extra`, then
 // growth).
@@ -1329,9 +1334,15 @@ struct Interp {
     /// callee's activation exists: the arguments are evaluated in the caller,
     /// which is where the argument expressions' own variables live.
     ///
-    /// Empty for the top-level program, which is not a wrong answer but the
-    /// right one -- measured, `use arg p` as a program's own first clause
-    /// binds nothing and `p` reads as `P`.
+    /// **The top-level program is a call too, and its caller is the command
+    /// line.** `execute` fills this from the [`Invocation`] before running the
+    /// main body, with the program's own path as the name and the command
+    /// line's one argument string -- or nothing at all, when there was no
+    /// argument. Measured, `use arg p` as a program's own first clause: with
+    /// no argument `p` reads as `P`, with `rexx p.rex hello` it reads as
+    /// `hello`, and with `rexx p.rex ""` it reads as the null string. So an
+    /// empty context here is the right answer for one specific invocation and
+    /// the wrong answer for the other two.
     call_context: CallContext,
     /// The in-process external data queue (I15): every line
     /// `PUSH`/`QUEUE` has written. See `queue.rs`'s own module doc for the
@@ -1382,6 +1393,12 @@ struct CallContext {
     /// The resolved routine name, as errors 40.3 and 40.4 spell it --
     /// measured, `Not enough arguments in invocation of SUB2`, the label's
     /// own upcased spelling.
+    ///
+    /// At the top level it is the **program's own path**, not a label: with no
+    /// argument supplied, `use strict arg p` as a program's first clause is
+    /// measured as `Error 40.3: Not enough arguments in invocation of
+    /// /abs/path/p.rex; minimum expected is 1.`, and `use strict arg` with an
+    /// argument supplied is the matching 40.4 naming the same path.
     name: Vec<u8>,
     /// The arguments in source order, an omitted position (`call sub 1,,3`)
     /// left as `None` rather than closed up. Measured: that call into `use
@@ -1720,9 +1737,22 @@ impl Interp {
 /// separate from `ProgramSource` because the parser has no use for it. The
 /// caller that read the file is the one that knows; `rexx-run` canonicalises
 /// before calling.
-pub fn run_program(path: &str, text: Vec<u8>) -> Outcome {
+///
+/// `invocation` is what the command line supplied -- see [`Invocation`], whose
+/// own doc carries the measured argument model. A caller with nothing to
+/// supply passes [`Invocation::none`], which is what a program run as
+/// `rexx p.rex` gets and is not the same as one run as `rexx p.rex ""`.
+///
+/// **A third parameter rather than a sibling entry point.** The alternative
+/// considered was leaving this signature alone and adding
+/// `run_program_with_arguments` beside it, which is cheaper to land and wrong
+/// for the reason `run_program_collect_every_alloc`'s own doc states about
+/// itself: this crate has one front door, and a second one is a second thing
+/// for every future caller to choose between. Widening the parameter list once
+/// costs a mechanical edit at every existing call site and nothing afterward.
+pub fn run_program(path: &str, text: Vec<u8>, invocation: Invocation) -> Outcome {
     let path = path.to_string();
-    on_interpreter_thread(move || execute(&path, text, false))
+    on_interpreter_thread(move || execute(&path, text, false, invocation))
 }
 
 /// `run_program`, except that `Heap::collect` runs after every allocation
@@ -1745,10 +1775,21 @@ pub fn run_program(path: &str, text: Vec<u8>) -> Outcome {
 /// something exercised throughout the phase. Say that plainly wherever this
 /// criterion's result is reported, rather than letting a passing gate imply
 /// otherwise.
+///
+/// It takes an [`Invocation`] for the same reason it takes a `path` and a
+/// `text`: it is a mode of `execute`, not a narrower entry point, and a mode
+/// that could not run a program the ordinary front door can run would be
+/// unable to stress exactly the programs whose rooting is least obvious --
+/// the argument string is an `ObjRef` this crate has to keep reachable for the
+/// whole run, which is the kind of thing this mode exists to check.
 #[doc(hidden)]
-pub fn run_program_collect_every_alloc(path: &str, text: Vec<u8>) -> Outcome {
+pub fn run_program_collect_every_alloc(
+    path: &str,
+    text: Vec<u8>,
+    invocation: Invocation,
+) -> Outcome {
     let path = path.to_string();
-    on_interpreter_thread(move || execute(&path, text, true))
+    on_interpreter_thread(move || execute(&path, text, true, invocation))
 }
 
 /// Runs `body` on a thread with `INTERPRETER_STACK_BYTES` of stack.
@@ -1775,7 +1816,12 @@ fn on_interpreter_thread(body: impl FnOnce() -> Outcome + Send + 'static) -> Out
 }
 
 /// Everything that happens on the interpreter thread: parse, run, report.
-fn execute(path: &str, text: Vec<u8>, collect_every_alloc: bool) -> Outcome {
+fn execute(
+    path: &str,
+    text: Vec<u8>,
+    collect_every_alloc: bool,
+    invocation: Invocation,
+) -> Outcome {
     let program = match parse_program(text) {
         Ok(program) => program,
         // **A top-level parse failure stays loud, and that was checked rather
@@ -1821,6 +1867,25 @@ fn execute(path: &str, text: Vec<u8>, collect_every_alloc: bool) -> Outcome {
     interp.program_path = path.to_string();
     if collect_every_alloc {
         interp.enable_stress_collect();
+    }
+    // The command line is the top-level program's caller, so what it supplied
+    // goes into the same `call_context` a `CALL` fills -- see that field's own
+    // doc for what reads it and for the three measured invocations that tell
+    // "no argument" from "one empty argument" apart.
+    interp.call_context.name = path.as_bytes().to_vec();
+    if let Some(argument) = invocation.argument() {
+        let value = interp.text(&argument);
+        // Rooted with a `push_temp` taken before `run`, which is what makes it
+        // outlive every clause: `step_in_temps_frame` truncates the
+        // temporaries stack back to a watermark it takes on entry, and every
+        // such watermark sits above this push. This is the same mechanism
+        // `resolve_and_run_call` uses to keep a call's own arguments reachable
+        // (`run.rs`, the `push_temp(argument.value())` beside the argument
+        // list it builds); `call_context` itself is not walked by the
+        // collector, so without this the value is unreachable the first time
+        // anything allocates.
+        interp.roots.push_temp(value);
+        interp.call_context.arguments = vec![Some(Argument::Value(value))];
     }
     let result = interp.run(program);
     let stack = interp.stack_span();
@@ -1978,6 +2043,7 @@ mod tests {
         let outcome = run_program(
             TEST_PATH,
             b"interpret \"zork = 42\"\ninterpret \"say zork\"\n".to_vec(),
+            crate::Invocation::none(),
         );
         assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
         assert_eq!(outcome.stdout, b"42\n");
@@ -2024,7 +2090,7 @@ mod tests {
                         interpret \"say zork\"\n\
                         zzz = zzz || '!'\n\
                         interpret \"say zzz\"\n";
-        let outcome = run_program(TEST_PATH, program.to_vec());
+        let outcome = run_program(TEST_PATH, program.to_vec(), crate::Invocation::none());
         assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
         assert_eq!(
             outcome.stdout,
@@ -2052,7 +2118,7 @@ mod tests {
                         interpret \"say 'inside'\"\n\
                         interpret \"exit\"\n\
                         say 'after'\n";
-        let outcome = run_program(TEST_PATH, program.to_vec());
+        let outcome = run_program(TEST_PATH, program.to_vec(), crate::Invocation::none());
         assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
         assert_eq!(outcome.stdout, b"before\ninside\n");
     }
@@ -2107,7 +2173,7 @@ mod tests {
                         interpret \"do jj = 1 to 1; say 2 & 1; end\"\n\
                         end\n\
                         end\n";
-        let outcome = run_program(TEST_PATH, program.to_vec());
+        let outcome = run_program(TEST_PATH, program.to_vec(), crate::Invocation::none());
         assert_eq!(outcome.exit_code, 222);
         assert_eq!(outcome.stdout, b"");
         assert_eq!(
@@ -2195,7 +2261,11 @@ mod tests {
             ),
         ];
         for (index, (program, expected)) in rows.iter().enumerate() {
-            let outcome = run_program(TEST_PATH, program.as_bytes().to_vec());
+            let outcome = run_program(
+                TEST_PATH,
+                program.as_bytes().to_vec(),
+                crate::Invocation::none(),
+            );
             assert_eq!(
                 String::from_utf8(outcome.stderr).unwrap(),
                 expected.replace("{path}", TEST_PATH),
@@ -2231,7 +2301,11 @@ mod tests {
                        do\n\
                        interpret \"select; when 1 = 1 then nop; end; nop\"\n\
                        end\n";
-        let outcome = run_program(TEST_PATH, program.as_bytes().to_vec());
+        let outcome = run_program(
+            TEST_PATH,
+            program.as_bytes().to_vec(),
+            crate::Invocation::none(),
+        );
         assert_eq!(outcome.exit_code, 0);
         assert_eq!(outcome.stdout, b"");
         assert_eq!(
@@ -2273,6 +2347,7 @@ mod tests {
         let outcome = run_program(
             TEST_PATH,
             b"say 1\ninterpret \"do forever then\"\n".to_vec(),
+            crate::Invocation::none(),
         );
         assert_eq!(outcome.exit_code, 229);
         assert_eq!(outcome.stdout, b"1\n");
@@ -2289,7 +2364,11 @@ mod tests {
             )
         );
 
-        let outcome = run_program(TEST_PATH, b"say 1\ninterpret \"if\"\n".to_vec());
+        let outcome = run_program(
+            TEST_PATH,
+            b"say 1\ninterpret \"if\"\n".to_vec(),
+            crate::Invocation::none(),
+        );
         assert_eq!(outcome.exit_code, 221);
     }
 
@@ -2321,8 +2400,8 @@ mod tests {
         let mut then_a_fragment = alone.clone();
         then_a_fragment.extend_from_slice(b"interpret \"say 'b'\"\n");
 
-        let alone = run_program(TEST_PATH, alone);
-        let then_a_fragment = run_program(TEST_PATH, then_a_fragment);
+        let alone = run_program(TEST_PATH, alone, crate::Invocation::none());
+        let then_a_fragment = run_program(TEST_PATH, then_a_fragment, crate::Invocation::none());
 
         assert_eq!(alone.exit_code, 0, "stderr: {:?}", alone.stderr);
         assert_eq!(

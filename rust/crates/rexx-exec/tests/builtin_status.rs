@@ -223,7 +223,7 @@ fn measure(oracle: &Oracle, run_root: &Path, name: &str, program: &str) -> Measu
         .unwrap_or_else(|| panic!("probe path {} is not valid UTF-8", abs.display()));
 
     let text = fs::read(&abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
-    let rust = rexx_exec::run_program(path_str, text);
+    let rust = rexx_exec::run_program(path_str, text, rexx_exec::Invocation::none());
     let cpp = oracle.run(&abs);
 
     let diffs = descriptor_diffs(&rust, &cpp);

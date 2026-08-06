@@ -436,6 +436,7 @@ fn every_out_of_scope_variant_fails_loudly() {
         let outcome = run_program(
             Path::new("/tmp/loud-witness.rex").to_str().unwrap(),
             witness.source.as_bytes().to_vec(),
+            rexx_exec::Invocation::none(),
         );
         if outcome.exit_code != NOT_IMPLEMENTED_EXIT {
             use std::fmt::Write as _;

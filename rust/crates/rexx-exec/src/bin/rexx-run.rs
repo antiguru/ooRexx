@@ -19,14 +19,35 @@
 //! them over, and write back what came out.
 
 use std::io::Write;
+use std::os::unix::ffi::OsStrExt;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
     let mut args = std::env::args_os().skip(1);
     let Some(path) = args.next() else {
-        eprintln!("usage: rexx-run FILE");
+        eprintln!("usage: rexx-run FILE [arguments]");
         return ExitCode::from(2);
     };
+
+    // Everything after the program path is the program's argument, joined into
+    // the single string a Rexx program can see. `rexx_exec::join_command_line`
+    // owns the joining rule and the measurements behind it; what belongs here
+    // is only the decision to hand it every remaining word, because that
+    // matches where the oracle does the same thing -- its own launcher
+    // (`utilities/rexx/platform/unix/rexx.cpp`'s `main`) builds `arg_buffer`
+    // from `argv` and the interpreter never sees the separate words.
+    //
+    // Bytes, not `String`: a command-line word is not required to be UTF-8 on
+    // this platform and a Rexx string is a byte string, so lossy conversion
+    // here would silently change the argument a program is given.
+    //
+    // No option parsing of any kind, which is the one place this binary is not
+    // a thin wrapper over that launcher. `rexx` accepts `-e`, `-o`/`-od` and
+    // `-v` before the program name; none of them is in Phase 4's scope, and
+    // treating a leading `-x` as an option here would mean silently dropping a
+    // word that would otherwise reach the program as part of its argument
+    // string. Every word after the path is an argument.
+    let invocation = rexx_exec::join_command_line(args.map(|arg| arg.as_bytes().to_vec()));
 
     let text = match std::fs::read(&path) {
         Ok(text) => text,
@@ -49,7 +70,7 @@ fn main() -> ExitCode {
     // failure is a race or a permission quirk on the directory, and reporting
     // the program under the name the caller used beats refusing to run it.
     let reported = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone().into());
-    let outcome = rexx_exec::run_program(&reported.to_string_lossy(), text);
+    let outcome = rexx_exec::run_program(&reported.to_string_lossy(), text, invocation);
 
     // Written in the order the program produced them relative to each other,
     // which is no order at all: they are separate descriptors, and D17 records
