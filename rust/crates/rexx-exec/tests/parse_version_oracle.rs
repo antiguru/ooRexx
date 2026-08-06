@@ -47,9 +47,11 @@
 //! Gated on `REXX_CORPUS_GATE`, the same switch `tests/corpus.rs` uses, so an
 //! offline checkout is not asked to produce an oracle for it. **That
 //! protection is partial and saying otherwise here would be false**:
-//! `tests/builtin_status.rs` invokes the oracle 66 times on a plain `cargo
-//! test` with no gate at all, so a machine without the oracle already cannot
-//! run this crate's default test suite. The gate is followed here because it
+//! `tests/builtin_status.rs` invokes the oracle unconditionally on a plain
+//! `cargo test`, with no gate at all -- `support::oracle::locate` asserts the
+//! binary exists rather than skipping -- so a machine without the oracle
+//! already cannot run this crate's default test suite. The gate is followed
+//! here because it
 //! is the convention for a check whose whole subject is the oracle, not
 //! because it restores a property the workspace has.
 //!
