@@ -1804,6 +1804,11 @@ That is invisible in a green baseline -- the truncation only happens when a muta
 Measured at Task 9: three of six "caught by this test and nothing else" claims were false, and re-running with `--no-fail-fast` found `corpus_differential` catching two of them and `keyword_assertions::the_exempt_set_matches_the_current_failures` catching a third.
 **Assert the binary count**, baseline against mutated, so a truncated run is an `INFRA_FAILURE` rather than a survivor or a clean catch.
 
+**Count `Running`/`Doc-tests` header lines, not `test result:` lines, and the two genuinely differ.**
+Measured at Task 9's re-review: the same green run gives **72** header lines and **73** `test result:` lines.
+Neither is wrong -- `Doc-tests rexx_exec` prints **two** `test result:` blocks from one process, a normal doctest run and a `compile_fail` one reported separately.
+**72 is the process count** and is what a truncation guard must compare; `test result:` double-counts that one process and will read as off-by-one forever.
+
 **Earlier tasks' uniqueness claims were taken with the truncating command and are not to be trusted as stated.**
 Tasks 5, 6 and 7 each recorded a "nothing else catches this" result; Task 8's scoped re-review used `--no-fail-fast` and stands, and Task 9's were re-run.
 Re-verify the rest here rather than inheriting them -- the failure is one-directional (it over-credits a new test with unique coverage, never under-credits), so no *correctness* conclusion rests on it, but the coverage story does.
