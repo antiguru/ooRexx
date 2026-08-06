@@ -1789,6 +1789,9 @@ Suggested shapes, each needing an instrument named: a builtin's optional argumen
   **790 is an upper bound on what 4c fixes, not a measure of its remaining surface**: three `CALL` bodies fail **under the C++ oracle itself** (`Error 43, Routine not found`) and `NUMERIC::test_42` exits 3 by falling through into its own `dig:` label.
   **No task owns these rows**, so they will fire ungated across the family tasks; say which task removed which, or the criterion is green here by construction.
 * **New: the builtin-status criterion**, both directions, whose falsification is Task 2's Step 5 -- the interpreter mutation, not the file edit.
+* **Record that 4b's queue gap is closed, and say by what.** 4b's gate shipped `PUSH`/`QUEUE` with their storage verified only in-crate.
+  Task 8 gave the round trip its first differential witness: `corpus/lang/pull_queue.rex` pushes and pulls, and a live `queue-round-trip` row in `crates/rexx-exec/tests/input_oracle.rs` runs it against the oracle today rather than waiting for this task.
+  **Cite the closure to the row that runs, not to the corpus program**, which `tests/corpus.rs` does not read until Step 4 above.
 * **New: `base/bif`**, reported as a measurement and **not gated on a threshold**, with the set assertion ungated per Step 3.
 
 **Ask of every criterion: what degenerate implementation satisfies this, and would deleting its subject leave it green?**
