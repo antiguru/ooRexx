@@ -59,15 +59,23 @@ making that header false.
 The file's own header says what that subset admits and what it still excludes,
 and moves one line at a time as 4c's tasks land.
 
-Two things it admits that no earlier subset does are worth naming here, because
-each has a rule attached.
+What it admits that no earlier subset does comes with rules attached, and they
+are worth naming here rather than only in the file's own header.
 Builtin function calls are admissible only in the names
 `crates/rexx-exec/tests/builtin_status.rs` measures as implemented, and
 `builtin-status.txt` is that machine-derived table.
 `PARSE SOURCE` is admissible but its third word is not: that word is the
 program's own absolute path, so a program printing it would put the filesystem
 in its output and break the determinism rule above.
-`lang/source_arg.rex` and `lang/parse_sources.rex` both project it away.
+`lang/parse_sources.rex` projects it away, and `lang/source_arg.rex` -- an
+earlier program that is *not* in this subset, because it calls builtins the
+status table does not yet call implemented -- already did the same.
+`PARSE VERSION` is implemented and no program here prints it either, for a
+related reason: all three of its fields are the interpreter's own build
+identity, the last a build date, so a committed differential over it would be a
+claim about which binary the oracle was built from.
+`crates/rexx-exec/tests/parse_version_oracle.rs` is where that string is
+checked instead.
 
 ## Current programs
 
@@ -133,9 +141,11 @@ by any program above; these three close every one of them.
 ### Phase 4c additions -- the `PARSE` template engine
 
 Written for 4c Task 7. Between them they cover all eight `TriggerKind`
-variants, the comma fence, the `.` placeholder and five of the seven
-`ParseSource` variants; each file's own header states, per block, which wrong
-answer a defective engine prints.
+variants, the comma fence, the `.` placeholder and four `ParseSource` variants
+-- `Value`, `Var`, `Arg` and `Source`. `Version` is implemented and
+deliberately unprinted (see the subset section above), and `Pull` and `LineIn`
+fail loudly. Each file's own header states, per block, which wrong answer a
+defective engine prints.
 
 | File | Covers |
 |---|---|

@@ -87,11 +87,19 @@ const CONTEXT: &[u8] = b"COMMAND";
 /// binary rather than about this crate.** Measured 2026-08-05 against the
 /// `build/` present then: interpreter name and version, then the language
 /// level, then the interpreter's *build date*. Nothing here can derive the
-/// third field, so it is recorded verbatim from the measurement, pinned by
-/// [`tests::the_version_string_is_the_measured_oracle_string`], and no corpus
-/// program prints it -- a differential witness over a build date would break
-/// on the next rebuild of the oracle and would say nothing about this
-/// engine.
+/// third field, so it is recorded verbatim from the measurement.
+///
+/// **`tests/parse_version_oracle.rs` is the only thing that can notice this
+/// going stale, and it has to run the oracle to do it.** A rebuilt oracle
+/// moves the build date with nothing in this crate changing, so that harness
+/// runs `parse version` through both interpreters and compares -- gated on
+/// `REXX_CORPUS_GATE`, since its whole subject is the oracle. An assertion
+/// comparing this constant against a literal copy of itself would go green
+/// through every rebuild there has ever been; that shape was here and is gone.
+///
+/// No corpus program prints it: a committed differential over a build date
+/// would break on the next rebuild and say nothing about this engine, and the
+/// corpus's own determinism rule excludes it anyway.
 const VERSION: &[u8] = b"REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026";
 
 /// The two bytes `PARSE` treats as whitespace when carving a section into
@@ -1049,17 +1057,24 @@ mod tests {
     /// The path is the one `run_program` was handed, so this pins the
     /// plumbing as well as the string: an engine that left it empty prints
     /// `LINUX COMMAND ` with nothing after it.
+    ///
+    /// The expected version line is built from [`VERSION`] rather than written
+    /// out again. This asks whether the `Version` source reaches that constant
+    /// -- which is all a test inside this crate can ask -- and leaves *whether
+    /// the constant is still the oracle's answer* to the one harness that can
+    /// tell, `tests/parse_version_oracle.rs`. Two copies of the string would
+    /// only mean two places to edit in step, which is what a self-comparison
+    /// is.
     #[test]
     fn source_and_version_carry_their_own_strings() {
         let outcome = crate::run_program(
             "/tmp/parse-source.rex",
             b"parse source s\nsay s\nparse version v\nsay v\n".to_vec(),
         );
-        assert_eq!(
-            String::from_utf8_lossy(&outcome.stdout),
-            "LINUX COMMAND /tmp/parse-source.rex\n\
-             REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026\n"
-        );
+        let mut expected = b"LINUX COMMAND /tmp/parse-source.rex\n".to_vec();
+        expected.extend_from_slice(VERSION);
+        expected.push(b'\n');
+        assert_eq!(outcome.stdout, expected);
     }
 
     /// A fractional, non-numeric or negative positional operand is 26.4, and
@@ -1097,21 +1112,6 @@ mod tests {
             String::from_utf8_lossy(&accepted.stdout),
             "[abcdefghij]\n",
             "an operand past the string's own end is a clamp, not an error"
-        );
-    }
-
-    /// `PARSE VERSION`'s string is the measured one, byte for byte.
-    ///
-    /// A pin and not a derivation: the third field is the oracle's own build
-    /// date and this crate has nothing to compute it from, so the only thing
-    /// that can be asserted is that the constant still says what the
-    /// measurement said. See [`VERSION`].
-    #[test]
-    fn the_version_string_is_the_measured_oracle_string() {
-        assert_eq!(
-            VERSION, b"REXX-ooRexx_5.3.0(MT)_64-bit 6.06 30 Jul 2026",
-            "PARSE VERSION's string was measured against the oracle build \
-             present on 2026-08-05; changing it is a re-measurement, not an edit"
         );
     }
 }

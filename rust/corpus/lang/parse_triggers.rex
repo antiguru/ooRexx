@@ -13,7 +13,12 @@
    backward: `=n`, `+n` and `-n` share one rule -- forward of the current
    position gives [current, new), and ANYTHING ELSE, equal included, gives
    [current, END]. An engine that assigns the null string for equal or
-   backward movement prints B4's third field and B5's third field empty.
+   backward movement empties the SECOND field of B4 and of B5 -- the target
+   the equal or backward trigger itself assigns. Their third fields belong to
+   the trailing End trigger and pin something else: where the backward branch
+   leaves the match position. B5's `-99` clamps it to the origin, so the third
+   field is the whole string; an engine that left the match position unmoved
+   prints `efghij` there instead.
 
    lengths: `>n`/`<n` do not share it. They are exact slices, so `>0` and `<0`
    both give the null string where `+0` gives the whole remainder. An engine
