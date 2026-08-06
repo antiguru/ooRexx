@@ -1064,10 +1064,18 @@ Extra targets in one template also get `''`, and **only the final target keeps i
 | source `ARG` | **no `>K>` at all** -- straight to `>>>` |
 | any positional trigger | `>L> "<n>"` · `>>> "<n>"`, **before** the preceding target's assignment |
 | `String` and `Mixed` | `>L>` · `>>>` -- **identical; caseless is not distinguishable in the trace** |
-| target | `>=> NAME <= "<value>"` |
+| target | `>=> NAME <= "<value>"` at `trace i`; `>>> "<value>"` at `trace r` -- see below |
 | `.` placeholder | `>.> "<consumed>"`, **emitted even when it consumes nothing** |
 | `End` | nothing |
 | comma fence | `>>> "<next template's source>"` |
+
+**An assigned target's own value line is a choice of prefix, not two independently gated lines**, and this table's `trace i` measurement could not have shown it.
+Measured during Task 7 and then confirmed at `instructions/ParseTrigger.cpp:274-280` (`assign` followed by `if (!tracingIntermediates()) traceResult`): under `trace r` a target emits `>>> "<value>"`, under `trace i` it emits `>=> NAME <= "<value>"` **in its place**, and never both.
+So a `trace i`-only survey sees `>=>` and concludes `>>>` is absent for targets, which is false at `trace r`.
+
+**The gates, since they do not all follow the construct.** `>K>`, the source `>>>`, the operand `>>>` and the fence `>>>` are gated on `results` and appear under `trace r`.
+`>L>`, `>V>`, `>C>`, `>=>` and `>.>` are gated on `intermediates`.
+**Do not assume a prefix's gate carries over from `DO`'s use of it** -- measure it for `PARSE`.
 
 **A trigger's numeric operand is evaluated BEFORE the preceding target is assigned** -- for `p 5 q -2 r` the order is `>L>"5"`, `>>>"5"`, `>=>P`, `>L>"2"`, `>>>"2"`, `>=>Q`, `>=>R`.
 The traced literal for `+3`/`-2`/`>3`/`<2` is the **bare number without the sign**.
@@ -1097,8 +1105,10 @@ Measured 2026-08-04 under **`trace i`**, not `trace r`:
 * **`>.>` fires at `trace i`, not `trace r`.** The groundwork document probed `trace r`, saw nothing, and recorded the absence -- an instrument that could not have produced the answer.
 * **`>.>` carries the value the placeholder consumed.**
 * **`>=>` is emitted per *assigned* target**; the `.` placeholder gets `>.>` instead, so the two partition the targets.
-* **`>K>` carries a `=>` continuation here**, where 4a's and 4b's `>K>` lines carry a bare value.
-  **Measure whether the existing `trace.rs` keyword path emits it before writing any of this**, and state which it was.
+* **`>K>` carries a `=>` continuation here, and so does every other `>K>` in this crate -- reuse the existing emitter.**
+  An earlier revision of this step claimed 4a's and 4b's `>K>` lines carry a bare value and told the implementer to go and measure it.
+  That claim was false: `Trace::trace_keyword` (`trace.rs:487`) already calls `push_tagged(.., ">K>", indent, true, keyword, " => ", value)`, so it emits `>K>   "KW" => "value"` with a quoted tag, and `keyword_while.expected` carries `>K>     "WHILE" => "1"`.
+  **Do not add a second keyword emitter.**
 
 Probe all eight `TriggerKind` variants under `trace i`. The four a `trace r`-only probe will miss are `Plus`, `Minus`, `MinusLength`, `PlusLength`.
 
@@ -1182,6 +1192,10 @@ So the model is **not** "each instruction reads stdin"; it is one object with a 
 Bare `ARG` and bare `PARSE ARG` with no template are legal and do nothing observable.
 
 **(f) Trace, under `trace i`.** `ARG` is the **only** source emitting no `>K>`, in both spellings. `PULL` and `LINEIN` emit it, and for `PULL` the `>K>` carries the **pre-uppercase** value while `>>>` carries the uppercased one -- the two lines differ on the same instruction.
+
+**This survey is `trace i`-only and that is a known blind spot, not a completeness claim.**
+Task 7's Step 0(g) carries the rule this one cannot show: an assigned target's value line is a **choice of prefix**, `>=>` at `trace i` and `>>>` at `trace r`, never both, and the prefixes do not share one gate (`>K>` and every `>>>` are `results`; `>L>`/`>V>`/`>C>`/`>=>`/`>.>` are `intermediates`).
+**Probe both modes for the two sources this task adds**, and do not infer a gate from `DO`'s use of the same prefix.
 
 **(g) What the suite checks.** `bif/ARG.testGroup`: 17 methods, 64 `assertSame`, **2 `expectSyntax`, both 40.14**. `bif/LINEIN.testGroup`: 6 methods, 9 `assertSame`, **0 `expectSyntax`**.
 A bare-word `ARG` scan returns **835** hits against **4** for the instruction syntax -- a ~200× overstatement, and **one of those 4 is `arg = 4`**, an assignment to a variable named `arg`. Require the syntax.
