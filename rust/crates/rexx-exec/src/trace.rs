@@ -652,6 +652,26 @@ impl Interp {
         );
     }
 
+    /// `>.>` (`TRACE_PREFIX_DUMMY`): what a `PARSE` template's `.`
+    /// placeholder just consumed, untagged, with no assignment behind it.
+    ///
+    /// Gated on `intermediates` (`ParseTrigger.cpp:285` calls
+    /// `traceIntermediate`, whose own body is `if
+    /// (settings.intermediateTrace)`, `RexxActivation.hpp:339`), which is
+    /// measured rather than taken from the C++ alone: `parse value 'one two'
+    /// with p . q` under `trace i` emits `>.>   ""` between the two `>=>`
+    /// lines, and the same program under `trace r` emits no `>.>` at all --
+    /// two `>>>` lines for `P` and `Q` and nothing for the placeholder.
+    ///
+    /// **Emitted even when the placeholder consumed nothing**, which is why
+    /// the line above is `>.>   ""` and not absent.
+    pub(crate) fn trace_dummy(&mut self, indent: usize, value: &[u8]) {
+        if !self.trace_mode().intermediates {
+            return;
+        }
+        push_value(&mut self.trace, ">.>", indent, value);
+    }
+
     /// `>C>` (`TRACE_PREFIX_COMPOUND`): announces which fully-resolved
     /// compound name a read or write just used, before `>V>`/`>=>` shows
     /// what is actually stored there -- `tag` is the compound's own

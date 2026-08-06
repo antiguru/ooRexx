@@ -57,8 +57,11 @@
 //! make it pass. Those differ whenever a second blocker stands behind the
 //! first, and here they are known to differ for at least four bodies (see
 //! "Bodies that are not their method" below). So a `4c` row means "4c is what
-//! it hits today", and the **790 `4c` rows are an upper bound on what landing
-//! 4c would fix** -- at least four of them would still not pass.
+//! it hits today", and the file's **`4c` rows are an upper bound on what
+//! landing the rest of 4c would fix** -- at least four of them would still not
+//! pass. Named rather than counted: the count is a row total in a file every
+//! task edits, so a number here is falsified by the next task that lands and
+//! the description never is.
 //!
 //! Second, the `defect:` rows are **not** derived: [`RunOutcome::attribution`]
 //! maps every [`RunOutcome::AssertionFailed`] to one constant string, so for

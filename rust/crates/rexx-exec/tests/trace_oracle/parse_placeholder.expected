@@ -1,0 +1,44 @@
+RC 0
+===STDOUT===
+onethreefourabcdefghij
+===STDERR===
+    25 *-* parse value 'one two three' with p . q
+       >L>   "one two three"
+       >K>   "VALUE" => "one two three"
+       >>>   "one two three"
+       >=>   P <= "one"
+       >.>   "two"
+       >=>   Q <= "three"
+    26 *-* parse value 'four' with r . s
+       >L>   "four"
+       >K>   "VALUE" => "four"
+       >>>   "four"
+       >=>   R <= "four"
+       >.>   ""
+       >=>   S <= ""
+    27 *-* parse value 'abcdefghij' with t 5 u
+       >L>   "abcdefghij"
+       >K>   "VALUE" => "abcdefghij"
+       >>>   "abcdefghij"
+       >L>   "5"
+       >>>   "5"
+       >=>   T <= "abcd"
+       >=>   U <= "efghij"
+    28 *-* trace off
+    30 *-* parse value 'one two three' with p . q
+       >K>   "VALUE" => "one two three"
+       >>>   "one two three"
+       >>>   "one"
+       >>>   "three"
+    31 *-* parse value 'four' with r . s
+       >K>   "VALUE" => "four"
+       >>>   "four"
+       >>>   "four"
+       >>>   ""
+    32 *-* parse value 'abcdefghij' with t 5 u
+       >K>   "VALUE" => "abcdefghij"
+       >>>   "abcdefghij"
+       >>>   "5"
+       >>>   "abcd"
+       >>>   "efghij"
+    33 *-* trace off

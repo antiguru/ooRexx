@@ -1,0 +1,110 @@
+/* PARSE's sources, its two case options, and the trace shape a target's own
+   value line takes in each of the two modes that show one.
+
+   WHICH WRONG ANSWER EACH BLOCK PRINTS.
+
+   var: PARSE VAR's source is an ordinary variable READ, in all three name
+   shapes. A1 uses a compound whose tail is a variable, so an engine that
+   reads the source under its unresolved spelling (`AA.II`) rather than the
+   resolved one (`AA.3`) prints `AA.II` instead of the value stored there.
+   A2's stem carries a default, which is the one shape whose read yields an
+   object rather than text.
+
+   arg: the argument strings of the running activation, one per comma-fenced
+   template, an omitted position becoming the null string and holding its
+   place rather than closing up. B3's third field is empty and its fourth is
+   `five`; an engine that closes omissions up prints `five` third and nothing
+   fourth.
+
+   upper/lower/caseless: UPPER and LOWER transform the SOURCE before parsing;
+   CASELESS leaves the source alone and folds only the comparison, so the
+   assignment keeps the original case. C3's pattern matches a lower-case `x`
+   against an upper-case `X` in the source and still prints `MiXeD` unchanged
+   on either side of it -- an engine that folds the source to compare prints
+   `mixed` or `MIXED`. C4/C5 pin that `upper caseless` and `caseless upper`
+   are order-independent.
+
+   source: only the first two words are printed. The third is the program's own
+   absolute path, which would put the filesystem in this program's output and
+   break the corpus's determinism rule; corpus/lang/source_arg.rex projects it
+   away the same way. The second word is the calling CONTEXT and not the call
+   depth: measured, it is COMMAND at the top level and inside an internal
+   routine alike, which is what D1 and D2 together pin.
+
+   PARSE VERSION is deliberately absent. Every field it carries is the
+   interpreter's own build identity, the third one a build DATE, so a
+   differential witness over it would be a claim about which binary the oracle
+   was built from rather than about this engine. It is pinned as a measured
+   constant in parse_template.rs instead.
+
+   trace: the two modes are here because a target's own value line is a CHOICE
+   between two prefixes and not two independent gates. Under TRACE I an
+   assigned target traces `>=> NAME <= "value"`; under TRACE R it traces
+   `>>> "value"` in its place, and the `.` placeholder's `>.>` line appears
+   under I and not under R. An engine that emits both, or that gates `>.>` on
+   results, diverges on stderr in a way no stdout witness can see. The traced
+   sections deliberately contain no PARSE SOURCE, whose `>K>` line would carry
+   the path.
+
+   No abuttal anywhere: a symbol abutting a preceding string literal can be
+   read as its hex or binary suffix (`say a"|"b` is error 15), so every join
+   below is an explicit `||`. */
+
+ii = 3
+aa.3 = 'kk ll'
+parse var aa.ii p q
+say 'A1 ['||p||']['||q||']'
+bb. = 'mm nn'
+parse var bb. r s
+say 'A2 ['||r||']['||s||']'
+plain = 'oo pp'
+parse var plain t u
+say 'A3 ['||t||']['||u||']'
+
+call args 'one two', 'three four', , 'five'
+
+parse caseless value 'aXbxc' with c1 'x' c2
+say 'C1 ['||c1||']['||c2||']'
+parse caseless value 'aXbxc' with c3 'x' c4 'x' c5
+say 'C2 ['||c3||']['||c4||']['||c5||']'
+parse caseless value 'MiXeD case' with c6 'x' c7
+say 'C3 ['||c6||']['||c7||']'
+parse upper caseless value 'MiXeD case' with c8 'x' c9
+say 'C4 ['||c8||']['||c9||']'
+parse caseless upper value 'MiXeD case' with ca 'x' cb
+say 'C5 ['||ca||']['||cb||']'
+parse lower value 'MiXeD CASE' with cc cd
+say 'C6 ['||cc||']['||cd||']'
+
+parse source sys context .
+say 'D1 ['||sys||']['||context||']'
+call context_in_a_routine
+
+trace r
+parse value 'one two three' with t1 . t2
+parse value 'abcdefghij' with t3 5 t4 -2 t5
+trace off
+trace i
+parse value 'one two three' with t6 . t7
+parse value 'abcdefghij' with t8 5 t9 -2 ta
+trace off
+say 'E1 ['||t2||']['||t5||']['||t7||']['||ta||']'
+exit 0
+
+args:
+  parse arg b1 b2
+  say 'B1 ['||b1||']['||b2||']'
+  parse arg b3 , b4
+  say 'B2 ['||b3||']['||b4||']'
+  parse arg b5 , b6 , b7 , b8
+  say 'B3 ['||b5||']['||b6||']['||b7||']['||b8||']'
+  parse upper arg b9 .
+  say 'B4 ['||b9||']'
+  parse arg 5 ba
+  say 'B5 ['||ba||']'
+  return
+
+context_in_a_routine:
+  parse source sys2 context2 .
+  say 'D2 ['||sys2||']['||context2||']'
+  return

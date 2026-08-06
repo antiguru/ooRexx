@@ -1,0 +1,72 @@
+# Phase 4c corpus subset -- the union with phase-4a.txt and phase-4b.txt is
+# what the harnesses read, not this file alone. Every entry in those two stays
+# in force.
+#
+# One path per line, relative to this directory (rust/corpus/). Lines starting
+# with # are comments; blank lines are ignored. Same format as phase-4a.txt and
+# phase-4b.txt, and read by the same `read_subset`, which unions the files in
+# first-seen order and drops a repeat.
+#
+# WHY THIS FILE EXISTS AND WHY IT IS NOT AN EXTENSION OF phase-4b.txt.
+# phase-4b.txt's own header excludes PARSE by definition ("no PARSE/ARG/PULL"),
+# so a witness for a construct 4c implements cannot go there without making
+# that header false. Criterion 1 (tests/coverage.rs) requires every in-scope
+# variant to be witnessed by some program in the subset it reads, so the moment
+# a variant moves into scope its witness has to land in a file that admits it --
+# this one.
+#
+# WHAT THIS SUBSET ADMITS, one line per construct as it lands. Everything
+# phase-4a.txt and phase-4b.txt admit, plus:
+#
+#   Builtin function calls, in the names tests/builtin_status.rs measures as
+#   implemented. corpus/builtin-status.txt is the machine-derived table of
+#   which those are; a name it does not call implemented cannot appear in a
+#   program listed here.
+#
+#   PARSE (4c Task 7) -- all eight template trigger kinds, the comma fence,
+#   the `.` placeholder, and the VALUE, VAR, ARG, SOURCE and VERSION sources.
+#   NOT PARSE PULL or PARSE LINEIN, which read a line back out of the queue or
+#   the console and fail loudly through Loud::parse_source, and NOT the ARG or
+#   PULL instruction spellings, which are separate InstructionKind variants and
+#   still fail loudly. PARSE VERSION is implemented but no program here prints
+#   it: every field it carries is the interpreter's own build identity, the
+#   third a build DATE, so a differential witness over it would be a claim
+#   about which binary the oracle was built from. It is pinned as a measured
+#   constant in parse_template.rs instead.
+#
+# WHAT IT STILL EXCLUDES. Everything phase-4b.txt excludes except builtin
+# function calls and PARSE, which is to say: no ARG/PULL instruction, no
+# message sends, no :: directives, no command clauses, no DO WITH, and no
+# DO OVER on a stem. The authoritative, machine-checked list is
+# tests/owners.rs's INSTRUCTION_TAGS/EXPR_TAGS: anything still carrying an
+# `Owner::Phase` there fails loudly and cannot appear in any program listed in
+# this file. Later 4c tasks move their own construct across that line and
+# delete its name from the paragraph above in the same change.
+#
+# A program listed here must also obey the corpus's one standing rule
+# (README.md, "The one rule: determinism"): same bytes on every run, on every
+# machine, with no clock, no PID, no filesystem and no locale in its output.
+# PARSE SOURCE's third word is the program's own absolute path, so no program
+# here prints it -- corpus/lang/source_arg.rex already projects it away the
+# same way, and parse_sources.rex says so in its own header.
+
+# New for 4c Task 7 -- the template movement rules, on stdout alone. Its own
+# header states, per block, which wrong answer each would print. The pair it
+# exists for is `-n` against `<n`: same movement, unrelated assignment, and an
+# engine that treats them as one operation gets one of the two blocks right
+# and the other wrong.
+lang/parse_triggers.rex
+
+# New for 4c Task 7 -- the sources, the case options, and the one trace fact
+# no stdout witness can reach: a target's own value line is a CHOICE between
+# `>=>` under TRACE I and `>>>` under TRACE R, not two independent gates, and
+# the `.` placeholder's `>.>` appears under I only. It therefore runs the same
+# two templates under both modes. Its traced sections deliberately contain no
+# PARSE SOURCE, whose `>K>` line would carry the program's path.
+lang/parse_sources.rex
+
+# Existing (Phase 2/3), listed here now that PARSE runs: string, literal,
+# positional and UPPER templates. Kept rather than folded into the two above
+# because it is the one PARSE program in the corpus written before this engine
+# existed, so it is an expectation this task had no hand in shaping.
+lang/parse_template.rex

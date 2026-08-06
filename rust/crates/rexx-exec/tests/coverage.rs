@@ -576,6 +576,28 @@ const EXPECTED_SUBSET_4B: &[&str] = &[
     "lang/call_on_trap_rearms.rex",
 ];
 
+/// `phase-4c.txt`'s exact line list, the same device [`EXPECTED_SUBSET`] and
+/// [`EXPECTED_SUBSET_4B`] are for the earlier phases, and added for the same
+/// reason: a "N of N" harness cannot notice a missing program, and every check
+/// that reads the file shrinks silently when a line goes.
+const EXPECTED_SUBSET_4C: &[&str] = &[
+    "lang/parse_triggers.rex",
+    "lang/parse_sources.rex",
+    "lang/parse_template.rex",
+];
+
+#[test]
+fn phase_4c_subset_matches_the_committed_list() {
+    let corpus_dir = corpus_dir();
+    let subset = read_subset(&[&corpus_dir.join("phase-4c.txt")]);
+    assert_eq!(
+        subset, EXPECTED_SUBSET_4C,
+        "phase-4c.txt's entries drifted from EXPECTED_SUBSET_4C -- adding or \
+         removing a line from the 4c subset is a plan amendment, and must \
+         change both the file and this list together"
+    );
+}
+
 #[test]
 fn phase_4b_subset_matches_the_committed_list() {
     let corpus_dir = corpus_dir();
@@ -617,6 +639,7 @@ fn every_in_scope_variant_is_witnessed_by_the_phase_subsets() {
     let subset = read_subset(&[
         &corpus_dir.join("phase-4a.txt"),
         &corpus_dir.join("phase-4b.txt"),
+        &corpus_dir.join("phase-4c.txt"),
     ]);
     assert!(
         !subset.is_empty(),

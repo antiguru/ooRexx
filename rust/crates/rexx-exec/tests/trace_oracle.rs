@@ -47,6 +47,7 @@
 //! | `>A>` | `call_arguments.rex`, `function_call.rex` |
 //! | `>F>` | `function_call.rex` |
 //! | `>R>` | `use_arg_alias.rex` |
+//! | `>.>` | `parse_placeholder.rex` |
 //!
 //! **Several witnesses below claim no prefix the table above does not
 //! already cover, and are here for a *content* difference instead** --
@@ -79,9 +80,11 @@
 //! [`every_witness_still_emits_every_prefix_it_is_named_for`] turn the
 //! table above into an assertion: each witness's committed `.expected`
 //! stderr must contain every prefix this table claims for it, checked as a
-//! byte substring, and the union across every witness must be exactly the
-//! thirteen prefixes claimed. A witness can still be swapped for a better
-//! one, but not for one that silently covers less.
+//! byte substring, and the union across every witness must be exactly
+//! [`CLAIMED_PREFIXES`] -- named rather than counted, because a count here is
+//! falsified by the next witness that lands and the name never is. A witness
+//! can still be swapped for a better one, but not for one that silently
+//! covers less.
 //!
 //! **NOTHING IN THIS FILE PINS A TRACE LINE'S INDENT, and no witness here
 //! can** (review round 1, F1). `check_witness` compares both sides through
@@ -357,6 +360,20 @@ fn exit_value_covers_the_exit_instructions_own_result_line() {
     check_witness("exit_value", &path);
 }
 
+/// `>.>`, the `PARSE` template placeholder's own line, **under both `TRACE I`
+/// and `TRACE R` in one program**. Two modes rather than one because the fact
+/// worth pinning is a *choice* of prefix: an assigned target traces `>=>`
+/// under `I` and `>>>` under `R`, never both, and the placeholder's `>.>`
+/// appears under `I` only. Either mode alone passes against an engine with two
+/// independent gates. The program's own header has the C++ site and says why
+/// it contains no `parse source`.
+#[test]
+fn parse_placeholder_covers_the_dummy_prefix_and_the_two_modes_disagreement() {
+    let path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/trace_oracle/parse_placeholder.rex");
+    check_witness("parse_placeholder", &path);
+}
+
 /// The module doc's own table, as data: which prefixes each witness is
 /// claimed to cover. See the module doc's own note on why this exists --
 /// found missing by a branch review (H3), which swapped `keyword_while.rex`
@@ -393,6 +410,10 @@ const WITNESS_PREFIXES: &[(&str, &[&str])] = &[
         "controlled_loop",
         &["*-*", ">>>", ">=>", ">L>", ">V>", ">K>", ">P>"],
     ),
+    (
+        "parse_placeholder",
+        &["*-*", ">>>", ">=>", ">L>", ">K>", ">.>"],
+    ),
 ];
 
 /// Every prefix a witness below is expected to reach, between them.
@@ -402,6 +423,7 @@ const WITNESS_PREFIXES: &[(&str, &[&str])] = &[
 /// ever really emit would go unnoticed otherwise).
 const CLAIMED_PREFIXES: &[&str] = &[
     "*-*", ">>>", ">=>", ">L>", ">V>", ">O>", ">K>", ">C>", ">P>", ">E>", ">A>", ">F>", ">R>",
+    ">.>",
 ];
 
 fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
@@ -518,8 +540,6 @@ enum Coverage {
 ///   bring this prefix into reach; issuing a command does, and that is the
 ///   half of `ADDRESS` that is not 4c's. See `phase-4-exclusions.txt`'s own
 ///   `+++` row for the transcripts.
-/// * `>.>` -- 4c. The `PARSE` template's placeholder (`.`) variable, and
-///   only that (`ParseTrigger.cpp:285`, read directly). `PARSE` is 4c's.
 /// * `>M>` -- Phase 5. Message sends; `ExprKind::Message` is Phase 5's in
 ///   the exclusions file's own ownership table.
 /// * `>N>` -- Phase 5. `traceClassResolution`, a namespace-qualified name,
@@ -534,7 +554,7 @@ const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
     ("*-*", Coverage::Witnessed),
     ("+++", Coverage::Owned("Phase 7")),
     (">>>", Coverage::Witnessed),
-    (">.>", Coverage::Owned("4c")),
+    (">.>", Coverage::Witnessed),
     (">V>", Coverage::Witnessed),
     (">E>", Coverage::Witnessed),
     (">L>", Coverage::Witnessed),
@@ -554,11 +574,11 @@ const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
 
 /// The coverage number itself, committed so that a change to it is a change
 /// to this file rather than a change to a printed line nobody reads.
-const WITNESSED_PREFIX_COUNT: usize = 13;
+const WITNESSED_PREFIX_COUNT: usize = 14;
 
-/// The other six, each with an owner. `WITNESSED_PREFIX_COUNT` plus this is
+/// The other five, each with an owner. `WITNESSED_PREFIX_COUNT` plus this is
 /// asserted to be the whole table, so neither number can drift on its own.
-const OUT_OF_SCOPE_PREFIX_COUNT: usize = 6;
+const OUT_OF_SCOPE_PREFIX_COUNT: usize = 5;
 
 /// The phases an owner may name. A phase that has finished cannot own a
 /// prefix -- whatever it owned is witnessed by then -- so a finished phase's
@@ -585,7 +605,7 @@ const OWNER_PHASES: &[&str] = &["4c", "Phase 5", "Phase 7"];
 ///    table.
 /// 4. Every owner names a phase from [`OWNER_PHASES`].
 #[test]
-fn the_trace_surfaces_coverage_is_thirteen_of_nineteen_with_owners_for_the_rest() {
+fn the_trace_surfaces_coverage_is_fourteen_of_nineteen_with_owners_for_the_rest() {
     let mut listed: Vec<&str> = PREFIX_COVERAGE.iter().map(|(prefix, _)| *prefix).collect();
     listed.sort_unstable();
     let before_dedup = listed.len();

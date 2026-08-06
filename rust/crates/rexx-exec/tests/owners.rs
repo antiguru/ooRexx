@@ -161,8 +161,13 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // left to split out.
     InstructionKind::Push { .. } => ("Push", Owner::InScope),
     InstructionKind::Queue { .. } => ("Queue", Owner::InScope),
+    // `PARSE`'s own keyword: the template engine is in scope. The two
+    // sources that are not, `PARSE PULL` and `PARSE LINEIN`, are sub-cases
+    // within the variant and fail loudly through `Loud::parse_source`, which
+    // is the same shape `PROCEDURE`'s `expose a.1` has and not something this
+    // per-variant table can express.
+    InstructionKind::Parse(_) => ("Parse", Owner::InScope),
     // ---- 4c's ----
-    InstructionKind::Parse(_) => ("Parse", Owner::Phase("4c")),
     InstructionKind::Arg(_) => ("Arg", Owner::Phase("4c")),
     InstructionKind::Pull(_) => ("Pull", Owner::Phase("4c")),
     InstructionKind::Address(_) => ("Address", Owner::Phase("4c")),
@@ -349,7 +354,6 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     // The one arm-grained row: `CALL`'s other three arms are in scope, so
     // they appear in `INSTRUCTION_TAGS` and not here.
     ("InstructionKind", "Call::Qualified", "Phase 5"),
-    ("InstructionKind", "Parse", "4c"),
     ("InstructionKind", "Arg", "4c"),
     ("InstructionKind", "Pull", "4c"),
     ("InstructionKind", "Address", "4c"),
@@ -480,7 +484,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        31
+        32
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -494,7 +498,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("4c"))
             .count(),
-        4
+        3
     );
     assert_eq!(
         INSTRUCTION_TAGS

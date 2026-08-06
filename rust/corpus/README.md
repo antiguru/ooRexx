@@ -50,6 +50,25 @@ each phase gets a file rather than the one file growing. The file's own header
 says what that subset admits and what it still excludes, and moves one line at
 a time as 4b's tasks land.
 
+## Phase 4c subset
+
+`phase-4c.txt` is the same format again, and is read alongside both earlier
+files for the same reason: `phase-4b.txt`'s own header excludes `PARSE` by
+definition, so a witness for a construct 4c implements cannot go there without
+making that header false.
+The file's own header says what that subset admits and what it still excludes,
+and moves one line at a time as 4c's tasks land.
+
+Two things it admits that no earlier subset does are worth naming here, because
+each has a rule attached.
+Builtin function calls are admissible only in the names
+`crates/rexx-exec/tests/builtin_status.rs` measures as implemented, and
+`builtin-status.txt` is that machine-derived table.
+`PARSE SOURCE` is admissible but its third word is not: that word is the
+program's own absolute path, so a program printing it would put the filesystem
+in its output and break the determinism rule above.
+`lang/source_arg.rex` and `lang/parse_sources.rex` both project it away.
+
 ## Current programs
 
 | File | Covers |
@@ -110,6 +129,18 @@ by any program above; these three close every one of them.
 | `prefix_dotvar_logical_over_label.rex` | `LOOP` as its own keyword, a bare label, `.nil`, a comma-list condition, `DO OVER` on a non-stem, an `OTHERWISE`-less `SELECT`, prefix `+` and `\`, bare `TRACE`, `TRACE VALUE` |
 | `comparison_operators_remaining.rex` | the ten `Operator` variants no other program constructs (`\>` `\<` `\>>` `\<<` `>>=` `<<=` `<>` `><` `\|` `&&`), and a labelled `SELECT` with an `OTHERWISE` |
 | `trace_numeric_request.rex` | `TRACE` with a bare number (`trace 5`) -- a raiser, Error 24.901, not a no-op, so it has to be this program's last statement |
+
+### Phase 4c additions -- the `PARSE` template engine
+
+Written for 4c Task 7. Between them they cover all eight `TriggerKind`
+variants, the comma fence, the `.` placeholder and five of the seven
+`ParseSource` variants; each file's own header states, per block, which wrong
+answer a defective engine prints.
+
+| File | Covers |
+|---|---|
+| `parse_triggers.rex` | the movement rules, on stdout alone: `-n` against `<n`, `>n`/`<n` as exact slices, the shared backward rule, patterns and the relative trigger that measures from a match's start, word carving, the comma fence, placeholders |
+| `parse_sources.rex` | `PARSE VAR` in all three name shapes, `PARSE ARG` with comma-fenced templates and an omitted argument, `PARSE SOURCE`'s first two words, `UPPER`/`LOWER`/`CASELESS`, and the same two templates under `TRACE R` and `TRACE I` -- the modes disagree about which prefix a target's own value line takes |
 
 ### `num/` — Phase 2, the numeric core
 

@@ -949,14 +949,10 @@ impl Interp {
             }
 
             InstructionKind::Assignment { target, value } => {
-                // `addVariable` builds only `Variable`, `Stem` or `Compound`
-                // targets (`ast.rs`'s own doc comment on `Assignment`), so the
-                // `other` arm below is unreachable through any program that
-                // parsed. Kept anyway, and exercised through `Loud::expression`
-                // rather than `unreachable!`, for the same reason `Loud`'s own
-                // exhaustive matches in `lib.rs` are: a guarantee the grammar
-                // makes is not one the type system enforces, and this crate's
-                // own rule is to fail loudly rather than trust it blindly.
+                // The target dispatch itself is `assign_expr_target`, shared
+                // with `PARSE`; its own doc comment carries which shapes
+                // `addVariable` can build, and why its fourth arm is loud and
+                // is reachable from the other caller but not from this one.
                 let value = self.eval(code, value)?;
                 self.roots.push_temp(value);
                 // `>>>` fires before the assignment itself
@@ -975,48 +971,7 @@ impl Interp {
                 let indent = self.clause_state.current_value_indent;
                 let rendered = self.to_text(value).to_vec();
                 self.trace_result(indent, &rendered);
-                match &target.kind {
-                    ExprKind::Variable(id) => {
-                        let name = code.symbols.name(*id).as_bytes().to_vec();
-                        let slot = self.slot_of(&name);
-                        let frame = self.activation().frame;
-                        self.roots.set_slot(frame, slot, value);
-                        self.trace_assignment(indent, &name, &rendered);
-                    }
-                    // `stem. = expr`: replace-and-rebind (D15a), through the
-                    // library `stem_assign` already builds -- this arm is the
-                    // dispatch Task 9 owns, not new stem logic.
-                    ExprKind::Stem(id) => {
-                        let name = code.symbols.name(*id).as_bytes().to_vec();
-                        self.stem_assign(&name, value);
-                        self.trace_assignment(indent, &name, &rendered);
-                    }
-                    // `a.b = expr`: resolve the tail key the same way reading
-                    // `a.b` would (`eval_node`'s own `Compound` arm), then
-                    // mutate that one tail in place through `stem_set`.
-                    //
-                    // `>C>` before `>=>` (`RexxActivation.cpp:4791`-`4802`'s
-                    // own order for a *read*; measured, this task's report,
-                    // that a *write* through `ExpressionCompoundVariable::
-                    // assign` announces the same resolved name first too):
-                    // the tag is the compound's own **source spelling**
-                    // (`a.i` stays `A.I` regardless of `i`'s value), and the
-                    // resolved name is `stem_name` (the read site's own,
-                    // matching `stem_set`'s own convention) concatenated
-                    // with `key`.
-                    ExprKind::Compound(id) => {
-                        let tag = code.symbols.name(*id).as_bytes().to_vec();
-                        let (stem_name, _tails) = compound_parts(code.symbols.name(*id));
-                        let stem_name = stem_name.as_bytes().to_vec();
-                        let key = self.tail_key(code, *id);
-                        self.stem_set(&stem_name, &key, value);
-                        let mut resolved = stem_name;
-                        resolved.extend_from_slice(&key);
-                        self.trace_compound_name(indent, &tag, &resolved);
-                        self.trace_assignment(indent, &tag, &rendered);
-                    }
-                    other => return Err(Loud::expression(other).into()),
-                }
+                self.assign_expr_target(code, target, value, &rendered, indent)?;
                 Ok(Flow::Next)
             }
 
@@ -1912,6 +1867,18 @@ impl Interp {
                 Ok(Flow::Next)
             }
 
+            // `PARSE`, in the five source spellings whose string is a value
+            // rather than a line read back (`VALUE`, `VAR`, `ARG`, `SOURCE`,
+            // `VERSION`). The template engine, the trace shape and the
+            // movement rules are `parse_template.rs`'s; this arm is the
+            // dispatch. `PARSE PULL`/`PARSE LINEIN` fail loudly from inside
+            // it (`Loud::parse_source`) rather than being defaulted to the
+            // null string, which is a plausible-looking wrong answer.
+            InstructionKind::Parse(parse) => {
+                self.exec_parse(code, parse)?;
+                Ok(Flow::Next)
+            }
+
             other => Err(Loud::instruction(other).into()),
         }
     }
@@ -2372,6 +2339,84 @@ impl Interp {
             }
             other => Err(Loud::expression(other).into()),
         }
+    }
+
+    /// Writes `value` through one assignment *target expression*, and traces
+    /// the write.
+    ///
+    /// `rendered` is `value`'s own text, supplied rather than recomputed here:
+    /// every caller already has it, and rendering a number twice is how a
+    /// second rendering under a different `DIGITS` would get a chance to
+    /// disagree with the first (D15).
+    ///
+    /// **The two callers do not agree about whether the `other` arm can be
+    /// reached, and that was measured rather than reasoned from one of them.**
+    /// An `Assignment`'s target is whatever `addVariable` builds, which is
+    /// only the three shapes below (`ast.rs`'s own doc comment on
+    /// `Assignment`). A `PARSE` target is `parseVariableOrMessageTerm`, so the
+    /// grammar admits a message term there: measured, `parse value 'a b' with
+    /// q~x r` parses, and the oracle answers `Error 97.1` (`Object "Q" does
+    /// not understand message "X="`) where this crate reports a `Phase 5` gap.
+    /// So the arm is live for one caller and unreachable for the other, and it
+    /// is reported through `Loud::expression` rather than `unreachable!` for
+    /// both: a guarantee the grammar makes is not one the type system
+    /// enforces, and failing loudly beats trusting it.
+    ///
+    /// **Shared by `Assignment` and `PARSE`**, which is what makes a
+    /// compound `PARSE` target behave exactly as `a.i = value` does --
+    /// measured, `ii = 3; parse value 'one two' with aa.ii cc.` traces
+    /// `>C> AA.II => "AA.3"` then `>=> AA.II <= "one"` and stores the value
+    /// under the resolved tail.
+    pub(crate) fn assign_expr_target(
+        &mut self,
+        code: &Code<'_>,
+        target: &Expr,
+        value: ObjRef,
+        rendered: &[u8],
+        indent: usize,
+    ) -> Result<(), Failure> {
+        match &target.kind {
+            ExprKind::Variable(id) => {
+                let name = code.symbols.name(*id).as_bytes().to_vec();
+                let slot = self.slot_of(&name);
+                let frame = self.activation().frame;
+                self.roots.set_slot(frame, slot, value);
+                self.trace_assignment(indent, &name, rendered);
+            }
+            // `stem. = expr`: replace-and-rebind (D15a), through the
+            // library `stem_assign` already builds -- this arm is the
+            // dispatch, not new stem logic.
+            ExprKind::Stem(id) => {
+                let name = code.symbols.name(*id).as_bytes().to_vec();
+                self.stem_assign(&name, value);
+                self.trace_assignment(indent, &name, rendered);
+            }
+            // `a.b = expr`: resolve the tail key the same way reading
+            // `a.b` would (`eval_node`'s own `Compound` arm), then
+            // mutate that one tail in place through `stem_set`.
+            //
+            // `>C>` before `>=>` (`RexxActivation.cpp:4791`-`4802`'s
+            // own order for a *read*; measured that a *write* through
+            // `ExpressionCompoundVariable::assign` announces the same
+            // resolved name first too): the tag is the compound's own
+            // **source spelling** (`a.i` stays `A.I` regardless of `i`'s
+            // value), and the resolved name is `stem_name` (the read site's
+            // own, matching `stem_set`'s own convention) concatenated with
+            // `key`.
+            ExprKind::Compound(id) => {
+                let tag = code.symbols.name(*id).as_bytes().to_vec();
+                let (stem_name, _tails) = compound_parts(code.symbols.name(*id));
+                let stem_name = stem_name.as_bytes().to_vec();
+                let key = self.tail_key(code, *id);
+                self.stem_set(&stem_name, &key, value);
+                let mut resolved = stem_name;
+                resolved.extend_from_slice(&key);
+                self.trace_compound_name(indent, &tag, &resolved);
+                self.trace_assignment(indent, &tag, rendered);
+            }
+            other => return Err(Loud::expression(other).into()),
+        }
+        Ok(())
     }
 
     /// Assigns `value` to the variable, whole stem, or one verbatim-keyed
@@ -5391,7 +5436,7 @@ impl Interp {
     /// `numeric digits 3; do 12345; end` is error 26.2, rc 230 on the
     /// oracle; this crate ran clean, rc 0, before this fix. `do i = 1 to
     /// 99999 for 12345` under `digits 3` is 26.3 on the oracle, same gap.
-    fn whole_nonneg(&mut self, value: ObjRef) -> Option<u64> {
+    pub(crate) fn whole_nonneg(&mut self, value: ObjRef) -> Option<u64> {
         let number = self.to_number(value).ok()?;
         let digits = usize::try_from(self.activation().settings.digits()).ok()?;
         let whole = number.whole_value(digits)?;
@@ -6441,13 +6486,13 @@ fn indent_in_range(instructions: &[Instruction], start: usize, end: usize, targe
 /// anything else with a period -- two or more, or one not at the end -- is a
 /// compound.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-enum NameShape {
+pub(crate) enum NameShape {
     Simple,
     Stem,
     Compound,
 }
 
-fn shape_of(name: &[u8]) -> NameShape {
+pub(crate) fn shape_of(name: &[u8]) -> NameShape {
     let dots = name.iter().filter(|&&b| b == b'.').count();
     if dots == 0 {
         NameShape::Simple

@@ -1,0 +1,133 @@
+/* Every PARSE template trigger kind, and the movement rules that separate
+   the ones that look like variants of each other.
+
+   WHICH WRONG ANSWER EACH BLOCK PRINTS.
+
+   minus/minuslength: `-n` moves the match position back and hands the target
+   everything from the OLD match position to the end of the string; `<n` hands
+   it exactly the n bytes ending at the match position. An engine that treats
+   them as one operation with a shared slice rule prints A2's middle field as
+   `cdefghij` (the `-2` answer) or A1's as `cd` (the `<2` answer). Same
+   movement, unrelated assignment.
+
+   backward: `=n`, `+n` and `-n` share one rule -- forward of the current
+   position gives [current, new), and ANYTHING ELSE, equal included, gives
+   [current, END]. An engine that assigns the null string for equal or
+   backward movement prints B4's third field and B5's third field empty.
+
+   lengths: `>n`/`<n` do not share it. They are exact slices, so `>0` and `<0`
+   both give the null string where `+0` gives the whole remainder. An engine
+   that routes all four through one rule prints B7/B8 as `abcdefghij` and B6
+   as empty.
+
+   patterns: an absent pattern matches at END and the empty pattern behaves as
+   absent, so E1 and E2 give the whole string and then nothing. An engine that
+   treats "not found" as "no movement" prints them the other way round, and one
+   that lets an empty needle match at position 1 prints E2 as `[][abcdefghij]`.
+
+   after a pattern: the next TARGET starts past the match while a following
+   RELATIVE trigger measures from the match's START. So `'c' +1` is
+   indistinguishable from `'c'` alone (E5 equals E4) and `'c' -1` reaches back
+   over the matched byte (E6). An engine with one match position instead of two
+   prints E6 as `cdefghij`.
+
+   words: only the final target of a trigger keeps its leading blanks, extra
+   targets get the null string rather than being skipped, and a tab counts as
+   whitespace. G1's third field is ` c`, with the blank.
+
+   No abuttal anywhere: a symbol abutting a preceding string literal can be
+   read as its hex or binary suffix (`say a"|"b` is error 15), so every join
+   below is an explicit `||`. */
+
+d = 'abcdefghij'
+
+parse value d with p 5 q -2 r
+say 'A1 ['||p||']['||q||']['||r||']'
+parse value d with p 5 q <2 r
+say 'A2 ['||p||']['||q||']['||r||']'
+
+parse value d with p 5 q
+say 'B1 ['||p||']['||q||']'
+parse value d with p 1 q
+say 'B2 ['||p||']['||q||']'
+parse value d with p 11 q
+say 'B3 ['||p||']['||q||']'
+parse value d with p 5 q 5 r
+say 'B4 ['||p||']['||q||']['||r||']'
+parse value d with p 5 q -99 r
+say 'B5 ['||p||']['||q||']['||r||']'
+parse value d with p +0 q
+say 'B6 ['||p||']['||q||']'
+parse value d with p >0 q
+say 'B7 ['||p||']['||q||']'
+parse value d with p <0 q
+say 'B8 ['||p||']['||q||']'
+parse value d with p =3 q
+say 'B9 ['||p||']['||q||']'
+
+parse value d with p >3 q <2 r
+say 'C1 ['||p||']['||q||']['||r||']'
+parse value d with p +3 q +2 r
+say 'C2 ['||p||']['||q||']['||r||']'
+parse value d with p +20 q
+say 'C3 ['||p||']['||q||']'
+parse value d with p <20 q
+say 'C4 ['||p||']['||q||']'
+
+nn = 6
+parse value d with p =(nn) q
+say 'D1 ['||p||']['||q||']'
+parse value d with p +(nn) q
+say 'D2 ['||p||']['||q||']'
+/* A bare parenthesised expression is a PATTERN, not a column: this searches
+   for the two-byte string `10` and does not find it. */
+parse value d with p (nn + 4) q
+say 'D3 ['||p||']['||q||']'
+parse value d with p +(length('abc')) q
+say 'D4 ['||p||']['||q||']'
+
+parse value d with p 'z' q
+say 'E1 ['||p||']['||q||']'
+parse value d with p '' q
+say 'E2 ['||p||']['||q||']'
+parse value d with p 'a' q
+say 'E3 ['||p||']['||q||']'
+parse value d with p 'c' q
+say 'E4 ['||p||']['||q||']'
+parse value d with p 'c' +1 q
+say 'E5 ['||p||']['||q||']'
+parse value d with p 'c' -1 q
+say 'E6 ['||p||']['||q||']'
+parse value 'aXbXc' with p 'X' q 'X' r
+say 'F1 ['||p||']['||q||']['||r||']'
+parse value 'aXXb' with p 'XX' q 'X' r
+say 'F2 ['||p||']['||q||']['||r||']'
+
+parse value 'a  b  c' with p q r
+say 'G1 ['||p||']['||q||']['||r||']'
+parse value '  a b  ' with p q
+say 'G2 ['||p||']['||q||']'
+parse value 'a b' with p q r s
+say 'G3 ['||p||']['||q||']['||r||']['||s||']'
+tabbed = 'a'||d2c(9)||'b'
+parse value tabbed with p q
+say 'G4 ['||p||']['||q||']'
+
+/* The comma fence assigns the null string to every unmatched target and never
+   leaves one unset, and an omitted middle template empties that template
+   alone without shifting the others. */
+parse value 'a b' with p , q
+say 'H1 ['||p||']['||q||']'
+parse value 'a b' with p q , r
+say 'H2 ['||p||']['||q||']['||r||']'
+parse value 'a b' with p , , q
+say 'H3 ['||p||']['||q||']'
+
+/* The `.` placeholder consumes a field and assigns nothing, in every
+   position. */
+parse value 'one two three' with p . q
+say 'I1 ['||p||']['||q||']'
+parse value 'one two three' with . p .
+say 'I2 ['||p||']'
+parse value d with . 3 p . 7 q
+say 'I3 ['||p||']['||q||']'

@@ -92,6 +92,11 @@ mod clause;
 mod run;
 use run::Ended;
 
+// The `PARSE` template engine: the movement cursor (source-independent, one
+// struct, unit-tested against measured oracle bytes) and the driver that
+// evaluates trigger operands, traces, and assigns the targets.
+mod parse_template;
+
 // `TRACE` (D17): the mode, the nine reachable prefixes' own byte formatting,
 // and the classification a `TRACE`/`TRACE VALUE` setting goes through to
 // become one. `run.rs`'s `step_in_temps_frame` and its loop drivers, and
@@ -546,6 +551,41 @@ impl Loud {
         }
     }
 
+    /// A `PARSE` source that reads a line rather than a value in scope:
+    /// `PARSE PULL` and `PARSE LINEIN`.
+    ///
+    /// A disclosed gap inside an otherwise implemented instruction, the same
+    /// shape [`Loud::compound_expose`] is, and loud for the same reason: the
+    /// near miss is silent. Both sources would parse the null string if
+    /// defaulted, which is a plausible answer for an empty queue and a wrong
+    /// one for a queue with lines in it. `4c` is the owner because the queue
+    /// this reads back is the one `PUSH`/`QUEUE` already fill (`queue.rs`).
+    ///
+    /// [`Loud::compound_expose`]: Loud::compound_expose
+    fn parse_source(keyword: &str) -> Loud {
+        Loud {
+            message: owned_message(&format!("PARSE {keyword}"), Some("4c")),
+        }
+    }
+
+    /// A `PARSE` template trigger that needs an operand and has none.
+    ///
+    /// Not reachable from a program that parsed: `parse_template`
+    /// (`rexx-parse`'s own `instruction.rs`) fills `value` for every kind but
+    /// `End`, and refuses a trigger with nothing after it at parse time
+    /// (38.901, measured). Kept as a `Loud` rather than a defaulted position
+    /// or an `unreachable!` for the reason [`Loud::instruction`]'s own doc
+    /// gives: a guarantee the grammar makes is not one the type system
+    /// enforces, and an abort is the outcome the failing-loudly rule exists to
+    /// exclude.
+    ///
+    /// [`Loud::instruction`]: Loud::instruction
+    fn parse_trigger_operand() -> Loud {
+        Loud {
+            message: "a PARSE template trigger carries no position operand".to_string(),
+        }
+    }
+
     /// An activation's body selector named something that is not a routine
     /// body -- an internal inconsistency, never a program error.
     ///
@@ -760,10 +800,16 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // stores every line either writes, and neither has a shape this
         // crate cannot express the way `Procedure`'s `expose a.1` does.
         InstructionKind::Push { .. } | InstructionKind::Queue { .. } => None,
-        InstructionKind::Parse(_)
-        | InstructionKind::Arg(_)
-        | InstructionKind::Pull(_)
-        | InstructionKind::Address(_) => Some("4c"),
+        // `Parse` is `None`: the template engine is here, and the two sources
+        // that are not -- `PARSE PULL` and `PARSE LINEIN` -- fail loudly
+        // through `Loud::parse_source`, a sub-case within the variant rather
+        // than a residual claim on the keyword. `Arg` and `Pull` are the
+        // separate `ARG`/`PULL` spellings, which have their own variants and
+        // move separately.
+        InstructionKind::Parse(_) => None,
+        InstructionKind::Arg(_) | InstructionKind::Pull(_) | InstructionKind::Address(_) => {
+            Some("4c")
+        }
         InstructionKind::Expose { .. }
         | InstructionKind::Options { .. }
         | InstructionKind::Message { .. }
@@ -1313,6 +1359,16 @@ struct Interp {
     /// a constant that would make an unseeded program reproducible where the
     /// oracle's is not.
     random_seed: Option<u64>,
+    /// The running program's own location, as `PARSE SOURCE`'s third word.
+    ///
+    /// The same string `run_program` was handed and `Raised::report`'s
+    /// position line prints -- absolute and dot-normalised, which is how the
+    /// oracle spells it (`run_program`'s own doc has the measurement). Held
+    /// here rather than derived from `programs` because a program's bytes
+    /// cannot know where they came from, and filled by `execute`; every other
+    /// construction path leaves it empty, so a unit test that wants a path
+    /// sets one.
+    program_path: String,
 }
 
 /// The name and arguments of one call in progress.
@@ -1423,6 +1479,7 @@ impl Interp {
             call_context: CallContext::default(),
             queue: Queue::new(),
             random_seed: None,
+            program_path: String::new(),
         }
     }
 
@@ -1761,6 +1818,7 @@ fn execute(path: &str, text: Vec<u8>, collect_every_alloc: bool) -> Outcome {
     };
 
     let mut interp = Interp::new();
+    interp.program_path = path.to_string();
     if collect_every_alloc {
         interp.enable_stress_collect();
     }
