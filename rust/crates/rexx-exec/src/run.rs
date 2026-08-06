@@ -1844,9 +1844,8 @@ impl Interp {
             // the queue the value lands on, decided below by which variant
             // matched (review round 1's M4: one arm, not two copies that can
             // drift). See `queue.rs`'s own module doc for the measured LIFO
-            // (`PUSH`)/FIFO (`QUEUE`) order and why nothing here reads a
-            // line back: reading one back is `PULL`/`PARSE PULL`/`QUEUED()`'s,
-            // not this arm's.
+            // (`PUSH`)/FIFO (`QUEUE`) order; reading a line back is
+            // `Interp::pull_line`'s (`input.rs`), not this arm's.
             InstructionKind::Push { expression } | InstructionKind::Queue { expression } => {
                 let line = match expression {
                     Some(expression) => {
@@ -1867,14 +1866,28 @@ impl Interp {
                 Ok(Flow::Next)
             }
 
-            // `PARSE`, in the five source spellings whose string is a value
-            // rather than a line read back (`VALUE`, `VAR`, `ARG`, `SOURCE`,
-            // `VERSION`). The template engine, the trace shape and the
-            // movement rules are `parse_template.rs`'s; this arm is the
-            // dispatch. `PARSE PULL`/`PARSE LINEIN` fail loudly from inside
-            // it (`Loud::parse_source`) rather than being defaulted to the
-            // null string, which is a plausible-looking wrong answer.
-            InstructionKind::Parse(parse) => {
+            // `PARSE`, in every source spelling, plus the two short forms that
+            // are the same instruction with `UPPER` already set: `ARG
+            // template` is `PARSE UPPER ARG template` and `PULL template` is
+            // `PARSE UPPER PULL template`. One arm, because `rexx-parse`
+            // builds the identical `Parse` body for all three (its
+            // `parse_instruction_body` takes the implied source and sets
+            // `upper` from it), so a second arm here would be a second copy of
+            // the dispatch and nothing else.
+            //
+            // Confirmed rather than assumed, with arguments `mIxEd CaSe`: `arg
+            // n1 n2` gives `MIXED`/`CASE`, `parse arg n3 n4` gives
+            // `mIxEd`/`CaSe`, and `parse upper arg n5 n6` gives `MIXED`/`CASE`.
+            // `UPPER` is a keyword only *before* the source: `arg upper t4`
+            // assigns `UPPER = 'MIXED'` and `t4 = 'CASE'`, taking `UPPER` as an
+            // ordinary template target -- which needs no special handling here
+            // because `rexx-parse` has already resolved it that way.
+            //
+            // The template engine, the trace shape and the movement rules are
+            // `parse_template.rs`'s; this arm is the dispatch.
+            InstructionKind::Parse(parse)
+            | InstructionKind::Arg(parse)
+            | InstructionKind::Pull(parse) => {
                 self.exec_parse(code, parse)?;
                 Ok(Flow::Next)
             }

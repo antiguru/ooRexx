@@ -24,20 +24,26 @@
 #   program listed here.
 #
 #   PARSE (4c Task 7) -- all eight template trigger kinds, the comma fence,
-#   the `.` placeholder, and the VALUE, VAR, ARG, SOURCE and VERSION sources.
-#   NOT PARSE PULL or PARSE LINEIN, which read a line back out of the queue or
-#   the console and fail loudly through Loud::parse_source, and NOT the ARG or
-#   PULL instruction spellings, which are separate InstructionKind variants and
-#   still fail loudly. PARSE VERSION is implemented but no program here prints
-#   it: every field it carries is the interpreter's own build identity, the
-#   third a build DATE, so a differential witness over it would be a claim
-#   about which binary the oracle was built from. It is pinned as a measured
-#   constant in parse_template.rs instead.
+#   the `.` placeholder, and every source. PARSE VERSION is implemented but no
+#   program here prints it: every field it carries is the interpreter's own
+#   build identity, the third a build DATE, so a differential witness over it
+#   would be a claim about which binary the oracle was built from. It is pinned
+#   as a measured constant in parse_template.rs instead.
+#
+#   The ARG and PULL instruction spellings, and the PARSE PULL and PARSE LINEIN
+#   sources (4c Task 8). The queue a program fills itself is fair game; the
+#   console is not, beyond reading it at end of input, because the harness gives
+#   both interpreters an empty stdin and a program whose answers depended on the
+#   console's contents could not be deterministic here. A command-line argument
+#   is likewise out of reach: the harness passes none, so a program here can
+#   only ever see the no-argument case. Both of those are witnessed against the
+#   oracle in crates/rexx-exec/tests/input_oracle.rs, which drives the rexx-run
+#   binary with argv and a fed stdin rather than calling run_program in process.
 #
 # WHAT IT STILL EXCLUDES. Everything phase-4b.txt excludes except builtin
-# function calls and PARSE, which is to say: no ARG/PULL instruction, no
-# message sends, no :: directives, no command clauses, no DO WITH, and no
-# DO OVER on a stem. The authoritative, machine-checked list is
+# function calls and PARSE, which is to say: no message sends, no :: directives,
+# no command clauses, no DO WITH, and no DO OVER on a stem. The authoritative,
+# machine-checked list is
 # tests/owners.rs's INSTRUCTION_TAGS/EXPR_TAGS: anything still carrying an
 # `Owner::Phase` there fails loudly and cannot appear in any program listed in
 # this file. Later 4c tasks move their own construct across that line and
@@ -70,3 +76,13 @@ lang/parse_sources.rex
 # because it is the one PARSE program in the corpus written before this engine
 # existed, so it is an expectation this task had no hand in shaping.
 lang/parse_template.rex
+
+# New for 4c Task 8 -- PULL, PARSE PULL, PARSE LINEIN and the ARG instruction.
+# lang/push_queue.rex can pin that PUSH/QUEUE evaluate and trace their
+# expression but not which end of the queue a line landed on, and block A here
+# reads that order back. Its own header states, per block, which wrong answer
+# each would print. Its E block runs the same five constructs under TRACE R and
+# then TRACE I, because a target's value line is a choice of prefix between the
+# two modes and because a bare PULL's `>K>` line carries the line before the
+# upcase while the `>>>` after it carries the line after.
+lang/pull_queue.rex

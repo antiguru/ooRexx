@@ -1164,11 +1164,29 @@ above.
   Phase 7: four of its five producers are this same interactive-debug
   path.
 
-  PUSH/QUEUE's own queue storage has no *differential* witness -- no
-  corpus program run against the oracle can distinguish a correct
+  A HARNESS THAT CAN SEE THE STDOUT HALF NOW EXISTS, and anything added to
+  it must stay clear of `?`. `crates/rexx-exec/tests/input_oracle.rs` (4c
+  Task 8) feeds both interpreters the same non-empty stdin, which is exactly
+  the condition under which the drain above is visible on stdout rather than
+  only on stderr. No row there uses `TRACE ?` or sets RXTRACE, and one that
+  did would fail for this reason rather than for a defect in the construct
+  it was written for.
+
+  CLOSED, 4c Task 8. PULL and PARSE PULL now read the queue back, and the
+  round trip is compared against the oracle by
+  `crates/rexx-exec/tests/input_oracle.rs`'s `queue-round-trip` row (live
+  under REXX_CORPUS_GATE today) and by `corpus/lang/pull_queue.rex`'s block A
+  (in `phase-4c.txt`, which `tests/corpus.rs` does not read until Task 15
+  Step 4 -- so that half is committed and inert, exactly as Task 7's own
+  witnesses are). Measured by hand at the same time, byte-identical on all
+  three channels. The record of what the gap WAS follows, unchanged, because
+  the boundary it describes is what the two witnesses above had to cross.
+
+  PUSH/QUEUE's own queue storage had no *differential* witness -- no
+  corpus program run against the oracle could distinguish a correct
   implementation from a specific, narrower degenerate one (4b Task 8, I15).
   Every construct that can read the queue back -- PULL, PARSE PULL,
-  QUEUED() -- is 4c's, so no corpus program can observe what the queue
+  QUEUED() -- was 4c's, so no corpus program could observe what the queue
   actually stored; only what was written to it and how it traced.
 
   THE BOUNDARY, MEASURED THREE WAYS (an earlier version of this row named
@@ -1201,11 +1219,14 @@ above.
   in scope and a green gate would otherwise have no way to learn that no
   corpus program can observe the queue's own contents.
 
-  CLOSES when 4c lands its first `PARSE PULL` (or `PULL`, or `QUEUED()`)
-  corpus program: that is the first point a *differential* run can observe
-  what this crate's queue stored, rather than only what was written to it
-  (the corpus's own reach today) or what an in-crate unit test asserts it
-  should be (`queue.rs`'s own reach today).
+  IT CLOSED the way this row said it would: at 4c's first `PARSE PULL`
+  reader, which is the first point a *differential* run can observe what this
+  crate's queue stored rather than only what was written to it or what an
+  in-crate unit test asserts it should be. `queue.rs`'s own
+  `interleaved_push_and_queue_survive_a_round_trip` closed the in-crate half
+  of the same gap at the same time -- both tests that were there before it
+  assert the STORED order, which a `pop_back` implementation leaves
+  untouched.
 
   THE CROSS-PROCESS CAVEAT, CORRECTED. The scoping document (I15,
   `2026-08-01-phase-4bc-scoping.md`) recorded the oracle's rxapi-backed

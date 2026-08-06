@@ -52,15 +52,21 @@ mod value;
 // and the "replace the object, mutate a tail in place" split.
 mod stem;
 
-// The in-process external data queue (I15) `PUSH`/`QUEUE` write to. Reading it
-// back is `PULL`/`PARSE PULL`/`QUEUED()`'s, none of which this crate has.
+// The in-process external data queue (I15) `PUSH`/`QUEUE` write to and
+// `PULL`/`PARSE PULL` read back.
 mod queue;
 use queue::Queue;
 
 // What a command line supplies to a top-level program: the one argument string
-// it can carry, and how a list of words becomes that string.
+// it can carry, how a list of words becomes that string, and where `.input`
+// reads from.
 mod invocation;
-pub use invocation::{Invocation, join_command_line};
+pub use invocation::{Invocation, ProgramInput, join_command_line};
+
+// `.input`: one line position, shared by every construct that reads a line,
+// and the queue-first rule `PULL` follows on top of it.
+mod input;
+use input::Input;
 
 // The per-body resolution plan (D16): `Plan`, `BodyKey`, `ProgramId`, the
 // plan cache, and the full name-resolution order (plan, then `extra`, then
@@ -556,23 +562,6 @@ impl Loud {
         }
     }
 
-    /// A `PARSE` source that reads a line rather than a value in scope:
-    /// `PARSE PULL` and `PARSE LINEIN`.
-    ///
-    /// A disclosed gap inside an otherwise implemented instruction, the same
-    /// shape [`Loud::compound_expose`] is, and loud for the same reason: the
-    /// near miss is silent. Both sources would parse the null string if
-    /// defaulted, which is a plausible answer for an empty queue and a wrong
-    /// one for a queue with lines in it. `4c` is the owner because the queue
-    /// this reads back is the one `PUSH`/`QUEUE` already fill (`queue.rs`).
-    ///
-    /// [`Loud::compound_expose`]: Loud::compound_expose
-    fn parse_source(keyword: &str) -> Loud {
-        Loud {
-            message: owned_message(&format!("PARSE {keyword}"), Some("4c")),
-        }
-    }
-
     /// A `PARSE` template trigger that needs an operand and has none.
     ///
     /// Not reachable from a program that parsed: `parse_template`
@@ -805,16 +794,12 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // stores every line either writes, and neither has a shape this
         // crate cannot express the way `Procedure`'s `expose a.1` does.
         InstructionKind::Push { .. } | InstructionKind::Queue { .. } => None,
-        // `Parse` is `None`: the template engine is here, and the two sources
-        // that are not -- `PARSE PULL` and `PARSE LINEIN` -- fail loudly
-        // through `Loud::parse_source`, a sub-case within the variant rather
-        // than a residual claim on the keyword. `Arg` and `Pull` are the
-        // separate `ARG`/`PULL` spellings, which have their own variants and
-        // move separately.
-        InstructionKind::Parse(_) => None,
-        InstructionKind::Arg(_) | InstructionKind::Pull(_) | InstructionKind::Address(_) => {
-            Some("4c")
-        }
+        // All three spellings of the one instruction: `PARSE`, and the `ARG`
+        // and `PULL` short forms, which `rexx-parse` gives variants of their
+        // own but which share `exec_parse`. Every source is implemented,
+        // including the two that read a line (`PARSE PULL`, `PARSE LINEIN`).
+        InstructionKind::Parse(_) | InstructionKind::Arg(_) | InstructionKind::Pull(_) => None,
+        InstructionKind::Address(_) => Some("4c"),
         InstructionKind::Expose { .. }
         | InstructionKind::Options { .. }
         | InstructionKind::Message { .. }
@@ -1345,10 +1330,16 @@ struct Interp {
     /// the wrong answer for the other two.
     call_context: CallContext,
     /// The in-process external data queue (I15): every line
-    /// `PUSH`/`QUEUE` has written. See `queue.rs`'s own module doc for the
-    /// LIFO/FIFO split and why nothing here reads it back -- that is
-    /// `PULL`/`PARSE PULL`/`QUEUED()`'s, none of which this crate has.
+    /// `PUSH`/`QUEUE` has written and `PULL`/`PARSE PULL` have not yet
+    /// removed. See `queue.rs`'s own module doc for the LIFO/FIFO split, and
+    /// `Interp::pull_line` (`input.rs`) for the queue-first-then-`.input`
+    /// rule that reads it.
     queue: Queue,
+    /// `.input`'s position: the one line cursor `PULL`, `PARSE PULL` and
+    /// `PARSE LINEIN` all advance. See `input.rs` for the shared-position
+    /// measurement and the line rule; `ProgramInput`'s own doc has why the
+    /// process's real standard input is never what this holds by default.
+    input: Input,
     /// `RANDOM`'s generator state: the seed the next call will scramble, or
     /// `None` before any call has drawn one.
     ///
@@ -1495,6 +1486,11 @@ impl Interp {
             procedure_permitted: false,
             call_context: CallContext::default(),
             queue: Queue::new(),
+            // Nothing to read, which is what makes it impossible for a unit
+            // test to reach the harness's own standard input: only `execute`
+            // ever replaces this, and only from an `Invocation` that named a
+            // source. `ProgramInput`'s own doc has the argument.
+            input: Input::new(ProgramInput::Nothing),
             random_seed: None,
             program_path: String::new(),
         }
@@ -1873,7 +1869,9 @@ fn execute(
     // doc for what reads it and for the three measured invocations that tell
     // "no argument" from "one empty argument" apart.
     interp.call_context.name = path.as_bytes().to_vec();
-    if let Some(argument) = invocation.argument() {
+    let (argument, program_input) = invocation.into_parts();
+    interp.input = Input::new(program_input);
+    if let Some(argument) = argument {
         let value = interp.text(&argument);
         // Rooted with a `push_temp` taken before `run`, which is what makes it
         // outlive every clause: `step_in_temps_frame` truncates the

@@ -18,9 +18,11 @@
 //! tracing, variables or where its string came from, so it is unit-testable
 //! against measured oracle bytes with no `Interp` in sight. [`Interp::
 //! exec_parse`] is the driver: it evaluates trigger operands, emits the trace
-//! lines, and assigns the targets. A new *source* (`PARSE PULL`, `PARSE
-//! LINEIN`) is a new arm in [`Interp::parse_strings`] and touches neither
-//! layer's logic.
+//! lines, and assigns the targets. A *source* is one arm of
+//! [`Interp::parse_strings`] and touches neither layer's logic -- including
+//! the two that read a line rather than evaluating a value, `PARSE PULL` and
+//! `PARSE LINEIN`, whose whole contribution here is calling one of
+//! `input.rs`'s two readers and handing back what it returned.
 //!
 //! # The five positions
 //!
@@ -502,8 +504,20 @@ impl Interp {
                 self.call_context.arguments = arguments;
                 return Ok(strings);
             }
-            ParseSource::Pull => return Err(Loud::parse_source("PULL").into()),
-            ParseSource::LineIn => return Err(Loud::parse_source("LINEIN").into()),
+            // The two sources that read a line rather than evaluating a value.
+            // The split between them is entirely in which reader is called --
+            // `PULL` takes the queue's head when there is one, `LINEIN` never
+            // consults the queue at all -- and `input.rs` owns that rule and
+            // the measurements behind it.
+            //
+            // The `>K>` line below therefore carries the line **before** any
+            // `UPPER` transform, because `next_template` is what applies the
+            // transform and it runs after this. Measured, `pull n3` on a line
+            // reading `skipped three`: `>K> "PULL" => "skipped three"` and
+            // then `>>> "SKIPPED THREE"`, the two lines disagreeing on the
+            // same instruction.
+            ParseSource::Pull => ("PULL", self.pull_line()),
+            ParseSource::LineIn => ("LINEIN", self.linein_line()),
         };
         self.trace_keyword(indent, keyword, &value);
         Ok(vec![value])

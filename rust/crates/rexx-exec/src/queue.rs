@@ -13,14 +13,15 @@
 //! (`run.rs`'s own arms for both). One per `Interp`, held as a plain field
 //! rather than anything IPC-backed -- see "Why not cross-process" below.
 //!
-//! **Nothing in 4b reads this queue.** `PULL`, `PARSE PULL` and `QUEUED()`
-//! are all 4c's, so this module has no removal method yet: adding one before
-//! anything calls it would be speculative API nobody has measured a caller
-//! for. This module's own tests read the stored order back through the
-//! private `lines` field instead, the same way `stem.rs`'s tests reach into
-//! `Body::Stem` directly rather than through a round trip nothing wires up
-//! yet -- both the type-level tests below, which construct a `Queue`
-//! directly, and
+//! `PULL` and `PARSE PULL` read it back, through `Interp::pull_line`
+//! (`input.rs`), which is where the "queue first, then `.input`" rule lives
+//! rather than here: this type knows the order its own two writers produce and
+//! nothing about the console.
+//!
+//! This module's own tests read the stored order back through the private
+//! `lines` field as well as through [`Queue::pop`], the same way `stem.rs`'s
+//! tests reach into `Body::Stem` directly -- both the type-level tests below,
+//! which construct a `Queue` directly, and
 //! `tests::push_and_queue_actually_write_into_the_running_interpreters_queue`,
 //! which runs a program through a real `Interp` and reads `Interp::queue`
 //! back the same way. The second exists because the first two cannot see
@@ -36,13 +37,11 @@
 //! oracle's `RexxInstructionQueue` (`QueueInstruction.cpp`) and differ only
 //! in `Activity::QueueOrder` (`QUEUE_LIFO` for `PUSH`, `QUEUE_FIFO` for
 //! `QUEUE`) -- `ast.rs`'s own doc comment on `InstructionKind::Push`/`Queue`
-//! already says the two keywords share one C++ class. The head is "the next
-//! line `PULL` will remove" once 4c wires that up, which is what makes
-//! `PUSH` (to the head) the LIFO order and `QUEUE` (to the tail) the FIFO
-//! one relative to it.
+//! already says the two keywords share one C++ class. The head is the next
+//! line [`Queue::pop`] removes, which is what makes `PUSH` (to the head) the
+//! LIFO order and `QUEUE` (to the tail) the FIFO one relative to it.
 //!
-//! Measured against the oracle with a 4c-shaped probe this crate cannot yet
-//! run itself (`PULL` is not implemented), `push "a"` then `queue "b"` then
+//! Measured against the oracle, `push "a"` then `queue "b"` then
 //! `push "c"`, then three bare `PULL`s into `v1`/`v2`/`v3`, each `SAY`n:
 //!
 //! ```text
@@ -64,16 +63,14 @@
 //! `B` only through `PULL`'s own transform, not because `queue.rs` folded
 //! their case on the way in.
 //!
-//! **The "head is what `PULL` removes" half of that is an assumption
-//! nothing here enforces (review round 1, M5).** `Queue` has no removal
-//! method (the paragraph above explains why not yet), so this file's own
-//! unit tests can only assert the internal order is `c`, `a`, `b`, not that
-//! a future `PULL` will actually consume it front-first. 4c's own `PULL`
-//! must pop the *front* to keep that order matching the oracle's `C`, `A`,
-//! `B`; a `pop_back` implementation would leave every test in this file
-//! green while printing `B`, `A`, `C` instead. Whoever implements `PULL`
-//! should treat this paragraph as the guard, not re-derive the premise from
-//! the measurement above.
+//! **The "head is what `PULL` removes" half of that used to be an assumption
+//! nothing enforced (review round 1, M5), and [`Queue::pop`] is what closed
+//! it.** A `pop_back` implementation would leave both type-level tests in
+//! this file green -- they assert the stored order, which `pop_back` does not
+//! change -- while printing `B`, `A`, `C` for the probe above. What
+//! distinguishes the two is a program that pushes and then pulls, which is
+//! `corpus/lang/pull_queue.rex` differentially and
+//! `interleaved_push_and_queue_survive_a_round_trip` below in crate.
 //!
 //! # Why not cross-process
 //!
@@ -98,10 +95,10 @@
 
 use std::collections::VecDeque;
 
-/// One `Interp`'s queue: every line `PUSH`/`QUEUE` has written, the head
-/// being the next line `PULL` will remove -- see the module doc's own
-/// "LIFO and FIFO" section for which end that is for each keyword, and the
-/// paragraph after it for why that is a premise this type does not enforce.
+/// One `Interp`'s queue: every line `PUSH`/`QUEUE` has written and
+/// [`Queue::pop`] has not removed, the head being the next line it will --
+/// see the module doc's own "LIFO and FIFO" section for which end that is for
+/// each keyword.
 /// `Vec<u8>` per line rather than an `ObjRef`, matching `Interp::out`/
 /// `Interp::trace`'s own sinks: `PUSH`/`QUEUE` store the already-rendered
 /// string form (`evaluateStringExpression`'s `requestString`, mirrored by
@@ -131,6 +128,18 @@ impl Queue {
     pub(crate) fn queue(&mut self, line: Vec<u8>) {
         self.lines.push_back(line);
     }
+
+    /// The head line, removed, or `None` when the queue is empty.
+    ///
+    /// The **front**, which is the whole of the LIFO/FIFO split: see the
+    /// module doc for the measured `C`, `A`, `B` this end produces and for
+    /// what a `pop_back` here would print instead. `None` rather than a null
+    /// string, so the one caller (`Interp::pull_line`, `input.rs`) can tell an
+    /// empty queue from a queued empty line -- it has to, because only the
+    /// first sends the read on to `.input`.
+    pub(crate) fn pop(&mut self) -> Option<Vec<u8>> {
+        self.lines.pop_front()
+    }
 }
 
 #[cfg(test)]
@@ -141,9 +150,9 @@ mod tests {
     use rexx_parse::{Program, parse_program};
     use std::rc::Rc;
 
-    /// The module doc's own 4c-shaped probe (`push "a"`, `queue "b"`,
-    /// `push "c"`), asserted against the queue type directly rather than
-    /// through the instruction loop.
+    /// The module doc's own probe (`push "a"`, `queue "b"`, `push "c"`),
+    /// asserted against the queue type directly rather than through the
+    /// instruction loop.
     ///
     /// **What this pins, and what it does not (review round 1, I1/I2/M2
     /// corrected this comment's earlier, wrong claim about the split).**
@@ -180,6 +189,10 @@ mod tests {
     /// pure FIFO order separately is what shows *this* half of the type is
     /// right for the ordinary reason and not by an accident of the other
     /// half's mistake cancelling out.
+    ///
+    /// The same reasoning applies to [`Queue::pop`], which is why
+    /// `interleaved_push_and_queue_survive_a_round_trip` exists beside it:
+    /// this test's own expectation is unchanged by which end `pop` takes from.
     #[test]
     fn queue_alone_is_plain_fifo() {
         let mut queue = Queue::new();
@@ -190,6 +203,30 @@ mod tests {
             queue.lines,
             VecDeque::from([b"a".to_vec(), b"b".to_vec(), b"c".to_vec()])
         );
+    }
+
+    /// Which end [`Queue::pop`] takes from, which neither test above can see.
+    ///
+    /// Both of them assert the *stored* order, and `pop_back` does not change
+    /// that -- so both stay green under it while every `PULL` in the language
+    /// answers in reverse. The module doc's measured `C`, `A`, `B` is what
+    /// this compares against, before `PULL`'s own upcasing: the values come
+    /// back `c`, `a`, `b`.
+    #[test]
+    fn interleaved_push_and_queue_survive_a_round_trip() {
+        let mut queue = Queue::new();
+        queue.push(b"a".to_vec());
+        queue.queue(b"b".to_vec());
+        queue.push(b"c".to_vec());
+        assert_eq!(queue.pop().as_deref(), Some(&b"c"[..]));
+        assert_eq!(queue.pop().as_deref(), Some(&b"a"[..]));
+        assert_eq!(queue.pop().as_deref(), Some(&b"b"[..]));
+        // Emptiness has to be distinguishable from a queued empty line, since
+        // only the first sends `PULL` on to `.input`.
+        assert_eq!(queue.pop(), None);
+        queue.queue(Vec::new());
+        assert_eq!(queue.pop().as_deref(), Some(&b""[..]));
+        assert_eq!(queue.pop(), None);
     }
 
     /// Pushes a fresh top-level activation for `program`, the minimal setup

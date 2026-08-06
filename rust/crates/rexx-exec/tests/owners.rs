@@ -161,15 +161,14 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     // left to split out.
     InstructionKind::Push { .. } => ("Push", Owner::InScope),
     InstructionKind::Queue { .. } => ("Queue", Owner::InScope),
-    // `PARSE`'s own keyword: the template engine is in scope. The two
-    // sources that are not, `PARSE PULL` and `PARSE LINEIN`, are sub-cases
-    // within the variant and fail loudly through `Loud::parse_source`, which
-    // is the same shape `PROCEDURE`'s `expose a.1` has and not something this
-    // per-variant table can express.
+    // The one instruction's three spellings, all in scope with every source:
+    // `PARSE`, and the `ARG`/`PULL` short forms that are the same instruction
+    // with `UPPER` implied. They are separate `InstructionKind` variants and so
+    // separate rows, but nothing distinguishes their ownership.
     InstructionKind::Parse(_) => ("Parse", Owner::InScope),
+    InstructionKind::Arg(_) => ("Arg", Owner::InScope),
+    InstructionKind::Pull(_) => ("Pull", Owner::InScope),
     // ---- 4c's ----
-    InstructionKind::Arg(_) => ("Arg", Owner::Phase("4c")),
-    InstructionKind::Pull(_) => ("Pull", Owner::Phase("4c")),
     InstructionKind::Address(_) => ("Address", Owner::Phase("4c")),
     // ---- Phase 5's ----
     InstructionKind::Expose { .. } => ("Expose", Owner::Phase("Phase 5")),
@@ -354,8 +353,6 @@ pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     // The one arm-grained row: `CALL`'s other three arms are in scope, so
     // they appear in `INSTRUCTION_TAGS` and not here.
     ("InstructionKind", "Call::Qualified", "Phase 5"),
-    ("InstructionKind", "Arg", "4c"),
-    ("InstructionKind", "Pull", "4c"),
     ("InstructionKind", "Address", "4c"),
     ("InstructionKind", "Expose", "Phase 5"),
     ("InstructionKind", "Options", "Phase 5"),
@@ -484,7 +481,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        32
+        34
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -498,7 +495,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("4c"))
             .count(),
-        3
+        1
     );
     assert_eq!(
         INSTRUCTION_TAGS

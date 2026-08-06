@@ -64,10 +64,14 @@
 //!
 //! # stdin is never the terminal
 //!
-//! Both interpreters are given an empty stdin. A probe that reads a line
-//! would otherwise block forever under a test harness, or -- worse -- consume
-//! whatever the runner's own stdin happened to hold, which is not the same on
-//! two machines.
+//! Both interpreters are given an empty stdin unless a caller supplies bytes
+//! for it ([`Oracle::run_with`]). A probe that read a line from the runner's
+//! own descriptor would otherwise block forever under a test harness, or --
+//! worse -- consume whatever that descriptor happened to hold, which is not
+//! the same on two machines. Supplying bytes explicitly is the only way any
+//! caller here gets a non-empty input, and the executor side of that is
+//! `rexx_exec::ProgramInput`, whose own doc makes the same argument about the
+//! in-process callers.
 
 // This module is pulled in by `mod support;` in more than one integration
 // test binary, and each one links only the part of it that binary uses. A
@@ -150,20 +154,46 @@ impl Oracle {
     /// different exit status and a different meaning. Callers that synthesise
     /// a program are therefore expected to give it a directory of its own.
     pub fn run(&self, path: &Path) -> CppOutcome {
+        self.run_with(path, &[], None)
+    }
+
+    /// [`Oracle::run`], with command-line words after the program path and a
+    /// choice of standard input.
+    ///
+    /// `args` are passed as separate `argv` entries, which the `"$0" "$@"`
+    /// wrapper the memory limit already needs forwards for free -- so nothing
+    /// here has to be escaped and the limit and the invocation count stay in
+    /// one place rather than being duplicated for a second entry point.
+    ///
+    /// `stdin` is `None` for the module doc's "stdin is never the terminal"
+    /// default, which stays a literal `Stdio::null()` rather than an
+    /// immediately-closed pipe: `/dev/null` is a seekable regular-ish
+    /// descriptor and a pipe is not, and `run`'s own behaviour must not change
+    /// shape because this method was added beside it.
+    pub fn run_with(&self, path: &Path, args: &[&str], stdin: Option<&[u8]>) -> CppOutcome {
         self.invocations.fetch_add(1, Ordering::Relaxed);
         let cwd = path.parent().unwrap_or(Path::new("."));
-        let output = Command::new("sh")
+        let mut command = Command::new("sh");
+        command
             .arg("-c")
             .arg(format!(
                 "ulimit -v {ORACLE_MEMORY_LIMIT_KIB} && exec \"$0\" \"$@\""
             ))
             .arg(&self.binary)
             .arg(path)
+            .args(args)
             .current_dir(cwd)
             .env("LD_LIBRARY_PATH", &self.lib_dir)
-            .stdin(Stdio::null())
-            .output()
-            .unwrap_or_else(|e| panic!("failed to spawn the oracle for {}: {e}", path.display()));
+            .stdin(match stdin {
+                None => Stdio::null(),
+                Some(_) => Stdio::piped(),
+            });
+        let output = match stdin {
+            None => command.output().unwrap_or_else(|e| {
+                panic!("failed to spawn the oracle for {}: {e}", path.display())
+            }),
+            Some(bytes) => write_and_wait(&mut command, bytes, path),
+        };
         CppOutcome {
             stdout: output.stdout,
             stderr: output.stderr,
@@ -176,6 +206,35 @@ impl Oracle {
     pub fn invocations(&self) -> usize {
         self.invocations.load(Ordering::Relaxed)
     }
+}
+
+/// Spawns `command`, writes `bytes` to its standard input, closes it, and waits.
+///
+/// Split out because both interpreters need it -- the oracle here and
+/// `rexx-run` in `tests/input_oracle.rs` -- and because getting it wrong has one
+/// specific failure mode worth naming: writing the whole buffer before reading
+/// any output deadlocks if the buffer is larger than a pipe and the program
+/// writes enough to fill its own. `wait_with_output` reads both output pipes
+/// concurrently, so the deadlock window is only the write below; every caller
+/// here feeds a handful of lines, far inside one pipe buffer.
+///
+/// A write failure is ignored deliberately: a program that exits before reading
+/// its input leaves this end broken (`EPIPE`), which is a legitimate outcome to
+/// compare rather than a harness error.
+pub fn write_and_wait(command: &mut Command, bytes: &[u8], path: &Path) -> std::process::Output {
+    use std::io::Write;
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|e| panic!("failed to spawn for {}: {e}", path.display()));
+    {
+        let mut sink = child.stdin.take().expect("stdin was requested as a pipe");
+        let _ = sink.write_all(bytes);
+    }
+    child
+        .wait_with_output()
+        .unwrap_or_else(|e| panic!("failed to wait for {}: {e}", path.display()))
 }
 
 /// Truncates an in-process exit code to the single byte a real process's

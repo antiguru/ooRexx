@@ -78,13 +78,16 @@
 //! ```
 //!
 //! and run, from the repository root (the `ulimit` guards against the
-//! interpreter requesting unbounded memory):
+//! interpreter requesting unbounded memory, and the `</dev/null` against the
+//! prolog reading the console -- `pull_queue.rex`'s prolog does, and without
+//! that redirect this driver blocks forever waiting for a line that a
+//! terminal will never send):
 //!
 //! ```bash
 //! for f in rust/corpus/lang/*.rex; do
 //!   name=$(basename "$f" .rex)
-//!   out=$( ( ulimit -v 1048576; build/bin/rexx SCRATCH/srclines.rex "$f" ) \
-//!           2>/dev/null | grep '^%SRCG%' )
+//!   out=$( ( ulimit -v 1048576; build/bin/rexx SCRATCH/srclines.rex "$f" \
+//!             </dev/null ) 2>/dev/null | grep '^%SRCG%' )
 //!   count=$(printf '%s\n' "$out" | sed -n 's/^%SRCG%COUNT //p')
 //!   { echo "count $count"; printf '%s\n' "$out" | sed -n 's/^%SRCG%L//p'; } \
 //!     > rust/crates/rexx-parse/tests/sourceline_oracle/$name.txt

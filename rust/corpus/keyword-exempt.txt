@@ -162,11 +162,6 @@ NUMERIC::test_81	4c
 NUMERIC::test_88	4c
 NUMERIC::test_89	4c
 NUMERIC::test_91	4c
-PARSE::test_PARSE_variable_patterns	4c
-PARSE::Test_614	4c
-PARSE::Test_620	4c
-PARSE::Test_626	4c
-PARSE::Test_632	4c
 PARSE::Test_638	4c
 TRACE::test_trace_option_none	4c
 TRACE::test_trace_nullstring	4c

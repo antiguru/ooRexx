@@ -260,3 +260,40 @@ fn a_clause_value_survives_the_handler_its_boundary_runs() {
     }
     assert!(total_collections > 0);
 }
+
+/// The command line's argument string survives every allocation the program
+/// makes.
+///
+/// It is an `ObjRef` created before the first clause runs and read by a clause
+/// that may be the program's last, and `Interp::call_context` is **not** walked
+/// by the collector -- so the only thing keeping it reachable is the
+/// `push_temp` `execute` takes before `Interp::run`. Nothing else in the tree
+/// can see that: the plain interpreter never collects, and every differential
+/// harness runs a program short enough that a swept value would still be
+/// sitting in freed-but-untouched memory.
+///
+/// **Checked by deleting its subject.** With `execute`'s `push_temp(value)`
+/// removed, this test panics at `value.rs`'s `a live value` while
+/// `tests/input_oracle.rs` and the whole plain suite stay green.
+///
+/// The program allocates repeatedly before reading the argument, and reads it
+/// last, so a collect between the two has somewhere to happen.
+#[test]
+fn a_command_line_argument_survives_collect_on_every_allocation() {
+    let text = "do i = 1 to 20\n  zj = 'filler' i\nend\nparse arg zp\nsay '['zp']'\n";
+    let stress = run_program_collect_every_alloc(
+        "<argument-rooting>",
+        text.as_bytes().to_vec(),
+        rexx_exec::Invocation::with_argument(b"the-argument".to_vec()),
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&stress.stdout),
+        "[the-argument]\n",
+        "the argument string did not survive collect-on-every-allocation"
+    );
+    // Anti-vacuity: a run that never collected cannot observe a dropped root.
+    assert!(
+        stress.collections > 0,
+        "zero collections, so this row cannot see a dropped root"
+    );
+}

@@ -47,7 +47,11 @@ fn main() -> ExitCode {
     // treating a leading `-x` as an option here would mean silently dropping a
     // word that would otherwise reach the program as part of its argument
     // string. Every word after the path is an argument.
-    let invocation = rexx_exec::join_command_line(args.map(|arg| arg.as_bytes().to_vec()));
+    // This process's own standard input is what `.input` reads, and this is the
+    // only place in the tree that asks for it: `ProgramInput`'s own doc has why
+    // the in-process callers must not, and why the default is not this.
+    let invocation = rexx_exec::join_command_line(args.map(|arg| arg.as_bytes().to_vec()))
+        .with_input(rexx_exec::ProgramInput::Stdin);
 
     let text = match std::fs::read(&path) {
         Ok(text) => text,

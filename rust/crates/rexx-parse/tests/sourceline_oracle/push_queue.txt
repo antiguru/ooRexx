@@ -1,4 +1,4 @@
-count 36
+count 39
 /* PUSH and QUEUE (4b Task 8, I15), under TRACE R throughout.                */
 /*                                                                           */
 /* WHAT THIS PROGRAM CAN AND CANNOT PIN. Nothing that reads the queue back   */
@@ -18,7 +18,10 @@ count 36
 /* so the >>> lines below are the whole point, not decoration. The          */
 /* interleaved storage order, and whether run.rs's arms write to the queue  */
 /* at all, are pinned by queue.rs's own unit tests instead (rust/crates/    */
-/* rexx-exec/src/queue.rs) -- the only place either can be.                 */
+/* rexx-exec/src/queue.rs). Reading the order back needs a construct this   */
+/* program's own subset does not admit: lang/pull_queue.rex does it on      */
+/* stdout, and crates/rexx-exec/tests/input_oracle.rs's `queue-round-trip`  */
+/* row does it against a console holding different lines.                   */
 /*                                                                           */
 /* Ends with a bare EXIT, not `exit 0`: condition_traps.rex's own header     */
 /* already recorded why -- an EXIT with a value has a pre-existing,          */

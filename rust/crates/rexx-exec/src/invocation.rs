@@ -33,7 +33,7 @@
 //!
 //! # Absent and empty are different states
 //!
-//! The last two rows above are the reason [`Invocation::argument`] is an
+//! The last two rows above are the reason [`Invocation`]'s argument is an
 //! `Option` and not a `Vec<u8>` that happens to be empty. `rexx p.rex ""`
 //! supplies an argument whose value is the null string; `rexx p.rex` supplies
 //! no argument at all. The oracle's own launcher makes exactly that
@@ -85,6 +85,13 @@
 //! `rexx.cpp` `strcat`s into a fixed `char arg_buffer[8192]`; overrunning
 //! that is undefined behaviour in the oracle rather than an answer to
 //! reproduce.
+//!
+//! # The other half of an invocation
+//!
+//! [`ProgramInput`] says where `.input` reads its lines from, and that arm's
+//! own doc has why the descriptor is never the default. What reading actually
+//! does with it -- the line rule, the `\r\n` collapse, and the position all
+//! the input constructs share -- is `input.rs`.
 
 /// What a command line supplied to the program being run.
 ///
@@ -97,17 +104,53 @@ pub struct Invocation {
     /// argument. See the module doc for why the two are different states and
     /// how each is observable.
     argument: Option<Vec<u8>>,
+    /// Where `.input` reads its lines from.
+    input: ProgramInput,
+}
+
+/// Where `.input` -- the position `PULL`, `PARSE PULL` and `PARSE LINEIN` all
+/// advance -- reads its lines from.
+///
+/// **[`ProgramInput::Nothing`] is the default and [`ProgramInput::Stdin`] has
+/// exactly one caller.** That asymmetry is deliberate and it is what makes it
+/// impossible for a test to block: `run_program`'s in-process callers include
+/// every differential and assertion harness in this crate, all of which run
+/// inside a `cargo test` process whose own standard input is a terminal on a
+/// developer's machine and a pipe on a build agent. A reader that reached the
+/// real descriptor from there would hang until someone typed a line, or
+/// silently eat bytes belonging to the harness, and neither failure looks like
+/// a bug in the construct under test. So the descriptor is not the default and
+/// not reachable by omission; a caller that wants it has to name it, and the
+/// only one that does is `bin/rexx-run.rs`, which is a process of its own with
+/// its own stdin.
+pub enum ProgramInput {
+    /// Nothing to read: every line read answers the null string.
+    ///
+    /// Byte for byte what the oracle answers with its stdin at `/dev/null`,
+    /// which is what the differential harnesses give it -- measured, an empty
+    /// queue and `/dev/null` give `PARSE PULL` and `PARSE LINEIN` the null
+    /// string, rc 0, no condition and no hang, repeatably.
+    Nothing,
+    /// The process's own standard input, read one line at a time.
+    Stdin,
+    /// A fixed buffer of bytes, read one line at a time -- what a test uses to
+    /// supply input deterministically.
+    Bytes(Vec<u8>),
 }
 
 impl Invocation {
-    /// No argument at all: the state `rexx p.rex` puts a program in.
+    /// No argument at all and nothing to read: the state `rexx p.rex` puts a
+    /// program in when its stdin is at `/dev/null`.
     ///
     /// Spelled as its own constructor rather than reached through `Default`
     /// because the absence is the interesting half. A caller writing
-    /// `Invocation::none()` has said which of the two absent-looking states
-    /// it means; a caller writing `Default::default()` has not.
+    /// `Invocation::none()` has said which of the two absent-looking argument
+    /// states it means; a caller writing `Default::default()` has not.
     pub fn none() -> Invocation {
-        Invocation { argument: None }
+        Invocation {
+            argument: None,
+            input: ProgramInput::Nothing,
+        }
     }
 
     /// One argument string, exactly as supplied -- including the null string,
@@ -115,12 +158,23 @@ impl Invocation {
     pub fn with_argument(argument: Vec<u8>) -> Invocation {
         Invocation {
             argument: Some(argument),
+            ..Invocation::none()
         }
     }
 
-    /// The argument string, if there is one.
-    pub(crate) fn argument(self) -> Option<Vec<u8>> {
-        self.argument
+    /// The same invocation, reading `.input` from `input`.
+    pub fn with_input(self, input: ProgramInput) -> Invocation {
+        Invocation { input, ..self }
+    }
+
+    /// The argument string, if there is one, and where `.input` reads from.
+    ///
+    /// One accessor consuming the whole value rather than two borrowing
+    /// getters: `execute` needs both halves and takes ownership of each, and a
+    /// pair of getters would either clone the argument bytes or hand out a
+    /// borrow that outlives nothing useful.
+    pub(crate) fn into_parts(self) -> (Option<Vec<u8>>, ProgramInput) {
+        (self.argument, self.input)
     }
 }
 
@@ -149,7 +203,10 @@ where
         }
         buffer.extend_from_slice(word.as_ref());
     }
-    Invocation { argument: joined }
+    Invocation {
+        argument: joined,
+        ..Invocation::none()
+    }
 }
 
 #[cfg(test)]
@@ -185,7 +242,7 @@ mod tests {
             (&["x ", "y"], Some(b"x  y")),
         ];
         for (words, expected) in cases {
-            let joined = join_command_line(*words).argument();
+            let joined = join_command_line(*words).into_parts().0;
             assert_eq!(
                 joined.as_deref(),
                 *expected,
@@ -204,14 +261,22 @@ mod tests {
     /// this is a separate test rather than one more row.
     #[test]
     fn no_words_is_absent_and_one_empty_word_is_present() {
-        assert!(join_command_line(Vec::<&str>::new()).argument().is_none());
+        assert!(
+            join_command_line(Vec::<&str>::new())
+                .into_parts()
+                .0
+                .is_none()
+        );
         assert_eq!(
-            join_command_line([""]).argument().as_deref(),
+            join_command_line([""]).into_parts().0.as_deref(),
             Some(&b""[..])
         );
-        assert!(Invocation::none().argument().is_none());
+        assert!(Invocation::none().into_parts().0.is_none());
         assert_eq!(
-            Invocation::with_argument(Vec::new()).argument().as_deref(),
+            Invocation::with_argument(Vec::new())
+                .into_parts()
+                .0
+                .as_deref(),
             Some(&b""[..])
         );
     }

@@ -191,16 +191,6 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
     // carry one, because the row would assert a loud failure that does not
     // happen.
     Witness {
-        tag: "Arg",
-        source: "arg x\n",
-        category: Category::Instruction,
-    },
-    Witness {
-        tag: "Pull",
-        source: "pull x\n",
-        category: Category::Instruction,
-    },
-    Witness {
         tag: "Address",
         source: "address cmd\n",
         category: Category::Instruction,
@@ -379,7 +369,7 @@ fn assert_witness_set_is_complete() {
          InstructionKind variant (per arm, for Call), no more and no \
          fewer"
     );
-    assert_eq!(expected_instructions.len(), 11);
+    assert_eq!(expected_instructions.len(), 9);
 
     let expected_exprs: Vec<&str> = EXPR_TAGS
         .iter()
@@ -410,7 +400,7 @@ fn in_scope_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        32
+        34
     );
     assert_eq!(
         EXPR_TAGS

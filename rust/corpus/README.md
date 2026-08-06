@@ -138,19 +138,25 @@ by any program above; these three close every one of them.
 | `comparison_operators_remaining.rex` | the ten `Operator` variants no other program constructs (`\>` `\<` `\>>` `\<<` `>>=` `<<=` `<>` `><` `\|` `&&`), and a labelled `SELECT` with an `OTHERWISE` |
 | `trace_numeric_request.rex` | `TRACE` with a bare number (`trace 5`) -- a raiser, Error 24.901, not a no-op, so it has to be this program's last statement |
 
-### Phase 4c additions -- the `PARSE` template engine
+### Phase 4c additions -- the `PARSE` template engine and the input model
 
-Written for 4c Task 7. Between them they cover all eight `TriggerKind`
-variants, the comma fence, the `.` placeholder and four `ParseSource` variants
--- `Value`, `Var`, `Arg` and `Source`. `Version` is implemented and
-deliberately unprinted (see the subset section above), and `Pull` and `LineIn`
-fail loudly. Each file's own header states, per block, which wrong answer a
-defective engine prints.
+Between them they cover all eight `TriggerKind` variants, the comma fence, the
+`.` placeholder and every `ParseSource` variant but `Version`, which is
+implemented and deliberately unprinted (see the subset section above) because
+every field it carries is the oracle's own build identity. Each file's own
+header states, per block, which wrong answer a defective engine prints.
 
 | File | Covers |
 |---|---|
 | `parse_triggers.rex` | the movement rules, on stdout alone: `-n` against `<n`, `>n`/`<n` as exact slices, the shared backward rule, patterns and the relative trigger that measures from a match's start, word carving, the comma fence, placeholders |
 | `parse_sources.rex` | `PARSE VAR` in all three name shapes, `PARSE ARG` with comma-fenced templates and an omitted argument, `PARSE SOURCE`'s first two words, `UPPER`/`LOWER`/`CASELESS`, and the same two templates under `TRACE R` and `TRACE I` -- the modes disagree about which prefix a target's own value line takes |
+| `pull_queue.rex` | `PULL`, `PARSE PULL`, `PARSE LINEIN` and the `ARG` instruction: the queue's interleaved storage order read back, an exhausted console answering the null string repeatedly, `PARSE LINEIN` declining to consult the queue, and the same five constructs under `TRACE R` and `TRACE I` -- a bare `PULL`'s `>K>` line carries the value before the upcase and the `>>>` after it the value after |
+
+The command line and a non-empty console are outside every corpus program's
+reach: the harness passes no arguments and an empty stdin, and a program whose
+output depended on the console could not be deterministic. Both are compared
+against the oracle in `crates/rexx-exec/tests/input_oracle.rs`, which drives
+the `rexx-run` binary with an `argv` and a fed stdin instead.
 
 ### `num/` — Phase 2, the numeric core
 
