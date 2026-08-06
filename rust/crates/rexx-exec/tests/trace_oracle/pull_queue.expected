@@ -1,0 +1,47 @@
+RC 0
+===STDOUT===
+A [A][c][b]
+B [][][][]
+C [][queued-not-for-linein]
+D [][][][]
+D bare forms are legal
+E done
+===STDERR===
+    93 *-* pull n14
+       >K>   "PULL" => "traced-lower"
+       >>>   "TRACED-LOWER"
+       >>>   "TRACED-LOWER"
+    94 *-* parse pull n15
+       >K>   "PULL" => ""
+       >>>   ""
+       >>>   ""
+    95 *-* parse linein n16
+       >K>   "LINEIN" => ""
+       >>>   ""
+       >>>   ""
+    96 *-* arg n17
+       >>>   ""
+       >>>   ""
+    97 *-* parse arg n18
+       >>>   ""
+       >>>   ""
+    98 *-* trace off
+   101 *-* pull n19
+       >K>   "PULL" => "traced-lower"
+       >>>   "TRACED-LOWER"
+       >=>   N19 <= "TRACED-LOWER"
+   102 *-* parse pull n20
+       >K>   "PULL" => ""
+       >>>   ""
+       >=>   N20 <= ""
+   103 *-* parse linein n21
+       >K>   "LINEIN" => ""
+       >>>   ""
+       >=>   N21 <= ""
+   104 *-* arg n22
+       >>>   ""
+       >=>   N22 <= ""
+   105 *-* parse arg n23
+       >>>   ""
+       >=>   N23 <= ""
+   106 *-* trace off

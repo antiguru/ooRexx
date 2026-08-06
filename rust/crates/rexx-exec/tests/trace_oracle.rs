@@ -40,7 +40,7 @@
 //! | `>L>` | `trace_output.rex` |
 //! | `>V>` | `trace_output.rex`, `compound_read_write.rex` |
 //! | `>O>` | `trace_output.rex` |
-//! | `>K>` | `keyword_while.rex` (`WHILE`) |
+//! | `>K>` | `keyword_while.rex` (`WHILE`), `pull_queue.rex` (`PULL`/`LINEIN`) |
 //! | `>C>` | `compound_read_write.rex` |
 //! | `>P>` | `prefix_operators.rex` |
 //! | `>E>` (bonus, not required) | `dotvariable_beyond_the_list.rex` |
@@ -63,7 +63,11 @@
 //! * a value line that was present and **wrong** --
 //!   `control_variable_reread.rex` (with the trip count that produced it);
 //! * a whole mode that emitted **nothing** -- `trace_labels.rex`;
-//! * a **condition** that was not raised -- `control_variable_novalue.rex`.
+//! * a **condition** that was not raised -- `control_variable_novalue.rex`;
+//! * a value line that carried the **wrong stage of a transform** --
+//!   `pull_queue.rex`, where a bare `PULL`'s `>K>` is the line before the
+//!   upcase and its `>>>` the line after, and where `ARG` alone among the
+//!   sources emits no `>K>` at all.
 //!
 //! Every one of them is listed in [`WITNESS_PREFIXES`] for the prefixes it
 //! does emit, which is what keeps it inside this file's own drift check.
@@ -129,16 +133,22 @@
 //! ```bash
 //! ( ulimit -v 1048576; \
 //!   LD_LIBRARY_PATH=/path/to/ooRexx/build/lib \
-//!   /path/to/ooRexx/build/bin/rexx PROGRAM.rex ) \
+//!   /path/to/ooRexx/build/bin/rexx PROGRAM.rex </dev/null ) \
 //!   1>/tmp/out 2>/tmp/err; rc=$?
 //! { echo "RC $rc"; echo "===STDOUT==="; cat /tmp/out; \
 //!   echo "===STDERR==="; cat /tmp/err; } > PROGRAM.expected
 //! ```
 //!
-//! `trace_output.rex` itself lives in `rust/corpus/lang/` (already a corpus
-//! subset member) rather than being duplicated here
-//! -- this test reads it from there by relative path, and only its own
-//! `.expected` lives in this directory.
+//! The `</dev/null` is not decoration: `pull_queue.rex` reads the console, and
+//! without it the capture blocks on a terminal and consumes whatever a pipe
+//! happens to hold. `run_program`'s own default (`Invocation::none`, hence
+//! `ProgramInput::Nothing`) is the empty console, so a capture taken with any
+//! other input would be an expectation this crate can never reproduce.
+//!
+//! `trace_output.rex` and `pull_queue.rex` live in `rust/corpus/lang/` (both
+//! corpus subset members) rather than being duplicated here
+//! -- this test reads them from there by relative path, and only their own
+//! `.expected` files live in this directory.
 //!
 //! **DEVIATION 0**: `check_witness`'s own stderr comparison runs both sides
 //! through `support::normalize_stderr` (`tests/support/mod.rs`, shared with
@@ -378,6 +388,35 @@ fn parse_placeholder_covers_the_dummy_prefix_and_the_two_modes_disagreement() {
     check_witness("parse_placeholder", &path);
 }
 
+/// The two `PARSE` sources that read a line, in **both** modes, and the one
+/// fact about them that only a trace can show: for a bare `PULL`, the `>K>`
+/// line carries the value **before** the upcase while the `>>>` line after it
+/// carries the value after, so the two lines disagree on a single instruction.
+///
+/// Three claims, all held by `check_witness`'s byte-exact comparison rather
+/// than by the substring table below:
+///
+/// * `>K>` is emitted for `PULL` and for `LINEIN` under `TRACE R` **and**
+///   under `TRACE I`, so it is a `results` prefix. A witness in one mode alone
+///   passes against an engine that gated it on the other.
+/// * `ARG` and `PARSE ARG` emit **no** `>K>` in either mode -- the only
+///   sources that do not. An engine that emitted one adds a line the committed
+///   bytes do not have.
+/// * the pre-upcase split above, which an engine that traced the transformed
+///   value in `>K>` gets wrong while still printing the right answer on
+///   stdout.
+///
+/// Read from `rust/corpus/lang/` rather than duplicated here, the same way
+/// `trace_output.rex` is: that program is a `phase-4c.txt` member and will run
+/// live against the oracle once Task 15 wires that file into `tests/corpus.rs`,
+/// where today only `coverage.rs` parses it. Committing its expectation here is
+/// what makes its trace half checked *now*, offline, in the ungated suite.
+#[test]
+fn pull_queue_covers_the_line_reading_sources_in_both_modes() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus/lang/pull_queue.rex");
+    check_witness("pull_queue", &path);
+}
+
 /// The module doc's own table, as data: which prefixes each witness is
 /// claimed to cover. See the module doc's own note on why this exists --
 /// found missing by a branch review (H3), which swapped `keyword_while.rex`
@@ -418,6 +457,7 @@ const WITNESS_PREFIXES: &[(&str, &[&str])] = &[
         "parse_placeholder",
         &["*-*", ">>>", ">=>", ">L>", ">K>", ">.>"],
     ),
+    ("pull_queue", &["*-*", ">>>", ">=>", ">K>"]),
 ];
 
 /// Every prefix a witness below is expected to reach, between them.

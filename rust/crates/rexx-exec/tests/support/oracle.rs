@@ -172,22 +172,11 @@ impl Oracle {
     /// shape because this method was added beside it.
     pub fn run_with(&self, path: &Path, args: &[&str], stdin: Option<&[u8]>) -> CppOutcome {
         self.invocations.fetch_add(1, Ordering::Relaxed);
-        let cwd = path.parent().unwrap_or(Path::new("."));
-        let mut command = Command::new("sh");
-        command
-            .arg("-c")
-            .arg(format!(
-                "ulimit -v {ORACLE_MEMORY_LIMIT_KIB} && exec \"$0\" \"$@\""
-            ))
-            .arg(&self.binary)
-            .arg(path)
-            .args(args)
-            .current_dir(cwd)
-            .env("LD_LIBRARY_PATH", &self.lib_dir)
-            .stdin(match stdin {
-                None => Stdio::null(),
-                Some(_) => Stdio::piped(),
-            });
+        let mut command = self.wrapped(path, args);
+        command.stdin(match stdin {
+            None => Stdio::null(),
+            Some(_) => Stdio::piped(),
+        });
         let output = match stdin {
             None => command.output().unwrap_or_else(|e| {
                 panic!("failed to spawn the oracle for {}: {e}", path.display())
@@ -199,6 +188,53 @@ impl Oracle {
             stderr: output.stderr,
             exit_code: output.status.code().unwrap_or(-1),
         }
+    }
+
+    /// [`Oracle::run_with`], given a **descriptor** for standard input instead
+    /// of bytes to feed down a pipe.
+    ///
+    /// For the inputs a byte buffer cannot express: a closed descriptor, or one
+    /// whose `read` fails outright. `Stdio` is taken by value because it is
+    /// consumed by the spawn, so a caller comparing both interpreters builds
+    /// one for each side.
+    ///
+    /// Separate from `run_with` rather than replacing its `Option<&[u8]>`,
+    /// because a caller passing bytes should not have to construct a pipe
+    /// itself and because `Stdio` cannot express "feed these bytes".
+    pub fn run_with_stdin(&self, path: &Path, args: &[&str], stdin: Stdio) -> CppOutcome {
+        self.invocations.fetch_add(1, Ordering::Relaxed);
+        let output = self
+            .wrapped(path, args)
+            .stdin(stdin)
+            .output()
+            .unwrap_or_else(|e| panic!("failed to spawn the oracle for {}: {e}", path.display()));
+        CppOutcome {
+            stdout: output.stdout,
+            stderr: output.stderr,
+            exit_code: output.status.code().unwrap_or(-1),
+        }
+    }
+
+    /// The `sh -c 'ulimit … && exec "$0" "$@"'` invocation, the library path
+    /// and the working directory, with standard input left for the caller.
+    ///
+    /// One builder rather than one per entry point: the memory limit is not
+    /// optional on any of them, and a second hand-rolled copy of this wrapper
+    /// is how one gets omitted. It deliberately does **not** touch the
+    /// invocation counter, so that each public method increments exactly once.
+    fn wrapped(&self, path: &Path, args: &[&str]) -> Command {
+        let mut command = Command::new("sh");
+        command
+            .arg("-c")
+            .arg(format!(
+                "ulimit -v {ORACLE_MEMORY_LIMIT_KIB} && exec \"$0\" \"$@\""
+            ))
+            .arg(&self.binary)
+            .arg(path)
+            .args(args)
+            .current_dir(path.parent().unwrap_or(Path::new(".")))
+            .env("LD_LIBRARY_PATH", &self.lib_dir);
+        command
     }
 
     /// How many programs this instance has actually run. See the module

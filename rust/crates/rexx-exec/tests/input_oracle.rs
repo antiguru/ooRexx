@@ -464,6 +464,20 @@ fn command_line_arguments_and_the_console_agree_with_the_oracle() {
         CASES.len(),
         failures.join("")
     );
+    // The floor is a literal, and it has to be: `oracle.invocations() ==
+    // CASES.len()` derives both sides from the same array, so an empty or
+    // gutted `CASES` satisfies it having compared nothing at all -- the same
+    // shape as a constant compared against itself, one level up. The equality
+    // below is still worth keeping beside it: it is what catches a row that
+    // silently failed to start the oracle. `>=` rather than `==` so that
+    // adding a row is not an edit here.
+    assert!(
+        oracle.invocations() >= 15,
+        "only {} oracle runs, which is fewer than this file has ever had -- \
+         rows were removed rather than the harness getting faster, and a \
+         shrunken CASES satisfies the equality below by comparing nothing",
+        oracle.invocations()
+    );
     assert_eq!(
         oracle.invocations(),
         CASES.len(),
@@ -516,26 +530,10 @@ fn an_unreadable_console_is_end_of_input() {
         .stdin(as_stdin())
         .output()
         .expect("rexx-run starts");
-    let cpp = Command::new("sh")
-        .arg("-c")
-        .arg(format!(
-            "ulimit -v {} && exec \"$0\" \"$@\"",
-            support::oracle::ORACLE_MEMORY_LIMIT_KIB
-        ))
-        .arg(support::oracle::oracle_root().join("bin/rexx"))
-        .arg(&abs)
-        .current_dir(&dir)
-        .env(
-            "LD_LIBRARY_PATH",
-            support::oracle::oracle_root().join("lib"),
-        )
-        .stdin(as_stdin())
-        .output()
-        .expect("the oracle starts");
-    // `locate` is called for its assertion that the binary exists at all; this
-    // one comparison builds its own command because it needs a descriptor
-    // `Oracle::run_with` deliberately does not accept.
-    let _ = oracle;
+    // Through the harness, not a hand-rolled `sh -c` wrapper: the memory limit
+    // and the invocation counter are exactly what `run_with_stdin` exists to
+    // keep in one place, and the counter is asserted below.
+    let cpp = oracle.run_with_stdin(&abs, &[], as_stdin());
 
     assert_eq!(
         (
@@ -546,7 +544,7 @@ fn an_unreadable_console_is_end_of_input() {
         (
             String::from_utf8_lossy(&cpp.stdout).into_owned(),
             String::from_utf8_lossy(&cpp.stderr).into_owned(),
-            cpp.status.code()
+            Some(cpp.exit_code)
         ),
         "an unreadable console must answer the null string on both sides"
     );
@@ -554,6 +552,11 @@ fn an_unreadable_console_is_end_of_input() {
         !cpp.stdout.is_empty(),
         "the oracle printed nothing, so this compared two empty outputs and \
          proved nothing about how either side handles an unreadable console"
+    );
+    assert_eq!(
+        oracle.invocations(),
+        1,
+        "the comparison above must have actually started the oracle"
     );
 
     let _ = fs::remove_dir_all(&dir);

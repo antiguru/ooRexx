@@ -1168,9 +1168,9 @@ above.
   it must stay clear of `?`. `crates/rexx-exec/tests/input_oracle.rs` (4c
   Task 8) feeds both interpreters the same non-empty stdin, which is exactly
   the condition under which the drain above is visible on stdout rather than
-  only on stderr. No row there uses `TRACE ?` or sets RXTRACE, and one that
-  did would fail for this reason rather than for a defect in the construct
-  it was written for.
+  only on stderr. A row there that used `TRACE ?`, or that ran with RXTRACE
+  set, would fail for this reason rather than for a defect in whatever it was
+  written to check -- so read this row first if one ever does.
 
   CLOSED, 4c Task 8. PULL and PARSE PULL now read the queue back, and the
   round trip is compared against the oracle by

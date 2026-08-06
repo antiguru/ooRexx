@@ -111,18 +111,17 @@ pub struct Invocation {
 /// Where `.input` -- the position `PULL`, `PARSE PULL` and `PARSE LINEIN` all
 /// advance -- reads its lines from.
 ///
-/// **[`ProgramInput::Nothing`] is the default and [`ProgramInput::Stdin`] has
-/// exactly one caller.** That asymmetry is deliberate and it is what makes it
-/// impossible for a test to block: `run_program`'s in-process callers include
-/// every differential and assertion harness in this crate, all of which run
-/// inside a `cargo test` process whose own standard input is a terminal on a
-/// developer's machine and a pipe on a build agent. A reader that reached the
-/// real descriptor from there would hang until someone typed a line, or
-/// silently eat bytes belonging to the harness, and neither failure looks like
-/// a bug in the construct under test. So the descriptor is not the default and
-/// not reachable by omission; a caller that wants it has to name it, and the
-/// only one that does is `bin/rexx-run.rs`, which is a process of its own with
-/// its own stdin.
+/// **[`ProgramInput::Nothing`] is the default, and that asymmetry is what
+/// makes it impossible for a test to block.** `run_program`'s in-process
+/// callers include every differential and assertion harness in this crate, all
+/// of which run inside a `cargo test` process whose own standard input is a
+/// terminal on a developer's machine and a pipe on a build agent. A reader
+/// that reached the real descriptor from there would hang until someone typed
+/// a line, or silently eat bytes belonging to the harness, and neither failure
+/// looks like a bug in the construct under test. So the descriptor is not the
+/// default and **not reachable by omission**: reaching it requires writing
+/// [`ProgramInput::Stdin`], which belongs to a caller that is a process of its
+/// own with a stdin of its own.
 pub enum ProgramInput {
     /// Nothing to read: every line read answers the null string.
     ///

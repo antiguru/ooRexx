@@ -134,9 +134,9 @@ impl Queue {
     /// The **front**, which is the whole of the LIFO/FIFO split: see the
     /// module doc for the measured `C`, `A`, `B` this end produces and for
     /// what a `pop_back` here would print instead. `None` rather than a null
-    /// string, so the one caller (`Interp::pull_line`, `input.rs`) can tell an
-    /// empty queue from a queued empty line -- it has to, because only the
-    /// first sends the read on to `.input`.
+    /// string, so that `Interp::pull_line` (`input.rs`) can tell an empty queue
+    /// from a queued empty line -- it has to, because only the first sends the
+    /// read on to `.input`.
     pub(crate) fn pop(&mut self) -> Option<Vec<u8>> {
         self.lines.pop_front()
     }
