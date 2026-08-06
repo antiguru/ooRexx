@@ -40,9 +40,18 @@
 #   oracle in crates/rexx-exec/tests/input_oracle.rs, which drives the rexx-run
 #   binary with argv and a fed stdin rather than calling run_program in process.
 #
+#   The ADDRESS instruction's environment-naming forms (4c Task 9): the
+#   constant `ADDRESS env`, the computed `ADDRESS VALUE expr` and `ADDRESS
+#   (expr)`, and the bare toggle. `ADDRESS env command` and any `WITH`
+#   redirection are the command dispatch and stay out, with the command
+#   clause. A program here cannot print the environment back: the only two
+#   readers of it are the ADDRESS() builtin and issuing a command, and this
+#   subset admits neither.
+#
 # WHAT IT STILL EXCLUDES. Everything phase-4b.txt excludes except builtin
-# function calls and PARSE, which is to say: no message sends, no :: directives,
-# no command clauses, no DO WITH, and no DO OVER on a stem. The authoritative,
+# function calls, PARSE and ADDRESS's environment forms, which is to say: no
+# message sends, no :: directives, no command clauses, no ADDRESS command or
+# WITH form, no DO WITH, and no DO OVER on a stem. The authoritative,
 # machine-checked list is
 # tests/owners.rs's INSTRUCTION_TAGS/EXPR_TAGS: anything still carrying an
 # `Owner::Phase` there fails loudly and cannot appear in any program listed in
@@ -86,3 +95,10 @@ lang/parse_template.rex
 # two modes and because a bare PULL's `>K>` line carries the line before the
 # upcase while the `>>>` after it carries the line after.
 lang/pull_queue.rex
+
+# New for 4c Task 9 -- ADDRESS naming an environment. Its own header states
+# first what it cannot see: the environment has no in-scope reader, so no block
+# asserts the swap. What it does pin is which forms trace a value line and
+# which do not, that the value line is `>>>` under TRACE I as well as TRACE R,
+# and the 250-byte name limit either side of the boundary with the 29.1 trapped.
+lang/address_env.rex

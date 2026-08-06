@@ -71,43 +71,44 @@ pub(crate) enum Owner {
 ///
 /// # The `split` form
 ///
-/// A variant whose arms do not share one owner takes the trailing `split
+/// A variant whose forms do not share one owner takes a trailing `split
 /// PATTERN in (EXPR) { .. }` section, which expands to a nested `match` on
-/// `EXPR` and contributes one row per arm to `$list`. Both matches stay
+/// `EXPR` and contributes one row per arm to `$list`. Any number of sections
+/// may follow the main block, one per such variant. Both matches stay
 /// wildcard-free, so a new variant of either enum is a compile error here.
 ///
-/// `split` rather than an ordinary row because the arms live behind a `Box`
-/// (`InstructionKind::Call(Box<Call>)`) and box patterns are unstable, so
-/// `InstructionKind::Call(Call::Named { .. })` is not a pattern that can be
-/// written; the arms are only reachable by dereferencing into a second
-/// `match`. The section is trailing, and the rows it contributes therefore
-/// land at the end of `$list`, because a matcher cannot alternate two row
-/// shapes inside one repetition without a token muncher. Every consumer
-/// sorts or counts, so `$list`'s order carries nothing.
+/// `split` rather than an ordinary row for two different reasons, one per
+/// variant that uses it, and the sections look different because of it.
+///
+/// * `Call`'s arms live behind a `Box` (`InstructionKind::Call(Box<Call>)`)
+///   and box patterns are unstable, so `InstructionKind::Call(Call::Named {
+///   .. })` is not a pattern that can be written; the arms are only reachable
+///   by dereferencing into a second `match`, and `EXPR` is that dereference.
+/// * `Address`'s forms are not arms at all. One variant carries a struct
+///   whose *fields* say which form it is, so there is no pattern to name them
+///   with; `EXPR` is a `bool` and the two arms are `true` and `false`. An
+///   exhaustive match over `bool` is as wildcard-free as one over an enum.
+///
+/// The sections are trailing, and the rows they contribute therefore land at
+/// the end of `$list`, because a matcher cannot alternate two row shapes
+/// inside one repetition without a token muncher. Every consumer sorts or
+/// counts, so `$list`'s order carries nothing.
 macro_rules! tags {
-    ($fn_name:ident, $list:ident, $ty:ty, { $($pat:pat => ($name:literal, $owner:expr)),+ $(,)? }) => {
-        pub(crate) fn $fn_name(k: &$ty) -> (&'static str, Owner) {
-            match k {
-                $($pat => ($name, $owner)),+
-            }
-        }
-        pub(crate) const $list: &[(&str, Owner)] = &[$(($name, $owner)),+];
-    };
     ($fn_name:ident, $list:ident, $ty:ty,
-     { $($pat:pat => ($name:literal, $owner:expr)),+ $(,)? },
-     split $outer:pat in ($inner:expr) {
+     { $($pat:pat => ($name:literal, $owner:expr)),+ $(,)? }
+     $(, split $outer:pat in ($inner:expr) {
          $($arm:pat => ($arm_name:literal, $arm_owner:expr)),+ $(,)?
-     }) => {
+     })* $(,)?) => {
         pub(crate) fn $fn_name(k: &$ty) -> (&'static str, Owner) {
             match k {
                 $($pat => ($name, $owner),)+
-                $outer => match $inner {
+                $($outer => match $inner {
                     $($arm => ($arm_name, $arm_owner)),+
-                },
+                },)*
             }
         }
         pub(crate) const $list: &[(&str, Owner)] =
-            &[$(($name, $owner),)+ $(($arm_name, $arm_owner)),+];
+            &[$(($name, $owner),)+ $($(($arm_name, $arm_owner),)+)*];
     };
 }
 
@@ -168,8 +169,6 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     InstructionKind::Parse(_) => ("Parse", Owner::InScope),
     InstructionKind::Arg(_) => ("Arg", Owner::InScope),
     InstructionKind::Pull(_) => ("Pull", Owner::InScope),
-    // ---- 4c's ----
-    InstructionKind::Address(_) => ("Address", Owner::Phase("4c")),
     // ---- Phase 5's ----
     InstructionKind::Expose { .. } => ("Expose", Owner::Phase("Phase 5")),
     InstructionKind::Options { .. } => ("Options", Owner::Phase("Phase 5")),
@@ -179,11 +178,10 @@ tags!(instruction_tag, INSTRUCTION_TAGS, InstructionKind, {
     InstructionKind::Forward(_) => ("Forward", Owner::Phase("Phase 5")),
 },
 // ---- `CALL`, arm-grained, because its arms do not share one owner ----
-// The only variant in this table that needs the `split` form, and the
-// language is what forces it rather than a preference: a qualified call
-// resolves a public routine of a named namespace, which needs the object
-// model, so `Call`'s arms cannot all land in one phase however the rest of
-// `CALL` is implemented.
+// The language is what forces the split rather than a preference: a
+// qualified call resolves a public routine of a named namespace, which needs
+// the object model, so `Call`'s arms cannot all land in one phase however the
+// rest of `CALL` is implemented.
 //
 // This grain is what lets `src/lib.rs`'s `instruction_owner` -- which has
 // always had to split `Call`, for the same reason -- be compared against
@@ -195,6 +193,21 @@ split InstructionKind::Call(c) in (&**c) {
     rexx_parse::Call::Trap(_) => ("Call::Trap", Owner::InScope),
     // `CALL ns:name`, mirroring `ExprKind::QualifiedCall`'s own ownership.
     rexx_parse::Call::Qualified { .. } => ("Call::Qualified", Owner::Phase("Phase 5")),
+},
+// ---- `ADDRESS`, split on the same condition `instruction_owner` uses ----
+// One keyword, two jobs. `ADDRESS env`, `ADDRESS VALUE expr` and the bare
+// toggle only name an environment, which is per-activation state and needs
+// nothing outside this crate. `ADDRESS env command` issues a command to that
+// environment, and `WITH` says where a command's three streams go; both need
+// the command dispatch `InstructionKind::Command` needs, and carry that same
+// owner (D18).
+//
+// A `bool` rather than a pattern, because the two jobs are told apart by
+// which *fields* of one struct are filled, not by which arm of an enum is
+// present. `instruction_owner` writes the identical expression.
+split InstructionKind::Address(a) in (a.command.is_some() || a.io.is_some()) {
+    true => ("Address::Command", Owner::Phase("Phase 7")),
+    false => ("Address::Environment", Owner::InScope),
 });
 
 tags!(expr_tag, EXPR_TAGS, ExprKind, {
@@ -350,10 +363,11 @@ impl Coverage {
 /// pinned here") tracks for Step 5's own purposes.
 pub(crate) const EXPECTED_OUT_OF_SCOPE: &[(&str, &str, &str)] = &[
     ("InstructionKind", "Command", "Phase 7"),
-    // The one arm-grained row: `CALL`'s other three arms are in scope, so
-    // they appear in `INSTRUCTION_TAGS` and not here.
+    // The two arm-grained rows. `CALL`'s other three arms are in scope, and
+    // so is `ADDRESS`'s other form, so those appear in `INSTRUCTION_TAGS` and
+    // not here.
     ("InstructionKind", "Call::Qualified", "Phase 5"),
-    ("InstructionKind", "Address", "4c"),
+    ("InstructionKind", "Address::Command", "Phase 7"),
     ("InstructionKind", "Expose", "Phase 5"),
     ("InstructionKind", "Options", "Phase 5"),
     ("InstructionKind", "Message", "Phase 5"),
@@ -464,9 +478,10 @@ fn variant_counts_match_the_audited_split() {
     //
     // **`INSTRUCTION_TAGS` is one row per separately owned unit, not one per
     // variant**: a variant, or an arm where a variant is split. So its
-    // length exceeds `InstructionKind`'s 40 variants by the 3 extra rows
-    // `Call`'s `split` section contributes. `only_backslash_is_unreachable`
-    // and `out_of_scope_set_matches_the_committed_expectation` are what
+    // length exceeds `InstructionKind`'s 40 variants by the extra rows the
+    // two `split` sections contribute, 3 for `Call` and 1 for `Address`.
+    // `only_backslash_is_unreachable` and
+    // `out_of_scope_set_matches_the_committed_expectation` are what
     // police the rows themselves; these are the totals.
     //
     // "In scope" means this crate answers the same bytes the oracle answers,
@@ -475,13 +490,13 @@ fn variant_counts_match_the_audited_split() {
     // legal in -- but it fails with the oracle's own 98.993/99.910,
     // measured, which is the same distinction `Procedure` draws for a
     // misplaced `PROCEDURE`: error 17.1, and not a gap.
-    assert_eq!(INSTRUCTION_TAGS.len(), 43);
+    assert_eq!(INSTRUCTION_TAGS.len(), 44);
     assert_eq!(
         INSTRUCTION_TAGS
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        34
+        35
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -495,7 +510,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("4c"))
             .count(),
-        1
+        0
     );
     assert_eq!(
         INSTRUCTION_TAGS
@@ -509,7 +524,7 @@ fn variant_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::Phase("Phase 7"))
             .count(),
-        1
+        2
     );
 
     assert_eq!(EXPR_TAGS.len(), 15);

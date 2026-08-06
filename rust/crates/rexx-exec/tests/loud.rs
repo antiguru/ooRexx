@@ -52,13 +52,20 @@
 //!
 //! # Arm-grained ownership, and why this file no longer reconciles anything
 //!
-//! `InstructionKind::Call` wraps an inner enum (`rexx_parse::Call`) whose
-//! arms do not share an owner: a namespace-qualified `CALL ns:name` needs
-//! the object model and is Phase 5's, mirroring `ExprKind::QualifiedCall`,
-//! while the other three arms are this crate's. `owners.rs`'s
-//! `INSTRUCTION_TAGS` therefore gives each arm its own row, through that
-//! file's `tags!` `split` section, and `owners::instruction_tag` answers
-//! `"Call::Qualified"` rather than `"Call"` for the one that is still loud.
+//! Two `InstructionKind` variants hold forms that do not share an owner, and
+//! `owners.rs`'s `INSTRUCTION_TAGS` gives each form its own row through that
+//! file's `tags!` `split` sections.
+//!
+//! * `InstructionKind::Call` wraps an inner enum (`rexx_parse::Call`) whose
+//!   namespace-qualified arm, `CALL ns:name`, needs the object model and is
+//!   Phase 5's, mirroring `ExprKind::QualifiedCall`, while the other three
+//!   arms are this crate's. `owners::instruction_tag` answers
+//!   `"Call::Qualified"` rather than `"Call"` for the one that is still loud.
+//! * `InstructionKind::Address` names an environment, issues a command, or
+//!   both. Naming one is this crate's; issuing one, and the `WITH`
+//!   redirection that says where a command's streams go, are Phase 7's. So
+//!   `instruction_tag` answers `"Address::Command"` or
+//!   `"Address::Environment"` according to the instruction's own fields.
 //!
 //! **Everything below is keyed by exactly the tags that table produces.**
 //! There is no expansion step, no second grain and no owner string written
@@ -178,7 +185,7 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
         source: "'date'\n",
         category: Category::Instruction,
     },
-    // The one arm-grained tag; see the module doc.
+    // The two arm-grained tags; see the module doc.
     Witness {
         tag: "Call::Qualified",
         // `CALL ns:name args`, restricted to public routines of that
@@ -190,9 +197,22 @@ const INSTRUCTION_WITNESSES: &[Witness] = &[
     // assertion below reads it: a variant this crate implements must not
     // carry one, because the row would assert a loud failure that does not
     // happen.
+    //
+    // **The command form, and the distinction is not cosmetic.** `address
+    // cmd` -- no quoted operand -- is the *constant environment* form: it
+    // sets the environment to `CMD` and issues nothing, measured on the
+    // oracle at rc 0 with no process started. This crate executes it, so a
+    // row naming it would assert a loud failure that no longer happens.
+    // `address cmd 'text'` is the command form, which is the half that is
+    // still Phase 7's.
+    //
+    // The command is the empty string on purpose: it is a `command` operand
+    // as far as every table here is concerned, and it is the one operand that
+    // could not do anything if a future change ever did dispatch it from a
+    // test run.
     Witness {
-        tag: "Address",
-        source: "address cmd\n",
+        tag: "Address::Command",
+        source: "address cmd ''\n",
         category: Category::Instruction,
     },
     Witness {
@@ -257,9 +277,10 @@ const EXPR_WITNESSES: &[Witness] = &[
 /// category it claims, before running it. A snippet that parses into the
 /// wrong shape would otherwise let a passing exit-code check mean nothing.
 ///
-/// `owners::instruction_tag` needs no help telling a `Call` arm from its
-/// variant: that table is arm-grained where `lib.rs` is, so the tag it
-/// answers for a parsed node is already the tag a witness names.
+/// `owners::instruction_tag` needs no help telling a `Call` arm or an
+/// `ADDRESS` form from its variant: that table is arm-grained where `lib.rs`
+/// is, so the tag it answers for a parsed node is already the tag a witness
+/// names.
 fn assert_constructs(witness: &Witness) {
     let program = parse_program(witness.source.as_bytes().to_vec())
         .unwrap_or_else(|e| panic!("witness for {} failed to parse: {e:?}", witness.tag));
@@ -366,8 +387,8 @@ fn assert_witness_set_is_complete() {
     assert_eq!(
         got_instructions, expected_sorted,
         "INSTRUCTION_WITNESSES must have exactly one entry per out-of-scope \
-         InstructionKind variant (per arm, for Call), no more and no \
-         fewer"
+         InstructionKind variant (per arm, for Call and Address), no more \
+         and no fewer"
     );
     assert_eq!(expected_instructions.len(), 9);
 
@@ -400,7 +421,7 @@ fn in_scope_counts_match_the_audited_split() {
             .iter()
             .filter(|(_, o)| *o == Owner::InScope)
             .count(),
-        34
+        35
     );
     assert_eq!(
         EXPR_TAGS

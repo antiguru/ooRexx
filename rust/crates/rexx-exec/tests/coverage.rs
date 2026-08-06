@@ -585,6 +585,7 @@ const EXPECTED_SUBSET_4C: &[&str] = &[
     "lang/parse_sources.rex",
     "lang/parse_template.rex",
     "lang/pull_queue.rex",
+    "lang/address_env.rex",
 ];
 
 #[test]

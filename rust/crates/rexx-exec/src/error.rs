@@ -1010,6 +1010,23 @@ impl Raised {
     pub(crate) fn use_local_not_first() -> Raised {
         Raised::syntax(99, 910, Vec::new())
     }
+
+    /// 29.1: an `ADDRESS` environment name longer than the platform's limit.
+    ///
+    /// Both substitutions are the oracle's own: the limit as a decimal, then
+    /// the whole rejected name. **Untruncated**, unlike every `Loud` message
+    /// in this crate -- measured at 251 bytes in, 251 bytes quoted back on
+    /// both the constant and the `VALUE` form, so a bound here would be a
+    /// divergence rather than a safeguard.
+    ///
+    /// The limit is a caller's argument rather than a constant read here,
+    /// because it is per platform: `MAX_ADDRESS_NAME_LENGTH` in
+    /// `platform/unix/MiscSystem.cpp` and a separate one under `windows/`.
+    /// The message quotes whichever the running platform used, so the number
+    /// that bounded the name and the number in the text are one value.
+    pub(crate) fn environment_name_too_long(limit: usize, found: &[u8]) -> Raised {
+        Raised::syntax(29, 1, vec![limit.to_string().into_bytes(), found.to_vec()])
+    }
 }
 
 /// Converts a `rexx-num` arithmetic failure into a `Raised`.

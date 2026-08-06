@@ -1255,7 +1255,9 @@ nm = 'envC'; address value nm  ->  envC
 
 Same intent, different `ADDRESS()`.
 
-**(b) Bare `ADDRESS` is a TOGGLE, not a stack.** Measured: `envA`, `envB`, bare -> `ENVA`, bare -> `ENVB`, bare -> `ENVA`. It swaps between the current and the previous, forever. A stack implementation is wrong from the third bare `ADDRESS` onward.
+**(b) Bare `ADDRESS` is a TOGGLE, not a stack.** Measured: `envA`, `envB`, bare -> `ENVA`, bare -> `ENVB`, bare -> `ENVA`. It swaps between the current and the previous, forever.
+
+*Corrected during Task 9.* This step used to add "a stack implementation is wrong from the third bare `ADDRESS` onward", which is one toggle too generous. Measured by mutation, replacing the swap with `current = alternate.take()`: the alternate is already wrong after **one** toggle and the current after **two**. Test at least three anyway; the point stands, only the number was wrong.
 
 **(c) It is per-activation state, like `NUMERIC` -- inherited on call, discarded on return.** Confirmed rather than inferred: a called internal routine sees the caller's environment, changes it, and the caller still sees its own after the return. **Task 13 depends on this.**
 
@@ -1268,12 +1270,14 @@ internal (call shownum)   ->  12 ENGINEERING 3
 
 `TRACE()` behaves the same way. **This is the measurement Task 13's non-inheritance table needs**, taken from the builtins' side rather than inferred from the trace.
 
-*Not isolated, flagged:* bare `ADDRESS` with **no** prior environment was never probed -- every probe set one first.
+*Probed during Task 9, the gap this step flagged:* bare `ADDRESS` with **no** prior environment changes nothing. `say address()` reports `sh` before and after each of three bare `ADDRESS`es, because a fresh activation starts both halves of the pair at the same default (`RexxActivation`'s constructors set `alternateAddress = currentAddress`).
 
 - [ ] **Step 1: Measure the default and the swap semantics**
 
 Measured: `say address()` with no `ADDRESS` instruction prints `sh` on this host.
 **That default is platform-supplied and therefore Phase 7's**, so a corpus witness must assert the **swap**, not the initial value.
+
+*Corrected during Task 9:* **the swap cannot be witnessed by a corpus program at all** until `ADDRESS()` answers, because a program has no other way to read the environment back. Task 9's corpus program asserts what is reachable -- which forms trace a value line, and the 250-byte name limit -- and the swap is pinned by `run.rs` unit tests that read the activation directly. Task 10's Step 0a carries the obligation.
 
 `ADDRESS` with no operand swaps to the previous environment.
 Probe: the two-deep swap; the swap with no prior environment; and whether the setting survives a `CALL` and a `RETURN`.
@@ -1282,9 +1286,10 @@ It is per-activation state like `Settings`, so it belongs on `Activation` and no
 
 - [ ] **Step 2: Split the `loud.rs` witness rather than deleting it**
 
-`loud.rs:208`'s witness is `address cmd` -- an `ADDRESS` **with a command**, which stays Phase 7's.
-Deleting the row removes the witness for a half that is still out of scope, and `assert_witness_set_is_complete` cannot catch that.
-**Make the row arm-grained**, following the pattern already in `owners.rs:349-351`: the environment form moves in scope, the command and `WITH` forms keep a Phase 7 witness.
+The existing witness is `address cmd`, and deleting the row would remove the witness for a half that is still out of scope -- `assert_witness_set_is_complete` cannot catch that.
+**Make the row arm-grained**, following the `Call::Qualified` pattern in `owners.rs`: the environment form moves in scope, the command and `WITH` forms keep a Phase 7 witness.
+
+*Corrected during Task 9.* This step used to say the existing witness was "an `ADDRESS` **with a command**". It is not: `address cmd` is the **constant environment** form, measured at rc 0 on the oracle with no process started -- it sets the environment to `CMD` and issues nothing. `address cmd ''` is the command form, measured at `RC(30)` with the command actually dispatched. So the witness **source** had to change as well as the row's grain; keeping it would have asserted a loud failure for a construct that now runs.
 
 - [ ] **Step 3: Write failing tests, implement, move the `owners.rs` row**
 
@@ -1301,6 +1306,23 @@ Deleting the row removes the witness for a half that is still out of scope, and 
 **Read "Shared facts every builtin task needs", restated in your brief.**
 
 **`lib.rs` and `run.rs` are in this task's file list on purpose** -- see Step 2.
+
+- [ ] **Step 0a: `ADDRESS()` is owed a corpus witness Task 9 could not write -- measured 2026-08-06**
+
+Task 9 landed the environment state and found it has **no in-scope observer**, so nothing in the corpus asserts what a bare `ADDRESS` actually does.
+The enumeration is the C++'s, not a guess: `settings.currentAddress` is read by `toggleAddress`, by `setAddress`, by `CommandInstruction`'s dispatch, by `BuiltinFunctions.cpp`'s `ADDRESS`, and by the default environment handed to an external `.rex` called as a routine.
+Of those, the two a Rexx program can reach are `ADDRESS()` and issuing a command, and the second is Phase 7's.
+**This task is the first that can write the witness, and it owes it.**
+
+The state is already there: `Activation::address` (`activation.rs`) is an `AddressState { current, alternate }`, both `Option<Rc<[u8]>>`.
+`ADDRESS()` returns `current`. **`None` means the platform's default environment** -- `sh` on this host, measured -- which Task 9 deliberately did not spell, because that default is Phase 7's. Deciding what `None` renders as is this task's first job, and it is the whole reason `ADDRESS()` could not land earlier.
+
+Two things the witness must assert, both measured on the oracle and neither currently asserted by any program:
+
+* **The swap, at least three deep.** `envA`, `envB`, then four bare `ADDRESS`es gives `ENVB`, `ENVA`, `ENVB`, `ENVA`, `ENVB`. One toggle cannot tell a swap from a pop.
+* **Inheritance into a callee, both halves.** With `address outer` in the main body, a called internal routine reports `OUTER`, and *its own* bare `ADDRESS` reports `sh` -- the caller's alternate came across too. `run.rs`'s `a_callees_own_environment_does_not_survive_the_return` pins the return direction; nothing pins this one, because `resolve_and_run_call` pops the callee unconditionally and no in-crate test can read a callee's state.
+
+`corpus/lang/address_env.rex` is the program to extend; its own header states which blocks exist and why none of them asserts the swap.
 
 - [ ] **Step 1: Build the probe table**
 

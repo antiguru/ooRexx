@@ -339,6 +339,20 @@ enum Resolved {
 /// counter that never fires.
 const MAX_ACTIVATION_DEPTH: usize = 10_000;
 
+/// The longest `ADDRESS` environment name this platform accepts, beyond which
+/// the instruction raises 29.1.
+///
+/// `MAX_ADDRESS_NAME_LENGTH` in `platform/unix/MiscSystem.cpp`, and a
+/// per-platform value there rather than a language constant -- the Windows
+/// build has its own `validateAddressName`. Measured against the oracle on
+/// this host: 250 bytes is accepted and reported back by `ADDRESS()` at
+/// length 250, 251 raises `Error 29.1` at rc 227.
+///
+/// **Only the two setting forms check it.** A bare `ADDRESS` swaps two names
+/// that were each validated when they were set, and `RexxActivation::
+/// toggleAddress` accordingly validates nothing.
+const MAX_ADDRESS_NAME_LENGTH: usize = 250;
+
 /// Where a `LEAVE`/`ITERATE` instruction itself sits, captured the instant
 /// it steps rather than reconstructed later -- see `Flow::Leave`'s own doc
 /// comment for why eagerly.
@@ -1892,6 +1906,29 @@ impl Interp {
                 Ok(Flow::Next)
             }
 
+            // `ADDRESS`, the three forms that only name an environment: the
+            // constant `ADDRESS env`, the computed `ADDRESS VALUE expr` (and
+            // its parenthesised spelling), and the bare toggle. See
+            // `exec_address`.
+            //
+            // `ADDRESS env command` and any `WITH` redirection are the
+            // command dispatch, and both fail loudly naming Phase 7 --
+            // `instruction_owner` (`lib.rs`) draws the identical line, and
+            // `owners.rs`'s own `Address::Command`/`Address::Environment`
+            // rows are what hold the two matches equal.
+            //
+            // `io` without `command` is a real shape, not a defensive extra:
+            // `address foo with output stem o.` sets the environment *and*
+            // registers a redirection for later commands, which is the
+            // `RexxInstructionAddressWith` half of the instruction.
+            InstructionKind::Address(address) => {
+                if address.command.is_some() || address.io.is_some() {
+                    return Err(Loud::instruction(&instruction.kind).into());
+                }
+                self.exec_address(code, address)?;
+                Ok(Flow::Next)
+            }
+
             other => Err(Loud::instruction(other).into()),
         }
     }
@@ -3437,6 +3474,10 @@ impl Interp {
         // the three probes that measure the inheritance and its one-way
         // direction.
         let traps = caller.traps.clone();
+        // Both halves of the pair, not just the current one: measured, a
+        // callee's own bare `ADDRESS` swaps to the *caller's* alternate.
+        // `Activation::address`' own doc comment has the transcript.
+        let address = caller.address.clone();
         let callee_id = self.next_activation_id();
         let mut callee = Activation::nested(
             callee_id,
@@ -3448,6 +3489,7 @@ impl Interp {
             Inherited {
                 settings,
                 trace_mode,
+                address,
                 traps,
             },
         );
@@ -5976,6 +6018,65 @@ impl Interp {
                 self.set_trace_mode(mode_from_setting(&text).map_err(raised_invalid_trace_letter)?);
             }
         }
+        Ok(())
+    }
+
+    /// `ADDRESS`'s three environment-naming forms. The caller has already
+    /// turned the command and `WITH` forms away.
+    ///
+    /// # The two forms upcase differently, and it is the cheap thing to get
+    /// wrong
+    ///
+    /// `rexx-parse` has already resolved this: `environment` is a symbol's
+    /// *upcased* spelling or a literal's verbatim bytes (`ast::Address`'s own
+    /// doc), so nothing here folds case. Measured on the oracle, four
+    /// spellings of the same intent:
+    ///
+    /// ```text
+    /// address envC                    ->  ENVC
+    /// address 'LiTeRaL'               ->  LiTeRaL
+    /// nm = 'mIxEd'; address value nm  ->  mIxEd
+    /// nm = 'mIxEd'; address (nm)      ->  mIxEd
+    /// ```
+    ///
+    /// So the computed forms never upcase, and the constant one does only
+    /// because a symbol token is already upcased when it is read.
+    ///
+    /// # Order of operations on the computed form
+    ///
+    /// Evaluate, trace the value, *then* validate the length -- the same
+    /// order `RexxInstructionAddress::execute` has (`traceResult` precedes
+    /// `SystemInterpreter::validateAddressName`), and measured: under `trace
+    /// r` a 251-byte name traces its own `>>>` line and only then raises
+    /// 29.1. The value line is `>>>` under `TRACE I` as well as under
+    /// `TRACE R`, measured -- unlike a `PARSE` target's, it is not a choice
+    /// of prefix between the two modes.
+    fn exec_address(
+        &mut self,
+        code: &Code<'_>,
+        address: &rexx_parse::Address,
+    ) -> Result<(), Failure> {
+        // `environment` before `dynamic`, mirroring the C++'s own `if
+        // (environment != OREF_NULL)` ahead of its `ADDRESS VALUE` arm. The
+        // parser never fills both, so the order decides nothing today.
+        let name: Rc<[u8]> = match (&address.environment, &address.dynamic) {
+            (None, None) => {
+                self.activation_mut().address.toggle();
+                return Ok(());
+            }
+            (Some(environment), _) => Rc::from(&environment[..]),
+            (None, Some(expression)) => {
+                let value = self.eval(code, expression)?;
+                self.roots.push_temp(value);
+                let text = self.to_text(value).to_vec();
+                self.trace_result(self.clause_state.current_value_indent, &text);
+                Rc::from(&text[..])
+            }
+        };
+        if name.len() > MAX_ADDRESS_NAME_LENGTH {
+            return Err(Raised::environment_name_too_long(MAX_ADDRESS_NAME_LENGTH, &name).into());
+        }
+        self.activation_mut().address.set(name);
         Ok(())
     }
 
@@ -12989,5 +13090,220 @@ mod tests {
                  minimum expected is 1.\n"
             )
         );
+    }
+
+    // ---- ADDRESS, the environment-naming forms ----
+    //
+    // Every assertion below reads the activation's own state rather than a
+    // program's output, and it has to: the environment has exactly two readers
+    // a Rexx program can use, `ADDRESS()` and issuing a command, and this
+    // crate answers neither. `corpus/lang/address_env.rex` covers what a
+    // program *can* see -- the trace lines and the 29.1 error -- and its own
+    // header says why it cannot assert the swap.
+
+    /// The running activation's `(current, alternate)` pair as text, `None`
+    /// staying `None` because it is not a name -- it is "the platform's
+    /// default environment", which this crate does not yet have a spelling
+    /// for.
+    fn address_pair(interp: &Interp) -> (Option<String>, Option<String>) {
+        let show = |name: &Option<Rc<[u8]>>| {
+            name.as_ref()
+                .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
+        };
+        let state = &interp.activation().address;
+        (show(&state.current), show(&state.alternate))
+    }
+
+    /// Measured on the oracle through `ADDRESS()`, four spellings of one
+    /// intent: `address envC` -> `ENVC`, `address 'LiTeRaL'` -> `LiTeRaL`,
+    /// and both computed forms -> the value unchanged.
+    #[test]
+    fn only_the_symbol_form_upcases_the_environment_name() {
+        for (source, want) in [
+            (&b"address envC\n"[..], "ENVC"),
+            (&b"address 'LiTeRaL'\n"[..], "LiTeRaL"),
+            (&b"nm = 'mIxEd'\naddress value nm\n"[..], "mIxEd"),
+            (&b"nm = 'mIxEd'\naddress (nm)\n"[..], "mIxEd"),
+        ] {
+            let mut interp = Interp::new();
+            run_source(&mut interp, source).expect("test program runs");
+            assert_eq!(
+                address_pair(&interp).0.as_deref(),
+                Some(want),
+                "{}",
+                String::from_utf8_lossy(source)
+            );
+        }
+    }
+
+    /// Bare `ADDRESS` swaps the pair, forever.
+    ///
+    /// **Four consecutive toggles, because one is not enough to tell a swap
+    /// from a pop.** Measured on the oracle through `ADDRESS()`: `ENVB`,
+    /// `ENVA`, `ENVB`, `ENVA`, `ENVB` for zero through four bare `ADDRESS`es
+    /// after `envA` and `envB`. A pop-stack implementation agrees on the
+    /// first toggle and then walks backwards out of the pair instead of
+    /// returning into it -- measured by mutation, replacing the swap with
+    /// `current = alternate.take()`: the alternate is already wrong after one
+    /// toggle and the current after two.
+    ///
+    /// Both halves are asserted rather than only the current one, and that is
+    /// what makes the first row catch anything at all.
+    #[test]
+    fn bare_address_is_a_toggle_and_not_a_stack() {
+        for (toggles, current, alternate) in [
+            (0, "ENVB", "ENVA"),
+            (1, "ENVA", "ENVB"),
+            (2, "ENVB", "ENVA"),
+            (3, "ENVA", "ENVB"),
+            (4, "ENVB", "ENVA"),
+        ] {
+            let mut source = b"address envA\naddress envB\n".to_vec();
+            for _ in 0..toggles {
+                source.extend_from_slice(b"address\n");
+            }
+            let mut interp = Interp::new();
+            run_source(&mut interp, &source).expect("test program runs");
+            assert_eq!(
+                address_pair(&interp),
+                (Some(current.to_string()), Some(alternate.to_string())),
+                "after {toggles} bare ADDRESS"
+            );
+        }
+    }
+
+    /// A bare `ADDRESS` before any other `ADDRESS` changes nothing, because
+    /// both halves of the pair start at the same default.
+    ///
+    /// Measured on the oracle, the one edge every earlier probe missed by
+    /// setting an environment first: `say address()` reports `sh` before and
+    /// after each of three bare `ADDRESS`es.
+    #[test]
+    fn a_bare_address_with_no_prior_environment_changes_nothing() {
+        let mut interp = Interp::new();
+        run_source(&mut interp, b"address\naddress\naddress\n").expect("test program runs");
+        assert_eq!(address_pair(&interp), (None, None));
+    }
+
+    /// Setting the same name twice leaves the toggle with nothing to swap:
+    /// `set` discards the *old* alternate rather than keeping a history.
+    /// Measured on the oracle, `address envA; address envA` then three bare
+    /// `ADDRESS`es, all five `ADDRESS()` readings `ENVA`.
+    #[test]
+    fn setting_the_same_environment_twice_leaves_the_toggle_nothing_to_do() {
+        for toggles in 0..=3 {
+            let mut source = b"address envA\naddress envA\n".to_vec();
+            for _ in 0..toggles {
+                source.extend_from_slice(b"address\n");
+            }
+            let mut interp = Interp::new();
+            run_source(&mut interp, &source).expect("test program runs");
+            assert_eq!(
+                address_pair(&interp),
+                (Some("ENVA".to_string()), Some("ENVA".to_string())),
+                "after {toggles} bare ADDRESS"
+            );
+        }
+    }
+
+    /// The environment is **per activation**: a callee's own `ADDRESS` dies
+    /// with it, and so does its own toggle.
+    ///
+    /// Measured on the oracle: `address outer` in the caller, `address inner`
+    /// in the callee, and the caller still reports `OUTER` after the `RETURN`,
+    /// then `sh` after a bare `ADDRESS` -- so neither half of the pair came
+    /// back. An implementation holding one pair on `Interp` instead of one per
+    /// activation reads `INNER` here.
+    ///
+    /// **The other direction is not asserted anywhere, and nothing here can
+    /// assert it.** A callee does inherit the caller's pair, both halves, and
+    /// `Activation::address`' own doc has the oracle transcript -- but a
+    /// callee never writes anything back and this crate has no reader for the
+    /// environment, so "inherited the caller's pair" and "started from the
+    /// default" predict identical bytes from every vantage point a test has.
+    /// `resolve_and_run_call` pops the callee unconditionally on both paths,
+    /// so not even a failing callee leaves its own state behind to read. The
+    /// first task that makes `ADDRESS()` answer is the first that can pin it.
+    #[test]
+    fn a_callees_own_environment_does_not_survive_the_return() {
+        let mut interp = Interp::new();
+        run_source(
+            &mut interp,
+            b"address outer\ncall sub\nexit\nsub:\naddress inner\naddress\nreturn\n",
+        )
+        .expect("test program runs");
+        assert_eq!(address_pair(&interp), (Some("OUTER".to_string()), None));
+    }
+
+    /// 250 bytes is accepted and 251 raises 29.1, on both setting forms.
+    ///
+    /// Measured on the oracle, rc 227 for each of the two long spellings, and
+    /// `ADDRESS()` reporting length 250 for the accepted one. The substitution
+    /// carries the whole name back untruncated -- 251 bytes in, 251 quoted.
+    #[test]
+    fn an_environment_name_over_two_hundred_and_fifty_bytes_raises_29_1() {
+        for length in [250usize, 251] {
+            let name = "z".repeat(length);
+            for source in [
+                format!("address '{name}'\n"),
+                format!("nm = '{name}'\naddress value nm\n"),
+            ] {
+                let mut interp = Interp::new();
+                let outcome = run_source(&mut interp, source.as_bytes());
+                if length == 250 {
+                    outcome.expect("a 250-byte name is accepted");
+                    assert_eq!(address_pair(&interp).0.as_deref(), Some(name.as_str()));
+                    continue;
+                }
+                let Err(Failure::Raised(raised)) = outcome else {
+                    panic!("expected 29.1 for a {length}-byte name, got {outcome:?}");
+                };
+                assert_eq!((raised.number, raised.sub), (29, 1));
+                assert_eq!(
+                    raised.additional,
+                    vec![b"250".to_vec(), name.clone().into_bytes()],
+                    "the limit and the whole rejected name, untruncated"
+                );
+                assert_eq!(
+                    address_pair(&interp),
+                    (None, None),
+                    "a rejected name must not have been installed"
+                );
+            }
+        }
+    }
+
+    /// The command form and the `WITH` form both still fail loudly, and both
+    /// name Phase 7.
+    ///
+    /// `tests/loud.rs` carries one witness for the `Address::Command` tag and
+    /// the tag covers two shapes, so the shape that witness does not spell is
+    /// pinned here. The third row is the one that is easy to miss: a `WITH`
+    /// with **no** command still configures a command's streams, so it is the
+    /// same owner even though it only names an environment.
+    #[test]
+    fn the_command_and_with_forms_stay_loud_and_name_phase_7() {
+        for source in [
+            &b"address cmd ''\n"[..],
+            &b"address cmd 'text'\n"[..],
+            &b"address cmd with output stem o.\n"[..],
+            &b"address with output stem o.\n"[..],
+            &b"address value 'q' with input stem i.\n"[..],
+        ] {
+            let mut interp = Interp::new();
+            let failure = run_source(&mut interp, source).unwrap_err();
+            let Failure::Loud(loud) = failure else {
+                panic!(
+                    "expected Loud for {:?}, got {failure:?}",
+                    String::from_utf8_lossy(source)
+                );
+            };
+            assert_eq!(
+                loud.message,
+                "ADDRESS is not implemented (Phase 7)",
+                "{}",
+                String::from_utf8_lossy(source)
+            );
+        }
     }
 }

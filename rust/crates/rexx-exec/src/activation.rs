@@ -84,6 +84,62 @@ pub(crate) struct Trap {
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) struct ActivationId(pub(crate) u64);
 
+/// The `ADDRESS` environment pair an activation carries: the target a command
+/// clause would be sent to, and the one a bare `ADDRESS` swaps back to.
+///
+/// **A pair and not a stack**, which is the whole of the bare form's
+/// behaviour. Measured on the oracle with `envA`, `envB` and then four
+/// consecutive bare `ADDRESS`es: `ENVA`, `ENVB`, `ENVA`, `ENVB`. A stack gets
+/// the first two right and is wrong from the third onward. The C++ is the same
+/// two words swapping, `RexxActivation::toggleAddress`.
+///
+/// `None` is the interpreter's default environment, which is **platform
+/// supplied** (`Activity::getInstance()->getDefaultEnvironment()`, and `sh`
+/// measured on this host) rather than a name this crate chooses. Both fields
+/// start `None` because the oracle starts both at that same default:
+/// `RexxActivation`'s own constructors set `currentAddress` and then
+/// `alternateAddress = currentAddress`. Measured consequence, and the one edge
+/// a survey built from working examples misses -- a bare `ADDRESS` before any
+/// other `ADDRESS` swaps two equal values and so changes nothing:
+///
+/// ```text
+/// say address()  ->  sh
+/// address        ->  (no change)
+/// say address()  ->  sh
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct AddressState {
+    /// The environment in force. `None` is the platform default.
+    ///
+    /// **This is what `ADDRESS()` answers**, the one reader of this state that
+    /// is not a command dispatch: `BuiltinFunctions.cpp`'s `ADDRESS` is
+    /// `context->getAddress()` and nothing else. Rendering `None` means naming
+    /// the platform default, which is why that builtin cannot be answered
+    /// before the default itself exists.
+    pub(crate) current: Option<Rc<[u8]>>,
+    /// What a bare `ADDRESS` swaps `current` with.
+    pub(crate) alternate: Option<Rc<[u8]>>,
+}
+
+impl AddressState {
+    /// `ADDRESS env` / `ADDRESS VALUE expr`: the new target becomes current and
+    /// the old current becomes the alternate.
+    ///
+    /// The old *alternate* is discarded, so setting the same name twice leaves
+    /// both halves equal and a following bare `ADDRESS` does nothing --
+    /// measured, `address envA; address envA` then three bare `ADDRESS`es all
+    /// report `ENVA`.
+    pub(crate) fn set(&mut self, name: Rc<[u8]>) {
+        self.alternate = self.current.take();
+        self.current = Some(name);
+    }
+
+    /// Bare `ADDRESS`.
+    pub(crate) fn toggle(&mut self) {
+        std::mem::swap(&mut self.current, &mut self.alternate);
+    }
+}
+
 /// One activation: everything about the frame currently executing.
 pub(crate) struct Activation {
     /// This activation's own identity, unique for the life of the `Interp`.
@@ -252,6 +308,37 @@ pub(crate) struct Activation {
     /// the caller's value at call time; nothing writes back on the way out,
     /// which is the whole of that behaviour.
     pub(crate) trace_mode: TraceMode,
+    /// This activation's own `ADDRESS` environment pair.
+    ///
+    /// **Per activation, inherited by copy at call time, never written back**,
+    /// the same one-way rule [`trace_mode`], [`settings`] and [`traps`] follow,
+    /// and measured the same way. `address outer` in the main body, then a
+    /// called internal routine:
+    ///
+    /// ```text
+    /// main   address()  ->  OUTER
+    ///  sub   address()  ->  OUTER      inherited
+    ///  sub   address              ->   sh      the caller's alternate came too
+    ///  sub   address inner ; address() -> INNER
+    /// main   address()  ->  OUTER      unchanged by the callee
+    /// main   address              ->   sh      the caller's own alternate
+    /// ```
+    ///
+    /// So both halves of the pair cross into the callee, not just the current
+    /// one -- the C++ copies the whole settings block
+    /// (`_parent->putSettings(settings)` in the internal-call constructor).
+    ///
+    /// A `::routine` does **not** inherit it: its constructor sets
+    /// `currentAddress` from the instance default and `alternateAddress` from
+    /// that, exactly as a top-level activation does. Nothing in this crate
+    /// enters a `::routine` body yet, so no code path here depends on that
+    /// difference, but it is the same non-inheritance `DIGITS`/`FORM`/`FUZZ`
+    /// and `TRACE` show.
+    ///
+    /// [`trace_mode`]: Activation::trace_mode
+    /// [`settings`]: Activation::settings
+    /// [`traps`]: Activation::traps
+    pub(crate) address: AddressState,
     /// The condition traps enabled in this activation, keyed by the exact
     /// condition name a raise carries (`Raised::condition`) -- `SYNTAX`,
     /// `NOVALUE`, `USER FOO`, ...
@@ -313,6 +400,7 @@ impl Activation {
             pc: 0,
             settings: Settings::default(),
             trace_mode: TraceMode::OFF,
+            address: AddressState::default(),
             traps: HashMap::new(),
         }
     }
@@ -368,6 +456,7 @@ impl Activation {
             pc,
             settings: inherited.settings,
             trace_mode: inherited.trace_mode,
+            address: inherited.address,
             traps: inherited.traps,
         }
     }
@@ -390,6 +479,7 @@ impl Activation {
 pub(crate) struct Inherited {
     pub(crate) settings: Settings,
     pub(crate) trace_mode: TraceMode,
+    pub(crate) address: AddressState,
     pub(crate) traps: HashMap<Box<[u8]>, Trap>,
 }
 

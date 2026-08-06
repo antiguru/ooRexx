@@ -723,11 +723,16 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
 /// `do_over_a_parenthesised_stem_target_is_also_caught` red, all four
 /// asserting the exact unsuffixed message.
 ///
-/// **Arm-grained for `InstructionKind::Call`, matching `owners.rs`'s own
-/// `split` section row for row**: three of `rexx_parse::Call`'s four arms are
-/// implemented and answer `None`, and `Call::Qualified` is genuinely Phase
-/// 5's (a namespace-qualified `CALL`, mirroring `ExprKind::QualifiedCall`'s
-/// own ownership below). Every other variant here stays coarse.
+/// **Arm-grained for `InstructionKind::Call` and `InstructionKind::Address`,
+/// matching `owners.rs`'s own `split` sections row for row.** Three of
+/// `rexx_parse::Call`'s four arms are implemented and answer `None`, and
+/// `Call::Qualified` is genuinely Phase 5's (a namespace-qualified `CALL`,
+/// mirroring `ExprKind::QualifiedCall`'s own ownership below); `ADDRESS`
+/// splits on whether the instruction carries a command or a `WITH`
+/// redirection, which its own arm below writes out. The two splits differ in
+/// shape because the language does: `Call`'s forms are enum arms and
+/// `Address`'s are struct fields, so one matches a pattern and the other a
+/// `bool`.
 ///
 /// Exhaustive with no `_` arm, matching `Loud::instruction`'s own match: a
 /// new `InstructionKind` variant is a compile error here, not a silent
@@ -799,7 +804,25 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // own but which share `exec_parse`. Every source is implemented,
         // including the two that read a line (`PARSE PULL`, `PARSE LINEIN`).
         InstructionKind::Parse(_) | InstructionKind::Arg(_) | InstructionKind::Pull(_) => None,
-        InstructionKind::Address(_) => Some("4c"),
+        // **Arm-grained, the second variant in this match that is.** The three
+        // forms that only name an environment -- `ADDRESS env`, `ADDRESS VALUE
+        // expr` and the bare toggle -- are implemented and answer `None`.
+        // `ADDRESS env command` issues a command, and a `WITH` redirection
+        // configures where a command's streams go; both need the command
+        // dispatch `InstructionKind::Command` needs, so they carry that same
+        // owner rather than one of their own (D18).
+        //
+        // The condition is a `bool` and not a pattern because these are struct
+        // fields rather than enum arms; `owners.rs`'s `split` section for
+        // `Address` matches on the identical expression, which is what keeps
+        // the two tables comparable row for row.
+        InstructionKind::Address(address) => {
+            if address.command.is_some() || address.io.is_some() {
+                Some("Phase 7")
+            } else {
+                None
+            }
+        }
         InstructionKind::Expose { .. }
         | InstructionKind::Options { .. }
         | InstructionKind::Message { .. }

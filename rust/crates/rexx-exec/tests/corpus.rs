@@ -10,8 +10,8 @@
 /*----------------------------------------------------------------------------*/
 
 //! The differential corpus runner: every program named in the phase subset
-//! files -- `rust/corpus/phase-4a.txt` and `rust/corpus/phase-4b.txt`, read as
-//! a union -- run under both interpreters, compared byte for byte on stdout
+//! files -- `rust/corpus/phase-4a.txt`, `phase-4b.txt` and `phase-4c.txt`,
+//! read as a union -- run under both interpreters, compared byte for byte on stdout
 //! and exit code, and on stderr up to DEVIATION 0's own narrow indent
 //! normalisation (see the "DEVIATION 0" section below).
 //!
@@ -23,6 +23,13 @@
 //! `read_subset` caller of four still pinned to a single file, which would
 //! have left a 4b witness enumerated by `coverage.rs` and never actually run
 //! against the oracle by anything.
+//!
+//! **That is exactly what had happened again to `phase-4c.txt`.** It was
+//! added, `coverage.rs` read it, and this runner did not -- so four programs
+//! written as differential witnesses were only ever being *parsed*, and a
+//! criterion-1 witness that nothing runs is a witness that cannot fail.
+//! Adding the file here found no divergence in any of them, which is the
+//! outcome that makes it a correction rather than a change of behaviour.
 //!
 //! **This is a repeatable progress instrument, not a once-at-the-end gate.**
 //! It replaces the hand-run shell loop 4a used after every task (3 of 26
@@ -319,7 +326,8 @@ fn build_report(matched: usize, total: usize, mismatches: &[Mismatch], gate: boo
     writeln!(w, "{banner}").unwrap();
     writeln!(
         w,
-        "rexx-exec differential corpus report -- rust/corpus/phase-4a.txt + phase-4b.txt"
+        "rexx-exec differential corpus report -- rust/corpus/phase-4a.txt + \
+         phase-4b.txt + phase-4c.txt"
     )
     .unwrap();
     if gate {
@@ -429,6 +437,11 @@ fn emit_uncaptured(text: &str) {
 /// paragraph above asks for -- 4b's Task 1 re-ran and had a number, and
 /// recording it is the instruction, not merely leaving the older row intact
 /// (review's ruling on the dated figure).
+///
+/// Expected result at commit `2070cd9d`: **47 of 47 matching**, the subset
+/// being those 42 plus `phase-4c.txt`'s five, which this call site had not
+/// been reading. All five matched on the first run, so the widening moved no
+/// number that was standing on anything.
 #[test]
 fn corpus_differential() {
     let oracle = support::oracle::locate();
@@ -436,6 +449,7 @@ fn corpus_differential() {
     let subset = read_subset(&[
         &corpus_dir.join("phase-4a.txt"),
         &corpus_dir.join("phase-4b.txt"),
+        &corpus_dir.join("phase-4c.txt"),
     ]);
     assert!(
         !subset.is_empty(),
