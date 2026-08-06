@@ -1,4 +1,4 @@
-count 110
+count 112
 /* PARSE's sources, its two case options, and the trace shape a target's own
    value line takes in each of the two modes that show one.
 
@@ -20,10 +20,12 @@ count 110
    upper/lower/caseless: UPPER and LOWER transform the SOURCE before parsing;
    CASELESS leaves the source alone and folds only the comparison, so the
    assignment keeps the original case. C3's pattern matches a lower-case `x`
-   against an upper-case `X` in the source and still prints `MiXeD` unchanged
-   on either side of it -- an engine that folds the source to compare prints
-   `mixed` or `MIXED`. C4/C5 pin that `upper caseless` and `caseless upper`
-   are order-independent.
+   against an upper-case `X` in the source and still assigns the source's own
+   bytes on either side of it, so it prints `[Mi][eD case]` -- an engine that
+   folds the source in order to compare prints `[MI][ED CASE]` instead, which
+   is what C4 prints from UPPER doing it on purpose. C4/C5 also pin that
+   `upper caseless` and `caseless upper` are order-independent, and C6 is
+   LOWER on its own, with no pattern for a fold to hide in.
 
    source: only the first two words are printed. The third is the program's own
    absolute path, which would put the filesystem in this program's output and

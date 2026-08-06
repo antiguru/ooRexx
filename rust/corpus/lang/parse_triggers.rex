@@ -21,9 +21,10 @@
    as empty.
 
    patterns: an absent pattern matches at END and the empty pattern behaves as
-   absent, so E1 and E2 give the whole string and then nothing. An engine that
-   treats "not found" as "no movement" prints them the other way round, and one
-   that lets an empty needle match at position 1 prints E2 as `[][abcdefghij]`.
+   absent, so E1 and E2 both give the whole string and then nothing. An engine
+   that lets an empty needle match at position 1 prints E2 as
+   `[][abcdefghij]`, and one that leaves the section empty on a miss prints E1
+   that way too.
 
    after a pattern: the next TARGET starts past the match while a following
    RELATIVE trigger measures from the match's START. So `'c' +1` is
