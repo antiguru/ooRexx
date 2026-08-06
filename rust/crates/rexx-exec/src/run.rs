@@ -339,14 +339,19 @@ enum Resolved {
 /// counter that never fires.
 const MAX_ACTIVATION_DEPTH: usize = 10_000;
 
-/// The longest `ADDRESS` environment name this platform accepts, beyond which
-/// the instruction raises 29.1.
+/// The longest `ADDRESS` environment name accepted, beyond which the
+/// instruction raises 29.1.
 ///
-/// `MAX_ADDRESS_NAME_LENGTH` in `platform/unix/MiscSystem.cpp`, and a
-/// per-platform value there rather than a language constant -- the Windows
-/// build has its own `validateAddressName`. Measured against the oracle on
-/// this host: 250 bytes is accepted and reported back by `ADDRESS()` at
-/// length 250, 251 raises `Error 29.1` at rc 227.
+/// `MAX_ADDRESS_NAME_LENGTH` in `platform/unix/MiscSystem.cpp`. The C++ keeps
+/// one per platform rather than one language constant, and **both are 250,
+/// with identical `validateAddressName` bodies** -- `platform/windows/
+/// MiscSystem.cpp` read directly, not assumed from the unix one. So the
+/// per-platform spelling there is a structure, not a difference, and this
+/// single constant is faithful to both.
+///
+/// Measured against the oracle on this host: 250 bytes is accepted and
+/// reported back by `ADDRESS()` at length 250, 251 raises `Error 29.1` at
+/// rc 227.
 ///
 /// **Only the two setting forms check it.** A bare `ADDRESS` swaps two names
 /// that were each validated when they were set, and `RexxActivation::
@@ -13172,17 +13177,59 @@ mod tests {
         }
     }
 
-    /// A bare `ADDRESS` before any other `ADDRESS` changes nothing, because
-    /// both halves of the pair start at the same default.
+    /// A bare `ADDRESS` before any other `ADDRESS` changes nothing, and the
+    /// default is a name the pair can toggle back **to**.
     ///
     /// Measured on the oracle, the one edge every earlier probe missed by
     /// setting an environment first: `say address()` reports `sh` before and
     /// after each of three bare `ADDRESS`es.
+    ///
+    /// **The second half is what makes this discriminate anything.** The first
+    /// assertion alone is satisfied by a `toggle` that does nothing at all,
+    /// and only a change to how the default is represented could redden it.
+    /// The second is the failure this edge actually invites: `None` is doing
+    /// two jobs in an `Option`, "the platform default" and "absent", and an
+    /// implementation that reads it as the second guards its toggle with `if
+    /// let Some(previous) = self.alternate.take()` and then refuses to leave
+    /// `ENVA`. Measured against the oracle, which does leave it: `address
+    /// envA` then bare `ADDRESS` reports `sh`.
+    /// One `Interp` per row, and a row's whole program in one string: each
+    /// `run_source` pushes a **fresh** activation, so splitting a sequence
+    /// across two calls would silently start the second half from the default
+    /// again -- which is how an earlier version of this test appeared to pass
+    /// its middle assertion for the wrong reason.
     #[test]
     fn a_bare_address_with_no_prior_environment_changes_nothing() {
-        let mut interp = Interp::new();
-        run_source(&mut interp, b"address\naddress\naddress\n").expect("test program runs");
-        assert_eq!(address_pair(&interp), (None, None));
+        const LEAD: &str = "address\naddress\naddress\n";
+        for (tail, current, alternate, what) in [
+            (
+                "",
+                None,
+                None,
+                "three bare ADDRESSes before any other ADDRESS",
+            ),
+            (
+                "address envA\n",
+                Some("ENVA"),
+                None,
+                "the default is still what the first set displaces",
+            ),
+            (
+                "address envA\naddress\n",
+                None,
+                Some("ENVA"),
+                "a bare ADDRESS must toggle back to the default, not decline \
+                 to move because the alternate is spelled None",
+            ),
+        ] {
+            let mut interp = Interp::new();
+            run_source(&mut interp, format!("{LEAD}{tail}").as_bytes()).expect("test program runs");
+            assert_eq!(
+                address_pair(&interp),
+                (current.map(str::to_string), alternate.map(str::to_string)),
+                "{what}"
+            );
+        }
     }
 
     /// Setting the same name twice leaves the toggle with nothing to swap:

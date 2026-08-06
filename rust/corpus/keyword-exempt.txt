@@ -40,9 +40,13 @@
 #       current answer, never this sentence, and no count of either group is
 #       written down here for the same reason.
 #
-#   Phase 7  The `ADDRESS ... WITH` bodies. `ADDRESS` naming an environment
-#       runs; issuing a command to one, and the `WITH` redirection that says
-#       where a command's three streams go, need the command dispatch.
+#   Phase 7  The `ADDRESS` bodies that do more than name an environment.
+#       Naming one runs; issuing a command to it, and the `WITH` redirection
+#       that says where a command's three streams go, both need the command
+#       dispatch. Two of these three are `WITH` forms and the third,
+#       `test_environment_path_null`, is a plain command -- `address "path"
+#       ""` -- so "the WITH bodies", which this line used to say, named the
+#       wrong set.
 #
 #   defect:compound-do-control-variable  6 bodies. NOT a phase gap: a real
 #       divergence, confirmed by running each rewritten program under the C++

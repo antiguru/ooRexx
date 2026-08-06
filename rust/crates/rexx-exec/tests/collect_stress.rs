@@ -100,9 +100,16 @@ fn corpus_dir() -> PathBuf {
 /// so a later task's own subset file can run *alongside* `phase-4a.txt`
 /// rather than replacing it -- see `coverage.rs`'s own copy of this function
 /// for the fuller argument. 4b's Task 1 is the first task to use that: the
-/// caller below passes `phase-4a.txt` and `phase-4b.txt`, so criterion 4's
-/// stress run covers every later phase's programs too rather than freezing
-/// at 4a's twenty-nine.
+/// caller below passes `phase-4a.txt` and `phase-4b.txt`.
+///
+/// **It does not pass `phase-4c.txt`, so criterion 4's stress run does not in
+/// fact cover every later phase's programs.** An earlier version of this
+/// comment said it did, which was true when only two subset files existed and
+/// false from the moment a third was added. `corpus.rs`'s own call site had
+/// the identical gap and was widened by 4c's Task 9; this one was left alone
+/// deliberately, because the stress harness's wiring is Task 15's remaining
+/// Step 4 work and a prose fix is not a licence to do it. What is corrected
+/// here is the sentence, not the call.
 fn read_subset(list_paths: &[&Path]) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut union = Vec::new();

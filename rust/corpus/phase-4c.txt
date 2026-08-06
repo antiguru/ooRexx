@@ -44,9 +44,10 @@
 #   constant `ADDRESS env`, the computed `ADDRESS VALUE expr` and `ADDRESS
 #   (expr)`, and the bare toggle. `ADDRESS env command` and any `WITH`
 #   redirection are the command dispatch and stay out, with the command
-#   clause. A program here cannot print the environment back: the only two
-#   readers of it are the ADDRESS() builtin and issuing a command, and this
-#   subset admits neither.
+#   clause. A program here cannot print the environment back: of the C++'s
+#   five readers of it, the only two a Rexx program can reach are the
+#   ADDRESS() builtin and issuing a command, and this subset admits neither.
+#   lang/address_env.rex's own header carries the enumeration.
 #
 # WHAT IT STILL EXCLUDES. Everything phase-4b.txt excludes except builtin
 # function calls, PARSE and ADDRESS's environment forms, which is to say: no

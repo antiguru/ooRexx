@@ -433,12 +433,16 @@ fn read_subset(list_paths: &[&Path]) -> Vec<String> {
 /// with an overlapping entry are the direct exercise of the union path:
 /// first-seen order across files, and a name repeated in the second file
 /// appearing only once, at its *first* position. Still worth keeping now
-/// that the real call sites pass two files, and the reason is measured:
-/// `phase-4a.txt` and `phase-4b.txt` do **not** overlap -- 30 entries and
-/// 12, union 42, which is criterion 1's own headline -- so a run over the
-/// committed files never takes the `seen.insert` false branch at all,
-/// whatever it passes. Hand-written overlapping inputs are the only way to
-/// reach the de-duplication half.
+/// that the real call sites pass more than one file, and the reason is
+/// measured: **no two phase subset files share an entry** -- checked across
+/// all three by sorting their entries and looking for a repeat, none found --
+/// so a run over the committed files never takes the `seen.insert` false
+/// branch at all, whatever it passes. **Nothing enforces that disjointness**,
+/// and this comment does not claim otherwise; it is a fact about the files as
+/// they stand, which is exactly why the de-duplication half needs
+/// hand-written overlapping inputs to reach at all. No union total is written
+/// down here either, because a total goes stale the moment a phase adds a
+/// program -- and one did.
 #[test]
 fn read_subset_unions_two_files_first_seen_order_deduplicated() {
     let dir = std::env::temp_dir();

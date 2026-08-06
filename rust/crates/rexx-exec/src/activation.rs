@@ -89,9 +89,12 @@ pub(crate) struct ActivationId(pub(crate) u64);
 ///
 /// **A pair and not a stack**, which is the whole of the bare form's
 /// behaviour. Measured on the oracle with `envA`, `envB` and then four
-/// consecutive bare `ADDRESS`es: `ENVA`, `ENVB`, `ENVA`, `ENVB`. A stack gets
-/// the first two right and is wrong from the third onward. The C++ is the same
-/// two words swapping, `RexxActivation::toggleAddress`.
+/// consecutive bare `ADDRESS`es: `ENVA`, `ENVB`, `ENVA`, `ENVB`. A stack walks
+/// backwards out of the pair instead of returning into it, and it parts
+/// company almost immediately -- measured by mutation, replacing the swap with
+/// `current = alternate.take()`: the alternate is wrong after **one** toggle
+/// and the current after **two**. The C++ is the same two words swapping,
+/// `RexxActivation::toggleAddress`.
 ///
 /// `None` is the interpreter's default environment, which is **platform
 /// supplied** (`Activity::getInstance()->getDefaultEnvironment()`, and `sh`
@@ -111,11 +114,13 @@ pub(crate) struct ActivationId(pub(crate) u64);
 pub(crate) struct AddressState {
     /// The environment in force. `None` is the platform default.
     ///
-    /// **This is what `ADDRESS()` answers**, the one reader of this state that
-    /// is not a command dispatch: `BuiltinFunctions.cpp`'s `ADDRESS` is
-    /// `context->getAddress()` and nothing else. Rendering `None` means naming
-    /// the platform default, which is why that builtin cannot be answered
-    /// before the default itself exists.
+    /// **This is what `ADDRESS()` answers**: `BuiltinFunctions.cpp`'s
+    /// `ADDRESS` is `context->getAddress()` and nothing else. It is one of
+    /// five readers of `settings.currentAddress` in the C++ and the only one
+    /// a Rexx program can use without issuing a command --
+    /// `corpus/lang/address_env.rex`'s own header has the enumeration.
+    /// Rendering `None` means naming the platform default, which is why that
+    /// builtin cannot be answered before the default itself exists.
     pub(crate) current: Option<Rc<[u8]>>,
     /// What a bare `ADDRESS` swaps `current` with.
     pub(crate) alternate: Option<Rc<[u8]>>,

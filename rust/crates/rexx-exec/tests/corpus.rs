@@ -199,8 +199,9 @@ fn gate_mode() -> bool {
 /// **Task 0's Step 4.** Was a single-file reader (`&Path`); widened to `&[&Path]`
 /// so a later task's own subset file can run *alongside* `phase-4a.txt`
 /// rather than replacing it -- see `coverage.rs`'s own copy of this function
-/// for the fuller argument. The caller below passes `phase-4a.txt` and
-/// `phase-4b.txt` since 4b's Task 1.
+/// for the fuller argument. The caller below passes every phase subset file
+/// there is: `phase-4a.txt` and `phase-4b.txt` since 4b's Task 1, and
+/// `phase-4c.txt` since 4c's Task 9, which found it had been left out.
 fn read_subset(list_paths: &[&Path]) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut union = Vec::new();
@@ -438,10 +439,16 @@ fn emit_uncaptured(text: &str) {
 /// recording it is the instruction, not merely leaving the older row intact
 /// (review's ruling on the dated figure).
 ///
-/// Expected result at commit `2070cd9d`: **47 of 47 matching**, the subset
+/// Expected result at commit `27606888`: **47 of 47 matching**, the subset
 /// being those 42 plus `phase-4c.txt`'s five, which this call site had not
 /// been reading. All five matched on the first run, so the widening moved no
 /// number that was standing on anything.
+///
+/// **The commit named is the one the number is true *at*, not the one the
+/// change was made against.** An earlier version of this row named
+/// `2070cd9d`, this change's parent, where the harness still read two files
+/// and reported 42 -- so the row was false as written, in the one way a dated
+/// row exists to prevent.
 #[test]
 fn corpus_differential() {
     let oracle = support::oracle::locate();

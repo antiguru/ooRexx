@@ -3,7 +3,7 @@ count 78
    the bare toggle, and the 250-byte name limit.
 
    WHAT THIS PROGRAM CANNOT SEE, STATED FIRST BECAUSE IT SHAPES EVERY BLOCK.
-   The environment an ADDRESS instruction sets has exactly four readers, and
+   The environment an ADDRESS instruction sets has exactly five readers, and
    the enumeration is the C++'s rather than a guess: `settings.currentAddress`
    is read by `RexxActivation::toggleAddress`, by `RexxActivation::setAddress`,
    by `CommandInstruction`'s dispatch, by the ADDRESS() builtin, and by the
@@ -23,9 +23,9 @@ count 78
    exactly the two computed ones. ADDRESS VALUE nm and ADDRESS (nm) each trace
    `>>>` for the string they computed; the constant form, the literal form and
    the bare toggle trace no value line at all, because they evaluate nothing.
-   An engine that traced a value for the constant form prints three extra
-   lines; one that evaluated the computed form without tracing it prints two
-   fewer.
+   An engine that traced a value for a form that evaluates nothing adds a line
+   after each of this block's constant, literal and bare clauses; one that
+   evaluated a computed form without tracing it drops that form's own `>>>`.
 
    B: the same forms under TRACE I. The computed form's own value line stays
    `>>>` here -- it is NOT the `>=>`/`>>>` choice a PARSE target's value line
