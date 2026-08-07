@@ -5,6 +5,11 @@ Task 0.7. This is the number every later phase's D9 performance gate (Global Con
 than its C++ counterpart on this suite. Coming out worse than what is recorded here, on the
 platforms recorded here, is the definition of a gate failure.
 
+**One later section does not belong to Task 0.7 and is marked as such**: `rexxcps`, near the
+bottom, records both interpreters on the Phase 4a design spec's own R1-R4 criteria, measured
+2026-08-06. It is here because a performance figure belongs in this file, not because Phase 0
+produced it.
+
 **Only the Linux row exists.** macOS, Windows, FreeBSD and OpenBSD baselines still need to be
 produced by CI runs; this file has one platform's numbers, not five. Do not treat an absent
 platform as "presumed fine" — Task 0.7's own text anticipates the OpenBSD leg may not even
@@ -180,11 +185,96 @@ LD_LIBRARY_PATH=../build/lib ./target/release/rexx-time \
     --warmup 10 --runs 50 -- ../build/bin/rexx ../rust/bench-programs/startup.rex
 ```
 
+## `rexxcps`, the Phase 4a R1/R2 criteria -- measured 2026-08-06
+
+**These criteria were written in Phase 4a's design spec
+(`docs/superpowers/specs/2026-07-30-phase-4a-executor-design.md:508-509`), which calls
+`samples/rexxcps.rex` "the end-of-4c gate", and they were never run until now.**
+Phase 4c reached its final whole-branch review with R1 and R2 unmeasured.
+The numbers below are the first application of them, and R2 fails.
+
+`rexxcps.rex` is pure Phase 1-4c surface: `SIGNAL ON NOVALUE`, `PARSE SOURCE`/`VERSION`/`VALUE`/
+`VAR`, `TIME('R')`, `FORMAT`, `SUBSTR`, `WORD`, `LENGTH`, numeric and non-integer `DO`, compound
+variables with variable tails, `SELECT`/`WHEN`, `TRACE VALUE`/`ADDRESS VALUE`, `CALL` to an
+internal label, `LEAVE`, `ITERATE`, `EXIT`.
+No classes, methods, `::REQUIRES` or message sends, so none of Phase 5's known gaps are in its
+path.
+Both sides ran the same file from a fresh directory, five runs each, `--release` on the Rust side,
+stdout and stderr captured to separate files and exit status read unpiped.
+
+### R1 -- correctness before speed: **PASS**
+
+Stdout is byte-identical between the two interpreters on all five paired runs after masking only
+the two timing-derived fields (the `Averaged:` line's counts and seconds, and the `Performance:`
+line's cps).
+The `REXX version is:` line was **not** masked and matched verbatim, so the crate reproduces the
+oracle's `PARSE VERSION` string exactly.
+Zero `Failed` lines on either side, reported as corroboration rather than as the criterion, per
+R1's own note that "prints no `Failed` line" is satisfied by printing nothing.
+Stderr empty and exit 0 on all ten runs.
+
+### R2 -- the cps ratio: **FAIL**
+
+`ratio = oracle_cps / rust_cps`, where above 1.5 fails, 1.0 to 1.5 is recorded as debt, and at or
+below 1.0 passes.
+
+| | oracle | rust |
+|---|---:|---:|
+| mean cps | 16,821,745 | 1,678,469 |
+| spread (max-min)/mean | 0.92 % | 0.91 % |
+
+**ratio = 10.02.**
+Taking the least- and most-favourable combinations across the five-run spreads gives 9.93 to
+10.11, a 1.8 % band, which is nowhere near wide enough to make the fail-vs-debt-vs-pass call
+ambiguous.
+Independently re-measured in a second session: 16,982,729 against 1,682,913, ratio 10.09.
+
+The two sides did different amounts of work and the record must say so.
+The benchmark self-calibrates, running a second trial only when the first comes in at or under one
+second: the oracle bumped `count` from 100 to 200 and ran both trials on every run, while the Rust
+side's first trial already took about 5.9 s and no second trial ran.
+That is a consequence of the ratio rather than a confound in it, since the cps figure each side
+prints is per clause.
+
+### R3 -- external cross-check: agrees to within 9 %
+
+Wall clock taken outside the benchmark (`date +%s.%N` around each invocation, not the program's
+own `TIME('R')`): oracle 1.8054 s mean over 30 M clauses, rust 6.5714 s over 10 M.
+Normalising for the trial-count asymmetry gives external cps of 16,617,116 and 1,521,752, an
+**external ratio of 10.92** against the internal 10.02 -- an 8.96 % relative difference, inside
+R3's own 10 % bar.
+So the failing R2 number is not an artefact of this crate's own `TIME('R')`, which is what R3
+exists to rule out.
+The 0.6-0.7 s of the Rust side's wall time that its internal timer does not account for is process
+startup and parse, and it is why the external ratio runs slightly *higher* than the internal one
+rather than lower.
+
+### R4, and what this section is not
+
+R4 requires the baseline to be measured at gate time rather than reused, and it was: both sides
+ran in the same session on the same machine, and the oracle figure here is **not** taken from the
+Phase 0 criterion rows above.
+This section records that measurement; it is not a reusable baseline, and a later gate re-measures
+both sides again.
+
+One asymmetry is worth carrying forward.
+Under this project's standard `ulimit -v 1048576` the oracle reserves 512 MiB of address space
+(D19's `INTERPRETER_STACK_BYTES`) before running anything and `rexx-run` reserves none, so the two
+do not have equal headroom under the same cap.
+It does not touch these figures -- the benchmark's inner loop comes nowhere near either ceiling and
+all ten runs completed without an allocation failure or a signal -- but it would matter if this
+benchmark were run under a tighter budget.
+
+No optimisation was attempted and none is proposed here.
+Recording the number is the whole of it.
+
 ## What is still missing
 
 - macOS 15 arm64, Windows/MSVC, FreeBSD 14.2, and OpenBSD 7.8 rows. None have been run. CI must
   add a job per platform that builds the C++ oracle, runs this same suite, and either commits
   numbers here or documents why a platform could not produce them (the known OpenBSD SIGSEGV is
   the anticipated case for that one, per Task 0.7's own text).
-- A Rust interpreter to compare against. This file is the C++ side of every future comparison;
-  there is nothing to compare it to yet, by design -- Phase 0 does not write interpreter code.
+- A Rust side for the seven `bench-programs/` dimensions. The criterion rows at the top of this
+  file are still the C++ half of a comparison with nothing on the other half; the `rexxcps`
+  section above is the first Rust figure this file carries, and it covers one program rather than
+  the seven.
