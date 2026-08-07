@@ -489,6 +489,23 @@ impl Timestamp {
         true
     }
 
+    /// `DATE('M')`'s own month name (and `'L'`'s, through [`Timestamp::
+    /// format_language`]) -- `RexxDateTime::getMonthName`, `monthNames
+    /// [month - 1]`.
+    ///
+    /// **`month == 0` is defined here, not reproduced from the oracle.**
+    /// [`Timestamp::year_day`]'s own doc has the sibling case
+    /// (`monthStarts[-1]`) and the four transcripts that cross-check it;
+    /// this one has no transcript to cross-check against, because the
+    /// identical input segfaults the real oracle instead of answering a
+    /// value -- measured, `date('M','0','D')` is rc 139 there, three runs
+    /// of three, `monthNames[-1]` reading a garbage pointer rather than
+    /// `monthStarts[-1]`'s own lucky `0`. This crate answers the empty
+    /// string rather than reproducing that crash, which is the only
+    /// defined choice available: there is no oracle byte to match.
+    ///
+    /// [`Timestamp::year_day`]: Timestamp::year_day
+    /// [`Timestamp::format_language`]: Timestamp::format_language
     fn month_name(&self) -> &'static [u8] {
         MONTH_NAMES
             .get((self.month - 1) as usize)
@@ -1368,6 +1385,29 @@ mod tests {
         assert!(e2 < r2, "e2 = {e2}, r2 = {r2}");
     }
 
+    /// The property `time_r_resets_relative_to_the_last_reset_not_program_start`
+    /// does not reach: **two `TIME('R')` reads inside one clause** answer
+    /// identically, because the reset the first one arms does not take
+    /// effect until the clock cache next misses -- which does not happen
+    /// again before the clause ends, so the second read still sees the
+    /// same cached "now" and the same still-unmoved anchor as the first.
+    /// Measured directly against the oracle: `zz = time('E'); call burn;
+    /// parse value time('R') time('R') with r1 r2` gives `0.718388
+    /// 0.718388` there (identical), where this crate's pre-fix answer was
+    /// `33.393735 0` (the second read wrongly saw the reset already
+    /// applied). An equality between the two reads needs no timing margin
+    /// at all, which is what makes it the right shape for this property --
+    /// unlike the sibling tests above and below, which each need one
+    /// because they compare *different* clauses' own readings.
+    #[test]
+    fn two_time_r_reads_in_one_clause_answer_identically() {
+        let stdout = output(
+            b"zz = time('E')\ncall burn\nparse value time('R') time('R') with r1 r2\nsay r1 r2\nexit\nburn: procedure\n  do i = 1 to 20000\n    j = i * i\n  end\n  return\n",
+        );
+        let [r1, r2] = parse_numbers(&stdout);
+        assert_eq!(r1, r2);
+    }
+
     /// `TIME('E')` reads the elapsed-time anchor without ever moving it --
     /// the pair that tells "E reads the state" apart from "E happens to
     /// also be the thing that establishes it". Driven through real burns:
@@ -1539,6 +1579,40 @@ mod tests {
     fn dates_day_of_year_style_round_trips_regardless_of_the_current_year() {
         assert_eq!(output(b"say date('D','265','D')\n"), "265\n");
         assert_eq!(output(b"say date('D','1','D')\n"), "1\n");
+    }
+
+    /// A day-of-year of `0` in every one of the five output styles this
+    /// crate can answer without crashing -- [`Timestamp::year_day`]'s own
+    /// doc has the C++ reading and the four cross-checked oracle
+    /// transcripts (`B`/`W`/`F`/`T`) this reproduces, plus `D` itself,
+    /// which is `0` on both sides trivially (a year-day of `0` read back
+    /// as a year-day). The sixth consumer, `M`, is not measured against
+    /// the oracle here at all -- it is a confirmed segfault there (rc 139,
+    /// `monthNames[-1]` unlike `monthStarts[-1]`), and this crate's own
+    /// answer for it is the deliberate divergence [`month_name`]'s own doc
+    /// names, not something to reproduce.
+    ///
+    /// Without [`Timestamp::year_day`]'s `.get(...).unwrap_or(0)` guard,
+    /// every one of `D`/`B`/`W`/`F`/`T` below panics the process (`index
+    /// out of bounds`, `MONTH_STARTS[(self.month - 1) as usize]` with
+    /// `self.month == 0`) rather than raising a Rexx condition -- a defect
+    /// no `SIGNAL ON SYNTAX` could ever catch, so this is the only
+    /// regression protection either that guard or `M`'s own separate one
+    /// in [`month_name`] has, since D11 keeps both builtins out of every
+    /// differential corpus program permanently.
+    ///
+    /// [`month_name`]: Timestamp::month_name
+    #[test]
+    fn date_day_of_year_zero_is_defined_across_five_output_styles() {
+        assert_eq!(output(b"say date('D','0','D')\n"), "0\n");
+        assert_eq!(output(b"say date('B','0','D')\n"), "739615\n");
+        assert_eq!(output(b"say date('W','0','D')\n"), "Wednesday\n");
+        assert_eq!(output(b"say date('F','0','D')\n"), "63902736000000000\n");
+        assert_eq!(output(b"say date('T','0','D')\n"), "1767139200\n");
+        // Not measured against the oracle -- it segfaults on this input
+        // (rc 139), which is not a value this test can pin. This crate's
+        // own answer is the empty string, never a panic.
+        assert_eq!(output(b"say date('M','0','D')\n"), "\n");
     }
 
     /// A malformed or out-of-range conversion input is 40.19, never a wrong
