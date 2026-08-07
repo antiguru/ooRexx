@@ -1488,6 +1488,18 @@ The `0.219 ≈ 0.109 + 0.110` arithmetic is what pins "since last reset"; since-
 
 **`TIME('C')` is `2:43pm`** -- lowercase meridiem, no leading zero. `TIME('Z')` and `TIME('')` are 40.904.
 
+**Both option sets come from the error insert, not the documentation, and `TIME`'s is the one this brief otherwise leaves unlisted.** Measured 2026-08-07, both rc 216:
+
+```
+say time('Z')   Error 40.904:  TIME argument 1 must be one of CEFHLMNORST; found "Z".
+say date('J')   Error 40.904:  DATE argument 1 must be one of BDEFILMNOSTUW; found "J".
+```
+
+`TIME`'s eleven are `C E F H L M N O R S T`; this brief names only `C`, `E`, `L` and `R`, so `F H M N O S T` are unprobed and Step 1's "probe every one" applies to both names, not just `DATE`.
+`DATE`'s thirteen `B D E F I L M N O S T U W` are exactly the two lists below with nothing left over, which is what makes those lists complete rather than merely long.
+
+**The empty option renders differently here than in Task 11's builtin, and an implementer normalising the two would be wrong.** `time('')` and `date('')` report `found ""`, where `datatype(1,'')`'s 93.915 reports `found "?"`. Two error paths, two spellings for the same empty input; pin whichever one you raise.
+
 **`DATE`: pin the CONVERSION form, which is deterministic, not any no-argument form.**
 `date('S','2026-08-05','I')` is `20260805`; `date('W','20260805','S')` is `Wednesday`; a malformed or impossible input is **40.19**.
 Host- or locale-dependent: `L`, `M`, `W` (names), `T`, `F` (absolute clocks). Deterministic given a fixed date: `B`, `D`, `E`, `I`, `N`, `O`, `S`, `U`.
