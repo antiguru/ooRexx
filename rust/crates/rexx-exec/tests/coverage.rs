@@ -497,6 +497,61 @@ fn corpus_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus")
 }
 
+/// The subset files the union-coverage run reads, in union order.
+///
+/// A named constant rather than a literal at the call site so that
+/// [`the_union_reads_every_phase_subset_file`] can assert it against the
+/// corpus directory itself.
+///
+/// **Dropping a file from this list is caught today, but only incidentally.**
+/// It fails `every_in_scope_variant_is_witnessed_by_the_phase_subsets` --
+/// measured, removing `phase-4c.txt` reports `4 in-scope variant(s)
+/// unwitnessed: Parse, Arg, Pull, Address::Environment` -- and that depends on
+/// the dropped phase still owning a variant no earlier phase witnesses. It is
+/// a property of the corpus as it stands, not an invariant: the moment those
+/// variants gain a witness elsewhere, the file can be dropped silently.
+const SUBSET_FILES: &[&str] = &["phase-4a.txt", "phase-4b.txt", "phase-4c.txt"];
+
+/// The phase subset files that exist in the corpus directory, sorted.
+///
+/// Read from the directory rather than listed a second time, so the assertion
+/// below cannot be satisfied by a copy of [`SUBSET_FILES`] edited in the same
+/// change, and so a subset file added later and never wired in here is red
+/// rather than silently unread.
+///
+/// Duplicated from `corpus.rs` and `collect_stress.rs` rather than shared, for
+/// the reason `read_subset` above is duplicated: these are three
+/// integration-test binaries and none can `mod` another.
+fn phase_subset_files_on_disk() -> Vec<String> {
+    let dir = corpus_dir();
+    let entries =
+        fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+    let mut names: Vec<String> = entries
+        .flatten()
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| name.starts_with("phase-") && name.ends_with(".txt"))
+        .collect();
+    names.sort();
+    names
+}
+
+/// The coverage union reads **every** phase subset file the corpus has.
+///
+/// The pin on *which files* the union site reads. The three
+/// `phase_*_subset_matches_the_committed_list` tests below pin each file's
+/// contents and say nothing about whether anything reads it.
+#[test]
+fn the_union_reads_every_phase_subset_file() {
+    assert_eq!(
+        SUBSET_FILES,
+        phase_subset_files_on_disk(),
+        "the variant-coverage union does not read every phase subset file in \
+         rust/corpus/. A file missing from SUBSET_FILES is a phase whose \
+         programs contribute no variants, and the coverage property then holds \
+         over a smaller union"
+    );
+}
+
 /// `phase-4a.txt`'s exact line list, one entry per non-comment, non-blank
 /// line, in file order. A branch review (`branch-review-harness.md`, H2)
 /// found that nothing pinned this: `corpus.rs`, `collect_stress.rs` and
@@ -670,11 +725,11 @@ fn every_in_scope_variant_is_witnessed_by_the_phase_subsets() {
     let mut operators = Coverage::new("Operator", OPERATOR_TAGS);
 
     let corpus_dir = corpus_dir();
-    let subset = read_subset(&[
-        &corpus_dir.join("phase-4a.txt"),
-        &corpus_dir.join("phase-4b.txt"),
-        &corpus_dir.join("phase-4c.txt"),
-    ]);
+    let paths: Vec<PathBuf> = SUBSET_FILES
+        .iter()
+        .map(|name| corpus_dir.join(name))
+        .collect();
+    let subset = read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
     assert!(
         !subset.is_empty(),
         "the phase subset files named no programs -- that is a corpus defect, \

@@ -173,7 +173,7 @@ use std::env;
 use std::fmt::Write as _;
 use std::fs;
 use std::io::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use rexx_exec::Outcome;
@@ -454,15 +454,75 @@ fn emit_uncaptured(text: &str) {
 /// `2070cd9d`, this change's parent, where the harness still read two files
 /// and reported 42 -- so the row was false as written, in the one way a dated
 /// row exists to prevent.
+/// The subset files this runner reads, in union order.
+///
+/// A named constant rather than a literal at the call site so that
+/// [`the_differential_reads_every_phase_subset_file`] can assert it against
+/// the corpus directory itself.
+///
+/// **Nothing else here can see a file dropped from this list.** The gate's own
+/// assertion is over `mismatches`, and a subset that lost a whole phase has no
+/// mismatches to report: measured, with `phase-4c.txt` removed, both plain
+/// mode and `REXX_CORPUS_GATE=1` exit 0 and the only thing that moves is the
+/// report's own "N of M matching" line, from 50 of 50 to 42 of 42. A number a
+/// reader might eyeball is not a check, and criterion 1 of the 4c gate rests
+/// on this figure.
+const SUBSET_FILES: &[&str] = &["phase-4a.txt", "phase-4b.txt", "phase-4c.txt"];
+
+/// The phase subset files that exist in the corpus directory, sorted.
+///
+/// Read from the directory rather than listed a second time, so the assertion
+/// below cannot be satisfied by a copy of [`SUBSET_FILES`] edited in the same
+/// change, and so a subset file added later and never wired in here is red
+/// rather than silently unrun.
+///
+/// Duplicated from `collect_stress.rs` and `coverage.rs` rather than shared,
+/// for the reason `read_subset` above is duplicated: these are three
+/// integration-test binaries and none can `mod` another.
+fn phase_subset_files_on_disk() -> Vec<String> {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    let entries =
+        fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+    let mut names: Vec<String> = entries
+        .flatten()
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| name.starts_with("phase-") && name.ends_with(".txt"))
+        .collect();
+    names.sort();
+    names
+}
+
+/// The differential reads **every** phase subset file the corpus has.
+///
+/// The pin on *which files* this runner reads, which is a different question
+/// from what any of them contains -- `coverage.rs`'s three
+/// `phase_*_subset_matches_the_committed_list` tests pin the contents.
+#[test]
+fn the_differential_reads_every_phase_subset_file() {
+    assert_eq!(
+        SUBSET_FILES,
+        phase_subset_files_on_disk(),
+        "the corpus differential does not read every phase subset file in \
+         rust/corpus/. A file missing from SUBSET_FILES is a phase whose \
+         programs are never run against the oracle, and the run stays green \
+         over whatever is left -- the headline shrinks and nothing asserts on \
+         it"
+    );
+}
+
 #[test]
 fn corpus_differential() {
     let oracle = support::oracle::locate();
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
-    let subset = read_subset(&[
-        &corpus_dir.join("phase-4a.txt"),
-        &corpus_dir.join("phase-4b.txt"),
-        &corpus_dir.join("phase-4c.txt"),
-    ]);
+    let paths: Vec<PathBuf> = SUBSET_FILES
+        .iter()
+        .map(|name| corpus_dir.join(name))
+        .collect();
+    let subset = read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
+    // Covers the empty *union* -- every named file present and every one of
+    // them naming nothing -- and nothing beyond it. A union that lost a whole
+    // file is still non-empty while the others stand, which is why the pin
+    // above exists rather than this guard being widened.
     assert!(
         !subset.is_empty(),
         "the phase subset files named no programs -- that is a corpus defect, \
