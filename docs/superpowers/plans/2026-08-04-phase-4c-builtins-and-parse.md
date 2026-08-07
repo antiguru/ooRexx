@@ -1534,13 +1534,20 @@ Construct the probe so they can -- separate the reads by a measurable interval, 
 
 - [ ] **Step 1: Set `BodyKey::directive` at the production site**
 
-`plan.rs:79`'s `directive: Option<usize>` is `None` at **seven** construction sites, six of which are test-only.
-**The production site is `lib.rs:1422`**; `plan.rs:631` is inside a `#[cfg(test)] mod tests` (the `cfg` is at `:615`), and the first revision of this plan sent an implementer to that fixture.
+`plan.rs:79`'s `directive: Option<usize>` is `None` at **nine** construction sites, eight of which are test-only.
+
+**The production site is the `BodyKey` literal inside `Interp::run_program`'s `plan_for` call** -- `lib.rs:1690-1697`, with `directive: None` at `:1693`, building the plan for the main body. Re-derive it rather than trusting the line: classify each site by whether it sits after its file's last `#[cfg(test)]`, and exactly one comes out production.
+
+`plan.rs:631` is inside a `#[cfg(test)] mod tests` (the `cfg` is at `:615`), and the first revision of this plan sent an implementer to that fixture.
+
+*(Re-counted 2026-08-07. The earlier "seven sites, six test-only, production at `lib.rs:1422`" was measured before Tasks 11 and 12 added fixtures and moved `lib.rs`; `:1422` is now a doc comment about `Invocation`, which is what a stale line number looks like when it still lands on plausible-looking code.)*
 
 - [ ] **Step 2: Give a `::routine` activation its own pool, and five other non-inheritances**
 
 D-R's table lists six measured differences from an internal label's activation.
-**`run.rs:3304-3313` inherits `NUMERIC`, `ADDRESS` and the condition traps, and a `::routine` inherits none of the three** -- two of those three failures are silent.
+**`Activation::nested` inherits `NUMERIC`, `ADDRESS` and the condition traps, and a `::routine` inherits none of the three** -- two of those three failures are silent.
+
+The constructor is `activation.rs:586-619` and it takes an `Inherited` struct: `settings`, `trace_mode`, `address`, `traps`, `condition`. Its own doc already records which fields are deliberately *not* inherited and why, so add your reasoning there rather than beside the call site. *(Corrected 2026-08-07: this step used to cite `run.rs:3304-3313`, which is the `raise propagate` condition-restoration block and never inherited anything. The fact was right and the address was wrong.)*
 
 **This is not 4b's `PROCEDURE` isolation reused.** A `::routine` has a different `CodeBody`, therefore a different `Plan`, therefore a different name-to-slot map, so the slot-index-identity property `PROCEDURE EXPOSE`'s alias bitset rests on does **not** hold across bodies.
 
@@ -1559,7 +1566,7 @@ So this task must:
 * raise 43.1 when the name resolves to none of label, builtin or `::routine`;
 * add an `EXCLUSIONS` row -- **external routine resolution, Phase 7** -- carrying both transcripts;
 * add a corpus rule that no corpus program may depend on external routine resolution, and note that the scratchpad's stale `.rex` files make this the easiest probe error in the phase;
-* settle the contradiction between `lib.rs:479` ("external ... 4c's") and `eval.rs:484` ("external third (Phase 7)") in the same commit.
+* settle the contradiction between `lib.rs:501` ("the builtin table and then external resolution, and **both are 4c's**") and `eval.rs:484` ("builtin second (4c), external third (Phase 7)") in the same commit. *(The `lib.rs` line was cited as `:479` before Tasks 11-12 moved it.)*
 
 `eval.rs:507`'s own comment argues against an unconditional substitution here -- read it before changing it.
 
@@ -1633,7 +1640,9 @@ Relax it to permit `::ROUTINE` and keep the panic for the rest.
 
 - [ ] **Step 8: Flip `>I>`/`<I<` to `Witnessed` and move both counts**
 
-`WITNESSED_PREFIX_COUNT` (`:551`) and `OUT_OF_SCOPE_PREFIX_COUNT` (`:555`) each move by two.
+`WITNESSED_PREFIX_COUNT` and `OUT_OF_SCOPE_PREFIX_COUNT` each move by two.
+
+Both live in **`tests/trace_oracle.rs`**, at `:621` and `:625`, currently **14** and **5**; the assertions that read them are at `:693`-`:696`, and the third one checks the sum. *(This step used to place them in `tests/coverage.rs` at `:551`/`:555`, where neither name occurs.)*
 
 - [ ] **Step 9: Stop rendering an argument nobody will print**
 
