@@ -29,7 +29,13 @@ A variant is witnessed the moment it appears in any program, regardless of what 
 That is exactly how 4a shipped `a. = 5; say a. + 1` aborting at rc 101 through a byte-identical corpus.
 A reader must not take a pass here as evidence that combinations were exercised.
 
+**The denominator is pinned, and until this task it was not.**
+A criterion of the form "N of N matching" is satisfied by shrinking N, and that was not hypothetical here: measured, dropping `phase-4c.txt` from `corpus.rs`'s own union call site left **both plain mode and `REXX_CORPUS_GATE=1` at exit 0**, with the only thing moving being the report's "50 of 50 matching" line becoming "42 of 42 matching".
+The gate assertion is over `mismatches`, and a subset that has lost a whole phase has none to report; the existing `!subset.is_empty()` guard does not reach it either, because a union missing one file is still non-empty while the others name programs.
+`the_differential_reads_every_phase_subset_file` now asserts the file list against `rust/corpus/` itself.
+
 *Falsification:* deleting a program from any subset file fails that file's own committed-list equality -- `phase_4a_subset_matches_the_committed_list`, `phase_4b_subset_matches_the_committed_list`, `phase_4c_subset_matches_the_committed_list`, the last added by Task 7 for exactly the reason 4b's gate found: for nine of `phase-4b.txt`'s twelve entries, deleting that one line left `coverage.rs` green, including one criterion's only witness.
+Deleting a whole subset *file* from a harness's list fails that harness's own `*_reads_every_phase_subset_file` pin -- run, in both directions, for all three harnesses.
 Mutating the interpreter fails the differential, exercised for real under criterion 6.
 
 ### 2. The `base/expressions` assertion table, `tests/assertions.rs` — a **regression check**, and this gate states plainly that it is not evidence of 4c's delivery
@@ -75,6 +81,10 @@ Task 15 widened the call site to the three-file union.
 Measured by deleting the subject: with `phase-4c.txt` removed from the list, the whole workspace stayed green and byte-identical -- every assertion the stress run makes holds just as well over a smaller union, and `coverage.rs`'s `phase_*_subset_matches_the_committed_list` tests pin each file's *contents*, not which harness reads it.
 `the_stress_subset_reads_every_phase_subset_file` now asserts the list against the corpus directory itself, so a file dropped from it is red and a subset file added later and forgotten is red too.
 Falsified: with the entry removed, `cargo test --workspace --no-fail-fast` exits 101 and that test names the missing file.
+
+**All three union call sites carry the same pin**, and the class is closed rather than the one instance.
+`corpus.rs` had the identical hole and is the file criterion 1 quotes; `coverage.rs` was caught only incidentally, by the variant-coverage property, which holds only while the dropped phase still owns a variant no earlier phase witnesses -- a fact about today's corpus rather than an invariant.
+The pins are derived from `fs::read_dir` on the corpus directory rather than from a second hand-written list, so a `phase-4d.txt` added and never wired in is red as well: run, all three go red at exit 101.
 
 **The control must not be `mutate-4b.sh` row 9.**
 Builtins reuse `resolve_and_run_call`'s argument evaluation, so the obvious root in that window is `self.roots.push_temp(argument.value())`, which is verbatim that row; re-running it would re-test 4b.
@@ -349,6 +359,7 @@ Briefly: six groups hold bytes that are not UTF-8 and a lossy read turns each in
 ## What this gate found
 
 * **`tests/collect_stress.rs` was the last `read_subset` call site reading two files**, so no builtin was under the allocation-stress collector at all. Fixed here.
+* **All three union call sites could shrink silently, and `corpus.rs`'s shrink moved criterion 1's own figure.** Dropping `phase-4c.txt` there left plain mode and `REXX_CORPUS_GATE=1` both at exit 0, with "50 of 50 matching" becoming "42 of 42 matching" and nothing asserting on the total. Each harness now pins its file list against the corpus directory.
 * **The `base/bif` extraction produced twelve confidently-wrong rows before three drop reasons were added.** Every one of them balanced the conservation invariant, which is exactly the failure mode that invariant cannot see.
 * **`::options all <condition>` enables `NOVALUE`**, so the file split that inverts body semantics is **43 of 76** and not the 38 the plan carried. Verified on the oracle.
 * **The `base/bif` exempt-set assertion is the only in-crate catcher for the `PARSE` comma fence** over the whole workspace.
