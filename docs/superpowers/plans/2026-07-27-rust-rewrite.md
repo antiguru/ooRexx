@@ -449,6 +449,23 @@ Gates are hard. A phase does not close until every exit criterion is demonstrate
 
 Phases 6, 7, and 8 are independent of each other and may run in parallel once Phase 5 closes.
 
+### The `S` series — ANSI X3.274 compliance
+
+A second axis, running beside the numbered phases rather than after them.
+See `docs/superpowers/specs/2026-08-07-ansi-compliance-design.md`.
+
+| # | Phase | Entry | Exit gate |
+|---|-------|-------|-----------|
+| S0 | Standard setup | 4c | The standard, its errata and the date/time document vendored under `docs/standards/` with retrieval dates; the ANSI BIF population settled by a stated method and cross-checked two ways; the three-way BIF set map against our 81/66/15; an extractor turning ANSI's executable BIF definitions into runnable programs, with a negative control proving a corrupted extraction fails loudly; and a written S1+ decomposition with per-phase entry conditions |
+| S1+ | *decided by S0* | S0 | — |
+
+**Why a letter series and not Phase 11.** These are an audit axis, not build steps: the BIF work is possible the moment 4c closes, and numbering them after Phase 10 would say otherwise.
+**Why `S` and not `C`.** This plan already uses *conformance* for the ooTest rungs L0 to L3-full, throughout every gate document and `phase-9-exclusions.txt`. Two meanings of one word is how a criterion gets marked satisfied by the wrong evidence.
+
+**A finding here is a three-way map, never a two-way comparison** (D-S1). This project is byte-for-byte agreement with ooRexx, so where ooRexx diverges from ANSI this crate diverges by design; comparing the Rust crate straight against the standard reports our deliberate choices as our defects. Every finding records what ANSI specifies, what ooRexx does, and what we do — which also exposes the case a two-way check structurally cannot see, where we match neither.
+
+**This series discharges an open Phase 2 criterion.** `phase-2-gate.md` records "ANSI X3.274 vectors — **CANNOT ASSESS**" because no vector files existed in the tree and that session was offline. The blocker was availability and no longer holds: the pre-publication final draft is free, machine-readable, 167 pages, and **defines each built-in as executable Rexx rather than prose**, so the check is differential like everything else here.
+
 **Why Phase 9's gate is L3-*core*, not L3.** The suite exercises things Phase 10 delivers — the extension test groups (`json`, `yaml`, `rxregexp`, and the rest), and the RXAPI-dependent features: external data queues, macrospace, and `rxsubcom` registration. This is confirmed rather than assumed: the checked-out suite calls the seven `Sys*RexxMacro*`/`Sys*RexxMacroSpace` routines, which the RXAPI daemon serves (see D11). Gating Phase 9 on the unqualified full suite would make it unevaluable until Phase 10 was already done. Phase 9's plan must therefore **enumerate the excluded groups explicitly, by name, in a committed file** (`docs/superpowers/plans/phase-9-exclusions.txt`), and Phase 10 deletes that file. An exclusion list that is not written down is indistinguishable from a suite that quietly does not run.
 
 **D8 kept L1** — measured at 86.2%. That number is a property of ooTest method *bodies* and it still holds, but **the L1 harness as Phase 0 built it is vacuous**, discovered 2026-07-30: `rexx-extract` renders each method inside `::routine main public`, so an extracted program's main body is empty and it executes **nothing at all** — verified under the oracle, which produces no output and exits 0 for a file in that shape. Two interpreters therefore agree on nothing, and a differential run over extracted programs would report success for an interpreter that implements nothing. No result on this project depends on it: Phase 2's gate recorded its L1 criterion as CANNOT ASSESS rather than claiming a pass. From Phase 4 on, L1 is **table-driven** along the route `phase-2-gate.md` costed: extract each assertion as data, carrying the `NUMERIC DIGITS` in force, and drive it from Rust. One change from that costing, which assumed Phase 2's capabilities: it restricted itself to plain `<operand> <operator> <operand>` triples **because Phase 2 had no parser**, and excluded the PRECEDENCE (1,226) and CONCATENATION (388) groups on the same ground. Phase 4 has a parser, so the row is the assertion's whole expression text and those 1,614 assertions are in scope — they are the ones most relevant to an evaluator. Any phase that wants to *run* extracted programs must first fix `render`.
