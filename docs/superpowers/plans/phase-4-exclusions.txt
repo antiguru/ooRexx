@@ -2002,10 +2002,13 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
 
   WHY THE STATUS ROW STAYS `implemented` RATHER THAN `divergent`: the same
   reasoning TRANSLATE's row above already gives for the identical shape.
-  builtin-status.txt's VALUE row is derived from one probe
-  (`zz=41; say value('zz')`), which never supplies a dot-prefixed argument
-  at all, so the derivation test and this gap do not disagree -- the probe
-  simply does not reach it.
+  builtin-status.txt is DERIVED from one probe per name and policed by
+  the_status_file_matches_a_live_differential_run, so a row reads whatever
+  a live run of that name's probe measures, and a gap the probe does not
+  reach cannot make it say otherwise. What VALUE's probe does and does not
+  supply is not restated here: it lives in builtin-probes.txt, it changes
+  without this paragraph being reread, and the derivation test is what
+  keeps the row honest either way.
 
 
   KNOWN GAP: VALUE'S EXTERNAL-SELECTOR FORM MIXES TWO OWNERS BEHIND ONE
