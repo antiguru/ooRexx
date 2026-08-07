@@ -552,7 +552,16 @@ impl Raised {
     }
 
     /// 40.14: a builtin's argument converted to a whole number but is not
-    /// strictly positive. Substitutions as [`argument_not_whole`]'s.
+    /// strictly positive. Substituted as the same three slots -- routine,
+    /// position, found -- as [`argument_not_whole`]'s.
+    ///
+    /// **`found` here is the converted whole number, not the rendered
+    /// value -- the opposite of [`argument_not_whole`]'s.** This error fires
+    /// only after the argument has converted successfully, so an integer
+    /// exists and the oracle substitutes it, where 40.12 fires on a value
+    /// that never converted and has only its own rendering to give. Measured,
+    /// rc 216 both sides: `say arg(0.0)` reports `found "0"`, not `found
+    /// "0.0"`.
     ///
     /// **A different layer from [`invalid_position`]'s 93.924, and the pair
     /// is what tells them apart.** Measured, rc 216 in both cases here:
@@ -583,6 +592,11 @@ impl Raised {
     /// Measured, rc 216 for a one-line program: `say sourceline(99)` gives
     /// `SOURCELINE argument 1 ("99") must be less than or equal to the
     /// number of lines in the program (1).`
+    ///
+    /// `requested` is the converted whole number, not the rendered value, for
+    /// the reason [`argument_not_positive`]'s doc gives.
+    ///
+    /// [`argument_not_positive`]: Raised::argument_not_positive
     pub(crate) fn sourceline_out_of_range(requested: &[u8], lines: usize) -> Raised {
         Raised::syntax(
             40,
@@ -597,6 +611,11 @@ impl Raised {
     ///
     /// Measured, rc 216: `errortext(-1)` and `errortext(100)` both give
     /// `ERRORTEXT argument 1 must be in the range 0-99; found "..."`.
+    ///
+    /// `found` is the converted whole number, not the rendered value, for
+    /// the reason [`argument_not_positive`]'s doc gives.
+    ///
+    /// [`argument_not_positive`]: Raised::argument_not_positive
     pub(crate) fn argument_out_of_range(routine: &[u8], position: usize, found: &[u8]) -> Raised {
         Raised::syntax(
             40,
