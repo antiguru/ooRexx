@@ -5475,7 +5475,7 @@ impl Interp {
                     *r -= 1;
                 }
                 *done = true;
-                self.bind_control(code, *control, loop_indent, *value);
+                self.bind_control(code, *control, loop_indent, *value)?;
                 Ok(true)
             }
             LoopState::Controlled {
@@ -5577,9 +5577,48 @@ impl Interp {
                     // no-op and the derived name flows on to fail 41.1 on
                     // `("II")`, which is the untrapped shape and still
                     // matches.
-                    let (previous, novalue) = self.read(code, *control);
+                    // **The re-test's own read goes through the same three
+                    // shapes `bind_control`'s write does**: a compound's
+                    // tail is resolved fresh here too, against whichever
+                    // *current* value the tail variable holds on *this*
+                    // pass, not the tail the loop's header resolved once at
+                    // setup.
+                    // Measured against the oracle: `a.=0; i=1; Do a.i=1 To
+                    // 3; If i>7 Then Leave; i=i+1; End; say i` answers `8`,
+                    // not `4` -- the body's own `i=i+1` moves which tail of
+                    // `a.` this read (and the write after it) resolves to on
+                    // the very next pass, so the loop's own `TO 3` bound
+                    // keeps comparing against a fresh, still-default `0`
+                    // tail instead of the one `a.i` incremented.
+                    let (previous, novalue, resolved) = match shape_of(&name) {
+                        NameShape::Simple => {
+                            let (value, novalue) = self.read(code, *control);
+                            (value, novalue, None)
+                        }
+                        // A bare stem never raises `NOVALUE` on read (`eval_
+                        // node`'s own `ExprKind::Stem` arm has the citation),
+                        // so there is no fallible read to thread through.
+                        NameShape::Stem => (self.read_stem(&name), Novalue::Set, None),
+                        NameShape::Compound => {
+                            let (stem_name, _tails) = compound_parts(code.symbols.name(*control));
+                            let key = self.tail_key(code, *control);
+                            let (value, novalue) = self.stem_get(stem_name.as_bytes(), &key);
+                            let mut resolved = stem_name.as_bytes().to_vec();
+                            resolved.extend_from_slice(&key);
+                            (value, novalue, Some(resolved))
+                        }
+                    };
                     self.novalue_check(novalue)?;
                     self.roots.push_temp(previous);
+                    // `>C>` before `>V>`, both self-gated on `intermediates`
+                    // like every other value-bearing prefix -- `stem_get`'s
+                    // own read announces the fully-resolved name it used
+                    // before either of the value lines shows what is stored
+                    // there, the same order `eval_node`'s `Compound` arm and
+                    // its own tracing counterpart use for an ordinary read.
+                    if let Some(resolved) = &resolved {
+                        self.trace_compound_name(loop_indent, &name, resolved);
+                    }
                     // `result_text` for the pair, not `intermediate_text`:
                     // `>V>` is `intermediates` and `>>>` is `results`, and
                     // `results` is the weaker of the two, so it renders for
@@ -5603,7 +5642,7 @@ impl Interp {
                 if re_tested && let Some(rendered) = self.result_text(value) {
                     self.trace_result(loop_indent, &rendered);
                 }
-                self.bind_control(code, *control, bind_indent, value);
+                self.bind_control(code, *control, bind_indent, value)?;
 
                 if let Some(r) = for_remaining
                     && *r == 0
@@ -5731,58 +5770,91 @@ impl Interp {
         })
     }
 
-    /// Writes `value` into `control`'s own slot -- the same read-the-name,
-    /// resolve-a-slot, write path `Assignment`'s `Variable` target already
-    /// uses (`step`'s own `Assignment` arm), reused rather than duplicated.
+    /// Writes `value` into `control`'s own variable, through whichever of
+    /// the three shapes (`shape_of`) its own spelling is.
     ///
-    /// **Traces its own `>=>`, at `indent`** (Task 9). Every write to a
-    /// control variable is an assignment to the oracle and traces like one:
-    /// `control->assign(context, result)` in both `DoBlock::checkOver`
-    /// (`DoBlock.cpp:165`) and `DoBlock::checkControl` (`:197`), and again
-    /// in a controlled loop's own setup. `indent` is the caller's, not this
-    /// function's to derive, because the same write is traced at two
-    /// different indents depending on which of those three events it is --
-    /// `loop_advance`'s own arms have the measured rule.
+    /// **Traces its own `>=>` (and, for a compound, the `>C>` ahead of it),
+    /// at `indent`** (Task 9). Every write to a control variable is an
+    /// assignment to the oracle and traces like one: `control->assign
+    /// (context, result)` in both `DoBlock::checkOver` (`DoBlock.cpp:165`)
+    /// and `DoBlock::checkControl` (`:197`), and again in a controlled
+    /// loop's own setup. `indent` is the caller's, not this function's to
+    /// derive, because the same write is traced at two different indents
+    /// depending on which of those three events it is -- `loop_advance`'s
+    /// own arms have the measured rule.
     ///
-    /// **A compound control variable (`do aa.1 = 1 to 2`) is already stored
-    /// wrongly here** -- `rexx_parse::Controlled::control` is a bare
-    /// `SymbolId`, so `slot_of` makes a simple variable literally named
-    /// `AA.1` instead of resolving the compound -- and the `>C>` line the
-    /// oracle traces before each of these `>=>`s is missing for the same
-    /// reason. Measured, and **owned by 4c**
-    /// (`phase-4-exclusions.txt`, "EXCLUSIONS -- a compound variable as a DO
-    /// control variable, owned by 4c"). Not
-    /// introduced by the tracing added here, and not fixable inside this
-    /// crate alone.
-    fn bind_control(&mut self, code: &Code<'_>, control: SymbolId, indent: usize, value: ObjRef) {
-        let name = code.symbols.name(control).as_bytes();
-        let slot = self.slot_of(name);
-        let frame = self.activation().frame;
-        self.roots.set_slot(frame, slot, value);
-        // `trace_assignment` carries its own `intermediates` gate, so the
-        // check below is not a second decision about whether to *print*: it
-        // decides whether to *build* the two `Vec`s, and it exists because
-        // this function runs once per loop pass.
-        //
-        // **Kept on a measurement, not on a pattern.** A 2,000,000-pass
-        // `do ii = 1 to 2000000` under `TRACE OFF`, release build, three
-        // runs each: 3.13/3.13/3.15 s with this check and 3.22/3.22/3.23 s
-        // without it -- about 40 ns per pass, which is the two allocations.
-        // Small, real, and a fixed number that stays true however the rest
-        // of the file changes.
-        //
-        // Two earlier versions of this note argued from sibling sites
-        // instead and were false both times (review round 1 F9, re-reviews
-        // NEW-5 and NEW-F1): first that other tracing sites share the shape,
-        // then that this is the only one -- the second sentence quoted a
-        // search command whose own search term it contained, so committing
-        // the evidence changed the answer. Neither claim was load-bearing.
-        // Do not restore either; if the question ever matters, the compiler
-        // and the profiler answer it, and this comment should not try to.
-        if self.tracing_intermediates() {
-            let name = code.symbols.name(control).as_bytes().to_vec();
-            let rendered = self.to_text(value).to_vec();
-            self.trace_assignment(indent, &name, &rendered);
+    /// The simple-variable case stays a direct slot write, with its own
+    /// `intermediates` gate kept below it (see that arm's own comment for
+    /// the measurement behind the gate). A stem or compound control instead
+    /// goes through `assign_expr_target`'s own `Stem`/`Compound` arms --
+    /// the same tail resolution, against `j`'s *current* value, that `say
+    /// cv.j` already uses -- built here from a synthetic `Expr` around
+    /// `control`'s own `SymbolId` rather than duplicated, since that is the
+    /// oracle-verified logic an ordinary `cv.j = expr` assignment already
+    /// runs. Measured, `j=7; do cv.j = 1 to 3; say cv.j; end`: the oracle
+    /// prints `1`/`2`/`3` and this crate, before this fix, printed `CV.7`
+    /// three times, because `Controlled::control` is a bare `SymbolId` and
+    /// the old code ran every shape through the simple-variable slot write
+    /// unconditionally, so a compound's tail was never resolved at all.
+    fn bind_control(
+        &mut self,
+        code: &Code<'_>,
+        control: SymbolId,
+        indent: usize,
+        value: ObjRef,
+    ) -> Result<(), Failure> {
+        match shape_of(code.symbols.name(control).as_bytes()) {
+            NameShape::Simple => {
+                let name = code.symbols.name(control).as_bytes();
+                let slot = self.slot_of(name);
+                let frame = self.activation().frame;
+                self.roots.set_slot(frame, slot, value);
+                // `trace_assignment` carries its own `intermediates` gate, so
+                // the check below is not a second decision about whether to
+                // *print*: it decides whether to *build* the two `Vec`s, and
+                // it exists because this function runs once per loop pass.
+                //
+                // **Kept on a measurement, not on a pattern.** A
+                // 2,000,000-pass `do ii = 1 to 2000000` under `TRACE OFF`,
+                // release build, three runs each: 3.13/3.13/3.15 s with this
+                // check and 3.22/3.22/3.23 s without it -- about 40 ns per
+                // pass, which is the two allocations. Small, real, and a
+                // fixed number that stays true however the rest of the file
+                // changes.
+                //
+                // Two earlier versions of this note argued from sibling
+                // sites instead and were false both times (review round 1
+                // F9, re-reviews NEW-5 and NEW-F1): first that other tracing
+                // sites share the shape, then that this is the only one --
+                // the second sentence quoted a search command whose own
+                // search term it contained, so committing the evidence
+                // changed the answer. Neither claim was load-bearing. Do not
+                // restore either; if the question ever matters, the compiler
+                // and the profiler answer it, and this comment should not
+                // try to.
+                if self.tracing_intermediates() {
+                    let name = code.symbols.name(control).as_bytes().to_vec();
+                    let rendered = self.to_text(value).to_vec();
+                    self.trace_assignment(indent, &name, &rendered);
+                }
+                Ok(())
+            }
+            NameShape::Stem => {
+                let target = Expr {
+                    kind: ExprKind::Stem(control),
+                    span: 0..0,
+                };
+                let rendered = self.intermediate_text(value);
+                self.assign_expr_target(code, &target, value, rendered.as_deref(), indent)
+            }
+            NameShape::Compound => {
+                let target = Expr {
+                    kind: ExprKind::Compound(control),
+                    span: 0..0,
+                };
+                let rendered = self.intermediate_text(value);
+                self.assign_expr_target(code, &target, value, rendered.as_deref(), indent)
+            }
         }
     }
 
@@ -8978,6 +9050,121 @@ mod tests {
         assert_eq!(
             say_output(&mut interp, b"do i = 5 to 3\nsay 'never'\nend\nsay i"),
             b"5\n".to_vec()
+        );
+    }
+
+    /// A compound variable as a `DO` control variable is bound on every
+    /// pass, through the same tail resolution `say cv.j` already uses, not
+    /// stored as a simple variable literally named `CV.J`. Measured against
+    /// the oracle: `1`/`2`/`3` inside the loop, then `4` twice -- the
+    /// loop's own final bound-test value, read back through the same tail
+    /// both by `cv.j` and by the literal `cv.7`.
+    #[test]
+    fn a_compound_control_variable_is_bound_on_every_pass() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"j = 7\ndo cv.j = 1 to 3\nsay cv.j\nend\nsay cv.j\nsay cv.7"
+            ),
+            b"1\n2\n3\n4\n4\n".to_vec()
+        );
+    }
+
+    /// **Pairs with the test above**: an ordinary simple control variable
+    /// is unaffected by routing a stem or compound one through
+    /// `assign_expr_target` -- the fast, unmodified slot write is still the
+    /// only path a simple control ever takes.
+    #[test]
+    fn a_simple_control_variable_still_binds_through_the_fast_slot_path() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(&mut interp, b"do ii = 1 to 3\nend\nsay ii"),
+            b"4\n".to_vec()
+        );
+    }
+
+    /// The compound's tail re-resolves fresh on every pass, against
+    /// whichever *current* value the tail variable holds -- not the tail
+    /// the loop's header resolved once at setup. Measured against the
+    /// oracle: the body's own `i = i + 1` moves which tail of `a.` this
+    /// loop's own read-and-increment step resolves to on the very next
+    /// pass, so `TO 3` keeps comparing against a fresh, still-default `0`
+    /// tail instead of the one `a.i` incremented, and the loop runs to `i
+    /// = 8` (the `LEAVE` bound) rather than stopping at `i = 4`.
+    #[test]
+    fn a_compound_control_variables_tail_re_resolves_every_pass() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"a. = 0\ni = 1\ndo a.i = 1 to 3\nif i > 7 then leave\ni = i + 1\nend\nsay i"
+            ),
+            b"8\n".to_vec()
+        );
+    }
+
+    /// A bare stem as a `DO` control variable (`do cv. = 13`) binds through
+    /// `stem_assign`, the same "replace and rebind" an ordinary `cv. = 13`
+    /// assignment uses. Paired with the compound tests above because a
+    /// stem's own spelling has no tail to resolve: it is the shape this fix
+    /// must leave working, not the one it corrects.
+    #[test]
+    fn a_stem_control_variable_binds_through_stem_assign() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"i = 0\ndo cv. = 13\nif i > 10 then leave\ni = i + 1\nend\nsay cv.\nsay i"
+            ),
+            b"24\n11\n".to_vec()
+        );
+    }
+
+    /// `LEAVE`/`ITERATE` naming a compound control variable is unaffected
+    /// by this fix: the name match that selects which loop to unwind is
+    /// against the control's own spelling, decided independently of
+    /// whether that spelling's tail is ever resolved. Measured against the
+    /// oracle for both instructions.
+    #[test]
+    fn leave_and_iterate_by_name_still_reach_a_compound_controlled_loop() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"c = 0\nj = 1\ndo i.j = 0 to 6\nc = c + 1\nif c = 2 then leave i.j\nend i.j\nsay c\nsay i.1"
+            ),
+            b"2\n1\n".to_vec()
+        );
+
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"c = 0\nj = 1\ndo i.j = 0 to 6\nc = c + 1\nif c = 2 then iterate i.j\nend i.j\nsay c\nsay i.1"
+            ),
+            b"7\n7\n".to_vec()
+        );
+    }
+
+    /// A compound control variable traces its own `>C>` before the setup's
+    /// `>=>` and again before the re-tested pass's `>V>`, exactly the order
+    /// `eval_node`'s own `Compound` arm uses for an ordinary read -- the
+    /// same order this fix's `bind_control` and its read-back both reuse
+    /// rather than reimplement.
+    #[test]
+    fn a_compound_control_variable_traces_its_own_c_line() {
+        let mut interp = Interp::new();
+        let program = parse_program(b"j = 1\ndo cv.j = 1 to 2\nnop\nend".to_vec())
+            .expect("test program parses");
+        let program = activate(&mut interp, program);
+        interp.set_trace_mode(mode_from_setting(b"i").expect("I is a valid setting"));
+        run_activated(&mut interp, &program).expect("test program runs");
+        let trace = String::from_utf8_lossy(&interp.trace);
+        assert!(
+            trace.contains(">C>   CV.J => \"CV.1\"") && trace.contains(">C>     CV.J => \"CV.1\""),
+            "expected a >C> line at both the setup indent and the re-tested-pass indent, \
+             resolving CV.J to CV.1; trace was:\n{trace}"
         );
     }
 

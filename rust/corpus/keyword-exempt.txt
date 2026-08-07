@@ -49,11 +49,6 @@
 #     breakdown, not read off this file, and not counted against the rest
 #     of the `4c` rows here, which move as this crate's own builtin table
 #     does.
-#   * The `defect:` rows below are NOT derived -- every assertion failure is
-#     mapped to one constant. What has teeth for them is membership, not the
-#     label: a body that starts failing its assertions and is not listed here
-#     goes red as an unaccounted failure. A second defect class would need
-#     the constant split by hand.
 #
 #   4c  Bodies blocked on a construct rexx-exec names as 4c's -- a builtin
 #       routine it does not run yet, or instruction work 4c still owes. No
@@ -76,21 +71,6 @@
 #       ""` -- so "the WITH bodies", which this line used to say, named the
 #       wrong set.
 #
-#   defect:compound-do-control-variable  6 bodies. NOT a phase gap: a real
-#       divergence, confirmed by running each rewritten program under the C++
-#       oracle as well, where all six pass. Every one uses a compound
-#       variable as a DO control variable (`Do cv.j=1 To 5`, `Do a.i=a.i to
-#       16`, `Do i.j=0 to 6 ... End i.j`). Two measured witnesses:
-#         c=0; j=1; Do cv.j=1 To 5; c=c+1; End; say '['c cv.j']'
-#           oracle [5 6], rexx-exec [5 CV.1] -- the control variable is never
-#           assigned when it is compound.
-#         a.=0; i=1; Do a.i=1 To 3; If i>7 Then Leave; i=i+1; End; say '['i']'
-#           oracle [8], rexx-exec [4] -- the oracle re-resolves the compound
-#           name each iteration, so which variable controls the loop changes
-#           as `i` does.
-#       DO is 4a's, so this is a 4a defect this 4b table surfaced. It is
-#       recorded rather than fixed here: Task 11 measures, and a DO change
-#       belongs with the tasks that own DO.
 ADDRESS::test_environment_value_with	Phase 7
 ADDRESS::test_environment_expression_with	Phase 7
 ADDRESS::test_environment_path_null	Phase 7
@@ -98,11 +78,4 @@ CALL::test_literal	RAISED
 CALL::test_expression	RAISED
 CALL::test_on_name	4c
 CALL::test_9	4c
-DO::test_DO_standardTest2A	defect:compound-do-control-variable
-DO::test_DO_standardTest2B	defect:compound-do-control-variable
-DO::test_DO_standardTest2P	defect:compound-do-control-variable
-DO::test_DO_standardTest2Q	defect:compound-do-control-variable
-DO::test_DO_standardTest5-69	defect:compound-do-control-variable
-ITERATE::test_12	defect:compound-do-control-variable
-LEAVE::test_11	defect:compound-do-control-variable
 NUMERIC::test_42	RAISED

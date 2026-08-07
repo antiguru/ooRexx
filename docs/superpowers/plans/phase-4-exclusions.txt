@@ -338,167 +338,6 @@ because their answer was got wrong before it was measured.
               points.
 
 
-EXCLUSIONS -- a compound variable as a DO control variable, owned by 4c
------------------------------------------------------------------------
-
-  A COMPOUND VARIABLE AS A DO CONTROL VARIABLE IS NOT SUPPORTED (found 4b
-  Task 11, by the base/keyword L1 table; owner assigned 4b Task 12).
-
-  OWNER: 4c. THIS ROW WAS IN KNOWN GAPS AND WAS MOVED HERE, which is a plan
-  amendment and is recorded as one. It is 4b Task 12's Step 3c ruling, made
-  under that step's own authorisation to pick one of three dispositions, and
-  the two it did not pick are named below with the reason, because a ruling
-  that records only its winner reads as though nothing was weighed.
-
-  WHY AN OWNER AT ALL. This is the one divergence 4b closes with that is not
-  a missing feature: the construct is implemented, the loop runs the right
-  number of times, and the answer is wrong. `instruction_owner` returns None
-  for InstructionKind::Do -- meaning implemented, not deferred -- so the
-  defective code is 4a's and a 4b instrument merely surfaced it. Phase 4
-  must not close having claimed `DO` and shipped a known, witnessed wrong
-  answer inside it with nobody named. Eleven 4b tasks were each right to
-  record rather than fix it, because `DO` was in none of their file lists;
-  this file IS in Task 12's, and it is where an owner is recorded, so that
-  excuse does not transfer to the gate.
-
-  WHY 4c AND NOT PHASE 5. Nothing here needs the object model. `do cv.j = 1
-  to 5` is classic Rexx, and this crate already resolves `cv.j` correctly in
-  `say cv.j` one line later -- the resolution exists and the DO path does not
-  use it. 4c is the last sub-phase of Phase 4, so it is the last point at
-  which a Phase 4 construct's own defect can be closed inside Phase 4.
-
-  WHY NOT FIXED AT THE GATE, which was Step 3c's first option. The fix is
-  not in `phase-4b-gate.md`'s reach: `run.rs` is outside Task 12's file list
-  and so is `rexx-parse`, and the cost recorded below includes a rexx-parse
-  signature change. Landing an interpreter behaviour change in the same
-  commit that measures the tree would invalidate every figure in the gate
-  document -- the mutation script, the corpus count, the L1 table -- and it
-  would do so with no review round behind it, which is the collision D5
-  warns about. The gate reports the tree 4b ships; it does not move it.
-
-  THE NOTICE MECHANISM ALREADY EXISTS AND NEEDS NOTHING NEW. When the fix
-  lands, the six ooTest bodies enumerated below (see "SIX ooTest BODIES TURN
-  ON THIS") all start passing, and
-  `the_exempt_set_matches_the_current_failures` goes red until they are
-  removed from the committed set. That is 4c's gate criterion for this row,
-  and it is automatic. (That identifier is kept on one line deliberately:
-  wrapping it mid-name defeats the `grep` a reader would use to find it,
-  which is the same reason this plan already prefers short greppable
-  fragments to whole sentences.)
-
-  The six are NOT re-listed here on purpose. An earlier version of this
-  paragraph named all six, called them the only assertion failures in
-  base/keyword, and cited the oracle re-run -- all of which the row's own body
-  already said, a few paragraphs down. That made two near-verbatim copies of
-  one fact inside the row whose own ruling closes with "recording a gap twice
-  is worse than recording it once, and the second copy is the one that hides
-  the first's incompleteness". Found by this row's own review.
-
-  *** ASSIGNING THIS OWNER DOES NOT CHANGE keyword-exempt.txt, AND MUST NOT.
-  *** Those six rows read `defect:compound-do-control-variable` and stay that
-  way. Their attribution is DERIVED FROM THE OUTCOME KIND, not from an
-  ownership table: `RunOutcome::AssertionFailed` maps unconditionally to that
-  one constant in `keyword_assertions.rs`, because these bodies RUN and
-  disagree rather than failing loudly with a phase-named message. Rewriting
-  them to `4c` would contradict the derivation the exempt file's own header
-  states and would turn `the_exempt_set_matches_the_current_failures` red
-  immediately. An owner records who owes the fix; it does not reclassify how
-  the harness sees the failure, and the two are separate facts.
-
-  NOT A rexx-parse GAP, which is the alternative worth ruling out. Measured:
-  parsing `do cv.j = 1 to 5` yields a Controlled whose control symbol is named
-  "CV.J" -- `cv.j` is a single symbol token in Rexx, so the entire compound
-  name is interned and reaches the executor intact. The SymbolId number is
-  deliberately not quoted: it counts symbols interned before it, so the same
-  loop reads 125, 127 or 129 depending on what precedes it, while the name
-  reproduces in every spelling.
-  bind_control then takes those name bytes and looks up a flat slot with no
-  tail resolution, while the same executor resolves the same name correctly
-  in `say cv.j` one line later. The parse delivers what a correct
-  implementation needs; the DO path does not use the compound resolution the
-  crate already has.
-
-  `Do cv.j = 1 To 5` names a compound variable as the control variable, which
-  ooRexx allows and which this crate gets wrong in two distinct ways.
-  Measured against the oracle, both from a clean directory:
-
-    c=0; j=1; Do cv.j=1 To 5 ; c=c+1; End; say '['c cv.j']'
-      oracle    [5 6]
-      rexx-exec [5 CV.1]
-
-  -- the loop runs the right number of times, but the control variable is
-  never assigned at all: `CV.1` is the derived name of an unset compound,
-  which is what an unset variable renders as. So the count is right and the
-  variable is untouched.
-
-    a.=0; i=1; Do a.i=1 To 3; If i>7 Then Leave; i=i+1; End; say '['i']'
-      oracle    [8]
-      rexx-exec [4]
-
-  -- and the tail is re-resolved on each iteration, so *which* variable
-  controls the loop changes as `i` does, and the loop runs seven times rather
-  than three. These are two symptoms of one gap, not two gaps: nothing binds
-  a compound control variable per pass.
-
-  SIX ooTest BODIES TURN ON THIS, and they are the only assertion failures in
-  the whole base/keyword table -- every other non-passing body there fails
-  loudly with an unimplemented construct, all of them 4c's.
-  `DO::test_DO_standardTest2B`, `2P`, `2Q`, `5-69`, `ITERATE::test_12` and
-  `LEAVE::test_11`, listed in rust/corpus/keyword-exempt.txt under
-  `defect:compound-do-control-variable`. Each was re-run under the C++ oracle
-  in its rewritten form, which passes all six, so these are divergences and
-  not an artefact of the rewrite -- two bodies beside them *were* such an
-  artefact and are not in this row (see the comment-handling commit).
-
-  `LEAVE`/`ITERATE`/`END` naming a compound (`End i.j`, `Leave I.J`) is
-  exercised by the same six, and MEASURED, THOSE THREE DISPATCH CORRECTLY --
-  they are not a second thing to fix. Printing the control variable beside
-  the loop counter separates them:
-
-    c=0; j=1; Do i.j=0 to 2; c=c+1; End i.j;                say '['c']' '['i.1']'
-      oracle [3] [3]   rexx-exec [3] [I.1]
-    c=0; j=1; Do i.j=0 to 6; c=c+1; If c=2 Then Leave i.j;   End i.j; ...
-      oracle [2] [1]   rexx-exec [2] [I.1]
-    c=0; j=1; Do i.j=0 to 6; c=c+1; If c=2 Then Iterate i.j; End i.j; ...
-      oracle [7] [7]   rexx-exec [7] [I.1]
-
-  Every loop-control count agrees -- the loop ends, leaves and iterates the
-  right number of times in all three. Only the control variable's value
-  diverges, and it is `I.1` every time: the literal name, never bound. So the
-  gap is exactly one mechanism, and a fixer should not spend time on
-  `LEAVE`/`ITERATE`/`END` name resolution.
-
-  THE SECOND SYMPTOM AND THE COST, WHICH WERE A SEPARATE KNOWN GAPS ROW
-  UNTIL 4b TASK 12 MERGED THEM HERE. Two rows described one defect -- this
-  one raised by Task 9's tracing work and the one above by Task 11's L1
-  table -- and the split is part of why it drifted unowned: a reader who
-  found either could reasonably think it was the whole of it. Neither
-  measurement is changed by the merge; only their location is. Note that the
-  paragraph below records the fix as needing a rexx-parse change, which is
-  the cost this section's own ruling cites for not fixing it at the gate.
-
-  A COMPOUND CONTROL VARIABLE IS STORED IN THE WRONG PLACE. `do aa.1 = 1 to
-  2` is legal Rexx and the oracle iterates it, assigning the compound AA.1 on
-  every pass. rexx_parse::Controlled::control is a bare SymbolId, so
-  bind_control resolves `AA.1` through slot_of and creates a SIMPLE variable
-  whose name happens to contain a dot. Measured, 2026-08-04, `do aa.1 = 1 to
-  2 ; nop ; end ; say aa.1`: the oracle prints 3 and this crate prints AA.1
-  (the derived name of a compound nothing ever wrote). Under trace i the same
-  program is also missing the >C> line the oracle emits before each of the
-  control variable's >V>/>=> lines, for the same reason -- there is no
-  compound to resolve.
-
-  NOT INTRODUCED BY THE TRACING ADDED AT TASK 9, and measurably so: the
-  stdout difference above is present on e72cc19f too. It became *visible*
-  there, because the >=> and >V> lines Task 9 added are the first thing that
-  prints the control variable's name at all.
-
-  Closing it needs a rexx-parse change (Controlled::control carrying the same
-  VariableRef shape an assignment target does), so it is not fixable inside
-  rexx-exec alone, which is the other reason it is recorded rather than
-  fixed: no 4b task's file list reaches the parser.
-
-
 EXCLUSIONS -- external routine resolution, Phase 7
 --------------------------------------------------
 
@@ -1541,9 +1380,12 @@ above.
 
   The full row -- both sets of measured transcripts, the rexx-parse
   ruling-out, the three probes narrowing it to exactly one mechanism, and the
-  cost -- is in "EXCLUSIONS -- a compound variable as a DO control variable,
-  owned by 4c", above. It left this section for the one reason this section's
-  own rules allow: an owner was assigned.
+  cost -- moved again at 4c Task 14, from EXCLUSIONS to CLOSED DEFECTS
+  ("A COMPOUND OR STEM VARIABLE AS A DO CONTROL VARIABLE WAS NEVER BOUND"):
+  the fix landed, and the recorded rexx-parse cost above turned out to be
+  wrong, not merely unpaid -- no parser change was needed at all. It left
+  this section for the one reason this section's own rules allow: an owner
+  was assigned.
 
   KNOWN GAP: TRANSLATE -- A NULL STRING'S IDENTITY DECIDES WHETHER TABLEIN WAS
   SUPPLIED. TRANSLATE's third argument has two meanings and the oracle tells
@@ -2354,3 +2196,61 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
 
   No owner is assigned to closing either limb: a time-zone database is
   Phase 5-or-later infrastructure, not a fix scoped to `DATE`/`TIME`.
+
+
+  A COMPOUND OR STEM VARIABLE AS A DO CONTROL VARIABLE WAS NEVER BOUND
+  (fixed, 4c Task 14 -- this was the EXCLUSIONS row above, "a compound
+  variable as a DO control variable, owned by 4c", moved here). `do cv.j =
+  1 to 5` is legal Rexx and the oracle assigns the compound `CV.J` on every
+  pass. `rexx_parse::Controlled::control` is already a bare `SymbolId`
+  carrying the whole interned spelling `cv.j` reduces to, the same starting
+  point `say cv.j` uses one line later, so this was never a parse gap --
+  the EXCLUSIONS row's recorded cost, "closing it needs a rexx-parse change
+  (`Controlled::control` carrying the same `VariableRef` shape an
+  assignment target does)", was wrong on both halves: an assignment
+  target's own shape is `Expr`, not `VariableRef`, and `VariableRef` itself
+  has no tail at all.
+
+  WHAT WE USED TO DO: `bind_control` ran every control variable through
+  `slot_of`, a flat name-to-slot lookup with no tail resolution, so a
+  compound's tail was never looked at and nothing a later `say cv.j` could
+  read back was ever written. Measured against the oracle, both from a
+  clean directory:
+
+    c=0; j=1; Do cv.j=1 To 5; c=c+1; End; say '['c cv.j']'
+      oracle    [5 6]
+      rexx-exec [5 CV.1]  -- before the fix
+
+    a.=0; i=1; Do a.i=1 To 3; If i>7 Then Leave; i=i+1; End; say '['i']'
+      oracle    [8]
+      rexx-exec [4]  -- before the fix, the compound's tail was re-resolved
+      on read but never on write, so the two disagreed about which pass
+      was which
+
+  THE FIX: `bind_control`, and the controlled loop's own re-tested read in
+  `loop_advance`, both dispatch on `shape_of` the same way
+  `assign_expr_target` already does for an ordinary assignment target -- a
+  stem writes through `stem_assign`, a compound resolves its tail fresh
+  each time against the tail variable's *current* value (`tail_key`) and
+  writes through `stem_set`, and a simple variable keeps the original flat
+  slot write with no change at all (so the write side's existing
+  `intermediates`-gated tracing, and its measured no-allocation-when-not-
+  tracing cost, are both unaffected for the common case). Both witnesses
+  above now match the oracle exactly, and so does the `>C>` trace line
+  before every `>V>`/`>=>` of a compound control, measured against the
+  oracle byte for byte under `TRACE I`. `LEAVE`/`ITERATE`/`END` naming a
+  compound control variable needed no change at all: that match is against
+  the control's own spelling, decided independently of whether the
+  spelling's tail is ever resolved.
+
+  WITNESS: `rust/crates/rexx-exec/src/run.rs`'s own test module --
+  `a_compound_control_variable_is_bound_on_every_pass`,
+  `a_compound_control_variables_tail_re_resolves_every_pass`,
+  `a_stem_control_variable_binds_through_stem_assign`,
+  `a_simple_control_variable_still_binds_through_the_fast_slot_path`,
+  `leave_and_iterate_by_name_still_reach_a_compound_controlled_loop`, and
+  `a_compound_control_variable_traces_its_own_c_line`. The seven ooTest
+  bodies this unblocked (`DO::test_DO_standardTest2A`, `2B`, `2P`, `2Q`,
+  `5-69`, `ITERATE::test_12`, `LEAVE::test_11`) are no longer in
+  `rust/corpus/keyword-exempt.txt`; `the_exempt_set_matches_the_current_
+  failures` is the witness that all seven now pass.
