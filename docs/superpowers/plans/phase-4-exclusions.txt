@@ -1566,6 +1566,35 @@ above.
   difference in this crate's favour. The oracle's own two numbers differ by
   504 kB between the two runs, which is the noise floor of this instrument.
 
+  THAT 5.7 MB WAS HELD OPEN AS UNEXPLAINED AND IS NOW EXPLAINED: IT IS
+  STARTUP FOOTPRINT AND HAS NOTHING TO DO WITH THE LARGE STRING. Re-measured
+  2026-08-06 at `ulimit -v 4194304`, five runs a side, it stands at 6.1 MB
+  (489951 against 496098) rather than 5.7. The same instrument on `say 1` --
+  a program that allocates no large string at all -- gives 2870 against
+  8446, a 5.6 MB gap in the same direction, present before either
+  interpreter does anything Rexx-specific. Subtracting it leaves a
+  big-string residual of 572 kB, BELOW the 792-1760 kB spread measured
+  within the big-string runs themselves, so there is no big-string-specific
+  residual left to explain. Independently reconfirmed on `say 1`: oracle
+  8408 kB against rexx-run 2932 kB.
+
+  THE LIKELY MECHANISM, OFFERED AS THE BEST FIT AND NOT AS PROOF: `ldd` on
+  the two binaries shows the oracle linking librexx.so.4 (17.8 MB on disk),
+  librexxapi.so.4, libstdc++ and libm, where rexx-run links only libc and
+  libgcc_s. Touching pages of a much larger shared library at load time,
+  plus the oracle's C++ static initialisers and its message-catalogue and
+  method-table setup, is consistent with a several-MB baseline and with the
+  direction. Not isolated further -- no post-dlopen RSS sample was taken.
+
+  THREE HYPOTHESES RULED OUT, each by measurement rather than argument. Run
+  to-run noise: the within-side spread is at most 1760 kB against a 6.1 MB
+  raw gap. A big-string-specific extra copy or leak in this crate: the
+  residual after subtracting the `say 1` baseline is under the noise floor,
+  and a copy tied to the large string would have to exceed it. D19's 512 MiB
+  reservation: RSS charges resident pages and an unfaulted reservation is
+  not resident, which is the same reason this pair survives the reservation
+  being free, stated in the next paragraph.
+
   THIS ONE MEASURES RSS AND SURVIVES THE RESERVATION BEING FREE. `ulimit -v`
   is set to 4 GiB here purely to stop a runaway; neither side comes near it,
   and /usr/bin/time -v reports resident pages, which the 512 MiB reservation
@@ -1620,15 +1649,84 @@ above.
     SAY (run.rs's Say arm)          renders into a Vec and then copies that
                                     into Interp::out
     parse_template's source render  the parse source, held as a Vec
+    Interp::assign_targets          a SECOND, separately-found copy on the
+      (parse_template.rs:670)       same path: `self.text(&cursor.string()
+                                    [piece])` for every bound template
+                                    variable, where the sibling
+                                    `self.text_owned` would move the buffer
+                                    instead. For `parse value X with y` the
+                                    piece IS the whole string, so this is a
+                                    full copy and not a slice.
+
+  "THREE COPIES" IS THE FLOOR AND NOT THE SHAPE: THERE ARE THREE BANDS.
+  Measured 2026-08-06 by sweeping N down under the standard
+  `ulimit -v 1048576`, last size that succeeds -> first size that fails:
+
+    reverse / substr / if-compare        200000000 -> 250000000
+    strip / parse value                  150000000 -> 170000000
+    say / concat                         100000000 -> 120000000
+    say length(copies('a',N)), no
+      wrapping call at all               465000000 -> 470000000
+
+  The last row is the calibration rather than a defect: with no extra copy
+  this crate's usable single allocation under that limit is between 465 MB
+  and 470 MB -- about 70 MB under the naive "1 GiB minus D19's 512 MiB"
+  arithmetic, from the thread's own stack, the code and data segments and
+  allocator bookkeeping. Dividing that ceiling by a site's live-copy count
+  predicts each band: 465/2 is inside (200M, 250M] and 465/3 is inside
+  (150M, 170M].
+
+  AND `||` AND SAY PAY A GROWTH-POLICY PENALTY ON TOP OF THE COPY COUNT,
+  which is why they are a band of their own rather than sitting with strip
+  and parse value. `Interp::concat` builds its buffer from the left operand
+  at EXACT capacity and then `extend_from_slice`s the one-byte right
+  operand, so Vec's amortised growth policy asks for roughly DOUBLE the left
+  operand's size to append one byte. The Say arm has the identical shape:
+  `out.extend_from_slice(&line)` at an exact fit, then `out.push(b'\n')`.
+  Measured directly, from the failing allocation's own size in the abort
+  message: `say length(copies('a',200000000) || 'x')` requests exactly
+  400000000, `say copies('a',120000000)` requests 240000000 and
+  `say copies('a',150000000)` requests 300000000 -- 2N in every case. The
+  cost here is the growth policy, not a further copy, and no count of copies
+  predicts it.
 
   NO GUARD FIXES ANY OF THEM, and that is why they are their own cause
   rather than sites the first cause missed. Each copy exists to satisfy the
-  borrow checker: `to_text` borrows the interpreter and every consumer needs
-  it mutably again, so the bytes are copied out to end the borrow. Closing
-  it needs `Interp` methods that read and allocate in one call -- a
+  borrow checker: `Interp::to_text` (value.rs:128) hands back a
+  `Cow::Borrowed` that borrows the INTERPRETER, not the value, and every
+  consumer needs `&mut self` again immediately, so the bytes are copied out
+  to end the borrow.
+
+  THE OBSTACLE IS TYPE-LEVEL, AND IT IS WHY THE OBVIOUS REPAIR IS NOT
+  AVAILABLE: `Cow::into_owned()` HAS NO FALLIBLE FORM. It goes through
+  `Vec::to_vec()`, which calls the infallible global allocator and aborts by
+  design, so `try_reserve` -- the idiom `builtin::buffer`
+  (builtin/mod.rs:858-863) already uses for a builtin's own RESULT
+  allocation -- cannot be pasted in at any of these sites. Guarding them
+  means not calling `.into_owned()`/`.to_vec()` at all. Closing it needs
+  `Interp` methods that read and allocate in one call -- a
   `text_from(value, range)` for the slice-taking builtins, a `concat_text`
-  for the join, a comparison that works from two borrows -- which is a
-  value.rs signature change plus one edit per builtin, not a guard.
+  reserving left+right up front (which retires the doubling as well), a
+  comparison that works from two borrows, and `self.text_owned` in place of
+  `self.text` at parse_template.rs:670 -- which is a value.rs signature
+  change plus one edit per builtin, not a guard. None of those helpers
+  exists anywhere in crates/rexx-exec/src today; checked 2026-08-06.
+
+  AND THE THIRD CAUSE CANNOT DELIVER rc 0 AT THIS ROW'S OWN PROBE SIZE
+  WITHOUT THE SECOND. Even a perfect fix -- every one of the seven sites
+  down to its theoretical minimum of one live copy -- does not get these
+  programs to the oracle's answer at N=400000000 under the standard limit.
+  Two live copies of 400 MB is about 763 MiB against the ~465 MB usable
+  budget measured above. The proof is already in the tree: `reverse` sits at
+  that minimum TODAY (`required_string` copies once and `text_owned` moves
+  the result with no further copy) and it still aborts at 400000000,
+  succeeding only up to somewhere in (200M, 250M]. So the third cause's
+  owner roughly doubles every threshold and the recorded seven programs are
+  STILL RED at the size written down here. The two causes have separate
+  owners and are NOT separately closable at this probe size. Whichever plan
+  picks up the third must carry this sentence, or its implementer lands a
+  correct fix, reruns the recorded probes, sees rc 134, and concludes the
+  fix was wrong.
 
   This cause is UNASSIGNED. It is not a Phase 5 or Phase 7 feature, it is
   this crate's own allocation discipline, and no phase has been given it.
@@ -1643,6 +1741,13 @@ above.
   than left unassigned: Phase 4 ships this deliberately, and the honest
   summary is that under an identical `ulimit -v` this crate has about half
   the oracle's allocatable address space.
+
+  "NOT YOURS" IS TRUE OF THE CAUSE AND FALSE OF THE OUTCOME. Per the
+  coupling written into the THIRD CAUSE above, the seven-program list this
+  row records cannot reach rc 0 at N=400000000 with either cause fixed
+  alone. A third-cause owner who reads this paragraph as permission to
+  ignore the reservation will finish, re-run the recorded probes, and still
+  see rc 134.
 
 
 
@@ -2177,9 +2282,32 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   letters carries this offset somewhere in its answer, whether or not the
   specific letter above was the one measured -- `N`'s own wall-clock hour
   is the most visible, `O` is the offset itself read back, and `T` is the
-  absolute count both of those are built from. D11 bars both builtins from
-  every differential comparison this crate has, so nothing here can turn
-  divergent; this row exists so the divergence is findable outside
+  absolute count both of those are built from.
+
+  NOTHING HERE TURNS `divergent` TODAY, BUT NOT FOR THE REASON THIS ROW
+  USED TO GIVE. It said D11 bars both builtins from every differential
+  comparison this crate has. That is false. D11 -- the one in
+  `2026-08-04-phase-4c-builtins-and-parse.md:127`, not the RexxUtil
+  decision of the same number in `2026-07-27-rust-rewrite.md:289` -- bars
+  them from a differential *corpus program*, which is what its own heading
+  and `corpus/README.md:85-91` both say, and `corpus/builtin-probes.txt` is
+  not one. `DATE` and `TIME` each have a probe there
+  (`builtin-probes.txt:91` and `:118`) and `builtin_status.rs:226-239` runs
+  every probe through `rexx_exec::run_program` AND the oracle, comparing all
+  three descriptors. Both names are recorded `implemented` in
+  `corpus/builtin-status.txt` on the strength of that comparison.
+
+  THE REAL CONTAINMENT IS THE PROBES' OWN CHOICE OF FORM, and it is
+  deliberate rather than lucky: `builtin-probes.txt:47-58` requires every
+  probe to be deterministic and says so, so `DATE` is probed as
+  `date('S','2026-08-04','I')` and `TIME` as `time('S','12:34:56','N')` --
+  conversions of a given value, which never reach
+  `real_clock_base_time`. Strengthening either probe to a no-argument
+  reading would flip its row `divergent` and turn `builtin_status.rs` red,
+  correctly. Whoever does that must come back here first, because the row
+  would then need an owner rather than a containment argument.
+
+  This row exists so the divergence is findable outside
   `builtin/datetime.rs`'s own module doc, which is where it was declared
   and where it stayed effectively unfindable by anyone auditing this
   ledger rather than the source.
@@ -2196,6 +2324,53 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
 
   No owner is assigned to closing either limb: a time-zone database is
   Phase 5-or-later infrastructure, not a fix scoped to `DATE`/`TIME`.
+
+
+  KNOWN GAP: THE INTERPRETER'S INTERNAL-PACKAGE ROUTINES ARE PROVIDED BY
+  NOTHING HERE, AND NO PHASE 4 ROW OWNS THEM. Measured 2026-08-07, each
+  from a fresh directory, both interpreters on the same source:
+
+    retc = beep(262, 1)                    oracle rc 0, null string
+                                           rexx-exec rc 213, Error 43.1
+                                           `Could not find routine "BEEP"`
+    say filespec('name','/a/b/c.txt')      oracle `c.txt`, rc 0
+                                           rexx-exec rc 213, Error 43.1
+    say length(directory())                oracle the cwd's length, rc 0
+                                           rexx-exec rc 213, Error 43.1
+
+  THEIR ABSENCE FROM THE BUILTIN TABLE IS CORRECT AND THAT IS WHY THEY NEED
+  A ROW. These are not entries in builtinTable[] (BuiltinFunctions.cpp) but
+  routines the interpreter's own package registers
+  (interpreter/runtime/InternalPackage.cpp:230, `rexx_routines`), so they are
+  outside the 66 names in scope AND outside the fifteen this file excludes
+  wholly -- and every mechanism this project has for noticing an unowned
+  builtin divergence is keyed on the builtin table. corpus/builtin-status.txt
+  cannot reach them: its 81 rows ARE rexx_inventory::builtins::NAMES.
+
+  THE ENUMERATION IS EXTERNAL AND EXACT, which is what makes it safe to state
+  here rather than assert: interpreter/runtime/NativeFunctions.h lists the
+  portable set in three lines -- Directory, Filespec, Beep -- and this
+  platform's interpreter/platform/unix/SysNativeFunctions.h adds none. Read
+  directly, both files, at the oracle checkout. Windows adds RxMessageBox,
+  which this project does not measure.
+
+  ONLY BEEP SHOWS IN ANY INSTRUMENT TODAY, and that is an accident of the
+  ooTest corpus rather than a difference in kind. Three rows of
+  rust/corpus/bif-exempt.txt (BEEP::test_1#1, test_5#1, test_7#1) carry the
+  attribution ANOMALY -- the harness's word for "exited non-zero and named no
+  construct" -- and that file's header carries the cause because nothing
+  derives it. bif_assertions.rs pins ANOMALY's row count, so those three
+  cannot quietly become four. FILESPEC's own 76 assertSame calls all fall to
+  named DropReasons and yield no row at all, and DIRECTORY has no group, so
+  neither name reaches an exempt file. A reader must not take "only BEEP is
+  listed" as "only BEEP is missing".
+
+  NO OWNER. This is not a builtin gap, so Phase 7's file-and-stream rows do
+  not cover it; it is not dispatch, so Phase 5's do not either. Whoever picks
+  up the internal package picks up all three at once, since one resolution
+  step serves them: a name the builtin table does not hold and ::ROUTINE
+  resolution does not find must consult the package's routines before
+  raising 43.1.
 
 
   A COMPOUND OR STEM VARIABLE AS A DO CONTROL VARIABLE WAS NEVER BOUND

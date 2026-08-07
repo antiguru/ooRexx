@@ -53,6 +53,19 @@
 #       it raises 43.1 here. Measured on the oracle, `retc = beep(262, 1)`
 #       exits 0 and answers the null string, so this is a real gap in what this
 #       crate provides rather than a divergence in a builtin it implements.
+#       Recorded outside this file too, as a KNOWN GAP in
+#       docs/superpowers/plans/phase-4-exclusions.txt, because BEEP belongs to
+#       no phase and this file is not a cross-phase artifact.
+#
+# THE THREE DERIVED CATEGORIES CARRY PINNED COUNTS, NOT JUST PINNED SPELLINGS.
+# MISMATCH, RAISE-MISMATCH and ANOMALY name neither an owner nor a construct,
+# so a row carrying one is a divergence nothing is holding. MISMATCH is the
+# sharp one: both renderings produced output and they DIFFER, which is the
+# single thing this whole differential exists to detect.
+# `every_exempt_attribution_is_a_known_phase_or_a_declared_outcome` pins them
+# at 0, 0 and 3. If it goes red, the repair is NOT to move the number: rule on
+# the row first -- give it a phase, or record it as a KNOWN GAP -- and then
+# move the number to match, deliberately.
 #
 BEEP::test_1#1	ANOMALY
 BEEP::test_5#1	ANOMALY
