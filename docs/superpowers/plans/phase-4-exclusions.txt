@@ -2227,25 +2227,58 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
       on read but never on write, so the two disagreed about which pass
       was which
 
+  ALSO PRESENT ON `e72cc19f`, BEFORE 4b TASK 9 EVER TOUCHED THIS CODE, which
+  rules out that task's own control-variable tracing as the introducer --
+  Task 9 only made the gap *visible*, because the `>=>`/`>V>` lines it added
+  were the first thing that ever printed the control variable's name at
+  all. Measured, 2026-08-04, `do aa.1 = 1 to 2 ; nop ; end ; say aa.1`: the
+  oracle prints `3` and this crate printed `AA.1` (the derived name of a
+  compound nothing had written) on `e72cc19f` exactly as it still did the
+  day before this fix.
+
+  `LEAVE`/`ITERATE`/`END` naming a compound (`End i.j`, `Leave i.j`) always
+  dispatched correctly -- measured before the fix, printing the control
+  variable beside the loop counter to separate the two:
+
+    c=0; j=1; Do i.j=0 to 2; c=c+1; End i.j; say '['c']' '['i.1']'
+      oracle    [3] [3]
+      rexx-exec [3] [I.1]  -- before the fix
+
+    c=0; j=1; Do i.j=0 to 6; c=c+1; If c=2 Then Leave i.j; End i.j; say '['c']' '['i.1']'
+      oracle    [2] [1]
+      rexx-exec [2] [I.1]  -- before the fix
+
+    c=0; j=1; Do i.j=0 to 6; c=c+1; If c=2 Then Iterate i.j; End i.j; say '['c']' '['i.1']'
+      oracle    [7] [7]
+      rexx-exec [7] [I.1]  -- before the fix
+
+  Every loop-control count already agreed pre-fix -- the loop ended, left
+  and iterated the right number of times in all three. Only the control
+  variable's own value diverged, and it was `I.1` every time: the literal
+  name, never bound. So the gap was exactly one mechanism, and the fix
+  needed no `LEAVE`/`ITERATE`/`END` name-resolution change at all.
+
   THE FIX: `bind_control`, and the controlled loop's own re-tested read in
   `loop_advance`, both dispatch on `shape_of` the same way
   `assign_expr_target` already does for an ordinary assignment target -- a
   stem writes through `stem_assign`, a compound resolves its tail fresh
   each time against the tail variable's *current* value (`tail_key`) and
-  writes through `stem_set`, and a simple variable keeps the original flat
-  slot write with no change at all (so the write side's existing
-  `intermediates`-gated tracing, and its measured no-allocation-when-not-
-  tracing cost, are both unaffected for the common case). Both witnesses
-  above now match the oracle exactly, and so does the `>C>` trace line
-  before every `>V>`/`>=>` of a compound control, measured against the
-  oracle byte for byte under `TRACE I`. `LEAVE`/`ITERATE`/`END` naming a
-  compound control variable needed no change at all: that match is against
-  the control's own spelling, decided independently of whether the
-  spelling's tail is ever resolved.
+  writes through `stem_set`, and a simple variable's own write is otherwise
+  the same slot write as before, keeping its `intermediates`-gated tracing
+  and the no-allocation-when-not-tracing cost that gate's own measurement
+  pins. The dispatch itself -- `shape_of` classifying the control's
+  spelling, a linear scan for a `.` byte -- now runs unconditionally on
+  every pass regardless of shape, a cost the cited measurement does not
+  cover and this fix did not re-benchmark (correctness over performance;
+  the simple-variable arm's own *behaviour* is unchanged, its cost is not
+  necessarily so). Both witnesses above now match the oracle exactly, and
+  so does the `>C>` trace line before every `>V>`/`>=>` of a compound
+  control, measured against the oracle byte for byte under `TRACE I`.
 
   WITNESS: `rust/crates/rexx-exec/src/run.rs`'s own test module --
   `a_compound_control_variable_is_bound_on_every_pass`,
   `a_compound_control_variables_tail_re_resolves_every_pass`,
+  `a_compound_controls_to_bound_survives_a_masking_stem_default`,
   `a_stem_control_variable_binds_through_stem_assign`,
   `a_simple_control_variable_still_binds_through_the_fast_slot_path`,
   `leave_and_iterate_by_name_still_reach_a_compound_controlled_loop`, and

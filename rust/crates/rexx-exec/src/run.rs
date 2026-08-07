@@ -9104,11 +9104,61 @@ mod tests {
         );
     }
 
+    /// **Crosses TO-bound-only termination with a pre-existing stem default
+    /// that masks a missing write** (review round 1, I3) -- the shape
+    /// `a_compound_control_variables_tail_re_resolves_every_pass` above does
+    /// not reach, because that test's own termination is an independent
+    /// `LEAVE` on `i`, not the loop's own `TO` bound. Here nothing but `TO 7`
+    /// ends the loop, and `a.`'s own pre-existing default (`a. = 0`) is
+    /// exactly what would paper over a write that lands nowhere: a `stem_
+    /// get` miss falls back to that default rather than to `NOVALUE`'s
+    /// derived-name text, so a broken write does not fail loudly here, it
+    /// makes the read-back see `0` on every pass and the loop never reach
+    /// its bound at all.
+    ///
+    /// Reproduces `DO::test_DO_standardTest2P`'s own mechanism (`i`
+    /// flip-flopping which tail of `a.` the control resolves to, so `c`
+    /// counts passes while the bound is carried by the tail each `i` visits
+    /// in turn) rather than a synthetic shape, because that is the `base/
+    /// keyword` body a write-side-only regression hung on for real (fix
+    /// round 1's own report has the transcript). `FOR 1000` is a safety
+    /// cap, not a behavioural change: the oracle and this crate both end the
+    /// loop via `TO 7` at pass 14, so the cap never fires on correct code,
+    /// and it is what turns "hangs forever" into "counts 1000 instead of
+    /// 14" if this ever regresses -- a `DO` loop in a permanent test must
+    /// not be able to hang the suite that runs it.
+    #[test]
+    fn a_compound_controls_to_bound_survives_a_masking_stem_default() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"i = 1\na. = 0\nc = 0\ndo a.i = 1 to 7 for 1000\nc = c + 1\nif i = 1 then i = 2\nelse i = 1\nend\nsay c"
+            ),
+            b"14\n".to_vec()
+        );
+    }
+
     /// A bare stem as a `DO` control variable (`do cv. = 13`) binds through
     /// `stem_assign`, the same "replace and rebind" an ordinary `cv. = 13`
     /// assignment uses. Paired with the compound tests above because a
     /// stem's own spelling has no tail to resolve: it is the shape this fix
     /// must leave working, not the one it corrects.
+    ///
+    /// **The second assertion is the one that can actually fail (review
+    /// round 1, I1/I2).** `read_stem` returns whatever object sits in the
+    /// slot with no check that it is a `Body::Stem`, so a flat scalar write
+    /// there is invisible to a bare-stem *read* of the same name -- the
+    /// first assertion's `say cv.` cannot tell a correct `stem_assign` write
+    /// from the old flat write apart, and measured directly against the
+    /// pre-fix tree (`git archive 1c2300d9`), it does not: the pre-fix build
+    /// prints the identical `24`/`11`. A *tail* of the same stem, touched
+    /// anywhere else in the body, goes through `stem_set`/`stem_get`
+    /// instead, both of which `expect` a `Body::Stem` at that slot and
+    /// panic otherwise -- measured on the pre-fix tree, `do cv. = 13\ncv.1 =
+    /// 99\nleave\nend\nsay cv.1\nsay cv.` panics at `stem.rs:288:60: a live
+    /// value`, rc 101, where the oracle and this crate's fixed build both
+    /// answer `99`/`13`.
     #[test]
     fn a_stem_control_variable_binds_through_stem_assign() {
         let mut interp = Interp::new();
@@ -9118,6 +9168,15 @@ mod tests {
                 b"i = 0\ndo cv. = 13\nif i > 10 then leave\ni = i + 1\nend\nsay cv.\nsay i"
             ),
             b"24\n11\n".to_vec()
+        );
+
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"do cv. = 13\ncv.1 = 99\nleave\nend\nsay cv.1\nsay cv."
+            ),
+            b"99\n13\n".to_vec()
         );
     }
 
