@@ -35,6 +35,7 @@
 
 use crate::Interp;
 use crate::error::Raised;
+use rexx_core::ObjRef;
 use rexx_num::Number;
 
 /// The visible-output shape of the current `TRACE` setting, restricted to
@@ -780,6 +781,49 @@ impl Interp {
             return;
         }
         push_tagged(&mut self.trace, ">C>", indent, false, tag, " => ", resolved);
+    }
+
+    /// `value`'s rendered bytes, **or `None` when no intermediate-value
+    /// trace line would print them**.
+    ///
+    /// **A copy of a value of any size, on a path that usually discards it.**
+    /// Every formatter above takes `&[u8]` and every call site therefore
+    /// renders into a fresh `Vec` first, because `to_text` borrows `self` and
+    /// the formatter needs `&mut self`. That copy is unavoidable; paying for
+    /// it when the formatter is about to return without printing is not, and
+    /// it is not a performance question -- an allocation this crate cannot
+    /// satisfy **aborts the process** rather than raising, where the oracle
+    /// answers. Measured at the project's own `ulimit -v 1048576`: `say
+    /// length(copies('a',400000000))` is `400000000` at rc 0 on the oracle
+    /// and SIGABRT at rc 134 here, from exactly one such copy.
+    ///
+    /// **The guard is paired with the render rather than written beside it**,
+    /// which is the whole reason this is a function. A guard written at a
+    /// call site can name the wrong `TraceMode` field, and the failure mode
+    /// is a trace line that silently stops printing -- so the two spellings
+    /// are the two this returns, and each names the same field its own
+    /// formatters check. Use [`Interp::result_text`] for `>>>`/`>K>`/`>R>`
+    /// and this for every other value-bearing prefix.
+    pub(crate) fn intermediate_text(&mut self, value: ObjRef) -> Option<Vec<u8>> {
+        self.trace_mode()
+            .intermediates
+            .then(|| self.to_text(value).to_vec())
+    }
+
+    /// `value`'s rendered bytes, or `None` when no **result-level** trace line
+    /// would print them -- [`Interp::intermediate_text`]'s sibling, and its
+    /// doc has the argument for both.
+    ///
+    /// `>>>`, `>K>` and `>R>` are the three prefixes gated on `results`.
+    /// Choosing between the two functions is choosing which prefix the
+    /// rendered bytes are for, and getting it wrong drops a line under
+    /// exactly one `TRACE` letter: `results` is true wherever
+    /// `intermediates` is, so a `>>>` site guarded by `intermediates` prints
+    /// under `TRACE I` and not under `TRACE R`.
+    pub(crate) fn result_text(&mut self, value: ObjRef) -> Option<Vec<u8>> {
+        self.trace_mode()
+            .results
+            .then(|| self.to_text(value).to_vec())
     }
 
     /// `>I>`/`<I<` (`TRACE_PREFIX_INVOCATION`/`_INVOCATION_EXIT`): a routine

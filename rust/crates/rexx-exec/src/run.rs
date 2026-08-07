@@ -1015,9 +1015,17 @@ impl Interp {
                 // this fix: this site's own copy never learned about the
                 // offset when the field was added.
                 let indent = self.clause_state.current_value_indent;
-                let rendered = self.to_text(value).to_vec();
-                self.trace_result(indent, &rendered);
-                self.assign_expr_target(code, target, value, &rendered, indent)?;
+                // One render for both lines, and `results` is the gate
+                // because it is the weaker of the two: `>>>` is gated on
+                // `results` and `>=>` on `intermediates`, and `results` is
+                // true wherever `intermediates` is. Guarding on
+                // `intermediates` instead would drop the `>>>` line under
+                // `TRACE R`.
+                let rendered = self.result_text(value);
+                if let Some(rendered) = &rendered {
+                    self.trace_result(indent, rendered);
+                }
+                self.assign_expr_target(code, target, value, rendered.as_deref(), indent)?;
                 Ok(Flow::Next)
             }
 
@@ -1099,8 +1107,9 @@ impl Interp {
                         // (`RexxInstruction.cpp:223`-`235`, read directly),
                         // whose own `traceResult` runs only inside the
                         // `expression != OREF_NULL` arm.
-                        let rendered = self.to_text(value).to_vec();
-                        self.trace_result(self.clause_state.current_value_indent, &rendered);
+                        if let Some(rendered) = self.result_text(value) {
+                            self.trace_result(self.clause_state.current_value_indent, &rendered);
+                        }
                         Some(value)
                     }
                     None => None,
@@ -1803,8 +1812,9 @@ impl Interp {
                     Some(expression) => {
                         let value = self.eval(code, expression)?;
                         self.roots.push_temp(value);
-                        let rendered = self.to_text(value).to_vec();
-                        self.trace_result(self.clause_state.current_value_indent, &rendered);
+                        if let Some(rendered) = self.result_text(value) {
+                            self.trace_result(self.clause_state.current_value_indent, &rendered);
+                        }
                         Some(value)
                     }
                     None => None,
@@ -2352,10 +2362,18 @@ impl Interp {
                 // and nothing at all for `Q` (`variable->drop(context)` has
                 // no trace call of its own).
                 let indent = self.clause_state.current_value_indent;
-                let rendered = self.to_text(value).to_vec();
-                self.trace_result(indent, &rendered);
+                // `results` and not `intermediates`, though the pair below
+                // needs both: `results` is the weaker gate, true wherever
+                // `intermediates` is, so this renders for either line and
+                // drops neither.
+                let rendered = self.result_text(value);
+                if let Some(rendered) = &rendered {
+                    self.trace_result(indent, rendered);
+                }
                 self.assign_by_name(&name, value);
-                self.trace_assignment(indent, &name, &rendered);
+                if let Some(rendered) = &rendered {
+                    self.trace_assignment(indent, &name, rendered);
+                }
             }
             None => self.drop_by_name(&name),
         }
@@ -2449,12 +2467,24 @@ impl Interp {
     /// measured, `ii = 3; parse value 'one two' with aa.ii cc.` traces
     /// `>C> AA.II => "AA.3"` then `>=> AA.II <= "one"` and stores the value
     /// under the resolved tail.
+    /// `rendered` is `None` when no `>=>` line would print it, which every
+    /// arm below forwards unchanged to [`Interp::trace_assignment`].
+    ///
+    /// **An `Option` rather than an empty slice**, and the reason is the
+    /// defect it closes: `rendered` is a full copy of the assigned value, so
+    /// a caller that produced it unconditionally copied a value of any size
+    /// on a path that discards it -- measured, `x = copies('a',400000000)`
+    /// aborts the process at the project's own `ulimit -v 1048576` where the
+    /// oracle answers. The type is what makes the caller's guard visible
+    /// here: a `&[u8]` that is empty because tracing is off and a `&[u8]`
+    /// that is empty because the value is the null string are the same value,
+    /// and only one of them may be printed.
     pub(crate) fn assign_expr_target(
         &mut self,
         code: &Code<'_>,
         target: &Expr,
         value: ObjRef,
-        rendered: &[u8],
+        rendered: Option<&[u8]>,
         indent: usize,
     ) -> Result<(), Failure> {
         match &target.kind {
@@ -2463,7 +2493,9 @@ impl Interp {
                 let slot = self.slot_of(&name);
                 let frame = self.activation().frame;
                 self.roots.set_slot(frame, slot, value);
-                self.trace_assignment(indent, &name, rendered);
+                if let Some(rendered) = rendered {
+                    self.trace_assignment(indent, &name, rendered);
+                }
             }
             // `stem. = expr`: replace-and-rebind (D15a), through the
             // library `stem_assign` already builds -- this arm is the
@@ -2471,7 +2503,9 @@ impl Interp {
             ExprKind::Stem(id) => {
                 let name = code.symbols.name(*id).as_bytes().to_vec();
                 self.stem_assign(&name, value);
-                self.trace_assignment(indent, &name, rendered);
+                if let Some(rendered) = rendered {
+                    self.trace_assignment(indent, &name, rendered);
+                }
             }
             // `a.b = expr`: resolve the tail key the same way reading
             // `a.b` would (`eval_node`'s own `Compound` arm), then
@@ -2494,7 +2528,9 @@ impl Interp {
                 let mut resolved = stem_name;
                 resolved.extend_from_slice(&key);
                 self.trace_compound_name(indent, &tag, &resolved);
-                self.trace_assignment(indent, &tag, rendered);
+                if let Some(rendered) = rendered {
+                    self.trace_assignment(indent, &tag, rendered);
+                }
             }
             other => return Err(Loud::expression(other).into()),
         }
@@ -3193,8 +3229,9 @@ impl Interp {
                 Some(expr) => {
                     let value = self.eval(code, expr)?;
                     self.roots.push_temp(value);
-                    let rendered = self.to_text(value).to_vec();
-                    self.trace_keyword(indent, "RESULT", &rendered);
+                    if let Some(rendered) = self.result_text(value) {
+                        self.trace_keyword(indent, "RESULT", &rendered);
+                    }
                     Some(value)
                 }
                 None => None,
@@ -3537,8 +3574,9 @@ impl Interp {
                 Some(expr) => {
                     let argument = self.eval_argument(code, expr)?;
                     self.roots.push_temp(argument.value());
-                    let rendered = self.to_text(argument.value()).to_vec();
-                    self.trace_argument(self.clause_state.current_value_indent, &rendered);
+                    if let Some(rendered) = self.intermediate_text(argument.value()) {
+                        self.trace_argument(self.clause_state.current_value_indent, &rendered);
+                    }
                     arguments.push(Some(argument));
                 }
             }
@@ -3967,11 +4005,12 @@ impl Interp {
                 // closed here rather than left open, because unlike an exit
                 // value this one goes on to be stored and read.
                 self.roots.push_temp(value);
-                let rendered = self.to_text(value).to_vec();
                 // The caller's own `>>>`, at the `CALL` clause's indent --
                 // `base_indent`, saved before the callee overwrote
                 // `current_value_indent` with its own clauses'.
-                self.trace_result(base_indent, &rendered);
+                if let Some(rendered) = self.result_text(value) {
+                    self.trace_result(base_indent, &rendered);
+                }
                 self.roots.set_slot(frame, slot, value);
             }
             None => self.roots.clear_slot(frame, slot),
@@ -13690,6 +13729,51 @@ mod tests {
             String::from_utf8_lossy(&outcome.stderr)
         );
         assert_eq!(outcome.stdout, b"main ran\n".to_vec());
+    }
+
+    /// A value too large to copy twice runs to completion on every path
+    /// whose second copy exists only to be traced.
+    ///
+    /// **The unit this asserts is "does not abort", which is not a thing a
+    /// test can assert from inside the process** -- an allocation failure
+    /// aborts rather than unwinding, so the run below would take the whole
+    /// test binary with it. What it asserts instead is the property the
+    /// guard actually adds: that no rendering happens at all when nothing
+    /// will print it. `Interp::intermediate_text` and `Interp::result_text`
+    /// return `None` under `TRACE N`, and a version of either that rendered
+    /// unconditionally and then threw the bytes away would satisfy every
+    /// other test in this file.
+    ///
+    /// The abort itself is measured out of process, in this task's own
+    /// report and in `phase-4-exclusions.txt`'s memory row: `say
+    /// length(copies('a',400000000))` at the project's `ulimit -v 1048576`
+    /// was SIGABRT at rc 134 and is now `400000000` at rc 0, matching the
+    /// oracle, and peak RSS for the 500 MB case went from 978,460 kB to
+    /// 490,692 kB against the oracle's 496,364 kB.
+    #[test]
+    fn nothing_is_rendered_for_a_trace_line_that_will_not_print() {
+        let mut interp = Interp::new();
+        let program = parse_program(b"n1 = 1".to_vec()).expect("test program parses");
+        activate(&mut interp, program);
+        let value = interp.text(b"whatever");
+
+        assert_eq!(interp.trace_mode().letter, b'N', "the default setting");
+        assert!(interp.intermediate_text(value).is_none());
+        assert!(interp.result_text(value).is_none());
+
+        // The neighbouring settings, because "always None" would pass the
+        // three lines above. `R` traces results and not intermediates, which
+        // is the one mode in which the two functions disagree.
+        interp.set_trace_mode(mode_from_setting(b"r").expect("R is a valid setting"));
+        assert!(interp.intermediate_text(value).is_none());
+        assert_eq!(interp.result_text(value).as_deref(), Some(&b"whatever"[..]));
+
+        interp.set_trace_mode(mode_from_setting(b"i").expect("I is a valid setting"));
+        assert_eq!(
+            interp.intermediate_text(value).as_deref(),
+            Some(&b"whatever"[..])
+        );
+        assert_eq!(interp.result_text(value).as_deref(), Some(&b"whatever"[..]));
     }
 
     /// `EXIT` inside a `::ROUTINE` ends the routine and settles `RESULT`,

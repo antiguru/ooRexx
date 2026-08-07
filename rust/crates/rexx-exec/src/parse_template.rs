@@ -671,11 +671,16 @@ impl Interp {
             self.roots.push_temp(value);
             match target {
                 Some(target) => {
+                    // Always `Some`: this is a borrow of the parse source
+                    // rather than a fresh copy of the assigned value, so
+                    // there is nothing here for the `Option` to guard
+                    // against -- see `assign_expr_target`'s own doc for what
+                    // the other caller pays.
                     self.assign_expr_target(
                         code,
                         target,
                         value,
-                        &cursor.string()[piece.clone()],
+                        Some(&cursor.string()[piece.clone()]),
                         indent,
                     )?;
                     // The `TRACE R` half of the pair -- see this module's own
