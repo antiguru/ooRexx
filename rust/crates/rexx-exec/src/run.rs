@@ -64,7 +64,7 @@
 //! `clause_line_override` where the other *sets* it) is measured and stated
 //! at both.
 
-use crate::activation::{Activation, Inherited, Trap, TrappedCondition, body_of};
+use crate::activation::{Activation, Inherited, TraceEntry, Trap, TrappedCondition, body_of};
 use crate::builtin;
 use crate::clause::{ClauseOutcome, ClauseValue, HandlerExit};
 use crate::error::{FailureSite, Raised, Search};
@@ -844,14 +844,6 @@ impl Interp {
                     Ok(flow) => flow,
                     Err(failure) => self.offer_to_trap(&code, failure)?,
                 };
-            // "The first instruction has now run", spent for `>I>` alone --
-            // `RexxActivation.cpp:659`, which clears it for every instruction
-            // kind but `EXPOSE`. **A `LABEL` spends it**, unlike
-            // `first_instruction_pending` five lines above, and that
-            // difference is measured: a routine whose first clause is `lbl:`
-            // and whose second is `trace l` announces nothing, where
-            // `PROCEDURE` after two labels is still legal.
-            self.activation_mut().trace_entry_allowed = false;
             // **No clause boundary here any more** (fix round 3). It moved
             // inside `step_in_temps_frame`, which is the one place a clause
             // is stepped -- so this loop, `run_bounded`, and every future
@@ -1253,7 +1245,13 @@ impl Interp {
                 let saved_base = std::mem::replace(&mut self.activation_indent, base_indent);
                 let saved_offset = std::mem::take(&mut self.indent_offset);
                 let saved_line = std::mem::replace(&mut self.clause_line_override, base_line);
+                // `saved_line` read before the replace above is also the
+                // answer to "is a fragment already running", which is the one
+                // extra thing `enter_fragment` needs and the only place it is
+                // in hand. Nothing new is tracked for it.
+                let saved_entry = self.enter_fragment(saved_line.is_some());
                 let flow = self.run_fragment(text);
+                self.leave_fragment(saved_entry);
                 self.activation_indent = saved_base;
                 self.indent_offset = saved_offset;
                 self.clause_line_override = saved_line;
@@ -3818,7 +3816,7 @@ impl Interp {
         let ended = self.run_activation();
 
         // Before the pop, because both halves of `<I<`'s gate are the
-        // callee's own -- its `trace_entry_done` and its `TRACE` setting.
+        // callee's own -- its `trace_entry` state and its `TRACE` setting.
         // `RexxActivation::termination` is where the C++ puts it, which is
         // likewise inside the activation.
         self.trace_invocation_exit();
@@ -4107,6 +4105,22 @@ impl Interp {
         // still readable one call later, and clearing it here is what an
         // earlier version of this did instead.
         self.activation_mut().clock_stale = true;
+        // `>I>`'s own "am I still on the first instruction" decay
+        // (`TraceEntry`, `activation.rs`), spent **here** and not in
+        // `run_activation`'s loop. `RexxActivation.cpp:657`-`659` clears the
+        // C++'s flag at the bottom of its instruction loop, and an `IF`'s
+        // then-clause, a `DO` body clause and a fragment's clauses are each a
+        // separate instruction in that loop -- where here they are nested
+        // inside their enclosing clause's step. This function is the one
+        // place a clause is stepped at any depth, so it is the only site that
+        // counts them all. Measured before the move: `if 1=1 then trace l` as
+        // a routine's first clause announced the pair here and nothing on the
+        // oracle.
+        //
+        // At the *top*, before the clause runs, because `Pending -> Allowed`
+        // is what a `TRACE` inside this very clause must see.
+        let stepped = self.activation().trace_entry.stepped();
+        self.activation_mut().trace_entry = stepped;
         // `TRACE`'s own `*-*` clause echo (D17), and the single insertion
         // point for it -- exactly the analogue of `eval`'s own split from
         // `eval_node`, since this is the one place `run_bounded`'s loop
@@ -5566,9 +5580,14 @@ impl Interp {
                     let (previous, novalue) = self.read(code, *control);
                     self.novalue_check(novalue)?;
                     self.roots.push_temp(previous);
-                    let rendered = self.to_text(previous).to_vec();
-                    self.trace_variable(loop_indent, &name, &rendered);
-                    self.trace_result(loop_indent, &rendered);
+                    // `result_text` for the pair, not `intermediate_text`:
+                    // `>V>` is `intermediates` and `>>>` is `results`, and
+                    // `results` is the weaker of the two, so it renders for
+                    // either and drops neither.
+                    if let Some(rendered) = self.result_text(previous) {
+                        self.trace_variable(loop_indent, &name, &rendered);
+                        self.trace_result(loop_indent, &rendered);
+                    }
                     let read = self.arith_operand(previous)?;
                     *current = read.add(by, digits).map_err(Raised::from)?;
                 }
@@ -5581,8 +5600,7 @@ impl Interp {
                 let value =
                     self.number(current.clone(), crate::eval::saturate_digits(digits), form);
                 let bind_indent = if re_tested { loop_indent } else { do_indent };
-                if re_tested {
-                    let rendered = self.to_text(value).to_vec();
+                if re_tested && let Some(rendered) = self.result_text(value) {
                     self.trace_result(loop_indent, &rendered);
                 }
                 self.bind_control(code, *control, bind_indent, value);
@@ -6376,8 +6394,7 @@ impl Interp {
     /// (`directive_gap`, `lib.rs`), so such a program is refused here rather
     /// than running without the lines.
     fn trace_invocation_entry(&mut self) {
-        let activation = self.activation();
-        if !activation.trace_entry_allowed || activation.trace_entry_done {
+        if !self.activation().trace_entry.may_announce() {
             return;
         }
         let Some(name) = self.invocation_routine_name() else {
@@ -6386,7 +6403,7 @@ impl Interp {
         if !self.trace_mode().labels {
             return;
         }
-        self.activation_mut().trace_entry_done = true;
+        self.activation_mut().trace_entry = TraceEntry::Done;
         let package = self.program_path.clone().into_bytes();
         self.trace_invocation(">I>", &name, &package);
     }
@@ -6401,10 +6418,10 @@ impl Interp {
     /// produces anyway since the report is written at the very end.
     ///
     /// `tracingLabels()` is re-read here rather than assumed from
-    /// `trace_entry_done`: measured, a routine whose body is `trace l` then
+    /// the `Done` state: measured, a routine whose body is `trace l` then
     /// `trace off` announces `>I>` and no `<I<`.
     fn trace_invocation_exit(&mut self) {
-        if !self.activation().trace_entry_done {
+        if self.activation().trace_entry != TraceEntry::Done {
             return;
         }
         let Some(name) = self.invocation_routine_name() else {
@@ -6415,6 +6432,49 @@ impl Interp {
         }
         let package = self.program_path.clone().into_bytes();
         self.trace_invocation("<I<", &name, &package);
+    }
+
+    /// Gives a fragment its own `>I>` count, and answers with the enclosing
+    /// state for [`Interp::leave_fragment`] to put back.
+    ///
+    /// **A fragment is a separate activation in the C++ and is not one here**,
+    /// which is the whole reason this is two functions rather than the plain
+    /// decay every other nested construct gets. `RexxActivation.cpp:3644`-
+    /// `:3652` gates an interpret activation's own announcement on
+    /// `tracingLabels() && parent->isMethodOrRoutine() &&
+    /// parent->traceEntryAllowed && !parent->traceEntryDone`, so the fragment
+    /// counts its own clauses from zero, but only when the enclosing
+    /// `INTERPRET` was itself the routine's first clause.
+    ///
+    /// `nested` is the `isMethodOrRoutine()` half: an interpret activation is
+    /// neither, so a fragment inside a fragment can never announce however
+    /// its own clauses fall. Measured, and it is the row that separates this
+    /// from a plain reset -- `interpret "interpret 'trace l'"` as a routine's
+    /// only clause writes zero bytes on the oracle, where
+    /// `interpret "trace l"` writes both lines.
+    fn enter_fragment(&mut self, nested: bool) -> TraceEntry {
+        let enclosing = self.activation().trace_entry;
+        let entry = if enclosing.may_announce() && !nested {
+            TraceEntry::Pending
+        } else {
+            TraceEntry::Spent
+        };
+        self.activation_mut().trace_entry = entry;
+        enclosing
+    }
+
+    /// Puts the enclosing state back after a fragment, **except** that a
+    /// fragment which announced leaves the activation `Done`.
+    ///
+    /// That exception is `RexxActivation.cpp:3664`, `if (isInterpret())
+    /// parent->traceEntryDone = true`, and it is what the `<I<` owes its
+    /// existence to: measured, `interpret "trace l"` as a routine's only
+    /// clause emits `>I>` **and** `<I<`, so the announcement has to survive
+    /// the fragment it happened in.
+    fn leave_fragment(&mut self, enclosing: TraceEntry) {
+        if self.activation().trace_entry != TraceEntry::Done {
+            self.activation_mut().trace_entry = enclosing;
+        }
     }
 
     /// The `::ROUTINE` name the running activation announces itself under, or
@@ -13938,6 +13998,92 @@ mod tests {
                  may be announced",
                 letter as char
             );
+        }
+    }
+
+    /// A `TRACE` that is not a **top-level** clause of the routine announces
+    /// nothing, however the construct around it nests -- and the two
+    /// `INTERPRET` rows that break that rule in both directions.
+    ///
+    /// **The axes this crosses, and why crossing them is the point.** The
+    /// gate has a trace-letter axis and a where-does-the-TRACE-sit axis.
+    /// `the_invocation_prefixes_are_gated_on_more_than_the_trace_letter`
+    /// varies the second only with flat clauses in front, and
+    /// `..._four_label_tracing_letters` varies the first with the `TRACE`
+    /// always flat and first. Each holds the other axis on its safe value,
+    /// and the defect lived exactly at the crossing: the decay was spent by
+    /// `run_activation`'s top-level loop, so anything running through
+    /// `run_bounded`/`run_fragment` reached the `TRACE` before it fired.
+    /// Measured before the fix, `if 1=1 then trace l` as a routine's first
+    /// clause: 0 bytes of stderr on the oracle, 318 bytes here, both rc 0.
+    ///
+    /// Every row is the oracle's own stderr, captured with `cat -A` so
+    /// trailing whitespace is visible. `n09` is here rather than only `n01`
+    /// because it crosses the axes the other way: the `TRACE R` still takes
+    /// effect for the clauses after it, so "announced nothing" has to be
+    /// distinguished from "did nothing".
+    #[test]
+    fn the_invocation_prefixes_are_not_announced_from_inside_a_nested_construct() {
+        const PATH: &str = "/tmp/rtn-nested.rex";
+        let both = format!(
+            "       >I> Routine \"RTN\" in package \"{PATH}\".\n\
+             \x20      <I< Routine \"RTN\" in package \"{PATH}\".\n"
+        );
+        let cases: &[(&str, &str, &str)] = &[
+            ("an IF then-branch", "if 1=1 then trace l", ""),
+            ("an IF else-branch", "if 1=0 then nop; else trace l", ""),
+            ("a DO body", "do 1; trace l; end", ""),
+            ("a controlled DO body", "do i = 1 to 1; trace l; end", ""),
+            ("a WHEN body", "select; when 1=1 then trace l; end", ""),
+            // The same nesting under a different letter: the setting takes
+            // effect (the `return` echoes) and the pair is still not
+            // announced, so this row separates "announced nothing" from
+            // "the TRACE did nothing".
+            (
+                "an IF then-branch, TRACE R",
+                "if 1=1 then trace r",
+                "     5 *-* return\n",
+            ),
+            // A fragment counts its own clauses from zero, so a `TRACE`
+            // that is the fragment's own first clause DOES announce...
+            ("an INTERPRET", "interpret \"trace l\"", "BOTH"),
+            // ...and everything that breaks one of the fragment rule's three
+            // conditions does not.
+            (
+                "an INTERPRET, second fragment clause",
+                "interpret \"nop; trace l\"",
+                "",
+            ),
+            (
+                "an INTERPRET that is not the routine's first clause",
+                "n0 = 0\ninterpret \"trace l\"",
+                "",
+            ),
+            (
+                "an INTERPRET inside an IF",
+                "if 1=1 then interpret \"trace l\"",
+                "",
+            ),
+            (
+                "an INTERPRET inside an INTERPRET",
+                "interpret \"interpret 'trace l'\"",
+                "",
+            ),
+            // The neighbouring announced case, so the eleven silences above
+            // are pinned to the nesting and not to something else about
+            // these programs.
+            ("a flat first clause", "trace l", "BOTH"),
+        ];
+        for (what, body, want) in cases {
+            let source = format!("call rtn\nsay 'after'\n::routine rtn\n{body}\nreturn\n");
+            let outcome = crate::run_program(PATH, source.into_bytes(), crate::Invocation::none());
+            let want = if *want == "BOTH" { both.as_str() } else { want };
+            assert_eq!(
+                String::from_utf8_lossy(&outcome.stderr),
+                want,
+                "{what}: stderr"
+            );
+            assert_eq!(outcome.stdout, b"after\n".to_vec(), "{what}: stdout");
         }
     }
 

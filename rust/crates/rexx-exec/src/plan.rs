@@ -71,13 +71,13 @@ pub(crate) struct BodyKey {
     /// `activation.rs`'s own `body_of` is the single place either is turned
     /// into a `&CodeBody`.
     ///
-    /// Two production sites, one per arm. `Interp::run` builds the main
-    /// body's plan under `None`; `resolve_and_run_call`'s `::ROUTINE` step
-    /// builds the routine's under `Some(index)`. A routine gets a plan of its
-    /// own rather than sharing the caller's, and that is what makes its pool
-    /// safe to isolate: a different `CodeBody` means a different
-    /// name-to-slot map, so the slot-index identity `PROCEDURE EXPOSE`'s
-    /// alias bitset rests on does not hold across the two.
+    /// `Interp::run` builds the main body's plan under `None`;
+    /// `resolve_and_run_call`'s `::ROUTINE` step builds a routine's under
+    /// `Some(index)`. A routine gets a plan of its own rather than sharing
+    /// the caller's, and that is what makes its pool safe to isolate: a
+    /// different `CodeBody` means a different name-to-slot map, so the
+    /// slot-index identity `PROCEDURE EXPOSE`'s alias bitset rests on does
+    /// not hold across the two.
     pub(crate) directive: Option<usize>,
 }
 

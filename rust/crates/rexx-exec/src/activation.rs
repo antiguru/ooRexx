@@ -235,6 +235,97 @@ impl AddressState {
     }
 }
 
+/// How far a routine activation is past the point where it could still
+/// announce its own `>I>`, and whether it has.
+///
+/// **One value where the C++ has two bools**, `traceEntryAllowed` and
+/// `traceEntryDone` (`RexxActivation.hpp:634`-`635`). They are read together
+/// at every site, only three of their four combinations are reachable, and
+/// the one this crate got wrong was reachable only because the pair let the
+/// "allowed" half be spent from a place the "done" half could not see.
+///
+/// **The transitions are a decay driven by clauses stepped, not by
+/// instructions in a list, and that difference is the whole defect this
+/// models.** The C++ clears `traceEntryAllowed` at the bottom of its own
+/// instruction loop (`RexxActivation.cpp:657`-`659`), and an `IF`'s
+/// then-clause, a `DO` body's clause and an `INTERPRET`'s clauses are each a
+/// separate instruction in that same loop. Here they are nested *inside*
+/// their enclosing clause's own step, so a clear driven by the top-level loop
+/// never fires before them. Measured -- `call rtn` / `::routine rtn` /
+/// `if 1=1 then trace l` / `return`: the oracle writes zero bytes to stderr
+/// and this crate wrote the whole `>I>`/`<I<` pair, both at rc 0, until the
+/// decay moved to [`Interp::step_in_temps_frame`], which is the one place a
+/// clause is stepped at any nesting depth.
+///
+/// The measured table, one row per shape, `>I>` announced only where marked.
+/// Every routine body below ends `return`; the caller is `call rtn`:
+///
+/// ```text
+/// trace l                                        announced
+/// /* comment */ then trace l                     announced   (not an instruction)
+/// n0 = 0 then trace l                            -
+/// lbl: then trace l                              -           (a LABEL is one)
+/// if 1=1 then trace l                            -
+/// if 1=0 then nop; else trace l                  -
+/// do 1; trace l; end                             -
+/// do i = 1 to 1; trace l; end                    -
+/// select; when 1=1 then trace l; end             -
+/// interpret "trace l"                            announced
+/// interpret "nop; trace l"                       -
+/// n0 = 0 then interpret "trace l"                -
+/// if 1=1 then interpret "trace l"                -
+/// interpret "interpret 'trace l'"                -
+/// ```
+///
+/// **`INTERPRET` is the one construct that does not simply decay**, and the
+/// last four rows are why. The C++ gives an interpret activation its own
+/// `traceEntryAllowed` and gates on `tracingLabels() &&
+/// parent->isMethodOrRoutine() && parent->traceEntryAllowed &&
+/// !parent->traceEntryDone` (`:3644`-`:3652`). So a fragment starts its own
+/// count, but only when the `INTERPRET` was the routine's own first clause,
+/// and never when the parent is *another fragment* -- an interpret activation
+/// is not a method or routine, which is exactly what the last row measures.
+/// `Interp::enter_fragment` and `Interp::leave_fragment` are that rule.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum TraceEntry {
+    /// No clause of this activation has been stepped yet.
+    Pending,
+    /// The clause being stepped is this activation's first, so a `TRACE`
+    /// executing right now may announce.
+    Allowed,
+    /// A second clause has begun, or a fragment was entered from a state that
+    /// could not announce. Nothing more will be announced and no `<I<` is
+    /// owed.
+    Spent,
+    /// `>I>` has been announced, which is also the precondition for `<I<`.
+    ///
+    /// The exit half needs this **and** `tracingLabels()` still being in
+    /// force at the end: measured, a routine whose body is `trace l` then
+    /// `trace off` announces `>I>` and no `<I<` at all.
+    Done,
+}
+
+impl TraceEntry {
+    /// The state one more stepped clause leaves this in.
+    ///
+    /// `Pending` is spent by the first clause *beginning*, not by its
+    /// finishing, which is what makes `Allowed` the state a `TRACE` in that
+    /// clause sees. `Done` absorbs, so a routine that announced and then runs
+    /// on still owes its `<I<`.
+    pub(crate) fn stepped(self) -> TraceEntry {
+        match self {
+            TraceEntry::Pending => TraceEntry::Allowed,
+            TraceEntry::Allowed | TraceEntry::Spent => TraceEntry::Spent,
+            TraceEntry::Done => TraceEntry::Done,
+        }
+    }
+
+    /// Whether a `TRACE` executing right now may announce `>I>`.
+    pub(crate) fn may_announce(self) -> bool {
+        matches!(self, TraceEntry::Allowed)
+    }
+}
+
 /// One activation: everything about the frame currently executing.
 pub(crate) struct Activation {
     /// This activation's own identity, unique for the life of the `Interp`.
@@ -268,9 +359,9 @@ pub(crate) struct Activation {
     /// [`body_of`] is the one function that turns the pair into a
     /// `&CodeBody`, so the two spellings cannot come apart.
     ///
-    /// `Some(i)` is a `::ROUTINE` activation, and it is pushed by exactly one
-    /// place: [`Activation::routine`], from `resolve_and_run_call`'s third
-    /// resolution step. The order in front of it is load-bearing rather than
+    /// `Some(i)` is a `::ROUTINE` activation, built by [`Activation::routine`]
+    /// from `resolve_and_run_call`'s third resolution step. The order in
+    /// front of it is load-bearing rather than
     /// tidy -- internal label, then builtin, then `::ROUTINE` -- because a
     /// routine name that **collides** with a builtin must go to the builtin.
     /// Measured: `::routine max` alongside `call max 1, 9` still calls the
@@ -367,32 +458,13 @@ pub(crate) struct Activation {
     ///
     /// [`entered_by_call`]: Activation::entered_by_call
     pub(crate) first_instruction_pending: bool,
-    /// Whether a `>I>` may still be announced for this activation --
-    /// `RexxActivation::traceEntryAllowed`, and true only while the *first*
-    /// instruction is the one running.
+    /// How far this activation is past the point where a `>I>` could still be
+    /// announced -- `RexxActivation::traceEntryAllowed` and `traceEntryDone`
+    /// as one value, because the two are read together everywhere and a
+    /// separate pair admits states the C++ never reaches.
     ///
-    /// **Not [`first_instruction_pending`], and a label is what tells them
-    /// apart.** That field treats a `LABEL` as transparent, because
-    /// `PROCEDURE` after two labels is legal; this one is cleared by a label
-    /// like any other instruction, because a `LABEL` *is* a
-    /// `RexxInstruction` and `RexxActivation.cpp:659` clears the flag for
-    /// everything but `EXPOSE`. Measured: a routine whose first clause is
-    /// `lbl:` and whose second is `trace l` announces nothing at all, where
-    /// the same routine without the label announces both lines. Blank lines
-    /// and comments do not count, since neither becomes an instruction --
-    /// measured, a routine with a comment line before its `trace l`
-    /// announces both.
-    ///
-    /// [`first_instruction_pending`]: Activation::first_instruction_pending
-    pub(crate) trace_entry_allowed: bool,
-    /// Whether this activation's `>I>` has already been announced, which is
-    /// also the precondition for its `<I<` --
-    /// `RexxActivation::traceEntryDone`.
-    ///
-    /// The exit half needs *both* this and `tracingLabels()` still being in
-    /// force at the end: measured, a routine whose body is `trace l` then
-    /// `trace off` announces `>I>` and no `<I<` at all.
-    pub(crate) trace_entry_done: bool,
+    /// [`TraceEntry`] has the transitions and the measurements behind them.
+    pub(crate) trace_entry: TraceEntry,
     pub(crate) pc: usize,
     /// This activation's own `NUMERIC DIGITS`/`FUZZ`/`FORM`.
     ///
@@ -556,8 +628,7 @@ impl Activation {
             owns_frame: true,
             entered_by_call: false,
             first_instruction_pending: true,
-            trace_entry_allowed: true,
-            trace_entry_done: false,
+            trace_entry: TraceEntry::Pending,
             pc: 0,
             settings: Settings::default(),
             // `NORMAL` and not `OFF`: the two behave identically here and a
@@ -646,8 +717,7 @@ impl Activation {
             owns_frame: false,
             entered_by_call: true,
             first_instruction_pending: true,
-            trace_entry_allowed: true,
-            trace_entry_done: false,
+            trace_entry: TraceEntry::Pending,
             pc,
             settings: inherited.settings,
             trace_mode: inherited.trace_mode,
@@ -697,8 +767,7 @@ impl Activation {
             owns_frame: true,
             entered_by_call: true,
             first_instruction_pending: true,
-            trace_entry_allowed: true,
-            trace_entry_done: false,
+            trace_entry: TraceEntry::Pending,
             pc: 0,
             settings: Settings::default(),
             trace_mode: TraceMode::NORMAL,

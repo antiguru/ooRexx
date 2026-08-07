@@ -479,24 +479,21 @@ impl Interp {
     /// `ExprKind::Call`: the internal-function form, evaluated for its
     /// value rather than run as a clause of its own.
     ///
-    /// **I25's split, restated here because a 4c implementer reading this
-    /// arm will not otherwise see it: resolution is internal routine first
-    /// (4b), builtin second (4c), external third (Phase 7).** Corrected by
-    /// review finding I2 (Task 4 fix round 1): the label search is not in
-    /// this function at all -- `eval_call` only decides the two inputs a
-    /// `CallTarget` reduces to (`name`, `search_labels`) below and hands
-    /// them to `resolve_and_run_call` (`run.rs`), which both this function
-    /// and `exec_call` (`CALL`) share, and where the label search actually
-    /// lives (`activation_body.labels.get(name)`). **The builtin lookup
-    /// belongs inside `resolve_and_run_call` too, between that miss and its
-    /// `Loud::unresolved_call` fallback** -- not inside `eval_call`, and not
-    /// only for the expression form, or `CALL length 'abc'` would still be
-    /// loud on this crate's own tree the day `f(1)`/`say length('abc')`
-    /// stopped being. `eval_call` itself owns no expression-only resolution
-    /// step; the only thing specific to this call form is what happens
-    /// *after* `resolve_and_run_call` returns (`Ended`'s three cases,
-    /// below), which `CALL` does not need because it never produces a
-    /// value for an enclosing expression to use.
+    /// **Resolution is four steps -- internal label, builtin, `::ROUTINE`,
+    /// then an external Rexx file -- and none of them is in this function.**
+    /// `eval_call` only decides the two inputs a `CallTarget` reduces to
+    /// (`name`, `search_labels`) below and hands them to
+    /// `resolve_and_run_call` (`run.rs`), which both this function and
+    /// `exec_call` (`CALL`) share, and which owns all four steps: the label
+    /// search (`activation_body.labels.get(name)`), the builtin table, the
+    /// `::ROUTINE` lookup, and the 43.1 that stands in for the file search
+    /// this crate does not do. Only the fourth is deferred, to **Phase 7**.
+    /// Keeping them there rather than here is what stops `CALL length 'abc'`
+    /// and `say length('abc')` answering differently. `eval_call` itself owns
+    /// no expression-only resolution step; the only thing specific to this
+    /// call form is what happens *after* `resolve_and_run_call` returns
+    /// (`Ended`'s three cases, below), which `CALL` does not need because it
+    /// never produces a value for an enclosing expression to use.
     ///
     /// **`CallTarget::Literal` never searches the label table, symmetric
     /// with `CALL "SUB"` (Task 3).** Its own doc in `rexx-parse` already
@@ -504,11 +501,12 @@ impl Interp {
     /// scratchpad root is on the external-routine search path and a stale
     /// `f.rex` there gives a different, wrong answer): with an internal
     /// `f:` label present, `say f(1)` runs it, while `say "f"(1)` is Error
-    /// 43.1 rc 213, "Routine not found". 4b has not built the builtin/
-    /// external steps that answer would need to tell "not a label" apart
-    /// from "not anything", so this stays the same loud `4c` fallback
-    /// `CALL "SUB"` already gets (`search_labels = false` below), not a
-    /// fabricated 43.1.
+    /// 43.1 rc 213, "Routine not found". **That is this crate's answer too**
+    /// (`search_labels = false` below): with the builtin and `::ROUTINE`
+    /// steps behind the label search built, "not a label" and "not anything"
+    /// are separable, so the condition is the oracle's own rather than a
+    /// fabricated one. `a_literal_call_target_never_reaches_the_label_table`
+    /// asserts exactly that, five lines of test below this paragraph.
     ///
     /// **`RESULT` is never touched here**, unlike `CALL`: measured, a
     /// caller's `RESULT` is unaffected by `f(1)` appearing in an

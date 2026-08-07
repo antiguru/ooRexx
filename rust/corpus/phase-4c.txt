@@ -91,6 +91,12 @@
 # A program listed here must also obey the corpus's one standing rule
 # (README.md, "The one rule: determinism"): same bytes on every run, on every
 # machine, with no clock, no PID, no filesystem and no locale in its output.
+# ONE EXCEPTION, and it is not a program's own doing: the oracle puts the
+# package's ABSOLUTE PATH in its own >I>/<I< trace lines, so a program that
+# announces a ::ROUTINE entry has one in its stderr. That stays comparable
+# because this harness gives both interpreters the same canonicalised path in
+# the same run; a program that PRINTS a path itself does not, and is still
+# forbidden. lang/routine_dispatch.rex's own entry below says which lines.
 # PARSE SOURCE's third word is the program's own absolute path, so no program
 # here prints it -- corpus/lang/source_arg.rex already projects it away the
 # same way, and parse_sources.rex says so in its own header.

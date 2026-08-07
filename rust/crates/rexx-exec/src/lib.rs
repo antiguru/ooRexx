@@ -497,24 +497,39 @@ impl Loud {
         }
     }
 
-    /// A named call this crate resolved to nothing it implements: not an
-    /// internal label of the calling body, so the next steps are the builtin
-    /// table and then external resolution, and **both are 4c's**.
+    /// A call that resolved to a **builtin this crate runs nothing for**.
+    ///
+    /// **Not "a name that resolved to nothing"**, which is what this used to
+    /// answer and no longer does. A named call resolves in four steps --
+    /// internal label, builtin, `::ROUTINE`, then an external Rexx file --
+    /// and a name matching none of them is the oracle's own Error 43.1
+    /// (`Raised::routine_not_found`), because the only step this crate skips
+    /// is the file search and that answers nothing for a program with no such
+    /// file beside it. External routine resolution is **Phase 7's**, with
+    /// both transcripts in `phase-4-exclusions.txt`.
+    ///
+    /// What is left for this constructor is the second step's own gap: the
+    /// fifteen builtins Phase 4 excludes outright (`builtin::
+    /// is_excluded_builtin`), where the oracle answers normally and this
+    /// crate has no code. A condition would be the wrong answer there --
+    /// a program *expecting* 43.1 would pass against a gap -- which is why
+    /// the excluded-builtin step sits in front of the `::ROUTINE` lookup
+    /// rather than falling through it. `builtin::dispatch`'s own
+    /// belt-and-braces arm is the other caller.
     ///
     /// The message keeps `owned_message`'s exact shape, `"routine \"NAME\"
     /// is not implemented (4c)"`, because that trailing shape is a contract
     /// `loud.rs` pins with an `ends_with`, not a formatting preference -- a
     /// second spelling here would be a second thing to keep in sync for
-    /// nothing.
+    /// nothing. The owner is `4c` for every name that reaches here, whichever
+    /// phase actually owns the builtin; `corpus/keyword-exempt.txt`'s own
+    /// header records that imprecision and which rows it affects.
     ///
-    /// **Truncated, and that is the same contract `form_name`'s doc states.**
-    /// A `Call::Named` target is a symbol or a quoted literal and so is
-    /// bounded by the source, but a `Call::Dynamic` target is an arbitrary
-    /// run-time value: `call (v)` with a megabyte in `v` would otherwise put
-    /// a megabyte on stderr, which the differential harness then compares
-    /// byte for byte. The oracle's own 43.1 does not truncate, so this is a
-    /// deliberate difference on a path where the two already differ -- the
-    /// oracle reports a condition here and this reports a gap.
+    /// **Truncated**, which now costs nothing: every name reaching here is a
+    /// builtin's, so it is short by construction. The truncation is kept
+    /// because it is free and because nothing in the type stops a future
+    /// caller handing over a `Call::Dynamic` target, which is an arbitrary
+    /// run-time value.
     fn unresolved_call(name: &[u8]) -> Loud {
         const LIMIT: usize = 128;
         let shown = if name.len() > LIMIT {
@@ -919,10 +934,11 @@ fn instruction_owner(kind: &InstructionKind) -> Option<&'static str> {
         // table whose only job is to be true -- `Loud::instruction` is not
         // reached for any of the three, and an owner string nothing
         // reads is exactly how the third copy of this data drifts. A named
-        // call that resolves to no internal label still fails loudly,
-        // through `Loud::unresolved_call`, naming `4c`: the builtin and
-        // external steps behind the label search are that phase's, not a
-        // residual claim on the `CALL` keyword itself.
+        // call that resolves to no internal label, no builtin and no
+        // `::ROUTINE` raises the oracle's own 43.1 rather than failing
+        // loudly; the one step behind those three that this crate skips is
+        // the external file search, which is Phase 7's. So there is no
+        // residual claim on the `CALL` keyword here at all.
         InstructionKind::Call(call) => match &**call {
             rexx_parse::Call::Named { .. }
             | rexx_parse::Call::Dynamic { .. }
@@ -1004,11 +1020,10 @@ fn expr_owner(kind: &ExprKind) -> Option<&'static str> {
         // `Call::Qualified` is loud, this variant has
         // no later-phase arm hiding inside it, so it closes outright. A
         // name that resolves to no internal label (or a `CallTarget::
-        // Literal`, which never searches labels at all) still fails loudly
-        // through `Loud::unresolved_call`, naming `4c` -- the builtin and
-        // external steps behind the label search are that phase's, exactly
-        // the same shape `InstructionKind::Call`'s own comment above
-        // describes for `CALL`.
+        // Literal`, which never searches labels at all), no builtin and no
+        // `::ROUTINE` raises the oracle's own 43.1 -- exactly the same shape
+        // `InstructionKind::Call`'s own comment above describes for `CALL`,
+        // with the external file search behind those three being Phase 7's.
         // `>name`/`<name` decays to the referenced
         // variable's value in every ordinary position (measured, `say >p`
         // prints `p`'s value), and its one load-bearing use, as the argument
