@@ -10,6 +10,11 @@ It delivered 66 of the 81 builtin names `rexx_inventory::builtins::NAMES` carrie
 **These are 4b's ten, carried forward with the amendments D14 and the 4c plan name, plus two the plan adds.**
 They were fixed in `docs/superpowers/plans/2026-08-04-phase-4c-builtins-and-parse.md` before this task ran anything, which is what makes them criteria rather than descriptions of what happened -- 4b's own gate makes the same distinction and for the same reason.
 
+**Criterion 4 is the one exception, and the claim above is withdrawn for it.**
+Its negative control was weakened after the measurement that showed the plan's version unsatisfiable, and the amended wording is the one quoted at the criterion below.
+The amendment is recorded there, with the plan's original wording beside it, so a reader can see which bar was cleared.
+Criteria 1 and 4 also carry pins added after the first measurement; those *strengthen* what is checked rather than moving the bar, and each says so at its own paragraph.
+
 **Every criterion below was checked against one question before it was written: what degenerate implementation satisfies this, and would deleting its subject leave it green?**
 Four criteria in 4a could not fail; 4b's review found more.
 The per-criterion notes say, for each one, what its falsification is, and where a criterion cannot see something the notes say so in the criterion rather than in a footnote.
@@ -73,6 +78,12 @@ Those are shallow-depth and loop-free; **the indent of a 4c construct -- a `PARS
 
 > The union subset passes again under `run_program_collect_every_alloc`, byte-identical to `run_program`; every program in it performs a non-zero number of collections, checked **per program** and not only in aggregate; and a negative control deleting a root a **builtin** holds makes at least one test fail.
 
+**AMENDMENT: that last clause is not the plan's wording, and the change lowered the bar.**
+`2026-08-04-phase-4c-builtins-and-parse.md:1945` reads "the control must target a root the **builtin's own result** holds between allocation and the caller's use".
+The quoted criterion above reads "a root a **builtin** holds", which is weaker: a builtin's own result and a value a builtin merely holds across its own allocation are different roots, and only the second exists.
+The weakening was made *because* the plan's version proved unsatisfiable: the paragraph below headed "Finding a builtin-shaped one required establishing that the obvious one does not exist" is that measurement, and the substituted control is `VALUE(name, newvalue)`'s root over the old stem value, which is run rather than cited.
+Recorded as an amendment rather than folded in silently, because a criterion that moves after the measurement and does not say so has stopped being a criterion.
+
 **Until this task, no builtin was under the collector at all.**
 `tests/collect_stress.rs` read `phase-4a.txt` and `phase-4b.txt` only, and the 4a/4b subset **calls no builtin**, so every allocation the 66 names make was outside `run_program_collect_every_alloc`'s reach -- the same defect 4a's version had when it ran 29 programs and zero call frames.
 Task 15 widened the call site to the three-file union.
@@ -99,12 +110,26 @@ What exists instead, and what the control deletes, is a root a builtin holds ove
 
 > An enumerating test with no wildcard arm asserts that each `InstructionKind`/`ExprKind` variant is in 4c's named set or produces `NOT_IMPLEMENTED_EXIT` with a message naming the owning sub-phase; and where a variant is split across phases, the check is per **arm**.
 
-*Falsification:* removing the phase from a loud message, or letting an unimplemented arm run rather than exit loudly, fails `every_out_of_scope_variant_fails_loudly`; a new variant in any enumerated enum is a compile error, not a silently shrinking check.
+**WHAT THIS CRITERION CANNOT SEE: `ExprKind::DotVariable`'s out-of-scope arm, which is the one arm the "per arm" clause is not applied to.**
+The variant is split -- `eval.rs:365-373` runs `.NIL`, `.TRUE` and `.FALSE` and sends every other environment symbol to the loud fallback -- so the clause covers it in principle.
+`tests/owners.rs` nonetheless gives `DotVariable` a single whole-variant `Owner::InScope` row.
+`tests/loud.rs` derives its witness set from that table's `Owner::Phase(_)` rows, and `table_owner` **panics** on a witness whose tag reads `Owner::InScope`, so the instrument is not merely blind to this arm: it forbids a row covering it.
+
+**Measured, not argued.**
+`eval.rs:372`'s `_ => Err(Loud::expression(&expr.kind).into())` replaced by `_ => Ok(self.text(b""))` -- which is exactly this criterion's own "letting an unimplemented arm run rather than exit loudly", applied to every environment symbol beyond the three -- leaves `cargo test -p rexx-exec --test loud --test owners --no-fail-fast` at **exit 0, 8 passed and 5 passed**.
+Both of this criterion's named instruments stay green under its own stated falsification.
+
+**The behaviour is covered; this criterion does not cover it.**
+The same mutation over `cargo test --workspace --no-fail-fast` exits 101 at **1,287 passed / 2 failed**, and the two catchers are `eval::tests::a_dot_variable_beyond_the_three_fails_loudly` -- a unit test this criterion does not cite -- and criterion 12's `bif_assertions::the_exempt_set_matches_the_current_failures`.
+Reachability is not theoretical either: nine rows of `corpus/bif-exempt.txt` read `UNATTRIBUTED:an environment symbol` today.
+Closing it means giving `DotVariable`'s second arm an owner, which is what the inheritance list at the end of this document hands Phase 5, and which would move those nine rows from unattributed to derived at the same time.
+
+*Falsification:* removing the phase from a loud message, or letting an unimplemented arm run rather than exit loudly, fails `every_out_of_scope_variant_fails_loudly` **for every arm the witness tables reach** -- which is every out-of-scope arm except `ExprKind::DotVariable`'s, where the measurement above shows it does not; a new variant in any enumerated enum is a compile error, not a silently shrinking check.
 
 ### 6. Mutation control: `rust/scripts/mutate-4c.sh`, 4c-shaped mutations, carrying the guard and three additions this phase forced
 
 > A committed list of one-line mutations to the code 4c added, each of which **declares in advance what each of two instruments should say about it, and is measured against that declaration** -- so an unexpected survival and an unexpected catch are both failures.
-> The script carries (a) the exact-match, exactly-once application guard, (b) a baseline pass of the unmutated tree before the first mutation and after the last restore, (c) a three-way `PASSED`/`DIVERGED`/`INFRA_FAILURE` classification that never folds an infrastructure failure into either bucket, (d) `--no-fail-fast` on every run, (e) a **binary-count assertion measured from its own baseline**, and (f) a wall-clock timeout per run, classified `INFRA_FAILURE`.
+> The script carries (a) the exact-match, exactly-once application guard, (b) a baseline pass of the unmutated tree before the first mutation and after the last restore, (c) a three-way `PASSED`/`DIVERGED`/`INFRA_FAILURE` classification that never folds an infrastructure failure into either bucket, (d) `--no-fail-fast` on every SUITE run, (e) a **binary-count assertion measured from its own baseline**, and (f) a wall-clock timeout per run, classified `INFRA_FAILURE`.
 
 **(d), (e) and (f) are new here and each is a measured defect in this phase rather than a precaution.**
 
@@ -114,6 +139,8 @@ What exists instead, and what the control deletes, is a root a builtin holds ove
 * The truncation guard counts `Running`/`Doc-tests` **header** lines, not `test result:` lines, and the two genuinely differ: `Doc-tests rexx_exec` prints two `test result:` blocks from one process.
   The count is **derived from the script's own baseline in the same run**, never written down, because every task that adds a test binary moves it -- 72/73 at Task 9, 75/76 at Task 15.
   The headers are on stderr and the `test result:` lines on stdout, so the two descriptors are captured separately.
+  **And the count being derived is what made it able to switch itself off**, which the final review found: `0` was the script's "not measured yet" sentinel and is also a value the header regex can genuinely return if cargo changes its banner, at which point every row skipped the truncation check while still scoring PASSED or DIVERGED normally from the other descriptor.
+  The unmeasured state is now the empty string and a zero at the baseline is fatal.
 * A mutation can hang instead of failing: measured at Task 14, a mutation left `keyword_assertions_differential` running for over nine minutes on a body whose loop the mutation had made unterminating.
 
 **A `PASSED`/`PASSED` declaration needs a written justification at its own row**, naming the instrument that should have caught it and why it cannot.
@@ -164,10 +191,19 @@ Both live in `rust/crates/rexx-exec/tests/keyword_assertions.rs`.
 
 ### 11. NEW: the builtin implemented/not-implemented boundary is **derived from a live differential run**, in both directions
 
-> `rust/corpus/builtin-status.txt` holds one row per name in `rexx_inventory::builtins::NAMES`, every row derived by running that name's probe through **both** interpreters, and the derivation is asserted equal to the file in both directions -- a row that disagrees is red whichever way it disagrees.
+> `rust/corpus/builtin-status.txt` holds one row per name in `rexx_inventory::builtins::NAMES`, derived two ways and asserted equal to the file in both directions -- a row that disagrees is red whichever way it disagrees.
+> The **66 in-scope** rows are each derived by running that name's probe through **both** interpreters.
+> The **15 excluded** rows are derived from `rexx_inventory::builtins::wholly_excluded` and run nothing at all.
 
 **"Each of the 66 names is recognised" is satisfied by 66 stubs returning the null string, which is why this criterion is phrased over a differential run rather than over a name table.**
-The file cannot drift ahead of the executor or lag behind it, because it is not hand-maintained: editing a row on its own only moves the failure.
+For the 66, the file cannot drift ahead of the executor or lag behind it, because it is not hand-maintained: editing a row on its own only moves the failure.
+
+**THAT PROPERTY DOES NOT EXTEND TO THE 15 EXCLUDED ROWS, AND THE HARNESS ENFORCES THE OPPOSITE FOR THEM.**
+`builtin_status.rs:335-339` pushes `Status::Excluded` from the static list and `continue`s before any probe lookup or oracle invocation, its module doc says so ("Nothing is run for it: there is no probe and no oracle invocation"), and `:492-504` *asserts* `oracle_invocations == in_scope.len() == 66` with the message "no excluded name may run anything".
+So an excluded row is a name-table assertion, not a differential result, and this criterion states that rather than letting the "every row" phrasing carry it.
+
+**What that costs, concretely.** When Phase 7 implements `LINES`, its row still reads `excluded`, because it is pushed from `wholly_excluded()` and nothing runs the name; `the_status_file_matches_a_live_differential_run` stays green while `bif-exempt.txt`'s `LINES` rows start passing and go red, pointing at the wrong file.
+The instrument that moves an excluded row is an edit to `wholly_excluded()`, which is `phase-4-exclusions.txt`'s fifteen, and that is a deliberate act rather than a measurement.
 
 *Falsification:* **Task 2's Step 5, the interpreter mutation and not the file edit.**
 Deleting `LENGTH`'s dispatch arm must flip its row `implemented` -> `loud` on its own.
@@ -188,6 +224,12 @@ A measurement nobody gates on, policed by an assertion nobody runs, is coverage 
 **The attribution column is derived from `rexx-exec`'s own loud message**, exactly as `keyword-exempt.txt` derives it, so the file cannot drift from `instruction_owner`/`expr_owner`.
 The same two limits apply: a derived owner says what a row hits *first*, and `Loud::unresolved_call` carries a fixed `4c` for every builtin name the crate runs nothing for, whichever phase actually owns it.
 
+**A row that fails without failing loudly has no derived owner, and those categories are pinned at their exact counts rather than merely whitelisted.**
+`MISMATCH`, `RAISE-MISMATCH` and `ANOMALY` name neither a phase nor a construct, so a row carrying one is a divergence nothing owns; `MISMATCH` in particular means both renderings produced output and they *differ*, which is the single thing this differential exists to detect.
+Accepting the spelling without the count leaves the file able to absorb a future value divergence: the set-equality test goes green again and the headline drops by one with nothing asserting on the headline.
+`every_exempt_attribution_is_a_known_phase_or_a_declared_outcome` now pins them at 0, 0 and 3.
+Falsified rather than argued: with `LOWER` made to append a space, five rows report `MISMATCH`, and adding them to `bif-exempt.txt` with that attribution -- the obvious repair -- leaves `the_exempt_set_matches_the_current_failures` green and the count pin as the only red test in the binary.
+
 *Falsification:* `the_falsification_proof` perturbs a passing row's expression and requires exactly that row to fail; `a_raise_row_needs_the_sub_number_too` requires a raise row expecting `40.12` not to be satisfied by a program raising `40.5`, and a row expecting a raise not to be satisfied by a program that raises nothing.
 Conservation is falsified by `every_call_is_a_row_or_a_counted_drop` per group, and by `the_row_floor`, which is what stops conservation being satisfied by an extractor that drops everything.
 
@@ -195,7 +237,13 @@ Conservation is falsified by `every_call_is_a_row_or_a_counted_drop` per group, 
 
 ## Assessment
 
-Every figure below was taken at commit `1c94e50b`, with the command shown, reading the exit status unpiped.
+Every figure below was taken with the command shown, reading the exit status unpiped.
+
+**They were not all taken at one commit, and an earlier version of this sentence said they were.**
+This document was written at `89debc85` and recorded its figures as taken at `1c94e50b`, the commit before it.
+That still holds for every criterion except **6**, whose suite baseline has been re-measured twice since; §6 below gives the figure for each tree it belongs to.
+Criterion 1's and criterion 4's pin paragraphs were also added after `89debc85`, at `d0102460` and `64ce92fe`, and each states the measurement it rests on at its own paragraph.
+A figure is a claim about the tree it was taken from, so a figure quoted here names its commit or it names none.
 
 | # | criterion | result |
 |---|---|---|
@@ -203,14 +251,14 @@ Every figure below was taken at commit `1c94e50b`, with the command shown, readi
 | 2 | `base/expressions` table | **MET as a regression check** — 4,224 of 4,259, unchanged from 4a and 4b |
 | 3 | trace byte for byte + prefix coverage | **MET, with the indent stated as uncovered** — 16 of 19 |
 | 4 | collect-on-every-allocation + builtin-shaped control | **MET** |
-| 5 | every variant loud, naming an owner | **MET** |
+| 5 | every variant loud, naming an owner | **MET, with one split arm stated as uncovered** — `ExprKind::DotVariable`'s |
 | 6 | `mutate-4c.sh` | **MET** — 9 of 9 as declared, one declaration corrected to what was measured |
 | 7 | no `unsafe`, clippy, fmt | **MET** |
 | 8 | a trap witnessed by a handler's value | **MET** |
 | 9 | `PUSH`/`QUEUE`'s 4b gap | **CLOSED**, by a named instrument that runs |
 | 10 | `base/keyword` L1, both directions | **MET** — 888 of 896 bodies, and the per-task attribution below |
-| 11 | builtin status derived from a live differential run | **MET** — 66 implemented, 15 excluded, 81 rows |
-| 12 | `base/bif` L1, ungated set assertion | **MET as a measurement** — 4,920 of 4,999 value rows, 184 of 186 raise rows |
+| 11 | builtin status derived from a live differential run | **MET for the 66 in-scope rows** — 66 implemented, 15 excluded, 81 rows; the 15 are a name-table assertion and run nothing |
+| 12 | `base/bif` L1, ungated set assertion | **MET as a measurement** — 4,920 of 4,999 value rows, 184 of 186 raise rows, out of 6,293 `assertSame` calls, 1,294 of which the extractor dropped |
 
 ### 1. The union subset
 
@@ -249,16 +297,33 @@ What the row deletes instead is `VALUE(name, newvalue)`'s root over the old stem
 
 `every_out_of_scope_variant_fails_loudly` and `tests/owners.rs`'s tables pass as part of the workspace run.
 
+**With `ExprKind::DotVariable`'s out-of-scope arm stated as uncovered by these two instruments**, measured rather than inferred: the criterion's own falsification, applied to that arm, leaves both of them at exit 0.
+The arm's behaviour is held by an `eval.rs` unit test and by criterion 12's exempt-set assertion instead.
+The criterion carries the measurement and the two catchers' names.
+
 ### 6. `mutate-4c.sh`
 
-**9 of 9 mutations behaved exactly as declared**, at exit 0, with the unmutated tree passing both instruments before the first mutation and after the last restore (50 of 50 matching; 75 test binaries, 1,287 passed, 0 failed, both times).
+**9 of 9 mutations behaved exactly as declared**, at exit 0, with the unmutated tree passing both instruments before the first mutation and after the last restore (50 of 50 matching, both times).
+
+**The suite baseline figure has moved twice, and this records which tree each belongs to**, because the script derives it from its own run rather than from a constant:
+
+| tree | binaries | passed | failed |
+|---|---:|---:|---:|
+| `1c94e50b`, as first written here | 75 | 1,286 | 0 |
+| after fix round 1, recorded at `d0102460` | 75 | 1,287 | 0 |
+| after fix round 2, at `64ce92fe` | 75 | 1,289 | 0 |
+
+Each round added tests and none added a test binary, which is why the guard counts binaries from its own baseline in the same run rather than from a written-down constant.
+`cargo test --workspace --no-fail-fast` at `64ce92fe` gives 1,289 passed / 0 failed over 75 binaries at exit 0.
+Re-running the whole script reproduces **9 of 9 as declared at exit 0** against that baseline, both at `64ce92fe` and again at `bc71b9c4` after the final-review fixes -- which is where the run that matters is, since one of those fixes is to the script itself.
+Both runs left the six mutated files byte-identical.
 
 **One declaration was corrected to what was measured rather than left standing as a guess.**
 Row 7 -- a `::ROUTINE` resolved before the builtin table -- was declared `PASSED`/`DIVERGED` on the reasoning that the resolution order had only an in-crate witness.
 It measured `DIVERGED`/`DIVERGED`: `corpus/lang/routine_dispatch.rex` defines `::routine length` and `::routine 'max'` for exactly this purpose, and the corpus witness is the stronger of the two because it compares against the oracle rather than against this crate's own expectation.
 The row now declares what it measures, and the correction is written at the row.
 
-**What the run says about coverage, per finding rather than per round** (every run used `--no-fail-fast`, so "nothing else caught it" is measured rather than truncated):
+**What the run says about coverage, per finding rather than per round** (every SUITE run used `--no-fail-fast`, so "nothing else caught it" is measured rather than truncated; the CORPUS runs do not carry it and do not need it, since `--test corpus` selects one target and there is no later binary to truncate):
 
 | row | corpus | suite | the in-crate tests that fired |
 |---|---|---|---|
@@ -328,7 +393,9 @@ The last two read `4c`, and that label is `Loud::unresolved_call`'s fixed string
 ### 11. The builtin status boundary
 
 `corpus/builtin-status.txt` holds 81 rows: **66 `implemented`, 15 `excluded`**, and no `loud` or `divergent` row.
-Every row is derived by running that name's probe through both interpreters and asserted equal to the file in both directions, so the file cannot drift ahead of the executor or lag behind it.
+Each of the 66 is derived by running that name's probe through both interpreters; each of the 15 is derived from `wholly_excluded()` with nothing run for it, which `builtin_status.rs:492-504` asserts by pinning the oracle invocation count at 66.
+Both derivations are asserted equal to the file in both directions, so **for the 66** the file cannot drift ahead of the executor or lag behind it.
+The 15 move only when the exclusion list moves.
 
 The falsification is **Task 2's Step 5, and it is an interpreter mutation rather than a file edit**: deleting `LENGTH`'s dispatch arm flips its row `implemented` -> `loud` on its own.
 Task 1, which wrote the harness, could not run it, because there was no dispatch to delete yet; Task 2 ran it.
@@ -346,7 +413,16 @@ All 81 failing rows are on `corpus/bif-exempt.txt`: 47 blocked on builtins `buil
 **`BEEP` is a real finding and it is not a builtin gap.**
 Measured on the oracle, `retc = beep(262, 1)` exits 0 and answers the null string; this crate raises 43.1.
 `BEEP` is not a builtin function at all -- it is a routine the interpreter's internal package registers (`interpreter/runtime/InternalPackage.cpp:199`) -- so its absence from `rexx_inventory::builtins::NAMES` is correct and the gap is in what this crate provides beside the builtin table.
-Nothing in Phase 4's scope covers it.
+Nothing in Phase 4's scope covers it: it is outside the 66 in scope and outside D4's fifteen exclusions alike.
+
+**Because nothing in Phase 4 owns it, it is recorded where a later phase will look**, in `phase-4-exclusions.txt`'s KNOWN GAPS section, under `KNOWN GAP: THE INTERPRETER'S INTERNAL-PACKAGE ROUTINES ARE PROVIDED BY NOTHING HERE`.
+That register is the cross-phase artifact and `builtin-status.txt` names it as where a divergence must be owned; this gate is a per-phase document the next phase need not read, and `builtin-status.txt`'s derived mechanism cannot reach `BEEP` because `BEEP` is correctly not a builtin.
+A measured divergence recorded only here would have been dropped at the phase boundary with nothing able to notice.
+
+**And `BEEP` is one of three, which only the register row says.**
+`interpreter/runtime/NativeFunctions.h` enumerates the portable internal routines in three lines -- `Directory`, `Filespec`, `Beep` -- and this platform's `SysNativeFunctions.h` adds none.
+Measured, all three: `say filespec('name','/a/b/c.txt')` answers `c.txt` at rc 0 on the oracle and raises 43.1 here, and `say length(directory())` likewise.
+Only `BEEP` reaches an instrument, and that is an accident of the ooTest corpus rather than a difference in kind: `FILESPEC`'s 76 `assertSame` calls all fall to named `DropReason`s and yield no row, and `DIRECTORY` has no `.testGroup` at all.
 
 **Conservation:** `4,999 rows + 1,294 dropped == 6,293 calls`, asserted per group, with every dropped call carried by one of seventeen named `DropReason`s.
 `the_row_floor` is what stops that being satisfied by an extractor that drops everything.
@@ -360,16 +436,16 @@ Briefly: six groups hold bytes that are not UTF-8 and a lossy read turns each in
 
 * **`tests/collect_stress.rs` was the last `read_subset` call site reading two files**, so no builtin was under the allocation-stress collector at all. Fixed here.
 * **All three union call sites could shrink silently, and `corpus.rs`'s shrink moved criterion 1's own figure.** Dropping `phase-4c.txt` there left plain mode and `REXX_CORPUS_GATE=1` both at exit 0, with "50 of 50 matching" becoming "42 of 42 matching" and nothing asserting on the total. Each harness now pins its file list against the corpus directory.
-* **The `base/bif` extraction produced twelve confidently-wrong rows before three drop reasons were added.** Every one of them balanced the conservation invariant, which is exactly the failure mode that invariant cannot see.
+* **The `base/bif` extraction produced eighteen rows before three drop reasons were added, twelve of them confidently wrong.** The eighteen is derivable from the drop table without re-measuring: `extract_bif.rs`'s `NonUtf8Source` 11 + `SideEffectingAssertion` 6 + `ClockDependent` 1 = 18 calls, and twelve of the restored rows report as `MISMATCH` -- a row that runs, answers, and answers differently from the oracle. Every one of the eighteen balanced the conservation invariant, which is exactly the failure mode that invariant cannot see. Those twelve are also the only `MISMATCH` rows this project has ever produced, which is why `bif_assertions.rs` now pins that category at zero rather than whitelisting it.
 * **`::options all <condition>` enables `NOVALUE`**, so the file split that inverts body semantics is **43 of 76** and not the 38 the plan carried. Verified on the oracle.
 * **The `base/bif` exempt-set assertion is the only in-crate catcher for the `PARSE` comma fence** over the whole workspace.
-* **`BEEP` works under the oracle and raises 43.1 here**, and it is outside the builtin table on both sides.
+* **`BEEP` works under the oracle and raises 43.1 here**, and it is outside the builtin table on both sides -- as are `FILESPEC` and `DIRECTORY`, the other two routines the interpreter's internal package registers, which diverge identically and reach no instrument here. All three are recorded in `phase-4-exclusions.txt` because no phase owns them.
 * **A `PARSE` mutation is caught by two `builtin::datetime` unit tests**, which is not a flake and not a coincidence: `dates_absolute_clock_is_cached_the_same_way` and its neighbour both run `parse value date('T') burn() date('T') with n1 . n2`, so the `.` placeholder is load-bearing for them. Reproduced in all three sweeps. It is worth recording because it is the shape a coverage claim gets wrong in the other direction -- a test's name says nothing about which code it reaches.
 
 ## What 4c inherits to Phase 5 and Phase 7
 
 * **The trace indent of every 4c construct is unpinned** (criterion 3). Closing it needs either an unnormalised comparison mode or in-crate exact-stderr assertions for `PARSE` and `>I>`/`<I<`.
 * **The eight remaining `keyword-exempt.txt` rows are unowned.** Three cannot be made to pass at all, and the exempt file's header says so; the other five are Phase 7's.
-* **`BEEP` and the interpreter's internal-package routines** are provided by neither the builtin table nor `::ROUTINE` resolution.
-* **`ExprKind::DotVariable` is loud and carries no owner**, which is why nine `base/bif` rows read `UNATTRIBUTED:an environment symbol`. Giving it a phase would make those rows derived like the rest.
+* **`BEEP` and the interpreter's internal-package routines** are provided by neither the builtin table nor `::ROUTINE` resolution, and carry a KNOWN GAP row in `phase-4-exclusions.txt` so a later phase can find them without reading this document.
+* **`ExprKind::DotVariable` is loud and carries no owner**, which is why nine `base/bif` rows read `UNATTRIBUTED:an environment symbol`. Giving it a phase would make those rows derived like the rest, and would at the same time close criterion 5's one uncovered arm: the whole-variant `Owner::InScope` row is what stops `loud.rs` carrying a witness for the arm that is not in scope, measured above.
 * **The `base/bif` drop table's largest categories are Phase 5's**: 418 calls in bodies that send a message and 467 in bodies whose statements this extractor cannot carry.
