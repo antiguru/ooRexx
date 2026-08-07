@@ -644,18 +644,22 @@ impl Activation {
         }
     }
 
-    /// The activation a `CALL` pushes: it starts at `pc`, and it **inherits**
-    /// `settings`, `trace_mode` and `traps` from the caller rather than
+    /// The activation a `CALL` pushes: it starts at `pc`, and it **inherits
+    /// every field [`Inherited`] carries** from the caller rather than
     /// defaulting them.
     ///
-    /// `traps` joined the other two at 4b's Task 7 and follows the identical
-    /// one-way rule for the identical reason -- see [`Activation::traps`] for
-    /// the three probes that pin it, including the one that separates
-    /// "inherited" from "checked in the caller after unwinding", which every
-    /// two-level program answers the same way and only a `PROCEDURE`d callee
-    /// tells apart.
+    /// The struct is the enumeration, so this doc names no list of its own:
+    /// a field added there is inherited here by construction, and a contract
+    /// repeating the list would say what it carried when it was written.
+    /// [`Inherited`]'s own doc states what qualifies a field for it.
     ///
-    /// All three inheritances are measured, and all are one-way -- the callee
+    /// `traps` is the one worth pointing at from here -- see
+    /// [`Activation::traps`] for the three probes that pin it, including the
+    /// one that separates "inherited" from "checked in the caller after
+    /// unwinding", which every two-level program answers the same way and
+    /// only a `PROCEDURE`d callee tells apart.
+    ///
+    /// Every inheritance is measured, and all are one-way -- the callee
     /// starts from the caller's value and never writes back. `numeric digits
     /// 7` in a caller, `numeric digits 3` in the callee: the callee sees 7 on
     /// entry, reports 3 after its own instruction, and the caller still
@@ -676,7 +680,7 @@ impl Activation {
     ///
     /// **A `::ROUTINE` is not this constructor's shape and takes no
     /// [`Inherited`] at all** -- [`Activation::routine`] is its own, and the
-    /// reason it is separate is that a routine inherits **none** of the five
+    /// reason it is separate is that a routine inherits **none** of the
     /// fields this one copies. Measured, one probe per field, each with a
     /// caller that set the value and a routine that reads it back:
     ///
@@ -690,7 +694,7 @@ impl Activation {
     ///                                                 none of its clauses echoed
     /// ```
     ///
-    /// The pool is the sixth difference and is not a field of either
+    /// The pool is a further difference and is not a field of either
     /// constructor: a routine's `frame` is one this crate pushed for it and
     /// `owns_frame` is true, where a `CALL`ed label shares its caller's.
     /// Measured: a caller holding `vv = 'CALLER'` calling a routine that says
@@ -725,10 +729,10 @@ impl Activation {
             traps: inherited.traps,
             condition: inherited.condition,
             // Not inherited, matching every other field this constructor
-            // does not list: a fresh `RexxActivation` constructs a fresh,
-            // invalid `RexxDateTime timeStamp` regardless of its caller,
-            // and this is that same "start invalid" rather than a fourth
-            // inheritance to add to the three above.
+            // does not take from `inherited`: a fresh `RexxActivation`
+            // constructs a fresh, invalid `RexxDateTime timeStamp`
+            // regardless of its caller, and this is that same "start
+            // invalid" rather than something `Inherited` should carry.
             cached_clock: None,
             clock_stale: true,
         }
@@ -783,13 +787,13 @@ impl Activation {
 /// Everything a callee starts from its caller's copy of, gathered so
 /// [`Activation::nested`] takes one argument for the lot.
 ///
-/// **The grouping is the concept and not a parameter-count workaround**,
-/// though the count is what forced it: `traps` was the third field of this
-/// shape, and three separate parameters sitting between `pc` and the end of
-/// an eight-argument list said nothing about what the three have in common.
-/// Each is measured to be inherited at call time and measured *not* to be
-/// written back on return -- the callee's copy simply dies with its frame --
-/// and each field's own doc comment on `Activation` carries the transcript.
+/// **The grouping is the concept and not a parameter-count workaround.**
+/// Each field here is measured to be inherited at call time and measured
+/// *not* to be written back on return -- the callee's copy simply dies with
+/// its frame -- and each field's own doc comment on `Activation` carries the
+/// transcript. They travel as one argument because that pair of properties
+/// is what they have in common, which a run of separate parameters between
+/// `pc` and the end of the signature would not say.
 ///
 /// A field belongs here when both halves hold. `extra` deliberately does not:
 /// it is moved back into the caller on return for a shared-pool callee

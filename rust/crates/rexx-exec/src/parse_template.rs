@@ -13,7 +13,7 @@
 //! out.
 //!
 //! Two layers, and the split is the design rather than tidiness. [`Cursor`]
-//! is the whole of the *movement* rule -- five positions and the eleven
+//! is the whole of the *movement* rule -- the five positions below and the
 //! operations that move them -- and it knows nothing about expressions,
 //! tracing, variables or where its string came from, so it is unit-testable
 //! against measured oracle bytes with no `Interp` in sight. [`Interp::
