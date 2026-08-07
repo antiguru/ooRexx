@@ -63,6 +63,78 @@ pub(crate) struct Trap {
     /// own name when `NAME` is omitted. `USER foo`'s own default is `FOO`,
     /// measured: `signal on user foo` with a `foo:` label traps there.
     pub(crate) label: Box<[u8]>,
+    /// The trap is armed but held while its own `CALL ON` handler runs
+    /// (`TrapHandler::disable`/`enable`, `execution/TrapHandler.cpp`).
+    ///
+    /// **A state and not a removal**, and a program can tell the two apart:
+    /// `CONDITION('S')` reports `DELAY` inside the handler and `OFF` for a
+    /// trap that is not there at all, measured in one program --
+    /// `call on user uc` with the handler printing `condition('S')` gives
+    /// `DELAY`, and the same handler after `call off user uc` gives `OFF`.
+    /// Removing and re-inserting reports `OFF` for the first, and it also
+    /// resurrects a trap the handler turned off, which the oracle does not:
+    /// `trapUndelay` sets the state on whatever handler is in the table and
+    /// does nothing when there is none.
+    ///
+    /// A delayed trap does not fire. `Interp::trap_for` is what enforces
+    /// that, so every lookup that decides whether to trap sees the same
+    /// thing a removal used to show it.
+    pub(crate) delayed: bool,
+}
+
+/// The condition a handler running in this activation was entered for: as
+/// much of the oracle's condition Directory as `CONDITION()` can be answered
+/// from here.
+///
+/// **Per activation, and that is measured rather than convenient.** The C++
+/// keeps it in `settings.conditionObj`, which an internal call copies along
+/// with the rest of the settings block and never writes back, so the three
+/// observables are:
+///
+/// ```text
+/// handler          condition('C')  ->  SYNTAX
+///  call clearer    condition('C')  ->  SYNTAX      inherited
+///  call clearer    condition('R')              then condition('C')  ->  ''
+/// handler          condition('C')  ->  SYNTAX      the callee's reset died with it
+/// ```
+///
+/// The same copy rule is why a handler's condition does not outlive its own
+/// activation: a `SIGNAL ON` handler in a callee leaves the caller reporting
+/// nothing once it returns.
+///
+/// **What is deliberately not here.** `CONDITION('A')` and `CONDITION('O')`
+/// answer an `Array` and a `Directory`, neither of which this crate's value
+/// model has; `builtin::state`'s `CONDITION` refuses those two options
+/// loudly rather than storing something that could only be rendered wrongly.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TrappedCondition {
+    /// `CONDITION('C')`: the condition's own name, the same bytes
+    /// [`Activation::traps`] is keyed by -- `SYNTAX`, `NOVALUE`, `USER UC`.
+    pub(crate) name: Box<[u8]>,
+    /// `CONDITION('E')`: the part of the condition object's `CODE` item
+    /// after the dot, which only a `SYNTAX` condition has one of.
+    ///
+    /// Measured: `say 1/0` trapped gives `3` (the sub of 42.3), `raise
+    /// syntax 40.4` gives `4`, `raise syntax 40` gives `0` -- so a missing
+    /// sub is a real zero rather than an absence -- and `NOVALUE`, `USER`,
+    /// `ERROR` and `FAILURE` all give the null string.
+    pub(crate) code_sub: Option<u16>,
+    /// `CONDITION('I')`: the trap that fired was `CALL ON` rather than
+    /// `SIGNAL ON`.
+    ///
+    /// **This is the one thing `CONDITION()` needs that nothing else records.**
+    /// `Trap::call` says how a trap *would* fire; this says how the
+    /// condition being reported *did*. The two come apart the moment the
+    /// handler re-arms its own trap the other way round -- measured, inside
+    /// a `CALL ON USER UC` handler, `signal on user uc` leaves
+    /// `CONDITION('I')` at `CALL` while `CONDITION('S')` becomes `ON`.
+    pub(crate) call: bool,
+    /// `CONDITION('D')`: the `RAISE ... DESCRIPTION` value, or `None` when
+    /// the raise carried none. See [`Raised::description`] for the one
+    /// condition whose description this cannot supply.
+    ///
+    /// [`Raised::description`]: crate::error::Raised::description
+    pub(crate) description: Option<Vec<u8>>,
 }
 
 /// A unique identity for one activation, minted when it is pushed and never
@@ -119,8 +191,8 @@ pub(crate) struct AddressState {
     /// five readers of `settings.currentAddress` in the C++ and the only one
     /// a Rexx program can use without issuing a command --
     /// `corpus/lang/address_env.rex`'s own header has the enumeration.
-    /// Rendering `None` means naming the platform default, which is why that
-    /// builtin cannot be answered before the default itself exists.
+    /// Rendering `None` means naming the platform default, which
+    /// `builtin::state`'s `DEFAULT_ENVIRONMENT` spells and says why.
     pub(crate) current: Option<Rc<[u8]>>,
     /// What a bare `ADDRESS` swaps `current` with.
     pub(crate) alternate: Option<Rc<[u8]>>,
@@ -374,6 +446,13 @@ pub(crate) struct Activation {
     /// [`trace_mode`]: Activation::trace_mode
     /// [`settings`]: Activation::settings
     pub(crate) traps: HashMap<Box<[u8]>, Trap>,
+    /// The condition `CONDITION()` reports in this activation, or `None`
+    /// when no handler has been entered here. [`TrappedCondition`] carries
+    /// the measurements for the copy-on-call, never-write-back rule it
+    /// follows along with [`traps`].
+    ///
+    /// [`traps`]: Activation::traps
+    pub(crate) condition: Option<TrappedCondition>,
 }
 
 impl Activation {
@@ -404,9 +483,14 @@ impl Activation {
             first_instruction_pending: true,
             pc: 0,
             settings: Settings::default(),
-            trace_mode: TraceMode::OFF,
+            // `NORMAL` and not `OFF`: the two behave identically here and a
+            // program can tell them apart, measured -- `say trace()` as the
+            // first clause of a program with no `TRACE` instruction prints
+            // `N`.
+            trace_mode: TraceMode::NORMAL,
             address: AddressState::default(),
             traps: HashMap::new(),
+            condition: None,
         }
     }
 
@@ -463,6 +547,7 @@ impl Activation {
             trace_mode: inherited.trace_mode,
             address: inherited.address,
             traps: inherited.traps,
+            condition: inherited.condition,
         }
     }
 }
@@ -486,6 +571,7 @@ pub(crate) struct Inherited {
     pub(crate) trace_mode: TraceMode,
     pub(crate) address: AddressState,
     pub(crate) traps: HashMap<Box<[u8]>, Trap>,
+    pub(crate) condition: Option<TrappedCondition>,
 }
 
 /// The code body a `(program, selector)` pair denotes: `None` is

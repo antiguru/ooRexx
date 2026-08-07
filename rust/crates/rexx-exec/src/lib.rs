@@ -562,6 +562,36 @@ impl Loud {
         }
     }
 
+    /// A builtin's option letter whose answer is an object this crate's
+    /// value model cannot make.
+    ///
+    /// **A disclosed gap inside an otherwise delivered builtin**, the shape
+    /// [`Loud::compound_expose`] established, and loud for the same reason:
+    /// the near miss is a silent wrong answer. `ARG(n,'A')` and
+    /// `CONDITION('A')`/`CONDITION('O')` answer an `Array` or a `Directory`
+    /// -- measured, `condition('A')~class` inside a `SIGNAL ON SYNTAX`
+    /// handler is `The Array class` and `condition('O')~class` is a
+    /// `Directory` with 14 items -- and this crate has neither. Returning
+    /// the null string would be right for exactly one of the shapes an
+    /// `Array` renders as (the empty one) and wrong for the rest.
+    ///
+    /// `why` names the object, so the message says what is missing rather
+    /// than only that something is.
+    ///
+    /// No owner string: like `compound_expose`, this is a sub-case within a
+    /// builtin the status table calls implemented, and `owned_message`'s
+    /// shape belongs to the variant-keyed owner tables.
+    ///
+    /// [`Loud::compound_expose`]: Loud::compound_expose
+    fn builtin_option_object(routine: &str, option: u8, why: &str) -> Loud {
+        Loud {
+            message: format!(
+                "{routine} option \"{}\" answers {why}, which is not implemented",
+                option.escape_ascii()
+            ),
+        }
+    }
+
     /// A `PARSE` template trigger that needs an operand and has none.
     ///
     /// Not reachable from a program that parsed: `parse_template`
@@ -950,6 +980,10 @@ struct ActiveCondition {
 struct PendingTrap {
     condition: Box<[u8]>,
     rc: Option<Vec<u8>>,
+    /// `RAISE ... DESCRIPTION`'s rendered value, held for the same reason
+    /// `rc` is: the raising clause's temps frame is long gone by the time
+    /// the handler reads it back through `CONDITION('D')`.
+    description: Option<Vec<u8>>,
     /// The activation this may be delivered to: the raising activation's
     /// **caller**, which is the one whose trap table matched.
     ///

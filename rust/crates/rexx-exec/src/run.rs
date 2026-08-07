@@ -64,7 +64,7 @@
 //! `clause_line_override` where the other *sets* it) is measured and stated
 //! at both.
 
-use crate::activation::{Activation, Inherited, Trap, body_of};
+use crate::activation::{Activation, Inherited, Trap, TrappedCondition, body_of};
 use crate::builtin;
 use crate::clause::{ClauseOutcome, ClauseValue, HandlerExit};
 use crate::error::{FailureSite, Raised, Search};
@@ -2561,6 +2561,7 @@ impl Interp {
                 let entry = Trap {
                     call,
                     label: label.clone(),
+                    delayed: false,
                 };
                 self.activation_mut()
                     .traps
@@ -2591,6 +2592,10 @@ impl Interp {
         traps
             .get(condition)
             .or_else(|| traps.get(b"ANY".as_slice()))
+            // A trap held while its own `CALL ON` handler runs does not fire
+            // -- see `Trap::delayed`, which is what a handler that calls
+            // something raising the same condition depends on.
+            .filter(|trap| !trap.delayed)
             .cloned()
     }
 
@@ -2720,6 +2725,22 @@ impl Interp {
             let value = self.text(rc);
             self.assign_by_name(b"RC", value);
         }
+        // What `CONDITION()` reports for the rest of this activation.
+        // Written here and not onto `active_condition` below, because the
+        // two have different lifetimes: this one dies with the activation
+        // (`TrappedCondition`), while `active_condition` is the interpreter's
+        // one slot for `RAISE PROPAGATE`.
+        self.activation_mut().condition = Some(TrappedCondition {
+            name: raised.condition.as_bytes().into(),
+            // Only a `SYNTAX` condition has a `CODE` item at all
+            // (`Activity::createExceptionObject` is the one place it is put
+            // in), so the name and not `reportable()` is the test: measured,
+            // a trapped `HALT` reports `E` as the null string, and `HALT` is
+            // the one non-`SYNTAX` condition this crate numbers.
+            code_sub: (raised.condition == "SYNTAX").then_some(raised.sub),
+            call: false,
+            description: raised.description.clone(),
+        });
         // What a later `RAISE PROPAGATE` re-raises. See `exec_raise_
         // propagate` for what is and is not measured about it.
         self.active_condition = Some(ActiveCondition {
@@ -2823,10 +2844,34 @@ impl Interp {
             sites: Vec::new(),
         });
         let key: Box<[u8]> = pending.condition.clone();
-        let removed = self.activation_mut().traps.remove(&key);
+        // **Delayed, not removed** (`Trap::delayed`). The two are the same
+        // to every lookup that decides whether to trap, and different to
+        // `CONDITION('S')`, which reports `DELAY` here and `OFF` for a trap
+        // that is absent. Setting a flag also leaves a handler's own `CALL
+        // OFF` alone, where removing and re-inserting put the trap back.
+        if let Some(trap) = self.activation_mut().traps.get_mut(&key) {
+            trap.delayed = true;
+        }
+        // What `CONDITION()` answers inside the handler. Set on *this*
+        // activation and restored afterwards, because the handler inherits
+        // its copy at call time and the caller must be left as it was --
+        // measured, `condition()` back in the caller after a `CALL ON`
+        // handler returns is the null string.
+        let enclosing_condition = self.activation_mut().condition.replace(TrappedCondition {
+            name: key.clone(),
+            // A `CALL ON` trap cannot name `SYNTAX` (measured: `call on
+            // syntax` is a 25.1 translation error), so no condition reaching
+            // here has a `CODE`.
+            code_sub: None,
+            call: true,
+            description: pending.description.clone(),
+        });
         let ended = self.resolve_and_run_call(code, &trap.label, true, &[]);
-        if let Some(trap) = removed {
-            self.activation_mut().traps.insert(key, trap);
+        self.activation_mut().condition = enclosing_condition;
+        // `trapUndelay`, which is a no-op when the handler turned its own
+        // trap off -- the C++ tests the handler for null before enabling it.
+        if let Some(trap) = self.activation_mut().traps.get_mut(&key) {
+            trap.delayed = false;
         }
         match ended {
             // The handler returned; execution resumes at the clause after
@@ -3005,11 +3050,17 @@ impl Interp {
             }
             None => None,
         };
+        // Kept, not only traced: a trapping handler reads it back through
+        // `CONDITION('D')` -- measured, `raise syntax 40.4 description 'zd'`
+        // trapped gives `zd` where the same raise without the clause gives
+        // the null string.
+        let mut description: Option<Vec<u8>> = None;
         if let Some(expr) = &raise.description {
             let value = self.eval(code, expr)?;
             self.roots.push_temp(value);
             let rendered = self.to_text(value).to_vec();
             self.trace_keyword(indent, "DESCRIPTION", &rendered);
+            description = Some(rendered);
         }
         // `ADDITIONAL expr` and `ARRAY (a, b)` produce the identical
         // substitution list -- measured, `additional ('MYROUTINE', 3)` and
@@ -3104,6 +3155,7 @@ impl Interp {
 
         if raise.condition.as_ref() == b"SYNTAX" {
             let mut raised = raise_syntax_condition(rc_text.as_deref().unwrap_or(b""), additional);
+            raised.description = description;
             // **The delivery rule follows the tail even when the argument was
             // rejected**, which is measured rather than convenient: `raise
             // syntax 40.10` inside a routine, with the trap in the main body
@@ -3148,6 +3200,7 @@ impl Interp {
                 self.pending_trap = Some(PendingTrap {
                     condition: name,
                     rc,
+                    description: description.clone(),
                     // The caller's own identity -- this activation is about
                     // to be popped, and `caller_trap_for` above just read
                     // that same activation's table. See the field's own doc
@@ -3164,6 +3217,7 @@ impl Interp {
             Some(_) => {
                 let mut raised = Raised::condition(condition_name(&name));
                 raised.rc = rc;
+                raised.description = description;
                 raised.delivery.search = Search::Caller;
                 Err(raised.into())
             }
@@ -3483,6 +3537,10 @@ impl Interp {
         // callee's own bare `ADDRESS` swaps to the *caller's* alternate.
         // `Activation::address`' own doc comment has the transcript.
         let address = caller.address.clone();
+        // Same one-way rule again: an internal call sees the caller's
+        // `CONDITION()` answers and a reset inside the callee dies with it.
+        // `TrappedCondition`'s own doc comment has the four-line transcript.
+        let condition = caller.condition.clone();
         let callee_id = self.next_activation_id();
         let mut callee = Activation::nested(
             callee_id,
@@ -3496,6 +3554,7 @@ impl Interp {
                 trace_mode,
                 address,
                 traps,
+                condition,
             },
         );
         callee.extra = extra;
@@ -5965,13 +6024,13 @@ impl Interp {
     /// the identical thing below; a later phase's `::OPTIONS FORM` is what
     /// would make the two differ, and should split this arm rather than
     /// assume they stay equal.
-    /// `TRACE`'s four forms (D17). `Trace::Default` (bare `TRACE`) and a
-    /// `Trace::Setting` letter that recognises but has nothing visible to
-    /// show in this crate's scope (`C`/`E`/`F`/`N`/`O`) both land on
-    /// `TraceMode::OFF` -- `mode_from_setting` draws no distinction between
-    /// them because this crate cannot observe one (measured: `trace` alone
-    /// and `trace value 'N'` are both silent, this task's own report has
-    /// the transcript).
+    /// `TRACE`'s four forms (D17). `Trace::Default` (bare `TRACE`) and the
+    /// `Trace::Setting` letters that are recognised but have nothing visible
+    /// to show in this crate's scope (`C`/`E`/`F`/`N`/`O`) are all silent
+    /// (measured: `trace` alone and `trace value 'N'` produce no output).
+    /// They are still six distinct settings rather than one, because
+    /// `TRACE()` reports which was asked for -- `TraceMode::letter` has that
+    /// measurement, and bare `TRACE` is `NORMAL` rather than `OFF`.
     ///
     /// **`L` is not in that list** and was until Task 9's review round 1:
     /// it lands on `TraceMode::LABELS` and echoes every executed `LABEL`
@@ -5989,7 +6048,10 @@ impl Interp {
     fn exec_trace(&mut self, code: &Code<'_>, setting: &Trace) -> Result<(), Failure> {
         match setting {
             Trace::Default => {
-                self.set_trace_mode(crate::trace::TraceMode::OFF);
+                // `setTraceNormal`, which is silent here and is *not*
+                // `TRACE OFF` -- measured, `trace r` then bare `trace` then
+                // `trace()` gives `N`, where `trace off` gives `O`.
+                self.set_trace_mode(crate::trace::TraceMode::NORMAL);
             }
             Trace::Setting(bytes) => {
                 self.set_trace_mode(
@@ -13100,11 +13162,12 @@ mod tests {
     // ---- ADDRESS, the environment-naming forms ----
     //
     // Every assertion below reads the activation's own state rather than a
-    // program's output, and it has to: the environment has exactly two readers
-    // a Rexx program can use, `ADDRESS()` and issuing a command, and this
-    // crate answers neither. `corpus/lang/address_env.rex` covers what a
-    // program *can* see -- the trace lines and the 29.1 error -- and its own
-    // header says why it cannot assert the swap.
+    // program's output. That was once forced -- the environment has exactly
+    // two readers a Rexx program can use, `ADDRESS()` and issuing a command
+    // -- and is now a division of labour: `corpus/lang/address_env.rex`
+    // asserts the same properties through `ADDRESS()`, against the oracle,
+    // and these read the pair directly so a wrong *alternate* is visible
+    // without a toggle to expose it.
 
     /// The running activation's `(current, alternate)` pair as text, `None`
     /// staying `None` because it is not a name -- it is "the platform's
@@ -13262,15 +13325,16 @@ mod tests {
     /// back. An implementation holding one pair on `Interp` instead of one per
     /// activation reads `INNER` here.
     ///
-    /// **The other direction is not asserted anywhere, and nothing here can
-    /// assert it.** A callee does inherit the caller's pair, both halves, and
-    /// `Activation::address`' own doc has the oracle transcript -- but a
-    /// callee never writes anything back and this crate has no reader for the
-    /// environment, so "inherited the caller's pair" and "started from the
-    /// default" predict identical bytes from every vantage point a test has.
-    /// `resolve_and_run_call` pops the callee unconditionally on both paths,
-    /// so not even a failing callee leaves its own state behind to read. The
-    /// first task that makes `ADDRESS()` answer is the first that can pin it.
+    /// **The other direction cannot be asserted here, and is asserted in the
+    /// corpus instead.** A callee does inherit the caller's pair, both
+    /// halves, and `Activation::address`' own doc has the oracle transcript
+    /// -- but a callee never writes anything back and `resolve_and_run_call`
+    /// pops it unconditionally on both paths, so no in-crate test can read a
+    /// callee's own state. `corpus/lang/address_env.rex`'s E block reads it
+    /// from inside the callee with `ADDRESS()`, and uses two named
+    /// environments rather than the default for both halves, because with an
+    /// unset alternate "inherited the caller's pair" and "started from the
+    /// default" print the same bytes.
     #[test]
     fn a_callees_own_environment_does_not_survive_the_return() {
         let mut interp = Interp::new();

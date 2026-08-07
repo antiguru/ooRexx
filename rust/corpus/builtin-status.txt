@@ -40,8 +40,8 @@
 
 ABBREV	implemented
 ABS	implemented
-ADDRESS	loud
-ARG	loud
+ADDRESS	implemented
+ARG	implemented
 B2X	implemented
 BITAND	implemented
 BITOR	implemented
@@ -55,7 +55,7 @@ CHARIN	excluded
 CHAROUT	excluded
 CHARS	excluded
 COMPARE	implemented
-CONDITION	loud
+CONDITION	implemented
 COPIES	implemented
 COUNTSTR	implemented
 D2C	implemented
@@ -64,11 +64,11 @@ DATATYPE	loud
 DATE	loud
 DELSTR	implemented
 DELWORD	implemented
-DIGITS	loud
-ERRORTEXT	loud
-FORM	loud
+DIGITS	implemented
+ERRORTEXT	implemented
+FORM	implemented
 FORMAT	implemented
-FUZZ	loud
+FUZZ	implemented
 INSERT	implemented
 LASTPOS	implemented
 LEFT	implemented
@@ -80,13 +80,13 @@ MAX	implemented
 MIN	implemented
 OVERLAY	implemented
 POS	implemented
-QUEUED	loud
+QUEUED	implemented
 RANDOM	implemented
 REVERSE	implemented
 RIGHT	implemented
 RXQUEUE	excluded
 SIGN	implemented
-SOURCELINE	loud
+SOURCELINE	implemented
 SPACE	implemented
 STREAM	excluded
 STRIP	implemented
@@ -94,7 +94,7 @@ SUBSTR	implemented
 SUBWORD	implemented
 SYMBOL	loud
 TIME	loud
-TRACE	loud
+TRACE	implemented
 TRANSLATE	implemented
 TRUNC	implemented
 VALUE	loud
@@ -118,4 +118,4 @@ RXFUNCQUERY	excluded
 ENDLOCAL	excluded
 SETLOCAL	excluded
 QUALIFY	excluded
-GC	loud
+GC	implemented

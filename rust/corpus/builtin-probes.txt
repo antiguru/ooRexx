@@ -15,12 +15,14 @@
 # file matches it in both directions, so a missing row and a spurious one are
 # both red; do not maintain the membership by hand from this comment.
 #
-# THE THREE PARTIAL ROWS ARE PROBED ON THEIR IN-SCOPE HALF, and getting that
-# wrong is easy: a first draft probed ADDRESS as `say address()`, which is the
-# platform-supplied default and is the half the exclusions file assigns to
-# Phase 7 ("say address()" with no ADDRESS instruction prints "sh"). The row
-# below sets the environment with an ADDRESS instruction first, which is the
-# half that is 4c's. VALUE is probed on the variable-access form, not the
+# THE THREE PARTIAL ROWS ARE PROBED ON THEIR IN-SCOPE HALF. For ADDRESS the
+# in-scope half is now both: a first draft probed it as `say address()`, the
+# platform-supplied default, which the exclusions file assigned to Phase 7 at
+# the time and reassigned to 4c at Task 10. The row below still sets the
+# environment with an ADDRESS instruction first, because a probe that reads
+# only the default would say nothing about the half this crate tracks.
+# `corpus/lang/address_env.rex` is where the default itself is witnessed.
+# VALUE is probed on the variable-access form, not the
 # external-selector form. QUEUED is probed within a single program, which is
 # what its own row permits -- the oracle's queue is rxapi-backed and shared
 # across processes, so nothing that spans two programs could ever match.

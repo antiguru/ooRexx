@@ -1,20 +1,17 @@
 /* ADDRESS naming an environment: the constant form, the two computed forms,
-   the bare toggle, and the 250-byte name limit.
+   the bare toggle, the 250-byte name limit, and -- since ADDRESS() answers --
+   what the toggle and a call actually do to the pair.
 
-   WHAT THIS PROGRAM CANNOT SEE, STATED FIRST BECAUSE IT SHAPES EVERY BLOCK.
-   The environment an ADDRESS instruction sets has exactly five readers, and
-   the enumeration is the C++'s rather than a guess: `settings.currentAddress`
-   is read by `RexxActivation::toggleAddress`, by `RexxActivation::setAddress`,
-   by `CommandInstruction`'s dispatch, by the ADDRESS() builtin, and by the
-   default environment handed to an external .rex called as a routine. Of
-   those, the two that a Rexx program can observe are ADDRESS() and issuing a
-   command. This corpus cannot call either. So no program here can print the
-   environment, and none of the blocks below asserts the SWAP -- what a bare
-   ADDRESS actually does is pinned by crates/rexx-exec/src/run.rs's own unit
-   tests, which read the state directly, and it is owed a corpus witness by
-   whichever task makes ADDRESS() answer.
-
-   WHAT IS LEFT IS STILL DIFFERENTIAL, AND IT IS THE TRACE AND THE ERROR.
+   WHAT THE ENVIRONMENT'S READERS ARE, STATED FIRST BECAUSE IT SHAPED THE
+   BLOCKS THAT CAME BEFORE D. The environment an ADDRESS instruction sets has
+   exactly five readers, and the enumeration is the C++'s rather than a guess:
+   `settings.currentAddress` is read by `RexxActivation::toggleAddress`, by
+   `RexxActivation::setAddress`, by `CommandInstruction`'s dispatch, by the
+   ADDRESS() builtin, and by the default environment handed to an external
+   .rex called as a routine. Of those, the two a Rexx program can observe are
+   ADDRESS() and issuing a command. Blocks A, B and C were written when this
+   corpus could call neither, so none of them prints the environment; D and E
+   are the witness they were owed.
 
    WHICH WRONG ANSWER EACH BLOCK PRINTS.
 
@@ -39,10 +36,39 @@
    different RC. The trapped clause is the computed form because the constant
    form would need a 251-byte literal in the source.
 
+   D: the swap, four toggles deep. TWO toggles are the fewest that can tell a
+   swap from a pop and they are not enough: a stack popped twice and a pair
+   swapped twice both read ENVD1 then ENVD2 if the stack is deep enough, and
+   both read ENVD1 then the default if it is not. Four says the pair
+   alternates forever. An engine that walks a stack backwards prints the
+   default from D4 onward; one that discards the alternate on every set prints
+   the default from D3 onward.
+
+   The line before A is the other half of the same question: with no ADDRESS
+   instruction executed yet, ADDRESS() names the PLATFORM DEFAULT. That is a
+   host-dependent constant -- `sh` here, from `SYSINITIALADDRESS` in
+   `platform/unix/SystemCommands.cpp`, `CMD` on a Windows build -- and it is
+   in this corpus for the reason `LINUX COMMAND` is: it is fixed when the
+   interpreter is built and does not move under it, unlike PARSE VERSION's
+   build date, which is why that one is kept out of every corpus program.
+
+   E: inheritance into a callee, both halves, and the return direction. The
+   callee reports the caller's CURRENT, and the callee's own bare ADDRESS
+   reports the caller's ALTERNATE -- so the whole pair crosses, not just the
+   half a command would use. BOTH NAMES ARE REAL ENVIRONMENTS AND NEITHER IS
+   THE DEFAULT, WHICH IS THE POINT: if the alternate were still unset, "the
+   callee inherited it" and "the callee started fresh" would both print the
+   default and the block would prove nothing. An engine that copies only the
+   current prints the default at E3; one that copies nothing prints it at E2
+   as well; one that writes the callee's own pair back prints ENVE3 at E4.
+
    Determinism: no clock, no PID, no filesystem, no path. The traced clauses
-   are this file's own text and the error is raised and trapped in-program. */
+   are this file's own text, the error is raised and trapped in-program, and
+   the one host-dependent value is the platform default named above. */
 
 nm = 'mIxEd'
+
+say 'D0 default' address()
 
 /* A */
 trace r
@@ -63,6 +89,28 @@ address
 trace off
 say 'B done'
 
+/* D */
+address envD1
+address envD2
+say 'D1' address()
+address
+say 'D2' address()
+address
+say 'D3' address()
+address
+say 'D4' address()
+address
+say 'D5' address()
+
+/* E */
+address envE1
+address envE2
+say 'E1 main' address()
+call peek
+say 'E4 main' address()
+address
+say 'E5 main' address()
+
 /* C */
 signal on syntax name toolong
 ok = copies('z', 250)
@@ -76,3 +124,11 @@ exit 0
 toolong:
 say 'C2 trapped rc' rc
 exit 0
+
+peek:
+say 'E2 sub' address()
+address
+say 'E3 sub' address()
+address envE3
+say 'E3b sub' address()
+return

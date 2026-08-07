@@ -633,6 +633,47 @@ fn every_string_builtin_is_implemented() {
     );
 }
 
+/// The names `src/builtin/state.rs` runs. [`STRING_FAMILY`]'s own doc has
+/// the argument for writing the list down rather than deriving it.
+const STATE_FAMILY: &[&str] = &[
+    "ADDRESS",
+    "ARG",
+    "CONDITION",
+    "DIGITS",
+    "ERRORTEXT",
+    "FORM",
+    "FUZZ",
+    "GC",
+    "QUEUED",
+    "SOURCELINE",
+    "TRACE",
+];
+
+/// Every name in [`STATE_FAMILY`] is committed `implemented`, for
+/// [`every_string_builtin_is_implemented`]'s reason.
+#[test]
+fn every_state_builtin_is_implemented() {
+    let committed: BTreeMap<_, _> = read_tab_rows(&status_path()).into_iter().collect();
+    let mut wrong = String::new();
+    for name in STATE_FAMILY {
+        match committed.get(*name).map(String::as_str) {
+            Some("implemented") => {}
+            Some(other) => {
+                writeln!(wrong, "  {name}: {other}").expect("writing to a String cannot fail");
+            }
+            None => {
+                writeln!(wrong, "  {name}: no row at all")
+                    .expect("writing to a String cannot fail");
+            }
+        }
+    }
+    assert!(
+        wrong.is_empty(),
+        "these state builtins are not committed as implemented in {}:\n{wrong}",
+        status_path().display()
+    );
+}
+
 /// Committing a `divergent` row requires a `KNOWN GAP: <NAME>` marker in the
 /// exclusions file. See the module doc: a divergence is a wrong answer, and
 /// absorbing one into the status file must cost more than a one-line edit.

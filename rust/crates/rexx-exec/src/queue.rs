@@ -140,6 +140,16 @@ impl Queue {
     pub(crate) fn pop(&mut self) -> Option<Vec<u8>> {
         self.lines.pop_front()
     }
+
+    /// How many lines are waiting: what `QUEUED()` answers.
+    ///
+    /// Single-program only, which is this module's own known gap rather than
+    /// a property of this function: the oracle's queue is rxapi-backed and
+    /// shared across processes, so a second `rexx` never sees what the first
+    /// wrote. The module doc has the measurement.
+    pub(crate) fn len(&self) -> usize {
+        self.lines.len()
+    }
 }
 
 #[cfg(test)]

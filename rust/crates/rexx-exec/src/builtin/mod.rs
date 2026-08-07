@@ -76,6 +76,7 @@ use crate::{Interp, Loud};
 
 mod convert;
 mod numeric;
+mod state;
 mod string;
 mod word;
 
@@ -140,6 +141,21 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 1,
         max: Some(1),
         run: numeric::abs,
+    },
+    Builtin {
+        // Zero arguments, not one: `check_args` with a maximum of 0, so
+        // measured, `say address(1)` is 40.4 naming a maximum of 0 rather
+        // than ignoring the extra.
+        name: b"ADDRESS",
+        min: 0,
+        max: Some(0),
+        run: state::address,
+    },
+    Builtin {
+        name: b"ARG",
+        min: 0,
+        max: Some(2),
+        run: state::arg,
     },
     Builtin {
         name: b"B2X",
@@ -208,6 +224,15 @@ const IMPLEMENTED: &[Builtin] = &[
         run: string::compare,
     },
     Builtin {
+        // A minimum of 0 and a maximum of 1: the bare form is
+        // `CONDITION('I')`, measured -- `BUILTIN(CONDITION)` opens
+        // `int style = 'I'`.
+        name: b"CONDITION",
+        min: 0,
+        max: Some(1),
+        run: state::condition,
+    },
+    Builtin {
         name: b"COPIES",
         min: 2,
         max: Some(2),
@@ -241,6 +266,12 @@ const IMPLEMENTED: &[Builtin] = &[
         run: convert::d2x,
     },
     Builtin {
+        name: b"DIGITS",
+        min: 0,
+        max: Some(0),
+        run: state::digits,
+    },
+    Builtin {
         // A minimum of 2 where `DELSTR`'s is 1: `DELWORD`'s start word is
         // required, so measured, `say delword('a b')` is 40.3 naming a
         // minimum of 2 where `say delstr('abcdef')` succeeds.
@@ -250,10 +281,37 @@ const IMPLEMENTED: &[Builtin] = &[
         run: word::delword,
     },
     Builtin {
+        name: b"ERRORTEXT",
+        min: 1,
+        max: Some(1),
+        run: state::errortext,
+    },
+    Builtin {
+        name: b"FORM",
+        min: 0,
+        max: Some(0),
+        run: state::form,
+    },
+    Builtin {
         name: b"FORMAT",
         min: 1,
         max: Some(5),
         run: numeric::format,
+    },
+    Builtin {
+        name: b"FUZZ",
+        min: 0,
+        max: Some(0),
+        run: state::fuzz,
+    },
+    Builtin {
+        // A maximum of 1 where its four neighbours here take none: the
+        // argument is the `"force"` spelling, and `BUILTIN(GC)` rejects
+        // anything whose first byte is not `f` or `F`.
+        name: b"GC",
+        min: 0,
+        max: Some(1),
+        run: state::gc,
     },
     Builtin {
         name: b"INSERT",
@@ -316,6 +374,12 @@ const IMPLEMENTED: &[Builtin] = &[
         run: string::pos,
     },
     Builtin {
+        name: b"QUEUED",
+        min: 0,
+        max: Some(0),
+        run: state::queued,
+    },
+    Builtin {
         // A minimum of 0: `random()` is a call with no arguments at all and
         // answers a number in 0..999.
         name: b"RANDOM",
@@ -342,6 +406,12 @@ const IMPLEMENTED: &[Builtin] = &[
         run: numeric::sign,
     },
     Builtin {
+        name: b"SOURCELINE",
+        min: 0,
+        max: Some(1),
+        run: state::sourceline,
+    },
+    Builtin {
         name: b"SPACE",
         min: 1,
         max: Some(3),
@@ -364,6 +434,15 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 2,
         max: Some(3),
         run: word::subword,
+    },
+    Builtin {
+        // A maximum of 1, and the argument *sets* the mode while the answer
+        // is the mode that was in force -- measured, `trace l` then `say
+        // trace('O')` prints `L`.
+        name: b"TRACE",
+        min: 0,
+        max: Some(1),
+        run: state::trace,
     },
     Builtin {
         // Six, not four: `start` and `range` are ooRexx's own extension to

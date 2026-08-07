@@ -19,26 +19,33 @@
 #     -- worse, they are not equivalent to the method they came from at all:
 #     CALL::test_expression, CALL::test_literal and CALL::test_on_name fail
 #     under the C++ oracle itself (Error 43, Routine not found) because they
-#     call ::routines the standalone program does not carry, and
-#     NUMERIC::test_42 exits 3 because the body falls through into its own
-#     `dig: Return digits()`. All four read 4c because rexx-exec blocks on an
-#     unresolved routine call first -- measured: routine "label", routine "",
-#     routine "CHARIN", routine "DIGITS". Only the last two are builtins; the
-#     first two are the very ::routines the standalone program does not
-#     carry.
+#     call ::routines the standalone program does not carry -- measured:
+#     routine "label", routine "". NUMERIC::test_42 is the fourth and is the
+#     one whose first blocker has since been removed, so it now reads what
+#     was always behind it, RAISED: `::method "test_42"` is the only method
+#     in its neighbourhood with no `return` before its trailing
+#     `dig: Return digits()`, so the extracted program falls into that
+#     subroutine and its RETURN value becomes the program's exit code.
+#     Measured, the C++ oracle exits 3 on the same program, so this is the
+#     extraction and not a divergence.
 #   * The `defect:` rows below are NOT derived -- every assertion failure is
 #     mapped to one constant. What has teeth for them is membership, not the
 #     label: a body that starts failing its assertions and is not listed here
 #     goes red as an unaccounted failure. A second defect class would need
 #     the constant split by hand.
 #
-#   4c  The bulk. The blockers are the builtin routines -- ADDRESS, ARG,
-#       DIGITS, FORM, FUZZ and the rest -- plus whatever instruction work 4c
-#       still owes. No body here is blocked by Phase 5, so 4b owes this table
-#       nothing further. Which names are still blockers is the derived half
-#       of this file and moves as they land; the run's own breakdown is the
-#       current answer, never this sentence, and no count of either group is
-#       written down here for the same reason.
+#   4c  Bodies blocked on a construct rexx-exec names as 4c's -- a builtin
+#       routine it does not run yet, or instruction work 4c still owes. No
+#       body here is blocked by Phase 5, so 4b owes this table nothing
+#       further. Which names are still blockers is the derived half of this
+#       file and moves as they land; the run's own breakdown is the current
+#       answer, never this sentence, and no count of either group is written
+#       down here for the same reason.
+#
+#   RAISED  Not an attribution at all: the harness's own word for "exited
+#       non-zero and named no construct", so there is nothing to derive a
+#       phase from. A row carrying it needs its cause written into this
+#       header, as the second bullet above does.
 #
 #   Phase 7  The `ADDRESS` bodies that do more than name an environment.
 #       Naming one runs; issuing a command to it, and the `WITH` redirection
@@ -63,13 +70,6 @@
 #       DO is 4a's, so this is a 4a defect this 4b table surfaced. It is
 #       recorded rather than fixed here: Task 11 measures, and a DO change
 #       belongs with the tasks that own DO.
-ADDRESS::test_1	4c
-ADDRESS::test_environment_symbol	4c
-ADDRESS::test_environment_string	4c
-ADDRESS::test_environment_string_value	4c
-ADDRESS::test_environment_value	4c
-ADDRESS::test_environment_value_extra	4c
-ADDRESS::test_environment_expression_extra	4c
 ADDRESS::test_environment_value_with	Phase 7
 ADDRESS::test_environment_expression_with	Phase 7
 ADDRESS::test_environment_path_null	Phase 7
@@ -77,100 +77,12 @@ ASSIGNMENT::test_3	4c
 CALL::test_literal	4c
 CALL::test_expression	4c
 CALL::test_on_name	4c
-CALL::test_7	4c
 CALL::test_9	4c
-DO::test_DO_standardTest2A	4c
+DO::test_DO_standardTest2A	defect:compound-do-control-variable
 DO::test_DO_standardTest2B	defect:compound-do-control-variable
 DO::test_DO_standardTest2P	defect:compound-do-control-variable
 DO::test_DO_standardTest2Q	defect:compound-do-control-variable
-DO::test_DO_standardTest5-4	4c
-DO::test_DO_standardTest5-5	4c
-DO::test_DO_standardTest5-6	4c
-DO::test_DO_standardTest5-7	4c
-DO::test_DO_standardTest5-8	4c
-DO::test_DO_standardTest5-9	4c
-DO::test_DO_standardTest5-10	4c
-DO::test_DO_standardTest5-11	4c
-DO::test_DO_standardTest5-12	4c
-DO::test_DO_standardTest5-13	4c
-DO::test_DO_standardTest5-14	4c
-DO::test_DO_standardTest5-15	4c
-DO::test_DO_standardTest5-16	4c
-DO::test_DO_standardTest5-17	4c
-DO::test_DO_standardTest5-18	4c
-DO::test_DO_standardTest5-22	4c
-DO::test_DO_standardTest5-23	4c
-DO::test_DO_standardTest5-24	4c
-DO::test_DO_standardTest5-25	4c
-DO::test_DO_standardTest5-26	4c
-DO::test_DO_standardTest5-27	4c
-DO::test_DO_standardTest5-28	4c
-DO::test_DO_standardTest5-29	4c
-DO::test_DO_standardTest5-30	4c
-DO::test_DO_standardTest5-31	4c
-DO::test_DO_standardTest5-32	4c
-DO::test_DO_standardTest5-33	4c
-DO::test_DO_standardTest5-34	4c
-DO::test_DO_standardTest5-35	4c
-DO::test_DO_standardTest5-36	4c
-DO::test_DO_standardTest5-40	4c
-DO::test_DO_standardTest5-41	4c
-DO::test_DO_standardTest5-42	4c
-DO::test_DO_standardTest5-43	4c
-DO::test_DO_standardTest5-44	4c
-DO::test_DO_standardTest5-45	4c
-DO::test_DO_standardTest5-46	4c
-DO::test_DO_standardTest5-47	4c
-DO::test_DO_standardTest5-48	4c
-DO::test_DO_standardTest5-49	4c
-DO::test_DO_standardTest5-50	4c
-DO::test_DO_standardTest5-51	4c
-DO::test_DO_standardTest5-52	4c
-DO::test_DO_standardTest5-53	4c
-DO::test_DO_standardTest5-54	4c
 DO::test_DO_standardTest5-69	defect:compound-do-control-variable
-DO::test_DO_standardTest5-71	4c
-IF::test_13	4c
-IF::test_14	4c
-INTERPRET::test_interpret_call	4c
 ITERATE::test_12	defect:compound-do-control-variable
 LEAVE::test_11	defect:compound-do-control-variable
-NUMERIC::test_15	4c
-NUMERIC::test_16	4c
-NUMERIC::test_19	4c
-NUMERIC::test_20	4c
-NUMERIC::test_27	4c
-NUMERIC::test_34	4c
-NUMERIC::test_36	4c
-NUMERIC::test_40	4c
-NUMERIC::test_41	4c
-NUMERIC::test_42	4c
-NUMERIC::test_43	4c
-NUMERIC::test_46	4c
-NUMERIC::test_47	4c
-NUMERIC::test_52	4c
-NUMERIC::test_53	4c
-NUMERIC::test_54	4c
-NUMERIC::test_55	4c
-NUMERIC::test_56	4c
-NUMERIC::test_57	4c
-NUMERIC::test_58	4c
-NUMERIC::test_59	4c
-NUMERIC::test_60	4c
-NUMERIC::test_62	4c
-NUMERIC::test_67	4c
-NUMERIC::test_68	4c
-NUMERIC::test_69	4c
-NUMERIC::test_71	4c
-NUMERIC::test_72	4c
-NUMERIC::test_74	4c
-NUMERIC::test_76	4c
-NUMERIC::test_77	4c
-NUMERIC::test_81	4c
-NUMERIC::test_88	4c
-NUMERIC::test_89	4c
-NUMERIC::test_91	4c
-PARSE::Test_638	4c
-TRACE::test_trace_option_none	4c
-TRACE::test_trace_nullstring	4c
-TRACE::test_trace_?o	4c
+NUMERIC::test_42	RAISED

@@ -44,10 +44,19 @@
 #   constant `ADDRESS env`, the computed `ADDRESS VALUE expr` and `ADDRESS
 #   (expr)`, and the bare toggle. `ADDRESS env command` and any `WITH`
 #   redirection are the command dispatch and stay out, with the command
-#   clause. A program here cannot print the environment back: of the C++'s
-#   five readers of it, the only two a Rexx program can reach are the
-#   ADDRESS() builtin and issuing a command, and this subset admits neither.
-#   lang/address_env.rex's own header carries the enumeration.
+#   clause. Of the C++'s five readers of the environment, the only two a Rexx
+#   program can reach are the ADDRESS() builtin and issuing a command; this
+#   subset admits the first since Task 10, so a program here CAN now print the
+#   environment back. lang/address_env.rex's own header carries the
+#   enumeration and the blocks that read it.
+#
+#   ADDRESS()'s answer for an environment no ADDRESS instruction has set is
+#   the platform default, `sh` on this host. It is in the corpus for the same
+#   reason PARSE SOURCE's `LINUX COMMAND` is and PARSE VERSION's build date is
+#   not: it is a compile-time constant of the interpreter (`SYSINITIALADDRESS`
+#   in `platform/unix/SystemCommands.cpp`) rather than a value that moves
+#   under a rebuild. A run on a platform whose default differs would need the
+#   expected byte changed, which is true of `LINUX COMMAND` already.
 #
 # WHAT IT STILL EXCLUDES. Everything phase-4b.txt excludes except builtin
 # function calls, PARSE and ADDRESS's environment forms, which is to say: no
@@ -97,9 +106,24 @@ lang/parse_template.rex
 # upcase while the `>>>` after it carries the line after.
 lang/pull_queue.rex
 
-# New for 4c Task 9 -- ADDRESS naming an environment. Its own header states
-# first what it cannot see: the environment has no in-scope reader, so no block
-# asserts the swap. What it does pin is which forms trace a value line and
-# which do not, that the value line is `>>>` under TRACE I as well as TRACE R,
-# and the 250-byte name limit either side of the boundary with the 29.1 trapped.
+# 4c Task 9 -- ADDRESS naming an environment, extended at Task 10. Blocks A,
+# B and C pin which forms trace a value line and which do not, that the value
+# line is `>>>` under TRACE I as well as TRACE R, and the 250-byte name limit
+# either side of the boundary with the 29.1 trapped. Blocks D and E are the
+# witness the first three were owed and could not write: the swap four toggles
+# deep, and inheritance into a callee in both halves, both read back through
+# ADDRESS(). E is the only place in the whole suite that can see a callee's
+# inherited alternate -- resolve_and_run_call pops the callee unconditionally,
+# so no in-crate test can read its state.
 lang/address_env.rex
+
+# New for 4c Task 10 -- the builtins that read interpreter state, other than
+# ADDRESS. Its own header states, per block, which wrong answer each would
+# print. Two pairs are the reason it exists: TRACE()'s five silent settings,
+# which an engine storing only what tracing DOES cannot tell apart, and
+# CONDITION's `I` against `S`, which are perfectly correlated until a handler
+# re-arms its own trap and only then reveal that one is stored and the other
+# is looked up live. Its D block reads CONDITION from inside a live handler,
+# because outside one every option is the null string and a stub returning ''
+# passes.
+lang/state_builtins.rex

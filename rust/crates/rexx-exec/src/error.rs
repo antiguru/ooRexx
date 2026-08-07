@@ -196,6 +196,21 @@ pub(crate) struct Raised {
     /// case that is neither: `n` is the value, measured at `rc= 5` for `raise
     /// error 5`, and `exec_raise` sets it there.
     pub(crate) rc: Option<Vec<u8>>,
+    /// `RAISE ... DESCRIPTION expr`'s rendered value, which a trapping
+    /// handler reads back through `CONDITION('D')`.
+    ///
+    /// `None` is "no `DESCRIPTION` clause", and `CONDITION('D')` answers the
+    /// null string for it -- measured, `raise syntax 40.4` trapped and
+    /// `say 1/0` trapped both give `D` as empty, where `raise syntax 40.4
+    /// description 'zd'` gives `zd`.
+    ///
+    /// **`NOVALUE`'s own description is the variable's derived name and is
+    /// not carried here.** Measured, `signal on novalue` with `say
+    /// zunsetvar` gives `D` as `ZUNSETVAR`; nothing on the read path passes
+    /// the name to `novalue_check`, so `builtin::state`'s `CONDITION`
+    /// refuses that one option-and-condition pair loudly rather than
+    /// answering the null string it would otherwise produce.
+    pub(crate) description: Option<Vec<u8>>,
     pub(crate) delivery: Delivery,
 }
 
@@ -232,6 +247,7 @@ impl Raised {
             sub,
             additional,
             rc: Some(number.to_string().into_bytes()),
+            description: None,
             delivery: Delivery::default(),
         }
     }
@@ -255,6 +271,7 @@ impl Raised {
             sub: 0,
             additional: Vec::new(),
             rc: None,
+            description: None,
             delivery: Delivery::default(),
         }
     }
@@ -294,6 +311,7 @@ impl Raised {
             // trapped `HALT` is not measured either way, so this follows the
             // non-`SYNTAX` row rather than inventing a third rule.
             rc: None,
+            description: None,
             delivery: Delivery::default(),
         }
     }
@@ -528,6 +546,102 @@ impl Raised {
             vec![
                 routine.to_vec(),
                 position.to_string().into_bytes(),
+                found.to_vec(),
+            ],
+        )
+    }
+
+    /// 40.14: a builtin's argument converted to a whole number but is not
+    /// strictly positive. Substitutions as [`argument_not_whole`]'s.
+    ///
+    /// **A different layer from [`invalid_position`]'s 93.924, and the pair
+    /// is what tells them apart.** Measured, rc 216 in both cases here:
+    /// `arg(0)` and `arg(-1)` are this error naming `ARG argument 1`, and
+    /// `sourceline(0)` is this error naming `SOURCELINE argument 1` -- where
+    /// `word('a b c',0)` is 93.924 at rc 163, because that one is the String
+    /// method's own `positionArgument` rather than the BIF wrapper's
+    /// `positive_integer`.
+    ///
+    /// [`argument_not_whole`]: Raised::argument_not_whole
+    /// [`invalid_position`]: Raised::invalid_position
+    pub(crate) fn argument_not_positive(routine: &[u8], position: usize, found: &[u8]) -> Raised {
+        Raised::syntax(
+            40,
+            14,
+            vec![
+                routine.to_vec(),
+                position.to_string().into_bytes(),
+                found.to_vec(),
+            ],
+        )
+    }
+
+    /// 40.34: `SOURCELINE`'s line number is past the end of the program.
+    /// The message names the routine itself, so the only substitutions are
+    /// the requested line and the program's own line count.
+    ///
+    /// Measured, rc 216 for a one-line program: `say sourceline(99)` gives
+    /// `SOURCELINE argument 1 ("99") must be less than or equal to the
+    /// number of lines in the program (1).`
+    pub(crate) fn sourceline_out_of_range(requested: &[u8], lines: usize) -> Raised {
+        Raised::syntax(
+            40,
+            34,
+            vec![requested.to_vec(), lines.to_string().into_bytes()],
+        )
+    }
+
+    /// 40.903: a builtin's argument is outside the fixed range 0-99, which
+    /// is the only range this catalogue entry can name -- the bounds are in
+    /// the message text, not substituted.
+    ///
+    /// Measured, rc 216: `errortext(-1)` and `errortext(100)` both give
+    /// `ERRORTEXT argument 1 must be in the range 0-99; found "..."`.
+    pub(crate) fn argument_out_of_range(routine: &[u8], position: usize, found: &[u8]) -> Raised {
+        Raised::syntax(
+            40,
+            903,
+            vec![
+                routine.to_vec(),
+                position.to_string().into_bytes(),
+                found.to_vec(),
+            ],
+        )
+    }
+
+    /// 40.904: a builtin's option argument is not one of the letters that
+    /// builtin accepts. `valid` is substituted verbatim, so its own quoting
+    /// is the caller's to supply.
+    ///
+    /// **The two spellings of `valid` are both the oracle's**, measured:
+    /// `condition('Z')` gives `must be one of ACDEIORS` with the letters
+    /// bare, while `gc('x')` gives `must be one of "force", "Force", "f",
+    /// "F"` with each alternative quoted -- the C++ passes a plain
+    /// `"ACDEIORS"` in one place and a `new_string` carrying its own quotes
+    /// in the other.
+    ///
+    /// **The null string is rejected rather than treated as omitted**:
+    /// `condition('')` is this error with `found ""`.
+    ///
+    /// A sibling of [`invalid_option`], not a duplicate: that one is 93.915,
+    /// raised by the *operation* layer, names no routine and no position,
+    /// and exits 163. This one is the BIF wrapper's, names both, and exits
+    /// 216.
+    ///
+    /// [`invalid_option`]: Raised::invalid_option
+    pub(crate) fn argument_not_in_list(
+        routine: &[u8],
+        position: usize,
+        valid: &str,
+        found: &[u8],
+    ) -> Raised {
+        Raised::syntax(
+            40,
+            904,
+            vec![
+                routine.to_vec(),
+                position.to_string().into_bytes(),
+                valid.as_bytes().to_vec(),
                 found.to_vec(),
             ],
         )

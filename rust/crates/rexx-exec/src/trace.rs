@@ -63,7 +63,19 @@ use rexx_num::Number;
 /// 4b's Task 9 review round 1 measured the fourth, `TRACE L`, which this
 /// crate answered with silence. The count in a sentence like that is a
 /// claim about the language, and it goes stale the way a table does.
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+///
+/// **[`letter`] is not a fifth observable question, it is the setting's own
+/// name**, and it is here because a program can *read the setting back*
+/// rather than only watch what it does. `TRACE()` answers
+/// `TraceSetting::toString`, which is a pure function of the stored flags,
+/// and the four booleans above are lossy in exactly the direction that
+/// answer needs: `C`, `E`, `F`, `N` and `O` all leave every one of them
+/// false while the oracle reports five different letters. So the letter is
+/// stored rather than derived, and the booleans stay the only thing the
+/// tracing code itself consults.
+///
+/// [`letter`]: TraceMode::letter
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) struct TraceMode {
     /// `TRACE_PREFIX_CLAUSE` (`*-*`): every stepped instruction's own clause
     /// is echoed. `TraceSetting::tracingAll`/`tracingInstructions`.
@@ -97,17 +109,41 @@ pub(crate) struct TraceMode {
     /// C++ site above enumerates the whole condition in one line; nothing
     /// enumerates the routes, so nothing here should count them.
     pub(crate) labels: bool,
+    /// The byte `TraceSetting::toString` (`runtime/TraceSetting.cpp:62`-`119`)
+    /// renders this setting as, and so the byte `TRACE()` answers.
+    ///
+    /// One byte and never two, because the `?` prefix that would make it two
+    /// is not carried -- `mode_from_setting` skips `?` rather than tracking
+    /// it, and `phase-4-exclusions.txt`'s own row says the prefix "is
+    /// silently ignored". Measured consequence, on stdout rather than the
+    /// stderr that row describes: after `trace ?r`, the oracle's `trace()`
+    /// is `?R` and this crate's is `R`.
+    ///
+    /// Nothing in the tracing code reads this. It exists so that the five
+    /// settings with nothing to show -- `C`, `E`, `F`, `N`, `O` -- stay
+    /// distinguishable to a program that asks, and it is the reason
+    /// [`TraceMode::NORMAL`] and [`TraceMode::OFF`] are two constants with
+    /// identical behaviour rather than one.
+    pub(crate) letter: u8,
 }
 
 impl TraceMode {
     /// `TraceSetting::setTraceOff`/`setTraceNormal`/`setTraceCommands`/
-    /// `setTraceErrors`/`setTraceFailures`, and the initial state before any
-    /// `TRACE` instruction runs at all -- every one of these sets a flag
+    /// `setTraceErrors`/`setTraceFailures` -- every one of these sets a flag
     /// this crate's own scope has nothing to show for (D18 excludes
     /// commands; errors/failures are command-condition machinery, not built
-    /// here), so all five collapse to this crate's one silent answer.
-    /// `#[derive(Default)]` picks this automatically (all four `false`),
-    /// which is also `Interp::new`'s own starting state.
+    /// here), so all five behave identically here.
+    ///
+    /// **They are five constants and not one, and only [`letter`] tells them
+    /// apart.** `TRACE()` reports the setting the program asked for, and the
+    /// oracle answers `O`, `N`, `C`, `E` and `F` respectively -- measured,
+    /// `trace commands` then `trace('O')` gives `C`.
+    ///
+    /// **[`NORMAL`] and not this one is the initial state**, measured: `say
+    /// trace()` as the first clause of a program with no `TRACE` instruction
+    /// prints `N`. `TraceSetting`'s own default construction runs
+    /// `setTraceNormal`, and bare `TRACE` returns to it -- also measured,
+    /// `trace r` then `trace` then `trace()` gives `N`.
     ///
     /// **`setTraceLabels` used to be the sixth name in that list and is
     /// not any more**: `TRACE L` has something to show -- the label clauses
@@ -115,11 +151,40 @@ impl TraceMode {
     /// changed the count in the sentence above and left the name in it, so
     /// the two contradicted each other; the re-review (NEW-6) caught that
     /// and this is the corrected pair.
+    ///
+    /// [`letter`]: TraceMode::letter
+    /// [`NORMAL`]: TraceMode::NORMAL
     pub(crate) const OFF: TraceMode = TraceMode {
         all: false,
         results: false,
         intermediates: false,
         labels: false,
+        letter: b'O',
+    };
+    /// `TRACE N` (`setTraceNormal`), and the setting every activation starts
+    /// under. Behaves exactly as [`TraceMode::OFF`]; see that constant for
+    /// why the two are separate.
+    pub(crate) const NORMAL: TraceMode = TraceMode {
+        letter: b'N',
+        ..TraceMode::OFF
+    };
+    /// `TRACE C` (`setTraceCommands`). Behaves exactly as
+    /// [`TraceMode::OFF`], since D18 excludes commands.
+    const COMMANDS: TraceMode = TraceMode {
+        letter: b'C',
+        ..TraceMode::OFF
+    };
+    /// `TRACE E` (`setTraceErrors`). Behaves exactly as [`TraceMode::OFF`]:
+    /// an `ERROR` condition is command-condition machinery.
+    const ERRORS: TraceMode = TraceMode {
+        letter: b'E',
+        ..TraceMode::OFF
+    };
+    /// `TRACE F` (`setTraceFailures`). Behaves exactly as
+    /// [`TraceMode::OFF`], for [`TraceMode::ERRORS`]' reason.
+    const FAILURES: TraceMode = TraceMode {
+        letter: b'F',
+        ..TraceMode::OFF
     };
     /// `TRACE L` (`setTraceLabels`, which resets every other flag and sets
     /// `traceLabels` alone). The one mode where `labels` decides anything:
@@ -131,6 +196,7 @@ impl TraceMode {
         results: false,
         intermediates: false,
         labels: true,
+        letter: b'L',
     };
     /// `TRACE A` (`setTraceAll`, `traceAllFlags`): every clause echoes, but
     /// `traceAllFlags` deliberately omits `traceResults` -- measured
@@ -143,6 +209,7 @@ impl TraceMode {
         results: false,
         intermediates: false,
         labels: true,
+        letter: b'A',
     };
     /// `TRACE R` (`setTraceResults`, `traceResultsFlags`).
     const RESULTS: TraceMode = TraceMode {
@@ -150,6 +217,7 @@ impl TraceMode {
         results: true,
         intermediates: false,
         labels: true,
+        letter: b'R',
     };
     /// `TRACE I` (`setTraceIntermediates`, `traceIntermediatesFlags`).
     const INTERMEDIATES: TraceMode = TraceMode {
@@ -157,6 +225,7 @@ impl TraceMode {
         results: true,
         intermediates: true,
         labels: true,
+        letter: b'I',
     };
 }
 
@@ -177,6 +246,20 @@ impl TraceMode {
 /// before this call), which is why this returns a `Result` at all rather
 /// than assuming a valid letter the way a `Trace::Setting`-only version
 /// could.
+///
+/// **The nine letters map to nine distinct answers**, five of which behave
+/// identically and differ only in what `TRACE()` reports -- see
+/// [`TraceMode::letter`]. An empty setting is `setTraceNormal`
+/// (`TraceSetting.cpp:141`-`146`), measured: `trace value ''` then
+/// `trace()` gives `N`.
+///
+/// A string of nothing but `?`s is the oracle's *debug toggle*, which keeps
+/// whatever setting is in force and flips the interactive flag. This crate
+/// answers [`TraceMode::OFF`] for it instead, which is what it answered
+/// before the letter existed; getting it right needs the current setting as
+/// an input and the interactive flag as a field, and `phase-4-exclusions.
+/// txt`'s `TRACE ?` row owns both halves. Measured divergence: `trace l`
+/// then `trace ?` then `trace()` is `?L` on the oracle and `O` here.
 pub(crate) fn mode_from_setting(bytes: &[u8]) -> Result<TraceMode, u8> {
     for &byte in bytes {
         if byte == b'?' {
@@ -195,9 +278,16 @@ pub(crate) fn mode_from_setting(bytes: &[u8]) -> Result<TraceMode, u8> {
             // a visible effect in this crate's scope -- `TRACE C x = 1` must
             // not be treated as an unrecognised setting, it must be treated
             // as "recognised, and this crate has nothing to show for it".
-            b'C' | b'E' | b'F' | b'N' | b'O' => Ok(TraceMode::OFF),
+            b'C' => Ok(TraceMode::COMMANDS),
+            b'E' => Ok(TraceMode::ERRORS),
+            b'F' => Ok(TraceMode::FAILURES),
+            b'N' => Ok(TraceMode::NORMAL),
+            b'O' => Ok(TraceMode::OFF),
             _ => Err(byte),
         };
+    }
+    if bytes.is_empty() {
+        return Ok(TraceMode::NORMAL);
     }
     Ok(TraceMode::OFF)
 }
@@ -735,7 +825,10 @@ mod tests {
     /// once each rather than only through the corpus's own two programs.
     #[test]
     fn every_recognised_letter_classifies_and_unrecognised_ones_report_the_byte() {
-        assert_eq!(mode_from_setting(b""), Ok(TraceMode::OFF));
+        // The empty setting is `setTraceNormal`, the all-`?` one is the
+        // debug toggle this crate answers `OFF` for -- `mode_from_setting`'s
+        // own doc has the measurement and the owner for each.
+        assert_eq!(mode_from_setting(b""), Ok(TraceMode::NORMAL));
         assert_eq!(mode_from_setting(b"?"), Ok(TraceMode::OFF));
         assert_eq!(mode_from_setting(b"??"), Ok(TraceMode::OFF));
         assert_eq!(mode_from_setting(b"a"), Ok(TraceMode::ALL));
@@ -759,13 +852,36 @@ mod tests {
         for mode in [TraceMode::ALL, TraceMode::RESULTS, TraceMode::INTERMEDIATES] {
             assert!(mode.labels && mode.all, "{mode:?}");
         }
+        // The five silent settings behave identically and are still five
+        // distinct answers, because `TRACE()` reports the letter. Both
+        // halves are asserted: same behaviour, different name.
         for letter in b"CEFNO" {
+            let mode = mode_from_setting(&[*letter]).expect("a recognised letter");
             assert_eq!(
-                mode_from_setting(&[*letter]),
-                Ok(TraceMode::OFF),
-                "{}",
+                (mode.all, mode.results, mode.intermediates, mode.labels),
+                (false, false, false, false),
+                "{} is silent",
                 *letter as char
             );
+            assert_eq!(
+                mode.letter, *letter,
+                "{} keeps its own name",
+                *letter as char
+            );
+            assert_eq!(
+                mode_from_setting(&[letter.to_ascii_lowercase()]),
+                Ok(mode),
+                "{} classifies case-insensitively",
+                *letter as char
+            );
+        }
+        // Every letter round-trips: what `mode_from_setting` accepts is what
+        // `TRACE()` reports back, for all nine. A mapping that collapsed two
+        // letters onto one constant fails here rather than only in a corpus
+        // program that happens to use the second one.
+        for letter in b"ACEFILNOR" {
+            let mode = mode_from_setting(&[*letter]).expect("a recognised letter");
+            assert_eq!(mode.letter, *letter, "{}", *letter as char);
         }
         assert_eq!(mode_from_setting(b"z"), Err(b'z'));
         assert_eq!(mode_from_setting(b"?z"), Err(b'z'));

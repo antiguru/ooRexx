@@ -116,10 +116,29 @@ whole name would overstate the gap; ignoring the split would understate it.
              which reads a pool such as ENVIRONMENT, is Phase 7's: it needs
              process environment access, which is the platform layer.
 
-  ADDRESS()  Reporting an environment set by an ADDRESS instruction is 4c's.
-             The platform-supplied default is Phase 7's -- measured, "say
-             address()" with no ADDRESS instruction prints "sh", which comes
-             from the layer D18 defers.
+  ADDRESS()  Reporting an environment set by an ADDRESS instruction is 4c's,
+             and so, SINCE 4c TASK 10, is the platform-supplied default this
+             row used to assign to Phase 7 -- measured, "say address()" with
+             no ADDRESS instruction prints "sh".
+
+             WHY THE ROW MOVED. The reason given for deferring it was that
+             the default "comes from the layer D18 defers", and that
+             conflates naming the default environment with issuing a command
+             to it. The name is SYSINITIALADDRESS, a #define in
+             platform/unix/SystemCommands.cpp fixed when the interpreter is
+             built (the Windows build returns GlobalNames::INITIALADDRESS
+             instead); nothing about reading it needs the command layer.
+             Deferring it also made the corpus witness this row's own
+             enumeration says ADDRESS() is owed impossible to write, because
+             a callee's inherited alternate is the default in the simplest
+             shape.
+
+             So it is spelled as a #[cfg]-selected constant in
+             builtin/state.rs, and it is in the corpus -- for the reason
+             PARSE SOURCE's "LINUX COMMAND" is and PARSE VERSION's build date
+             is not: it is a compile-time constant of the interpreter rather
+             than a value that moves under a rebuild. What stays Phase 7's is
+             unchanged: issuing a command to that environment.
 
   QUEUED     In scope against 4b's in-process queue. Cross-process sharing with
              the oracle's rxapi-backed session queue will never match, so a
@@ -533,14 +552,17 @@ DEVIATIONS -- permanent, chosen
      under trace r suppresses the error report entirely. Only the
      rendering's leading whitespace is normalised.
 
-     "TRACE() IS READABLE BY THE PROGRAM" STOOD IN THAT LIST AND IS NOT A
-     PROPERTY THIS CRATE HAS. Measured 2026-08-04, `say trace()`: the oracle
-     prints N at rc 0; this crate prints `rexx-exec: routine "TRACE" is not
-     implemented (4c)` at rc 120. The builtin is 4c's, so the sentence
-     described the oracle rather than the agreement, which is the opposite
-     of what a "stays byte-exact" list is for. Noted by 4b Task 9's own
-     re-review while checking a different row's coupling argument against a
-     live reader and finding there was none.
+     "TRACE() IS READABLE BY THE PROGRAM" STOOD IN THAT LIST, WAS FALSE WHEN
+     IT WAS WRITTEN, AND IS TRUE AGAIN SINCE 4c TASK 10. Measured
+     2026-08-04, `say trace()`: the oracle printed N at rc 0 and this crate
+     printed `rexx-exec: routine "TRACE" is not implemented (4c)` at rc 120,
+     so the sentence described the oracle rather than the agreement, which
+     is the opposite of what a "stays byte-exact" list is for. Noted by 4b
+     Task 9's own re-review while checking a different row's coupling
+     argument against a live reader and finding there was none. Task 10
+     landed the builtin and the letter it reports; the one spelling still
+     not byte-exact is the interactive prefix, and the TRACE ? row below now
+     carries that.
 
   1. DO OVER on a stem does not reproduce the oracle's traversal order.
 
@@ -1108,10 +1130,26 @@ above.
     +++ "LINUX COMMAND <absolute path>"        (before the first clause echo)
     +++ Interactive trace. "Trace Off" to end debug, ENTER to continue. +++
 
-  stdout and the exit code match; only stderr differs. Not a deviation and
-  not an exclusion: the design spec's own Risks section required measuring
-  what the oracle does with `?` and no tty and then either reproducing it or
-  failing loudly, and neither happened.
+  Not a deviation and not an exclusion: the design spec's own Risks section
+  required measuring what the oracle does with `?` and no tty and then either
+  reproducing it or failing loudly, and neither happened.
+
+  "STDOUT AND THE EXIT CODE MATCH" WAS TRUE UNTIL 4c TASK 10 AND IS NOT NOW,
+  because TRACE() gives the prefix a reader on stdout. Measured, with stdin
+  at /dev/null:
+
+    trace ?r ; say trace()          oracle ?R    rexx-exec R
+    trace l ; trace ? ; say trace() oracle ?L    rexx-exec O
+
+  The second line is the wider half: a `?` with no letter after it is the
+  oracle's DEBUG TOGGLE, which keeps whatever setting is in force and flips
+  the interactive flag, where `mode_from_setting` resets the setting because
+  it has no current mode to keep. Closing either half needs the interactive
+  flag as a field and the current mode as an input to the classifier, which
+  is this row's work and not TRACE()'s -- reproducing the flag in the
+  RENDERING alone would make `trace()` report a prefix for a mode nothing
+  else honours, which is the same "a fix that hides the remaining half"
+  trade the stdin-drain paragraph below describes.
 
   "ONLY STDERR DIFFERS" HOLDS ONLY AT /dev/null, and that qualifier is the
   whole reason this row has the owner it now has. With non-empty stdin,

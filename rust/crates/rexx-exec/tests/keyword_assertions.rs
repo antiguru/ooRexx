@@ -813,17 +813,29 @@ fn an_assertion_inside_a_loop_is_checked_on_every_pass() {
 }
 
 /// The exempt file's `unblocked_by` column is in the vocabulary
-/// `phase-4-exclusions.txt` fixes for owner strings, or is an explicit
-/// `defect:` tag. Nothing else, so a typo cannot quietly become a new
-/// category that the set-equality test then happily matches against itself.
+/// `phase-4-exclusions.txt` fixes for owner strings, is an explicit
+/// `defect:` tag, or is one of the two categories [`RunOutcome::attribution`]
+/// emits for a body that neither passes nor names a construct. Nothing else,
+/// so a typo cannot quietly become a new category that the set-equality test
+/// then happily matches against itself.
+///
+/// **The last two are here because they are this file's own string
+/// constants, not hand-written attributions.** A `RAISED` row says the body
+/// exited non-zero for a reason the harness cannot name -- it names no
+/// phase, because the harness has nothing to derive one from -- and the
+/// exempt file's own header is where the cause for such a row is written
+/// down. Requiring a phase there would mean inventing one.
 #[test]
 fn every_exempt_attribution_is_a_known_phase_or_a_declared_defect() {
     const PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
+    const DERIVED: &[&str] = &["RAISED", "NO-ASSERTION-EXECUTED"];
     for (key, attribution) in committed_exempt() {
         assert!(
-            PHASES.contains(&attribution.as_str()) || attribution.starts_with("defect:"),
-            "{key} is attributed to {attribution:?}, which is neither one of {PHASES:?} nor a \
-             `defect:` tag"
+            PHASES.contains(&attribution.as_str())
+                || DERIVED.contains(&attribution.as_str())
+                || attribution.starts_with("defect:"),
+            "{key} is attributed to {attribution:?}, which is none of {PHASES:?}, {DERIVED:?} nor \
+             a `defect:` tag"
         );
     }
 }
