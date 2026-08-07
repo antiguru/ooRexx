@@ -68,6 +68,17 @@
 # this file. Later 4c tasks move their own construct across that line and
 # delete its name from the paragraph above in the same change.
 #
+# NO PROGRAM HERE MAY DEPEND ON EXTERNAL ROUTINE RESOLUTION. The oracle
+# searches for a Rexx file named for a call target that matches no label, no
+# builtin and no ::ROUTINE; this crate raises 43.1 instead (Phase 7,
+# phase-4-exclusions.txt). A program relying on that search would pass or
+# fail here according to what happens to be sitting in the directory the
+# harness runs it from, which is the opposite of the determinism rule below.
+# It is also the easiest probe error in the phase: the session scratchpad is
+# ON that search path and holds hundreds of stale .rex files, so the same
+# three-line program has been measured reporting 44.1 rc 212 from the
+# scratchpad root and 43.1 rc 213 from a clean directory.
+#
 # A program listed here must also obey the corpus's one standing rule
 # (README.md, "The one rule: determinism"): same bytes on every run, on every
 # machine, with no clock, no PID, no filesystem and no locale in its output.

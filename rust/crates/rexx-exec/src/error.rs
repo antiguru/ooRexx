@@ -398,6 +398,50 @@ impl Raised {
         Raised::syntax(44, 1, vec![name.to_vec()])
     }
 
+    /// 43.1: a named call matched no internal label, no builtin and no
+    /// `::ROUTINE` of the running program. `name` is the target **as the
+    /// call site spells it** -- upcased for a bare symbol, verbatim for a
+    /// quoted literal or a `CALL (expr)` target.
+    ///
+    /// Measured in a clean directory, all rc 213: `call zorkolo` with
+    /// nothing of that name gives `Could not find routine "ZORKOLO".`;
+    /// `call 'max' 1, 9` gives `Could not find routine "max".` while `call
+    /// 'MAX' 1, 9` reaches the builtin and answers 9, because the builtin
+    /// table is matched case-sensitively; `nm = 'max'; call (nm) 1, 9` is
+    /// the same 43.1 for the same reason.
+    ///
+    /// **The oracle searches one more place before answering this, and this
+    /// crate does not**: an external Rexx file named for the target. Measured
+    /// in a directory holding `zorkolo.rex`, `call zorkolo` runs that file at
+    /// rc 0, and with a `::ROUTINE zorkolo` in the calling program the
+    /// routine wins instead. External routine resolution is Phase 7's
+    /// (`phase-4-exclusions.txt` carries both transcripts), so on this crate
+    /// a program that would have found a file gets this condition. That is a
+    /// narrower difference than it looks: the substitution, the number, the
+    /// sub and the exit code are the oracle's own for every program with no
+    /// such file beside it.
+    ///
+    /// Not truncated, unlike `Loud::unresolved_call`'s own message:
+    /// this is the oracle's answer rather than a report about this crate, so
+    /// a `CALL (v)` carrying a megabyte in `v` names a megabyte here exactly
+    /// as the oracle does.
+    pub(crate) fn routine_not_found(name: &[u8]) -> Raised {
+        Raised::syntax(43, 1, vec![name.to_vec()])
+    }
+
+    /// 99.903: two `::ROUTINE` directives of the same name in one program.
+    /// No substitutions -- the message names neither.
+    ///
+    /// Measured: two `::routine zork` directives give rc 157, the second
+    /// directive's own clause echoed, `Error 99 ... Translation error.` and
+    /// `Error 99.903:  Duplicate ::ROUTINE directive instruction.` A
+    /// translation-time refusal on the oracle rather than an install-time
+    /// one, which is why it is reported before the main body's first clause
+    /// here too.
+    pub(crate) fn duplicate_routine() -> Raised {
+        Raised::syntax(99, 903, Vec::new())
+    }
+
     /// 16.1: `SIGNAL`/`SIGNAL VALUE` named a target that matches no label in
     /// the running activation's own body. `name` is the resolved target's
     /// own bytes -- already upcased for a bare symbol, verbatim for a quoted

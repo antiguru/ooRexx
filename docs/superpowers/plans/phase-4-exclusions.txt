@@ -436,6 +436,54 @@ EXCLUSIONS -- a compound variable as a DO control variable, owned by 4c
   fixed: no 4b task's file list reaches the parser.
 
 
+EXCLUSIONS -- external routine resolution, Phase 7
+--------------------------------------------------
+
+  A NAMED CALL THAT MATCHES NO INTERNAL LABEL, NO BUILTIN AND NO ::ROUTINE
+  RAISES 43.1 HERE. The oracle searches one more place first: an external
+  Rexx file named for the target. Measured 2026-08-07, two directories, the
+  same three-line program:
+
+    a directory holding zorkolo.rex, whose body is
+        say 'EXTERNAL FILE RAN' ; return 'EXT'
+
+        call zorkolo ; say 'r=' result
+          -> rc 0, stdout "EXTERNAL FILE RAN" then "r= EXT"
+
+    an empty directory
+
+        call zorkolo ; say 'r=' result
+          -> rc 213, stdout EMPTY, and on stderr
+               1 *-* call zorkolo
+             Error 43 running <path> line 1:  Routine not found.
+             Error 43.1:  Could not find routine "ZORKOLO".
+
+  The second is what this crate answers in both directories. So the
+  difference is confined to a program that has a matching file beside it,
+  and 4c is byte-identical to the oracle for every program that does not.
+
+  A ::ROUTINE BEATS THE FILE, which is why the step this task did land sits
+  in front of the one it did not: measured, with zorkolo.rex present AND a
+  `::routine zorkolo` in the calling program, the routine wins and the file
+  never runs. So implementing the file search later cannot change any answer
+  4c gives today; it can only add answers where 4c raises.
+
+  OWNER: Phase 7, the platform layer. Resolving a name to a file needs the
+  search path (the oracle tries the program's own directory, the current
+  directory and PATH-like locations), file loading, and a second Package
+  object -- the same subsystem the seven stream builtins above are blocked
+  on.
+
+  A CORPUS RULE FOLLOWS FROM IT, and rust/corpus/phase-4c.txt carries it: no
+  corpus program may depend on external routine resolution. This is the
+  easiest probe error in the phase rather than a theoretical one -- the
+  session scratchpad sits on the oracle's own search path and holds hundreds
+  of stale .rex files, and the same three-line program has been measured
+  reporting 44.1 rc 212 from the scratchpad root and 43.1 rc 213 from a
+  clean directory. Every measurement in this section was taken from a
+  directory created for it.
+
+
 DEVIATIONS -- permanent, chosen
 -------------------------------
 

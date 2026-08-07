@@ -69,12 +69,14 @@ use crate::builtin;
 use crate::clause::{ClauseOutcome, ClauseValue, HandlerExit};
 use crate::error::{FailureSite, Raised, Search};
 use crate::eval::logical_value;
+use crate::plan::BodyKey;
 use crate::trace::{
     is_whole_number, mode_from_setting, raised_invalid_trace_letter,
     raised_numeric_trace_interactive_only,
 };
 use crate::{
-    ActiveCondition, Argument, CallContext, Code, Failure, Interp, Loud, Novalue, PendingTrap,
+    ActiveCondition, Argument, CallContext, Code, Failure, InstalledRoutine, Interp, Loud, Novalue,
+    PendingTrap,
 };
 use rexx_core::{ObjRef, SlotFrame, SlotRef};
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
@@ -272,12 +274,12 @@ impl Ended {
 /// What a called name resolved to, decided in one place before any argument
 /// is evaluated.
 ///
-/// The third outcome -- neither a label nor a builtin -- is not a variant: it
-/// returns this crate's declared gap at the point of decision, so nothing
-/// downstream can hold a `Resolved` that has nothing to run. Two variants,
-/// two paths, and the paths differ in more than which code runs:
-/// `resolve_and_run_call`'s own doc comment has what the builtin path
-/// deliberately skips.
+/// The fourth outcome -- none of the three below -- is not a variant: it
+/// raises 43.1 at the point of decision, so nothing downstream can hold a
+/// `Resolved` that has nothing to run. Three variants, three paths, and the
+/// paths differ in more than which code runs: `resolve_and_run_call`'s own
+/// doc comment has what the builtin path deliberately skips and what a
+/// `::ROUTINE` starts from instead of inheriting.
 enum Resolved {
     /// A label in the *running activation's* body, at this instruction index.
     Label(usize),
@@ -286,6 +288,23 @@ enum Resolved {
     /// code live on one row there, and splitting the row across a resolution
     /// result would be the second copy that drifts.
     Builtin,
+    /// A `::ROUTINE` this program installed. `InstalledRoutine::directive` is
+    /// the same integer `Activation::body` and `BodyKey::directive` carry.
+    Routine(InstalledRoutine),
+}
+
+/// Which of the two activation-pushing outcomes a resolved call took, kept
+/// past the push so the three decisions that follow it can read it.
+///
+/// [`Resolved`] cannot serve here: `Resolved::Builtin` returns before any
+/// activation exists, and a type that still admits it would need a dead arm
+/// at each of those three reads. The three, each measured and each different
+/// between the two variants: whether `SIGL` is set, which constructor and
+/// pool the callee gets, and what `activation_indent` the callee starts at.
+#[derive(Copy, Clone)]
+enum Entered {
+    Label(usize),
+    Routine(InstalledRoutine),
 }
 
 /// How many activations may be live at once before `CALL` raises 11.1
@@ -3427,14 +3446,49 @@ impl Interp {
         // **The whole resolution happens here, upstream of the argument loop
         // below**, and the shape is load-bearing rather than tidy. The
         // builtin step needs its arguments already evaluated, so it cannot
-        // sit where the loud return sits; putting the lookup between the
-        // label miss and the loud return would have placed it upstream of the
-        // evaluation it consumes. Deciding all three outcomes first is what
-        // lets one argument loop serve two of them.
+        // sit where the raising return sits; putting the lookup between the
+        // label miss and that return would have placed it upstream of the
+        // evaluation it consumes. Deciding all four outcomes first is what
+        // lets one argument loop serve three of them.
+        //
+        // **The order is measured in both directions.** A label wins over a
+        // builtin of the same name; a builtin wins over a `::ROUTINE` of the
+        // same name (`call max 1, 9` with a `::routine max` present reports
+        // 9, and the routine never runs), so a `::ROUTINE` search in front of
+        // the builtin step would silently run the wrong routine. A quoted
+        // target is a second order rather than the same one: `call
+        // 'ZORKOLO'` skips the internal `zorkolo:` label -- `search_labels`
+        // is already false for it -- and still reaches the `::routine`.
+        //
+        // The routine lookup upcases both sides (`Interp::routines`' own
+        // doc), where the builtin step in front of it is case-sensitive:
+        // measured, `call 'max' 1, 9` is 43.1 and `call 'MAX' 1, 9` is 9, and
+        // that asymmetry is exactly what makes a `::routine 'max'` reachable
+        // at all.
         let resolved = match label {
             Some(target) => Resolved::Label(target),
             None if builtin::is_builtin(name) => Resolved::Builtin,
-            None => return Err(Loud::unresolved_call(name).into()),
+            // A builtin Phase 4 excludes outright is still a builtin, so it
+            // sits here rather than behind the routine lookup -- see
+            // `builtin::is_excluded_builtin`'s own doc for why neither the
+            // routine step nor 43.1 is an acceptable answer for one.
+            None if builtin::is_excluded_builtin(name) => {
+                return Err(Loud::unresolved_call(name).into());
+            }
+            None => match self.routines.get(&name.to_ascii_uppercase()[..]).copied() {
+                Some(installed) => Resolved::Routine(installed),
+                // **43.1, not this crate's loud gap**, and the difference is
+                // one search: the oracle looks for an external Rexx file
+                // named for the target before answering, and this crate does
+                // not (Phase 7, `phase-4-exclusions.txt`). Measured in a
+                // clean directory with nothing of that name beside the
+                // program, the oracle's own answer is exactly this condition
+                // -- `call zorkolo` gives 43.1 rc 213 `Could not find routine
+                // "ZORKOLO".` -- so answering it here is right for every
+                // program with no such file and wrong only for one that has
+                // one, where the oracle runs the file at rc 0.
+                None => return Err(Raised::routine_not_found(name).into()),
+            },
         };
 
         // **Evaluated in the caller, before anything is pushed**, which is
@@ -3490,7 +3544,7 @@ impl Interp {
         // allocation a builtin's result costs happens with the inputs
         // reachable, and the value handed back is rooted by whichever caller
         // receives it exactly as a callee's `RETURN` value already is.
-        let target = match resolved {
+        let entered = match resolved {
             Resolved::Builtin => {
                 let values: Vec<Option<ObjRef>> = arguments
                     .iter()
@@ -3506,7 +3560,8 @@ impl Interp {
                 };
                 return Ok(Ended::Returned(Some(result?)));
             }
-            Resolved::Label(target) => target,
+            Resolved::Label(target) => Entered::Label(target),
+            Resolved::Routine(installed) => Entered::Routine(installed),
         };
 
         // `SIGL`, set here rather than before the argument loop above: the
@@ -3519,7 +3574,18 @@ impl Interp {
         // and `sub`'s own `SIGL` as the `CALL`'s line -- a version setting
         // `SIGL` before evaluating arguments would report the argument as
         // the `CALL`'s own line instead.
-        self.set_sigl(self.clause_state.line());
+        //
+        // **Not on the `::ROUTINE` path, and both halves of that are
+        // measured.** `signal there` / `there:` / `call rtn` leaves the
+        // caller's own `SIGL` at 1, the `SIGNAL`'s line, so a routine call
+        // does not overwrite it; and `sigl` read inside the routine prints
+        // the derived name `SIGL`, so nothing sets one in the routine's own
+        // pool either. This one line writes the *caller's* pool for a label
+        // (the two share it) and would write the *routine's* for a routine,
+        // so both probes would go wrong if it ran on both paths.
+        if matches!(entered, Entered::Label(_)) {
+            self.set_sigl(self.clause_state.line());
+        }
 
         // D19/I6: one Rust frame per activation, plus this counter, so an
         // unbounded recursion becomes a reportable condition instead of a
@@ -3530,58 +3596,98 @@ impl Interp {
             return Err(Raised::insufficient_stack().into());
         }
 
-        // **D9r's default: a shared pool.** The callee reuses the caller's
-        // `SlotFrame`, so it reads and writes the caller's variables and its
-        // writes survive the return -- measured, and `pop_slots` is
-        // deliberately not called on the way out because the frame is not
-        // this activation's to free. Task 5's `PROCEDURE` is what will ever
-        // push a frame of its own.
-        //
-        // `extra` is cloned in and moved back out for the same reason: it is
-        // the *name* half of that one pool (`plan.rs`'s own `slot_of`), and
-        // leaving the callee with an empty one would strand a name bound at
-        // run time inside it. Measured on the oracle -- a callee running
-        // `interpret "zork = 42"` and a caller then saying `zork` prints 42,
-        // which needs the binding as well as the slot to cross the return.
-        // Empty in every program that has no `INTERPRET` and no `DROP (v)`,
-        // which is why the clone is not a cost worth avoiding.
-        let caller = self.activation();
-        let plan = Rc::clone(&caller.plan);
-        let frame = caller.frame;
-        let settings = caller.settings.clone();
-        let trace_mode = caller.trace_mode;
-        let extra = caller.extra.clone();
-        // Cloned in and never written back, exactly like `settings` and
-        // `trace_mode` beside it -- `Activation::traps`' own doc comment has
-        // the three probes that measure the inheritance and its one-way
-        // direction.
-        let traps = caller.traps.clone();
-        // Both halves of the pair, not just the current one: measured, a
-        // callee's own bare `ADDRESS` swaps to the *caller's* alternate.
-        // `Activation::address`' own doc comment has the transcript.
-        let address = caller.address.clone();
-        // Same one-way rule again: an internal call sees the caller's
-        // `CONDITION()` answers and a reset inside the callee dies with it.
-        // `TrappedCondition`'s own doc comment has the four-line transcript.
-        let condition = caller.condition.clone();
         let callee_id = self.next_activation_id();
-        let mut callee = Activation::nested(
-            callee_id,
-            program,
-            selector,
-            plan,
-            frame,
-            target,
-            Inherited {
-                settings,
-                trace_mode,
-                address,
-                traps,
-                condition,
-            },
-        );
-        callee.extra = extra;
-        self.activations.push(callee);
+        match entered {
+            Entered::Label(target) => {
+                // **D9r's default: a shared pool.** The callee reuses the
+                // caller's `SlotFrame`, so it reads and writes the caller's
+                // variables and its writes survive the return -- measured,
+                // and `pop_slots` is deliberately not called on the way out
+                // because the frame is not this activation's to free. Task
+                // 5's `PROCEDURE` is what will ever push a frame of its own.
+                //
+                // `extra` is cloned in and moved back out for the same
+                // reason: it is the *name* half of that one pool (`plan.rs`'s
+                // own `slot_of`), and leaving the callee with an empty one
+                // would strand a name bound at run time inside it. Measured
+                // on the oracle -- a callee running `interpret "zork = 42"`
+                // and a caller then saying `zork` prints 42, which needs the
+                // binding as well as the slot to cross the return. Empty in
+                // every program that has no `INTERPRET` and no `DROP (v)`,
+                // which is why the clone is not a cost worth avoiding.
+                let caller = self.activation();
+                let plan = Rc::clone(&caller.plan);
+                let frame = caller.frame;
+                let settings = caller.settings.clone();
+                let trace_mode = caller.trace_mode;
+                let extra = caller.extra.clone();
+                // Cloned in and never written back, exactly like `settings`
+                // and `trace_mode` beside it -- `Activation::traps`' own doc
+                // comment has the three probes that measure the inheritance
+                // and its one-way direction.
+                let traps = caller.traps.clone();
+                // Both halves of the pair, not just the current one:
+                // measured, a callee's own bare `ADDRESS` swaps to the
+                // *caller's* alternate. `Activation::address`' own doc
+                // comment has the transcript.
+                let address = caller.address.clone();
+                // Same one-way rule again: an internal call sees the caller's
+                // `CONDITION()` answers and a reset inside the callee dies
+                // with it. `TrappedCondition`'s own doc comment has the
+                // four-line transcript.
+                let condition = caller.condition.clone();
+                let mut callee = Activation::nested(
+                    callee_id,
+                    program,
+                    selector,
+                    plan,
+                    frame,
+                    target,
+                    Inherited {
+                        settings,
+                        trace_mode,
+                        address,
+                        traps,
+                        condition,
+                    },
+                );
+                callee.extra = extra;
+                self.activations.push(callee);
+            }
+            // **A pool of its own, and not one of the five inheritances**
+            // -- `Activation::routine` is where that is stated and
+            // `Activation::nested`'s own doc carries the six probes. The
+            // plan is the routine body's own, cached under its own
+            // `BodyKey`, and it is what sizes the frame: a routine's names
+            // are not the caller's, so a frame sized from the caller's plan
+            // would be the wrong length.
+            Entered::Routine(installed) => {
+                // Reached through `programs` rather than through the running
+                // activation's own `Rc`, so the plan's cache key and the
+                // activation's program are the same program by construction
+                // (`InstalledRoutine`'s own doc).
+                let routine_program = Rc::clone(&self.programs[installed.program.0]);
+                let Some(body) = body_of(&routine_program, Some(installed.directive)) else {
+                    return Err(Loud::missing_body().into());
+                };
+                let plan = self.plan_for(
+                    BodyKey {
+                        program: installed.program,
+                        directive: Some(installed.directive),
+                    },
+                    body,
+                    &routine_program.symbols,
+                );
+                let frame = self.roots.push_slots(plan.len());
+                self.activations.push(Activation::routine(
+                    callee_id,
+                    routine_program,
+                    installed.directive,
+                    plan,
+                    frame,
+                ));
+            }
+        }
 
         // Level state for the callee, five pieces, saved here and restored
         // on both paths below. `Interpret`'s own arm is the model for four
@@ -3594,6 +3700,10 @@ impl Interp {
         //   because "2 x depth" agrees with the truth at caller indent 0 and
         //   parts company immediately after: a flat `call` echoes the callee
         //   at 2, one `DO` deep at 4, two `DO`s deep at 6.
+        //   **A `::ROUTINE` gets 0 instead**, which is the same fact as
+        //   `TRACE` not crossing into one seen from the other side: measured,
+        //   a routine called from inside two nested `DO` blocks and turning
+        //   `trace r` on itself echoes its own clauses at indent 0, not at 6.
         // * `indent_offset` is zeroed alongside it, exactly as the fragment
         //   case is and for the same reason -- the calling clause's printed
         //   indent already contains any escape elevation, and leaving this
@@ -3644,10 +3754,11 @@ impl Interp {
         //   is a clause line set with no boundary attached -- the exact thing
         //   `clause.rs` exists to make unwritable.
         let saved_clause_state = self.save_clause_state();
-        let saved_base = std::mem::replace(
-            &mut self.activation_indent,
-            saved_clause_state.value_indent() + 2,
-        );
+        let callee_indent = match entered {
+            Entered::Label(_) => saved_clause_state.value_indent() + 2,
+            Entered::Routine(_) => 0,
+        };
+        let saved_base = std::mem::replace(&mut self.activation_indent, callee_indent);
         let saved_offset = std::mem::take(&mut self.indent_offset);
         let saved_line = std::mem::take(&mut self.clause_line_override);
         let saved_context = std::mem::replace(
@@ -10320,8 +10431,8 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            matches!(&failure, Failure::Loud(loud) if loud.message.ends_with("is not implemented (4c)")),
-            "expected the 4c fallback, got {failure:?}"
+            matches!(&failure, Failure::Raised(raised) if raised.number == 43 && raised.sub == 1),
+            "expected the oracle's own 43.1, got {failure:?}"
         );
         assert!(interp.out.is_empty(), "the label must not have run");
 
@@ -10357,7 +10468,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            matches!(&failure, Failure::Loud(loud) if loud.message.contains("sub")),
+            matches!(&failure, Failure::Raised(raised) if raised.number == 43 && raised.sub == 1),
             "the unupcased value must not match the upcased label: {failure:?}"
         );
         assert!(interp.out.is_empty(), "the label must not have run");
@@ -13102,9 +13213,10 @@ mod tests {
     /// ```
     ///
     /// The lowercase literal is the neighbouring failure that pins the
-    /// match to the bytes rather than to a case-insensitive compare: this
-    /// crate cannot answer 43.1 yet, so it answers the same declared gap a
-    /// name it resolves to nothing has always answered.
+    /// match to the bytes rather than to a case-insensitive compare, and it
+    /// is the oracle's own 43.1 here: the `::ROUTINE` step behind the builtin
+    /// table is what makes "matched no builtin" and "matched nothing at all"
+    /// the same answer for a name no directive defines.
     #[test]
     fn length_dispatches_from_every_call_form_that_reaches_the_builtin_table() {
         let mut interp = Interp::new();
@@ -13138,10 +13250,291 @@ mod tests {
         let mut interp = Interp::new();
         let failure = run_source(&mut interp, b"say \"length\"('abc')").unwrap_err();
         assert!(
-            matches!(failure, Failure::Loud(_)),
-            "a lowercase literal target matches no builtin, so it stays the \
-             unresolved-name gap; got {failure:?}"
+            matches!(&failure, Failure::Raised(raised) if raised.number == 43 && raised.sub == 1),
+            "a lowercase literal target matches no builtin, so it is the \
+             oracle's own 43.1; got {failure:?}"
         );
+    }
+
+    // ---- `::ROUTINE` dispatch ----
+
+    /// Runs `source` through the real entry point, which is the only path
+    /// that installs directives -- this module's own `activate` pushes an
+    /// activation directly and never sees one.
+    fn routine_program(source: &[u8]) -> crate::Outcome {
+        crate::run_program(
+            "/tmp/routine.rex",
+            source.to_vec(),
+            crate::Invocation::none(),
+        )
+    }
+
+    /// The whole resolution order in one program, and the order is what each
+    /// line is for rather than the dispatch: every name below resolves to
+    /// **something** on this crate, so a wrong order is a wrong answer and
+    /// not a failure.
+    ///
+    /// Measured on the oracle in a clean directory, rc 0, exactly these four
+    /// lines. Each is a separate `::routine` that would win if the step in
+    /// front of it were removed:
+    ///
+    /// * `call max 1, 9` -> `9`: the builtin beats `::routine max`.
+    /// * `call zorkolo` -> `LABEL`: the internal label beats
+    ///   `::routine zorkolo`.
+    /// * `call 'ZORKOLO'` -> `ROUTINE`: a quoted target skips the label and
+    ///   reaches the routine anyway.
+    /// * `call 'MAX' 1, 9` -> `9`: a quoted target does **not** skip the
+    ///   builtin.
+    #[test]
+    fn the_resolution_order_is_label_then_builtin_then_routine() {
+        let outcome = routine_program(
+            b"call max 1, 9\n\
+              say result\n\
+              call zorkolo\n\
+              say result\n\
+              call 'ZORKOLO'\n\
+              say result\n\
+              call 'MAX' 1, 9\n\
+              say result\n\
+              exit\n\
+              zorkolo:\n\
+              return 'LABEL'\n\
+              ::routine max\n\
+              return 'ROUTINE-MAX'\n\
+              ::routine zorkolo\n\
+              return 'ROUTINE'\n",
+        );
+        assert_eq!(
+            outcome.exit_code,
+            0,
+            "stderr: {}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(outcome.stdout, b"9\nLABEL\nROUTINE\n9\n".to_vec());
+    }
+
+    /// The routine lookup upcases both sides, where the builtin step in front
+    /// of it is case-sensitive -- and the second half is what makes the first
+    /// observable at all, since a `::routine 'max'` is only reachable because
+    /// `call 'max'` misses the builtin table.
+    ///
+    /// Measured on the oracle, rc 0, these three lines.
+    #[test]
+    fn a_routine_lookup_upcases_both_sides_where_the_builtin_lookup_does_not() {
+        let outcome = routine_program(
+            b"call 'ZORK'\n\
+              say result\n\
+              call zork\n\
+              say result\n\
+              call 'max' 1, 9\n\
+              say result\n\
+              ::routine 'zork'\n\
+              return 'HIT'\n\
+              ::routine 'max'\n\
+              return 'ROUTINE-lower-max'\n",
+        );
+        assert_eq!(
+            outcome.exit_code,
+            0,
+            "stderr: {}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(
+            outcome.stdout,
+            b"HIT\nHIT\nROUTINE-lower-max\n".to_vec(),
+            "an upcased-both-sides lookup finds all three"
+        );
+    }
+
+    /// A `::ROUTINE` gets a pool of its own, and a `CALL`ed label does not --
+    /// the pair, because the isolating half alone passes just as well against
+    /// an implementation that isolates everything.
+    ///
+    /// Measured on the oracle, rc 0: the routine reads the derived name `VV`
+    /// for a variable the caller set, its own write does not survive the
+    /// return, and the identical program with a label instead prints the
+    /// caller's value and keeps the callee's write.
+    #[test]
+    fn a_routine_has_its_own_pool_and_a_called_label_shares_the_callers() {
+        let outcome = routine_program(
+            b"vv = 'CALLER'\n\
+              call rtn\n\
+              say vv\n\
+              call lbl\n\
+              say vv\n\
+              exit\n\
+              lbl:\n\
+              say vv\n\
+              vv = 'LABEL-WROTE'\n\
+              return\n\
+              ::routine rtn\n\
+              say vv\n\
+              vv = 'ROUTINE-WROTE'\n\
+              return\n",
+        );
+        assert_eq!(
+            outcome.exit_code,
+            0,
+            "stderr: {}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(
+            outcome.stdout,
+            b"VV\nCALLER\nCALLER\nLABEL-WROTE\n".to_vec()
+        );
+    }
+
+    /// None of the five things [`Inherited`] carries crosses into a
+    /// `::ROUTINE`, and the neighbouring `CALL`ed label shows each of them
+    /// crossing -- so this pins the difference rather than the defaults.
+    ///
+    /// Measured on the oracle, rc 0, exactly the eight lines below. The
+    /// `NUMERIC` probe uses `FORM` as well as `DIGITS` because a caller
+    /// setting `form engineering` and a routine reporting `SCIENTIFIC` is the
+    /// only spelling of that field where inherited and defaulted differ.
+    #[test]
+    fn a_routine_inherits_none_of_the_five_a_called_label_inherits() {
+        let outcome = routine_program(
+            b"numeric digits 7\n\
+              numeric form engineering\n\
+              address system\n\
+              call rtn\n\
+              call lbl\n\
+              exit\n\
+              lbl:\n\
+              say digits() form()\n\
+              say address()\n\
+              say trace()\n\
+              return\n\
+              ::routine rtn\n\
+              say digits() form()\n\
+              say address()\n\
+              say trace()\n\
+              return\n",
+        );
+        assert_eq!(
+            outcome.exit_code,
+            0,
+            "stderr: {}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(
+            outcome.stdout,
+            b"9 SCIENTIFIC\nsh\nN\n7 ENGINEERING\nSYSTEM\nN\n".to_vec(),
+            "the routine reports defaults and the label reports the caller's"
+        );
+    }
+
+    /// A caller's condition trap does not arm inside a `::ROUTINE`, and the
+    /// probe separates "not inherited" from "the caller caught it after the
+    /// routine unwound" -- which every two-level program answers the same way
+    /// unless the routine has a label of the trap's own name.
+    ///
+    /// Measured on the oracle, rc 0, `in routine` then `CALLER TRAP`: the
+    /// routine's own `mytrap:` never runs.
+    #[test]
+    fn a_routine_does_not_inherit_the_callers_condition_traps() {
+        let outcome = routine_program(
+            b"signal on syntax name mytrap\n\
+              call rtn\n\
+              say 'unreached'\n\
+              exit\n\
+              mytrap:\n\
+              say 'CALLER TRAP'\n\
+              exit 0\n\
+              ::routine rtn\n\
+              say 'in routine'\n\
+              n1 = 1/0\n\
+              return\n\
+              mytrap:\n\
+              say 'ROUTINE TRAP'\n\
+              return\n",
+        );
+        assert_eq!(
+            outcome.exit_code,
+            0,
+            "stderr: {}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(outcome.stdout, b"in routine\nCALLER TRAP\n".to_vec());
+    }
+
+    /// A `::ROUTINE` call sets no `SIGL` on either side.
+    ///
+    /// Measured on the oracle, rc 0: the caller's own `SIGL` still reads the
+    /// `SIGNAL`'s line after the call returns, and `sigl` inside the routine
+    /// is the derived name. The `CALL`ed label beside it is the neighbouring
+    /// success -- it *does* set one, in the pool the two share.
+    #[test]
+    fn a_routine_call_sets_no_sigl_where_a_called_label_does() {
+        let outcome = routine_program(
+            b"signal there\n\
+              there:\n\
+              call rtn\n\
+              say sigl\n\
+              call lbl\n\
+              say sigl\n\
+              exit\n\
+              lbl:\n\
+              return\n\
+              ::routine rtn\n\
+              say sigl\n\
+              return\n",
+        );
+        assert_eq!(
+            outcome.exit_code,
+            0,
+            "stderr: {}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(
+            outcome.stdout,
+            b"SIGL\n1\n5\n".to_vec(),
+            "the routine has none, the caller keeps line 1, the label sets 5"
+        );
+    }
+
+    /// Two `::ROUTINE` directives of the same name refuse the program before
+    /// its first clause, with the oracle's own translation error.
+    ///
+    /// Measured, rc 157, stdout EMPTY -- the `say` never runs, which is the
+    /// half a message-only assertion would miss.
+    #[test]
+    fn a_duplicate_routine_directive_is_99_903_before_the_first_clause() {
+        let outcome = routine_program(
+            b"say 'main ran'\n\
+              ::routine zork\n\
+              return 'A'\n\
+              ::routine zork\n\
+              return 'B'\n",
+        );
+        assert_eq!(outcome.exit_code, 157, "256 - 99");
+        assert_eq!(outcome.stdout, b"", "stdout is empty: main never ran");
+        let stderr = String::from_utf8_lossy(&outcome.stderr);
+        assert!(
+            stderr.contains("Error 99.903:  Duplicate ::ROUTINE directive instruction.")
+                && stderr.contains("*-* ::routine zork"),
+            "expected the oracle's own report with the directive echoed, got: {stderr}"
+        );
+    }
+
+    /// A program carrying a `::ROUTINE` it never calls runs exactly as one
+    /// with no directive does -- the adjacent success for the refusal above,
+    /// and the boundary Step 4's rule turns on: presence is not use.
+    #[test]
+    fn an_uncalled_routine_directive_changes_nothing() {
+        let outcome = routine_program(
+            b"say 'main ran'\n\
+              ::routine zork\n\
+              return 'A'\n",
+        );
+        assert_eq!(
+            outcome.exit_code,
+            0,
+            "stderr: {}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(outcome.stdout, b"main ran\n".to_vec());
     }
 
     /// A builtin's result is a value whose rendering `NUMERIC DIGITS` cannot

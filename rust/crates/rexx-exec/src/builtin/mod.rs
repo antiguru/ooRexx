@@ -623,6 +623,37 @@ pub(crate) fn is_builtin(name: &[u8]) -> bool {
     std::str::from_utf8(name).is_ok_and(|name| in_scope().contains(name))
 }
 
+/// The builtin names Phase 4 excludes **outright**, as a set built once --
+/// the same derivation [`in_scope`] uses, from the complement
+/// `rexx_inventory::builtins::wholly_excluded()`. A *partially* excluded name
+/// is not here: its in-scope form still dispatches, and its excluded form is
+/// loud from inside the builtin's own code.
+fn wholly_excluded() -> &'static HashSet<&'static str> {
+    static NAMES: OnceLock<HashSet<&'static str>> = OnceLock::new();
+    NAMES.get_or_init(|| {
+        rexx_inventory::builtins::wholly_excluded()
+            .into_iter()
+            .collect()
+    })
+}
+
+/// Whether `name` is a builtin function name Phase 4 runs nothing for.
+///
+/// **Its own resolution step, in front of the `::ROUTINE` lookup and behind
+/// [`is_builtin`].** The oracle's builtin table is one table and a builtin
+/// always beats a `::ROUTINE` of the same name, so a name in it must never
+/// reach the routine step -- a `::routine charin` would otherwise run here
+/// where the oracle runs `CHARIN`. And it must never reach 43.1 either: the
+/// oracle answers this name, so a condition here would let a program
+/// *expecting* that condition pass against a gap, which is the whole reason
+/// an excluded construct fails loudly instead.
+///
+/// Case-sensitive on the same argument [`is_builtin`]'s doc makes: a quoted
+/// lower-case target reaches no builtin on the oracle either.
+pub(crate) fn is_excluded_builtin(name: &[u8]) -> bool {
+    std::str::from_utf8(name).is_ok_and(|name| wholly_excluded().contains(name))
+}
+
 /// Runs the builtin `name` over already-evaluated arguments.
 ///
 /// `None` means **`name` is not a builtin**, which is the answer that lets

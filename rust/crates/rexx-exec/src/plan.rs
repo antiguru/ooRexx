@@ -71,11 +71,13 @@ pub(crate) struct BodyKey {
     /// `activation.rs`'s own `body_of` is the single place either is turned
     /// into a `&CodeBody`.
     ///
-    /// Still only ever `None` in practice, and that field's doc has the
-    /// measured reason: a `::routine` **is** reachable for any non-builtin
-    /// name, and dispatching to one is deferred because the builtin
-    /// resolution step in front of it is 4c's -- a name colliding with a
-    /// builtin would otherwise silently run the wrong routine.
+    /// Two production sites, one per arm. `Interp::run` builds the main
+    /// body's plan under `None`; `resolve_and_run_call`'s `::ROUTINE` step
+    /// builds the routine's under `Some(index)`. A routine gets a plan of its
+    /// own rather than sharing the caller's, and that is what makes its pool
+    /// safe to isolate: a different `CodeBody` means a different
+    /// name-to-slot map, so the slot-index identity `PROCEDURE EXPOSE`'s
+    /// alias bitset rests on does not hold across the two.
     pub(crate) directive: Option<usize>,
 }
 

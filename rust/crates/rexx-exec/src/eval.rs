@@ -1745,21 +1745,46 @@ mod tests {
         assert_eq!(outcome.stdout, b"42\n");
     }
 
-    /// A name that resolves to nothing -- not a label of the calling body
-    /// and not a builtin -- falls through to the loud `4c` fallback rather
-    /// than succeeding or crashing. This depends on Task 0's owner-suffix
-    /// message shape (`owned_message`, `lib.rs`).
+    /// A name that resolves to nothing -- not a label of the calling body,
+    /// not a builtin and not a `::ROUTINE` -- raises the oracle's own 43.1
+    /// rather than succeeding, crashing, or reporting a gap.
     ///
     /// The witness is a name no table can ever hold, not a builtin waiting
     /// its turn: the builtin step reads `rexx_inventory`'s own name set, so
     /// any real builtin here would assert where the implemented boundary sits
     /// and go red the day that name landed. Where the boundary sits is
     /// `corpus/builtin-status.txt`'s to record, over every builtin at once.
+    ///
+    /// Measured on the oracle in a clean directory, which is the only place
+    /// this answer is stable: `call zorkolo` reports 43.1 rc 213 there and
+    /// runs a stale `zorkolo.rex` at rc 0 in a directory that has one.
     #[test]
-    fn an_unresolvable_name_still_fails_loudly_naming_4c() {
+    fn an_unresolvable_name_raises_43_1() {
         let outcome = crate::run_program(
             "call-expr-builtin.rex",
             b"say zorkolo('abc')\n".to_vec(),
+            crate::Invocation::none(),
+        );
+        assert_eq!(outcome.exit_code, 213);
+        assert!(
+            String::from_utf8_lossy(&outcome.stderr)
+                .contains(r#"Error 43.1:  Could not find routine "ZORKOLO"."#),
+            "stderr: {:?}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(outcome.stdout, b"");
+    }
+
+    /// The neighbouring case the one above cannot pin on its own: a builtin
+    /// Phase 4 excludes **outright** is not "resolves to nothing", and must
+    /// stay loud rather than joining it at 43.1. The oracle answers `CHARIN`,
+    /// so a condition here would let a program expecting one pass against a
+    /// gap.
+    #[test]
+    fn a_wholly_excluded_builtin_stays_loud_rather_than_raising_43_1() {
+        let outcome = crate::run_program(
+            "call-expr-excluded.rex",
+            b"say charin('nosuch.txt')\n".to_vec(),
             crate::Invocation::none(),
         );
         assert_eq!(outcome.exit_code, crate::NOT_IMPLEMENTED_EXIT);
@@ -1776,10 +1801,10 @@ mod tests {
     /// external-routine search path and holds a stale `f.rex` -- the first
     /// attempt at exactly this measurement found it and reported the wrong
     /// answer): `say "f"(1)` with `f:` present is Error 43.1 rc 213, "Routine
-    /// not found", where `say f(1)` runs the label instead. 4b's own answer
-    /// is the loud `4c` fallback, not a fabricated 43.1 -- there is no
-    /// builtin/external step yet to distinguish "not a label" from "not
-    /// anything at all".
+    /// not found", where `say f(1)` runs the label instead. That is this
+    /// crate's answer too now that the builtin and `::ROUTINE` steps behind
+    /// the label search exist: "not a label" and "not anything at all" are
+    /// separable, so the condition is the oracle's own rather than fabricated.
     #[test]
     fn a_literal_call_target_never_reaches_the_label_table() {
         let outcome = crate::run_program(
@@ -1787,9 +1812,10 @@ mod tests {
             b"say \"f\"(1)\nexit\nf: return 41\n".to_vec(),
             crate::Invocation::none(),
         );
-        assert_eq!(outcome.exit_code, crate::NOT_IMPLEMENTED_EXIT);
+        assert_eq!(outcome.exit_code, 213);
         assert!(
-            String::from_utf8_lossy(&outcome.stderr).contains("4c"),
+            String::from_utf8_lossy(&outcome.stderr)
+                .contains(r#"Error 43.1:  Could not find routine "f"."#),
             "stderr: {:?}",
             String::from_utf8_lossy(&outcome.stderr)
         );

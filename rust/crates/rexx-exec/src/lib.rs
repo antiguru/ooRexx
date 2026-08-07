@@ -38,7 +38,8 @@
 
 use rexx_core::{Heap, ObjRef, RootSet, SlotRef};
 use rexx_parse::{
-    CodeBody, ExprKind, InstructionKind, PrefixOp, Program, SymbolId, SymbolTable, parse_program,
+    CodeBody, Directive, DirectiveKind, ExprKind, InstructionKind, PrefixOp, Program, SymbolId,
+    SymbolTable, parse_program,
 };
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -1066,6 +1067,21 @@ struct Interp {
     /// `ProgramId(0)`'s program is still here.
     programs: Vec<Rc<Program>>,
     plans: HashMap<BodyKey, Rc<Plan>>,
+    /// Every `::ROUTINE` the running program installs, keyed by its
+    /// **upcased** name and holding its index in `Program::directives`.
+    ///
+    /// Upcased on both sides, which is the lookup rule and not a convenience:
+    /// measured, `::routine 'zork'` is reached by `call zork`, `call 'zork'`
+    /// and `call 'ZORK'` alike, and `::routine MiXeD` by `call 'mixed'`.
+    /// `CodeBody::labels` is the opposite -- a quoted target never searches it
+    /// at all -- so the two tables cannot share a key rule.
+    ///
+    /// Filled by [`Interp::install_directives`] before the main body's first
+    /// clause, matching the oracle, which resolves every directive at
+    /// translation or install time: measured, a `::ROUTINE` naming a library
+    /// it cannot load reports 98.903 with **empty stdout** whether or not the
+    /// program ever calls it.
+    routines: HashMap<Box<[u8]>, InstalledRoutine>,
     /// The output sink. `SAY` writes here and `Outcome::stdout` is what it
     /// becomes.
     out: Vec<u8>,
@@ -1543,6 +1559,20 @@ struct Interp {
     program_path: String,
 }
 
+/// Where one installed `::ROUTINE` lives: which loaded program, and which of
+/// its directives.
+///
+/// The program is carried rather than assumed to be the running one, because
+/// the two spellings the resolution needs -- the `BodyKey` a plan is cached
+/// under and the `Rc<Program>` the activation holds -- must name the same
+/// program or a routine would run under another program's plan. Both come
+/// from this one field, so they cannot come apart.
+#[derive(Copy, Clone)]
+struct InstalledRoutine {
+    program: ProgramId,
+    directive: usize,
+}
+
 /// The name and arguments of one call in progress.
 ///
 /// One struct rather than two `Interp` fields so that the save-and-restore
@@ -1635,6 +1665,7 @@ impl Interp {
             activations: Vec::new(),
             programs: Vec::new(),
             plans: HashMap::new(),
+            routines: HashMap::new(),
             out: Vec::new(),
             trace: Vec::new(),
             clause_state: ClauseState::new(),
@@ -1682,6 +1713,15 @@ impl Interp {
         let id = ProgramId(self.programs.len());
         self.programs.push(Rc::clone(&program));
 
+        // **Before the first clause, and its failures print nothing on
+        // stdout.** That is the oracle's own shape rather than a choice
+        // here: measured, `say 'main ran'` followed by `::requires
+        // 'no_such_file_zz.rex'` is 43.901 at rc 213 with stdout EMPTY, and
+        // `::class foo subclass zzznotaclass` is 98.909 at rc 158, likewise
+        // empty. A program whose directives all install runs its main body
+        // exactly as one with no directives does.
+        self.install_directives(id, &program)?;
+
         // Note what does *not* happen here: the plan is looked up through
         // `&program.main`, a borrow of the local `Rc`, while `self` is
         // borrowed mutably by `plan_for`. Reaching the same body through
@@ -1713,6 +1753,92 @@ impl Interp {
         let activation = self.activations.pop().expect("the frame just pushed");
         self.roots.pop_slots(activation.frame);
         exit
+    }
+
+    /// Resolves every `::` directive of `program`, filling [`Interp::routines`]
+    /// and refusing the ones this crate cannot resolve.
+    ///
+    /// **A directive that fails to resolve refuses the program; a directive
+    /// that merely *exists* does not.** Both halves are measured, and they
+    /// fail in opposite directions, which is why the rule is stated rather
+    /// than approximated by "any directive is a gap". Programs the oracle
+    /// runs, all rc 0 printing `main ran`:
+    ///
+    /// ```text
+    /// ::class foo
+    /// ::class foo + ::method bar
+    /// ::class foo + ::attribute baz
+    /// ::constant kk 5
+    /// ::resource foo ... ::END
+    /// ::annotate package author 'me'
+    /// a loose ::method with no ::class
+    /// ```
+    ///
+    /// Programs the oracle refuses before `main`, stdout EMPTY in every case:
+    ///
+    /// ```text
+    /// ::class foo subclass zzznotaclass     98.909 rc 158
+    /// ::class foo metaclass zzznotaclass    98.908 rc 158
+    /// ::class bar inherit zzznotaclass      98.909 rc 158
+    /// ::requires 'no_such_file_zz.rex'      43.901 rc 213
+    /// ::routine z external "LIBRARY nosuchlib nosuchfn"   98.903 rc 158
+    /// ::method m external "LIBRARY nosuchlib nosuchfn"    98.903 rc 158
+    /// ::annotate routine nosuchrtn          99.945 rc 157
+    /// duplicate ::routine of the same name  99.903 rc 157
+    /// ```
+    ///
+    /// So the predicate below is: **a directive installs here when installing
+    /// it neither runs code, changes a setting a Phase 4 construct can read,
+    /// nor resolves a name against a table this crate does not have.** Each
+    /// arm's own comment says which of the three it trips.
+    fn install_directives(&mut self, id: ProgramId, program: &Rc<Program>) -> Result<(), Failure> {
+        for (index, directive) in program.directives.iter().enumerate() {
+            let DirectiveKind::Routine(routine) = &directive.kind else {
+                continue;
+            };
+            // Resolves nothing outside this file and runs nothing: the body
+            // is already assembled in the AST, so installing it is recording
+            // a name.
+            let name: Box<[u8]> = routine.name.to_ascii_uppercase().into();
+            let installed = InstalledRoutine {
+                program: id,
+                directive: index,
+            };
+            if self.routines.insert(name, installed).is_some() {
+                // A *translation* error on the oracle, not an install one:
+                // measured, two `::routine zork` directives give `Error
+                // 99.903: Duplicate ::ROUTINE directive instruction.` at rc
+                // 157, echoing the second directive's own clause.
+                // `rexx-parse` does not detect it, so it is detected here,
+                // where the accumulated table is what answers.
+                self.blame_directive(program, directive);
+                return Err(Raised::duplicate_routine().into());
+            }
+        }
+        Ok(())
+    }
+
+    /// Records `directive`'s own clause as the site a directive-time
+    /// condition is reported against, so its report carries the same echo
+    /// line the oracle prints above the two `Error` lines.
+    ///
+    /// Indent 0 unconditionally: a directive is never nested inside anything,
+    /// and the oracle's own echo for one is flush left (measured, `     2 *-*
+    /// ::class foo subclass zzznotaclass`).
+    fn blame_directive(&mut self, program: &Rc<Program>, directive: &Directive) {
+        let line = program.source.line_of(directive.clause_span.start);
+        let text = program
+            .source
+            .join_span(directive.clause_span.clone())
+            .map_or_else(
+                || b"<clause span outside the retained source>".to_vec(),
+                |bytes| bytes.into_owned(),
+            );
+        self.failure_site = Some(FailureSite {
+            line,
+            text,
+            indent: 0,
+        });
     }
 
     // `plan_for` and `activation`/`activation_mut` live in `plan.rs`/

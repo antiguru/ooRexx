@@ -268,36 +268,27 @@ pub(crate) struct Activation {
     /// [`body_of`] is the one function that turns the pair into a
     /// `&CodeBody`, so the two spellings cannot come apart.
     ///
-    /// **Always `None` today, and that is a deliberate scope call rather than
-    /// something being out of reach.** A `::routine`'s body is present in the
-    /// AST (`DirectiveKind::Routine`'s own `body: Option<CodeBody>`, `Some`
-    /// for every non-external routine), so `Some(i)` is representable, and
-    /// [`body_of`] resolves it. A `::routine` **is reachable for any
-    /// non-builtin name** -- measured, `call zorkolo` into `::routine
-    /// zorkolo` dispatches on the oracle and prints its `RETURN` value, where
-    /// this crate answers the loud 4c fallback.
+    /// `Some(i)` is a `::ROUTINE` activation, and it is pushed by exactly one
+    /// place: [`Activation::routine`], from `resolve_and_run_call`'s third
+    /// resolution step. The order in front of it is load-bearing rather than
+    /// tidy -- internal label, then builtin, then `::ROUTINE` -- because a
+    /// routine name that **collides** with a builtin must go to the builtin.
+    /// Measured: `::routine max` alongside `call max 1, 9` still calls the
+    /// builtin and reports 9, so a `::routine` search placed in front would
+    /// silently run the wrong routine rather than fail.
     ///
-    /// What is deferred is the resolution step *in front* of it. A named call
-    /// resolves internal label, then builtin, then external, and the builtin
-    /// table is 4c's -- so a name that **collides** with a builtin has to go
-    /// to the builtin, and getting that wrong silently runs the wrong routine
-    /// instead of failing loudly. Measured: `::routine max` alongside `call
-    /// max 1,2` still calls the builtin and reports `2`. Dispatching
-    /// non-builtin names here today would mean shipping a rule that is right
-    /// until someone names a routine `MAX`, which is the trade this defers
-    /// rather than a limit it hits.
+    /// A quoted target is a second order and not the same one: measured,
+    /// `call 'ZORKOLO'` skips the internal `zorkolo:` label and reaches the
+    /// `::routine`, while `call 'MAX' 1, 9` still reaches the builtin.
     ///
-    /// **An earlier version of this comment said a `::routine` "cannot be
-    /// reached", inferred from the `max` probe alone.** That probe is the one
-    /// shape where "behind the builtin step" and "unreachable entirely"
-    /// predict identical bytes, so it could not separate them; the
-    /// non-builtin name is what does.
+    /// The lookup **upcases both sides**, unlike [`CodeBody::labels`].
+    /// Measured: `::routine 'zork'` is found by `call zork`, `call 'zork'`
+    /// and `call 'ZORK'` alike, and `::routine MiXeD` by `call 'mixed'`.
+    /// The builtin step in front of it is the opposite, matched
+    /// case-sensitively: `call 'max' 1, 9` is 43.1 where `call 'MAX' 1, 9`
+    /// answers 9, which is what lets a `::routine 'max'` be reachable at all.
     ///
-    /// Task 3's report records the three ways a `::routine` activation is
-    /// measurably *not* an internal label's -- its own variable pool, `TRACE`
-    /// not crossing into it, and builtins shadowing it -- because whoever
-    /// sets `Some(i)` owes all three, and none of them falls out of this
-    /// field.
+    /// [`CodeBody::labels`]: rexx_parse::CodeBody::labels
     pub(crate) body: Option<usize>,
     pub(crate) plan: Rc<Plan>,
     /// Names bound after `plan` was built, and the reason this field exists is
@@ -583,6 +574,31 @@ impl Activation {
     /// instruction is a legal `PROCEDURE` is not knowable from the body's
     /// text (`first_instruction_pending`'s own doc has the four measured
     /// shapes).
+    ///
+    /// **A `::ROUTINE` is not this constructor's shape and takes no
+    /// [`Inherited`] at all** -- [`Activation::routine`] is its own, and the
+    /// reason it is separate is that a routine inherits **none** of the five
+    /// fields this one copies. Measured, one probe per field, each with a
+    /// caller that set the value and a routine that reads it back:
+    ///
+    /// ```text
+    /// numeric digits 7 / fuzz 2 / form engineering    routine: 9 0 SCIENTIFIC
+    /// address system                                  routine: address() = sh
+    /// signal on syntax name mytrap, routine has its   the routine's own mytrap
+    ///   own mytrap: label and raises 1/0              never runs; the caller's does
+    /// inside a SIGNAL ON SYNTAX handler, condition()  routine: the null string
+    /// trace r in the caller                           routine: trace() = N,
+    ///                                                 none of its clauses echoed
+    /// ```
+    ///
+    /// The pool is the sixth difference and is not a field of either
+    /// constructor: a routine's `frame` is one this crate pushed for it and
+    /// `owns_frame` is true, where a `CALL`ed label shares its caller's.
+    /// Measured: a caller holding `vv = 'CALLER'` calling a routine that says
+    /// `vv` prints the derived name `VV`, the routine's own write to `vv` is
+    /// not visible after the return, and `RESULT` and `SIGL` read inside the
+    /// routine are their own uninitialised names rather than the caller's
+    /// values.
     pub(crate) fn nested(
         id: ActivationId,
         program: Rc<Program>,
@@ -613,6 +629,50 @@ impl Activation {
             // invalid `RexxDateTime timeStamp` regardless of its caller,
             // and this is that same "start invalid" rather than a fourth
             // inheritance to add to the three above.
+            cached_clock: None,
+            clock_stale: true,
+        }
+    }
+
+    /// The activation a call into a `::ROUTINE` directive pushes: it starts
+    /// at instruction 0 of `directives[body]`'s own body, in a pool of its
+    /// own, and it inherits **nothing**.
+    ///
+    /// **The absence of an [`Inherited`] parameter is the contract**, not a
+    /// convenience. [`Activation::nested`]'s own doc carries the six probes
+    /// that measure it, one per field it would otherwise have copied, and
+    /// there is no arm here that could accidentally start copying one.
+    ///
+    /// `owns_frame` is true, so `resolve_and_run_call` pops the frame on the
+    /// way out and does **not** move `extra` back into the caller. That is
+    /// the same pair `PROCEDURE` already sets, and it is right here for a
+    /// stronger reason than there: a routine has a different `CodeBody` and
+    /// therefore a different [`Plan`], so a name means a different slot index
+    /// on each side and a binding carried across would land on an unrelated
+    /// variable.
+    pub(crate) fn routine(
+        id: ActivationId,
+        program: Rc<Program>,
+        body: usize,
+        plan: Rc<Plan>,
+        frame: SlotFrame,
+    ) -> Activation {
+        Activation {
+            id,
+            program,
+            body: Some(body),
+            plan,
+            extra: HashMap::new(),
+            frame,
+            owns_frame: true,
+            entered_by_call: true,
+            first_instruction_pending: true,
+            pc: 0,
+            settings: Settings::default(),
+            trace_mode: TraceMode::NORMAL,
+            address: AddressState::default(),
+            traps: HashMap::new(),
+            condition: None,
             cached_clock: None,
             clock_stale: true,
         }
