@@ -9,9 +9,10 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The 4a exit gate's criterion 4: the named L0 subset (`rust/corpus/phase-4a.txt`)
-//! passes again under collect-on-every-allocation, and the mode is proved to
-//! do something before its pass is believed.
+//! The 4a exit gate's criterion 4: the named L0 subset -- the union of every
+//! `rust/corpus/phase-*.txt` file, which is what [`read_subset`]'s caller
+//! reads -- passes again under collect-on-every-allocation, and the mode is
+//! proved to do something before its pass is believed.
 //!
 //! # The mode did not exist before this task
 //!
@@ -96,20 +97,13 @@ fn corpus_dir() -> PathBuf {
 /// than shared: see either file's own module doc for why an integration
 /// test cannot `mod` another test binary.
 ///
-/// **Task 0's Step 4.** Was a single-file reader (`&Path`); widened to `&[&Path]`
-/// so a later task's own subset file can run *alongside* `phase-4a.txt`
-/// rather than replacing it -- see `coverage.rs`'s own copy of this function
-/// for the fuller argument. 4b's Task 1 is the first task to use that: the
-/// caller below passes `phase-4a.txt` and `phase-4b.txt`.
-///
-/// **It does not pass `phase-4c.txt`, so criterion 4's stress run does not in
-/// fact cover every later phase's programs.** An earlier version of this
-/// comment said it did, which was true when only two subset files existed and
-/// false from the moment a third was added. `corpus.rs`'s own call site had
-/// the identical gap and was widened by 4c's Task 9; this one was left alone
-/// deliberately, because the stress harness's wiring is Task 15's remaining
-/// Step 4 work and a prose fix is not a licence to do it. What is corrected
-/// here is the sentence, not the call.
+/// Takes a slice rather than a single path so that a later phase's own subset
+/// file runs *alongside* the earlier ones rather than replacing them -- see
+/// `coverage.rs`'s own copy of this function for the fuller argument. The
+/// caller below reads every phase subset file the corpus has, which is what
+/// puts a phase's own constructs under the collector at all: a program calling
+/// a builtin lives only in `phase-4c.txt`, and until it was read here every
+/// allocation a builtin makes was outside this harness's reach.
 fn read_subset(list_paths: &[&Path]) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     let mut union = Vec::new();
@@ -134,6 +128,7 @@ fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
     let subset = read_subset(&[
         &corpus_dir.join("phase-4a.txt"),
         &corpus_dir.join("phase-4b.txt"),
+        &corpus_dir.join("phase-4c.txt"),
     ]);
     assert!(
         !subset.is_empty(),

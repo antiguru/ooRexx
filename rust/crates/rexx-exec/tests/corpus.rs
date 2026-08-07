@@ -444,6 +444,11 @@ fn emit_uncaptured(text: &str) {
 /// been reading. All five matched on the first run, so the widening moved no
 /// number that was standing on anything.
 ///
+/// Expected result at commit `1c519dfc`: **50 of 50 matching**, the subset
+/// being `phase-4a.txt`'s 30, `phase-4b.txt`'s 12 and `phase-4c.txt`'s 8. No
+/// call site moved between this row and the one above it; what moved is
+/// `phase-4c.txt`, which three later 4c tasks added programs to.
+///
 /// **The commit named is the one the number is true *at*, not the one the
 /// change was made against.** An earlier version of this row named
 /// `2070cd9d`, this change's parent, where the harness still read two files

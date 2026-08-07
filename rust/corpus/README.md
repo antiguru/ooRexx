@@ -77,6 +77,37 @@ claim about which binary the oracle was built from.
 `crates/rexx-exec/tests/parse_version_oracle.rs` is where that string is
 checked instead.
 
+### What a `phase-4c.txt` program may not do
+
+Five rules, each of which would break the determinism rule above or would put
+a program's answer outside what any harness here can compare.
+
+* **No `RANDOM()`, no `DATE()`, no `TIME()`** (decision D11).
+  All three answer differently on two runs of the *same* interpreter, so a
+  differential over one compares two unrelated values and calls the difference
+  a divergence.
+  Their only gate is in-crate unit tests, in `crates/rexx-exec/src/builtin/`,
+  which pin the properties that do not move -- a rendering, an argument's
+  arity, that two `TIME('R')` reads in one clause answer identically.
+* **`QUEUED()` only over a queue the program filled itself.**
+  The data queue is not the program's own storage -- it is named by
+  `RXQUEUE`/`rxapi` and outlives the program -- so a count taken over lines
+  the program did not push is a statement about the session it ran in.
+* **No dependence on external routine resolution.**
+  The oracle searches the filesystem for a `.rex` file named for a call target
+  matching no label, no builtin and no `::ROUTINE`; this crate raises 43.1
+  instead, and that search is Phase 7's.
+  A program relying on it answers according to what happens to be sitting in
+  the directory the harness runs it from.
+* **No `DO OVER` on a stem** (decision D3), the same exclusion `phase-4a.txt`
+  and `phase-4b.txt` carry.
+  The traversal-order deviation it would expose is recorded in
+  `docs/superpowers/plans/phase-4-exclusions.txt` and is out of scope through
+  the end of Phase 4.
+* **No `::` directive but `::ROUTINE`.**
+  The other eight fail loudly here, and `tests/coverage.rs`'s
+  `assert_program_has_only_routine_directives` is what refuses them.
+
 ## Current programs
 
 | File | Covers |
