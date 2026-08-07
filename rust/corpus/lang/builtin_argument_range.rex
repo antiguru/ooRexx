@@ -1,0 +1,43 @@
+/* A builtin's range message carries the integer its argument CONVERTED to,
+   never the rendering that argument carries around with it -- and the two
+   only come apart when a `NUMERIC DIGITS` setting is crossed with an
+   argument that is not an integer literal.
+
+   WHY THIS IS A PROGRAM OF ITS OWN. The message is on stderr and it is
+   fatal, so it has to be the last clause; a SIGNAL ON SYNTAX handler cannot
+   read a substitution back, and the whole point here is the substituted
+   bytes. `trace_numeric_request.rex` is the same shape for the same reason.
+
+   WHICH WRONG ANSWER THIS PRINTS. `999999+1` under `NUMERIC DIGITS 3` is a
+   value whose rendering was fixed at creation as `1.00E+6` (D15) and whose
+   conversion under the builtin argument precision is `1000000`. The oracle
+   substitutes the conversion. An engine that substitutes the value's own
+   rendering prints
+
+     Error 40.903:  ERRORTEXT argument 1 must be in the range 0-99; found "1.00E+6".
+
+   and one that re-renders under the DIGITS in force at the call rather than
+   at creation prints `1000000` here by luck and the wrong thing the moment
+   the two settings differ, which is why the value is created under one
+   setting and read under another.
+
+   The A line is the control, and it is what makes the crossing visible as a
+   crossing: the same builtin, the same out-of-range value, written as an
+   integer literal, where rendering and conversion coincide and every engine
+   agrees. A corpus that had only that line would report full coverage of
+   this message and see nothing.
+
+   Determinism: no clock, no PID, no filesystem. The path in the report's
+   own position line is the harness's, which it supplies to both
+   interpreters alike. */
+
+signal on syntax name shown
+say 'A' errortext(1000000)
+shown:
+say 'A trapped rc' rc
+
+numeric digits 3
+z = 999999 + 1
+numeric digits 9
+say 'B renders as' z
+say 'B' errortext(z)

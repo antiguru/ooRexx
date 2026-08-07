@@ -66,19 +66,37 @@ pub(crate) struct Trap {
     /// The trap is armed but held while its own `CALL ON` handler runs
     /// (`TrapHandler::disable`/`enable`, `execution/TrapHandler.cpp`).
     ///
-    /// **A state and not a removal**, and a program can tell the two apart:
-    /// `CONDITION('S')` reports `DELAY` inside the handler and `OFF` for a
-    /// trap that is not there at all, measured in one program --
-    /// `call on user uc` with the handler printing `condition('S')` gives
-    /// `DELAY`, and the same handler after `call off user uc` gives `OFF`.
-    /// Removing and re-inserting reports `OFF` for the first, and it also
-    /// resurrects a trap the handler turned off, which the oracle does not:
-    /// `trapUndelay` sets the state on whatever handler is in the table and
-    /// does nothing when there is none.
+    /// **A state and not a removal, and `CONDITION('S')` is the whole of
+    /// what a program can see of the difference.** It reports `DELAY`
+    /// inside the handler and `OFF` for a trap that is not there at all,
+    /// measured in one program -- `call on user uc` with the handler
+    /// printing `condition('S')` gives `DELAY`, and the same handler after
+    /// `call off user uc` gives `OFF`. Removing and re-inserting reports
+    /// `OFF` for the first.
     ///
-    /// A delayed trap does not fire. `Interp::trap_for` is what enforces
-    /// that, so every lookup that decides whether to trap sees the same
-    /// thing a removal used to show it.
+    /// **That is the only difference, and the wider claim this comment used
+    /// to make is false.** It said a removal "resurrects a trap the handler
+    /// turned off". It does not: the handler runs as a nested activation
+    /// with its own copy of the trap table, so its `CALL OFF` never reaches
+    /// the caller's table and there is nothing to resurrect. Measured two
+    /// ways -- on the oracle, a handler whose first act is `call off user
+    /// uc` is entered again on a second raise; and with the removal restored
+    /// here, the same program prints identically except that
+    /// `CONDITION('S')` reads `OFF` where it should read `DELAY`.
+    /// Commit `f03d69f1`'s message carries the superseded claim and cannot
+    /// be edited.
+    ///
+    /// A delayed trap does not fire, and `Interp::trap_for` is what
+    /// enforces that. **`Interp::caller_trap_for` deliberately does not**,
+    /// which is the C++'s own line rather than an omission: `raiseCondition`
+    /// matches a handler and queues it without asking whether it is delayed,
+    /// and `processTraps` is what skips a delayed one. So a condition raised
+    /// inside a handler by a routine the handler called is *matched*, then
+    /// dropped at the clause boundary when `deliver_pending_trap`'s own
+    /// `trap_for` declines it. Measured, and both interpreters agree: a
+    /// handler whose first run calls a routine raising the same condition
+    /// runs **once**, and the program carries on. An earlier version of this
+    /// comment said every such lookup filters, which is one lookup too many.
     pub(crate) delayed: bool,
 }
 

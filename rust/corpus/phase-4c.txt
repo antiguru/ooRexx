@@ -53,8 +53,8 @@
 #   ADDRESS()'s answer for an environment no ADDRESS instruction has set is
 #   the platform default, `sh` on this host. It is in the corpus for the same
 #   reason PARSE SOURCE's `LINUX COMMAND` is and PARSE VERSION's build date is
-#   not: it is a compile-time constant of the interpreter (`SYSINITIALADDRESS`
-#   in `platform/unix/SystemCommands.cpp`) rather than a value that moves
+#   not: it is a compile-time constant of the interpreter (SYSINITIALADDRESS
+#   in platform/<os>/PlatformDefinitions.h) rather than a value that moves
 #   under a rebuild. A run on a platform whose default differs would need the
 #   expected byte changed, which is true of `LINUX COMMAND` already.
 #
@@ -127,3 +127,11 @@ lang/address_env.rex
 # because outside one every option is the null string and a stub returning ''
 # passes.
 lang/state_builtins.rex
+
+# New for 4c Task 10 fix round 1 -- one message, twice, once with the axes
+# crossed and once without. A builtin's range message substitutes the integer
+# its argument converted to, and an argument whose own rendering differs from
+# that conversion is the only kind that can tell the two apart. Fatal and on
+# stderr, so it has to be its own program's last clause; its header says why a
+# trapped handler cannot stand in.
+lang/builtin_argument_range.rex

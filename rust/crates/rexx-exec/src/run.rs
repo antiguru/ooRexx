@@ -2780,11 +2780,16 @@ impl Interp {
     /// included, and only then the handler. Neither is what a trap that
     /// fired at the raise would print.
     ///
-    /// The trap is removed for the handler's duration and **put back
-    /// afterwards**, unlike a `SIGNAL ON` trap, which stays removed.
-    /// Measured: a handler that itself calls a routine raising the same
-    /// condition does not re-enter, and the program then carries on
+    /// The trap is **held for the handler's duration and released
+    /// afterwards**, unlike a `SIGNAL ON` trap, which is removed and stays
+    /// removed. Measured: a handler that itself calls a routine raising the
+    /// same condition does not re-enter, and the program then carries on
     /// normally rather than running the handler a second time later.
+    ///
+    /// "Held" is `Trap::delayed` since 4c Task 10 and was a `remove` with a
+    /// re-insert before it. The two agree on everything but
+    /// `CONDITION('S')`, which is why the change was needed and why nothing
+    /// else in this function's behaviour moved with it.
     pub(crate) fn deliver_pending_trap(
         &mut self,
         code: &Code<'_>,
@@ -2846,9 +2851,11 @@ impl Interp {
         let key: Box<[u8]> = pending.condition.clone();
         // **Delayed, not removed** (`Trap::delayed`). The two are the same
         // to every lookup that decides whether to trap, and different to
-        // `CONDITION('S')`, which reports `DELAY` here and `OFF` for a trap
-        // that is absent. Setting a flag also leaves a handler's own `CALL
-        // OFF` alone, where removing and re-inserting put the trap back.
+        // `CONDITION('S')` alone, which reports `DELAY` here and `OFF` for a
+        // trap that is absent. Nothing else moves: an earlier version of
+        // this comment claimed the flag also protects a handler's own `CALL
+        // OFF`, and that is false -- the handler's table is a copy, so its
+        // `CALL OFF` never reached this one to be undone.
         if let Some(trap) = self.activation_mut().traps.get_mut(&key) {
             trap.delayed = true;
         }
@@ -2859,17 +2866,24 @@ impl Interp {
         // handler returns is the null string.
         let enclosing_condition = self.activation_mut().condition.replace(TrappedCondition {
             name: key.clone(),
-            // A `CALL ON` trap cannot name `SYNTAX` (measured: `call on
-            // syntax` is a 25.1 translation error), so no condition reaching
-            // here has a `CODE`.
+            // No condition reaching here has a `CODE`, and both halves of
+            // that are measured. A `CALL ON` trap cannot name `SYNTAX`
+            // directly -- `call on syntax` is a 25.1 translation error --
+            // and `CALL ON ANY`, the one spelling that could smuggle it in,
+            // does not catch a `SYNTAX` condition either: `call on any name
+            // uh` with `say 1/0` is the ordinary fatal 42.3 at rc 214 on
+            // both interpreters. `TrapHandler::canHandle` is the C++ side of
+            // the same rule.
             code_sub: None,
             call: true,
             description: pending.description.clone(),
         });
         let ended = self.resolve_and_run_call(code, &trap.label, true, &[]);
         self.activation_mut().condition = enclosing_condition;
-        // `trapUndelay`, which is a no-op when the handler turned its own
-        // trap off -- the C++ tests the handler for null before enabling it.
+        // `trapUndelay`. The `if let` mirrors the C++ testing the handler
+        // for null before enabling it; nothing a Rexx program can do
+        // removes the entry between here and the delay above, so the arm is
+        // structural rather than a case anything reaches.
         if let Some(trap) = self.activation_mut().traps.get_mut(&key) {
             trap.delayed = false;
         }
@@ -2940,6 +2954,15 @@ impl Interp {
     /// `trap_for` rather than parameterised by depth because these are the
     /// only two depths anything asks about, and a depth parameter would read
     /// as though arbitrary ones were meaningful.
+    ///
+    /// **A second difference from `trap_for`, and it is deliberate: this one
+    /// does not filter [`Trap::delayed`].** Matching a delayed handler and
+    /// then declining to run it is what the C++ does
+    /// (`RexxActivation::raiseCondition` queues without asking;
+    /// `processTraps` skips), and `deliver_pending_trap`'s own `trap_for`
+    /// is the decline. Measured rather than argued: a `CALL ON` handler that
+    /// calls a routine raising the same condition runs once on both
+    /// interpreters, byte for byte.
     fn caller_trap_for(&self, condition: &[u8]) -> Option<Trap> {
         let caller = self.activations.len().checked_sub(2)?;
         let traps = &self.activations[caller].traps;
@@ -12514,15 +12537,20 @@ mod tests {
         assert_eq!(interp.out, b"TH ran\nonward\n".to_vec());
     }
 
-    /// **Fix round 1's finding 3(a).** A `CALL ON` trap is removed for its
-    /// handler's duration and **put back** afterwards, unlike a `SIGNAL ON`
-    /// trap, which stays removed. `deliver_pending_trap` documented this and
-    /// nothing tested it: deleting the re-insertion left the whole suite and
-    /// the corpus gate green.
+    /// **4b's fix round 1, finding 3(a).** A `CALL ON` trap is held for its
+    /// handler's duration and released afterwards, unlike a `SIGNAL ON`
+    /// trap, which is removed and stays removed. `deliver_pending_trap`
+    /// documented this and nothing tested it: deleting the release left the
+    /// whole suite and the corpus gate green.
     ///
     /// Two raises, and the second one's handler run is the assertion -- an
-    /// implementation that never puts the trap back prints `UH 2 / mid / end`
+    /// implementation that never releases the trap prints `UH 2 / mid / end`
     /// and drops the second condition silently.
+    ///
+    /// The release was a re-insertion until 4c Task 10 made it
+    /// `trap.delayed = false`. Re-measured against the new spelling: with
+    /// that line skipped this test fails exactly as before, and the corpus
+    /// drops to 48 of 49 on `lang/call_on_trap_rearms.rex`.
     #[test]
     fn a_call_trap_is_put_back_after_its_handler_returns() {
         let mut interp = Interp::new();

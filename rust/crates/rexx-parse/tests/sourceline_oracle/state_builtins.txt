@@ -1,4 +1,4 @@
-count 156
+count 157
 /* The builtins that read interpreter state: ARG, CONDITION, DIGITS, FORM,
    FUZZ, GC, QUEUED, SOURCELINE and TRACE. ADDRESS has its own program
    (lang/address_env.rex), which the toggle and the callee-inheritance blocks
@@ -32,9 +32,10 @@ count 156
    'I' and 'S' appear. A trap that fires as a CALL reports CALL, and while
    its handler runs the trap is DELAYED rather than off -- an engine that
    removes the trap for the handler's duration instead of holding it prints
-   OFF at F1, and it also resurrects a trap the handler turned off. The
-   condition does not survive the handler's return, which F3 is: an engine
-   keeping one interpreter-wide condition object prints USER UC there.
+   OFF at F1, and that is the whole of the difference the two mechanisms
+   make. The condition does not survive the handler's return, which F3 is:
+   an engine keeping one interpreter-wide condition object prints USER UC
+   there.
 
    D: CONDITION from INSIDE a live handler, which is the only place it can be
    read at all -- outside one every option is the null string, so a stub

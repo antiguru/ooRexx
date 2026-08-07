@@ -15,19 +15,34 @@
 # Two limits on that, both real:
 #
 #   * A derived owner says what a body hits FIRST, not what would make it
-#     pass. Four bodies are known to have a second blocker behind the first
+#     pass. Three bodies are known to have a second blocker behind the first
 #     -- worse, they are not equivalent to the method they came from at all:
-#     CALL::test_expression, CALL::test_literal and CALL::test_on_name fail
-#     under the C++ oracle itself (Error 43, Routine not found) because they
-#     call ::routines the standalone program does not carry -- measured:
-#     routine "label", routine "". NUMERIC::test_42 is the fourth and is the
-#     one whose first blocker has since been removed, so it now reads what
-#     was always behind it, RAISED: `::method "test_42"` is the only method
-#     in its neighbourhood with no `return` before its trailing
+#     CALL::test_expression and CALL::test_literal fail under the C++ oracle
+#     itself (Error 43, Routine not found) because they call ::routines the
+#     standalone program does not carry -- measured, routine "label" and
+#     routine "". NUMERIC::test_42 is the third and is the one whose first
+#     blocker has since been removed, so it now reads what was always behind
+#     it, RAISED: `::method "test_42"` is the only method in its
+#     neighbourhood with no `return` before its trailing
 #     `dig: Return digits()`, so the extracted program falls into that
 #     subroutine and its RETURN value becomes the program's exit code.
 #     Measured, the C++ oracle exits 3 on the same program, so this is the
 #     extraction and not a divergence.
+#
+#     CALL::test_on_name WAS LISTED IN THAT SENTENCE AND DOES NOT BELONG.
+#     Its first blocker is a BUILTIN, not a missing ::routine -- the run's
+#     own breakdown reads routine "CHARIN", from `call charin "/"`, which is
+#     the third clause of the body. A correction that over-reaches is still
+#     a false statement, and this one over-reached by one name.
+#
+#   * A derived owner is 4c for EVERY unresolved routine name, including
+#     names Phase 4 excludes outright. `Loud::unresolved_call` carries a
+#     fixed "4c" because a builtin and a ::routine are the same thing to the
+#     message. So three of the five 4c rows below are really waiting on a
+#     builtin: ASSIGNMENT::test_3 on DATATYPE (Task 11's), and
+#     CALL::test_on_name and CALL::test_9 on CHARIN and LINEIN, which are
+#     WHOLE exclusions and so Phase 7's. Measured from the run's own "first
+#     construct hit" breakdown, not read off this file.
 #   * The `defect:` rows below are NOT derived -- every assertion failure is
 #     mapped to one constant. What has teeth for them is membership, not the
 #     label: a body that starts failing its assertions and is not listed here

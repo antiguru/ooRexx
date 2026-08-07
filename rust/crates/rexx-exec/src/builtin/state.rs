@@ -71,10 +71,16 @@ use crate::error::{Failure, Raised};
 /// run, and after a bare `ADDRESS` swaps back to it.
 ///
 /// **A compile-time platform constant, which is why it is spelled here at
-/// all.** The oracle's is `SYSINITIALADDRESS`, a `#define` in
-/// `platform/unix/SystemCommands.cpp:68` returned by
-/// `SystemInterpreter::getDefaultAddressName()`; the Windows build's own
-/// file returns `GlobalNames::INITIALADDRESS` instead. It is fixed when the
+/// all.** Both platforms' `SystemInterpreter::getDefaultAddressName()` are
+/// the identical one line, `return GlobalNames::INITIALADDRESS;`, and
+/// `memory/GlobalNames.h:124` builds that name from `SYSINITIALADDRESS`.
+/// **The split is in `platform/<os>/PlatformDefinitions.h`**: `"sh"` at
+/// unix line 66, `"CMD"` at windows line 65, both read directly. (There is
+/// a second `#define SYSINITIALADDRESS "sh"` in
+/// `platform/unix/SystemCommands.cpp:68`; it is local to that translation
+/// unit and is **not** the one `GlobalNames.h` expands, so citing it -- as
+/// an earlier version of this comment did -- names a definition that could
+/// change without changing the answer.) The value is fixed when the
 /// interpreter is built, not read from the environment or the process, and
 /// measured on this host: `say address()` as a program's only clause prints
 /// `sh`.
@@ -245,8 +251,7 @@ pub(crate) fn errortext(
 ) -> Result<ObjRef, Failure> {
     let number = whole_number(interp, name, args, 1)?.expect("check_arity admitted argument 1");
     if !(0..=99).contains(&number) {
-        let found = rendered(interp, args, 1);
-        return Err(Raised::argument_out_of_range(name, 1, &found).into());
+        return Err(Raised::argument_out_of_range(name, 1, converted(number).as_bytes()).into());
     }
     let text = u16::try_from(number)
         .ok()
@@ -278,13 +283,11 @@ pub(crate) fn sourceline(
         return Ok(interp.text(lines.to_string().as_bytes()));
     };
     if number <= 0 {
-        let found = rendered(interp, args, 1);
-        return Err(Raised::argument_not_positive(name, 1, &found).into());
+        return Err(Raised::argument_not_positive(name, 1, converted(number).as_bytes()).into());
     }
     let requested = usize::try_from(number).unwrap_or(usize::MAX);
     if requested > lines {
-        let found = rendered(interp, args, 1);
-        return Err(Raised::sourceline_out_of_range(&found, lines).into());
+        return Err(Raised::sourceline_out_of_range(converted(number).as_bytes(), lines).into());
     }
     let line = interp
         .activation()
@@ -392,8 +395,7 @@ pub(crate) fn arg(
         return Ok(interp.text(count.to_string().as_bytes()));
     };
     if position <= 0 {
-        let found = rendered(interp, args, 1);
-        return Err(Raised::argument_not_positive(name, 1, &found).into());
+        return Err(Raised::argument_not_positive(name, 1, converted(position).as_bytes()).into());
     }
     let index = usize::try_from(position).unwrap_or(usize::MAX);
     let supplied = interp
@@ -530,16 +532,45 @@ pub(crate) fn condition(
     }
 }
 
-/// The argument at `position` as the 40.x message spells it in `found "..."`.
+/// A converted argument as a 40.x range message spells it in `found "..."`:
+/// **the integer the conversion produced, never the value's own rendering.**
 ///
-/// The *rendered value*, which is the same choice `argument_not_whole`
-/// makes: an argument's source spelling is not reachable from here, and the
-/// two differ only for a value whose text and literal disagree.
-fn rendered(interp: &mut Interp, args: &[Option<ObjRef>], position: usize) -> Vec<u8> {
-    match super::arg(args, position) {
-        Some(value) => interp.to_text(value).into_owned(),
-        None => Vec::new(),
-    }
+/// The two are the same for an integer literal and differ for everything
+/// else, which is why an alphabet of integer literals cannot see this.
+/// Measured on the oracle, rc 216 in every row:
+///
+/// ```text
+/// arg(0.0)                                found "0"          not "0.0"
+/// arg('+0')                               found "0"          not "+0"
+/// errortext(1e2)                          found "100"        not "1E2"
+/// errortext(' 100 ')                      found "100"        not " 100 "
+/// sourceline(1e1)                         ("10")             not ("1E1")
+/// numeric digits 3; errortext(999999+1)   found "1000000"    not "1.00E+6"
+/// ```
+///
+/// **The last row is the one that needs `NUMERIC DIGITS` crossed with a
+/// numeric-looking argument to see at all**, and it is a D15 interaction:
+/// the value's rendering is fixed at creation under `DIGITS 3`, while
+/// `required_integer` converts under `ARGUMENT_DIGITS` and the message
+/// carries what the conversion produced. Holding either axis at its safe
+/// value -- an integer literal, or the default `DIGITS` -- hides every row
+/// above.
+///
+/// **This is the opposite choice from [`Raised::argument_not_whole`], and
+/// the split is where the conversion succeeded.** 40.12 is raised *because*
+/// the conversion failed, so there is no integer and the rendered value is
+/// all there is -- measured, `numeric digits 3; z = 1/3; numeric digits 9;
+/// errortext(z)` reports `found "0.333"`, the rendering captured at
+/// creation, and `errortext(99999999999999999999)` reports all twenty
+/// digits. The range checks below it are raised *after* a successful
+/// conversion, and they report the result of it. `builtin/mod.rs`'s
+/// `length_of`, `position_of` and `count_of` already had it right for the
+/// same reason: measured, `numeric digits 3; word('a b', -(999999+1))` is
+/// 93.924 `found "-1000000"`.
+///
+/// [`Raised::argument_not_whole`]: crate::error::Raised::argument_not_whole
+fn converted(value: i64) -> String {
+    value.to_string()
 }
 
 #[cfg(test)]
@@ -849,6 +880,122 @@ mod tests {
                 panic!("expected Raised, got {failure:?}");
             };
             assert_eq!((missing.number, missing.sub), (40, 5));
+        }
+    }
+
+    /// A range check reports the integer the conversion produced, and 40.12
+    /// -- raised when that conversion fails -- reports the value's own
+    /// rendering. [`converted`] has the oracle transcripts.
+    ///
+    /// Every argument below is a *text* whose rendering and conversion
+    /// differ. An alphabet of integer literals makes the two coincide and
+    /// cannot fail this test at all, which is how the wrong choice shipped.
+    #[test]
+    fn a_range_message_substitutes_the_converted_integer() {
+        assert_eq!(
+            raised(b"ARG", &[b"0.0"]),
+            (40, 14, vec![b"ARG".to_vec(), b"1".to_vec(), b"0".to_vec()])
+        );
+        assert_eq!(
+            raised(b"ARG", &[b"+0"]),
+            (40, 14, vec![b"ARG".to_vec(), b"1".to_vec(), b"0".to_vec()])
+        );
+        assert_eq!(
+            raised(b"ARG", &[b"-1.0"]),
+            (40, 14, vec![b"ARG".to_vec(), b"1".to_vec(), b"-1".to_vec()])
+        );
+        for spelling in [b"1e2".as_slice(), b" 100 ".as_slice(), b"100.0".as_slice()] {
+            assert_eq!(
+                raised(b"ERRORTEXT", &[spelling]),
+                (
+                    40,
+                    903,
+                    vec![b"ERRORTEXT".to_vec(), b"1".to_vec(), b"100".to_vec()]
+                ),
+                "{}",
+                String::from_utf8_lossy(spelling)
+            );
+        }
+        // The opposite half, and the reason this is a split rather than one
+        // rule: the conversion failed here, so there is no integer to
+        // report and all twenty digits come back verbatim.
+        assert_eq!(
+            raised(b"ERRORTEXT", &[b"99999999999999999999"]),
+            (
+                40,
+                12,
+                vec![
+                    b"ERRORTEXT".to_vec(),
+                    b"1".to_vec(),
+                    b"99999999999999999999".to_vec()
+                ]
+            )
+        );
+        // `SOURCELINE` needs a running program for its line count, so both
+        // of its range messages are asserted whole.
+        let (code, stderr) = failure(b"say sourceline(1e1)\n");
+        assert_eq!(code, 216, "{stderr}");
+        assert!(
+            stderr.contains(
+                "Error 40.34:  SOURCELINE argument 1 (\"10\") must be less than or \
+                             equal to the number of lines in the program (1)."
+            ),
+            "{stderr}"
+        );
+        let (code, stderr) = failure(b"say sourceline(0.0)\n");
+        assert_eq!(code, 216, "{stderr}");
+        assert!(
+            stderr.contains("Error 40.14:  SOURCELINE argument 1 must be positive; found \"0\"."),
+            "{stderr}"
+        );
+    }
+
+    /// The D15 crossing: the `NUMERIC DIGITS` a value was *rendered* under
+    /// against the integer its conversion produces.
+    ///
+    /// This is the axis pair the shared block asks for -- numeric-looking
+    /// argument crossed with a `DIGITS` setting -- and neither half sees
+    /// anything on its own. Under the default `DIGITS`, `999999+1` renders
+    /// as `1000000` and the two agree; with `DIGITS 3` and an integer
+    /// literal, no conversion is ever wrong.
+    ///
+    /// The second program of each pair moves `DIGITS` back *after* creating
+    /// the value, so a reading that used the current setting rather than the
+    /// captured one would also be wrong, and differently.
+    #[test]
+    fn a_range_message_ignores_the_digits_the_value_was_rendered_under() {
+        for (source, expected) in [
+            (
+                b"numeric digits 3; say errortext(999999+1)\n".as_slice(),
+                "Error 40.903:  ERRORTEXT argument 1 must be in the range 0-99; found \"1000000\".",
+            ),
+            (
+                b"numeric digits 3; z = 999999+1; numeric digits 9; say errortext(z)\n".as_slice(),
+                "Error 40.903:  ERRORTEXT argument 1 must be in the range 0-99; found \"1000000\".",
+            ),
+            (
+                b"numeric digits 3; say arg(-(999999+1))\n".as_slice(),
+                "Error 40.14:  ARG argument 1 must be positive; found \"-1000000\".",
+            ),
+            (
+                b"numeric digits 3; say sourceline(999999+1)\n".as_slice(),
+                "Error 40.34:  SOURCELINE argument 1 (\"1000000\") must be less than or equal to \
+                 the number of lines in the program (1).",
+            ),
+            // And the 40.12 half under the same crossing, which does read
+            // the captured rendering: `1/3` at `DIGITS 3` is `0.333`, and
+            // stays `0.333` after `DIGITS 9`.
+            (
+                b"numeric digits 3; z = 1/3; numeric digits 9; say errortext(z)\n".as_slice(),
+                "Error 40.12:  ERRORTEXT argument 1 must be a whole number; found \"0.333\".",
+            ),
+        ] {
+            let (code, stderr) = failure(source);
+            assert_eq!(code, 216, "{stderr}");
+            assert!(
+                stderr.contains(expected),
+                "expected {expected:?} in:\n{stderr}"
+            );
         }
     }
 

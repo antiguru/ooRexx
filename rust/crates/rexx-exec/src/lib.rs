@@ -562,21 +562,26 @@ impl Loud {
         }
     }
 
-    /// A builtin's option letter whose answer is an object this crate's
-    /// value model cannot make.
+    /// A builtin's option letter whose answer this crate cannot produce.
     ///
     /// **A disclosed gap inside an otherwise delivered builtin**, the shape
     /// [`Loud::compound_expose`] established, and loud for the same reason:
-    /// the near miss is a silent wrong answer. `ARG(n,'A')` and
-    /// `CONDITION('A')`/`CONDITION('O')` answer an `Array` or a `Directory`
-    /// -- measured, `condition('A')~class` inside a `SIGNAL ON SYNTAX`
-    /// handler is `The Array class` and `condition('O')~class` is a
-    /// `Directory` with 14 items -- and this crate has neither. Returning
-    /// the null string would be right for exactly one of the shapes an
-    /// `Array` renders as (the empty one) and wrong for the rest.
+    /// the near miss is a silent wrong answer.
     ///
-    /// `why` names the object, so the message says what is missing rather
-    /// than only that something is.
+    /// **Two different reasons reach it, and the name says "object" for
+    /// only one of them.** `ARG(n,'A')` and `CONDITION('A')`/`CONDITION('O')`
+    /// answer an `Array` or a `Directory` -- measured, `condition('A')~class`
+    /// inside a `SIGNAL ON SYNTAX` handler is `The Array class` and
+    /// `condition('O')~class` is a `Directory` with 14 items -- and this
+    /// crate's value model has neither. `CONDITION('D')` for a `NOVALUE`
+    /// condition answers an ordinary *string*, the variable's derived name,
+    /// which this crate simply does not carry as far as the handler
+    /// (`Raised::description`). Both are "the oracle has an answer here and
+    /// we cannot build it", which is what this constructor is for; only the
+    /// first is about an object.
+    ///
+    /// `why` names what is missing, so the message says that rather than
+    /// only that something is.
     ///
     /// No owner string: like `compound_expose`, this is a sub-case within a
     /// builtin the status table calls implemented, and `owned_message`'s

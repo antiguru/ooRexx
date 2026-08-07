@@ -23,8 +23,8 @@
 //! is the one that rots. "Owned by 4c", "the twelve builtins so far" and
 //! "not yet implemented" are all claims about where this boundary sits, and
 //! the boundary moves every time a task lands. The measured evidence for the
-//! rule is a contrast between two media -- a 796-row derived-and-policed
-//! table needed no correction across thirteen tasks, while a one-line count
+//! rule is a contrast between two media -- a derived-and-policed table
+//! needed no correction across thirteen tasks, while a one-line count
 //! comment stating the same kind of fact in prose rotted four times. This
 //! file is the derived-and-policed medium for the builtins, which is what
 //! makes asserting the boundary cheaper than writing about it.

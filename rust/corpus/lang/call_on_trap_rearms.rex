@@ -38,9 +38,9 @@
  *                like SIGNAL ON's.
  *   '2:V'        RESULT read back after the second `call raiser` resumes.
  *
- * Checked against a mutation: with `deliver_pending_trap`'s re-insertion of
- * the fired trap (run.rs, the `if let Some(trap) = removed` arm run after
- * the handler call) skipped, ZLOG reads `S[H54]1:VK2:V` -- the '[H60]'
+ * Checked against a mutation: with `deliver_pending_trap`'s release of the
+ * fired trap skipped (run.rs, `trap.delayed = false`; a re-insertion until
+ * 4c Task 10, re-measured since), ZLOG reads `S[H54]1:VK2:V` -- the '[H60]'
  * segment is simply gone, because the second `raise user zx return 'V'`
  * finds no trap armed and returns 'V' to its caller unhandled, exactly the
  * "nothing traps it" arm `exec_raise` already has for an unarmed condition.

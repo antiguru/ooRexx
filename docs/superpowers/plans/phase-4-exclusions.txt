@@ -125,9 +125,12 @@ whole name would overstate the gap; ignoring the split would understate it.
              the default "comes from the layer D18 defers", and that
              conflates naming the default environment with issuing a command
              to it. The name is SYSINITIALADDRESS, a #define in
-             platform/unix/SystemCommands.cpp fixed when the interpreter is
-             built (the Windows build returns GlobalNames::INITIALADDRESS
-             instead); nothing about reading it needs the command layer.
+             platform/<os>/PlatformDefinitions.h -- "sh" at the unix file's
+             line 66 and "CMD" at the windows file's line 65 -- reached
+             through GlobalNames.h:124 and returned by an identical
+             getDefaultAddressName() on both platforms. It is fixed when the
+             interpreter is built, and nothing about reading it needs the
+             command layer.
              Deferring it also made the corpus witness this row's own
              enumeration says ADDRESS() is owed impossible to write, because
              a callee's inherited alternate is the default in the simplest
@@ -1136,15 +1139,19 @@ above.
 
   "STDOUT AND THE EXIT CODE MATCH" WAS TRUE UNTIL 4c TASK 10 AND IS NOT NOW,
   because TRACE() gives the prefix a reader on stdout. Measured, with stdin
-  at /dev/null:
+  at /dev/null, all three spellings:
 
-    trace ?r ; say trace()          oracle ?R    rexx-exec R
-    trace l ; trace ? ; say trace() oracle ?L    rexx-exec O
+    trace ?r ; say trace()             oracle ?R    rexx-exec R
+    trace l ; trace ? ; say trace()    oracle ?L    rexx-exec O
+    trace l ; say trace('?') ; trace() oracle L then ?L   rexx-exec L then O
 
-  The second line is the wider half: a `?` with no letter after it is the
-  oracle's DEBUG TOGGLE, which keeps whatever setting is in force and flips
-  the interactive flag, where `mode_from_setting` resets the setting because
-  it has no current mode to keep. Closing either half needs the interactive
+  The second and third are the wider half, and they are the same defect
+  reached two ways: a `?` with no letter after it is the oracle's DEBUG
+  TOGGLE, which keeps whatever setting is in force and flips the interactive
+  flag, where `mode_from_setting` resets the setting because it has no
+  current mode to keep. The third shows the builtin's SETTER form reaching
+  it too -- note the returned value L is right in both, so only the
+  resulting setting differs. Closing any of the three needs the interactive
   flag as a field and the current mode as an input to the classifier, which
   is this row's work and not TRACE()'s -- reproducing the flag in the
   RENDERING alone would make `trace()` report a prefix for a mode nothing

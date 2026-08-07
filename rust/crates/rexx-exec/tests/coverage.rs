@@ -591,6 +591,7 @@ const EXPECTED_SUBSET_4C: &[&str] = &[
     "lang/pull_queue.rex",
     "lang/address_env.rex",
     "lang/state_builtins.rex",
+    "lang/builtin_argument_range.rex",
 ];
 
 #[test]

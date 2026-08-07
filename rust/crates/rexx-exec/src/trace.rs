@@ -258,8 +258,11 @@ impl TraceMode {
 /// answers [`TraceMode::OFF`] for it instead, which is what it answered
 /// before the letter existed; getting it right needs the current setting as
 /// an input and the interactive flag as a field, and `phase-4-exclusions.
-/// txt`'s `TRACE ?` row owns both halves. Measured divergence: `trace l`
-/// then `trace ?` then `trace()` is `?L` on the oracle and `O` here.
+/// txt`'s `TRACE ?` row owns both halves. Measured divergence, and the
+/// builtin's setter form reaches it as well as the instruction: `trace l`
+/// then `trace ?` then `trace()` is `?L` on the oracle and `O` here, and so
+/// is `trace l` then `trace('?')` -- where the value that call *returns*,
+/// `L`, is right on both.
 pub(crate) fn mode_from_setting(bytes: &[u8]) -> Result<TraceMode, u8> {
     for &byte in bytes {
         if byte == b'?' {

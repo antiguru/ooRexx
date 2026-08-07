@@ -47,8 +47,8 @@ count 134
 
    The line before A is the other half of the same question: with no ADDRESS
    instruction executed yet, ADDRESS() names the PLATFORM DEFAULT. That is a
-   host-dependent constant -- `sh` here, from `SYSINITIALADDRESS` in
-   `platform/unix/SystemCommands.cpp`, `CMD` on a Windows build -- and it is
+   host-dependent constant -- `sh` here and `CMD` on a Windows build, from
+   SYSINITIALADDRESS in platform/<os>/PlatformDefinitions.h -- and it is
    in this corpus for the reason `LINUX COMMAND` is: it is fixed when the
    interpreter is built and does not move under it, unlike PARSE VERSION's
    build date, which is why that one is kept out of every corpus program.
