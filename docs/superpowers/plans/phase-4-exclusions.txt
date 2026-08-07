@@ -484,6 +484,84 @@ EXCLUSIONS -- external routine resolution, Phase 7
   directory created for it.
 
 
+EXCLUSIONS -- every directive except ::ROUTINE, Phase 5
+-------------------------------------------------------
+
+  THE RULE IS RESOLUTION, NOT PRESENCE, AND THE TWO FAIL IN OPPOSITE
+  DIRECTIONS. Refusing any program that *contains* a directive rejects
+  programs the oracle runs; ignoring one whose installation the oracle
+  performs runs programs the oracle refuses. Measured 2026-08-07, one probe
+  per directive form, each from a clean directory.
+
+  RUNS ON THE ORACLE, rc 0, printing "main ran" -- and runs here too,
+  because installing one of these neither executes code, changes a setting
+  a Phase 4 construct can read, nor resolves a name against a table this
+  crate does not have:
+
+    ::class foo
+    ::class foo + ::method bar
+    ::class foo + ::attribute baz
+    ::constant kk 5
+    ::resource foo ... ::END
+    ::annotate package author 'me'
+    a loose ::method with no ::class
+
+  REFUSED BY THE ORACLE BEFORE main, stdout EMPTY in every case -- and
+  refused here, loudly, naming Phase 5 (or Phase 7 for the two that need a
+  library loaded):
+
+    ::class foo subclass zzznotaclass                  98.909 rc 158
+    ::class foo metaclass zzznotaclass                 98.908 rc 158
+    ::class bar inherit zzznotaclass                   98.909 rc 158
+    ::annotate routine nosuchrtn                       99.945 rc 157
+    ::requires 'no_such_file_zz.rex'                   43.901 rc 213
+    ::routine z external "LIBRARY nosuchlib nosuchfn"  98.903 rc 158
+    ::method m external "LIBRARY nosuchlib nosuchfn"   98.903 rc 158
+
+  THE TWO DELIBERATE OVER-REFUSALS, both of which reject a program the
+  oracle runs. Neither is silent: both name a phase and exit with
+  NOT_IMPLEMENTED_EXIT, which is this file's standing trade -- a declared
+  gap over a wrong answer.
+
+    ::CLASS NAMING ANOTHER CLASS is refused whether or not that class
+    exists, because 4c has no class table to tell the two apart. Measured,
+    `::class foo subclass object` is rc 0 "main ran" on the oracle and loud
+    here. The alternative is running the zzznotaclass program above at rc 0
+    where the oracle produces nothing at rc 158.
+
+    ::REQUIRES IS REFUSED EVEN WHEN THE FILE IS PRESENT. This one
+    contradicts a measurement the task brief recorded as a requirement, and
+    the reason is a probe the brief did not take: ::REQUIRES does not merely
+    make names available, it LOADS AND RUNS the required file's prolog.
+    Measured -- helper.rex whose first clause is `say 'PROLOG RAN'`, and
+    `::requires 'loud_helper.rex'` in a program whose own body is `say 'main
+    ran'`: the oracle prints
+
+        PROLOG RAN
+        main ran
+
+    at rc 0. So presence IS use for this directive, in a way that changes
+    stdout and not only which routine a call finds. The brief's own
+    boundary case is the weaker half of the same fact: `::requires
+    'helper.rex'` where the helper holds `::routine helperfn public` makes
+    `helperfn()` return HELPED, so ignoring the directive also changes
+    resolution. Getting either right means loading and running the file,
+    which is Phase 5's ::REQUIRES.
+
+  ::OPTIONS IS REFUSED FOR THE SAME REASON AND WITHOUT THE TRADE: its whole
+  effect is to change package settings, unconditionally. Measured,
+  `::options digits 12` in a program whose body is `say digits() form()
+  fuzz()` prints `12 SCIENTIFIC 0`. There is no unused ::OPTIONS.
+
+  WHAT REMAINS UNCLOSED. A duplicate ::ROUTINE is NOT in this section: it is
+  detected and reported here as the oracle's own 99.903 at rc 157, echoing
+  the directive clause, and rust/crates/rexx-exec/src/run.rs asserts the
+  whole transcript. Everything else above that the oracle refuses is refused
+  here with a loud message rather than with the oracle's own condition, so
+  the number, the sub and the exit code differ; only "refuses before main
+  with empty stdout" is shared.
+
+
 DEVIATIONS -- permanent, chosen
 -------------------------------
 

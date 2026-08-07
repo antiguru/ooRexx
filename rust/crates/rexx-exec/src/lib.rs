@@ -38,8 +38,8 @@
 
 use rexx_core::{Heap, ObjRef, RootSet, SlotRef};
 use rexx_parse::{
-    CodeBody, Directive, DirectiveKind, ExprKind, InstructionKind, PrefixOp, Program, SymbolId,
-    SymbolTable, parse_program,
+    AnnotationTarget, CodeBody, Directive, DirectiveKind, ExprKind, InstructionKind, PrefixOp,
+    Program, SymbolId, SymbolTable, parse_program,
 };
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -756,6 +756,84 @@ fn owned_message(name: &str, owner: Option<&'static str>) -> String {
     match owner {
         None => format!("{name} is not implemented"),
         Some(owner) => format!("{name} is not implemented ({owner})"),
+    }
+}
+
+/// The gap a `::` directive declares at install time, or `None` for one this
+/// crate can install.
+///
+/// **The predicate is what installing the directive *does*, and it has three
+/// clauses**: a directive is a gap here when installing it runs code, changes
+/// a package setting a Phase 4 construct can read, or resolves a name against
+/// a table this crate does not have. `Interp::install_directives`' own doc
+/// carries the measured transcript for every form on both sides of the line,
+/// and `phase-4-exclusions.txt`'s directive section carries the two arms that
+/// deliberately over-refuse and why.
+///
+/// A directive that installs cleanly is **ignored**, not implemented: 4c has
+/// no object model, so a `::CLASS` that names nothing and a `::METHOD` with a
+/// body are unreachable from any construct this phase runs. That is why they
+/// are not a gap -- a program containing one and never using it produces the
+/// oracle's own bytes.
+fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
+    let gap = |name: &str, owner: &'static str| {
+        Some(Loud {
+            message: owned_message(name, Some(owner)),
+        })
+    };
+    match kind {
+        // Loads a shared library and binds an entry point in it, before
+        // `main` and whether or not the routine is ever called -- measured,
+        // 98.903 rc 158 with stdout empty in both shapes. Phase 7 owns
+        // library loading.
+        DirectiveKind::Routine(routine) if routine.external.is_some() => {
+            gap("::ROUTINE EXTERNAL", "Phase 7")
+        }
+        DirectiveKind::Method(method) if method.external.is_some() => {
+            gap("::METHOD EXTERNAL", "Phase 7")
+        }
+        DirectiveKind::Attribute(attribute) if attribute.external.is_some() => {
+            gap("::ATTRIBUTE EXTERNAL", "Phase 7")
+        }
+        // Loads a file and **runs its prolog** before `main`: measured, a
+        // helper whose first clause is `say 'PROLOG RAN'` prints that line
+        // above the requiring program's own output at rc 0. So presence is
+        // use, and this refuses a program the oracle runs whenever the
+        // prolog happens to be empty -- the trade `phase-4-exclusions.txt`
+        // states, taken because the alternative is silently dropping both
+        // that output and the public routines the file imports.
+        DirectiveKind::Requires(_) => gap("::REQUIRES", "Phase 5"),
+        // Applies package settings unconditionally, and there is no unused
+        // form: measured, `::options digits 12` makes `digits()` report 12,
+        // and `::options trace labels` makes every `::ROUTINE` in the file
+        // emit its own `>I>`/`<I<` pair.
+        DirectiveKind::Options(_) => gap("::OPTIONS", "Phase 5"),
+        // Resolves a class name against the environment, which 4c has no
+        // table for -- so this cannot tell `subclass object` (rc 0 on the
+        // oracle) from `subclass zzznotaclass` (98.909 rc 158) and refuses
+        // both.
+        DirectiveKind::Class(class)
+            if class.subclass.is_some()
+                || class.metaclass.is_some()
+                || !class.inherit.is_empty() =>
+        {
+            gap("::CLASS naming another class", "Phase 5")
+        }
+        // Resolves its target against the accumulated package: measured,
+        // `::annotate routine nosuchrtn` is 99.945 rc 157. `::ANNOTATE
+        // PACKAGE` names nothing and is ignored with the rest.
+        DirectiveKind::Annotate(annotate)
+            if !matches!(annotate.target, AnnotationTarget::Package) =>
+        {
+            gap("::ANNOTATE naming a target", "Phase 5")
+        }
+        DirectiveKind::Annotate(_)
+        | DirectiveKind::Attribute(_)
+        | DirectiveKind::Class(_)
+        | DirectiveKind::Constant(_)
+        | DirectiveKind::Method(_)
+        | DirectiveKind::Resource(_)
+        | DirectiveKind::Routine(_) => None,
     }
 }
 
@@ -1813,6 +1891,18 @@ impl Interp {
                 // where the accumulated table is what answers.
                 self.blame_directive(program, directive);
                 return Err(Raised::duplicate_routine().into());
+            }
+        }
+
+        // **A second pass, because the oracle's own two refusals happen at
+        // two different times.** A duplicate `::ROUTINE` is a *translation*
+        // error (99.903, rc 157) and everything below is an *install* one
+        // (98.9xx/43.901), so a program with both gets the translation error
+        // -- which is what running the whole first pass before any of this
+        // reproduces.
+        for directive in &program.directives {
+            if let Some(loud) = directive_gap(&directive.kind) {
+                return Err(loud.into());
             }
         }
         Ok(())

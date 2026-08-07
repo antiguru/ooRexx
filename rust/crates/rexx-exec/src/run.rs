@@ -13537,6 +13537,132 @@ mod tests {
         assert_eq!(outcome.stdout, b"main ran\n".to_vec());
     }
 
+    /// Every directive form whose installation this crate **can** perform
+    /// leaves the program running byte for byte as the oracle runs it, one
+    /// program per form.
+    ///
+    /// **This is the half that stops "any directive is a gap".** Each source
+    /// below was measured on the oracle in a clean directory: rc 0, stdout
+    /// `main ran`, stderr empty. A version of `directive_gap` that refused on
+    /// presence passes every refusal test in this file and fails all seven of
+    /// these.
+    #[test]
+    fn every_directive_this_crate_can_install_leaves_the_program_alone() {
+        let sources: &[(&str, &[u8])] = &[
+            ("a bare ::CLASS", b"say 'main ran'\n::class foo\n"),
+            (
+                "::CLASS with a ::METHOD",
+                b"say 'main ran'\n::class foo\n::method bar\nreturn 1\n",
+            ),
+            (
+                "::CLASS with a ::ATTRIBUTE",
+                b"say 'main ran'\n::class foo\n::attribute baz\n",
+            ),
+            (
+                "a loose ::METHOD with no ::CLASS",
+                b"say 'main ran'\n::method loose\nreturn 1\n",
+            ),
+            ("::CONSTANT", b"say 'main ran'\n::constant kk 5\n"),
+            (
+                "::RESOURCE",
+                b"say 'main ran'\n::resource foo\nsome text\n::END\n",
+            ),
+            (
+                "::ANNOTATE PACKAGE",
+                b"say 'main ran'\n::annotate package author 'me'\n",
+            ),
+        ];
+        for (what, source) in sources {
+            let outcome = routine_program(source);
+            assert_eq!(
+                outcome.exit_code,
+                0,
+                "{what}: stderr {}",
+                String::from_utf8_lossy(&outcome.stderr)
+            );
+            assert_eq!(outcome.stdout, b"main ran\n".to_vec(), "{what}: stdout");
+            assert!(outcome.stderr.is_empty(), "{what}: stderr must be empty");
+        }
+    }
+
+    /// Every directive form whose installation this crate **cannot** perform
+    /// refuses the program before its first clause, naming the owning phase.
+    ///
+    /// Two things are asserted per form and both matter. The owner suffix is
+    /// what `corpus.rs` and `keyword-exempt.txt` read to attribute a failure.
+    /// The **empty stdout** is what says the refusal happened at install
+    /// rather than at the call: every source below has `say 'main ran'` as
+    /// its first clause, and the oracle prints nothing for the five it also
+    /// refuses.
+    ///
+    /// `::CLASS foo SUBCLASS object` is the one source here the oracle runs
+    /// at rc 0 -- deliberate, and `phase-4-exclusions.txt`'s directive
+    /// section carries the argument. It is in this list rather than exempted
+    /// from it because a refusal that is not asserted is one a later change
+    /// can drop silently. The `::REQUIRES` row is not the over-refusal case:
+    /// no `helper.rex` sits beside these programs, so the oracle refuses that
+    /// source too, and the over-refusal (a helper that *is* present) is
+    /// measured in the exclusions file instead -- this crate never opens the
+    /// file, so the two sources are one case to it.
+    #[test]
+    fn every_directive_this_crate_cannot_install_refuses_before_the_first_clause() {
+        let cases: &[(&[u8], &str)] = &[
+            (
+                b"say 'main ran'\n::class foo subclass zzznotaclass\n",
+                "::CLASS naming another class is not implemented (Phase 5)",
+            ),
+            (
+                b"say 'main ran'\n::class foo metaclass zzznotaclass\n",
+                "::CLASS naming another class is not implemented (Phase 5)",
+            ),
+            (
+                b"say 'main ran'\n::class bar inherit zzznotaclass\n",
+                "::CLASS naming another class is not implemented (Phase 5)",
+            ),
+            (
+                b"say 'main ran'\n::class foo subclass object\n",
+                "::CLASS naming another class is not implemented (Phase 5)",
+            ),
+            (
+                b"say 'main ran'\n::requires 'helper.rex'\n",
+                "::REQUIRES is not implemented (Phase 5)",
+            ),
+            (
+                b"say 'main ran'\n::options digits 12\n",
+                "::OPTIONS is not implemented (Phase 5)",
+            ),
+            (
+                b"say 'main ran'\n::annotate routine nosuchrtn\n",
+                "::ANNOTATE naming a target is not implemented (Phase 5)",
+            ),
+            (
+                b"say 'main ran'\n::routine z external \"LIBRARY nosuchlib nosuchfn\"\n",
+                "::ROUTINE EXTERNAL is not implemented (Phase 7)",
+            ),
+            (
+                b"say 'main ran'\n::class foo\n::method m external \"LIBRARY nosuchlib nosuchfn\"\n",
+                "::METHOD EXTERNAL is not implemented (Phase 7)",
+            ),
+        ];
+        for (source, message) in cases {
+            let outcome = routine_program(source);
+            assert_eq!(
+                outcome.exit_code,
+                crate::NOT_IMPLEMENTED_EXIT,
+                "{message}: exit code"
+            );
+            assert_eq!(
+                outcome.stdout, b"",
+                "{message}: stdout must be empty -- main must not have run"
+            );
+            assert_eq!(
+                outcome.stderr,
+                format!("rexx-exec: {message}\n").into_bytes(),
+                "{message}: stderr"
+            );
+        }
+    }
+
     /// A builtin's result is a value whose rendering `NUMERIC DIGITS` cannot
     /// reach, and D15 is still visible on it from the other side.
     ///
