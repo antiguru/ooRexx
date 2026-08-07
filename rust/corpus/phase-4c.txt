@@ -58,10 +58,19 @@
 #   under a rebuild. A run on a platform whose default differs would need the
 #   expected byte changed, which is true of `LINUX COMMAND` already.
 #
+#   ::ROUTINE, and calls into one (4c Task 13). No other directive: the other
+#   eight are Phase 5's, and the ones whose installation the oracle performs
+#   before `main` fail loudly here -- phase-4-exclusions.txt's directive
+#   section has the transcript per form. tests/coverage.rs's
+#   assert_program_has_only_routine_directives admits ::ROUTINE and keeps the
+#   panic for the rest, and its walker descends into a routine's body, so a
+#   construct used only inside one still counts toward criterion 1.
+#
 # WHAT IT STILL EXCLUDES. Everything phase-4b.txt excludes except builtin
-# function calls, PARSE and ADDRESS's environment forms, which is to say: no
-# message sends, no :: directives, no command clauses, no ADDRESS command or
-# WITH form, no DO WITH, and no DO OVER on a stem. The authoritative,
+# function calls, PARSE, ADDRESS's environment forms and ::ROUTINE, which is
+# to say: no message sends, no directive other than ::ROUTINE, no command
+# clauses, no ADDRESS command or WITH form, no DO WITH, and no DO OVER on a
+# stem. The authoritative,
 # machine-checked list is
 # tests/owners.rs's INSTRUCTION_TAGS/EXPR_TAGS: anything still carrying an
 # `Owner::Phase` there fails loudly and cannot appear in any program listed in
@@ -146,3 +155,13 @@ lang/state_builtins.rex
 # stderr, so it has to be its own program's last clause; its header says why a
 # trapped handler cannot stand in.
 lang/builtin_argument_range.rex
+
+# New for 4c Task 13 -- ::ROUTINE dispatch, and the one witness for >I>/<I<
+# anywhere in the suite. Its own header states, per block, which wrong answer
+# each would print. It is here rather than in tests/trace_oracle/ because
+# those two lines name the package by its ABSOLUTE PATH: a committed
+# .expected would be true on the machine that captured it and false on the
+# next, where a live run gives both interpreters the same path. That absolute
+# path on stderr is the one exception to the no-paths rule above, and it is
+# the oracle's own doing rather than something the program prints.
+lang/routine_dispatch.rex

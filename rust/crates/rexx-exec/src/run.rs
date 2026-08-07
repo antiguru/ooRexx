@@ -81,9 +81,9 @@ use crate::{
 use rexx_core::{ObjRef, SlotFrame, SlotRef};
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
-    ConditionTrap, ControlExpr, Controlled, EndStyle, Expr, ExprKind, Fragment, Instruction,
-    InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource, Raise,
-    SymbolId, Trace, Use, UseTarget, VariableRef, compound_parts, parse_interpret,
+    ConditionTrap, ControlExpr, Controlled, DirectiveKind, EndStyle, Expr, ExprKind, Fragment,
+    Instruction, InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource,
+    Raise, SymbolId, Trace, Use, UseTarget, VariableRef, compound_parts, parse_interpret,
 };
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -844,6 +844,14 @@ impl Interp {
                     Ok(flow) => flow,
                     Err(failure) => self.offer_to_trap(&code, failure)?,
                 };
+            // "The first instruction has now run", spent for `>I>` alone --
+            // `RexxActivation.cpp:659`, which clears it for every instruction
+            // kind but `EXPOSE`. **A `LABEL` spends it**, unlike
+            // `first_instruction_pending` five lines above, and that
+            // difference is measured: a routine whose first clause is `lbl:`
+            // and whose second is `trace l` announces nothing, where
+            // `PROCEDURE` after two labels is still legal.
+            self.activation_mut().trace_entry_allowed = false;
             // **No clause boundary here any more** (fix round 3). It moved
             // inside `step_in_temps_frame`, which is the one place a clause
             // is stepped -- so this loop, `run_bounded`, and every future
@@ -3771,6 +3779,12 @@ impl Interp {
 
         let ended = self.run_activation();
 
+        // Before the pop, because both halves of `<I<`'s gate are the
+        // callee's own -- its `trace_entry_done` and its `TRACE` setting.
+        // `RexxActivation::termination` is where the C++ puts it, which is
+        // likewise inside the activation.
+        self.trace_invocation_exit();
+
         // Popped on both paths, and unconditionally: `run_activation`'s own
         // loop asserts the activation stack is where it found it after every
         // step, so a `CALL` that returned with the callee still on it would
@@ -3796,6 +3810,37 @@ impl Interp {
         self.clause_line_override = saved_line;
         self.restore_clause_state(saved_clause_state);
         self.call_context = saved_context;
+
+        // **`EXIT` inside a `::ROUTINE` ends the routine, not the program**,
+        // where `EXIT` inside a `CALL`ed label ends the program. The C++'s
+        // `implicitExit` sets `RETURNED` outright for an `isProgramLevelCall`
+        // activation and only otherwise walks up through `exitFrom`
+        // (`RexxActivation.cpp:1455`-`1469`), and a routine invocation is one
+        // of those. Measured on the oracle, rc 0 every time, and the shapes
+        // matter because the exit arrives here by three different routes:
+        //
+        // ```text
+        // call rtn / say result       ::routine rtn ; exit 5      ->  5, and main runs on
+        // n1 = rtn() / say n1         ::routine rtn ; exit 7      ->  7
+        // call rtn / say result       ::routine rtn ; exit        ->  RESULT, unset
+        // call rtn / say 'after'      a label INSIDE the routine exits 9 -> "after" runs
+        // call rtn / say 'after'      interpret "exit 4" in the routine  -> "after" runs
+        // ```
+        //
+        // The second and fourth arrive as `Failure::Exited` rather than as
+        // `Ended::Exited`, because an `EXIT` reached through an expression
+        // call has no `Flow` to travel on (`Failure::Exited`'s own doc,
+        // `error.rs`). Both are the same event and both stop here. Falling
+        // off the routine's own end is the same rule seen from the other
+        // side: measured, it leaves `RESULT` unset and the caller runs on.
+        let ended = match ended {
+            Ok(Ended::Exited(value)) | Err(Failure::Exited(value))
+                if matches!(entered, Entered::Routine(_)) =>
+            {
+                return Ok(Ended::Returned(value));
+            }
+            other => other,
+        };
 
         match ended {
             Ok(ended) => Ok(ended),
@@ -6237,7 +6282,117 @@ impl Interp {
                 self.set_trace_mode(mode_from_setting(&text).map_err(raised_invalid_trace_letter)?);
             }
         }
+        // `RexxActivation::setTrace` calls `traceEntry()` right after
+        // installing the new flags (`RexxActivation.cpp:1024`), which is the
+        // route every 4c-reachable `>I>` takes. `Trace::Skip` never gets here
+        // -- it returned above -- and the C++ agrees: its own arm sets no
+        // flags and calls nothing.
+        self.trace_invocation_entry();
         Ok(())
+    }
+
+    /// `>I>`, if this activation is a `::ROUTINE` still on its first
+    /// instruction and the setting just installed traces labels.
+    ///
+    /// **The gate is two predicates that no single field expresses**,
+    /// `tracingLabels() && isMethodOrRoutine()` (`RexxActivation.cpp:3655`),
+    /// plus the once-only pair on the activation. Each half is measured on
+    /// its own:
+    ///
+    /// * `tracingLabels()` -- the routine's own `trace` instruction fires
+    ///   these lines for exactly **A, I, L and R**, verified by running the
+    ///   same routine under all nine accepted letters; `n`, `c`, `e`, `f` and
+    ///   `o` produce zero stderr. `TraceMode::labels` is that predicate.
+    /// * `isMethodOrRoutine()` -- a main body never announces one. Measured,
+    ///   `trace l` as a program's own first clause emits nothing, and
+    ///   `::options trace labels` in a file whose only code is a main body
+    ///   likewise.
+    /// * `traceEntryAllowed` -- the `trace` must be the routine's **first**
+    ///   instruction. Measured, a routine whose first clause is `n0 = 0` and
+    ///   whose second is `trace r` echoes its clauses and announces nothing.
+    /// * `traceEntryDone` -- once per activation, and the second of two calls
+    ///   into the same routine announces its own pair, not a third line
+    ///   (measured, `call rtn` twice gives `>I>`/`<I<` twice).
+    ///
+    /// **The caller's setting is not one of the halves and cannot be.**
+    /// Measured, `trace l` in a caller targeting a routine emits nothing at
+    /// all -- a routine inherits no `TraceMode`, so the only setting this
+    /// ever reads is one the routine itself installed.
+    ///
+    /// **A dynamic `TRACE VALUE` reaches this too**, and that is the C++'s
+    /// own second route rather than an accident: `earlyTraceEntry`'s code
+    /// analysis (`:3630`-`:3641`) demands a *non-dynamic* `TRACE`, but
+    /// `setTrace` calls `traceEntry` unconditionally, and by then the flags
+    /// are installed and `traceEntryAllowed` is still true. Measured,
+    /// `trace value 'l'` as a routine's first clause announces both lines.
+    /// This crate implements the `setTrace` route only; the code-analysis
+    /// route exists in the C++ to announce the entry *before* a guarded
+    /// method takes its object lock, and with no methods and no locks here
+    /// nothing can run between the two points, so no probe separates them.
+    ///
+    /// **`::OPTIONS TRACE LABELS` is a third route and this crate does not
+    /// implement it.** Measured, a routine with no `trace` instruction of its
+    /// own, in a file carrying `::options trace labels`, announces both lines
+    /// with identical bytes. `::OPTIONS` is a declared Phase 5 gap
+    /// (`directive_gap`, `lib.rs`), so such a program is refused here rather
+    /// than running without the lines.
+    fn trace_invocation_entry(&mut self) {
+        let activation = self.activation();
+        if !activation.trace_entry_allowed || activation.trace_entry_done {
+            return;
+        }
+        let Some(name) = self.invocation_routine_name() else {
+            return;
+        };
+        if !self.trace_mode().labels {
+            return;
+        }
+        self.activation_mut().trace_entry_done = true;
+        let package = self.program_path.clone().into_bytes();
+        self.trace_invocation(">I>", &name, &package);
+    }
+
+    /// `<I<`, on every way a routine activation can end.
+    ///
+    /// Called with the callee still on the activation stack, because both
+    /// halves of the gate are read off it. Measured on all four endings, and
+    /// all four announce it: `return`, `exit`, falling off the routine's own
+    /// end, and an untrapped condition -- where the line lands **before** the
+    /// error report's own clause echoes, which is the order this crate
+    /// produces anyway since the report is written at the very end.
+    ///
+    /// `tracingLabels()` is re-read here rather than assumed from
+    /// `trace_entry_done`: measured, a routine whose body is `trace l` then
+    /// `trace off` announces `>I>` and no `<I<`.
+    fn trace_invocation_exit(&mut self) {
+        if !self.activation().trace_entry_done {
+            return;
+        }
+        let Some(name) = self.invocation_routine_name() else {
+            return;
+        };
+        if !self.trace_mode().labels {
+            return;
+        }
+        let package = self.program_path.clone().into_bytes();
+        self.trace_invocation("<I<", &name, &package);
+    }
+
+    /// The `::ROUTINE` name the running activation announces itself under, or
+    /// `None` when the running activation is not a routine at all -- which is
+    /// the `isMethodOrRoutine()` half of the gate, expressed as the lookup
+    /// that would supply the substitution.
+    ///
+    /// The directive's own spelling, verbatim. Measured: `::routine 'zork'`
+    /// announces `"zork"` and `::routine MiXeD` announces `"MIXED"`, the
+    /// second because the scanner upcases a bare symbol before the directive
+    /// parser sees it.
+    fn invocation_routine_name(&self) -> Option<Vec<u8>> {
+        let index = self.activation().body?;
+        match &self.activation().program.directives.get(index)?.kind {
+            DirectiveKind::Routine(routine) => Some(routine.name.to_vec()),
+            _ => None,
+        }
     }
 
     /// `ADDRESS`'s three environment-naming forms. The caller has already
@@ -13535,6 +13690,253 @@ mod tests {
             String::from_utf8_lossy(&outcome.stderr)
         );
         assert_eq!(outcome.stdout, b"main ran\n".to_vec());
+    }
+
+    /// `EXIT` inside a `::ROUTINE` ends the routine and settles `RESULT`,
+    /// where `EXIT` inside a `CALL`ed label ends the program.
+    ///
+    /// **Four routes, because the exit reaches the routine boundary four
+    /// different ways** and only two of them travel on a `Flow`: a plain
+    /// `EXIT` in the routine's own body, one reached from a label *inside*
+    /// the routine, one reached through an expression call (which arrives as
+    /// `Failure::Exited`, an `Err`), and one inside an `INTERPRET`. Measured
+    /// on the oracle, rc 0 for all of them.
+    ///
+    /// The last block is the neighbouring case that keeps this about routines
+    /// rather than about `EXIT`: the same `exit 5` in a `CALL`ed label ends
+    /// the program at rc 5.
+    #[test]
+    fn exit_inside_a_routine_ends_the_routine_where_a_labels_exit_ends_the_program() {
+        let outcome = routine_program(
+            b"call rtn_value\n\
+              say result\n\
+              call rtn_bare\n\
+              say result\n\
+              say rtn_expr()\n\
+              call rtn_interpret\n\
+              call rtn_falls_off\n\
+              say result\n\
+              say 'main ran on'\n\
+              exit 0\n\
+              ::routine rtn_value\n\
+              exit 5\n\
+              ::routine rtn_bare\n\
+              exit\n\
+              ::routine rtn_expr\n\
+              n1 = inner()\n\
+              say 'unreached'\n\
+              return 1\n\
+              inner:\n\
+              exit 9\n\
+              ::routine rtn_interpret\n\
+              interpret \"exit 4\"\n\
+              say 'unreached'\n\
+              return\n\
+              ::routine rtn_falls_off\n\
+              n0 = 0\n",
+        );
+        assert_eq!(
+            outcome.exit_code,
+            0,
+            "stderr: {}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+        assert_eq!(
+            outcome.stdout,
+            b"5\nRESULT\n9\nRESULT\nmain ran on\n".to_vec(),
+            "a bare EXIT and falling off the end both leave RESULT unset"
+        );
+
+        let program_exit = routine_program(
+            b"call sub\n\
+              say 'never'\n\
+              exit\n\
+              sub:\n\
+              exit 5\n",
+        );
+        assert_eq!(program_exit.exit_code, 5, "a label's EXIT ends the program");
+        assert_eq!(program_exit.stdout, b"");
+    }
+
+    /// A `::ROUTINE`'s own clauses echo at indent **0**, however deeply the
+    /// call site is nested -- the same fact as `TRACE` not crossing into a
+    /// routine, seen from the other side.
+    ///
+    /// **The exact stderr, because nothing else in the suite can see this
+    /// one.** `support::normalize_stderr` (DEVIATION 0) collapses the space
+    /// run between a trace line's marker and its content, so
+    /// `tests/corpus.rs` and `tests/trace_oracle.rs` compare a clause echoed
+    /// at indent 2 equal to one echoed at indent 0. Measured, and the
+    /// mutation is the caller's own `value_indent() + 2` applied to the
+    /// routine path as well: the whole workspace stays green with that
+    /// change and only this assertion goes red.
+    ///
+    /// The oracle's own transcript for this program, `cat -A`'d, is what the
+    /// expectation below is: the routine is called from two nested `DO`
+    /// blocks, so an internal label reached the same way would echo at
+    /// indent 6.
+    #[test]
+    fn a_routines_own_clauses_echo_at_indent_zero_however_deep_the_call_site_is() {
+        const PATH: &str = "/tmp/rtn-indent.rex";
+        let outcome = crate::run_program(
+            PATH,
+            b"do 1\n\
+              do 1\n\
+              call rtn\n\
+              end\n\
+              end\n\
+              ::routine rtn\n\
+              trace r\n\
+              n1 = 1\n\
+              return\n"
+                .to_vec(),
+            crate::Invocation::none(),
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stderr),
+            format!(
+                "       >I> Routine \"RTN\" in package \"{PATH}\".\n\
+                 \x20    8 *-* n1 = 1\n\
+                 \x20      >>>   \"1\"\n\
+                 \x20    9 *-* return\n\
+                 \x20      <I< Routine \"RTN\" in package \"{PATH}\".\n"
+            )
+        );
+    }
+
+    /// `>I>`/`<I<` fire for exactly the four `TRACE` letters whose setting
+    /// traces labels, and for no other, when the routine's own `TRACE` is its
+    /// first instruction.
+    ///
+    /// **All nine accepted letters, not the four that work.** Measured on the
+    /// oracle by running the same routine under each: `a`, `i`, `l` and `r`
+    /// announce both lines, and `n`, `c`, `e`, `f` and `o` produce zero
+    /// stderr. A gate written as "any trace setting at all" passes a
+    /// four-letter test and fails this one.
+    ///
+    /// The bytes are asserted whole rather than by substring: seven leading
+    /// blanks, the prefix, one blank, the message, the trailing period
+    /// outside the closing quote, and no trailing whitespace.
+    #[test]
+    fn the_invocation_prefixes_fire_for_exactly_the_four_label_tracing_letters() {
+        const PATH: &str = "/tmp/rtn-letters.rex";
+        let announced = format!(
+            "       >I> Routine \"RTN\" in package \"{PATH}\".\n\
+             \x20      <I< Routine \"RTN\" in package \"{PATH}\".\n"
+        );
+        for letter in *b"ailr" {
+            let source = format!(
+                "call rtn\n::routine rtn\ntrace {}\nreturn\n",
+                letter as char
+            );
+            let outcome = crate::run_program(PATH, source.into_bytes(), crate::Invocation::none());
+            let stderr = String::from_utf8_lossy(&outcome.stderr).into_owned();
+            assert!(
+                stderr.starts_with(&announced[..announced.find('\n').unwrap() + 1]),
+                "trace {}: expected the `>I>` line first, got {stderr:?}",
+                letter as char
+            );
+            assert!(
+                stderr.ends_with(&announced[announced.find('\n').unwrap() + 1..]),
+                "trace {}: expected the `<I<` line last, got {stderr:?}",
+                letter as char
+            );
+        }
+        for letter in *b"ncefo" {
+            let source = format!(
+                "call rtn\n::routine rtn\ntrace {}\nreturn\n",
+                letter as char
+            );
+            let outcome = crate::run_program(PATH, source.into_bytes(), crate::Invocation::none());
+            assert_eq!(
+                outcome.stderr, b"",
+                "trace {}: this setting does not trace labels, so neither line \
+                 may be announced",
+                letter as char
+            );
+        }
+    }
+
+    /// The five things other than the letter that decide whether the pair is
+    /// announced, each with the neighbouring case that is announced.
+    ///
+    /// Every source below was measured on the oracle, rc 0. They are one test
+    /// because each is the *same* program differing in one clause, and
+    /// splitting them would hide that: the announced case is what says the
+    /// difference is the clause and not something else about the program.
+    #[test]
+    fn the_invocation_prefixes_are_gated_on_more_than_the_trace_letter() {
+        const PATH: &str = "/tmp/rtn-gate.rex";
+        let entry = format!("       >I> Routine \"RTN\" in package \"{PATH}\".\n");
+        let exit = format!("       <I< Routine \"RTN\" in package \"{PATH}\".\n");
+        let both = format!("{entry}{exit}");
+
+        let check = |what: &str, source: &str, want: &str| {
+            let outcome =
+                crate::run_program(PATH, source.as_bytes().to_vec(), crate::Invocation::none());
+            assert_eq!(
+                String::from_utf8_lossy(&outcome.stderr),
+                want,
+                "{what}: stderr"
+            );
+        };
+
+        // The routine's `TRACE` must be its FIRST instruction, and a LABEL
+        // spends that permission where `PROCEDURE`'s own permission survives
+        // one.
+        check(
+            "trace l first",
+            "call rtn\n::routine rtn\ntrace l\nreturn\n",
+            &both,
+        );
+        check(
+            "an assignment in front of it",
+            "call rtn\n::routine rtn\nn0 = 0\ntrace l\nreturn\n",
+            "",
+        );
+        check(
+            "a label in front of it",
+            "call rtn\n::routine rtn\nlbl:\ntrace l\nreturn\n",
+            "",
+        );
+
+        // A comment is not an instruction, so it does not spend it.
+        check(
+            "a comment in front of it",
+            "call rtn\n::routine rtn\n/* c */\ntrace l\nreturn\n",
+            &both,
+        );
+
+        // The dynamic form reaches the same `setTrace` route.
+        check(
+            "trace value 'l'",
+            "call rtn\n::routine rtn\ntrace value 'l'\nreturn\n",
+            &both,
+        );
+
+        // `<I<` re-reads the setting, so a routine that turns tracing off
+        // announces its entry and not its exit.
+        check(
+            "trace l then trace off",
+            "call rtn\n::routine rtn\ntrace l\ntrace off\nreturn\n",
+            &entry,
+        );
+
+        // The caller's setting never crosses, and a main body never
+        // announces one however it is traced.
+        check(
+            "trace l in the caller",
+            "trace l\ncall rtn\n::routine rtn\nn0 = 0\nreturn\n",
+            "",
+        );
+        check("trace l in a main body alone", "trace l\nn0 = 0\n", "");
+
+        // Once per activation, so two calls announce two pairs.
+        check(
+            "two calls",
+            "call rtn\ncall rtn\n::routine rtn\ntrace l\nreturn\n",
+            &format!("{both}{both}"),
+        );
     }
 
     /// Every directive form whose installation this crate **can** perform

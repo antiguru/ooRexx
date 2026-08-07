@@ -781,6 +781,49 @@ impl Interp {
         }
         push_tagged(&mut self.trace, ">C>", indent, false, tag, " => ", resolved);
     }
+
+    /// `>I>`/`<I<` (`TRACE_PREFIX_INVOCATION`/`_INVOCATION_EXIT`): a routine
+    /// activation's own entry and exit announcement.
+    ///
+    /// **Not a value line and not a clause echo**, so it goes through neither
+    /// [`push_value`] nor [`push_clause`], and it takes no indent: the C++
+    /// writes the message straight into a buffer whose first
+    /// `INSTRUCTION_OVERHEAD` bytes are blanks with the prefix laid over
+    /// bytes 7..10 (`traceEntryOrExit`, `RexxActivation.cpp:3678`-`3713`), so
+    /// the content always begins at byte 11 regardless of nesting.
+    ///
+    /// The text is message 101018, `Routine <q>&1</q> in package <q>&2</q>.`
+    /// (`interpreter/messages/rexxmsg.xml:6470`-`6471`), where `<q>` is a
+    /// double quote. Confirmed with `cat -A`, and there is no trailing
+    /// whitespace:
+    ///
+    /// ```text
+    ///        >I> Routine "RTN" in package "/abs/path/own_a.rex".$
+    ///        <I< Routine "RTN" in package "/abs/path/own_a.rex".$
+    /// ```
+    ///
+    /// Seven blanks, the prefix, **one** blank, then the message, and the
+    /// trailing period is outside the closing quote. `name` is the
+    /// `::ROUTINE` directive's own spelling -- upcased for the bare symbol
+    /// form because the scanner upcases it, and left alone for the quoted
+    /// form (measured: `::routine 'zork'` announces `"zork"` and `::routine
+    /// MiXeD` announces `"MIXED"`).
+    ///
+    /// Unguarded, unlike every formatter above: both callers
+    /// (`trace_invocation_entry`/`trace_invocation_exit`, `run.rs`) have a
+    /// two-part gate of their own that no `TraceMode` field expresses on its
+    /// own, and a third partial gate here would be a second place to keep it.
+    pub(crate) fn trace_invocation(&mut self, prefix: &str, name: &[u8], package: &[u8]) {
+        let line_start = self.trace.len();
+        self.trace.extend(std::iter::repeat_n(b' ', 7));
+        self.trace.extend_from_slice(prefix.as_bytes());
+        self.trace.extend_from_slice(b" Routine \"");
+        self.trace.extend_from_slice(name);
+        self.trace.extend_from_slice(b"\" in package \"");
+        self.trace.extend_from_slice(package);
+        self.trace.extend_from_slice(b"\".\n");
+        make_displayable(&mut self.trace, line_start);
+    }
 }
 
 #[cfg(test)]

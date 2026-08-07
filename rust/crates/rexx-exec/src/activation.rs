@@ -367,6 +367,32 @@ pub(crate) struct Activation {
     ///
     /// [`entered_by_call`]: Activation::entered_by_call
     pub(crate) first_instruction_pending: bool,
+    /// Whether a `>I>` may still be announced for this activation --
+    /// `RexxActivation::traceEntryAllowed`, and true only while the *first*
+    /// instruction is the one running.
+    ///
+    /// **Not [`first_instruction_pending`], and a label is what tells them
+    /// apart.** That field treats a `LABEL` as transparent, because
+    /// `PROCEDURE` after two labels is legal; this one is cleared by a label
+    /// like any other instruction, because a `LABEL` *is* a
+    /// `RexxInstruction` and `RexxActivation.cpp:659` clears the flag for
+    /// everything but `EXPOSE`. Measured: a routine whose first clause is
+    /// `lbl:` and whose second is `trace l` announces nothing at all, where
+    /// the same routine without the label announces both lines. Blank lines
+    /// and comments do not count, since neither becomes an instruction --
+    /// measured, a routine with a comment line before its `trace l`
+    /// announces both.
+    ///
+    /// [`first_instruction_pending`]: Activation::first_instruction_pending
+    pub(crate) trace_entry_allowed: bool,
+    /// Whether this activation's `>I>` has already been announced, which is
+    /// also the precondition for its `<I<` --
+    /// `RexxActivation::traceEntryDone`.
+    ///
+    /// The exit half needs *both* this and `tracingLabels()` still being in
+    /// force at the end: measured, a routine whose body is `trace l` then
+    /// `trace off` announces `>I>` and no `<I<` at all.
+    pub(crate) trace_entry_done: bool,
     pub(crate) pc: usize,
     /// This activation's own `NUMERIC DIGITS`/`FUZZ`/`FORM`.
     ///
@@ -530,6 +556,8 @@ impl Activation {
             owns_frame: true,
             entered_by_call: false,
             first_instruction_pending: true,
+            trace_entry_allowed: true,
+            trace_entry_done: false,
             pc: 0,
             settings: Settings::default(),
             // `NORMAL` and not `OFF`: the two behave identically here and a
@@ -618,6 +646,8 @@ impl Activation {
             owns_frame: false,
             entered_by_call: true,
             first_instruction_pending: true,
+            trace_entry_allowed: true,
+            trace_entry_done: false,
             pc,
             settings: inherited.settings,
             trace_mode: inherited.trace_mode,
@@ -667,6 +697,8 @@ impl Activation {
             owns_frame: true,
             entered_by_call: true,
             first_instruction_pending: true,
+            trace_entry_allowed: true,
+            trace_entry_done: false,
             pc: 0,
             settings: Settings::default(),
             trace_mode: TraceMode::NORMAL,

@@ -556,6 +556,22 @@ enum Coverage {
     /// A committed witness above emits it, and `check_witness` compares it
     /// byte for byte.
     Witnessed,
+    /// A **live corpus** program emits it, named here by its path relative to
+    /// `rust/corpus/`. `tests/corpus.rs` runs that program under both
+    /// interpreters on every run and compares all three channels, so the
+    /// comparison is as strict as `check_witness`'s -- it is the
+    /// *expectation* that cannot be committed, not the check.
+    ///
+    /// **The reason is host dependence, and only one kind of line has it.**
+    /// `>I>`/`<I<` name the package by its absolute path, so a captured
+    /// `.expected` would be true on the machine that captured it and false
+    /// on the next; a live run gives both interpreters the same path in the
+    /// same process invocation. A prefix belongs here only when no committed
+    /// file could hold it, never as a shortcut around capturing one.
+    ///
+    /// [`every_live_witness_emits_its_prefix_and_is_run_by_the_corpus`] is
+    /// what keeps this from being a claim this file makes about itself.
+    WitnessedLive(&'static str),
     /// Not reachable from the code this crate runs yet, and the phase named
     /// is where it becomes reachable. The string is spelled exactly as
     /// `phase-4-exclusions.txt`'s own owner column spells it, because that
@@ -568,8 +584,9 @@ enum Coverage {
 /// the honest statement is that the witnesses verify what they cover and
 /// *how much of the trace surface that is* is measured by nothing.
 ///
-/// Every one of the oracle's nineteen prefixes appears exactly once, either
-/// as [`Coverage::Witnessed`] or with the phase that owns it. The owners:
+/// Every one of the oracle's nineteen prefixes appears exactly once, as
+/// [`Coverage::Witnessed`], as [`Coverage::WitnessedLive`], or with the phase
+/// that owns it. The owners:
 ///
 /// * `+++` -- Phase 7. Four producers in the C++, and every one of them is
 ///   behind something D18 defers. `RexxActivation.cpp:4468` is a command's
@@ -588,12 +605,13 @@ enum Coverage {
 ///   the exclusions file's own ownership table.
 /// * `>N>` -- Phase 5. `traceClassResolution`, a namespace-qualified name,
 ///   which needs `::REQUIRES`; `ExprKind::QualifiedCall` is Phase 5's there.
-/// * `>I>`/`<I<` -- 4c, alongside `::routine` dispatch itself. Measured
-///   rather than assumed, and the exclusions file's own row carries the
-///   transcripts: the gate is `tracingLabels() && isMethodOrRoutine()`
-///   (`RexxActivation.cpp:3655`), so **both** halves are needed, and this
-///   crate reaches neither -- `::routine` is deferred to 4c by decision, not
-///   by unreachability.
+///
+/// `>I>` and `<I<` were owned by 4c here and are now witnessed, by
+/// `corpus/lang/routine_dispatch.rex` rather than by a file in this
+/// directory. The gate is `tracingLabels() && isMethodOrRoutine()`
+/// (`RexxActivation.cpp:3655`) and that witness's block E supplies both
+/// halves from inside a `::ROUTINE`; the absolute package path in the line
+/// is why the expectation cannot be committed.
 const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
     ("*-*", Coverage::Witnessed),
     ("+++", Coverage::Owned("Phase 7")),
@@ -609,25 +627,91 @@ const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
     (">M>", Coverage::Owned("Phase 5")),
     (">A>", Coverage::Witnessed),
     (">=>", Coverage::Witnessed),
-    (">I>", Coverage::Owned("4c")),
+    (">I>", Coverage::WitnessedLive(LIVE_INVOCATION_WITNESS)),
     (">N>", Coverage::Owned("Phase 5")),
     (">K>", Coverage::Witnessed),
     (">R>", Coverage::Witnessed),
-    ("<I<", Coverage::Owned("4c")),
+    ("<I<", Coverage::WitnessedLive(LIVE_INVOCATION_WITNESS)),
 ];
 
-/// The coverage number itself, committed so that a change to it is a change
-/// to this file rather than a change to a printed line nobody reads.
-const WITNESSED_PREFIX_COUNT: usize = 14;
+/// Each [`Coverage::WitnessedLive`] row's own chain, the analogue of
+/// [`every_witness_still_emits_every_prefix_it_is_named_for`] for a witness
+/// whose expectation lives in the live corpus.
+///
+/// Three links, and dropping any one of them makes the row a claim rather
+/// than a measurement:
+///
+/// 1. **The program emits the prefix.** Run here, in process, through the
+///    same `run_program` entry point every other check uses -- so a change
+///    that stops emitting the line goes red here even with no oracle on the
+///    machine.
+/// 2. **The corpus runs it against the oracle.** The path must appear in one
+///    of the phase subset files, which is what `tests/corpus.rs` reads; a
+///    program not listed there is compared with nothing, and this row would
+///    then rest on this file's own output alone.
+/// 3. **The file exists**, which the read in link 1 already settles.
+///
+/// What this cannot check is the *bytes*: that is link 2's job, and it is
+/// where the absolute package path stops being a problem, because both
+/// interpreters get the same one.
+#[test]
+fn every_live_witness_emits_its_prefix_and_is_run_by_the_corpus() {
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    let mut listed = String::new();
+    for name in ["phase-4a.txt", "phase-4b.txt", "phase-4c.txt"] {
+        let path = corpus_dir.join(name);
+        listed.push_str(
+            &std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("{}: unreadable ({e})", path.display())),
+        );
+    }
+    for (prefix, coverage) in PREFIX_COVERAGE {
+        let Coverage::WitnessedLive(rel_path) = coverage else {
+            continue;
+        };
+        assert!(
+            listed
+                .lines()
+                .any(|line| line.trim() == *rel_path && !line.trim_start().starts_with('#')),
+            "{rel_path} witnesses {prefix:?} but is in no phase subset file, so \
+             tests/corpus.rs never runs it against the oracle"
+        );
+        let path = corpus_dir.join(rel_path);
+        let source =
+            std::fs::read(&path).unwrap_or_else(|e| panic!("{}: unreadable ({e})", path.display()));
+        let outcome = run_program(
+            &path.to_string_lossy(),
+            source,
+            rexx_exec::Invocation::none(),
+        );
+        assert!(
+            contains_bytes(&outcome.stderr, prefix.as_bytes()),
+            "{rel_path} is this table's witness for {prefix:?} and emitted no \
+             such line: {:?}",
+            String::from_utf8_lossy(&outcome.stderr)
+        );
+    }
+}
 
-/// The other five, each with an owner. `WITNESSED_PREFIX_COUNT` plus this is
+/// The one corpus program that witnesses a prefix no committed file can
+/// hold, relative to `rust/corpus/`.
+const LIVE_INVOCATION_WITNESS: &str = "lang/routine_dispatch.rex";
+
+/// The coverage number itself, committed so that a change to it is a change
+/// to this file rather than a change to a printed line nobody reads. Counts
+/// `Witnessed` and `WitnessedLive` together: both are compared against the
+/// oracle byte for byte, and the split between them is about where the
+/// expectation lives, not about how strict the check is.
+const WITNESSED_PREFIX_COUNT: usize = 16;
+
+/// The other three, each with an owner. `WITNESSED_PREFIX_COUNT` plus this is
 /// asserted to be the whole table, so neither number can drift on its own.
-const OUT_OF_SCOPE_PREFIX_COUNT: usize = 5;
+const OUT_OF_SCOPE_PREFIX_COUNT: usize = 3;
 
 /// The phases an owner may name. A phase that has finished cannot own a
 /// prefix -- whatever it owned is witnessed by then -- so a finished phase's
 /// name does not appear here.
-const OWNER_PHASES: &[&str] = &["4c", "Phase 5", "Phase 7"];
+const OWNER_PHASES: &[&str] = &["Phase 5", "Phase 7"];
 
 /// Criterion 3's coverage measure, asserted rather than printed.
 ///
@@ -644,12 +728,14 @@ const OWNER_PHASES: &[&str] = &["4c", "Phase 5", "Phase 7"];
 ///    [`every_witness_still_emits_every_prefix_it_is_named_for`] has already
 ///    tied to what the committed `.expected` files actually contain. That
 ///    chain is what stops "witnessed" from being a claim this file makes
-///    about itself.
+///    about itself, and
+///    [`every_live_witness_emits_its_prefix_and_is_run_by_the_corpus`] is the
+///    same chain for the `WitnessedLive` rows.
 /// 3. Both counts match their committed literals and add up to the whole
 ///    table.
 /// 4. Every owner names a phase from [`OWNER_PHASES`].
 #[test]
-fn the_trace_surfaces_coverage_is_fourteen_of_nineteen_with_owners_for_the_rest() {
+fn the_trace_surfaces_coverage_is_sixteen_of_nineteen_with_owners_for_the_rest() {
     let mut listed: Vec<&str> = PREFIX_COVERAGE.iter().map(|(prefix, _)| *prefix).collect();
     listed.sort_unstable();
     let before_dedup = listed.len();
@@ -686,11 +772,19 @@ fn the_trace_surfaces_coverage_is_fourteen_of_nineteen_with_owners_for_the_rest(
     let owned: Vec<&str> = PREFIX_COVERAGE
         .iter()
         .filter_map(|(_, coverage)| match coverage {
-            Coverage::Witnessed => None,
+            Coverage::Witnessed | Coverage::WitnessedLive(_) => None,
             Coverage::Owned(phase) => Some(*phase),
         })
         .collect();
-    assert_eq!(witnessed.len(), WITNESSED_PREFIX_COUNT, "witnessed count");
+    let live = PREFIX_COVERAGE
+        .iter()
+        .filter(|(_, coverage)| matches!(coverage, Coverage::WitnessedLive(_)))
+        .count();
+    assert_eq!(
+        witnessed.len() + live,
+        WITNESSED_PREFIX_COUNT,
+        "witnessed count, committed and live together"
+    );
     assert_eq!(owned.len(), OUT_OF_SCOPE_PREFIX_COUNT, "out-of-scope count");
     assert_eq!(
         WITNESSED_PREFIX_COUNT + OUT_OF_SCOPE_PREFIX_COUNT,

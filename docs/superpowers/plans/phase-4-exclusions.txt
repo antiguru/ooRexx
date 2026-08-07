@@ -200,7 +200,11 @@ because their answer was got wrong before it was measured.
               owner argued from "no path exists" would have been wrong; the
               argument has to be about which half of ADDRESS lands when.
 
-  >I> / <I<   4c, deferred alongside ::routine dispatch itself.
+  >I> / <I<   DELIVERED by 4c Task 13, alongside ::routine dispatch itself.
+              The row is kept rather than deleted because its argument is
+              about how an owner was got wrong and then right, which a
+              deletion would lose; the paragraph at the end of the row says
+              what shipped and what did not.
 
               BY DECISION, NOT BY UNREACHABILITY, and the distinction is the
               whole reason this row exists. 4b Task 3 first recorded ">I> is
@@ -214,8 +218,7 @@ because their answer was got wrong before it was measured.
               in 4b for any non-builtin name; 4b declines to implement it
               because getting builtin-colliding names right needs 4c's table,
               and a wrong answer there would silently run the wrong routine
-              rather than fail loudly. Today the construct fails loudly
-              naming 4c, which is the correct behaviour.
+              rather than fail loudly.
 
               THE SENTENCE ABOVE IS THIS ROW'S OWNERSHIP CLAIM -- "4b
               declines to implement it because getting builtin-colliding
@@ -239,9 +242,21 @@ because their answer was got wrong before it was measured.
 
                 * `trace l` in the CALLER, targeting a ::routine -> nothing
                   at all. The caller's setting does not cross into it.
-                * `::options trace labels` in the package, or a non-dynamic
-                  `trace l` as the routine's own first instruction (the
-                  `earlyTraceEntry` path at :3629-:3640) -> both lines fire.
+                * `::options trace labels` in the package, or a `trace l`
+                  as the routine's own first instruction -> both lines fire.
+                  RE-MEASURED AT TASK 13 AND THE SECOND HALF WAS NARROWER
+                  THAN IT SHOULD HAVE BEEN: this said "non-dynamic", which
+                  is `earlyTraceEntry`'s own condition (:3629-:3640) and not
+                  the whole gate. `trace value 'l'` as a routine's first
+                  instruction fires both lines too, through `setTrace`'s own
+                  call to `traceEntry` (:1024). What "first instruction"
+                  excludes is measured and is narrower still: a routine
+                  whose first clause is a LABEL and whose second is `trace
+                  l` fires nothing, because a label clears
+                  `traceEntryAllowed` (:659) like any other instruction.
+                * Exactly A, I, L and R, verified by running the same
+                  routine under all nine accepted letters; n, c, e, f and o
+                  produce zero stderr.
                 * The content is NOT a clause echo. It is, verbatim:
                       >I> Routine "ZORKOLO" in package "<absolute path>".
                       <I< Routine "ZORKOLO" in package "<absolute path>".
@@ -251,7 +266,7 @@ because their answer was got wrong before it was measured.
                   corpus, not in tests/trace_oracle/.
 
               THREE MEASURED WAYS A ::ROUTINE ACTIVATION IS NOT AN INTERNAL
-              LABEL'S, which 4c will have to meet:
+              LABEL'S, recorded here before 4c met them:
 
                 * It has its own variable pool. Measured: a caller with
                   `nn = 5` calling a ::routine that says `nn` prints the
@@ -264,6 +279,32 @@ because their answer was got wrong before it was measured.
                   An internal label's clauses ARE echoed under the same
                   setting, which is what 4b implements.
 
+              THREE MORE THAT TASK 13 MEASURED AND THIS LIST DID NOT HAVE.
+              None of them falls out of the three above, and two are silent
+              failures rather than visible ones:
+
+                * NUMERIC, ADDRESS, the condition traps and CONDITION() are
+                  all inherited by a CALLed label and by none of them by a
+                  ::routine. Measured one field at a time, caller against
+                  routine: `numeric digits 7`/`form engineering` reads back
+                  as `9 SCIENTIFIC`; `address system` reads back as `sh`; a
+                  caller's `signal on syntax name mytrap` does not arm the
+                  routine's own `mytrap:` label; and CONDITION('C') inside a
+                  routine called from a live handler is the null string.
+                * A ::routine call sets no SIGL, on either side. The
+                  caller's stays at whatever line it held, and `sigl` read
+                  inside the routine is the derived name.
+                * EXIT INSIDE A ::ROUTINE ENDS THE ROUTINE, NOT THE PROGRAM,
+                  where EXIT inside a CALLed label ends the program.
+                  Measured, all rc 0: `exit 5` in a routine leaves the
+                  caller's RESULT at 5 and the main body running on; a bare
+                  `exit` leaves RESULT unset; and the same holds when the
+                  EXIT is reached from a label inside the routine, from an
+                  expression call inside it, or from an INTERPRET inside it.
+                  `implicitExit` (:1455-:1469) sets RETURNED outright for an
+                  isProgramLevelCall activation and only otherwise walks up
+                  through exitFrom.
+
               THE LESSON THAT GENERALISES, and it is why the first answer was
               wrong: absence under one instrument is not evidence of
               ownership. The first revision probed `trace i` on an internal
@@ -273,6 +314,28 @@ because their answer was got wrong before it was measured.
               `::method` travels with `::routine` here (`isMethodOrRoutine`
               is one predicate) but is Phase 5's by the object model, not
               4c's. The row is named for both because the C++ gate is.
+
+              WHAT SHIPPED AND WHAT DID NOT. Both lines are emitted, byte
+              for byte, through the route the routine's own TRACE takes.
+              corpus/lang/routine_dispatch.rex is the witness, and it is in
+              the live corpus rather than in tests/trace_oracle/ for the
+              reason this row already gave: the absolute package path makes
+              any committed expectation host-dependent. trace_oracle.rs's
+              PREFIX_COVERAGE carries the two rows as WitnessedLive and its
+              own test runs the program, checks the prefix reaches stderr,
+              and checks the program is in a subset file so corpus.rs
+              compares it against the oracle.
+
+              THE ::OPTIONS TRACE LABELS ROUTE IS NOT IMPLEMENTED, and it is
+              not a gap in these two prefixes: ::OPTIONS is a declared Phase
+              5 refusal (the directive section below), so a program taking
+              that route is refused before `main` rather than run without
+              the lines. The earlyTraceEntry code-analysis route is not
+              implemented either, and no probe separates it from the
+              setTrace route here -- it exists in the C++ to announce the
+              entry before a guarded METHOD takes its object lock, and with
+              no methods and no locks nothing can run between the two
+              points.
 
 
 EXCLUSIONS -- a compound variable as a DO control variable, owned by 4c

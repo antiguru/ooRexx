@@ -102,8 +102,9 @@
 //! subset's *programs* construct, not about running them -- the differential
 //! half in `tests/corpus.rs` is what proves they execute correctly. The walk
 //! below is `rexx-parse/tests/gate_walk`'s shared module, trimmed to what the
-//! subset actually contains (no directives -- `assert_program_has_no_directives`
-//! guards that assumption rather than silently ignoring one) and reproduced
+//! subset actually contains (`::ROUTINE` and no other directive --
+//! `assert_program_has_only_routine_directives` guards that assumption rather
+//! than silently ignoring one) and reproduced
 //! here rather than imported, because an integration test cannot reach
 //! another crate's `tests/` module and this crate's own `Cargo.toml`
 //! deliberately keeps `rexx-parse` as a normal, not dev, dependency for
@@ -128,8 +129,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use rexx_parse::{
-    EndTarget, Expr, ExprKind, Instruction, InstructionKind, Loop, LoopKind, Program, Trace,
-    parse_program,
+    DirectiveKind, EndTarget, Expr, ExprKind, Instruction, InstructionKind, Loop, LoopKind,
+    Program, Trace, parse_program,
 };
 
 #[path = "owners.rs"]
@@ -142,17 +143,24 @@ use owners::{
 
 // ---------------------------------------------------------------------------
 // The walk. Trimmed from `rexx-parse/tests/gate_walk/mod.rs` to what the
-// subset actually contains: no directives. `assert_program_has_no_directives`
-// guards that assumption at every parse rather than silently under-walking a
-// program that gained one.
+// subset actually contains: `::ROUTINE` bodies and no other directive kind.
+// `assert_program_has_only_routine_directives` guards that assumption at every
+// parse rather than silently under-walking a program that gained one.
 // ---------------------------------------------------------------------------
 
-fn assert_program_has_no_directives(path: &Path, p: &Program) {
+fn assert_program_has_only_routine_directives(path: &Path, p: &Program) {
+    let others: Vec<&str> = p
+        .directives
+        .iter()
+        .map(|d| d.kind.keyword())
+        .filter(|keyword| *keyword != "ROUTINE")
+        .collect();
     assert!(
-        p.directives.is_empty(),
-        "{} has a `::` directive, which this walker does not follow into -- \
-         the 4a subset is defined to have none (see phase-4a.txt's own header); \
-         either the subset gained one by mistake or this walker needs widening",
+        others.is_empty(),
+        "{} has a `::` directive this walker does not follow into ({others:?}) -- \
+         only ::ROUTINE is admitted, because `each_instruction` descends into a \
+         routine's body and into no other kind of directive body; either the \
+         subset gained one by mistake or this walker needs widening",
         path.display()
     );
 }
@@ -376,9 +384,26 @@ fn exprs_of_loop<'a>(l: &'a Loop, f: &mut impl FnMut(&'a Expr)) {
     }
 }
 
+/// Every instruction of the main body **and of every `::ROUTINE` body**.
+///
+/// Descending into a routine is what lets
+/// `assert_program_has_only_routine_directives` admit one at all: the guard
+/// exists to stop a subset program hiding constructs from criterion 1 inside
+/// a body nothing walks, so admitting a directive and not walking it would
+/// have opened exactly the hole the guard names. No other directive kind is
+/// descended into, and none is admitted.
 fn each_instruction<'a>(p: &'a Program, visit: &mut impl FnMut(&'a Instruction)) {
     for i in &p.main.instructions {
         visit(i);
+    }
+    for directive in &p.directives {
+        if let DirectiveKind::Routine(routine) = &directive.kind
+            && let Some(body) = &routine.body
+        {
+            for i in &body.instructions {
+                visit(i);
+            }
+        }
     }
 }
 
@@ -592,6 +617,7 @@ const EXPECTED_SUBSET_4C: &[&str] = &[
     "lang/address_env.rex",
     "lang/state_builtins.rex",
     "lang/builtin_argument_range.rex",
+    "lang/routine_dispatch.rex",
 ];
 
 #[test]
@@ -660,7 +686,7 @@ fn every_in_scope_variant_is_witnessed_by_the_phase_subsets() {
         let text = fs::read(&abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
         let p = parse_program(text)
             .unwrap_or_else(|e| panic!("{} failed to parse: {e:?}", abs.display()));
-        assert_program_has_no_directives(&abs, &p);
+        assert_program_has_only_routine_directives(&abs, &p);
 
         each_instruction(&p, &mut |i| {
             instructions.seen.insert(instruction_tag(&i.kind).0);
