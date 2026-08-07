@@ -304,3 +304,68 @@ fn a_command_line_argument_survives_collect_on_every_allocation() {
         "zero collections, so this row cannot see a dropped root"
     );
 }
+
+/// `VALUE`'s compound-write path (`builtin/datatype.rs`) holds the *old*
+/// value across the allocation its own write performs.
+///
+/// `Interp::stem_get`'s "no object at all" branch (`stem.rs`) derives a
+/// fresh, slot-less `Body::Text` for the read-before-write answer when the
+/// stem has never been touched, and `Interp::stem_set` then allocates that
+/// stem's *first* object on the identical branch -- so without rooting the
+/// old value first, that second allocation's own pre-sweep can collect the
+/// first with nothing left pointing at it.
+///
+/// **Checked by deleting its subject**, the `push_temp` `value`'s
+/// `SymbolKind::CompoundName` arm now takes: with it removed, the fourth
+/// row panics at `value.rs`'s `a live value`, and the plain (non-stress)
+/// run of the same program still passes, so nothing but the collector
+/// sees it. The first three rows are the adjacent successes that pin the
+/// defect to *this* write path rather than to compounds, `VALUE`, or
+/// reads in general -- a direct compound assignment, a stem already
+/// carrying a default, and `VALUE`'s own read-only form all stay green
+/// under the mutant.
+#[test]
+fn values_compound_write_roots_the_old_value_before_the_stems_first_allocation() {
+    let rows: [(&str, &str, &str); 4] = [
+        (
+            "a direct compound assignment, no VALUE involved",
+            "j=3\na.j='new'\nsay a.3\n",
+            "new\n",
+        ),
+        (
+            "a stem already carrying a default, read directly",
+            "s.='d'\nsay s.9\n",
+            "d\n",
+        ),
+        (
+            "VALUE's read-only form on the same never-touched compound",
+            "j=3\nsay value('a.j')\n",
+            "A.3\n",
+        ),
+        (
+            "the failing shape: VALUE's write on a never-touched compound",
+            "j=3\nsay value('a.j','new')\n",
+            "A.3\n",
+        ),
+    ];
+    let mut total_collections: u64 = 0;
+    for (name, text, expected) in rows {
+        let path = format!("<value-compound-write-rooting: {name}>");
+        let stress = run_program_collect_every_alloc(
+            &path,
+            text.as_bytes().to_vec(),
+            rexx_exec::Invocation::none(),
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&stress.stdout),
+            expected,
+            "{name}, under collect-on-every-allocation"
+        );
+        assert!(
+            stress.collections > 0,
+            "{name} performed zero collections, so it cannot see a dropped root"
+        );
+        total_collections += stress.collections;
+    }
+    assert!(total_collections > 0);
+}

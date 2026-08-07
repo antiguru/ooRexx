@@ -597,10 +597,9 @@ impl Loud {
         }
     }
 
-    /// `VALUE`'s three-argument form: a *present* third argument names an
-    /// external variable pool -- the platform environment, `.environment`,
-    /// or a system-defined pool -- rather than this crate's own local
-    /// variables (`expression/BuiltinFunctions.cpp:1868` onward).
+    /// `VALUE`'s three-argument form: a *present* third argument selects an
+    /// external pool rather than this crate's own local variables
+    /// (`expression/BuiltinFunctions.cpp:1848`-`1913`).
     ///
     /// **Presence decides, not the selector's value.** Measured 2026-08-07:
     /// `value('myvar',,'')` still reaches this path, because an *empty*
@@ -610,13 +609,27 @@ impl Loud {
     /// answers the local pool's value instead -- a wrong answer, not a loud
     /// one -- which is worse than the gap this declares.
     ///
-    /// Owned by Phase 7, spelled the way `instruction_owner` spells it: a
-    /// value fetched *from* a named pool is the same subsystem `ADDRESS`'s
-    /// command layer sends one *to* (`run.rs`'s own not-yet-implemented
-    /// `ADDRESS` message carries the identical owner).
+    /// **One argument, three destinations, and this constructor declares
+    /// all three unimplemented without claiming which one a given call
+    /// would have reached.** The oracle's own dispatch on the selector's
+    /// value (`BUILTIN(VALUE)`, cited above) is an empty selector reading
+    /// or writing `.environment`; the literal `'ENVIRONMENT'` reading or
+    /// writing the OS environment; and anything else trying a
+    /// platform-defined selector and then the registered value exit. Only
+    /// the third of these is Phase 7's; the first is Phase 5's, the same
+    /// environment/`.local` subsystem a `docs/superpowers/plans/
+    /// phase-4-exclusions.txt` KNOWN GAP row already names, and the second
+    /// is neither. That row carries the per-path attribution; this
+    /// constructor does not repeat it.
+    ///
+    /// No owner string: like [`Loud::builtin_option_object`], this is a
+    /// sub-case within a builtin the status table calls implemented, and
+    /// `owned_message`'s shape belongs to the variant-keyed owner tables.
+    ///
+    /// [`Loud::builtin_option_object`]: Loud::builtin_option_object
     fn value_selector() -> Loud {
         Loud {
-            message: owned_message("VALUE's external-selector form", Some("Phase 7")),
+            message: "VALUE's external-selector form is not implemented".to_string(),
         }
     }
 

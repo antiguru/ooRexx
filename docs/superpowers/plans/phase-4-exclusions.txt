@@ -1970,3 +1970,70 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   is quotable and none is claimed. Closing this needs rexx-num's rendering
   path to reserve fallibly and a FormatError variant carrying major 5. No
   owner is assigned.
+
+
+  KNOWN GAP: VALUE ON A DEFINED ENVIRONMENT NAME IS SILENTLY WRONG AT RC 0.
+  VALUE's local-pool read of a name that classifies as a leading-dot Literal
+  (`SYMBOL('.foo')`'s own classification) falls back to the argument's own
+  upcased spelling whenever that name is undefined -- the oracle's own
+  fallback too, `RexxDotVariable::getValue` (`expression/
+  ExpressionDotVariable.cpp:195`) reaching `variableName->concatToCstring(
+  ".")` only after a package-environment lookup and a small reflection-name
+  table both come back empty. VALUE.testGroup exercises exactly the
+  undefined case (test034: with `c='.'` and `b='B'`, `value(c||b)` answers
+  `.B`), and this crate answers it correctly. It has neither the lookup nor
+  the table, so a name either subsystem WOULD resolve is silently wrong at
+  rc 0 rather than loud. Measured:
+
+    say value('.LOCAL')     oracle rc 0: The Local Directory     rexx-exec rc 0: .LOCAL
+    say value('.ARRAY')     oracle rc 0: The Array class         rexx-exec rc 0: .ARRAY
+
+  and the identical name is already loud on the ordinary expression path --
+  `say .LOCAL` is rc 120 here -- so one path for the same name is loud and
+  the other is a silent wrong answer. RULED: declare the gap, do not build
+  the subsystem to close it. The affected set is `.local`, `.environment`,
+  every class name and every stream alias -- the whole Phase 5 environment/
+  `.local`-directory subsystem, not one fringe name -- and enumerating that
+  set is Phase 5's own work; an enumeration written here, in this crate's
+  own repository, would rot exactly the way rust/CLAUDE.md's exhaustiveness
+  rule describes, so none is attempted. No owner is assigned to closing it,
+  because closing it is building the subsystem, which is Phase 5's to do,
+  not a fix scoped to VALUE.
+
+  WHY THE STATUS ROW STAYS `implemented` RATHER THAN `divergent`: the same
+  reasoning TRANSLATE's row above already gives for the identical shape.
+  builtin-status.txt's VALUE row is derived from one probe
+  (`zz=41; say value('zz')`), which never supplies a dot-prefixed argument
+  at all, so the derivation test and this gap do not disagree -- the probe
+  simply does not reach it.
+
+
+  KNOWN GAP: VALUE'S EXTERNAL-SELECTOR FORM MIXES TWO OWNERS BEHIND ONE
+  ARGUMENT. A *present* third argument to VALUE selects the pool this
+  crate declares wholly unimplemented (`Loud::value_selector`), and the
+  oracle's own dispatch on that argument (`BUILTIN(VALUE)`,
+  `expression/BuiltinFunctions.cpp:1848`-`1913`) is not one subsystem but
+  three, split by the selector's own value:
+
+    (a) an EMPTY selector reads/writes `TheEnvironment`, the `.environment`
+        directory -- the same Phase 5 subsystem the row immediately above
+        this one names, not Phase 7's.
+    (b) a selector that caselessly compares equal to `'ENVIRONMENT'` reads/
+        writes the platform's OS environment variables
+        (`SystemInterpreter::getEnvironmentVariable`/
+        `setEnvironmentVariable`).
+    (c) anything else tries a platform-defined selector
+        (`SystemInterpreter::valueFunction`) and then the registered value
+        exit, and only THIS branch is unambiguously Phase 7's.
+
+  `Loud::value_selector` fires on the third argument's mere presence and
+  says nothing about which of the three a given selector would have
+  reached, which is correct as a gap declaration (this crate builds none
+  of the three) but would be a false attribution if the doc comment named
+  a single owner covering all three -- an earlier draft of that comment
+  did exactly this, analogising the whole form to `ADDRESS`'s Phase-7
+  command layer, which is true of (c) alone. Recorded here rather than
+  fixed by enumerating a run-time switch on the selector's value: the gap
+  is real regardless of which of the three a given call would have hit,
+  and building the switch without building any of the three destinations
+  would only replace one honest "not implemented" with three.

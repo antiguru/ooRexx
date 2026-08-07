@@ -102,8 +102,8 @@ const MAX_SYMBOL_LENGTH: usize = 250;
 
 /// Whether `byte` is one `LanguageParser::isSymbolCharacter` accepts
 /// (`parser/Scanner.cpp:60`'s ASCII half): `!.?_0-9A-Za-z`, and nothing at or
-/// above `0x80` -- measured at Task 5's sibling builtins and confirmed here,
-/// every high byte is a symbol character in no code page this crate reads.
+/// above `0x80` -- every high byte is a symbol character in no code page
+/// this crate reads.
 fn is_symbol_byte(byte: u8) -> bool {
     matches!(byte, b'!' | b'.' | b'?' | b'_' | b'0'..=b'9' | b'A'..=b'Z' | b'a'..=b'z')
 }
@@ -320,9 +320,8 @@ pub(crate) fn datatype(
 ///
 /// Growing costs nothing observable: a freshly grown slot has no value
 /// either way, so calling this on a name nothing has ever touched changes
-/// nothing a later read or write would see, the property `Interp::slot_of`'s
-/// own doc states and the reason 4c's brief names it rather than a
-/// non-growing lookup.
+/// nothing a later read or write would see -- the property `Interp::
+/// slot_of`'s own doc states.
 ///
 /// **Matches two different oracle checks with one shape**, because they
 /// turn out to be the same test. `RexxActivation::localVariableExists`
@@ -474,8 +473,13 @@ pub(crate) fn var(
 /// The fallback this function takes is correct for every undefined name,
 /// which is every name `VALUE.testGroup` exercises (`.zl`/`.zu`/`.B` are all
 /// undefined dot-derived strings built by concatenation, never
-/// `.local~x`-defined ones passed to `VALUE` directly) and silently wrong
-/// only for a `.name` this crate cannot represent regardless.
+/// `.local~x`-defined ones passed to `VALUE` directly). It is silently
+/// wrong, at rc 0, for a name the *whole* absent environment/`.local`
+/// subsystem would otherwise resolve -- not one fringe name, since that
+/// subsystem is what `.local`, `.environment`, every class name and every
+/// stream alias resolve through. Measured and ruled: `docs/superpowers/
+/// plans/phase-4-exclusions.txt`'s own KNOWN GAP row has the transcripts
+/// and the decision to declare this rather than build the subsystem.
 fn literal_value(interp: &mut Interp, upper: &[u8]) -> ObjRef {
     if upper.first() == Some(&b'.') {
         match upper {
@@ -508,10 +512,14 @@ pub(crate) fn value(
     let upper = text.to_ascii_uppercase();
     let newvalue = arg(args, 2);
     match classify(&upper) {
-        SymbolKind::Bad => Err(Raised::argument_not_a_symbol(name, 1, &upper).into()),
+        // `found` is the call's own spelling, not the upcased text just
+        // used to classify it -- see `Raised::argument_not_a_symbol`'s own
+        // doc for the C++ pointer-aliasing mistake that makes those two
+        // different call sites in the oracle and one call site here.
+        SymbolKind::Bad => Err(Raised::argument_not_a_symbol(name, 1, &text).into()),
         SymbolKind::Numeric | SymbolKind::Literal | SymbolKind::LiteralDot => {
             if newvalue.is_some() {
-                return Err(Raised::argument_not_a_symbol(name, 1, &upper).into());
+                return Err(Raised::argument_not_a_symbol(name, 1, &text).into());
             }
             Ok(literal_value(interp, &upper))
         }
@@ -539,6 +547,15 @@ pub(crate) fn value(
             let stem_name = upper[..=dot].to_vec();
             let key = resolve_compound_key(interp, &upper[dot + 1..]);
             let (old, _) = interp.stem_get(&stem_name, &key);
+            // Rooted before `stem_set` runs, not after: when the stem has
+            // never been touched, `stem_get` derives `old` as a fresh,
+            // slot-less allocation (`stem.rs`'s "no object at all" branch),
+            // and `stem_set` then allocates the stem's *first* object on
+            // the identical branch -- so without this, `old` is reachable
+            // from nowhere the collector walks for the one allocation that
+            // matters. The instruction loop's own temps frame (`run.rs`'s
+            // `step`) closes this out at the end of the clause.
+            interp.roots.push_temp(old);
             if let Some(new) = newvalue {
                 interp.stem_set(&stem_name, &key, new);
             }
@@ -594,10 +611,11 @@ mod tests {
         (condition.number, condition.sub, condition.additional)
     }
 
-    /// [`classify`] against every one of `SYMBOL.testGroup`'s 28 numbered
-    /// cases (`test001`-`test028`), which is the exponent-tail grammar's
-    /// own adversarial corpus -- every row was measured on the oracle by
-    /// the ooTest suite's authors, not by this task.
+    /// [`classify`] against `SYMBOL.testGroup`'s 26 distinct inputs across
+    /// `test001`-`test028` (`test007`/`test015` and `test019`/`test026`
+    /// each repeat the other's input), which is the exponent-tail
+    /// grammar's own adversarial corpus -- every row was measured on the
+    /// oracle by the ooTest suite's authors, not by this task.
     #[test]
     fn classify_matches_every_symbol_testgroup_numbered_case() {
         let cases: &[(&[u8], SymbolKind)] = &[
@@ -683,18 +701,19 @@ mod tests {
         }
     }
 
-    /// The four remaining `SYMBOL.testGroup` cases (`test_SYMBOL` and its
-    /// four "new tests"), which exercise the variable pool rather than the
-    /// classifier alone: a plain assigned name, a compound whose tail
-    /// resolves through a variable, a bare digit constant, an invalid
-    /// symbol, and the two dot/empty edge cases.
+    /// `SYMBOL.testGroup`'s `test_SYMBOL` method, all nine of its
+    /// assertions (five documented examples, then its own "new tests"
+    /// comment introduces four more), which exercise the variable pool
+    /// rather than the classifier alone: a plain assigned name, a compound
+    /// whose tail resolves through a variable, a bare digit constant, an
+    /// invalid symbol, and four dot/empty/blank edge cases.
     #[test]
     fn symbol_reads_the_variable_pool_for_names_and_compounds() {
         assert_eq!(
             output(
-                b"drop a.3\nj=3\nsay symbol('J') symbol(J) symbol('a.j') symbol(2) symbol('*')\nsay symbol('.') symbol('.a') symbol('')\n"
+                b"drop a.3\nj=3\nsay symbol('J') symbol(J) symbol('a.j') symbol(2) symbol('*')\nsay symbol('.') symbol('.a') symbol('') symbol('  ')\n"
             ),
-            "VAR LIT LIT LIT BAD\nLIT LIT BAD\n"
+            "VAR LIT LIT LIT BAD\nLIT LIT BAD BAD\n"
         );
     }
 
@@ -713,10 +732,11 @@ mod tests {
     }
 
     /// A stem with an explicit default makes every tail report as existing,
-    /// including tails never individually assigned -- the D15a rule that
-    /// makes `STRING_STEM`'s existence check equivalent to `STemClass::
-    /// realCompoundVariableValue`'s stem-level fallback rather than to
-    /// `tails.is_empty()`.
+    /// including tails never individually assigned -- `s.9` itself
+    /// classifies as `SymbolKind::CompoundName` (one period, not trailing),
+    /// and the D15a rule this pins is that its existence check falls back
+    /// to `StemClass::realCompoundVariableValue`'s stem-level default
+    /// rather than to `tails.is_empty()`.
     #[test]
     fn a_stems_default_value_makes_every_tail_report_var() {
         assert_eq!(
@@ -812,8 +832,8 @@ mod tests {
         );
     }
 
-    /// Swept over all 256 byte values: none of `A`, `U`, `L`, `M` ever
-    /// answers `1` for a byte at or above `0x80`, matching the brief's own
+    /// Swept over every byte from `0x80` to `0xFF`: none of `A`, `U`, `L`,
+    /// `M` ever answers `1` for one of them, matching the brief's own
     /// Step 1 measurement and confirming `u8::is_ascii_*` needs no help to
     /// reproduce it. `W` is the same claim, and is checked separately
     /// (below) through a live activation, since `'W'` reads the running
@@ -905,7 +925,7 @@ mod tests {
     /// present. On the oracle, `value('myvar',,'')` answers `.MYVAR` (a
     /// pool lookup, not the local `NEWVAL` a crate ignoring the third
     /// argument would answer); this crate declares the whole
-    /// external-selector path a Phase 7 gap rather than risk answering the
+    /// external-selector path a gap rather than risk answering the
     /// *local* value silently wrong, so both an empty and a named selector
     /// take the identical loud path -- the pair below is what tells "the
     /// third argument's presence is checked" apart from "the third
@@ -919,7 +939,7 @@ mod tests {
             let (code, stderr) = failure(source);
             assert_eq!(code, crate::NOT_IMPLEMENTED_EXIT, "{stderr}");
             assert!(
-                stderr.contains("VALUE's external-selector form is not implemented (Phase 7)"),
+                stderr.contains("VALUE's external-selector form is not implemented"),
                 "{stderr}"
             );
         }
@@ -960,6 +980,73 @@ mod tests {
             .expect("a builtin name")
             .expect("the call succeeds");
         assert_eq!(interp.to_text(result).into_owned(), b"5");
+    }
+
+    /// The 40.26 insert is the call's own spelling, never upcased -- every
+    /// witness above (`*`, `5`) has no case to get wrong, so neither can
+    /// tell an upcased insert from a verbatim one. These four do have a
+    /// case, or a byte no lossy conversion may touch, and each is measured
+    /// against the oracle directly:
+    ///
+    /// ```text
+    /// value('ab*')             found "ab*"              (BAD, via the first call site)
+    /// value('1e1','x')         found "1e1"               (a constant given a new value, the second)
+    /// value('abc.def*','x')    found "abc.def*"
+    /// value('a'||'80'x)        found "a" + the raw byte 0x80
+    /// ```
+    ///
+    /// `VALUE.testGroup:88`'s `test008` (`value(.zl)` where `.zl` holds
+    /// `'lowercase garbage'`) reaches this same raiser; the fifth row below
+    /// is that transcript with the `.zl` indirection resolved, since this
+    /// crate has no `.local` to build the indirection through.
+    #[test]
+    fn value_40_26_substitutes_the_arguments_own_bytes_case_and_all() {
+        assert_eq!(
+            raised(b"VALUE", &[b"ab*"]),
+            (
+                40,
+                26,
+                vec![b"VALUE".to_vec(), b"1".to_vec(), b"ab*".to_vec()]
+            )
+        );
+        assert_eq!(
+            raised(b"VALUE", &[b"1e1", b"x"]),
+            (
+                40,
+                26,
+                vec![b"VALUE".to_vec(), b"1".to_vec(), b"1e1".to_vec()]
+            )
+        );
+        assert_eq!(
+            raised(b"VALUE", &[b"abc.def*", b"x"]),
+            (
+                40,
+                26,
+                vec![b"VALUE".to_vec(), b"1".to_vec(), b"abc.def*".to_vec()]
+            )
+        );
+        // The high byte must round-trip raw, not through `from_utf8_lossy`'s
+        // replacement character.
+        assert_eq!(
+            raised(b"VALUE", &[&[b'a', 0x80][..]]),
+            (
+                40,
+                26,
+                vec![b"VALUE".to_vec(), b"1".to_vec(), vec![b'a', 0x80]]
+            )
+        );
+        assert_eq!(
+            raised(b"VALUE", &[b"lowercase garbage"]),
+            (
+                40,
+                26,
+                vec![
+                    b"VALUE".to_vec(),
+                    b"1".to_vec(),
+                    b"lowercase garbage".to_vec()
+                ]
+            )
+        );
     }
 
     /// A leading-dot literal with no definition reads as its own upcased

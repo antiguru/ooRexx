@@ -555,16 +555,24 @@ impl Raised {
     /// variable name, a stem, a compound, or a numeric/literal constant)
     /// does not, or classifies as a constant while the call also supplies a
     /// new value for it. `routine` and `position` as [`argument_not_whole`]'s;
-    /// `found` is the argument's own text, already upcased the way the
-    /// caller upcases before classifying it (`VariableDictionary::
-    /// getVariableRetriever`, `execution/VariableDictionary.cpp:738`, folds
-    /// case before the switch that decides BAD from everything else).
+    /// `found` is the argument's **own bytes, verbatim -- never upcased**.
     ///
-    /// **One message, two reasons the C++ does not distinguish** --
-    /// `Error_Incorrect_call_symbol` fires from one call site
-    /// (`expression/BuiltinFunctions.cpp:1840`) whether the name failed to
-    /// classify as a symbol at all or classified as a constant that a new
-    /// value was offered to. Measured, rc 216 both:
+    /// `expression/BuiltinFunctions.cpp:1840`'s
+    /// `reportException(Error_Incorrect_call_symbol, "VALUE", IntegerOne,
+    /// variable)` passes `BUILTIN(VALUE)`'s own local `variable`, and
+    /// `VariableDictionary::getVariableRetriever` (`execution/
+    /// VariableDictionary.cpp:739`) upcases a *parameter it took by value*
+    /// (`variable = variable->upper();`) -- a reassignment local to that
+    /// function's own stack frame, which never reaches back into the
+    /// caller's copy. So the classification runs upcased and the message
+    /// substitutes the original spelling regardless. Measured, case
+    /// preserved both sides: `value('ab*')` reports `found "ab*"`, not
+    /// `found "AB*"`.
+    ///
+    /// **One message, two reasons the C++ does not distinguish** -- the
+    /// identical call site fires whether the name failed to classify as a
+    /// symbol at all or classified as a constant that a new value was
+    /// offered to. Measured, rc 216 both:
     ///
     /// ```text
     /// value('*')      Error 40.26:  VALUE argument 1 must be a valid symbol; found "*".
