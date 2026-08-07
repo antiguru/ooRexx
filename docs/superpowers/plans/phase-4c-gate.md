@@ -71,6 +71,11 @@ Those are shallow-depth and loop-free; **the indent of a 4c construct -- a `PARS
 `tests/collect_stress.rs` read `phase-4a.txt` and `phase-4b.txt` only, and the 4a/4b subset **calls no builtin**, so every allocation the 66 names make was outside `run_program_collect_every_alloc`'s reach -- the same defect 4a's version had when it ran 29 programs and zero call frames.
 Task 15 widened the call site to the three-file union.
 
+**And the widening is itself pinned, because without a pin this amendment is green by construction.**
+Measured by deleting the subject: with `phase-4c.txt` removed from the list, the whole workspace stayed green and byte-identical -- every assertion the stress run makes holds just as well over a smaller union, and `coverage.rs`'s `phase_*_subset_matches_the_committed_list` tests pin each file's *contents*, not which harness reads it.
+`the_stress_subset_reads_every_phase_subset_file` now asserts the list against the corpus directory itself, so a file dropped from it is red and a subset file added later and forgotten is red too.
+Falsified: with the entry removed, `cargo test --workspace --no-fail-fast` exits 101 and that test names the missing file.
+
 **The control must not be `mutate-4b.sh` row 9.**
 Builtins reuse `resolve_and_run_call`'s argument evaluation, so the obvious root in that window is `self.roots.push_temp(argument.value())`, which is verbatim that row; re-running it would re-test 4b.
 
@@ -236,7 +241,7 @@ What the row deletes instead is `VALUE(name, newvalue)`'s root over the old stem
 
 ### 6. `mutate-4c.sh`
 
-**9 of 9 mutations behaved exactly as declared**, at exit 0, with the unmutated tree passing both instruments before the first mutation and after the last restore (50 of 50 matching; 75 test binaries, 1,286 passed, 0 failed, both times).
+**9 of 9 mutations behaved exactly as declared**, at exit 0, with the unmutated tree passing both instruments before the first mutation and after the last restore (50 of 50 matching; 75 test binaries, 1,287 passed, 0 failed, both times).
 
 **One declaration was corrected to what was measured rather than left standing as a guess.**
 Row 7 -- a `::ROUTINE` resolved before the builtin table -- was declared `PASSED`/`DIVERGED` on the reasoning that the resolution order had only an in-crate witness.
