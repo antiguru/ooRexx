@@ -1590,9 +1590,19 @@ a loose ::method with no ::class         -> rc 0, "main ran"
 
 So the rule is: a program that *contains* a well-formed directive it never uses must run identically on both interpreters.
 A program that *uses* one must not silently do the wrong thing.
-The boundary case that shows the difference: `::requires 'helper.rex'` where the helper holds `::routine helperfn public` makes `helperfn()` callable and returning `HELPED` -- so `::REQUIRES` **imports names into the resolution chain**, and ignoring it changes which routine a call finds.
 
-**Detect use, not presence.** Failing loudly on presence rejects valid programs; ignoring resolution failure runs a program the oracle refuses.
+**`::REQUIRES` breaks that rule, and the o4 row above is the probe that misses it.** Measured 2026-08-07: a helper whose first clause is `say 'PROLOG RAN'`, required by a program whose body is `say 'main ran'`, prints
+
+```
+PROLOG RAN
+main ran
+```
+
+on the oracle at rc 0. **`::REQUIRES` runs the required file's prolog**, so for this directive presence *is* use and it changes stdout before the requiring program produces a line. It also imports names: a helper holding `::routine helperfn public` makes `helperfn()` callable and returning `HELPED`, so ignoring the directive changes which routine a call finds. Telling an empty prolog from a printing one means loading and running the file, which is Phase 5's.
+
+**Ruled 2026-08-07: refuse `::REQUIRES` and `::CLASS ... SUBCLASS`, naming Phase 5.** This is knowingly a divergence -- programs the oracle runs at rc 0 exit 120 here -- taken because the alternative is a silent wrong answer, and it must carry an `EXCLUSIONS` row with both transcripts. `::CLASS ... SUBCLASS` goes with it because 4c has no class table to tell a resolvable superclass from an unresolvable one, and running `::class foo subclass zzznotaclass` at rc 0 where the oracle gives nothing at rc 158 is the same silent wrongness in the other direction.
+
+**Detect use, not presence -- but check whether the directive's own installation is observable before deciding it is unused.** Failing loudly on presence rejects valid programs; ignoring resolution failure runs a program the oracle refuses; and treating an *observable* installation as mere presence is how `::REQUIRES` slipped through a survey that probed only the exit code and one line of stdout.
 
 - [ ] **Step 5: Trace does not cross into a `::routine`**
 
