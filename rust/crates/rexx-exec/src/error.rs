@@ -551,6 +551,39 @@ impl Raised {
         )
     }
 
+    /// 40.26: an argument that must classify as a Rexx symbol (a valid
+    /// variable name, a stem, a compound, or a numeric/literal constant)
+    /// does not, or classifies as a constant while the call also supplies a
+    /// new value for it. `routine` and `position` as [`argument_not_whole`]'s;
+    /// `found` is the argument's own text, already upcased the way the
+    /// caller upcases before classifying it (`VariableDictionary::
+    /// getVariableRetriever`, `execution/VariableDictionary.cpp:738`, folds
+    /// case before the switch that decides BAD from everything else).
+    ///
+    /// **One message, two reasons the C++ does not distinguish** --
+    /// `Error_Incorrect_call_symbol` fires from one call site
+    /// (`expression/BuiltinFunctions.cpp:1840`) whether the name failed to
+    /// classify as a symbol at all or classified as a constant that a new
+    /// value was offered to. Measured, rc 216 both:
+    ///
+    /// ```text
+    /// value('*')      Error 40.26:  VALUE argument 1 must be a valid symbol; found "*".
+    /// value('5','x')  Error 40.26:  VALUE argument 1 must be a valid symbol; found "5".
+    /// ```
+    ///
+    /// [`argument_not_whole`]: Raised::argument_not_whole
+    pub(crate) fn argument_not_a_symbol(routine: &[u8], position: usize, found: &[u8]) -> Raised {
+        Raised::syntax(
+            40,
+            26,
+            vec![
+                routine.to_vec(),
+                position.to_string().into_bytes(),
+                found.to_vec(),
+            ],
+        )
+    }
+
     /// 40.14: a builtin's argument converted to a whole number but is not
     /// strictly positive. Substituted as the same three slots -- routine,
     /// position, found -- as [`argument_not_whole`]'s.

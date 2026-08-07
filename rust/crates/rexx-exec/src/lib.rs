@@ -597,6 +597,29 @@ impl Loud {
         }
     }
 
+    /// `VALUE`'s three-argument form: a *present* third argument names an
+    /// external variable pool -- the platform environment, `.environment`,
+    /// or a system-defined pool -- rather than this crate's own local
+    /// variables (`expression/BuiltinFunctions.cpp:1868` onward).
+    ///
+    /// **Presence decides, not the selector's value.** Measured 2026-08-07:
+    /// `value('myvar',,'')` still reaches this path, because an *empty*
+    /// third argument is a present one and the oracle answers a lookup in
+    /// `.environment`; only an *omitted* third argument stays on 4c's own
+    /// local-pool read/write. A crate that ignores the third argument
+    /// answers the local pool's value instead -- a wrong answer, not a loud
+    /// one -- which is worse than the gap this declares.
+    ///
+    /// Owned by Phase 7, spelled the way `instruction_owner` spells it: a
+    /// value fetched *from* a named pool is the same subsystem `ADDRESS`'s
+    /// command layer sends one *to* (`run.rs`'s own not-yet-implemented
+    /// `ADDRESS` message carries the identical owner).
+    fn value_selector() -> Loud {
+        Loud {
+            message: owned_message("VALUE's external-selector form", Some("Phase 7")),
+        }
+    }
+
     /// A `PARSE` template trigger that needs an operand and has none.
     ///
     /// Not reachable from a program that parsed: `parse_template`

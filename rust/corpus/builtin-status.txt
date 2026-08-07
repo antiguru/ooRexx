@@ -60,7 +60,7 @@ COPIES	implemented
 COUNTSTR	implemented
 D2C	implemented
 D2X	implemented
-DATATYPE	loud
+DATATYPE	implemented
 DATE	loud
 DELSTR	implemented
 DELWORD	implemented
@@ -92,13 +92,13 @@ STREAM	excluded
 STRIP	implemented
 SUBSTR	implemented
 SUBWORD	implemented
-SYMBOL	loud
+SYMBOL	implemented
 TIME	loud
 TRACE	implemented
 TRANSLATE	implemented
 TRUNC	implemented
-VALUE	loud
-VAR	loud
+VALUE	implemented
+VAR	implemented
 VERIFY	implemented
 WORD	implemented
 WORDINDEX	implemented

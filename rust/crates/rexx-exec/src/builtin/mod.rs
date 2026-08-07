@@ -75,6 +75,7 @@ use crate::error::{Failure, Raised};
 use crate::{Interp, Loud};
 
 mod convert;
+mod datatype;
 mod numeric;
 mod state;
 mod string;
@@ -243,6 +244,16 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 2,
         max: Some(2),
         run: string::countstr,
+    },
+    Builtin {
+        // A minimum of 1, not 2: the second argument is the type option,
+        // and it is optional -- measured, `datatype('12.5')` succeeds with
+        // no second argument at all, answering `NUM`/`CHAR` rather than
+        // 40.3. `DATATYPE_Min`/`DATATYPE_Max`, `BuiltinFunctions.cpp:780`.
+        name: b"DATATYPE",
+        min: 1,
+        max: Some(2),
+        run: datatype::datatype,
     },
     Builtin {
         // A minimum of 1, not 2: `DELSTR`'s start position is optional and
@@ -436,6 +447,12 @@ const IMPLEMENTED: &[Builtin] = &[
         run: word::subword,
     },
     Builtin {
+        name: b"SYMBOL",
+        min: 1,
+        max: Some(1),
+        run: datatype::symbol,
+    },
+    Builtin {
         // A maximum of 1, and the argument *sets* the mode while the answer
         // is the mode that was in force -- measured, `trace l` then `say
         // trace('O')` prints `L`.
@@ -464,6 +481,21 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 1,
         max: Some(3),
         run: string::upper,
+    },
+    Builtin {
+        // `VALUE_Min`/`VALUE_Max`, `BuiltinFunctions.cpp:1812`-`1813`: the
+        // new-value and selector positions are both optional, so
+        // `value('name')` alone is legal.
+        name: b"VALUE",
+        min: 1,
+        max: Some(3),
+        run: datatype::value,
+    },
+    Builtin {
+        name: b"VAR",
+        min: 1,
+        max: Some(1),
+        run: datatype::var,
     },
     Builtin {
         name: b"VERIFY",
