@@ -122,14 +122,68 @@ fn read_subset(list_paths: &[&Path]) -> Vec<String> {
     union
 }
 
+/// The subset files this harness reads, in union order.
+///
+/// A named constant rather than a literal at the call site so that
+/// [`the_stress_subset_reads_every_phase_subset_file`] can assert it against
+/// the corpus directory itself. Which files a harness reads is not something
+/// any other check here can see: `coverage.rs`'s
+/// `phase_*_subset_matches_the_committed_list` tests pin each file's
+/// **contents**, and every assertion in
+/// [`the_l0_subset_passes_again_under_collect_on_every_allocation`] holds just
+/// as well over a smaller union. Measured by deleting the subject: with
+/// `phase-4c.txt` removed from this list, the whole workspace stays green and
+/// byte-identical, and the builtins leave the collector's reach silently.
+const SUBSET_FILES: &[&str] = &["phase-4a.txt", "phase-4b.txt", "phase-4c.txt"];
+
+/// The phase subset files that exist in the corpus directory, sorted.
+///
+/// Read from the directory rather than listed a second time, so the assertion
+/// below cannot be satisfied by a copy of [`SUBSET_FILES`] that was edited in
+/// the same change -- and so a subset file added later and forgotten here is
+/// red rather than silently unread.
+fn phase_subset_files_on_disk() -> Vec<String> {
+    let dir = corpus_dir();
+    let entries =
+        fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+    let mut names: Vec<String> = entries
+        .flatten()
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter(|name| name.starts_with("phase-") && name.ends_with(".txt"))
+        .collect();
+    names.sort();
+    names
+}
+
+/// The stress run reads **every** phase subset file the corpus has.
+///
+/// This is the pin on *which files* the harness reads, which is a different
+/// question from what any of them contains. Without it the third entry of
+/// [`SUBSET_FILES`] can be dropped -- by an edit, or by a merge -- and nothing
+/// in the workspace moves: the run still passes, still reports a non-zero
+/// collection count for every program it did read, and still exercises no
+/// builtin at all, because no program in `phase-4a.txt` or `phase-4b.txt`
+/// calls one.
+#[test]
+fn the_stress_subset_reads_every_phase_subset_file() {
+    assert_eq!(
+        SUBSET_FILES,
+        phase_subset_files_on_disk(),
+        "the collect-on-every-allocation run does not read every phase subset \
+         file in rust/corpus/. A file missing from SUBSET_FILES is a phase \
+         whose programs never reach this harness, and nothing else in the \
+         workspace can see that -- the run passes over whatever it was given"
+    );
+}
+
 #[test]
 fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
     let corpus_dir = corpus_dir();
-    let subset = read_subset(&[
-        &corpus_dir.join("phase-4a.txt"),
-        &corpus_dir.join("phase-4b.txt"),
-        &corpus_dir.join("phase-4c.txt"),
-    ]);
+    let paths: Vec<PathBuf> = SUBSET_FILES
+        .iter()
+        .map(|name| corpus_dir.join(name))
+        .collect();
+    let subset = read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
     assert!(
         !subset.is_empty(),
         "the phase subset files named no programs -- that is a corpus defect, \
