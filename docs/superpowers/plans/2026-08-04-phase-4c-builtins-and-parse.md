@@ -1416,6 +1416,18 @@ datatype(123,'')  = 93.915                            datatype(123,'Z')  = 93.91
 So `'NUM'` and `'NX'` are accepted silently; only an empty string or a bad *first* character raises.
 **Swept over all 256 bytes: every byte from `0x80` to `0xFF` returns 0 for `A`, `U`, `L`, `W` and `M`.** Nothing above `0x7F` is ever a letter.
 
+**An OMITTED second argument is not an empty one, and the whole message is the requirement.** Measured 2026-08-07:
+
+```
+datatype('',)     -> CHAR       omitted: the one-argument form
+datatype(1,'')    -> 93.915     empty: Method option must be one of "ABILMNOSUVWX9"; found "?".
+datatype(1,'Z')   -> 93.915     Method option must be one of "ABILMNOSUVWX9"; found "Z".
+```
+
+Both raisers are rc 163.
+The empty option's insert renders as **`found "?"`**, not `found ""` -- the oracle substitutes a placeholder where there is no character to show, so a crate that formats the option's own bytes emits a byte-different message.
+This is the absent-versus-empty axis Task 8 had to cross for `ARG`; here it decides between an answer and an error.
+
 **The trap: the empty string is `CHAR` in the one-argument form, but `datatype('','B')` is `1`** -- the empty string is a valid binary string.
 
 **(c) `SYMBOL`/`VAR`: a stem with a default value makes EVERY tail report `VAR`**, including tails never assigned. `BAD` is reserved for genuinely malformed names -- `1abc` is `LIT`, not `BAD`.
@@ -1424,6 +1436,11 @@ So `'NUM'` and `'NX'` are accepted silently; only an empty string or a bad *firs
 
 The variable-access form (`value('name')`, `value('name', newval)`) is 4c's.
 **The external-selector form (`value(name, , 'ENVIRONMENT')`) is Phase 7's and must fail loudly naming Phase 7**, not silently ignore the third argument.
+
+**No existing `Loud` constructor fits, and the owner string is policed for its exact spelling.**
+Checked 2026-08-07: `Loud::unresolved_call` (`lib.rs:517`) hardcodes `Some("4c")`; `Loud::compound_expose` and `Loud::builtin_option_object` carry no owner at all, and both docs say why.
+`owned_message(name, owner)` (`lib.rs:718`) takes an arbitrary owner and renders `"{name} is not implemented ({owner})"`, so add a constructor that passes `Some("Phase 7")`.
+The literal is **`"Phase 7"`, not `"7"`** -- that is how `instruction_owner` spells it (`lib.rs:856`, `:867`), how `ADDRESS`'s message spells it (`run.rs:13442`), and `coverage.rs`'s module doc requires the split table's spelling.
 
 The two-argument form writes, so it needs the **growing** slot resolver.
 That is **`Interp::slot_of`** (`plan.rs:561`), which checks plan, then `extra`, then grows, and is idempotent.
