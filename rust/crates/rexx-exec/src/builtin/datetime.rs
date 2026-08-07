@@ -25,12 +25,18 @@
 //! converted between two named styles, which depends on nothing but its own
 //! bytes. `DATE`'s thirteen output letters (`BDEFILMNOSTUW`) and ten input
 //! letters (`BDEFINOSTU`) are each deterministic once an input is supplied,
-//! including `L`/`M`/`W` (month and weekday names): the oracle's own
-//! `monthNames`/`dayNames` tables (`RexxDateTime.cpp`) are hardcoded English
-//! text, not a locale lookup, so a fixed calendar date names its month and
-//! weekday exactly as pinned here regardless of when or where this runs.
-//! Only a **no-argument** call -- any of the thirteen letters, not a
-//! distinguished subset -- reads "today" and cannot be pinned.
+//! including `L`/`M`/`W` (month and weekday names). `M`/`W` read the
+//! oracle's own `monthNames`/`dayNames` tables (`RexxDateTime.cpp`)
+//! directly, hardcoded English text rather than a locale lookup. `L`'s own
+//! month name is a *different* mechanism -- `Interpreter::getMessageText
+//! (Message_Translations_January + month - 1)` (`BuiltinFunctions.cpp:1268`),
+//! a `rexxmsg.xml` catalogue entry -- and it agrees with `M`'s answer only
+//! because that catalogue entry is itself hardcoded to English on this
+//! build (`RexxErrorMessages.h:727`), not because `L` reads the same array.
+//! Either way, a fixed calendar date names its month and weekday exactly as
+//! pinned here regardless of when or where this runs. Only a
+//! **no-argument** call -- any of the thirteen letters, not a distinguished
+//! subset -- reads "today" and cannot be pinned.
 //!
 //! # The clock is cached once per clause, and `TIME('R')` is state that survives across clauses
 //!
@@ -75,22 +81,49 @@
 //! zero. The oracle's own no-argument reading uses the host's local zone;
 //! that is a real, acknowledged divergence for the no-argument forms only
 //! (D11 bars them from every differential comparison this crate has), not
-//! a claim that this crate's "now" is otherwise wrong.
+//! a claim that this crate's "now" is otherwise wrong. Recorded as a
+//! `KNOWN GAP` in `docs/superpowers/plans/phase-4-exclusions.txt`, with the
+//! measured transcripts, because a divergence this wide belongs in the
+//! ledger every builtin's gaps are audited from, not only here. That entry
+//! also names the second limb: [`Timestamp::clear`] never ports
+//! `setTimeZoneOffset`, harmless only while every "now" is fixed at UTC.
 //!
 //! # A defined answer where the oracle's own is undefined
 //!
-//! `TIME`'s time-only input styles (`N`/`C`/`L`/`H`/`S`/`M`) never touch a
-//! `year`/`month`/`day` field, and the oracle's own `RexxDateTime::clear`
-//! leaves those at `0` rather than at a real calendar date. Asking such a
-//! result for a *date*-shaped output (`F`/`T`/`O`) then indexes
-//! `monthStarts[month - 1]` at `month == 0`, i.e. one element before the
-//! array -- measured, `time('F', '12:34:56', 'N')` returns a value that
-//! depends on whatever byte happens to sit there, not on any Rexx
-//! specification. This crate starts every cleared [`Timestamp`] at
-//! `1/1/1`, never `0/0/0`, so the identical call is merely a very old date
-//! (`00010101`-shaped) rather than a read of undefined memory -- observably
-//! different from the oracle on this one unspecified cross of input and
-//! output style, and not attempted to be reproduced byte for byte.
+//! **`TIME`'s `H`/`S`/`M` input styles, crossed with a date-shaped output
+//! (`F`/`T`), diverge from the oracle -- `N`/`C`/`L` do not.** All six
+//! input styles start from `RexxDateTime::clear()`, which leaves
+//! `year`/`month`/`day` at `0`. `H`/`S`/`M` call `setHours`/`setSeconds`/
+//! `setMinutes`, none of which ever touch those three fields, so they stay
+//! at `0/0/0` on the oracle. `N`/`C`/`L` instead go through
+//! `parseDateTimeFormat`, whose own first three statements are
+//! unconditionally `day = 1; month = 1; year = 1;` -- run *before* the
+//! format string is even consulted, so a time-only format (`"HH:ii:ss"`,
+//! `"cc:iiCC"`, `"HH:ii:ss.uuuuuu"`) that never mentions those fields still
+//! leaves them at `1/1/1`, identically on both sides, because this crate's
+//! own [`Timestamp::parse`] ports that same unconditional reset. Measured
+//! directly against the oracle for all three: `time('F','12:34:56','N')`,
+//! `time('F','1:23pm','C')` and `time('F','01:02:03.456789','L')` give the
+//! identical answer on this crate and on the real interpreter.
+//!
+//! `H`/`S`/`M`'s own `0/0/0` then asks `getBaseDate()` for a *year* of `0`,
+//! which walks straight into the identical `monthStarts[-1]` read
+//! [`Timestamp::year_day`] documents for `DATE`'s day-of-year-`0` case --
+//! confirmed reproducible on this exact binary by working the oracle's own
+//! arithmetic through by hand and matching six real transcripts exactly
+//! (`time('F'/'T','5','H')`, `('30','S')`, `('90','M')`), not assumed
+//! stable across builds. This crate starts every cleared [`Timestamp`] at
+//! `1/1/1`, never `0/0/0`, so `H`/`S`/`M` land on a real (if very old)
+//! calendar date instead of reproducing that read -- a real, six-case
+//! divergence, pinned as such by
+//! [`time_h_s_m_diverge_from_the_oracle_for_a_date_shaped_output`] rather
+//! than left undocumented.
+//!
+//! `O` is not part of this family at all: its own input style copies
+//! `current` (`timestamp = current;`, `BUILTIN(TIME)`'s own `'O'` arm)
+//! before adjusting, so it starts from a real calendar date on both sides
+//! and never reaches `clear()`'s `0/0/0` in the first place. Its own
+//! divergence is the UTC-only clock, declared separately.
 
 use rexx_core::ObjRef;
 use rexx_num::Number;
@@ -214,8 +247,34 @@ impl Timestamp {
 
     /// The day-of-year (`DATE('D')`), 1-based, leap day counted from March
     /// onward -- `RexxDateTime::getYearDay`.
+    ///
+    /// **`month == 0` is the consumer [`set_day`]'s own doc names**: this is
+    /// the site that would otherwise index `MONTH_STARTS` at `-1`, so the
+    /// lookup goes through `.get()` rather than direct indexing. Measured
+    /// on the oracle, `date('D','0','D')` (this crate's own `month == 0`)
+    /// returns `0` rather than crashing -- `monthStarts[-1]` happens to read
+    /// as `0` on this build. **That is a claim about what one out-of-bounds
+    /// C++ read happens to return, checked directly rather than assumed
+    /// stable**: cross-checked by hand against four *other* fields this
+    /// same input drives (`date('B','0','D')` = `739615`,
+    /// `date('W','0','D')` = `Wednesday`, `date('F','0','D')` = the matching
+    /// basetime, `date('T','0','D')` = the matching Unix time -- all four
+    /// arithmetic consequences of a year-day of exactly `0`), and the fifth
+    /// consumer, `date('M','0','D')`, **segfaults the real oracle** (its own
+    /// `monthNames[-1]` is not so lucky). So `0` is reproducible on this
+    /// exact binary, not "`0` by construction" -- a different build could
+    /// read anything at that offset, this crate is not attempting to track
+    /// that offset, and `unwrap_or(0)` is chosen because it is what this
+    /// build happens to do, pinned by the four transcripts above rather
+    /// than derived from anything about `MONTH_STARTS` itself.
+    ///
+    /// [`set_day`]: Timestamp::set_day
     fn year_day(&self) -> i64 {
-        let mut yearday = MONTH_STARTS[(self.month - 1) as usize] + self.day;
+        let mut yearday = MONTH_STARTS
+            .get((self.month - 1) as usize)
+            .copied()
+            .unwrap_or(0)
+            + self.day;
         if self.month > 2 && self.is_leap_year() {
             yearday += 1;
         }
@@ -305,7 +364,15 @@ impl Timestamp {
     ///
     /// A day-of-year at or below `0` is the module doc's own defined-instead-
     /// of-undefined case: set to month `0`, day `0` (clamped, never
-    /// negative) rather than indexing the month table at `-1`.
+    /// negative). **This function's own lookup never indexes the month
+    /// table at `-1`** -- the `basedays < 1` arm below returns before
+    /// reaching it -- but `month == 0` still has to be read back out
+    /// somewhere, and every place that happens ([`year_day`], [`month_name`])
+    /// carries its own guard rather than assuming this function's early
+    /// return was the only place the hazard could show up.
+    ///
+    /// [`year_day`]: Timestamp::year_day
+    /// [`month_name`]: Timestamp::month_name
     fn set_day(&mut self, basedays: i64) {
         if basedays < 1 {
             self.month = 0;
@@ -834,18 +901,32 @@ fn real_clock_base_time() -> i64 {
 
 /// The clock reading in force for the clause the *currently executing
 /// activation* is stepping -- cached on that activation, and read fresh
-/// only once that cache has been invalidated. See [`Activation::
-/// cached_clock`]'s own doc for where the invalidation happens, why it
-/// lives on the activation rather than on `Interp`, and what it
-/// reproduces.
+/// only once [`Activation::clock_stale`] says so. See its own doc for why
+/// the cache lives on the activation rather than on `Interp`.
 ///
-/// [`Activation::cached_clock`]: crate::activation::Activation::cached_clock
+/// **Also where a pending `TIME('R')` reset actually takes effect** --
+/// [`Interp::pending_elapsed_reset`]'s own doc has why that has to happen
+/// here, at the cache miss, rather than the instant `TIME('R')` runs: the
+/// still-stale [`Activation::cached_clock`] is read one last time, into
+/// [`Interp::elapsed_anchor`], before this function overwrites it with a
+/// fresh reading.
 fn now_base_time(interp: &mut Interp) -> i64 {
-    if let Some(cached) = interp.activation().cached_clock {
-        return cached;
+    if !interp.activation().clock_stale {
+        return interp
+            .activation()
+            .cached_clock
+            .expect("a clock that is not stale was read at least once");
+    }
+    if interp.pending_elapsed_reset {
+        if let Some(stale) = interp.activation().cached_clock {
+            interp.elapsed_anchor = Some(stale);
+        }
+        interp.pending_elapsed_reset = false;
     }
     let micros = real_clock_base_time();
-    interp.activation_mut().cached_clock = Some(micros);
+    let activation = interp.activation_mut();
+    activation.cached_clock = Some(micros);
+    activation.clock_stale = false;
     micros
 }
 
@@ -862,15 +943,16 @@ fn now(interp: &mut Interp) -> Timestamp {
 
 /// `TIME('E')`/`TIME('R')`'s own reading: elapsed microseconds, formatted,
 /// since [`Interp::elapsed_anchor`] -- lazily anchored to `reading` on the
-/// very first call, and reset to `reading` when `reset` is set or the clock
-/// read backward. See [`Interp::elapsed_anchor`]'s own doc for the
-/// transcript this reproduces and the simplification it names.
+/// very first call. A reset (`reset` set, or the clock read backward) does
+/// **not** move the anchor here -- it only arms [`Interp::
+/// pending_elapsed_reset`], which [`now_base_time`]'s own cache-miss path
+/// is what actually consumes, matching the oracle's own lazy order.
 fn elapsed_reading(interp: &mut Interp, reading: i64, reset: bool) -> Vec<u8> {
     let anchor = *interp.elapsed_anchor.get_or_insert(reading);
     let threshold = reading - anchor;
     let text = match threshold {
         negative if negative < 0 => {
-            interp.elapsed_anchor = Some(reading);
+            interp.pending_elapsed_reset = true;
             b"0".to_vec()
         }
         0 => b"0".to_vec(),
@@ -879,7 +961,7 @@ fn elapsed_reading(interp: &mut Interp, reading: i64, reset: bool) -> Vec<u8> {
         }
     };
     if reset {
-        interp.elapsed_anchor = Some(reading);
+        interp.pending_elapsed_reset = true;
     }
     text
 }
@@ -919,10 +1001,46 @@ fn style_byte(
     }
 }
 
+/// `expression/BuiltinFunctions.hpp`'s own `ALPHANUM` macro, spelled out so
+/// [`check_separator`] can run the identical `strchr`-based membership test
+/// the oracle does, the `0`-byte quirk included -- see [`strchr_matches`].
+const ALPHANUM: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+/// Membership as the oracle's own `strchr(set, byte)` computes it, its
+/// C-string quirk included: `strchr` finds the byte `0` in **any** string,
+/// because a C string's own terminator is a `0` byte and `strchr` treats
+/// that as ordinary membership, checked or not against `set`'s own
+/// contents. Every `strchr`-based membership test `BUILTIN(DATE)`/
+/// `BUILTIN(TIME)` runs therefore reports "found" for a `0` byte against
+/// *every* set, including one that itself carries no zero -- measured,
+/// three call sites at once, all rc 216 and none of them what
+/// `set.contains(&0)` alone would answer since none of [`ALPHANUM`],
+/// `"EINOSU"` or `"BDFLMTW"` contains a literal zero:
+///
+/// ```text
+/// date('S','20070922','S','00'x)     40.43   (the alphanumeric-set osep check)
+/// date('00'x,,,'-')                  40.904  (the EINOSU osep-compatibility check;
+///                                              0 counts as "found", so as
+///                                              "compatible", so parsing falls
+///                                              through to the style switch, which
+///                                              then rejects the 0 byte as a style)
+/// date(,'20070922','00'x,,'-')       40.44   (the BDFLMTW isep-compatibility check;
+///                                              0 counts as "found", so as
+///                                              "incompatible")
+/// ```
+fn strchr_matches(set: &[u8], byte: u8) -> bool {
+    byte == 0 || set.contains(&byte)
+}
+
 /// A separator argument (`DATE`'s `osep`/`isep`): exactly one non-
-/// alphanumeric byte, or the null string.
+/// alphanumeric byte, or the null string. A `0x00` byte counts as
+/// alphanumeric here -- not because it is one, but because [`strchr_matches`]
+/// is what the oracle's own check actually computes.
 fn check_separator(name: &[u8], position: usize, sep: &[u8]) -> Result<(), Failure> {
-    let bad = sep.len() > 1 || sep.first().is_some_and(u8::is_ascii_alphanumeric);
+    let bad = sep.len() > 1
+        || sep
+            .first()
+            .is_some_and(|&byte| strchr_matches(ALPHANUM, byte));
     if bad {
         Err(Raised::separator_not_a_char(name, position, sep).into())
     } else {
@@ -969,7 +1087,7 @@ pub(crate) fn date(
     let output_sep: Option<&[u8]> = match &osep {
         None => None,
         Some(sep) => {
-            if !b"EINOSU".contains(&style) {
+            if !strchr_matches(b"EINOSU", style) {
                 return Err(Raised::format_incompatible_separator(name, 1, &[style], 4).into());
             }
             check_separator(name, 4, sep)?;
@@ -983,7 +1101,7 @@ pub(crate) fn date(
         let input_sep: Option<&[u8]> = match &isep {
             None => None,
             Some(sep) => {
-                if b"BDFLMTW".contains(&style2) {
+                if strchr_matches(b"BDFLMTW", style2) {
                     return Err(Raised::format_incompatible_separator(name, 3, &[style2], 5).into());
                 }
                 check_separator(name, 5, sep)?;
@@ -1129,47 +1247,7 @@ pub(crate) fn time(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plan::{BodyKey, ProgramId};
-    use crate::{Activation, Interp, Invocation, run_program};
-    use std::rc::Rc;
-
-    /// Pushes a fresh top-level activation for `program`, the minimal setup
-    /// `Interp::run` does. Copied rather than shared, matching every other
-    /// test module in this crate (`queue.rs`'s own copy has the same note)
-    /// -- needed here, rather than reached through `run_program`, only by
-    /// the `TIME('R')` tests that manipulate [`Interp::elapsed_anchor`]
-    /// directly between two calls on one live `Interp`, which `run_program`
-    /// hands back only after the whole run has ended.
-    fn activate(interp: &mut Interp, program: rexx_parse::Program) -> Rc<rexx_parse::Program> {
-        let program = Rc::new(program);
-        let id = ProgramId(interp.programs.len());
-        interp.programs.push(Rc::clone(&program));
-        let plan = interp.plan_for(
-            BodyKey {
-                program: id,
-                directive: None,
-            },
-            &program.main,
-            &program.symbols,
-        );
-        let frame = interp.roots.push_slots(plan.len());
-        let id = interp.next_activation_id();
-        interp
-            .activations
-            .push(Activation::new(id, Rc::clone(&program), plan, frame));
-        program
-    }
-
-    /// A live `Interp` with one pushed top-level activation, empty source --
-    /// enough for [`now`] to have somewhere to cache a reading, and nothing
-    /// more.
-    fn live_interp() -> Interp {
-        let mut interp = Interp::new();
-        let program =
-            rexx_parse::parse_program(b"nop\n".to_vec()).expect("a trivial program parses");
-        activate(&mut interp, program);
-        interp
-    }
+    use crate::{Invocation, run_program};
 
     /// Runs `source` as a whole program and hands back the stdout it
     /// produced, having first insisted the run ended cleanly.
@@ -1249,77 +1327,98 @@ mod tests {
 
     // ---- TIME('R')'s reset semantics ----
 
+    /// Parses `stdout` -- one line of space-separated numbers, as every
+    /// elapsed-time test below produces -- into exactly `N` `f64`s.
+    fn parse_numbers<const N: usize>(stdout: &str) -> [f64; N] {
+        let parsed: Vec<f64> = stdout
+            .trim()
+            .split(' ')
+            .map(|word| word.parse().unwrap_or_else(|e| panic!("{word:?}: {e}")))
+            .collect();
+        parsed
+            .try_into()
+            .unwrap_or_else(|v: Vec<f64>| panic!("expected {N} numbers, got {v:?} from {stdout:?}"))
+    }
+
     /// The first `TIME('R')` a program runs answers `0`; a later one answers
-    /// elapsed time **since the last reset**, not since the first call --
-    /// pinned by driving the interpreter's own state (a fabricated anchor
-    /// well in the past) rather than the wall clock, since two clock reads
-    /// close together cannot tell a live read from a stale one apart
-    /// (`Interp::elapsed_anchor`'s own doc has the transcript this
-    /// reproduces).
+    /// elapsed time **since the last reset**, not since the first call.
+    /// Driven through real burns and real clause boundaries rather than a
+    /// fabricated `Interp::elapsed_anchor` -- a raw `dispatch` call with no
+    /// clause boundary in between never marks the clock cache stale, so a
+    /// reset's own *lazy* application (`Interp::elapsed_anchor`'s own doc)
+    /// would never be exercised by that shape, only assumed.
     #[test]
     fn time_r_resets_relative_to_the_last_reset_not_program_start() {
-        let mut interp = live_interp();
-        // The first read is always `0`, wherever the wall clock actually is
-        // -- `elapsed_anchor` starts `None` and self-anchors on first use.
-        let first = dispatch_time_r(&mut interp);
-        assert_eq!(first, b"0".to_vec());
-
-        // Move the anchor five seconds into the past without touching the
-        // real clock, so the *next* read has a known, large elapsed value
-        // to report -- this is "since program start" and "since the last
-        // reset" agreeing, because there has been only one reset so far.
-        interp.elapsed_anchor = interp.elapsed_anchor.map(|anchor| anchor - 5_000_000);
-        let since_first_reset = dispatch_time_r(&mut interp);
-        let since_first_reset = std::str::from_utf8(&since_first_reset)
-            .expect("ASCII")
-            .parse::<f64>()
-            .unwrap();
-        assert!(
-            (4.9..5.5).contains(&since_first_reset),
-            "expected about 5 seconds since the first reset, got {since_first_reset}"
+        let stdout = output(
+            b"r1 = time('R')\ncall burn\ne1 = time('E')\ncall burn\nr2 = time('R')\ne2 = time('E')\nsay r1 e1 r2 e2\nexit\nburn: procedure\n  do i = 1 to 20000\n    j = i * i\n  end\n  return\n",
         );
-
-        // That same `TIME('R')` call reset the anchor to *now*, so an
-        // immediate follow-up reports elapsed-since-that-reset, not
-        // elapsed-since-program-start (which would again read about 5s).
-        let since_second_reset = dispatch_time_r(&mut interp);
-        let since_second_reset = std::str::from_utf8(&since_second_reset)
-            .expect("ASCII")
-            .parse::<f64>()
-            .unwrap();
-        assert!(
-            since_second_reset < 0.5,
-            "expected well under a second since the second reset, got {since_second_reset}"
-        );
+        let [r1, e1, r2, e2] = parse_numbers(&stdout);
+        // The very first elapsed-time call in the whole program is always
+        // exactly `0`.
+        assert_eq!(r1, 0.0);
+        // e1 measures since r1's own reset -- the first burn's own
+        // duration, a real positive amount of time.
+        assert!(e1 > 0.0, "e1 = {e1}");
+        // r2 measures since that SAME reset, not since e1's own read (`E`
+        // never resets anything), so it covers BOTH burns and is at least
+        // as large as e1 alone.
+        assert!(r2 >= e1, "r2 = {r2}, e1 = {e1}");
+        // r2 also reset, so an immediate e2 measures only the (tiny) gap
+        // since r2's own read -- nowhere near r2's own accumulated value.
+        assert!(e2 < r2, "e2 = {e2}, r2 = {r2}");
     }
 
-    fn dispatch_time_r(interp: &mut Interp) -> Vec<u8> {
-        let r = interp.text(b"R");
-        let result = super::super::dispatch(interp, b"TIME", &[Some(r)])
-            .expect("a builtin name")
-            .expect("the call succeeds");
-        interp.to_text(result).into_owned()
-    }
-
-    /// `TIME('E')` reads the same anchor without resetting it -- the pair
-    /// that tells "E reads the state" apart from "E happens to also be the
-    /// thing that establishes it".
+    /// `TIME('E')` reads the elapsed-time anchor without ever moving it --
+    /// the pair that tells "E reads the state" apart from "E happens to
+    /// also be the thing that establishes it". Driven through real burns:
+    /// if `E` reset anything, the third reading below would measure only
+    /// the second burn, not both.
     #[test]
     fn time_e_does_not_reset_the_anchor_time_r_does() {
-        let mut interp = live_interp();
-        let e = interp.text(b"E");
-        let read = |interp: &mut Interp| {
-            let result = super::super::dispatch(interp, b"TIME", &[Some(e)])
-                .expect("a builtin name")
-                .expect("the call succeeds");
-            interp.to_text(result).into_owned()
-        };
-        let first = read(&mut interp);
-        assert_eq!(first, b"0".to_vec());
-        // A second `E`, with no clock advance an assertion can see, still
-        // reads `0` -- unlike `R`, nothing here moved the anchor.
-        let second = read(&mut interp);
-        assert_eq!(second, b"0".to_vec());
+        let stdout = output(
+            b"e1 = time('E')\ncall burn\ne2 = time('E')\ncall burn\ne3 = time('E')\nsay e1 e2 e3\nexit\nburn: procedure\n  do i = 1 to 20000\n    j = i * i\n  end\n  return\n",
+        );
+        let [e1, e2, e3] = parse_numbers(&stdout);
+        assert_eq!(e1, 0.0);
+        assert!(e2 > 0.0, "e2 = {e2}");
+        // e3, since e1's still-unmoved anchor, covers BOTH burns -- not
+        // merely `e3 > e2`, which a reset (measuring only the second burn
+        // alone, a similarly sized one) could satisfy by chance.
+        assert!(e3 > e2 * 1.5, "e2 = {e2}, e3 = {e3}");
+    }
+
+    /// The real divergence `Interp::elapsed_anchor`'s own doc names: a
+    /// callee's own `TIME('R')` resets the *caller's* elapsed-time anchor
+    /// too, once the callee returns, because both read and write the one
+    /// field this crate shares between them where the oracle's own
+    /// per-activation copy dies with the callee's frame. Declared rather
+    /// than silent -- this is the shape that shows it, not a value: the
+    /// caller's own reading after `call sub` returns is close to `0`
+    /// rather than close to the caller's own accumulated elapsed time.
+    #[test]
+    fn a_callees_own_time_r_leaks_into_the_caller_after_it_returns() {
+        // The callee reads `E` both before and after its own `R`, matching
+        // the transcript this pins exactly -- without that follow-up read
+        // *inside* the callee, the reset stays pending across the `CALL`
+        // boundary and is instead consumed later against whichever
+        // activation happens to be on top when the next real clock read
+        // occurs, which does not reliably reproduce the leak. Measured:
+        // dropping the callee's own second `E` here changes `after` from
+        // "near zero" back to "comparable to the burn", because the
+        // pending reset then gets consumed against the *caller's* own
+        // stale reading (which predates the callee entirely) rather than
+        // the callee's own recent one.
+        let stdout = output(
+            b"zz = time('E')\ncall burn\ncall sub\nsay time('E')\nexit\nsub:\n  n1 = time('E')\n  n2 = time('R')\n  n3 = time('E')\n  return\nburn: procedure\n  do i = 1 to 20000\n    j = i * i\n  end\n  return\n",
+        );
+        let [after]: [f64; 1] = parse_numbers(&stdout);
+        // If the callee's reset had stayed inside its own frame (the
+        // oracle's own behaviour, measured directly: `inside 0.001751` /
+        // `after 0.001814`, the two comparable), `after` would still
+        // reflect elapsed time since the very first `time('E')`,
+        // comparable to the burn's own duration. It does not here: the
+        // callee's reset is visible to the caller.
+        assert!(after < 0.05, "after = {after}, expected the leak (near 0)");
     }
 
     // ---- DATE's option letters: the deterministic conversion form ----
@@ -1363,16 +1462,20 @@ mod tests {
         }
     }
 
-    /// The reverse conversion for every one of the ten **input** letters --
-    /// `S` output makes each of them independently checkable, and `date('B',
+    /// The reverse conversion for nine of the ten **input** letters -- `S`
+    /// output makes each of them independently checkable, and `date('B',
     /// '1 Jan 0001')` (the zero basedate) and `date('B', '31 Dec 9999')`
     /// (the maximum) pin the two ends of the range [`Timestamp::
     /// set_base_date`] accepts, both measured against the oracle.
+    ///
+    /// **`D` is not here.** Its own conversion depends on "today"'s year
+    /// (`date('S','265','D')` would be `20260922` only in 2026, and wrong
+    /// on 2027-01-01), so it is pinned separately, year-independently, by
+    /// [`dates_day_of_year_style_round_trips_regardless_of_the_current_year`].
     #[test]
     fn date_every_input_letter_round_trips_to_standard() {
         for (probe, expected) in [
             (&b"date('S','732940','B')"[..], "20070922"),
-            (b"date('S','265','D')", "20260922"),
             (b"date('S','22/09/07','E')", "20070922"),
             (b"date('S','63326016000000000','F')", "20070922"),
             (b"date('S','2007-09-22','I')", "20070922"),
@@ -1390,6 +1493,40 @@ mod tests {
                 String::from_utf8_lossy(probe)
             );
         }
+    }
+
+    /// D15 through `DATE`'s own numeric conversion styles: a value's
+    /// `DIGITS`/`FORM` pair is fixed when the value is created, and `zz`'s
+    /// arithmetic (`+ 0`, which is what actually forces a fresh rendering,
+    /// where a bare literal assignment would not) captures it under
+    /// `DIGITS 3` -- rendering as `7.33E+5`, rounded -- before `NUMERIC
+    /// DIGITS 9` runs. `date` reads `zz`'s own captured rendering, not a
+    /// re-rendering under the *running* digits, so the basedate it
+    /// converts is `733000` (`7.33E+5`), not `732940`. Measured against
+    /// the oracle: both sides answer `20071121` here, not `20070922`.
+    #[test]
+    fn date_reads_a_numeric_arguments_own_captured_rendering_not_the_running_digits() {
+        assert_eq!(
+            output(b"numeric digits 3\nzz = 732940 + 0\nsay zz\nnumeric digits 9\nsay date('S', zz, 'B')\n"),
+            "7.33E+5\n20071121\n"
+        );
+    }
+
+    /// `DATE`'s arity quirk's own sibling shape: an *interior* omission at
+    /// position 3 (`option2`) with position 4 (`osep`) supplied is legal --
+    /// `option2` defaults to `N`, and `osep`'s own compatibility is checked
+    /// against `style` (position 1), never against the omitted `option2`
+    /// -- so a purely numeric `indate` fails to parse under the resulting
+    /// default `N` format, 40.19, rather than 40.5. Never probed before
+    /// this test; measured against the oracle.
+    #[test]
+    fn an_interior_option2_omission_with_osep_supplied_defaults_style2_to_n() {
+        let (code, stderr) = failure(b"say date('S','20070922',,'-')\n");
+        assert_eq!(code, 216, "{stderr}");
+        assert!(
+            stderr.contains("DATE argument 2, \"20070922\", is not in the format described by argument 3, \"N\"."),
+            "{stderr}"
+        );
     }
 
     /// `'D'` (day-of-year) is deterministic given a fixed *reference* year,
@@ -1591,6 +1728,45 @@ mod tests {
         assert_eq!(output(b"say time('T','0','T')\n"), "0\n");
     }
 
+    /// The module doc's own corrected divergence claim, both halves: `N`/
+    /// `C`/`L` agree with the oracle for a date-shaped output because
+    /// `parseDateTimeFormat`'s unconditional `day=1;month=1;year=1` runs
+    /// identically on both sides, while `H`/`S`/`M` diverge because they
+    /// bypass that reset entirely and land on the oracle's own `year == 0`
+    /// instead -- each of the six numbers below is measured directly
+    /// against the real oracle, not derived.
+    #[test]
+    fn time_n_c_l_agree_with_the_oracle_but_h_s_m_do_not() {
+        // N/C/L: identical on both sides.
+        assert_eq!(output(b"say time('F','12:34:56','N')\n"), "45296000000\n");
+        assert_eq!(output(b"say time('F','1:23pm','C')\n"), "48180000000\n");
+        assert_eq!(
+            output(b"say time('F','01:02:03.456789','L')\n"),
+            "3723456789\n"
+        );
+    }
+
+    /// `H`/`S`/`M` crossed with `F`/`T`: the real, six-case divergence the
+    /// module doc names -- this crate's own answer, pinned as *this
+    /// crate's* answer rather than the oracle's, which the doc comment on
+    /// [`super::Timestamp::year_day`] already covers separately (a
+    /// `monthStarts[-1]` read this build happens to answer with `0`,
+    /// worked through the oracle's own arithmetic by hand for each of
+    /// these six and confirmed against a live run: the oracle answers
+    /// `-31604400000000`/`-62167201200` for `H`, `-31622370000000`/
+    /// `-62167219170` for `S`, and `-31617000000000`/`-62167213800` for
+    /// `M` -- none of which this test asserts, because pinning the
+    /// oracle's own undefined-behaviour output is not this test's job).
+    #[test]
+    fn time_h_s_m_diverge_from_the_oracle_for_a_date_shaped_output() {
+        assert_eq!(output(b"say time('F','5','H')\n"), "18000000000\n");
+        assert_eq!(output(b"say time('T','5','H')\n"), "-62135578800\n");
+        assert_eq!(output(b"say time('F','30','S')\n"), "30000000\n");
+        assert_eq!(output(b"say time('T','30','S')\n"), "-62135596770\n");
+        assert_eq!(output(b"say time('F','90','M')\n"), "5400000000\n");
+        assert_eq!(output(b"say time('T','90','M')\n"), "-62135591400\n");
+    }
+
     /// `TIME('O')`'s own input style adjusts the current instant's time
     /// zone offset rather than reading a bare number back -- measured, a
     /// zero offset and a one-hour offset both round-trip to themselves.
@@ -1682,8 +1858,22 @@ mod tests {
             stderr.contains("Missing argument in invocation of DATE; argument 2 is required."),
             "{stderr}"
         );
-        assert!(output(b"say date()\n").ends_with('\n'));
-        assert!(output(b"say date('S')\n").ends_with('\n'));
+        // `.ends_with('\n')` alone is vacuous here -- `SAY` always appends
+        // one, so the whole check would be carried by `output()`'s own
+        // exit-0 assertion. The normal-format day is 1 or 2 digits, so
+        // `"D Mon YYYY\n"` is 11 or 12 bytes; the standard format is
+        // always exactly 8 digits, so `"YYYYMMDD\n"` is always 9.
+        let normal = output(b"say date()\n");
+        assert!(
+            (11..=12).contains(&normal.len()),
+            "expected an 11- or 12-byte normal date, got {normal:?}"
+        );
+        let standard = output(b"say date('S')\n");
+        assert_eq!(
+            standard.len(),
+            9,
+            "expected an 8-digit date, got {standard:?}"
+        );
     }
 
     // ---- separators ----
@@ -1707,6 +1897,44 @@ mod tests {
         assert!(
             stderr.contains(
                 "DATE argument 1, \"B\", is a format incompatible with the separator specified in argument 4."
+            ),
+            "{stderr}"
+        );
+    }
+
+    /// A `0x00` byte, crossed against every one of `strchr`'s three uses in
+    /// this builtin, exactly as `strchr_matches`' own doc claims -- each
+    /// measured directly against the oracle. A NUL osep is rejected as
+    /// "alphanumeric" (`strchr(ALPHANUM, 0)` finds `ALPHANUM`'s own
+    /// terminator); a NUL *style* is "found" in `EINOSU` too, so it is
+    /// treated as osep-compatible and falls through to be rejected by the
+    /// final style switch instead (40.904, not 40.44); a NUL *style2* is
+    /// "found" in `BDFLMTW`, which is the incompatible set, so that one
+    /// really is 40.44. All three report `found "?"` -- the same
+    /// control-byte placeholder a raw `0x01` gets, since this is the
+    /// *report line's* own substitution, not something either raiser
+    /// spells specially for a NUL.
+    #[test]
+    fn a_nul_byte_is_handled_via_strchrs_own_terminator_quirk_at_all_three_sites() {
+        let (code, stderr) = failure(b"say date('S','20070922','S','00'x)\n");
+        assert_eq!(code, 216, "{stderr}");
+        assert!(
+            stderr.contains(
+                "DATE argument 4 must be a single non-alphanumeric character or the null string; found \"?\"."
+            ),
+            "{stderr}"
+        );
+        let (code, stderr) = failure(b"call date '00'x,,,'-'\n");
+        assert_eq!(code, 216, "{stderr}");
+        assert!(
+            stderr.contains("DATE argument 1 must be one of BDEFILMNOSTUW; found \"?\"."),
+            "{stderr}"
+        );
+        let (code, stderr) = failure(b"call date , '20070922', '00'x, , '-'\n");
+        assert_eq!(code, 216, "{stderr}");
+        assert!(
+            stderr.contains(
+                "DATE argument 3, \"?\", is a format incompatible with the separator specified in argument 5."
             ),
             "{stderr}"
         );

@@ -38,10 +38,13 @@
 #   * A derived owner is 4c for EVERY unresolved routine name, including
 #     names Phase 4 excludes outright. `Loud::unresolved_call` carries a
 #     fixed "4c" because a builtin and a ::routine are the same thing to the
-#     message. So two of the four 4c rows below are really waiting on a
-#     builtin: CALL::test_on_name and CALL::test_9 on CHARIN and LINEIN,
-#     which are WHOLE exclusions and so Phase 7's. Measured from the run's
-#     own "first construct hit" breakdown, not read off this file.
+#     message. So among the `4c` rows below, CALL::test_on_name and
+#     CALL::test_9 are really waiting on a builtin -- CHARIN and LINEIN,
+#     which are WHOLE exclusions and so Phase 7's, not a builtin this phase
+#     could still land. Measured from the run's own "first construct hit"
+#     breakdown, not read off this file, and not counted against the rest
+#     of the `4c` rows here, which move as this crate's own builtin table
+#     does.
 #   * The `defect:` rows below are NOT derived -- every assertion failure is
 #     mapped to one constant. What has teeth for them is membership, not the
 #     label: a body that starts failing its assertions and is not listed here

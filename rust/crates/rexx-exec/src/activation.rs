@@ -471,9 +471,16 @@ pub(crate) struct Activation {
     ///
     /// [`traps`]: Activation::traps
     pub(crate) condition: Option<TrappedCondition>,
-    /// `DATE`/`TIME`'s clock reading for the clause this activation is
-    /// currently executing, in `builtin::datetime`'s own microseconds-since-
-    /// 0001-01-01 unit -- `None` once invalidated and not yet re-read.
+    /// `DATE`/`TIME`'s clock reading, in `builtin::datetime`'s own
+    /// microseconds-since-0001-01-01 unit -- the last value this activation
+    /// ever read, or `None` before its first one. **This is not itself the
+    /// per-clause cache** -- see [`clock_stale`] for that half -- because
+    /// `RexxActivation::getTime`'s own lazy `TIME('R')` reset
+    /// (`execution/RexxActivation.cpp:3400`-`3406`) needs the *stale* value
+    /// still readable one call after the clause that produced it stopped
+    /// being current, to anchor the reset to. Overwriting this straight to
+    /// `None` on invalidation, an earlier version of this field's own
+    /// shape, made that value unrecoverable by the time a reset needed it.
     ///
     /// **Per activation, matching `ActivationSettings::timeStamp` exactly**,
     /// and not one field on `Interp` the way [`Interp::elapsed_anchor`]'s
@@ -485,20 +492,25 @@ pub(crate) struct Activation {
     /// returning. `burn`'s own body steps its own instructions -- a `DO`
     /// clause and a `RETURN` clause, at least two calls into
     /// `step_in_temps_frame` -- through *its own* `Activation`, invalidating
-    /// only `cached_clock` on the callee's frame; the caller's is a
+    /// only `clock_stale` on the callee's frame; the caller's is a
     /// different field on a different frame and survives the call
     /// untouched, so the second `time("L")` after `burn()` returns still
     /// reads *this* clause's own cached value. A version of this field
     /// tried first on `Interp` reproduced the oracle's cache in every case
     /// except this one nested-call shape -- and this is that shape.
     ///
-    /// Invalidated once per instruction by `step_in_temps_frame`, on
-    /// whichever activation is executing at the time, mirroring
+    /// [`clock_stale`]: Activation::clock_stale
+    /// [`Interp::elapsed_anchor`]: crate::Interp::elapsed_anchor
+    pub(crate) cached_clock: Option<i64>,
+    /// Whether [`cached_clock`] needs a fresh read before this activation's
+    /// clause may trust it -- the per-clause half [`cached_clock`]'s own
+    /// doc names, set `true` once per instruction by `step_in_temps_frame`
+    /// on whichever activation is executing at the time, mirroring
     /// `RexxActivation::run`'s own `settings.timeStamp.valid = false` set
     /// right after `nextInst->execute()` returns (`RexxActivation.cpp:647`).
     ///
-    /// [`Interp::elapsed_anchor`]: crate::Interp::elapsed_anchor
-    pub(crate) cached_clock: Option<i64>,
+    /// [`cached_clock`]: Activation::cached_clock
+    pub(crate) clock_stale: bool,
 }
 
 impl Activation {
@@ -538,6 +550,7 @@ impl Activation {
             traps: HashMap::new(),
             condition: None,
             cached_clock: None,
+            clock_stale: true,
         }
     }
 
@@ -601,6 +614,7 @@ impl Activation {
             // and this is that same "start invalid" rather than a fourth
             // inheritance to add to the three above.
             cached_clock: None,
+            clock_stale: true,
         }
     }
 }

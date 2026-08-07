@@ -1463,39 +1463,74 @@ struct Interp {
     /// datetime`'s microseconds-since-0001-01-01 unit) elapsed time is
     /// measured from, or `None` before any `E`/`R` call has run.
     ///
-    /// **One field for the whole interpreter, where the oracle keeps it per
-    /// activation** (`ActivationSettings::elapsedTime`) and resets it to
-    /// zero on every `CALL` -- the same divergence [`random_seed`]'s own
-    /// doc takes, and a real one: a routine's own `TIME('E')` would measure
-    /// since *its own* entry on the oracle, and since the enclosing
-    /// program's last reset here. Declared rather than hidden because nothing
-    /// in this crate's builtin-call path pushes an activation for `DATE`/
-    /// `TIME` itself (`builtin/mod.rs`'s own module doc) -- only a real
-    /// internal-routine `CALL` crossing an elapsed-time read would show
-    /// it, and no test in this crate's own suite, nor any differential
-    /// program (D11 bars `TIME`/`DATE` from all of them), does.
-    ///
     /// **Lazily initialised to the first call's own reading, not to zero.**
     /// `RexxActivation::getElapsed` does the same lazy fill
     /// (`execution/RexxActivation.cpp:3424`), which is what makes a
     /// program's *first* `TIME('E')` or `TIME('R')` read exactly `0` rather
     /// than elapsed-since-process-start.
     ///
-    /// **A deliberate simplification of the oracle's own lazy reset.** The
-    /// oracle does not overwrite this anchor the instant `TIME('R')` runs;
-    /// it only flags a pending reset and applies it the next time the
-    /// per-activation clock cache (`Activation::cached_clock`) is re-read
-    /// (`RexxActivation::getTime`'s own comment: "the time needs to stay
-    /// valid until the clause is complete"). This field updates immediately
-    /// instead. The two agree on every externally observable answer this
-    /// crate's own tests measure -- each reset happens in a clause of its
-    /// own, so the oracle's deferred anchor and this field's immediate one
-    /// are the same clock reading -- and differ only by sub-clause timing
-    /// nobody can observe without a second `TIME` call inside the reset's
-    /// own clause, which `TIME('R')`'s single-read shape never offers.
+    /// **The reset itself is applied lazily, not immediately, matching the
+    /// oracle rather than simplifying it.** `TIME('R')` does not overwrite
+    /// this field the instant it runs; it sets [`pending_elapsed_reset`]
+    /// instead, and `builtin::datetime::now_base_time`'s own cache-miss
+    /// path is what actually moves this anchor, to the *stale* value still
+    /// sitting in [`Activation::cached_clock`] from the clause the reset
+    /// ran in -- exactly `RexxActivation::getTime`'s own order
+    /// (`execution/RexxActivation.cpp:3400`-`3406`): capture the timestamp
+    /// before overwriting it, then refresh. An earlier version of this
+    /// applied the reset immediately and got exactly one measured case
+    /// wrong: two `TIME('R')` calls inside **one** clause read the same
+    /// value on the oracle (the reset has not taken effect yet when the
+    /// second call reads the still-cached timestamp), where the immediate
+    /// version read `0` for the second -- `builtin::datetime`'s own
+    /// `time_r_resets_relative_to_the_last_reset_not_program_start` pins
+    /// the corrected behaviour with a real burn rather than a fabricated
+    /// clock.
+    ///
+    /// **One field for the whole interpreter, where the oracle keeps it per
+    /// activation** (`ActivationSettings::elapsedTime`) -- the same
+    /// divergence [`random_seed`]'s own doc takes, but **not** for the
+    /// reason an earlier revision of this comment gave. The oracle does
+    /// not reset this to zero on every `CALL`: `putSettings` copies the
+    /// *whole* settings block into a callee by value
+    /// (`execution/RexxActivation.cpp:225`, the same inheritance
+    /// [`trace_mode`]/[`traps`] already document), so a callee's own
+    /// `TIME('E')` reads the caller's own elapsed time correctly inherited
+    /// -- and this one field reproduces exactly that, measured directly.
+    /// The real, opposite divergence is the *write-back*: the oracle's own
+    /// copy-in is guarded to never copy back out except for an `INTERPRET`
+    /// fragment (`isInterpret()`, `:686`), so a callee's own reset dies
+    /// with its frame there and leaks into the caller here, because both
+    /// read and write the identical field. Measured:
+    ///
+    /// ```text
+    /// zz=time('E'); call burn; call sub; say 'after' time('E')   [sub does n2 = time('R')]
+    ///   oracle:  inside 0.725271  inside-after-R 0.000004  after 0.725387
+    ///   crate:   inside 33.889432 inside-after-R 0.000005  after 0.000013
+    /// ```
+    ///
+    /// `inside` (the callee's own inherited reading) matches; `after` (the
+    /// caller's reading once the callee has returned) does not, because
+    /// the callee's own `R` reset this field out from under the caller.
+    /// `builtin::datetime`'s own
+    /// `a_callees_own_time_r_leaks_into_the_caller_after_it_returns` pins
+    /// this as a declared divergence rather than a silent one.
     ///
     /// [`random_seed`]: Interp::random_seed
+    /// [`pending_elapsed_reset`]: Interp::pending_elapsed_reset
+    /// [`Activation::cached_clock`]: crate::activation::Activation::cached_clock
+    /// [`trace_mode`]: crate::activation::Activation::trace_mode
+    /// [`traps`]: crate::activation::Activation::traps
     elapsed_anchor: Option<i64>,
+    /// Whether a `TIME('R')` (or a clock read going backward) is waiting
+    /// to move [`elapsed_anchor`] the next time the clock cache next
+    /// refreshes -- `RexxActivation`'s own `elapsedReset` state flag
+    /// (`execution/ActivationSettings.hpp:121`), consumed by
+    /// `builtin::datetime::now_base_time`'s cache-miss path. See
+    /// [`elapsed_anchor`]'s own doc for why the reset is lazy at all.
+    ///
+    /// [`elapsed_anchor`]: Interp::elapsed_anchor
+    pending_elapsed_reset: bool,
     /// The running program's own location, as `PARSE SOURCE`'s third word.
     ///
     /// The same string `run_program` was handed and `Raised::report`'s
@@ -1628,6 +1663,7 @@ impl Interp {
             input: Input::new(ProgramInput::Nothing),
             random_seed: None,
             elapsed_anchor: None,
+            pending_elapsed_reset: false,
             program_path: String::new(),
         }
     }

@@ -2040,3 +2040,41 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   is real regardless of which of the three a given call would have hit,
   and building the switch without building any of the three destinations
   would only replace one honest "not implemented" with three.
+
+
+  KNOWN GAP: DATE/TIME READ THE WALL CLOCK IN UTC, NEVER THE HOST'S LOCAL
+  ZONE. `builtin::datetime::real_clock_base_time` builds every no-argument
+  reading from `SystemTime::now()` with a time-zone offset fixed at zero;
+  this crate carries no time-zone database at all. The oracle's own
+  `SystemInterpreter::getCurrentTime` reads the host's local zone. Wide by
+  the numbers, not a rounding difference -- measured on this host (UTC+2
+  at measurement time), all four with rc 0 both sides:
+
+    say time('N')     oracle 15:37:39         rexx-exec 13:37:39
+    say time('O')      oracle 7200000000        rexx-exec 0
+    say date('T')      oracle 1786117069         rexx-exec 1786109869
+    say time('T')      oracle 1786117069         rexx-exec 1786109869
+
+  Every no-argument reading of any of `DATE`'s thirteen or `TIME`'s eleven
+  letters carries this offset somewhere in its answer, whether or not the
+  specific letter above was the one measured -- `N`'s own wall-clock hour
+  is the most visible, `O` is the offset itself read back, and `T` is the
+  absolute count both of those are built from. D11 bars both builtins from
+  every differential comparison this crate has, so nothing here can turn
+  divergent; this row exists so the divergence is findable outside
+  `builtin/datetime.rs`'s own module doc, which is where it was declared
+  and where it stayed effectively unfindable by anyone auditing this
+  ledger rather than the source.
+
+  A second, narrower limb: `Timestamp::clear()` never ports
+  `timestamp.setTimeZoneOffset(current.getTimeZoneOffset())`
+  (`BuiltinFunctions.cpp:1110`/`:1372`, both builtins' own `indate`/
+  `intime` blocks) -- harmless today only because "now" is fixed at UTC
+  (offset `0`) regardless, so the port has nothing to carry. Fixing the
+  clock's own zone without also fixing this second limb would leave
+  `TIME('O')`'s own input style silently wrong, because it starts a parsed
+  timestamp from whatever offset a real "now" would carry and this crate's
+  own `clear()` never gives it one to start from.
+
+  No owner is assigned to closing either limb: a time-zone database is
+  Phase 5-or-later infrastructure, not a fix scoped to `DATE`/`TIME`.

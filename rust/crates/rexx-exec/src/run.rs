@@ -3895,7 +3895,7 @@ impl Interp {
         source: Option<&ProgramSource>,
     ) -> Result<Flow, Failure> {
         // `DATE`/`TIME`'s per-clause clock cache (`activation.rs`'s own doc
-        // on `Activation::cached_clock`) is invalidated **unconditionally,
+        // on `Activation::clock_stale`) is invalidated **unconditionally,
         // once per call, on whichever activation is executing right now**,
         // mirroring `RexxActivation::run`'s `settings.timeStamp.valid =
         // false` right after `nextInst->execute()` returns
@@ -3907,8 +3907,11 @@ impl Interp {
         // fresh one, any further read of the same clause sees the value
         // that read cached, and a callee's own instructions invalidate only
         // the callee's own cache rather than reaching back into the
-        // caller's.
-        self.activation_mut().cached_clock = None;
+        // caller's. The cached *value* itself (`Activation::cached_clock`)
+        // is left untouched here -- `TIME('R')`'s own lazy reset needs it
+        // still readable one call later, and clearing it here is what an
+        // earlier version of this did instead.
+        self.activation_mut().clock_stale = true;
         // `TRACE`'s own `*-*` clause echo (D17), and the single insertion
         // point for it -- exactly the analogue of `eval`'s own split from
         // `eval_node`, since this is the one place `run_bounded`'s loop
