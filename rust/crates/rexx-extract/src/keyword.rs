@@ -290,7 +290,7 @@ pub fn count_assert_same(source: &str) -> usize {
         .count()
 }
 
-fn is_symbol_char(c: char) -> bool {
+pub(crate) fn is_symbol_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '_'
 }
 
@@ -594,7 +594,10 @@ fn clause_boundary(before: &str) -> bool {
 /// inside a comment cannot be mistaken for one in the argument list -- and
 /// `text` is the byte-aligned original the returned slices come from, so an
 /// argument keeps any comment written inside it.
-fn parse_two_args<'a>(blanked: &str, text: &'a str) -> Option<(&'a str, &'a str, usize)> {
+pub(crate) fn parse_two_args<'a>(
+    blanked: &str,
+    text: &'a str,
+) -> Option<(&'a str, &'a str, usize)> {
     let mut chars = blanked.char_indices();
     if chars.next()?.1 != '(' {
         return None;
@@ -648,7 +651,7 @@ fn parse_two_args<'a>(blanked: &str, text: &'a str) -> Option<(&'a str, &'a str,
 /// Testing the last character after trimming is enough to stay out of
 /// strings: a line whose final token is a string literal ends with that
 /// literal's own closing quote.
-fn ends_with_continuation(line: &str) -> bool {
+pub(crate) fn ends_with_continuation(line: &str) -> bool {
     matches!(line.trim_end().chars().last(), Some(',') | Some('-'))
 }
 
@@ -734,7 +737,7 @@ fn blank_self_assertions(line: &str) -> String {
 /// a block reason reports comes from the *unblanked* line at the call site,
 /// which is what a reader needs to find it again, not from the blanked copy
 /// this is given.
-fn contains_unquoted(line: &str, target: char) -> bool {
+pub(crate) fn contains_unquoted(line: &str, target: char) -> bool {
     let mut in_str: Option<char> = None;
     for c in line.chars() {
         if let Some(quote) = in_str {
@@ -770,7 +773,7 @@ fn contains_unquoted(line: &str, target: char) -> bool {
 /// `from_utf8` at the end cannot fail: a comment region is blanked in full,
 /// so no multi-byte sequence is ever half-replaced, and every byte written
 /// is an ASCII space.
-fn blank_comments(body: &str) -> String {
+pub(crate) fn blank_comments(body: &str) -> String {
     let source = body.as_bytes();
     let mut out = source.to_vec();
     let mut depth = 0usize;

@@ -33,6 +33,15 @@
 //! assertions. See that module's own doc for the measurement behind the
 //! split.
 
+//! [`bif`] is a fourth mode, for `base/bif`. It is the only one that is a
+//! *reuse* rather than a new shape: the unit is [`AssertionRow`] again, since
+//! that group tests functions and an assertion's meaning is fixed by the
+//! `NUMERIC` settings and a short prelude. What it adds is what a body needs
+//! that is not written in the body -- a `.local` fixture another method set,
+//! and a `::options novalue` directive that inverts what an unassigned symbol
+//! means. See that module's own doc.
+
+pub mod bif;
 pub mod keyword;
 
 /// The set of `self~` messages that are assertions rather than fixture access.

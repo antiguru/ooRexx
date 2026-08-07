@@ -1,0 +1,137 @@
+# Every extracted `base/bif` row that does not pass today, and what would
+# actually make it pass. One `GROUP::METHOD#N<TAB>unblocked_by` per line, `N`
+# being the 1-based position of the row among the rows its own method yielded;
+# lines starting with # are comments.
+#
+# Measured at ooTest r13178. This is the committed set `bif_assertions.rs`
+# polices in both directions: a row here that starts passing is as red as a row
+# not here that starts failing, so an improvement shows up in a diff rather than
+# being quietly absorbed.
+#
+# THE SET ASSERTION OVER THIS FILE IS NOT BEHIND AN ENV VAR. The harness's
+# headline -- how many rows pass -- is explicitly a measurement rather than a
+# threshold, because base/bif covers the whole builtin surface including the
+# names D4 excludes and everything Phase 5 and Phase 7 own. A measurement
+# nobody gates on, policed by an assertion nobody runs, is coverage that does
+# not exist, so `the_exempt_set_matches_the_current_failures` runs under a
+# plain `cargo test`.
+#
+# The `unblocked_by` column is NOT hand-written FOR A ROW THAT FAILS LOUDLY:
+# there it is the owning phase `rexx-exec`'s own message names, re-derived on
+# every run, so this file cannot drift from `instruction_owner`/`expr_owner`
+# and a blocker moving between phases goes red here.
+#
+# Two limits on that, the same two `keyword-exempt.txt` carries:
+#
+#   * A derived owner says what a row hits FIRST, not what would make it pass.
+#
+#   * A derived owner is `4c` for every builtin name rexx-exec runs nothing
+#     for, whichever phase actually owns it: `Loud::unresolved_call` carries a
+#     fixed "4c". EVERY `4c` ROW BELOW IS ONE OF THOSE, and every one of them
+#     names a builtin `corpus/builtin-status.txt` calls `excluded` -- CHARIN,
+#     CHAROUT, CHARS, LINES, QUALIFY, RXQUEUE, STREAM. None is a builtin this
+#     phase could still land. Read off the run's own "first construct hit"
+#     breakdown, not off this file.
+#
+#   Phase 5  The row's own operands send a message: `XRANGE`'s hex-pair bodies
+#       write `'41'x~c2d` and `D2C::test10` writes a method call. Needs
+#       dispatch.
+#
+#   UNATTRIBUTED:an environment symbol  `ExprKind::DotVariable` is loud and
+#       `expr_owner` gives it no phase, so the harness has nothing to derive
+#       one from. These rows read a `.NAME` the file never sets -- REVERSE's
+#       `.funnyconst`, VALUE's `.a` -- which the oracle renders as the symbol's
+#       own uppercased text. STREAM's four are the same construct reached
+#       through a prelude.
+#
+#   ANOMALY  Not an attribution at all: the harness's own word for "exited
+#       non-zero and named no construct". All three are BEEP, and the cause is
+#       written down here because nothing derives it: `BEEP` is not a builtin
+#       function at all. It is a routine the interpreter's internal package
+#       registers (`interpreter/runtime/InternalPackage.cpp:199`), so it is
+#       absent from `rexx_inventory::builtins::NAMES` correctly, and a call to
+#       it raises 43.1 here. Measured on the oracle, `retc = beep(262, 1)`
+#       exits 0 and answers the null string, so this is a real gap in what this
+#       crate provides rather than a divergence in a builtin it implements.
+#
+BEEP::test_1#1	ANOMALY
+BEEP::test_5#1	ANOMALY
+BEEP::test_7#1	ANOMALY
+CHARIN::test_charin_simple#1	4c
+CHARIN::test_charin_noerr_1#1	4c
+CHARIN::test_charin_noerr_2#1	4c
+CHAROUT::test_stdout_ret2#1	4c
+CHAROUT::test_stdout_start#1	4c
+CHARS::test_stdin_wrong_synatx#1	4c
+D2C::test10#1	Phase 5
+LENGTH::test025#1	UNATTRIBUTED:an environment symbol
+LINES::test_normal_negativeTest1#1	4c
+LINES::test_normal_negativeTest1#2	4c
+LINES::test_normal_negativeTest1#3	4c
+LINES::test_count_negativeTest1#1	4c
+LINES::test_count_negativeTest1#2	4c
+LINES::test_count_negativeTest1#3	4c
+QUALIFY::test_qualify_arg_dot#1	4c
+QUALIFY::test_qualify_arg_dot#2	4c
+REVERSE::test017#1	UNATTRIBUTED:an environment symbol
+REVERSE::test021#1	UNATTRIBUTED:an environment symbol
+REVERSE::test026#1	UNATTRIBUTED:an environment symbol
+RXQUEUE::test_rxqueue_get#1	4c
+RXQUEUE::test_rxqueue_create_one_arg#1	4c
+RXQUEUE::test_rxqueue_create_session#1	4c
+RXQUEUE::test_rxqueue_open#1	4c
+RXQUEUE::test_rxqueue_switch#1	4c
+STREAM::test_simple_open#1	4c
+STREAM::test_simple_open#2	4c
+STREAM::test_open_isUsable#1	4c
+STREAM::test_open_isUsable#2	4c
+STREAM::test_open_isUsable#3	4c
+STREAM::test_open_isUsable#4	4c
+STREAM::test_open_isUsable#5	4c
+STREAM::test_close_twice#1	4c
+STREAM::test_close_twice#2	4c
+STREAM::test_close_twice#3	4c
+STREAM::test_close_twice#4	4c
+STREAM::test_close_twice#5	4c
+STREAM::test_queryFile_not_exists#1	4c
+STREAM::test_queryFile_not_exists#2	4c
+STREAM::test_queryFile_not_exists#3	4c
+STREAM::test_queryFile_not_exists#4	4c
+STREAM::test_queryFile_not_exists#5	4c
+STREAM::test_queryFile_not_exists#6	4c
+STREAM::test_queryFile_not_exists#7	4c
+STREAM::test_queryFile_not_exists#8	4c
+STREAM::test_queryDir_not_exists#1	4c
+STREAM::test_queryDir_not_exists#2	4c
+STREAM::test_queryDir_not_exists#3	4c
+STREAM::test_queryDir_not_exists#4	4c
+STREAM::test_queryDir_not_exists#5	4c
+STREAM::test_queryDir_not_exists#6	4c
+STREAM::test_queryDir_not_exists#7	4c
+STREAM::test_queryDir_not_exists#8	4c
+STREAM::test_relative_file_exists#1	UNATTRIBUTED:an environment symbol
+STREAM::test_relative_file_exists2#1	UNATTRIBUTED:an environment symbol
+STREAM::test_relative_file_not_exists#1	UNATTRIBUTED:an environment symbol
+STREAM::test_relative_file_not_exists2#1	UNATTRIBUTED:an environment symbol
+VALUE::test019#1	UNATTRIBUTED:an environment symbol
+XRANGE::test_xrange_hex_hex#1	Phase 5
+XRANGE::test_xrange_hex_hex#2	Phase 5
+XRANGE::test_xrange_hex_hex#3	Phase 5
+XRANGE::test_xrange_hex_hex#4	Phase 5
+XRANGE::test_xrange_hex_hex#5	Phase 5
+XRANGE::test_xrange_hex_hex#6	Phase 5
+XRANGE::test_xrange_hex_hex#7	Phase 5
+XRANGE::test_xrange_hex_hex#8	Phase 5
+XRANGE::test_xrange_hex_hex#9	Phase 5
+XRANGE::test_xrange_hex_hex#10	Phase 5
+XRANGE::test_xrange_hex_hex#11	Phase 5
+XRANGE::test_xrange_hex_hex#12	Phase 5
+XRANGE::test_xrange_hex_hex#13	Phase 5
+XRANGE::test_xrange_three#3	Phase 5
+XRANGE::test_xrange_three#4	Phase 5
+XRANGE::test_xrange_three#5	Phase 5
+XRANGE::test_xrange_three#6	Phase 5
+XRANGE::test_xrange_three#7	Phase 5
+XRANGE::test_xrange_three#8	Phase 5
+XRANGE::test_xrange_three#9	Phase 5
+XRANGE::test_xrange_three#10	Phase 5
