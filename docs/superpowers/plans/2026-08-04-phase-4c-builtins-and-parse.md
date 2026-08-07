@@ -1748,9 +1748,13 @@ When the fix lands, all seven start passing and `the_exempt_set_matches_the_curr
 **D12's reuse decision holds, but not as a drop-in.** Without the three additions below, only **39.9% of calls extract correctly and the rest are silently wrong rather than dropped**, which the conservation invariant cannot see.
 
 **The denominator is not what a naive scan gives.** `^[[:space:]]*::method` case-insensitively gives 5,462; **three of those sit inside `/* … */` block comments** (`CHARS.testGroup`, `LINES.testGroup` ×2), so live method directives are **5,459**.
-All 6,293 `assertSame` calls reconcile by location: roughly **6,150-6,170 in live method bodies, 120-135 inside block comments, 5 in `::routine` bodies, 1 behind a `--`**.
-The block-comment band is a range because ooRexx block comments **nest** and a same-line `/* … */` is easy to mis-detect; the total reconciles exactly either way.
-**A line-oriented scan extracts over a hundred assertions that never run.**
+All 6,293 `assertSame` calls reconcile by location, and the split is **exact rather than a band** -- measured 2026-08-07 at `70be78e2`, superseding the `6,150-6,170 / 120-135` estimate this row carried when Task 15 was dispatched: **6,268 outside any comment, 24 inside `/* … */` block comments, 1 behind a `--`** (`DATE.testGroup:1140`).
+`6,268 + 24 + 1 = 6,293` closes exactly.
+Two independent nested-comment blankers agree, and the earlier band was an over-estimate of the comment side by about a hundred.
+Of the 6,268, **5 sit in `::routine` bodies** and **2 sit outside any `test`-prefixed `::method`** -- a file's prolog, a `::class` region, a method the framework never runs -- leaving **6,261 in test method bodies**.
+The `::routine` five are counted **inside** the 6,268, not beside it; the extractor gives each of the three populations its own `DropReason` so the split stays visible.
+**The block-comment hazard is real but is an order of magnitude smaller than a hundred, and it is concentrated: 23 of the 24 are in `LINES.testGroup` alone**, in two `/* disable test … */` blocks that comment out whole `::method`s, with the 24th in `CHARS.testGroup`.
+Blanking comments before scanning is still required -- a line-oriented scan extracts every one of the 25 -- but what it prevents is a 25-call error, not a hundred-call one.
 
 **The composition, by body (a body counts in every category it touches):**
 
@@ -1777,10 +1781,14 @@ The block-comment band is a range because ooRexx block comments **nest** and a s
 
 **Two categories nobody thought to ask about, and the first is the larger risk:**
 
-* **`::options novalue` is a file-level directive that inverts body semantics.** **38 of the 76 files** carry it. Under it an unassigned symbol **raises**; in the other 38 files it evaluates to its own uppercased name. **Same body text, opposite meaning, and the deciding directive is outside the body.** Roughly 1,325 bodies / 2,027 calls live under it. Verified: none of the seven word groups carry it, which is exactly why they can write `word(nv,1)` = `'NV'`.
+* **`::options novalue` is a file-level directive that inverts body semantics.** **43 of the 76 files** carry it -- measured 2026-08-07 at `70be78e2`, correcting the **38** this row carried when Task 15 was dispatched. Under it an unassigned symbol **raises**; in the other **33** files it evaluates to its own uppercased name. **Same body text, opposite meaning, and the deciding directive is outside the body.** **3,068** of the 6,293 `assertSame` calls live in the 43 files, and 2,145 in the 38 `novalue`-spelling ones. The "roughly 1,325 bodies / 2,027 calls" this row used to give is dropped rather than adjusted: it matches neither count, and how it was derived is not recorded, so there is nothing to scale. Verified: none of the seven word groups carry it, which is exactly why they can write `word(nv,1)` = `'NV'`.
+
+  **The spelling is the whole reason the count was wrong, so match on both keywords.** Whitespace-normalised, the 43 lines are **36 × `::options novalue error`, 2 × `::options novalue syntax`, 5 × `::options all syntax`** -- 38 files matching `novalue`, 5 matching `all`, and **no file matching both**. A `sort | uniq -c` that does not strip trailing whitespace splits the first group as 35 + 1, which is the same 36.
+
+  **`::options all <condition>` implies NOVALUE, verified on the oracle rather than read off the grammar.** `say nv1` as a program's only clause: with no directive it prints `NV1` at **exit 0**; under `::options novalue syntax` and under `::options all syntax` alike it fails `Error 98.986: Reference to unassigned variable "NV1"` at **exit 158**, byte for byte the same report. Matching only the `novalue` spelling applies the symbol-equals-own-name resolution in the five `all` files -- `BEEP`, `CONDITION`, `DATE`, `LINEOUT`, `XRANGE` -- where the idiom raises instead, which is the direction that asserts a value the interpreter must never produce.
 * **The NOVALUE idiom itself** -- assertions that read a never-assigned symbol and rely on symbol-equals-own-name, e.g. `BITAND.testGroup:185`'s `assertSame(bitand('3', nv2.3), '02'x||'V2.3')`. Resolvable from the body's own bytes **only if the extractor knows the rule**; to a naive reader it looks like unresolved indirection. **Bounded at ≥178 firm, ≤307 loose** -- the residue contains false positives from instruction forms (a `PARSE` target read later), and the gap was not closed.
 
-**Confidence, stated so it can be checked rather than trusted.** Firm: the reconciliation, the 5,459/5,462 split, the 362-of-363 `NUMERIC` ordering, the 38-of-76 `::options` split, the `expectSyntax` 200/210. Softer: the resolvable/not split turns on a "simple versus computed RHS" rule, and that rule is conservative, so the mechanically-resolvable set is probably slightly larger than stated.
+**Confidence, stated so it can be checked rather than trusted.** Firm: the 5,459/5,462 `::method` split, the 362-of-363 `NUMERIC` ordering, the `expectSyntax` 200/210. **Two of the figures this line used to call firm were not**: the reconciliation's comment band and the 38-of-76 `::options` split are both corrected above, each re-derived three times, and both are now exact. Softer: the resolvable/not split turns on a "simple versus computed RHS" rule, and that rule is conservative, so the mechanically-resolvable set is probably slightly larger than stated.
 
 - [ ] **Step 1: Extract `base/bif` by reuse**
 
