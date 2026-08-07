@@ -1840,9 +1840,10 @@ The exempt set's attribution is **derived from the loud message**, not hand-writ
 
 - [ ] **Step 4: Wire `phase-4c.txt` into all three harnesses**
 
-`tests/corpus.rs:548-550` hardcodes `phase-4a.txt` and `phase-4b.txt`.
-So do `tests/coverage.rs` and `tests/collect_stress.rs`.
+All three of `tests/corpus.rs`, `tests/coverage.rs` and `tests/collect_stress.rs` originally hardcoded `phase-4a.txt` and `phase-4b.txt` at their `read_subset` call sites.
 **All three must read the three-file union**, or every 4c witness is inert and D6 is undischarged.
+**Re-derive each call site rather than trusting a line number** -- the citations this step once carried have all moved.
+Find them by `read_subset(&[` in each file, verified 2026-08-07: `corpus.rs` reads three files, `coverage.rs` reads three at its union site (and one file each at the three per-phase pins, which is deliberate), `collect_stress.rs` reads two.
 
 Add `phase_4c_subset_matches_the_committed_list` to `coverage.rs` -- the pin 4b's gate found missing for `phase-4b.txt`, where **nine of twelve entries were deletable with everything green**, including one criterion's only witness.
 
@@ -1851,7 +1852,9 @@ Task 7 added the `coverage.rs` pin when it created `phase-4c.txt`.
 Task 9 added `phase-4c.txt` to `tests/corpus.rs` after finding that Tasks 7 and 8's witnesses were being *parsed* by `coverage.rs` and *run* by nothing, while `corpus.rs`'s own module doc said otherwise -- one of its mutations was invisible to the whole suite until the wiring landed.
 Deferring the wiring to this task was the error: a witness that does not run is not a witness, and four of them sat inert across three tasks.
 **What is left here is `tests/collect_stress.rs`**, plus confirming the other two rather than redoing them.
-The corpus gate moved **42 -> 47** at Task 9; any criterion quoting 42 is pre-Task-9.
+The corpus gate moved **42 -> 47** at Task 9, and Tasks 10-14 have since taken it to **50 of 50**, measured 2026-08-07 at `1c519dfc` under `REXX_CORPUS_GATE=1` (`phase-4a.txt` 30 + `phase-4b.txt` 12 + `phase-4c.txt` 8).
+Any criterion quoting 42 or 47 is stale.
+**`corpus.rs`'s dated-row convention binds here:** add a new row naming the commit the number is true at, do not edit the 47 in place.
 
 **Corpus rules for 4c, written into `corpus/README.md` beside the `DO OVER` one:** no `RANDOM`, no `DATE`, no `TIME` (D11); `QUEUED()` single-program only; no dependence on external routine resolution (Task 13); no `DO OVER` on a stem (D3).
 
@@ -1866,13 +1869,25 @@ Measured at Task 9: three of six "caught by this test and nothing else" claims w
 **Assert the binary count**, baseline against mutated, so a truncated run is an `INFRA_FAILURE` rather than a survivor or a clean catch.
 
 **Count `Running`/`Doc-tests` header lines, not `test result:` lines, and the two genuinely differ.**
-Measured at Task 9's re-review: the same green run gives **72** header lines and **73** `test result:` lines.
+Measured at Task 9's re-review: that green run gave **72** header lines and **73** `test result:` lines.
 Neither is wrong -- `Doc-tests rexx_exec` prints **two** `test result:` blocks from one process, a normal doctest run and a `compile_fail` one reported separately.
-**72 is the process count** and is what a truncation guard must compare; `test result:` double-counts that one process and will read as off-by-one forever.
+The header line is the process count and is what a truncation guard must compare; `test result:` double-counts that one process and will read as off-by-one forever.
+The headers are on **stderr** and the `test result:` lines on **stdout**, so the guard must capture the two descriptors separately.
+
+**Do not hardcode the number.** Re-measured 2026-08-07 at `1c519dfc`: **73** headers and **74** `test result:` lines, so the constant Task 9 would have written is already wrong, and every task that adds a test binary breaks it again.
+**The guard must measure its own baseline in the same run** -- count the headers of the pre-mutation baseline it already performs, then require the mutated run to produce that same count -- so the figure is derived, never maintained.
+A count recorded in this plan or in the gate document is a dated observation, not an input to the guard.
 
 **Earlier tasks' uniqueness claims were taken with the truncating command and are not to be trusted as stated.**
 Tasks 5, 6 and 7 each recorded a "nothing else catches this" result; Task 8's scoped re-review used `--no-fail-fast` and stands, and Task 9's were re-run.
+Tasks 10-14 were dispatched with `--no-fail-fast` mandatory, and Task 14's coverage proof used a stronger instrument still -- `git archive` of the pre-fix commit, built and run against the new test's own program, which *is* the defect rather than an approximation of it.
+Prefer that instrument wherever the defect has a commit.
 Re-verify the rest here rather than inheriting them -- the failure is one-directional (it over-credits a new test with unique coverage, never under-credits), so no *correctness* conclusion rests on it, but the coverage story does.
+
+**A mutation can hang instead of failing, and an unbounded run reads as a stall rather than a result.**
+Measured at Task 14: a mutation to the executor left `keyword_assertions_differential` running for over nine minutes, on `DO::test_DO_standardTest2P`, whose extracted body loops until a condition the mutation had made unreachable.
+`cargo test` has no per-test timeout, so the whole guard sits there and no bucket is ever assigned.
+**Give each mutated run a wall-clock timeout** (`timeout`(1) around the `cargo test` invocation), and classify a timeout as `INFRA_FAILURE` -- never as `DIVERGED`, which would credit the mutation with a catch the suite did not actually make, and never as `PASSED`.
 
 **Declare each mutation's outcome per instrument in advance**, so an unexpected catch fails as loudly as an unexpected survival.
 
@@ -1890,9 +1905,18 @@ Suggested shapes, each needing an instrument named: a builtin's optional argumen
   All 35 are `unblocked_by: "Phase 5"` and no row is `4c`.
   **State plainly that deleting the whole of 4c leaves this criterion green**, so it is carried as a regression check and not as evidence of 4c's delivery.
 * **Criterion 3**'s target is **16 of 19**: `>.>`, `>I>`, `<I<` are 4c's; `+++` is Phase 7's under D-P.
-* **Criterion 10**'s 790 `4c` rows in `keyword-exempt.txt` fire here.
-  **790 is an upper bound on what 4c fixes, not a measure of its remaining surface**: three `CALL` bodies fail **under the C++ oracle itself** (`Error 43, Routine not found`) and `NUMERIC::test_42` exits 3 by falling through into its own `dig:` label.
-  **No task owns these rows**, so they will fire ungated across the family tasks; say which task removed which, or the criterion is green here by construction.
+  Verified 2026-08-07: `trace_oracle.rs`'s `WITNESSED_PREFIX_COUNT` is 16 and `OUT_OF_SCOPE_PREFIX_COUNT` is 3, and the test asserts their sum is 19.
+  **State the limit this criterion does not cover: the corpus cannot pin a trace *indent*, for any prefix.**
+  Both differential harnesses normalise the run of spaces after the marker, on both sides, and the committed `.expected` files are normalised at comparison time too, so an off-by-two indent is invisible to every corpus-based instrument.
+  Only an in-crate exact-stderr assertion sees one.
+  A criterion claiming "trace output byte for byte" over the corpus is claiming coverage that does not exist; name the in-crate tests that carry the indent, or say the indent is unpinned.
+* **Criterion 10**'s `4c` rows in `keyword-exempt.txt` fire here, and the number this plan was written around is spent.
+  **790 was the count when 4c began. Measured 2026-08-07 at `1c519dfc`, the file holds 8 data rows, of which 2 read `4c`** (`CALL::test_on_name`, `CALL::test_9`), 3 read `Phase 7` (all `ADDRESS`), and 3 read `RAISED`.
+  The gate is **888 of 896 bodies passing, carrying 1737 of 1773 `assertSame` calls**, under `REXX_KEYWORD_GATE=1`.
+  **790 was always an upper bound on what 4c fixes, not a measure of its remaining surface**, and the residue proves it: the three `RAISED` rows are the two `CALL` bodies that fail **under the C++ oracle itself** (`Error 43, Routine not found`, because the extraction dropped the `::routine`s they call) plus `NUMERIC::test_42`, which exits 3 by falling through into its own `dig:` label.
+  Those three cannot be made to pass by implementing anything.
+  **No task owned these rows**, so they came off ungated across the family tasks.
+  **Say which task removed which**, from the git history of `corpus/keyword-exempt.txt`, or the criterion is green here by construction.
 * **New: the builtin-status criterion**, both directions, whose falsification is Task 2's Step 5 -- the interpreter mutation, not the file edit.
 * **Record that 4b's queue gap is closed, and say by what.** 4b's gate shipped `PUSH`/`QUEUE` with their storage verified only in-crate.
   Task 8 gave the round trip its first differential witness: `corpus/lang/pull_queue.rex` pushes and pulls, and a live `queue-round-trip` row in `crates/rexx-exec/tests/input_oracle.rs` runs it against the oracle today rather than waiting for this task.
@@ -1908,7 +1932,7 @@ Four traps specific to 4c:
   Measured at Task 2: the 42-program stress subset calls **no builtin**, so every allocation the 66 add is outside `run_program_collect_every_alloc`'s reach.
   The union must gain at least one program per family that allocates, or criterion 4 passes over a subset that never exercises the code 4c added -- the same defect 4a's version had when it ran 29 programs and zero call frames.
 * **Criterion 4's collector control must delete a root a *builtin* holds.**
-  Because builtins reuse `resolve_and_run_call`'s argument evaluation, the obvious root in that window is `run.rs:3259`'s `push_temp(argument.value())` -- which is **verbatim `mutate-4b.sh` row 9**.
+  Because builtins reuse `resolve_and_run_call`'s argument evaluation, the obvious root in that window is `self.roots.push_temp(argument.value())` -- at `run.rs:3259` when this was written, `run.rs:3574` as of 2026-08-07, so find it by the expression, not the line -- which is **verbatim `mutate-4b.sh` row 9**.
   Re-running it re-tests 4b, which is what the criterion's own second sentence forbids.
   The control must target a root the **builtin's own result** holds between allocation and the caller's use.
 * **A "reported, not gated" measurement can still be vacuous** if the set assertion behind it is behind the env var.
