@@ -1502,7 +1502,9 @@ say date('J')   Error 40.904:  DATE argument 1 must be one of BDEFILMNOSTUW; fou
 
 **`DATE`: pin the CONVERSION form, which is deterministic, not any no-argument form.**
 `date('S','2026-08-05','I')` is `20260805`; `date('W','20260805','S')` is `Wednesday`; a malformed or impossible input is **40.19**.
-Host- or locale-dependent: `L`, `M`, `W` (names), `T`, `F` (absolute clocks). Deterministic given a fixed date: `B`, `D`, `E`, `I`, `N`, `O`, `S`, `U`.
+**The determinism split this survey originally drew was wrong, and the axis is the argument, not the letter.** It claimed `L`, `M`, `W` (names) and `T`, `F` (absolute clocks) were host- or locale-dependent against a deterministic `B`, `D`, `E`, `I`, `N`, `O`, `S`, `U`. Refuted 2026-08-07, three ways: the oracle's month and weekday tables are hardcoded English string arrays (`classes/support/RexxDateTime.cpp:53`, `:65`) and the file makes no `setlocale`, `nl_langinfo` or `strftime` call at all; `date('L'|'M'|'W','20260805','S')` prints `5 August 2026` / `August` / `Wednesday` unchanged under `LC_ALL=de_DE.UTF-8`; and `date('T'|'F','20260805','S')` is byte-identical across runs.
+
+**All thirteen letters are deterministic given a fixed input date. What is unpinnable is the no-argument form of any of them**, which reads today's clock. So the corpus bar (D11) is about the missing argument, not about a subset of the options -- and a conversion-form test is available for every letter.
 **`DATE('C')` and `DATE('J')` are rejected with 40.904 on this build** despite existing in other Rexx dialects -- pin that, because an implementer working from a generic reference will add them.
 
 - [ ] **Step 1: Neither may appear in a corpus program (D11), so the unit tests are the whole gate**
