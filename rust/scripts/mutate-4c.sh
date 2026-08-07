@@ -79,6 +79,15 @@
 #    are captured separately below. A `2>&1` capture would interleave them
 #    undefinedly and the header count would depend on buffering.
 #
+#    AND A MEASURED ZERO IS FATAL, BECAUSE THIS GUARD CAN OTHERWISE TURN ITSELF
+#    OFF. The header count comes from a regex over cargo's own banner. If cargo
+#    changes that banner the regex matches nothing and the baseline measures 0
+#    binaries -- a real measurement, not a missing one -- while `test result:`
+#    on the other descriptor is untouched, so every row still classifies PASSED
+#    or DIVERGED and the script reports 9 of 9 at exit 0 with device (e) silently
+#    disabled. `require_baseline_pass` aborts on a zero, and the "not measured
+#    yet" state is the empty string rather than 0 so the two cannot be confused.
+#
 # 3. EVERY MUTATED RUN IS UNDER A WALL-CLOCK TIMEOUT, AND A TIMEOUT IS AN
 #    INFRA_FAILURE. A mutation can HANG rather than fail: measured at 4c's
 #    Task 14, a mutation to the executor left `keyword_assertions_differential`
@@ -140,7 +149,14 @@ FAILURES=()
 
 # Measured by `require_baseline_pass` before the first mutation, and required of
 # every mutated SUITE run thereafter. Never a constant: see device 2 above.
-BASELINE_BINARIES=0
+#
+# The empty string is "not measured yet", which no measurement can produce. It
+# used to be 0, and 0 is a value `suite_binaries` really can return -- if cargo
+# changes its per-target banner the regex stops matching and the count is a
+# genuine zero. That zero would then be stored here as the expectation, and
+# `suite_status` reads a zero expectation as "no expectation", so every row
+# below would skip the truncation check with nothing red anywhere.
+BASELINE_BINARIES=""
 
 # A plain file copy, not `git checkout -- <path>`: this project's git discipline
 # forbids that command regardless of caller, and restoring from a backup taken
@@ -369,7 +385,19 @@ require_baseline_pass() {
     fi
     local binaries
     binaries="$(suite_binaries)"
-    if [ "${BASELINE_BINARIES}" -eq 0 ]; then
+    # A suite that just passed started at least one binary, so a zero here is
+    # the regex in `suite_binaries` no longer matching cargo's output rather
+    # than a fact about the tree. Fatal rather than stored: stored, it would
+    # disarm the truncation check for every row while all nine still scored
+    # normally from the `test result:` lines on the other descriptor.
+    if [ "${binaries}" -eq 0 ]; then
+        echo "FATAL: the ${label} baseline started 0 test binaries, which a passing" \
+             "suite cannot do. suite_binaries' Running/Doc-tests pattern no longer" \
+             "matches cargo's stderr, so device (e), the truncation guard, has" \
+             "nothing to compare against and every mutation below would skip it." >&2
+        exit 1
+    fi
+    if [ -z "${BASELINE_BINARIES}" ]; then
         BASELINE_BINARIES="${binaries}"
     elif [ "${binaries}" -ne "${BASELINE_BINARIES}" ]; then
         echo "FATAL: the tree started ${binaries} test binaries at the ${label}" \

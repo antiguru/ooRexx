@@ -1660,6 +1660,7 @@ mod tests {
             &[b'1', 0x80],
         ];
         let mut interp = interp_at("9");
+        let mut parsed_count = 0usize;
         for subject in subjects {
             let value = interp.text(subject);
             let parsed = interp.to_number(value).is_ok();
@@ -1669,7 +1670,24 @@ mod tests {
                 "{:?} is a number the scan cannot take apart",
                 String::from_utf8_lossy(subject)
             );
+            parsed_count += usize::from(parsed);
         }
+
+        // Without this line the assertion above is satisfied by a parser that
+        // accepts nothing: `!parsed` is then true for every subject and the
+        // loop asserts an implication with a false antecedent every time,
+        // staying green while the thing it exists to check is entirely
+        // broken. The count is what makes the antecedent real. It is exact
+        // rather than a floor because `subjects` is a literal in this same
+        // function, so the number cannot move without someone editing the
+        // list directly above it.
+        assert_eq!(
+            parsed_count,
+            19,
+            "{parsed_count} of the {} subjects parse as numbers; the agreement asserted above is \
+             only worth having over the ones that do",
+            subjects.len()
+        );
     }
 
     /// `XRANGE`'s twelve class tables, including the one that begins with a

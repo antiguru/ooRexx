@@ -815,16 +815,54 @@ fn a_raise_row_needs_the_sub_number_too() {
 /// categories [`RowOutcome::attribution`] emits for a row that neither passes
 /// nor names a construct. Nothing else, so a typo cannot quietly become a new
 /// category that the set-equality test then happily matches against itself.
+///
+/// Each derived category also carries its exact row count, including the ones
+/// standing at zero.
 #[test]
 fn every_exempt_attribution_is_a_known_phase_or_a_declared_outcome() {
     const PHASES: &[&str] = &["4b", "4c", "Phase 5", "Phase 7"];
-    const DERIVED: &[&str] = &["MISMATCH", "RAISE-MISMATCH", "ANOMALY"];
+
+    // The count is the whole point of this table, not decoration on it.
+    //
+    // A phase string names who will do the work and `UNATTRIBUTED:` names the
+    // construct that has to be built; these three name neither, so a row
+    // carrying one is a divergence nothing owns. Accepting the spelling
+    // without pinning the count means a future value divergence can be
+    // repaired by adding a row: the set-equality test goes green again, the
+    // headline drops by one, and nothing asserts on the headline.
+    //
+    // `MISMATCH` is the sharp one -- both renderings produced output and they
+    // differ, which is the single thing this differential exists to detect --
+    // and the only rows of that shape this extraction has ever produced were
+    // twelve that three drop reasons then removed. A category pinned at zero
+    // fails the first time the corpus grows one, which is exactly when a
+    // reader needs to know; `extract_bif.rs`'s `DropReason` table pins its own
+    // zeroes for the same reason.
+    const DERIVED: &[(&str, usize)] = &[("MISMATCH", 0), ("RAISE-MISMATCH", 0), ("ANOMALY", 3)];
+
+    let names: Vec<&str> = DERIVED.iter().map(|(name, _)| *name).collect();
+    let mut counts = vec![0usize; DERIVED.len()];
     for (key, attribution) in committed_exempt() {
         assert!(
             PHASES.contains(&attribution.as_str())
-                || DERIVED.contains(&attribution.as_str())
+                || names.contains(&attribution.as_str())
                 || attribution.starts_with("UNATTRIBUTED:"),
-            "{key} is attributed to {attribution:?}, which is none of {PHASES:?} nor {DERIVED:?}"
+            "{key} is attributed to {attribution:?}, which is none of {PHASES:?} nor {names:?}"
+        );
+        if let Some(i) = names.iter().position(|name| *name == attribution) {
+            counts[i] += 1;
+        }
+    }
+    for (count, (name, expected)) in counts.iter().zip(DERIVED) {
+        assert_eq!(
+            count,
+            expected,
+            "{count} rows of {} carry the derived attribution {name}, against the {expected} \
+             pinned here. A row with this attribution names no owner and no construct, so it is \
+             a divergence no phase is holding: rule on it -- give it a phase, or record it as a \
+             KNOWN GAP in phase-4-exclusions.txt -- and move this number deliberately rather \
+             than letting the set-equality test absorb it",
+            exempt_path().display()
         );
     }
 }
