@@ -61,7 +61,7 @@ COUNTSTR	implemented
 D2C	implemented
 D2X	implemented
 DATATYPE	implemented
-DATE	loud
+DATE	implemented
 DELSTR	implemented
 DELWORD	implemented
 DIGITS	implemented
@@ -93,7 +93,7 @@ STRIP	implemented
 SUBSTR	implemented
 SUBWORD	implemented
 SYMBOL	implemented
-TIME	loud
+TIME	implemented
 TRACE	implemented
 TRANSLATE	implemented
 TRUNC	implemented

@@ -471,6 +471,34 @@ pub(crate) struct Activation {
     ///
     /// [`traps`]: Activation::traps
     pub(crate) condition: Option<TrappedCondition>,
+    /// `DATE`/`TIME`'s clock reading for the clause this activation is
+    /// currently executing, in `builtin::datetime`'s own microseconds-since-
+    /// 0001-01-01 unit -- `None` once invalidated and not yet re-read.
+    ///
+    /// **Per activation, matching `ActivationSettings::timeStamp` exactly**,
+    /// and not one field on `Interp` the way [`Interp::elapsed_anchor`]'s
+    /// own divergence is: a nested `CALL`'s own instructions must not
+    /// disturb the *caller's* cached reading, and a single `Interp`-wide
+    /// field could not tell the two apart. Measured, the shape the shared
+    /// brief's own probe is built from: `say time("L") burn() time("L")`,
+    /// where `burn` is an internal routine that runs a real CPU burn before
+    /// returning. `burn`'s own body steps its own instructions -- a `DO`
+    /// clause and a `RETURN` clause, at least two calls into
+    /// `step_in_temps_frame` -- through *its own* `Activation`, invalidating
+    /// only `cached_clock` on the callee's frame; the caller's is a
+    /// different field on a different frame and survives the call
+    /// untouched, so the second `time("L")` after `burn()` returns still
+    /// reads *this* clause's own cached value. A version of this field
+    /// tried first on `Interp` reproduced the oracle's cache in every case
+    /// except this one nested-call shape -- and this is that shape.
+    ///
+    /// Invalidated once per instruction by `step_in_temps_frame`, on
+    /// whichever activation is executing at the time, mirroring
+    /// `RexxActivation::run`'s own `settings.timeStamp.valid = false` set
+    /// right after `nextInst->execute()` returns (`RexxActivation.cpp:647`).
+    ///
+    /// [`Interp::elapsed_anchor`]: crate::Interp::elapsed_anchor
+    pub(crate) cached_clock: Option<i64>,
 }
 
 impl Activation {
@@ -509,6 +537,7 @@ impl Activation {
             address: AddressState::default(),
             traps: HashMap::new(),
             condition: None,
+            cached_clock: None,
         }
     }
 
@@ -566,6 +595,12 @@ impl Activation {
             address: inherited.address,
             traps: inherited.traps,
             condition: inherited.condition,
+            // Not inherited, matching every other field this constructor
+            // does not list: a fresh `RexxActivation` constructs a fresh,
+            // invalid `RexxDateTime timeStamp` regardless of its caller,
+            // and this is that same "start invalid" rather than a fourth
+            // inheritance to add to the three above.
+            cached_clock: None,
         }
     }
 }

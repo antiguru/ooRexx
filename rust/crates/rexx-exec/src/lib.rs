@@ -1459,6 +1459,43 @@ struct Interp {
     /// a constant that would make an unseeded program reproducible where the
     /// oracle's is not.
     random_seed: Option<u64>,
+    /// `TIME('E')`/`TIME('R')`'s anchor: the clock reading (`builtin::
+    /// datetime`'s microseconds-since-0001-01-01 unit) elapsed time is
+    /// measured from, or `None` before any `E`/`R` call has run.
+    ///
+    /// **One field for the whole interpreter, where the oracle keeps it per
+    /// activation** (`ActivationSettings::elapsedTime`) and resets it to
+    /// zero on every `CALL` -- the same divergence [`random_seed`]'s own
+    /// doc takes, and a real one: a routine's own `TIME('E')` would measure
+    /// since *its own* entry on the oracle, and since the enclosing
+    /// program's last reset here. Declared rather than hidden because nothing
+    /// in this crate's builtin-call path pushes an activation for `DATE`/
+    /// `TIME` itself (`builtin/mod.rs`'s own module doc) -- only a real
+    /// internal-routine `CALL` crossing an elapsed-time read would show
+    /// it, and no test in this crate's own suite, nor any differential
+    /// program (D11 bars `TIME`/`DATE` from all of them), does.
+    ///
+    /// **Lazily initialised to the first call's own reading, not to zero.**
+    /// `RexxActivation::getElapsed` does the same lazy fill
+    /// (`execution/RexxActivation.cpp:3424`), which is what makes a
+    /// program's *first* `TIME('E')` or `TIME('R')` read exactly `0` rather
+    /// than elapsed-since-process-start.
+    ///
+    /// **A deliberate simplification of the oracle's own lazy reset.** The
+    /// oracle does not overwrite this anchor the instant `TIME('R')` runs;
+    /// it only flags a pending reset and applies it the next time the
+    /// per-activation clock cache (`Activation::cached_clock`) is re-read
+    /// (`RexxActivation::getTime`'s own comment: "the time needs to stay
+    /// valid until the clause is complete"). This field updates immediately
+    /// instead. The two agree on every externally observable answer this
+    /// crate's own tests measure -- each reset happens in a clause of its
+    /// own, so the oracle's deferred anchor and this field's immediate one
+    /// are the same clock reading -- and differ only by sub-clause timing
+    /// nobody can observe without a second `TIME` call inside the reset's
+    /// own clause, which `TIME('R')`'s single-read shape never offers.
+    ///
+    /// [`random_seed`]: Interp::random_seed
+    elapsed_anchor: Option<i64>,
     /// The running program's own location, as `PARSE SOURCE`'s third word.
     ///
     /// The same string `run_program` was handed and `Raised::report`'s
@@ -1590,6 +1627,7 @@ impl Interp {
             // source. `ProgramInput`'s own doc has the argument.
             input: Input::new(ProgramInput::Nothing),
             random_seed: None,
+            elapsed_anchor: None,
             program_path: String::new(),
         }
     }

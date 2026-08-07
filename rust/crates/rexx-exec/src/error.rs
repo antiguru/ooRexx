@@ -707,6 +707,94 @@ impl Raised {
         )
     }
 
+    /// 40.19: `DATE`/`TIME`'s input-conversion argument does not parse under
+    /// the input style it was given, or parses but is out of range for it
+    /// (`Error_Incorrect_call_format_invalid`, `expression/
+    /// BuiltinFunctions.cpp`, both builtins' own `indate`/`intime` blocks).
+    /// `found` is the argument's own rendered text and `style` the single
+    /// upcased input-style byte, never the whole option string -- both
+    /// measured, rc 216: `date(,'','f')` gives `DATE argument 2, "", is not
+    /// in the format described by argument 3, "F".` and `date('D','367',
+    /// 'D')` (2026 is not a leap year) gives the same shape naming `"D"`.
+    ///
+    /// **Position 2 and position 3 are fixed text in the message, not
+    /// substituted** -- `RexxErrorMessages.h`'s own catalogue entry spells
+    /// them literally, so this always reads "argument 2" and "argument 3"
+    /// regardless of which builtin raised it (`TIME` has no fifth argument
+    /// to disagree with that).
+    pub(crate) fn date_format_invalid(routine: &[u8], found: &[u8], style: u8) -> Raised {
+        Raised::syntax(40, 19, vec![routine.to_vec(), found.to_vec(), vec![style]])
+    }
+
+    /// 40.29: `TIME`'s elapsed-time output styles (`E`/`R`) refuse an input
+    /// conversion argument outright, before the input is even parsed.
+    ///
+    /// Measured, rc 216: `time('r','12:00:00')` gives `TIME conversion to
+    /// format "R" is not allowed.` -- `style` is the **output** style's own
+    /// upcased byte, not the input style's.
+    pub(crate) fn invalid_conversion(routine: &[u8], style: u8) -> Raised {
+        Raised::syntax(40, 29, vec![routine.to_vec(), vec![style]])
+    }
+
+    /// 40.43: a `DATE`/`TIME` separator argument is not exactly one
+    /// non-alphanumeric byte and not the null string either.
+    ///
+    /// Measured, rc 216: `date(,,,'a')` gives `DATE argument 4 must be a
+    /// single non-alphanumeric character or the null string; found "a".`
+    /// `found` is the separator argument's own bytes, whatever their length
+    /// -- a multi-byte separator reaches this the same way a single
+    /// alphanumeric one does, since the oracle's own test is one `||`
+    /// condition covering both.
+    pub(crate) fn separator_not_a_char(routine: &[u8], position: usize, found: &[u8]) -> Raised {
+        Raised::syntax(
+            40,
+            43,
+            vec![
+                routine.to_vec(),
+                position.to_string().into_bytes(),
+                found.to_vec(),
+            ],
+        )
+    }
+
+    /// 40.44: a `DATE`/`TIME` argument's own format is incompatible with a
+    /// separator supplied elsewhere in the call. Three call sites share this
+    /// one shape, each measured:
+    ///
+    /// ```text
+    /// date('b',,,'')                    DATE argument 1, "B", is a format incompatible
+    ///                                    with the separator specified in argument 4.
+    /// date(,'20070922','w',,'-')        DATE argument 3, "W", is a format incompatible
+    ///                                    with the separator specified in argument 5.
+    /// date(,'1 May 2022',,,'-')         DATE argument 2, "1 May 2022", is a format
+    ///                                    incompatible with the separator specified in
+    ///                                    argument 5.
+    /// ```
+    ///
+    /// The first two name a **style byte** (upcased, one character) as
+    /// `value`; the third names the **input argument itself**, verbatim and
+    /// un-upcased, because that call site fires when parsing already failed
+    /// with an input separator in play, not when a style was merely
+    /// incompatible with one -- `position`/`value`/`other_position` are the
+    /// caller's to supply correctly for each of the three.
+    pub(crate) fn format_incompatible_separator(
+        routine: &[u8],
+        position: usize,
+        value: &[u8],
+        other_position: usize,
+    ) -> Raised {
+        Raised::syntax(
+            40,
+            44,
+            vec![
+                routine.to_vec(),
+                position.to_string().into_bytes(),
+                value.to_vec(),
+                other_position.to_string().into_bytes(),
+            ],
+        )
+    }
+
     /// 93.923: a length argument converted to a whole number but is
     /// negative. No routine name and no position in the message, only the
     /// value.

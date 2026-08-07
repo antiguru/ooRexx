@@ -76,6 +76,7 @@ use crate::{Interp, Loud};
 
 mod convert;
 mod datatype;
+mod datetime;
 mod numeric;
 mod state;
 mod string;
@@ -254,6 +255,21 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 1,
         max: Some(2),
         run: datatype::datatype,
+    },
+    Builtin {
+        // A minimum of 0 and a maximum of 5: `date()` and `date('S')` both
+        // succeed with no other arguments at all, and `DATE_Min`/
+        // `DATE_Max` (`BuiltinFunctions.cpp:1003`-`1004`) name 5 as the top
+        // -- `osep`/`isep`, positions 4 and 5, following the input/output
+        // style pair. This module's own doc comment on the count check
+        // names the conditional-required quirk `(min, max)` cannot express
+        // for this exact builtin: supplying `option2` (position 3) without
+        // `indate` (position 2) is 40.5, not legal, and `date::date` checks
+        // that itself.
+        name: b"DATE",
+        min: 0,
+        max: Some(5),
+        run: datetime::date,
     },
     Builtin {
         // A minimum of 1, not 2: `DELSTR`'s start position is optional and
@@ -451,6 +467,17 @@ const IMPLEMENTED: &[Builtin] = &[
         min: 1,
         max: Some(1),
         run: datatype::symbol,
+    },
+    Builtin {
+        // A minimum of 0 and a maximum of 3: `TIME_Min`/`TIME_Max`
+        // (`BuiltinFunctions.cpp:1315`-`1316`). `option2` (position 3)
+        // requires `intime` (position 2) the same way `DATE`'s own
+        // conditional pair does, measured, `time(,,'n')` is 40.5 naming
+        // argument 2.
+        name: b"TIME",
+        min: 0,
+        max: Some(3),
+        run: datetime::time,
     },
     Builtin {
         // A maximum of 1, and the argument *sets* the mode while the answer
