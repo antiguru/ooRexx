@@ -207,7 +207,7 @@ fn main() -> ExitCode {
 
     let oracle_binary = PathBuf::from(ORACLE_ROOT).join("bin/rexx");
     let oracle_lib = PathBuf::from(ORACLE_ROOT).join("lib");
-    let rust_binary = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/release/rexx-run");
+    let [rust_binary, _debug] = rust_binary_candidates();
     for required in [&oracle_binary, &rust_binary] {
         if !required.is_file() {
             eprintln!(
@@ -222,6 +222,20 @@ fn main() -> ExitCode {
     // cwd; normalised now so the report names a path a reader can paste
     // rather than one with `../..` in the middle of it.
     let rust_binary = rust_binary.canonicalize().unwrap_or(rust_binary);
+
+    // The entire output of this phase is ratios against the oracle, so an
+    // oracle that could not be identified is not a measurement to report with
+    // a caveat -- it is a run that must not produce a table at all.
+    let objects = oracle_objects(&oracle_binary);
+    if objects.is_empty() {
+        eprintln!(
+            "rexx-bench-suite: `ldd {}` resolved no shared object under {ORACLE_ROOT}. \
+             The launcher is a thin `main` and the interpreter is in those objects, so \
+             without them nothing here identifies the build every ratio is taken against.",
+            oracle_binary.display()
+        );
+        return ExitCode::FAILURE;
+    }
 
     // Every child runs with its cwd here rather than in the repository or in
     // the scratchpad. The oracle resolves an unresolved call name against the
@@ -262,7 +276,7 @@ fn main() -> ExitCode {
     write_provenance(
         &mut report,
         &oracle_binary,
-        &oracle_lib,
+        &objects,
         &rust_binary,
         pairs,
         warmup,
@@ -322,10 +336,18 @@ fn main() -> ExitCode {
         Err(error) => failures.push(format!("rexxcps: {error}")),
     }
 
-    write_blocked(&mut report, &rust, &workdir);
+    for name in write_blocked(&mut report, &rust, &workdir) {
+        failures.push(format!(
+            "{name} is declared Role::Blocked and no longer fails; it is reported as \
+             unrunnable and measured by nothing"
+        ));
+    }
 
     if !failures.is_empty() {
-        report.push_str("\n### Axes that did not complete\n\n");
+        report.push_str(
+            "\n### This run is not a baseline\n\nEach line below is either an axis that did \
+             not complete or an axis whose declared role is no longer true.\n\n",
+        );
         for failure in &failures {
             let _ = writeln!(report, "* {failure}");
         }
@@ -339,7 +361,7 @@ fn main() -> ExitCode {
         ExitCode::SUCCESS
     } else {
         eprintln!(
-            "rexx-bench-suite: {} axis/axes did not complete; the report above is partial",
+            "rexx-bench-suite: {} problem(s); the report above is not a baseline",
             failures.len()
         );
         ExitCode::FAILURE
@@ -554,6 +576,13 @@ fn interval_for(n: usize) -> MedianInterval {
     })
 }
 
+/// The per-side coverage the axis intervals carry, taken from the sample size
+/// rather than restated, so it cannot drift from [`PAIRS`].
+fn interval_coverage(rows: &[AxisRow]) -> f64 {
+    rows.first()
+        .map_or(0.0, |row| interval_for(row.paired.oracle.len()).coverage)
+}
+
 fn seconds(samples: &[Duration]) -> Vec<f64> {
     samples.iter().map(Duration::as_secs_f64).collect()
 }
@@ -583,11 +612,46 @@ fn capture(program: &str, args: &[&str]) -> String {
         .unwrap_or_else(|| format!("<{program} failed>"))
 }
 
+/// Where `rexx-run` is built, release first.
+///
+/// `main` takes the release build and nothing else, because the profile is
+/// part of what is being measured. The role check in the tests takes whichever
+/// exists, because "does this program fail on this crate" does not depend on
+/// the optimisation level and a `cargo test --workspace` builds only the debug
+/// one.
+fn rust_binary_candidates() -> [PathBuf; 2] {
+    let target = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target");
+    [
+        target.join("release/rexx-run"),
+        target.join("debug/rexx-run"),
+    ]
+}
+
+/// The ooRexx shared objects `binary` actually loads, sorted.
+///
+/// Derived from `ldd` rather than listed, so the fingerprint set cannot fall
+/// behind the build. Anything outside [`ORACLE_ROOT`] is the system's, not
+/// the oracle's, and is left out: `libc` moving is not this baseline's
+/// subject.
+fn oracle_objects(binary: &Path) -> Vec<PathBuf> {
+    let listing = capture("ldd", &[&binary.display().to_string()]);
+    let mut objects: Vec<PathBuf> = listing
+        .lines()
+        .filter_map(|line| line.split_once(" => "))
+        .filter_map(|(_, resolved)| resolved.split(" (").next())
+        .map(|path| PathBuf::from(path.trim()))
+        .filter(|path| path.starts_with(ORACLE_ROOT))
+        .collect();
+    objects.sort();
+    objects.dedup();
+    objects
+}
+
 #[allow(clippy::too_many_arguments)]
 fn write_provenance(
     report: &mut String,
     oracle_binary: &Path,
-    oracle_lib: &Path,
+    oracle_objects: &[PathBuf],
     rust_binary: &Path,
     pairs: usize,
     warmup: usize,
@@ -612,16 +676,25 @@ fn write_provenance(
         oracle_binary.display(),
         fingerprint(oracle_binary)
     );
-    // The launcher is 60 KB of `main`; the interpreter is the shared object
-    // it loads. A rebuild of the library alone leaves the launcher's
+    // The launcher is 60 KB of `main`; the interpreter is in the shared
+    // objects it loads. A rebuild of a library alone leaves the launcher's
     // fingerprint unchanged, so fingerprinting only `bin/rexx` would not
     // detect the oracle moving under this baseline.
-    let librexx = oracle_lib.join("librexx.so.4");
-    let _ = writeln!(
-        report,
-        "| oracle `lib/librexx.so.4` | {} |",
-        fingerprint(&librexx)
-    );
+    //
+    // Resolved from `ldd` rather than named here, so an object the oracle
+    // build gains later is fingerprinted without anyone remembering to add
+    // it. The two objects loaded today carry different dates, which is the
+    // observation that a hardcoded list is a list that can be short.
+    for object in oracle_objects {
+        let _ = writeln!(
+            report,
+            "| oracle `lib/{}` | {} |",
+            object
+                .file_name()
+                .map_or_else(|| "?".into(), |name| name.to_string_lossy()),
+            fingerprint(object)
+        );
+    }
     let _ = writeln!(
         report,
         "| this crate `rexx-run` | `{}` -- {} |",
@@ -734,9 +807,26 @@ fn write_axes(report: &mut String, rows: &[AxisRow], offset: &Paired) {
         report,
         "The throughput ratio (oracle iters/s over this crate's) and the wall ratio (this crate's \
          median over the oracle's) are the same number, because both sides run the same iteration \
-         count. The ratio interval is the conservative combination of the two sides' intervals. \
-         The verdict applies the plan's Global Constraints rule: this crate's point estimate \
-         against the oracle interval, slow side.\n"
+         count.\n"
+    );
+    // The joint coverage is stated because the obvious reading of the column
+    // is wrong. Dividing one side's interval by the other's is a Bonferroni
+    // combination: each endpoint can fail on either side, so the guarantee is
+    // one minus the sum of the two miss probabilities, not either side's own
+    // coverage. The verdict does not use this column -- it is the point
+    // estimate against the oracle interval, exactly as the gate is stated --
+    // so a later reader quoting the ratio interval as a 95% interval would be
+    // the only thing this narrows, and that is the reader worth protecting.
+    let joint = 1.0 - 2.0 * (1.0 - interval_coverage(rows));
+    let _ = writeln!(
+        report,
+        "**The ratio interval is indicative, and the verdict is not taken from it.** It divides \
+         one side's interval by the other's, so its joint coverage is at least {:.1}% by \
+         Bonferroni -- one minus the two sides' miss probabilities added -- not the {:.1}% either \
+         side carries alone. The verdict applies Global Constraints' rule directly: this crate's \
+         point estimate against the oracle's interval, slow side.\n",
+        joint * 100.0,
+        interval_coverage(rows) * 100.0
     );
     let _ = writeln!(
         report,
@@ -905,7 +995,18 @@ fn parse_cps(stdout: &[u8]) -> Option<u64> {
         .ok()
 }
 
-fn write_blocked(report: &mut String, rust: &Side, workdir: &Path) {
+/// Runs the axes declared [`Role::Blocked`], reports what each produced, and
+/// names any that no longer deserve the role.
+///
+/// **The role is checked, not trusted.** [`verify_axis_list`] pins which
+/// programs exist; it says nothing about whether a program still fails. When
+/// Phase 5 lands message sends these three start exiting 0, and with the role
+/// unchecked they would keep appearing under this heading with status 0 and an
+/// empty message, timed by nothing -- three dimensions dropping out of the
+/// measurement while the run stayed green, which is the same defect the axis
+/// pin exists to prevent arriving through a different door.
+fn write_blocked(report: &mut String, rust: &Side, workdir: &Path) -> Vec<String> {
+    let mut no_longer_blocked = Vec::new();
     let _ = writeln!(report, "### Axes this crate cannot run\n");
     let _ = writeln!(
         report,
@@ -919,6 +1020,9 @@ fn write_blocked(report: &mut String, rust: &Side, workdir: &Path) {
         let path = rexx_bench::program_path(axis.name);
         match run(rust, &path, workdir) {
             Ok(completed) => {
+                if completed.succeeded() {
+                    no_longer_blocked.push(axis.name.to_string());
+                }
                 let _ = writeln!(
                     report,
                     "| `{}` | {} | `{}` |",
@@ -939,6 +1043,16 @@ fn write_blocked(report: &mut String, rust: &Side, workdir: &Path) {
         }
     }
     let _ = writeln!(report);
+    if !no_longer_blocked.is_empty() {
+        let _ = writeln!(
+            report,
+            "**{} no longer fails on this crate and is still declared `Role::Blocked`.** \
+             It is being reported as unrunnable and timed by nothing. Give it `Role::Loop` \
+             and a loop bound, or decide deliberately that it stays out.\n",
+            no_longer_blocked.join(", ")
+        );
+    }
+    no_longer_blocked
 }
 
 #[cfg(test)]
@@ -961,6 +1075,63 @@ mod tests {
                 loop_count(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
             assert!(count > 0, "{} has a zero loop bound", path.display());
         }
+    }
+
+    /// Every axis declared `Role::Blocked` really does fail on this crate.
+    ///
+    /// The names pin is not enough on its own. It catches an axis leaving the
+    /// list; it cannot catch an axis staying in the list under a role that has
+    /// stopped being true. When Phase 5 lands message sends these three exit
+    /// 0, and without this they would go on being printed as unrunnable with
+    /// status 0 and an empty message while nothing timed them -- the pin's own
+    /// failure mode, reached by a different route. Red here forces the
+    /// decision instead.
+    #[test]
+    fn every_blocked_axis_still_fails_on_this_crate() {
+        let binary = rust_binary_candidates()
+            .into_iter()
+            .find(|path| path.is_file())
+            .unwrap_or_else(|| {
+                panic!(
+                    "neither target/release/rexx-run nor target/debug/rexx-run exists. This \
+                     test runs the blocked axes through this crate, and skipping instead \
+                     would let the roles below go unchecked while the run stayed green. \
+                     `cargo build -p rexx-exec --bin rexx-run` first."
+                )
+            });
+        let side = Side {
+            label: "rust",
+            binary,
+            env: Vec::new(),
+        };
+        let dir = std::env::temp_dir().join(format!(
+            "rexx-bench-suite-blocked-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&dir).expect("temporary directory");
+
+        let blocked: Vec<&Axis> = AXES.iter().filter(|a| a.role == Role::Blocked).collect();
+        assert!(
+            !blocked.is_empty(),
+            "no axis is declared Role::Blocked, so this test asserts nothing"
+        );
+        for axis in blocked {
+            let path = rexx_bench::program_path(axis.name);
+            // Through the same capped, directory-pinned wrapper the suite
+            // uses. `alloc.rex` allocates without bound if it ever starts
+            // running, and an uncapped in-process run of it would take the
+            // machine's memory rather than the test.
+            let completed = run(&side, &path, &dir).expect("the runner launches");
+            assert!(
+                !completed.succeeded(),
+                "{} is declared Role::Blocked but exited 0. The suite would report it as \
+                 unrunnable and time it with nothing. Give it Role::Loop and a loop bound, \
+                 or decide deliberately that it stays out",
+                axis.name
+            );
+        }
+        fs::remove_dir(&dir).ok();
     }
 
     /// `startup.rex` has no loop, so asking it for one is an error rather
