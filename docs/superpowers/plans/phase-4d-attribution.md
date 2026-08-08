@@ -11,6 +11,15 @@ Oracle `bin/rexx` sha256 `bb5bb8ccbb96c376e329b91aafdad891f975ba06c941dbceba82c3
 `lib/librexxapi.so.4` `3536b76379c23fc7e3c4bce97b57d3c4812291ce5d68e71adc507ee690dc7d66` -- all three
 match that section's Provenance exactly.
 
+**Revised after review, same day, same tree.**
+The first version of this file explained `alloc4c`'s 2.08x as a cost shared with the oracle.
+That was wrong and is corrected in C6: the oracle was profiled on that axis, which the first version
+never did, and it spends 56.0% of its time collecting where this crate spends none.
+Step 1's refutation was also rebuilt, because the model it refuted was not the one a reader would
+hold.
+No measurement was withdrawn and no share changed; what changed is one explanation, one argument,
+and the additions the two required.
+
 Three prototypes were built, measured, and reverted inside the commit that publishes this file.
 `sha256sum -c` against copies taken before the edits confirms `eval.rs`, `run.rs` and `value.rs`
 are byte-identical to their pre-prototype state, and the rebuilt `rexx-run` has the sha256 above.
@@ -41,23 +50,50 @@ by a factor of 36, which is the signature of one large workload-independent cons
 everything else.
 That constant is gone, and the hypothesis the spec recorded is now false.
 
-Two single-cause models are refuted directly by the table, and each would have implied one task
-rather than several:
+Three single-cause models were tested against that table, and the third is the one that has to be
+taken seriously.
 
-* **A constant additive per-iteration overhead.**
-  The differences run 214.0 ns to 3930.2 ns, an 18.4x range.
-  No constant fits.
 * **A constant multiplier.**
   The ratios run 2.08x to 10.61x, a 5.1x range.
-  No multiplier fits.
+  Refuted.
+* **A constant additive cost per *iteration*.**
+  The differences run 214.0 ns to 3930.2 ns, an 18.4x range.
+  Refuted, but this is a straw model and refuting it settles nothing: the axes execute different
+  numbers of clauses per iteration, so nobody should expect a per-iteration constant to fit.
+* **A constant additive cost per *clause*, which is the model that nearly fits.**
+  Loop-body clause counts are `varlookup` 2, `compound` 2, `alloc4c` 3, `strings` 5, `arith` 7,
+  giving per-clause differences of 107.0, 584.7, 404.7, 553.2 and 561.5 ns.
+  **Four of the five sit inside 1.44x of each other**, and counting the stepped `DO` header as well
+  (3, 3, 4, 6, 8) gives 71.3, 389.8, 303.6, 461.0 and 491.3 ns, still inside 1.62x.
+  That is a materially better fit than either model above, and it is not an idle one, because C7
+  below is literally a per-clause constant.
+
+**The per-clause model is refuted by the prototypes, not by the table, and this is what carries
+Step 1.**
+In one interleaved run, P1 moved `compound` **-51.6%** and `arith` **-0.7%**.
+No per-clause constant can produce that: `arith` executes 3.5 times as many clauses per iteration as
+`compound` and moved about seventy times less.
+P3 is the same argument from the other direction -- `arith` -16.3% while `strings` and `compound`
+got *slower* -- and a constant cannot have two signs.
+The effects are axis-specific in size and in direction, which is what a set of workload-specific
+causes looks like and what no single constant produces.
+
+**The near-fit is a consequence of the causes, not an alternative to them, and `varlookup` is where
+it visibly fails.**
+Most of the named causes below scale with clauses because each clause of these programs performs
+about one variable write and one or two allocations, so several per-clause and per-assignment costs
+aggregating to a similar per-clause figure is what should be expected.
+`varlookup`, at 107 ns per clause against 405-585 for the others, is the axis the constant fits
+worst and also the axis with the largest single named share in this document (C1 at 32.7%).
 
 So the residual is workload-specific, per-axis decomposition is warranted, and the rest of this
 document names causes rather than restating axes.
 
-**The reading is a description of five points, not a fitted law.**
-Comparing spans across axes assumes an "iteration" is comparable work between axes, which it is
-not; what carries the argument is the *shape* -- flat then, not flat now -- and the two refuted
-models, both of which are stated in units where the comparison is legitimate.
+**The span comparison above is a description of five points, not a fitted law**, and it is not what
+the conclusion rests on.
+Comparing spans across axes assumes an "iteration" is comparable work between axes, which it is not;
+the argument rests on the prototype split, which is measured in one run against one base and needs
+no such assumption.
 
 ## Method
 
@@ -68,11 +104,28 @@ Every run exited 0 and printed the bytes the baseline's "same work on both sides
 Analysed through `pollard` with `expand_inlines`, because almost every interesting callee here is
 inlined and the enclosing function is not the one paying.
 
-`unsymbolicated_pct` was 0 on `arith` and `varlookup` and at most 0.0095% on the other three, so
-the binary is the one named above.
+**`unsymbolicated_pct` is a per-run reading, not a property of the binary**, and it is quoted that
+way: on the five profiles this document uses it read 0 (`arith`), 0 (`varlookup`), 0.0010%
+(`compound`), 0.0076% (`strings`) and 0.0095% (`alloc4c`), and the oracle profile in C6 read 0.0158%.
+A re-profile of the same binary will read a different small number.
+What the readings establish is that the binary is the one named above, which is a threshold
+question, not that any particular figure recurs.
+
 The profiler did not distort the workload: profile durations against the committed baseline's
 medians are `alloc4c` 2.344 s against 2.3422 s, `arith` 3.086 s against 3.1207 s, `compound`
 6.766 s against 6.9965 s, `strings` 9.194 s against 9.1611 s, `varlookup` 5.258 s against 5.2800 s.
+
+**The wall-clock harness used for the prototypes below is not the baseline's harness, and the
+absolute figures are not interchangeable.**
+Both compute a ratio the same way -- raw median over raw median, with neither side's fixed
+per-process offset netted out -- but the baseline launches each child through a `/bin/sh` `ulimit`
+wrapper and times it with `Instant` inside `rexx-bench-suite`, while the runs below use a bash
+subshell with the `ulimit` builtin, timed with `date +%s.%N` around it.
+The baseline puts the per-process offset at no more than 0.84% of any axis on either side, so this
+is a small effect, but it is not a zero one and it is part of why the oracle-interleaved run's base
+medians below land between 7.2% under and 0.2% over the committed section's.
+**Every claim below is a within-run comparison for that reason**, and no figure here should be
+substituted into the baseline's tables.
 
 **A share below is a subtree total unless the text says "self".**
 A subtree total is the right unit for a cause, because a cause is a decision whose cost is spread
@@ -96,13 +149,20 @@ The implied ratio is the committed baseline's ratio multiplied by one minus the 
 | C6 every heap value is a fresh `malloc` into a never-swept arena | all five | self time in the glibc allocator: `alloc4c` 39.5%, `strings` 37.7%, `arith` 34.6%, `compound` 30.0%, `varlookup` 4.6% | see C6 below -- this row's share is not removable as stated |
 | C7 every stepped clause binary-searches the source line table | all five | `alloc4c` 6.0%, `varlookup` 2.9%, `compound` 1.8%, `arith` 1.6% | `alloc4c` 1.96x, `varlookup` 4.23x, `compound` 5.97x, `arith` 2.66x |
 
-**C1 and C4 overlap on `compound` and `alloc4c`, and nowhere else.**
-A compound access resolves its tail piece by name through the same `Plan::slot_of` C1 names, so
-C4's 12.7% on `compound` contains part of C1's 14.2% there.
-No other pair in the table shares a call site.
+**Do not sum these shares.**
+Two overlaps exist and both would be double-counted by a bar derived from two rows at once.
 
-**C6 is the one row whose share is not a prediction**, and the difference matters enough that it is
-kept in a different column shape rather than smoothed into the others.
+* **C1 and C4 overlap on `compound` and `alloc4c`.**
+  A compound access resolves its tail piece by name through the same `Plan::slot_of` C1 names, so
+  C4's 12.7% on `compound` contains part of C1's 14.2% there.
+  Among C1 to C5 and C7 that is the only shared call site.
+* **C6 overlaps every other row, by construction.**
+  C6 is *self* time in the allocator while C1 to C5 and C7 are subtree totals, and every one of
+  those subtrees allocates, so part of each axis's allocator share is already inside them.
+  C3 and C5 say so explicitly in their own sections; it is true of all of them.
+
+**C6 is also the one row whose share is not a prediction**, and the difference matters enough that
+it is kept in a different column shape rather than smoothed into the others.
 See C6 for why.
 
 ### C1 -- variable binding is resolved through a hash map on every access, and an assignment resolves by copying and hashing the name text
@@ -224,33 +284,89 @@ Self time in the glibc allocator family -- `int_malloc`, `int_free_chunk`, `tcac
 `unlink_chunk`, `malloc_consolidate`, `sysmalloc`, `realloc`, `free`, and the `mmap`/`munmap`/
 `mprotect` the allocator issues -- measured by grouping every matching frame by module:
 
-| axis | glibc allocator, self | this crate's arena side, self | baseline ratio |
-|---|---:|---:|---:|
-| `alloc4c` | 39.5% | 4.6% | 2.08x |
-| `strings` | 37.7% | 8.5% | 10.61x |
-| `arith` | 34.6% | 4.1% | 2.70x |
-| `compound` | 30.0% | not separated | 6.08x |
-| `varlookup` | 4.6% | negligible | 4.35x |
+| axis | glibc allocator, self | of which `mmap`/`munmap`/`mprotect` | this crate's arena side, self | baseline ratio |
+|---|---:|---:|---:|---:|
+| `alloc4c` | 39.5% | 3.5 pp | 4.6% | 2.08x |
+| `strings` | 37.7% | 5.9 pp | 8.5% | 10.61x |
+| `arith` | 34.6% | 1.9 pp | 4.1% | 2.70x |
+| `compound` | 30.0% | 0.0 pp | not separated | 6.08x |
+| `varlookup` | 4.6% | 0.2 pp | negligible | 4.35x |
 
 "This crate's arena side" is `Heap::alloc_with_uncollected` plus `core::ptr::write::<Slot>`, the
 push of a 96-byte `Slot` into `Heap.slots`.
 
-**Read the last two columns against each other, because that is the finding.**
+**The syscall column is disclosed because the grouping choice raises exactly the endpoint the
+finding below rests on**, and it is given so a reader can recompute without it.
+Excluding the three syscalls the ordering is `alloc4c` 36.0%, `arith` 32.7%, `strings` 31.8%,
+`compound` 30.0%, `varlookup` 4.4% -- `arith` and `strings` swap, and both endpoints hold: `alloc4c`
+is still highest and `varlookup` still lowest.
+
+**Read the allocator column against the ratio column, because that is the finding.**
 The axis with the *highest* allocator share is the axis *closest* to the oracle, and the axis with
 the *lowest* allocator share sits in the middle of the ratio range.
 Across the five axes the allocator share and the ratio do not move together at all.
 So a gate whose bars were derived from an allocation story would be derived from a quantity that
 does not predict the thing being gated.
 
-This is the direct answer to the flag `perf-baseline.md` raises under "`alloc4c`: the closest axis,
-and what that means".
-Task 2b asked whether `alloc4c`'s 2.08x means allocation is not this crate's bottleneck or means
-`alloc4c` undermeasures the load.
-The profile answers the first half: `alloc4c` does not undermeasure allocation -- it has the
-largest allocator share of any axis -- and the oracle still comes within 2.08x on it, which is what
-a shared cost looks like rather than a divergence.
-The C++ profile agrees from its own side: `MemoryObject::newObject` is 26% of the oracle's realistic
-benchmark, so the oracle is paying a comparable proportion for the same thing.
+#### Why `alloc4c` is 2.08x, and why that is a debt rather than headroom
+
+The finding above is about ordering, and it does not by itself explain the endpoint.
+The explanation is in the *denominator*, and it required profiling the oracle, which this document's
+first version did not do.
+
+**The oracle on `alloc4c` spends most of its time collecting, and this crate spends none, because
+this crate never collects.**
+Profiled on the same program, same wrapper, 1057 ms and 1080 samples:
+
+| oracle function | share |
+|---|---:|
+| `MemoryObject::newObject` | 69.1% total |
+| `MemoryObject::collect` | 56.0% total |
+| `MemoryObject::markObjects` / `markObjectsMain` | 46.6% total |
+| `CompoundTableElement::live` | **20.7% self**, 30.3% total -- the largest self-time function in the profile |
+| `MemorySegmentSet::sweep` | 9.4% total |
+| `RexxInteger::live` | 4.4% self |
+
+`CompoundTableElement::live` is the mark phase walking `tab.`'s tail table, and `alloc4c.rex`'s own
+header says that table is "a genuinely live, growing table on any interpreter".
+The oracle re-marks all of it on every collection; this crate marks nothing, ever.
+
+**Confirmed a second way, without a profiler.**
+The same program against one identical but for `tab.1 = i` in place of `tab.i = i`, so the tail table
+stops growing and everything else is unchanged.
+Five repetitions per cell, interleaved, same wrapper, all runs exit 0, and all four cells print
+`12888896`:
+
+| | oracle | this crate | ratio |
+|---|---:|---:|---:|
+| growing tail, as `alloc4c.rex` is written | 1077.4 ms | 2338.2 ms | **2.17x** |
+| flat tail | 184.1 ms | 1564.8 ms | **8.50x** |
+
+Removing the growing table makes the oracle **5.85x** faster and this crate **1.49x** faster.
+So **82.9% of the oracle's time on this axis is work the growing table causes it to do**, and with
+that work removed the axis reads about 8.5x -- the same neighbourhood as `strings`.
+
+**2.08x is therefore a debt, not headroom, and it will get worse when a collector lands.**
+The two sides are not paying for the same thing: the oracle pays mark and sweep over a live, growing
+table, and this crate pays `malloc` and then never reclaims anything.
+"A shared cost" -- which this document's first version claimed, citing
+`MemoryObject::newObject` at 26% of a *different* benchmark from the C++ memory file -- inverts what
+is happening, and the comparison was not sound either, since that 26% is a subtree total on another
+program set against this crate's self time on this one.
+The on-axis figure is 69.1%, and it takes one profile to get.
+
+**`phase-4d-retention.md`'s collection-trigger prototype covered `strings`, `arith`, `compound` and
+`varlookup`, and not `alloc4c`** -- the one axis where a collector has a large live set to re-mark
+and little to reclaim, and therefore the one axis where its cost is least offset.
+Whoever lands a trigger policy in 4d-2 should measure `alloc4c` before and after and expect the
+ratio to move the wrong way.
+
+This is also the direct answer to the flag `perf-baseline.md` raises under "`alloc4c`: the closest
+axis, and what that means", and it is the second of the two explanations that section offers rather
+than the first.
+`alloc4c` does not undermeasure this crate's allocation -- it has the largest allocator share of any
+axis -- but its *denominator* is inflated by collector work this crate does not perform, so 2.08x
+overstates how close this crate is on that dimension.
 
 **The share in this row is not a prediction, and no ratio is implied from it.**
 Removing "the allocator" is not a change anyone can make; what can be changed is how many
@@ -261,6 +377,9 @@ separate measured values:
   **16% faster on `strings`** and no movement its data could distinguish from noise on `arith`,
   `compound` or `varlookup`.
   That implies `strings` 10.61x -> 8.91x and nothing on the other three.
+  It measured **nothing on `alloc4c`**, which did not exist as an axis when that work was done, and
+  which the oracle profile above says is the axis where collection costs most and reclaims least.
+  A collector is a win on `strings` and a cost on `alloc4c`, and only the first half is measured.
 * **Allocation count.** A collector does not reduce it.
   C1, C2, C3 and C4 each remove allocations as a side effect, which is why P1's measured win on
   `compound` exceeds its profiled share.
@@ -406,8 +525,10 @@ are the same shape of defect: work that the parser or the plan already did, thro
 per iteration.
 C3, C4, C5 and C7 are four more instances of that same shape, at 14.5%, 12.7%, 9.9% and up to 6.0%.
 C6, the allocator, is the one large share that is *not* that shape, and it is also the one whose
-per-axis share does not predict the per-axis ratio, because the oracle pays a comparable
-proportion for the same thing.
+per-axis share does not order the axes by ratio -- not because the cost is shared, but because
+`alloc4c`, the axis that would otherwise anchor an allocation story, has a denominator inflated by
+collector work this crate does not perform.
+Read C6 before deriving any bar from an allocation figure.
 
 ## What is not attributed here
 
@@ -416,10 +537,16 @@ proportion for the same thing.
   decimal-division work from an implementation this crate could improve.
   The C++ profile's own `b3_decarith` row puts 73.5% of the oracle's time in arithmetic on a decimal
   benchmark, so some of this is shared cost.
-* **`strings`' remaining 23%** in `changestr` (12.2%), `pos` (5.8%) and `substr` (5.0%) after C5's
-  resolution overhead is taken out.
-  `strings` is the worst axis at 10.61x and the combined prototype barely moved it; whatever
-  explains it is in those three builtins and in C6, and this task did not decompose them.
+* **Most of `strings`, which is the worst axis and is not ready to carry a bar.**
+  Stated as the number Task 8 would need rather than as a gap: of 10.61x, the **named and removable**
+  share is C1's 7.6% plus C5's 9.9%, which is **17.5%**, implying 8.75x at best.
+  The only thing actually measured against it is the combined prototype's **2.8%**, a factor of six
+  short, and that 2.8% is itself marginal at n=5.
+  Everything else is C6 (37.7% self in the allocator, whose removability this document does not
+  establish) and the builtin bodies -- `changestr` 12.2%, `pos` 5.8%, `substr` 5.0% -- which are work
+  the oracle performs too and which nobody has opened.
+  So roughly a sixth of `strings` is attributed to a mechanism with a named fix, and a bar derived
+  from this document for that axis would be a bar over the unattributed five sixths.
 * **Which of C1's two halves the oracle's array index would remove**, beyond the bound P2 measured.
 * **The interaction between causes.**
   P1, P2 and P3 were measured individually and in combination; the combination's effect on
@@ -433,9 +560,18 @@ proportion for the same thing.
 cd rust
 cargo build --offline --release -p rexx-exec --bin rexx-run
 samply record --save-only -o <axis>.json ./target/release/rexx-run bench-programs/<axis>.rex
+
+# the oracle side of C6, which needs LD_LIBRARY_PATH and gives symbols from librexx.so.4
+LD_LIBRARY_PATH=<oracle>/lib samply record --save-only -o oracle-alloc4c.json \
+    <oracle>/bin/rexx <abs>/alloc4c.rex
 ```
 
 Run each from a fresh empty directory -- the scratchpad is on the oracle's external-routine search
 path -- and check `unsymbolicated_pct` on load before reading a share off the profile.
+
+C6's flat-tail control is `alloc4c.rex` with `tab.i = i` replaced by `tab.1 = i` and nothing else
+changed; both variants print `12888896`, which is what makes the pair comparable, and both sides must
+be run interleaved because the oracle's figure moves by a factor of six between them.
+
 The prototypes are throwaway and are not committed; each is the one edit its row in the table above
 describes.
