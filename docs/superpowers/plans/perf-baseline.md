@@ -766,24 +766,58 @@ the task that produced the run this section replaces, and passed the resulting n
 rather than a committed file, so no output file backs it; it is recorded here as a single-pair,
 explicitly-not-a-baseline figure on that basis, not as a measurement any task reproduced.
 That four-measurement spread -- 6.21x to 7.41x, about 1.2x peak to peak -- is wider than the spread
-across the four wall-clock ratios' repeat measurements across these same two runs, none of which
-moved by more than a few hundredths of a unit between them.
-**The two nine-pair runs agree far more tightly with each other than either does with the single-pair
-or contended figures**: 7.31x and 7.33x are 0.3% apart, against a 1.2x peak-to-peak spread across all
-four.
-Two independent nine-pair runs on nearly the same commit agreeing this closely is itself evidence the
-machine was quiet for both -- the same conclusion the four reproduced wall-clock ratios above support
-independently.
-The 7.15x-7.46x interval reported above is this run's own sign-test interval and does not capture
-that between-run movement; it describes how much the median would move if this exact run were
-repeated, not how much it moved when the run itself, the contention on the machine, or both changed.
+across the four wall-clock ratios' own repeat measurements taken within the task that produced the
+run this section replaces, none of which moved by more than a few hundredths of a unit between those
+repeats.
+
+**That earlier claim is about repeats within one task's own verification, and it does not extend to
+the comparison between that task's run and this one -- stretching it to cover this run as well is
+the specific mistake this paragraph now corrects.**
+Between the nine-pair run this section replaces and this run, the cps ratio moved from 7.31x to
+7.33x: 0.3%, the tightest agreement in the whole four-measurement spread.
+The four wall-clock ratios moved far less uniformly over that same gap: `arith` held flat at 2.70x
+and `varlookup` moved 4.34x to 4.35x, but `compound` fell 6.35x to 6.08x (-0.27, about 4%) and
+`strings` fell 10.77x to 10.61x (-0.16, about 1.5%) -- an order of magnitude more than the cps
+ratio's own movement over the identical gap.
+So cps agreeing tightly between these two runs is not evidence that the wall-clock ratios generally
+reproduce closely between them; on this evidence it is closer to the opposite pattern, and asserting
+the wider claim would repeat the error this paragraph exists to fix.
+
+**`compound`'s two across-run intervals do not overlap, and that carries further than a wording
+fix.**
+The run this section replaces reported `compound` at 6.35x, interval 6.32x-6.39x; this run reports
+6.08x, interval 6.02x-6.14x -- disjoint.
+Both are nine-pair sign-test intervals nominally targeting 96.1% coverage, both taken on a machine
+this task judged quiet by every check available to it (the address-space cap held, spreads sat
+inside or near the historical band, and the two runs' own `startup` offsets were of the same order),
+and they still share no point.
+That is direct evidence that between-run variance on `compound` exceeds what either run's own
+within-run interval reports: a sign-test interval describes how much one run's median would move if
+that exact run were repeated, not how far a second, independently-taken run's median can land.
+
+**This is an open question for Task 8, not one this task can close.**
+Global Constraints' performance gate (`:39`) defines its verdict on interval overlap -- the
+criterion's point estimate falling outside the C++ baseline's confidence interval, on the slow side.
+If between-run variance on an axis exceeds what that axis's single-run interval reports, as
+`compound`'s disjoint pair demonstrates it can, a gate decided from one run's interval can be decided
+by which run happened to be taken rather than by a real difference in speed.
+Two runs cannot establish a variance model and this task does not attempt one; the `compound` pair is
+recorded here as evidence that the question is live, for Task 8 to take up with however many runs a
+variance estimate actually needs.
+
+The 7.15x-7.46x interval reported above is this run's own sign-test interval and does not capture the
+between-run movement described here; it describes how much the median would move if this exact run
+were repeated, not how much it moved when the run itself, the time between runs, or both changed.
 Read 7.33x as the accepted figure for this measurement and read 6.21x-7.41x as the honest range
 across what has actually been observed, not as a tighter interval around 7.33x.
 
 Recorded as an observation about measurement stability, not attributed: nothing in this task looked
-for why the internal cps ratio moves more than the loop-axis ratios do between runs, though the two
-nine-pair figures' tight agreement suggests the movement seen so far is concentrated in the
-single-pair and contended measurements rather than being a property of nine-pair runs generally.
+for why the cps ratio and the wall-clock ratios move by such different amounts between these two
+particular runs.
+`compound`'s disjoint intervals are themselves evidence against treating nine-pair runs as reliably
+stable run-to-run -- the opposite of what looking at the cps figures alone would have suggested, and
+a reminder that a pattern seen in one measurement (cps) does not transfer to another (wall clock)
+without checking.
 
 ### What moved between the two baselines, and why
 

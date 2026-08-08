@@ -28,7 +28,19 @@
    does not exercise whatever forces a collection in alloc.rex's own design
    intent ("sized to force multiple collections"). It is not a substitute for
    a collection-forcing measurement once message sends land; it is the piece
-   of that axis this crate can run today. */
+   of that axis this crate can run today.
+
+   One further asymmetry, disclosed rather than left for a reader to notice:
+   alloc.rex's string is a fixed four characters ("item"); this program's
+   grows with `i`, from five characters at i=1 to eleven at i=1,000,000
+   (four plus up to seven digits). Judged immaterial at this size, checked
+   rather than assumed: `do i = 1 to 500000; s = "abcde"; end` and the same
+   loop with an eleven-character literal peaked at 69,108 KB and 68,812 KB
+   resident respectively on this crate (2026-08-09) -- no measurable
+   per-iteration cost from the extra six bytes, consistent with both
+   lengths landing in the same allocator size class well under the 96-byte
+   `Heap::Slot` overhead that dominates a short string's retained cost
+   (`docs/superpowers/plans/phase-4d-retention.md`). */
 n = 1000000
 total = 0
 do i = 1 to n
