@@ -193,6 +193,15 @@ impl Number {
             probe
                 .try_reserve_exact(request)
                 .map_err(|_| ArithError::SystemResources)?;
+            // The reservation is the whole point of the buffer, and nothing
+            // reads it afterwards, so the optimiser is entitled to delete the
+            // allocation and with it the failure this arm exists to report.
+            // It does: under `lto = "fat"` and without this line, `numeric
+            // digits 999999999999999999; r = 4.0 / 2` answers `2` instead of
+            // raising error 5, while the same build without LTO raises it.
+            // `black_box` forces the vector to exist, which forces the
+            // allocation to have been attempted.
+            std::hint::black_box(&probe);
         }
 
         // Long-divide the digit strings, generating one more digit than
