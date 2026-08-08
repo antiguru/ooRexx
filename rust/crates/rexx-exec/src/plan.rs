@@ -33,7 +33,6 @@ use rexx_parse::{
     ParseSource, Redirection, Signal, SymbolId, SymbolTable, Tail, Trace, Use, VariableRef,
     compound_parts,
 };
-use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -110,8 +109,7 @@ pub(crate) struct BodyKey {
 pub(crate) struct Plan {
     pub(crate) names: HashMap<Box<[u8]>, usize>,
     pub(crate) by_symbol: HashMap<SymbolId, usize>,
-    /// The static clause indent of each instruction in this body, memoised
-    /// by index. [`Plan::NO_INDENT`] means "not asked yet".
+    /// The static clause indent of every instruction in this body, by index.
     ///
     /// `static_indent` walks the flat instruction list from position zero to
     /// answer for one index, and `step_in_temps_frame` asks for the answer on
@@ -121,44 +119,30 @@ pub(crate) struct Plan {
     /// the single largest self-time function in the profile at 8.0%.
     ///
     /// The answer depends on the instruction list alone (`static_indent`'s
-    /// own doc comment: never on which iteration is running), so it can be
-    /// kept once it is known.
+    /// own doc comment: never on which iteration is running), so it belongs
+    /// here, with the rest of what one upfront pass over the body knows.
     ///
-    /// **Filled on first ask rather than by the upfront pass**, which is
-    /// measured rather than stylistic: filling every entry costs the body's
-    /// length per entry, and a body's clauses are not all executed. A
-    /// 20,000-clause body placed after an `EXIT` ran in 22 ms before this
-    /// field existed and 211 ms with it filled upfront. Asking only for what
-    /// is stepped makes the total no worse than computing on demand ever
-    /// was, since each index is then computed at most once.
-    ///
-    /// `Cell` because a `Plan` is shared through an `Rc` and so is never held
-    /// mutably; the interpreter is single-threaded, and nothing here escapes
-    /// to another one.
-    pub(crate) indents: Box<[Cell<usize>]>,
+    /// Filled by `all_indents`, which walks the body **once** for every
+    /// position rather than once per position -- that distinction is what
+    /// makes filling upfront affordable. Asking `static_indent` for each
+    /// index instead costs the body's length per index, and made a
+    /// 20,000-clause body placed after an `EXIT` go from 22 ms to 211 ms.
+    pub(crate) indents: Box<[usize]>,
 }
 
 impl Plan {
-    /// `indents`' own "not asked yet" marker. No clause indents this far.
-    pub(crate) const NO_INDENT: usize = usize::MAX;
-
-    /// The static clause indent of `target`, computed on the first ask and
-    /// remembered.
+    /// The static clause indent of `target`.
     ///
     /// `instructions` is a parameter rather than a field because a `Plan` is
     /// cached by `BodyKey`, and the body it describes is reached through the
-    /// `Rc<Program>` every caller already holds.
+    /// `Rc<Program>` every caller already holds. It is only consulted for a
+    /// position this plan has no entry for, which a body of the length the
+    /// table was built from cannot produce.
     pub(crate) fn indent_of(&self, instructions: &[Instruction], target: usize) -> usize {
-        let Some(slot) = self.indents.get(target) else {
-            return crate::run::static_indent(instructions, target);
-        };
-        let known = slot.get();
-        if known != Plan::NO_INDENT {
-            return known;
+        match self.indents.get(target) {
+            Some(indent) => *indent,
+            None => crate::run::static_indent(instructions, target),
         }
-        let computed = crate::run::static_indent(instructions, target);
-        slot.set(computed);
-        computed
     }
 
     /// Walks `body` once and returns a finished table (D16: "built by one
@@ -186,9 +170,7 @@ impl Plan {
         for instruction in &body.instructions {
             plan.note_instruction(&instruction.kind, symbols);
         }
-        plan.indents = (0..body.instructions.len())
-            .map(|_| Cell::new(Plan::NO_INDENT))
-            .collect();
+        plan.indents = crate::run::all_indents(&body.instructions);
         plan
     }
 
@@ -673,14 +655,14 @@ mod tests {
     use crate::Code;
     use rexx_parse::{Program, parse_interpret, parse_program};
 
-    /// `indent_of` answers what `static_indent` answers, for every index,
-    /// and answers the same thing the second time.
+    /// `indent_of` answers what `static_indent` answers, for every index.
     ///
-    /// It is a memo over `static_indent`, so the answers cannot differ by
-    /// arithmetic -- what can differ is the wiring: an off-by-one in which
-    /// slot an index reads or writes gives one instruction another's indent,
-    /// which every arm of this program has a distinct value for. The second
-    /// pass is the half that reads a filled slot rather than computing.
+    /// The table is filled by a separate traversal (`all_indents`), and
+    /// `all_indents_fills_what_static_indent_computes_for_every_corpus_program`
+    /// is what holds that traversal to this one. What this adds is the
+    /// wiring in between: an off-by-one in which entry an index reads gives
+    /// one instruction another's indent, and every arm of the program below
+    /// has a distinct value.
     #[test]
     fn indent_of_answers_what_static_indent_answers_at_every_index() {
         let source = b"if 1 = 1 then\n  do i = 1 to 2\n    say i\n  end\nelse\n  nop\nselect\n  when 1 = 0 then nop\n  otherwise\n    say 'o'\nend\n";
@@ -695,17 +677,15 @@ mod tests {
         let first: Vec<usize> = (0..instructions.len())
             .map(|index| plan.indent_of(instructions, index))
             .collect();
-        let second: Vec<usize> = (0..instructions.len())
-            .map(|index| plan.indent_of(instructions, index))
-            .collect();
-        assert_eq!(first, expected, "first pass, computing");
-        assert_eq!(second, expected, "second pass, reading the memo");
-        // The stored table itself, not only what the accessor answers: a
-        // write to the wrong slot leaves every other slot unfilled, and an
-        // unfilled slot is recomputed and so still answers correctly. Only
-        // looking at what was stored separates the two.
-        let stored: Vec<usize> = plan.indents.iter().map(Cell::get).collect();
-        assert_eq!(stored, expected, "what the memo actually holds");
+        assert_eq!(first, expected);
+        // The stored table itself, not only what the accessor answers: an
+        // accessor that recomputed on every call would satisfy the two
+        // assertions above while the table it reads from stayed empty.
+        assert_eq!(
+            plan.indents.as_ref(),
+            expected.as_slice(),
+            "what the table actually holds"
+        );
         // Not every index the same value, or the assertions above hold for a
         // memo that always answers with slot zero.
         assert!(

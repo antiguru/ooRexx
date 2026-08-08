@@ -7029,6 +7029,141 @@ impl Interp {
 /// state: a `WHEN`'s own condition sits at the `SELECT`'s own two, not zero,
 /// and `OTHERWISE`'s own body is two more, not the `WHEN`-`THEN` shape's
 /// four more.
+/// Fills `out[i]` with the static clause indent of every position in
+/// `[start, end)`, in one walk of the range.
+///
+/// The same traversal [`indent_in_range`] performs to answer for a single
+/// target, doing every position at once. That function answers one index by
+/// walking from the start of the body, so asking it for all of them costs
+/// the body's length squared; this costs the body's length.
+///
+/// **Every arm is the same arm, transcribed.** Each `return k` there becomes
+/// one assignment of `base + k` here, and each `return k +
+/// indent_in_range(a, b, target)` becomes a recursive fill of `[a, b)` at
+/// `base + k`. Where that function decides between an equality case and a
+/// range case, this one fills the range first and then writes the equality
+/// case over it -- the equality checks come first there, so they must win
+/// here. `whens` is walked in reverse for the same reason: that function
+/// answers from the *first* matching entry, and a later fill would otherwise
+/// overwrite an earlier one.
+///
+/// A transcription is a second statement of a dozen separately measured
+/// oracle behaviours, and it can be wrong where the original is right.
+/// `every_corpus_program_fills_the_indents_static_indent_computes` is what
+/// holds them together, over every program in the corpus rather than over
+/// examples chosen here.
+fn fill_indents(
+    instructions: &[Instruction],
+    start: usize,
+    end: usize,
+    base: usize,
+    out: &mut [usize],
+) {
+    let len = instructions.len();
+    let mut pc = start;
+    while pc < end {
+        out[pc] = base;
+        match &instructions[pc].kind {
+            InstructionKind::If { false_target, .. } => {
+                let false_target = false_target.unwrap_or(len);
+                let then_start = pc + 1;
+                fill_indents(
+                    instructions,
+                    then_start,
+                    false_target.min(len),
+                    base + 4,
+                    out,
+                );
+                if then_start < len {
+                    out[then_start] = base + 2;
+                }
+                match instructions.get(false_target).map(|i| &i.kind) {
+                    Some(InstructionKind::Else { then_exit }) => {
+                        let else_end = then_exit.unwrap_or(len);
+                        fill_indents(
+                            instructions,
+                            false_target + 1,
+                            else_end.min(len),
+                            base + 4,
+                            out,
+                        );
+                        out[false_target] = base + 2;
+                        pc = else_end;
+                    }
+                    _ => pc = false_target,
+                }
+                continue;
+            }
+            InstructionKind::Do(body) | InstructionKind::Loop(body) => {
+                let body_start = pc + 1;
+                let end_index = body.end.expect(
+                    "an unclosed DO/LOOP is error 14.1/14.5, so a body that parsed has this set",
+                );
+                fill_indents(instructions, body_start, end_index.min(len), base + 2, out);
+                // `END`'s own position: `indent_in_range` skips past it
+                // (`pc = end_index + 1`) and so answers for it from the
+                // enclosing level, which is what aligns an `END` with its
+                // `DO`.
+                if end_index < len {
+                    out[end_index] = base;
+                }
+                pc = end_index + 1;
+                continue;
+            }
+            InstructionKind::Select {
+                whens,
+                otherwise,
+                end: select_end,
+                ..
+            } => {
+                let select_end = select_end.unwrap_or(len);
+                // The arm's own fallback, written first so the shapes below
+                // overwrite it: a position inside a `SELECT` that matches
+                // none of them keeps the enclosing level rather than
+                // asserting anything about how it got there.
+                for slot in out.iter_mut().take(select_end.min(len)).skip(pc + 1) {
+                    *slot = base;
+                }
+                if let Some(otherwise_index) = otherwise {
+                    fill_indents(
+                        instructions,
+                        otherwise_index + 1,
+                        select_end.min(len),
+                        base + 4,
+                        out,
+                    );
+                    out[*otherwise_index] = base + 2;
+                }
+                for &when_index in whens.iter().rev() {
+                    let (body_start, body_end) = match &instructions[when_index].kind {
+                        InstructionKind::When { false_target, .. }
+                        | InstructionKind::WhenCase { false_target, .. } => {
+                            (when_index + 1, false_target.unwrap_or(len))
+                        }
+                        _ => continue,
+                    };
+                    fill_indents(instructions, body_start, body_end.min(len), base + 6, out);
+                    if body_start < len {
+                        out[body_start] = base + 4;
+                    }
+                    out[when_index] = base + 2;
+                }
+                pc = select_end;
+                continue;
+            }
+            _ => {}
+        }
+        pc += 1;
+    }
+}
+
+/// Every position's static clause indent, in one walk.
+pub(crate) fn all_indents(instructions: &[Instruction]) -> Box<[usize]> {
+    let mut out = vec![0usize; instructions.len()];
+    fill_indents(instructions, 0, instructions.len(), 0, &mut out);
+    out.into_boxed_slice()
+}
+
 pub(crate) fn static_indent(instructions: &[Instruction], target: usize) -> usize {
     indent_in_range(instructions, 0, instructions.len(), target)
 }
@@ -10363,6 +10498,61 @@ mod tests {
     /// This calls `static_indent` directly rather than through a raise,
     /// because a marker clause cannot raise -- there is no `FailureSite` to
     /// read one back from.
+    /// `all_indents` fills what `static_indent` computes, for every position
+    /// of every program in the corpus.
+    ///
+    /// The two are separate traversals of the same rules -- `static_indent`
+    /// walks the body once per position, `fill_indents` assigns every
+    /// position in one walk -- so the transcription can be wrong where the
+    /// original is right, and only running both over real programs shows it.
+    /// The corpus is the source rather than examples written here for the
+    /// usual reason: it grows when a construct lands, and a table of
+    /// hand-picked shapes does not.
+    ///
+    /// Programs that do not parse are skipped, since the corpus holds
+    /// deliberate syntax errors and there is no instruction list to compare.
+    #[test]
+    fn all_indents_fills_what_static_indent_computes_for_every_corpus_program() {
+        let corpus = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+        let mut compared = 0usize;
+        let mut positions = 0usize;
+        let mut directories = vec![corpus];
+        while let Some(directory) = directories.pop() {
+            for entry in std::fs::read_dir(&directory).expect("a readable corpus directory") {
+                let path = entry.expect("a readable directory entry").path();
+                if path.is_dir() {
+                    directories.push(path);
+                    continue;
+                }
+                if path.extension().and_then(|e| e.to_str()) != Some("rex") {
+                    continue;
+                }
+                let bytes = std::fs::read(&path).expect("a readable corpus program");
+                let Ok(program) = parse_program(bytes) else {
+                    continue;
+                };
+                let instructions = &program.main.instructions;
+                let filled = all_indents(instructions);
+                let expected: Vec<usize> = (0..instructions.len())
+                    .map(|index| static_indent(instructions, index))
+                    .collect();
+                assert_eq!(
+                    filled.as_ref(),
+                    expected.as_slice(),
+                    "{} disagrees",
+                    path.display()
+                );
+                compared += 1;
+                positions += instructions.len();
+            }
+        }
+        assert!(
+            compared > 40 && positions > 500,
+            "only {compared} programs and {positions} positions were compared, \
+             which is too little of the corpus to have tested anything"
+        );
+    }
+
     #[test]
     fn a_then_else_when_then_or_otherwise_markers_own_clause_indents_half_its_bodys() {
         // `IF`'s own `THEN`: `then_start` used to fall into the body's `+4`
