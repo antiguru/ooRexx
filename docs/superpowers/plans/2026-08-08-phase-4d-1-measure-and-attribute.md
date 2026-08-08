@@ -149,11 +149,21 @@ Confirm the linear growth and the per-iteration constant yourself. Vary the loop
 
 **Check the exit status and the output of every probe.** A program that dies on line 1 reports a small, stable, entirely meaningless resident set -- that mistake was made while checking this very finding, and the wrong number looked like a refutation of it.
 
-- [ ] **Step 2: Determine whether the collector runs at all during a loop**
+- [ ] **Step 2: Already answered -- confirm it, do not re-derive it**
 
-`Heap::collections_performed` is a cumulative counter incremented inside `collect` itself, and `run_program_collect_every_alloc` exists as a stress mode. Use them. Report how many collections a ten-million-iteration loop performs.
+**Measured 2026-08-08, before this task was dispatched: nothing triggers a collection automatically.**
 
-Three outcomes, and they have different owners: the collector never runs, so nothing triggers it; the collector runs but reclaims nothing, so something roots every temporary; or it reclaims correctly and the growth is elsewhere, in which case find where.
+`heap.collect` has exactly two production callers. `Interp::alloc_with` (`rexx-exec/src/lib.rs:2091`) calls it **only when `self.stress_collect` is set**, which is the test-only stress mode. The other is the user-callable `GC('Force')` builtin (`builtin/state.rs:234`). There is no allocation-count threshold, no heap-size threshold, and no other trigger anywhere in the crate, so a normal program never collects and the heap grows monotonically until the process dies.
+
+**The collector itself works.** On a two-million-iteration loop of `x = x + 1; y = x`, both runs exiting 0 with correct output: plain peaks at 423,892 KB, and the same loop calling `gc('Force')` every hundred thousand iterations peaks at 122,880 KB.
+
+So this is **a missing trigger policy, not a broken collector and not a root leak**, and the three-outcome question this step used to ask is settled at the first branch.
+
+Confirm the two call sites still read that way at the commit you are working from, then spend the effort on what is *not* known:
+
+* **What the 216 bytes per iteration actually are.** The loop's live set is two integers, so name what is allocated per iteration and why. `x = x + 1` and `y = x` between them allocate a number and rebind a variable; that should not cost 216 bytes retained.
+* **Why forcing a collection every hundred thousand iterations still leaves 123 MB** rather than the roughly 21 MB those iterations should account for. The likely answer is that the arena is a high-water mark and `collect` reclaims into free lists without returning pages, which would make peak RSS a measure of the largest interval between collections rather than of live data. **Confirm or refute that** -- it decides whether a trigger policy alone would fix the observed figures or only bound them.
+* **What a trigger policy would cost in time**, per Step 4. This is the number 4d-2 needs and the one nobody has.
 
 - [ ] **Step 3: Name the retained object and the root that holds it**
 
