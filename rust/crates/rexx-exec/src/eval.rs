@@ -311,10 +311,10 @@ impl Interp {
 
     fn eval_node(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Failure> {
         match &expr.kind {
-            ExprKind::Literal(bytes) => Ok(self.text(bytes)),
+            ExprKind::Literal(bytes) => Ok(self.literal(bytes)),
             // A constant's value is its own upcased spelling, which is
             // observable rather than incidental: `say 1e5` prints `1E5`.
-            ExprKind::Constant(id) => Ok(self.text(code.symbols.name(*id).as_bytes())),
+            ExprKind::Constant(id) => Ok(self.literal(code.symbols.name(*id).as_bytes())),
             ExprKind::Variable(id) => {
                 let (value, novalue) = self.read(code, *id);
                 self.novalue_check(novalue)?;

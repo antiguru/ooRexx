@@ -47,6 +47,31 @@ impl Interp {
         self.text_owned(bytes.to_vec())
     }
 
+    /// A source literal's value, inlined as a tagged integer when the
+    /// literal's own bytes are already exactly what that integer renders as,
+    /// and a heap string otherwise.
+    ///
+    /// A Rexx literal keeps its source spelling -- `05` prints `05` and `5.0`
+    /// prints `5.0` -- so only the canonical rendering is eligible, which is
+    /// what [`canonical_small_int`] decides.
+    ///
+    /// This is not a new kind of value. `number` already inlines every
+    /// arithmetic result that renders as a small integer, so a `SmallInt`
+    /// reaches every consumer in the crate already; what changes here is only
+    /// which of two existing representations a literal starts in.
+    pub(crate) fn literal(&mut self, bytes: &[u8]) -> ObjRef {
+        // Allocation is the thing being avoided, so the eligibility test may
+        // not render a candidate to compare it -- rendering allocates the
+        // string this exists to skip. The round trip is therefore stated as a
+        // byte pattern and checked, rather than performed.
+        if let Some(value) = canonical_small_int(bytes)
+            && let Some(handle) = ObjRef::small_int(value)
+        {
+            return handle;
+        }
+        self.text(bytes)
+    }
+
     /// [`text`], for a caller that already owns the bytes.
     ///
     /// **The copy `text` makes is a second allocation of the result's full
@@ -331,6 +356,39 @@ impl Interp {
 /// Caching this string on an object whose `created_form` is `Engineering`
 /// would seed the cache with the wrong one; `to_text`'s own lazy fill, keyed
 /// off the object's real `created_form`, is what must produce it.
+/// The integer a literal's bytes spell, when those bytes are exactly that
+/// integer's own rendering.
+///
+/// `Decoded::SmallInt` renders through `i64`'s `Display`, so the eligible
+/// spellings are the ones `Display` produces: an optional `-`, then digits
+/// with no leading zero unless the value is `0` itself. Everything else keeps
+/// its source spelling and stays a string -- `05`, `5.0`, `+5`, `1E5` and
+/// `-0` all render differently from the integer they denote, and a literal
+/// that renders differently from its source is a wrong answer, not a faster
+/// one.
+///
+/// Returns `None` rather than clamping when the value is outside the tag's
+/// range, because the caller's fallback is a correct heap string.
+fn canonical_small_int(bytes: &[u8]) -> Option<i64> {
+    let (negative, digits) = match bytes.split_first() {
+        Some((b'-', rest)) => (true, rest),
+        _ => (false, bytes),
+    };
+    if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    // `-0` is excluded by the same clause that excludes `05`: both render as
+    // something other than their own source bytes.
+    if digits[0] == b'0' && (digits.len() > 1 || negative) {
+        return None;
+    }
+    let magnitude: i64 = std::str::from_utf8(digits).ok()?.parse().ok()?;
+    let value = if negative { -magnitude } else { magnitude };
+    (SMALL_INT_MIN..=SMALL_INT_MAX)
+        .contains(&value)
+        .then_some(value)
+}
+
 fn small_int_for(value: &Number, created_digits: u32) -> Option<i64> {
     let rendered = value.format_form(u64::from(created_digits), Form::Scientific);
     if rendered.contains('.') || rendered.contains('E') {

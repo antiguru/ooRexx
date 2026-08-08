@@ -136,6 +136,23 @@ fn read_subset(list_paths: &[&Path]) -> Vec<String> {
 /// byte-identical, and the builtins leave the collector's reach silently.
 const SUBSET_FILES: &[&str] = &["phase-4a.txt", "phase-4b.txt", "phase-4c.txt"];
 
+/// The subset programs that allocate nothing, so collect-on-every-allocation
+/// has nothing to fire on.
+///
+/// Every value these four produce is a literal spelling a canonical small
+/// integer, and `Interp::literal` inlines those into the handle rather than
+/// the heap. `deep_nested_expr.rex` is the clearest case: three thousand
+/// terms, all of them the literal `1`, and not one allocation between them.
+///
+/// A program belongs here because of what it contains, not because it was
+/// inconvenient -- see the both-directions assertion at the use site.
+const NO_ALLOCATION_PROGRAMS: &[&str] = &[
+    "lang/deep_nested_expr.rex",
+    "lang/mutation_controlled_order.rex",
+    "lang/no_trailing_newline.rex",
+    "lang/trace_numeric_request.rex",
+];
+
 /// The phase subset files that exist in the corpus directory, sorted.
 ///
 /// Read from the directory rather than listed a second time, so the assertion
@@ -237,11 +254,30 @@ fn the_l0_subset_passes_again_under_collect_on_every_allocation() {
     // exactly the defect this criterion was rewritten to close. Checked
     // per program, not only in aggregate, so one silent program cannot
     // hide behind the rest of the subset's counts.
-    assert!(
-        zero_collection_programs.is_empty(),
-        "these programs performed zero collections under the stress mode, \
-         which the aggregate total alone would not have caught: {}",
-        zero_collection_programs.join(", ")
+    //
+    // The set is committed data rather than an emptiness check, because a
+    // program that allocates nothing is a legitimate state: a program whose
+    // only values are literals spelling canonical small integers allocates
+    // nothing at all, since `Interp::literal` inlines those into the handle
+    // instead of the heap.
+    //
+    // **Both directions.** A program joining this set has had an allocation
+    // silently removed; a program leaving it has gained one. Either is a
+    // change a human should look at, which a one-directional exemption
+    // would not force -- and an exemption nobody can fail is how a
+    // shrinking subset goes unnoticed.
+    let mut observed: Vec<&str> = zero_collection_programs
+        .iter()
+        .map(String::as_str)
+        .collect();
+    observed.sort_unstable();
+    let mut expected: Vec<&str> = NO_ALLOCATION_PROGRAMS.to_vec();
+    expected.sort_unstable();
+    assert_eq!(
+        observed, expected,
+        "the set of programs performing zero collections under the stress \
+         mode has drifted from the committed list; a program that gained an \
+         allocation and one that lost one are both worth deciding about"
     );
     assert!(
         total_collections > 0,
