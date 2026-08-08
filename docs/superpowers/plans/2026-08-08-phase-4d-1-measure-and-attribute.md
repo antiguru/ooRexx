@@ -128,10 +128,39 @@ Record the `arith` result explicitly against **Phase 2's outstanding parity debt
 
 ---
 
+### Task 2b: Re-establish the baseline, because five speedups landed after it
+
+Task 2's baseline was committed at `107febcd`. Five speedups landed after it -- `3799692d`, `b6b1d8a9`, `e1d50dda`, `c428ec8a`, `04ab4af6` -- so `perf-baseline.md`'s Phase 4d-1 section no longer describes this interpreter, and every task below that reads it would read a stale number.
+
+**That those speedups landed at all contradicts this phase's own no-optimisation rule** (Global Constraints, `:18`). They were measured and they were the user's call, and the consequence is recorded rather than argued: this unit can produce a *current* baseline and attribution, and cannot produce a pre-optimisation one. The bar-before-optimisation property is partly spent and no document should claim otherwise.
+
+**Staleness is already confirmed and the direction is known.** An indicative re-run on 2026-08-08 gave `arith` 2.60x against the committed 3.52x, `compound` 6.32x against 12.15x, `strings` 10.68x against 13.70x, `varlookup` 4.28x against 23.07x, and an internal cps ratio of 6.21x against 9.33x. **Those figures are not a baseline and must not be quoted as one**: their spreads reached 82.77 per cent on `strings` and 32.84 per cent on `arith`, against the committed baseline's 1.04 to 2.40 per cent, and an interval of 6.32x to 13.37x decides nothing. The machine was not quiet.
+
+**Files:**
+* Modify: `docs/superpowers/plans/perf-baseline.md`
+
+- [ ] **Step 1: Re-run the committed harness on a quiet machine**
+
+`./target/release/rexx-bench-suite`, built from `rust/`. Nothing else running -- no background build, no other benchmark, no editor indexing. The harness already interleaves and reports per-side spread; that spread is the check on whether the run is usable.
+
+- [ ] **Step 2: Reject the run if its spread is worse than the committed baseline's**
+
+The committed section's spreads are 1.04 to 2.40 per cent. A run whose spread is materially worse is not a baseline, and re-running it is cheaper than reasoning about which of two bad numbers to trust. Say in the document what spread the accepted run had.
+
+- [ ] **Step 3: Record both figures, with their commits**
+
+Follow the amendment discipline `phase-4c-gate.md` used for its criterion 4: carry **both wordings and the reason**. The old figures stay, marked as measured at `107febcd` and superseded, with the five speedup commits named as what moved them. A reader must be able to see that the numbers changed and why, rather than finding one set silently replaced.
+
+- [ ] **Step 4: Commit**
+
+---
+
 ### Task 3: Diagnose the unbounded per-iteration retention
 
 Task 2 measured peak resident set alongside wall time and found this crate between 51 and 218 times the oracle's, which sits near 20 MB on every axis.
-Follow-up measurement, 2026-08-08, on `do i = 1 to n; x = x + 1; y = x; end`: **retention grows linearly with iterations at roughly 216 bytes each** -- 213 MB at one million, 1.06 GB at five, 2.11 GB at ten -- and a literal loop bound behaves identically to a variable one (213,104 KB against 213,028 KB).
+Follow-up measurement, 2026-08-08, on `do i = 1 to n; x = x + 1; y = x; end`: retention grew linearly with iterations at roughly 216 bytes each -- 213 MB at one million, 1.06 GB at five, 2.11 GB at ten -- and a literal loop bound behaved identically to a variable one (213,104 KB against 213,028 KB).
+
+**Every figure in the paragraph above is stale, and this task re-measures rather than confirms.** All of it was taken at or before `107febcd`. Two of the speedups that landed afterwards remove per-iteration allocation on exactly the loop shape named here: `b6b1d8a9` does small-integer arithmetic without building a decimal, and `e1d50dda` steps a counted loop without building a `Number` per iteration. The per-iteration constant, the linearity and the RSS multiple may all have moved, and an implementer who sets out to *confirm* 216 bytes will either confirm a number that no longer exists or find a mismatch with no guidance on which figure governs. **Establish the current numbers first, report them against the ones above, and treat the difference as a finding rather than an error.**
 The oracle stays flat because it collects.
 
 **This is pulled ahead of the profiling task because it may not be a performance property at all.**
@@ -289,7 +318,7 @@ Back up with `cp` before mutating and restore from that backup, verifying with `
 
 ### Task 7: The allocator diagnostic
 
-A smoke profile of `arith` -- the axis closest to the oracle -- put roughly a third of self time in the glibc malloc family with the crate's own allocation path a further five per cent on top. One short run of one axis, so Task 5 supersedes it.
+A smoke profile of `arith` -- the axis closest to the oracle -- put roughly a third of self time in the glibc malloc family with the crate's own allocation path a further five per cent on top. One short run of one axis, so Task 6 supersedes it.
 
 This task exists for what it **rules out**, not for what it wins.
 
@@ -322,7 +351,7 @@ This is a runtime behaviour change, so unlike `lto` it does **not** go into the 
 **Files:**
 * Create: `docs/superpowers/plans/phase-4d-gate.md`
 
-- [ ] **Step 1: Write the criteria before reading Task 5's numbers again**
+- [ ] **Step 1: Write the criteria before reading Task 6's numbers again**
 
 Model the document on `docs/superpowers/plans/phase-4c-gate.md`, which renders **MET** or not per criterion in a table.
 
