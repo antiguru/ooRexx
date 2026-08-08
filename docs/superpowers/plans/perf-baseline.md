@@ -277,9 +277,14 @@ The Phase 0 criterion rows were taken against a different oracle build and this 
 that a baseline is measured at gate time, so none of those numbers are reused here.
 Both sides below were measured in one run, on the same machine, alternating.
 
-Produced by `rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs`, which emits this report as
-markdown so that no figure in it is retyped.
-Everything from "Provenance" to "Axes this crate cannot run" is that program's output verbatim.
+Produced by `rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs`.
+**Every heading from "Provenance" to "Axes this crate cannot run", and every table and paragraph
+under them, is that program's output byte for byte.**
+The prose before "Provenance" and after "Axes this crate cannot run" is written here and is not
+its output.
+That boundary is worth stating exactly, because 4d-2's re-measurement diffs a fresh run against
+this block to detect oracle drift, and a delta that turns out to be an edited sentence costs that
+task either a false alarm or the budget to reconcile it.
 
 ### Method, and the three choices that are not the obvious ones
 
@@ -316,87 +321,60 @@ stdout, stderr and exit status were read as three separate descriptors.
 
 | | |
 |---|---|
-| measured | 2026-08-08T09:22:05+02:00 |
-| repo commit | `044f56b9cd8c41ddb7ac3bcaa795985258cdb066` |
+| measured | 2026-08-08T10:35:41+02:00 |
+| repo commit | `7735aac4b393852ac9bd9088697d027b6b9c1f63` |
 | oracle `bin/rexx` | `/home/moritz/dev/repos/ooRexx/build/bin/rexx` -- size=62600 bytes, mtime=2026-08-05 16:02:20.172072564 +0200, sha256=bb5bb8ccbb96c376e329b91aafdad891f975ba06c941dbceba82c3848fa13019 |
 | oracle `lib/librexx.so.4` | size=17853856 bytes, mtime=2026-08-05 16:02:20.064306594 +0200, sha256=42136c4038004fe2d5104181e06873301f032ced97c54a0fe84042e006d9b6fb |
-| this crate `rexx-run` | `/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/target/release/rexx-run` -- size=12927176 bytes, mtime=2026-08-08 07:33:54.993191821 +0200, sha256=77f6680275f1ed4bdd68fab93bccb2568d3c2a440e0741ca53f2f97e361ae6ac |
+| oracle `lib/librexxapi.so.4` | size=667792 bytes, mtime=2026-07-30 23:06:46.077533141 +0200, sha256=3536b76379c23fc7e3c4bce97b57d3c4812291ce5d68e71adc507ee690dc7d66 |
+| this crate `rexx-run` | `/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/target/release/rexx-run` -- size=12927176 bytes, mtime=2026-08-08 09:34:35.308221101 +0200, sha256=77f6680275f1ed4bdd68fab93bccb2568d3c2a440e0741ca53f2f97e361ae6ac |
 | address-space cap | `ulimit -v 8388608` KiB, **both sides, every axis** |
 | pairs per axis | 9 sampled, 1 warm-up pair(s) discarded, oracle and this crate alternating |
 | pairs for the offset line | 51 sampled, 5 warm-up |
 | statistic | median; interval is the distribution-free sign-test interval for the median at a 95% target |
 | working directory of every child | a fresh empty temporary directory |
 
-The oracle's shared object is fingerprinted alongside its launcher.
-`bin/rexx` is 60 KB of `main`; the interpreter is `lib/librexx.so.4`, and a rebuild of the library
-alone would leave the launcher's fingerprint unchanged.
-This phase measures that binary here and again at the end of 4d-2, and
-`phase-4-exclusions.txt` records a sweep that moved from 18 mismatches to 12 with no code change
-and no harness noticing.
-
-The `rexx-run` hash was checked rather than assumed: forcing a rebuild of `rexx-exec` and its
-dependents under the pinned `[profile.release]` reproduced byte-identical output,
-`77f6680275f1ed4bdd68fab93bccb2568d3c2a440e0741ca53f2f97e361ae6ac`, so the binary measured is the
-one the recorded commit and profile produce.
-That rebuild moved the file's mtime, so the mtime in the row above is the one at measurement time
-and no longer matches the file; the hash is what identifies the binary and it does.
-
 ### Fixed per-process offset (`startup.rex`)
 
-**Not comparable, and not a pass.**
-This crate has no `CoreClasses.orx` bootstrap yet (Phase 5), so it starts fast by not doing the
-work the oracle does at startup.
-The two numbers below are each side's own fixed cost, reported so every axis can be read net of it
--- not as a result about which interpreter starts faster.
+**Not comparable, and not a pass.** This crate has no `CoreClasses.orx` bootstrap yet (Phase 5), so it starts fast by not doing the work the oracle does at startup. The two numbers below are each side's own fixed cost, reported so every axis above can be read net of it -- not as a result about which interpreter starts faster.
 
 | side | median | min | max | 95.1% interval | spread |
 |---|---:|---:|---:|---|---:|
-| oracle | 6.504 ms | 4.892 ms | 8.736 ms | 6.081 - 6.972 ms | 59.1 % |
-| this crate | 1.748 ms | 0.960 ms | 2.626 ms | 1.552 - 1.951 ms | 95.3 % |
+| oracle | 7.226 ms | 5.435 ms | 8.997 ms | 7.010 - 7.581 ms | 49.3 % |
+| this crate | 1.660 ms | 1.093 ms | 2.555 ms | 1.559 - 1.952 ms | 88.1 % |
 
 Both offsets include one `/bin/sh` `exec` from the `ulimit` wrapper, on both sides equally.
-Neither offset is large enough to matter to any axis below.
-The largest share it takes of any axis is 0.76%, the oracle's on `strings`, which is the oracle's
-shortest axis; on this crate's side the largest is 0.043%, on `arith`.
-That is exactly what reporting the offset separately was meant to establish rather than assume.
 
 ### Axes
 
-`iters/s` is the program's own loop bound, read out of the program text, divided by the median wall
-time.
-`iters/s net` divides by the median wall time less that side's per-process offset above.
+`iters/s` is the program's own loop bound divided by the median wall time. `iters/s net` divides by the median wall time less that side's per-process offset above.
 
 | axis | iterations | side | median | min | max | interval | spread | iters/s | iters/s net |
 |---|---:|---|---:|---:|---:|---|---:|---:|---:|
-| `arith` | 500000 | oracle | 1.1547 s | 1.1473 s | 1.1615 s | 1.1516 - 1.1586 s | 1.23 % | 433008 | 435461 |
-| `arith` | 500000 | this crate | 4.0920 s | 4.0711 s | 4.1102 s | 4.0718 - 4.1013 s | 0.96 % | 122189 | 122242 |
-| `compound` | 5000000 | oracle | 1.1458 s | 1.1299 s | 1.1617 s | 1.1341 - 1.1554 s | 2.78 % | 4363895 | 4388807 |
-| `compound` | 5000000 | this crate | 13.7525 s | 13.7194 s | 13.8723 s | 13.7438 - 13.7831 s | 1.11 % | 363572 | 363618 |
-| `strings` | 3000000 | oracle | 0.8512 s | 0.8488 s | 0.8755 s | 0.8489 - 0.8641 s | 3.15 % | 3524334 | 3551469 |
-| `strings` | 3000000 | this crate | 11.7783 s | 11.6486 s | 12.0490 s | 11.6608 - 11.8308 s | 3.40 % | 254705 | 254743 |
-| `varlookup` | 19000000 | oracle | 1.2080 s | 1.1894 s | 1.2799 s | 1.1956 - 1.2776 s | 7.49 % | 15728077 | 15813213 |
-| `varlookup` | 19000000 | this crate | 28.0147 s | 27.9363 s | 28.1389 s | 28.0029 - 28.0708 s | 0.72 % | 678216 | 678258 |
+| `arith` | 500000 | oracle | 1.1545 s | 1.1456 s | 1.1764 s | 1.1503 - 1.1637 s | 2.66 % | 433083 | 435811 |
+| `arith` | 500000 | this crate | 4.0694 s | 4.0446 s | 4.0974 s | 4.0611 - 4.0936 s | 1.30 % | 122868 | 122918 |
+| `compound` | 5000000 | oracle | 1.1440 s | 1.1342 s | 1.1605 s | 1.1349 - 1.1596 s | 2.29 % | 4370766 | 4398548 |
+| `compound` | 5000000 | this crate | 13.8938 s | 13.8525 s | 13.9972 s | 13.8582 - 13.9884 s | 1.04 % | 359873 | 359916 |
+| `strings` | 3000000 | oracle | 0.8648 s | 0.8472 s | 0.8759 s | 0.8543 - 0.8724 s | 3.31 % | 3469053 | 3498282 |
+| `strings` | 3000000 | this crate | 11.8497 s | 11.7281 s | 12.0120 s | 11.8111 - 11.8892 s | 2.40 % | 253172 | 253207 |
+| `varlookup` | 19000000 | oracle | 1.2140 s | 1.1891 s | 1.2754 s | 1.1988 - 1.2230 s | 7.11 % | 15651144 | 15744857 |
+| `varlookup` | 19000000 | this crate | 28.0086 s | 27.8945 s | 28.1793 s | 27.9243 - 28.1755 s | 1.02 % | 678362 | 678403 |
 
 #### Ratios and the gate call
 
-The throughput ratio (oracle iters/s over this crate's) and the wall ratio (this crate's median
-over the oracle's) are the same number, because both sides run the same iteration count.
-The ratio interval is the conservative combination of the two sides' intervals.
-The verdict applies Global Constraints' rule: this crate's point estimate against the oracle
-interval, slow side.
+The throughput ratio (oracle iters/s over this crate's) and the wall ratio (this crate's median over the oracle's) are the same number, because both sides run the same iteration count.
+
+**The ratio interval is indicative, and the verdict is not taken from it.** It divides one side's interval by the other's, so its joint coverage is at least 92.2% by Bonferroni -- one minus the two sides' miss probabilities added -- not the 96.1% either side carries alone. The verdict applies Global Constraints' rule directly: this crate's point estimate against the oracle's interval, slow side.
 
 | axis | oracle median | this crate median | ratio | ratio interval | verdict |
 |---|---:|---:|---:|---|---|
-| `arith` | 1.1547 s | 4.0920 s | 3.54x | 3.51x - 3.56x | SLOWER |
-| `compound` | 1.1458 s | 13.7525 s | 12.00x | 11.90x - 12.15x | SLOWER |
-| `strings` | 0.8512 s | 11.7783 s | 13.84x | 13.49x - 13.94x | SLOWER |
-| `varlookup` | 1.2080 s | 28.0147 s | 23.19x | 21.92x - 23.48x | SLOWER |
+| `arith` | 1.1545 s | 4.0694 s | 3.52x | 3.49x - 3.56x | SLOWER |
+| `compound` | 1.1440 s | 13.8938 s | 12.15x | 11.95x - 12.33x | SLOWER |
+| `strings` | 0.8648 s | 11.8497 s | 13.70x | 13.54x - 13.92x | SLOWER |
+| `varlookup` | 1.2140 s | 28.0086 s | 23.07x | 22.83x - 23.50x | SLOWER |
 
 #### Same work on both sides
 
-A wall time is only about the workload if the workload ran.
-Every sampled run on each side printed the same bytes, and the two sides printed the same bytes as
-each other.
+A wall time is only about the workload if the workload ran. Every sampled run on each side printed the same bytes, and the two sides printed the same bytes as each other.
 
 | axis | stable within a side | identical across sides | stdout |
 |---|---|---|---|
@@ -407,29 +385,23 @@ each other.
 
 ### `samples/rexxcps.rex`
 
-The oracle's own clauses-per-second benchmark, run from the read-only C++ tree.
-It self-calibrates: a trial that comes in at or under a second is run again at twice the count, so
-the two sides do **different amounts of work** and their wall times are not directly comparable.
-The clauses-per-second figure each side prints is per clause and is the comparable one.
-Each side's `Averaged:` line is quoted so the asymmetry is visible rather than inferred.
+The oracle's own clauses-per-second benchmark, run from the read-only C++ tree. It self-calibrates: a trial that comes in at or under a second is run again at twice the count, so the two sides do **different amounts of work** and their wall times are not directly comparable. The clauses-per-second figure each side prints is per clause and is the comparable one. Each side's `Averaged:` line is quoted so the asymmetry is visible rather than inferred.
 
 | side | wall median | wall interval | `Averaged:` |
 |---|---:|---|---|
-| oracle | 1.7754 s | 1.7650 - 1.7984 s | `Averaged: 200 x 100 iterations of 1000 clauses (over 1.2s)` |
-| this crate | 6.0409 s | 6.0142 - 6.0680 s | `Averaged: 100 x 100 iterations of 1000 clauses (over 5.5s)` |
+| oracle | 1.7973 s | 1.7630 - 1.8261 s | `Averaged: 200 x 100 iterations of 1000 clauses (over 1.2s)` |
+| this crate | 6.0882 s | 6.0737 - 6.1017 s | `Averaged: 100 x 100 iterations of 1000 clauses (over 5.5s)` |
 
 | side | median cps | min | max | 96.1% interval | spread |
 |---|---:|---:|---:|---|---:|
-| oracle | 17076182 | 16826547 | 17193682 | 16962982 - 17155572 | 2.15 % |
-| this crate | 1831046 | 1820826 | 1840277 | 1822934 - 1838647 | 1.06 % |
+| oracle | 16822174 | 16510464 | 17197674 | 16546553 - 17189869 | 4.09 % |
+| this crate | 1817623 | 1778937 | 1829822 | 1809548 - 1822448 | 2.80 % |
 
-**Internal cps ratio: 9.33x** (oracle median over this crate's median), interval 9.23x - 9.41x.
+**Internal cps ratio: 9.26x** (oracle median over this crate's median), interval 9.08x - 9.50x.
 
 ### Axes this crate cannot run
 
-Measured here rather than left out of the table, with the status and message each one actually
-produced.
-These belong to later tasks in this phase; what belongs to this one is that they are visible.
+Measured here rather than left out of the table, with the status and message each one actually produced. These belong to later tasks in this phase; what belongs to this one is that they are visible.
 
 | axis | exit status | message |
 |---|---:|---|
@@ -437,37 +409,64 @@ These belong to later tasks in this phase; what belongs to this one is that they
 | `dispatch` | 120 | `rexx-exec: a message send is not implemented (Phase 5)` |
 | `heapshape` | 120 | `rexx-exec: a message send is not implemented (Phase 5)` |
 
+
 ### What the baseline says
+
+**This section and everything after it is written here, not emitted by the harness.**
+
+**The oracle build is identified by three hashes, not one.**
+`bin/rexx` is 60 KB of `main`; the interpreter lives in the shared objects it loads, and `ldd`
+resolves two of them under the build root, carrying different dates.
+The suite fingerprints whatever `ldd` resolves rather than a list someone maintains, and refuses to
+print a table at all if it resolves nothing.
+This phase measures that build here and again at the end of 4d-2, and `phase-4-exclusions.txt`
+records a sweep that moved from 18 mismatches to 12 with no code change and no harness noticing.
+The C++ tree also carries an uncommitted local patch, so these hashes are the only identity that
+build has.
+
+The `rexx-run` hash was checked rather than assumed: forcing a rebuild of `rexx-exec` and its
+dependents under the pinned `[profile.release]` reproduced byte-identical output,
+`77f6680275f1ed4bdd68fab93bccb2568d3c2a440e0741ca53f2f97e361ae6ac`, so the binary measured is the
+one the recorded commit and profile produce.
+
+**Neither per-process offset is large enough to matter to any axis.**
+The largest share it takes is 0.84%, the oracle's on `strings`, which is the oracle's shortest
+axis; on this crate's side the largest is 0.041%, on `arith`.
+That is what reporting the offset separately was meant to establish rather than assume.
 
 **The spread of ratios across axes is real, not measurement noise.**
 This settles the phase's open hypothesis that the wide per-axis ratio spread might be a property of
 the oracle's variation rather than this crate's.
-It is neither: the four ratio intervals -- 3.51-3.56, 11.90-12.15, 13.49-13.94, 21.92-23.48 -- do
+It is neither: the four ratio intervals -- 3.49-3.56, 11.95-12.33, 13.54-13.92, 22.83-23.50 -- do
 not come close to overlapping each other, while the widest single-side run-to-run spread in the
-axes table is the oracle's 7.49% on `varlookup`.
-The per-workload differences are a factor of 6.5 from end to end and the measurement variation is a
+axes table is the oracle's 7.11% on `varlookup`.
+The per-workload differences are a factor of 6.6 from end to end and the measurement variation is a
 few percent, so attribution per axis is well founded, which is what Tasks 3 and 4 depend on.
 
+The hypothesis did guess the right side, for what that is worth: the oracle's run-to-run spread
+exceeds this crate's on all four axes (2.66 against 1.30, 2.29 against 1.04, 3.31 against 2.40,
+7.11 against 1.02).
+It is simply two orders of magnitude too small to explain anything.
+
 Absolute throughput is what makes that readable, and it is why the ratio alone would not have been
-enough: this crate does 678,216 variable-lookup iterations a second against the oracle's
-15,728,077, and 122,189 arithmetic iterations against 433,008.
+enough: this crate does 678,362 variable-lookup iterations a second against the oracle's
+15,651,144, and 122,868 arithmetic iterations against 433,083.
 `arith` is the axis where this crate is closest to the oracle in ratio terms *and* the axis where
 both sides are slowest in absolute terms.
 
-**`arith` is 3.54x, against the 1.22x recorded as Phase 2's parity debt.**
+**`arith` is 3.52x, against the 1.22x recorded as Phase 2's parity debt.**
 `d1-decision.md`'s "Phase 2 addendum -- arithmetic at 1.22x, recorded as debt (2026-07-28)"
-recorded 1.22x and said in the same entry that it was a **lower bound**,
-because it timed Rust arithmetic alone against a C++ figure that already included parsing,
-dispatch and variable lookup, and that it would get worse once the Rust side started paying those
-costs.
+recorded 1.22x and said in the same entry that it was a **lower bound**, because it timed Rust
+arithmetic alone against a C++ figure that already included parsing, dispatch and variable lookup,
+and that it would get worse once the Rust side started paying those costs.
 It did, by a factor of 2.9.
 This is that debt's scheduled Phase 4 re-measurement, and the entry's own prediction is confirmed
 rather than contradicted.
 
-**`rexxcps` is 9.33x, against 10.02x and 10.09x measured 2026-08-06.**
-The oracle moved little (17,076,182 cps here against 16,821,745 and 16,982,729 then, though those
+**`rexxcps` is 9.26x, against 10.02x and 10.09x measured 2026-08-06.**
+The oracle barely moved (16,822,174 cps here against 16,821,745 and 16,982,729 then, though those
 were means of five runs and this is a median of nine); this crate moved from about 1.68 M cps to
-1.83 M, roughly 9%.
+1.82 M, roughly 8%.
 Recorded as an observation, not attributed: nothing in this task looked for what changed between
 those commits.
 
@@ -503,13 +502,18 @@ Landing a speedup before the gate exists destroys the property this unit is buil
 ```sh
 cd rust
 cargo build --offline --release -p rexx-exec --bin rexx-run -p rexx-bench
-./target/release/rexx-bench-suite > baseline.md      # about 11 minutes
+./target/release/rexx-bench-suite > baseline.md      # about 12 minutes
 ./target/release/rexx-bench-suite --self-check       # one pair per axis, plumbing only
 ```
 
 `--self-check` runs a single pair per axis and labels its own output as not a baseline; it exists
-so the harness can be exercised without spending eleven minutes and without producing a table that
+so the harness can be exercised without spending twelve minutes and without producing a table that
 could be mistaken for one.
+
+The suite exits non-zero, and says so at the top of the section it would otherwise have produced,
+when an axis fails to complete or when an axis declared `Role::Blocked` stops failing. The second
+of those is the case that matters after Phase 5: three dimensions would otherwise keep appearing
+under "Axes this crate cannot run" with status 0 and an empty message, timed by nothing.
 
 ## What is still missing
 
@@ -517,11 +521,9 @@ could be mistaken for one.
   add a job per platform that builds the C++ oracle, runs this same suite, and either commits
   numbers here or documents why a platform could not produce them (the known OpenBSD SIGSEGV is
   the anticipated case for that one, per Task 0.7's own text). `rexx-bench-suite` is Linux-only as
-  written: the address-space cap is a `/bin/sh` builtin and the fingerprints come from `stat` and
-  `sha256sum`.
-- A Rust side for `dispatch`, `alloc` and `heapshape`. Those three exit 120 on a message send and
-  are Phase 5's, so the 4d-1 section above covers five of the eight `bench-programs/` dimensions
-  with both sides, and reports the other three as blocked rather than omitting them.
-- `rexx_bench::PROGRAMS`, which the criterion harness iterates, names seven programs and the
-  benchmark directory holds eight -- `heapshape` is absent from it. The 4d-1 suite does not reuse
-  that list for exactly this reason; it declares its own and asserts it against the directory.
+  written: the address-space cap is a `/bin/sh` builtin, and the fingerprints come from `ldd`,
+  `stat` and `sha256sum`.
+- A Rust side for the axes under "Axes this crate cannot run" above. That table is the live list,
+  emitted by the suite from the roles in its own source; each entry exits on a message send and is
+  Phase 5's. The suite reports them rather than omitting them, and turns red if one stops being
+  blocked while still declared so.
