@@ -74,11 +74,12 @@ use crate::trace::{
     is_whole_number, mode_from_setting, raised_invalid_trace_letter,
     raised_numeric_trace_interactive_only,
 };
+use crate::value::{exact_small_int, within_digits};
 use crate::{
     ActiveCondition, Argument, CallContext, Code, Failure, InstalledRoutine, Interp, Loud, Novalue,
     PendingTrap,
 };
-use rexx_core::{ObjRef, SlotFrame, SlotRef};
+use rexx_core::{Decoded, ObjRef, SlotFrame, SlotRef};
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
     ConditionTrap, ControlExpr, Controlled, DirectiveKind, EndStyle, Expr, ExprKind, Fragment,
@@ -550,7 +551,7 @@ enum LoopState {
     /// `setup_controlled` already defaulted it to `1`.
     Controlled {
         control: SymbolId,
-        current: Number,
+        current: ControlValue,
         to: Option<Number>,
         by: Number,
         for_remaining: Option<u64>,
@@ -565,6 +566,43 @@ enum LoopState {
         /// function without passing through the top of the driver's loop.
         stepped: bool,
     },
+}
+
+/// A controlled loop's running control value.
+///
+/// `Small` is not a different value from `Wide`, only a cheaper way to hold
+/// the same one: a counted loop spends its whole life on integers small
+/// enough to add in a register, and holding those as a `Number` costs a heap
+/// `Vec` per iteration for the increment and another for the bound test.
+///
+/// `Small` is produced **only** where the value was computed as an `i64` in
+/// the first place, never by converting a `Number` that arrived some other
+/// way. A `Number` carries its own spelling (`1.50` and `1.5` are different
+/// objects), and while every spelling this could hold renders the same, the
+/// conversion would be a second place where that has to stay true.
+enum ControlValue {
+    Small(i64),
+    Wide(Number),
+}
+
+impl ControlValue {
+    /// The value as a `Number`, borrowed when it already is one.
+    fn number(&self) -> Cow<'_, Number> {
+        match self {
+            ControlValue::Small(value) => Cow::Owned(Number::from_i64(*value)),
+            ControlValue::Wide(number) => Cow::Borrowed(number),
+        }
+    }
+
+    /// The value as an integer exact at `digits`, or `None` when it is not
+    /// one -- the same condition `Number::plain_integer` decides, asked of
+    /// either representation.
+    fn small(&self, digits: u64) -> Option<i64> {
+        match self {
+            ControlValue::Small(value) => within_digits(*value, digits).then_some(*value),
+            ControlValue::Wide(number) => number.plain_integer(digits),
+        }
+    }
 }
 
 /// What `eval_condition` should do with the value it just computed, beyond
@@ -5627,8 +5665,28 @@ impl Interp {
                         self.trace_variable(loop_indent, &name, &rendered);
                         self.trace_result(loop_indent, &rendered);
                     }
-                    let read = self.arith_operand(previous)?;
-                    *current = read.add(by, digits).map_err(Raised::from)?;
+                    // The increment, on integers when it can be. `previous`
+                    // comes back out of the variable pool as a tagged small
+                    // integer for every ordinary counted loop, and `BY` is
+                    // whole; the guard is the same one `eval`'s own
+                    // arithmetic fast path uses, and for the same reason --
+                    // an operand too wide for `DIGITS` is rounded before the
+                    // addition, so the exact `i64` sum would be the wrong
+                    // answer.
+                    let stepped = match previous.decode() {
+                        Decoded::SmallInt(value) if within_digits(value, digits) => by
+                            .plain_integer(digits)
+                            .and_then(|step| value.checked_add(step))
+                            .filter(|sum| within_digits(*sum, digits)),
+                        _ => None,
+                    };
+                    *current = match stepped {
+                        Some(sum) => ControlValue::Small(sum),
+                        None => {
+                            let read = self.arith_operand(previous)?;
+                            ControlValue::Wide(read.add(by, digits).map_err(Raised::from)?)
+                        }
+                    };
                 }
                 // The first pass takes the value the header already computed,
                 // unincremented and with no line of its own beyond the `>=>`
@@ -5636,8 +5694,14 @@ impl Interp {
                 // `getValue`, whose comment says why: the initial assignment
                 // was already traced during setup, and tracing here too
                 // "prevents getting an extra add looking item traced".
-                let value =
-                    self.number(current.clone(), crate::eval::saturate_digits(digits), form);
+                let value = if let ControlValue::Small(small) = current
+                    && let Some(handle) = exact_small_int(*small, digits)
+                {
+                    handle
+                } else {
+                    let number = current.number().into_owned();
+                    self.number(number, crate::eval::saturate_digits(digits), form)
+                };
                 let bind_indent = if re_tested { loop_indent } else { do_indent };
                 if re_tested && let Some(rendered) = self.result_text(value) {
                     self.trace_result(loop_indent, &rendered);
@@ -5650,12 +5714,44 @@ impl Interp {
                     return Ok(false);
                 }
                 if let Some(to) = to {
-                    let by_negative =
-                        numeric_less(by, &Number::zero(), digits, fuzz).map_err(Raised::from)?;
-                    let within = if by_negative {
-                        !numeric_less(current, to, digits, fuzz).map_err(Raised::from)?
-                    } else {
-                        !numeric_less(to, current, digits, fuzz).map_err(Raised::from)?
+                    // The bound test, on integers when it can be.
+                    // `numeric_less` reaches it through a subtraction, which
+                    // allocates twice per pass for what an `i64` comparison
+                    // answers outright.
+                    //
+                    // **`FUZZ` is why this needs a guard beyond the three
+                    // values being integers.** A nonzero `FUZZ` compares at
+                    // *less* than `DIGITS` precision, so two integers that
+                    // differ can still compare equal, and no `i64`
+                    // comparison expresses that. `FUZZ` is `0` unless a
+                    // program says otherwise.
+                    let integral = (fuzz == 0)
+                        .then(|| {
+                            Some((
+                                current.small(digits)?,
+                                to.plain_integer(digits)?,
+                                by.plain_integer(digits)?,
+                            ))
+                        })
+                        .flatten();
+                    let within = match integral {
+                        Some((current, to, by)) => {
+                            if by < 0 {
+                                current >= to
+                            } else {
+                                current <= to
+                            }
+                        }
+                        None => {
+                            let current = current.number();
+                            let by_negative = numeric_less(by, &Number::zero(), digits, fuzz)
+                                .map_err(Raised::from)?;
+                            if by_negative {
+                                !numeric_less(&current, to, digits, fuzz).map_err(Raised::from)?
+                            } else {
+                                !numeric_less(to, &current, digits, fuzz).map_err(Raised::from)?
+                            }
+                        }
                     };
                     if !within {
                         return Ok(false);
@@ -5762,7 +5858,10 @@ impl Interp {
         };
         Ok(LoopState::Controlled {
             control: ctrl.control,
-            current,
+            // The header's own value, kept as the `Number` the header
+            // produced. The first re-test replaces it, and that is where the
+            // integer representation gets picked up.
+            current: ControlValue::Wide(current),
             to,
             by,
             for_remaining,

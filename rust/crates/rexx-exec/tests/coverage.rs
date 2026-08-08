@@ -604,6 +604,11 @@ const EXPECTED_SUBSET: &[&str] = &[
     // report's 40-column indent saturation, which no other program in this
     // list nests deeply enough to reach.
     "lang/deep_nesting_indent_cap.rex",
+    // A controlled loop's per-step rounding, and specifically the value the
+    // *next* step adds to. No other program in this list advances a control
+    // variable past its own DIGITS, so none of them can tell the rounded sum
+    // from the exact one.
+    "lang/loop_control_rounding.rex",
 ];
 
 #[test]

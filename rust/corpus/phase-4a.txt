@@ -71,3 +71,12 @@ lang/mutation_controlled_order.rex
 # the oracle printed 40 at depth 25 and the interpreter printed 50 -- and no
 # program in this subset nested deeply enough to see it.
 lang/deep_nesting_indent_cap.rex
+
+# The control variable's own rounding, per step and against the value the
+# previous step stored. The distinguishing case is the first loop in the file:
+# at DIGITS 3 the exact sum and the rounded sum render identically for one
+# step and part company on the next, so a fast path that carries the exact
+# sum forward matches the oracle for two lines and then trails it by one step
+# for the rest of the loop. Nothing else in this subset advances a control
+# variable past its own precision.
+lang/loop_control_rounding.rex
