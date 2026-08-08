@@ -22,18 +22,22 @@ of the two causes is a genuine root leak that a garbage collector would not touc
   triggers a collection.
   A retained object costs 96 bytes of arena slot plus its own payload -- 128 bytes for a short
   string, 144 for a wide decimal.
-* **Cause B, a counted loop's control temp is rooted until the loop ends.**
-  `DO i = 1 TO n` pushes one root per iteration in `Interp::loop_advance` and pops none of them
-  until the enclosing `DO` clause finishes, so the root set grows 8 bytes an iteration.
-  A collector cannot reclaim through it: the roots are live by definition, so when the control
-  variable's values are heap objects the loop pins every one of them.
+* **Cause B, a loop header's temps are rooted until the loop ends.**
+  Two sites push one root per pass and pop none of them until the enclosing `DO` clause finishes:
+  `Interp::loop_advance` for a counted loop's control variable, and `Interp::eval_condition` for
+  every `WHILE` or `UNTIL` test.
+  Either grows the root set 8 bytes a pass, and a loop with both pays both.
+  A collector cannot reclaim through them: the roots are live by definition, so when the values are
+  heap objects the loop pins every one of them.
 
 Both are defects rather than performance properties, and both are recorded in
 `phase-4-exclusions.txt` under KNOWN GAPS.
 
-**Fixing both is a win on time as well as memory.**
+**Fixing them is a win on time as well as memory.**
 Measured by prototype, then reverted: peak RSS falls 42x on `arith`, 60x on `varlookup` and 298x on
 `strings`, and `strings` gets 16% *faster*.
+Those figures cover cause A and cause B's `loop_advance` site; the `eval_condition` site was located
+and measured but not prototyped, so what closing it is worth is unquantified.
 
 ## The stale figures, and what replaces them
 
@@ -117,25 +121,44 @@ per-iteration column subtracts the 2,500 KB floor a trivial program occupies.
 | `do i = 1 to n` | `if i = n then nop` | 1,063,640 KB | 135.8 |
 | `do i = 1.5 to n by 1` | `nop` | 1,064,416 KB | 135.9 |
 | `do while k < n` | `k = k + 1` | 1,063,580 KB | 135.8 |
+| `do while k < n` | `k = k + 1; nop` | 1,063,848 KB | 135.9 |
 | `do forever` | `k = k + 1; if k = n then leave` | 1,001,456 KB | 127.9 |
+| `do n while zz`, `zz = 1` | `nop` | 64,468 KB | 7.9 |
+| `do n until zz`, `zz = 0` | `nop` | 63,704 KB | 7.8 |
+| `do n while zz`, `zz = 1` | `k = k + 1` | 63,956 KB | 7.9 |
 
 Read the table as four constants: **0, 8, 128 and 384**, plus 8-and-128 added together as 136.
 
 * **0 is the negative control that matters most.**
-  `do n` -- a repeat-count loop with no control variable -- retains nothing at all, at any body that
-  allocates nothing.
+  `do n` -- a repeat-count loop with no control variable and no condition -- retains nothing at all,
+  at any body that allocates nothing.
   Eight million iterations, eight million clause steps, and a flat 2.5 MB.
   So neither "iterating" nor "stepping a clause" retains anything, and any explanation that says
   otherwise is refuted by this row.
-* **8 is the counted loop's control variable**, and only the control variable.
-  It appears whenever the header is `DO i = ...` and never when it is `DO n`, `DO WHILE` or
-  `DO FOREVER`, and it does not move when the body is doubled from one `nop` to two.
+* **8 is one loop-header temp per pass, and there are two independent sources of it.**
+  A counted header contributes one, for the control variable.
+  A `WHILE` or `UNTIL` test contributes one, whatever the header around it.
+  The last three rows isolate the second source with the first absent: `do n while zz` on a bare
+  variable allocates nothing on either side of the test, has no control variable at all, and still
+  retains 7.9 bytes a pass against the same loop without the condition at 0.0.
+  `UNTIL` behaves identically, and adding a body clause does not move it.
+* **A loop pays 8 for each source it has.** `do i = 1 to n while ...` would pay 16; no row here
+  measures that combination, and the arithmetic is stated rather than measured.
 * **128 is one retained string object**, and it does not care what produced it: a literal
   assignment, a comparison's `0`, an `IF`'s test.
   `if 1 then nop` and `if k then nop` cost nothing because a literal `1` is inlined (`3799692d`) and
   a variable read allocates nothing, which is what isolates the 128 to the *comparison's result*
   rather than to `IF`.
 * **384 is three of them**: `'a'`, `'b'` and the concatenation.
+* **136 is 128 and 8 added, and reading it that way is what corrects the row above it.**
+  `do while k < n` costs 135.8 because the comparison's result is a retained heap object (128, cause
+  A) *and* the `WHILE` test leaves a rooted temp behind (8, cause B).
+  `do forever` with the same counting body costs 127.9 -- the 128 only -- because it has no `WHILE`
+  test, and the `IF` in its body does not leak: an `IF` is its own instruction, so the
+  `step_in_temps_frame` around it pops every pass.
+  `do n; if k = 5 then nop; end` at 127.9 is the same statement from the other side.
+  **The leak is `eval_condition` called from a loop header, not `eval_condition` as such**, and the
+  difference is which frame the caller runs inside.
 * **`zz = zz + 1` costs nothing** inside a `do n` loop, which is `b6b1d8a9` visible from the memory
   side: a small-integer sum is a tagged immediate and never reaches the heap.
   Give it an operand that cannot be one -- `do i = 1.5 to n`, or a 25-digit addend -- and the 128
@@ -184,7 +207,21 @@ They are not reachable from `RootSet` at all -- the per-clause temps frame that 
 popped when the clause ended, and the variable they were bound to has been rebound many times since.
 They are retained because the sweep that would notice never runs.
 
-### Cause B -- `RootSet.temps`, grown by `loop_advance`, popped only at loop exit
+### Cause B -- `RootSet.temps`, grown by a loop header, popped only at loop exit
+
+**Two push sites, not one, and any explanation that names only the counted form is incomplete.**
+`Interp::loop_advance` pushes the control variable's previous value; `Interp::eval_condition`
+(`run.rs:6016`) pushes the result of every `WHILE`/`UNTIL` test.
+Both run inside the *same single* `step_in_temps_frame` -- the one belonging to the whole `DO`
+instruction -- so both accumulate for the loop's entire run.
+
+**The tree already said so, and this document's first version missed it.**
+`step_in_temps_frame`'s own doc comment at `run.rs:4073`-`4082` reads: "everything pushed per pass
+(`eval_condition`'s own `push_temp` for every `WHILE`/`UNTIL` test, one `ObjRef` per iteration)
+accumulates for the loop's whole run rather than one iteration's ... a `do while` running 10^7
+passes holds ~10^7 dead-but-rooted temps in one frame."
+It classifies this as a cost rather than a correctness defect, which was right when nothing
+collected and is the thing that changes once something does.
 
 For `do i = 1 to n; nop; end` at 100,000 iterations, massif's peak snapshot has a 1,075,070-byte
 useful heap and puts **1,048,576 of those bytes in one allocation site**:
@@ -198,8 +235,14 @@ useful heap and puts **1,048,576 of those bytes in one allocation site**:
              <- <rexx_exec::Interp>::run_activation (run.rs:882)
 ```
 
+The `WHILE` form gives the matching profile.
+For `do n while zz; nop; end` with `zz = 1` at 100,000 passes -- no control variable, and nothing on
+either side of the test that allocates -- the peak snapshot is a 1,074,768-byte useful heap with the
+same **1,048,576 bytes** in the same vector, this time under `eval_condition (run.rs:6017)` called
+from `run_repeating (run.rs:5168)`.
+
 1,048,576 bytes over a 131,072-element capacity is **8 bytes per `ObjRef`**, which is the table's
-8-byte constant exactly.
+8-byte constant exactly, and it is the same constant on both profiles.
 
 `Interp::loop_advance` reads the control variable's previous value, calls
 `self.roots.push_temp(previous)` to root it across the arithmetic that produces the next value, and
@@ -215,8 +258,28 @@ When the control values are tagged small integers they cost only the 8 bytes of 
 when they are not -- `do i = 1.5 to n by 1` -- each one pins a heap object as well, which is why
 that row costs 136 bytes and not 8.
 `RootSet::pop_frame` truncates to a watermark and its own doc comment says a caller may open a frame
-and rely on the outer truncation, so the fix is a frame taken and popped inside `loop_advance`, not
-a change to the root set.
+and rely on the outer truncation, so the fix is a frame taken and popped at the push site, not a
+change to the root set.
+
+**The fix must cover both sites, and a fix to `loop_advance` alone is worse than none.**
+It would close the shape all four benchmark axes happen to use -- every one of them is
+`do i = 1 to n` -- and leave `DO WHILE` and `DO UNTIL` growing without bound, which is the shape a
+long-running service loop is actually written in.
+The suite would go green on the axes and the defect would survive in the form that matters most.
+Whoever takes this in 4d-2 should treat `do n while zz; nop; end` as the acceptance test, not
+`varlookup.rex`.
+
+**A warning about the instrument, because 4d-2 will reuse it: massif attributes the `realloc`, not
+the leaking push.**
+Both sites push into one `RootSet.temps` vector, so the frame massif names is whichever push happens
+to cross the capacity boundary -- not the one whose entries are accumulating.
+Measured on `do while k < n; k = k + 1; end`: the temps vector's growth is attributed to
+`eval_arithmetic (eval.rs:620)`, the *body's* push, while the entries piling up are
+`eval_condition`'s.
+Cause B's attribution here is sound only because each profile was taken on a shape where the leaking
+push is the only one -- a `nop` body -- and that is the discipline to copy.
+The general rule: a growing shared buffer names its last grower, so isolate the suspect push by
+removing the others rather than by reading the deepest frame.
 
 ## Whether the arena is a high-water mark
 
@@ -265,13 +328,24 @@ same sha256 as the baseline binary.
 * **Prototype A, a trigger policy.**
   A watermark on `Heap::live_count()` in `Interp::alloc_with`: collect before allocating once the
   live count passes it, then set the next watermark to twice what survived, floor 65,536.
-* **Prototype B, the loop temp.**
+* **Prototype B, the loop temp -- `loop_advance` only.**
   `push_frame` before `loop_advance`'s `push_temp` and `pop_frame` after the increment stores its
   result.
+  **It does not touch `eval_condition`**, so every figure below bounds the counted form and says
+  nothing about what closing the `WHILE`/`UNTIL` site is worth.
+  All four benchmark axes are `do i = 1 to n`, so no axis here could have shown the difference.
 
 Every measurement below is interleaved -- base, prototype, base, prototype -- because two separate
 suite runs on this machine have invented a 5% effect that was not there.
 Every run exited 0 and printed the expected bytes.
+
+**One measurement was discarded, and it is named here so a re-measurement can be reconciled rather
+than believed.**
+A non-interleaved first pass read 18.94 s for prototype A on `strings` against 9.20 s for the base.
+Interleaved, the same comparison is 7.79 s against 9.24 s -- the opposite sign.
+The 18.94 s run was taken immediately after a base run whose 3.7 GB resident set was still resident,
+and it is contaminated by that rather than by anything in the prototype.
+No figure in this document derives from it.
 
 **Prototype A alone**, three interleaved repetitions:
 
@@ -285,6 +359,17 @@ Every run exited 0 and printed the expected bytes.
 `varlookup` and `compound` do not move at all under A, and that is the finding rather than a
 disappointment: their retention is cause B, which A does not touch.
 
+**Read the wall columns in that table with the outliers in view, because two of them will not carry
+a claim.**
+`varlookup`'s third repetition is 8.05 s against 5.41 and 5.42, and `strings`' three rise
+monotonically at 9.39 / 10.14 / 10.82, which is a drifting machine rather than a distribution.
+At that dispersion and n=3, **`arith` at +5.5% and `varlookup` at +3.4% are not distinguishable from
+noise**, and neither is `compound`'s -1%.
+What the data does carry is every RSS column, which is stable to well under a percent across
+repetitions and moves by factors rather than percents, and `strings`' wall win, which is measured
+below at seven interleaved repetitions rather than three.
+No claim in this document rests on a sub-10% wall difference.
+
 **Both prototypes**, interleaved, two repetitions except `strings` at seven:
 
 | axis | base RSS | A+B RSS | base wall (median) | A+B wall (median) |
@@ -296,9 +381,12 @@ disappointment: their retention is cause B, which A does not touch.
 | `startup` | 2,548 KB | 2,512 KB | -- | -- |
 
 So the two together are worth **42x on `arith`, 16x on `compound`, 298x on `strings` and 60x on
-`varlookup`** in peak resident set, at a wall cost between -16% and +6%.
+`varlookup`** in peak resident set.
 `varlookup` lands at 2,436 KB against the oracle's 20,992 KB, and `compound` at 2,388 KB against
 20,720 KB.
+On wall time the only movement the data supports is `strings`, below; the other three axes sit
+within the noise the previous table's outliers imply, so they are reported as unchanged rather than
+as a small cost.
 
 **`strings` gets faster, by 16%, and that is the headline for 4d-2.**
 Its base peak is 3.7 GB; holding 3.7 GB of never-reused arena destroys locality, and collecting into
@@ -315,7 +403,7 @@ A real trigger policy in 4d-2 must sweep `rexx-exec` for that shape rather than 
 prototype's silence, because every corpus program is small enough that a rare unrooted window need
 not be hit even once.
 
-## The ruling: this is a defect
+## The ruling: This is a defect
 
 **Both causes are defects, not performance properties, and a user sees them as an abort.**
 A Rexx program whose live set is two integers should not exhaust memory, and this one does: at
@@ -329,13 +417,33 @@ memory allocation of 402653184 bytes failed
 on stderr, exit status 134, and nothing at all on stdout.
 No Rexx condition is raised, so `SIGNAL ON SYNTAX` cannot catch it, no traceback is printed, and the
 partial output the program had already produced is lost.
-`compound.rex`, `varlookup.rex` and `startup.rex` now complete under that cap; at `107febcd` four of
-the five aborted, so the symptom has narrowed without going away.
+`compound.rex`, `varlookup.rex` and `startup.rex` complete under that cap; at `107febcd` four of the
+five aborted, so the symptom has narrowed without going away.
+
+**One of those two aborts is the cap's doing rather than the memory's, and `rust/CLAUDE.md` requires
+this to be said.**
+`ulimit -v` charges a process for address space it merely reserves, and this crate reserves
+`INTERPRETER_STACK_BYTES` -- 512 MiB, `lib.rs:309` -- for the sized interpreter thread before any
+program runs.
+Raising the cap by exactly that, to `ulimit -v 1572864`, was measured:
+
+| axis | `ulimit -v 1048576` | `ulimit -v 1572864` |
+|---|---|---|
+| `arith` | rc 134, `memory allocation of 402653184 bytes failed` | **rc 0, `4629643519330627.7808`** |
+| `strings` | rc 134, `memory allocation of 402653184 bytes failed` | rc 134, `memory allocation of 805306368 bytes failed` |
+| `compound`, `varlookup`, `startup` | rc 0 | rc 0 |
+
+So with the reservation free, **one axis dies rather than two**.
+
+**The ruling is unchanged by that, and the reason is the linearity rather than the axis count.**
+`strings` genuinely exceeds 1.5 GiB of real resident set, and growth on every shape measured here is
+linear and unbounded, so any finite limit is reached by a long enough run.
+What the correction costs is the "two of five" figure, not the finding.
 
 The severity is a function of runtime, not of program size.
 A four-line loop that is correct today fails after enough iterations, and the iteration count at
-which it fails depends on how much the body allocates -- 8 bytes an iteration for a counted loop
-that allocates nothing, 128 for one that touches a string.
+which it fails depends on how much the body allocates -- 8 bytes a pass for a counted or conditional
+loop that allocates nothing, 128 for one that touches a string.
 
 Both are recorded in `docs/superpowers/plans/phase-4-exclusions.txt` under KNOWN GAPS.
 
@@ -359,6 +467,16 @@ long-running program without an RSS assertion would catch nothing either.
 Closing this needs both -- a program whose iteration count is large enough for the linear term to
 dominate the fixed cost, and a bound on its peak resident set rather than on its output.
 
+**The benchmark suite has a narrower version of the same gap, and it nearly cost this task its main
+finding.**
+All four runnable axes are `do i = 1 to n`.
+None is a `DO WHILE`, a `DO UNTIL` or a `DO FOREVER`, so `eval_condition`'s push site is invisible
+to every one of them, and the first version of this document concluded from those four axes that the
+8-byte constant belonged to counted loops alone.
+A memory regression test built from the benchmark axes would inherit that blind spot exactly: it
+would go green on a fix that closed `loop_advance` and left `eval_condition` open.
+Whatever 4d-2 adds needs a conditional loop in it.
+
 That is a gap in the instrument the whole project's definition of correctness rests on, and it is
 why unbounded growth survived three phases of differential testing with a green suite.
 
@@ -376,11 +494,15 @@ Check the exit status and stdout of every run before reading the resident set.
 A program that dies on line 1 reports a small, stable and entirely meaningless figure, and that
 mistake has already been made once against this very finding.
 
-The two allocation sites:
+The allocation sites:
 
 ```sh
 valgrind --tool=massif --stacks=no --detailed-freq=1 --massif-out-file=out /abs/path/rexx-run /abs/path/probe.rex
 ms_print --threshold=1.0 out
 ```
+
+Run each site on a probe where it is the only push into the buffer in question -- a `nop` body for
+either root-set site -- or massif names the last grower rather than the leaker, per the warning
+under Cause B.
 
 100,000 iterations is enough for both, because the growth is linear from there up.

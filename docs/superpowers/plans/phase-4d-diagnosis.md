@@ -5,10 +5,14 @@ Driven directly rather than through the task plan, because the work is iterative
 
 **Cause 3 and its two open questions are superseded by `phase-4d-retention.md`, measured at
 `c9a90906`.**
-Three statements below are false at that commit, and the corrections are there with their evidence:
-this is a missing trigger policy **and also** a root leak, in `Interp::loop_advance`, which a
-collector cannot fix; the standard `ulimit -v 1048576` now aborts two of the five axes rather than
-four; and both "what is not diagnosed" items about the arena and the 128-byte figure are answered.
+Two statements below are false at that commit and one is answered rather than false; each carries an
+inline marker where it appears, so a reader arriving by search sees the warning beside the claim.
+False: "not a root leak" -- it is one, in `Interp::loop_advance` and `Interp::eval_condition`, which
+a collector cannot fix.
+False: four of five axes abort under the standard cap -- two do, and one of those two survives the
+cap being raised by the 512 MiB this crate merely reserves.
+Answered: both "what is not diagnosed" items, about the arena being a high-water mark and about the
+128-byte figure.
 Everything else here, including the four causes and the per-axis attribution, stands as measured at
 `9bcbfeda`.
 
@@ -94,8 +98,22 @@ A normal program never collects and the heap grows monotonically until the proce
 
 This is a **missing trigger policy, not a broken collector and not a root leak.**
 
+> **FALSE at `c9a90906`, in its last clause.** It *is* also a root leak, in two places:
+> `Interp::loop_advance` for a counted loop's control variable, and `Interp::eval_condition` for
+> every `WHILE`/`UNTIL` test. Both push a `RootSet` temp per iteration that nothing pops until the
+> whole `DO` clause ends, and no collector can reclaim through a live root. Measured and located in
+> `phase-4d-retention.md`.
+
 **Consequence for the standard memory cap.** Under the project's `ulimit -v 1048576` this crate aborts on four of the five runnable benchmark axes, completing only `startup`.
 The previously recorded set of seven SIGABRT programs is therefore not an exotic large-string edge case: the crate exhausts memory on ordinary loops, and any memory finding taken under that cap was measured on an interpreter already out of room.
+
+> **STALE at `c9a90906`: two of the five, not four.** `compound` and `varlookup` now complete under
+> that cap. And the count itself is partly an artifact of the cap rather than of memory used, which
+> `rust/CLAUDE.md` requires every `ulimit -v` finding to say: raising the cap by exactly the 512 MiB
+> `INTERPRETER_STACK_BYTES` reserves takes `arith` from rc 134 to rc 0 with correct output, leaving
+> `strings` as the only axis that dies with the reservation free. The sentence that follows this row
+> still holds -- ordinary loops do exhaust memory, and growth is linear and unbounded, so any cap is
+> eventually hit.
 
 ## Cause 4 -- the residual
 
