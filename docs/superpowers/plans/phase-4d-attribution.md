@@ -386,6 +386,87 @@ separate measured values:
 
 Task 7 owns the allocator-swap diagnostic and is the place to bound what remains after those.
 
+### Task 7 -- the allocator-swap diagnostic
+
+Measured 2026-08-09 at commit `9ce83f14`, working tree clean before and after.
+`#[global_allocator]` swapped to `mimalloc` 0.1.52 (`libmimalloc-sys` 0.1.49, its bundled v3
+mimalloc), a `Cargo.toml` dependency addition and one `static` declaration in `rexx-run.rs`, both
+backed up with `cp` and restored the same way; never `git checkout --`.
+`sha256sum -c` confirmed both source files byte-identical to their pre-swap state, and the rebuilt
+`rexx-run` is `c3b2516069a1b5f5d504613986f00b69e0c0fc892c041958212d45a699c0e967` -- the baseline
+binary, byte for byte.
+No `unsafe` was added to this crate's own code: the swap is a `static` plus a dependency, and
+`cargo build` under `unsafe_code = "forbid"` succeeded without a lint exception, because the `unsafe
+impl GlobalAlloc` lives inside the `mimalloc` crate, outside this workspace's lint.
+
+**The fork resolves against the pre-registered expectation: it recovers little, not most.**
+Five repetitions per axis, interleaved against the reverted baseline binary, same wrapper (`ulimit
+-v 8388608`, fresh empty directory, `/dev/null` stdin) the prototypes above used:
+
+| axis | base median | mimalloc median | change | C6's glibc self-time share |
+|---|---:|---:|---:|---:|
+| `varlookup` | 5.2260 s | 5.2883 s | **+1.2%** | 4.6% |
+| `compound` | 6.6706 s | 6.2322 s | -6.6% | 30.0% |
+| `strings` | 9.2406 s | 8.6737 s | -6.1% | 37.7% |
+| `alloc4c` | 2.2800 s | 1.8611 s | **-18.4%** | 39.5% |
+| `arith` | 3.0940 s | 2.8925 s | -6.5% | 34.6% |
+
+All ten runs per axis exited 0; stdout was stable within each side and identical across the swap on
+every axis, so both binaries did the same work.
+
+Reading the win against the axis's own C6 share -- not as an implied ratio, since C6's own text
+says that share is not removable as stated, but as the loosest possible ceiling, "if every byte of
+that self time vanished and nothing else grew" -- the swap recovers 46.6% of `alloc4c`'s share,
+22.0% of `compound`'s, 18.8% of `arith`'s and 16.2% of `strings`'s.
+On `varlookup`, the axis with the least allocator involvement, it is a net loss rather than a
+recovery.
+Never "most", and smaller everywhere the ceiling is loosest.
+
+**Profiling `alloc4c` -- the axis with the largest win and the highest share -- shows where the
+recovered time actually came from, and where it did not.**
+Same method as C6 (`samply record --save-only`, 1 kHz, `pollard` with `expand_inlines`,
+`unsymbolicated_pct` 0.37% on this profile), run on the mimalloc binary.
+Because mimalloc is statically linked rather than glibc's shared object, its own functions
+attribute to this binary's module rather than to `libc.so.6`; module `libc.so.6` falls to 15.3%
+self, almost all of it `memcpy`/`memcmp` (9.8% and 4.3%) rather than allocation.
+Summing every `mi_*` function's self time gives **16.8%**, plus 0.7% for the `madvise` mimalloc
+still issues through libc for arena purging -- roughly **17.5%**, against the base binary's 39.5%
+in the glibc allocator family on the same axis.
+So mimalloc's own bookkeeping is, on this axis, a little over half as expensive per call as
+glibc's -- a real quality improvement -- and it still only buys an 18.4% wall-clock win, not a
+39.5% or a 55% one, because two things do not move: the per-call cost inside mimalloc itself
+(`mi_free` 4.2% self, `mi_theap_malloc_aligned` 3.1%, `mi_malloc_aligned` 2.3%,
+`mi_page_malloc_zero` 2.2%, each paid once per allocation regardless of which allocator answers
+it), and the surrounding machinery that exists because a hash-keyed lookup and a heap allocation
+happen at all -- `memcpy`/`memcmp`, the SipHash calls (`Hasher::write` 4.6% self, `::finish` 1.8%),
+and `hashbrown`'s own probing -- none of which shrank because the allocator changed.
+
+**So the cost is allocation count, and the fix is not to call the allocator at all, exactly as
+predicted.**
+D1's pre-registered side byte-arena remains the candidate a faster general-purpose allocator does
+not replace; what a faster allocator buys, per this one measurement, is a partial win bounded well
+under half of C6's share on every axis it helps, and a loss on the axis it does not.
+
+**Feasibility, checked rather than assumed.** The parity gate names Linux and macOS (Global
+Constraints); the project's own CI, `.github/workflows/{unix,windows,bsd}.yml`, names five: Linux
+(`ubuntu-24.04`), macOS (`macos-15`, arm64), Windows (`windows-2022`), FreeBSD 14.2 and OpenBSD 7.8
+-- all for the C++ oracle, since this crate has no CI of its own yet.
+Built here, from this Linux machine: `cargo build --offline --release` compiles `mimalloc` 0.1.52
+via `libmimalloc-sys`'s `cc`-crate build script, no `cmake`, no network fetch beyond what this
+machine's registry cache already held.
+**Not built from here, and therefore unchecked**: macOS, Windows, FreeBSD, OpenBSD.
+`libmimalloc-sys`'s `build.rs` branches explicitly on `target_env == "msvc"` (compiling the static
+source as C++17 through a generated wrapper) and on `target_vendor == "apple"`, and mimalloc's own
+vendored `readme.md` (`c_src/mimalloc/v3/readme.md:35-36`) claims ports to "Windows, macOS, Linux,
+WASM, various BSD's", with its `prim.h`/`prim.c` carrying `__FreeBSD__`, `__OpenBSD__`,
+`__NetBSD__` and `__DragonFly__` branches by name.
+That is upstream's own claim and this crate's build script targeting those platforms by name, not a
+build performed on them; recorded as unchecked rather than inferred from it.
+
+**No optimisation is adopted here.** The swap was reverted before this commit closed; adoption of
+any allocator, this one or another, is a 4d-2 decision against the parity gate, not a Task 7
+decision.
+
 ### C7 -- every stepped clause binary-searches the source line table
 
 `step_in_temps_frame` computes the current clause's source line on every stepped instruction
