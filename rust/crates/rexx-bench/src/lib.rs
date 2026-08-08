@@ -46,11 +46,17 @@ pub static PROGRAMS: &[&str] = &[
 /// Programs in `bench-programs/` that the criterion harness deliberately does
 /// not benchmark.
 ///
-/// `heapshape` reports two timings of its own on standard output -- a build
-/// time and a forced-collection pause -- and only the second is comparable
-/// with anything. Wrapping it in a harness that times the whole process would
-/// measure the sum, which is the number its own header says not to use.
-/// `d1-decision.md` runs it directly for that reason.
+/// **Membership here is a claim about the program, and the claim is checked.**
+/// A program belongs here when it measures and reports its own timing: it
+/// prints a figure the harness cannot produce, and timing the whole process
+/// instead would measure the sum of the parts it separates.
+/// `the_exemptions_are_true_of_the_programs_they_name` asserts that in both
+/// directions, so appending a name here cannot turn a red assertion green
+/// unless the program really does time itself.
+///
+/// `heapshape` reports a build time and a forced-collection pause on standard
+/// output, and only the second is comparable with anything; its own header
+/// says not to use the sum. `d1-decision.md` runs it directly for that reason.
 pub static NOT_BENCHMARKED: &[&str] = &["heapshape"];
 
 /// Resolves `REXX_BENCH_BINARY` into an `Interpreter`, deriving its library
@@ -127,5 +133,62 @@ mod tests {
              disk and in neither list is a dimension the criterion harness has stopped \
              covering, with nothing to notice; a name in a list and not on disk cannot run"
         );
+    }
+
+    /// Whether a benchmark program measures and reports its own timing.
+    ///
+    /// `TIME('R')`/`TIME('E')` is how a Rexx program reads its own elapsed
+    /// clock, and case does not matter in Rexx, so the source is folded before
+    /// the search.
+    fn reports_its_own_timing(program: &str) -> bool {
+        let path = program_path(program);
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+        text.to_ascii_lowercase().contains("time(")
+    }
+
+    /// Each exemption is true of the program it names, and no benchmarked
+    /// program qualifies for one.
+    ///
+    /// Without this, [`NOT_BENCHMARKED`] is a place to put a name. Someone
+    /// facing a red `the_benchmark_list_accounts_for_every_program` can
+    /// satisfy it by appending, and the program is then exempt from the
+    /// criterion harness with nothing anywhere claiming it should be -- which
+    /// is how this project has twice had a corpus subset shrink in silence.
+    /// Reproduced before this test was written: a dummy program dropped into
+    /// `bench-programs/` turned that assertion red, and adding its name to
+    /// `NOT_BENCHMARKED` turned it green again.
+    ///
+    /// **"Fails on this crate" would not have worked as the property.**
+    /// `dispatch` and `alloc` exit 120 on this crate exactly as `heapshape`
+    /// does, and both are benchmarked, so failing here does not distinguish
+    /// the two lists at all. A check keyed on it would have passed for
+    /// `heapshape` by coincidence, and would have forced the wrong decision at
+    /// Phase 5, when `heapshape` starts running and its real reason for
+    /// exemption still holds. The criterion harness runs whatever
+    /// `REXX_BENCH_BINARY` names, which for the committed baseline is the C++
+    /// oracle, where every program in the directory runs.
+    #[test]
+    fn the_exemptions_are_true_of_the_programs_they_name() {
+        assert!(
+            !NOT_BENCHMARKED.is_empty(),
+            "no exemption is claimed, so this test asserts nothing"
+        );
+        for name in NOT_BENCHMARKED {
+            assert!(
+                reports_its_own_timing(name),
+                "{name} is exempt from the criterion harness, but it does not call TIME() and \
+                 so reports no timing of its own. That is the only reason NOT_BENCHMARKED \
+                 recognises. Benchmark it, or give the exemption a reason this test can check"
+            );
+        }
+        for name in PROGRAMS {
+            assert!(
+                !reports_its_own_timing(name),
+                "{name} is benchmarked by the criterion harness and also reports a timing of \
+                 its own, so the harness is measuring the sum of parts the program separates. \
+                 It belongs in NOT_BENCHMARKED"
+            );
+        }
     }
 }

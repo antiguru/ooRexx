@@ -576,11 +576,59 @@ fn interval_for(n: usize) -> MedianInterval {
     })
 }
 
-/// The per-side coverage the axis intervals carry, taken from the sample size
-/// rather than restated, so it cannot drift from [`PAIRS`].
-fn interval_coverage(rows: &[AxisRow]) -> f64 {
-    rows.first()
-        .map_or(0.0, |row| interval_for(row.paired.oracle.len()).coverage)
+/// The per-side coverage one axis's intervals carry, taken from its sample
+/// size rather than restated, so it cannot drift from [`PAIRS`].
+///
+/// Takes the row rather than the slice: a slice admits the empty case, and the
+/// caller has to have decided what an axis table with no axes says before it
+/// can ask this.
+fn interval_coverage(row: &AxisRow) -> f64 {
+    interval_for(row.paired.oracle.len()).coverage
+}
+
+/// The Bonferroni lower bound on the ratio interval's coverage, from one
+/// side's coverage.
+///
+/// Each endpoint of the ratio can miss on either side, so the joint guarantee
+/// is one minus the two miss probabilities added. Clamped at zero because
+/// below 50% per side the raw arithmetic goes negative, and "at least -100%"
+/// is not a statement about anything -- `--self-check` takes one pair per axis
+/// and lands exactly there.
+fn joint_coverage_bound(per_side: f64) -> f64 {
+    (1.0 - 2.0 * (1.0 - per_side)).max(0.0)
+}
+
+/// The paragraph that tells a reader what the ratio interval is worth.
+///
+/// Two sentences rather than one with a spliced fragment, because the two
+/// cases make different claims: one reports a bound, the other reports that
+/// there is no useful bound to report. The first is worded exactly as the
+/// committed baseline carries it -- see
+/// [`the_caveat_matches_the_committed_baseline`], which is what keeps that
+/// document's "this block is the program's output byte for byte" true without
+/// re-running a twelve-minute measurement to find out.
+fn ratio_interval_caveat(per_side: f64) -> String {
+    let joint = joint_coverage_bound(per_side);
+    if joint > 0.0 {
+        format!(
+            "**The ratio interval is indicative, and the verdict is not taken from it.** It \
+             divides one side's interval by the other's, so its joint coverage is at least \
+             {:.1}% by Bonferroni -- one minus the two sides' miss probabilities added -- not \
+             the {:.1}% either side carries alone. The verdict applies Global Constraints' rule \
+             directly: this crate's point estimate against the oracle's interval, slow side.",
+            joint * 100.0,
+            per_side * 100.0
+        )
+    } else {
+        format!(
+            "**The ratio interval is indicative, and the verdict is not taken from it.** Its \
+             joint coverage is a Bonferroni bound -- one minus the two sides' miss \
+             probabilities added -- and at this sample size that bound is vacuous, the interval \
+             on each side carrying only {:.1}%. The verdict applies Global Constraints' rule \
+             directly: this crate's point estimate against the oracle's interval, slow side.",
+            per_side * 100.0
+        )
+    }
 }
 
 fn seconds(samples: &[Duration]) -> Vec<f64> {
@@ -763,10 +811,21 @@ fn write_offset(report: &mut String, name: &str, paired: &Paired) {
 }
 
 fn write_axes(report: &mut String, rows: &[AxisRow], offset: &Paired) {
+    let _ = writeln!(report, "### Axes\n");
+    // Every axis having failed is already reported loudly elsewhere; what
+    // this guard buys is that the sections below never have to describe a
+    // statistic over nothing.
+    let Some(first) = rows.first() else {
+        let _ = writeln!(
+            report,
+            "**No axis produced samples.** There is nothing to state a throughput, a ratio or \
+             an interval over; see the failures listed at the end.\n"
+        );
+        return;
+    };
     let oracle_offset = Stats::of(&mut seconds(&offset.oracle)).median;
     let rust_offset = Stats::of(&mut seconds(&offset.rust)).median;
 
-    let _ = writeln!(report, "### Axes\n");
     let _ = writeln!(
         report,
         "`iters/s` is the program's own loop bound divided by the median wall time. \
@@ -811,22 +870,16 @@ fn write_axes(report: &mut String, rows: &[AxisRow], offset: &Paired) {
     );
     // The joint coverage is stated because the obvious reading of the column
     // is wrong. Dividing one side's interval by the other's is a Bonferroni
-    // combination: each endpoint can fail on either side, so the guarantee is
-    // one minus the sum of the two miss probabilities, not either side's own
-    // coverage. The verdict does not use this column -- it is the point
-    // estimate against the oracle interval, exactly as the gate is stated --
-    // so a later reader quoting the ratio interval as a 95% interval would be
-    // the only thing this narrows, and that is the reader worth protecting.
-    let joint = 1.0 - 2.0 * (1.0 - interval_coverage(rows));
+    // combination, so the guarantee is one minus the sum of the two miss
+    // probabilities, not either side's own coverage. The verdict does not use
+    // this column -- it is the point estimate against the oracle interval,
+    // exactly as the gate is stated -- so a later reader quoting the ratio
+    // interval as a 95% interval is the only thing this narrows, and that is
+    // the reader worth protecting.
     let _ = writeln!(
         report,
-        "**The ratio interval is indicative, and the verdict is not taken from it.** It divides \
-         one side's interval by the other's, so its joint coverage is at least {:.1}% by \
-         Bonferroni -- one minus the two sides' miss probabilities added -- not the {:.1}% either \
-         side carries alone. The verdict applies Global Constraints' rule directly: this crate's \
-         point estimate against the oracle's interval, slow side.\n",
-        joint * 100.0,
-        interval_coverage(rows) * 100.0
+        "{}\n",
+        ratio_interval_caveat(interval_coverage(first))
     );
     let _ = writeln!(
         report,
@@ -1141,6 +1194,56 @@ mod tests {
     fn a_program_without_a_loop_has_no_bound() {
         let path = rexx_bench::program_path("startup");
         assert!(loop_count(&path).is_err());
+    }
+
+    /// The Bonferroni bound is stated, and it is clamped rather than allowed
+    /// to go negative. A `--self-check` run has one pair per axis, whose
+    /// per-side coverage is zero, and the unclamped arithmetic printed
+    /// "at least -100.0%" into a report that exits 0.
+    #[test]
+    fn the_joint_coverage_bound_is_clamped() {
+        let nine = interval_for(9).coverage;
+        assert!((joint_coverage_bound(nine) - (1.0 - 2.0 * (1.0 - nine))).abs() < 1e-12);
+        assert!(joint_coverage_bound(nine) > 0.92 && joint_coverage_bound(nine) < 0.93);
+        assert_eq!(joint_coverage_bound(interval_for(1).coverage), 0.0);
+        assert_eq!(joint_coverage_bound(0.25), 0.0);
+
+        // The bug's exact shape, not "contains no minus sign" -- the prose
+        // carries `--` for its dashes and an assertion on that is red for a
+        // reason that has nothing to do with coverage.
+        let vacuous = ratio_interval_caveat(interval_for(1).coverage);
+        assert!(vacuous.contains("that bound is vacuous"), "{vacuous}");
+        assert!(vacuous.contains("only 0.0%"), "{vacuous}");
+        assert!(
+            !vacuous.contains("-100"),
+            "a negative coverage reached the report: {vacuous}"
+        );
+    }
+
+    /// The caveat this suite emits at [`PAIRS`] is the one the committed
+    /// baseline carries.
+    ///
+    /// `perf-baseline.md` claims its whole block is this program's output byte
+    /// for byte, and 4d-2 diffs a fresh run against that block to find oracle
+    /// drift. Every other line of the block is a measured value that moves on
+    /// every run, so a diff there is self-explanatory; this paragraph is the
+    /// one piece of *prose* the harness emits, and prose that drifts would
+    /// show up in that diff looking exactly like a finding. Pinned here so it
+    /// cannot drift unnoticed, and so a wording change costs a re-paste rather
+    /// than a re-measurement nobody budgeted for.
+    #[test]
+    fn the_caveat_matches_the_committed_baseline() {
+        let baseline = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../docs/superpowers/plans/perf-baseline.md");
+        let text = fs::read_to_string(&baseline)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", baseline.display()));
+        let emitted = ratio_interval_caveat(interval_for(PAIRS).coverage);
+        assert!(
+            text.contains(&emitted),
+            "the committed baseline does not contain the caveat this suite emits at {PAIRS} \
+             pairs. Either the wording changed and the block needs re-pasting, or the block is \
+             no longer this program's output and the document says it is.\n\nemitted:\n{emitted}"
+        );
     }
 
     #[test]
