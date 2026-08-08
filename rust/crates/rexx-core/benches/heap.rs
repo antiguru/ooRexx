@@ -3,7 +3,10 @@
 //! The graph shape mirrors `rust/bench-programs/heapshape.rex` so the pause
 //! figure is comparable with the C++ one: 1,000 arrays of 1,000 distinct
 //! strings, 10% cross-linked so the graph is not a pure tree, all reachable
-//! from one root.
+//! from one root, plus 1,000 more distinct strings and a container mirroring
+//! the Rexx side's `root` directory (see `build_graph`, which is the one
+//! place that still cannot match exactly: this crate has no `Directory`
+//! body variant).
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use rexx_core::{Body, Heap, ObjRef, RootSet};
@@ -40,6 +43,27 @@ fn build_graph() -> (Heap, RootSet) {
             items[0] = target;
         }
     }
+
+    // The Rexx side also builds `root = .directory~new` and sets
+    // `root["K" || i] = a` for each of the 1,000 arrays -- the same arrays
+    // `outer` already reaches, but under 1,000 more distinct key strings
+    // ("K" concatenated, same reasoning as "e" || j above). This crate has
+    // no `Directory` body, so the container is approximated with a plain
+    // array holding just the 1,000 key strings: the array's own values are
+    // already reachable via `outer` and would not add live objects, only
+    // the keys are new. This matches the C++ side's object *count* (1,001
+    // extra objects: one container plus 1,000 keys) but not its *shape* --
+    // marking a `Directory` walks a hash table's buckets, marking this array
+    // walks a contiguous `Vec`, which is cheaper per entry. That residual
+    // gap is not closed here; see `d1-decision.md`.
+    let mut root_keys = Vec::with_capacity(OUTER);
+    for i in 0..OUTER {
+        root_keys.push(heap.alloc(Body::Text {
+            bytes: format!("K{}", i + 1).into_bytes(),
+            num: None,
+        }));
+    }
+    outer.push(heap.alloc(Body::Array(root_keys)));
 
     let root = heap.alloc(Body::Array(outer));
     roots.add_global(".ROOT", root);
