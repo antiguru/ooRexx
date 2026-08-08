@@ -427,6 +427,66 @@ impl Number {
         self.digits.iter().all(|d| *d == 0)
     }
 
+    /// The number `value` denotes, built directly.
+    ///
+    /// The same result as `Number::parse(&value.to_string())`, which is what
+    /// this replaces: that spelling allocates a `String` and then re-scans
+    /// it, and it sits on the path every tagged small integer takes to reach
+    /// arithmetic.
+    pub fn from_i64(value: i64) -> Self {
+        if value == 0 {
+            return Number::zero();
+        }
+        // `unsigned_abs`, not `-value`: `i64::MIN` has no positive form.
+        let mut magnitude = value.unsigned_abs();
+        let mut digits = Vec::with_capacity(20);
+        while magnitude > 0 {
+            digits.push((magnitude % 10) as u8);
+            magnitude /= 10;
+        }
+        digits.reverse();
+        Number {
+            negative: value < 0,
+            digits,
+            exponent: 0,
+        }
+    }
+
+    /// The integer this is already written as, at `digits` precision, or
+    /// `None` when it is not written that way.
+    ///
+    /// "Already written as" is the whole point: this answers `Some` only when
+    /// the value needs no rounding to fit `digits` (`self.digits` is no
+    /// longer than that), has nothing after the decimal point (a
+    /// non-negative exponent, so no trailing `.00` a renderer would have to
+    /// show), and stays inside plain form (its digits plus its exponent fit
+    /// `digits`, so the adjusted exponent cannot reach the exponential
+    /// trigger). Under those three it renders as a run of decimal digits in
+    /// either `FORM`, and that run is the returned `i64`.
+    ///
+    /// A `None` says only that the caller must look properly, never that no
+    /// integer rendering exists -- `1.50E+2` at `DIGITS 9` answers `Some(150)`
+    /// while `1.50` answers `None`, and `999 + 1` at `DIGITS 3` answers
+    /// `None` because it needs rounding, even though the rounded result
+    /// renders as `1.00E+3`.
+    pub fn plain_integer(&self, digits: u64) -> Option<i64> {
+        let exponent = u64::try_from(self.exponent).ok()?;
+        let width = self.digits.len() as u64 + exponent;
+        // 19 caps the multiply loop below before `digits` -- which a program
+        // may set to billions -- can turn a rejection into a long one.
+        if width > digits || width > 19 {
+            return None;
+        }
+        let mut value: i64 = 0;
+        for digit in &self.digits {
+            value = value.checked_mul(10)?.checked_add(i64::from(*digit))?;
+        }
+        for _ in 0..exponent {
+            value = value.checked_mul(10)?;
+        }
+        Some(if self.negative { -value } else { value })
+    }
+
     /// The same magnitude with the sign cleared, which is what `ABS` needs
     /// and nothing here could otherwise express: `negative` is private to
     /// this crate.

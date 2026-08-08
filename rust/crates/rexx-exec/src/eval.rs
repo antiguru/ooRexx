@@ -62,8 +62,9 @@
 
 use crate::error::Raised;
 use crate::run::Ended;
+use crate::value::{exact_small_int, within_digits};
 use crate::{Code, Failure, Interp, Loud, StackSpan};
-use rexx_core::{NotNumeric, ObjRef};
+use rexx_core::{Decoded, NotNumeric, ObjRef};
 use rexx_num::{CompareOp, DivOp, Number, compare_decoded};
 use rexx_parse::{CallTarget, Expr, ExprKind, Operator, PrefixOp, compound_parts};
 
@@ -618,9 +619,30 @@ impl Interp {
         let right_value = self.eval(code, right)?;
         self.roots.push_temp(right_value);
 
-        let left_number = self.arith_operand(left_value)?;
         let digits = self.activation().settings.digits();
         let form = self.activation().settings.form();
+
+        // Both operands already integers small enough to tag, and an
+        // operator whose exact result is an integer too: the whole general
+        // path below is a detour through a representation neither operand is
+        // in and the result does not need. It is a detour that allocates --
+        // `to_number` renders a `SmallInt` to a `String` and reparses it,
+        // `add` builds a digit `Vec`, and `number` renders that back to a
+        // `String` to decide the result is a small integer after all -- so
+        // what this skips is five allocations, not five instructions.
+        //
+        // `small_int_arith` answers `None` for every case where the two
+        // paths could disagree, and `exact_small_int`'s own doc comment has
+        // why the remaining ones cannot.
+        if let (Decoded::SmallInt(left_int), Decoded::SmallInt(right_int)) =
+            (left_value.decode(), right_value.decode())
+            && let Some(result) = small_int_arith(op, left_int, right_int, digits)
+        {
+            self.roots.pop_frame(frame);
+            return Ok(result);
+        }
+
+        let left_number = self.arith_operand(left_value)?;
 
         let result = if op == Operator::Power {
             let exponent = match self.to_number(right_value) {
@@ -913,6 +935,42 @@ impl Interp {
 /// variable is created through `Interp::number` exactly like any other
 /// arithmetic result (`run.rs`'s `loop_advance`), and needs the identical
 /// narrowing -- reused from here rather than copied.
+/// `left op right` as a tagged small integer, or `None` when the general
+/// arithmetic path must run instead.
+///
+/// Only `+`, `-` and `*` are here, because only they take two integers to an
+/// integer. The other four are absent for reasons of their own, none of them
+/// a matter of effort:
+///
+/// * `/` is not integer-valued at all (`1 / 3`).
+/// * `%` and `//` are defined in Rexx through that same rounded division and
+///   not through `i64`'s truncation, so they agree with it only where the
+///   division needs no rounding -- a condition on the operands, not on the
+///   result, and one this function's shape cannot state.
+/// * `**` leaves the tag's range for single-digit operands, so the guard
+///   would reject nearly everything it was handed.
+///
+/// The `checked_*` operators cover `*` overflowing `i64` outright; `+` and
+/// `-` on two 61-bit values cannot, and use the checked form only so the
+/// three arms read alike.
+///
+/// **Both operands are checked against `digits` before the operation, not
+/// just the result afterwards.** Rexx rounds the operands too, so an operand
+/// too wide for the precision makes the exact `i64` answer the wrong one --
+/// see [`exact_small_int`]'s own doc comment for the measured pair.
+fn small_int_arith(op: Operator, left: i64, right: i64, digits: u64) -> Option<ObjRef> {
+    if !within_digits(left, digits) || !within_digits(right, digits) {
+        return None;
+    }
+    let value = match op {
+        Operator::Plus => left.checked_add(right),
+        Operator::Subtract => left.checked_sub(right),
+        Operator::Multiply => left.checked_mul(right),
+        _ => None,
+    }?;
+    exact_small_int(value, digits)
+}
+
 pub(crate) fn saturate_digits(digits: u64) -> u32 {
     u32::try_from(digits).unwrap_or(u32::MAX)
 }
@@ -1087,6 +1145,118 @@ mod tests {
         let value = eval_in_place(interp, source)
             .unwrap_or_else(|failure| panic!("expected {source:?} to evaluate, got {failure:?}"));
         interp.to_text(value).to_vec()
+    }
+
+    // ---- the small-integer fast path ----
+
+    /// Every answer the fast path gives is the answer the general path
+    /// gives, over a grid of operands, precisions and both `FORM`s.
+    ///
+    /// Compared against the general path's own output rather than against a
+    /// table of expected strings written here. A table would pin the fast
+    /// path to my reading of Rexx's rounding rule, and that reading is
+    /// exactly what was wrong: a first version of `small_int_arith` checked
+    /// only the result against `DIGITS` and answered `975` for `1000 - 25`
+    /// at `DIGITS 3`, where the interpreter answers `980`. The general path
+    /// is `rexx-num`, which is differentially validated against the oracle;
+    /// agreeing with it is the property worth asserting.
+    #[test]
+    fn the_small_int_fast_path_answers_what_the_general_path_answers() {
+        use rexx_num::Form;
+
+        let operands: [i64; 20] = [
+            0,
+            1,
+            -1,
+            5,
+            -5,
+            25,
+            -25,
+            99,
+            100,
+            999,
+            -999,
+            1000,
+            -1000,
+            1001,
+            12345,
+            -12345,
+            1 << 30,
+            -(1 << 30),
+            rexx_core::SMALL_INT_MAX,
+            rexx_core::SMALL_INT_MIN,
+        ];
+        let precisions: [u64; 9] = [1, 2, 3, 5, 9, 15, 18, 19, 20];
+        let ops = [Operator::Plus, Operator::Subtract, Operator::Multiply];
+        let forms = [Form::Scientific, Form::Engineering];
+
+        let mut interp = Interp::new();
+        let mut compared = 0usize;
+        for op in ops {
+            for left in operands {
+                for right in operands {
+                    for digits in precisions {
+                        let Some(fast) = small_int_arith(op, left, right, digits) else {
+                            continue;
+                        };
+                        let fast_text = interp.to_text(fast).to_vec();
+
+                        let left_number =
+                            Number::parse(&left.to_string()).expect("an i64 spelling parses");
+                        let right_number =
+                            Number::parse(&right.to_string()).expect("an i64 spelling parses");
+                        let result = match op {
+                            Operator::Plus => left_number.add(&right_number, digits),
+                            Operator::Subtract => left_number.sub(&right_number, digits),
+                            Operator::Multiply => left_number.mul(&right_number, digits),
+                            other => unreachable!("{other:?} is not on the fast path"),
+                        }
+                        .expect("no arithmetic error on the general path either");
+
+                        // Both `FORM`s, because the fast path never reads
+                        // `FORM` at all: the claim being tested is that under
+                        // its own guard the two forms cannot disagree, which
+                        // only an assertion over both can carry.
+                        for form in forms {
+                            let general =
+                                interp.number(result.clone(), saturate_digits(digits), form);
+                            let general_text = interp.to_text(general).to_vec();
+                            assert_eq!(
+                                String::from_utf8_lossy(&fast_text),
+                                String::from_utf8_lossy(&general_text),
+                                "{left} {op:?} {right} at DIGITS {digits}, FORM {form:?}"
+                            );
+                        }
+                        compared += 1;
+                    }
+                }
+            }
+        }
+        // The grid is mostly refusals at the low precisions, so a guard that
+        // rejected everything would satisfy the loop above vacuously.
+        assert!(
+            compared > 1000,
+            "only {compared} pairs were on the fast path"
+        );
+    }
+
+    /// The measured pair the guard exists for, and its neighbour that must
+    /// still go fast.
+    ///
+    /// `1000 - 25` at `DIGITS 3` is `980` on the interpreter, not `975`:
+    /// `1000` needs four significant digits, so it is rounded before the
+    /// subtraction and the `5` falls off the end (`ootest`'s
+    /// `SUBTRACTION::test_147`). The fast path must decline it. `100 - 25`
+    /// differs only in the operand's width and must not be declined --
+    /// without this half, a guard that refused every subtraction would pass.
+    #[test]
+    fn an_operand_too_wide_for_the_precision_leaves_the_fast_path() {
+        assert!(small_int_arith(Operator::Subtract, 1000, 25, 3).is_none());
+
+        let mut interp = Interp::new();
+        let fast = small_int_arith(Operator::Subtract, 100, 25, 3)
+            .expect("both operands fit three digits, and so does the result");
+        assert_eq!(&*interp.to_text(fast), b"75");
     }
 
     // ---- terms ----

@@ -181,3 +181,34 @@ fn the_negative_threshold_is_on_the_raw_exponent_not_the_adjusted_one() {
     assert_eq!(Number::parse("123e-19").unwrap().format(9), "1.23E-17");
     assert_eq!(Number::parse("1000e-19").unwrap().format(9), "1.000E-16");
 }
+
+/// `from_i64` builds what parsing the same integer's decimal spelling
+/// builds.
+///
+/// It exists to skip that `String`, so equality with it is the whole
+/// contract. `i64::MIN` is in the grid because it is the one value with no
+/// positive counterpart, and a sign-then-negate implementation gets exactly
+/// that one wrong.
+#[test]
+fn from_i64_builds_what_parsing_the_same_spelling_builds() {
+    for value in [
+        0i64,
+        1,
+        -1,
+        9,
+        10,
+        -10,
+        100,
+        12345,
+        -12345,
+        1_000_000_000,
+        i64::MAX,
+        i64::MIN,
+    ] {
+        assert_eq!(
+            Number::from_i64(value),
+            Number::parse(&value.to_string()).expect("an i64 spelling parses"),
+            "{value}"
+        );
+    }
+}

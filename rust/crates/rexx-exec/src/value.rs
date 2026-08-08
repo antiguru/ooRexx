@@ -247,8 +247,7 @@ impl Interp {
     pub(crate) fn to_number(&mut self, value: ObjRef) -> Result<Number, NotNumeric> {
         match value.decode() {
             Decoded::Nil => Err(NotNumeric),
-            Decoded::SmallInt(n) => Ok(Number::parse(&n.to_string())
-                .expect("an i64's decimal spelling is always a number")),
+            Decoded::SmallInt(n) => Ok(Number::from_i64(n)),
             Decoded::Heap { .. } => {
                 // Mirrors `to_text`'s own stem redirect above: decided, and
                 // the borrow on `self.heap` dropped, before the recursive
@@ -389,7 +388,83 @@ fn canonical_small_int(bytes: &[u8]) -> Option<i64> {
         .then_some(value)
 }
 
+/// Powers of ten, up to the widest one an `i64` can hold.
+///
+/// Indexed by a `DIGITS` setting, so index `d` is the first magnitude that
+/// needs more than `d` significant digits to write down.
+const POW10: [u64; 19] = [
+    1,
+    10,
+    100,
+    1_000,
+    10_000,
+    100_000,
+    1_000_000,
+    10_000_000,
+    100_000_000,
+    1_000_000_000,
+    10_000_000_000,
+    100_000_000_000,
+    1_000_000_000_000,
+    10_000_000_000_000,
+    100_000_000_000_000,
+    1_000_000_000_000_000,
+    10_000_000_000_000_000,
+    100_000_000_000_000_000,
+    1_000_000_000_000_000_000,
+];
+
+/// Whether `value` is written in at most `digits` significant digits, so
+/// that rounding it to that precision is the identity.
+///
+/// `digits` at or above 19 admits every `i64`, since `i64::MIN` is itself 19
+/// digits wide.
+pub(crate) fn within_digits(value: i64, digits: u64) -> bool {
+    digits >= POW10.len() as u64 || value.unsigned_abs() < POW10[digits as usize]
+}
+
+/// An exact integer result as a `SmallInt`, when that handle is the same
+/// value [`Interp::number`] would have produced for it -- and `None` when it
+/// is not, so the caller runs the general path instead.
+///
+/// Two conditions, both necessary:
+///
+/// * **`value` fits the tag.** [`ObjRef::small_int`] decides this; the
+///   general path's own `Body::Num` holds everything wider.
+/// * **`value` is [`within_digits`]**, so the rounding Rexx applies to
+///   *every* arithmetic result leaves it alone. A result that needs rounding
+///   renders exponentially: measured under `DIGITS 1`, `15 + 5` is `2E+1`
+///   and not `20`.
+///
+/// **This is a condition on the result alone, and the result alone is not
+/// enough to make an operation exact** -- the operands must each be
+/// `within_digits` too, which is the caller's to check, because Rexx rounds
+/// the operands before it operates on them and not only the answer
+/// afterwards. Under `DIGITS 3`, `1000 - 25` is `980`: `1000` needs four
+/// digits, so the `25` is aligned against a `1000` that has already lost its
+/// last position, and the `5` falls off the end. The result, `980`, is
+/// perfectly `within_digits` -- checking it and nothing else admits an
+/// answer of `975`. (`ootest`'s `SUBTRACTION::test_147` and `test_151` are
+/// that pair; they caught exactly this.)
+pub(crate) fn exact_small_int(value: i64, digits: u64) -> Option<ObjRef> {
+    within_digits(value, digits)
+        .then(|| ObjRef::small_int(value))
+        .flatten()
+}
+
 fn small_int_for(value: &Number, created_digits: u32) -> Option<i64> {
+    // The probe below allocates the very string this function exists to
+    // decide it does not need, so the common case is answered without it:
+    // `plain_integer` is `Some` exactly when the value is already a run of
+    // decimal digits at this precision, which is what the probe would have
+    // gone on to discover. It is deliberately a subset -- everything it
+    // declines still gets the full rendering treatment below, so the answer
+    // is unchanged and only the work is.
+    if let Some(whole) = value.plain_integer(u64::from(created_digits))
+        && (SMALL_INT_MIN..=SMALL_INT_MAX).contains(&whole)
+    {
+        return Some(whole);
+    }
     let rendered = value.format_form(u64::from(created_digits), Form::Scientific);
     if rendered.contains('.') || rendered.contains('E') {
         return None;
@@ -410,6 +485,73 @@ mod tests {
     /// so a parse failure is this test's own bug, not a case to handle.
     fn n(text: &str) -> Number {
         Number::parse(text).expect("test literal parses")
+    }
+
+    /// Everything `plain_integer` accepts renders as exactly that integer,
+    /// in either `FORM`.
+    ///
+    /// `small_int_for` answers from it without rendering, so the two must
+    /// not be able to disagree. The property is one-directional on purpose:
+    /// a `None` here means only "look properly", and the rendering probe
+    /// still runs, so a value this declines needs no assertion.
+    ///
+    /// `Engineering` is asserted alongside `Scientific` because
+    /// `plain_integer` is never told which form is in force. That is sound
+    /// only while its acceptance implies plain rendering, where the two
+    /// forms cannot differ -- the assertion is what holds that.
+    #[test]
+    fn the_plain_integer_shortcut_agrees_with_the_rendering_probe() {
+        let spellings = [
+            "0",
+            "0.00",
+            "-0",
+            "1",
+            "-1",
+            "5",
+            "1.50",
+            "150",
+            "1.50E+2",
+            "12.0",
+            "1.2E+3",
+            "999",
+            "1000",
+            "1E+9",
+            "1E+18",
+            "1E+19",
+            "0.001",
+            "1E-5",
+            "-12345",
+            "123456789012345678",
+            "2305843009213693951",
+            "9999999999999999999999",
+        ];
+        let precisions: [u32; 7] = [1, 2, 3, 9, 18, 19, 20];
+
+        let mut accepted = 0usize;
+        for spelling in spellings {
+            for digits in precisions {
+                let value = n(spelling);
+                let Some(whole) = value.plain_integer(u64::from(digits)) else {
+                    continue;
+                };
+                let expected = whole.to_string();
+                assert_eq!(
+                    value.format_form(u64::from(digits), Form::Scientific),
+                    expected,
+                    "{spelling} at DIGITS {digits}, FORM SCIENTIFIC"
+                );
+                assert_eq!(
+                    value.format_form(u64::from(digits), Form::Engineering),
+                    expected,
+                    "{spelling} at DIGITS {digits}, FORM ENGINEERING"
+                );
+                accepted += 1;
+            }
+        }
+        assert!(
+            accepted > 30,
+            "only {accepted} of the grid reached the shortcut, so this asserts almost nothing"
+        );
     }
 
     /// `text_owned` keeps the caller's buffer instead of copying it.
