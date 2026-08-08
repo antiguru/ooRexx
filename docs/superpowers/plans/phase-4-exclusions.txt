@@ -2462,3 +2462,71 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   `5-69`, `ITERATE::test_12`, `LEAVE::test_11`) are no longer in
   `rust/corpus/keyword-exempt.txt`; `the_exempt_set_matches_the_current_
   failures` is the witness that all seven now pass.
+
+
+  KNOWN GAP: A LOOP'S MEMORY GROWS WITHOUT BOUND, FROM TWO INDEPENDENT
+  CAUSES, AND A LONG-RUNNING PROGRAM ABORTS. Measured 2026-08-08 at
+  c9a90906, /usr/bin/time -v peak resident set, each probe from a fresh
+  empty directory with its exit status and stdout checked. The full
+  diagnosis, the massif call stacks and the prototype figures are in
+  docs/superpowers/plans/phase-4d-retention.md.
+
+  WHAT A USER SEES. Under the project's standard `ulimit -v 1048576` two of
+  the five runnable benchmark axes die:
+
+    bench-programs/arith.rex     rc 134, stdout empty,
+    bench-programs/strings.rex   stderr `memory allocation of 402653184
+                                 bytes failed`
+
+  No Rexx condition is raised, so SIGNAL ON SYNTAX cannot catch it; no
+  traceback is printed; output already produced is lost. The failure is a
+  function of how long a program runs rather than of how it is written, so
+  a four-line loop that is correct today fails after enough iterations.
+
+  CAUSE A -- NOTHING TRIGGERS A COLLECTION, so every heap object a program
+  allocates is retained for the process's whole life. Retention is 128
+  bytes per short string, 144 per wide decimal, of which 96 is the
+  `rexx_core::heap::Slot` the arena vector grows by (massif, at
+  `Heap::alloc_with_uncollected`). `Heap.slots` is only ever pushed and
+  indexed -- no truncate, no shrink_to_fit -- so the arena is a permanent
+  high-water mark. That bounds rather than defeats a trigger policy: the
+  free list IS reused, and measured on one 8,000,000-iteration program,
+  peak RSS tracks the collection interval linearly -- 1,002,700 KB with no
+  collection, 15,796 KB forcing one every 100,000 iterations, 4,036 KB
+  every 10,000.
+
+  CAUSE B -- A COUNTED LOOP'S CONTROL TEMP IS ROOTED UNTIL THE LOOP ENDS,
+  which is a root leak and NOT fixable by a collector. `Interp::loop_advance`
+  (run.rs) calls `roots.push_temp` on the control variable's previous value
+  and pops nothing; the only release is the enclosing `step_in_temps_frame`'s
+  pop, and the instruction that frame belongs to is the whole DO. So
+  `RootSet.temps` grows 8 bytes an iteration for the loop's whole life
+  (massif, at `push_temp` under `loop_advance`). Measured, 8,000,000
+  iterations: `do n; nop; end` is flat at 2,568 KB and `do i = 1 to n; nop;
+  end` reaches 64,268 KB, which is the negative control that separates the
+  two causes. When the control values are not tagged small integers the
+  roots pin heap objects too: `do i = 1.5 to n by 1` with a `nop` body costs
+  1,064,416 KB.
+
+  NOT A BROKEN COLLECTOR. Both prototypes were built, measured and reverted;
+  with both in place the whole test suite passes, 1,317 tests, 0 failures.
+  Peak RSS falls 42x on arith, 16x on compound, 298x on strings and 60x on
+  varlookup, at a wall cost between -16% and +6% -- strings gets FASTER.
+
+  NO OWNER IS ASSIGNED HERE. 4d-2 is the phase unit that would take it, and
+  the diagnosis document is written for whoever does. A trigger policy must
+  first sweep rexx-exec for the under-rooted window `Heap::collect`'s own doc
+  comment records, because the corpus is too small to hit one.
+
+  WHY THE DIFFERENTIAL SUITE CANNOT SEE THIS, AND THIS LIMB IS THE ONE THAT
+  GENERALISES. Neither the corpus harness nor the trace harness reads peak
+  resident set, getrusage, or any memory figure at all: a program that
+  retains a gigabyte and prints the right bytes passes. And every corpus
+  program is far too small to accumulate a visible amount -- the largest
+  loop bound anywhere in rust/corpus is `to 1010`, which at 8 bytes an
+  iteration retains about 8 KB. The two compound, so closing the gap needs
+  both a program whose iteration count lets the linear term dominate the
+  fixed cost AND a bound on its peak resident set rather than on its output.
+  Adding either alone catches nothing. That is a gap in the instrument this
+  project's whole definition of correctness rests on, and it is why
+  unbounded growth survived three phases of differential testing green.

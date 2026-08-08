@@ -3,6 +3,15 @@
 Measured 2026-08-08 at `9bcbfeda`, release build with the pinned profile, this machine.
 Driven directly rather than through the task plan, because the work is iterative and a linear task list was the wrong shape for it.
 
+**Cause 3 and its two open questions are superseded by `phase-4d-retention.md`, measured at
+`c9a90906`.**
+Three statements below are false at that commit, and the corrections are there with their evidence:
+this is a missing trigger policy **and also** a root leak, in `Interp::loop_advance`, which a
+collector cannot fix; the standard `ulimit -v 1048576` now aborts two of the five axes rather than
+four; and both "what is not diagnosed" items about the arena and the 128-byte figure are answered.
+Everything else here, including the four causes and the per-axis attribution, stands as measured at
+`9bcbfeda`.
+
 ## Summary
 
 **Four causes, three of them compounding.**
