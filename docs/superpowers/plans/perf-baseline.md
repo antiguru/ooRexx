@@ -258,9 +258,10 @@ This section records that measurement; it is not a reusable baseline, and a late
 both sides again.
 
 One asymmetry is worth carrying forward.
-Under this project's standard `ulimit -v 1048576` the oracle reserves 512 MiB of address space
-(D19's `INTERPRETER_STACK_BYTES`) before running anything and `rexx-run` reserves none, so the two
-do not have equal headroom under the same cap.
+Under this project's standard `ulimit -v 1048576` this crate reserves 512 MiB of address space
+(D19's `INTERPRETER_STACK_BYTES`) before running anything and the oracle reserves nothing
+comparable, so under the shared cap this crate has roughly 500 MB of room and the oracle roughly
+1000, and the two do not have equal headroom.
 It does not touch these figures -- the benchmark's inner loop comes nowhere near either ceiling and
 all ten runs completed without an allocation failure or a signal -- but it would matter if this
 benchmark were run under a tighter budget.

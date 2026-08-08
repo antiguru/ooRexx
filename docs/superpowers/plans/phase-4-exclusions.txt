@@ -2187,12 +2187,12 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
     say length(trunc(1e999999999))   ->  1000000000, rc 0 on the oracle
 
   goes through rexx-num's infallible String allocation here. Under the memory
-  asymmetry rust/CLAUDE.md records -- the oracle reserves 512 MiB for its
-  interpreter stack, so the same `ulimit -v` leaves this crate roughly half
-  the room -- the two sides cannot agree at that scale anyway, so no threshold
-  is quotable and none is claimed. Closing this needs rexx-num's rendering
-  path to reserve fallibly and a FormatError variant carrying major 5. No
-  owner is assigned.
+  asymmetry rust/CLAUDE.md records -- this crate reserves 512 MiB for its
+  interpreter stack, so the same `ulimit -v` leaves this crate with roughly
+  half the room the oracle has -- the two sides cannot agree at that scale
+  anyway, so no threshold is quotable and none is claimed. Closing this needs
+  rexx-num's rendering path to reserve fallibly and a FormatError variant
+  carrying major 5. No owner is assigned.
 
 
   KNOWN GAP: VALUE ON A DEFINED ENVIRONMENT NAME IS SILENTLY WRONG AT RC 0.
