@@ -634,37 +634,46 @@ Measured here rather than left out of the table, with the status and message eac
 | `dispatch` | 120 | `rexx-exec: a message send is not implemented (Phase 5)` |
 | `heapshape` | 120 | `rexx-exec: a message send is not implemented (Phase 5)` |
 
-### Spread, and why this run is accepted despite exceeding the old band on two sides
+### Spread, and why this run is accepted despite exceeding the old band on two rows
 
-**The bar is the committed baseline's band, and this run does not clear it everywhere.**
-The `107febcd` section's this-crate spreads ran 1.02% to 2.40% and its oracle spreads ran 2.29% to
-7.11%.
+**The bar is the committed baseline's band, taken over the four axis rows and not `rexxcps`.**
+The `107febcd` section's this-crate spreads over `arith`, `compound`, `strings`, `varlookup` ran
+1.02% to 2.40%; its oracle spreads over those same four ran 2.29% to 7.11%.
+
+**On the oracle side, every row in this run lands inside that band, two of them well inside it.**
+This run's oracle spreads are `arith` 2.04%, `compound` 2.02%, `strings` 4.08%, `varlookup` 5.42%.
+`arith` and `compound` sit below the old band's lower edge (2.29%) -- tighter, not wider -- and
+`strings` and `varlookup` sit below its upper edge (7.11%), `varlookup` by nearly two points.
+No oracle row exceeds the old band.
+
+**On the this-crate side, two of four rows exceed it.**
 This run's this-crate spreads are `arith` 1.03%, `compound` 2.79%, `strings` 2.86%, `varlookup`
-0.94%; its oracle spreads are `arith` 2.04%, `compound` 2.02%, `strings` 4.08%, `varlookup` 5.42%.
-Two oracle rows (`strings`, `varlookup`) and two this-crate rows (`compound`, `strings`) sit above
-the old band's upper end, `strings` on the oracle side by nearly a point.
-None of that is stated away: this run is measurably noisier than `107febcd`'s, on four of the eight
-rows.
+0.94%.
+`arith` and `varlookup` sit inside or below the old band, but `compound` (2.79%) and `strings`
+(2.86%) both sit above its 2.40% upper edge, by 0.39 and 0.46 points respectively.
+That is not stated away: this run is noisier than `107febcd`'s on those two rows, and only those
+two, out of the eight total.
 
 **It is accepted anyway, on the ratio intervals rather than the raw spreads.**
 The gate criterion this task exists to support is per-axis attribution, and that is what the ratio
 interval carries: 2.67x-2.72x, 6.32x-6.39x, 10.53x-11.06x, 4.28x-4.38x.
 None of the four comes near overlapping another, so the four axes remain distinguishable from each
-other despite the wider per-row spread -- the same conclusion "The spread of ratios across axes is
-real, not measurement noise" reached below for `107febcd`, reached again here on noisier input.
-What the wider spread costs is precision on each individual ratio, not the ability to rank the four
-axes against each other, and ranking them is what Tasks 3 and 4 need.
+other despite the two wider rows -- the same conclusion "The spread of ratios across axes is real,
+not measurement noise" reached below for `107febcd`, reached again here on slightly noisier input.
+What the two wider rows cost is precision on `compound`'s and `strings`' individual ratios, not the
+ability to rank the four axes against each other, and ranking them is what Tasks 3 and 4 need.
 
 **This is a different bar from the one the indicative run failed.**
 The controller's own contended run, taken with other work on the machine and recorded in
 `task-2b-brief.md` as direction-only, hit 82.77% spread on `strings` and 32.84% on `arith` -- one to
 two orders of magnitude past the committed band, wide enough that its ratio intervals would have
 overlapped each other and said nothing.
-This run's worst row is 5.42%, roughly a quarter of the indicative run's *best* row.
-A spread of 2.86% on one row is not the same failure as a spread of 82.77%, and rejecting this run
-because two rows sit a few tenths of a point above `107febcd`'s band, when the attribution the band
-exists to protect still holds, would be discarding a usable measurement over noise smaller than what
-it is meant to catch.
+This run's worst row, at 5.42% (oracle `varlookup`, itself inside the old band), is roughly a sixth
+of the indicative run's *best* row (32.84%).
+Exceeding the old band by a few tenths of a point on two rows, when the attribution the band exists
+to protect still holds, is not the same failure as a spread one to two orders of magnitude past it,
+and rejecting this run on that basis would be discarding a usable measurement over noise smaller
+than what the band is meant to catch.
 
 **As a coarse cross-check**, three of this run's four ratios land close to the contended run's:
 `arith` 2.70x against 2.60x, `compound` 6.35x against 6.32x, `strings` 10.77x against 10.68x.
@@ -678,6 +687,10 @@ noisy run's own spreads make it unusable as a check on anything finer than "same
 Three measurements of the same tree gave three different internal cps ratios: 7.41x
 (`--self-check`, one pair, explicitly not a baseline), 6.21x (the controller's contended run), and
 7.31x (this run, nine pairs, the accepted one).
+The 7.41x figure's provenance: the coordinator ran `--self-check` on this tree before dispatching
+this task, and passed the resulting number in a message rather than a committed file, so no output
+file backs it; it is recorded here as a single-pair, explicitly-not-a-baseline figure on that basis,
+not as a measurement this task reproduced.
 That spread -- 6.21x to 7.41x, about 1.2x peak to peak -- is wider than the spread across the four
 wall-clock ratios' repeat measurements in this same task, none of which moved by more than a few
 hundredths of a unit between runs.
