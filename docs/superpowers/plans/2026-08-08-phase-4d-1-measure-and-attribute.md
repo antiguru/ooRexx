@@ -21,7 +21,8 @@ Every task's requirements implicitly include this section.
 * **Never run cargo from the repo root** -- exit 101, "could not find Cargo.toml", which reads exactly like a test failure. Run from `rust/`.
 * **`grep` is a `ugrep -I` wrapper that silently skips non-UTF-8 files.** Always `/bin/grep -a`.
 * **Never report a single figure.** N runs and the spread, every time.
-* **`ulimit -v` is applied equally to both sides or to neither, and which is stated.** It caps address space, and **this crate reserves 512 MiB before running anything** (`INTERPRETER_STACK_BYTES`, `rexx-exec/src/lib.rs:309`) while the oracle reserves nothing comparable. Measured 2026-08-08: `say 1` exits 0 on the oracle at `ulimit -v 100000` and fails here (rc 101) at both 100000 and 400000, succeeding at 600000. The project's standard cap of 1048576 clears both, so use it on both sides for the whole-program axes and say so.
+* **`ulimit -v` is applied equally to both sides or to neither, and which is stated.** It caps address space, and **this crate reserves 512 MiB before running anything** (`INTERPRETER_STACK_BYTES`, `rexx-exec/src/lib.rs:309`) while the oracle reserves nothing comparable. Measured 2026-08-08: `say 1` exits 0 on the oracle at `ulimit -v 100000` and fails here (rc 101) at both 100000 and 400000, succeeding at 600000.
+  **The project's standard cap of 1048576 does NOT clear the benchmark workloads, and an earlier version of this line said it did.** That claim was checked against `say 1` and generalised, which is the error, not the number: measured at Task 2, this crate aborts under that cap on `varlookup`, `compound`, `strings`, `arith` and `rexxcps`, completing only `startup`. Task 2 used `ulimit -v 8388608` on both sides and verified it clears everything. **Use a cap you have verified against the workload you are running, state it, and apply it to both sides.**
 * **Three programs crash the oracle deterministically; never run them:** `select; when 1 = 0 then; when 2 = 2 then nop; end`; `say date('M','0','D')`; any `NUMERIC DIGITS` above 1000.
 * **Run oracle probes from a fresh empty subdirectory** of `/tmp/claude-1000/-home-moritz-dev-repos-ooRexx-rust-rewrite/0b337b3a-acaa-4a86-b38a-f4a89668e346/scratchpad`, absolute paths, fresh **directory** per batch.
 * Markdown: one sentence per line, `*` bullets, headers capitalise only the first word and proper nouns, `--` not em-dashes.
@@ -35,10 +36,11 @@ Every task's requirements implicitly include this section.
 | `docs/superpowers/plans/2026-07-27-rust-rewrite.md` | roadmap amended for 4d, "the ratio bar" defined | 1 |
 | `docs/superpowers/plans/phase-4-exclusions.txt` | reservation reversal corrected | 1 |
 | `rust/crates/rexx-bench/src/bin/rexx-bench-suite.rs` | the interleaved two-interpreter harness | 2 |
-| `rust/bench-programs/alloc4c.rex` | allocation axis, 4c surface | 3 |
-| `rust/crates/rexx-core/benches/heap.rs` | GC arm rebuilt like-for-like | 4 |
-| `docs/superpowers/plans/phase-4d-attribution.md` | named causes with numbers | 5, 6 |
-| `docs/superpowers/plans/phase-4d-gate.md` | the criteria and their derivations | 7 |
+| `docs/superpowers/plans/phase-4d-retention.md` | the per-iteration retention diagnosis | 3 |
+| `rust/bench-programs/alloc4c.rex` | allocation axis, 4c surface | 4 |
+| `rust/crates/rexx-core/benches/heap.rs` | GC arm rebuilt like-for-like | 5 |
+| `docs/superpowers/plans/phase-4d-attribution.md` | named causes with numbers | 6, 7 |
+| `docs/superpowers/plans/phase-4d-gate.md` | the criteria and their derivations | 8 |
 
 ---
 
@@ -126,7 +128,54 @@ Record the `arith` result explicitly against **Phase 2's outstanding parity debt
 
 ---
 
-### Task 3: Make the allocation axis measurable
+### Task 3: Diagnose the unbounded per-iteration retention
+
+Task 2 measured peak resident set alongside wall time and found this crate between 51 and 218 times the oracle's, which sits near 20 MB on every axis.
+Follow-up measurement, 2026-08-08, on `do i = 1 to n; x = x + 1; y = x; end`: **retention grows linearly with iterations at roughly 216 bytes each** -- 213 MB at one million, 1.06 GB at five, 2.11 GB at ten -- and a literal loop bound behaves identically to a variable one (213,104 KB against 213,028 KB).
+The oracle stays flat because it collects.
+
+**This is pulled ahead of the profiling task because it may not be a performance property at all.**
+A loop whose live set is two integers should not grow without bound; a long-running Rexx program would exhaust memory.
+If that is right it is a defect, its fix is 4d-2's largest single lever, and it plausibly explains a large share of the timing gap on every loop axis -- the smoke profile of `arith` put about a third of self time in the glibc malloc family, which is what unreclaimed per-iteration allocation looks like from the allocator's side.
+
+**This task diagnoses. It does not fix.** The phase's no-optimisation rule binds here exactly as elsewhere.
+
+**Files:**
+* Create: `docs/superpowers/plans/phase-4d-retention.md`
+
+- [ ] **Step 1: Reproduce and characterise, before reading any code**
+
+Confirm the linear growth and the per-iteration constant yourself. Vary the loop body and find what the retention is proportional to: iterations, clauses executed, assignments, distinct variables, or arithmetic operations. A body of `nop` against one of `x = x + 1` against one of `y = x` separates several of these in three runs.
+
+**Check the exit status and the output of every probe.** A program that dies on line 1 reports a small, stable, entirely meaningless resident set -- that mistake was made while checking this very finding, and the wrong number looked like a refutation of it.
+
+- [ ] **Step 2: Determine whether the collector runs at all during a loop**
+
+`Heap::collections_performed` is a cumulative counter incremented inside `collect` itself, and `run_program_collect_every_alloc` exists as a stress mode. Use them. Report how many collections a ten-million-iteration loop performs.
+
+Three outcomes, and they have different owners: the collector never runs, so nothing triggers it; the collector runs but reclaims nothing, so something roots every temporary; or it reclaims correctly and the growth is elsewhere, in which case find where.
+
+- [ ] **Step 3: Name the retained object and the root that holds it**
+
+Whatever Step 2 says, end with a specific answer: which allocation, held by which root, released by what if anything. `roots.push_temp` and the frame discipline in `run.rs` are the obvious places to look, and `crates/rexx-core/src/roots.rs` defines the root set.
+
+- [ ] **Step 4: Quantify the time cost, by prototype, then revert**
+
+Confirm the attribution the way a bug fix is confirmed: change it, show both the retention and the wall time move, revert it. **Publish the measured win in `phase-4d-retention.md` and revert the prototype in the same commit.** Back up with `cp` and restore from the backup, verified with `sha256sum -c`; never `git checkout --`.
+
+If a prototype is not tractable within this task, say so and record what you would need -- an unquantified cause is still a finding, and a wrong number is worse than none.
+
+- [ ] **Step 5: Rule on whether this is a defect, and record the coverage gap either way**
+
+If it is a defect, say what a user would see and record it in `docs/superpowers/plans/phase-4-exclusions.txt` in that file's own style.
+
+**Regardless of the ruling, record this:** nothing in the differential suite can see unbounded growth, because every corpus program is small and the harness compares output rather than resident set. That is a coverage gap in the project's primary instrument, and it is why this reached Phase 4 unnoticed.
+
+- [ ] **Step 6: Commit**
+
+---
+
+### Task 4: Make the allocation axis measurable
 
 `alloc.rex` stops at `rc=120`, "a message send is not implemented (Phase 5)". Allocation throughput does not need message sends, and 4d-2 will land representation changes -- **landing them with this axis unmeasured is the worst available ordering.**
 
@@ -152,7 +201,7 @@ Byte-identical stdout, exit 0 both sides. An interpreter that computes something
 
 ---
 
-### Task 4: D1's Phase 4 re-measurement -- the GC arm, rebuilt
+### Task 5: D1's Phase 4 re-measurement -- the GC arm, rebuilt
 
 `d1-decision.md:19-22` records the Phase 1 heap result as a debt rather than a pass and says it "must be re-measured at Phase 4 when a real interpreter exists to measure on equal footing". This task is that re-measurement.
 
@@ -179,7 +228,7 @@ Write the result into `d1-decision.md` as the Phase 4 re-measurement the documen
 
 ---
 
-### Task 5: Profile every axis and attribute the gap
+### Task 6: Profile every axis and attribute the gap
 
 **Files:**
 * Create: `docs/superpowers/plans/phase-4d-attribution.md`
@@ -220,7 +269,7 @@ Back up with `cp` before mutating and restore from that backup, verifying with `
 
 ---
 
-### Task 6: The allocator diagnostic
+### Task 7: The allocator diagnostic
 
 A smoke profile of `arith` -- the axis closest to the oracle -- put roughly a third of self time in the glibc malloc family with the crate's own allocation path a further five per cent on top. One short run of one axis, so Task 5 supersedes it.
 
@@ -250,7 +299,7 @@ This is a runtime behaviour change, so unlike `lto` it does **not** go into the 
 
 ---
 
-### Task 7: Write the gate
+### Task 8: Write the gate
 
 **Files:**
 * Create: `docs/superpowers/plans/phase-4d-gate.md`
