@@ -100,9 +100,18 @@ iterations of a *counted* loop specifically.
 Every row below is 8,000,000 iterations, every run exited 0 with the expected stdout, and the
 per-iteration column subtracts the 2,500 KB floor a trivial program occupies.
 
+**The table is two batches, and the `do n` control was run in both.**
+The last three rows -- the `WHILE`/`UNTIL` shapes -- and the `do n` control quoted below come from a
+second batch, run after review found the first batch's reading of these shapes incomplete; every
+other row is from the first.
+The control read **2,532 KB** in that second batch against 2,568 KB in the first, a 36 KB spread on
+a 2.5 MB fixed cost that is run-to-run noise and 0.0 bytes per iteration either way.
+The second batch's figure is the one quoted here and in `phase-4-exclusions.txt`, because it is the
+one the `WHILE` rows were measured beside.
+
 | loop header | body | peak RSS | bytes per iteration |
 |---|---|---:|---:|
-| `do n` | `nop` | 2,568 KB | 0.0 |
+| `do n` | `nop` | 2,532 KB | 0.0 |
 | `do n` | `zz = zz + 1` | 2,516 KB | 0.0 |
 | `do n` | `if 1 then nop` | 2,796 KB | 0.0 |
 | `do n` | `if k then nop`, `k = 1` | 2,744 KB | 0.0 |
@@ -211,7 +220,7 @@ They are retained because the sweep that would notice never runs.
 
 **Two push sites, not one, and any explanation that names only the counted form is incomplete.**
 `Interp::loop_advance` pushes the control variable's previous value; `Interp::eval_condition`
-(`run.rs:6016`) pushes the result of every `WHILE`/`UNTIL` test.
+(`run.rs:6017`) pushes the result of every `WHILE`/`UNTIL` test.
 Both run inside the *same single* `step_in_temps_frame` -- the one belonging to the whole `DO`
 instruction -- so both accumulate for the loop's entire run.
 
