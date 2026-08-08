@@ -41,6 +41,7 @@ pub static PROGRAMS: &[&str] = &[
     "strings",
     "arith",
     "alloc",
+    "alloc4c",
 ];
 
 /// Programs in `bench-programs/` that the criterion harness deliberately does

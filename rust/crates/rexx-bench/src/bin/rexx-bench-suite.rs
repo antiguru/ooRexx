@@ -166,6 +166,10 @@ const AXES: &[Axis] = &[
         role: Role::Blocked,
     },
     Axis {
+        name: "alloc4c",
+        role: Role::Loop,
+    },
+    Axis {
         name: "arith",
         role: Role::Loop,
     },
