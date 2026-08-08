@@ -29,9 +29,11 @@
 
 use crate::Interp;
 use rexx_parse::{
-    Call, CodeBody, Expr, ExprKind, Fragment, InstructionKind, Loop, LoopKind, Parse, ParseSource,
-    Redirection, Signal, SymbolId, SymbolTable, Tail, Trace, Use, VariableRef, compound_parts,
+    Call, CodeBody, Expr, ExprKind, Fragment, Instruction, InstructionKind, Loop, LoopKind, Parse,
+    ParseSource, Redirection, Signal, SymbolId, SymbolTable, Tail, Trace, Use, VariableRef,
+    compound_parts,
 };
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -108,9 +110,57 @@ pub(crate) struct BodyKey {
 pub(crate) struct Plan {
     pub(crate) names: HashMap<Box<[u8]>, usize>,
     pub(crate) by_symbol: HashMap<SymbolId, usize>,
+    /// The static clause indent of each instruction in this body, memoised
+    /// by index. [`Plan::NO_INDENT`] means "not asked yet".
+    ///
+    /// `static_indent` walks the flat instruction list from position zero to
+    /// answer for one index, and `step_in_temps_frame` asks for the answer on
+    /// every clause it steps -- so the cost of computing it on demand is the
+    /// length of the body, per clause. Measured on `samples/rexxcps.rex`,
+    /// where the body is long enough for that to show: `indent_in_range` was
+    /// the single largest self-time function in the profile at 8.0%.
+    ///
+    /// The answer depends on the instruction list alone (`static_indent`'s
+    /// own doc comment: never on which iteration is running), so it can be
+    /// kept once it is known.
+    ///
+    /// **Filled on first ask rather than by the upfront pass**, which is
+    /// measured rather than stylistic: filling every entry costs the body's
+    /// length per entry, and a body's clauses are not all executed. A
+    /// 20,000-clause body placed after an `EXIT` ran in 22 ms before this
+    /// field existed and 211 ms with it filled upfront. Asking only for what
+    /// is stepped makes the total no worse than computing on demand ever
+    /// was, since each index is then computed at most once.
+    ///
+    /// `Cell` because a `Plan` is shared through an `Rc` and so is never held
+    /// mutably; the interpreter is single-threaded, and nothing here escapes
+    /// to another one.
+    pub(crate) indents: Box<[Cell<usize>]>,
 }
 
 impl Plan {
+    /// `indents`' own "not asked yet" marker. No clause indents this far.
+    pub(crate) const NO_INDENT: usize = usize::MAX;
+
+    /// The static clause indent of `target`, computed on the first ask and
+    /// remembered.
+    ///
+    /// `instructions` is a parameter rather than a field because a `Plan` is
+    /// cached by `BodyKey`, and the body it describes is reached through the
+    /// `Rc<Program>` every caller already holds.
+    pub(crate) fn indent_of(&self, instructions: &[Instruction], target: usize) -> usize {
+        let Some(slot) = self.indents.get(target) else {
+            return crate::run::static_indent(instructions, target);
+        };
+        let known = slot.get();
+        if known != Plan::NO_INDENT {
+            return known;
+        }
+        let computed = crate::run::static_indent(instructions, target);
+        slot.set(computed);
+        computed
+    }
+
     /// Walks `body` once and returns a finished table (D16: "built by one
     /// upfront pass", not populated lazily one name at a time).
     ///
@@ -136,6 +186,9 @@ impl Plan {
         for instruction in &body.instructions {
             plan.note_instruction(&instruction.kind, symbols);
         }
+        plan.indents = (0..body.instructions.len())
+            .map(|_| Cell::new(Plan::NO_INDENT))
+            .collect();
         plan
     }
 
@@ -620,6 +673,51 @@ mod tests {
     use crate::Code;
     use rexx_parse::{Program, parse_interpret, parse_program};
 
+    /// `indent_of` answers what `static_indent` answers, for every index,
+    /// and answers the same thing the second time.
+    ///
+    /// It is a memo over `static_indent`, so the answers cannot differ by
+    /// arithmetic -- what can differ is the wiring: an off-by-one in which
+    /// slot an index reads or writes gives one instruction another's indent,
+    /// which every arm of this program has a distinct value for. The second
+    /// pass is the half that reads a filled slot rather than computing.
+    #[test]
+    fn indent_of_answers_what_static_indent_answers_at_every_index() {
+        let source = b"if 1 = 1 then\n  do i = 1 to 2\n    say i\n  end\nelse\n  nop\nselect\n  when 1 = 0 then nop\n  otherwise\n    say 'o'\nend\n";
+        let program = parse_program(source.to_vec()).expect("test program parses");
+        let plan = Plan::build(&program.main, &program.symbols);
+        let instructions = &program.main.instructions;
+        assert!(instructions.len() > 8, "the program lost its shape");
+
+        let expected: Vec<usize> = (0..instructions.len())
+            .map(|index| crate::run::static_indent(instructions, index))
+            .collect();
+        let first: Vec<usize> = (0..instructions.len())
+            .map(|index| plan.indent_of(instructions, index))
+            .collect();
+        let second: Vec<usize> = (0..instructions.len())
+            .map(|index| plan.indent_of(instructions, index))
+            .collect();
+        assert_eq!(first, expected, "first pass, computing");
+        assert_eq!(second, expected, "second pass, reading the memo");
+        // The stored table itself, not only what the accessor answers: a
+        // write to the wrong slot leaves every other slot unfilled, and an
+        // unfilled slot is recomputed and so still answers correctly. Only
+        // looking at what was stored separates the two.
+        let stored: Vec<usize> = plan.indents.iter().map(Cell::get).collect();
+        assert_eq!(stored, expected, "what the memo actually holds");
+        // Not every index the same value, or the assertions above hold for a
+        // memo that always answers with slot zero.
+        assert!(
+            expected
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+                > 2,
+            "this program does not distinguish enough indent levels to test with: {expected:?}"
+        );
+    }
+
     /// Pushes a fresh top-level activation for `program`, the same setup
     /// `Interp::run` does, so these tests can drive `slot_of`/`Plan` through
     /// a live activation without running the whole instruction loop.
@@ -763,6 +861,7 @@ mod tests {
             body: &program.main,
             symbols: &program.symbols,
             slots: &HashMap::new(),
+            indents: None,
         };
         let key = interp.tail_key(&code, id);
         assert_eq!(key, b"2");
@@ -857,6 +956,7 @@ mod tests {
             body: &program.main,
             symbols: &program.symbols,
             slots: &HashMap::new(),
+            indents: None,
         };
         let key = interp.tail_key(&code, id);
         // The tail VALUE "abc" survives verbatim, lowercase and all -- not

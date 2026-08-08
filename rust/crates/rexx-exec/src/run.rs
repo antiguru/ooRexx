@@ -808,6 +808,7 @@ impl Interp {
             body,
             symbols: &program.symbols,
             slots: &plan.by_symbol,
+            indents: Some(&plan),
         };
         let depth = self.activations.len();
 
@@ -1437,7 +1438,7 @@ impl Interp {
                 self.current_case_text = case_text.clone();
                 for &when_index in whens {
                     let when_instruction = &code.body.instructions[when_index];
-                    let when_indent = self.printed_indent(&code.body.instructions, when_index);
+                    let when_indent = self.printed_indent(code, when_index);
                     // Overrides the enclosing `SELECT`'s own
                     // `current_value_indent` (`step_in_temps_frame` set it
                     // to `select_indent` before this arm even started) for
@@ -4188,7 +4189,7 @@ impl Interp {
         // `printed_indent` rather than `static_indent` directly, so that
         // *which* offsets apply is one fact in one place -- see its own doc
         // comment for what it adds and why open-coding it was a defect.
-        let indent = self.printed_indent(&code.body.instructions, index);
+        let indent = self.printed_indent(code, index);
         self.clause_state.current_value_indent = indent;
         // Set unconditionally, exactly like `current_value_indent` just
         // above and for the identical reason (that field's own doc comment):
@@ -4326,7 +4327,7 @@ impl Interp {
         source: Option<&ProgramSource>,
         instruction: &Instruction,
     ) {
-        let indent = self.printed_indent(&code.body.instructions, index);
+        let indent = self.printed_indent(code, index);
         self.record_failure_at(source, instruction, indent);
     }
 
@@ -4383,7 +4384,7 @@ impl Interp {
             // temps_frame`'s own computation at all (`Flow::Leave`'s own
             // doc comment: eagerly, before any propagation), so it needs
             // the identical addition independently, not by inheritance.
-            indent: self.printed_indent(&code.body.instructions, index),
+            indent: self.printed_indent(code, index),
             // Already this instruction's own line: `step_in_temps_frame`'s
             // `in_clause` set it before dispatching this `step`, through the
             // same `clause_line` call `SIGL` reads.
@@ -4598,7 +4599,7 @@ impl Interp {
         // added -- one computation serves both callers correctly because
         // the field itself, not this function, is what carries the
         // difference between them.
-        let otherwise_indent = self.printed_indent(&code.body.instructions, otherwise_index);
+        let otherwise_indent = self.printed_indent(code, otherwise_index);
         self.clause_state.current_value_indent = otherwise_indent;
         if self.trace_mode().all
             && let Some((line, text)) = self.clause_site(source, otherwise_instruction)
@@ -4716,8 +4717,15 @@ impl Interp {
     /// is deliberately *not* where the 40-column clamp lives: that is on the
     /// `*-*` echo alone (`trace::MAX_CLAUSE_INDENT`), and clamping here would
     /// truncate every `>>>` value line too.
-    fn printed_indent(&self, instructions: &[Instruction], target: usize) -> usize {
-        static_indent(instructions, target) + self.activation_indent + self.indent_offset
+    fn printed_indent(&self, code: &Code<'_>, target: usize) -> usize {
+        // The table when this body has one, and the walk when it does not --
+        // an `INTERPRET` fragment is the case with none, and its instruction
+        // list is short enough that the walk is what it always was.
+        let base = match code.indents {
+            Some(plan) => plan.indent_of(&code.body.instructions, target),
+            None => static_indent(&code.body.instructions, target),
+        };
+        base + self.activation_indent + self.indent_offset
     }
 
     /// Runs `code.body.instructions[start..end]` in place, one instruction at
@@ -4877,11 +4885,7 @@ impl Interp {
                             // `END` is ever itself the direct landing
                             // point of an escape (untested, but cheap to
                             // keep uniform rather than silently exempt).
-                            self.trace_clause(
-                                line,
-                                self.printed_indent(&code.body.instructions, index),
-                                &text,
-                            );
+                            self.trace_clause(line, self.printed_indent(code, index), &text);
                         }
                         Ok(Flow::Goto(resume))
                     }
@@ -6234,6 +6238,10 @@ impl Interp {
             body: &fragment.body,
             symbols: &fragment.symbols,
             slots: &slots,
+            // A fragment has no `Plan` of its own -- `fragment_plan` answers
+            // slots and nothing else -- so its clause indents are computed
+            // the way they always were.
+            indents: None,
         };
 
         // `exit` inside `INTERPRET` ends the program, not the fragment, so
@@ -7021,7 +7029,7 @@ impl Interp {
 /// state: a `WHEN`'s own condition sits at the `SELECT`'s own two, not zero,
 /// and `OTHERWISE`'s own body is two more, not the `WHEN`-`THEN` shape's
 /// four more.
-fn static_indent(instructions: &[Instruction], target: usize) -> usize {
+pub(crate) fn static_indent(instructions: &[Instruction], target: usize) -> usize {
     indent_in_range(instructions, 0, instructions.len(), target)
 }
 

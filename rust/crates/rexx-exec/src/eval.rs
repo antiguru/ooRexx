@@ -1103,6 +1103,7 @@ mod tests {
             body: &program.main,
             symbols: &program.symbols,
             slots: &HashMap::new(),
+            indents: None,
         };
         interp.eval(&code, expr)
     }
@@ -1137,6 +1138,7 @@ mod tests {
             body: &program.main,
             symbols: &program.symbols,
             slots: &HashMap::new(),
+            indents: None,
         };
         interp.eval(&code, expr)
     }
@@ -1293,6 +1295,7 @@ mod tests {
             body: &program.main,
             symbols: &program.symbols,
             slots: &HashMap::new(),
+            indents: None,
         };
         let value = interp.eval(&code, expr).unwrap();
         assert_eq!(&*interp.to_text(value), b"5");
@@ -1500,6 +1503,7 @@ mod tests {
             body: &program.main,
             symbols: &program.symbols,
             slots: &HashMap::new(),
+            indents: None,
         };
         let value = interp.eval(&code, expr).unwrap();
         assert_eq!(&*interp.to_text(value), b"ab");
@@ -1702,6 +1706,7 @@ mod tests {
             body: &program.main,
             symbols: &program.symbols,
             slots: &HashMap::new(),
+            indents: None,
         };
         let condition = match &program.main.instructions[0].kind {
             InstructionKind::If { condition, .. } => condition,

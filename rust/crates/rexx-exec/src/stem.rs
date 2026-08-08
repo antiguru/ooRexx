@@ -749,6 +749,7 @@ mod tests {
             body: &program.main,
             symbols: &program.symbols,
             slots: &HashMap::new(),
+            indents: None,
         };
         let key = interp.tail_key(&code, id);
         assert_eq!(key, b"I");
@@ -780,6 +781,7 @@ mod tests {
             body: &program.main,
             symbols: &program.symbols,
             slots: &HashMap::new(),
+            indents: None,
         };
         let key = interp.tail_key(&code, id);
         assert_eq!(key, b"abc");
@@ -814,6 +816,7 @@ mod tests {
             body: &program.main,
             symbols: &program.symbols,
             slots: &HashMap::new(),
+            indents: None,
         };
         let key = interp.tail_key(&code, id);
         assert_eq!(key, b"1.2");
@@ -831,6 +834,7 @@ mod tests {
             body: &program2.main,
             symbols: &program2.symbols,
             slots: &HashMap::new(),
+            indents: None,
         };
         let key2 = interp.tail_key(&code2, id2);
         assert_eq!(key2, key);

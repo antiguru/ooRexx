@@ -1055,6 +1055,14 @@ struct Code<'a> {
     /// why this is a field of `Code` rather than something read back off the
     /// activation.
     slots: &'a HashMap<SymbolId, usize>,
+    /// `Plan::indents` for **this** body, when there is one.
+    ///
+    /// A field here for the same reason `slots` is one: an `INTERPRET`
+    /// fragment runs its own instruction list while the activation's plan
+    /// still describes the enclosing body, so the table cannot be read back
+    /// off the activation without being the wrong body's. `None` is that
+    /// case, and `printed_indent` falls back to computing the answer.
+    indents: Option<&'a Plan>,
 }
 
 /// Whether a variable read found a value or derived one from the name.
