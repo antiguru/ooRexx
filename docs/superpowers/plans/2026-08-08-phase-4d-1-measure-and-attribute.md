@@ -159,6 +159,14 @@ Three outcomes, and they have different owners: the collector never runs, so not
 
 Whatever Step 2 says, end with a specific answer: which allocation, held by which root, released by what if anything. `roots.push_temp` and the frame discipline in `run.rs` are the obvious places to look, and `crates/rexx-core/src/roots.rs` defines the root set.
 
+**Use a heap profiler rather than reading code and guessing.** `samply` answers where time goes and is the wrong instrument here; the question is what is held and by whom.
+
+`valgrind --tool=massif` is installed and needs no setup. It reports heap size over time plus the allocation tree with call stacks at each peak snapshot, which is exactly the shape of this question. Use `--stacks=no --detailed-freq=1` and read the result with `ms_print`.
+
+**Valgrind's 20-to-50-times slowdown does not matter here, and the reason is worth understanding rather than working around.** The retention is *linear* in iterations, so it reproduces at any scale: 100,000 iterations retain roughly 21 MB, which is ample signal. Run the small loop under the slow instrument rather than trying to make the big loop fast. Confirm linearity holds at the small end before relying on it.
+
+If massif's C-level stacks are hard to attribute to Rust call sites, the `dhat` crate is a pure-Rust alternative -- a dev-dependency plus a feature-gated global allocator, no system install -- and it names Rust frames directly. `heaptrack` would be better than either and is **not installed**; installing it needs root, so ask rather than attempting it.
+
 - [ ] **Step 4: Quantify the time cost, by prototype, then revert**
 
 Confirm the attribution the way a bug fix is confirmed: change it, show both the retention and the wall time move, revert it. **Publish the measured win in `phase-4d-retention.md` and revert the prototype in the same commit.** Back up with `cp` and restore from the backup, verified with `sha256sum -c`; never `git checkout --`.
