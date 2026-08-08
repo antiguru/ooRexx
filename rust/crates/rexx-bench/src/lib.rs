@@ -9,10 +9,13 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! Shared plumbing for the Task 0.7 benchmark harness (`benches/interpreter.rs`)
-//! and the cold-start timer (`src/bin/rexx-time.rs`): resolving
-//! `REXX_BENCH_BINARY` into a runnable `Interpreter` and locating
-//! `bench-programs/`.
+//! Shared plumbing for the Task 0.7 benchmark harness (`benches/interpreter.rs`),
+//! the cold-start timer (`src/bin/rexx-time.rs`) and the interleaved
+//! two-interpreter suite (`src/bin/rexx-bench-suite.rs`): resolving
+//! `REXX_BENCH_BINARY` into a runnable `Interpreter`, locating
+//! `bench-programs/`, and the subprocess timing core in [`timing`].
+
+pub mod timing;
 
 use rexx_oracle::Interpreter;
 use std::path::{Path, PathBuf};

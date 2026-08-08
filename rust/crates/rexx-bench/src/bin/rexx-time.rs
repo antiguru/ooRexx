@@ -20,9 +20,16 @@
 //! Usage: `rexx-time [--warmup N] [--runs N] <command> [args...]`
 //! (a leading `--` before the command is accepted and skipped, for
 //! readability at call sites).
+//!
+//! The launch-and-wall-clock step and the min/median/mean/max reduction live
+//! in [`rexx_bench::timing`], shared with `rexx-bench-suite`. What stays here
+//! is the command line and the report; the measured quantity is unchanged,
+//! and the committed Phase 0 cold-start numbers remain numbers this binary
+//! still produces.
 
-use std::process::{Command, ExitCode, Stdio};
-use std::time::{Duration, Instant};
+use rexx_bench::timing::{Capture, Summary, time_once};
+use std::process::ExitCode;
+use std::time::Duration;
 
 fn main() -> ExitCode {
     let mut warmup = 5usize;
@@ -52,7 +59,7 @@ fn main() -> ExitCode {
     };
 
     for _ in 0..warmup {
-        if !run_once(program, program_args) {
+        if run_once(program, program_args).is_none() {
             eprintln!("warmup run failed: {program} {program_args:?}");
             return ExitCode::FAILURE;
         }
@@ -60,44 +67,38 @@ fn main() -> ExitCode {
 
     let mut samples = Vec::with_capacity(runs);
     for _ in 0..runs {
-        let start = Instant::now();
-        if !run_once(program, program_args) {
+        let Some(wall) = run_once(program, program_args) else {
             eprintln!("run failed: {program} {program_args:?}");
             return ExitCode::FAILURE;
-        }
-        samples.push(start.elapsed());
+        };
+        samples.push(wall);
     }
     // A run that failed to launch at all reports nothing rather than a
     // fabricated zero -- an empty `samples` here would already have
     // returned above, but guard the arithmetic below regardless.
-    if samples.is_empty() {
+    let Some(summary) = Summary::of(&mut samples) else {
         eprintln!("no runs completed");
         return ExitCode::FAILURE;
-    }
-
-    samples.sort();
-    let min = samples[0];
-    let max = samples[samples.len() - 1];
-    let median = samples[samples.len() / 2];
-    let mean = samples.iter().sum::<Duration>() / samples.len() as u32;
+    };
 
     println!("command: {program} {}", program_args.join(" "));
     println!("runs: {runs} ({warmup} warm-up runs discarded)");
-    println!("min:    {:>10.3} ms", min.as_secs_f64() * 1000.0);
-    println!("median: {:>10.3} ms", median.as_secs_f64() * 1000.0);
-    println!("mean:   {:>10.3} ms", mean.as_secs_f64() * 1000.0);
-    println!("max:    {:>10.3} ms", max.as_secs_f64() * 1000.0);
+    println!("min:    {:>10.3} ms", millis(summary.min));
+    println!("median: {:>10.3} ms", millis(summary.median));
+    println!("mean:   {:>10.3} ms", millis(summary.mean));
+    println!("max:    {:>10.3} ms", millis(summary.max));
     ExitCode::SUCCESS
 }
 
-fn run_once(program: &str, args: &[String]) -> bool {
-    Command::new(program)
-        .args(args)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+/// Wall time of one successful run, or `None` if it could not be launched or
+/// did not exit 0.
+fn run_once(program: &str, args: &[String]) -> Option<Duration> {
+    let completed = time_once(program, args, &[], Capture::Discard).ok()?;
+    completed.succeeded().then_some(completed.wall)
+}
+
+fn millis(duration: Duration) -> f64 {
+    duration.as_secs_f64() * 1000.0
 }
 
 fn next_number(args: &mut impl Iterator<Item = String>, flag: &str) -> usize {
