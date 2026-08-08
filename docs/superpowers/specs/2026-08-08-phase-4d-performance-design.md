@@ -99,6 +99,23 @@ Planned now, in full.
 
 **Stage 2 may prototype, and must publish and revert.** The falsification rule below requires having a fix in hand to confirm an attribution, which would otherwise hand stage 3 the very number it is supposed to write independently. So a prototype's measured win is published in the attribution document and the prototype is reverted; the bar is then visibly downstream of a number already on the record.
 
+**Swap the global allocator early, as a diagnostic rather than as an optimisation.** Decided 2026-08-08.
+
+A smoke profile of `arith` -- the axis that is *best* against the oracle -- puts roughly a third of self time in the glibc malloc family (`_GI___libc_malloc`, `int_malloc`, `int_free_chunk`, `_GI___libc_free`, `realloc`), with `Heap::alloc_with_uncollected` a further 5% on top.
+One 4-second run of one axis, so the figure is indicative and 4d-1 re-measures it properly.
+
+The value of an allocator swap here is that **it separates two hypotheses that the profile alone cannot.**
+If a `#[global_allocator]` change recovers most of that third, the cost is allocator *quality* and the fix is adoption.
+If it recovers little, the cost is allocation *count*, and the fix is not to call the allocator -- which is D1's side byte-arena, already nominated as the first thing to try.
+Run it before deciding between them, because it is a few lines and it bounds the answer.
+
+Two constraints on *adopting* it, as opposed to measuring with it:
+
+* This is a runtime behaviour change, not a build setting, so unlike `lto` it does **not** go into the baseline. It is measured, published and reverted per the rule above, and 4d-2 decides adoption against the bar.
+* Adoption is gated on the platforms the parity gate and CI already name. An allocator that does not build everywhere the interpreter ships is not a candidate, and that must be checked rather than assumed.
+
+Note what the comparison is really telling us: the oracle does not call libc malloc per object at all -- it allocates from its own pools (`MemoryObject`, `DeadObjectPool`) -- so a per-value malloc is a difference in kind, and a faster malloc narrows it without removing it.
+
 ### 4d-2 -- optimise
 
 **Planned only after 4d-1 closes**, from the attribution. It cannot be planned now: its tasks are one-cause-each and no cause exists yet, so any task written today would be written from the provisional table this spec has already disowned.
