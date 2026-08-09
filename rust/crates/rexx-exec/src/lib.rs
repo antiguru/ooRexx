@@ -116,6 +116,12 @@ mod parse_template;
 // only the bytes.
 mod trace;
 
+// The register-based instruction stream (Phase 4e): `Op`, `Chunk`, and
+// `compile`, the one pass that turns a body into a `Chunk`. `Interp::chunk_for`
+// (`plan.rs`, beside `plan_for`) is the cache that makes compiling a body once
+// rather than once per entry.
+mod ir;
+
 /// The exit code for a construct this crate does not implement.
 ///
 /// It has to sit outside 157..=253, where a Rexx error's `256 - major` lives,
@@ -1168,6 +1174,25 @@ struct Interp {
     /// `ProgramId(0)`'s program is still here.
     programs: Vec<Rc<Program>>,
     plans: HashMap<BodyKey, Rc<Plan>>,
+    /// The chunk cache (Phase 4e), under the same key `plans` is: D16's
+    /// discipline, unchanged, applied to a second cache rather than
+    /// invented afresh for it. See `Interp::chunk_for`, in `plan.rs`.
+    #[allow(
+        dead_code,
+        reason = "Task 3's driver is chunk_for's first production caller"
+    )]
+    chunks: HashMap<BodyKey, Rc<crate::ir::Chunk>>,
+    /// How many bodies `chunk_for` has refused because they do not fit the
+    /// index widths the compiled stream commits to (`ChunkTooLarge`) --
+    /// never because a body contains a construct the compiler does not
+    /// know, which does not exist (D21: every instruction compiles).
+    /// `Interp::chunk_for`'s own doc says what stops this being a silent
+    /// fallback to the tree-walker.
+    #[allow(
+        dead_code,
+        reason = "Task 3's driver is chunk_for's first production caller"
+    )]
+    chunks_refused: usize,
     /// Every `::ROUTINE` the running program installs, keyed by its
     /// **upcased** name and holding its index in `Program::directives`.
     ///
@@ -1766,6 +1791,8 @@ impl Interp {
             activations: Vec::new(),
             programs: Vec::new(),
             plans: HashMap::new(),
+            chunks: HashMap::new(),
+            chunks_refused: 0,
             routines: HashMap::new(),
             out: Vec::new(),
             trace: Vec::new(),

@@ -586,6 +586,39 @@ impl Interp {
         plan
     }
 
+    /// The chunk for one body, from the cache or compiled and cached, under
+    /// the same key as its plan (D16's discipline, unchanged).
+    ///
+    /// `None` means the body does not fit the index widths and this
+    /// activation runs on the tree-walker. `chunks_refused` is what stops
+    /// that being silent: the dual-engine harness asserts it is zero across
+    /// the corpus.
+    #[allow(
+        dead_code,
+        reason = "Task 3's driver is this method's first production caller"
+    )]
+    pub(crate) fn chunk_for(
+        &mut self,
+        key: BodyKey,
+        body: &CodeBody,
+        plan: &Plan,
+    ) -> Option<Rc<crate::ir::Chunk>> {
+        if let Some(chunk) = self.chunks.get(&key) {
+            return Some(Rc::clone(chunk));
+        }
+        match crate::ir::compile(body, plan) {
+            Ok(chunk) => {
+                let chunk = Rc::new(chunk);
+                self.chunks.insert(key, Rc::clone(&chunk));
+                Some(chunk)
+            }
+            Err(_) => {
+                self.chunks_refused += 1;
+                None
+            }
+        }
+    }
+
     /// The slot `name` resolves to in the current frame, allocating one if it
     /// resolves to none.
     ///
