@@ -50,12 +50,23 @@ fn every_instruction_of_an_all_generic_body_compiles_to_one_generic_op() {
 /// `run_bounded`'s absorption guard is inclusive, so a construct's resume
 /// point can be `end`, which is one past its last instruction. A map that
 /// stops at `len - 1` panics there rather than at compile.
+///
+/// The expected count comes from the parsed body's own `instructions.len()`,
+/// not from anything `Chunk` computes: an earlier version of this test
+/// compared `chunk.op_of.len()` against a `Chunk::instruction_count()` that
+/// was itself defined as `op_of.len() - 1`, which reduces to `x == x` and
+/// cannot fail regardless of whether `compile` pushes the final entry.
+/// Verified by removing that final push in `compile.rs` and confirming this
+/// version goes red where the old one did not (recorded in the task report).
 #[test]
 fn the_instruction_map_has_an_entry_one_past_the_last_instruction() {
-    let chunk = compile_for_test(b"if 1 = 1 then say 'a'\nsay 'b'\n").expect("compiles");
+    let source = b"if 1 = 1 then say 'a'\nsay 'b'\n";
+    let program = parse_program(source.to_vec()).expect("test program parses");
+    let plan = Plan::build(&program.main, &program.symbols);
+    let chunk = super::compile(&program.main, &plan).expect("compiles");
     assert_eq!(
         chunk.op_of.len(),
-        chunk.instruction_count() + 1,
+        program.main.instructions.len() + 1,
         "one entry per instruction plus the end entry"
     );
 }

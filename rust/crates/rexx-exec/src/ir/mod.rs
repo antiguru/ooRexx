@@ -30,6 +30,10 @@
 mod compile;
 pub(crate) use compile::compile;
 
+// `render`, the golden-test serialiser, has no caller outside `golden_tests.rs`
+// and the plan's ten tasks never give it one -- gated here rather than carrying
+// a permanent `#[allow(dead_code)]` for a caller that is never coming.
+#[cfg(test)]
 mod golden;
 
 #[cfg(test)]
@@ -114,13 +118,4 @@ pub(crate) struct Chunk {
         reason = "Task 3's driver reserves this many registers; nothing does yet"
     )]
     registers: u16,
-}
-
-#[cfg(test)]
-impl Chunk {
-    /// The number of instructions this chunk was compiled from: `op_of`
-    /// less its trailing one-past-the-end entry.
-    pub(crate) fn instruction_count(&self) -> usize {
-        self.op_of.len() - 1
-    }
 }
