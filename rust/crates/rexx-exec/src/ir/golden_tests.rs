@@ -131,15 +131,22 @@ fn an_if_with_no_else_emits_no_branch_end_jump() {
     assert_eq!(chunk.registers, 1);
 }
 
-/// Two `IF`s in one body reuse the same register, which is the whole of what
-/// the allocator's stack discipline buys over the spike's withdrawn monotonic
-/// counter: each clause takes a mark when its `Clause` op is emitted and
-/// releases to it at that clause's `end`, so a long body does not reserve a
-/// region proportional to its length.
+/// Two `IF`s in one body reuse the same register, which is what the
+/// allocator's stack discipline buys over the spike's withdrawn monotonic
+/// counter: under that counter the inner `IF` would take register 1 and the
+/// high-water mark would grow with a body's length rather than with its depth.
 ///
-/// Nested rather than sequential, because sequential would also hold under a
-/// per-clause reset and nesting is what tells the two apart -- the inner `IF`
-/// is compiled after the outer one has already released.
+/// **What this does not pin, stated because an earlier version of this comment
+/// claimed it did.** It says nothing about a `Mark` carrying a *position*: a
+/// `mark()` that always answered `Mark(0)` leaves this test green, because
+/// nothing this compiler emits yet allocates in an enclosing scope and so
+/// every mark taken here really is zero. The nesting below is nesting of `IF`s
+/// in the source, not of live registers. What pins the mark's position is
+/// `compile::tests::a_released_register_is_handed_out_again_and_a_nested_one_is_not`,
+/// which drives the allocator directly and does redden under that mutation --
+/// and the first construct to allocate in an enclosing scope, which the plan's
+/// Decisions section names as a loop's control value, is what will make it
+/// observable in an emitted stream.
 #[test]
 fn nested_ifs_reuse_one_register() {
     let chunk =

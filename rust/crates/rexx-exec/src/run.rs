@@ -4231,32 +4231,19 @@ impl Interp {
         source: Option<&ProgramSource>,
         engine: BodyEngine<'_>,
     ) -> Result<Flow, Failure> {
-        let outcome = self.in_stepped_clause(code, index, instruction, source, |it| {
+        match self.in_stepped_clause(code, index, instruction, source, |it| {
             it.step(code, index, instruction, source, engine)
-        });
-        match outcome {
-            Ok(ClauseOutcome::Ran(flow)) => flow,
-            Ok(ClauseOutcome::Ended(exit)) => Ok(Flow::Exit(exit.value())),
-            // The handler run at this clause's boundary failed. The clause
-            // the oracle blames is **this** one -- the one whose boundary
-            // ran it -- not the enclosing instruction: measured, a failing
-            // `CALL ON` handler queued by `call sub` inside a `DO` echoes
-            // `3 *-* call sub`, where without this it echoed
-            // `2 *-* do i = 1 to 1`, the `DO` clause's own site recorded one
-            // level out. Fix round 3's NEW-B. The outer `Err` is the
-            // handler's alone -- this clause's own failure comes back as
-            // `Ran(Err(_))` above -- which is what keeps the two apart.
-            Err(failure) => {
-                self.record_failure_site(code, index, source, instruction);
-                Err(failure)
-            }
+        })? {
+            ClauseOutcome::Ran(flow) => flow,
+            ClauseOutcome::Ended(exit) => Ok(Flow::Exit(exit.value())),
         }
     }
 
     /// Everything one clause of `code` owes, around whatever `work` is: the
     /// clock invalidation, the `>I>` decay, the value indent, the clause line
     /// and boundary, the clause echo, the GC temps frame with its watermark
-    /// tripwire, and the failing clause's own site.
+    /// tripwire, and the failing clause's own site -- **whether the failure is
+    /// the clause's own or its boundary's**.
     ///
     /// **The one clause unit, and both engines enter it.**
     /// `step_in_temps_frame_with` passes `step`, so an unpromoted instruction
@@ -4269,6 +4256,17 @@ impl Interp {
     /// question "does this carry an `ObjRef` whose only root was this clause's
     /// temps frame?"; `clause.rs`'s own doc has why that has to be answered
     /// explicitly and what it still does not close.
+    ///
+    /// **Both failure sites are recorded here rather than by the caller**, and
+    /// that is not tidiness. The `Err` this function answers is the
+    /// *boundary's* -- a `CALL ON` handler delivered at the end of this clause
+    /// that itself raised -- and the clause the oracle blames for it is this
+    /// one, the one whose boundary ran the handler, not the enclosing
+    /// instruction. Measured: a failing handler queued by an `IF`'s own
+    /// condition echoes `2 *-* if raiser() = 'V'`, and with the record left to
+    /// the caller a promoted `IF` echoed nothing there while an unpromoted one
+    /// echoed correctly -- the two engines diverging on a program's stderr.
+    /// A caller that has to remember is a caller that can forget, and one did.
     pub(crate) fn in_stepped_clause<T: ClauseValue>(
         &mut self,
         code: &Code<'_>,
@@ -4354,7 +4352,7 @@ impl Interp {
         let line = self
             .clause_line(source, instruction)
             .unwrap_or_else(|| self.clause_state.line());
-        self.in_clause(code, line, |it| {
+        let outcome = self.in_clause(code, line, |it| {
             // **`is_label` is what makes `TRACE L` produce anything at all**
             // (review round 1, F8): the oracle's `RexxInstructionLabel::
             // execute` traces through `traceLabel` and nothing else, and
@@ -4410,7 +4408,17 @@ impl Interp {
                 it.record_failure_site(code, index, source, instruction);
             }
             ran
-        })
+        });
+        // The clause's *own* failure came back as `Ran(Err(_))` and was
+        // recorded inside the closure above; this `Err` is the boundary's, and
+        // it is the same clause that owes the site. Recording it twice is
+        // harmless -- `record_failure_at`'s first-wins guard makes the second
+        // call a no-op -- and recording it in neither place is what the
+        // measurement in this function's doc comment describes.
+        if outcome.is_err() {
+            self.record_failure_site(code, index, source, instruction);
+        }
+        outcome
     }
 
     /// Resolves `instruction`'s own clause (and its statically-derived

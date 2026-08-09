@@ -293,16 +293,30 @@ const LOOP_CASES: &[InlineCase] = &[
     },
 ];
 
-/// The shapes the branch promotion has to keep: an `IF` with and without an
-/// `ELSE`, on both paths; a nested `IF`; a null `THEN` consequence; a `SELECT`
-/// that matches and one that does not (**7.3**, not the 93.4 the plan's task
-/// text names -- measured against the oracle, which reports "All WHEN
-/// expressions of SELECT are false; OTHERWISE expected" at rc 249 for both
-/// `SELECT` and `SELECT CASE`); a condition that is not a logical value; a
-/// condition that raises into a `SIGNAL ON` trap; a branch inside a loop body
-/// that leaves it; a branch in a `CALL`ed label; and a `PROCEDURE` reached
-/// through a true branch, which is 17.1 exactly because a branch does not
-/// inherit the first-instruction permission.
+/// What a branch promotion has to keep, in two kinds.
+///
+/// **Shapes**, which ask what a branch does: an `IF` with an `ELSE` on both
+/// paths and one without on both paths, a nested `IF`, a null `THEN`
+/// consequence, a `SELECT` that matches and two that do not (**7.3**, not the
+/// 93.4 an earlier draft of the plan named -- measured against the oracle,
+/// which reports "All WHEN expressions of SELECT are false; OTHERWISE
+/// expected" at rc 249 for both `SELECT` and `SELECT CASE`), a condition that
+/// is not a logical value, a condition that raises into a `SIGNAL ON` trap, a
+/// branch inside a loop body that leaves it, a `DO` block as a whole true
+/// branch, and a branch in a `CALL`ed label.
+///
+/// **Boundaries**, which ask whether the clause unit is discharged exactly
+/// once where a promoted clause opens one: a `PROCEDURE` reached through a
+/// true branch, which is 17.1 because a branch does not inherit the
+/// first-instruction permission, and two `CALL ON` handlers that fail at an
+/// `IF`'s own clause boundary.
+///
+/// **The second kind is the one a table of shapes does not reach**, and it is
+/// here because a first version of this table had only the first kind and a
+/// promoted `IF` shipped without recording its boundary's failure site: every
+/// shape agreed on both engines and the divergence was in a clause obligation
+/// no shape asks about. A table extended for the next promotion should grow
+/// boundaries, not more shapes.
 ///
 /// Every one of these passes with both engines delegating to the tree-walker's
 /// clause unit, which is the point of adding them before the compiler emits
@@ -333,6 +347,17 @@ const BRANCH_CASES: &[InlineCase] = &[
         name: "if with no else, false path",
         program: "if 1 = 0 then say 'then'\nsay 'after'\n",
         stdout: "after\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        // Its own case rather than the mirror of the one above, because the
+        // compiled form of a branch with no `ELSE` emits no branch-end jump:
+        // the true path leaves by falling off its end, which is a different
+        // mechanism from every other true path here.
+        name: "if with no else, true path",
+        program: "if 1 = 1 then say 'then'\nsay 'after'\n",
+        stdout: "then\nafter\n",
         stderr: "",
         exit_code: 0,
     },
@@ -446,6 +471,39 @@ const BRANCH_CASES: &[InlineCase] = &[
         stdout: "in sub\n7\n",
         stderr: "",
         exit_code: 0,
+    },
+    InlineCase {
+        // **A boundary case, not a shape.** The `CALL ON` handler is queued by
+        // the `IF`'s own condition and delivered at the `IF`'s clause
+        // boundary, where it raises -- so the clause the failure is attributed
+        // to is the one whose boundary ran the handler. Measured against the
+        // oracle: `2 *-* if raiser() = 'V'`. A promoted clause that records
+        // its own failure but not its boundary's prints only the handler's
+        // line here, and no shape case can see that, because every shape case
+        // asks what a branch does rather than what its clause unit owes.
+        name: "a call on handler failing at an if's own boundary",
+        program: "call on user zx name h\nif raiser() = 'V' then say 'then'\nelse say 'else'\n\
+                  say 'after'\nexit\nraiser:\nraise user zx return 'V'\nh:\nsay 1/0\nreturn\n",
+        stdout: "",
+        stderr: "     9 *-*   say 1/0\n     2 *-* if raiser() = 'V' \nError 42 running <PATH> \
+                 line 9:  Arithmetic overflow/underflow.\nError 42.3:  Arithmetic overflow; \
+                 divisor must not be zero.\n",
+        exit_code: 214,
+    },
+    InlineCase {
+        // The same boundary one construct deeper, where the failure to record
+        // is not merely silent: the enclosing `DO`'s own site wins the
+        // first-wins race instead, so the wrong clause is echoed rather than
+        // none. Measured against the oracle: `3 *-* if raiser() = 'V'`, not
+        // `2 *-* do i = 1 to 1`.
+        name: "a call on handler failing at an if's boundary inside a loop",
+        program: "call on user zx name h\ndo i = 1 to 1\n  if raiser() = 'V' then say 'then'\n\
+                  end\nsay 'after'\nexit\nraiser:\nraise user zx return 'V'\nh:\nzq = 1/0\nreturn\n",
+        stdout: "",
+        stderr: "    10 *-*     zq = 1/0\n     3 *-*   if raiser() = 'V' \nError 42 running \
+                 <PATH> line 10:  Arithmetic overflow/underflow.\nError 42.3:  Arithmetic \
+                 overflow; divisor must not be zero.\n",
+        exit_code: 214,
     },
     InlineCase {
         // A branch does not inherit the first-instruction permission, so a

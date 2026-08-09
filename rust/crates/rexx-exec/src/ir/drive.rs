@@ -126,16 +126,21 @@ impl Interp {
         registers: FrameId,
         source: Option<&ProgramSource>,
     ) -> Result<Ended, Failure> {
-        let depth = self.activations.len();
         let len = code.body.instructions.len();
 
         loop {
             // The activation's own `pc` is where a body is entered at -- `0`
             // for a program, a label's index for a `CALL`, a handler's for a
-            // trap -- and `apply_flow` is what moves it afterwards. Nothing
-            // between those two reads it, which is what lets the op counter
-            // below be a local: the tree-walker already leaves the `pc`
-            // sitting on an `IF` for the whole of its branch.
+            // trap -- and `apply_flow` is what moves it afterwards.
+            //
+            // **The op counter below is a local, and what licenses that is a
+            // property of the `pc` rather than a claim about who reads it.**
+            // The tree-walker already leaves the `pc` sitting on an `IF` for
+            // the whole of that `IF`'s branch and on a `DO` for the whole of
+            // its loop, so a `pc` that does not name the clause currently
+            // running is the behaviour every reader of it already has to
+            // tolerate. This driver leaves it in exactly the same states: on
+            // whichever clause `apply_flow` last routed to.
             let entry = self.activation().pc;
             if entry >= len {
                 return Ok(END_OF_BODY);
@@ -168,12 +173,6 @@ impl Interp {
             if let Some(ended) = self.apply_flow(code, flow)? {
                 return Ok(ended);
             }
-            debug_assert_eq!(
-                self.activations.len(),
-                depth,
-                "a clause left the activation stack changed, so this loop's `code` and its `pc` \
-                 no longer describe the same frame"
-            );
         }
     }
 
@@ -230,6 +229,7 @@ impl Interp {
         let Some(stop) = chunk.op_at(end) else {
             return Err(Loud::chunk_map_too_short().into());
         };
+        let depth = self.activations.len();
         let mut pc = at;
         while pc < stop {
             let Some(op) = chunk.op_at_index(pc) else {
@@ -316,7 +316,22 @@ impl Interp {
                         ClauseRegion::Exit(value) => (Flow::Exit(value), pc),
                     }
                 }
+                // **A jump past this range's end is loud rather than a
+                // stop.** `absorb` cannot check it -- a jump target is an op
+                // index and absorption is decided in instruction space -- so
+                // without this the loop's own `pc < stop` reads an escaping
+                // jump as "the range completed" and answers `Flow::Next`,
+                // which is a construct silently finishing where it should have
+                // propagated. Landing exactly on `stop` *is* completion, which
+                // is what a branch-end jump at a range boundary does, so the
+                // comparison is strict. A backward jump out of the range is
+                // not checked and is not emitted: it would re-run ops inside
+                // the range, which is a wrong answer rather than a silent one,
+                // and checking it costs a second `op_at` on the hot path.
                 Op::Jump { target } => {
+                    if *target > stop {
+                        return Err(Loud::jump_out_of_range().into());
+                    }
                     pc = *target;
                     continue;
                 }
@@ -329,6 +344,17 @@ impl Interp {
                 Op::EvalExpr { .. } => return Err(Loud::op_not_driven("EvalExpr").into()),
                 Op::JumpUnless { .. } => return Err(Loud::op_not_driven("JumpUnless").into()),
             };
+            // **Per clause, not per escaping flow.** A clause that left the
+            // activation stack changed makes this loop's `code` describe a
+            // frame it is no longer running, and every op after it is stepped
+            // against the wrong body -- so the check has to sit where a clause
+            // finishes rather than where control leaves this function.
+            debug_assert_eq!(
+                self.activations.len(),
+                depth,
+                "a clause left the activation stack changed, so this loop's `code` and its `pc` \
+                 no longer describe the same frame"
+            );
             match absorb(flow, start, end) {
                 Absorbed::Advance => pc = next,
                 Absorbed::Resume(target) => {
@@ -371,16 +397,17 @@ impl Interp {
             // clause is a clause and the permission is spent by whichever
             // clause the activation granted it to.
             //
-            // **Nothing reads it back today and a mutation removing this line
-            // is caught by no test in the workspace** (recorded in the task
-            // report rather than left to be rediscovered). The reason is a
-            // property of what `compile` emits rather than of the permission
-            // rule: every `Clause` region is followed by the `THEN` marker's
-            // own `Generic`, which grants again before any `PROCEDURE` in the
-            // branch can be reached, so the value this line clears is
-            // overwritten before it is read. It stays because the obligation
-            // belongs to the clause unit and not to the op stream's current
-            // shape.
+            // **Unobservable, and nothing here makes it observable.** Deleting
+            // this line changes no test's answer, and so does deleting the
+            // `grant_procedure_permission` call that precedes this clause. The
+            // reason is a property of what `compile` happens to emit -- an op
+            // that grants follows every `Clause` region it currently produces,
+            // and grants again before any `PROCEDURE` can be reached -- and
+            // **nothing enforces that property**: no assertion states it, and
+            // a promotion that emits a region followed by something else would
+            // make both lines load-bearing with nothing going red in between.
+            // They stay because the obligation belongs to the clause unit; do
+            // not read them as a guarantee that anything checks them.
             let _first_instruction = std::mem::take(&mut it.procedure_permitted);
             it.run_region_ops(code, chunk, registers, at, end)
         })?;

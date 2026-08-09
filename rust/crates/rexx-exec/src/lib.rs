@@ -739,6 +739,20 @@ impl Loud {
     /// expression `eval_condition` has already validated as exactly `0` or
     /// `1`, so this says the two ops came apart. Loud rather than a defaulted
     /// answer, which would take a branch on a value nothing chose.
+    /// A compiled jump names an op past the end of the range it is running in
+    /// -- an internal inconsistency, never a program error.
+    ///
+    /// A construct's own jumps stay inside (or exactly at the boundary of) the
+    /// range that encloses it, because `block.rs` closes an inner branch's
+    /// targets before the outer one's. Loud rather than left to the loop's own
+    /// bound, which would read the escape as the range having completed
+    /// normally and answer `Flow::Next` for a construct that never finished.
+    fn jump_out_of_range() -> Loud {
+        Loud {
+            message: "a compiled jump leaves the range it is running in".to_string(),
+        }
+    }
+
     fn register_not_logical() -> Loud {
         Loud {
             message: "a compiled branch read a register holding no logical value".to_string(),
