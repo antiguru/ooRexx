@@ -230,6 +230,50 @@ impl TraceMode {
     };
 }
 
+/// Everything `crate::ir::compile` is allowed to read out of a [`TraceMode`],
+/// and so everything a compiled chunk's identity depends on.
+///
+/// **This type is the cache key, and `compile` takes it instead of a
+/// `TraceMode` for exactly that reason.** A chunk carries an emission decision
+/// taken when it was compiled, so two chunks for one body can differ and the
+/// cache has to tell them apart; a compiler handed the whole `TraceMode` could
+/// read a field the key does not carry, and the failure that produces is a
+/// cached chunk answering for a setting it was not compiled under. Narrowing
+/// the argument is what makes that unexpressible rather than forbidden.
+///
+/// [`echoes`] is the whole of what compilation asks, and it is the same
+/// question [`Interp::tracing_clause`] answers at run time -- one rule, called
+/// from both, so a chunk compiled to echo and a clause run without one cannot
+/// come to disagree about which clauses echo.
+///
+/// [`echoes`]: ChunkTrace::echoes
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+pub(crate) struct ChunkTrace {
+    /// [`TraceMode::all`]: every stepped clause echoes.
+    clauses: bool,
+    /// [`TraceMode::labels`]: a `LABEL` clause echoes.
+    labels: bool,
+}
+
+impl ChunkTrace {
+    /// What `compile` reads out of the setting in force.
+    pub(crate) fn of(mode: TraceMode) -> ChunkTrace {
+        ChunkTrace {
+            clauses: mode.all,
+            labels: mode.labels,
+        }
+    }
+
+    /// Whether a `*-*` line prints for a clause of this kind.
+    ///
+    /// The `||` reduces to `clauses` in every mode but `L`, because `labels`
+    /// is true wherever `clauses` is ([`TraceMode::labels`]'s own doc comment
+    /// has the flag sets that make that so).
+    pub(crate) fn echoes(self, is_label: bool) -> bool {
+        self.clauses || (self.labels && is_label)
+    }
+}
+
 /// Classifies a `TRACE` option string exactly like
 /// `TraceSetting::parseTraceSetting` (`TraceSetting.cpp:135`-`210`): skip any
 /// number of leading `?`s (a debug-pause toggle this non-interactive runtime
@@ -523,13 +567,20 @@ impl Interp {
     /// nothing will print it.
     ///
     /// `all` covers every clause; `labels` covers a `LABEL` clause only, and
-    /// is the only field that decides anything under `TRACE L`. The `||`
-    /// reduces to `all` in every other mode, because `labels` is true
-    /// wherever `all` is (`TraceMode::labels`'s own doc comment has the
-    /// flag sets that make that so).
+    /// is the only field that decides anything under `TRACE L`.
+    ///
+    /// The rule itself lives in [`ChunkTrace::echoes`], because
+    /// `crate::ir::compile` asks the identical question at compile time and a
+    /// second copy of it is how a chunk compiled to echo and a clause run
+    /// without one would come to disagree.
     pub(crate) fn tracing_clause(&self, is_label: bool) -> bool {
-        let mode = self.trace_mode();
-        mode.all || (mode.labels && is_label)
+        self.chunk_trace().echoes(is_label)
+    }
+
+    /// The part of the setting in force that a chunk's identity depends on
+    /// ([`ChunkTrace`]).
+    pub(crate) fn chunk_trace(&self) -> ChunkTrace {
+        ChunkTrace::of(self.trace_mode())
     }
 
     /// Appends `*-*`'s own line for a clause that is **never** a `LABEL`:

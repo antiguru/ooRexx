@@ -284,6 +284,23 @@ impl Ended {
     }
 }
 
+/// Who emits a stepped clause's own `*-*` line
+/// ([`Interp::in_stepped_clause_with`]).
+///
+/// **Two answers rather than a `bool`**, because the two are not two settings
+/// of one switch: one asks the current `TRACE` setting and the other says the
+/// question has already been answered somewhere the clause unit cannot see.
+pub(crate) enum Echo {
+    /// The clause unit asks [`Interp::tracing_clause`] and echoes if the
+    /// answer is yes. Every tree-walker clause, and a promoted clause whose
+    /// chunk was compiled under a setting that is no longer in force.
+    Gated,
+    /// The clause unit emits nothing: this clause's chunk already decided,
+    /// and carries the decision as [`crate::ir::Op::TraceClause`] or as the
+    /// absence of it.
+    Compiled,
+}
+
 /// What a called name resolved to, decided in one place before any argument
 /// is evaluated.
 ///
@@ -854,8 +871,12 @@ impl Interp {
         // `None` from `chunk_for` is a body that does not fit the stream's
         // index widths: it runs the loop below, and `Interp::chunks_refused`
         // has already counted the refusal so the fallback is not silent.
+        // The setting in force *now* is what this body's chunk is looked up
+        // by, not the one the program started under: the setting is an input
+        // to compilation (D23), so entering a body under a second setting is
+        // entering a second chunk.
         if matches!(self.engine, Engine::Ir)
-            && let Some(chunk) = self.chunk_for(key, body, &plan)
+            && let Some(chunk) = self.chunk_for(key, self.chunk_trace(), body, &plan)
         {
             return self.run_chunk(&code, &chunk, Some(&program.source));
         }
@@ -4265,6 +4286,25 @@ impl Interp {
         source: Option<&ProgramSource>,
         work: impl FnOnce(&mut Self) -> Result<T, Failure>,
     ) -> Result<ClauseOutcome<T>, Failure> {
+        self.in_stepped_clause_with(Echo::Gated, code, index, instruction, source, work)
+    }
+
+    /// [`Interp::in_stepped_clause`], naming who emits this clause's `*-*`
+    /// echo.
+    ///
+    /// Split out for the compiled stream, whose promoted clauses carry the
+    /// echo as an op ([`Echo::Compiled`]); every other caller wants
+    /// [`Echo::Gated`] and reaches it through `in_stepped_clause` above.
+    #[inline(always)]
+    pub(crate) fn in_stepped_clause_with<T: ClauseValue>(
+        &mut self,
+        echo: Echo,
+        code: &Code<'_>,
+        index: usize,
+        instruction: &Instruction,
+        source: Option<&ProgramSource>,
+        work: impl FnOnce(&mut Self) -> Result<T, Failure>,
+    ) -> Result<ClauseOutcome<T>, Failure> {
         // `DATE`/`TIME`'s per-clause clock cache (`activation.rs`'s own doc
         // on `Activation::clock_stale`) is invalidated **unconditionally,
         // once per call, on whichever activation is executing right now**,
@@ -4343,24 +4383,15 @@ impl Interp {
             .clause_line(source, instruction)
             .unwrap_or_else(|| self.clause_state.line());
         let outcome = self.in_clause(code, line, |it| {
-            // **`is_label` is what makes `TRACE L` produce anything at all**
-            // (review round 1, F8): the oracle's `RexxInstructionLabel::
-            // execute` traces through `traceLabel` and nothing else, and
-            // that gate is `tracingLabels()`, true under `L` as well as
-            // `A`/`R`/`I`. This is the only clause-echo site a `LABEL` ever
-            // reaches, so it is the only one that has to ask. Measured under
-            // `trace l`: a fallen-through label, a `CALL` target and a
-            // `SIGNAL` target all echo, in that one program's whole stderr,
-            // and every other clause is silent.
-            //
-            // The guard is `tracing_clause` rather than `trace_mode().all`
-            // so that the decision lives in one place -- `clause_site`
-            // allocates the clause's text, which is why it is guarded at all.
-            let is_label = matches!(instruction.kind, InstructionKind::Label { .. });
-            if it.tracing_clause(is_label)
-                && let Some((line, text)) = it.clause_site(source, instruction)
-            {
-                it.trace_stepped_clause(is_label, line, indent, &text);
+            // **`Echo::Gated` asks whether the setting in force echoes this
+            // clause; `Echo::Compiled` is a clause whose chunk already
+            // answered that**, and emits the echo as an op of its own
+            // (`crate::ir::Op::TraceClause`) rather than here. The whole point
+            // of the second arm is that a chunk compiled under a setting that
+            // does not echo pays nothing at all for the decision -- no gate,
+            // no `clause_site`, no op.
+            if matches!(echo, Echo::Gated) {
+                it.echo_stepped_clause(source, instruction, indent);
             }
             // The debug tripwire I22 asks for, alongside `RootSet::temps_len`,
             // its one prerequisite.
@@ -4409,6 +4440,54 @@ impl Interp {
             self.record_failure_site(code, index, source, instruction);
         }
         outcome
+    }
+
+    /// One stepped clause's `*-*` echo, **if the setting in force echoes a
+    /// clause of that kind**, at `indent`.
+    ///
+    /// The gate is `tracing_clause` rather than `trace_mode().all` so that
+    /// the decision lives in one place, and it is a gate at all because
+    /// `clause_site` allocates the clause's text.
+    ///
+    /// **`is_label` is what makes `TRACE L` produce anything at all** (4b
+    /// Task 9, review round 1, F8): the oracle's `RexxInstructionLabel::
+    /// execute` traces through `traceLabel` and nothing else, and that gate is
+    /// `tracingLabels()`, true under `L` as well as `A`/`R`/`I`. This is the
+    /// only clause-echo site a `LABEL` ever reaches, so it is the only one
+    /// that has to ask. Measured under `trace l`: a fallen-through label, a
+    /// `CALL` target and a `SIGNAL` target all echo, in that one program's
+    /// whole stderr, and every other clause is silent.
+    pub(crate) fn echo_stepped_clause(
+        &mut self,
+        source: Option<&ProgramSource>,
+        instruction: &Instruction,
+        indent: usize,
+    ) {
+        let is_label = matches!(instruction.kind, InstructionKind::Label { .. });
+        if self.tracing_clause(is_label)
+            && let Some((line, text)) = self.clause_site(source, instruction)
+        {
+            self.trace_stepped_clause(is_label, line, indent, &text);
+        }
+    }
+
+    /// The same echo with **no gate at all**, for a caller that has already
+    /// decided ([`crate::ir::Op::TraceClause`], whose presence in a chunk is
+    /// that decision).
+    ///
+    /// `trace_stepped_clause`'s own `tracing_clause` gate is bypassed by
+    /// passing `is_label` through unchanged and calling the formatter
+    /// directly, so the bytes are the ones `echo_stepped_clause` would have
+    /// produced and only the question of *whether* differs.
+    pub(crate) fn echo_compiled_clause(
+        &mut self,
+        source: Option<&ProgramSource>,
+        instruction: &Instruction,
+        indent: usize,
+    ) {
+        if let Some((line, text)) = self.clause_site(source, instruction) {
+            crate::trace::push_clause(&mut self.trace, line, indent, &text);
+        }
     }
 
     /// Resolves `instruction`'s own clause (and its statically-derived

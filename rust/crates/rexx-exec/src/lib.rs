@@ -115,6 +115,7 @@ mod parse_template;
 // `eval.rs`'s `eval`, own *when* to call into this module; this module owns
 // only the bytes.
 mod trace;
+use trace::ChunkTrace;
 
 // The register-based instruction stream (Phase 4e): `Op`, `Chunk`, and
 // `compile`, the one pass that turns a body into a `Chunk`. `Interp::chunk_for`
@@ -1283,10 +1284,15 @@ struct Interp {
     /// like `stress_collect` beside it: it is a property of the whole run,
     /// chosen once by the caller and never varying between activations.
     engine: Engine,
-    /// The chunk cache (Phase 4e), under the same key `plans` is: D16's
-    /// discipline, unchanged, applied to a second cache rather than
-    /// invented afresh for it. See `Interp::chunk_for`, in `plan.rs`.
-    chunks: HashMap<BodyKey, Rc<crate::ir::Chunk>>,
+    /// The chunk cache (Phase 4e): D16's discipline applied to a second cache
+    /// rather than invented afresh for it, under `plans`' own `BodyKey`
+    /// **paired with the trace setting the chunk was compiled under**.
+    ///
+    /// The pair rather than the `BodyKey` alone because the setting is an
+    /// input to compilation (D23), so one body has one plan and can have more
+    /// than one chunk. See `Interp::chunk_for`, in `plan.rs`, for why a
+    /// narrower key is a wrong-output defect.
+    chunks: HashMap<(BodyKey, ChunkTrace), Rc<crate::ir::Chunk>>,
     /// How many times `chunk_for` has refused a body because it does not fit
     /// the index widths the compiled stream commits to (`ChunkTooLarge`) --
     /// never because a body contains a construct the compiler does not

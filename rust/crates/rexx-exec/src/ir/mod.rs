@@ -27,6 +27,8 @@
 
 use rexx_core::FrameId;
 
+use crate::trace::ChunkTrace;
+
 mod compile;
 mod drive;
 pub(crate) use compile::compile;
@@ -70,11 +72,32 @@ pub(crate) enum Op {
     /// section: "a promoted clause takes a mark when its `Clause` op is
     /// emitted and releases to it at `end`").
     ///
+    /// **This is the clause's unconditional half, and [`Op::TraceClause`] is
+    /// the conditional one.** Everything this op runs is semantics rather than
+    /// trace: the clause line `SIGL`, condition objects and syntax error
+    /// messages all read, the clause boundary a queued `CALL ON` handler is
+    /// delivered at, the GC temps frame, and the failing clause's own site.
+    /// None of it may be elided with the echo, which is why the split is two
+    /// ops rather than one op with a flag.
+    ///
     /// **No `Generic` or `Loop` op may sit inside `(here, end)`**, which
     /// `compile` asserts: both run a whole clause through
     /// `step_in_temps_frame`, which echoes the clause itself, and the echo is
     /// not idempotent.
     Clause { index: u32, end: u32 },
+    /// Echoes the `*-*` line of the clause of the instruction at `index`.
+    ///
+    /// **The conditional half of [`Op::Clause`], and its presence in the
+    /// stream *is* the decision.** `compile` emits it exactly when
+    /// `ChunkTrace::echoes` answers yes for that instruction, so a chunk
+    /// compiled under a setting that echoes nothing has no such op and its
+    /// clauses pay nothing at all for trace -- no gate, no `clause_site`
+    /// allocation, no line to skip.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, and it is the region's
+    /// first op: the echo is the first thing the tree-walker's own clause unit
+    /// does inside `in_clause`, before anything the clause computes.
+    TraceClause { index: u32 },
     /// Evaluates expression `slot` of the instruction at `index` into
     /// register `dst`, still dispatched through `eval.rs` rather than
     /// reimplemented here (the plan's Decisions section: trace ops land
@@ -227,9 +250,20 @@ pub(crate) struct ChunkTooLarge {
     pub(crate) what: &'static str,
 }
 
-/// One body's compiled instruction stream, cached on `Interp` under the same
-/// `BodyKey` its `Plan` is (`Interp::chunk_for`, in `plan.rs`).
+/// One body's compiled instruction stream, cached on `Interp` under its
+/// `Plan`'s `BodyKey` **and the [`ChunkTrace`] it was compiled under**
+/// (`Interp::chunk_for`, in `plan.rs`).
 pub(crate) struct Chunk {
+    /// The trace setting this stream's ops were emitted for, which is half of
+    /// the key it is cached under and the thing the driver compares the
+    /// setting in force against.
+    ///
+    /// **Kept on the chunk rather than only in the cache key**, because a
+    /// `TRACE` executed while this chunk is running changes the setting
+    /// without going anywhere near the cache -- `Interp::run_ops` reads this
+    /// to notice, and a chunk that could not say what it was compiled for
+    /// would leave that undetectable.
+    trace: ChunkTrace,
     /// One entry per instruction, in instruction order -- D21's "every
     /// instruction compiles, nothing refuses" is a claim about instructions,
     /// not about promotion, so an instruction no task has promoted still gets
@@ -272,6 +306,11 @@ impl Chunk {
     /// The op at op index `at`.
     fn op_at_index(&self, at: u32) -> Option<&Op> {
         self.ops.get(at as usize)
+    }
+
+    /// The setting this chunk's trace ops were emitted for.
+    fn trace(&self) -> ChunkTrace {
+        self.trace
     }
 
     /// Whether `reg` is inside the region `run_chunk` reserves for this

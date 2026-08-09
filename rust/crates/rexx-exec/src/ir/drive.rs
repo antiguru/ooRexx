@@ -32,8 +32,8 @@ use rexx_parse::{ProgramSource, SymbolId};
 use super::{BodyEngine, Chunk, Op};
 use crate::clause::{ClauseOutcome, ClauseValue};
 use crate::run::{
-    Absorbed, Ended, Flow, SelectEscape, SelectResume, absorb, otherwise_range, otherwise_resume,
-    select_escape, select_parts, when_resume, when_targets,
+    Absorbed, Echo, Ended, Flow, SelectEscape, SelectResume, absorb, otherwise_range,
+    otherwise_resume, select_escape, select_parts, when_resume, when_targets,
 };
 use crate::{Code, Failure, Interp, Loud};
 
@@ -293,6 +293,28 @@ impl Interp {
         // `SELECT` opens a branch, so the two comparisons per op below are a
         // `Vec::last` on an empty `Vec` for everything else.
         let mut frames: Vec<SelectFrame> = Vec::new();
+        // **Whether the setting in force is still the one this chunk's trace
+        // ops were emitted for**, and the whole of what makes a compiled-in
+        // emission decision safe.
+        //
+        // A widened cache key answers this on the way in: `chunk_for` is asked
+        // for the chunk of the setting in force, so a body entered under a
+        // second setting gets a second chunk rather than the first one. What
+        // the key cannot answer is a `TRACE` run *while this chunk is
+        // running*, which changes the setting with nothing consulting the
+        // cache -- and the reply below is not a re-compile but a fall back to
+        // the run-time gate for the clauses that follow, which is what the
+        // tree-walker does for the same clause anyway.
+        //
+        // **Refreshed after the ops that run a whole clause, and nowhere
+        // else.** `Interp::set_trace_mode` writes the *running* activation's
+        // setting and nothing else does (its own doc comment), a callee gets a
+        // copy through `Activation::nested` and never writes back, and the
+        // instructions that call it are unpromoted -- so an `Op::Generic` or
+        // an `Op::Loop` is the only thing here that can change the answer. The
+        // `debug_assert` in the `Clause` arm is what checks that by behaviour
+        // rather than leaving it as a claim: it recomputes and compares.
+        let mut stale = chunk.trace() != self.chunk_trace();
         let mut pc = at;
         loop {
             // **A branch whose ops the counter has left has run off its own
@@ -335,6 +357,7 @@ impl Interp {
                         self.grant_procedure_permission(instruction);
                     }
                     let flow = self.step_in_temps_frame(code, index, instruction, source)?;
+                    stale = chunk.trace() != self.chunk_trace();
                     (flow, pc + 1)
                 }
                 // **The clause wrapper is the same one `Generic` takes**, and
@@ -361,6 +384,7 @@ impl Interp {
                         source,
                         BodyEngine::Chunk { chunk, registers },
                     )?;
+                    stale = chunk.trace() != self.chunk_trace();
                     (flow, pc + 1)
                 }
                 Op::Clause { index, end } => {
@@ -374,6 +398,13 @@ impl Interp {
                     if GRANTING {
                         self.grant_procedure_permission(instruction);
                     }
+                    debug_assert_eq!(
+                        stale,
+                        chunk.trace() != self.chunk_trace(),
+                        "the trace setting moved somewhere this loop does not look, so a promoted \
+                         clause is about to echo under a decision that is no longer the current \
+                         one"
+                    );
                     match self.run_clause_region(
                         code,
                         chunk,
@@ -383,6 +414,7 @@ impl Interp {
                         index,
                         instruction,
                         source,
+                        stale,
                     )? {
                         // A promoted clause produces no `Flow` of its own:
                         // where it leaves the counter *is* its answer, which
@@ -456,6 +488,7 @@ impl Interp {
                 // `Clause`. Loud rather than a panic, which is this crate's
                 // standing rule for a state the type system admits and the
                 // compiler does not produce.
+                Op::TraceClause { .. } => return Err(Loud::op_not_driven("TraceClause").into()),
                 Op::EvalExpr { .. } => return Err(Loud::op_not_driven("EvalExpr").into()),
                 Op::JumpUnless { .. } => return Err(Loud::op_not_driven("JumpUnless").into()),
                 Op::WhenTest { .. } => return Err(Loud::op_not_driven("WhenTest").into()),
@@ -679,6 +712,16 @@ impl Interp {
     /// allocator releases to it when this region's ops were emitted -- so
     /// there is nothing to release here: the registers this region wrote are
     /// simply not addressed again.
+    ///
+    /// **`stale` moves the clause echo from the stream back to the run-time
+    /// gate, in both directions at once.** The region's own
+    /// [`Op::TraceClause`] is skipped and [`crate::run::Echo::Gated`] is
+    /// passed instead, so a chunk compiled to echo under a setting that no
+    /// longer does prints nothing, and one compiled silent under a setting
+    /// that now echoes prints the same line the tree-walker would. The two
+    /// have to be one decision: doing only the first would leave a `TRACE R`
+    /// inside a body invisible to every promoted clause after it, and only
+    /// the second would leave `TRACE N` unable to switch one off.
     #[expect(
         clippy::too_many_arguments,
         reason = "one caller, and every argument is a value that caller already holds"
@@ -693,26 +736,29 @@ impl Interp {
         index: usize,
         instruction: &rexx_parse::Instruction,
         source: Option<&ProgramSource>,
+        stale: bool,
     ) -> Result<ClauseRegion, Failure> {
-        let outcome = self.in_stepped_clause(code, index, instruction, source, |it| {
-            // Taken on entry exactly as `step` takes it, because a promoted
-            // clause is a clause and the permission is spent by whichever
-            // clause the activation granted it to.
-            //
-            // **Unobservable, and nothing here makes it observable.** Deleting
-            // this line changes no test's answer, and so does deleting the
-            // `grant_procedure_permission` call that precedes this clause. The
-            // reason is a property of what `compile` happens to emit -- an op
-            // that grants follows every `Clause` region it currently produces,
-            // and grants again before any `PROCEDURE` can be reached -- and
-            // **nothing enforces that property**: no assertion states it, and
-            // a promotion that emits a region followed by something else would
-            // make both lines load-bearing with nothing going red in between.
-            // They stay because the obligation belongs to the clause unit; do
-            // not read them as a guarantee that anything checks them.
-            let _first_instruction = std::mem::take(&mut it.procedure_permitted);
-            it.run_region_ops(code, chunk, registers, at, end)
-        })?;
+        let echo = if stale { Echo::Gated } else { Echo::Compiled };
+        let outcome =
+            self.in_stepped_clause_with(echo, code, index, instruction, source, |it| {
+                // Taken on entry exactly as `step` takes it, because a promoted
+                // clause is a clause and the permission is spent by whichever
+                // clause the activation granted it to.
+                //
+                // **Unobservable, and nothing here makes it observable.** Deleting
+                // this line changes no test's answer, and so does deleting the
+                // `grant_procedure_permission` call that precedes this clause. The
+                // reason is a property of what `compile` happens to emit -- an op
+                // that grants follows every `Clause` region it currently produces,
+                // and grants again before any `PROCEDURE` can be reached -- and
+                // **nothing enforces that property**: no assertion states it, and
+                // a promotion that emits a region followed by something else would
+                // make both lines load-bearing with nothing going red in between.
+                // They stay because the obligation belongs to the clause unit; do
+                // not read them as a guarantee that anything checks them.
+                let _first_instruction = std::mem::take(&mut it.procedure_permitted);
+                it.run_region_ops(code, chunk, registers, at, end, source, stale)
+            })?;
         match outcome {
             ClauseOutcome::Ran(next) => Ok(ClauseRegion::Continue(next?.0)),
             ClauseOutcome::Ended(exit) => Ok(ClauseRegion::Exit(exit.value())),
@@ -726,6 +772,10 @@ impl Interp {
     /// that runs a whole clause of its own does not, and cannot: `compile`
     /// asserts no `Generic` or `Loop` sits inside a region, because both echo
     /// the clause and the echo is not idempotent.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one caller, and every argument is a value that caller already holds"
+    )]
     fn run_region_ops(
         &mut self,
         code: &Code<'_>,
@@ -733,6 +783,8 @@ impl Interp {
         registers: FrameId,
         at: u32,
         end: u32,
+        source: Option<&ProgramSource>,
+        stale: bool,
     ) -> Result<ClauseNext, Failure> {
         let mut pc = at;
         while pc < end {
@@ -740,6 +792,28 @@ impl Interp {
                 return Err(Loud::chunk_map_too_short().into());
             };
             match op {
+                // **No gate**: this op exists only in a chunk compiled under a
+                // setting that echoes, which is the decision. `stale` is the
+                // one thing that can withdraw it, and then the clause unit has
+                // already asked the current setting instead
+                // (`run_clause_region`).
+                Op::TraceClause { index } => {
+                    let Some(instruction) = code.body.instructions.get(*index as usize) else {
+                        return Err(Loud::chunk_map_too_short().into());
+                    };
+                    if !stale {
+                        // The indent the enclosing `Clause` op's own clause
+                        // unit computed, read back rather than recomputed:
+                        // `in_stepped_clause_with` sets this field to
+                        // `printed_indent` for the clause it is opening and
+                        // nothing between there and here writes it, so the two
+                        // engines cannot come to print an echo at two
+                        // different indents for one clause.
+                        let indent = self.clause_state.current_value_indent;
+                        self.echo_compiled_clause(source, instruction, indent);
+                    }
+                    pc += 1;
+                }
                 Op::EvalExpr { index, slot, dst } => {
                     debug_assert!(
                         chunk.holds_register(*dst),

@@ -13,11 +13,12 @@
 //! Decisions section: "compilation is whole-body and lazy: one body at a
 //! time, on first entry, cached").
 
-use rexx_parse::{CodeBody, InstructionKind};
+use rexx_parse::{CodeBody, Instruction, InstructionKind};
 
 use super::{Chunk, ChunkTooLarge, Op};
 use crate::plan::Plan;
 use crate::run::{if_targets, otherwise_range};
+use crate::trace::ChunkTrace;
 
 /// The compile-time register stack (the plan's Decisions section: "register
 /// allocation is a compile-time stack, and the chunk records its high-water
@@ -205,7 +206,18 @@ enum PatchKind {
 /// -- unreachable in practice at this task, since nothing produces four
 /// billion instructions in a test and an `IF` allocates one register it then
 /// releases, but the check is the contract [`ChunkTooLarge`] documents.
-pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLarge> {
+///
+/// **`trace` is an input to the result, not a hint** (D23). It decides which
+/// promoted clauses get an [`Op::TraceClause`] of their own, so two chunks for
+/// one body can differ and `Interp::chunk_for` keys on it as well as on the
+/// body. A [`ChunkTrace`] rather than a whole `TraceMode`, because the
+/// argument *is* the key: a compiler that could read a field the key does not
+/// carry would cache a chunk under a name that does not identify it.
+pub(crate) fn compile(
+    body: &CodeBody,
+    _plan: &Plan,
+    trace: ChunkTrace,
+) -> Result<Chunk, ChunkTooLarge> {
     #[cfg(test)]
     count_compile_call();
 
@@ -266,10 +278,12 @@ pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLa
                 let mark = registers.mark();
                 let dst = registers.alloc()?;
                 let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
                 ops.push(Op::Clause {
                     index: instruction_index(index)?,
-                    end: at + 3,
+                    end: at + 3 + u32::from(echo),
                 });
+                push_echo(&mut ops, echo, instruction_index(index)?);
                 ops.push(Op::EvalExpr {
                     index: instruction_index(index)?,
                     slot: 0,
@@ -322,11 +336,13 @@ pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLa
                     None => None,
                 };
                 let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
                 let region = if case_reg.is_some() { 2 } else { 1 };
                 ops.push(Op::Clause {
                     index: instruction_index(index)?,
-                    end: at + region,
+                    end: at + region + u32::from(echo),
                 });
+                push_echo(&mut ops, echo, instruction_index(index)?);
                 if let Some(dst) = case_reg {
                     ops.push(Op::EvalExpr {
                         index: instruction_index(index)?,
@@ -409,10 +425,12 @@ pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLa
                 let mark = registers.mark();
                 let dst = registers.alloc()?;
                 let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
                 ops.push(Op::Clause {
                     index: instruction_index(index)?,
-                    end: at + 3,
+                    end: at + 3 + u32::from(echo),
                 });
+                push_echo(&mut ops, echo, instruction_index(index)?);
                 ops.push(Op::WhenTest {
                     index: instruction_index(index)?,
                     case: info.case,
@@ -468,10 +486,32 @@ pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLa
     assert_clause_regions_hold_no_clause_op(&ops);
 
     Ok(Chunk {
+        trace,
         ops,
         op_of,
         registers: registers.high_water(),
     })
+}
+
+/// Whether a promoted clause of `instruction` echoes under `trace`.
+///
+/// The same question `Interp::tracing_clause` asks at run time, through the
+/// same [`ChunkTrace::echoes`], so the compiled answer and the run-time one
+/// cannot disagree. `is_label` is read off the instruction rather than assumed
+/// false: nothing here says a `LABEL` can never be promoted, and a rule that
+/// held only because of what happens to be promoted today is the kind that
+/// stops holding without anything going red.
+fn echoes(trace: ChunkTrace, instruction: &Instruction) -> bool {
+    trace.echoes(matches!(instruction.kind, InstructionKind::Label { .. }))
+}
+
+/// Pushes the clause echo op, if `echo`, as the **first** op of the region
+/// that follows -- the position the tree-walker's own clause unit echoes at,
+/// before anything the clause computes.
+fn push_echo(ops: &mut Vec<Op>, echo: bool, index: u32) {
+    if echo {
+        ops.push(Op::TraceClause { index });
+    }
 }
 
 /// Emits the ops that go in front of one instruction, innermost first.

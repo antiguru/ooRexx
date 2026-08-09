@@ -35,6 +35,9 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::Clause { index: at, end } => {
                 out.push_str(&format!("{index}: Clause index={at} end={end}\n"));
             }
+            Op::TraceClause { index: at } => {
+                out.push_str(&format!("{index}: TraceClause index={at}\n"));
+            }
             Op::EvalExpr {
                 index: at,
                 slot,

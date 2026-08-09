@@ -28,6 +28,7 @@
 //! prints 8).
 
 use crate::Interp;
+use crate::trace::ChunkTrace;
 use rexx_parse::{
     Call, CodeBody, Expr, ExprKind, Fragment, Instruction, InstructionKind, Loop, LoopKind, Parse,
     ParseSource, Redirection, Signal, SymbolId, SymbolTable, Tail, Trace, Use, VariableRef,
@@ -586,8 +587,23 @@ impl Interp {
         plan
     }
 
-    /// The chunk for one body, from the cache or compiled and cached, under
-    /// the same key as its plan (D16's discipline, unchanged).
+    /// The chunk for one body **under one trace setting**, from the cache or
+    /// compiled and cached (D16's discipline, with the key D23 widens it by).
+    ///
+    /// **`BodyKey` alone does not identify a chunk and keying on it alone is a
+    /// wrong-output defect, not a slow one.** The trace setting is an input to
+    /// compilation (D23): it decides which clause echoes are emitted as ops,
+    /// so one body compiles to two different streams under two settings, and a
+    /// lookup that ignored the setting would hand back whichever was compiled
+    /// first -- a body entered untraced and then under `trace i` would run the
+    /// untraced stream the second time. `ChunkTrace` is exactly what
+    /// `crate::ir::compile` reads, and `compile` takes nothing else, so the
+    /// key cannot come to be narrower than the thing it names.
+    ///
+    /// Widened rather than evicted, because eviction throws away the chunk a
+    /// program that toggles `TRACE` is about to want again: two settings mean
+    /// two entries here and two compiles for the whole run, where eviction
+    /// means one compile per change.
     ///
     /// `None` means the body does not fit the index widths and this
     /// activation runs on the tree-walker. `chunks_refused` counts that, once
@@ -598,16 +614,17 @@ impl Interp {
     pub(crate) fn chunk_for(
         &mut self,
         key: BodyKey,
+        trace: ChunkTrace,
         body: &CodeBody,
         plan: &Plan,
     ) -> Option<Rc<crate::ir::Chunk>> {
-        if let Some(chunk) = self.chunks.get(&key) {
+        if let Some(chunk) = self.chunks.get(&(key, trace)) {
             return Some(Rc::clone(chunk));
         }
-        match crate::ir::compile(body, plan) {
+        match crate::ir::compile(body, plan, trace) {
             Ok(chunk) => {
                 let chunk = Rc::new(chunk);
-                self.chunks.insert(key, Rc::clone(&chunk));
+                self.chunks.insert((key, trace), Rc::clone(&chunk));
                 Some(chunk)
             }
             Err(_) => {

@@ -22,15 +22,31 @@ use super::golden::render;
 use super::{Chunk, ChunkTooLarge};
 use crate::Interp;
 use crate::plan::{BodyKey, Plan, ProgramId};
+use crate::trace::{ChunkTrace, TraceMode};
 
-/// Parses `source`, builds its plan and compiles it -- the three steps
-/// `Interp::chunk_for` otherwise runs one at a time, collapsed for tests
-/// that only want the resulting `Chunk`. `#[cfg(test)]` only: this is not a
-/// crate entry point.
+/// Parses `source`, builds its plan and compiles it **under the setting every
+/// activation starts at** -- the three steps `Interp::chunk_for` otherwise
+/// runs one at a time, collapsed for tests that only want the resulting
+/// `Chunk`. `#[cfg(test)]` only: this is not a crate entry point.
 fn compile_for_test(source: &[u8]) -> Result<Chunk, ChunkTooLarge> {
+    compile_for_test_under(source, ChunkTrace::of(TraceMode::NORMAL))
+}
+
+/// [`compile_for_test`] under a named trace setting, which is an input to
+/// what `compile` emits (D23).
+fn compile_for_test_under(source: &[u8], trace: ChunkTrace) -> Result<Chunk, ChunkTooLarge> {
     let program = parse_program(source.to_vec()).expect("test program parses");
     let plan = Plan::build(&program.main, &program.symbols);
-    super::compile(&program.main, &plan)
+    super::compile(&program.main, &plan, trace)
+}
+
+/// The setting `TRACE R` puts in force, as far as compilation can see it.
+///
+/// Through `mode_from_setting` rather than a hand-built `TraceMode`, so a case
+/// below is compiling for the setting a `trace r` clause would actually
+/// produce.
+fn traced() -> ChunkTrace {
+    ChunkTrace::of(crate::trace::mode_from_setting(b"r").expect("R is a valid TRACE setting"))
 }
 
 #[test]
@@ -318,6 +334,93 @@ fn a_select_with_no_otherwise_scans_out_onto_its_own_end() {
     );
 }
 
+/// The same `IF` compiled under `TRACE R`: the clause echo is an **op** of the
+/// clause's own region, and the region is one op longer for it.
+///
+/// The neighbour of `an_if_with_an_else_compiles_to_a_clause_region_and_two_
+/// jumps`, and the pair is the whole of D23's emission decision: one body, two
+/// settings, two streams. Everything but the `TraceClause` and the indices it
+/// shifts is identical, which is what says the setting decides *what is
+/// emitted* rather than what any op does.
+///
+/// **The echo is the region's first op, not its last.** The tree-walker echoes
+/// a clause before it computes anything, so the `>>>` line an `IF`'s condition
+/// produces follows the `*-*` line; an echo emitted after the `EvalExpr` would
+/// reverse them and no register or jump would move.
+#[test]
+fn a_traced_if_carries_its_clause_echo_as_an_op_of_the_region() {
+    let chunk = compile_for_test_under(b"if 1 = 1 then say 'a'\nelse say 'b'\nsay 'c'\n", traced())
+        .expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=4\n\
+         1: TraceClause index=0\n\
+         2: EvalExpr index=0 slot=0 dst=0\n\
+         3: JumpUnless reg=0 target=8\n\
+         4: Generic index=1\n\
+         5: Generic index=2\n\
+         6: EndBranch\n\
+         7: Jump target=10\n\
+         8: Generic index=3\n\
+         9: Generic index=4\n\
+         10: Generic index=5\n"
+    );
+    // The echo op addresses no register, so the extra op changes nothing the
+    // driver has to reserve.
+    assert_eq!(chunk.registers, 1);
+    assert_eq!(chunk.op_of, vec![0, 4, 5, 6, 9, 10, 11]);
+}
+
+/// A traced `SELECT CASE`: **one echo per promoted clause**, the header's and
+/// each listed `WHEN`'s, and none anywhere else.
+///
+/// Three things this pins that the `IF` pair does not:
+///
+/// * the header's echo sits **before** its `EvalExpr`, so the `>K>  "CASE"`
+///   line the expression produces follows the `*-*` line rather than preceding
+///   it;
+/// * `SelectCaseText` stays **outside** the region, one op further along than
+///   it was untraced -- it is not part of the clause and the echo must not
+///   have pulled it in;
+/// * a `THEN` marker, a branch body and the `END` get no echo op at all. They
+///   are `Generic`, so their echo comes from the tree-walker's own clause unit
+///   and a second one here would print every such clause twice.
+#[test]
+fn a_traced_select_echoes_its_header_and_each_listed_when() {
+    let chunk = compile_for_test_under(
+        b"select case 1 + 1\n  when 1 then say 'a'\n  when 2 then say 'b'\nend\nsay 'after'\n",
+        traced(),
+    )
+    .expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=3\n\
+         1: TraceClause index=0\n\
+         2: EvalExpr index=0 slot=0 dst=0\n\
+         3: SelectCaseText index=0 case=0\n\
+         4: Clause index=1 end=8\n\
+         5: TraceClause index=1\n\
+         6: WhenTest index=1 case=0 dst=1\n\
+         7: JumpUnless reg=1 target=11\n\
+         8: EnterWhen select=0 when=1\n\
+         9: Generic index=2\n\
+         10: Generic index=3\n\
+         11: Clause index=4 end=15\n\
+         12: TraceClause index=4\n\
+         13: WhenTest index=4 case=0 dst=1\n\
+         14: JumpUnless reg=1 target=18\n\
+         15: EnterWhen select=0 when=4\n\
+         16: Generic index=5\n\
+         17: Generic index=6\n\
+         18: Generic index=7\n\
+         19: Generic index=8\n"
+    );
+    assert_eq!(
+        chunk.registers, 2,
+        "the CASE value and one WHEN answer are live at once, and never more"
+    );
+}
+
 /// `run_bounded`'s absorption guard is inclusive, so a construct's resume
 /// point can be `end`, which is one past its last instruction. A map that
 /// stops at `len - 1` panics there rather than at compile.
@@ -334,7 +437,8 @@ fn the_instruction_map_has_an_entry_one_past_the_last_instruction() {
     let source = b"if 1 = 1 then say 'a'\nsay 'b'\n";
     let program = parse_program(source.to_vec()).expect("test program parses");
     let plan = Plan::build(&program.main, &program.symbols);
-    let chunk = super::compile(&program.main, &plan).expect("compiles");
+    let chunk =
+        super::compile(&program.main, &plan, ChunkTrace::of(TraceMode::NORMAL)).expect("compiles");
     assert_eq!(
         chunk.op_of.len(),
         program.main.instructions.len() + 1,
@@ -363,11 +467,16 @@ fn chunk_for_compiles_a_body_once_across_repeated_lookups() {
     let mut interp = Interp::new();
     let before = super::compile::compile_calls();
 
+    let untraced = ChunkTrace::of(TraceMode::NORMAL);
     let first = interp
-        .chunk_for(key, &program.main, &plan)
+        .chunk_for(key, untraced, &program.main, &plan)
         .expect("compiles");
-    let second = interp.chunk_for(key, &program.main, &plan).expect("cached");
-    let third = interp.chunk_for(key, &program.main, &plan).expect("cached");
+    let second = interp
+        .chunk_for(key, untraced, &program.main, &plan)
+        .expect("cached");
+    let third = interp
+        .chunk_for(key, untraced, &program.main, &plan)
+        .expect("cached");
 
     assert_eq!(
         super::compile::compile_calls() - before,
@@ -379,4 +488,65 @@ fn chunk_for_compiles_a_body_once_across_repeated_lookups() {
         "second lookup is the same chunk"
     );
     assert!(Rc::ptr_eq(&first, &third), "third lookup is the same chunk");
+}
+
+/// **One body, two settings, two chunks.** The trace setting is an input to
+/// compilation (D23), so a cache keyed on `BodyKey` alone hands the body
+/// entered under the second setting a stream compiled for the first one.
+///
+/// The three assertions answer three different degenerate caches, and the
+/// third is the one the key change is for:
+///
+/// * `compile` ran twice, so the second setting was compiled for rather than
+///   answered from the first setting's entry -- this is what a key that
+///   ignores the setting fails;
+/// * the two chunks are distinct `Rc`s, so it is not one chunk handed back
+///   under two names;
+/// * and asking again under the *first* setting gives the *first* chunk back,
+///   which is what says the second lookup added an entry rather than replacing
+///   one. A cache that evicted on a setting change passes the first two and
+///   fails this, and a program that toggles `TRACE` in a loop is what that
+///   costs.
+#[test]
+fn one_body_under_two_trace_settings_is_two_cached_chunks() {
+    let program = parse_program(b"if 1 = 1 then say 1\n".to_vec()).expect("test program parses");
+    let key = BodyKey {
+        program: ProgramId(0),
+        directive: None,
+    };
+    let plan = Plan::build(&program.main, &program.symbols);
+    let untraced = ChunkTrace::of(TraceMode::NORMAL);
+
+    let mut interp = Interp::new();
+    let before = super::compile::compile_calls();
+
+    let silent = interp
+        .chunk_for(key, untraced, &program.main, &plan)
+        .expect("compiles");
+    let echoing = interp
+        .chunk_for(key, traced(), &program.main, &plan)
+        .expect("compiles");
+
+    assert_eq!(
+        super::compile::compile_calls() - before,
+        2,
+        "the second setting was answered from the first setting's cached chunk"
+    );
+    assert!(
+        !Rc::ptr_eq(&silent, &echoing),
+        "both settings got the same chunk, so one of them is running the other's stream"
+    );
+    assert!(
+        render(&silent) != render(&echoing),
+        "the two settings compiled to the same stream, so the setting decided nothing"
+    );
+    assert!(
+        Rc::ptr_eq(
+            &silent,
+            &interp
+                .chunk_for(key, untraced, &program.main, &plan)
+                .expect("cached")
+        ),
+        "the first setting's chunk was evicted rather than kept beside the second's"
+    );
 }
