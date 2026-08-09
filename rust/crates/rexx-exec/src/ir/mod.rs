@@ -87,8 +87,67 @@ pub(crate) enum Op {
     /// `slot` numbers the instruction's own expressions. An `If` has one,
     /// slot `0`, and its value is a Rexx logical value -- `eval_condition`
     /// validates it as exactly `0` or `1` before this op stores it, which is
-    /// why [`Op::JumpUnless`] can test it without repeating the validation.
+    /// why [`Op::JumpUnless`] can test it without repeating the validation. A
+    /// `SELECT CASE` has one too, slot `0`, and its value is whatever the
+    /// expression came to, kept for every `WHEN CASE` of that `SELECT` to be
+    /// compared against.
     EvalExpr { index: u32, slot: u32, dst: u16 },
+    /// Hands the `SELECT` at `index` the text an **absorbed** `WHEN CASE`
+    /// compares against, from register `case`, or clears it for a plain
+    /// `SELECT` that has no `CASE` expression at all.
+    ///
+    /// `Interp::current_case_text` is the one hand-off an absorbed `WHEN CASE`
+    /// has (`lib.rs`'s own doc comment on the field), and this op is where the
+    /// tree-walker's own `Select` arm sets it: **after** the header clause,
+    /// not inside it, so a `CALL ON` handler delivered at that clause's
+    /// boundary cannot be the last writer.
+    ///
+    /// **Outside a [`Op::Clause`] region on purpose**, for exactly that
+    /// reason. A listed `WHEN CASE` never reads it: it is handed the same
+    /// register directly by [`Op::WhenTest`].
+    SelectCaseText { index: u32, case: Option<u16> },
+    /// Tests the listed `WHEN`/`WHEN CASE` at `index` and stores whether it
+    /// holds in register `dst`, as the Rexx logical value [`Op::JumpUnless`]
+    /// reads back.
+    ///
+    /// `case` is the register the enclosing `SELECT CASE` left its own value
+    /// in, and `None` for a plain `SELECT`. It is a register of the
+    /// **enclosing** scope rather than of this clause's, because the last
+    /// `WHEN` of a `SELECT` is tested after every earlier `WHEN`'s branch has
+    /// already run (the plan's Decisions section: "a construct whose state
+    /// outlives its member clauses allocates in the enclosing scope").
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, whose clause is this
+    /// `WHEN`'s own -- the echo, the value indent its comparison lines trace
+    /// at, the boundary and both failure sites are that region's.
+    WhenTest {
+        index: u32,
+        case: Option<u16>,
+        dst: u16,
+    },
+    /// Opens a frame over the branch of the listed `WHEN` at `when`, which
+    /// belongs to the `SELECT` at `select`.
+    ///
+    /// The frame is what the tree-walker's own `run_bounded(...)?` followed by
+    /// `leave_select` is when it is flattened: a `LEAVE`/`ITERATE` escaping
+    /// this branch has to reach that `leave_select` rather than the enclosing
+    /// range, and in a flat stream there is no Rust call frame between the two
+    /// to make that happen.
+    EnterWhen { select: u32, when: u32 },
+    /// Opens a frame over the `OTHERWISE` branch of the `SELECT` at `select`,
+    /// which is [`Op::EnterWhen`]'s counterpart for the branch no `WHEN`
+    /// owns.
+    ///
+    /// A separate op rather than a flag, because the two branches leave
+    /// differently: `OTHERWISE`'s restores `Interp::indent_offset` on the way
+    /// out and a `WHEN`'s does not, which is `run_otherwise`'s own split from
+    /// `Select`'s arm exactly.
+    ///
+    /// **It sits at the `OTHERWISE`'s own `op_of` entry, in front of the
+    /// marker's op**, so that both ways of arriving there open the frame: the
+    /// scan falling past its last `WHEN`, and an absorbed `WHEN CASE`'s
+    /// escape landing on the marker ([`crate::run::SelectEscape::Otherwise`]).
+    EnterOtherwise { select: u32 },
     /// Continues at op `target`.
     Jump { target: u32 },
     /// Continues at op `target` unless register `reg` holds the logical value

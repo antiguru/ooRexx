@@ -503,6 +503,78 @@ const BRANCH_CASES: &[InlineCase] = &[
         exit_code: 0,
     },
     InlineCase {
+        // **A `SELECT` resumes at two different places, and this is the one
+        // that is not the other.** A matching `LEAVE` from `OTHERWISE` resumes
+        // *past* the `END`, where the same branch falling off its own end runs
+        // the `END` (the pair below). Measured against the oracle under
+        // `trace r`: no `5 *-* end` line here and one there. A single resume
+        // for both echoes an `END` the oracle does not.
+        name: "leave naming a select from inside its otherwise",
+        program: "trace r\nselect label s\n  when 1 = 0 then nop\n  otherwise leave s\nend\n\
+                  say 'after'\n",
+        stdout: "after\n",
+        stderr: "     2 *-* select label s\n     3 *-*   when 1 = 0 \n       >>>     \"0\"\n     \
+                 4 *-*   otherwise\n     4 *-*     leave s\n     6 *-* say 'after'\n       \
+                 >>>   \"after\"\n",
+        exit_code: 0,
+    },
+    InlineCase {
+        // The adjacent success for the case above: the same `OTHERWISE`
+        // finishing normally *does* run the `END`, which is the arrival that
+        // makes the two resumes different rather than one being wrong.
+        name: "an otherwise that finishes normally runs its own end",
+        program: "trace r\nselect label s\n  when 1 = 0 then nop\n  otherwise nop\nend\n\
+                  say 'after'\n",
+        stdout: "after\n",
+        stderr: "     2 *-* select label s\n     3 *-*   when 1 = 0 \n       >>>     \"0\"\n     \
+                 4 *-*   otherwise\n     4 *-*     nop\n     5 *-* end\n     6 *-* say 'after'\n  \
+                 \x20    >>>   \"after\"\n",
+        exit_code: 0,
+    },
+    InlineCase {
+        // The escape elevation an absorbed `WHEN CASE` sets is restored once
+        // `OTHERWISE`'s whole dispatch is over, and this is the program that
+        // says so: the `END` and the clause after the `SELECT` both trace at
+        // their own positions. Left in force they would each print four
+        // columns further in, which no case whose `OTHERWISE` is the last
+        // thing that traces can see.
+        name: "the escape elevation is restored after an escaped otherwise",
+        program: "trace r\nselect case 2\n  when 2 then\n  when 3 then nop\n  otherwise nop\nend\n\
+                  say 'after'\n",
+        stdout: "after\n",
+        stderr: "     2 *-* select case 2\n       >K>   \"CASE\" => \"2\"\n     3 *-*   when 2 \n  \
+                 \x20    >>>     \"2\"\n       >>>     \"1\"\n     3 *-*     then\n     \
+                 4 *-*       when 3 \n       >>>         \"3\"\n       >>>         \"0\"\n     \
+                 5 *-*       otherwise\n     5 *-*         nop\n     6 *-* end\n     \
+                 7 *-* say 'after'\n       >>>   \"after\"\n",
+        exit_code: 0,
+    },
+    InlineCase {
+        // A `SELECT CASE` inside a matched `WHEN`'s branch of another: the
+        // inner one's own value must not reclaim the register the outer one is
+        // still comparing later `WHEN`s against, and the outer's must survive
+        // the inner construct entirely.
+        name: "select case nested in a matched when of another",
+        program: "select case 2\n  when 1 then say 'no'\n  when 2 then do\n    \
+                  select case 'zz'\n      when 'zz' then say 'inner'\n      \
+                  otherwise say 'inner o'\n    end\n  end\n  when 3 then say 'no3'\n  \
+                  otherwise say 'outer o'\nend\nsay 'after'\n",
+        stdout: "inner\nafter\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        // A `SELECT` inside an `INTERPRET` fragment, which compiles to no
+        // chunk at all: the fragment's clauses stay on the tree-walker under
+        // both engines, so this says the construct still works from the arm
+        // the promotion left in place.
+        name: "select inside an interpret fragment",
+        program: "interpret \"select; when 1 = 1 then say 'frag'; end\"\nsay 'after'\n",
+        stdout: "frag\nafter\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
         // A `LEAVE` naming nothing at all, forwarded past the `SELECT` and then
         // past the loop until the search runs out: the indent it is reported at
         // is the residual each forwarded-past frame resets, which is what

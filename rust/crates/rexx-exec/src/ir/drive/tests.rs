@@ -202,6 +202,64 @@ fn the_ir_engine_steps_an_ifs_chosen_branch_from_the_chunk() {
     }
 }
 
+/// A `SELECT`'s own header, every listed `WHEN` it tests, and the branch that
+/// wins are all stepped from the chunk.
+///
+/// **The only observable that separates a promoted `SELECT` from an unpromoted
+/// one**, for the reason the `IF` count above is a count: the construct is
+/// resolved through the same `scan_when`, `when_targets`, `select_escape` and
+/// `leave_select` either way, so both engines print the same bytes for every
+/// program and nothing in the output says which drove it. With the whole
+/// construct left on the tree-walker the count is 2 on either path -- the
+/// `SELECT`'s own clause and the one clause after it -- with the scan, the
+/// branch and the `END` reached through `run_bounded`'s tree-walker arm and
+/// counted nowhere.
+///
+/// Both paths, because they are different mechanisms and different ops: a
+/// matched `WHEN` falls into its branch past an `EnterWhen` and leaves by its
+/// frame's own end, and `OTHERWISE` is reached by the last `WHEN`'s
+/// `JumpUnless` landing on an `EnterOtherwise`. A count taken on one alone is
+/// satisfied by an implementation that only flattened the other.
+#[test]
+fn the_ir_engine_steps_a_selects_chosen_branch_from_the_chunk() {
+    // The matched path: the `SELECT` clause, both `WHEN` clauses, the winning
+    // `THEN` marker and its body, and the clause after the whole construct.
+    // The `END` is not among them and is not missing: one true `WHEN` resumes
+    // past it.
+    //
+    // The `OTHERWISE` path: the `SELECT` clause, the one `WHEN` clause, the
+    // `OTHERWISE` marker and its body, the `END` -- which this path *does*
+    // reach, and does nothing at -- and the clause after.
+    for (program, expected, path) in [
+        (
+            "select\n  when 1 = 0 then nop\n  when 2 = 2 then nop\n  otherwise nop\nend\nnop\n",
+            6,
+            "matched when",
+        ),
+        (
+            "select\n  when 1 = 0 then nop\n  otherwise nop\nend\nnop\n",
+            6,
+            "otherwise",
+        ),
+    ] {
+        let before = clause_op_entries();
+        let outcome = execute(
+            TEST_PATH,
+            program.as_bytes().to_vec(),
+            false,
+            Invocation::none().with_engine(Engine::Ir),
+        );
+        let stepped = clause_op_entries() - before;
+        assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+        assert_eq!(
+            stepped, expected,
+            "the IR engine stepped {stepped} clauses from the chunk on the {path} path, where \
+             the SELECT's own clause, each listed WHEN's clause, the chosen branch's clauses and \
+             the clause after the whole construct are {expected}"
+        );
+    }
+}
+
 /// The negative control for the test above: the tree-walker steps nothing
 /// from a chunk, so a count that never moved would satisfy it on its own.
 #[test]

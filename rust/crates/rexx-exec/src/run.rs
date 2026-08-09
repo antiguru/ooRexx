@@ -1547,7 +1547,15 @@ impl Interp {
                     };
                     if holds {
                         let targets = when_targets(&when_instruction.kind, len);
-                        let (body_end, resume) = (targets.body_end, targets.resume);
+                        let body_end = targets.body_end;
+                        // One answer twice, unlike `OTHERWISE`'s: a matched
+                        // `WHEN` resumes past the `END` whether it finished or
+                        // was left by name, because one true `WHEN` ends the
+                        // whole `SELECT` either way.
+                        let resume = SelectResume {
+                            done: targets.resume,
+                            left: targets.resume,
+                        };
                         let flow = self.run_bounded(
                             code,
                             when_index + 1,
@@ -4592,7 +4600,11 @@ impl Interp {
     /// The value is pushed as a temp because the text is taken from it after
     /// the clause boundary has run, and a `CALL ON` handler delivered there
     /// allocates.
-    fn select_case(&mut self, code: &Code<'_>, case_expr: &Expr) -> Result<ObjRef, Failure> {
+    pub(crate) fn select_case(
+        &mut self,
+        code: &Code<'_>,
+        case_expr: &Expr,
+    ) -> Result<ObjRef, Failure> {
         // The clause unit set this to the `SELECT`'s own printed indent on the
         // way in.
         let indent = self.clause_state.current_value_indent;
@@ -4623,7 +4635,7 @@ impl Interp {
     /// only root was this clause's temps frame (`ClauseValue for bool`).
     /// Where a matched `WHEN` sends control is [`when_targets`], read from
     /// the same node by whichever engine needs it.
-    fn scan_when(
+    pub(crate) fn scan_when(
         &mut self,
         code: &Code<'_>,
         when_instruction: &Instruction,
@@ -4703,20 +4715,29 @@ impl Interp {
         // `lib.rs`'s own doc comment gives for never restoring it after
         // `END`'s own 7.3 either.
         self.indent_offset = 0;
-        self.leave_select(code, index, label, otherwise_end, flow)
+        self.leave_select(
+            code,
+            index,
+            label,
+            SelectResume {
+                done: otherwise_end,
+                left: select_exit(code.body.instructions.len(), end),
+            },
+            flow,
+        )
     }
 
-    fn leave_select(
+    pub(crate) fn leave_select(
         &mut self,
         code: &Code<'_>,
         index: usize,
         label: Option<SymbolId>,
-        resume: usize,
+        resume: SelectResume,
         flow: Flow,
     ) -> Result<Flow, Failure> {
         match flow {
-            Flow::Next => Ok(Flow::Goto(resume)),
-            Flow::Leave(Some(name), _) if label == Some(name) => Ok(Flow::Goto(resume)),
+            Flow::Next => Ok(Flow::Goto(resume.done)),
+            Flow::Leave(Some(name), _) if label == Some(name) => Ok(Flow::Goto(resume.left)),
             Flow::Iterate(Some(name), origin) if label == Some(name) => {
                 self.record_leave_failure(&origin);
                 Err(raised_iterate_wrong_kind(code.symbols.name(name).as_bytes()).into())
@@ -6158,13 +6179,16 @@ impl Interp {
     /// expression, slot `0`, and its value is a logical one: `eval_condition`
     /// has already validated it as exactly `0` or `1`, so it is stored as the
     /// small integer of that name and `Op::JumpUnless` reads it back without
-    /// repeating the validation.
+    /// repeating the validation. A `SELECT CASE` has one too, slot `0`, and
+    /// its value is stored as it came: nothing branches on it, and every
+    /// `WHEN CASE` of that `SELECT` compares its own values against this one's
+    /// text.
     ///
     /// **Loud rather than a panic for every shape that is not one this
     /// stream emits**, which is this crate's standing rule for a state the
-    /// type system admits and the compiler does not produce: `ir::compile`
-    /// emits an `EvalExpr` only for an `If`'s slot `0`, and a promotion that
-    /// emits another adds the arm here that gives it meaning.
+    /// type system admits and the compiler does not produce: a promotion that
+    /// emits an `EvalExpr` for a third instruction adds the arm here that
+    /// gives it meaning.
     pub(crate) fn eval_chunk_expr(
         &mut self,
         code: &Code<'_>,
@@ -6174,14 +6198,21 @@ impl Interp {
         let Some(instruction) = code.body.instructions.get(index) else {
             return Err(Loud::chunk_map_too_short().into());
         };
-        let holds = match (&instruction.kind, slot) {
+        match (&instruction.kind, slot) {
             (InstructionKind::If { condition, .. }, 0) => {
-                self.eval_if_condition(code, condition)?
+                let holds = self.eval_if_condition(code, condition)?;
+                // In range unconditionally: `SMALL_INT_MAX` is far above one.
+                Ok(ObjRef::small_int(i64::from(holds)).unwrap_or(ObjRef::NIL))
             }
-            (kind, _) => return Err(Loud::instruction(kind).into()),
-        };
-        // In range unconditionally: `SMALL_INT_MAX` is far above one.
-        Ok(ObjRef::small_int(i64::from(holds)).unwrap_or(ObjRef::NIL))
+            (
+                InstructionKind::Select {
+                    case: Some(case_expr),
+                    ..
+                },
+                0,
+            ) => self.select_case(code, case_expr),
+            (kind, _) => Err(Loud::instruction(kind).into()),
+        }
     }
 
     /// Evaluates `condition` and answers whether it holds, for `IF`/`WHEN`.
@@ -7747,6 +7778,38 @@ pub(crate) fn when_targets(kind: &InstructionKind, len: usize) -> WhenTargets {
     }
 }
 
+/// What a `SELECT` node tells whoever is running one of its branches.
+///
+/// `step`'s own `Select` arm has these in scope from the `match` that
+/// destructured the node; the driver, which arrives at a branch through an op
+/// carrying an instruction index and nothing else, reads them back from the
+/// same node through [`select_parts`].
+pub(crate) struct SelectParts {
+    /// `SELECT LABEL name`'s own label, which a `LEAVE`/`ITERATE` may name.
+    pub(crate) label: Option<SymbolId>,
+    /// This `SELECT`'s own `OTHERWISE` marker, if it has one.
+    pub(crate) otherwise: Option<usize>,
+    /// The `END` that closes it.
+    pub(crate) end: Option<usize>,
+}
+
+/// [`SelectParts`] for a `Select` node, and `None` for anything else.
+pub(crate) fn select_parts(kind: &InstructionKind) -> Option<SelectParts> {
+    match kind {
+        InstructionKind::Select {
+            label,
+            otherwise,
+            end,
+            ..
+        } => Some(SelectParts {
+            label: *label,
+            otherwise: *otherwise,
+            end: *end,
+        }),
+        _ => None,
+    }
+}
+
 /// One past the last instruction of a `SELECT`'s `OTHERWISE` branch, which is
 /// also where control resumes once that branch has finished: its own `END`,
 /// where the `EndStyle::Otherwise` arm does nothing.
@@ -7757,13 +7820,46 @@ pub(crate) fn otherwise_range(len: usize, end: Option<usize>) -> usize {
     end.unwrap_or(len)
 }
 
+/// Where a `LEAVE` naming a `SELECT` resumes: past the `END` that closes it.
+///
+/// The same answer a listed `WHEN` carries in its own `exit` (`ast.rs`: "the
+/// instruction after the enclosing `SELECT`'s `END`"), computed for the
+/// `OTHERWISE` branch, which has no node of its own to carry it.
+pub(crate) fn select_exit(len: usize, end: Option<usize>) -> usize {
+    match end {
+        Some(end) => (end + 1).min(len),
+        None => len,
+    }
+}
+
+/// Where a `SELECT` sends control when one of its branches is over, which is
+/// **two answers and not one**.
+///
+/// They coincide for a matched `WHEN` and differ for `OTHERWISE`, which is why
+/// one of them was wrong before this type existed.
+#[derive(Clone, Copy)]
+pub(crate) struct SelectResume {
+    /// A branch that ran off its own end. `OTHERWISE`'s falls through onto the
+    /// `END`, which executes and does nothing; a matched `WHEN`'s resumes past
+    /// the `END`, because one true `WHEN` ends the whole `SELECT`.
+    pub(crate) done: usize,
+    /// A `LEAVE` naming this `SELECT`, which resumes past the `END` from
+    /// **either** branch. Measured under `trace r`: `select label s` /
+    /// `when 1 = 0 then nop` / `otherwise leave s` / `end` echoes no `end`
+    /// clause at all, where the same `OTHERWISE` falling through echoes one.
+    pub(crate) left: usize,
+}
+
 /// What a `SELECT` does with a `Flow` that escaped the branch it was running.
 ///
-/// **One decision, made by both engines.** `step`'s own `Select` arm dispatches
-/// `OTHERWISE` through `run_otherwise` and everything else through
-/// `leave_select`; the driver resumes at `OTHERWISE`'s own entry op and
-/// everything else walks its frame stack. What each does next differs; which
-/// of the two it is does not.
+/// **The tree-walker's decision, and the compiled stream expresses the same
+/// one as layout rather than as a second copy of this.** `run_bounded` owns
+/// one range, so a `Flow::Goto` onto the `OTHERWISE` marker escapes it and
+/// leaves the construct entirely unless something recognises the target --
+/// which is what this is for. In the stream `Chunk::op_of` *is* the resume
+/// table and the op that opens `OTHERWISE`'s frame sits at the marker's entry
+/// in it, so every arrival there already opens that frame
+/// (`Interp::leave_branch`'s own doc comment has what was measured).
 pub(crate) enum SelectEscape {
     /// The flow lands exactly on this `SELECT`'s own `OTHERWISE` marker, so
     /// that branch runs **with this `SELECT`'s search frame still standing**.

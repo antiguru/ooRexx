@@ -170,6 +170,133 @@ fn nested_ifs_reuse_one_register() {
     );
 }
 
+/// The compiled `SELECT` with an `OTHERWISE`: one clause region for the header
+/// and one per listed `WHEN`, chained by the `JumpUnless` each `WHEN` ends
+/// with, and a frame opened over whichever branch wins.
+///
+/// The eleven instructions are `SELECT`, `WHEN`, `THEN`, `say 'a'`, `WHEN`,
+/// `THEN`, `say 'b'`, `OTHERWISE`, `say 'o'`, `END`, `say 'after'`.
+///
+/// The three things a reader should check by eye are the jump targets:
+///
+/// * the first `WHEN`'s `JumpUnless` goes to op 8, the **second `WHEN`'s own
+///   clause region**, which is the scan continuing;
+/// * the second `WHEN`'s goes to op 14, the `EnterOtherwise` in front of the
+///   `OTHERWISE` marker, which is the scan running out;
+/// * and nothing jumps past a branch, because a branch is left by the frame
+///   `EnterWhen` opened rather than by an op -- reaching op 14 by falling out
+///   of the second `WHEN`'s branch is that branch's `op_end`, and the driver
+///   closes the frame there instead of running the op.
+///
+/// **`op_of[7]` is 14 and not 15**, which is the other half of the same
+/// mechanism: an absorbed `WHEN CASE`'s escape landing exactly on the
+/// `OTHERWISE` marker has to open the frame the marker's branch runs under,
+/// and that is what putting `EnterOtherwise` at the resume entry does.
+#[test]
+fn a_select_with_an_otherwise_compiles_to_a_scan_chain_and_two_frames() {
+    let chunk = compile_for_test(
+        b"select\n  when 1 = 0 then say 'a'\n  when 2 = 2 then say 'b'\n  otherwise say 'o'\n\
+          end\nsay 'after'\n",
+    )
+    .expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=1\n\
+         1: SelectCaseText index=0 case=-\n\
+         2: Clause index=1 end=5\n\
+         3: WhenTest index=1 case=- dst=0\n\
+         4: JumpUnless reg=0 target=8\n\
+         5: EnterWhen select=0 when=1\n\
+         6: Generic index=2\n\
+         7: Generic index=3\n\
+         8: Clause index=4 end=11\n\
+         9: WhenTest index=4 case=- dst=0\n\
+         10: JumpUnless reg=0 target=14\n\
+         11: EnterWhen select=0 when=4\n\
+         12: Generic index=5\n\
+         13: Generic index=6\n\
+         14: EnterOtherwise select=0\n\
+         15: Generic index=7\n\
+         16: Generic index=8\n\
+         17: Generic index=9\n\
+         18: Generic index=10\n"
+    );
+    assert_eq!(
+        chunk.registers, 1,
+        "the second WHEN reuses the register the first one released"
+    );
+    assert_eq!(chunk.op_of, vec![0, 2, 6, 7, 8, 12, 13, 14, 16, 17, 18, 19]);
+}
+
+/// A `SELECT CASE`'s own value is allocated in the **enclosing** scope, so the
+/// register a `WHEN` takes for its own answer cannot reclaim it.
+///
+/// **This is the first emitted stream where `Mark` carrying a position is
+/// observable**, which `nested_ifs_reuse_one_register` says it is not for an
+/// `IF`. The `CASE` value is register 0 and outlives every member clause --
+/// the second `WHEN` is tested after the first `WHEN`'s branch has already run
+/// -- while the two `WHEN`s share register 1 between them. An allocator whose
+/// `mark()` always answered `Mark(0)` would hand register 0 back to the first
+/// `WHEN` and compare every later `WHEN` against whatever that left behind.
+#[test]
+fn a_select_cases_own_value_outlives_the_registers_its_whens_take() {
+    let chunk = compile_for_test(
+        b"select case 1 + 1\n  when 1 then say 'a'\n  when 2 then say 'b'\nend\nsay 'after'\n",
+    )
+    .expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=2\n\
+         1: EvalExpr index=0 slot=0 dst=0\n\
+         2: SelectCaseText index=0 case=0\n\
+         3: Clause index=1 end=6\n\
+         4: WhenTest index=1 case=0 dst=1\n\
+         5: JumpUnless reg=1 target=9\n\
+         6: EnterWhen select=0 when=1\n\
+         7: Generic index=2\n\
+         8: Generic index=3\n\
+         9: Clause index=4 end=12\n\
+         10: WhenTest index=4 case=0 dst=1\n\
+         11: JumpUnless reg=1 target=15\n\
+         12: EnterWhen select=0 when=4\n\
+         13: Generic index=5\n\
+         14: Generic index=6\n\
+         15: Generic index=7\n\
+         16: Generic index=8\n"
+    );
+    assert_eq!(
+        chunk.registers, 2,
+        "the CASE value and one WHEN answer are live at once, and never more"
+    );
+}
+
+/// Without an `OTHERWISE` the scan runs out onto the `END`, whose own 7.3 is
+/// what "every WHEN was false" means -- so the last `WHEN`'s `JumpUnless`
+/// names the `END`'s **own** op and no frame is open when it runs.
+///
+/// The neighbouring case to the one above, and it is what says the
+/// `EnterOtherwise` there belongs to the `OTHERWISE` rather than being emitted
+/// for every `SELECT`: a driver that opened a frame here would have one still
+/// standing when the `END` raised.
+#[test]
+fn a_select_with_no_otherwise_scans_out_onto_its_own_end() {
+    let chunk = compile_for_test(b"select\n  when 1 = 0 then say 'a'\nend\nsay 'after'\n")
+        .expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=1\n\
+         1: SelectCaseText index=0 case=-\n\
+         2: Clause index=1 end=5\n\
+         3: WhenTest index=1 case=- dst=0\n\
+         4: JumpUnless reg=0 target=8\n\
+         5: EnterWhen select=0 when=1\n\
+         6: Generic index=2\n\
+         7: Generic index=3\n\
+         8: Generic index=4\n\
+         9: Generic index=5\n"
+    );
+}
+
 /// `run_bounded`'s absorption guard is inclusive, so a construct's resume
 /// point can be `end`, which is one past its last instruction. A map that
 /// stops at `len - 1` panics there rather than at compile.

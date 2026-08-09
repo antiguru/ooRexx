@@ -17,7 +17,7 @@ use rexx_parse::{CodeBody, InstructionKind};
 
 use super::{Chunk, ChunkTooLarge, Op};
 use crate::plan::Plan;
-use crate::run::if_targets;
+use crate::run::{if_targets, otherwise_range};
 
 /// The compile-time register stack (the plan's Decisions section: "register
 /// allocation is a compile-time stack, and the chunk records its high-water
@@ -110,6 +110,49 @@ struct Patch {
     kind: PatchKind,
 }
 
+/// An op that has to be emitted in front of an instruction's own first op,
+/// so that arriving at that instruction from elsewhere runs it and falling
+/// into the instruction from the op before it does not.
+///
+/// This is the [`Chunk::op_of`]/`first_op_of` split, from the emitting side:
+/// `op_of` names whichever of these is in front, and `first_op_of` names the
+/// instruction's own op. Both entries in the table below are cases where an
+/// arrival has to do something the instruction itself does not.
+///
+/// [`Chunk::op_of`]: super::Chunk
+enum Before {
+    /// An `IF`'s branch-end jump, in front of the `ELSE` it skips, resuming at
+    /// this instruction.
+    BranchEnd(usize),
+    /// A `SELECT`'s [`Op::EnterOtherwise`], in front of the `OTHERWISE` marker
+    /// whose branch it opens a frame over. The `SELECT` is at this index.
+    EnterOtherwise(usize),
+}
+
+/// What a listed `WHEN` needs from the `SELECT` that collected it, recorded
+/// when that `SELECT` compiles and read when the `WHEN` itself does.
+///
+/// A table indexed by instruction rather than a lookup from the `WHEN` back to
+/// its `SELECT`: the pass is forward and a `SELECT` always compiles before its
+/// own `whens`, so the answer is already known by the time it is wanted, and
+/// nothing has to search for it.
+struct WhenInfo {
+    /// The `SELECT` this `WHEN` belongs to.
+    select: u32,
+    /// The register that `SELECT`'s `CASE` value is in, and `None` for a plain
+    /// `SELECT`.
+    case: Option<u16>,
+    /// Where the scan goes when this `WHEN` does not hold: the next listed
+    /// `WHEN`, the `OTHERWISE`, or the `END` whose 7.3 is what "no `WHEN`
+    /// matched and there is no `OTHERWISE`" means.
+    false_target: usize,
+    /// Which of that instruction's two entries the scan wants. It is
+    /// [`PatchKind::Resume`] for an `OTHERWISE`, whose `op_of` is the
+    /// [`Op::EnterOtherwise`] that opens the frame, and [`PatchKind::Enter`]
+    /// for the other two, which have nothing in front of them.
+    false_kind: PatchKind,
+}
+
 /// Which op a jump to an instruction means, for the one instruction where
 /// the two differ: the `ELSE` a branch-end jump sits in front of.
 ///
@@ -141,8 +184,11 @@ enum PatchKind {
 /// Every instruction in `body.instructions` compiles (D21: "every
 /// instruction compiles, nothing refuses" is about instructions). A `DO` or
 /// `LOOP` becomes [`Op::Loop`], whose body clauses the driver steps; an `IF`
-/// becomes a [`Op::Clause`] region that evaluates its condition and jumps;
-/// every other instruction becomes [`Op::Generic`]. `plan` is not yet read:
+/// becomes a [`Op::Clause`] region that evaluates its condition and jumps; a
+/// `SELECT` becomes one such region per listed `WHEN` as well as for its own
+/// header, laid out as a scan chain with a frame opened over whichever branch
+/// wins; every other instruction becomes [`Op::Generic`]. `plan` is not yet
+/// read:
 /// nothing compiled here needs a name-to-slot answer, but a task that
 /// promotes an assignment reads it to place the assignment's own `EvalExpr`.
 ///
@@ -162,30 +208,49 @@ pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLa
     let mut op_of = Vec::with_capacity(len + 1);
     let mut registers = Registers::new();
     let mut patches: Vec<Patch> = Vec::new();
-    // Indexed by instruction: the resume an `IF`'s true branch jumps to when
-    // it finishes, emitted immediately *before* that instruction's own ops.
-    // A `Vec` keyed by the instruction the jump sits in front of, rather than
-    // a stack, because the branch that needs it is the one whose
-    // `false_target` names an `ELSE`, and an `ELSE` belongs to exactly one
-    // `IF` -- the `debug_assert` below is what says so rather than assuming it.
-    let mut jump_before: Vec<Option<usize>> = vec![None; len];
+    // Indexed by instruction: the op that goes in front of that instruction's
+    // own, emitted at its `op_of` entry. A `Vec` keyed by the instruction the
+    // op sits in front of, rather than a stack, because each entry belongs to
+    // exactly one construct -- an `ELSE` to one `THEN`, an `OTHERWISE` to one
+    // `SELECT` -- and the `debug_assert`s below are what say so rather than
+    // assuming it.
+    let mut before: Vec<Option<Before>> = Vec::new();
+    before.resize_with(len, || None);
+    // Indexed by instruction: what a listed `WHEN` compiling at that index
+    // needs from the `SELECT` that collected it.
+    let mut when_info: Vec<Option<WhenInfo>> = Vec::new();
+    when_info.resize_with(len, || None);
+    // Indexed by instruction: a register top to put back on reaching it. A
+    // `SELECT CASE`'s own value is what needs one -- it is allocated in the
+    // enclosing scope so that every member clause's release leaves it alone,
+    // and this is where that allocation ends.
+    let mut release_at: Vec<Option<Mark>> = vec![None; len];
 
     // Indexed by instruction: the instruction's own first op, which is
-    // `op_of`'s entry except where a branch-end jump sits in front of it.
+    // `op_of`'s entry except where a `Before` op sits in front of it.
     // Compile-time only -- the driver never wants it, because `PatchKind`'s
-    // own doc comment has why the one jump that does is emitted here.
+    // own doc comment has why the ops that do are emitted here.
     let mut first_op_of = Vec::with_capacity(len);
 
     for (index, instruction) in body.instructions.iter().enumerate() {
         op_of.push(op_index(&ops)?);
-        if let Some(resume) = jump_before[index] {
-            let op = op_index(&ops)?;
-            ops.push(Op::Jump { target: 0 });
-            patches.push(Patch {
-                op,
-                target: resume,
-                kind: PatchKind::Resume,
-            });
+        if let Some(mark) = release_at[index] {
+            registers.release(mark);
+        }
+        match before[index] {
+            Some(Before::BranchEnd(resume)) => {
+                let op = op_index(&ops)?;
+                ops.push(Op::Jump { target: 0 });
+                patches.push(Patch {
+                    op,
+                    target: resume,
+                    kind: PatchKind::Resume,
+                });
+            }
+            Some(Before::EnterOtherwise(select)) => ops.push(Op::EnterOtherwise {
+                select: instruction_index(select)?,
+            }),
+            None => {}
         }
         first_op_of.push(op_index(&ops)?);
         match &instruction.kind {
@@ -231,13 +296,147 @@ pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLa
                 // would execute for nothing.
                 if targets.resume != targets.false_target {
                     debug_assert!(
-                        jump_before[targets.false_target].is_none(),
-                        "two IFs want a branch-end jump in front of instruction {}, so an ELSE \
+                        before[targets.false_target].is_none(),
+                        "two constructs want an op in front of instruction {}, so an ELSE \
                          belongs to more than one THEN",
                         targets.false_target
                     );
-                    jump_before[targets.false_target] = Some(targets.resume);
+                    before[targets.false_target] = Some(Before::BranchEnd(targets.resume));
                 }
+            }
+            // The `SELECT` clause is its `CASE` expression and nothing else,
+            // which is the boundary `run.rs`'s own `Select` arm measured
+            // (`SIGL` reports the `SELECT`'s line, not the first `WHEN`'s), and
+            // a plain `SELECT` has an empty region rather than none, because
+            // the clause and its boundary are owed either way.
+            InstructionKind::Select {
+                case,
+                whens,
+                otherwise,
+                end,
+                ..
+            } => {
+                let select_end = otherwise_range(len, *end);
+                // Allocated in the *enclosing* scope, before any member
+                // clause's mark is taken, because the last `WHEN`'s test comes
+                // after every earlier `WHEN`'s branch has already run: a
+                // register released at a clause boundary inside the construct
+                // would be handed out again while this one is still live.
+                let outer = registers.mark();
+                let case_reg = match case {
+                    Some(_) => Some(registers.alloc()?),
+                    None => None,
+                };
+                let at = op_index(&ops)?;
+                let region = if case_reg.is_some() { 2 } else { 1 };
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: at + region,
+                });
+                if let Some(dst) = case_reg {
+                    ops.push(Op::EvalExpr {
+                        index: instruction_index(index)?,
+                        slot: 0,
+                        dst,
+                    });
+                }
+                ops.push(Op::SelectCaseText {
+                    index: instruction_index(index)?,
+                    case: case_reg,
+                });
+                // Past the whole construct, so nothing between here and the
+                // `END` can reuse the register. A `select_end` of `len` has no
+                // instruction to hang the release on and needs none: there is
+                // nothing after it to hand the register to.
+                if select_end < len {
+                    release_at[select_end] = Some(outer);
+                }
+                // Where the scan goes once no listed `WHEN` is left, which is
+                // also where it starts when there is no `WHEN` at all.
+                let no_match = match otherwise {
+                    Some(otherwise_index) => {
+                        debug_assert!(
+                            before[*otherwise_index].is_none(),
+                            "two constructs want an op in front of instruction {otherwise_index}, \
+                             so an OTHERWISE belongs to more than one SELECT"
+                        );
+                        before[*otherwise_index] = Some(Before::EnterOtherwise(index));
+                        (*otherwise_index, PatchKind::Resume)
+                    }
+                    // Landing on the `END` is what makes 7.3 the `END`'s own
+                    // clause rather than this `SELECT`'s, exactly as the
+                    // tree-walker's `Goto(end)` does.
+                    None => (select_end, PatchKind::Enter),
+                };
+                for (position, &when_index) in whens.iter().enumerate() {
+                    let (false_target, false_kind) = match whens.get(position + 1) {
+                        Some(&next) => (next, PatchKind::Enter),
+                        None => no_match,
+                    };
+                    when_info[when_index] = Some(WhenInfo {
+                        select: instruction_index(index)?,
+                        case: case_reg,
+                        false_target,
+                        false_kind,
+                    });
+                }
+                // The first listed `WHEN` is the instruction after this one in
+                // every program that parses, so the scan is reached by falling
+                // through and a jump to it would be an op the driver runs for
+                // nothing. Emitted only when it is not -- a `SELECT` with no
+                // listed `WHEN` at all is the case that reaches this.
+                if whens.first() != Some(&(index + 1)) {
+                    let (target, kind) = match whens.first() {
+                        Some(&first) => (first, PatchKind::Enter),
+                        None => no_match,
+                    };
+                    let op = op_index(&ops)?;
+                    ops.push(Op::Jump { target: 0 });
+                    patches.push(Patch { op, target, kind });
+                }
+            }
+            // A **listed** `WHEN`/`WHEN CASE`: one whose `SELECT` collected it,
+            // which is what `when_info` holds an entry for. An *absorbed* one
+            // -- itself another `WHEN`'s consequence, never collected -- has
+            // none, and falls to `Generic` below, where `step`'s own arm
+            // evaluates it and branches exactly as it does for the tree-walker.
+            //
+            // The clause is the condition and nothing else, same as an `IF`'s,
+            // and `EnterWhen` sits past the region because opening the frame is
+            // the branch's business rather than the clause's.
+            InstructionKind::When { .. } | InstructionKind::WhenCase { .. }
+                if when_info[index].is_some() =>
+            {
+                let info = when_info[index]
+                    .take()
+                    .expect("the guard above just observed one");
+                let mark = registers.mark();
+                let dst = registers.alloc()?;
+                let at = op_index(&ops)?;
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: at + 3,
+                });
+                ops.push(Op::WhenTest {
+                    index: instruction_index(index)?,
+                    case: info.case,
+                    dst,
+                });
+                let jump = op_index(&ops)?;
+                ops.push(Op::JumpUnless {
+                    reg: dst,
+                    target: 0,
+                });
+                patches.push(Patch {
+                    op: jump,
+                    target: info.false_target,
+                    kind: info.false_kind,
+                });
+                registers.release(mark);
+                ops.push(Op::EnterWhen {
+                    select: info.select,
+                    when: instruction_index(index)?,
+                });
             }
             _ => ops.push(Op::Generic {
                 index: instruction_index(index)?,

@@ -27,11 +27,14 @@
 //! `apply_flow` and `absorb`.
 
 use rexx_core::{Decoded, FrameId, ObjRef};
-use rexx_parse::ProgramSource;
+use rexx_parse::{ProgramSource, SymbolId};
 
 use super::{BodyEngine, Chunk, Op};
 use crate::clause::{ClauseOutcome, ClauseValue};
-use crate::run::{Absorbed, Ended, Flow, absorb};
+use crate::run::{
+    Absorbed, Ended, Flow, SelectResume, absorb, otherwise_range, select_exit, select_parts,
+    when_targets,
+};
 use crate::{Code, Failure, Interp, Loud};
 
 /// What a body that runs off its own end answers.
@@ -41,6 +44,67 @@ use crate::{Code, Failure, Interp, Loud};
 /// end of the file ends the *program*, and the caller's next clause never
 /// runs.
 const END_OF_BODY: Ended = Ended::Exited(None);
+
+/// One construct the driver has open: a `SELECT` branch that is running, and
+/// everything an escaping `Flow` needs in order to leave it.
+///
+/// **This is the tree-walker's own Rust call frame, flattened.** There, a
+/// matched `WHEN`'s branch is `run_bounded(code, when + 1, body_end, ...)?`
+/// followed by `leave_select`, and the call stack is what makes an escaping
+/// `Flow` meet that `leave_select` before it meets the enclosing range. A flat
+/// op stream has no call between the two, so the driver keeps the frames
+/// itself and an escaping `Flow` walks them.
+///
+/// **Local to one [`Interp::run_ops`] call, not on `Interp`.** A `Failure`
+/// unwinds out of that call with frames still open and the `Vec` is simply
+/// dropped, exactly as the Rust frames it replaces are; a stack on `Interp`
+/// would need every raise to remember to unwind it. A `DO` body inside a
+/// branch enters `run_ops` again through `run_bounded_from_chunk` and gets a
+/// stack of its own, which is right: a `LEAVE` there meets the loop first and
+/// this frame afterwards, in that order, exactly as the nested calls give.
+struct SelectFrame {
+    /// The `SELECT` instruction this branch belongs to, which is the position
+    /// `pop_search_frame` resets a forwarded `LEAVE`'s indent to.
+    select: usize,
+    /// `SELECT LABEL name`'s own label.
+    label: Option<SymbolId>,
+    /// The branch's own instruction range -- the range the tree-walker bounds
+    /// the identical `run_bounded` call to, and the one an escaping `Flow` is
+    /// absorbed against here.
+    start: usize,
+    end: usize,
+    /// Where `leave_select` resumes this branch, which is two answers rather
+    /// than one ([`SelectResume`]).
+    resume: SelectResume,
+    /// One past the branch's last op. **Reaching it is the branch running off
+    /// its own end**, which is the arrival the tree-walker gets as
+    /// `run_bounded` answering `Flow::Next` -- and it is an op position rather
+    /// than an instruction one because that is the space the counter walks.
+    op_end: u32,
+    /// Which branch this is, which decides how it is left.
+    branch: Branch,
+}
+
+/// Which of a `SELECT`'s two kinds of branch a [`SelectFrame`] is open over.
+///
+/// The two leave differently, and the difference is `run_otherwise`'s own
+/// split from `step`'s `Select` arm: `OTHERWISE`'s dispatch restores
+/// `Interp::indent_offset` once it is over, and a matched `WHEN`'s does not.
+enum Branch {
+    /// A matched listed `WHEN`'s branch.
+    When,
+    /// The `OTHERWISE` branch.
+    Otherwise,
+}
+
+/// Where a `Flow` leaves the counter, once every open frame and the range
+/// itself have had their say.
+enum Settled {
+    /// Continue at this op.
+    At(u32),
+    /// Nothing absorbed it: it is this whole `run_ops` call's answer.
+    Escaped(Flow),
+}
 
 /// Where a promoted clause left the program counter.
 ///
@@ -220,8 +284,28 @@ impl Interp {
             return Err(Loud::chunk_map_too_short().into());
         };
         let depth = self.activations.len();
+        // The constructs this level has open. Empty for every body until a
+        // `SELECT` opens a branch, so the two comparisons per op below are a
+        // `Vec::last` on an empty `Vec` for everything else.
+        let mut frames: Vec<SelectFrame> = Vec::new();
         let mut pc = at;
-        while pc < stop {
+        loop {
+            // **A branch whose ops the counter has left has run off its own
+            // end**, and that is the arrival the tree-walker gets as
+            // `run_bounded` answering `Flow::Next`. Checked before the op is
+            // fetched, because the op at `op_end` belongs to whatever follows
+            // the branch and must not run until the branch has been left.
+            if let Some(frame) = frames.pop_if(|frame| pc >= frame.op_end) {
+                let flow = self.leave_branch(code, &frame, Flow::Next)?;
+                match self.settle(code, chunk, &mut frames, flow, pc, start, end)? {
+                    Settled::At(target) => pc = target,
+                    Settled::Escaped(other) => return Ok(other),
+                }
+                continue;
+            }
+            if pc >= stop {
+                return Ok(Flow::Next);
+            }
             let Some(op) = chunk.op_at_index(pc) else {
                 return Err(Loud::chunk_map_too_short().into());
             };
@@ -325,7 +409,43 @@ impl Interp {
                     pc = *target;
                     continue;
                 }
-                // Both are only meaningful inside a `Clause` region, which
+                // Handing an absorbed `WHEN CASE` the text it compares against
+                // (`Op::SelectCaseText`'s own doc has why it is here rather
+                // than inside the header's clause region), and opening a frame
+                // over a branch. None of the three runs a clause or produces a
+                // `Flow`, so each continues straight to the next op.
+                Op::SelectCaseText { index, case } => {
+                    let text = match case {
+                        Some(register) => {
+                            debug_assert!(
+                                chunk.holds_register(*register),
+                                "op reads register {register} outside the region the chunk \
+                                 reserved"
+                            );
+                            let value = self.roots.temp_at(registers, *register as usize);
+                            Some(self.to_text(value).to_vec())
+                        }
+                        None => None,
+                    };
+                    debug_assert!(
+                        code.body.instructions.get(*index as usize).is_some(),
+                        "a SelectCaseText op names an instruction outside its own body"
+                    );
+                    self.current_case_text = text;
+                    pc += 1;
+                    continue;
+                }
+                Op::EnterWhen { select, when } => {
+                    frames.push(self.when_frame(code, chunk, *select as usize, *when as usize)?);
+                    pc += 1;
+                    continue;
+                }
+                Op::EnterOtherwise { select } => {
+                    frames.push(self.otherwise_frame(code, chunk, *select as usize)?);
+                    pc += 1;
+                    continue;
+                }
+                // All three are only meaningful inside a `Clause` region, which
                 // `run_clause_region` walks: reaching one here means a jump
                 // landed in the middle of a region rather than on its
                 // `Clause`. Loud rather than a panic, which is this crate's
@@ -333,6 +453,7 @@ impl Interp {
                 // compiler does not produce.
                 Op::EvalExpr { .. } => return Err(Loud::op_not_driven("EvalExpr").into()),
                 Op::JumpUnless { .. } => return Err(Loud::op_not_driven("JumpUnless").into()),
+                Op::WhenTest { .. } => return Err(Loud::op_not_driven("WhenTest").into()),
             };
             // **Per clause, not per escaping flow.** A clause that left the
             // activation stack changed makes this loop's `code` describe a
@@ -345,18 +466,176 @@ impl Interp {
                 "a clause left the activation stack changed, so this loop's `code` and its `pc` \
                  no longer describe the same frame"
             );
-            match absorb(flow, start, end) {
-                Absorbed::Advance => pc = next,
-                Absorbed::Resume(target) => {
-                    let Some(at) = chunk.op_at(target) else {
-                        return Err(Loud::chunk_map_too_short().into());
-                    };
-                    pc = at;
-                }
-                Absorbed::Escaped(other) => return Ok(other),
+            match self.settle(code, chunk, &mut frames, flow, next, start, end)? {
+                Settled::At(target) => pc = target,
+                Settled::Escaped(other) => return Ok(other),
             }
         }
-        Ok(Flow::Next)
+    }
+
+    /// Where `flow` leaves the counter, once every open frame and then the
+    /// range itself have had their say.
+    ///
+    /// **The flattening of the tree-walker's own nesting.** There, a `Flow`
+    /// leaving a matched `WHEN`'s branch is absorbed against that branch's
+    /// range by `run_bounded`, then handed to `leave_select`,
+    /// and whatever comes back is absorbed against the enclosing range by
+    /// whichever loop called it -- one round per Rust call frame. Here the
+    /// rounds are a loop over the frame stack, in the same order and through
+    /// the same two functions.
+    ///
+    /// `next` is where an unabsorbed `Flow::Next` continues, which is the op
+    /// after whichever one produced it.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "two callers inside one loop, and every argument is a value that loop holds"
+    )]
+    fn settle(
+        &mut self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        frames: &mut Vec<SelectFrame>,
+        mut flow: Flow,
+        next: u32,
+        start: usize,
+        end: usize,
+    ) -> Result<Settled, Failure> {
+        loop {
+            // Copied out rather than held, because the `Escaped` arm pops the
+            // frame this came from.
+            let Some((frame_start, frame_end)) = frames.last().map(|f| (f.start, f.end)) else {
+                return Ok(match absorb(flow, start, end) {
+                    Absorbed::Advance => Settled::At(next),
+                    Absorbed::Resume(target) => Settled::At(op_at(chunk, target)?),
+                    Absorbed::Escaped(other) => Settled::Escaped(other),
+                });
+            };
+            match absorb(flow, frame_start, frame_end) {
+                Absorbed::Advance => return Ok(Settled::At(next)),
+                // `target` can be the branch's own `end`, which is one past its
+                // last instruction: `op_at` answers this frame's `op_end`
+                // there, and the loop's own check closes the frame on the next
+                // pass rather than a second rule doing it here.
+                Absorbed::Resume(target) => return Ok(Settled::At(op_at(chunk, target)?)),
+                Absorbed::Escaped(other) => {
+                    let frame = frames.pop().expect("the check above just observed one");
+                    flow = self.leave_branch(code, &frame, other)?;
+                }
+            }
+        }
+    }
+
+    /// What a `SELECT` does with a `Flow` that left one of its branches, which
+    /// is `leave_select` -- exactly what `step`'s own `Select` arm and
+    /// `run_otherwise` do with the same `Flow`.
+    ///
+    /// **`select_escape` has no counterpart here, and its absence is the op
+    /// layout doing the same job.** The tree-walker needs that decision
+    /// because its `run_bounded` owns one range and a `Flow::Goto` landing on
+    /// the `OTHERWISE` marker escapes it, leaving the construct entirely
+    /// unless something recognises the target. Here `Chunk::op_of` *is* the
+    /// resume table and [`Op::EnterOtherwise`] sits at the `OTHERWISE`'s entry
+    /// in it, so **every** arrival there opens the branch's frame -- the scan
+    /// running out of `WHEN`s and an absorbed `WHEN CASE`'s escape alike.
+    /// Measured: a driver arm making the decision explicitly as well could be
+    /// deleted with the whole workspace, corpus included, still green, because
+    /// the layout had already answered it; what does redden is moving
+    /// `EnterOtherwise` off that entry.
+    ///
+    /// [`Op::EnterOtherwise`]: super::Op::EnterOtherwise
+    fn leave_branch(
+        &mut self,
+        code: &Code<'_>,
+        frame: &SelectFrame,
+        flow: Flow,
+    ) -> Result<Flow, Failure> {
+        let flow = match frame.branch {
+            Branch::When => flow,
+            // `run_otherwise`'s own last two lines, in order: the offset is
+            // restored once that whole dispatch -- marker and body alike -- is
+            // finished reading it, and only then does `leave_select` run. A
+            // raise leaves it unrestored here for the same reason it does
+            // there, since nothing runs afterward to see a stale value.
+            Branch::Otherwise => {
+                self.indent_offset = 0;
+                flow
+            }
+        };
+        self.leave_select(code, frame.select, frame.label, frame.resume, flow)
+    }
+
+    /// The frame [`Op::EnterWhen`] opens: the matched branch of the listed
+    /// `WHEN` at `when`, belonging to the `SELECT` at `select`.
+    ///
+    /// Every bound comes from the nodes themselves through the same
+    /// [`when_targets`] and [`select_parts`] the tree-walker reads, so the two
+    /// engines cannot come to disagree about where a branch ends or which
+    /// label leaves it.
+    fn when_frame(
+        &self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        select: usize,
+        when: usize,
+    ) -> Result<SelectFrame, Failure> {
+        let (Some(select_instruction), Some(when_instruction)) = (
+            code.body.instructions.get(select),
+            code.body.instructions.get(when),
+        ) else {
+            return Err(Loud::chunk_map_too_short().into());
+        };
+        let Some(parts) = select_parts(&select_instruction.kind) else {
+            return Err(Loud::select_op_off_its_node().into());
+        };
+        let targets = when_targets(&when_instruction.kind, code.body.instructions.len());
+        Ok(SelectFrame {
+            select,
+            label: parts.label,
+            start: when + 1,
+            end: targets.body_end,
+            resume: SelectResume {
+                done: targets.resume,
+                left: targets.resume,
+            },
+            op_end: op_at(chunk, targets.body_end)?,
+            branch: Branch::When,
+        })
+    }
+
+    /// The frame [`Op::EnterOtherwise`] opens: the `OTHERWISE` branch of the
+    /// `SELECT` at `select`.
+    ///
+    /// The range **starts at the marker**, not past it, which is
+    /// `run_otherwise`'s own range: the marker is an ordinary clause, stepped
+    /// by the same unit as everything else in the branch.
+    fn otherwise_frame(
+        &self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        select: usize,
+    ) -> Result<SelectFrame, Failure> {
+        let Some(select_instruction) = code.body.instructions.get(select) else {
+            return Err(Loud::chunk_map_too_short().into());
+        };
+        let Some(parts) = select_parts(&select_instruction.kind) else {
+            return Err(Loud::select_op_off_its_node().into());
+        };
+        let Some(otherwise) = parts.otherwise else {
+            return Err(Loud::select_op_off_its_node().into());
+        };
+        let otherwise_end = otherwise_range(code.body.instructions.len(), parts.end);
+        Ok(SelectFrame {
+            select,
+            label: parts.label,
+            start: otherwise,
+            end: otherwise_end,
+            resume: SelectResume {
+                done: otherwise_end,
+                left: select_exit(code.body.instructions.len(), parts.end),
+            },
+            op_end: op_at(chunk, otherwise_end)?,
+            branch: Branch::Otherwise,
+        })
     }
 
     /// One promoted clause: the ops of `(at - 1, end)`, run inside the same
@@ -448,12 +727,47 @@ impl Interp {
                         return Ok(ClauseNext(*target));
                     }
                 }
+                Op::WhenTest { index, case, dst } => {
+                    debug_assert!(
+                        chunk.holds_register(*dst),
+                        "op writes register {dst} outside the region the chunk reserved"
+                    );
+                    let case_text = match case {
+                        Some(register) => {
+                            debug_assert!(
+                                chunk.holds_register(*register),
+                                "op reads register {register} outside the region the chunk \
+                                 reserved"
+                            );
+                            let value = self.roots.temp_at(registers, *register as usize);
+                            Some(self.to_text(value).to_vec())
+                        }
+                        None => None,
+                    };
+                    let Some(instruction) = code.body.instructions.get(*index as usize) else {
+                        return Err(Loud::chunk_map_too_short().into());
+                    };
+                    let holds = self.scan_when(code, instruction, case_text.as_deref())?;
+                    // In range unconditionally: `SMALL_INT_MAX` is far above
+                    // one. Stored as the logical value `Op::JumpUnless` reads
+                    // back, exactly as an `IF`'s condition is.
+                    let value = ObjRef::small_int(i64::from(holds)).unwrap_or(ObjRef::NIL);
+                    self.roots.set_temp(registers, *dst as usize, value);
+                    pc += 1;
+                }
                 Op::Jump { target } => {
                     return Ok(ClauseNext(*target));
                 }
                 Op::Generic { .. } => return Err(Loud::op_not_driven("Generic").into()),
                 Op::Loop { .. } => return Err(Loud::op_not_driven("Loop").into()),
                 Op::Clause { .. } => return Err(Loud::op_not_driven("Clause").into()),
+                Op::SelectCaseText { .. } => {
+                    return Err(Loud::op_not_driven("SelectCaseText").into());
+                }
+                Op::EnterWhen { .. } => return Err(Loud::op_not_driven("EnterWhen").into()),
+                Op::EnterOtherwise { .. } => {
+                    return Err(Loud::op_not_driven("EnterOtherwise").into());
+                }
             }
         }
         Ok(ClauseNext(end))
@@ -475,6 +789,18 @@ impl Interp {
             _ => Err(Loud::register_not_logical().into()),
         }
     }
+}
+
+/// The op instruction `target` resumes at, or the loud failure a chunk whose
+/// map is shorter than its own body earns.
+///
+/// `compile` writes one entry per instruction plus a final one, so this is in
+/// range for every index a construct computes -- including one past the last
+/// instruction, which is what a branch's own `end` is.
+fn op_at(chunk: &Chunk, target: usize) -> Result<u32, Failure> {
+    chunk
+        .op_at(target)
+        .ok_or_else(|| Loud::chunk_map_too_short().into())
 }
 
 /// How a promoted clause finished.

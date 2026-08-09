@@ -44,6 +44,28 @@ pub(crate) fn render(chunk: &Chunk) -> String {
                     "{index}: EvalExpr index={at} slot={slot} dst={dst}\n"
                 ));
             }
+            Op::SelectCaseText { index: at, case } => {
+                out.push_str(&format!(
+                    "{index}: SelectCaseText index={at} case={}\n",
+                    render_register(*case)
+                ));
+            }
+            Op::WhenTest {
+                index: at,
+                case,
+                dst,
+            } => {
+                out.push_str(&format!(
+                    "{index}: WhenTest index={at} case={} dst={dst}\n",
+                    render_register(*case)
+                ));
+            }
+            Op::EnterWhen { select, when } => {
+                out.push_str(&format!("{index}: EnterWhen select={select} when={when}\n"));
+            }
+            Op::EnterOtherwise { select } => {
+                out.push_str(&format!("{index}: EnterOtherwise select={select}\n"));
+            }
             Op::Jump { target } => {
                 out.push_str(&format!("{index}: Jump target={target}\n"));
             }
@@ -53,4 +75,15 @@ pub(crate) fn render(chunk: &Chunk) -> String {
         }
     }
     out
+}
+
+/// An optional register operand: its index, or `-` for an op that has none.
+///
+/// A rendering rather than `Option`'s own `Debug`, so a golden expectation
+/// reads as one word per field.
+fn render_register(register: Option<u16>) -> String {
+    match register {
+        Some(register) => register.to_string(),
+        None => "-".to_string(),
+    }
 }

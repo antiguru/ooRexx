@@ -732,13 +732,6 @@ impl Loud {
         }
     }
 
-    /// A register a branch op reads holds something that is not a Rexx
-    /// logical value -- an internal inconsistency, never a program error.
-    ///
-    /// The only writer of such a register is an `Op::EvalExpr` whose
-    /// expression `eval_condition` has already validated as exactly `0` or
-    /// `1`, so this says the two ops came apart. Loud rather than a defaulted
-    /// answer, which would take a branch on a value nothing chose.
     /// A compiled jump names an op past the end of the range it is running in
     /// -- an internal inconsistency, never a program error.
     ///
@@ -753,9 +746,31 @@ impl Loud {
         }
     }
 
+    /// A register a branch op reads holds something that is not a Rexx
+    /// logical value -- an internal inconsistency, never a program error.
+    ///
+    /// The only writer of such a register is an `Op::EvalExpr` whose
+    /// expression `eval_condition` has already validated as exactly `0` or
+    /// `1`, so this says the two ops came apart. Loud rather than a defaulted
+    /// answer, which would take a branch on a value nothing chose.
     fn register_not_logical() -> Loud {
         Loud {
             message: "a compiled branch read a register holding no logical value".to_string(),
+        }
+    }
+
+    /// A compiled `SELECT` op does not describe the `SELECT` it was emitted
+    /// for -- an internal inconsistency, never a program error.
+    ///
+    /// `ir::compile` emits these ops only while compiling a `Select` node and
+    /// fills their instruction indices from that node, so reaching this means
+    /// an op and the body it indexes came apart. Loud rather than a panic, for
+    /// the reason [`Loud::instruction`] gives.
+    ///
+    /// [`Loud::instruction`]: Loud::instruction
+    fn select_op_off_its_node() -> Loud {
+        Loud {
+            message: "a compiled SELECT op does not name a SELECT of its own body".to_string(),
         }
     }
 
