@@ -56,11 +56,27 @@ And the expensive one is only expensive **near the boundary**: no amount of inst
 **A candidate is accepted if a paired interleaved comparison against the immediately preceding binary shows a reproducible gain.**
 
 Both binaries run alternately within one loop, on one machine state, so frequency, residency, page cache and thermal state hit both arms and cancel.
-That is why this is cheap: a handful of alternating pairs resolves a few per cent, and it needs no knowledge of the absolute noise band at all.
+That is why this is cheap: a handful of alternating pairs resolves a few per cent, and it needs no knowledge of any absolute noise band.
 
 The measurement is **relative to our own previous state**, never to the oracle. The oracle does not enter the accept rule.
 
 **Interleave within one loop; never read across two separate runs.** That rule stands and is the reason this works.
+
+### If a few runs do not show it, there is none
+
+**The working model, and it is a hard rule for candidates: an improvement that a handful of paired runs cannot show does not exist.**
+Discard it. Do not add runs, do not add pairs, do not re-run it later hoping for a better sitting.
+
+Three reasons it holds here, and the first is the one that matters:
+
+* **Adding runs until a candidate passes is searching for a result rather than measuring one.** The loop tries many candidates; if each may be re-run until it looks good, some will look good by chance, and the record will fill with accepted changes that do nothing. The cost is not one bad change -- it is that the record stops being evidence.
+* **A change too small to see in a few runs is too small to matter at this distance.** The axes are between 2.08x and 10.61x from the bar. Closing that needs changes worth tens of per cent, and dozens of one-per-cent wins is not a plan.
+* **Throughput is the loop's scarce resource.** Every hour spent rescuing a marginal candidate is an hour not spent finding a large one, and the large ones are what the bar needs.
+
+**This does not contradict the gate's escalation rule, and the difference is worth stating because it will otherwise read as licence to re-run a failing candidate.**
+Escalation applies to **one pre-specified question asked once** -- is this axis at parity -- where spending more measurement is legitimate because nothing is being selected.
+It does **not** apply to candidate selection, where re-running until something passes is exactly the failure above.
+A candidate gets its few runs and a verdict. An axis at the boundary gets more runs and no choice about which answer it wants.
 
 ### The gate's verdict: escalate only when the answer is close
 
@@ -106,7 +122,7 @@ Each entry carries: the cause or hypothesis, the axes it predicted it would move
 **A change lands only if a paired interleaved comparison against the immediately preceding binary shows a reproducible gain**, per Unit 0.
 
 Against our own previous state, not against the oracle -- the oracle is what the *gate* compares to, and it does not enter the accept decision.
-A change whose effect does not survive the pairing is discarded regardless of how good the theory is.
+A change whose effect does not survive the pairing is discarded regardless of how good the theory is, and is **not** re-run with more pairs -- see [If a few runs do not show it](#if-a-few-runs-do-not-show-it-there-is-none).
 "Reproducible" means the sign holds across the alternations, not that a single pair favoured it.
 
 **A change that reaches its axis's target by a route other than its stated hypothesis has not confirmed the hypothesis**, and says so in the record.
