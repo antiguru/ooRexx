@@ -126,22 +126,30 @@ fn run(text: Vec<u8>, engine: Engine) -> Outcome {
     run_program(INLINE_PATH, text, Invocation::none().with_engine(engine))
 }
 
-/// One `DO`/`LOOP` program with the answer the tree-walker gives for it.
+/// One inline program with the answer the tree-walker gives for it.
 ///
 /// The expected bytes are half of what each case is worth and the two-engine
 /// comparison is the other half, because neither half alone is enough here.
 /// The comparison says the two engines agree and says nothing about what
 /// either does; the expected bytes say what the program does and would stay
 /// green if the IR engine were never selected at all. A case carries both.
-struct LoopCase {
+struct InlineCase {
     name: &'static str,
     program: &'static str,
     stdout: &'static str,
     /// The trace sink, empty for a case that sets no `TRACE`. Written out in
-    /// full for the two traced cases rather than summarised: a loop's trace is
-    /// where a re-implementation diverges first, because the `DO` and `END`
-    /// clauses re-echo per pass under rules that no `SAY` can observe.
+    /// full for the traced cases rather than summarised: a construct's trace
+    /// is where a re-implementation diverges first, because a `DO`/`END` pair
+    /// re-echoes per pass and an `IF`'s `THEN`/`ELSE` markers echo at lines
+    /// and indents no `SAY` can observe.
+    ///
+    /// `<PATH>` stands for [`INLINE_PATH`], which a raised condition's middle
+    /// line prints and which no `&'static str` can spell without repeating
+    /// the constant; [`compare_inline_cases`] substitutes it.
     stderr: &'static str,
+    /// The exit status the tree-walker reports, so a case whose whole point
+    /// is a raised condition pins the status as well as the message.
+    exit_code: i32,
 }
 
 /// The shapes the loop promotion has to keep: one per `LoopKind` this crate
@@ -152,14 +160,15 @@ struct LoopCase {
 /// clause unit, which is the point of adding them before the compiler emits
 /// anything: a case written after a promotion cannot say whether it ever would
 /// have failed.
-const LOOP_CASES: &[LoopCase] = &[
-    LoopCase {
+const LOOP_CASES: &[InlineCase] = &[
+    InlineCase {
         name: "controlled",
         program: "do i = 1 to 3\n  say i\nend\n",
         stdout: "1\n2\n3\n",
         stderr: "",
+        exit_code: 0,
     },
-    LoopCase {
+    InlineCase {
         // The per-pass control-variable re-read, which is the behaviour a
         // reviewer once caught being called unreachable: the body writes the
         // control variable and the next pass reads `10` back, adds the `BY`,
@@ -168,38 +177,44 @@ const LOOP_CASES: &[LoopCase] = &[
         program: "do i = 1 to 3\n  i = 10\nend\nsay i\n",
         stdout: "11\n",
         stderr: "",
+        exit_code: 0,
     },
-    LoopCase {
+    InlineCase {
         name: "controlled with BY and FOR",
         program: "do i = 1 to 10 by 3 for 2\n  say i\nend\nsay i\n",
         stdout: "1\n4\n7\n",
         stderr: "",
+        exit_code: 0,
     },
-    LoopCase {
+    InlineCase {
         name: "bare repeat count",
         program: "do 3\n  say 'zz'\nend\n",
         stdout: "zz\nzz\nzz\n",
         stderr: "",
+        exit_code: 0,
     },
-    LoopCase {
+    InlineCase {
         name: "while",
         program: "n1 = 0\ndo while n1 < 3\n  n1 = n1 + 1\n  say n1\nend\n",
         stdout: "1\n2\n3\n",
         stderr: "",
+        exit_code: 0,
     },
-    LoopCase {
+    InlineCase {
         name: "until",
         program: "n1 = 0\ndo until n1 >= 3\n  n1 = n1 + 1\n  say n1\nend\n",
         stdout: "1\n2\n3\n",
         stderr: "",
+        exit_code: 0,
     },
-    LoopCase {
+    InlineCase {
         name: "forever with leave",
         program: "n1 = 0\ndo forever\n  n1 = n1 + 1\n  if n1 = 3 then leave\nend\nsay n1\n",
         stdout: "3\n",
         stderr: "",
+        exit_code: 0,
     },
-    LoopCase {
+    InlineCase {
         // The label search, across two frames: the `ITERATE` names the outer
         // loop from inside the inner one, so the inner loop is left and the
         // outer one re-tested.
@@ -208,23 +223,26 @@ const LOOP_CASES: &[LoopCase] = &[
                   if inner = 2 then iterate lbl\n    zz = zz + 1\n  end\nend\nsay zz\n",
         stdout: "3\n",
         stderr: "",
+        exit_code: 0,
     },
-    LoopCase {
+    InlineCase {
         // `DO OVER` in the single-iteration form this crate implements for a
         // non-stem target: the target yields itself, once.
         name: "do over a non-stem target",
         program: "do qq over 4.5\n  say qq\nend\n",
         stdout: "4.5\n",
         stderr: "",
+        exit_code: 0,
     },
-    LoopCase {
+    InlineCase {
         // A block, not a loop: exactly one pass, and its `END` echoes once.
         name: "simple block",
         program: "do\n  say 'a'\n  say 'zz'\nend\nsay 'after'\n",
         stdout: "a\nzz\nafter\n",
         stderr: "",
+        exit_code: 0,
     },
-    LoopCase {
+    InlineCase {
         // The same block reached through an `IF`'s true branch, which is a
         // different route into it: `If` steps its branch itself, so this
         // block's own clauses arrive from `If`'s driver rather than from the
@@ -233,16 +251,18 @@ const LOOP_CASES: &[LoopCase] = &[
         program: "if 1 = 1 then do\n  say 'a'\n  say 'zz'\nend\n",
         stdout: "a\nzz\n",
         stderr: "",
+        exit_code: 0,
     },
-    LoopCase {
+    InlineCase {
         // A labelled `Simple` block is leavable by name where an unlabelled
         // one is not, and it owns a search frame either way.
         name: "labelled simple block, left by name",
         program: "do label blk\n  say 'a'\n  leave blk\n  say 'never'\nend\nsay 'after'\n",
         stdout: "a\nafter\n",
         stderr: "",
+        exit_code: 0,
     },
-    LoopCase {
+    InlineCase {
         // The `DO` clause re-echoes once per pass and `END` once per pass that
         // falls through to it, and the control step's four intermediate lines
         // straddle the `BY` addition.
@@ -256,8 +276,9 @@ const LOOP_CASES: &[LoopCase] = &[
                  3 *-*   nop\n     4 *-* end\n     2 *-* do i = 1 to 2\n       \
                  >V>     I => \"2\"\n       >>>     \"2\"\n       >>>     \"3\"\n       \
                  >=>     I <= \"3\"\n",
+        exit_code: 0,
     },
-    LoopCase {
+    InlineCase {
         // `UNTIL` gets a second, unconditional `DO` re-echo of its own,
         // between `END` and the test, and no top-of-loop one.
         name: "until under trace r",
@@ -268,6 +289,177 @@ const LOOP_CASES: &[LoopCase] = &[
                  3 *-* do until n1 >= 2\n       >K>     \"UNTIL\" => \"0\"\n     \
                  4 *-*   n1 = n1 + 1\n       >>>     \"2\"\n     5 *-* end\n     \
                  3 *-* do until n1 >= 2\n       >K>     \"UNTIL\" => \"1\"\n",
+        exit_code: 0,
+    },
+];
+
+/// The shapes the branch promotion has to keep: an `IF` with and without an
+/// `ELSE`, on both paths; a nested `IF`; a null `THEN` consequence; a `SELECT`
+/// that matches and one that does not (**7.3**, not the 93.4 the plan's task
+/// text names -- measured against the oracle, which reports "All WHEN
+/// expressions of SELECT are false; OTHERWISE expected" at rc 249 for both
+/// `SELECT` and `SELECT CASE`); a condition that is not a logical value; a
+/// condition that raises into a `SIGNAL ON` trap; a branch inside a loop body
+/// that leaves it; a branch in a `CALL`ed label; and a `PROCEDURE` reached
+/// through a true branch, which is 17.1 exactly because a branch does not
+/// inherit the first-instruction permission.
+///
+/// Every one of these passes with both engines delegating to the tree-walker's
+/// clause unit, which is the point of adding them before the compiler emits
+/// anything: a case written after a promotion cannot say whether it ever would
+/// have failed.
+///
+/// Every expected byte below was measured against the oracle before it was
+/// written down, and the two agree on all of them.
+const BRANCH_CASES: &[InlineCase] = &[
+    InlineCase {
+        name: "if with an else, true path",
+        program: "if 1 = 1 then say 'then'\nelse say 'else'\nsay 'after'\n",
+        stdout: "then\nafter\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        // The path the compiled form changes most: the tree-walker leaves it
+        // to the enclosing loop's fallthrough, and a jump has to land on the
+        // same `ELSE`.
+        name: "if with an else, false path",
+        program: "if 1 = 0 then say 'then'\nelse say 'else'\nsay 'after'\n",
+        stdout: "else\nafter\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        name: "if with no else, false path",
+        program: "if 1 = 0 then say 'then'\nsay 'after'\n",
+        stdout: "after\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        // The outer `ELSE` has to be skipped by the inner branch's own
+        // resume, which is the one target neither `false_target` gives.
+        name: "nested if, both true",
+        program: "if 1 = 1 then\n  if 2 = 2 then say 'inner'\n  else say 'inner else'\n\
+                  else say 'outer else'\nsay 'after'\n",
+        stdout: "inner\nafter\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        // A null clause as the whole consequence: the true branch is the
+        // `THEN` marker and nothing else.
+        name: "empty then",
+        program: "if 1 = 1 then;\nsay 'after'\n",
+        stdout: "after\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        name: "select with otherwise, second when matches",
+        program: "select\n  when 1 = 0 then say 'a'\n  when 2 = 2 then say 'b'\n  \
+                  otherwise say 'o'\nend\nsay 'after'\n",
+        stdout: "b\nafter\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        name: "select with no matching when",
+        program: "select\n  when 1 = 0 then say 'a'\nend\nsay 'after'\n",
+        stdout: "",
+        stderr: "     3 *-* end\nError 7 running <PATH> line 3:  WHEN or OTHERWISE expected.\n\
+                 Error 7.3:  All WHEN expressions of SELECT are false; OTHERWISE expected.\n",
+        exit_code: 249,
+    },
+    InlineCase {
+        name: "select case with no matching when",
+        program: "select case 2\n  when 1 then say 'a'\nend\nsay 'after'\n",
+        stdout: "",
+        stderr: "     3 *-* end\nError 7 running <PATH> line 3:  WHEN or OTHERWISE expected.\n\
+                 Error 7.3:  All WHEN expressions of SELECT are false; OTHERWISE expected.\n",
+        exit_code: 249,
+    },
+    InlineCase {
+        // The `IF`'s own clause is what the failure is attributed to, and its
+        // echo carries the clause text up to the `THEN`.
+        name: "if condition is not a logical value",
+        program: "if 'x' then say 'y'\n",
+        stdout: "",
+        stderr: "     1 *-* if 'x' \nError 34 running <PATH> line 1:  Logical value not 0 or 1.\n\
+                 Error 34.1:  Value of expression following IF keyword must be exactly \"0\" \
+                 or \"1\"; found \"x\".\n",
+        exit_code: 222,
+    },
+    InlineCase {
+        // The trap offer is made once, by the activation the condition
+        // unwound, whether or not the `IF` resolves its branch inside its own
+        // clause step.
+        name: "if condition raises into a signal on trap",
+        program: "signal on syntax\nif 1/0 = 1 then say 'y'\nsay 'unreached'\nexit\n\
+                  syntax:\nsay 'trapped' rc\n",
+        stdout: "trapped 42\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        // The `THEN` marker echoes at the `IF`'s own line and the consequence
+        // two columns further in, both of them clauses in their own right.
+        name: "if under trace i, true path",
+        program: "trace i\nif 1 = 1 then say 'y'\nelse say 'n'\n",
+        stdout: "y\n",
+        stderr: "     2 *-* if 1 = 1 \n       >L>   \"1\"\n       >L>   \"1\"\n       \
+                 >O>   \"=\" => \"1\"\n       >>>   \"1\"\n     2 *-*   then\n     \
+                 2 *-*     say 'y'\n       >L>       \"y\"\n       >>>       \"y\"\n",
+        exit_code: 0,
+    },
+    InlineCase {
+        // The `ELSE` marker echoes at its own line, which is the false path's
+        // whole observable difference from the true one.
+        name: "if under trace r, false path",
+        program: "trace r\nif 1 = 0 then say 'y'\nelse say 'n'\n",
+        stdout: "n\n",
+        stderr: "     2 *-* if 1 = 0 \n       >>>   \"0\"\n     3 *-*   else\n     \
+                 3 *-*     say 'n'\n       >>>       \"n\"\n",
+        exit_code: 0,
+    },
+    InlineCase {
+        // A `LEAVE` from inside a true branch inside a loop body: the flow
+        // has to escape the branch and be consumed by the loop.
+        name: "if inside a loop body, leaving it",
+        program: "n1 = 0\ndo i = 1 to 5\n  if i = 3 then leave\n  n1 = n1 + 1\nend\nsay n1\n",
+        stdout: "2\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        // A `DO` block as the whole true branch, with an `ELSE` after it: the
+        // block's own resume lands on the `ELSE`, which must not run.
+        name: "if whose true branch is a do block, with an else",
+        program: "if 1 = 1 then do\n  say 'a'\n  say 'b'\nend\nelse say 'c'\nsay 'after'\n",
+        stdout: "a\nb\nafter\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        name: "if in a called label",
+        program: "call sub\nsay result\nexit\nsub:\n  if 1 = 1 then say 'in sub'\n  return 7\n",
+        stdout: "in sub\n7\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        // A branch does not inherit the first-instruction permission, so a
+        // `PROCEDURE` reached through one is 17.1 -- the observable that says
+        // `grant_procedure_permission` is spent identically under both
+        // engines.
+        name: "procedure reached through a true branch",
+        program: "call sub 1\nexit\nsub:\n  if arg(1) = 1 then procedure\n  return\n",
+        stdout: "",
+        stderr: "     4 *-*       procedure\n     1 *-* call sub 1\nError 17 running <PATH> \
+                 line 4:  Unexpected PROCEDURE.\nError 17.1:  PROCEDURE is valid only when it \
+                 is the first instruction executed after an internal CALL or function \
+                 invocation.\n",
+        exit_code: 239,
     },
 ];
 
@@ -275,7 +467,20 @@ const LOOP_CASES: &[LoopCase] = &[
 /// the bytes the tree-walker produces for it.
 #[test]
 fn both_engines_agree_on_every_loop_shape() {
-    for case in LOOP_CASES {
+    compare_inline_cases(LOOP_CASES);
+}
+
+/// Every [`BRANCH_CASES`] program, the same way.
+#[test]
+fn both_engines_agree_on_every_branch_shape() {
+    compare_inline_cases(BRANCH_CASES);
+}
+
+/// Runs each case twice and asserts both halves: the two engines against each
+/// other, and the tree-walker against the bytes recorded for it.
+fn compare_inline_cases(cases: &[InlineCase]) {
+    assert!(!cases.is_empty(), "an empty case table asserts nothing");
+    for case in cases {
         let text = case.program.as_bytes().to_vec();
         let tw = run(text.clone(), Engine::TreeWalker);
         let ir = run(text, Engine::Ir);
@@ -305,11 +510,15 @@ fn both_engines_agree_on_every_loop_shape() {
         );
         assert_eq!(
             String::from_utf8_lossy(&tw.stderr),
-            case.stderr,
+            case.stderr.replace("<PATH>", INLINE_PATH),
             "[{}] the tree-walker's own trace moved",
             case.name
         );
-        assert_eq!(tw.exit_code, 0, "[{}] the program failed", case.name);
+        assert_eq!(
+            tw.exit_code, case.exit_code,
+            "[{}] the tree-walker's own exit status moved",
+            case.name
+        );
     }
 }
 
