@@ -1524,48 +1524,44 @@ impl Interp {
                 self.current_case_text = case_text.clone();
                 for &when_index in whens {
                     let when_instruction = &code.body.instructions[when_index];
-                    let when_indent = self.printed_indent(code, when_index);
-                    // Overrides the enclosing `SELECT`'s own
-                    // `current_value_indent` (`step_in_temps_frame` set it
-                    // to `select_indent` before this arm even started) for
-                    // the same reason `scan_when`'s own explicit clause echo
-                    // and `record_failure_site` calls exist: this condition
-                    // is evaluated outside any `step_in_temps_frame` call of
-                    // its own, so nothing else sets any of the three.
-                    // **Each listed `WHEN` is a clause of its own, with its
-                    // own boundary** (fix round 4, re-review finding NEW-2).
-                    // In the oracle every `WHEN` is an instruction the
-                    // activation's loop fetches separately, so a condition
-                    // queued while testing one is delivered before the next
-                    // `WHEN`, before `OTHERWISE`, and before a matched
-                    // `WHEN`'s own body. All three measured, all three wrong
-                    // before this: a false `when sub() = 'NO'` on line 4
-                    // followed by a winning `when` on line 5 reported `SIGL`
-                    // 5; the same falling to `OTHERWISE` did not deliver
-                    // until after `OTHERWISE`'s body had already run and read
-                    // the handler's variable unset; and a *true* `when sub()
-                    // = 'SV'` on line 4 with `then` on line 5 reported 5.
-                    let when_line = self
-                        .clause_line(source, when_instruction)
-                        .unwrap_or_else(|| self.clause_state.line());
-                    let mut outcome: Option<(usize, usize)> = None;
-                    let scanned = self.in_clause(code, when_line, |it| {
-                        it.scan_when(
-                            code,
-                            source,
-                            when_index,
-                            when_instruction,
-                            when_indent,
-                            case_text.as_deref(),
-                            len,
-                            &mut outcome,
-                        )
-                    })?;
-                    match scanned {
+                    // **Each listed `WHEN` is a clause of its own, and the
+                    // clause unit is what says so** -- `in_stepped_clause`,
+                    // the same entry point an unpromoted instruction reaches
+                    // through `step_in_temps_frame`, rather than a bare
+                    // `in_clause` with the rest of a clause's obligations
+                    // written out beside it. In the oracle every `WHEN` is an
+                    // instruction the activation's loop fetches separately, so
+                    // a condition queued while testing one is delivered before
+                    // the next `WHEN`, before `OTHERWISE`, and before a matched
+                    // `WHEN`'s own body; all three were measured wrong before
+                    // a boundary existed here at all.
+                    //
+                    // **What the clause unit discharges that the hand-rolled
+                    // version did not, and both were measured.** The clause
+                    // echo, the value indent and the *condition's* own failure
+                    // site were written out at this call site; the failure site
+                    // of the clause's **boundary** was not, so a `CALL ON`
+                    // handler delivered here and failing was blamed on the
+                    // enclosing `SELECT`. Measured against the oracle: `call on
+                    // user zx name h` / `select` / `when raiser() = 'V' then
+                    // ...` with a handler that divides by zero echoes `3 *-*
+                    // when raiser() = 'V'`, and this arm echoed `2 *-* select`.
+                    // The indent was wrong for the same reason and in the same
+                    // program: the hand-rolled version passed the `WHEN`'s
+                    // indent to `scan_when` as an argument and never wrote it
+                    // to `current_value_indent`, so the handler's own
+                    // activation was based two columns short of the oracle's.
+                    let scanned =
+                        self.in_stepped_clause(code, when_index, when_instruction, source, |it| {
+                            it.scan_when(code, when_instruction, case_text.as_deref())
+                        })?;
+                    let holds = match scanned {
                         ClauseOutcome::Ended(exit) => return Ok(Flow::Exit(exit.value())),
                         ClauseOutcome::Ran(ran) => ran?,
-                    }
-                    if let Some((body_end, resume)) = outcome {
+                    };
+                    if holds {
+                        let targets = when_targets(&when_instruction.kind, len);
+                        let (body_end, resume) = (targets.body_end, targets.resume);
                         let flow = self.run_bounded(
                             code,
                             when_index + 1,
@@ -4619,92 +4615,40 @@ impl Interp {
     /// rule and the oracle transcripts that pin it). `Exit` and a `Goto`
     /// that escaped `run_bounded`'s own range pass through with nothing
     /// touched, same as always.
-    /// One listed `WHEN`/`WHEN CASE`'s own condition, as its own clause body.
+    /// One listed `WHEN`/`WHEN CASE`'s own condition, and whether it holds.
     ///
-    /// Extracted from `Select`'s own scan loop (fix round 4) for one reason:
-    /// a `WHEN` is a clause, so its condition has to run inside an
-    /// `in_clause` closure, and a closure that borrows the loop's own locals
-    /// is easier to read as a named function than inline. `matched` is an
-    /// out-parameter rather than the return value because the closure's
-    /// return type is what `ClauseValue` is chosen from, and `()` is the
-    /// honest answer -- a `WHEN`'s decision is a pair of instruction indices,
-    /// not an `ObjRef` this clause's temps frame was the only root for.
+    /// **The work of one clause, and nothing a clause owes around it.** The
+    /// caller opens the clause with [`Interp::in_stepped_clause`], so the
+    /// `*-*` echo, the value indent this reads back, the `SIGL` line, the
+    /// boundary and *both* failure sites -- the condition's own and the
+    /// boundary's -- are that unit's, entered from both engines through it
+    /// rather than written out beside each caller. An earlier version wrote
+    /// three of those out here and left the fourth to nobody; see the call
+    /// site in `Select`'s own arm for what that measured as.
     ///
-    /// Every fallible call below is matched explicitly, never through `?`, so
-    /// a failure can be attributed to `when_instruction` -- the
-    /// `When`/`WhenCase` whose condition is actually being evaluated --
-    /// before it propagates. Nothing here goes through `step_in_temps_frame`
-    /// at all: `When`/`WhenCase`'s own `step` arm is a no-op (see its own doc
-    /// comment), so without this a raise here would still be attributed to
-    /// the enclosing `SELECT` instruction, which is exactly the defect
-    /// `record_failure_site`'s own doc comment describes. Measured: `select` /
-    /// `when 'x' then nop` / `end` must report the `WHEN`'s own line and
-    /// clause, not the `SELECT`'s.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "\
-        one caller, and every argument is a value that caller already holds: \
-        bundling them into a struct would only move the same list one line up"
-    )]
+    /// The answer is a `bool` because that is what the clause produces: a
+    /// Rexx logical value already consumed into one, with no `ObjRef` whose
+    /// only root was this clause's temps frame (`ClauseValue for bool`).
+    /// Where a matched `WHEN` sends control is [`when_targets`], read from
+    /// the same node by whichever engine needs it.
     fn scan_when(
         &mut self,
         code: &Code<'_>,
-        source: Option<&ProgramSource>,
-        when_index: usize,
         when_instruction: &Instruction,
-        when_indent: usize,
         case_text: Option<&[u8]>,
-        len: usize,
-        matched: &mut Option<(usize, usize)>,
-    ) -> Result<(), Failure> {
-        // `When`/`WhenCase`'s own clause echo, explicit for the same reason
-        // `record_failure_site`'s own calls below are: that instruction's
-        // `step` arm is a pure no-op (never independently dispatched, only
-        // ever read as data by the scan), so nothing else ever calls
-        // `step_in_temps_frame` for it and its `*-*` line would otherwise
-        // never appear at all -- measured, `select` / `when 1 = 1 then ...`
-        // echoes the `WHEN`'s own clause on its own line before anything
-        // about its condition.
-        if self.trace_mode().all
-            && let Some((line, text)) = self.clause_site(source, when_instruction)
-        {
-            self.trace_clause(line, when_indent, &text);
-        }
-        *matched = match &when_instruction.kind {
-            InstructionKind::When {
+    ) -> Result<bool, Failure> {
+        // The clause unit set this to this `WHEN`'s own printed indent on the
+        // way in, which is what its condition's `>>>` lines trace at.
+        let indent = self.clause_state.current_value_indent;
+        match &when_instruction.kind {
+            InstructionKind::When { condition, .. } => self.eval_condition(
+                code,
                 condition,
-                false_target,
-                exit,
-            } => {
-                let holds = match self.eval_condition(
-                    code,
-                    condition,
-                    ConditionTrace::Result(when_indent),
-                    raised_when_not_logical,
-                ) {
-                    Ok(holds) => holds,
-                    Err(failure) => {
-                        self.record_failure_site(code, when_index, source, when_instruction);
-                        return Err(failure);
-                    }
-                };
-                holds.then(|| (false_target.unwrap_or(len), exit.unwrap_or(len)))
-            }
-            InstructionKind::WhenCase {
-                values,
-                false_target,
-                exit,
-            } => match case_text {
-                Some(case_text) => {
-                    let matched = match self.test_case_when(code, values, case_text, when_indent) {
-                        Ok(matched) => matched,
-                        Err(failure) => {
-                            self.record_failure_site(code, when_index, source, when_instruction);
-                            return Err(failure);
-                        }
-                    };
-                    matched.then(|| (false_target.unwrap_or(len), exit.unwrap_or(len)))
-                }
+                ConditionTrace::Result(indent),
+                raised_when_not_logical,
+            ),
+            InstructionKind::WhenCase { values, .. } => match case_text {
+                Some(case_text) => self.test_case_when(code, values, case_text, indent),
                 // A listed `WhenCase` with no `case` expression: a plain
                 // `SELECT` with no `CASE` at all, which the parser should
                 // never produce for a `WhenCase` node (only `SELECT CASE`
@@ -4718,12 +4662,11 @@ impl Interp {
                         let v = self.eval(code, value)?;
                         self.roots.push_temp(v);
                     }
-                    None
+                    Ok(false)
                 }
             },
             other => panic!("a SELECT's whens holds only When/WhenCase, not {other:?}"),
-        };
-        Ok(())
+        }
     }
 
     /// Runs a `SELECT`'s own `OTHERWISE`, `leave_select`-wrapped -- the one
@@ -7787,6 +7730,46 @@ pub(crate) fn if_targets(instructions: &[Instruction], raw: Option<usize>) -> If
     IfTargets {
         false_target,
         resume: skip_else(instructions, false_target),
+    }
+}
+
+/// Where a listed `WHEN` sends control once its own condition holds.
+///
+/// **One computation, read by both engines**, exactly as [`IfTargets`] is.
+/// `step`'s own `Select` arm runs `[when + 1, body_end)` and hands whatever
+/// comes back to `leave_select`, which answers `Goto(resume)` for a branch
+/// that finished; `ir::compile` lays the same range out as the ops between
+/// this `WHEN`'s clause region and the next one's, and the driver opens a
+/// frame over exactly it. Having each work the pair out for itself is how the
+/// two would come to disagree about where a matched branch ends.
+pub(crate) struct WhenTargets {
+    /// One past the last instruction of this `WHEN`'s own branch: the next
+    /// listed `WHEN`, the `OTHERWISE`, or the enclosing `SELECT`'s `END`.
+    pub(crate) body_end: usize,
+    /// Where control resumes once that branch has finished, which is past the
+    /// whole `SELECT`, because one true `WHEN` ends it.
+    pub(crate) resume: usize,
+}
+
+/// [`WhenTargets`] for a listed `When`/`WhenCase` node, against the body it
+/// belongs to.
+///
+/// `len` is that body's own instruction count, which is what a `None` target
+/// means (`InstructionKind::When`'s own doc). The panic is the parser's
+/// invariant that a `SELECT`'s `whens` collects nothing else, the same one
+/// `Interp::scan_when` states.
+pub(crate) fn when_targets(kind: &InstructionKind, len: usize) -> WhenTargets {
+    match kind {
+        InstructionKind::When {
+            false_target, exit, ..
+        }
+        | InstructionKind::WhenCase {
+            false_target, exit, ..
+        } => WhenTargets {
+            body_end: false_target.unwrap_or(len),
+            resume: exit.unwrap_or(len),
+        },
+        other => panic!("a SELECT's whens holds only When/WhenCase, not {other:?}"),
     }
 }
 

@@ -542,6 +542,26 @@ const BRANCH_CASES: &[InlineCase] = &[
         exit_code: 0,
     },
     InlineCase {
+        // **A boundary case, not a shape, and the one that found a live
+        // defect.** The handler is queued by a listed `WHEN`'s own condition
+        // and delivered at *that* `WHEN`'s clause boundary, where it fails --
+        // so the clause blamed is the `WHEN`, and the handler's own clauses
+        // print at the `WHEN`'s indent plus two. Measured against the oracle:
+        // `3 *-*   when raiser() = 'V'` at indent 2 and `11 *-*     say 1/0`
+        // at indent 4. Before a `WHEN` was opened by the clause unit this
+        // echoed `2 *-* select` at indent 0 and the handler two columns short,
+        // with every other test in the workspace green.
+        name: "a call on handler failing at a listed when's own boundary",
+        program: "call on user zx name h\nselect\n  when raiser() = 'V' then say 'then'\n  \
+                  otherwise say 'o'\nend\nsay 'after'\nexit\nraiser:\nraise user zx return 'V'\n\
+                  h:\nsay 1/0\nreturn\n",
+        stdout: "",
+        stderr: "    11 *-*     say 1/0\n     3 *-*   when raiser() = 'V' \nError 42 running \
+                 <PATH> line 11:  Arithmetic overflow/underflow.\nError 42.3:  Arithmetic \
+                 overflow; divisor must not be zero.\n",
+        exit_code: 214,
+    },
+    InlineCase {
         // **A boundary case, not a shape.** The handler is queued inside a
         // matched `WHEN`'s body clause and fails at *that* clause's boundary,
         // so the clause blamed is the body's own and not the `WHEN`'s or the
