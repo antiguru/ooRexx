@@ -82,7 +82,8 @@ A debt for an axis requires all four of:
 4. A named re-measurement point.
    Phase 2's `arith` debt is the working example: `d1-decision.md:76` recorded 1.22x, said in the same entry it was a lower bound, and named Phase 4 as its re-measurement -- which is criterion 4 below, and which found it had worsened by a factor of about 2.2 exactly as predicted.
 
-So six debts require six attributed residuals, six statements of what would close them, and one amendment per axis granted by the user.
+**So closing all six missing axes this way is not available today, and would not be cheap if it were.**
+Two of the six are barred outright by requirement 2 until someone attributes them, and the other four would each cost an attributed residual, a statement of what would close it, a re-measurement point, and an amendment the user grants.
 That is a far higher price than three runs and a table, which is the point.
 
 ### Two bars per axis, and only one of them closes the phase
@@ -179,7 +180,8 @@ A run counts only if all three of these hold and are recorded in its report:
 **The band is a percentage of the ratio, and it is applied to the parity threshold rather than to the interval's width.**
 The movements it is drawn from are percentage changes in the *ratio*, so that is the scale it is expressed on.
 Write `T` for the axis's **parity threshold ratio**: the oracle's interval upper bound divided by the oracle's median, both on the reading being judged.
-`T` is what `:39`'s verdict reduces to once both sides are expressed as a ratio, and it is a little above 1.00 -- for `alloc4c` on the raw reading it is 1.1408 / 1.1279 = **1.011**.
+`T` is what `:39`'s verdict reduces to once both sides are expressed as a ratio, and it is a little above 1.00 -- for `alloc4c` on the raw reading it is 1.1408 / 1.1279 = **1.0114**.
+**Four decimal places throughout, and the worked example below carries its intermediate**, because `T` rounded to three does not reproduce the answer it is used to derive.
 With `b` the band and `R` this crate's ratio point estimate:
 
 * `R < T x (1 - b)` reads **MET**.
@@ -200,7 +202,7 @@ It is a statement that this instrument cannot answer the question, and the axis 
 It is also not a debt: the debt mechanism above requires NOT MET at the closing measurement, precisely so that an axis cannot be carried forward on a verdict the instrument declined to give.
 
 **The cost of this rule is stated rather than hidden: it makes a bare tie unprovable.**
-An axis that genuinely lands at 1.00x reads UNDECIDED, and MET needs `R < T x (1 - b)`, which on `alloc4c`'s current numbers is 0.939 -- about 6% faster than the oracle rather than level with it.
+An axis that genuinely lands at 1.00x reads UNDECIDED, and MET needs `R < T x (1 - b)`, which on `alloc4c`'s current numbers is 1.0114 x 0.928 = **0.9386** -- about 6% faster than the oracle rather than level with it.
 That is a strengthening of what this *instrument* can certify, not an amendment to `:39`'s bar, and the way out is a better instrument -- more pairs per run, or enough independent runs to justify a real variance estimate -- rather than a wider band.
 
 ---
@@ -504,10 +506,10 @@ Nothing in this section was measured by this task.
 | # | criterion | result |
 |---|---|---|
 | 1 | `varlookup` at parity | **NOT MET** -- 4.35x raw, 4.38x net; derived bar 2.80x |
-| 2 | `compound` at parity | **NOT MET** -- 6.08x raw, 6.12x net; derived bar 1.81x-2.58x |
+| 2 | `compound` at parity | **NOT MET** -- 6.08x raw, 6.12x net; derived bar 2.58x (band to 1.81x, unattainable end) |
 | 3 | `strings` at parity | **NOT MET** -- 10.61x raw, 10.70x net; **no derived bar** |
 | 4 | `arith` at parity | **NOT MET** -- 2.70x raw, 2.72x net; derived bar 2.16x |
-| 5 | `alloc4c` at parity | **NOT MET** -- 2.08x raw, 2.09x net; derived bar 1.70x (band 1.62x-1.70x), **and 2.08x is a debt, not headroom** |
+| 5 | `alloc4c` at parity | **NOT MET** -- 2.08x raw, 2.09x net; derived bar 1.70x (band to 1.62x, unattainable end); **2.08x is a deficit that worsens when a collector lands, not headroom, and not the recorded-debt mechanism** |
 | 6 | `heapshape` full-GC pause at parity | **NOT MET** -- 1.58x-1.66x; no derived bar |
 | 7 | `rexxcps` | **REPORTED, GATES NOTHING** -- 7.33x, observed range 6.21x-7.41x |
 | 8 | `startup` | **NOT COMPARABLE** -- D2's absolute target is about 55 ms; nothing is gated on it |
