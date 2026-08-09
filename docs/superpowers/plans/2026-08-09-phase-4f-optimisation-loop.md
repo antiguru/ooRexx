@@ -99,7 +99,42 @@ That is a weaker claim than parity and is labelled as one -- but it is a *measur
 
 * **The harness unification.** `rexx_bench::child` now holds one capped, directory-pinned child wrapper shared by `rexx-bench-suite` and the band tool, so the `/bin/sh`+`Instant` against bash+`date` split recorded in `phase-4d-attribution.md` no longer exists in tooling. That split contaminated the 7.2% figure and removing it is worth having on its own.
 * **The control programs**, for the escalation path above.
-* **One measured finding from the 314 rows before the run was stopped, to be confirmed or dropped rather than assumed:** pinning with `taskset` appeared to *widen* the spread rather than narrow it, and to shift central ratios (`strings` 10.51x to 10.09x, `varlookup` 4.32x to 4.11x). If that holds, core migration is not the variance source and pinning is not a neutral instrument.
+  `rust/bench-control/alloc4c-101.rex` is `bench-programs/alloc4c.rex` with the loop bound raised by exactly 1% and nothing else changed, and a test asserts both halves of that so the pair cannot quietly stop being the known amount it is used as.
+* **One measured reading from the 314 rows before the run was stopped**, set out below rather than summarised, because the summary this bullet first carried -- that pinning widened the spread -- is not what the per-axis rows say.
+
+### The reading the stopped run left
+
+**Three or four passes per arm per axis. It decides nothing, and it is written down only so the next person does not repeat it blind.**
+Measured 2026-08-09 08:10:55 to 08:32:49 at `77679f75` plus the harness landed with this reading, `rexx-run` sha256 `c3b2516069a1b5f5d504613986f00b69e0c0fc892c041958212d45a699c0e967` against the three oracle objects `phase-4d-gate.md` names, load average 1.01 to 1.56 throughout, every axis printing one constant value across all 314 rows.
+
+| axis | unpinned median ratio | pinned median ratio | shift | unpinned envelope | pinned envelope |
+|---|---:|---:|---:|---:|---:|
+| `alloc4c` | 2.0029x | 2.0018x | -0.05% | 0.63% | 0.58% |
+| `arith` | 2.7072x | 2.6548x | -1.94% | 0.75% | 0.58% |
+| `compound` | 5.8641x | 5.7723x | -1.57% | 0.48% | 1.20% |
+| `strings` | 10.5219x | 10.0853x | -4.15% | 0.77% | 1.88% |
+| `varlookup` | 4.3231x | 4.1053x | -5.04% | 1.24% | 0.48% |
+
+Envelope is the largest deviation of a pass's ratio from the median over that arm's passes on that axis.
+
+**What the rows support: pinning moves the ratio.**
+Four of five axes shifted in the same direction, by up to 5.04% on `varlookup` -- larger than either arm's envelope there.
+So `taskset` is not a control that leaves the quantity alone while tidying its variance, and a pinned measurement is not comparable with an unpinned one.
+
+**What the rows do not support: that pinning widened the spread.**
+It narrowed `alloc4c`, `arith` and `varlookup` and widened `compound` and `strings`.
+The worst-axis figure rose from 1.24% to 1.88% through a change of which axis is worst, `strings` overtaking a `varlookup` that pinning more than halved.
+At three or four passes none of this is separated from sampling noise.
+The usable statement is that pinning did not visibly reduce the spread while it did visibly move the ratio, so core migration is not obviously the variance source and pinning is not free.
+
+**Adding `perf stat` moved the ratio again, in the same direction, on all five axes**: -0.33%, -1.32%, -1.57%, -1.28% and -0.58% on `alloc4c`, `arith`, `compound`, `strings` and `varlookup`.
+That is the direction a fixed per-process cost produces on a ratio whose sides differ in absolute duration -- the oracle's medians run 0.88 s to 1.25 s here and this crate's 2.31 s to 8.95 s -- but nothing measured `perf stat`'s startup cost directly, so the mechanism is a candidate rather than a finding.
+
+**The CPU governor could not be fixed, and that is a property of the machine rather than an omission.**
+`/sys` does not exist in this environment: `ls /sys` reports no such file, `/proc/mounts` carries no `sysfs` line, and every `scaling_governor` is therefore absent -- the same absence `rust/CLAUDE.md` records as the reason no cgroup limit can be created here.
+Frequency does vary, 1.479 to 2.972 GHz across the 32 logical CPUs at rest.
+A later reader on a machine with sysfs should try it rather than assume it was weighed and dropped.
+Counting cycles is the substitute available here, and it is a substitute rather than an equivalent: cycles ignore frequency scaling, but a cycle ratio equals a wall-clock ratio only if both sides run at the same average frequency.
 
 ### What this means for the gate's 7.2% band
 
@@ -133,14 +168,14 @@ A change whose effect does not survive the pairing is discarded regardless of ho
 The shares are now different, and the next candidate is chosen from the new profile, not from the entry attribution.
 
 The entry attribution is the loop's **starting point**, not its plan.
-When re-profiling stops proposing candidates above the band, that is a stopping condition, not a prompt to work harder on the list.
+When re-profiling stops proposing candidates whose effect survives the pairing, that is a stopping condition, not a prompt to work harder on the list.
 
 ### The stopping rule
 
 The loop ends on the first of:
 
 1. **Every classic-Rexx axis within noise of the oracle or better.** This is the only ending that closes Phase 4.
-2. **Re-profiling yields no candidate above the band on an axis still short.** Record the shortfall, the profile that produced no candidate, and what would be needed. This is a finding, not a failure, and it is what tells us a structural change is required rather than another local fix.
+2. **Re-profiling yields no candidate whose effect survives the pairing on an axis still short.** Record the shortfall, the profile that produced no candidate, and what would be needed. This is a finding, not a failure, and it is what tells us a structural change is required rather than another local fix.
 3. **A measured result contradicts the model badly enough that continuing would be guessing.** Stop and re-derive.
 
 ## What this phase does not do
@@ -151,6 +186,6 @@ The loop ends on the first of:
 
 ## Open questions
 
-* **Whether cycle counts can replace wall time** for the accept rule. They are far more reproducible, but the oracle side must be measured the same way and the gate's own text is written against wall-clock ratios.
+* **Whether cycle counts can replace wall time** for the accept rule. They are far more reproducible, but the oracle side must be measured the same way and the gate's own text is written against wall-clock ratios. The reading above adds a second cost to check: turning `perf stat` on moved the measured ratio on all five axes, so a counted run and an uncounted one are not interchangeable even when only the wall time is read off.
 * **The platform matrix.** `rexx-bench-suite` is Linux-only as written, and `:35` names five platforms. Harness work precedes machine access.
-* **Whether the band can be made per-axis.** `varlookup` reproduced at 0.94% within a run while `strings` reached 5.47%; one global band is set by the worst axis and may be needlessly strict on the others.
+* **How many runs an axis near 1.0 actually needs.** Reproducibility differs by axis -- `varlookup` reproduced at 0.94% within a run while `strings` reached 5.47% -- so the escalation cost is per axis and is not known in advance for any of them. It is answered when an axis first escalates, not before.

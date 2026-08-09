@@ -10,11 +10,14 @@
 /*----------------------------------------------------------------------------*/
 
 //! Shared plumbing for the Task 0.7 benchmark harness (`benches/interpreter.rs`),
-//! the cold-start timer (`src/bin/rexx-time.rs`) and the interleaved
-//! two-interpreter suite (`src/bin/rexx-bench-suite.rs`): resolving
-//! `REXX_BENCH_BINARY` into a runnable `Interpreter`, locating
-//! `bench-programs/`, and the subprocess timing core in [`timing`].
+//! the cold-start timer (`src/bin/rexx-time.rs`), the interleaved
+//! two-interpreter suite (`src/bin/rexx-bench-suite.rs`) and the between-run
+//! band tool (`src/bin/rexx-bench-band.rs`): resolving `REXX_BENCH_BINARY`
+//! into a runnable `Interpreter`, locating `bench-programs/`, the subprocess
+//! timing core in [`timing`], and the one capped, directory-pinned way of
+//! launching either interpreter in [`child`].
 
+pub mod child;
 pub mod timing;
 
 use rexx_oracle::Interpreter;
@@ -90,6 +93,16 @@ pub fn program_path(name: &str) -> PathBuf {
     programs_dir().join(format!("{name}.rex"))
 }
 
+/// Directory holding the control programs, resolved the same way.
+///
+/// Separate from [`programs_dir`] on purpose: `rexx-bench-suite` asserts its
+/// axis list against that directory in both directions, so a program placed
+/// there becomes a dimension of the committed baseline. A control is not a
+/// dimension of anything -- see `bench-control/README.md`.
+pub fn controls_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench-control")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -133,6 +146,61 @@ mod tests {
             "PROGRAMS plus NOT_BENCHMARKED does not match bench-programs/. A program on \
              disk and in neither list is a dimension the criterion harness has stopped \
              covering, with nothing to notice; a name in a list and not on disk cannot run"
+        );
+    }
+
+    /// A control differs from the axis it controls by a known amount, and by
+    /// nothing else.
+    ///
+    /// Both halves are asserted because either can fail silently. A control
+    /// that drifted from its axis anywhere but the loop bound would still look
+    /// like a 1% control and would have stopped being one; a bound edited to a
+    /// rounder number would change the size of the effect the instrument is
+    /// asked to resolve, with nothing in the file to notice. The escalation
+    /// rule reads a tight interval as sensitivity only because this pair is
+    /// what it says it is.
+    #[test]
+    fn the_control_differs_from_its_axis_only_in_the_loop_bound() {
+        let axis = program_path("alloc4c");
+        let control = controls_dir().join("alloc4c-101.rex");
+        let read = |path: &Path| {
+            std::fs::read_to_string(path).unwrap_or_else(|e| panic!("cannot read {path:?}: {e}"))
+        };
+        let bound = |text: &str| -> u64 {
+            let mut found = None;
+            for line in text.lines() {
+                if let Some(rest) = line.trim().strip_prefix("n = ")
+                    && let Ok(count) = rest.trim().parse::<u64>()
+                {
+                    assert!(found.is_none(), "more than one loop bound");
+                    found = Some(count);
+                }
+            }
+            found.expect("a loop bound")
+        };
+        let axis_text = read(&axis);
+        let control_text = read(&control);
+
+        let strip = |text: &str| -> String {
+            text.lines()
+                .filter(|line| !line.trim().starts_with("n = "))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        assert_eq!(
+            strip(&axis_text),
+            strip(&control_text),
+            "the control and its axis differ somewhere other than the loop bound, so the \
+             difference between them is no longer the known amount it is used as"
+        );
+
+        let axis_bound = bound(&axis_text);
+        let control_bound = bound(&control_text);
+        assert_eq!(
+            control_bound * 100,
+            axis_bound * 101,
+            "the control is {control_bound} iterations against the axis's {axis_bound}, which \
+             is not the 1% the escalation rule runs it for"
         );
     }
 

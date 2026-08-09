@@ -51,6 +51,11 @@
 //! forbids the `unsafe` `pre_exec` that would give it one, so the address-
 //! space cap has to be a shell builtin -- the same wrapper
 //! `rexx-exec/tests/support/oracle.rs` uses for the same reason.
+//!
+//! The wrapper itself lives in `rexx_bench::child`, shared with
+//! `rexx-bench-band`, so the two harnesses cannot launch their children
+//! differently. `--pin <cpulist>` confines every child to those CPUs; without
+//! it the wrapper is the one every committed figure was taken through.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -58,7 +63,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::time::Duration;
 
-use rexx_bench::timing::{Capture, Completed, MedianInterval, median_interval_indices, time_once};
+use rexx_bench::child::{ADDRESS_SPACE_LIMIT_KIB, ORACLE_ROOT, Side, Wrapper, run};
+use rexx_bench::timing::{MedianInterval, median_interval_indices};
 
 /// Paired measurements per axis.
 ///
@@ -95,31 +101,6 @@ const OFFSET_WARMUP_PAIRS: usize = 5;
 /// existing criterion rows in `perf-baseline.md` are stated at, and a later
 /// measurement has to be comparable to this one.
 const TARGET_COVERAGE: f64 = 0.95;
-
-/// Address-space ceiling applied to **both** sides on **every** axis, in KiB.
-///
-/// Not this project's usual 1 GiB. Measured 2026-08-08 on this tree: under
-/// `ulimit -v 1048576` this crate aborts (SIGABRT, "memory allocation of N
-/// bytes failed") on `varlookup`, `compound`, `strings`, `arith` and
-/// `samples/rexxcps.rex`, and completes only `startup`. Uncapped, the same
-/// four peak at 4.0 GB, 1.06 GB, 4.3 GB and 1.07 GB of resident memory
-/// against the oracle's 20 MB on all four. The cap therefore cannot stay at
-/// 1 GiB without the measurement covering one axis instead of five.
-///
-/// 8 GiB rather than no cap at all: the cap exists so a runaway interpreter
-/// cannot take the machine's memory with it, which has ended a session here
-/// before, and 8 GiB clears every axis on both sides with room to spare
-/// (verified before this constant was chosen). Both sides get the same
-/// number, so nothing about the comparison is asymmetric -- but the *reason*
-/// the number had to move is a result in its own right and belongs in the
-/// report, not only in this comment.
-const ADDRESS_SPACE_LIMIT_KIB: u64 = 8 * 1024 * 1024;
-
-/// Root of the built C++ oracle. Hardcoded for the reason
-/// `rexx-exec/tests/support/oracle.rs` gives: the point of the comparison is
-/// "against *this* build", and an env var would let a different one answer
-/// for it with nothing to notice.
-const ORACLE_ROOT: &str = "/home/moritz/dev/repos/ooRexx/build";
 
 /// The oracle's own clauses-per-second benchmark, in the read-only C++ tree.
 /// Not copied into this repository: it is the oracle's file, and a copy is a
@@ -200,17 +181,25 @@ const AXES: &[Axis] = &[
 ];
 
 fn main() -> ExitCode {
-    let self_check = std::env::args().any(|arg| arg == "--self-check");
+    let arguments: Vec<String> = std::env::args().collect();
+    let self_check = arguments.iter().any(|arg| arg == "--self-check");
     let (pairs, warmup, offset_pairs, offset_warmup) = if self_check {
         (1, 0, 3, 0)
     } else {
         (PAIRS, WARMUP_PAIRS, OFFSET_PAIRS, OFFSET_WARMUP_PAIRS)
     };
+    // Off by default, so a run with no arguments is the run the committed
+    // baseline was taken with. `rexx-bench-band` measures what pinning is
+    // worth; this flag is how the suite gets the same treatment once that
+    // measurement says it is worth having.
+    let wrapper = Wrapper {
+        pin: flag_value(&arguments, "--pin"),
+        counters: false,
+    };
 
     verify_axis_list();
 
     let oracle_binary = PathBuf::from(ORACLE_ROOT).join("bin/rexx");
-    let oracle_lib = PathBuf::from(ORACLE_ROOT).join("lib");
     let [rust_binary, _debug] = rust_binary_candidates();
     for required in [&oracle_binary, &rust_binary] {
         if !required.is_file() {
@@ -254,19 +243,8 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let oracle = Side {
-        label: "oracle",
-        binary: oracle_binary.clone(),
-        env: vec![(
-            "LD_LIBRARY_PATH".to_string(),
-            oracle_lib.display().to_string(),
-        )],
-    };
-    let rust = Side {
-        label: "rust",
-        binary: rust_binary.clone(),
-        env: Vec::new(),
-    };
+    let oracle = Side::oracle();
+    let rust = Side::rust(rust_binary.clone());
 
     let mut report = String::new();
     let mut failures: Vec<String> = Vec::new();
@@ -286,6 +264,7 @@ fn main() -> ExitCode {
         warmup,
         offset_pairs,
         offset_warmup,
+        &wrapper,
     );
 
     // The offset first, because every axis below is read against it.
@@ -302,6 +281,7 @@ fn main() -> ExitCode {
         &workdir,
         offset_pairs,
         offset_warmup,
+        &wrapper,
     ) {
         Ok(paired) => paired,
         Err(error) => {
@@ -322,7 +302,7 @@ fn main() -> ExitCode {
             }
         };
         eprintln!("measuring {} ({iterations} iterations)", axis.name);
-        match measure_interleaved(&oracle, &rust, &path, &workdir, pairs, warmup) {
+        match measure_interleaved(&oracle, &rust, &path, &workdir, pairs, warmup, &wrapper) {
             Ok(paired) => rows.push(AxisRow {
                 name: axis.name.to_string(),
                 iterations,
@@ -334,13 +314,21 @@ fn main() -> ExitCode {
     write_axes(&mut report, &rows, &offset);
 
     eprintln!("measuring rexxcps");
-    let cps = measure_interleaved(&oracle, &rust, Path::new(REXXCPS), &workdir, pairs, warmup);
+    let cps = measure_interleaved(
+        &oracle,
+        &rust,
+        Path::new(REXXCPS),
+        &workdir,
+        pairs,
+        warmup,
+        &wrapper,
+    );
     match &cps {
         Ok(paired) => write_rexxcps(&mut report, paired),
         Err(error) => failures.push(format!("rexxcps: {error}")),
     }
 
-    for name in write_blocked(&mut report, &rust, &workdir) {
+    for name in write_blocked(&mut report, &rust, &workdir, &wrapper) {
         failures.push(format!(
             "{name} is declared Role::Blocked and no longer fails; it is reported as \
              unrunnable and measured by nothing"
@@ -370,13 +358,6 @@ fn main() -> ExitCode {
         );
         ExitCode::FAILURE
     }
-}
-
-/// One interpreter, and what its child processes need in the environment.
-struct Side {
-    label: &'static str,
-    binary: PathBuf,
-    env: Vec<(String, String)>,
 }
 
 /// The paired samples for one axis, in the order they were taken.
@@ -421,6 +402,7 @@ fn measure_interleaved(
     workdir: &Path,
     pairs: usize,
     warmup: usize,
+    wrapper: &Wrapper,
 ) -> Result<Paired, String> {
     let mut result = Paired {
         oracle: Vec::with_capacity(pairs),
@@ -434,7 +416,7 @@ fn measure_interleaved(
         // the same order relative to whatever the machine is doing.
         for is_oracle in [true, false] {
             let side = if is_oracle { oracle } else { rust };
-            let completed = run(side, program, workdir)?;
+            let completed = run(side, program, workdir, wrapper)?;
             if !completed.succeeded() {
                 return Err(format!(
                     "{} exited {:?} on {}: {}",
@@ -458,23 +440,10 @@ fn measure_interleaved(
     Ok(result)
 }
 
-/// One capped, directory-pinned invocation of one side.
-fn run(side: &Side, program: &Path, workdir: &Path) -> Result<Completed, String> {
-    // `cd` and `ulimit` are shell builtins and there is no rlimit hook on
-    // `Command`; `"$@"` keeps the paths out of the shell string so nothing
-    // needs quoting.
-    let script = r#"cd "$1" || exit 111; ulimit -v "$2" || exit 112; shift 2; exec "$@""#;
-    let args = vec![
-        "-c".to_string(),
-        script.to_string(),
-        "rexx-bench-suite".to_string(),
-        workdir.display().to_string(),
-        ADDRESS_SPACE_LIMIT_KIB.to_string(),
-        side.binary.display().to_string(),
-        program.display().to_string(),
-    ];
-    time_once("/bin/sh", &args, &side.env, Capture::Collect)
-        .map_err(|error| format!("{} could not be launched: {error}", side.label))
+/// The value following `name` on the command line, if `name` is present.
+fn flag_value(arguments: &[String], name: &str) -> Option<String> {
+    let at = arguments.iter().position(|arg| arg == name)?;
+    arguments.get(at + 1).cloned()
 }
 
 /// The `.rex` stems present in `rust/bench-programs/`, sorted.
@@ -709,6 +678,7 @@ fn write_provenance(
     warmup: usize,
     offset_pairs: usize,
     offset_warmup: usize,
+    wrapper: &Wrapper,
 ) {
     let _ = writeln!(report, "### Provenance\n");
     let _ = writeln!(report, "| | |");
@@ -774,6 +744,15 @@ fn write_provenance(
         report,
         "| working directory of every child | a fresh empty temporary directory |"
     );
+    // Emitted only when it is on, so a run with no arguments prints the block
+    // `perf-baseline.md` carries. An absent row therefore means an unpinned
+    // run, which is what every figure in that document was taken with.
+    if let Some(cpus) = &wrapper.pin {
+        let _ = writeln!(
+            report,
+            "| CPU affinity of every child | `taskset -c {cpus}`, **both sides, every axis** |"
+        );
+    }
     let _ = writeln!(report);
 }
 
@@ -1062,7 +1041,12 @@ fn parse_cps(stdout: &[u8]) -> Option<u64> {
 /// empty message, timed by nothing -- three dimensions dropping out of the
 /// measurement while the run stayed green, which is the same defect the axis
 /// pin exists to prevent arriving through a different door.
-fn write_blocked(report: &mut String, rust: &Side, workdir: &Path) -> Vec<String> {
+fn write_blocked(
+    report: &mut String,
+    rust: &Side,
+    workdir: &Path,
+    wrapper: &Wrapper,
+) -> Vec<String> {
     let mut no_longer_blocked = Vec::new();
     let _ = writeln!(report, "### Axes this crate cannot run\n");
     let _ = writeln!(
@@ -1075,7 +1059,7 @@ fn write_blocked(report: &mut String, rust: &Side, workdir: &Path) -> Vec<String
     let _ = writeln!(report, "|---|---:|---|");
     for axis in AXES.iter().filter(|axis| axis.role == Role::Blocked) {
         let path = rexx_bench::program_path(axis.name);
-        match run(rust, &path, workdir) {
+        match run(rust, &path, workdir, wrapper) {
             Ok(completed) => {
                 if completed.succeeded() {
                     no_longer_blocked.push(axis.name.to_string());
@@ -1179,7 +1163,8 @@ mod tests {
             // uses. `alloc.rex` allocates without bound if it ever starts
             // running, and an uncapped in-process run of it would take the
             // machine's memory rather than the test.
-            let completed = run(&side, &path, &dir).expect("the runner launches");
+            let completed =
+                run(&side, &path, &dir, &Wrapper::default()).expect("the runner launches");
             assert!(
                 !completed.succeeded(),
                 "{} is declared Role::Blocked but exited 0. The suite would report it as \
@@ -1295,8 +1280,16 @@ mod tests {
             binary: PathBuf::from("/bin/sh"),
             env: vec![("REXX_BENCH_SIDE".to_string(), mark.to_string())],
         };
-        measure_interleaved(&side("o"), &side("R"), &script, &dir, 3, 1)
-            .expect("the probe script runs");
+        measure_interleaved(
+            &side("o"),
+            &side("R"),
+            &script,
+            &dir,
+            3,
+            1,
+            &Wrapper::default(),
+        )
+        .expect("the probe script runs");
 
         let order = fs::read_to_string(dir.join("order")).expect("the children wrote in `dir`");
         assert_eq!(
@@ -1328,7 +1321,15 @@ mod tests {
             binary: PathBuf::from("/bin/sh"),
             env: Vec::new(),
         };
-        let outcome = measure_interleaved(&side("oracle"), &side("rust"), &script, &dir, 3, 0);
+        let outcome = measure_interleaved(
+            &side("oracle"),
+            &side("rust"),
+            &script,
+            &dir,
+            3,
+            0,
+            &Wrapper::default(),
+        );
         let Err(error) = outcome else {
             panic!("a side exiting 3 is not a measurement");
         };
