@@ -36,9 +36,11 @@ This document is also a fresh measurement of the other five axes rather than a c
 `perf-baseline.md`'s numbers, because "benchmark comparisons interleave between arms within one
 sitting" (Global Constraints) and this task's `emptyloop` sample has to sit in the same sitting as
 the axes it is compared against for spread and ratio purposes.
-The five pre-existing axes' numbers here therefore differ slightly from `perf-baseline.md`'s own
-`d233d1e9` figures -- run-to-run variation on this machine, not a code change; no `rexx-exec` or
-`rexx-core` source changed between that measurement and this one.
+The five pre-existing axes' numbers here differ from `perf-baseline.md`'s own `d233d1e9` figures by
+varying amounts.
+Two of the five moved enough that this document cannot wave the difference away as "run-to-run
+variation" without checking; "Movement against `perf-baseline.md`'s `d233d1e9` figures" below
+states what moved and what this document can and cannot say about why.
 
 ## The new axis: `emptyloop.rex`
 
@@ -60,12 +62,13 @@ this corpus is sized to (`rust/bench-programs/README.md`, "Sizing").
 window.
 The harness run below measured it at a 0.8955 s oracle median, confirming the choice.
 Registered as `Role::Loop` in `rexx-bench-suite.rs`'s `AXES` and added to `rexx_bench::PROGRAMS`, so
-both the interleaved suite and the criterion harness (`benches/interpreter.rs`) cover it; the
-criterion harness was not run for this document (this task's own "Ambiguity resolved" instructions
-size against the interleaved suite, not against criterion), but at a ~0.9 s oracle / ~3.0 s Rust
-program size and criterion's existing `sample_size(10)` / 30 s ceiling for this benchmark group,
-ten samples of the slower side costs about 30 s -- inside the ceiling, not a problem this task had
-to work around.
+both the interleaved suite and the criterion harness (`benches/interpreter.rs`) cover it.
+This document reports the interleaved suite's own figures, not criterion's.
+The interleaved suite is what every ratio and interval below comes from, and criterion's own cost
+for this axis was checked rather than run, because checking is enough to know it needs no
+accommodation: at a ~0.9 s oracle / ~3.0 s Rust program size and criterion's existing
+`sample_size(10)` / 30 s measurement-time ceiling for this benchmark group, ten samples of the
+slower side costs about 30 s -- inside the ceiling.
 Verified deterministic and side-effect-free before being committed: two runs from two different
 fresh directories produced byte-identical stdout (`done`), exit 0, empty stderr.
 
@@ -220,6 +223,59 @@ Measured here rather than left out of the table, with the status and message eac
 model).
 They carry no ratio for the same reason `perf-baseline.md`'s own "Axes this crate cannot run"
 section gives none: there is no completed run on this side to compare against the oracle's.
+
+## Movement against `perf-baseline.md`'s `d233d1e9` figures
+
+Two of the five pre-existing axes moved by more than this document can wave away as ordinary
+run-to-run noise, and this section names the movement rather than folding it into "differ
+slightly."
+
+| axis | `d233d1e9` ratio | this run's ratio | change | intervals overlap? |
+|---|---:|---:|---:|---|
+| `alloc4c` | 2.08x (2.03x-2.11x) | 2.00x (1.97x-2.02x) | -3.8% | no |
+| `compound` | 6.08x (6.02x-6.14x) | 5.81x (5.73x-5.88x) | -4.4% | no |
+| `arith` | 2.70x (2.68x-2.72x) | 2.67x (2.65x-2.69x) | -1.1% | yes |
+| `strings` | 10.61x (10.40x-10.85x) | 10.47x (10.27x-10.64x) | -1.3% | yes |
+| `varlookup` | 4.35x (4.32x-4.41x) | 4.40x (4.26x-4.44x) | +1.1% | yes |
+
+**This document cannot distinguish two candidate explanations, and does not choose between them.**
+
+`git log d233d1e9..1b3efeb1 -- rust/crates/rexx-exec/src rust/crates/rexx-core/src` returns exactly
+one commit: `f9d9f46c`, this phase's own Task 0.
+It extracted `grant_procedure_permission` and `apply_flow` out of `run_activation`'s per-clause
+loop -- the hottest loop in the interpreter -- changing 183 lines of `run.rs` and adding 31 to
+`roots.rs`.
+Extraction is not claimed to change behaviour, and the full workspace suite agrees (1337 passed, 0
+failed, before and after), but extraction can move a compiler's inlining decisions even when
+behaviour is identical, and nothing in this task measured whether it did here.
+
+**Candidate 1: Task 0's extraction moved the generated code, and `alloc4c`/`compound` are the axes
+sensitive to it.**
+Consistent with the two axes carrying disjoint intervals both moving in the same direction (the
+ratio fell on both), and with `arith`/`strings`/`varlookup` -- which exercise less of
+`run_activation`'s extracted path per iteration, or exercise it differently -- moving an order of
+magnitude less.
+
+**Candidate 2: this is ordinary cross-run noise on this machine, and `alloc4c`/`compound` are simply
+the two axes it lands on hardest this time.**
+`perf-baseline.md`'s own "The internal cps ratio is unstable across runs, more than the wall-clock
+ratios are" section already recorded `compound` moving from 6.35x to 6.08x -- about 4% -- between
+two runs with no code change between them at all, and called that "direct evidence that between-run
+variance on `compound` exceeds what either run's own within-run interval reports."
+A second ~4% movement on the same axis, this time coinciding with a code change, has exactly the
+same magnitude as a movement that document already attributed to noise rather than to a cause.
+
+**The consequence for later tasks.**
+Task 4 predicts `emptyloop` and `varlookup`'s movement; Task 9 predicts `arith` and `compound`'s.
+A task whose measured movement on `alloc4c` or `compound` comes in within a few percent of what this
+section reports cannot conclude its own change caused it, because a movement of that size has now
+been observed on `compound` twice, with no attributable single cause confirmed either time.
+Settling which candidate above is right would need attributing Task 0's change specifically --
+measuring the tree-walker's axis figures before and after `f9d9f46c` in one sitting -- which this
+task does not do and was not asked to do.
+Until that measurement exists, a later task claiming a movement on `alloc4c` or `compound` smaller
+than about 4% should say so against this section, rather than treating this document's figures as a
+clean, zero-change starting point for those two axes specifically.
 
 ## Per-iteration cost, net of the fixed per-process offset
 
