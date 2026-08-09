@@ -17,42 +17,27 @@
 //! on every program -- a selection test comparing output would stay green
 //! with selection deleted. What separates them is whether `run_chunk` ran at
 //! all, which is what [`super::run_chunk_entries`] counts.
-
-use std::sync::{Mutex, MutexGuard};
+//!
+//! **Both counting tests name their engine and neither reads a default**, so
+//! what they assert stays true whatever the default becomes. Which engine the
+//! default *is* belongs to `Invocation`, and `invocation.rs` asserts it there.
 
 use super::run_chunk_entries;
-use crate::{Engine, Invocation, run_program};
+use crate::{Engine, Invocation, Outcome, execute, run_program};
 
 /// The path these programs are reported under. Nothing reads it back: no
 /// program below raises, so it never reaches a report.
 const TEST_PATH: &str = "/nonexistent/ir-drive-test.rex";
 
-/// Serialises every test in this module.
-///
-/// The counter is process-wide (see its own comment for why it cannot be a
-/// `thread_local`), so a test taking a delta while another runs a program
-/// under [`Engine::Ir`] sees both. **Every test here holds this, including
-/// the ones that never read the counter**: what has to be excluded is a
-/// concurrent *run*, not a concurrent read, and the two tests that only run
-/// programs are exactly the ones that would corrupt someone else's delta.
-/// Nothing outside this module runs under `Engine::Ir`, which is what keeps
-/// the lock sufficient as well as necessary.
-static COUNTER: Mutex<()> = Mutex::new(());
-
-fn counter_lock() -> MutexGuard<'static, ()> {
-    COUNTER
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
-
 /// A program that enters three bodies: its own main body, the internal label
 /// `sub` a `CALL` transfers to, and the `::ROUTINE` body a second `CALL`
 /// resolves to.
 ///
-/// The three are the two production paths into `run_activation` --
-/// `Interp::run` for the first and `resolve_and_run_call` for the other two
-/// -- so the count separates "the IR engine runs the main body" from "the IR
-/// engine runs every body".
+/// The main body is entered by the program starting; the other two are
+/// entered by a call being resolved. So a count of three separates "the IR
+/// engine runs the body a program starts in" from "the IR engine runs every
+/// body an activation is ever pushed for", which is the distinction engine
+/// selection has to get right at both.
 const THREE_BODIES: &[u8] = b"\
 call sub
 call rtn
@@ -63,24 +48,35 @@ sub:
   return
 ";
 
-#[test]
-fn the_ir_engine_drives_every_body_the_program_enters() {
-    let _guard = counter_lock();
+/// Runs [`THREE_BODIES`] on `engine`, on **this** thread.
+///
+/// `execute` rather than `run_program`, and that is what makes the count
+/// exact: `run_program` runs the interpreter on a thread of its own, and
+/// `run_chunk`'s counter is per thread. Everything `run_program` does to an
+/// `Invocation` happens here too, so the `Engine` still travels the whole
+/// production route from `Invocation` to `Interp::engine`. The stack
+/// `run_program` sizes is not needed for a program three shallow bodies deep.
+fn drive(engine: Engine) -> (Outcome, usize) {
     let before = run_chunk_entries();
-    let outcome = run_program(
+    let outcome = execute(
         TEST_PATH,
         THREE_BODIES.to_vec(),
-        Invocation::none().with_engine(Engine::Ir),
+        false,
+        Invocation::none().with_engine(engine),
     );
+    (outcome, run_chunk_entries() - before)
+}
+
+#[test]
+fn the_ir_engine_drives_every_body_the_program_enters() {
+    let (outcome, driven) = drive(Engine::Ir);
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
-        run_chunk_entries() - before,
-        3,
-        "the IR engine drove {} bodies where the program has three: its main \
-         body, the CALLed label, and the ::ROUTINE. Fewer means an entry point \
-         into `run_activation` reached the tree-walker instead, which every \
-         later promotion would then silently skip",
-        run_chunk_entries() - before
+        driven, 3,
+        "the IR engine drove {driven} chunks where the program has three \
+         bodies: its main body, the CALLed label, and the ::ROUTINE. Fewer \
+         means a way of entering an activation reached the tree-walker \
+         instead, which every later promotion would then silently skip"
     );
 }
 
@@ -90,29 +86,30 @@ fn the_ir_engine_drives_every_body_the_program_enters() {
 /// says the count tracks the engine rather than the program.
 #[test]
 fn the_tree_walker_drives_no_chunk_at_all() {
-    let _guard = counter_lock();
-    let before = run_chunk_entries();
-    let outcome = run_program(TEST_PATH, THREE_BODIES.to_vec(), Invocation::none());
+    let (outcome, driven) = drive(Engine::TreeWalker);
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
-        run_chunk_entries() - before,
-        0,
-        "the default engine drove a chunk, so `Engine::TreeWalker` is no longer \
-         the default this phase's later tasks measure against"
+        driven, 0,
+        "the tree-walker drove {driven} chunks, so the engine choice no longer \
+         decides which driver runs a body"
     );
 }
 
 /// Nothing in an ordinary program overflows the compiled stream's index
-/// widths, so the fallback path is never taken and the counter it bumps
-/// stays at zero.
+/// widths, so the refusal path is never taken and the counter it bumps stays
+/// at zero.
 ///
 /// Asserted on both engines: under the tree-walker nothing is compiled at
 /// all, and under the IR engine every body compiled. A non-zero count either
 /// way would mean bodies were quietly running on the tree-walker while a
 /// dual-engine comparison passed.
+///
+/// Through `run_program`, unlike the two above, because what it reads is the
+/// public `Outcome` field rather than the per-thread counter -- so this also
+/// covers the descent from `run_program` through its own thread, which
+/// `execute` alone does not.
 #[test]
 fn no_body_is_refused_by_either_engine() {
-    let _guard = counter_lock();
     for engine in [Engine::TreeWalker, Engine::Ir] {
         let outcome = run_program(
             TEST_PATH,
@@ -121,7 +118,8 @@ fn no_body_is_refused_by_either_engine() {
         );
         assert_eq!(
             outcome.chunks_refused, 0,
-            "{engine:?} refused a body of a three-body program"
+            "{engine:?} refused a body of a three-body program {} times",
+            outcome.chunks_refused
         );
     }
 }

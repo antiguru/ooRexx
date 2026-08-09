@@ -810,19 +810,40 @@ impl Interp {
             slots: &plan.by_symbol,
             indents: Some(&plan),
         };
+        // The key this body's plan was cached under, and the key its chunk is
+        // cached under. **They have to be the same key**, and nothing but this
+        // says so: `plan` is read off the activation while `key` is rebuilt
+        // from the activation's program id and body selector, so a push that
+        // paired a plan with the wrong id would put a body's chunk under
+        // another body's name -- a wrong answer rather than a miss, exactly
+        // what `BodyKey::directive`'s own doc says about the selector.
+        //
+        // Unpinned by anything else today because production loads one
+        // program, so every `ProgramId` is 0 and `directive` alone
+        // discriminates. A read, never an insert: `plan_for` would paper over
+        // the mismatch by caching the plan a second time under the wrong key.
+        let key = self.activation().body_key();
+        debug_assert!(
+            self.plans
+                .get(&key)
+                .is_some_and(|cached| Rc::ptr_eq(cached, &plan)),
+            "the running activation's body key does not name the plan it is running with, so \
+             its chunk would be cached under another body's name"
+        );
+
         // **Engine selection, and it is here rather than at either caller.**
         // `run_activation` is the one function that runs an activation's
-        // body, so both production entry points -- `Interp::run` and
-        // `resolve_and_run_call` -- reach the compiled stream through this
-        // one decision. Putting it at the callers instead would need the
-        // `Code` above rebuilt at each, and a caller that was missed would
+        // body, so entering an activation is what reaches the compiled
+        // stream, rather than each place that enters one having to ask.
+        // Putting the decision at the callers instead would need the `Code`
+        // above rebuilt at each, and any caller that was missed would
         // tree-walk its whole body while a dual-engine gate still passed.
         //
         // `None` from `chunk_for` is a body that does not fit the stream's
         // index widths: it runs the loop below, and `Interp::chunks_refused`
-        // has already counted it so the fallback is not silent.
+        // has already counted the refusal so the fallback is not silent.
         if matches!(self.engine, Engine::Ir)
-            && let Some(chunk) = self.chunk_for(self.activation().body_key(), body, &plan)
+            && let Some(chunk) = self.chunk_for(key, body, &plan)
         {
             return self.run_chunk(&code, &chunk, Some(&program.source));
         }

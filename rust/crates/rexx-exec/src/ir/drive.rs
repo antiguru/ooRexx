@@ -40,8 +40,9 @@ impl Interp {
     /// `in_clause`.** That is a scoped closure (`clause.rs`): it sets the
     /// clause line, runs the whole clause, and then, only on the success
     /// path, delivers a queued `CALL ON` handler, which can end the program.
-    /// A clause spans a run of ops, and a flat stream has no scope to hang
-    /// that on.
+    /// The shape is built for a clause that spans a run of ops, because a
+    /// flat stream has no scope to hang that on -- an `Op::Generic` needs no
+    /// such scope, since the call it makes is a whole clause.
     ///
     /// The register region is reserved once, here, from `chunk.registers`,
     /// and truncated away on every path out. It sits on the temporaries
@@ -124,10 +125,11 @@ impl Interp {
     /// Answers the clause's own `Flow`, which the outer loop applies.
     ///
     /// `start` is an **op** index, where the outer loop's `index` is an
-    /// instruction index: a clause spans a run of ops, and `chunk.op_of` is
-    /// the one place the two spaces meet. An `Op::Generic` is a whole clause
-    /// on its own, since the call it makes runs one, so it answers the
-    /// clause's `Flow` directly.
+    /// instruction index, and `chunk.op_of` is the one place the two spaces
+    /// meet. Taking an op index rather than reusing the instruction one is
+    /// what lets a clause be built from more than one op; an `Op::Generic` is
+    /// a whole clause on its own, since the call it makes runs one, so it
+    /// answers the clause's `Flow` directly.
     ///
     /// `index` travels beside `instruction` rather than being derived from
     /// it: `If` and `Select` compute a branch's start from their own
@@ -167,30 +169,37 @@ impl Interp {
     }
 }
 
-// Test-only instrumentation: how many bodies have been driven as a chunk.
+// Test-only instrumentation: how many chunks this thread has driven.
 //
 // The engine-selection tests need this to tell "the IR engine ran this body"
 // apart from "the run produced the answer the tree-walker also produces".
-// Every op is `Generic` here, so the two engines agree on every program by
+// Every op is `Op::Generic`, so the two engines agree on every program by
 // construction and no observable output tells them apart -- a selection test
 // resting on output alone would pass with selection deleted.
 //
-// A process-wide atomic rather than a `thread_local`, unlike `compile.rs`'s
-// own call counter beside it: `run_program` runs the interpreter on a thread
-// of its own (`on_interpreter_thread`), so a counter kept per thread would be
-// incremented on a thread the reading test cannot see. The tests' own module
-// serialises against it, which is what makes a delta mean one run's work.
+// **Per thread, not per process, and the difference is what keeps a delta
+// meaningful when the default engine is not the tree-walker.** A test reading
+// a process-wide count measures every program any concurrently running test
+// happens to drive, and no lock between the reading tests can exclude that,
+// because the contamination comes from tests that never take it. A thread's
+// own count is contaminated by nothing, since `libtest` gives each test a
+// thread and the interpreter runs on whichever thread entered it. That is
+// what obliges the tests to enter through `execute` rather than
+// `run_program`, which spawns a thread of its own: the counter would then be
+// incremented on a thread no test can read.
 #[cfg(test)]
-static RUN_CHUNK_ENTRIES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+thread_local! {
+    static RUN_CHUNK_ENTRIES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 #[cfg(test)]
 fn count_run_chunk_entry() {
-    RUN_CHUNK_ENTRIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    RUN_CHUNK_ENTRIES.with(|entries| entries.set(entries.get() + 1));
 }
 
 #[cfg(test)]
 pub(crate) fn run_chunk_entries() -> usize {
-    RUN_CHUNK_ENTRIES.load(std::sync::atomic::Ordering::Relaxed)
+    RUN_CHUNK_ENTRIES.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]

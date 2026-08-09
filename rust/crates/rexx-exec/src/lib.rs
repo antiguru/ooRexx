@@ -345,9 +345,13 @@ pub struct Outcome {
     /// collected nothing cannot pass by being indistinguishable from one
     /// that collected correctly.
     pub collections: u64,
-    /// How many bodies the run declined to compile because they do not fit
-    /// the compiled stream's index widths, and so ran on the tree-walker
+    /// How many times the run declined to compile a body because it does not
+    /// fit the compiled stream's index widths, and ran it on the tree-walker
     /// instead.
+    ///
+    /// **Refusals, not bodies.** A refused body is not remembered -- there is
+    /// no negative cache -- so one entered a thousand times is compiled,
+    /// refused and counted a thousand times.
     ///
     /// Always `0` under [`Engine::TreeWalker`](crate::Engine::TreeWalker),
     /// which compiles nothing. Under [`Engine::Ir`](crate::Engine::Ir) it is
@@ -1223,12 +1227,15 @@ struct Interp {
     /// discipline, unchanged, applied to a second cache rather than
     /// invented afresh for it. See `Interp::chunk_for`, in `plan.rs`.
     chunks: HashMap<BodyKey, Rc<crate::ir::Chunk>>,
-    /// How many bodies `chunk_for` has refused because they do not fit the
-    /// index widths the compiled stream commits to (`ChunkTooLarge`) --
+    /// How many times `chunk_for` has refused a body because it does not fit
+    /// the index widths the compiled stream commits to (`ChunkTooLarge`) --
     /// never because a body contains a construct the compiler does not
     /// know, which does not exist (D21: every instruction compiles).
-    /// `Interp::chunk_for`'s own doc says what stops this being a silent
-    /// fallback to the tree-walker.
+    ///
+    /// One per refusal rather than one per body, because `chunks` holds only
+    /// successes: a refused body is recompiled and refused again on every
+    /// entry. `Interp::chunk_for`'s own doc says what stops this being a
+    /// silent fallback to the tree-walker.
     chunks_refused: usize,
     /// Every `::ROUTINE` the running program installs, keyed by its
     /// **upcased** name and holding its index in `Program::directives`.

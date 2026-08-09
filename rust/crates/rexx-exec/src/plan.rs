@@ -590,9 +590,11 @@ impl Interp {
     /// the same key as its plan (D16's discipline, unchanged).
     ///
     /// `None` means the body does not fit the index widths and this
-    /// activation runs on the tree-walker. `chunks_refused` is what stops
-    /// that being silent: the dual-engine harness asserts it is zero across
-    /// the corpus.
+    /// activation runs on the tree-walker. `chunks_refused` counts that, once
+    /// per refusal: only a compiled chunk is cached, so a refused body comes
+    /// back here and is refused again the next time it is entered. That
+    /// counter is what stops the fallback being silent -- the dual-engine
+    /// harness asserts it is zero across the corpus.
     pub(crate) fn chunk_for(
         &mut self,
         key: BodyKey,

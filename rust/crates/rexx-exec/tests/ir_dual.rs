@@ -38,9 +38,10 @@
 //!   `PROCEDURE` and `USE LOCAL` see the same first-instruction answer;
 //! * the register region is opened and closed without disturbing the
 //!   temporaries stack any clause depends on;
-//! * every body in the population compiles -- `chunks_refused` is asserted
-//!   zero on both arms, so a compiler that started refusing ordinary bodies
-//!   could not pass by quietly running everything on the tree-walker.
+//! * every body in the population compiles -- `chunks_refused`, which counts
+//!   refusals rather than distinct bodies, is asserted zero on both arms, so
+//!   a compiler that started refusing ordinary bodies could not pass by
+//!   quietly running everything on the tree-walker.
 //!
 //! Which *engine* actually ran is not observable from a program's output at
 //! this point in the phase, and this file makes no attempt to infer it from
@@ -78,14 +79,17 @@
 //! programs" is a property of the code rather than something asserted about
 //! two separately built lists.
 //!
-//! What is asserted is that the list is complete:
+//! What is asserted is that the list is complete, and every such assertion
+//! compares against something outside this file:
 //! [`the_dual_harness_reads_every_phase_subset_file`] pins the corpus half
-//! against the corpus directory itself (the shape `corpus.rs`'s own test of
-//! the same name uses), and
-//! [`every_population_is_present_and_non_empty`] pins the four population
-//! names and requires each to have found programs. A population that
-//! silently extracted nothing would otherwise pass with a shrunken
-//! denominator and no line of output saying so.
+//! against the corpus directory itself (the shape `corpus.rs`'s own
+//! `the_differential_reads_every_phase_subset_file` uses),
+//! [`the_sweep_runs_every_ootest_suite_a_sibling_harness_runs`] pins the
+//! other half against the suite roots the sibling harnesses in `tests/` name,
+//! and [`every_population_the_tree_calls_for_is_present_and_non_empty`]
+//! requires each to have found programs. A population that silently
+//! extracted nothing, or was deleted along with the line declaring it, would
+//! otherwise pass with a shrunken denominator and no output saying so.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -139,12 +143,20 @@ struct Population {
     cases: Vec<Case>,
 }
 
-/// The four population names, in the order [`populations`] builds them.
+/// The `ootest/ooRexx/base` suites this sweep draws programs from, sorted.
 ///
-/// Named here so [`every_population_is_present_and_non_empty`] can assert
-/// against it: a population dropped from the builder would otherwise leave a
-/// smaller sweep that still passes.
-const POPULATION_NAMES: &[&str] = &["corpus", "assertions", "bif", "keyword"];
+/// A literal, checked against the tree by
+/// [`the_sweep_runs_every_ootest_suite_a_sibling_harness_runs`]: the sibling
+/// harnesses in `tests/` name the suites they run, on disk, outside this
+/// file, so a suite dropped from here is red rather than a quietly smaller
+/// sweep. That is [`SUBSET_FILES`]'s arrangement exactly, one literal against
+/// one external enumeration, and it is the arrangement a second in-repo list
+/// does not have -- deleting a population and its name from a list beside it
+/// is one edit, not two.
+const OOTEST_SUITES: &[&str] = &["bif", "expressions", "keyword"];
+
+/// The name of the population that is not an `ootest` suite.
+const CORPUS_POPULATION: &str = "corpus";
 
 /// The subset files the corpus population reads, in union order.
 ///
@@ -152,6 +164,10 @@ const POPULATION_NAMES: &[&str] = &["corpus", "assertions", "bif", "keyword"];
 /// way -- see [`the_dual_harness_reads_every_phase_subset_file`]. Duplicated
 /// rather than shared because these are separate integration-test binaries
 /// and neither can `mod` the other.
+///
+/// A literal here and a directory listing on the other side of the
+/// assertion, never two literals: that asymmetry is the whole of what the pin
+/// is worth.
 const SUBSET_FILES: &[&str] = &["phase-4a.txt", "phase-4b.txt", "phase-4c.txt"];
 
 fn corpus_dir() -> PathBuf {
@@ -288,60 +304,74 @@ fn case_of(row: &AssertionRow, index: usize) -> Case {
     }
 }
 
-/// Every case, in the order [`POPULATION_NAMES`] gives.
+/// Every case, one population per entry of [`OOTEST_SUITES`] plus the
+/// corpus.
+///
+/// The `match` has no catch-all: a suite named in that list with no arm here
+/// cannot be turned into programs, and saying so loudly is the only honest
+/// answer -- silently running three populations where four were declared is
+/// the shrunken denominator this file exists to prevent.
 fn populations() -> Vec<Population> {
-    let mut assertions = Vec::new();
-    for (group, source) in suite_sources("expressions") {
+    let mut out = vec![Population {
+        name: CORPUS_POPULATION,
+        cases: corpus_cases(),
+    }];
+    for suite in OOTEST_SUITES {
+        let cases = match *suite {
+            "expressions" => expression_cases(suite),
+            "bif" => bif_cases(suite),
+            "keyword" => keyword_cases(suite),
+            other => panic!(
+                "ootest suite base/{other} is declared in OOTEST_SUITES and nothing here turns \
+                 its .testGroup files into programs"
+            ),
+        };
+        out.push(Population { name: suite, cases });
+    }
+    out
+}
+
+fn expression_cases(suite: &str) -> Vec<Case> {
+    let mut cases = Vec::new();
+    for (group, source) in suite_sources(suite) {
         for (index, row) in extract_assertions(&group, &source).rows.iter().enumerate() {
-            assertions.push(case_of(row, index));
+            cases.push(case_of(row, index));
         }
     }
+    cases
+}
 
-    let mut bif = Vec::new();
-    for (group, source) in suite_sources("bif") {
+fn bif_cases(suite: &str) -> Vec<Case> {
+    let mut cases = Vec::new();
+    for (group, source) in suite_sources(suite) {
         let extraction = extract_bif(&group, &source);
         for (index, row) in extraction.rows.iter().enumerate() {
-            bif.push(case_of(row, index));
+            cases.push(case_of(row, index));
         }
         for (index, row) in extraction.raises.iter().enumerate() {
             let operands: Vec<&str> = row.operands.iter().map(String::as_str).collect();
-            bif.push(Case {
+            cases.push(Case {
                 name: format!("{}::{} raise #{index}", row.group, row.method),
                 path: INLINE_PATH.to_string(),
                 text: row_program(row.digits, row.form, &row.prelude, &operands),
             });
         }
     }
+    cases
+}
 
-    let mut keyword = Vec::new();
-    for (group, source) in suite_sources("keyword") {
+fn keyword_cases(suite: &str) -> Vec<Case> {
+    let mut cases = Vec::new();
+    for (group, source) in suite_sources(suite) {
         for body in extract_keyword(&group, &source).bodies {
-            keyword.push(Case {
+            cases.push(Case {
                 name: format!("{}::{}", body.group, body.method),
                 path: INLINE_PATH.to_string(),
                 text: body.program.clone().into_bytes(),
             });
         }
     }
-
-    vec![
-        Population {
-            name: "corpus",
-            cases: corpus_cases(),
-        },
-        Population {
-            name: "assertions",
-            cases: assertions,
-        },
-        Population {
-            name: "bif",
-            cases: bif,
-        },
-        Population {
-            name: "keyword",
-            cases: keyword,
-        },
-    ]
+    cases
 }
 
 /// Runs one case on both engines and describes the first difference, if any.
@@ -388,13 +418,15 @@ fn compare(case: &Case) -> Option<String> {
     // agree and the population passes while the engine under test never ran.
     if ir.chunks_refused != 0 {
         return Some(format!(
-            "the ir arm refused {} bodies, which ran on the tree-walker instead",
+            "the ir arm refused a body {} times, running it on the tree-walker \
+             instead",
             ir.chunks_refused
         ));
     }
     if tw.chunks_refused != 0 {
         return Some(format!(
-            "the tree-walker arm refused {} bodies, and it compiles none",
+            "the tree-walker arm counted {} refusals, and it compiles nothing \
+             to refuse",
             tw.chunks_refused
         ));
     }
@@ -414,9 +446,10 @@ fn excerpt(bytes: &[u8]) -> String {
 
 /// The dual harness reads **every** phase subset file the corpus has.
 ///
-/// `corpus.rs`'s own test of this name has the argument: a file missing from
-/// the list is a phase whose programs are never run, the sweep stays green
-/// over whatever is left, and nothing else here can see it happen.
+/// `corpus.rs`'s own `the_differential_reads_every_phase_subset_file` has the
+/// argument: a file missing from the list is a phase whose programs are never
+/// run, the sweep stays green over whatever is left, and nothing else here
+/// can see it happen.
 #[test]
 fn the_dual_harness_reads_every_phase_subset_file() {
     assert_eq!(
@@ -427,17 +460,98 @@ fn the_dual_harness_reads_every_phase_subset_file() {
     );
 }
 
-/// Every population named is built, and every one of them found programs.
+/// Every `ootest` suite a sibling harness in `tests/` runs programs from,
+/// read out of those files rather than listed here a second time.
 ///
-/// The names are pinned so a population deleted from the builder is red
-/// rather than a quietly smaller sweep; the non-emptiness is pinned because
-/// an extractor pointed at the wrong directory, or a subset file that named
-/// nothing, would otherwise pass with nothing run.
+/// The marker is the path the harnesses build their suite root from, which is
+/// a literal in each of them. `ir_dual.rs` itself joins the suite name on
+/// separately and so contributes nothing to this set, which is what stops the
+/// answer being a copy of the question -- but the file is skipped by name as
+/// well, so a later edit that spelled the path out here could not quietly
+/// satisfy the pin either.
+fn ootest_suites_sibling_harnesses_read() -> Vec<String> {
+    const MARKER: &str = "ootest/ooRexx/base/";
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+    let entries =
+        fs::read_dir(&dir).unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+    let mut suites = std::collections::BTreeSet::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_none_or(|e| e != "rs")
+            || path.file_name().is_some_and(|n| n == "ir_dual.rs")
+        {
+            continue;
+        }
+        let text = fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+        for (offset, _) in text.match_indices(MARKER) {
+            let tail = &text[offset + MARKER.len()..];
+            let end = tail
+                .find(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                .unwrap_or(tail.len());
+            if end > 0 {
+                suites.insert(tail[..end].to_string());
+            }
+        }
+    }
+    suites.into_iter().collect()
+}
+
+/// The sweep runs every `ootest` suite some other harness in this crate runs.
+///
+/// **What this rules out is a two-sided deletion**, which is the one that
+/// happens: a population removed from [`populations`] *and* from the list
+/// beside it leaves every other test in this file green over a sweep missing
+/// thousands of programs. Pinning the list against a second list in the same
+/// file does not rule that out, because both are one edit away. The sibling
+/// harness sources are not.
 #[test]
-fn every_population_is_present_and_non_empty() {
+fn the_sweep_runs_every_ootest_suite_a_sibling_harness_runs() {
+    let on_disk = ootest_suites_sibling_harnesses_read();
+    assert!(
+        !on_disk.is_empty(),
+        "no sibling harness in tests/ names an ootest suite root, so this pin \
+         found nothing to compare against and would accept any sweep at all"
+    );
+    assert_eq!(
+        OOTEST_SUITES, on_disk,
+        "the dual-engine sweep and this crate's other harnesses do not run the \
+         same ootest suites. A suite only they run is one the two engines are \
+         never compared on"
+    );
+}
+
+/// Every population the tree calls for is built, and every one of them found
+/// programs.
+///
+/// The expectation is derived, not restated: the corpus population is
+/// required because `rust/corpus/` has phase subset files in it, and each
+/// suite population because a sibling harness runs that suite. So deleting
+/// either kind from [`populations`] is red without a second edit anywhere
+/// being able to hide it.
+///
+/// Non-emptiness is separate from presence and catches the other shape: an
+/// extractor pointed at the wrong directory, or a subset file naming nothing,
+/// builds a population that exists and runs no programs.
+#[test]
+fn every_population_the_tree_calls_for_is_present_and_non_empty() {
+    let mut required = vec![CORPUS_POPULATION.to_string()];
+    assert!(
+        !phase_subset_files_on_disk().is_empty(),
+        "rust/corpus/ has no phase subset file, so nothing here requires the \
+         corpus population to exist"
+    );
+    required.extend(ootest_suites_sibling_harnesses_read());
+    required.sort();
+
     let populations = populations();
-    let names: Vec<&str> = populations.iter().map(|p| p.name).collect();
-    assert_eq!(names, POPULATION_NAMES, "a population went missing");
+    let mut names: Vec<String> = populations.iter().map(|p| p.name.to_string()).collect();
+    names.sort();
+    assert_eq!(
+        names, required,
+        "a population the tree calls for is missing"
+    );
+
     for population in &populations {
         assert!(
             !population.cases.is_empty(),

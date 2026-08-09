@@ -81,9 +81,9 @@ pub(crate) struct ChunkTooLarge {
     ///
     /// **No production reader, and the allow says so rather than a fake one
     /// being invented for it.** `chunk_for` is the only caller that sees an
-    /// `Err`, and a refusal is not a failure there: it counts the body in
-    /// `Interp::chunks_refused` and runs it on the tree-walker, with nothing
-    /// to print. The field is what makes a refusal diagnosable when a
+    /// `Err`, and a refusal is not a failure there: it bumps
+    /// `Interp::chunks_refused` and runs the body on the tree-walker, with
+    /// nothing to print. The field is what makes a refusal diagnosable when a
     /// second reason for one exists; the counter is what makes it
     /// impossible to miss.
     #[allow(dead_code, reason = "no production caller renders a refusal's reason")]

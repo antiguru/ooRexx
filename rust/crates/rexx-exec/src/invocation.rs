@@ -121,17 +121,19 @@ pub struct Invocation {
 /// interpreter. `Invocation` is already `run_program`'s third parameter and
 /// already reaches the interpreter, which is what makes a per-run choice
 /// expressible at all.
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+/// **No `Default`**, deliberately: [`Invocation::none`] is the one place that
+/// decides which engine a caller who did not choose gets, and a `Default`
+/// impl with no caller would be a second place for that answer to live.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Engine {
     /// The tree-walker: an activation's body is stepped instruction by
     /// instruction, straight out of the AST.
-    #[default]
     TreeWalker,
     /// The compiled instruction stream: an activation's body is compiled to
     /// a chunk on first entry, cached, and driven clause by clause.
     ///
     /// A body that does not fit the stream's index widths runs on the
-    /// tree-walker instead and is counted in
+    /// tree-walker instead, and each such refusal is counted in
     /// [`Outcome::chunks_refused`](crate::Outcome::chunks_refused), so the
     /// fallback is never silent.
     Ir,
@@ -285,6 +287,41 @@ mod tests {
                 joined.as_ref().map(|b| String::from_utf8_lossy(b))
             );
         }
+    }
+
+    /// An invocation nobody chose an engine for runs on the tree-walker, and
+    /// the other two builders leave that choice alone.
+    ///
+    /// `with_input` and `with_argument` both build from a `..` update, so a
+    /// field added to this struct is carried by them silently or dropped by
+    /// them silently depending on which side of the `..` it lands. That is
+    /// what the second half checks; the first is the default itself, which a
+    /// later task flips deliberately and which nothing else in this crate
+    /// states.
+    #[test]
+    fn an_invocation_that_chose_no_engine_runs_on_the_tree_walker() {
+        assert_eq!(Invocation::none().into_parts().2, Engine::TreeWalker);
+        assert_eq!(
+            Invocation::with_argument(b"a".to_vec()).into_parts().2,
+            Engine::TreeWalker
+        );
+        assert_eq!(
+            Invocation::none()
+                .with_engine(Engine::Ir)
+                .with_input(ProgramInput::Bytes(b"line\n".to_vec()))
+                .into_parts()
+                .2,
+            Engine::Ir,
+            "with_input dropped the chosen engine"
+        );
+        assert_eq!(
+            Invocation::none()
+                .with_engine(Engine::Ir)
+                .with_engine(Engine::TreeWalker)
+                .into_parts()
+                .2,
+            Engine::TreeWalker
+        );
     }
 
     /// The absent/empty split, on its own, because it is the one this type
