@@ -1502,12 +1502,11 @@ impl Interp {
                     ClauseOutcome::Ended(exit) => return Ok(Flow::Exit(exit.value())),
                     ClauseOutcome::Ran(ran) => ran?,
                 }
-                let case_text = case_value.map(|value| self.to_text(value).to_vec());
-                // F3: the one hand-off an absorbed `WhenCase` needs and
-                // nothing else threads to it -- `lib.rs`'s own doc comment
-                // on `current_case_text` has the full argument, including
-                // the disclosed nested-`SELECT CASE` limitation.
-                self.current_case_text = case_text.clone();
+                // The hand-off an absorbed `WhenCase` needs and nothing else
+                // threads to it -- `lib.rs`'s own doc comment on
+                // `current_case_text` has the full argument, including the
+                // disclosed nested-`SELECT CASE` limitation.
+                let case_text = self.open_select_case(case_value);
                 for &when_index in whens {
                     let when_instruction = &code.body.instructions[when_index];
                     // **Each listed `WHEN` is a clause of its own, and the
@@ -1548,14 +1547,7 @@ impl Interp {
                     if holds {
                         let targets = when_targets(&when_instruction.kind, len);
                         let body_end = targets.body_end;
-                        // One answer twice, unlike `OTHERWISE`'s: a matched
-                        // `WHEN` resumes past the `END` whether it finished or
-                        // was left by name, because one true `WHEN` ends the
-                        // whole `SELECT` either way.
-                        let resume = SelectResume {
-                            done: targets.resume,
-                            left: targets.resume,
-                        };
+                        let resume = when_resume(&targets);
                         let flow = self.run_bounded(
                             code,
                             when_index + 1,
@@ -3041,6 +3033,12 @@ impl Interp {
             description: pending.description.clone(),
         });
         let ended = self.resolve_and_run_call(code, &trap.label, true, &[]);
+        // A trap queued by the handler that just ran is not one the
+        // interrupted clause owes, and `in_clause`'s tripwire has to be able
+        // to tell the two apart -- see the field's own doc comment.
+        if let Some(pending) = self.pending_trap.as_mut() {
+            pending.queued_during_delivery = true;
+        }
         self.activation_mut().condition = enclosing_condition;
         // `trapUndelay`. The `if let` mirrors the C++ testing the handler
         // for null before enabling it; nothing a Rexx program can do
@@ -3392,6 +3390,10 @@ impl Interp {
                     // that same activation's table. See the field's own doc
                     // comment for the three transcripts behind it.
                     activation: self.activations[self.activations.len() - 2].id,
+                    // Set by `deliver_pending_trap` if this turns out to have
+                    // been queued while a handler was running, which is not
+                    // knowable here: this is the raise, not the delivery.
+                    queued_during_delivery: false,
                 });
                 Ok(Flow::Return(result))
             }
@@ -4585,6 +4587,61 @@ impl Interp {
     /// rule and the oracle transcripts that pin it). `Exit` and a `Goto`
     /// that escaped `run_bounded`'s own range pass through with nothing
     /// touched, same as always.
+    /// The clause boundary a promoted construct owes once the branch it chose
+    /// has finished -- **the one `step_in_temps_frame` runs for the
+    /// tree-walker and flattening removed.**
+    ///
+    /// `IF` and `SELECT` each end their own *header* clause before running
+    /// anything else (`clause.rs`'s whole rule), and both engines do that the
+    /// same way. What the tree-walker also has, and a flattened construct does
+    /// not, is the wrapper around the whole arm: `step_in_temps_frame_with`
+    /// opens a clause for the `IF`/`SELECT` instruction, resolves the branch
+    /// inside it, and runs a boundary on the way out. A promoted construct is a
+    /// run of ops with no wrapper, so that boundary has to be an op.
+    ///
+    /// **It is not a spare boundary, and the program that says so is this
+    /// one:**
+    ///
+    /// ```text
+    /// call on user zx name h        /* h raises zy */
+    /// call on user zy name g        /* g says SIGL */
+    /// select
+    /// when 1 = 1 then zq = raiser()
+    /// end
+    /// say 'after'
+    /// ```
+    ///
+    /// `h` runs at the body clause's own boundary and its `RAISE ... RETURN`
+    /// **leaves a new trap queued behind it**; [`Interp::in_clause`] delivers
+    /// at most one and does not re-check. So the last member clause's boundary
+    /// is not the last boundary with work to do, and without this one `g` runs
+    /// after `say 'after'` instead of before it, at the wrong `SIGL`. Oracle
+    /// and tree-walker print `G ran 4` then `after`; the compiled stream
+    /// printed `after` then `G ran 6`, and in debug tripped `in_clause`'s own
+    /// assertion. The `IF` spelling of the same program is the same defect.
+    ///
+    /// **The line is left alone**, which is what makes `SIGL` agree: the oracle
+    /// closes a branch with a synthetic instruction Phase 3 elides (`ast.rs`'s
+    /// "Why there is no node for the synthetic end of a branch"), and a clause
+    /// with no source position of its own does not move `SIGL` off the last
+    /// clause that had one. Measured across four spellings: the delivered
+    /// handler reports the branch's last clause's line.
+    ///
+    /// `flow` is what the branch answered, passed through so it is rooted
+    /// across a delivered handler exactly as `step_in_temps_frame_with`'s own
+    /// `ClauseValue for Flow` roots it.
+    pub(crate) fn end_promoted_branch(
+        &mut self,
+        code: &Code<'_>,
+        flow: Flow,
+    ) -> Result<Flow, Failure> {
+        let line = self.clause_state.line();
+        match self.in_clause(code, line, move |_| Ok(flow))? {
+            ClauseOutcome::Ran(ran) => ran,
+            ClauseOutcome::Ended(exit) => Ok(Flow::Exit(exit.value())),
+        }
+    }
+
     /// A `SELECT CASE`'s own `CASE` expression: the whole of what the
     /// `SELECT` header clause does, and the value every `WHEN CASE` of that
     /// `SELECT` is compared against.
@@ -4619,6 +4676,22 @@ impl Interp {
         Ok(value)
     }
 
+    /// Hands a `SELECT` its case text: the value its `WHEN CASE`s compare
+    /// against, and `Interp::current_case_text` for the **absorbed** ones that
+    /// have no other way to reach it (`lib.rs`'s own doc comment on the
+    /// field).
+    ///
+    /// **Called after the header clause has ended, by both engines**, so a
+    /// `CALL ON` handler delivered at that clause's boundary cannot be the
+    /// last writer of the field. That placement is the whole content of this
+    /// function, which is why it is one function rather than an assignment
+    /// written out at each engine's own call site.
+    pub(crate) fn open_select_case(&mut self, value: Option<ObjRef>) -> Option<Vec<u8>> {
+        let text = value.map(|value| self.to_text(value).to_vec());
+        self.current_case_text = text.clone();
+        text
+    }
+
     /// One listed `WHEN`/`WHEN CASE`'s own condition, and whether it holds.
     ///
     /// **The work of one clause, and nothing a clause owes around it.** The
@@ -4626,9 +4699,8 @@ impl Interp {
     /// `*-*` echo, the value indent this reads back, the `SIGL` line, the
     /// boundary and *both* failure sites -- the condition's own and the
     /// boundary's -- are that unit's, entered from both engines through it
-    /// rather than written out beside each caller. An earlier version wrote
-    /// three of those out here and left the fourth to nobody; see the call
-    /// site in `Select`'s own arm for what that measured as.
+    /// rather than written out beside each caller. The call site in `Select`'s
+    /// own arm has what a hand-rolled version of that list measured as.
     ///
     /// The answer is a `bool` because that is what the clause produces: a
     /// Rexx logical value already consumed into one, with no `ObjRef` whose
@@ -4714,17 +4786,37 @@ impl Interp {
         // nothing runs afterward to see a stale value, the same reasoning
         // `lib.rs`'s own doc comment gives for never restoring it after
         // `END`'s own 7.3 either.
+        self.leave_otherwise(code, index, label, otherwise_end, end, flow)
+    }
+
+    /// Leaving a `SELECT`'s `OTHERWISE` branch: the escape elevation is
+    /// restored now that the whole dispatch -- marker and body alike -- is
+    /// finished reading it, and then `leave_select` decides where control
+    /// goes.
+    ///
+    /// **One function because it is one rule, and both engines reach it.** A
+    /// raise leaves the offset unrestored deliberately: `run_otherwise`'s own
+    /// `?` returns before this is called, and a raise that is not trapped is
+    /// fatal, so nothing runs afterward to see a stale value -- the same
+    /// reasoning `lib.rs`'s doc comment gives for never restoring it after
+    /// `END`'s own 7.3 either.
+    pub(crate) fn leave_otherwise(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        label: Option<SymbolId>,
+        otherwise_end: usize,
+        end: Option<usize>,
+        flow: Flow,
+    ) -> Result<Flow, Failure> {
+        debug_assert_eq!(
+            otherwise_end,
+            otherwise_range(code.body.instructions.len(), end),
+            "an OTHERWISE branch was run over a range that is not its own"
+        );
         self.indent_offset = 0;
-        self.leave_select(
-            code,
-            index,
-            label,
-            SelectResume {
-                done: otherwise_end,
-                left: select_exit(code.body.instructions.len(), end),
-            },
-            flow,
-        )
+        let resume = otherwise_resume(code.body.instructions.len(), end);
+        self.leave_select(code, index, label, resume, flow)
     }
 
     pub(crate) fn leave_select(
@@ -7756,6 +7848,25 @@ pub(crate) struct WhenTargets {
     pub(crate) resume: usize,
 }
 
+/// [`SelectResume`] for a matched listed `WHEN`: one answer twice, because one
+/// true `WHEN` ends the whole `SELECT` whether its branch finished or was left
+/// by name.
+pub(crate) fn when_resume(targets: &WhenTargets) -> SelectResume {
+    SelectResume {
+        done: targets.resume,
+        left: targets.resume,
+    }
+}
+
+/// [`SelectResume`] for the `OTHERWISE` branch: falling off its end runs the
+/// `END`, and a `LEAVE` naming this `SELECT` resumes past it.
+pub(crate) fn otherwise_resume(len: usize, end: Option<usize>) -> SelectResume {
+    SelectResume {
+        done: otherwise_range(len, end),
+        left: select_exit(len, end),
+    }
+}
+
 /// [`WhenTargets`] for a listed `When`/`WhenCase` node, against the body it
 /// belongs to.
 ///
@@ -7835,8 +7946,13 @@ pub(crate) fn select_exit(len: usize, end: Option<usize>) -> usize {
 /// Where a `SELECT` sends control when one of its branches is over, which is
 /// **two answers and not one**.
 ///
-/// They coincide for a matched `WHEN` and differ for `OTHERWISE`, which is why
-/// one of them was wrong before this type existed.
+/// They coincide for a matched `WHEN` and differ for `OTHERWISE`. The pairing
+/// is built by [`when_resume`] and [`otherwise_resume`] rather than at each
+/// engine's own call site, so that the rule deciding *which* of the two a
+/// branch gets is one thing in one place: measured under `trace r`, a `LEAVE`
+/// naming a `SELECT` from inside its `OTHERWISE` echoes no `end` clause where
+/// the same branch falling through echoes one, and a single answer cannot be
+/// right for both.
 #[derive(Clone, Copy)]
 pub(crate) struct SelectResume {
     /// A branch that ran off its own end. `OTHERWISE`'s falls through onto the

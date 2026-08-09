@@ -1238,6 +1238,24 @@ struct PendingTrap {
     /// `a_pending_trap_is_delivered_when_the_trapping_clause_is_a_return` and
     /// `a_pending_trap_whose_activation_is_gone_is_never_delivered`.
     activation: ActivationId,
+    /// Whether this was queued by a **handler** running at a clause boundary
+    /// rather than by that clause's own work.
+    ///
+    /// **It exempts exactly one thing: `Interp::in_clause`'s own tripwire.**
+    /// That assertion reads a condition still waiting when a later clause
+    /// begins as a construct having run an instruction without ending its
+    /// header clause first, and for a trap the clause itself queued that is
+    /// what it means. A trap queued *during* a delivery is not: the boundary
+    /// that would have taken it had already taken one, `in_clause` delivers at
+    /// most one and does not re-check, and the oracle defers it to the next
+    /// boundary too. Measured with no construct anywhere in the program --
+    /// `zq = raiser()` on line 3 whose handler itself raises a second trapped
+    /// condition -- the oracle prints `after` and then the second handler's
+    /// `SIGL` 4, and this crate agrees; the assertion fired on it regardless.
+    ///
+    /// Nothing else reads it. Delivery order, the identity check and `SIGL`
+    /// are all unchanged by it.
+    queued_during_delivery: bool,
 }
 
 /// The interpreter. Owns the heap, the root set, the activation stack, the

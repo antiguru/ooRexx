@@ -32,8 +32,8 @@ use rexx_parse::{ProgramSource, SymbolId};
 use super::{BodyEngine, Chunk, Op};
 use crate::clause::{ClauseOutcome, ClauseValue};
 use crate::run::{
-    Absorbed, Ended, Flow, SelectResume, absorb, otherwise_range, select_exit, select_parts,
-    when_targets,
+    Absorbed, Ended, Flow, SelectEscape, SelectResume, absorb, otherwise_range, otherwise_resume,
+    select_escape, select_parts, when_resume, when_targets,
 };
 use crate::{Code, Failure, Interp, Loud};
 
@@ -68,6 +68,8 @@ struct SelectFrame {
     select: usize,
     /// `SELECT LABEL name`'s own label.
     label: Option<SymbolId>,
+    /// That `SELECT`'s own `OTHERWISE` marker, for [`select_escape`].
+    otherwise: Option<usize>,
     /// The branch's own instruction range -- the range the tree-walker bounds
     /// the identical `run_bounded` call to, and the one an escaping `Flow` is
     /// absorbed against here.
@@ -76,6 +78,9 @@ struct SelectFrame {
     /// Where `leave_select` resumes this branch, which is two answers rather
     /// than one ([`SelectResume`]).
     resume: SelectResume,
+    /// The `SELECT`'s own `END`, as the node records it, for
+    /// [`Interp::leave_otherwise`] to build the same answer from.
+    select_end: Option<usize>,
     /// One past the branch's last op. **Reaching it is the branch running off
     /// its own end**, which is the arrival the tree-walker gets as
     /// `run_bounded` answering `Flow::Next` -- and it is an op position rather
@@ -415,26 +420,26 @@ impl Interp {
                 // over a branch. None of the three runs a clause or produces a
                 // `Flow`, so each continues straight to the next op.
                 Op::SelectCaseText { index, case } => {
-                    let text = match case {
-                        Some(register) => {
-                            debug_assert!(
-                                chunk.holds_register(*register),
-                                "op reads register {register} outside the region the chunk \
-                                 reserved"
-                            );
-                            let value = self.roots.temp_at(registers, *register as usize);
-                            Some(self.to_text(value).to_vec())
-                        }
-                        None => None,
-                    };
+                    let value = case.map(|register| {
+                        debug_assert!(
+                            chunk.holds_register(register),
+                            "op reads register {register} outside the region the chunk reserved"
+                        );
+                        self.roots.temp_at(registers, register as usize)
+                    });
                     debug_assert!(
                         code.body.instructions.get(*index as usize).is_some(),
                         "a SelectCaseText op names an instruction outside its own body"
                     );
-                    self.current_case_text = text;
+                    self.open_select_case(value);
                     pc += 1;
                     continue;
                 }
+                // The boundary the tree-walker's own wrapper around an
+                // `IF`'s whole arm runs, which a flattened construct has no
+                // wrapper to run. `Interp::end_promoted_branch`'s doc comment
+                // has the program that says it is not a spare one.
+                Op::EndBranch => (self.end_promoted_branch(code, Flow::Next)?, pc + 1),
                 Op::EnterWhen { select, when } => {
                     frames.push(self.when_frame(code, chunk, *select as usize, *when as usize)?);
                     pc += 1;
@@ -488,13 +493,14 @@ impl Interp {
     /// after whichever one produced it.
     ///
     /// **`inline(always)`, and it is a measurement rather than a habit.** This
-    /// replaced an `absorb` match written out in the driver's own loop, which
-    /// is one call per clause of every promoted body. Left to the inliner's
-    /// judgement it is emitted as a function and `bench-programs/emptyloop.rex`
-    /// -- a loop whose body does nothing, so the measurement is the per-clause
-    /// cost and almost nothing else -- runs 2.85s before this promotion and
-    /// 3.39s after, on the compiled stream, interleaved across three sittings.
-    /// With the annotation it is 2.86s, which is the level the promotion found.
+    /// is one call per clause of every promoted body, where the driver's loop
+    /// otherwise decides a `Flow` inline. Left to the inliner's judgement it is
+    /// emitted as a function, and `bench-programs/emptyloop.rex` -- a loop
+    /// whose body does nothing, so the measurement is the per-clause cost and
+    /// almost nothing else -- runs 3.38-3.40s on the compiled stream against
+    /// 2.84-2.87s without the frame stack at all. With the annotation it is
+    /// 2.85-2.87s, which is that same level. Interleaved between arms within
+    /// one sitting, three sittings.
     #[expect(
         clippy::too_many_arguments,
         reason = "two callers inside one loop, and every argument is a value that loop holds"
@@ -535,22 +541,22 @@ impl Interp {
         }
     }
 
-    /// What a `SELECT` does with a `Flow` that left one of its branches, which
-    /// is `leave_select` -- exactly what `step`'s own `Select` arm and
-    /// `run_otherwise` do with the same `Flow`.
+    /// What a `SELECT` does with a `Flow` that left one of its branches:
+    /// `select_escape` and `leave_select`, exactly what `step`'s own `Select`
+    /// arm and `run_otherwise` do with the same `Flow`, and then the boundary
+    /// the tree-walker's own wrapper around the whole arm runs.
     ///
-    /// **`select_escape` has no counterpart here, and its absence is the op
-    /// layout doing the same job.** The tree-walker needs that decision
-    /// because its `run_bounded` owns one range and a `Flow::Goto` landing on
-    /// the `OTHERWISE` marker escapes it, leaving the construct entirely
-    /// unless something recognises the target. Here `Chunk::op_of` *is* the
-    /// resume table and [`Op::EnterOtherwise`] sits at the `OTHERWISE`'s entry
-    /// in it, so **every** arrival there opens the branch's frame -- the scan
-    /// running out of `WHEN`s and an absorbed `WHEN CASE`'s escape alike.
-    /// Measured: a driver arm making the decision explicitly as well could be
-    /// deleted with the whole workspace, corpus included, still green, because
-    /// the layout had already answered it; what does redden is moving
-    /// `EnterOtherwise` off that entry.
+    /// **`select_escape` decides one thing here that it also decides there,
+    /// and one thing it does not have to.** Where control goes is answered by
+    /// the op layout either way -- [`Op::EnterOtherwise`] sits at the
+    /// `OTHERWISE` marker's entry in `Chunk::op_of`, so every arrival there
+    /// opens the branch's frame, the scan running out of `WHEN`s and an
+    /// absorbed `WHEN CASE`'s escape alike. What the layout cannot answer is
+    /// whether the *construct* has finished: a redirect into `OTHERWISE` is
+    /// one `SELECT` still running, so it owes no end-of-branch boundary yet,
+    /// where the tree-walker gets that for free by not having returned from
+    /// its own `step` call. Answering it here is what keeps the two engines to
+    /// one boundary per construct.
     ///
     /// [`Op::EnterOtherwise`]: super::Op::EnterOtherwise
     fn leave_branch(
@@ -560,18 +566,37 @@ impl Interp {
         flow: Flow,
     ) -> Result<Flow, Failure> {
         let flow = match frame.branch {
-            Branch::When => flow,
-            // `run_otherwise`'s own last two lines, in order: the offset is
-            // restored once that whole dispatch -- marker and body alike -- is
-            // finished reading it, and only then does `leave_select` run. A
-            // raise leaves it unrestored here for the same reason it does
-            // there, since nothing runs afterward to see a stale value.
+            Branch::When => match select_escape(frame.otherwise, flow) {
+                // Still inside this `SELECT`: `EnterOtherwise` at the target's
+                // own entry opens the next branch's frame, and this `WHEN`'s
+                // branch did not finish -- control was redirected out of it,
+                // so the end-of-branch boundary below is not owed.
+                SelectEscape::Otherwise(target) => return Ok(Flow::Goto(target)),
+                SelectEscape::Forward(flow) => flow,
+            },
+            // `Interp::leave_otherwise` is the whole of leaving this branch,
+            // shared with `run_otherwise`: the escape elevation is restored
+            // and `leave_select` decides where control goes. **And no
+            // end-of-branch boundary follows it**, because `OTHERWISE`'s
+            // branch ends at the `END`, a real instruction with a boundary of
+            // its own -- measured, a handler queued by the last clause of an
+            // `OTHERWISE` and re-queued by its own handler is delivered at the
+            // `END`'s line, not at the branch's.
             Branch::Otherwise => {
-                self.indent_offset = 0;
-                flow
+                return self.leave_otherwise(
+                    code,
+                    frame.select,
+                    frame.label,
+                    frame.end,
+                    frame.select_end,
+                    flow,
+                );
             }
         };
-        self.leave_select(code, frame.select, frame.label, frame.resume, flow)
+        let flow = self.leave_select(code, frame.select, frame.label, frame.resume, flow)?;
+        // A matched `WHEN`'s branch is one the oracle closes with a synthetic
+        // instruction, so it owes that instruction's boundary.
+        self.end_promoted_branch(code, flow)
     }
 
     /// The frame [`Op::EnterWhen`] opens: the matched branch of the listed
@@ -601,12 +626,11 @@ impl Interp {
         Ok(SelectFrame {
             select,
             label: parts.label,
+            otherwise: parts.otherwise,
+            select_end: parts.end,
             start: when + 1,
             end: targets.body_end,
-            resume: SelectResume {
-                done: targets.resume,
-                left: targets.resume,
-            },
+            resume: when_resume(&targets),
             op_end: op_at(chunk, targets.body_end)?,
             branch: Branch::When,
         })
@@ -637,12 +661,11 @@ impl Interp {
         Ok(SelectFrame {
             select,
             label: parts.label,
+            otherwise: parts.otherwise,
+            select_end: parts.end,
             start: otherwise,
             end: otherwise_end,
-            resume: SelectResume {
-                done: otherwise_end,
-                left: select_exit(code.body.instructions.len(), parts.end),
-            },
+            resume: otherwise_resume(code.body.instructions.len(), parts.end),
             op_end: op_at(chunk, otherwise_end)?,
             branch: Branch::Otherwise,
         })
@@ -778,6 +801,7 @@ impl Interp {
                 Op::EnterOtherwise { .. } => {
                     return Err(Loud::op_not_driven("EnterOtherwise").into());
                 }
+                Op::EndBranch => return Err(Loud::op_not_driven("EndBranch").into()),
             }
         }
         Ok(ClauseNext(end))

@@ -125,6 +125,21 @@ pub(crate) enum Op {
         case: Option<u16>,
         dst: u16,
     },
+    /// Closes the branch control has just run off the end of: the clause
+    /// boundary a promoted construct owes where the tree-walker's own wrapper
+    /// around the whole arm runs one.
+    ///
+    /// `Interp::end_promoted_branch`'s doc comment has the program that says
+    /// this is not a spare boundary -- a `CALL ON` handler whose own `RAISE`
+    /// leaves a second trap queued behind it, which nothing else is left to
+    /// deliver.
+    ///
+    /// **Emitted at the branch's end, not at the construct's**, and reached
+    /// only by falling out of the branch: it sits at the `op_of` entry of the
+    /// instruction the branch ends before, where the `IF`'s own false path
+    /// (`PatchKind::Enter`) does not land. A `SELECT` needs no op for it,
+    /// because its branches are closed by their frames.
+    EndBranch,
     /// Opens a frame over the branch of the listed `WHEN` at `when`, which
     /// belongs to the `SELECT` at `select`.
     ///

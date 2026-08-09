@@ -60,6 +60,9 @@ pub(crate) fn render(chunk: &Chunk) -> String {
                     render_register(*case)
                 ));
             }
+            Op::EndBranch => {
+                out.push_str(&format!("{index}: EndBranch\n"));
+            }
             Op::EnterWhen { select, when } => {
                 out.push_str(&format!("{index}: EnterWhen select={select} when={when}\n"));
             }

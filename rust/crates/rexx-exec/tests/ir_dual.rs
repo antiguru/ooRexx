@@ -614,6 +614,57 @@ const BRANCH_CASES: &[InlineCase] = &[
         exit_code: 0,
     },
     InlineCase {
+        // **A boundary case, and the one a review found that this table's own
+        // author had argued was unreachable.** The premise it was missing:
+        // a delivered handler can *leave a new trap queued behind it*, and
+        // `in_clause` delivers at most one without re-checking. So the last
+        // member clause's boundary is not the last boundary with work, which
+        // is the assumption a flattened construct's single boundary rests on.
+        //
+        // `h` runs at the body clause's boundary and its own `RAISE ... RETURN`
+        // queues `zy`; the boundary that delivers `g` is the one the oracle
+        // runs at the branch's synthetic end. Measured: `G ran 4` then
+        // `after`. Without it `g` ran after `say 'after'` at the wrong `SIGL`,
+        // and in debug the run tripped `clause.rs`'s own assertion.
+        name: "a handler that queues again at a matched when's own branch end",
+        program: "call on user zx name h\ncall on user zy name g\nselect\n\
+                  when 1 = 1 then zq = raiser()\nend\nsay 'after'\nexit\nraiser:\n\
+                  raise user zx return 'V'\nh:\nraise user zy return 1\ng:\nsay 'G ran' sigl\n\
+                  return\n",
+        stdout: "G ran 4\nafter\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        // **One boundary per construct, not one per branch entered.** The
+        // absorbed `WHEN CASE`'s own clause queues `zy` and its false path
+        // escapes onto the `OTHERWISE` marker, which is F-EX1's redirect --
+        // and a redirect is this `SELECT` still running, so the branch it left
+        // owes no end-of-branch boundary. The delivery therefore lands at the
+        // `OTHERWISE` marker's own clause, `SIGL` 6, where a `SELECT` that
+        // closed the branch it was redirected out of would report 5.
+        name: "a handler that queues again where a when is redirected to otherwise",
+        program: "call on user zx name h\ncall on user zy name g\nselect case 2\nwhen 2 then\n\
+                  when raiser() then nop\notherwise say 'O'\nend\nsay 'after'\nexit\nraiser:\n\
+                  raise user zx return 'V'\nh:\nraise user zy return 1\ng:\nsay 'G ran' sigl\n\
+                  return\n",
+        stdout: "G ran 6\nO\nafter\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        // The `IF` spelling of the case above, which is the same defect one
+        // construct over and was already there before `SELECT` was promoted.
+        // Measured: `G ran 3` then `after`.
+        name: "a handler that queues again at an if's own branch end",
+        program: "call on user zx name h\ncall on user zy name g\nif 1 = 1 then zq = raiser()\n\
+                  say 'after'\nexit\nraiser:\nraise user zx return 'V'\nh:\n\
+                  raise user zy return 1\ng:\nsay 'G ran' sigl\nreturn\n",
+        stdout: "G ran 3\nafter\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
         // **A boundary case, not a shape, and the one that found a live
         // defect.** The handler is queued by a listed `WHEN`'s own condition
         // and delivered at *that* `WHEN`'s clause boundary, where it fails --
@@ -833,6 +884,105 @@ fn compare_inline_cases(cases: &[InlineCase]) {
         assert_eq!(
             tw.exit_code, case.exit_code,
             "[{}] the tree-walker's own exit status moved",
+            case.name
+        );
+    }
+}
+
+/// One program the two engines are **known** to answer differently, with what
+/// each of them says and what the oracle says.
+struct KnownDivergence {
+    name: &'static str,
+    program: &'static str,
+    /// The tree-walker's stdout.
+    tree_walker: &'static str,
+    /// The compiled stream's stdout, which in both rows below is also the
+    /// oracle's.
+    ir: &'static str,
+}
+
+/// Where the two engines disagree today, why it is not fixed here, and the
+/// bytes that make it impossible for either side to move quietly.
+///
+/// **This does not weaken the sweep above.** That asserts no divergence over
+/// its populations, unconditionally, and nothing here is in any of them: a
+/// divergence needs a `CALL ON` handler that itself raises a second trapped
+/// condition, and no corpus program or `ootest` row does that. So the choice
+/// is not between catching these and not catching them; it is between writing
+/// them down and leaving them undiscoverable.
+///
+/// **Both rows are one mechanism.** The tree-walker resolves an `IF`'s or a
+/// `SELECT`'s chosen branch *inside* that instruction's own `step`, so
+/// `step_in_temps_frame` runs a clause boundary when the whole construct
+/// finishes. Where the oracle ends a taken branch with a synthetic
+/// instruction, that boundary is the right one and both engines have it (the
+/// compiled stream's `Op::EndBranch`). Where the oracle has no such
+/// instruction -- an `IF` whose condition was false ran no branch, and an
+/// `OTHERWISE` branch ends at the real `END` -- the tree-walker runs a
+/// boundary the oracle does not, and the compiled stream, having no wrapper,
+/// does not. **The compiled stream is the one that matches the oracle in both
+/// rows.**
+///
+/// Not fixed here because suppressing it means letting an instruction opt out
+/// of its own clause boundary, which is the exact thing `clause.rs` is built
+/// to make impossible; the honest fix is for the tree-walker to stop resolving
+/// branches inside its own step, which is a change to `IF`/`SELECT`'s own
+/// design rather than to this phase's.
+const KNOWN_DIVERGENCES: &[KnownDivergence] = &[
+    KnownDivergence {
+        // `h` queues a second trapped condition. The oracle jumps over the
+        // synthetic end-of-branch instruction on a false condition, so the
+        // delivery waits for the next real clause: `after` then `G ran 4`.
+        name: "a handler that queues again where no branch was taken",
+        program: "call on user zx name h\ncall on user zy name g\nif raiser() = 'X' then nop\n\
+                  say 'after'\nexit\nraiser:\nraise user zx return 'V'\nh:\n\
+                  raise user zy return 1\ng:\nsay 'G ran' sigl\nreturn\n",
+        tree_walker: "G ran 3\nafter\n",
+        ir: "after\nG ran 4\n",
+    },
+    KnownDivergence {
+        // The same handler inside an `OTHERWISE`, whose branch the oracle ends
+        // at the `END` -- so the delivery is at the `END`'s own line, 7.
+        name: "a handler that queues again at the end of an otherwise",
+        program: "call on user zx name h\ncall on user zy name g\nselect\n\
+                  when 1 = 0 then nop\notherwise\n   zq = raiser()\nend\nsay 'after'\nexit\n\
+                  raiser:\nraise user zx return 'V'\nh:\nraise user zy return 1\ng:\n\
+                  say 'G ran' sigl\nreturn\n",
+        tree_walker: "G ran 6\nafter\n",
+        ir: "G ran 7\nafter\n",
+    },
+];
+
+/// Every [`KNOWN_DIVERGENCES`] row still says exactly what it claims.
+///
+/// Red if either engine's answer moves, in either direction -- including a
+/// fix, which is what should delete the row rather than update it.
+#[test]
+fn the_known_engine_divergences_still_diverge_exactly_as_recorded() {
+    assert!(
+        !KNOWN_DIVERGENCES.is_empty(),
+        "an empty table asserts nothing; delete the test with the last row"
+    );
+    for case in KNOWN_DIVERGENCES {
+        let text = case.program.as_bytes().to_vec();
+        let tw = run(text.clone(), Engine::TreeWalker);
+        let ir = run(text, Engine::Ir);
+        assert_eq!(
+            String::from_utf8_lossy(&tw.stdout),
+            case.tree_walker,
+            "[{}] the tree-walker's own answer moved",
+            case.name
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&ir.stdout),
+            case.ir,
+            "[{}] the compiled stream's own answer moved",
+            case.name
+        );
+        assert_ne!(
+            case.tree_walker, case.ir,
+            "[{}] the two answers recorded here are the same, so this row \
+             records no divergence at all",
             case.name
         );
     }

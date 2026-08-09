@@ -408,11 +408,23 @@ impl Interp {
         //   `say` with the handler's variable still unset, on the oracle and
         //   here -- the condition waits for the enclosing clause.
         //
+        // **And what it exempts a third time, which is not a construct at
+        // all**: a trap queued by a *handler* this activation delivered at an
+        // earlier boundary. That boundary had already taken one -- this
+        // function delivers at most one and does not re-check -- so the wait
+        // is the design rather than a missing call, and the oracle waits too.
+        // Measured with no construct in the program at all, which is what
+        // says this is not the defect above wearing different clothes.
+        //
         // So this catches the wrong-`SIGL` half and says so; a delivery that
         // is late in *time* but lands on the same line is invisible to it,
         // and to `SIGL`.
         debug_assert!(
             self.clause_state.current_clause_line == line
+                || self
+                    .pending_trap
+                    .as_ref()
+                    .is_none_or(|pending| pending.queued_during_delivery)
                 || self.pending_trap.as_ref().map(|pending| pending.activation)
                     != Some(self.activation().id),
             "a clause at line {} began while a condition queued by this activation's clause at \

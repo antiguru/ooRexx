@@ -121,9 +121,15 @@ struct Patch {
 ///
 /// [`Chunk::op_of`]: super::Chunk
 enum Before {
-    /// An `IF`'s branch-end jump, in front of the `ELSE` it skips, resuming at
-    /// this instruction.
-    BranchEnd(usize),
+    /// The end of an `IF`'s true branch: the clause boundary the tree-walker's
+    /// own wrapper runs there ([`Op::EndBranch`]), and the jump past the `ELSE`
+    /// when there is one to skip.
+    ///
+    /// **Every `IF` registers one**, because the boundary is owed whether or
+    /// not there is anything to jump over. `resume` is `None` for the `IF`
+    /// whose true branch falls straight through to where the false path
+    /// lands, which is every `IF` without an `ELSE`.
+    ThenEnd { resume: Option<usize> },
     /// A `SELECT`'s [`Op::EnterOtherwise`], in front of the `OTHERWISE` marker
     /// whose branch it opens a frame over. The `SELECT` is at this index.
     EnterOtherwise(usize),
@@ -214,8 +220,12 @@ pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLa
     // exactly one construct -- an `ELSE` to one `THEN`, an `OTHERWISE` to one
     // `SELECT` -- and the `debug_assert`s below are what say so rather than
     // assuming it.
-    let mut before: Vec<Option<Before>> = Vec::new();
-    before.resize_with(len, || None);
+    // A list per instruction, not one entry: nested `IF`s whose branches end
+    // at the same instruction each owe a boundary of their own, which the
+    // oracle runs as one synthetic instruction per branch. `len + 1` entries,
+    // because a branch can end at the body's own end and still owe one.
+    let mut before: Vec<Vec<Before>> = Vec::new();
+    before.resize_with(len + 1, Vec::new);
     // Indexed by instruction: what a listed `WHEN` compiling at that index
     // needs from the `SELECT` that collected it.
     let mut when_info: Vec<Option<WhenInfo>> = Vec::new();
@@ -237,21 +247,7 @@ pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLa
         if let Some(mark) = release_at[index] {
             registers.release(mark);
         }
-        match before[index] {
-            Some(Before::BranchEnd(resume)) => {
-                let op = op_index(&ops)?;
-                ops.push(Op::Jump { target: 0 });
-                patches.push(Patch {
-                    op,
-                    target: resume,
-                    kind: PatchKind::Resume,
-                });
-            }
-            Some(Before::EnterOtherwise(select)) => ops.push(Op::EnterOtherwise {
-                select: instruction_index(select)?,
-            }),
-            None => {}
-        }
+        emit_before(&mut ops, &mut patches, &mut before[index])?;
         first_op_of.push(op_index(&ops)?);
         match &instruction.kind {
             // `DO` and `LOOP` are the same construct under two spellings
@@ -294,15 +290,13 @@ pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLa
                 // the true branch's fallthrough is already the resume, and a
                 // jump to where control was going anyway is an op the driver
                 // would execute for nothing.
-                if targets.resume != targets.false_target {
-                    debug_assert!(
-                        before[targets.false_target].is_none(),
-                        "two constructs want an op in front of instruction {}, so an ELSE \
-                         belongs to more than one THEN",
-                        targets.false_target
-                    );
-                    before[targets.false_target] = Some(Before::BranchEnd(targets.resume));
-                }
+                // The boundary is owed either way; the jump only when the
+                // false path lands on an `ELSE`, since without one the true
+                // branch's fallthrough is already the resume and a jump to
+                // where control was going anyway is an op the driver would run
+                // for nothing.
+                let resume = (targets.resume != targets.false_target).then_some(targets.resume);
+                before[targets.false_target].push(Before::ThenEnd { resume });
             }
             // The `SELECT` clause is its `CASE` expression and nothing else,
             // which is the boundary `run.rs`'s own `Select` arm measured
@@ -356,11 +350,13 @@ pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLa
                 let no_match = match otherwise {
                     Some(otherwise_index) => {
                         debug_assert!(
-                            before[*otherwise_index].is_none(),
-                            "two constructs want an op in front of instruction {otherwise_index}, \
-                             so an OTHERWISE belongs to more than one SELECT"
+                            !before[*otherwise_index]
+                                .iter()
+                                .any(|before| matches!(before, Before::EnterOtherwise(_))),
+                            "two SELECTs want a frame opened in front of instruction \
+                             {otherwise_index}, so an OTHERWISE belongs to more than one SELECT"
                         );
-                        before[*otherwise_index] = Some(Before::EnterOtherwise(index));
+                        before[*otherwise_index].push(Before::EnterOtherwise(index));
                         (*otherwise_index, PatchKind::Resume)
                     }
                     // Landing on the `END` is what makes 7.3 the `END`'s own
@@ -443,6 +439,9 @@ pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLa
             }),
         }
     }
+    // A branch that ends at the body's own end still owes its boundary, and
+    // there is no instruction iteration left to emit it in.
+    emit_before(&mut ops, &mut patches, &mut before[len])?;
     // One entry past the last instruction, pushed after the loop above:
     // `run_bounded`'s absorption guard is inclusive, so a construct's
     // resume point can be `end`, one past its last instruction, and a table
@@ -473,6 +472,51 @@ pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLa
         op_of,
         registers: registers.high_water(),
     })
+}
+
+/// Emits the ops that go in front of one instruction, innermost first.
+///
+/// **Reversed, because registration order is outermost first.** A construct
+/// registers its own entry when *it* compiles, and an enclosing construct
+/// compiles before the one nested inside it; control leaves the inner branch
+/// first, so the inner boundary runs first. The one entry that can carry a
+/// jump is the outermost, which reversal puts last -- and it has to be last,
+/// since every op after a jump at the same position is unreachable.
+fn emit_before(
+    ops: &mut Vec<Op>,
+    patches: &mut Vec<Patch>,
+    before: &mut [Before],
+) -> Result<(), ChunkTooLarge> {
+    before.reverse();
+    debug_assert!(
+        before
+            .iter()
+            .rev()
+            .skip(1)
+            .all(|entry| !matches!(entry, Before::ThenEnd { resume: Some(_) })),
+        "an op in front of an instruction carries a jump with more ops behind it, which \
+         nothing would reach"
+    );
+    for entry in before.iter() {
+        match entry {
+            Before::ThenEnd { resume } => {
+                ops.push(Op::EndBranch);
+                if let Some(resume) = resume {
+                    let op = op_index(ops)?;
+                    ops.push(Op::Jump { target: 0 });
+                    patches.push(Patch {
+                        op,
+                        target: *resume,
+                        kind: PatchKind::Resume,
+                    });
+                }
+            }
+            Before::EnterOtherwise(select) => ops.push(Op::EnterOtherwise {
+                select: instruction_index(*select)?,
+            }),
+        }
+    }
+    Ok(())
 }
 
 /// The index the next op will be pushed at, refused rather than wrapped.

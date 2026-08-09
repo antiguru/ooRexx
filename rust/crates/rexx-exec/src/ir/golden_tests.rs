@@ -73,19 +73,26 @@ fn a_counted_loop_compiles_its_do_to_a_loop_op_and_its_body_to_generic() {
 /// them across two engines.
 ///
 /// The six instructions are `IF`, `THEN`, `say 'a'`, `ELSE`, `say 'b'`,
-/// `say 'c'`. Three of the nine ops are the `IF`'s own clause -- the region
-/// that evaluates the condition and branches on it -- and one more is the
-/// jump that ends the true branch, which sits between the last op of the
-/// true branch and the `ELSE`'s own op so that neither instruction's entry
-/// in `op_of` moves.
+/// `say 'c'`. Three ops are the `IF`'s own clause -- the region that evaluates
+/// the condition and branches on it -- and two more close the true branch,
+/// sitting between its last op and the `ELSE`'s own op so that neither
+/// instruction's entry in `op_of` moves.
 ///
-/// The two jump targets are the two things a reader should check by eye:
-/// `JumpUnless` goes to op 6, the `ELSE` marker, and `Jump` goes to op 8,
-/// `say 'c'`, past the whole `ELSE` branch.
+/// The three things a reader should check by eye are the two jump targets and
+/// what sits between them: `JumpUnless` goes to op 7, the `ELSE` marker, and
+/// `Jump` goes to op 9, `say 'c'`, past the whole `ELSE` branch, with
+/// `EndBranch` at op 5 -- the boundary a promoted construct owes once the
+/// branch it chose has finished.
 ///
-/// **`op_of[3]` is 5 and not 6**, which is the other half of the same
-/// mechanism: the `ELSE`'s entry in the resume table is the branch-end jump
-/// in front of it, so a `Flow::Goto(3)` -- a nested `DO` block resuming at
+/// **The `JumpUnless` target is past that `EndBranch`, and that is measured**:
+/// the oracle closes a *taken* branch with a synthetic instruction and jumps
+/// over it on the false path, where an `IF` whose condition is false runs no
+/// such boundary at all.
+///
+/// **`op_of[3]` is 5 and not 7**, which is the other half of the same
+/// mechanism: the `ELSE`'s entry in the resume table is the pair of ops that
+/// close the branch in front of it, so a `Flow::Goto(3)` -- a nested `DO`
+/// block resuming at
 /// exactly the branch's boundary -- skips the `ELSE` the way falling off the
 /// end of the branch does. The false path is the one arrival that must run
 /// it, and that is the `JumpUnless` above, resolved against the `ELSE`'s own
@@ -98,24 +105,28 @@ fn an_if_with_an_else_compiles_to_a_clause_region_and_two_jumps() {
         render(&chunk),
         "0: Clause index=0 end=3\n\
          1: EvalExpr index=0 slot=0 dst=0\n\
-         2: JumpUnless reg=0 target=6\n\
+         2: JumpUnless reg=0 target=7\n\
          3: Generic index=1\n\
          4: Generic index=2\n\
-         5: Jump target=8\n\
-         6: Generic index=3\n\
-         7: Generic index=4\n\
-         8: Generic index=5\n"
+         5: EndBranch\n\
+         6: Jump target=9\n\
+         7: Generic index=3\n\
+         8: Generic index=4\n\
+         9: Generic index=5\n"
     );
     // One register, allocated for the condition and released at the clause's
     // own end -- so a body with two `IF`s reserves one, not two.
     assert_eq!(chunk.registers, 1);
-    assert_eq!(chunk.op_of, vec![0, 3, 4, 5, 7, 8, 9]);
+    assert_eq!(chunk.op_of, vec![0, 3, 4, 5, 8, 9, 10]);
 }
 
-/// Without an `ELSE` the true branch falls straight through to where the
-/// false path lands, so **no jump is emitted at all**: the two targets are
-/// the same instruction, and an op that jumps to where control was already
-/// going is one the driver would run for nothing.
+/// Without an `ELSE` **no jump is emitted at all**: the two targets are the
+/// same instruction, and an op that jumps to where control was already going
+/// is one the driver would run for nothing.
+///
+/// The end-of-branch boundary is still emitted, and is still the true path's
+/// alone: the branch falls into `EndBranch` at op 5 and the `JumpUnless` goes
+/// past it to op 6.
 #[test]
 fn an_if_with_no_else_emits_no_branch_end_jump() {
     let chunk = compile_for_test(b"if 1 = 0 then say 'a'\nsay 'b'\n").expect("compiles");
@@ -123,14 +134,22 @@ fn an_if_with_no_else_emits_no_branch_end_jump() {
         render(&chunk),
         "0: Clause index=0 end=3\n\
          1: EvalExpr index=0 slot=0 dst=0\n\
-         2: JumpUnless reg=0 target=5\n\
+         2: JumpUnless reg=0 target=6\n\
          3: Generic index=1\n\
          4: Generic index=2\n\
-         5: Generic index=3\n"
+         5: EndBranch\n\
+         6: Generic index=3\n"
     );
     assert_eq!(chunk.registers, 1);
 }
 
+/// **One `EndBranch` per `IF`, inner before outer.** Control leaves the inner
+/// branch first, and the oracle runs one synthetic end-of-branch instruction
+/// per branch rather than one per position -- so a handler delivered at the
+/// inner one that queues again has the outer one left to deliver it. Both
+/// `JumpUnless` targets are past both, because neither false path ran a
+/// branch.
+///
 /// Two `IF`s in one body reuse the same register, which is what the
 /// allocator's stack discipline buys over the spike's withdrawn monotonic
 /// counter: under that counter the inner `IF` would take register 1 and the
@@ -155,14 +174,16 @@ fn nested_ifs_reuse_one_register() {
         render(&chunk),
         "0: Clause index=0 end=3\n\
          1: EvalExpr index=0 slot=0 dst=0\n\
-         2: JumpUnless reg=0 target=9\n\
+         2: JumpUnless reg=0 target=11\n\
          3: Generic index=1\n\
          4: Clause index=2 end=7\n\
          5: EvalExpr index=2 slot=0 dst=0\n\
-         6: JumpUnless reg=0 target=9\n\
+         6: JumpUnless reg=0 target=11\n\
          7: Generic index=3\n\
          8: Generic index=4\n\
-         9: Generic index=5\n"
+         9: EndBranch\n\
+         10: EndBranch\n\
+         11: Generic index=5\n"
     );
     assert_eq!(
         chunk.registers, 1,
