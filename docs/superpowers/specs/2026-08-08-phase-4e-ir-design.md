@@ -22,16 +22,12 @@ Phase 4f's parity bar is a constraint the IR must also satisfy; it is **not** th
 This phase previously sat after Phase 4d and blocked on its gate. That ordering is withdrawn. Anything that restructures the interpreter has to land **before** the phase gate closes, or the performance work becomes a patch on top of something already certified. Since 4d-1's own conclusion is that the seven attributed causes cannot reach parity, and the IR is the only specified structural candidate, the IR precedes the optimisation loop. See `docs/superpowers/plans/2026-08-09-phase-4f-optimisation-loop.md`.
 
 **What that ordering does not claim.**
-It does not claim the IR closes the gap. The `spike/bytecode-vm` figures are withdrawn, the mechanics spike measured **no** speedup, and this phase's own stopping rule has no anchor until chunk caching and loop promotion exist. The IR is built for the reasons above; whether it also moves the ratios is measured afterwards, by 4f, against a characterised noise band.
+It does not claim the IR closes the gap. The `spike/bytecode-vm` figures are withdrawn, the mechanics spike measured **no** speedup, and no reproducible anchor exists until chunk caching and loop promotion do. The IR is built for the reasons above; this phase owes only that it not leave the benchmark axes slower, and whether the ratios actually move is 4f's question under 4f's rules.
 
 Every mechanism below that a spike settled is marked with its commit on branch `spike/ir-mechanics` (worktree `/home/moritz/dev/repos/ooRexx-ir-spike`, findings in `docs/superpowers/plans/phase-4e-spike-findings.md`).
 Claims not so marked are design intent and have not been run.
 
-## Why this phase exists, and what is actually established
-
-A call site in an instruction stream is a stable, patchable slot, which is what makes per-call-site inline caches natural; a tree-walker can hang a cache off an AST node but cannot rewrite the operation itself.
-Retrofitting a patchable stream after message sends exist means touching every op and the whole dispatch loop.
-That argument is architectural and does not depend on a measurement.
+## What is established, and what is withdrawn
 
 **The performance argument is weaker than earlier drafts of this spec claimed, and the numbers behind it are withdrawn.**
 
@@ -55,7 +51,9 @@ Task 1 exists to fix that before anything is decided against it.
 
 **What this phase now blocks.** Phase 4f, the optimisation loop, which cannot begin until the structural change has landed -- otherwise it tunes code the IR replaces. And Phase 5, which needs the patchable call site.
 
-**What 4d-1 handed forward that binds this phase.** Its own conclusion is that the seven attributed causes, landed perfectly on every axis, do not reach parity anywhere; the best derived bar is 1.62x. So the gap this phase's exit criteria are measured against is a real one and not a rounding error. Note also that `phase-4d-gate.md`'s undecidable band is 7.2% and is being re-derived by Phase 4f's Unit 0 -- **this phase's own measurements are not decidable finer than that band until it shrinks**, which is why the stopping rule below is stated against re-established figures rather than against the withdrawn prototype numbers.
+**What 4d-1 handed forward that binds this phase.** Its own conclusion is that the seven attributed causes, landed perfectly on every axis, do not reach parity anywhere; the best derived bar is 1.62x. That is why a structural change is sequenced at all, and it is the reason this phase exists in the schedule even though its own justification is architectural.
+
+**What 4d-1's measurement discipline hands forward, and what it does not.** `phase-4d-gate.md`'s 7.2% undecidable band is **withdrawn**, not re-derived: Phase 4f replaced it with an escalation rule that spends measurement only where a ratio lands near 1.0. This phase's own comparisons are between two engine arms of one build, where the paired rule applies and no absolute band is needed. Its stopping rule is still stated against figures Task 1 re-establishes rather than against the withdrawn prototype numbers.
 
 **The bar-before-optimisation property this ordering was meant to provide is already partly spent.**
 4d-1's plan states at `:18`: "Nothing in this phase optimises anything. … If you find yourself keeping a speedup, stop."
@@ -76,7 +74,16 @@ It is simultaneously the differential oracle and a live component, permanently.
 
 ## The bar
 
-This phase inherits `phase-4d-gate.md` once it exists.
+**This phase does not inherit `phase-4d-gate.md`'s parity bars, and the re-sequencing is why.**
+Those bars are Phase 4f's exit condition, and 4f runs *after* this phase.
+Gating 4e on them would either make 4f unreachable or make it redundant, and 4e's own promotions are not the changes the parity bars were derived to measure.
+What this phase owes the gate document is an **input state**: the axis ratios re-measured under both engines, as the position 4f's loop starts from.
+
+**What this phase does own is a floor, and it can fail.**
+The IR arm must not be *slower* than the tree-walker arm on the benchmark axes, because the minimum promotion set covers what those axes execute, and a structural change that leaves 4f starting from a worse position has not paid for itself.
+The spike's one clean A/B put the promoted side slower, so this is a live outcome rather than a formality.
+[Exit gate](#exit-gate) criterion 4 states it as a criterion.
+
 Global Constraints `2026-07-27-rust-rewrite.md:39` is unamended here: "slower" means the criterion point estimate falls outside the C++ baseline's confidence interval on the slow side.
 That text names **Linux and macOS**, and `:35` requires every phase gate to run on all five platforms.
 No measurement described here is multi-host, and no platform runs the Rust suite automatically today.
@@ -314,15 +321,19 @@ Keying on text fixes the miss-rate half and not the retention half. The plan nam
 
 ## Measurement, and the missing anchor
 
-Reuses 4d-1's harness and bars: interleaved between binaries, per-arm minima, absolute throughput alongside ratios, the oracle fingerprint asserted, each promotion naming the axes it predicts and by how much, and every speedup falsified by reverting.
+Reuses 4d-1's harness and its discipline: per-arm minima, absolute throughput alongside ratios, the oracle fingerprint asserted, each promotion naming the axes it predicts and by how much, and every speedup falsified by reverting.
+
+**One thing changes, and it makes the measurement easier rather than harder.** 4d-1 interleaved between two *binaries*, which is where build identity had to be tracked. The engine A/B interleaves between two *arms of one binary*, selected per run through the carrier of [Body entry](#body-entry), so both arms are the same build by construction and the identity problem does not arise. The oracle comparison keeps the two-binary form and keeps the fingerprint.
 
 **The no-regression rule needs a scope**, because an unpromoted construct is slower under the IR while the IR becomes the default at the gate.
 So: **no committed suite result regresses under the tree-walker arm**, which stays measurable via the engine switch. The IR arm is measured against the promotion predictions.
 
-**The stopping rule has no anchor, and inventing one now would anchor it to a number nobody can reproduce.**
+**This phase has no performance stopping rule, and it does not need one.**
+It is done when the minimum promotion set is native and the exit gate passes; how far the ratios move is 4f's question and 4f's loop has the stopping rule.
+What this phase does need is an **anchor** -- a reproducible starting figure -- and it does not have one.
 The `spike/bytecode-vm` figures exist only in commit prose -- no bench-results file, no harness script, no build identity -- and no empty-loop program exists in `rust/bench-programs/`, so its headline workload cannot be re-run from the tree. They were also taken on a design S2 and S3 have since ruled out.
 
-**Task 1 re-establishes them**, and the stopping rule is stated against those numbers.
+**Task 1 re-establishes the anchor**, and every promotion's predicted-versus-measured claim is stated against it.
 
 **What the spike could not measure, and why (`70b1c5cc`).**
 Its A/B of the promoted clause unit against the tree-walker's gave +7 to +19.6 ns/clause over eight runs, median about 11, against a total of roughly 790 ns/clause dominated by parsing.
@@ -364,10 +375,12 @@ Each criterion carries what it cannot see and how it is falsified.
 *Cannot see:* speed; criterion 4 covers that.
 *Falsification:* the masked comparison `2026-07-30-phase-4a-executor-design.md:508` already specifies. A byte comparison is **not** the falsification and an earlier draft was wrong to ask for one: `rexxcps` prints wall-clock throughput and a self-calibrated iteration count, so two runs of the oracle against itself differ. The mask covers the calibrated count as well as the cps figure, because at the current ratio the two sides' `Averaged:` lines differ in shape.
 
-**4. Every axis meets its bar in `phase-4d-gate.md`, or a shortfall is recorded as a named debt that names the task discharging it.**
+**4. On every benchmark axis the IR arm is not slower than the tree-walker arm, and the resulting ratios are recorded as Phase 4f's input state.**
 
-*Cannot see:* whether the debt is ever discharged.
-*Falsification:* a bound the plan sets on how many axes may close as debt. Without it this criterion is satisfied by any outcome, since recording a shortfall is always possible.
+Not "meets `phase-4d-gate.md`'s bars" -- those are 4f's exit condition and 4f runs after this phase. See [The bar](#the-bar).
+
+*Cannot see:* whether the IR is *faster*, which this phase deliberately does not promise, and whether an axis moved for the reason a promotion predicted rather than by accident. The per-promotion predicted-versus-measured record is what carries the second.
+*Falsification:* the paired interleaved comparison Phase 4f's accept rule specifies, run between the two engine arms of one binary rather than between two binaries -- which removes the build-identity problem entirely, since both arms are the same build. An axis that comes out slower fails this criterion; it is not convertible into a recorded debt, because a debt here would hand 4f a regression to discharge before it starts.
 
 **5. The patch table has a working consumer: quickened small-integer arithmetic, with a measured win that reverts.**
 
@@ -395,7 +408,7 @@ Landing it edits **two** lines: the roadmap row at `:442` and `:473`. `:473` was
 
 ## Decisions recorded here
 
-* **D20.** The IR lands as Phase 4e, entered after 4d-1's Task 8 writes `phase-4d-gate.md`. 4d-2 keeps allocation, string representation and `rexx-num`'s scratch buffers. The bar-before-optimisation property is already partly spent and D20 does not claim otherwise.
+* **D20.** The IR lands as Phase 4e, entered after 4d-1's Task 8 writes `phase-4d-gate.md`, and **before** the optimisation loop rather than after it. Allocation, string representation and `rexx-num`'s scratch buffers are candidates for that loop, which is now Phase 4f; the 4d-2 that D20 originally named is superseded. The bar-before-optimisation property is already partly spent and D20 does not claim otherwise.
 * **D21.** Coverage is total, justified by incrementality and the reach of the drift gate. **Not** by the mandate; that argument is withdrawn as self-defeating. Coverage is total at the driver level; execution coverage grows only with promotion.
 * **D22.** The op stream is immutable and patch state lives in a parallel atomic table whose entries are hints that never remove a precondition check. Quickened small-integer arithmetic is the one consumer this phase builds, at `AtomicU32`.
   **The schema does not generalise to sends**: a send's precondition is "the lookup would still return this method", and checking that *is* the lookup. Real inline caches substitute behaviour identity plus invalidation on behaviour mutation.
@@ -408,5 +421,5 @@ Landing it edits **two** lines: the roadmap row at `:442` and `:473`. `:473` was
 
 * **macOS, and CI at all.** The inherited gate names Linux and macOS, `:35` requires five platforms, and no platform runs the Rust suite automatically today. A dual-engine gate doubles whatever manual process exists.
 * **The retention bound for fragment chunk caching**, or a decision not to cache, against D16's recorded reasoning.
-* **The bound on how many axes may close as debt** under exit criterion 4.
+* **How the two engine arms are compared on the benchmark axes** under exit criterion 4, given that both arms live in one binary and the existing harness interleaves between two.
 * **`run_fragment`'s re-entrancy**: a fragment chunk runs inside a body that may itself be running a chunk, sharing the frame.
