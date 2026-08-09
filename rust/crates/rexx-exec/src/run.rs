@@ -814,23 +814,7 @@ impl Interp {
 
         while let Some(instruction) = code.body.instructions.get(self.activation().pc) {
             let index = self.activation().pc;
-            // "Is this the first instruction executed in this activation" --
-            // consumed here, one instruction at a time, and read by
-            // `PROCEDURE` and `USE LOCAL` alone. A `Label` is transparent to
-            // it: measured, `call sub` into `sub:` / `lbl2:` / `procedure`
-            // runs, while the same with a `nop` in place of the second label
-            // is error 17.1. So a label neither grants the permission nor
-            // spends it.
-            //
-            // Cleared *before* the step and carried across it on
-            // `Interp::procedure_permitted`, which `step` takes on entry --
-            // that is what stops an `INTERPRET` fragment or an `IF` branch
-            // inheriting it, measured through `sub: interpret "procedure"`
-            // being 17.1. See the field's own doc comment.
-            if !matches!(instruction.kind, InstructionKind::Label { .. }) {
-                self.procedure_permitted =
-                    std::mem::take(&mut self.activation_mut().first_instruction_pending);
-            }
+            self.grant_procedure_permission(instruction);
             // The failing clause's site, if any escapes, is resolved inside
             // `step_in_temps_frame` itself (Task 10's own doc comment there):
             // this call may nest arbitrarily deep through `If`/`Select`'s own
@@ -887,53 +871,8 @@ impl Interp {
             // inside `step_in_temps_frame`, which is the one place a clause
             // is stepped -- so this loop, `run_bounded`, and every future
             // caller get it without being enumerated. See `clause.rs`.
-            match flow {
-                Flow::Next => self.activation_mut().pc += 1,
-                Flow::Goto(target) => self.activation_mut().pc = target,
-                // `SIGNAL`, once its target has escaped every nested
-                // construct and every `INTERPRET` fragment it fired from
-                // (`Flow::Signal`'s own doc comment has why it cannot ride
-                // `Goto` to get here). The only consumer, matching `Goto`'s
-                // own arm exactly: `target` already resolved against this
-                // activation's own body (`resolve_signal_target`), which is
-                // exactly the body `code` above is bound to.
-                Flow::Signal(target) => self.activation_mut().pc = target,
-                Flow::Exit(value) => return Ok(Ended::Exited(value)),
-                // The activation boundary `Flow::Return` was added to reach.
-                // Every construct between the `RETURN` and here forwarded it
-                // untouched; this is the one consumer.
-                Flow::Return(value) => return Ok(Ended::Returned(value)),
-                // Task 11: a `LEAVE`/`ITERATE` that reached the very top of
-                // the program -- nothing anywhere, at any nesting depth,
-                // ever matched it. This is the exhausted-search family,
-                // 28.1 (bare `LEAVE`)/28.2 (bare `ITERATE`)/28.3 (named
-                // `LEAVE`)/28.4 (named `ITERATE`). `origin.indent` already
-                // holds this family's own answer by the time it gets here
-                // -- every `Select`/`Do` frame the search walked through on
-                // the way up has already reset it to its own `static_indent`
-                // as it forwarded past (`LeaveOrigin`'s own doc comment has
-                // the rule, corrected after review: it is **not** always
-                // zero, only when every popped frame along the way happened
-                // to sit at top level). 28.5 (a named `ITERATE` that *did*
-                // match something, just not a loop) is a different family,
-                // raised where the match was found, in `Select`/`Do`'s own
-                // arms, and never reaches here.
-                Flow::Leave(name, origin) => {
-                    self.record_leave_failure(&origin);
-                    let raised = match name {
-                        None => raised_leave_no_loop(),
-                        Some(n) => raised_leave_no_match(code.symbols.name(n).as_bytes()),
-                    };
-                    return Err(raised.into());
-                }
-                Flow::Iterate(name, origin) => {
-                    self.record_leave_failure(&origin);
-                    let raised = match name {
-                        None => raised_iterate_no_loop(),
-                        Some(n) => raised_iterate_no_match(code.symbols.name(n).as_bytes()),
-                    };
-                    return Err(raised.into());
-                }
+            if let Some(ended) = self.apply_flow(&code, flow)? {
+                return Ok(ended);
             }
             debug_assert_eq!(
                 self.activations.len(),
@@ -946,6 +885,106 @@ impl Interp {
         // callee that runs off the end of the file ends the *program* and the
         // caller's next clause never runs. See `Ended::Exited`'s own doc.
         Ok(Ended::Exited(None))
+    }
+
+    /// Transfers "is this the first instruction executed in this activation"
+    /// to the step about to run, which `PROCEDURE` and `USE LOCAL` are the
+    /// only readers of.
+    ///
+    /// A `Label` is transparent to it: measured, `call sub` into `sub:` /
+    /// `lbl2:` / `procedure` runs, while the same with a `nop` in place of
+    /// the second label is error 17.1. So a label neither grants the
+    /// permission nor spends it.
+    ///
+    /// Cleared *before* the step and carried across it on
+    /// `Interp::procedure_permitted`, which `step` takes on entry -- that is
+    /// what stops an `INTERPRET` fragment or an `IF` branch inheriting it,
+    /// measured through `sub: interpret "procedure"` being 17.1. See the
+    /// field's own doc comment.
+    ///
+    /// Extracted from `run_activation`'s loop so a second engine discharges
+    /// the same obligation rather than reimplementing it. It is per
+    /// *clause*, not per instruction-node, so an engine that begins a
+    /// clause without an `Instruction` in hand has to supply one.
+    pub(crate) fn grant_procedure_permission(&mut self, instruction: &Instruction) {
+        if !matches!(instruction.kind, InstructionKind::Label { .. }) {
+            self.procedure_permitted =
+                std::mem::take(&mut self.activation_mut().first_instruction_pending);
+        }
+    }
+
+    /// Applies one clause's `Flow` to this activation.
+    ///
+    /// `Ok(None)` continues the body; `Ok(Some(_))` finishes the activation.
+    ///
+    /// Extracted from `run_activation`'s loop for the same reason as
+    /// `grant_procedure_permission`. The `Leave`/`Iterate` arms
+    /// are the reason this is worth extracting rather than copying: they are
+    /// error semantics, not plumbing.
+    ///
+    /// **`run_fragment`'s own `Leave`/`Iterate` arms are not a call site for
+    /// this, and the difference is the useful part.** They are the same
+    /// event at a different boundary, so they share the four constructors
+    /// and the `record_leave_failure` call -- but they resolve the name
+    /// against the *fragment's* symbol table, which is the last point at
+    /// which the id means anything, and they `seal_site_level` first.
+    /// Absorbing them would mean parameterising both, which buys nothing
+    /// here and would make one function answer to two boundaries.
+    /// A second engine wanting this behaviour at a *third* boundary should
+    /// re-read that before assuming one shared function covers it.
+    pub(crate) fn apply_flow(
+        &mut self,
+        code: &Code<'_>,
+        flow: Flow,
+    ) -> Result<Option<Ended>, Failure> {
+        match flow {
+            Flow::Next => self.activation_mut().pc += 1,
+            Flow::Goto(target) => self.activation_mut().pc = target,
+            // `SIGNAL`, once its target has escaped every nested construct
+            // and every `INTERPRET` fragment it fired from (`Flow::Signal`'s
+            // own doc comment has why it cannot ride `Goto` to get here).
+            // The only consumer, matching `Goto`'s own arm exactly: `target`
+            // already resolved against this activation's own body
+            // (`resolve_signal_target`), which is exactly the body `code` is
+            // bound to.
+            Flow::Signal(target) => self.activation_mut().pc = target,
+            Flow::Exit(value) => return Ok(Some(Ended::Exited(value))),
+            // The activation boundary `Flow::Return` was added to reach.
+            // Every construct between the `RETURN` and here forwarded it
+            // untouched; this is the one consumer.
+            Flow::Return(value) => return Ok(Some(Ended::Returned(value))),
+            // Task 11: a `LEAVE`/`ITERATE` that reached the very top of the
+            // program -- nothing anywhere, at any nesting depth, ever
+            // matched it. This is the exhausted-search family, 28.1 (bare
+            // `LEAVE`)/28.2 (bare `ITERATE`)/28.3 (named `LEAVE`)/28.4
+            // (named `ITERATE`). `origin.indent` already holds this family's
+            // own answer by the time it gets here -- every `Select`/`Do`
+            // frame the search walked through on the way up has already
+            // reset it to its own `static_indent` as it forwarded past
+            // (`LeaveOrigin`'s own doc comment has the rule, corrected after
+            // review: it is **not** always zero, only when every popped
+            // frame along the way happened to sit at top level). 28.5 (a
+            // named `ITERATE` that *did* match something, just not a loop)
+            // is a different family, raised where the match was found, in
+            // `Select`/`Do`'s own arms, and never reaches here.
+            Flow::Leave(name, origin) => {
+                self.record_leave_failure(&origin);
+                let raised = match name {
+                    None => raised_leave_no_loop(),
+                    Some(n) => raised_leave_no_match(code.symbols.name(n).as_bytes()),
+                };
+                return Err(raised.into());
+            }
+            Flow::Iterate(name, origin) => {
+                self.record_leave_failure(&origin);
+                let raised = match name {
+                    None => raised_iterate_no_loop(),
+                    Some(n) => raised_iterate_no_match(code.symbols.name(n).as_bytes()),
+                };
+                return Err(raised.into());
+            }
+        }
+        Ok(None)
     }
 
     /// Runs one instruction.
@@ -2761,7 +2800,11 @@ impl Interp {
     /// Returns a `Flow` rather than a bare target so that
     /// `run_activation`'s existing `match` does the transfer: `Flow::Signal`
     /// is exactly "set this activation's `pc`", which is what a trap does.
-    fn offer_to_trap(&mut self, code: &Code<'_>, failure: Failure) -> Result<Flow, Failure> {
+    pub(crate) fn offer_to_trap(
+        &mut self,
+        code: &Code<'_>,
+        failure: Failure,
+    ) -> Result<Flow, Failure> {
         let Failure::Raised(raised) = &failure else {
             return Err(failure);
         };
@@ -4119,7 +4162,7 @@ impl Interp {
     /// the fragment's own clause would win the race outright and the
     /// enclosing `INTERPRET` would never be echoed at all -- which is the
     /// second of the two ways the obvious one-line fix was measured wrong.
-    fn step_in_temps_frame(
+    pub(crate) fn step_in_temps_frame(
         &mut self,
         code: &Code<'_>,
         index: usize,
@@ -4320,7 +4363,7 @@ impl Interp {
     /// has its own field now (`activation_indent`), the addend is emphatically
     /// **not** always zero, and nothing below may
     /// assume it is.
-    fn record_failure_site(
+    pub(crate) fn record_failure_site(
         &mut self,
         code: &Code<'_>,
         index: usize,
@@ -4717,7 +4760,7 @@ impl Interp {
     /// is deliberately *not* where the 40-column clamp lives: that is on the
     /// `*-*` echo alone (`trace::MAX_CLAUSE_INDENT`), and clamping here would
     /// truncate every `>>>` value line too.
-    fn printed_indent(&self, code: &Code<'_>, target: usize) -> usize {
+    pub(crate) fn printed_indent(&self, code: &Code<'_>, target: usize) -> usize {
         // The table when this body has one, and the walk when it does not --
         // an `INTERPRET` fragment is the case with none, and its instruction
         // list is short enough that the walk is what it always was.
@@ -6873,7 +6916,7 @@ impl Interp {
     /// restructuring rather than this task's -- **but nothing below may assume a
     /// site is unresolvable any more**, and the comments that used to say so
     /// have been corrected rather than left standing.
-    fn clause_site(
+    pub(crate) fn clause_site(
         &self,
         source: Option<&ProgramSource>,
         instruction: &Instruction,
@@ -6903,7 +6946,7 @@ impl Interp {
     /// same way, so a `SIGNAL`/`CALL` fired from inside an `INTERPRET`
     /// fragment reads the enclosing clause's own line here exactly as
     /// `clause_site` already gives the trace/error paths.
-    fn clause_line(
+    pub(crate) fn clause_line(
         &self,
         source: Option<&ProgramSource>,
         instruction: &Instruction,

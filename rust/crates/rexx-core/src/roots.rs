@@ -146,6 +146,37 @@ impl RootSet {
         self.temps.push(value);
     }
 
+    /// Opens a region of `count` indexable temporaries, all [`ObjRef::NIL`],
+    /// and returns the watermark below them.
+    ///
+    /// An IR chunk's register file. Registers are roots the
+    /// collector must walk, and the two other places to put them both fail:
+    /// a `SlotFrame` of their own makes `grow_slots` on the frame beneath
+    /// panic (its assertion, deliberately not a placeholder), and extending
+    /// the activation's own `push_slots` request reaches neither `CALL
+    /// label` nor `INTERPRET` nor a trap handler, none of which push a frame
+    /// at all.
+    ///
+    /// The temporaries stack has neither problem: it is independent of slot
+    /// frames, so a variable growing underneath is not its business, and it
+    /// nests, which is what a fragment chunk compiled and run inside a
+    /// running chunk needs.
+    pub fn reserve_temps(&mut self, count: usize) -> FrameId {
+        let frame = FrameId(self.temps.len());
+        self.temps.resize(self.temps.len() + count, ObjRef::NIL);
+        frame
+    }
+
+    /// Reads register `index` of the region opened at `frame`.
+    pub fn temp_at(&self, frame: FrameId, index: usize) -> ObjRef {
+        self.temps[frame.0 + index]
+    }
+
+    /// Writes register `index` of the region opened at `frame`.
+    pub fn set_temp(&mut self, frame: FrameId, index: usize, value: ObjRef) {
+        self.temps[frame.0 + index] = value;
+    }
+
     /// How many temporaries are currently rooted.
     ///
     /// For a **debug tripwire only**, and specifically for the one
