@@ -5,7 +5,7 @@
 > Read [Why this is a loop](#why-this-is-a-loop-and-not-a-task-list) before doing anything else.
 
 **Supersedes 4d-2.** Decided 2026-08-09.
-**Entry:** Unit 0 below closed, and Phase 4e landed.
+**Entry:** Phase 4e landed. Unit 0 below is a set of rules, not a measurement to complete first.
 **Exit:** parity on every classic-Rexx axis, or the loop's stopping rule fires with the shortfall recorded.
 **Phase 4 closes when this closes.**
 
@@ -40,34 +40,55 @@ The debt mechanism survives only for work that genuinely belongs to a later phas
 Performance work that lands after a phase is declared done may change the implementation structurally, and then it is a patch on top of something already certified.
 Anything that would restructure the interpreter has to happen before the gate closes, not after.
 
-## Unit 0 -- characterise the noise, then reduce it
+## Unit 0 -- the two measurement rules
 
-**Nothing in this phase is decidable until this closes, and it blocks the gate as much as it blocks the loop.**
+**Withdrawn 2026-08-09: the upfront noise characterisation.** Both wordings kept.
 
-`phase-4d-gate.md` currently declares an undecidable band of 7.2%.
-That figure is **the largest of three observations**, adopted as a lower bound because three runs cannot support anything better.
-A 7.2% band means a change worth 5% is unmeasurable, and most individual optimisations are worth less than that.
-It is a broken instrument, not a fact about the machine.
+It required 30 to 50 repetitions per side per axis to characterise a distribution, then interventions to reduce it, targeting a band under one per cent before anything else could start.
+A run was begun and stopped at 314 rows.
 
-**Step 1: characterise.**
-30 to 50 repetitions per side per axis, same binary, same program, same machine state, so the *distribution* of the ratio is known rather than its observed extreme.
-Report the distribution, not a single number: median, spread, and the shape, because a long tail and a wide symmetric spread need different responses.
+**It conflated two different measurement problems and priced the harder one upfront.**
+Deciding "did this change help" and deciding "are we at parity" are not the same question, need different instruments, and cost wildly different amounts.
+And the expensive one is only expensive **near the boundary**: no amount of instrument precision changes the verdict on an axis sitting at 10.61x.
 
-**Step 2: reduce.**
-Most of the variance is likely attackable and none of it requires touching the interpreter:
+### The loop's accept rule: paired, same sitting, cheap
 
-* pin to a core with `taskset`, so a migration mid-run stops being a measurement,
-* fix the CPU governor, so frequency scaling is not part of the signal,
-* measure cycles rather than wall time where the comparison allows it,
-* control residency and page-cache state between runs,
-* remove the harness difference `phase-4d-attribution.md` records between the suite and the ad-hoc scripts, so one harness produces every number.
+**A candidate is accepted if a paired interleaved comparison against the immediately preceding binary shows a reproducible gain.**
 
-**Step 3: re-derive the band from the reduced distribution**, and amend `phase-4d-gate.md` with both wordings and the reason.
+Both binaries run alternately within one loop, on one machine state, so frequency, residency, page cache and thermal state hit both arms and cancel.
+That is why this is cheap: a handful of alternating pairs resolves a few per cent, and it needs no knowledge of the absolute noise band at all.
 
-**The target is a band under one per cent**, because the loop below cannot accept a change it cannot measure.
+The measurement is **relative to our own previous state**, never to the oracle. The oracle does not enter the accept rule.
 
-**Do not flip UNDECIDED into a pass while the band is wide.**
-"Within noise" is the right bar only when noise is small; with a 7.2% band it would mean 7.2% slower passes, and a worse instrument would make the gate easier. That is the vacuity shape this project has shipped before. The band shrinks first.
+**Interleave within one loop; never read across two separate runs.** That rule stands and is the reason this works.
+
+### The gate's verdict: escalate only when the answer is close
+
+**Measure cheaply first, and spend more only if the result is near 1.0.**
+
+* If the ratio is far from 1.0 relative to the spread the runs themselves show, it is decided. Six axes between 2.08x and 10.61x need no further measurement to be called NOT MET, and none of them ever did.
+* If it lands near 1.0, that axis alone earns more runs -- targeted, on the axis in question, until the interval separates from 1.0 or demonstrably will not.
+
+The escalation is **adaptive and per axis**, not a global constant established in advance.
+There is no need to know "the noise profile"; there is a need for enough runs to separate a particular number from 1.0, and that requirement scales with how close it already is.
+
+**Sensitivity is demonstrated when it is claimed, not before.** When an axis escalates, a control pair differing by a known small amount is run alongside it, so a tight interval is shown to be sensitivity rather than blindness.
+
+### If an axis cannot be certified at parity
+
+**Then it must show measured, reproducible relative improvement instead**, against a named prior state, with the shortfall from parity recorded.
+That is a weaker claim than parity and is labelled as one -- but it is a *measured* claim, which "within an unmeasurable band" is not.
+
+### What was kept from the withdrawn unit
+
+* **The harness unification.** `rexx_bench::child` now holds one capped, directory-pinned child wrapper shared by `rexx-bench-suite` and the band tool, so the `/bin/sh`+`Instant` against bash+`date` split recorded in `phase-4d-attribution.md` no longer exists in tooling. That split contaminated the 7.2% figure and removing it is worth having on its own.
+* **The control programs**, for the escalation path above.
+* **One measured finding from the 314 rows before the run was stopped, to be confirmed or dropped rather than assumed:** pinning with `taskset` appeared to *widen* the spread rather than narrow it, and to shift central ratios (`strings` 10.51x to 10.09x, `varlookup` 4.32x to 4.11x). If that holds, core migration is not the variance source and pinning is not a neutral instrument.
+
+### What this means for the gate's 7.2% band
+
+`phase-4d-gate.md`'s band was derived as the largest of three observations and used as a global threshold.
+Under the rules above it is not needed as a global constant, and the gate is amended to say so: the band is replaced by the escalation rule, which spends measurement where the answer is close and nowhere else.
 
 ## The loop
 
@@ -82,10 +103,11 @@ Each entry carries: the cause or hypothesis, the axes it predicted it would move
 
 ### The accept rule
 
-**A change lands only if its measured effect exceeds the characterised band, interleaved, against the oracle.**
+**A change lands only if a paired interleaved comparison against the immediately preceding binary shows a reproducible gain**, per Unit 0.
 
-Below the band it is discarded regardless of how good the theory is.
-This is the rule that makes Unit 0 a prerequisite rather than a nicety.
+Against our own previous state, not against the oracle -- the oracle is what the *gate* compares to, and it does not enter the accept decision.
+A change whose effect does not survive the pairing is discarded regardless of how good the theory is.
+"Reproducible" means the sign holds across the alternations, not that a single pair favoured it.
 
 **A change that reaches its axis's target by a route other than its stated hypothesis has not confirmed the hypothesis**, and says so in the record.
 

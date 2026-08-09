@@ -31,6 +31,24 @@ The crate side is `rust/target/release/rexx-run` sha256 `c3b2516069a1b5f5d504613
 
 ---
 
+## Amended 2026-08-09 (second): the 7.2% band is withdrawn, and replaced by an escalation rule
+
+**Both wordings are kept, per this document's own amendment rule.**
+
+**What this document said.** An undecidable band of 7.2%, applied as a global threshold to every axis on every reading, with UNDECIDED withholding a pass. A unit of Phase 4f was to characterise the distribution over 30 to 50 repetitions per side per axis and reduce the band below one per cent before anything downstream was decidable.
+
+**What binds now.** There is no global band, and no upfront characterisation.
+
+**The reason.** The band conflated two different questions. "Did this change help" is a *paired* comparison against our own previous binary on one machine state, where the confounds cancel and a handful of alternations resolves a few per cent; it belongs to Phase 4f's accept rule and never involves the oracle. "Are we at parity" is an *absolute* comparison against the oracle, needed once, at the end -- and it only needs precision **near 1.0**. Six axes between 2.08x and 10.61x were never a measurement question, and no instrument improvement would have changed their verdict.
+
+**The escalation rule.** Measure cheaply. If the ratio sits far from 1.0 relative to the spread the runs themselves show, it is decided. If it lands near 1.0, that axis alone earns more runs, targeted, until its interval separates from 1.0 or demonstrably will not -- with a control pair differing by a known small amount run alongside, so a tight interval is shown to be sensitivity rather than blindness. Precision is spent where the answer is close and nowhere else.
+
+**Where an axis cannot be certified at parity even after escalation**, it must instead show measured, reproducible relative improvement against a named prior state, with the shortfall from parity recorded. That is a weaker claim and is labelled as one, but it is measured -- which "inside an unmeasurable band" was not.
+
+**One thing the withdrawn work established and worth keeping:** the `/bin/sh`+`Instant` against bash+`date` harness split recorded in `phase-4d-attribution.md`, which contaminated the original 7.2% figure, no longer exists in tooling -- one child wrapper now serves every measurement. And an early, unconfirmed reading suggested `taskset` pinning *widens* the spread and shifts central ratios rather than tightening them; if that holds, core migration is not the variance source.
+
+See `docs/superpowers/plans/2026-08-09-phase-4f-optimisation-loop.md`, Unit 0.
+
 ## Amended 2026-08-09: the bar is within-noise-or-better, and classic-Rexx axes cannot take a debt
 
 **Both wordings are kept, per this document's own amendment rule.**
