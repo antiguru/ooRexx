@@ -334,3 +334,56 @@ It is not a claim that the tree-walker figures above are stable to more than a p
 run-to-run: `perf-baseline.md`'s own "internal cps ratio is unstable across runs" section already
 established that for this same machine, and nothing in this task's single run contradicts or
 extends that finding.
+
+## Task 4: `Do`/`Loop`, predicted versus measured
+
+The first task in this phase to run any of a program's clauses from a compiled stream: a `DO`/`LOOP`
+compiles to an op of its own and its body's clauses are stepped through the driver instead of
+straight into the tree-walker's clause unit.
+The construct itself is resolved by the same `Interp::run_loop` under both engines, so the two arms
+agree by construction and this is a measurement about cost only.
+
+### The prediction
+
+Recorded before measuring: **no movement, or a regression of up to about 2%** on both `emptyloop` and
+`varlookup`, IR arm against tree-walker arm.
+The reasoning was a decomposition of `emptyloop`'s 120 ns/iteration measured at `777fa4a9` -- about 26
+ns of repeating-loop framing, about 57 ns of controlled-loop control step, about 37 ns for the one
+body clause -- none of which this promotion changes, against an oracle figure of about 35.8
+ns/iteration for the whole thing.
+The promotion adds an `op_of` lookup, an `ops` index and a match per body clause and removes nothing,
+so the arm doing the extra work should have been the slower one.
+
+### The measurement
+
+Both arms are the same binary, selected through `REXX_ENGINE`, so there is no build identity to
+reconcile between arms.
+There is one between *builds*, and it decided the design: a first sitting read `emptyloop` at 5.6% in
+the IR arm's favour, and reverting the promotion showed that most of that was the **tree-walker** arm
+reading 3.05 s in one build and 2.88 s in the other -- on an arm that compiles nothing and cannot be
+affected by the change. Code layout on this machine is worth about 2% on this axis.
+
+So the estimator is taken within one binary and the reverted build is its negative control, with all
+four cells interleaved in one sitting, four rounds per axis, `ulimit -v 8388608`, one fresh empty
+directory:
+
+| axis | binary | tree-walker arm | IR arm | IR vs tree-walker |
+|---|---|---:|---:|---:|
+| `emptyloop` (25e6) | promoted | 3.01 s | 2.96 s | **-1.7%** |
+| `emptyloop` | reverted | 2.95 s | 2.955 s | -0.2% |
+| `varlookup` (19e6) | promoted | 5.325 s | 5.155 s | **-3.2%** |
+| `varlookup` | reverted | 5.345 s | 5.335 s | -0.2% |
+
+### What it means, and what it does not
+
+The prediction was **wrong in sign on both axes**, and the movement arrived by no route anyone has
+named: the arm that does strictly more per-clause work is the faster one, and nothing here explains
+why.
+Per this phase's own rule, a movement that arrives other than by the stated hypothesis has not
+confirmed the hypothesis, so this is a measured improvement without a mechanism and should not be
+quoted as "promotion made loops faster" until something identifies one.
+
+The percentages above are IR-arm-against-tree-walker-arm and are **not** comparable with the
+tree-walker-vs-oracle ratios earlier in this document: this sitting ran no oracle at all.
+Re-deriving 3.33x and 4.40x against these numbers would be combining two sittings, which is the
+comparison this document's own method forbids.
