@@ -107,25 +107,32 @@ That is a weaker claim than parity and is labelled as one -- but it is a *measur
 **Three or four passes per arm per axis. It decides nothing, and it is written down only so the next person does not repeat it blind.**
 Measured 2026-08-09 08:10:55 to 08:32:49 at `77679f75` plus the harness landed with this reading, `rexx-run` sha256 `c3b2516069a1b5f5d504613986f00b69e0c0fc892c041958212d45a699c0e967` against the three oracle objects `phase-4d-gate.md` names, load average 1.01 to 1.56 throughout, every axis printing one constant value across all 314 rows.
 
-| axis | unpinned median ratio | pinned median ratio | shift | unpinned envelope | pinned envelope |
+| axis | unpinned median ratio | pinned median ratio | shift | unpinned max deviation | pinned max deviation |
 |---|---:|---:|---:|---:|---:|
-| `alloc4c` | 2.0029x | 2.0018x | -0.05% | 0.63% | 0.58% |
+| `alloc4c` | 2.0029x | 2.0018x | -0.06% | 0.63% | 0.58% |
 | `arith` | 2.7072x | 2.6548x | -1.94% | 0.75% | 0.58% |
 | `compound` | 5.8641x | 5.7723x | -1.57% | 0.48% | 1.20% |
 | `strings` | 10.5219x | 10.0853x | -4.15% | 0.77% | 1.88% |
 | `varlookup` | 4.3231x | 4.1053x | -5.04% | 1.24% | 0.48% |
 
-Envelope is the largest deviation of a pass's ratio from the median over that arm's passes on that axis.
+Max deviation is the largest deviation of a pass's ratio from the median over that arm's passes on that axis.
+**Three dispersion statistics are available from these rows and the next paragraph turns on which one is read**, so the table names its own rather than calling itself the envelope: max deviation from the median, as above; the full range, `(max - min) / median`; and the interpolated 2.5/97.5 half-width.
 
 **What the rows support: pinning moves the ratio.**
-Four of five axes shifted in the same direction, by up to 5.04% on `varlookup` -- larger than either arm's envelope there.
+Four of five axes shifted in the same direction, by up to 5.04% on `varlookup` -- larger than either arm's dispersion there on any of the three statistics.
 So `taskset` is not a control that leaves the quantity alone while tidying its variance, and a pinned measurement is not comparable with an unpinned one.
+
+**One figure disagrees with a commit message and the rows settle it.**
+`c0ad58b7`'s message puts `varlookup`'s shift at 4.77%; recomputed from the rows it is **5.04%**, which is what this table and every sentence around it carry.
+A commit message cannot be edited, so the disagreement is recorded here rather than left for a reader to find and have to adjudicate.
 
 **What the rows do not support: that pinning widened the spread.**
 That was the controller's summary and it is wrong as a general claim.
-Which axes narrowed depends on the dispersion statistic, and the two available ones disagree: by interpolated half-width it narrowed `alloc4c`, `arith` and `varlookup`; by full envelope, recomputed independently from the same rows, `arith` moves to the other side (0.81% to 0.88%).
-`alloc4c` and `varlookup` narrow and `compound` and `strings` widen under both.
-The worst-axis figure rose from 1.24% to 1.88% through a change of which axis is worst, `strings` overtaking a `varlookup` that pinning more than halved.
+Which axes narrowed depends on which of the three statistics is read, and exactly one axis is sensitive to the choice.
+`arith` narrows by max deviation (0.75% to 0.58%) and by interpolated half-width (0.72% to 0.54%), and **widens** by full range (0.81% to 0.88%).
+`alloc4c` and `varlookup` narrow under all three, `compound` and `strings` widen under all three.
+So the disagreement is one axis wide, and the table's column is the first of the three.
+The worst-axis figure rose from 1.24% to 1.88% -- max deviation, as the table -- through a change of which axis is worst, `strings` overtaking a `varlookup` that pinning more than halved.
 At three or four passes none of this is separated from sampling noise.
 The usable statement is that pinning did not visibly reduce the spread while it did visibly move the ratio, so core migration is not obviously the variance source and pinning is not free.
 
