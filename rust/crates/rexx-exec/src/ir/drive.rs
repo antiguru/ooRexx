@@ -486,10 +486,20 @@ impl Interp {
     ///
     /// `next` is where an unabsorbed `Flow::Next` continues, which is the op
     /// after whichever one produced it.
+    ///
+    /// **`inline(always)`, and it is a measurement rather than a habit.** This
+    /// replaced an `absorb` match written out in the driver's own loop, which
+    /// is one call per clause of every promoted body. Left to the inliner's
+    /// judgement it is emitted as a function and `bench-programs/emptyloop.rex`
+    /// -- a loop whose body does nothing, so the measurement is the per-clause
+    /// cost and almost nothing else -- runs 2.85s before this promotion and
+    /// 3.39s after, on the compiled stream, interleaved across three sittings.
+    /// With the annotation it is 2.86s, which is the level the promotion found.
     #[expect(
         clippy::too_many_arguments,
         reason = "two callers inside one loop, and every argument is a value that loop holds"
     )]
+    #[inline(always)]
     fn settle(
         &mut self,
         code: &Code<'_>,
