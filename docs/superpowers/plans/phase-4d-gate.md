@@ -31,6 +31,25 @@ The crate side is `rust/target/release/rexx-run` sha256 `c3b2516069a1b5f5d504613
 
 ---
 
+## Amended 2026-08-09: the bar is within-noise-or-better, and classic-Rexx axes cannot take a debt
+
+**Both wordings are kept, per this document's own amendment rule.**
+
+**What this document said.** Parity per `:39`, with a recorded debt available on any axis that could not reach it, granted by the user at plan level against four evidence conditions.
+
+**What binds now.** The bar is **within measurement noise of the oracle, or better**, and **no recorded debt is available on a classic-Rexx axis** -- `arith`, `compound`, `strings`, `varlookup`, `alloc4c`, `rexxcps`.
+Those close on the bar or Phase 4 stays open.
+The debt mechanism below survives only for `dispatch`, `alloc.rex` and `startup`, where it scopes work to Phase 5 rather than conceding a bar.
+
+**The reason is structural.** Performance work landing after a phase is certified may change the implementation structurally, and is then a patch on something already declared done. Anything that restructures the interpreter has to land inside the gate, not after it -- which is why Phase 4e now precedes the optimisation loop rather than following it.
+
+**"Within noise" is contingent on the noise being small, and today it is not.**
+The 7.2% band below is the largest of three observations, adopted as a lower bound because three runs support nothing better.
+Read as a pass rule it would let a 7% regression through, and would make a *worse* instrument an *easier* gate.
+**Phase 4f's Unit 0 re-derives the band from a characterised distribution (30 to 50 repetitions per side per axis) and reduces it -- pinning, fixed governor, controlled residency, one harness -- targeting under one per cent.**
+Until that lands, UNDECIDED continues to withhold a pass and must not be read as one.
+See `docs/superpowers/plans/2026-08-09-phase-4f-optimisation-loop.md`.
+
 ## The result, before the criteria: no bar this gate can derive reaches parity on any axis
 
 **Phase 4d does not close today, and the attribution it is built on does not predict that it will.**

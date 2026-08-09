@@ -1,9 +1,28 @@
 # Phase 4e -- the instruction stream
 
 **Status:** design, revised after two reviews and a mechanics spike.
-**Entry:** **not yet met.** See [Entry](#entry).
-**Blocks:** Phase 5.
-**Decided:** 2026-08-08.
+**Entry:** **met.** Phase 4d-1 closed 2026-08-09; `phase-4d-gate.md` exists.
+**Blocks:** Phase 4f (the optimisation loop) and Phase 5.
+**Decided:** 2026-08-08, re-sequenced 2026-08-09.
+
+## Why this phase exists, and why it is not justified by a ratio
+
+**The IR is a foundation, not a speedup.**
+Its reasons are architectural and each of them is prior to, and independent of, any benchmark number:
+
+* **It founds OO dispatch.** A call site in an instruction stream is a stable, patchable slot, which is what makes per-call-site inline caches natural. A tree-walker can hang a cache off an AST node but cannot rewrite the operation itself. Retrofitting a patchable stream after message sends exist means touching every op and the whole dispatch loop. This is Phase 5's dependency, not 4f's.
+* **It is the shape a compiler backend consumes.** A flat stream with explicit jumps and pre-resolved operands has derivable basic blocks and maps to SSA without an abstract-stack pass; `Generic` is already the bailout edge a compiled function needs. Cranelift or WebAssembly become reachable questions rather than rewrites.
+* **It makes trace an emission decision rather than a mode flag**, which is what D23 needs and what the spike showed is a correctness requirement once expressions are promoted.
+* **It gives quickening and specialisation somewhere to live**, which the tree-walker structurally cannot.
+
+**This matters for what the IR is allowed to be optimised for.**
+Phase 4f's parity bar is a constraint the IR must also satisfy; it is **not** the reason the IR exists. A design tuned to move five benchmark ratios would take different decisions from one built to carry message sends, a compiler backend and a trace regime -- and the second is what this phase is for. Where the two pull apart, the foundation wins and the ratio is 4f's problem.
+
+**The re-sequencing, and why.**
+This phase previously sat after Phase 4d and blocked on its gate. That ordering is withdrawn. Anything that restructures the interpreter has to land **before** the phase gate closes, or the performance work becomes a patch on top of something already certified. Since 4d-1's own conclusion is that the seven attributed causes cannot reach parity, and the IR is the only specified structural candidate, the IR precedes the optimisation loop. See `docs/superpowers/plans/2026-08-09-phase-4f-optimisation-loop.md`.
+
+**What that ordering does not claim.**
+It does not claim the IR closes the gap. The `spike/bytecode-vm` figures are withdrawn, the mechanics spike measured **no** speedup, and this phase's own stopping rule has no anchor until chunk caching and loop promotion exist. The IR is built for the reasons above; whether it also moves the ratios is measured afterwards, by 4f, against a characterised noise band.
 
 Every mechanism below that a spike settled is marked with its commit on branch `spike/ir-mechanics` (worktree `/home/moritz/dev/repos/ooRexx-ir-spike`, findings in `docs/superpowers/plans/phase-4e-spike-findings.md`).
 Claims not so marked are design intent and have not been run.
@@ -32,12 +51,11 @@ Task 1 exists to fix that before anything is decided against it.
 
 ## Entry
 
-`docs/superpowers/plans/` holds gates for phases 2, 3, 4a, 4b and 4c.
-`phase-4d-gate.md` does not exist on disk and has never existed in git history.
-Writing it is 4d-1's Task 8, and 4d-1 is open.
+**Met, 2026-08-09.** Phase 4d-1 closed with all eight tasks complete, and `phase-4d-gate.md` exists at commit `c790e3a7`.
 
-**4d-1 Task 8 closing is a hard precondition.**
-Without it, exit criterion 4 below points at a document that does not exist.
+**What this phase now blocks.** Phase 4f, the optimisation loop, which cannot begin until the structural change has landed -- otherwise it tunes code the IR replaces. And Phase 5, which needs the patchable call site.
+
+**What 4d-1 handed forward that binds this phase.** Its own conclusion is that the seven attributed causes, landed perfectly on every axis, do not reach parity anywhere; the best derived bar is 1.62x. So the gap this phase's exit criteria are measured against is a real one and not a rounding error. Note also that `phase-4d-gate.md`'s undecidable band is 7.2% and is being re-derived by Phase 4f's Unit 0 -- **this phase's own measurements are not decidable finer than that band until it shrinks**, which is why the stopping rule below is stated against re-established figures rather than against the withdrawn prototype numbers.
 
 **The bar-before-optimisation property this ordering was meant to provide is already partly spent.**
 4d-1's plan states at `:18`: "Nothing in this phase optimises anything. … If you find yourself keeping a speedup, stop."
