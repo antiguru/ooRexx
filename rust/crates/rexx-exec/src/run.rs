@@ -180,14 +180,25 @@ pub(crate) enum Flow {
     /// that is not a loop" family) report at two different, both
     /// oracle-measured, indentations that no longer-lived state can recover
     /// once the search has moved on** -- see the report's own transcripts.
-    Leave(Option<SymbolId>, LeaveOrigin),
+    ///
+    /// **Boxed, and the box is what keeps `Flow` small.** [`LeaveOrigin`] is
+    /// 48 bytes, of which 24 are an inline `Vec<u8>`, and it is the widest
+    /// payload any variant here carries -- so holding it inline made every
+    /// `Flow` in the interpreter 64 bytes wide, and every clause returns one.
+    /// Measured on `emptyloop` with `perf stat -e instructions:u`: boxing it
+    /// takes `size_of::<Flow>()` from 64 to 24 and removes 950 million
+    /// instructions from a 40-billion-instruction run, 2.4% of the whole. The
+    /// allocation it adds is paid once per `LEAVE`/`ITERATE` *executed*, not
+    /// once per clause, and a loop executing one `LEAVE` per pass measured
+    /// 4.1% cheaper boxed as well, so the trade is favourable on both sides.
+    Leave(Option<SymbolId>, Box<LeaveOrigin>),
     /// `ITERATE`, bare or by name. See `Leave`'s own doc comment; the two
     /// variants are handled by nearly identical logic in `Do`/`Select`'s own
     /// arms, differing only in which of the oracle's measured asymmetries
     /// applies (`Select` never consumes a bare `Iterate` at all, and a named
     /// one that matches its own label but is not a loop is 28.5, not simply
     /// "not mine, keep looking").
-    Iterate(Option<SymbolId>, LeaveOrigin),
+    Iterate(Option<SymbolId>, Box<LeaveOrigin>),
     /// `SIGNAL label` and `SIGNAL VALUE`, once the target resolves to an
     /// instruction index.
     ///
@@ -1822,11 +1833,11 @@ impl Interp {
             // if none does) inspects the `Flow` this returns, never here.
             InstructionKind::Leave { name } => Ok(Flow::Leave(
                 *name,
-                self.leave_origin(code, index, source, instruction),
+                Box::new(self.leave_origin(code, index, source, instruction)),
             )),
             InstructionKind::Iterate { name } => Ok(Flow::Iterate(
                 *name,
-                self.leave_origin(code, index, source, instruction),
+                Box::new(self.leave_origin(code, index, source, instruction)),
             )),
 
             // `END`. `Select`'s two non-7.3 closings (`OTHERWISE` present)
@@ -4267,6 +4278,17 @@ impl Interp {
     /// the caller a promoted `IF` echoed nothing there while an unpromoted one
     /// echoed correctly -- the two engines diverging on a program's stderr.
     /// A caller that has to remember is a caller that can forget, and one did.
+    ///
+    /// **`inline(always)`, and it is a measurement rather than a habit.** This
+    /// wraps `Interp::in_clause`, so a clause step that reaches `step` passes
+    /// through two generic-over-a-closure layers; left to the inliner's own
+    /// judgement neither collapses, and the `work` closure is emitted as a
+    /// function of its own that every clause calls. Measured on `emptyloop`
+    /// with `perf stat -e instructions:u`, this annotation together with
+    /// `in_clause`'s own removes 1.075 billion instructions from a 40-billion
+    /// run, 2.7% of the whole, on the tree-walker and the compiled stream
+    /// alike. `#[inline]` alone reads zero.
+    #[inline(always)]
     pub(crate) fn in_stepped_clause<T: ClauseValue>(
         &mut self,
         code: &Code<'_>,
@@ -4822,17 +4844,24 @@ impl Interp {
     /// fourteen-point probe behind that rule leaves it exactly as it was,
     /// because `activation_indent` is `0` in every one of those fourteen
     /// shapes.
-    fn pop_search_frame(&self, code: &Code<'_>, index: usize, origin: LeaveOrigin) -> LeaveOrigin {
-        LeaveOrigin {
-            site: origin.site,
-            indent: static_indent(&code.body.instructions, index) + self.activation_indent,
-            // Untouched: this resets the *indent* the search reports at, and
-            // the clause line stays the `LEAVE`/`ITERATE`'s own however many
-            // frames it is forwarded past -- measured, `iterate lab` inside
-            // an inner loop attributes the outer loop's re-test to the
-            // `ITERATE`'s line, not to anything about the frames in between.
-            clause_line: origin.clause_line,
-        }
+    fn pop_search_frame(
+        &self,
+        code: &Code<'_>,
+        index: usize,
+        mut origin: Box<LeaveOrigin>,
+    ) -> Box<LeaveOrigin> {
+        origin.indent = static_indent(&code.body.instructions, index) + self.activation_indent;
+        // `site` and `clause_line` are left alone: this resets the *indent*
+        // the search reports at, and the clause line stays the
+        // `LEAVE`/`ITERATE`'s own however many frames it is forwarded past --
+        // measured, `iterate lab` inside an inner loop attributes the outer
+        // loop's re-test to the `ITERATE`'s line, not to anything about the
+        // frames in between.
+        //
+        // Updated through the existing box rather than built as a fresh
+        // `LeaveOrigin`, so forwarding a flow past a construct moves a
+        // pointer instead of copying the site's own buffer.
+        origin
     }
 
     /// `target`'s own **absolute printed indent**: its lexical

@@ -369,6 +369,13 @@ impl Interp {
     /// nothing -- for a failure that is trapped *here* rather than unwinding
     /// the activation, `offer_to_trap` is the one place that knows, and it
     /// delivers there.
+    ///
+    /// **`inline(always)`, and it is a measurement rather than a habit** --
+    /// `Interp::in_stepped_clause`'s own doc comment carries the number, since
+    /// the two annotations were measured together and neither is worth much
+    /// alone: this is the inner of the two generic-over-a-closure layers every
+    /// stepped clause passes through.
+    #[inline(always)]
     pub(crate) fn in_clause<T: ClauseValue>(
         &mut self,
         code: &Code<'_>,

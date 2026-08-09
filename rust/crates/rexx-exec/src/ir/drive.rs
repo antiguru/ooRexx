@@ -42,29 +42,6 @@ use crate::{Code, Failure, Interp, Loud};
 /// runs.
 const END_OF_BODY: Ended = Ended::Exited(None);
 
-/// Whether a level of [`Interp::run_ops`] is the activation's own, and so
-/// owes each clause it opens the first-instruction permission.
-///
-/// **The tree-walker's own split, kept exactly**: `run_activation`'s loop
-/// calls `grant_procedure_permission` and `run_bounded` does not, so a clause
-/// inside a construct's body never spends the permission and a `PROCEDURE`
-/// there is 17.1. Granting at every level instead would be a `mem::take` per
-/// body clause that answers `false` every time -- measured on `emptyloop`,
-/// which is 25 million of them.
-#[derive(Clone, Copy)]
-enum Granting {
-    /// The activation's own level: `run_chunk_clauses`.
-    Yes,
-    /// A construct's body: `run_bounded`'s chunk arm.
-    No,
-}
-
-impl Granting {
-    fn grants(self) -> bool {
-        matches!(self, Granting::Yes)
-    }
-}
-
 /// Where a promoted clause left the program counter.
 ///
 /// A newtype so it can carry [`ClauseValue`]: `Interp::in_stepped_clause`
@@ -151,8 +128,7 @@ impl Interp {
             // `[0, len]` is the whole body, so every `Goto` a clause of it
             // produces is absorbed here and only the flows that end or
             // redirect the activation come back.
-            let flow = match self.run_ops(code, chunk, registers, at, 0, len, source, Granting::Yes)
-            {
+            let flow = match self.run_ops::<true>(code, chunk, registers, at, 0, len, source) {
                 Ok(flow) => flow,
                 // `offer_to_trap` answers `Flow::Signal` for a trap that
                 // fired and `Flow::Exit` for a handler that ended the
@@ -183,6 +159,11 @@ impl Interp {
     /// into the op space the loop walks, and the one guard on it. `compile`
     /// writes one entry per instruction plus a final one, so the lookup is in
     /// range for any index that indexes an instruction.
+    ///
+    /// `#[inline]` because this is entered once per pass of every promoted
+    /// `DO` body and does one map lookup before handing over, where the
+    /// tree-walker's own arm is inlined into its caller outright.
+    #[inline]
     pub(crate) fn run_bounded_from_chunk(
         &mut self,
         code: &Code<'_>,
@@ -195,7 +176,7 @@ impl Interp {
         let Some(at) = chunk.op_at(start) else {
             return Err(Loud::chunk_map_too_short().into());
         };
-        self.run_ops(code, chunk, registers, at, start, end, source, Granting::No)
+        self.run_ops::<false>(code, chunk, registers, at, start, end, source)
     }
 
     /// Runs `chunk`'s ops from op `at` until one of them produces a `Flow`
@@ -210,12 +191,22 @@ impl Interp {
     /// Reaching the op one past `end`'s own first op, whether by falling
     /// through or by an absorbed `Goto`, is the only way this answers
     /// `Flow::Next`; every other exit is the escaping `Flow` unchanged.
+    ///
+    /// `GRANTING` is whether this level is the activation's own, and so owes
+    /// each clause it opens the first-instruction permission. **The
+    /// tree-walker's own split, kept exactly**: `run_activation`'s loop calls
+    /// `grant_procedure_permission` and `run_bounded` does not, so a clause
+    /// inside a construct's body never spends the permission and a `PROCEDURE`
+    /// there is 17.1. Granting at every level instead would be a `mem::take`
+    /// per body clause that answers `false` every time. It is a `const`
+    /// parameter rather than a value because each caller knows its own answer
+    /// at the call site, which turns a per-clause branch into no code at all.
     #[expect(
         clippy::too_many_arguments,
         reason = "two callers, and every argument is a value each already holds: bundling them \
                   into a struct would only move the same list one line up"
     )]
-    fn run_ops(
+    fn run_ops<const GRANTING: bool>(
         &mut self,
         code: &Code<'_>,
         chunk: &Chunk,
@@ -224,7 +215,6 @@ impl Interp {
         start: usize,
         end: usize,
         source: Option<&ProgramSource>,
-        granting: Granting,
     ) -> Result<Flow, Failure> {
         let Some(stop) = chunk.op_at(end) else {
             return Err(Loud::chunk_map_too_short().into());
@@ -252,7 +242,7 @@ impl Interp {
                     let Some(instruction) = code.body.instructions.get(index) else {
                         return Err(Loud::chunk_map_too_short().into());
                     };
-                    if granting.grants() {
+                    if GRANTING {
                         self.grant_procedure_permission(instruction);
                     }
                     let flow = self.step_in_temps_frame(code, index, instruction, source)?;
@@ -272,7 +262,7 @@ impl Interp {
                     let Some(instruction) = code.body.instructions.get(index) else {
                         return Err(Loud::chunk_map_too_short().into());
                     };
-                    if granting.grants() {
+                    if GRANTING {
                         self.grant_procedure_permission(instruction);
                     }
                     let flow = self.step_in_temps_frame_with(
@@ -292,7 +282,7 @@ impl Interp {
                     let Some(instruction) = code.body.instructions.get(index) else {
                         return Err(Loud::chunk_map_too_short().into());
                     };
-                    if granting.grants() {
+                    if GRANTING {
                         self.grant_procedure_permission(instruction);
                     }
                     match self.run_clause_region(
