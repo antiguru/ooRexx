@@ -318,6 +318,14 @@ const LOOP_CASES: &[InlineCase] = &[
 /// no shape asks about. A table extended for the next promotion should grow
 /// boundaries, not more shapes.
 ///
+/// **`SELECT` opens a clause per listed `WHEN` as well as for its own header**,
+/// so it has more of those boundaries than `IF` does. Its own boundary cases
+/// are: a `CALL ON` handler queued by the `SELECT CASE` expression, which the
+/// header's boundary must deliver before the first `WHEN` is tested; a handler
+/// failing at a listed `WHEN`'s own clause boundary; a handler failing at a
+/// matched `WHEN` body clause's boundary; and a `PROCEDURE` inside a matched
+/// `WHEN` body, which is 17.1 for the same reason a branch's is.
+///
 /// Every one of these passes with both engines delegating to the tree-walker's
 /// clause unit, which is the point of adding them before the compiler emits
 /// anything: a case written after a promotion cannot say whether it ever would
@@ -403,6 +411,164 @@ const BRANCH_CASES: &[InlineCase] = &[
         stderr: "     3 *-* end\nError 7 running <PATH> line 3:  WHEN or OTHERWISE expected.\n\
                  Error 7.3:  All WHEN expressions of SELECT are false; OTHERWISE expected.\n",
         exit_code: 249,
+    },
+    InlineCase {
+        // The `>K>   "CASE"` line, the two `>>>` lines each `WHEN CASE`
+        // comparison produces, and the `THEN` marker: a `SELECT CASE`'s whole
+        // trace, which is where a re-implementation of the scan diverges first.
+        name: "select case under trace r, second when matches",
+        program: "trace r\nselect case 1 + 1\n  when 1 then say 'a'\n  when 2 then say 'b'\n  \
+                  otherwise say 'o'\nend\nsay 'after'\n",
+        stdout: "b\nafter\n",
+        stderr: "     2 *-* select case 1 + 1\n       >K>   \"CASE\" => \"2\"\n     3 *-*   \
+                 when 1 \n       >>>     \"1\"\n       >>>     \"0\"\n     4 *-*   when 2 \n       \
+                 >>>     \"2\"\n       >>>     \"1\"\n     4 *-*     then\n     4 *-*       \
+                 say 'b'\n       >>>         \"b\"\n     7 *-* say 'after'\n       \
+                 >>>   \"after\"\n",
+        exit_code: 0,
+    },
+    InlineCase {
+        // The `OTHERWISE` marker echoes on its own line at the scan level, and
+        // the `END` that closes an `OTHERWISE` echoes and does nothing --
+        // neither is reached by any path a matched `WHEN` takes.
+        name: "select with otherwise under trace r",
+        program: "trace r\nselect\n  when 1 = 0 then say 'a'\n  otherwise say 'o'\nend\n\
+                  say 'after'\n",
+        stdout: "o\nafter\n",
+        stderr: "     2 *-* select\n     3 *-*   when 1 = 0 \n       >>>     \"0\"\n     \
+                 4 *-*   otherwise\n     4 *-*     say 'o'\n       >>>       \"o\"\n     \
+                 5 *-* end\n     6 *-* say 'after'\n       >>>   \"after\"\n",
+        exit_code: 0,
+    },
+    InlineCase {
+        // An **absorbed** `WHEN CASE` -- one this `SELECT`'s `whens` never
+        // collected, because it is the listed `WHEN`'s own `THEN` consequence
+        // -- whose false path escapes the matched body and lands on the `END`.
+        // Its residual indent rides along, so the 7.3 clause echoes four
+        // columns further in than the `END`'s own position.
+        name: "select case whose absorbed when case falls through to 7.3",
+        program: "trace r\nselect case 2\n  when 2 then\n  when 3 then nop\nend\nsay 'after'\n",
+        stdout: "",
+        stderr: "     2 *-* select case 2\n       >K>   \"CASE\" => \"2\"\n     3 *-*   \
+                 when 2 \n       >>>     \"2\"\n       >>>     \"1\"\n     3 *-*     then\n     \
+                 4 *-*       when 3 \n       >>>         \"3\"\n       >>>         \"0\"\n     \
+                 5 *-*     end\n     5 *-*     end\nError 7 running <PATH> line 5:  WHEN or \
+                 OTHERWISE expected.\nError 7.3:  All WHEN expressions of SELECT are false; \
+                 OTHERWISE expected.\n",
+        exit_code: 249,
+    },
+    InlineCase {
+        // F-EX1: the same absorbed escape landing exactly on this `SELECT`'s
+        // own `OTHERWISE` marker, which has to run with this `SELECT`'s search
+        // frame still standing -- the `leave s` is what says so, since a
+        // redirect that lost the frame reports 28.3 instead.
+        name: "select label whose absorbed when case escapes into otherwise",
+        program: "select label s case 2\n  when 2 then\n  when 3 then nop\n  otherwise say 'O'\n  \
+                  leave s\nend\nsay 'after'\n",
+        stdout: "O\nafter\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        // A `SELECT` is never a repetitive block, so an `ITERATE` naming one is
+        // 28.5 even though the name matches -- the one flow a matching label
+        // does not consume.
+        name: "iterate naming a select is 28.5",
+        program: "select label s\n  when 1 = 1 then iterate s\nend\nsay 'after'\n",
+        stdout: "",
+        stderr: "     2 *-*       iterate s\nError 28 running <PATH> line 2:  Invalid LEAVE or \
+                 ITERATE.\nError 28.5:  Symbol following ITERATE (\"S\") does not match a \
+                 repetitive block instruction.\n",
+        exit_code: 228,
+    },
+    InlineCase {
+        // A matching `LEAVE` is consumed and resumes past the whole `SELECT`,
+        // from inside a `DO` block that is itself the matched branch -- so the
+        // search walks the block's frame before it reaches the `SELECT`'s.
+        name: "leave naming a select from inside a do block in its branch",
+        program: "select label s\n  when 1 = 1 then do\n    say 'in'\n    leave s\n    \
+                  say 'never'\n  end\nend\nsay 'after'\n",
+        stdout: "in\nafter\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        // A bare `LEAVE` from inside a matched `WHEN` is not the `SELECT`'s: it
+        // is forwarded outward and consumed by the enclosing loop.
+        name: "select inside a loop body, leaving the loop from a when",
+        program: "zn = 0\ndo i = 1 to 5\n  select\n    when i = 3 then leave\n    \
+                  otherwise zn = zn + 1\n  end\nend\nsay zn\n",
+        stdout: "2\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        // A `LEAVE` naming nothing at all, forwarded past the `SELECT` and then
+        // past the loop until the search runs out: the indent it is reported at
+        // is the residual each forwarded-past frame resets, which is what
+        // `pop_search_frame` decides.
+        name: "leave naming nothing, forwarded out of a when",
+        program: "do i = 1 to 1\n  select\n    when 1 = 1 then leave nope\n  end\nend\n",
+        stdout: "",
+        stderr: "     3 *-* leave nope\nError 28 running <PATH> line 3:  Invalid LEAVE or \
+                 ITERATE.\nError 28.3:  Symbol following LEAVE (\"NOPE\") must either match the \
+                 label of a current loop or block instruction.\n",
+        exit_code: 228,
+    },
+    InlineCase {
+        // The same from inside `OTHERWISE`, which reaches the forwarding
+        // through a different dispatch than a matched `WHEN` does.
+        name: "leave naming nothing, forwarded out of an otherwise",
+        program: "do i = 1 to 1\n  select\n    when 1 = 0 then nop\n    otherwise leave nope\n  \
+                  end\nend\n",
+        stdout: "",
+        stderr: "     4 *-* leave nope\nError 28 running <PATH> line 4:  Invalid LEAVE or \
+                 ITERATE.\nError 28.3:  Symbol following LEAVE (\"NOPE\") must either match the \
+                 label of a current loop or block instruction.\n",
+        exit_code: 228,
+    },
+    InlineCase {
+        // **A boundary case, not a shape.** The handler is queued by the
+        // `SELECT CASE` expression and has to run at the *header's* own clause
+        // boundary, before the first `WHEN` is tested -- the matched branch
+        // reads the variable the handler set. A header that never ends its own
+        // clause delivers late and prints `v unset`.
+        name: "a call on handler queued by a select case expression",
+        program: "call on user zx name h\nzv = 'unset'\nselect case raiser()\n  \
+                  when 'V' then say 'v' zv\n  otherwise say 'o'\nend\nexit\nraiser:\n\
+                  raise user zx return 'V'\nh:\nzv = 'set'\nreturn\n",
+        stdout: "v set\n",
+        stderr: "",
+        exit_code: 0,
+    },
+    InlineCase {
+        // **A boundary case, not a shape.** The handler is queued inside a
+        // matched `WHEN`'s body clause and fails at *that* clause's boundary,
+        // so the clause blamed is the body's own and not the `WHEN`'s or the
+        // `SELECT`'s.
+        name: "a call on handler failing at a when body clause's boundary",
+        program: "call on user zx name h\nselect\n  when 1 = 1 then say raiser()\n  \
+                  otherwise nop\nend\nsay 'after'\nexit\nraiser:\nraise user zx return 'V'\nh:\n\
+                  say 1/0\nreturn\n",
+        stdout: "V\n",
+        stderr: "    11 *-*         say 1/0\n     3 *-*       say raiser()\nError 42 running \
+                 <PATH> line 11:  Arithmetic overflow/underflow.\nError 42.3:  Arithmetic \
+                 overflow; divisor must not be zero.\n",
+        exit_code: 214,
+    },
+    InlineCase {
+        // **A boundary case, not a shape.** A matched `WHEN`'s body does not
+        // inherit the first-instruction permission any more than a branch
+        // does, so a `PROCEDURE` there is 17.1.
+        name: "procedure reached through a matched when",
+        program: "call sub 1\nexit\nsub:\n  select\n    when arg(1) = 1 then procedure\n    \
+                  otherwise nop\n  end\n  return\n",
+        stdout: "",
+        stderr: "     5 *-*         procedure\n     1 *-* call sub 1\nError 17 running <PATH> \
+                 line 5:  Unexpected PROCEDURE.\nError 17.1:  PROCEDURE is valid only when it is \
+                 the first instruction executed after an internal CALL or function \
+                 invocation.\n",
+        exit_code: 239,
     },
     InlineCase {
         // The `IF`'s own clause is what the failure is attributed to, and its
