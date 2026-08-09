@@ -42,6 +42,29 @@ use crate::{Code, Failure, Interp, Loud};
 /// runs.
 const END_OF_BODY: Ended = Ended::Exited(None);
 
+/// Whether a level of [`Interp::run_ops`] is the activation's own, and so
+/// owes each clause it opens the first-instruction permission.
+///
+/// **The tree-walker's own split, kept exactly**: `run_activation`'s loop
+/// calls `grant_procedure_permission` and `run_bounded` does not, so a clause
+/// inside a construct's body never spends the permission and a `PROCEDURE`
+/// there is 17.1. Granting at every level instead would be a `mem::take` per
+/// body clause that answers `false` every time -- measured on `emptyloop`,
+/// which is 25 million of them.
+#[derive(Clone, Copy)]
+enum Granting {
+    /// The activation's own level: `run_chunk_clauses`.
+    Yes,
+    /// A construct's body: `run_bounded`'s chunk arm.
+    No,
+}
+
+impl Granting {
+    fn grants(self) -> bool {
+        matches!(self, Granting::Yes)
+    }
+}
+
 /// Where a promoted clause left the program counter.
 ///
 /// A newtype so it can carry [`ClauseValue`]: `Interp::in_stepped_clause`
@@ -123,7 +146,8 @@ impl Interp {
             // `[0, len]` is the whole body, so every `Goto` a clause of it
             // produces is absorbed here and only the flows that end or
             // redirect the activation come back.
-            let flow = match self.run_ops(code, chunk, registers, at, 0, len, source) {
+            let flow = match self.run_ops(code, chunk, registers, at, 0, len, source, Granting::Yes)
+            {
                 Ok(flow) => flow,
                 // `offer_to_trap` answers `Flow::Signal` for a trap that
                 // fired and `Flow::Exit` for a handler that ended the
@@ -172,7 +196,7 @@ impl Interp {
         let Some(at) = chunk.op_at(start) else {
             return Err(Loud::chunk_map_too_short().into());
         };
-        self.run_ops(code, chunk, registers, at, start, end, source)
+        self.run_ops(code, chunk, registers, at, start, end, source, Granting::No)
     }
 
     /// Runs `chunk`'s ops from op `at` until one of them produces a `Flow`
@@ -201,6 +225,7 @@ impl Interp {
         start: usize,
         end: usize,
         source: Option<&ProgramSource>,
+        granting: Granting,
     ) -> Result<Flow, Failure> {
         let Some(stop) = chunk.op_at(end) else {
             return Err(Loud::chunk_map_too_short().into());
@@ -227,7 +252,9 @@ impl Interp {
                     let Some(instruction) = code.body.instructions.get(index) else {
                         return Err(Loud::chunk_map_too_short().into());
                     };
-                    self.grant_procedure_permission(instruction);
+                    if granting.grants() {
+                        self.grant_procedure_permission(instruction);
+                    }
                     let flow = self.step_in_temps_frame(code, index, instruction, source)?;
                     (flow, pc + 1)
                 }
@@ -245,7 +272,9 @@ impl Interp {
                     let Some(instruction) = code.body.instructions.get(index) else {
                         return Err(Loud::chunk_map_too_short().into());
                     };
-                    self.grant_procedure_permission(instruction);
+                    if granting.grants() {
+                        self.grant_procedure_permission(instruction);
+                    }
                     let flow = self.step_in_temps_frame_with(
                         code,
                         index,
@@ -263,7 +292,9 @@ impl Interp {
                     let Some(instruction) = code.body.instructions.get(index) else {
                         return Err(Loud::chunk_map_too_short().into());
                     };
-                    self.grant_procedure_permission(instruction);
+                    if granting.grants() {
+                        self.grant_procedure_permission(instruction);
+                    }
                     match self.run_clause_region(
                         code,
                         chunk,
