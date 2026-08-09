@@ -163,6 +163,45 @@ fn the_ir_engine_steps_a_simple_blocks_body_from_the_chunk() {
     );
 }
 
+/// An `IF`'s chosen branch is stepped from the chunk, on both paths.
+///
+/// **The only observable that separates a promoted `IF` from an unpromoted
+/// one**, and that is why it is a count. Both engines print the same bytes
+/// for every program -- the condition is evaluated by the same
+/// `eval_if_condition` either way -- so what changes is whether the branch's
+/// clauses reach the compiled stream at all. With the branch left on the
+/// tree-walker the count is 2 on each path: the `IF` clause and the one
+/// clause after the whole construct, with everything inside the branch
+/// reached through `run_bounded`'s tree-walker arm and counted nowhere.
+///
+/// Both paths, because they are different mechanisms: the true path falls
+/// into the branch and leaves it by the branch-end jump, and the false path
+/// gets there by the `JumpUnless`. A count taken on one alone is satisfied by
+/// an implementation that only flattened the other.
+#[test]
+fn the_ir_engine_steps_an_ifs_chosen_branch_from_the_chunk() {
+    // `IF`, `THEN`, `say 'a'`, `ELSE`, `say 'b'`, `say 'c'` -- four clauses
+    // run on either path, and which four is what differs.
+    for (condition, expected, path) in [("1 = 1", 4, "then"), ("1 = 0", 4, "else")] {
+        let program = format!("if {condition} then say 'a'\nelse say 'b'\nsay 'c'\n");
+        let before = clause_op_entries();
+        let outcome = execute(
+            TEST_PATH,
+            program.into_bytes(),
+            false,
+            Invocation::none().with_engine(Engine::Ir),
+        );
+        let stepped = clause_op_entries() - before;
+        assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+        assert_eq!(
+            stepped, expected,
+            "the IR engine stepped {stepped} clauses from the chunk on the {path} path, where \
+             the IF's own clause, the branch marker, the branch body and the clause after the \
+             whole construct are four"
+        );
+    }
+}
+
 /// The negative control for the test above: the tree-walker steps nothing
 /// from a chunk, so a count that never moved would satisfy it on its own.
 #[test]

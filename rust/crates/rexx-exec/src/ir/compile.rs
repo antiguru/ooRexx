@@ -17,55 +17,299 @@ use rexx_parse::{CodeBody, InstructionKind};
 
 use super::{Chunk, ChunkTooLarge, Op};
 use crate::plan::Plan;
+use crate::run::if_targets;
+
+/// The compile-time register stack (the plan's Decisions section: "register
+/// allocation is a compile-time stack, and the chunk records its high-water
+/// mark").
+///
+/// `mark` takes the current top, `alloc` hands out the next index, and
+/// `release` puts the top back to a mark. A promoted clause takes a mark when
+/// its [`Op::Clause`] is emitted and releases to it at the clause's `end`, so
+/// two sibling clauses reuse the same registers and a clause nested inside
+/// another's region cannot reclaim the enclosing one's. A construct whose
+/// state outlives its member clauses allocates in the *enclosing* scope,
+/// before those clauses are emitted, which is what puts its registers below
+/// every mark they take.
+///
+/// The withdrawn alternative was the spike's whole-chunk monotonic counter: it
+/// allocates a register per assignment and never reuses one, so a long body
+/// reserves a region proportional to its length.
+struct Registers {
+    /// The next index `alloc` hands out.
+    next: u16,
+    /// The largest `next` ever reached, which is what [`Chunk::registers`]
+    /// records -- the size of the region the driver has to reserve for a run
+    /// of this chunk to address every register it names.
+    high_water: u16,
+}
+
+/// A saved register top, handed back to [`Registers::release`].
+///
+/// A newtype rather than a bare `u16` so a register index and a mark cannot
+/// be passed to each other's function: both are positions in the same stack
+/// and the compiler is otherwise the only thing keeping them apart.
+#[derive(Clone, Copy)]
+struct Mark(u16);
+
+impl Registers {
+    fn new() -> Registers {
+        Registers {
+            next: 0,
+            high_water: 0,
+        }
+    }
+
+    fn mark(&self) -> Mark {
+        Mark(self.next)
+    }
+
+    /// The next register, or the refusal a body needing more than `u16::MAX`
+    /// live at once earns (the plan's Decisions section: "register indices
+    /// are `u16`").
+    fn alloc(&mut self) -> Result<u16, ChunkTooLarge> {
+        let index = self.next;
+        self.next = self
+            .next
+            .checked_add(1)
+            .ok_or(ChunkTooLarge { what: "registers" })?;
+        self.high_water = self.high_water.max(self.next);
+        Ok(index)
+    }
+
+    /// Puts the top back to `mark`, so every register allocated since is
+    /// handed out again.
+    ///
+    /// The high-water mark is untouched: it is what the region has to be
+    /// *sized* to, and a register released is still one the run needed.
+    fn release(&mut self, mark: Mark) {
+        self.next = mark.0;
+    }
+
+    fn high_water(&self) -> u16 {
+        self.high_water
+    }
+}
+
+/// A jump whose target is an instruction index the forward pass has not
+/// reached yet, and the op that has to be rewritten once it has.
+///
+/// **The pass is single and forward, so every branch target is a
+/// backpatch.** An `IF`'s false path lands on an instruction after it and its
+/// true path resumes past the `ELSE`, and neither op index exists when the
+/// `IF` itself is compiled. Recording the pair and resolving it after the
+/// loop is what keeps the pass single, and resolving it through `op_of` is
+/// what keeps a target an *instruction* position everywhere else: `Flow::Goto`
+/// carries instruction indices too, so both spaces meet in exactly one table.
+struct Patch {
+    /// The op to rewrite.
+    op: u32,
+    /// The instruction it continues at.
+    target: usize,
+    /// Which of the two ops an instruction can be entered at this jump wants.
+    kind: PatchKind,
+}
+
+/// Which op a jump to an instruction means, for the one instruction where
+/// the two differ: the `ELSE` a branch-end jump sits in front of.
+///
+/// **Arriving at an `ELSE` means two different things and the tree-walker
+/// tells them apart by which loop is running.** `run_bounded`'s own doc
+/// comment states it: "the true path (fall through A, land on `Else` by
+/// `pc += 1`) and the false path (`Goto` straight to `Else`) arrive at the
+/// identical `(instruction, pc)`, and only one of the two arrivals is
+/// supposed to enter B". A flat stream has two *op* positions there instead,
+/// which is what lets it answer both without a second engine -- and this is
+/// the field that says which one a jump wants.
+#[derive(Clone, Copy)]
+enum PatchKind {
+    /// The instruction's own first op: run the instruction.
+    ///
+    /// The `IF`'s own false path, and nothing else. It is the one arrival
+    /// that must enter the `ELSE` marker.
+    Enter,
+    /// Where control resumes when it arrives at this instruction from
+    /// anywhere else, which is `Chunk::op_of`'s own answer: the branch-end
+    /// jump when there is one in front, so that a true branch finishing --
+    /// by falling off its end or by a nested construct's `Flow::Goto` landing
+    /// exactly on the boundary -- skips the `ELSE` rather than running it.
+    Resume,
+}
 
 /// Compiles `body` into a [`Chunk`], once, whole.
 ///
 /// Every instruction in `body.instructions` compiles (D21: "every
 /// instruction compiles, nothing refuses" is about instructions). A `DO` or
-/// `LOOP` becomes [`Op::Loop`], whose body clauses the driver steps; every
-/// other instruction becomes [`Op::Generic`]. `plan` is not yet read: nothing
-/// compiled here needs a name-to-slot answer, but a task that promotes an
-/// assignment or a branch reads it to place the `EvalExpr`/`Clause` ops this
-/// file only declares.
+/// `LOOP` becomes [`Op::Loop`], whose body clauses the driver steps; an `IF`
+/// becomes a [`Op::Clause`] region that evaluates its condition and jumps;
+/// every other instruction becomes [`Op::Generic`]. `plan` is not yet read:
+/// nothing compiled here needs a name-to-slot answer, but a task that
+/// promotes an assignment reads it to place the assignment's own `EvalExpr`.
 ///
 /// The one error is a machine width, not a language construct (the plan's
 /// Decisions section: "the compiler has one error, and it is a machine
-/// width"). Op indices are `u32`, so a body whose op stream would exceed
-/// `u32::MAX` is refused rather than wrapped -- unreachable in practice at
-/// this task, since `ops` and `body.instructions` are the same length and
-/// nothing produces four billion instructions in a test, but the check is
-/// the contract [`ChunkTooLarge`] documents, not a defence against a case
-/// this task can exercise.
+/// width"). Op indices are `u32` and register indices `u16`, so a body whose
+/// stream or register file would exceed either is refused rather than wrapped
+/// -- unreachable in practice at this task, since nothing produces four
+/// billion instructions in a test and an `IF` allocates one register it then
+/// releases, but the check is the contract [`ChunkTooLarge`] documents.
 pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLarge> {
     #[cfg(test)]
     count_compile_call();
 
-    let mut ops = Vec::with_capacity(body.instructions.len());
-    let mut op_of = Vec::with_capacity(body.instructions.len() + 1);
-    for instruction in &body.instructions {
-        let op_index = u32::try_from(ops.len()).map_err(|_| ChunkTooLarge { what: "op stream" })?;
-        op_of.push(op_index);
-        ops.push(match &instruction.kind {
+    let len = body.instructions.len();
+    let mut ops: Vec<Op> = Vec::with_capacity(len);
+    let mut op_of = Vec::with_capacity(len + 1);
+    let mut registers = Registers::new();
+    let mut patches: Vec<Patch> = Vec::new();
+    // Indexed by instruction: the resume an `IF`'s true branch jumps to when
+    // it finishes, emitted immediately *before* that instruction's own ops.
+    // A `Vec` keyed by the instruction the jump sits in front of, rather than
+    // a stack, because the branch that needs it is the one whose
+    // `false_target` names an `ELSE`, and an `ELSE` belongs to exactly one
+    // `IF` -- the `debug_assert` below is what says so rather than assuming it.
+    let mut jump_before: Vec<Option<usize>> = vec![None; len];
+
+    // Indexed by instruction: the instruction's own first op, which is
+    // `op_of`'s entry except where a branch-end jump sits in front of it.
+    // Compile-time only -- the driver never wants it, because `PatchKind`'s
+    // own doc comment has why the one jump that does is emitted here.
+    let mut first_op_of = Vec::with_capacity(len);
+
+    for (index, instruction) in body.instructions.iter().enumerate() {
+        op_of.push(op_index(&ops)?);
+        if let Some(resume) = jump_before[index] {
+            let op = op_index(&ops)?;
+            ops.push(Op::Jump { target: 0 });
+            patches.push(Patch {
+                op,
+                target: resume,
+                kind: PatchKind::Resume,
+            });
+        }
+        first_op_of.push(op_index(&ops)?);
+        match &instruction.kind {
             // `DO` and `LOOP` are the same construct under two spellings
             // (`step`'s own arm matches them together), so they compile the
-            // same way. Everything else is still `Generic`.
-            InstructionKind::Do(_) | InstructionKind::Loop(_) => Op::Loop,
-            _ => Op::Generic,
-        });
+            // same way.
+            InstructionKind::Do(_) | InstructionKind::Loop(_) => ops.push(Op::Loop {
+                index: instruction_index(index)?,
+            }),
+            // The `IF` clause is its condition and nothing else -- the branch
+            // it chooses is not inside it, which is the boundary
+            // `run.rs`'s own `If` arm measured (`SIGL` reports the `IF`'s line,
+            // not the branch's). So the region is exactly two ops and the
+            // register the condition lands in is released at its end.
+            InstructionKind::If { false_target, .. } => {
+                let targets = if_targets(&body.instructions, *false_target);
+                let mark = registers.mark();
+                let dst = registers.alloc()?;
+                let at = op_index(&ops)?;
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: at + 3,
+                });
+                ops.push(Op::EvalExpr {
+                    index: instruction_index(index)?,
+                    slot: 0,
+                    dst,
+                });
+                let jump = op_index(&ops)?;
+                ops.push(Op::JumpUnless {
+                    reg: dst,
+                    target: 0,
+                });
+                patches.push(Patch {
+                    op: jump,
+                    target: targets.false_target,
+                    kind: PatchKind::Enter,
+                });
+                registers.release(mark);
+                // Only when the false path lands on an `ELSE`: without one,
+                // the true branch's fallthrough is already the resume, and a
+                // jump to where control was going anyway is an op the driver
+                // would execute for nothing.
+                if targets.resume != targets.false_target {
+                    debug_assert!(
+                        jump_before[targets.false_target].is_none(),
+                        "two IFs want a branch-end jump in front of instruction {}, so an ELSE \
+                         belongs to more than one THEN",
+                        targets.false_target
+                    );
+                    jump_before[targets.false_target] = Some(targets.resume);
+                }
+            }
+            _ => ops.push(Op::Generic {
+                index: instruction_index(index)?,
+            }),
+        }
     }
     // One entry past the last instruction, pushed after the loop above:
     // `run_bounded`'s absorption guard is inclusive, so a construct's
     // resume point can be `end`, one past its last instruction, and a table
     // that stopped at `len - 1` would panic there instead of failing loudly
     // at compile.
-    let end = u32::try_from(ops.len()).map_err(|_| ChunkTooLarge { what: "op stream" })?;
+    let end = op_index(&ops)?;
     op_of.push(end);
+    first_op_of.push(end);
+
+    for patch in patches {
+        // In range for every target: both tables have an entry per
+        // instruction plus the end one, and `if_targets` clamps `None` to
+        // `len`.
+        let target = match patch.kind {
+            PatchKind::Enter => first_op_of[patch.target],
+            PatchKind::Resume => op_of[patch.target],
+        };
+        match &mut ops[patch.op as usize] {
+            Op::Jump { target: slot } | Op::JumpUnless { target: slot, .. } => *slot = target,
+            _ => unreachable!("a patch names the op it was recorded beside"),
+        }
+    }
+
+    assert_clause_regions_hold_no_clause_op(&ops);
 
     Ok(Chunk {
         ops,
         op_of,
-        registers: 0,
+        registers: registers.high_water(),
     })
+}
+
+/// The index the next op will be pushed at, refused rather than wrapped.
+fn op_index(ops: &[Op]) -> Result<u32, ChunkTooLarge> {
+    u32::try_from(ops.len()).map_err(|_| ChunkTooLarge { what: "op stream" })
+}
+
+/// An instruction index as an op payload, refused rather than wrapped.
+fn instruction_index(index: usize) -> Result<u32, ChunkTooLarge> {
+    u32::try_from(index).map_err(|_| ChunkTooLarge { what: "op stream" })
+}
+
+/// **No `Generic` or `Loop` op sits inside a [`Op::Clause`] region.**
+///
+/// Both run a whole clause through `Interp::step_in_temps_frame`, which
+/// echoes the clause itself -- and the echo is not idempotent, so a clause
+/// already opened by a `Clause` op would echo twice. The compiler is where
+/// this can be checked at all: the driver sees one op at a time and cannot
+/// tell an op it reached by falling into a region from one it jumped to.
+///
+/// An unconditional `assert!` rather than a `debug_assert!`, so the release
+/// build carries the same guarantee. It is one linear scan per body, once,
+/// against a compile that has already walked the same list.
+fn assert_clause_regions_hold_no_clause_op(ops: &[Op]) {
+    for (at, op) in ops.iter().enumerate() {
+        let Op::Clause { end, .. } = op else {
+            continue;
+        };
+        for inside in ops[at + 1..(*end as usize).min(ops.len())].iter() {
+            assert!(
+                !matches!(inside, Op::Generic { .. } | Op::Loop { .. }),
+                "a Clause region at op {at} holds an op that opens a clause of its own, \
+                 so the clause would be echoed twice"
+            );
+        }
+    }
 }
 
 // Test-only instrumentation: how many times `compile` has actually run. The
@@ -88,4 +332,130 @@ fn count_compile_call() {
 #[cfg(test)]
 pub(crate) fn compile_calls() -> usize {
     COMPILE_CALLS.with(|calls| calls.get())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Op, Registers, assert_clause_regions_hold_no_clause_op};
+
+    /// Two sibling clauses reuse the same registers, and a clause nested
+    /// inside another's mark does not.
+    ///
+    /// This is the discipline the plan's Decisions section fixes, and the one
+    /// the withdrawn whole-chunk monotonic counter fails: under that counter
+    /// the second sibling would get register 2, and the high-water mark would
+    /// grow with the body's length rather than with its depth.
+    #[test]
+    fn a_released_register_is_handed_out_again_and_a_nested_one_is_not() {
+        let mut registers = Registers::new();
+
+        let outer = registers.mark();
+        assert_eq!(registers.alloc().expect("in range"), 0);
+        let inner = registers.mark();
+        assert_eq!(
+            registers.alloc().expect("in range"),
+            1,
+            "a register allocated while an enclosing one is live must not reuse it"
+        );
+        registers.release(inner);
+        assert_eq!(
+            registers.alloc().expect("in range"),
+            1,
+            "releasing to the inner mark hands the same register out again"
+        );
+        registers.release(outer);
+        assert_eq!(
+            registers.alloc().expect("in range"),
+            0,
+            "releasing to the outer mark hands out the enclosing register too"
+        );
+    }
+
+    /// The high-water mark is the deepest the stack ever reached, not the
+    /// number of registers handed out and not what is live at the end.
+    ///
+    /// Both halves matter: a `Chunk::registers` taken from the live count
+    /// would reserve nothing for a body whose every clause released, and one
+    /// taken from the number of `alloc` calls would reserve four here.
+    #[test]
+    fn the_high_water_mark_is_the_deepest_the_stack_reached() {
+        let mut registers = Registers::new();
+        assert_eq!(registers.high_water(), 0, "an empty body reserves nothing");
+
+        for _ in 0..2 {
+            let mark = registers.mark();
+            registers.alloc().expect("in range");
+            registers.alloc().expect("in range");
+            registers.release(mark);
+        }
+
+        assert_eq!(registers.high_water(), 2);
+    }
+
+    /// A body needing more than `u16::MAX` registers live at once is refused
+    /// rather than wrapped, which is the register half of the one error
+    /// `compile` has (the plan's Decisions section: "the compiler has one
+    /// error, and it is a machine width rather than a language construct").
+    ///
+    /// Driven through the allocator directly: no program this crate parses
+    /// reaches that many live registers, so a test that tried to write one
+    /// would be measuring the parser instead.
+    ///
+    /// The last index handed out is `u16::MAX - 1` rather than `u16::MAX`,
+    /// because it is the *count* that has to fit: a region of `u16::MAX + 1`
+    /// registers is what a chunk could not record the size of.
+    #[test]
+    fn a_register_file_wider_than_u16_is_refused() {
+        let mut registers = Registers::new();
+        for expected in 0..u16::MAX {
+            assert_eq!(registers.alloc().expect("in range"), expected);
+        }
+        assert_eq!(registers.high_water(), u16::MAX);
+        assert_eq!(
+            registers.alloc().expect_err("one past the last index").what,
+            "registers"
+        );
+    }
+
+    /// The assertion `compile` runs over what it emitted, shown firing on the
+    /// arrangement it forbids.
+    ///
+    /// Built here rather than by mutating the compiler, so the witness stays
+    /// in the tree: a `Generic` op inside a `Clause` region would open a
+    /// second clause for an instruction whose clause is already open, and
+    /// `step_in_temps_frame` echoes the clause on the way in, so the echo
+    /// would appear twice.
+    #[test]
+    #[should_panic(expected = "holds an op that opens a clause of its own")]
+    fn a_generic_op_inside_a_clause_region_is_refused() {
+        assert_clause_regions_hold_no_clause_op(&[
+            Op::Clause { index: 0, end: 3 },
+            Op::EvalExpr {
+                index: 0,
+                slot: 0,
+                dst: 0,
+            },
+            Op::Generic { index: 1 },
+        ]);
+    }
+
+    /// The neighbouring arrangement that must stay accepted: the same ops
+    /// with the `Generic` one *past* the region's end.
+    ///
+    /// Without this the assertion above is satisfied by a check that refuses
+    /// every stream, which is the shape that would make every `IF` a refusal
+    /// and every body a tree-walker body.
+    #[test]
+    fn a_generic_op_after_a_clause_region_is_accepted() {
+        assert_clause_regions_hold_no_clause_op(&[
+            Op::Clause { index: 0, end: 3 },
+            Op::EvalExpr {
+                index: 0,
+                slot: 0,
+                dst: 0,
+            },
+            Op::JumpUnless { reg: 0, target: 3 },
+            Op::Generic { index: 1 },
+        ]);
+    }
 }

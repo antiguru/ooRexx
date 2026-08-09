@@ -38,9 +38,9 @@ fn every_instruction_of_an_all_generic_body_compiles_to_one_generic_op() {
     let chunk = compile_for_test(b"say 1\nsay 2\nn1 = 3\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Generic\n\
-         1: Generic\n\
-         2: Generic\n"
+        "0: Generic index=0\n\
+         1: Generic index=1\n\
+         2: Generic index=2\n"
     );
     // Nothing here addresses a register, so the chunk reserves none.
     assert_eq!(chunk.registers, 0);
@@ -58,14 +58,109 @@ fn a_counted_loop_compiles_its_do_to_a_loop_op_and_its_body_to_generic() {
     let chunk = compile_for_test(b"do i = 1 to 3\n  nop\nend\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Loop\n\
-         1: Generic\n\
-         2: Generic\n"
+        "0: Loop index=0\n\
+         1: Generic index=1\n\
+         2: Generic index=2\n"
     );
     // The loop is driven by `run_loop`, which holds its control value in a
     // `LoopState` of its own rather than in the chunk's register region, so
     // nothing here allocates one.
     assert_eq!(chunk.registers, 0);
+}
+
+/// The compiled `IF` with an `ELSE`, which is the shape the whole promotion
+/// is about: both paths are jumps in one stream where the tree-walker splits
+/// them across two engines.
+///
+/// The six instructions are `IF`, `THEN`, `say 'a'`, `ELSE`, `say 'b'`,
+/// `say 'c'`. Three of the nine ops are the `IF`'s own clause -- the region
+/// that evaluates the condition and branches on it -- and one more is the
+/// jump that ends the true branch, which sits between the last op of the
+/// true branch and the `ELSE`'s own op so that neither instruction's entry
+/// in `op_of` moves.
+///
+/// The two jump targets are the two things a reader should check by eye:
+/// `JumpUnless` goes to op 6, the `ELSE` marker, and `Jump` goes to op 8,
+/// `say 'c'`, past the whole `ELSE` branch.
+///
+/// **`op_of[3]` is 5 and not 6**, which is the other half of the same
+/// mechanism: the `ELSE`'s entry in the resume table is the branch-end jump
+/// in front of it, so a `Flow::Goto(3)` -- a nested `DO` block resuming at
+/// exactly the branch's boundary -- skips the `ELSE` the way falling off the
+/// end of the branch does. The false path is the one arrival that must run
+/// it, and that is the `JumpUnless` above, resolved against the `ELSE`'s own
+/// first op instead.
+#[test]
+fn an_if_with_an_else_compiles_to_a_clause_region_and_two_jumps() {
+    let chunk =
+        compile_for_test(b"if 1 = 1 then say 'a'\nelse say 'b'\nsay 'c'\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=3\n\
+         1: EvalExpr index=0 slot=0 dst=0\n\
+         2: JumpUnless reg=0 target=6\n\
+         3: Generic index=1\n\
+         4: Generic index=2\n\
+         5: Jump target=8\n\
+         6: Generic index=3\n\
+         7: Generic index=4\n\
+         8: Generic index=5\n"
+    );
+    // One register, allocated for the condition and released at the clause's
+    // own end -- so a body with two `IF`s reserves one, not two.
+    assert_eq!(chunk.registers, 1);
+    assert_eq!(chunk.op_of, vec![0, 3, 4, 5, 7, 8, 9]);
+}
+
+/// Without an `ELSE` the true branch falls straight through to where the
+/// false path lands, so **no jump is emitted at all**: the two targets are
+/// the same instruction, and an op that jumps to where control was already
+/// going is one the driver would run for nothing.
+#[test]
+fn an_if_with_no_else_emits_no_branch_end_jump() {
+    let chunk = compile_for_test(b"if 1 = 0 then say 'a'\nsay 'b'\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=3\n\
+         1: EvalExpr index=0 slot=0 dst=0\n\
+         2: JumpUnless reg=0 target=5\n\
+         3: Generic index=1\n\
+         4: Generic index=2\n\
+         5: Generic index=3\n"
+    );
+    assert_eq!(chunk.registers, 1);
+}
+
+/// Two `IF`s in one body reuse the same register, which is the whole of what
+/// the allocator's stack discipline buys over the spike's withdrawn monotonic
+/// counter: each clause takes a mark when its `Clause` op is emitted and
+/// releases to it at that clause's `end`, so a long body does not reserve a
+/// region proportional to its length.
+///
+/// Nested rather than sequential, because sequential would also hold under a
+/// per-clause reset and nesting is what tells the two apart -- the inner `IF`
+/// is compiled after the outer one has already released.
+#[test]
+fn nested_ifs_reuse_one_register() {
+    let chunk =
+        compile_for_test(b"if 1 = 1 then\n  if 2 = 2 then say 'a'\nsay 'b'\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=3\n\
+         1: EvalExpr index=0 slot=0 dst=0\n\
+         2: JumpUnless reg=0 target=9\n\
+         3: Generic index=1\n\
+         4: Clause index=2 end=7\n\
+         5: EvalExpr index=2 slot=0 dst=0\n\
+         6: JumpUnless reg=0 target=9\n\
+         7: Generic index=3\n\
+         8: Generic index=4\n\
+         9: Generic index=5\n"
+    );
+    assert_eq!(
+        chunk.registers, 1,
+        "the inner IF reuses the register the outer one released"
+    );
 }
 
 /// `run_bounded`'s absorption guard is inclusive, so a construct's resume

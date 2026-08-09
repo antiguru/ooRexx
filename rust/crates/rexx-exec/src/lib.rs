@@ -732,6 +732,19 @@ impl Loud {
         }
     }
 
+    /// A register a branch op reads holds something that is not a Rexx
+    /// logical value -- an internal inconsistency, never a program error.
+    ///
+    /// The only writer of such a register is an `Op::EvalExpr` whose
+    /// expression `eval_condition` has already validated as exactly `0` or
+    /// `1`, so this says the two ops came apart. Loud rather than a defaulted
+    /// answer, which would take a branch on a value nothing chose.
+    fn register_not_logical() -> Loud {
+        Loud {
+            message: "a compiled branch read a register holding no logical value".to_string(),
+        }
+    }
+
     // **There is no `Loud::parse`, and its absence is the fix.** A fragment
     // that does not parse raises the oracle's own 27.901 at rc 229, through
     // `impl From<&ParseError> for Raised` (`error.rs`), which `run_fragment`

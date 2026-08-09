@@ -1388,12 +1388,8 @@ impl Interp {
                 condition,
                 false_target,
             } => {
-                let len = code.body.instructions.len();
-                let false_target = false_target.unwrap_or(len);
-                // Reads `current_value_indent` rather than recomputing
-                // `static_indent(index)` -- same reasoning as `Assignment`'s
-                // own arm, above.
-                let indent = self.clause_state.current_value_indent;
+                let targets = if_targets(&code.body.instructions, *false_target);
+                let false_target = targets.false_target;
                 // **The `IF` clause ends when its condition has been
                 // evaluated**, not when the branch it chose has finished
                 // running (fix round 4, re-review finding NEW-2). In the
@@ -1408,19 +1404,13 @@ impl Interp {
                 // one-line spelling agrees either way, which is why five
                 // rounds of probes never separated them.
                 let line = self.clause_state.line();
-                let holds = match self.in_clause(code, line, |it| {
-                    it.eval_condition(
-                        code,
-                        condition,
-                        ConditionTrace::Result(indent),
-                        raised_if_not_logical,
-                    )
-                })? {
-                    ClauseOutcome::Ended(exit) => return Ok(Flow::Exit(exit.value())),
-                    ClauseOutcome::Ran(holds) => holds?,
-                };
+                let holds =
+                    match self.in_clause(code, line, |it| it.eval_if_condition(code, condition))? {
+                        ClauseOutcome::Ended(exit) => return Ok(Flow::Exit(exit.value())),
+                        ClauseOutcome::Ran(holds) => holds?,
+                    };
                 if holds {
-                    let resume = self.skip_else(code, false_target);
+                    let resume = targets.resume;
                     match self.run_bounded(
                         code,
                         index + 1,
@@ -4241,6 +4231,52 @@ impl Interp {
         source: Option<&ProgramSource>,
         engine: BodyEngine<'_>,
     ) -> Result<Flow, Failure> {
+        let outcome = self.in_stepped_clause(code, index, instruction, source, |it| {
+            it.step(code, index, instruction, source, engine)
+        });
+        match outcome {
+            Ok(ClauseOutcome::Ran(flow)) => flow,
+            Ok(ClauseOutcome::Ended(exit)) => Ok(Flow::Exit(exit.value())),
+            // The handler run at this clause's boundary failed. The clause
+            // the oracle blames is **this** one -- the one whose boundary
+            // ran it -- not the enclosing instruction: measured, a failing
+            // `CALL ON` handler queued by `call sub` inside a `DO` echoes
+            // `3 *-* call sub`, where without this it echoed
+            // `2 *-* do i = 1 to 1`, the `DO` clause's own site recorded one
+            // level out. Fix round 3's NEW-B. The outer `Err` is the
+            // handler's alone -- this clause's own failure comes back as
+            // `Ran(Err(_))` above -- which is what keeps the two apart.
+            Err(failure) => {
+                self.record_failure_site(code, index, source, instruction);
+                Err(failure)
+            }
+        }
+    }
+
+    /// Everything one clause of `code` owes, around whatever `work` is: the
+    /// clock invalidation, the `>I>` decay, the value indent, the clause line
+    /// and boundary, the clause echo, the GC temps frame with its watermark
+    /// tripwire, and the failing clause's own site.
+    ///
+    /// **The one clause unit, and both engines enter it.**
+    /// `step_in_temps_frame_with` passes `step`, so an unpromoted instruction
+    /// gets exactly what it always did. A promoted clause passes the work its
+    /// [`crate::ir`] ops do instead, which is what stops a flattened construct
+    /// re-deriving any of the list above -- the defect a second implementation
+    /// of this function would be.
+    ///
+    /// `work`'s return type is what `ClauseValue` is chosen from, which is the
+    /// question "does this carry an `ObjRef` whose only root was this clause's
+    /// temps frame?"; `clause.rs`'s own doc has why that has to be answered
+    /// explicitly and what it still does not close.
+    pub(crate) fn in_stepped_clause<T: ClauseValue>(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        instruction: &Instruction,
+        source: Option<&ProgramSource>,
+        work: impl FnOnce(&mut Self) -> Result<T, Failure>,
+    ) -> Result<ClauseOutcome<T>, Failure> {
         // `DATE`/`TIME`'s per-clause clock cache (`activation.rs`'s own doc
         // on `Activation::clock_stale`) is invalidated **unconditionally,
         // once per call, on whichever activation is executing right now**,
@@ -4318,7 +4354,7 @@ impl Interp {
         let line = self
             .clause_line(source, instruction)
             .unwrap_or_else(|| self.clause_state.line());
-        let outcome = self.in_clause(code, line, |it| {
+        self.in_clause(code, line, |it| {
             // **`is_label` is what makes `TRACE L` produce anything at all**
             // (review round 1, F8): the oracle's `RexxInstructionLabel::
             // execute` traces through `traceLabel` and nothing else, and
@@ -4361,37 +4397,20 @@ impl Interp {
             // `Vec::len` before and after, and a comparison.
             let temps_at_entry = it.roots.temps_len();
             let frame = it.roots.push_frame();
-            let flow = it.step(code, index, instruction, source, engine);
+            let ran = work(it);
             debug_assert!(
-                flow.is_err() || it.roots.temps_len() >= temps_at_entry,
+                ran.is_err() || it.roots.temps_len() >= temps_at_entry,
                 "step popped below its own temps watermark ({} -> {}), so it \
                  discarded roots it did not push",
                 temps_at_entry,
                 it.roots.temps_len()
             );
             it.roots.pop_frame(frame);
-            if flow.is_err() {
+            if ran.is_err() {
                 it.record_failure_site(code, index, source, instruction);
             }
-            flow
-        });
-        match outcome {
-            Ok(ClauseOutcome::Ran(flow)) => flow,
-            Ok(ClauseOutcome::Ended(exit)) => Ok(Flow::Exit(exit.value())),
-            // The handler run at this clause's boundary failed. The clause
-            // the oracle blames is **this** one -- the one whose boundary
-            // ran it -- not the enclosing instruction: measured, a failing
-            // `CALL ON` handler queued by `call sub` inside a `DO` echoes
-            // `3 *-* call sub`, where without this it echoed
-            // `2 *-* do i = 1 to 1`, the `DO` clause's own site recorded one
-            // level out. Fix round 3's NEW-B. The outer `Err` is the
-            // handler's alone -- this clause's own failure comes back as
-            // `Ran(Err(_))` above -- which is what keeps the two apart.
-            Err(failure) => {
-                self.record_failure_site(code, index, source, instruction);
-                Err(failure)
-            }
-        }
+            ran
+        })
     }
 
     /// Resolves `instruction`'s own clause (and its statically-derived
@@ -4915,21 +4934,37 @@ impl Interp {
         source: Option<&ProgramSource>,
         engine: BodyEngine<'_>,
     ) -> Result<Flow, Failure> {
+        match engine {
+            BodyEngine::TreeWalker => self.run_bounded_instructions(code, start, end, source),
+            // The op-level counterpart. It walks the same range under the
+            // same absorption rule ([`absorb`], which both loops decide
+            // through), and the whole of the difference is the space its
+            // program counter lives in: a promoted construct is a run of ops
+            // *inside* one instruction's position, so a loop stepping one
+            // instruction at a time cannot enter it.
+            BodyEngine::Chunk { chunk, registers } => {
+                self.run_bounded_from_chunk(code, chunk, registers, start, end, source)
+            }
+        }
+    }
+
+    /// [`Interp::run_bounded`]'s tree-walker arm: one instruction at a time,
+    /// straight into the tree-walker's own clause unit.
+    fn run_bounded_instructions(
+        &mut self,
+        code: &Code<'_>,
+        start: usize,
+        end: usize,
+        source: Option<&ProgramSource>,
+    ) -> Result<Flow, Failure> {
         let mut pc = start;
         while pc < end {
             let instruction = &code.body.instructions[pc];
-            let flow = match engine {
-                BodyEngine::TreeWalker => {
-                    self.step_in_temps_frame(code, pc, instruction, source)?
-                }
-                BodyEngine::Chunk(chunk) => {
-                    self.step_from_chunk(code, chunk, pc, instruction, source)?
-                }
-            };
-            match flow {
-                Flow::Next => pc += 1,
-                Flow::Goto(target) if target >= start && target <= end => pc = target,
-                other => return Ok(other),
+            let flow = self.step_in_temps_frame(code, pc, instruction, source)?;
+            match absorb(flow, start, end) {
+                Absorbed::Advance => pc += 1,
+                Absorbed::Resume(target) => pc = target,
+                Absorbed::Escaped(other) => return Ok(other),
             }
         }
         Ok(Flow::Next)
@@ -6141,6 +6176,60 @@ impl Interp {
         u64::try_from(whole).ok()
     }
 
+    /// An `IF`'s own condition, evaluated as the whole of the `IF` clause's
+    /// work.
+    ///
+    /// **The one implementation, entered from both engines**: `step`'s `If`
+    /// arm calls it inside its own `in_clause`, and `Op::EvalExpr` calls it
+    /// for the compiled form's `Clause` region. The indent it traces at is
+    /// read from `current_value_indent` rather than recomputed, for the same
+    /// reason `Assignment`'s own arm reads it: `in_stepped_clause` has already
+    /// set it to this clause's own printed indent, and recomputing
+    /// `static_indent(index)` would drop both the activation base and any
+    /// escape elevation in force.
+    fn eval_if_condition(&mut self, code: &Code<'_>, condition: &Expr) -> Result<bool, Failure> {
+        let indent = self.clause_state.current_value_indent;
+        self.eval_condition(
+            code,
+            condition,
+            ConditionTrace::Result(indent),
+            raised_if_not_logical,
+        )
+    }
+
+    /// Expression `slot` of the instruction at `index`, evaluated as the
+    /// compiled stream's [`crate::ir::Op::EvalExpr`] asks.
+    ///
+    /// The answer is the expression's own Rexx value. An `If` has one
+    /// expression, slot `0`, and its value is a logical one: `eval_condition`
+    /// has already validated it as exactly `0` or `1`, so it is stored as the
+    /// small integer of that name and `Op::JumpUnless` reads it back without
+    /// repeating the validation.
+    ///
+    /// **Loud rather than a panic for every shape that is not one this
+    /// stream emits**, which is this crate's standing rule for a state the
+    /// type system admits and the compiler does not produce: `ir::compile`
+    /// emits an `EvalExpr` only for an `If`'s slot `0`, and a promotion that
+    /// emits another adds the arm here that gives it meaning.
+    pub(crate) fn eval_chunk_expr(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        slot: u32,
+    ) -> Result<ObjRef, Failure> {
+        let Some(instruction) = code.body.instructions.get(index) else {
+            return Err(Loud::chunk_map_too_short().into());
+        };
+        let holds = match (&instruction.kind, slot) {
+            (InstructionKind::If { condition, .. }, 0) => {
+                self.eval_if_condition(code, condition)?
+            }
+            (kind, _) => return Err(Loud::instruction(kind).into()),
+        };
+        // In range unconditionally: `SMALL_INT_MAX` is far above one.
+        Ok(ObjRef::small_int(i64::from(holds)).unwrap_or(ObjRef::NIL))
+    }
+
     /// Evaluates `condition` and answers whether it holds, for `IF`/`WHEN`.
     ///
     /// **A comma list checks itself, but a single expression does not, and
@@ -6244,23 +6333,6 @@ impl Interp {
             }
         }
         Ok(false)
-    }
-
-    /// If `target` names an `Else` instruction, its own `then_exit`
-    /// (defaulting to the end of the body when `None`, "the end of this
-    /// body" per `ast.rs`'s own doc comment). Otherwise `target` unchanged.
-    ///
-    /// Shared by both of `If`'s own arms: the true path calls this to learn
-    /// where to resume once its bounded branch finishes, and the doc comment
-    /// on the `If` arm is where the false path's own reasoning for *not*
-    /// needing this lives.
-    fn skip_else(&self, code: &Code<'_>, target: usize) -> usize {
-        match code.body.instructions.get(target).map(|i| &i.kind) {
-            Some(InstructionKind::Else { then_exit }) => {
-                then_exit.unwrap_or(code.body.instructions.len())
-            }
-            _ => target,
-        }
     }
 
     /// Parses `text` as an `INTERPRET` fragment and runs it **inside the
@@ -7614,6 +7686,83 @@ fn validate_indirect_word(word: &[u8]) -> Result<Vec<u8>, Failure> {
         _ => {}
     }
     Ok(word.to_ascii_uppercase())
+}
+
+/// What [`Interp::run_bounded`]'s absorption rule says about one clause's
+/// `Flow`, in a range bounded by `[start, end]`.
+///
+/// **One rule, two loops.** The instruction-level loop and the op-level one
+/// both decide through [`absorb`] and differ only in what they do with the
+/// answer: an `Advance` moves an instruction counter by one or an op counter
+/// to the op after the clause, and a `Resume` maps its instruction index
+/// through the chunk's own table in the op case. Writing the range test twice
+/// is how the two would come to disagree about which `Goto` is an escape.
+pub(crate) enum Absorbed {
+    /// Nothing to redirect: continue after the clause that produced it.
+    Advance,
+    /// An in-range `Flow::Goto`: continue at this instruction.
+    Resume(usize),
+    /// Not this range's: hand it back to the caller unchanged.
+    Escaped(Flow),
+}
+
+/// [`Absorbed`] for `flow` in the range `[start, end]`.
+///
+/// `end` is inclusive, and deliberately: a nested construct's own resume point
+/// landing exactly on this range's boundary is normal completion, not an
+/// escape. Everything that is not a `Next` or an in-range `Goto` escapes,
+/// including a `Flow` variant this function does not name -- which is the
+/// same case as an out-of-range `Goto` on purpose, so a new variant
+/// propagates outward rather than being silently mishandled by a wrong arm.
+pub(crate) fn absorb(flow: Flow, start: usize, end: usize) -> Absorbed {
+    match flow {
+        Flow::Next => Absorbed::Advance,
+        Flow::Goto(target) if target >= start && target <= end => Absorbed::Resume(target),
+        other => Absorbed::Escaped(other),
+    }
+}
+
+/// Where an `IF` sends control on each of its two paths.
+///
+/// **One computation, read by both engines.** `step`'s own `If` arm runs
+/// `[index + 1, false_target)` and answers `Goto(resume)`; `ir::compile`
+/// emits a `JumpUnless` to `false_target` and, when the two differ, a `Jump`
+/// to `resume` at the end of the true branch. Having each work the pair out
+/// for itself is how the two would come to disagree about which instruction an
+/// `ELSE` starts at.
+pub(crate) struct IfTargets {
+    /// Where control goes when the condition is false: the `ELSE` when there
+    /// is one, otherwise the instruction after the `THEN` branch.
+    pub(crate) false_target: usize,
+    /// Where control resumes once the *true* branch has finished, which is
+    /// past the `ELSE` branch when there is one and identical to
+    /// `false_target` when there is not.
+    pub(crate) resume: usize,
+}
+
+/// [`IfTargets`] for an `If` whose parsed `false_target` is `raw`, against the
+/// body it belongs to.
+pub(crate) fn if_targets(instructions: &[Instruction], raw: Option<usize>) -> IfTargets {
+    // `None` is the end of this body (`InstructionKind::If`'s own doc), which
+    // is one past the last instruction and exactly what an empty range there
+    // needs.
+    let false_target = raw.unwrap_or(instructions.len());
+    IfTargets {
+        false_target,
+        resume: skip_else(instructions, false_target),
+    }
+}
+
+/// Where the *true* branch resumes, given where the false one goes.
+///
+/// `target` is the `If`'s own `false_target`: an `ELSE`'s index when there is
+/// one, in which case the true branch resumes past that `ELSE`'s own branch
+/// (`Else::then_exit`), and otherwise already the resume itself.
+fn skip_else(instructions: &[Instruction], target: usize) -> usize {
+    match instructions.get(target).map(|i| &i.kind) {
+        Some(InstructionKind::Else { then_exit }) => then_exit.unwrap_or(instructions.len()),
+        _ => target,
+    }
 }
 
 /// 20.928: a subsidiary-list word is not a legal symbol at all (contains a

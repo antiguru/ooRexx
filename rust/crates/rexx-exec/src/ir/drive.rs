@@ -12,44 +12,60 @@
 //! The driver: what runs a compiled [`Chunk`] for the activation on top of
 //! the stack.
 //!
+//! **The program counter is an op index.** That is the whole of what makes a
+//! promoted construct possible: an `IF` compiles to a run of ops sitting
+//! inside one instruction's position, and a counter that walks instructions
+//! cannot enter one. The instruction space has not gone away -- `Flow::Goto`
+//! and `Flow::Signal` both carry instruction indices, and `Chunk::op_of` is
+//! the one table where the two spaces meet.
+//!
 //! It sits beside `run_activation`'s own loop rather than replacing it --
 //! `Interp::engine` chooses between the two -- and it discharges exactly the
 //! same per-clause obligations, through the same functions, because those
 //! were extracted from that loop rather than copied out of it:
-//! `grant_procedure_permission`, `step_in_temps_frame`, `offer_to_trap` and
-//! `apply_flow`.
+//! `grant_procedure_permission`, `in_stepped_clause`, `offer_to_trap`,
+//! `apply_flow` and `absorb`.
 
-use rexx_parse::{Instruction, ProgramSource};
+use rexx_core::{Decoded, FrameId, ObjRef};
+use rexx_parse::ProgramSource;
 
 use super::{BodyEngine, Chunk, Op};
-use crate::run::{Ended, Flow};
+use crate::clause::{ClauseOutcome, ClauseValue};
+use crate::run::{Absorbed, Ended, Flow, absorb};
 use crate::{Code, Failure, Interp, Loud};
+
+/// What a body that runs off its own end answers.
+///
+/// `Exited` and not `Returned`, for the reason `Ended::Exited`'s own doc
+/// gives and `run_activation`'s loop ends with: a callee that runs off the
+/// end of the file ends the *program*, and the caller's next clause never
+/// runs.
+const END_OF_BODY: Ended = Ended::Exited(None);
+
+/// Where a promoted clause left the program counter.
+///
+/// A newtype so it can carry [`ClauseValue`]: `Interp::in_stepped_clause`
+/// chooses what to root across a delivered `CALL ON` handler from its work's
+/// return type, and this answers `None` because a promoted clause's values
+/// live in the chunk's register region, which the clause's own temps frame is
+/// not the root for and does not unwind.
+struct ClauseNext(u32);
+
+impl ClauseValue for ClauseNext {
+    fn rooted(&self) -> Option<ObjRef> {
+        None
+    }
+}
 
 impl Interp {
     /// Runs `chunk` for the activation on top of the stack.
-    ///
-    /// The outer loop iterates clauses; the inner one runs that clause's own
-    /// ops. The `pc` stays an **instruction** index throughout, mapped
-    /// through `chunk.op_of` at the top of each clause, which is what lets
-    /// [`Interp::apply_flow`] be reused unchanged -- `Flow::Goto` and
-    /// `Flow::Signal` both carry instruction indices, and `Signal`'s resolve
-    /// against the activation's own body rather than against the body being
-    /// stepped, which inside an `INTERPRET` fragment are different bodies.
-    ///
-    /// **Two levels rather than one flat loop, and the reason is
-    /// `in_clause`.** That is a scoped closure (`clause.rs`): it sets the
-    /// clause line, runs the whole clause, and then, only on the success
-    /// path, delivers a queued `CALL ON` handler, which can end the program.
-    /// The shape is built for a clause that spans a run of ops, because a
-    /// flat stream has no scope to hang that on -- an `Op::Generic` needs no
-    /// such scope, since the call it makes is a whole clause.
     ///
     /// The register region is reserved once, here, from `chunk.registers`,
     /// and truncated away on every path out. It sits on the temporaries
     /// stack (`RootSet::reserve_temps`' own doc has why neither a slot frame
     /// of its own nor the activation's own frame works), below every
-    /// watermark `step_in_temps_frame` takes, so a clause's own frame pops
-    /// back to above it rather than through it.
+    /// watermark a clause takes, so a clause's own frame pops back to above
+    /// it rather than through it.
     pub(crate) fn run_chunk(
         &mut self,
         code: &Code<'_>,
@@ -64,37 +80,67 @@ impl Interp {
         // raised paths leave the activation for `Interp::run` and
         // `resolve_and_run_call` to tear down, and a region left behind
         // would keep its registers rooted for the rest of the run.
-        let ended = self.run_chunk_clauses(code, chunk, source);
+        let ended = self.run_chunk_clauses(code, chunk, registers, source);
         self.roots.pop_frame(registers);
         ended
     }
 
-    /// The outer level: one iteration per clause.
-    ///
     /// The body of `run_chunk` past the register region, split out so the
     /// truncation above covers every way this returns.
+    ///
+    /// **Two levels rather than one flat loop, and the reason is the trap
+    /// offer.** [`Interp::run_ops`] runs ops until one escapes its range, and
+    /// is the same function `run_bounded`'s chunk arm enters for a construct's
+    /// body -- so it must not offer anything to a trap, exactly as
+    /// `run_bounded` does not. This level is the activation's own, which is
+    /// where the offer belongs: one per activation, made by the activation
+    /// that is unwinding. A nested `run_ops` (a `DO` body) shares this
+    /// activation's traps and must not get a second offer.
     fn run_chunk_clauses(
         &mut self,
         code: &Code<'_>,
         chunk: &Chunk,
+        registers: FrameId,
         source: Option<&ProgramSource>,
     ) -> Result<Ended, Failure> {
         let depth = self.activations.len();
+        let len = code.body.instructions.len();
 
-        while let Some(instruction) = code.body.instructions.get(self.activation().pc) {
-            let index = self.activation().pc;
-            self.grant_procedure_permission(instruction);
-            let flow = match self.step_from_chunk(code, chunk, index, instruction, source) {
+        loop {
+            // The activation's own `pc` is where a body is entered at -- `0`
+            // for a program, a label's index for a `CALL`, a handler's for a
+            // trap -- and `apply_flow` is what moves it afterwards. Nothing
+            // between those two reads it, which is what lets the op counter
+            // below be a local: the tree-walker already leaves the `pc`
+            // sitting on an `IF` for the whole of its branch.
+            let entry = self.activation().pc;
+            if entry >= len {
+                return Ok(END_OF_BODY);
+            }
+            let Some(at) = chunk.op_at(entry) else {
+                return Err(Loud::chunk_map_too_short().into());
+            };
+            // `[0, len]` is the whole body, so every `Goto` a clause of it
+            // produces is absorbed here and only the flows that end or
+            // redirect the activation come back.
+            let flow = match self.run_ops(code, chunk, registers, at, 0, len, source) {
                 Ok(flow) => flow,
-                // **The trap offer stays here**, at the same position it
-                // holds in `run_activation`'s own loop, because the position
-                // is the semantics: one offer per activation, made by the
-                // activation that is unwinding. A nested `run_bounded` (an
-                // `IF` branch, a `WHEN` body) shares this activation's traps
-                // and must not get a second offer, which is what moving this
-                // inside `apply_flow` would give it.
+                // `offer_to_trap` answers `Flow::Signal` for a trap that
+                // fired and `Flow::Exit` for a handler that ended the
+                // program, never `Flow::Next`, so a trapped condition
+                // redirects this loop rather than ending it.
                 Err(failure) => self.offer_to_trap(code, failure)?,
             };
+            // `Flow::Next` is `run_ops` reaching the end of its range, and
+            // the range here is the whole body -- so it is the end of the
+            // body itself rather than one clause finishing, and there is no
+            // `pc` to advance. Everything else is a flow the activation
+            // itself owns, which `apply_flow` applies exactly as
+            // `run_activation`'s loop does; a `Signal` writes the `pc` that
+            // the top of this loop then reads back.
+            if matches!(flow, Flow::Next) {
+                return Ok(END_OF_BODY);
+            }
             if let Some(ended) = self.apply_flow(code, flow)? {
                 return Ok(ended);
             }
@@ -105,112 +151,301 @@ impl Interp {
                  no longer describe the same frame"
             );
         }
-        // Out of instructions. `Exited` and not `Returned`, for the reason
-        // `Ended::Exited`'s own doc gives and `run_activation`'s loop ends
-        // with: a callee that runs off the end of the file ends the
-        // *program*, and the caller's next clause never runs.
-        Ok(Ended::Exited(None))
     }
 
-    /// Steps the clause at instruction index `index` from `chunk`.
+    /// `run_bounded`'s chunk arm: the instructions of `[start, end)`, run from
+    /// `chunk`'s ops.
     ///
-    /// **The one mapping from the instruction space a `pc` lives in into the
-    /// op space the inner level walks**, and the one guard on it. Both the
-    /// outer loop above and `Interp::run_bounded`'s [`BodyEngine::Chunk`] arm
-    /// come through here, so a clause reached from inside a `DO`/`LOOP` body
-    /// is mapped exactly as one reached from the top of the body is, and a
-    /// map too short for the body it belongs to fails the same way from
-    /// either.
-    ///
-    /// `compile` writes one entry per instruction plus a final one, so the
-    /// lookup is in range for any index that indexes an instruction.
-    pub(crate) fn step_from_chunk(
+    /// The one mapping from the instruction space a range is expressed in
+    /// into the op space the loop walks, and the one guard on it. `compile`
+    /// writes one entry per instruction plus a final one, so the lookup is in
+    /// range for any index that indexes an instruction.
+    pub(crate) fn run_bounded_from_chunk(
         &mut self,
         code: &Code<'_>,
         chunk: &Chunk,
-        index: usize,
-        instruction: &Instruction,
+        registers: FrameId,
+        start: usize,
+        end: usize,
         source: Option<&ProgramSource>,
     ) -> Result<Flow, Failure> {
-        let Some(&start) = chunk.op_of.get(index) else {
+        let Some(at) = chunk.op_at(start) else {
             return Err(Loud::chunk_map_too_short().into());
         };
-        self.run_clause_ops(code, chunk, start, index, instruction, source)
+        self.run_ops(code, chunk, registers, at, start, end, source)
     }
 
-    /// The inner level: the ops of the clause starting at op `start`, whose
-    /// instruction is `instruction` at instruction index `index`.
+    /// Runs `chunk`'s ops from op `at` until one of them produces a `Flow`
+    /// that `[start, end]` does not absorb, and answers that `Flow`.
     ///
-    /// Answers the clause's own `Flow`, which the outer loop applies.
+    /// `start` and `end` are **instruction** indices, because that is what a
+    /// `Flow::Goto` carries and what a construct computes its body's bounds
+    /// in; `at` and the counter are **op** indices. `Chunk::op_at` is where
+    /// the two spaces meet, and `absorb` -- shared with the tree-walker's own
+    /// bounded loop -- is where the rule that reads them lives.
     ///
-    /// `start` is an **op** index, where the outer loop's `index` is an
-    /// instruction index, and `chunk.op_of` is the one place the two spaces
-    /// meet. Taking an op index rather than reusing the instruction one is
-    /// what lets a clause be built from more than one op; an `Op::Generic` is
-    /// a whole clause on its own, since the call it makes runs one, so it
-    /// answers the clause's `Flow` directly.
-    ///
-    /// `index` travels beside `instruction` rather than being derived from
-    /// it: `If` and `Select` compute a branch's start from their own
-    /// position, and a nested `run_bounded` steps an instruction the
-    /// activation's `pc` is not pointing at.
-    fn run_clause_ops(
+    /// Reaching the op one past `end`'s own first op, whether by falling
+    /// through or by an absorbed `Goto`, is the only way this answers
+    /// `Flow::Next`; every other exit is the escaping `Flow` unchanged.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "two callers, and every argument is a value each already holds: bundling them \
+                  into a struct would only move the same list one line up"
+    )]
+    fn run_ops(
         &mut self,
         code: &Code<'_>,
         chunk: &Chunk,
-        start: u32,
-        index: usize,
-        instruction: &Instruction,
+        registers: FrameId,
+        at: u32,
+        start: usize,
+        end: usize,
         source: Option<&ProgramSource>,
     ) -> Result<Flow, Failure> {
-        #[cfg(test)]
-        count_clause_op_entry();
-
-        let Some(op) = chunk.ops.get(start as usize) else {
+        let Some(stop) = chunk.op_at(end) else {
             return Err(Loud::chunk_map_too_short().into());
         };
-        match op {
-            // **`Generic` delegates to `step_in_temps_frame`, not to
-            // `step`.** `step` is not the clause unit: its wrapper carries
-            // the per-clause clock invalidation, the `>I>` trace-entry
-            // decay, `current_value_indent`, the `SIGL` clause line, the
-            // clause boundary through `in_clause`, the clause echo, the GC
-            // temps frame with its watermark tripwire, and failure-site
-            // resolution. That call is also why **no `Clause` op precedes a
-            // `Generic` one**: it echoes the clause itself, and the echo is
-            // not idempotent.
-            Op::Generic => self.step_in_temps_frame(code, index, instruction, source),
-            // **The clause wrapper is the same one `Generic` takes**, and the
-            // whole of the difference is the `BodyEngine` it carries: the
-            // construct is resolved by `run_loop`, exactly as the tree-walker
-            // resolves it, and the engine decides only how each of its body's
-            // clauses is stepped. Writing a second loop here instead is the
-            // defect the dual-engine sweep exists to catch.
-            Op::Loop => self.step_in_temps_frame_with(
-                code,
-                index,
-                instruction,
-                source,
-                BodyEngine::Chunk(chunk),
-            ),
-            // Neither variant has a constructor: `compile` emits `Generic`
-            // and `Loop`, and `golden.rs`'s renderer is the only other thing
-            // that names either. Loud rather than a panic, which is this
-            // crate's standing rule for a state the type system admits and
-            // the code does not produce.
-            Op::Clause { .. } => Err(Loud::op_not_driven("Clause").into()),
-            Op::EvalExpr { .. } => Err(Loud::op_not_driven("EvalExpr").into()),
+        let mut pc = at;
+        while pc < stop {
+            let Some(op) = chunk.op_at_index(pc) else {
+                return Err(Loud::chunk_map_too_short().into());
+            };
+            let (flow, next) = match op {
+                // **`Generic` delegates to `step_in_temps_frame`, not to
+                // `step`.** `step` is not the clause unit: its wrapper carries
+                // the per-clause clock invalidation, the `>I>` trace-entry
+                // decay, `current_value_indent`, the `SIGL` clause line, the
+                // clause boundary through `in_clause`, the clause echo, the GC
+                // temps frame with its watermark tripwire, and failure-site
+                // resolution. That call is also why **no `Clause` op precedes
+                // a `Generic` one**: it echoes the clause itself, the echo is
+                // not idempotent, and `compile` asserts the arrangement.
+                Op::Generic { index } => {
+                    #[cfg(test)]
+                    count_clause_op_entry();
+                    let index = *index as usize;
+                    let Some(instruction) = code.body.instructions.get(index) else {
+                        return Err(Loud::chunk_map_too_short().into());
+                    };
+                    self.grant_procedure_permission(instruction);
+                    let flow = self.step_in_temps_frame(code, index, instruction, source)?;
+                    (flow, pc + 1)
+                }
+                // **The clause wrapper is the same one `Generic` takes**, and
+                // the whole of the difference is the `BodyEngine` it carries:
+                // the construct is resolved by `run_loop`, exactly as the
+                // tree-walker resolves it, and the engine decides only how
+                // each of its body's clauses is stepped. Writing a second loop
+                // here instead is the defect the dual-engine sweep exists to
+                // catch.
+                Op::Loop { index } => {
+                    #[cfg(test)]
+                    count_clause_op_entry();
+                    let index = *index as usize;
+                    let Some(instruction) = code.body.instructions.get(index) else {
+                        return Err(Loud::chunk_map_too_short().into());
+                    };
+                    self.grant_procedure_permission(instruction);
+                    let flow = self.step_in_temps_frame_with(
+                        code,
+                        index,
+                        instruction,
+                        source,
+                        BodyEngine::Chunk { chunk, registers },
+                    )?;
+                    (flow, pc + 1)
+                }
+                Op::Clause { index, end } => {
+                    #[cfg(test)]
+                    count_clause_op_entry();
+                    let index = *index as usize;
+                    let end = *end;
+                    let Some(instruction) = code.body.instructions.get(index) else {
+                        return Err(Loud::chunk_map_too_short().into());
+                    };
+                    self.grant_procedure_permission(instruction);
+                    match self.run_clause_region(
+                        code,
+                        chunk,
+                        registers,
+                        pc + 1,
+                        end,
+                        index,
+                        instruction,
+                        source,
+                    )? {
+                        // A promoted clause produces no `Flow` of its own:
+                        // where it leaves the counter *is* its answer, which
+                        // is what a jump op is for. Only its boundary can end
+                        // the activation, and that is the `Exit` below.
+                        ClauseRegion::Continue(next) => {
+                            pc = next;
+                            continue;
+                        }
+                        ClauseRegion::Exit(value) => (Flow::Exit(value), pc),
+                    }
+                }
+                Op::Jump { target } => {
+                    pc = *target;
+                    continue;
+                }
+                // Both are only meaningful inside a `Clause` region, which
+                // `run_clause_region` walks: reaching one here means a jump
+                // landed in the middle of a region rather than on its
+                // `Clause`. Loud rather than a panic, which is this crate's
+                // standing rule for a state the type system admits and the
+                // compiler does not produce.
+                Op::EvalExpr { .. } => return Err(Loud::op_not_driven("EvalExpr").into()),
+                Op::JumpUnless { .. } => return Err(Loud::op_not_driven("JumpUnless").into()),
+            };
+            match absorb(flow, start, end) {
+                Absorbed::Advance => pc = next,
+                Absorbed::Resume(target) => {
+                    let Some(at) = chunk.op_at(target) else {
+                        return Err(Loud::chunk_map_too_short().into());
+                    };
+                    pc = at;
+                }
+                Absorbed::Escaped(other) => return Ok(other),
+            }
+        }
+        Ok(Flow::Next)
+    }
+
+    /// One promoted clause: the ops of `(at - 1, end)`, run inside the same
+    /// clause wrapper an unpromoted instruction gets.
+    ///
+    /// `at` is the op after the `Clause` op itself. The register mark the
+    /// plan's Decisions section describes is a compile-time quantity -- the
+    /// allocator releases to it when this region's ops were emitted -- so
+    /// there is nothing to release here: the registers this region wrote are
+    /// simply not addressed again.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "one caller, and every argument is a value that caller already holds"
+    )]
+    fn run_clause_region(
+        &mut self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        registers: FrameId,
+        at: u32,
+        end: u32,
+        index: usize,
+        instruction: &rexx_parse::Instruction,
+        source: Option<&ProgramSource>,
+    ) -> Result<ClauseRegion, Failure> {
+        let outcome = self.in_stepped_clause(code, index, instruction, source, |it| {
+            // Taken on entry exactly as `step` takes it, because a promoted
+            // clause is a clause and the permission is spent by whichever
+            // clause the activation granted it to.
+            //
+            // **Nothing reads it back today and a mutation removing this line
+            // is caught by no test in the workspace** (recorded in the task
+            // report rather than left to be rediscovered). The reason is a
+            // property of what `compile` emits rather than of the permission
+            // rule: every `Clause` region is followed by the `THEN` marker's
+            // own `Generic`, which grants again before any `PROCEDURE` in the
+            // branch can be reached, so the value this line clears is
+            // overwritten before it is read. It stays because the obligation
+            // belongs to the clause unit and not to the op stream's current
+            // shape.
+            let _first_instruction = std::mem::take(&mut it.procedure_permitted);
+            it.run_region_ops(code, chunk, registers, at, end)
+        })?;
+        match outcome {
+            ClauseOutcome::Ran(next) => Ok(ClauseRegion::Continue(next?.0)),
+            ClauseOutcome::Ended(exit) => Ok(ClauseRegion::Exit(exit.value())),
         }
     }
+
+    /// The ops of one promoted clause, `[at, end)`, and where they leave the
+    /// counter.
+    ///
+    /// Only the ops that are part of a clause's own work appear here. An op
+    /// that runs a whole clause of its own does not, and cannot: `compile`
+    /// asserts no `Generic` or `Loop` sits inside a region, because both echo
+    /// the clause and the echo is not idempotent.
+    fn run_region_ops(
+        &mut self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        registers: FrameId,
+        at: u32,
+        end: u32,
+    ) -> Result<ClauseNext, Failure> {
+        let mut pc = at;
+        while pc < end {
+            let Some(op) = chunk.op_at_index(pc) else {
+                return Err(Loud::chunk_map_too_short().into());
+            };
+            match op {
+                Op::EvalExpr { index, slot, dst } => {
+                    debug_assert!(
+                        chunk.holds_register(*dst),
+                        "op writes register {dst} outside the region the chunk reserved"
+                    );
+                    let value = self.eval_chunk_expr(code, *index as usize, *slot)?;
+                    self.roots.set_temp(registers, *dst as usize, value);
+                    pc += 1;
+                }
+                Op::JumpUnless { reg, target } => {
+                    debug_assert!(
+                        chunk.holds_register(*reg),
+                        "op reads register {reg} outside the region the chunk reserved"
+                    );
+                    if self.register_holds(registers, *reg)? {
+                        pc += 1;
+                    } else {
+                        return Ok(ClauseNext(*target));
+                    }
+                }
+                Op::Jump { target } => {
+                    return Ok(ClauseNext(*target));
+                }
+                Op::Generic { .. } => return Err(Loud::op_not_driven("Generic").into()),
+                Op::Loop { .. } => return Err(Loud::op_not_driven("Loop").into()),
+                Op::Clause { .. } => return Err(Loud::op_not_driven("Clause").into()),
+            }
+        }
+        Ok(ClauseNext(end))
+    }
+
+    /// Whether register `reg` holds the Rexx logical value `1`.
+    ///
+    /// The only writer of a register a `JumpUnless` reads is an `EvalExpr`
+    /// whose expression `eval_condition` has already validated as exactly
+    /// `0` or `1`, so this is a readback rather than a second check --
+    /// re-deriving the answer from the value's text would be a second
+    /// implementation of the rule that decides a branch. Anything else in the
+    /// register means the two ops came apart, which is loud rather than a
+    /// silently-taken branch.
+    fn register_holds(&self, registers: FrameId, reg: u16) -> Result<bool, Failure> {
+        match self.roots.temp_at(registers, reg as usize).decode() {
+            Decoded::SmallInt(1) => Ok(true),
+            Decoded::SmallInt(0) => Ok(false),
+            _ => Err(Loud::register_not_logical().into()),
+        }
+    }
+}
+
+/// How a promoted clause finished.
+enum ClauseRegion {
+    /// Continue at this op.
+    Continue(u32),
+    /// A `CALL ON` handler ran at this clause's boundary and ended the whole
+    /// program.
+    Exit(Option<ObjRef>),
 }
 
 // Test-only instrumentation: how many chunks this thread has driven.
 //
 // The engine-selection tests need this to tell "the IR engine ran this body"
 // apart from "the run produced the answer the tree-walker also produces".
-// Every op is `Op::Generic`, so the two engines agree on every program by
-// construction and no observable output tells them apart -- a selection test
-// resting on output alone would pass with selection deleted.
+// Both engines resolve every construct through the same functions, so they
+// agree on every program by construction and no observable output tells them
+// apart -- a selection test resting on output alone would pass with selection
+// deleted.
 //
 // **Per thread, not per process, and the difference is what keeps a delta
 // meaningful when the default engine is not the tree-walker.** A test reading
@@ -241,11 +476,16 @@ pub(crate) fn run_chunk_entries() -> usize {
 // compiled stream.
 //
 // `run_chunk_entries` counts *activations* driven, which cannot see the one
-// thing promoting `DO`/`LOOP` changes: whether a clause **inside** a loop body
-// reaches the stream at all. Both engines produce identical bytes for every
-// program by construction here, and an activation entered is one entry either
-// way, so this is the only observable that separates a body driven from the
-// chunk from a body driven straight into the tree-walker.
+// thing promoting a construct changes: whether a clause **inside** that
+// construct reaches the stream at all. Both engines produce identical bytes
+// for every program by construction here, and an activation entered is one
+// entry either way, so this is the only observable that separates a body
+// driven from the chunk from a body driven straight into the tree-walker.
+//
+// Counted where a clause *begins*, which is every op that opens one: a
+// `Generic`, a `Loop`, and a promoted `Clause` region. So a construct that
+// moves from one of those shapes to another does not change the count, and a
+// construct whose clauses stop reaching the stream does.
 //
 // Per thread for the reason `RUN_CHUNK_ENTRIES` is: see its own comment.
 #[cfg(test)]

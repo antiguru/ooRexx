@@ -26,23 +26,29 @@ pub(crate) fn render(chunk: &Chunk) -> String {
     let mut out = String::new();
     for (index, op) in chunk.ops.iter().enumerate() {
         match op {
-            Op::Generic => {
-                out.push_str(&format!("{index}: Generic\n"));
+            Op::Generic { index: at } => {
+                out.push_str(&format!("{index}: Generic index={at}\n"));
             }
-            Op::Loop => {
-                out.push_str(&format!("{index}: Loop\n"));
+            Op::Loop { index: at } => {
+                out.push_str(&format!("{index}: Loop index={at}\n"));
             }
-            Op::Clause { end } => {
-                out.push_str(&format!("{index}: Clause end={end}\n"));
+            Op::Clause { index: at, end } => {
+                out.push_str(&format!("{index}: Clause index={at} end={end}\n"));
             }
             Op::EvalExpr {
-                index: expr,
+                index: at,
                 slot,
                 dst,
             } => {
                 out.push_str(&format!(
-                    "{index}: EvalExpr index={expr} slot={slot} dst={dst}\n"
+                    "{index}: EvalExpr index={at} slot={slot} dst={dst}\n"
                 ));
+            }
+            Op::Jump { target } => {
+                out.push_str(&format!("{index}: Jump target={target}\n"));
+            }
+            Op::JumpUnless { reg, target } => {
+                out.push_str(&format!("{index}: JumpUnless reg={reg} target={target}\n"));
             }
         }
     }
