@@ -121,6 +121,14 @@ pub struct Invocation {
 /// interpreter. `Invocation` is already `run_program`'s third parameter and
 /// already reaches the interpreter, which is what makes a per-run choice
 /// expressible at all.
+///
+/// **A `rexx-run` process is the one case that argument does not cover**,
+/// since it runs one program and exits, so one answer per process is all it
+/// needs. That binary reads `REXX_ENGINE` and turns it into one of these
+/// before it builds an `Invocation` (`bin/rexx-run.rs`'s
+/// `engine_from_environment`). The library itself reads no environment
+/// variable to make this choice at any depth, so an in-process harness gets
+/// exactly what its own `Invocation` asked for.
 /// **No `Default`**, deliberately: [`Invocation::none`] is the one place that
 /// decides which engine a caller who did not choose gets, and a `Default`
 /// impl with no caller would be a second place for that answer to live.

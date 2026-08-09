@@ -335,7 +335,7 @@ run-to-run: `perf-baseline.md`'s own "internal cps ratio is unstable across runs
 established that for this same machine, and nothing in this task's single run contradicts or
 extends that finding.
 
-## Task 4: `Do`/`Loop`, predicted versus measured
+## Task 4a: `Do`/`Loop`, predicted versus measured
 
 The first task in this phase to run any of a program's clauses from a compiled stream: a `DO`/`LOOP`
 compiles to an op of its own and its body's clauses are stepped through the driver instead of

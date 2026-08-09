@@ -132,6 +132,37 @@ fn the_ir_engine_steps_a_loop_body_from_the_chunk() {
     );
 }
 
+/// A `DO ... END` block's two body clauses are stepped from the chunk too.
+///
+/// **A separate test from the counted loop's, because `LoopKind::Simple` is a
+/// separate arm of `run_loop` with a `run_bounded` call of its own**, and the
+/// counted loop's count cannot see it: leaving that one arm on the tree-walker
+/// leaves every other test in the workspace green, including the dual-engine
+/// sweep, which cannot tell the two drivers apart because both produce
+/// identical bytes.
+///
+/// **At the top of the body, not inside an `IF`.** `If` steps its own branch
+/// through the tree-walker (that promotion is not this task's), so a block
+/// written as `if 1 = 1 then do ... end` never reaches the stream at all and a
+/// count taken over one would be satisfied by the `IF`, not by the block.
+#[test]
+fn the_ir_engine_steps_a_simple_blocks_body_from_the_chunk() {
+    let before = clause_op_entries();
+    let outcome = execute(
+        TEST_PATH,
+        b"do\n  nop\n  nop\nend\n".to_vec(),
+        false,
+        Invocation::none().with_engine(Engine::Ir),
+    );
+    let stepped = clause_op_entries() - before;
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(
+        stepped, 3,
+        "the IR engine stepped {stepped} clauses from the chunk where a block \
+         over two clauses has three: its own DO clause and both body clauses"
+    );
+}
+
 /// The negative control for the test above: the tree-walker steps nothing
 /// from a chunk, so a count that never moved would satisfy it on its own.
 #[test]

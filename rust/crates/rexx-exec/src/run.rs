@@ -4230,10 +4230,9 @@ impl Interp {
     /// [`Interp::step_in_temps_frame`], naming which driver steps the member
     /// clauses of a construct this instruction resolves inside itself.
     ///
-    /// Only a `DO`/`LOOP` reads `engine` today, and only the compiled
-    /// stream's own driver ever passes anything but [`BodyEngine::TreeWalker`]
-    /// -- see [`BodyEngine`]'s own doc comment for what it does and does not
-    /// decide.
+    /// `engine` is forwarded to `step` and reaches whichever construct
+    /// resolves its own members inside this call -- see [`BodyEngine`]'s own
+    /// doc comment for what it does and does not decide.
     pub(crate) fn step_in_temps_frame_with(
         &mut self,
         code: &Code<'_>,

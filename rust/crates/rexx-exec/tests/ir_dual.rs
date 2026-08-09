@@ -220,8 +220,26 @@ const LOOP_CASES: &[LoopCase] = &[
     LoopCase {
         // A block, not a loop: exactly one pass, and its `END` echoes once.
         name: "simple block",
+        program: "do\n  say 'a'\n  say 'zz'\nend\nsay 'after'\n",
+        stdout: "a\nzz\nafter\n",
+        stderr: "",
+    },
+    LoopCase {
+        // The same block reached through an `IF`'s true branch, which is a
+        // different route into it: `If` steps its branch itself, so this
+        // block's own clauses arrive from `If`'s driver rather than from the
+        // enclosing body's.
+        name: "simple block inside an if",
         program: "if 1 = 1 then do\n  say 'a'\n  say 'zz'\nend\n",
         stdout: "a\nzz\n",
+        stderr: "",
+    },
+    LoopCase {
+        // A labelled `Simple` block is leavable by name where an unlabelled
+        // one is not, and it owns a search frame either way.
+        name: "labelled simple block, left by name",
+        program: "do label blk\n  say 'a'\n  leave blk\n  say 'never'\nend\nsay 'after'\n",
+        stdout: "a\nafter\n",
         stderr: "",
     },
     LoopCase {

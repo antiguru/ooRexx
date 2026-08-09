@@ -32,19 +32,37 @@ use std::process::ExitCode;
 /// It exists because the two engines are the same build selected through
 /// `Invocation`, so a benchmark comparison between them has to interleave
 /// between arms of one binary within one sitting -- and nothing else in this
-/// binary can reach `Invocation::with_engine`. Any spelling other than the two
-/// below is rejected rather than defaulted: a typo that silently measured the
-/// tree-walker twice would produce a comparison of an arm against itself, and
-/// report it as no movement.
+/// binary can reach `Invocation::with_engine`.
+///
+/// **Set-but-unrecognised is rejected, and that includes a value this platform
+/// will not decode.** Only an unset variable defaults. A typo, or a byte string
+/// that is not UTF-8, would otherwise run the tree-walker while the caller
+/// believed it had asked for the other engine -- which is worse than either
+/// running or refusing, because a benchmark would attribute the result to the
+/// wrong arm and read a comparison of one arm against itself as no movement.
 fn engine_from_environment() -> rexx_exec::Engine {
-    match std::env::var("REXX_ENGINE").as_deref() {
-        Ok("ir") => rexx_exec::Engine::Ir,
-        Ok("tree-walker") | Err(_) => rexx_exec::Engine::TreeWalker,
-        Ok(other) => {
-            eprintln!("rexx-run: REXX_ENGINE={other}: expected `ir` or `tree-walker`");
-            std::process::exit(2);
-        }
+    use std::env::VarError;
+
+    match std::env::var("REXX_ENGINE") {
+        Err(VarError::NotPresent) => rexx_exec::Engine::TreeWalker,
+        Ok(value) => match value.as_str() {
+            "ir" => rexx_exec::Engine::Ir,
+            "tree-walker" => rexx_exec::Engine::TreeWalker,
+            other => reject_engine(&format!("`{other}`")),
+        },
+        // Not decodable as UTF-8, so there is nothing to compare against
+        // either spelling and nothing to print back either. Rejected rather
+        // than defaulted for the reason above: it is set, so the caller asked
+        // for something.
+        Err(VarError::NotUnicode(_)) => reject_engine("a value that is not UTF-8"),
     }
+}
+
+/// Reports an unusable `REXX_ENGINE` and stops, with the status `main` uses
+/// for a request it cannot carry out at all.
+fn reject_engine(described: &str) -> ! {
+    eprintln!("rexx-run: REXX_ENGINE is {described}: expected `ir` or `tree-walker`");
+    std::process::exit(2);
 }
 
 fn main() -> ExitCode {

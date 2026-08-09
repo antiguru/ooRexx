@@ -61,10 +61,9 @@ pub(crate) enum Op {
     /// echo are one implementation, entered from both engines, rather than
     /// two. What this op changes is the one line inside it that was
     /// engine-specific: the body's clauses are stepped through
-    /// [`Interp::run_clause_ops`] instead of straight into the tree-walker's
+    /// `Interp::step_from_chunk` instead of straight into the tree-walker's
     /// clause unit, so an instruction inside a loop is reachable from the
-    /// compiled stream at all. Every promotion after this one is of an
-    /// instruction that spends its life inside a loop body.
+    /// compiled stream at all.
     ///
     /// Carries no payload for the same reason [`Op::Generic`] does not: the
     /// driver reaches it through `Chunk::op_of`, so the instruction index is

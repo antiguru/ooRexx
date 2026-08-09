@@ -83,15 +83,8 @@ impl Interp {
 
         while let Some(instruction) = code.body.instructions.get(self.activation().pc) {
             let index = self.activation().pc;
-            // The one mapping from the instruction space the `pc` lives in
-            // into the op space the inner level walks. `compile` writes one
-            // entry per instruction plus a final one, so this is in range
-            // for every index the guard above admitted.
-            let Some(&start) = chunk.op_of.get(index) else {
-                return Err(Loud::chunk_map_too_short().into());
-            };
             self.grant_procedure_permission(instruction);
-            let flow = match self.run_clause_ops(code, chunk, start, index, instruction, source) {
+            let flow = match self.step_from_chunk(code, chunk, index, instruction, source) {
                 Ok(flow) => flow,
                 // **The trap offer stays here**, at the same position it
                 // holds in `run_activation`'s own loop, because the position
@@ -121,11 +114,16 @@ impl Interp {
 
     /// Steps the clause at instruction index `index` from `chunk`.
     ///
-    /// The one entry point a construct's own body driver uses
-    /// (`Interp::run_bounded`'s [`BodyEngine::Chunk`] arm): it does the
-    /// instruction-to-op mapping the outer loop above does, so a clause
-    /// reached from inside a `DO`/`LOOP` body runs the same ops a clause
-    /// reached from the top of the body would.
+    /// **The one mapping from the instruction space a `pc` lives in into the
+    /// op space the inner level walks**, and the one guard on it. Both the
+    /// outer loop above and `Interp::run_bounded`'s [`BodyEngine::Chunk`] arm
+    /// come through here, so a clause reached from inside a `DO`/`LOOP` body
+    /// is mapped exactly as one reached from the top of the body is, and a
+    /// map too short for the body it belongs to fails the same way from
+    /// either.
+    ///
+    /// `compile` writes one entry per instruction plus a final one, so the
+    /// lookup is in range for any index that indexes an instruction.
     pub(crate) fn step_from_chunk(
         &mut self,
         code: &Code<'_>,
