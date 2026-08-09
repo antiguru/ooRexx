@@ -915,6 +915,26 @@ const TRACE_SETTING_CASES: &[InlineCase] = &[
         exit_code: 0,
     },
     InlineCase {
+        // **The row that reaches a chunk compiled to echo and then asks it not
+        // to.** Every row above whose `TRACE` is in the body itself compiles
+        // the body before that `TRACE` runs, so the chunk is the silent one
+        // and the only question is whether the echo can be added back. Here
+        // the body is *entered* with `trace r` already in force, so its chunk
+        // carries an echo op per promoted clause, and the `trace n` inside it
+        // is what has to withdraw them.
+        //
+        // The `3 *-* exit` line is the surrounding evidence that the
+        // withdrawal is per activation rather than global: `trace n` was
+        // executed in the callee's, and the caller's own next clause echoes.
+        name: "a body entered under trace r that then turns trace off",
+        program: "trace r\ncall sub\nexit\nsub:\nif 1 = 1 then trace n\n\
+                  if 1 = 1 then say 'x'\nreturn\n",
+        stdout: "x\n",
+        stderr: "     2 *-* call sub\n     4 *-*   sub:\n     5 *-*   if 1 = 1 \n       \
+                 >>>     \"1\"\n     5 *-*     then\n     5 *-*       trace n\n     3 *-* exit\n",
+        exit_code: 0,
+    },
+    InlineCase {
         // A `SELECT`'s header and its listed `WHEN` are promoted clauses too,
         // and each has an echo of its own -- so the row that says the fix is
         // about clauses rather than about `IF`.

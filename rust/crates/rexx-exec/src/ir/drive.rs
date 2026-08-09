@@ -293,28 +293,6 @@ impl Interp {
         // `SELECT` opens a branch, so the two comparisons per op below are a
         // `Vec::last` on an empty `Vec` for everything else.
         let mut frames: Vec<SelectFrame> = Vec::new();
-        // **Whether the setting in force is still the one this chunk's trace
-        // ops were emitted for**, and the whole of what makes a compiled-in
-        // emission decision safe.
-        //
-        // A widened cache key answers this on the way in: `chunk_for` is asked
-        // for the chunk of the setting in force, so a body entered under a
-        // second setting gets a second chunk rather than the first one. What
-        // the key cannot answer is a `TRACE` run *while this chunk is
-        // running*, which changes the setting with nothing consulting the
-        // cache -- and the reply below is not a re-compile but a fall back to
-        // the run-time gate for the clauses that follow, which is what the
-        // tree-walker does for the same clause anyway.
-        //
-        // **Refreshed after the ops that run a whole clause, and nowhere
-        // else.** `Interp::set_trace_mode` writes the *running* activation's
-        // setting and nothing else does (its own doc comment), a callee gets a
-        // copy through `Activation::nested` and never writes back, and the
-        // instructions that call it are unpromoted -- so an `Op::Generic` or
-        // an `Op::Loop` is the only thing here that can change the answer. The
-        // `debug_assert` in the `Clause` arm is what checks that by behaviour
-        // rather than leaving it as a claim: it recomputes and compares.
-        let mut stale = chunk.trace() != self.chunk_trace();
         let mut pc = at;
         loop {
             // **A branch whose ops the counter has left has run off its own
@@ -357,7 +335,6 @@ impl Interp {
                         self.grant_procedure_permission(instruction);
                     }
                     let flow = self.step_in_temps_frame(code, index, instruction, source)?;
-                    stale = chunk.trace() != self.chunk_trace();
                     (flow, pc + 1)
                 }
                 // **The clause wrapper is the same one `Generic` takes**, and
@@ -384,7 +361,6 @@ impl Interp {
                         source,
                         BodyEngine::Chunk { chunk, registers },
                     )?;
-                    stale = chunk.trace() != self.chunk_trace();
                     (flow, pc + 1)
                 }
                 Op::Clause { index, end } => {
@@ -398,13 +374,39 @@ impl Interp {
                     if GRANTING {
                         self.grant_procedure_permission(instruction);
                     }
-                    debug_assert_eq!(
-                        stale,
-                        chunk.trace() != self.chunk_trace(),
-                        "the trace setting moved somewhere this loop does not look, so a promoted \
-                         clause is about to echo under a decision that is no longer the current \
-                         one"
-                    );
+                    // **Whether the setting in force is still the one this
+                    // chunk's trace ops were emitted for**, and the whole of
+                    // what makes a compiled-in emission decision safe.
+                    //
+                    // The widened cache key answers this on the way in:
+                    // `chunk_for` is asked for the chunk of the setting in
+                    // force, so a body entered under a second setting gets a
+                    // second chunk rather than the first one. What the key
+                    // cannot answer is a `TRACE` run *while this chunk is
+                    // running*, which changes the setting with nothing
+                    // consulting the cache -- and the reply is not a
+                    // re-compile but a fall back to the run-time gate for the
+                    // clauses that follow, which is what the tree-walker does
+                    // for the same clause anyway.
+                    //
+                    // **Read here, per promoted clause, rather than kept in a
+                    // local the loop refreshes -- and that is a measurement
+                    // rather than the obvious shape.** A local has to be
+                    // initialised, and `bench-programs/emptyloop.rex`, whose
+                    // body holds no promoted clause at all, enters `run_ops`
+                    // once per pass: initialising one there cost 40.30 to
+                    // 40.55 billion user instructions, 10 per pass, on a
+                    // program that has nothing for the answer to decide. Asked
+                    // here it is 40.30 billion again, and a clause that does
+                    // have an echo to decide pays one comparison -- the same
+                    // one `in_stepped_clause` used to make for it.
+                    //
+                    // It is also the shape with no premise about *who* can
+                    // change the setting mid-body. A local refreshed after the
+                    // ops that can run a `TRACE` needs that list to be right,
+                    // and the list is an internal enumeration; reading the
+                    // setting where the answer is used needs nothing.
+                    let stale = chunk.trace() != self.chunk_trace();
                     match self.run_clause_region(
                         code,
                         chunk,

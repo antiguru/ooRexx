@@ -4457,6 +4457,16 @@ impl Interp {
     /// that has to ask. Measured under `trace l`: a fallen-through label, a
     /// `CALL` target and a `SIGNAL` target all echo, in that one program's
     /// whole stderr, and every other clause is silent.
+    ///
+    /// **`inline(always)`, and it is a measurement rather than a habit.** This
+    /// is one call per clause of every body on either engine, and the gate is
+    /// the whole of what an untraced run does here. Left to the inliner's own
+    /// judgement it is emitted as a function and
+    /// `bench-programs/emptyloop.rex` runs 2.80-2.82s on the tree-walker
+    /// against 2.73-2.75s with the same lines written out at the call site;
+    /// with the annotation it is that same level. Interleaved between arms
+    /// within one sitting, six sittings.
+    #[inline(always)]
     pub(crate) fn echo_stepped_clause(
         &mut self,
         source: Option<&ProgramSource>,

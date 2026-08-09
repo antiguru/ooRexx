@@ -257,6 +257,7 @@ pub(crate) struct ChunkTrace {
 
 impl ChunkTrace {
     /// What `compile` reads out of the setting in force.
+    #[inline(always)]
     pub(crate) fn of(mode: TraceMode) -> ChunkTrace {
         ChunkTrace {
             clauses: mode.all,
@@ -269,6 +270,7 @@ impl ChunkTrace {
     /// The `||` reduces to `clauses` in every mode but `L`, because `labels`
     /// is true wherever `clauses` is ([`TraceMode::labels`]'s own doc comment
     /// has the flag sets that make that so).
+    #[inline(always)]
     pub(crate) fn echoes(self, is_label: bool) -> bool {
         self.clauses || (self.labels && is_label)
     }
@@ -573,12 +575,14 @@ impl Interp {
     /// `crate::ir::compile` asks the identical question at compile time and a
     /// second copy of it is how a chunk compiled to echo and a clause run
     /// without one would come to disagree.
+    #[inline(always)]
     pub(crate) fn tracing_clause(&self, is_label: bool) -> bool {
         self.chunk_trace().echoes(is_label)
     }
 
     /// The part of the setting in force that a chunk's identity depends on
     /// ([`ChunkTrace`]).
+    #[inline(always)]
     pub(crate) fn chunk_trace(&self) -> ChunkTrace {
         ChunkTrace::of(self.trace_mode())
     }
