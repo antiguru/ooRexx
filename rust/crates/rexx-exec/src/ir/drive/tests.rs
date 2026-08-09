@@ -12,17 +12,18 @@
 //! Engine selection: which bodies the driver actually runs.
 //!
 //! **Output cannot answer this and these tests do not ask it to.** Every op
-//! compiles to `Op::Generic`, which delegates the clause back to the
-//! tree-walker's own clause unit, so the two engines produce identical bytes
-//! on every program -- a selection test comparing output would stay green
-//! with selection deleted. What separates them is whether `run_chunk` ran at
-//! all, which is what [`super::run_chunk_entries`] counts.
+//! resolves its clause through the same functions the tree-walker's own loop
+//! calls, so the two engines produce identical bytes on every program -- a
+//! selection test comparing output would stay green with selection deleted.
+//! What separates them is what the driver did: which bodies it drove
+//! ([`super::run_chunk_entries`]) and which clauses it stepped
+//! ([`super::clause_op_entries`]).
 //!
 //! **Both counting tests name their engine and neither reads a default**, so
 //! what they assert stays true whatever the default becomes. Which engine the
 //! default *is* belongs to `Invocation`, and `invocation.rs` asserts it there.
 
-use super::run_chunk_entries;
+use super::{clause_op_entries, run_chunk_entries};
 use crate::{Engine, Invocation, Outcome, execute, run_program};
 
 /// The path these programs are reported under. Nothing reads it back: no
@@ -92,6 +93,62 @@ fn the_tree_walker_drives_no_chunk_at_all() {
         driven, 0,
         "the tree-walker drove {driven} chunks, so the engine choice no longer \
          decides which driver runs a body"
+    );
+}
+
+/// A three-pass loop over a one-clause body: the loop's `DO` clause and each
+/// of the three body clauses are stepped from the chunk.
+///
+/// **This is the only observable that separates a promoted `DO`/`LOOP` from
+/// an unpromoted one**, and that is why it is a count rather than a
+/// comparison of output. The construct is resolved by the same `run_loop`
+/// either way, so both engines print the same bytes on every program; what
+/// changes is whether the body's clauses reach the compiled stream at all.
+/// With the body left on the tree-walker the count is 1 -- the `DO` clause
+/// alone -- and every promotion after this one would then silently skip
+/// anything written inside a loop.
+///
+/// The `END` clause is not in the count and is not missing from it:
+/// `run_bounded`'s range stops before `END`, and the loop's own `Flow::Goto`
+/// resumes one past it, so no engine ever steps it.
+#[test]
+fn the_ir_engine_steps_a_loop_body_from_the_chunk() {
+    const COUNTED_LOOP: &[u8] = b"do i = 1 to 3\n  nop\nend\n";
+
+    let before = clause_op_entries();
+    let outcome = execute(
+        TEST_PATH,
+        COUNTED_LOOP.to_vec(),
+        false,
+        Invocation::none().with_engine(Engine::Ir),
+    );
+    let stepped = clause_op_entries() - before;
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(
+        stepped, 4,
+        "the IR engine stepped {stepped} clauses from the chunk where a \
+         three-pass loop over a one-clause body has four: its own DO clause \
+         and one body clause per pass"
+    );
+}
+
+/// The negative control for the test above: the tree-walker steps nothing
+/// from a chunk, so a count that never moved would satisfy it on its own.
+#[test]
+fn the_tree_walker_steps_no_clause_from_a_chunk() {
+    let before = clause_op_entries();
+    let outcome = execute(
+        TEST_PATH,
+        b"do i = 1 to 3\n  nop\nend\n".to_vec(),
+        false,
+        Invocation::none().with_engine(Engine::TreeWalker),
+    );
+    let stepped = clause_op_entries() - before;
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(
+        stepped, 0,
+        "the tree-walker stepped {stepped} clauses from a chunk, so the engine \
+         choice no longer decides which driver steps a clause"
     );
 }
 

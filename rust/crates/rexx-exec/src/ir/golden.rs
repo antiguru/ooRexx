@@ -29,6 +29,9 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::Generic => {
                 out.push_str(&format!("{index}: Generic\n"));
             }
+            Op::Loop => {
+                out.push_str(&format!("{index}: Loop\n"));
+            }
             Op::Clause { end } => {
                 out.push_str(&format!("{index}: Clause end={end}\n"));
             }

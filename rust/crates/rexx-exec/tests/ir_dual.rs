@@ -16,12 +16,17 @@
 //!
 //! # What this proves, and what it does not
 //!
-//! **It does not yet prove that a promoted construct is right, because
-//! nothing is promoted.** Every instruction compiles to `Op::Generic`, which
-//! delegates its clause back to the tree-walker's own clause unit. So an
-//! all-`Generic` program agrees with itself by construction, and this file's
-//! comparison is not evidence about expression evaluation, arithmetic, or
-//! any construct's semantics.
+//! **It cannot see a promotion that shares its semantics, and every
+//! promotion so far does.** An instruction the compiler has not promoted
+//! delegates its clause back to the tree-walker's own clause unit; a `DO` or
+//! `LOOP` is resolved by the same `Interp::run_loop` under both engines, with
+//! only the driver that steps its body's clauses differing. So the two arms
+//! agree by construction, and this file's comparison is not evidence about
+//! expression evaluation, arithmetic, or any construct's semantics.
+//!
+//! **That is a property to keep rather than a weakness to fix**: a promotion
+//! that shares its semantics cannot diverge, and one that re-implements them
+//! can, which is what this comparison is here to catch when it arrives.
 //!
 //! What it does prove is everything *around* that delegation, which is the
 //! whole of what the driver adds and is not shared with `run_activation`:
@@ -43,10 +48,10 @@
 //!   a compiler that started refusing ordinary bodies could not pass by
 //!   quietly running everything on the tree-walker.
 //!
-//! Which *engine* actually ran is not observable from a program's output at
-//! this point in the phase, and this file makes no attempt to infer it from
-//! one. That question is answered where it can be answered honestly, by
-//! counting `run_chunk` entries: `src/ir/drive/tests.rs`.
+//! Which *engine* actually ran, and how much of a program it drove, is not
+//! observable from that program's output, and this file makes no attempt to
+//! infer it from one. That question is answered where it can be answered
+//! honestly, by counting what the driver did: `src/ir/drive/tests.rs`.
 //!
 //! # There is no REPORT mode here
 //!
@@ -119,6 +124,175 @@ fn both_engines_agree_on_an_all_generic_program() {
 
 fn run(text: Vec<u8>, engine: Engine) -> Outcome {
     run_program(INLINE_PATH, text, Invocation::none().with_engine(engine))
+}
+
+/// One `DO`/`LOOP` program with the answer the tree-walker gives for it.
+///
+/// The expected bytes are half of what each case is worth and the two-engine
+/// comparison is the other half, because neither half alone is enough here.
+/// The comparison says the two engines agree and says nothing about what
+/// either does; the expected bytes say what the program does and would stay
+/// green if the IR engine were never selected at all. A case carries both.
+struct LoopCase {
+    name: &'static str,
+    program: &'static str,
+    stdout: &'static str,
+    /// The trace sink, empty for a case that sets no `TRACE`. Written out in
+    /// full for the two traced cases rather than summarised: a loop's trace is
+    /// where a re-implementation diverges first, because the `DO` and `END`
+    /// clauses re-echo per pass under rules that no `SAY` can observe.
+    stderr: &'static str,
+}
+
+/// The shapes the loop promotion has to keep: one per `LoopKind` this crate
+/// runs, both `LoopConditional` spellings, both `LEAVE` and `ITERATE`, and two
+/// traced loops.
+///
+/// Every one of these passes with both engines delegating to the tree-walker's
+/// clause unit, which is the point of adding them before the compiler emits
+/// anything: a case written after a promotion cannot say whether it ever would
+/// have failed.
+const LOOP_CASES: &[LoopCase] = &[
+    LoopCase {
+        name: "controlled",
+        program: "do i = 1 to 3\n  say i\nend\n",
+        stdout: "1\n2\n3\n",
+        stderr: "",
+    },
+    LoopCase {
+        // The per-pass control-variable re-read, which is the behaviour a
+        // reviewer once caught being called unreachable: the body writes the
+        // control variable and the next pass reads `10` back, adds the `BY`,
+        // and stops because `11 > 3`.
+        name: "controlled, body writes the control variable",
+        program: "do i = 1 to 3\n  i = 10\nend\nsay i\n",
+        stdout: "11\n",
+        stderr: "",
+    },
+    LoopCase {
+        name: "controlled with BY and FOR",
+        program: "do i = 1 to 10 by 3 for 2\n  say i\nend\nsay i\n",
+        stdout: "1\n4\n7\n",
+        stderr: "",
+    },
+    LoopCase {
+        name: "bare repeat count",
+        program: "do 3\n  say 'zz'\nend\n",
+        stdout: "zz\nzz\nzz\n",
+        stderr: "",
+    },
+    LoopCase {
+        name: "while",
+        program: "n1 = 0\ndo while n1 < 3\n  n1 = n1 + 1\n  say n1\nend\n",
+        stdout: "1\n2\n3\n",
+        stderr: "",
+    },
+    LoopCase {
+        name: "until",
+        program: "n1 = 0\ndo until n1 >= 3\n  n1 = n1 + 1\n  say n1\nend\n",
+        stdout: "1\n2\n3\n",
+        stderr: "",
+    },
+    LoopCase {
+        name: "forever with leave",
+        program: "n1 = 0\ndo forever\n  n1 = n1 + 1\n  if n1 = 3 then leave\nend\nsay n1\n",
+        stdout: "3\n",
+        stderr: "",
+    },
+    LoopCase {
+        // The label search, across two frames: the `ITERATE` names the outer
+        // loop from inside the inner one, so the inner loop is left and the
+        // outer one re-tested.
+        name: "nested, labelled iterate",
+        program: "zz = 0\ndo label lbl outer = 1 to 3\n  do inner = 1 to 3\n    \
+                  if inner = 2 then iterate lbl\n    zz = zz + 1\n  end\nend\nsay zz\n",
+        stdout: "3\n",
+        stderr: "",
+    },
+    LoopCase {
+        // `DO OVER` in the single-iteration form this crate implements for a
+        // non-stem target: the target yields itself, once.
+        name: "do over a non-stem target",
+        program: "do qq over 4.5\n  say qq\nend\n",
+        stdout: "4.5\n",
+        stderr: "",
+    },
+    LoopCase {
+        // A block, not a loop: exactly one pass, and its `END` echoes once.
+        name: "simple block",
+        program: "if 1 = 1 then do\n  say 'a'\n  say 'zz'\nend\n",
+        stdout: "a\nzz\n",
+        stderr: "",
+    },
+    LoopCase {
+        // The `DO` clause re-echoes once per pass and `END` once per pass that
+        // falls through to it, and the control step's four intermediate lines
+        // straddle the `BY` addition.
+        name: "controlled under trace i",
+        program: "trace i\ndo i = 1 to 2\n  nop\nend\n",
+        stdout: "",
+        stderr: "     2 *-* do i = 1 to 2\n       >L>   \"1\"\n       >L>   \"2\"\n       \
+                 >K>   \"TO\" => \"2\"\n       >=>   I <= \"1\"\n     3 *-*   nop\n     \
+                 4 *-* end\n     2 *-* do i = 1 to 2\n       >V>     I => \"1\"\n       \
+                 >>>     \"1\"\n       >>>     \"2\"\n       >=>     I <= \"2\"\n     \
+                 3 *-*   nop\n     4 *-* end\n     2 *-* do i = 1 to 2\n       \
+                 >V>     I => \"2\"\n       >>>     \"2\"\n       >>>     \"3\"\n       \
+                 >=>     I <= \"3\"\n",
+    },
+    LoopCase {
+        // `UNTIL` gets a second, unconditional `DO` re-echo of its own,
+        // between `END` and the test, and no top-of-loop one.
+        name: "until under trace r",
+        program: "trace r\nn1 = 0\ndo until n1 >= 2\n  n1 = n1 + 1\nend\n",
+        stdout: "",
+        stderr: "     2 *-* n1 = 0\n       >>>   \"0\"\n     3 *-* do until n1 >= 2\n     \
+                 4 *-*   n1 = n1 + 1\n       >>>     \"1\"\n     5 *-* end\n     \
+                 3 *-* do until n1 >= 2\n       >K>     \"UNTIL\" => \"0\"\n     \
+                 4 *-*   n1 = n1 + 1\n       >>>     \"2\"\n     5 *-* end\n     \
+                 3 *-* do until n1 >= 2\n       >K>     \"UNTIL\" => \"1\"\n",
+    },
+];
+
+/// Every [`LOOP_CASES`] program on both engines, byte for byte, and against
+/// the bytes the tree-walker produces for it.
+#[test]
+fn both_engines_agree_on_every_loop_shape() {
+    for case in LOOP_CASES {
+        let text = case.program.as_bytes().to_vec();
+        let tw = run(text.clone(), Engine::TreeWalker);
+        let ir = run(text, Engine::Ir);
+        assert_eq!(
+            String::from_utf8_lossy(&tw.stdout),
+            String::from_utf8_lossy(&ir.stdout),
+            "[{}] stdout",
+            case.name
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&tw.stderr),
+            String::from_utf8_lossy(&ir.stderr),
+            "[{}] stderr",
+            case.name
+        );
+        assert_eq!(tw.exit_code, ir.exit_code, "[{}] exit status", case.name);
+        assert_eq!(
+            ir.chunks_refused, 0,
+            "[{}] the ir arm refused the body and ran it on the tree-walker",
+            case.name
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&tw.stdout),
+            case.stdout,
+            "[{}] the tree-walker's own stdout moved",
+            case.name
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&tw.stderr),
+            case.stderr,
+            "[{}] the tree-walker's own trace moved",
+            case.name
+        );
+        assert_eq!(tw.exit_code, 0, "[{}] the program failed", case.name);
+    }
 }
 
 /// The path a program with no file behind it is reported under -- the rows

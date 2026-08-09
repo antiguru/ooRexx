@@ -21,7 +21,7 @@
 
 use rexx_parse::{Instruction, ProgramSource};
 
-use super::{Chunk, Op};
+use super::{BodyEngine, Chunk, Op};
 use crate::run::{Ended, Flow};
 use crate::{Code, Failure, Interp, Loud};
 
@@ -119,6 +119,27 @@ impl Interp {
         Ok(Ended::Exited(None))
     }
 
+    /// Steps the clause at instruction index `index` from `chunk`.
+    ///
+    /// The one entry point a construct's own body driver uses
+    /// (`Interp::run_bounded`'s [`BodyEngine::Chunk`] arm): it does the
+    /// instruction-to-op mapping the outer loop above does, so a clause
+    /// reached from inside a `DO`/`LOOP` body runs the same ops a clause
+    /// reached from the top of the body would.
+    pub(crate) fn step_from_chunk(
+        &mut self,
+        code: &Code<'_>,
+        chunk: &Chunk,
+        index: usize,
+        instruction: &Instruction,
+        source: Option<&ProgramSource>,
+    ) -> Result<Flow, Failure> {
+        let Some(&start) = chunk.op_of.get(index) else {
+            return Err(Loud::chunk_map_too_short().into());
+        };
+        self.run_clause_ops(code, chunk, start, index, instruction, source)
+    }
+
     /// The inner level: the ops of the clause starting at op `start`, whose
     /// instruction is `instruction` at instruction index `index`.
     ///
@@ -144,6 +165,9 @@ impl Interp {
         instruction: &Instruction,
         source: Option<&ProgramSource>,
     ) -> Result<Flow, Failure> {
+        #[cfg(test)]
+        count_clause_op_entry();
+
         let Some(op) = chunk.ops.get(start as usize) else {
             return Err(Loud::chunk_map_too_short().into());
         };
@@ -158,11 +182,24 @@ impl Interp {
             // `Generic` one**: it echoes the clause itself, and the echo is
             // not idempotent.
             Op::Generic => self.step_in_temps_frame(code, index, instruction, source),
+            // **The clause wrapper is the same one `Generic` takes**, and the
+            // whole of the difference is the `BodyEngine` it carries: the
+            // construct is resolved by `run_loop`, exactly as the tree-walker
+            // resolves it, and the engine decides only how each of its body's
+            // clauses is stepped. Writing a second loop here instead is the
+            // defect the dual-engine sweep exists to catch.
+            Op::Loop => self.step_in_temps_frame_with(
+                code,
+                index,
+                instruction,
+                source,
+                BodyEngine::Chunk(chunk),
+            ),
             // Neither variant has a constructor: `compile` emits `Generic`
-            // for every instruction, and `golden.rs`'s renderer is the only
-            // other thing that names either. Loud rather than a panic, which
-            // is this crate's standing rule for a state the type system
-            // admits and the code does not produce.
+            // and `Loop`, and `golden.rs`'s renderer is the only other thing
+            // that names either. Loud rather than a panic, which is this
+            // crate's standing rule for a state the type system admits and
+            // the code does not produce.
             Op::Clause { .. } => Err(Loud::op_not_driven("Clause").into()),
             Op::EvalExpr { .. } => Err(Loud::op_not_driven("EvalExpr").into()),
         }
@@ -200,6 +237,32 @@ fn count_run_chunk_entry() {
 #[cfg(test)]
 pub(crate) fn run_chunk_entries() -> usize {
     RUN_CHUNK_ENTRIES.with(std::cell::Cell::get)
+}
+
+// Test-only instrumentation: how many clauses this thread has stepped from a
+// compiled stream.
+//
+// `run_chunk_entries` counts *activations* driven, which cannot see the one
+// thing promoting `DO`/`LOOP` changes: whether a clause **inside** a loop body
+// reaches the stream at all. Both engines produce identical bytes for every
+// program by construction here, and an activation entered is one entry either
+// way, so this is the only observable that separates a body driven from the
+// chunk from a body driven straight into the tree-walker.
+//
+// Per thread for the reason `RUN_CHUNK_ENTRIES` is: see its own comment.
+#[cfg(test)]
+thread_local! {
+    static CLAUSE_OP_ENTRIES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn count_clause_op_entry() {
+    CLAUSE_OP_ENTRIES.with(|entries| entries.set(entries.get() + 1));
+}
+
+#[cfg(test)]
+pub(crate) fn clause_op_entries() -> usize {
+    CLAUSE_OP_ENTRIES.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]

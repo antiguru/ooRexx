@@ -69,6 +69,7 @@ use crate::builtin;
 use crate::clause::{ClauseOutcome, ClauseValue, HandlerExit};
 use crate::error::{FailureSite, Raised, Search};
 use crate::eval::logical_value;
+use crate::ir::BodyEngine;
 use crate::plan::BodyKey;
 use crate::trace::{
     is_whole_number, mode_from_setting, raised_invalid_trace_letter,
@@ -1075,6 +1076,7 @@ impl Interp {
         index: usize,
         instruction: &Instruction,
         source: Option<&ProgramSource>,
+        engine: BodyEngine<'_>,
     ) -> Result<Flow, Failure> {
         // Taken on entry, unconditionally, so that this call consumes it and
         // every nested `step` below it -- a fragment's, an `IF` branch's --
@@ -1419,7 +1421,13 @@ impl Interp {
                 };
                 if holds {
                     let resume = self.skip_else(code, false_target);
-                    match self.run_bounded(code, index + 1, false_target, source)? {
+                    match self.run_bounded(
+                        code,
+                        index + 1,
+                        false_target,
+                        source,
+                        BodyEngine::TreeWalker,
+                    )? {
                         Flow::Next => Ok(Flow::Goto(resume)),
                         other => Ok(other),
                     }
@@ -1557,7 +1565,13 @@ impl Interp {
                         ClauseOutcome::Ran(ran) => ran?,
                     }
                     if let Some((body_end, resume)) = outcome {
-                        let flow = self.run_bounded(code, when_index + 1, body_end, source)?;
+                        let flow = self.run_bounded(
+                            code,
+                            when_index + 1,
+                            body_end,
+                            source,
+                            BodyEngine::TreeWalker,
+                        )?;
                         // **F-EX1, found by the whole-branch review, not by
                         // this task's own probes.** An absorbed `WhenCase`'s
                         // own false-branch escape (its own arm, below) can
@@ -1808,7 +1822,7 @@ impl Interp {
             // doc comment for why `Do`'s own arm never returns until the
             // entire loop is over, one way or another.
             InstructionKind::Do(body) | InstructionKind::Loop(body) => {
-                self.run_loop(code, index, instruction, body, source)
+                self.run_loop(code, index, instruction, body, source, engine)
             }
 
             // `LEAVE`/`ITERATE`, bare or by name -- Task 11. Resolves to
@@ -4210,6 +4224,24 @@ impl Interp {
         instruction: &Instruction,
         source: Option<&ProgramSource>,
     ) -> Result<Flow, Failure> {
+        self.step_in_temps_frame_with(code, index, instruction, source, BodyEngine::TreeWalker)
+    }
+
+    /// [`Interp::step_in_temps_frame`], naming which driver steps the member
+    /// clauses of a construct this instruction resolves inside itself.
+    ///
+    /// Only a `DO`/`LOOP` reads `engine` today, and only the compiled
+    /// stream's own driver ever passes anything but [`BodyEngine::TreeWalker`]
+    /// -- see [`BodyEngine`]'s own doc comment for what it does and does not
+    /// decide.
+    pub(crate) fn step_in_temps_frame_with(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        instruction: &Instruction,
+        source: Option<&ProgramSource>,
+        engine: BodyEngine<'_>,
+    ) -> Result<Flow, Failure> {
         // `DATE`/`TIME`'s per-clause clock cache (`activation.rs`'s own doc
         // on `Activation::clock_stale`) is invalidated **unconditionally,
         // once per call, on whichever activation is executing right now**,
@@ -4330,7 +4362,7 @@ impl Interp {
             // `Vec::len` before and after, and a comparison.
             let temps_at_entry = it.roots.temps_len();
             let frame = it.roots.push_frame();
-            let flow = it.step(code, index, instruction, source);
+            let flow = it.step(code, index, instruction, source, engine);
             debug_assert!(
                 flow.is_err() || it.roots.temps_len() >= temps_at_entry,
                 "step popped below its own temps watermark ({} -> {}), so it \
@@ -4690,7 +4722,13 @@ impl Interp {
         {
             self.trace_clause(line, otherwise_indent, &text);
         }
-        let flow = self.run_bounded(code, otherwise_index + 1, otherwise_end, source)?;
+        let flow = self.run_bounded(
+            code,
+            otherwise_index + 1,
+            otherwise_end,
+            source,
+            BodyEngine::TreeWalker,
+        )?;
         // Restores the offset to `0` now that `OTHERWISE`'s own whole
         // dispatch (marker and body alike) is finished reading it --
         // `?` above already returned early without reaching this line if
@@ -4866,17 +4904,29 @@ impl Interp {
     /// `source` is forwarded to `step_in_temps_frame` unchanged, purely so it
     /// can resolve the failing clause's own site rather than the caller's --
     /// see that function's own doc comment.
+    ///
+    /// `engine` decides only which driver each member clause is stepped
+    /// through, and nothing about this loop's own absorption rule
+    /// ([`BodyEngine`]'s own doc comment).
     fn run_bounded(
         &mut self,
         code: &Code<'_>,
         start: usize,
         end: usize,
         source: Option<&ProgramSource>,
+        engine: BodyEngine<'_>,
     ) -> Result<Flow, Failure> {
         let mut pc = start;
         while pc < end {
             let instruction = &code.body.instructions[pc];
-            let flow = self.step_in_temps_frame(code, pc, instruction, source)?;
+            let flow = match engine {
+                BodyEngine::TreeWalker => {
+                    self.step_in_temps_frame(code, pc, instruction, source)?
+                }
+                BodyEngine::Chunk(chunk) => {
+                    self.step_from_chunk(code, chunk, pc, instruction, source)?
+                }
+            };
             match flow {
                 Flow::Next => pc += 1,
                 Flow::Goto(target) if target >= start && target <= end => pc = target,
@@ -4901,6 +4951,17 @@ impl Interp {
     /// answers (no message dispatch at all). Checked ahead of any header
     /// evaluation, so `do counter c with index i over x` -- both keywords
     /// at once -- fails loudly without evaluating `x` either.
+    ///
+    /// **One implementation, entered from both engines.** `engine` reaches
+    /// exactly one thing: which driver steps each of the body's clauses
+    /// ([`BodyEngine`]). Nothing below branches on it -- not the header, not
+    /// `WHILE`/`UNTIL`, not the label search, not a single trace echo -- which
+    /// is what makes promoting `DO`/`LOOP` an extraction rather than a second
+    /// loop to keep in step with this one.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the same argument `run_repeating`'s own allow makes: every parameter is state one DO/LOOP needs"
+    )]
     fn run_loop(
         &mut self,
         code: &Code<'_>,
@@ -4908,6 +4969,7 @@ impl Interp {
         instruction: &Instruction,
         body: &Loop,
         source: Option<&ProgramSource>,
+        engine: BodyEngine<'_>,
     ) -> Result<Flow, Failure> {
         if body.counter.is_some() || matches!(body.kind, LoopKind::With { .. }) {
             return Err(Loud::instruction(&instruction.kind).into());
@@ -4930,7 +4992,7 @@ impl Interp {
             // labelled simple block is leavable but an unlabelled one is
             // 28.1 on a bare `LEAVE` reaching it.
             LoopKind::Simple => {
-                let flow = self.run_bounded(code, body_start, end_index, source)?;
+                let flow = self.run_bounded(code, body_start, end_index, source, engine)?;
                 match self.do_body_outcome(code, index, label, false, resume, flow)? {
                     DoOutcome::Escaped(escape) => Ok(escape),
                     // Falls through to `END`, which `run_bounded`'s own
@@ -4986,6 +5048,7 @@ impl Interp {
                 body.conditional.as_ref(),
                 source,
                 LoopState::Forever,
+                engine,
             ),
             LoopKind::Count(count_expr) => {
                 let remaining = match count_expr {
@@ -5033,6 +5096,7 @@ impl Interp {
                     body.conditional.as_ref(),
                     source,
                     LoopState::Count { remaining },
+                    engine,
                 )
             }
             LoopKind::Controlled(ctrl) => {
@@ -5051,6 +5115,7 @@ impl Interp {
                     body.conditional.as_ref(),
                     source,
                     state,
+                    engine,
                 )
             }
             LoopKind::Over {
@@ -5127,6 +5192,7 @@ impl Interp {
                         done: false,
                         remaining,
                     },
+                    engine,
                 )
             }
             LoopKind::With { .. } => unreachable!("DO WITH takes the loud path above"),
@@ -5169,6 +5235,7 @@ impl Interp {
         conditional: Option<&LoopConditional>,
         source: Option<&ProgramSource>,
         mut state: LoopState,
+        engine: BodyEngine<'_>,
     ) -> Result<Flow, Failure> {
         // The loop's own two spaces of indent, added once here rather than
         // per-check: `static_indent(&code.body.instructions, do_index)` is
@@ -5320,7 +5387,7 @@ impl Interp {
                 ClauseOutcome::Ran(Ok(HeaderOutcome::Continue)) => {}
             }
 
-            let flow = self.run_bounded(code, body_start, end_index, source)?;
+            let flow = self.run_bounded(code, body_start, end_index, source, engine)?;
             match self.do_body_outcome(code, do_index, label, true, resume, flow)? {
                 DoOutcome::Escaped(escape) => return Ok(escape),
                 // **`END` is not reached at all when an `ITERATE` ended the
@@ -6346,6 +6413,9 @@ impl Interp {
             0,
             code.body.instructions.len(),
             Some(&fragment.source),
+            // A fragment compiles to no chunk, and its `Code` is a different
+            // body from the one an enclosing chunk's `op_of` indexes.
+            BodyEngine::TreeWalker,
         ) {
             Ok(flow) => flow,
             Err(failure) => {

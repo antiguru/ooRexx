@@ -9,9 +9,10 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The golden tests for `ir::compile`: what an all-`Generic` body renders
-//! as, the `op_of` boundary `run_bounded`'s inclusive absorption guard
-//! needs, and the chunk cache's "compiled once" guarantee.
+//! The golden tests for `ir::compile`: what an unpromoted body and a
+//! compiled loop each render as, the `op_of` boundary `run_bounded`'s
+//! inclusive absorption guard needs, and the chunk cache's "compiled once"
+//! guarantee.
 
 use std::rc::Rc;
 
@@ -41,9 +42,29 @@ fn every_instruction_of_an_all_generic_body_compiles_to_one_generic_op() {
          1: Generic\n\
          2: Generic\n"
     );
-    // Nothing allocates a register until Task 4's allocator exists (the
-    // plan's Decisions section), so none of this task's own chunks ever
-    // claim one.
+    // Nothing here addresses a register, so the chunk reserves none.
+    assert_eq!(chunk.registers, 0);
+}
+
+/// The compiled form of the plan's own example loop.
+///
+/// Three instructions and three ops: the `DO` is [`super::Op::Loop`], and the
+/// body clause and the `END` are still `Generic`. The `END` op is never
+/// reached -- `run_bounded`'s range stops before it and the loop's own resume
+/// is one past it -- and it is emitted anyway because `op_of` is indexed by
+/// instruction, so an instruction without an op would shift every later entry.
+#[test]
+fn a_counted_loop_compiles_its_do_to_a_loop_op_and_its_body_to_generic() {
+    let chunk = compile_for_test(b"do i = 1 to 3\n  nop\nend\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Loop\n\
+         1: Generic\n\
+         2: Generic\n"
+    );
+    // The loop is driven by `run_loop`, which holds its control value in a
+    // `LoopState` of its own rather than in the chunk's register region, so
+    // nothing here allocates one.
     assert_eq!(chunk.registers, 0);
 }
 

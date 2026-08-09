@@ -13,7 +13,7 @@
 //! Decisions section: "compilation is whole-body and lazy: one body at a
 //! time, on first entry, cached").
 
-use rexx_parse::CodeBody;
+use rexx_parse::{CodeBody, InstructionKind};
 
 use super::{Chunk, ChunkTooLarge, Op};
 use crate::plan::Plan;
@@ -21,11 +21,12 @@ use crate::plan::Plan;
 /// Compiles `body` into a [`Chunk`], once, whole.
 ///
 /// Every instruction in `body.instructions` compiles (D21: "every
-/// instruction compiles, nothing refuses" is about instructions). This task
-/// promotes none of them, so each becomes [`Op::Generic`]. `plan` is not yet
-/// read: nothing this task compiles needs a name-to-slot answer, but a task
-/// that promotes an assignment or a branch reads it to place the
-/// `EvalExpr`/`Clause` ops this task only declares.
+/// instruction compiles, nothing refuses" is about instructions). A `DO` or
+/// `LOOP` becomes [`Op::Loop`], whose body clauses the driver steps; every
+/// other instruction becomes [`Op::Generic`]. `plan` is not yet read: nothing
+/// compiled here needs a name-to-slot answer, but a task that promotes an
+/// assignment or a branch reads it to place the `EvalExpr`/`Clause` ops this
+/// file only declares.
 ///
 /// The one error is a machine width, not a language construct (the plan's
 /// Decisions section: "the compiler has one error, and it is a machine
@@ -41,10 +42,16 @@ pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLa
 
     let mut ops = Vec::with_capacity(body.instructions.len());
     let mut op_of = Vec::with_capacity(body.instructions.len() + 1);
-    for _ in &body.instructions {
+    for instruction in &body.instructions {
         let op_index = u32::try_from(ops.len()).map_err(|_| ChunkTooLarge { what: "op stream" })?;
         op_of.push(op_index);
-        ops.push(Op::Generic);
+        ops.push(match &instruction.kind {
+            // `DO` and `LOOP` are the same construct under two spellings
+            // (`step`'s own arm matches them together), so they compile the
+            // same way. Everything else is still `Generic`.
+            InstructionKind::Do(_) | InstructionKind::Loop(_) => Op::Loop,
+            _ => Op::Generic,
+        });
     }
     // One entry past the last instruction, pushed after the loop above:
     // `run_bounded`'s absorption guard is inclusive, so a construct's

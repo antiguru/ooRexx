@@ -22,6 +22,31 @@ use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
 use std::process::ExitCode;
 
+/// Which engine this run uses, from `REXX_ENGINE`.
+///
+/// **An environment variable and not a command-line option**, for the reason
+/// `main`'s own comment gives for having no option parsing at all: every word
+/// after the program path is the program's argument, and a leading `-x` that
+/// this binary swallowed would silently change what a program is given.
+///
+/// It exists because the two engines are the same build selected through
+/// `Invocation`, so a benchmark comparison between them has to interleave
+/// between arms of one binary within one sitting -- and nothing else in this
+/// binary can reach `Invocation::with_engine`. Any spelling other than the two
+/// below is rejected rather than defaulted: a typo that silently measured the
+/// tree-walker twice would produce a comparison of an arm against itself, and
+/// report it as no movement.
+fn engine_from_environment() -> rexx_exec::Engine {
+    match std::env::var("REXX_ENGINE").as_deref() {
+        Ok("ir") => rexx_exec::Engine::Ir,
+        Ok("tree-walker") | Err(_) => rexx_exec::Engine::TreeWalker,
+        Ok(other) => {
+            eprintln!("rexx-run: REXX_ENGINE={other}: expected `ir` or `tree-walker`");
+            std::process::exit(2);
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let mut args = std::env::args_os().skip(1);
     let Some(path) = args.next() else {
@@ -51,7 +76,8 @@ fn main() -> ExitCode {
     // only place in the tree that asks for it: `ProgramInput`'s own doc has why
     // the in-process callers must not, and why the default is not this.
     let invocation = rexx_exec::join_command_line(args.map(|arg| arg.as_bytes().to_vec()))
-        .with_input(rexx_exec::ProgramInput::Stdin);
+        .with_input(rexx_exec::ProgramInput::Stdin)
+        .with_engine(engine_from_environment());
 
     let text = match std::fs::read(&path) {
         Ok(text) => text,
