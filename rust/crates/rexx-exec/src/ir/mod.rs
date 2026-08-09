@@ -13,21 +13,20 @@
 //! shapes later tasks extend rather than reshape.
 //!
 //! `compile` (`compile.rs`) walks a body once and emits one `Op` per
-//! instruction. This task promotes none of them, so every op is
-//! `Op::Generic`, which delegates the instruction at its index back to the
-//! tree-walker's own clause unit (`Interp::step`, `clause.rs`). A later task
-//! promotes a construct by teaching `compile` to emit something other than
-//! `Generic` for it, never by changing what `Generic` means.
+//! instruction. Every op it emits is `Op::Generic`, which delegates the
+//! instruction at its index back to the tree-walker's own clause unit
+//! (`Interp::step_in_temps_frame`, and `clause.rs` for the boundary it
+//! carries). A construct is promoted by teaching `compile` to emit something
+//! other than `Generic` for it, never by changing what `Generic` means.
 //!
 //! `Interp::chunk_for` (`plan.rs`, beside `plan_for`, under the same
 //! `BodyKey`) is the cache: a body compiles once, on first entry, and the
-//! result is kept for every later one. Nothing in this crate calls it yet --
-//! Task 3's driver is its first production caller -- so this module and
-//! `plan.rs`'s new cache fields are exercised only by the tests in
-//! `golden_tests.rs` until then, which is why several items below carry an
-//! `#[allow(dead_code)]` rather than a caller.
+//! result is kept for every later one. `drive.rs` is what runs the result,
+//! and `run_activation` is what chooses between it and the tree-walker
+//! (`Interp::engine`, from the `Invocation`).
 
 mod compile;
+mod drive;
 pub(crate) use compile::compile;
 
 // `render`, the golden-test serialiser, has no caller outside `golden_tests.rs`
@@ -51,7 +50,6 @@ mod golden_tests;
 /// is what lets Task 4 extend this enum rather than reshape it.
 pub(crate) enum Op {
     /// Delegates the instruction at this index back to the tree-walker.
-    #[allow(dead_code, reason = "Task 3's driver executes this; nothing does yet")]
     Generic,
     /// A promoted clause. `end` is the op index one past this clause's last
     /// op -- the mark the register allocator releases to when the clause
@@ -76,27 +74,28 @@ pub(crate) enum Op {
 /// still compiles; this reports that the *stream* built from them does not
 /// fit some index's width.
 #[derive(Debug)]
-#[allow(
-    dead_code,
-    reason = "Task 3's engine selection is this type's first production reader"
-)]
 pub(crate) struct ChunkTooLarge {
     /// What overflowed. Always `"op stream"` today: op indices are `u32`
-    /// and this task allocates no registers, so nothing else can overflow
-    /// before Task 4's register allocator exists to overflow `u16::MAX`.
+    /// and nothing allocates a register yet, so nothing else can overflow
+    /// before a register allocator exists to overflow `u16::MAX`.
+    ///
+    /// **No production reader, and the allow says so rather than a fake one
+    /// being invented for it.** `chunk_for` is the only caller that sees an
+    /// `Err`, and a refusal is not a failure there: it counts the body in
+    /// `Interp::chunks_refused` and runs it on the tree-walker, with nothing
+    /// to print. The field is what makes a refusal diagnosable when a
+    /// second reason for one exists; the counter is what makes it
+    /// impossible to miss.
+    #[allow(dead_code, reason = "no production caller renders a refusal's reason")]
     pub(crate) what: &'static str,
 }
 
 /// One body's compiled instruction stream, cached on `Interp` under the same
 /// `BodyKey` its `Plan` is (`Interp::chunk_for`, in `plan.rs`).
 pub(crate) struct Chunk {
-    /// One entry per instruction, `Op::Generic` for every one of them in
-    /// this task -- D21's "every instruction compiles, nothing refuses" is
-    /// a claim about instructions, not about promotion.
-    #[allow(
-        dead_code,
-        reason = "Task 3's driver executes a chunk's ops; nothing does yet"
-    )]
+    /// One entry per instruction, `Op::Generic` for every one of them --
+    /// D21's "every instruction compiles, nothing refuses" is a claim about
+    /// instructions, not about promotion.
     ops: Vec<Op>,
     /// Instruction index -> op index into `ops`. One entry per instruction,
     /// in order, plus one final entry at `ops.len()`, pushed *after* the
@@ -104,18 +103,11 @@ pub(crate) struct Chunk {
     /// inclusive, so a construct's resume point can be one past its last
     /// instruction, and a map that stopped at `len - 1` would panic there
     /// instead of failing loudly at compile.
-    #[allow(
-        dead_code,
-        reason = "Task 3's driver reads this to resume mid-body; nothing does yet"
-    )]
     op_of: Vec<u32>,
     /// The register allocator's high-water mark (the plan's Decisions
     /// section: "the chunk records its high-water mark"). Always `0` here:
-    /// nothing allocates a register until Task 4's allocator exists. Task
-    /// 3's driver reserves this many registers before running a chunk.
-    #[allow(
-        dead_code,
-        reason = "Task 3's driver reserves this many registers; nothing does yet"
-    )]
+    /// nothing allocates a register until Task 4's allocator exists.
+    /// `Interp::run_chunk` reserves this many registers before running a
+    /// chunk and truncates them away on the way out.
     registers: u16,
 }

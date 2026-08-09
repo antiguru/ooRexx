@@ -62,7 +62,7 @@ use queue::Queue;
 // it can carry, how a list of words becomes that string, and where `.input`
 // reads from.
 mod invocation;
-pub use invocation::{Invocation, ProgramInput, join_command_line};
+pub use invocation::{Engine, Invocation, ProgramInput, join_command_line};
 
 // `.input`: one line position, shared by every construct that reads a line,
 // and the queue-first rule `PULL` follows on top of it.
@@ -345,6 +345,17 @@ pub struct Outcome {
     /// collected nothing cannot pass by being indistinguishable from one
     /// that collected correctly.
     pub collections: u64,
+    /// How many bodies the run declined to compile because they do not fit
+    /// the compiled stream's index widths, and so ran on the tree-walker
+    /// instead.
+    ///
+    /// Always `0` under [`Engine::TreeWalker`](crate::Engine::TreeWalker),
+    /// which compiles nothing. Under [`Engine::Ir`](crate::Engine::Ir) it is
+    /// what stops the fallback being silent: the dual-engine harness asserts
+    /// it is zero across the whole population, so a compiler that starts
+    /// refusing ordinary bodies goes red rather than quietly running
+    /// everything on the tree-walker and passing.
+    pub chunks_refused: usize,
 }
 
 /// How deep evaluation went and how much stack it took to get there.
@@ -687,6 +698,33 @@ impl Loud {
     fn missing_body() -> Loud {
         Loud {
             message: "an activation's body selector names no routine body".to_string(),
+        }
+    }
+
+    /// A chunk's instruction map is shorter than the body it was compiled
+    /// from -- an internal inconsistency, never a program error.
+    ///
+    /// `compile` writes one entry per instruction plus a final one, so the
+    /// driver's lookup is in range for every instruction index the body has.
+    /// Loud rather than an indexing panic for the reason [`Loud::instruction`]
+    /// gives: an abort is precisely the outcome the failing-loudly rule
+    /// exists to exclude, and a guarantee one function makes is not one the
+    /// type system enforces at the other.
+    ///
+    /// [`Loud::instruction`]: Loud::instruction
+    fn chunk_map_too_short() -> Loud {
+        Loud {
+            message: "a compiled chunk has no op for an instruction of its own body".to_string(),
+        }
+    }
+
+    /// The driver reached an op it has no arm for.
+    ///
+    /// `what` names the op, so the message says which one rather than only
+    /// that one was reached.
+    fn op_not_driven(what: &'static str) -> Loud {
+        Loud {
+            message: format!("a compiled {what} op has no driver arm"),
         }
     }
 
@@ -1174,13 +1212,16 @@ struct Interp {
     /// `ProgramId(0)`'s program is still here.
     programs: Vec<Rc<Program>>,
     plans: HashMap<BodyKey, Rc<Plan>>,
+    /// Which engine `run_activation` runs a body on, from the
+    /// [`Invocation`] `execute` was handed.
+    ///
+    /// On the interpreter rather than threaded through every call, exactly
+    /// like `stress_collect` beside it: it is a property of the whole run,
+    /// chosen once by the caller and never varying between activations.
+    engine: Engine,
     /// The chunk cache (Phase 4e), under the same key `plans` is: D16's
     /// discipline, unchanged, applied to a second cache rather than
     /// invented afresh for it. See `Interp::chunk_for`, in `plan.rs`.
-    #[allow(
-        dead_code,
-        reason = "Task 3's driver is chunk_for's first production caller"
-    )]
     chunks: HashMap<BodyKey, Rc<crate::ir::Chunk>>,
     /// How many bodies `chunk_for` has refused because they do not fit the
     /// index widths the compiled stream commits to (`ChunkTooLarge`) --
@@ -1188,10 +1229,6 @@ struct Interp {
     /// know, which does not exist (D21: every instruction compiles).
     /// `Interp::chunk_for`'s own doc says what stops this being a silent
     /// fallback to the tree-walker.
-    #[allow(
-        dead_code,
-        reason = "Task 3's driver is chunk_for's first production caller"
-    )]
     chunks_refused: usize,
     /// Every `::ROUTINE` the running program installs, keyed by its
     /// **upcased** name and holding its index in `Program::directives`.
@@ -1791,6 +1828,7 @@ impl Interp {
             activations: Vec::new(),
             programs: Vec::new(),
             plans: HashMap::new(),
+            engine: Engine::TreeWalker,
             chunks: HashMap::new(),
             chunks_refused: 0,
             routines: HashMap::new(),
@@ -1838,7 +1876,7 @@ impl Interp {
     /// own loop asserts exactly that after every step.
     fn run(&mut self, program: Program) -> Result<Option<ObjRef>, Failure> {
         let program = Rc::new(program);
-        let id = ProgramId(self.programs.len());
+        let program_id = ProgramId(self.programs.len());
         self.programs.push(Rc::clone(&program));
 
         // **Before the first clause, and its failures print nothing on
@@ -1848,7 +1886,7 @@ impl Interp {
         // `::class foo subclass zzznotaclass` is 98.909 at rc 158, likewise
         // empty. A program whose directives all install runs its main body
         // exactly as one with no directives does.
-        self.install_directives(id, &program)?;
+        self.install_directives(program_id, &program)?;
 
         // Note what does *not* happen here: the plan is looked up through
         // `&program.main`, a borrow of the local `Rc`, while `self` is
@@ -1857,7 +1895,7 @@ impl Interp {
         // `run_activation` writes out.
         let plan = self.plan_for(
             BodyKey {
-                program: id,
+                program: program_id,
                 directive: None,
             },
             &program.main,
@@ -1866,8 +1904,13 @@ impl Interp {
 
         let frame = self.roots.push_slots(plan.len());
         let id = self.next_activation_id();
-        self.activations
-            .push(Activation::new(id, Rc::clone(&program), plan, frame));
+        self.activations.push(Activation::new(
+            id,
+            Rc::clone(&program),
+            program_id,
+            plan,
+            frame,
+        ));
 
         // `Returned` and `Exited` are the same thing at the top: measured,
         // `return 5` in a main body with no active call exits 5, exactly like
@@ -2293,6 +2336,7 @@ fn execute(
                 stderr: format!("rexx-exec: {error}\n").into_bytes(),
                 stack: StackSpan::default(),
                 collections: 0,
+                chunks_refused: 0,
             };
         }
     };
@@ -2307,8 +2351,9 @@ fn execute(
     // doc for what reads it and for the three measured invocations that tell
     // "no argument" from "one empty argument" apart.
     interp.call_context.name = path.as_bytes().to_vec();
-    let (argument, program_input) = invocation.into_parts();
+    let (argument, program_input, engine) = invocation.into_parts();
     interp.input = Input::new(program_input);
+    interp.engine = engine;
     if let Some(argument) = argument {
         let value = interp.text(&argument);
         // Rooted with a `push_temp` taken before `run`, which is what makes it
@@ -2326,6 +2371,7 @@ fn execute(
     let result = interp.run(program);
     let stack = interp.stack_span();
     let collections = interp.heap.collections_performed();
+    let chunks_refused = interp.chunks_refused;
     // The whole echo stack, innermost first: the levels `seal_site_level`
     // already closed, then the level that was still unwinding when the
     // condition reached the top. See `Interp::failure_sites` for why the two
@@ -2381,6 +2427,7 @@ fn execute(
         stderr: interp.trace,
         stack,
         collections,
+        chunks_refused,
     }
 }
 

@@ -1034,11 +1034,11 @@ mod tests {
     fn interp_at(digits: &str) -> Interp {
         let mut interp = Interp::new();
         let program = Rc::new(parse_program(b"nop".to_vec()).expect("a NOP program parses"));
-        let id = ProgramId(interp.programs.len());
+        let program_id = ProgramId(interp.programs.len());
         interp.programs.push(Rc::clone(&program));
         let plan = interp.plan_for(
             BodyKey {
-                program: id,
+                program: program_id,
                 directive: None,
             },
             &program.main,
@@ -1046,9 +1046,9 @@ mod tests {
         );
         let frame = interp.roots.push_slots(plan.len());
         let activation = interp.next_activation_id();
-        interp
-            .activations
-            .push(Activation::new(activation, program, plan, frame));
+        interp.activations.push(Activation::new(
+            activation, program, program_id, plan, frame,
+        ));
         interp
             .activation_mut()
             .settings

@@ -1112,11 +1112,11 @@ mod tests {
         use std::rc::Rc;
 
         let program = Rc::new(rexx_parse::parse_program(Vec::new()).expect("the empty program"));
-        let id = crate::plan::ProgramId(interp.programs.len());
+        let program_id = crate::plan::ProgramId(interp.programs.len());
         interp.programs.push(Rc::clone(&program));
         let plan = interp.plan_for(
             crate::plan::BodyKey {
-                program: id,
+                program: program_id,
                 directive: None,
             },
             &program.main,
@@ -1126,7 +1126,7 @@ mod tests {
         let id = interp.next_activation_id();
         interp
             .activations
-            .push(crate::Activation::new(id, program, plan, frame));
+            .push(crate::Activation::new(id, program, program_id, plan, frame));
     }
 
     #[test]

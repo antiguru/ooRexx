@@ -533,11 +533,11 @@ mod tests {
     /// nothing here needs the frame released early.
     fn activate(interp: &mut Interp, program: Program) -> Rc<Program> {
         let program = Rc::new(program);
-        let id = ProgramId(interp.programs.len());
+        let program_id = ProgramId(interp.programs.len());
         interp.programs.push(Rc::clone(&program));
         let plan = interp.plan_for(
             BodyKey {
-                program: id,
+                program: program_id,
                 directive: None,
             },
             &program.main,
@@ -545,9 +545,13 @@ mod tests {
         );
         let frame = interp.roots.push_slots(plan.len());
         let id = interp.next_activation_id();
-        interp
-            .activations
-            .push(Activation::new(id, Rc::clone(&program), plan, frame));
+        interp.activations.push(Activation::new(
+            id,
+            Rc::clone(&program),
+            program_id,
+            plan,
+            frame,
+        ));
         program
     }
 

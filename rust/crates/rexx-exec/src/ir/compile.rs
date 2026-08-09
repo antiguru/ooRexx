@@ -35,10 +35,6 @@ use crate::plan::Plan;
 /// nothing produces four billion instructions in a test, but the check is
 /// the contract [`ChunkTooLarge`] documents, not a defence against a case
 /// this task can exercise.
-#[allow(
-    dead_code,
-    reason = "Task 3's driver, via chunk_for, is this function's first production caller"
-)]
 pub(crate) fn compile(body: &CodeBody, _plan: &Plan) -> Result<Chunk, ChunkTooLarge> {
     #[cfg(test)]
     count_compile_call();

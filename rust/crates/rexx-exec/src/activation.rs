@@ -31,7 +31,7 @@
 //! are set for a callee.
 
 use crate::Interp;
-use crate::plan::Plan;
+use crate::plan::{BodyKey, Plan, ProgramId};
 use crate::trace::TraceMode;
 use rexx_core::SlotFrame;
 use rexx_num::Settings;
@@ -349,6 +349,17 @@ pub(crate) struct Activation {
     ///
     /// [`body`]: Activation::body
     pub(crate) program: Rc<Program>,
+    /// `program`'s own id, the durable identity `Interp::programs` hands out.
+    ///
+    /// The `Rc` above is a liveness anchor and cannot answer this: two
+    /// activations holding the same `Rc` share an id, but an `Rc` is not a
+    /// key, and recovering the index by scanning `Interp::programs` is a
+    /// reverse lookup that can fail. Carried so that [`Activation::body_key`]
+    /// is a field read: it is the other half of the plan and chunk caches'
+    /// key, whose first half is [`body`] just below.
+    ///
+    /// [`body`]: Activation::body
+    pub(crate) program_id: ProgramId,
     /// Which of `program`'s code bodies this activation is running: `None` is
     /// `program.main`, `Some(i)` is `program.directives[i]`'s own body.
     ///
@@ -615,12 +626,14 @@ impl Activation {
     pub(crate) fn new(
         id: ActivationId,
         program: Rc<Program>,
+        program_id: ProgramId,
         plan: Rc<Plan>,
         frame: SlotFrame,
     ) -> Activation {
         Activation {
             id,
             program,
+            program_id,
             body: None,
             plan,
             extra: HashMap::new(),
@@ -702,9 +715,21 @@ impl Activation {
     /// not visible after the return, and `RESULT` and `SIGL` read inside the
     /// routine are their own uninitialised names rather than the caller's
     /// values.
+    ///
+    /// The parameter list is over clippy's threshold and stays that way: the
+    /// three fields that could be bundled are `program`, `program_id` and
+    /// `body`, and bundling them would put a type between every reader and
+    /// `Activation::program`, which is the field the instruction loop clones
+    /// its `Rc` from. [`Inherited`] is the bundle that pays for itself,
+    /// because the fields in it share a property rather than a caller.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the alternative bundle would wrap the field every instruction loop reads"
+    )]
     pub(crate) fn nested(
         id: ActivationId,
         program: Rc<Program>,
+        program_id: ProgramId,
         body: Option<usize>,
         plan: Rc<Plan>,
         frame: SlotFrame,
@@ -714,6 +739,7 @@ impl Activation {
         Activation {
             id,
             program,
+            program_id,
             body,
             plan,
             extra: HashMap::new(),
@@ -757,6 +783,7 @@ impl Activation {
     pub(crate) fn routine(
         id: ActivationId,
         program: Rc<Program>,
+        program_id: ProgramId,
         body: usize,
         plan: Rc<Plan>,
         frame: SlotFrame,
@@ -764,6 +791,7 @@ impl Activation {
         Activation {
             id,
             program,
+            program_id,
             body: Some(body),
             plan,
             extra: HashMap::new(),
@@ -780,6 +808,23 @@ impl Activation {
             condition: None,
             cached_clock: None,
             clock_stale: true,
+        }
+    }
+
+    /// The key this activation's body is cached under, in both the plan
+    /// cache and the chunk cache.
+    ///
+    /// The two halves are [`Activation::program_id`] and
+    /// [`Activation::body`], and neither is derived here: `body` is already
+    /// the same selector `BodyKey::directive` carries (that field's own doc
+    /// says why the two spellings cannot come apart), and `program_id` is the
+    /// id the loader issued for `program`. So this is a field read, and a
+    /// body entered through any path is looked up under the key its plan was
+    /// built under.
+    pub(crate) fn body_key(&self) -> BodyKey {
+        BodyKey {
+            program: self.program_id,
+            directive: self.body,
         }
     }
 }

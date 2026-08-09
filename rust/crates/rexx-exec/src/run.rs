@@ -76,8 +76,8 @@ use crate::trace::{
 };
 use crate::value::{exact_small_int, within_digits};
 use crate::{
-    ActiveCondition, Argument, CallContext, Code, Failure, InstalledRoutine, Interp, Loud, Novalue,
-    PendingTrap,
+    ActiveCondition, Argument, CallContext, Code, Engine, Failure, InstalledRoutine, Interp, Loud,
+    Novalue, PendingTrap,
 };
 use rexx_core::{Decoded, ObjRef, SlotFrame, SlotRef};
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
@@ -810,6 +810,23 @@ impl Interp {
             slots: &plan.by_symbol,
             indents: Some(&plan),
         };
+        // **Engine selection, and it is here rather than at either caller.**
+        // `run_activation` is the one function that runs an activation's
+        // body, so both production entry points -- `Interp::run` and
+        // `resolve_and_run_call` -- reach the compiled stream through this
+        // one decision. Putting it at the callers instead would need the
+        // `Code` above rebuilt at each, and a caller that was missed would
+        // tree-walk its whole body while a dual-engine gate still passed.
+        //
+        // `None` from `chunk_for` is a body that does not fit the stream's
+        // index widths: it runs the loop below, and `Interp::chunks_refused`
+        // has already counted it so the fallback is not silent.
+        if matches!(self.engine, Engine::Ir)
+            && let Some(chunk) = self.chunk_for(self.activation().body_key(), body, &plan)
+        {
+            return self.run_chunk(&code, &chunk, Some(&program.source));
+        }
+
         let depth = self.activations.len();
 
         while let Some(instruction) = code.body.instructions.get(self.activation().pc) {
@@ -3559,6 +3576,7 @@ impl Interp {
         // first version of this function searched `code.body` and passed
         // every test that had no `INTERPRET` in it.
         let program = Rc::clone(&self.activation().program);
+        let program_id = self.activation().program_id;
         let selector = self.activation().body;
         let Some(activation_body) = body_of(&program, selector) else {
             return Err(Loud::missing_body().into());
@@ -3765,6 +3783,7 @@ impl Interp {
                 let mut callee = Activation::nested(
                     callee_id,
                     program,
+                    program_id,
                     selector,
                     plan,
                     frame,
@@ -3808,6 +3827,7 @@ impl Interp {
                 self.activations.push(Activation::routine(
                     callee_id,
                     routine_program,
+                    installed.program,
                     installed.directive,
                     plan,
                     frame,
@@ -7804,11 +7824,11 @@ mod tests {
     /// `plan.rs`, `stem.rs` each keep their own).
     fn activate(interp: &mut Interp, program: Program) -> Rc<Program> {
         let program = Rc::new(program);
-        let id = ProgramId(interp.programs.len());
+        let program_id = ProgramId(interp.programs.len());
         interp.programs.push(Rc::clone(&program));
         let plan = interp.plan_for(
             BodyKey {
-                program: id,
+                program: program_id,
                 directive: None,
             },
             &program.main,
@@ -7816,9 +7836,13 @@ mod tests {
         );
         let frame = interp.roots.push_slots(plan.len());
         let id = interp.next_activation_id();
-        interp
-            .activations
-            .push(Activation::new(id, Rc::clone(&program), plan, frame));
+        interp.activations.push(Activation::new(
+            id,
+            Rc::clone(&program),
+            program_id,
+            plan,
+            frame,
+        ));
         program
     }
 

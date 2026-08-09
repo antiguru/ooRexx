@@ -106,6 +106,35 @@ pub struct Invocation {
     argument: Option<Vec<u8>>,
     /// Where `.input` reads its lines from.
     input: ProgramInput,
+    /// Which engine runs the program's bodies.
+    engine: Engine,
+}
+
+/// Which engine runs each body of the program: the tree-walker, or the
+/// compiled instruction stream.
+///
+/// **A field of [`Invocation`] rather than an environment variable**, and the
+/// difference is not stylistic. A variable is read once per process, so it
+/// cannot give two arms inside one `cargo test` process, and the harnesses
+/// that run a population of programs call
+/// [`run_program`](crate::run_program) directly rather than spawning an
+/// interpreter. `Invocation` is already `run_program`'s third parameter and
+/// already reaches the interpreter, which is what makes a per-run choice
+/// expressible at all.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub enum Engine {
+    /// The tree-walker: an activation's body is stepped instruction by
+    /// instruction, straight out of the AST.
+    #[default]
+    TreeWalker,
+    /// The compiled instruction stream: an activation's body is compiled to
+    /// a chunk on first entry, cached, and driven clause by clause.
+    ///
+    /// A body that does not fit the stream's index widths runs on the
+    /// tree-walker instead and is counted in
+    /// [`Outcome::chunks_refused`](crate::Outcome::chunks_refused), so the
+    /// fallback is never silent.
+    Ir,
 }
 
 /// Where `.input` -- the position `PULL`, `PARSE PULL` and `PARSE LINEIN` all
@@ -149,6 +178,7 @@ impl Invocation {
         Invocation {
             argument: None,
             input: ProgramInput::Nothing,
+            engine: Engine::TreeWalker,
         }
     }
 
@@ -166,14 +196,20 @@ impl Invocation {
         Invocation { input, ..self }
     }
 
-    /// The argument string, if there is one, and where `.input` reads from.
+    /// The same invocation, run on `engine`.
+    pub fn with_engine(self, engine: Engine) -> Invocation {
+        Invocation { engine, ..self }
+    }
+
+    /// The argument string, if there is one, where `.input` reads from, and
+    /// which engine runs the bodies.
     ///
-    /// One accessor consuming the whole value rather than two borrowing
-    /// getters: `execute` needs both halves and takes ownership of each, and a
-    /// pair of getters would either clone the argument bytes or hand out a
+    /// One accessor consuming the whole value rather than three borrowing
+    /// getters: `execute` needs every part and takes ownership of each, and a
+    /// set of getters would either clone the argument bytes or hand out a
     /// borrow that outlives nothing useful.
-    pub(crate) fn into_parts(self) -> (Option<Vec<u8>>, ProgramInput) {
-        (self.argument, self.input)
+    pub(crate) fn into_parts(self) -> (Option<Vec<u8>>, ProgramInput, Engine) {
+        (self.argument, self.input, self.engine)
     }
 }
 
