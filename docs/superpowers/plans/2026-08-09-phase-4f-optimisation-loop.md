@@ -122,7 +122,9 @@ Four of five axes shifted in the same direction, by up to 5.04% on `varlookup` -
 So `taskset` is not a control that leaves the quantity alone while tidying its variance, and a pinned measurement is not comparable with an unpinned one.
 
 **What the rows do not support: that pinning widened the spread.**
-It narrowed `alloc4c`, `arith` and `varlookup` and widened `compound` and `strings`.
+That was the controller's summary and it is wrong as a general claim.
+Which axes narrowed depends on the dispersion statistic, and the two available ones disagree: by interpolated half-width it narrowed `alloc4c`, `arith` and `varlookup`; by full envelope, recomputed independently from the same rows, `arith` moves to the other side (0.81% to 0.88%).
+`alloc4c` and `varlookup` narrow and `compound` and `strings` widen under both.
 The worst-axis figure rose from 1.24% to 1.88% through a change of which axis is worst, `strings` overtaking a `varlookup` that pinning more than halved.
 At three or four passes none of this is separated from sampling noise.
 The usable statement is that pinning did not visibly reduce the spread while it did visibly move the ratio, so core migration is not obviously the variance source and pinning is not free.
