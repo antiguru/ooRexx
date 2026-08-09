@@ -1480,10 +1480,6 @@ impl Interp {
                 end,
             } => {
                 let len = code.body.instructions.len();
-                // Reads `current_value_indent` rather than recomputing
-                // `static_indent(index)` -- same reasoning as `Assignment`'s
-                // own arm.
-                let select_indent = self.clause_state.current_value_indent;
                 // **The `SELECT` clause ends when its `CASE` expression has
                 // been evaluated** -- same rule and same reason as `IF`'s,
                 // just above: the oracle's `RexxInstructionSelect::execute`
@@ -1495,28 +1491,18 @@ impl Interp {
                 // instruction rather than after the expression -- a plain
                 // `SELECT` simply has nothing that could have queued.
                 let select_line = self.clause_state.line();
-                let mut case_text: Option<Vec<u8>> = None;
+                let mut case_value: Option<ObjRef> = None;
                 match self.in_clause(code, select_line, |it| {
                     let Some(case_expr) = case else {
                         return Ok(());
                     };
-                    let value = it.eval(code, case_expr)?;
-                    it.roots.push_temp(value);
-                    let text = it.to_text(value).to_vec();
-                    // `>K>` (`SelectInstruction.cpp:372`,
-                    // `traceKeywordResult(CASE, ...)`), at the
-                    // `SELECT`'s own level -- measured, this task's
-                    // report, `>K>   "CASE" => "2"` sits at the same
-                    // indent as `select case ...` itself, not the
-                    // `WHEN`-scan level `WhenCase`'s own comparison
-                    // lines (below) are indented to.
-                    it.trace_keyword(select_indent, "CASE", &text);
-                    case_text = Some(text);
+                    case_value = Some(it.select_case(code, case_expr)?);
                     Ok(())
                 })? {
                     ClauseOutcome::Ended(exit) => return Ok(Flow::Exit(exit.value())),
                     ClauseOutcome::Ran(ran) => ran?,
                 }
+                let case_text = case_value.map(|value| self.to_text(value).to_vec());
                 // F3: the one hand-off an absorbed `WhenCase` needs and
                 // nothing else threads to it -- `lib.rs`'s own doc comment
                 // on `current_case_text` has the full argument, including
@@ -1569,46 +1555,22 @@ impl Interp {
                             source,
                             BodyEngine::TreeWalker,
                         )?;
-                        // **F-EX1, found by the whole-branch review, not by
-                        // this task's own probes.** An absorbed `WhenCase`'s
-                        // own false-branch escape (its own arm, below) can
-                        // land exactly on this `SELECT`'s own `OTHERWISE`
-                        // marker via a bare `Flow::Goto`, which `leave_
-                        // select`'s own `other => Ok(other)` arm would
-                        // otherwise forward unrecognised -- all the way out
-                        // of this `SELECT`'s own `step` entirely, so
-                        // `OTHERWISE`'s own body would then run under
-                        // whichever *outer* construct happens to receive
-                        // that `Goto`, with no `SELECT` frame on the search
-                        // a `LEAVE`/`ITERATE` inside it needs to find. That
-                        // is precisely the pre-Task-11 shape Task 11 built
-                        // `run_otherwise` (below, this fix's own extraction
-                        // of what was inline here) to fix in the first
-                        // place -- measured, `select label s case 2 / when
-                        // 2 then / when 3 then nop / otherwise say 'O' /
-                        // leave s / end`: oracle `O`, `after`, rc 0; before
-                        // this fix, `O`, then `Error 28.3`, rc 228, because
-                        // `leave s` searched outward from *outside* this
-                        // `SELECT` and never found it. Redirecting through
-                        // `run_otherwise` here, exactly as the ordinary "no
-                        // `WHEN` matched" path already does below, is what
-                        // restores the frame.
-                        if let Flow::Goto(target) = flow
-                            && *otherwise == Some(target)
-                        {
-                            // **Do not clear `indent_offset` here.** F-EX1's
-                            // own re-review found the first version of this
-                            // comment wrong: `OTHERWISE`'s own marker *and
-                            // its whole body* need the offset still active
-                            // through `run_otherwise`'s own dispatch (`lib.
-                            // rs`'s own doc comment on `indent_offset` has
-                            // the measured transcript) -- `run_otherwise`
-                            // itself is what restores it to `0`, once that
-                            // whole dispatch is over, not here before it
-                            // has even started.
-                            return self.run_otherwise(code, index, *label, target, *end, source);
-                        }
-                        return self.leave_select(code, index, *label, resume, flow);
+                        // F-EX1, and the classifier is [`select_escape`] so
+                        // that both engines make this decision once. **Do not
+                        // clear `indent_offset` on the redirect**: `OTHERWISE`'s
+                        // own marker *and its whole body* need the offset still
+                        // active through the dispatch (`lib.rs`'s own doc
+                        // comment on `indent_offset` has the measured
+                        // transcript), and what restores it to `0` is the end
+                        // of that dispatch, not its start.
+                        return match select_escape(*otherwise, flow) {
+                            SelectEscape::Otherwise(target) => {
+                                self.run_otherwise(code, index, *label, target, *end, source)
+                            }
+                            SelectEscape::Forward(flow) => {
+                                self.leave_select(code, index, *label, resume, flow)
+                            }
+                        };
                     }
                 }
                 match otherwise {
@@ -4615,6 +4577,36 @@ impl Interp {
     /// rule and the oracle transcripts that pin it). `Exit` and a `Goto`
     /// that escaped `run_bounded`'s own range pass through with nothing
     /// touched, same as always.
+    /// A `SELECT CASE`'s own `CASE` expression: the whole of what the
+    /// `SELECT` header clause does, and the value every `WHEN CASE` of that
+    /// `SELECT` is compared against.
+    ///
+    /// **One implementation, entered from both engines.** `step`'s own
+    /// `Select` arm calls it inside the header's `in_clause` and keeps the
+    /// value in a local for the scan; `ir::compile` emits it as the one op of
+    /// the header's clause region and keeps the value in a register of the
+    /// enclosing scope, which is what makes it outlive the member clauses that
+    /// read it. What each engine does with the answer differs; deriving it
+    /// does not.
+    ///
+    /// The value is pushed as a temp because the text is taken from it after
+    /// the clause boundary has run, and a `CALL ON` handler delivered there
+    /// allocates.
+    fn select_case(&mut self, code: &Code<'_>, case_expr: &Expr) -> Result<ObjRef, Failure> {
+        // The clause unit set this to the `SELECT`'s own printed indent on the
+        // way in.
+        let indent = self.clause_state.current_value_indent;
+        let value = self.eval(code, case_expr)?;
+        self.roots.push_temp(value);
+        let text = self.to_text(value).to_vec();
+        // `>K>` (`SelectInstruction.cpp:372`, `traceKeywordResult(CASE, ...)`),
+        // at the `SELECT`'s own level -- measured, `>K>   "CASE" => "2"` sits
+        // at the same indent as `select case ...` itself, not the `WHEN`-scan
+        // level a `WhenCase`'s own comparison lines are indented to.
+        self.trace_keyword(indent, "CASE", &text);
+        Ok(value)
+    }
+
     /// One listed `WHEN`/`WHEN CASE`'s own condition, and whether it holds.
     ///
     /// **The work of one clause, and nothing a clause owes around it.** The
@@ -4678,12 +4670,13 @@ impl Interp {
     /// arm, unchanged in behaviour, so the second call site cannot drift
     /// from the first one's.
     ///
-    /// `otherwise_index`'s own clause echo is explicit for the same reason
-    /// `WHEN`'s own is (`Select`'s own arm, above): its `step` arm is a
-    /// no-op and its own index is never inside any `run_bounded` range
-    /// (the body below starts *after* it), so nothing else ever visits it.
-    /// Measured, this task's report: `otherwise` traces on its own line, at
-    /// the `SELECT`'s own scan level, before its body.
+    /// **The `OTHERWISE` marker is inside the range, not in front of it**, so
+    /// it is stepped by the same clause unit every other instruction reaches
+    /// and its `*-*` echo, its value indent and its boundary are that unit's
+    /// rather than written out here. `step`'s own `Otherwise` arm is the
+    /// no-op the marker's execution is. That is also what lets `ir::compile`
+    /// emit the marker as an ordinary op: an engine that had to reproduce a
+    /// hand-rolled echo would be reproducing it, not sharing it.
     fn run_otherwise(
         &mut self,
         code: &Code<'_>,
@@ -4693,29 +4686,10 @@ impl Interp {
         end: Option<usize>,
         source: Option<&ProgramSource>,
     ) -> Result<Flow, Failure> {
-        let otherwise_end = end.unwrap_or(code.body.instructions.len());
-        let otherwise_instruction = &code.body.instructions[otherwise_index];
-        // `static_indent`'s own fixed answer for `otherwise_index` (this
-        // task's earlier fix, not `select_indent`): the marker sits at the
-        // scan level (2 at top level), the same as a `WHEN`'s own
-        // condition, not the `SELECT`'s own level. `+ self.indent_offset`
-        // (F-EX1's own correction to F3, `lib.rs`'s own doc comment on the
-        // field): `0` on the ordinary "no `WHEN` matched" path this
-        // function already served before F-EX1, and the absorbed
-        // `WhenCase`'s own escape's residual on the redirect path F-EX1
-        // added -- one computation serves both callers correctly because
-        // the field itself, not this function, is what carries the
-        // difference between them.
-        let otherwise_indent = self.printed_indent(code, otherwise_index);
-        self.clause_state.current_value_indent = otherwise_indent;
-        if self.trace_mode().all
-            && let Some((line, text)) = self.clause_site(source, otherwise_instruction)
-        {
-            self.trace_clause(line, otherwise_indent, &text);
-        }
+        let otherwise_end = otherwise_range(code.body.instructions.len(), end);
         let flow = self.run_bounded(
             code,
-            otherwise_index + 1,
+            otherwise_index,
             otherwise_end,
             source,
             BodyEngine::TreeWalker,
@@ -7770,6 +7744,49 @@ pub(crate) fn when_targets(kind: &InstructionKind, len: usize) -> WhenTargets {
             resume: exit.unwrap_or(len),
         },
         other => panic!("a SELECT's whens holds only When/WhenCase, not {other:?}"),
+    }
+}
+
+/// One past the last instruction of a `SELECT`'s `OTHERWISE` branch, which is
+/// also where control resumes once that branch has finished: its own `END`,
+/// where the `EndStyle::Otherwise` arm does nothing.
+///
+/// `len` is the body's instruction count, which is what a `None` `end` means.
+/// One computation for the same reason [`when_targets`] is one.
+pub(crate) fn otherwise_range(len: usize, end: Option<usize>) -> usize {
+    end.unwrap_or(len)
+}
+
+/// What a `SELECT` does with a `Flow` that escaped the branch it was running.
+///
+/// **One decision, made by both engines.** `step`'s own `Select` arm dispatches
+/// `OTHERWISE` through `run_otherwise` and everything else through
+/// `leave_select`; the driver resumes at `OTHERWISE`'s own entry op and
+/// everything else walks its frame stack. What each does next differs; which
+/// of the two it is does not.
+pub(crate) enum SelectEscape {
+    /// The flow lands exactly on this `SELECT`'s own `OTHERWISE` marker, so
+    /// that branch runs **with this `SELECT`'s search frame still standing**.
+    ///
+    /// An absorbed `WhenCase`'s false-branch escape is the one thing that
+    /// produces it: a bare `Flow::Goto` past the matched branch's own bounds,
+    /// which forwarded unrecognised would run `OTHERWISE`'s body under
+    /// whichever outer construct received the `Goto`, with no `SELECT` frame
+    /// for a `LEAVE`/`ITERATE` inside it to find. Measured, `select label s
+    /// case 2` / `when 2 then` / `when 3 then nop` / `otherwise say 'O'` /
+    /// `leave s` / `end`: oracle `O`, `after`, rc 0, where forwarding it
+    /// outward is `Error 28.3`, rc 228.
+    Otherwise(usize),
+    /// Anything else, `leave_select`'s to resolve.
+    Forward(Flow),
+}
+
+/// [`SelectEscape`] for `flow` against a `SELECT` whose `OTHERWISE` is at
+/// `otherwise`.
+pub(crate) fn select_escape(otherwise: Option<usize>, flow: Flow) -> SelectEscape {
+    match flow {
+        Flow::Goto(target) if otherwise == Some(target) => SelectEscape::Otherwise(target),
+        other => SelectEscape::Forward(other),
     }
 }
 
