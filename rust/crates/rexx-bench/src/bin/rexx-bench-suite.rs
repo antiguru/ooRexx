@@ -163,6 +163,10 @@ const AXES: &[Axis] = &[
         role: Role::Blocked,
     },
     Axis {
+        name: "emptyloop",
+        role: Role::Loop,
+    },
+    Axis {
         name: "heapshape",
         role: Role::Blocked,
     },
