@@ -1999,12 +1999,14 @@ impl Interp {
             // doc comment for why `Do`'s own arm never returns until the
             // entire loop is over, one way or another.
             InstructionKind::Do(body) | InstructionKind::Loop(body) => {
-                // `BodyEngine::TreeWalker`, like every other `run_bounded`
-                // call on this page: **anything that reaches `step` is being
-                // stepped by the tree-walker.** A promoted `DO`/`LOOP` does
-                // not come through here at all -- its header is a compiled
-                // clause region and `ir::Op::LoopRun` enters
-                // `run_loop_with_header` with the chunk's own engine.
+                // **Anything that reaches `step` is being stepped by the
+                // tree-walker**, which is a property of this function's own
+                // signature rather than of what its callers happen to pass:
+                // `step` takes no [`BodyEngine`], so there is no engine here to
+                // forward and none can be threaded in without changing it. A
+                // promoted `DO`/`LOOP` does not come through here at all -- its
+                // header is a compiled clause region and `ir::Op::LoopRun`
+                // enters `run_loop_with_header` with the chunk's own engine.
                 self.run_loop(
                     code,
                     index,
@@ -5430,6 +5432,14 @@ impl Interp {
         let Some(keyword) = role.keyword() else {
             return;
         };
+        // `trace_keyword` carries its own `results` gate, so this is not a second
+        // decision about whether to *print*: it decides whether to render the
+        // value into a `Vec` at all, which an untraced run has no use for. The
+        // same shape and the same reason as `bind_control`'s own check, one level
+        // down from where that one sits.
+        if !self.trace_mode().results {
+            return;
+        }
         let text = self.to_text(value).to_vec();
         self.trace_keyword(self.clause_state.current_value_indent, keyword, &text);
     }

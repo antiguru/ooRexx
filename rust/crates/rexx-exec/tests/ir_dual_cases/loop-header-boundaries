@@ -36,6 +36,32 @@
 #   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
 #     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
 #
+# TWO LOOP-HEADER BOUNDARIES DIVERGE FROM THE ORACLE AND ARE NOT ROWS HERE,
+# because a row's expected block is what this crate prints and these two are
+# places where that is not what the oracle prints. Both were measured on both
+# engines, and the engines agree on each; neither moved when the header was
+# flattened.
+#
+#   * **A zero-pass loop whose requeued handler has no body clause behind it.**
+#     `do i = 1 to raiser()` with `raiser` returning 0 and its handler raising a
+#     second trapped condition: the oracle prints `after` and then `G ran 6`,
+#     delivering the second trap at the next real clause, and this crate prints
+#     `G ran 3` and then `after`, delivering it at the `DO` clause's own boundary.
+#     The `DO` clause encloses the whole loop here, so its boundary runs after
+#     the loop rather than before the body -- and with zero passes there is no
+#     body clause in between to take the delivery instead. The row above with one
+#     pass reports `G ran 4` on both sides, which is why this shape needs its own
+#     mention rather than being covered by it.
+#   * **An `UNTIL` requeue.** The oracle delivers the second trap at the `END`'s
+#     own clause, `G ran 5`; this crate delivers it at the clause after the loop,
+#     `G ran 6`. The `END` is an instruction the oracle executes and this crate
+#     never steps -- it echoes it and jumps past it.
+#
+# Both are the elided-instruction family `task-4bp-report.md` catalogues: the
+# oracle runs a clause boundary at a position where this crate has no instruction
+# to run one at. They are recorded here rather than in a report because this is
+# the file the next reader of a loop-header boundary opens.
+#
 # Expected lines are tagged so that no line of the block can be empty: an empty
 # line ends an expected block, and a program's own output may hold one.
 #

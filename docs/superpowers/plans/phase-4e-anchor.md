@@ -402,13 +402,19 @@ Everything this task moves is paid once per loop entry and neither axis enters a
 Two release builds of the base worktree differing **by one comment and nothing else** read, on
 `emptyloop`, 2.745 s and 2.959 s on the tree-walker arm (+7.8%) and 2.907 s and 3.152 s on the IR arm
 (+8.4%).
-Identical semantics, different sha256, different layout.
 
-So the ~2% this document records earlier and the up-to-6% Task 4b recorded are both understatements
-of what layout is worth on this axis, and **no cross-binary wall-clock or cycle claim about
-`emptyloop` means anything without a same-source control build beside it**.
-`instructions:u` is unaffected: it reads the same to within 1e-8 across runs of one binary and it is
-what the attribution below uses.
+**The cause is not code layout, and getting that wrong once is why it is spelled out here.** The two
+builds have a byte-identical `.text` -- same sha256, same size, same load address, differing only in
+one debug-line entry -- so the executed code is the same and codegen variance cannot explain any of
+it (`68f29913`). It is run-to-run variance in the measurement environment, which is the worse of the
+two answers: layout could in principle be stabilised and this cannot, and **it bounds repeated runs
+of one binary rather than only comparisons between two**.
+
+So the rule this figure earns is not "cross-binary claims need a control build" but the stronger one
+the spec now carries: **a wall-clock or cycle claim on this axis means nothing unless its arms ran
+interleaved in one sitting**, and the ~8% is the size of what a non-interleaved comparison is reading.
+`instructions:u` is unaffected -- it reads the same to within 1e-8 across runs of one binary -- and it
+is what the attribution below uses.
 
 ### Instructions, which is the instrument that resolves this change
 
@@ -434,18 +440,33 @@ Per this document's own rule it is recorded and not claimed.
 
 Head is slower on both arms and both axes -- `emptyloop` +6.2% tree-walker and +1.3% IR, `varlookup`
 +1.8% and +4.5%, with cycles agreeing -- **while executing fewer instructions on all four cells**.
-The comment-only control build above moves the same cells by 7.8% and 8.4%, which is larger than
-three of those four numbers and comparable to the fourth.
-So these deltas are inside the instrument's own spread between builds of identical source and are not
-this task's, in either direction.
+The identical-`.text` pair above moves the same cells by 7.8% and 8.4%, which is larger than three of
+those four numbers and comparable to the fourth, on binaries whose executed code cannot differ at all.
+So these deltas are inside the measurement environment's own spread and are not this task's, in either
+direction.
 
-### One observation the phase should check rather than inherit
+### `emptyloop` fails criterion 4, and it failed before this task
 
-Within one binary at BASE, `emptyloop`'s IR arm read 2.919 s against its tree-walker arm's 2.735 s --
-IR slower by 6.7% -- where Task 4b-M recorded parity at `401e0df5` (IR 3.12x against 3.13x).
-Task 4b' and Task 6 landed in between, and Task 6 measured its own cost at +0.25%, which does not
-account for the rest.
-The two measurements also use different instruments: this one runs `rexx-run` directly under `perf`
-and 4b-M used the benchmark suite.
-**Nothing here establishes which, and criterion 4 rests on the answer**, so it is worth one
-same-instrument re-measurement before Task 11 reads either figure.
+Task 4c flagged a contradiction here -- it read `emptyloop`'s IR arm 6.7% slower than its tree-walker
+arm within one binary at BASE, where 4b-M's figures said parity -- and the review resolved it against
+4b-M rather than against Task 4c.
+
+**4b-M's 3.12x/3.13x are withdrawn** (`6ce592ff`). Re-measured within one binary as a paired sign
+test at 4b-M's own commit `1535b030`, two independent builds read IR/TW **1.0299** and **1.0265**,
+with the IR arm faster in **0 of 9** pairs both times, against the 0.9964 that was reported. At head
+the same measurement reads **1.0237** wall and **1.0654** instructions; `varlookup` reads **1.0511**
+and **1.0321**. So both registered axes fail criterion 4 and `emptyloop` was never passing it.
+
+The cost is attributed, on instruction counts, per `DO`-body pass, IR arm minus tree-walker arm:
+
+| commit | per-pass delta |
+|---|---:|
+| before the frame stack | 63 |
+| after the frame stack (4b') | **153** |
+| after `settle` was inlined | 96 |
+| through Task 6 | 96 |
+| after Task 4c | **99** |
+
+**4b' owns +33 per pass, Task 4c owns +3, and Task 6 costs exactly zero on this axis.** So the
+structural remedy belongs to the frame stack rather than to any later promotion, and neither the
+`varlookup` residual's amortisation hypothesis nor this task's header work is where it sits.

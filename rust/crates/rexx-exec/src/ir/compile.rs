@@ -283,17 +283,13 @@ pub(crate) fn compile(
                 }
                 let at = op_index(&ops)?;
                 let echo = echoes(trace, instruction);
-                // One op per value evaluated, one more for each value the
-                // oracle echoes a `>K>` line for, one more per value for its
-                // own validation, and `LoopRun` itself.
-                let region: u32 = header
-                    .iter()
-                    .map(|(role, _)| 2 + u32::from(role.keyword().is_some()))
-                    .sum::<u32>()
-                    + 1;
+                // One group per header expression, and `LoopRun` inside the
+                // region behind them: the whole loop runs inside the `DO` clause,
+                // exactly as it does on the tree-walker. `close_region` below is
+                // what fixes the region's end, from what was actually pushed.
                 ops.push(Op::Clause {
                     index: instruction_index(index)?,
-                    end: at + 1 + u32::from(echo) + region,
+                    end: 0,
                 });
                 push_echo(&mut ops, echo, instruction_index(index)?);
                 for (slot, &(role, dst)) in header.iter().enumerate() {
@@ -310,6 +306,7 @@ pub(crate) fn compile(
                 ops.push(Op::LoopRun {
                     index: instruction_index(index)?,
                 });
+                close_region(&mut ops, at)?;
                 // Past the `END`, so nothing between here and there can reuse a
                 // register the running loop still reads. A loop whose `END` is
                 // the body's last instruction has nothing to hang the release
@@ -334,7 +331,7 @@ pub(crate) fn compile(
                 let echo = echoes(trace, instruction);
                 ops.push(Op::Clause {
                     index: instruction_index(index)?,
-                    end: at + 3 + u32::from(echo),
+                    end: 0,
                 });
                 push_echo(&mut ops, echo, instruction_index(index)?);
                 ops.push(Op::EvalExpr {
@@ -347,6 +344,7 @@ pub(crate) fn compile(
                     reg: dst,
                     target: 0,
                 });
+                close_region(&mut ops, at)?;
                 patches.push(Patch {
                     op: jump,
                     target: targets.false_target,
@@ -390,10 +388,9 @@ pub(crate) fn compile(
                 };
                 let at = op_index(&ops)?;
                 let echo = echoes(trace, instruction);
-                let region = if case_reg.is_some() { 2 } else { 1 };
                 ops.push(Op::Clause {
                     index: instruction_index(index)?,
-                    end: at + region + u32::from(echo),
+                    end: 0,
                 });
                 push_echo(&mut ops, echo, instruction_index(index)?);
                 if let Some(dst) = case_reg {
@@ -403,6 +400,11 @@ pub(crate) fn compile(
                         dst,
                     });
                 }
+                // Closed here, so that `SelectCaseText` below is past the
+                // region's end -- setting the case text is the construct's
+                // business rather than the header clause's, and its own doc
+                // comment has why.
+                close_region(&mut ops, at)?;
                 ops.push(Op::SelectCaseText {
                     index: instruction_index(index)?,
                     case: case_reg,
@@ -481,7 +483,7 @@ pub(crate) fn compile(
                 let echo = echoes(trace, instruction);
                 ops.push(Op::Clause {
                     index: instruction_index(index)?,
-                    end: at + 3 + u32::from(echo),
+                    end: 0,
                 });
                 push_echo(&mut ops, echo, instruction_index(index)?);
                 ops.push(Op::WhenTest {
@@ -494,6 +496,9 @@ pub(crate) fn compile(
                     reg: dst,
                     target: 0,
                 });
+                // Closed before `EnterWhen`, which opens the branch's frame and
+                // is the branch's business rather than the clause's.
+                close_region(&mut ops, at)?;
                 patches.push(Patch {
                     op: jump,
                     target: info.false_target,
@@ -628,6 +633,25 @@ fn release_to(slot: &mut Option<Mark>, mark: Mark) {
         _ => mark,
     };
     *slot = Some(lowest);
+}
+
+/// Rewrites the [`Op::Clause`] at `at` so that its `end` is the position one
+/// past everything pushed since -- the region's own end.
+///
+/// **A region is opened, emitted, and then closed from the stream's own length**,
+/// rather than opened with a length worked out ahead of the ops it describes. A
+/// length computed ahead is the emitted shape written twice inside one arm, once
+/// as pushes and once as arithmetic, and for a region whose ops depend on the
+/// node -- a `DO`/`LOOP` header, which is one group per expression written -- the
+/// second copy is a second traversal that has to agree with the first. Closing
+/// from the length cannot disagree with what was pushed.
+fn close_region(ops: &mut [Op], at: u32) -> Result<(), ChunkTooLarge> {
+    let end = op_index(ops)?;
+    match &mut ops[at as usize] {
+        Op::Clause { end: slot, .. } => *slot = end,
+        _ => unreachable!("close_region is given the index of the Clause op it closes"),
+    }
+    Ok(())
 }
 
 /// The index the next op will be pushed at, refused rather than wrapped.
