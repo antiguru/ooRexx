@@ -390,10 +390,27 @@ pub struct Outcome {
 /// The probe itself perturbs the frame it measures, by the width of the local
 /// whose address it takes. That biases the answer upward by a few bytes per
 /// level, which is the safe direction for sizing a stack.
+///
+/// **This is the one thing in `Outcome` the two engines can disagree about, and
+/// the disagreement is the definition working rather than a defect.** It counts
+/// `eval` recursion, and the compiled stream produces some values without
+/// recursing at all: `crate::ir::Op::Const` builds a literal's value from the
+/// chunk's own constant table and never enters `eval`. So `say 'x'` reports
+/// `max_depth` 1 on the tree-walker and 0 on the compiled stream -- one level of
+/// `eval` against none -- and 0 is the honest answer for a run that recursed
+/// nowhere. **Nothing asserts it either way**: `tests/ir_dual.rs` compares
+/// stdout, stderr and exit status, and this field reaches no oracle comparison
+/// at all (`tests/support/oracle.rs`'s own doc says the oracle process never
+/// measures it). An operator chain, which is what anything sizing a stack from
+/// this measures, recurses identically on both engines, because an operator is
+/// evaluated by `eval` whichever engine reached it. **A caller must not read
+/// `max_depth` as a count of expressions evaluated.**
 #[derive(Copy, Clone, Debug, Default)]
 pub struct StackSpan {
     /// The deepest `eval` recursion the run reached. Zero if it never
-    /// evaluated an expression at all.
+    /// evaluated an expression at all, and zero also for a run whose only
+    /// values came from ops that do not enter `eval` -- see this type's own doc
+    /// comment.
     pub max_depth: usize,
     /// Stack bytes between the first `eval` level and the deepest one, both
     /// on the chain that reached `max_depth`. Meaningless unless `max_depth`

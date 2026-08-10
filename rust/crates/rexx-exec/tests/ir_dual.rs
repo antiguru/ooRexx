@@ -16,20 +16,38 @@
 //!
 //! # What this proves, and what it does not
 //!
-//! **It cannot see a promotion that shares its semantics, and every
-//! promotion so far does.** An instruction the compiler has not promoted
-//! delegates its clause back to the tree-walker's own clause unit; a `DO` or
-//! `LOOP` is resolved by the same `Interp::run_loop` under both engines, with
-//! only the driver that steps its body's clauses differing. So the two arms
-//! agree by construction, and this file's comparison is not evidence about
-//! expression evaluation, arithmetic, or any construct's semantics.
+//! **The one thing it cannot see is work the two engines share.** An
+//! instruction the compiler has not promoted delegates its clause back to the
+//! tree-walker's own clause unit, and a construct resolved by one function
+//! entered from both arms -- `Interp::run_loop`, `Interp::assign_evaluated`,
+//! `Interp::say_evaluated` -- answers identically on both by construction. So
+//! this comparison is not evidence that any of *those* is right; that is what
+//! the oracle harnesses are for, and the two halves compose.
 //!
 //! **That is a property to keep rather than a weakness to fix**: a promotion
 //! that shares its semantics cannot diverge, and one that re-implements them
-//! can, which is what this comparison is here to catch when it arrives.
+//! can, which is what this comparison is here to catch.
 //!
-//! What it does prove is everything *around* that delegation, which is the
-//! whole of what the driver adds and is not shared with `run_activation`:
+//! **What it does see is anything a compiled op does that the shared path does
+//! not, and that is no longer hypothetical.** The stream carries ops whose
+//! emission is not delegated at all: `crate::ir::Op::Const` produces a
+//! literal's value without entering `eval.rs`, so the `>L>` line `eval.rs`
+//! emits as a *side effect* of evaluating a literal has to be re-emitted by an
+//! op of its own -- and **this file is what catches that line going missing.**
+//! Measured, by making that op's emission a no-op:
+//! [`both_engines_agree_across_every_population`] reddens, and stays red with
+//! the purpose-written case file for those instructions held out of the
+//! directory entirely.
+//!
+//! **The oracle differential cannot see the same defect**, because
+//! `tests/support/mod.rs` normalises the region such a line sits in. This
+//! comparison diffs raw stderr between the arms, so it can. Neither harness
+//! substitutes for the other and the pair is stronger than either: this one
+//! says a promoted expression still emits what its evaluation used to, and the
+//! oracle harnesses say what that ought to be.
+//!
+//! What it proves beyond that is everything *around* the delegation, which is
+//! the whole of what the driver adds and is not shared with `run_activation`:
 //!
 //! * the outer clause loop terminates where the tree-walker's does, on the
 //!   same instruction, for every program in the population;
@@ -46,7 +64,10 @@
 //! * every body in the population compiles -- `chunks_refused`, which counts
 //!   refusals rather than distinct bodies, is asserted zero on both arms, so
 //!   a compiler that started refusing ordinary bodies could not pass by
-//!   quietly running everything on the tree-walker.
+//!   quietly running everything on the tree-walker;
+//! * a promoted expression re-emits every intermediate trace line its
+//!   evaluation used to produce as a side effect, for every traced program in
+//!   the population.
 //!
 //! Which *engine* actually ran, and how much of a program it drove, is not
 //! observable from that program's output, and this file makes no attempt to
@@ -1016,6 +1037,22 @@ struct KnownDivergence {
 /// boundary the oracle does not, and the compiled stream, having no wrapper,
 /// does not. **The compiled stream is the one that matches the oracle in both
 /// rows.**
+///
+/// **A third member of the same family belongs to neither engine, so it is not
+/// a row here -- and this is where a fixer will look for it.** A `DO` block that
+/// is a branch body, whose last body clause queues a handler that itself
+/// `RAISE`s, reports the second delivery's `SIGL` **one clause early on both
+/// engines**. Measured against the oracle: `if 1 = 1 then do` / `zq = raiser()`
+/// / `end` with the requeueing handler prints `G ran 5` on the oracle and
+/// `G ran 4` on both arms; putting an unpromoted `CALL raiser` in the same slot
+/// prints `G ran 6` against `G ran 5`, also on both arms.
+///
+/// It is the same elided instruction one construct over: the oracle ends that
+/// branch at the block's real `END`, which has a boundary of its own, where both
+/// engines deliver at the last body clause instead. **So it is pre-existing and
+/// not any promotion's** -- the unpromoted-`CALL` spelling is the control that
+/// says so -- and no test asserts it, because the two arms agree and this table
+/// only holds programs where they do not.
 ///
 /// Not fixed here because suppressing it means letting an instruction opt out
 /// of its own clause boundary, which is the exact thing `clause.rs` is built

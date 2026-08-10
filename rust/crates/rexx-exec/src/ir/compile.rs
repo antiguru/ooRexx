@@ -666,6 +666,7 @@ pub(crate) fn compile(
 
     assert_clause_regions_hold_no_clause_op(&ops);
     assert_trace_ops_open_a_clause_region(&ops);
+    assert_literal_echoes_follow_their_load(&ops);
 
     Ok(Chunk {
         trace,
@@ -883,6 +884,35 @@ fn assert_trace_ops_open_a_clause_region(ops: &[Op]) {
     }
 }
 
+/// **Every [`Op::TraceLiteral`] sits immediately behind the [`Op::Const`] whose
+/// own register it reads**, which is both halves of that op's contract at once.
+///
+/// `eval.rs` emits a literal's `>L>` line post-order, with the value in hand,
+/// so an echo in front of its load prints whatever the register held before --
+/// and an echo further behind it prints after value lines that the oracle puts
+/// after this one. Reading a *different* register is the third way the pair
+/// comes apart, and it is the one no ordering check would see: the line would
+/// be in the right place with the wrong value in it.
+///
+/// An unconditional `assert!` for [`assert_clause_regions_hold_no_clause_op`]'s
+/// reason, and it is the same linear scan's worth of work.
+fn assert_literal_echoes_follow_their_load(ops: &[Op]) {
+    for (at, op) in ops.iter().enumerate() {
+        let Op::TraceLiteral { src } = op else {
+            continue;
+        };
+        let loads_it = at
+            .checked_sub(1)
+            .and_then(|before| ops.get(before))
+            .is_some_and(|before| matches!(before, Op::Const { dst, .. } if dst == src));
+        assert!(
+            loads_it,
+            "the literal echo at {at} does not follow the load of the register it reads, so it \
+             echoes a value that op did not put there"
+        );
+    }
+}
+
 // Test-only instrumentation: how many times `compile` has actually run. The
 // chunk-cache test (`golden_tests.rs`) needs this to tell "the chunk cache
 // compiled the body once" apart from "the second lookup happened not to
@@ -909,7 +939,7 @@ pub(crate) fn compile_calls() -> usize {
 mod tests {
     use super::{
         Op, Registers, assert_clause_regions_hold_no_clause_op,
-        assert_trace_ops_open_a_clause_region,
+        assert_literal_echoes_follow_their_load, assert_trace_ops_open_a_clause_region,
     };
 
     /// Two sibling clauses reuse the same registers, and a clause nested
@@ -1064,6 +1094,57 @@ mod tests {
         assert_trace_ops_open_a_clause_region(&[
             Op::Generic { index: 0 },
             Op::TraceClause { index: 1 },
+        ]);
+    }
+
+    /// A literal echo in **front** of the load it reads, which is the
+    /// arrangement that prints whatever the register held before the literal
+    /// reached it -- and the only line of the transcript it moves is the one
+    /// carrying the value.
+    #[test]
+    #[should_panic(expected = "does not follow the load of the register it reads")]
+    fn a_literal_echo_in_front_of_its_load_is_refused() {
+        assert_literal_echoes_follow_their_load(&[
+            Op::Clause { index: 0, end: 4 },
+            Op::TraceLiteral { src: 0 },
+            Op::Const { dst: 0, konst: 0 },
+            Op::Say {
+                index: 0,
+                src: Some(0),
+            },
+        ]);
+    }
+
+    /// A literal echo that reads a register the op in front of it did not
+    /// write, which no ordering check alone would see: the line lands in the
+    /// right place with the wrong value in it.
+    #[test]
+    #[should_panic(expected = "does not follow the load of the register it reads")]
+    fn a_literal_echo_reading_another_register_is_refused() {
+        assert_literal_echoes_follow_their_load(&[
+            Op::Clause { index: 0, end: 4 },
+            Op::Const { dst: 0, konst: 0 },
+            Op::TraceLiteral { src: 1 },
+            Op::Say {
+                index: 0,
+                src: Some(0),
+            },
+        ]);
+    }
+
+    /// The neighbouring arrangement that must stay accepted, without which both
+    /// refusals above are satisfied by a check that refuses every stream
+    /// carrying a literal at all -- which would make every such body a refusal.
+    #[test]
+    fn a_literal_echo_behind_its_own_load_is_accepted() {
+        assert_literal_echoes_follow_their_load(&[
+            Op::Clause { index: 0, end: 4 },
+            Op::Const { dst: 0, konst: 0 },
+            Op::TraceLiteral { src: 0 },
+            Op::Say {
+                index: 0,
+                src: Some(0),
+            },
         ]);
     }
 

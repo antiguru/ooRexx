@@ -262,6 +262,20 @@ pub(crate) enum Op {
     /// already -- so what the wrong call here would cost is an allocation per
     /// pass, not an answer.
     ///
+    /// **This op has no performance evidence in either direction, and that is
+    /// measured rather than an omission.** A literal in an assignment's value
+    /// position or a `SAY`'s expression position is what emits it, and no
+    /// registered benchmark axis has one **inside a measured loop**: counting
+    /// executions on each axis at `n` and at `2n` gives a figure independent of
+    /// `n` every time -- one execution on `bench-programs/emptyloop.rex` (its
+    /// closing `say 'done'`) and one on `bench-programs/strings.rex` (the
+    /// subject string it assigns before its loop), zero on `varlookup`, `arith`,
+    /// `compound`, `alloc4c` and `startup`. So **no measurement of those axes
+    /// says anything about this op**, and a per-clause cost measured on them
+    /// belongs to the clause machinery around it -- [`Op::Clause`],
+    /// [`Op::TraceClause`], [`Op::EvalExpr`], [`Op::Store`] -- rather than
+    /// here.
+    ///
     /// **It emits nothing, and [`Op::TraceLiteral`] is why that is safe.**
     /// `eval.rs` emits a literal's `>L>` line as a side effect of evaluating
     /// it, so an op that only loads a value silently drops that line -- and
@@ -298,6 +312,13 @@ pub(crate) enum Op {
     /// the `Const` whose register it reads: `eval.rs` emits this line
     /// post-order, with the value in hand, so a line emitted anywhere else
     /// would print in the wrong place relative to the value lines around it.
+    /// `compile::assert_literal_echoes_follow_their_load` is what makes that an
+    /// assertion rather than a sentence, and it checks the register as well as
+    /// the position: an echo behind the wrong load lands in the right place with
+    /// the wrong value in it.
+    ///
+    /// **It runs exactly where [`Op::Const`] does, so it has no performance
+    /// evidence either** -- see that op's own note for the measurement.
     TraceLiteral { src: u16 },
     /// Writes register `src` through the target of the `Assignment` at
     /// `index`, and traces the write.
