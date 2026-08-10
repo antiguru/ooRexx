@@ -490,6 +490,19 @@ impl Chunk {
         self.ops.get(at as usize)
     }
 
+    /// The ops of `[at, end)`, or `None` when that is not a range of this
+    /// stream.
+    ///
+    /// **What a clause region is walked as, rather than one [`Chunk::op_at_index`]
+    /// per op**, and the reason is that a region's counter only ever advances:
+    /// every op inside one either falls through to the next or ends the region,
+    /// so the range is settled once on the way in and the bounds check per op
+    /// goes with it. Worth 2 instructions per promoted clause on
+    /// `bench-programs/varlookup.rex`, whose regions hold three ops.
+    fn ops_in(&self, at: u32, end: u32) -> Option<&[Op]> {
+        self.ops.get(at as usize..end as usize)
+    }
+
     /// The setting this chunk's trace ops were emitted for.
     fn trace(&self) -> ChunkTrace {
         self.trace

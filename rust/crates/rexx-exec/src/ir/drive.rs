@@ -27,7 +27,7 @@
 //! `apply_flow` and `absorb`.
 
 use rexx_core::{Decoded, FrameId, ObjRef};
-use rexx_parse::{InstructionKind, ProgramSource, SymbolId};
+use rexx_parse::{Instruction, InstructionKind, ProgramSource, SymbolId};
 
 use super::{BodyEngine, Chunk, Op};
 use crate::clause::{ClauseOutcome, ClauseValue};
@@ -185,7 +185,6 @@ impl Interp {
         source: Option<&ProgramSource>,
     ) -> Result<Ended, Failure> {
         let len = code.body.instructions.len();
-
         loop {
             // The activation's own `pc` is where a body is entered at -- `0`
             // for a program, a label's index for a `CALL`, a handler's for a
@@ -284,9 +283,20 @@ impl Interp {
     /// at the call site, which turns a per-clause branch into no code at all.
     #[expect(
         clippy::too_many_arguments,
-        reason = "two callers, and every argument is a value each already holds: bundling them \
-                  into a struct would only move the same list one line up"
+        reason = "two callers, and every argument is a value each already holds"
     )]
+    // **Bundling the four range-invariant arguments into a struct was tried and
+    // rejected**, so that nobody spends the session on it again. It does what
+    // it promises to `instructions:u` -- 6 fewer per range entry, 1 fewer per
+    // `Op::Generic` clause -- and on `cycles:u` it moves both arms of
+    // `bench-programs/emptyloop.rex` far more than that in opposite directions:
+    // the tree-walker arm, which never enters this function, 8.61 to 7.96
+    // billion cycles, and the compiled arm 8.63 to 9.12, taking that axis'
+    // cycle ratio from 1.00 to 1.15 while its instruction count falls.
+    // Reproduced across two sittings and two builds, with branch misses at
+    // 70,000 out of 6.3 billion branches either way, so it is not prediction.
+    // No mechanism below "the layout changed" was found, and a change with that
+    // profile is not worth 7 instructions.
     fn run_ops<const GRANTING: bool>(
         &mut self,
         code: &Code<'_>,
@@ -354,10 +364,15 @@ impl Interp {
                     count_clause_op_entry();
                     let index = *index as usize;
                     let end = *end;
-                    let Some(instruction) = code.body.instructions.get(index) else {
-                        return Err(Loud::chunk_map_too_short().into());
-                    };
+                    // The instruction itself is fetched by `run_clause_region`,
+                    // which needs it whether or not this level grants: fetching
+                    // it here as well would be a second bounds-checked lookup
+                    // per promoted clause on the path that does not grant, which
+                    // is every clause inside a construct's body.
                     if GRANTING {
+                        let Some(instruction) = code.body.instructions.get(index) else {
+                            return Err(Loud::chunk_map_too_short().into());
+                        };
                         self.grant_procedure_permission(instruction);
                     }
                     // **Whether the setting in force is still the one this
@@ -409,7 +424,6 @@ impl Interp {
                         pc + 1,
                         end,
                         index,
-                        instruction,
                         source,
                         stale,
                     )? {
@@ -733,6 +747,21 @@ impl Interp {
     /// have to be one decision: doing only the first would leave a `TRACE R`
     /// inside a body invisible to every promoted clause after it, and only
     /// the second would leave `TRACE N` unable to switch one off.
+    ///
+    /// **The clause's instruction is fetched here rather than passed in, and the
+    /// two facts that decides are worth one line each.** The caller has to look
+    /// it up only when it grants the first-instruction permission, which is the
+    /// activation's own level and not the body of any construct -- so on the path
+    /// every clause inside a loop takes, the lookup happens once instead of
+    /// twice. And this argument list is one slot shorter than it would be with
+    /// the instruction added to it, which on this ABI is the difference between
+    /// nine slots and ten: passing the instruction *as well* was measured at a net
+    /// **1** instruction per promoted clause on `bench-programs/varlookup.rex`,
+    /// because the tenth slot gave back almost all of the 8 that not looking the
+    /// instruction up again is worth. Fetching it here costs no slot, and the two
+    /// together -- this lookup moved in, and the region's ops reading it -- are
+    /// worth 10 and 8 of the 19 instructions per promoted clause that came off
+    /// this path.
     #[expect(
         clippy::too_many_arguments,
         reason = "one caller, and every argument is a value that caller already holds"
@@ -745,10 +774,12 @@ impl Interp {
         at: u32,
         end: u32,
         index: usize,
-        instruction: &rexx_parse::Instruction,
         source: Option<&ProgramSource>,
         stale: bool,
     ) -> Result<ClauseRegion, Failure> {
+        let Some(instruction) = code.body.instructions.get(index) else {
+            return Err(Loud::chunk_map_too_short().into());
+        };
         let echo = if stale { Echo::Gated } else { Echo::Compiled };
         let outcome =
             self.in_stepped_clause_with(echo, code, index, instruction, source, |it| {
@@ -779,7 +810,7 @@ impl Interp {
                 //   an assignment in a called label" row diverge, and again
                 //   nothing else notices.
                 let _first_instruction = std::mem::take(&mut it.procedure_permitted);
-                it.run_region_ops(code, chunk, registers, at, end, source, stale)
+                it.run_region_ops(code, chunk, registers, at, end, instruction, source, stale)
             })?;
         match outcome {
             ClauseOutcome::Ran(next) => Ok(match next? {
@@ -797,6 +828,15 @@ impl Interp {
     /// that runs a whole clause of its own does not, and cannot: `compile`
     /// asserts no `Generic` sits inside a region, because it echoes the clause
     /// and the echo is not idempotent.
+    ///
+    /// **`clause` is the instruction every index-bearing op in here names**, so
+    /// an op reads it rather than resolving its own `index` against the body.
+    /// `compile::assert_region_ops_name_their_clause` is what makes that
+    /// checked rather than assumed, and
+    /// [`debug_assert_names_the_clause`] is the same check per op in debug. It
+    /// removes two bounds-checked lookups of the same instruction per promoted
+    /// assignment, worth 8 instructions per clause on
+    /// `bench-programs/varlookup.rex`.
     #[expect(
         clippy::too_many_arguments,
         reason = "one caller, and every argument is a value that caller already holds"
@@ -808,6 +848,7 @@ impl Interp {
         registers: FrameId,
         at: u32,
         end: u32,
+        clause: &Instruction,
         source: Option<&ProgramSource>,
         stale: bool,
     ) -> Result<RegionEnd, Failure> {
@@ -819,11 +860,10 @@ impl Interp {
         // header -- an `IF`'s, a `WHEN`'s, a `SELECT`'s -- pays one discriminant
         // store rather than the struct's own initialisation.
         let mut header: Option<LoopHeaderValues> = None;
-        let mut pc = at;
-        while pc < end {
-            let Some(op) = chunk.op_at_index(pc) else {
-                return Err(Loud::chunk_map_too_short().into());
-            };
+        let Some(ops) = chunk.ops_in(at, end) else {
+            return Err(Loud::chunk_map_too_short().into());
+        };
+        for op in ops {
             match op {
                 // **No gate**: this op exists only in a chunk compiled under a
                 // setting that echoes, which is the decision. `stale` is the
@@ -831,9 +871,7 @@ impl Interp {
                 // already asked the current setting instead
                 // (`run_clause_region`).
                 Op::TraceClause { index } => {
-                    let Some(instruction) = code.body.instructions.get(*index as usize) else {
-                        return Err(Loud::chunk_map_too_short().into());
-                    };
+                    debug_assert_names_the_clause(code, *index, clause, "TraceClause");
                     if !stale {
                         #[cfg(test)]
                         count_trace_op_echo();
@@ -845,18 +883,17 @@ impl Interp {
                         // engines cannot come to print an echo at two
                         // different indents for one clause.
                         let indent = self.clause_state.current_value_indent;
-                        self.echo_compiled_clause(source, instruction, indent);
+                        self.echo_compiled_clause(source, clause, indent);
                     }
-                    pc += 1;
                 }
                 Op::EvalExpr { index, slot, dst } => {
                     debug_assert!(
                         chunk.holds_register(*dst),
                         "op writes register {dst} outside the region the chunk reserved"
                     );
-                    let value = self.eval_chunk_expr(code, *index as usize, *slot)?;
+                    debug_assert_names_the_clause(code, *index, clause, "EvalExpr");
+                    let value = self.eval_chunk_expr(code, clause, *slot)?;
                     self.roots.set_temp(registers, *dst as usize, value);
-                    pc += 1;
                 }
                 // **The phase's first native expression op**: the literal's
                 // value, built from the chunk's own interned bytes through the
@@ -874,7 +911,6 @@ impl Interp {
                     };
                     let value = self.literal(bytes);
                     self.roots.set_temp(registers, *dst as usize, value);
-                    pc += 1;
                 }
                 // The `>L>` line of one literal. **Its own op**, because the
                 // load emits nothing and `eval.rs` emits this as a side effect
@@ -887,7 +923,6 @@ impl Interp {
                     );
                     let value = self.roots.temp_at(registers, *src as usize);
                     self.echo_literal(value);
-                    pc += 1;
                 }
                 // The write, through `Interp::assign_evaluated` -- the whole of
                 // what `step`'s own `Assignment` arm does past the evaluation,
@@ -898,26 +933,21 @@ impl Interp {
                         chunk.holds_register(*src),
                         "op reads register {src} outside the region the chunk reserved"
                     );
-                    let Some(instruction) = code.body.instructions.get(*index as usize) else {
-                        return Err(Loud::chunk_map_too_short().into());
-                    };
-                    let InstructionKind::Assignment { target, .. } = &instruction.kind else {
+                    debug_assert_names_the_clause(code, *index, clause, "Store");
+                    let InstructionKind::Assignment { target, .. } = &clause.kind else {
                         return Err(Loud::store_op_off_its_node().into());
                     };
                     let value = self.roots.temp_at(registers, *src as usize);
                     self.assign_evaluated(code, target, value)?;
-                    pc += 1;
                 }
                 // The print, through `Interp::say_evaluated`, for the same
                 // reason `Op::Store` goes through `assign_evaluated`.
                 Op::Say { index, src } => {
+                    debug_assert_names_the_clause(code, *index, clause, "Say");
                     debug_assert!(
                         matches!(
-                            code.body
-                                .instructions
-                                .get(*index as usize)
-                                .map(|instruction| &instruction.kind),
-                            Some(InstructionKind::Say { expression })
+                            &clause.kind,
+                            InstructionKind::Say { expression }
                                 if expression.is_some() == src.is_some()
                         ),
                         "a Say op names an instruction that is not a SAY of matching arity"
@@ -930,16 +960,13 @@ impl Interp {
                         self.roots.temp_at(registers, register as usize)
                     });
                     self.say_evaluated(value);
-                    pc += 1;
                 }
                 Op::JumpUnless { reg, target } => {
                     debug_assert!(
                         chunk.holds_register(*reg),
                         "op reads register {reg} outside the region the chunk reserved"
                     );
-                    if self.register_holds(registers, *reg)? {
-                        pc += 1;
-                    } else {
+                    if !self.register_holds(registers, *reg)? {
                         return Ok(RegionEnd::At(*target));
                     }
                 }
@@ -960,16 +987,13 @@ impl Interp {
                         }
                         None => None,
                     };
-                    let Some(instruction) = code.body.instructions.get(*index as usize) else {
-                        return Err(Loud::chunk_map_too_short().into());
-                    };
-                    let holds = self.scan_when(code, instruction, case_text.as_deref())?;
+                    debug_assert_names_the_clause(code, *index, clause, "WhenTest");
+                    let holds = self.scan_when(code, clause, case_text.as_deref())?;
                     // In range unconditionally: `SMALL_INT_MAX` is far above
                     // one. Stored as the logical value `Op::JumpUnless` reads
                     // back, exactly as an `IF`'s condition is.
                     let value = ObjRef::small_int(i64::from(holds)).unwrap_or(ObjRef::NIL);
                     self.roots.set_temp(registers, *dst as usize, value);
-                    pc += 1;
                 }
                 // The `>K>` line of one header value. **The emission is its
                 // own op**, which is what lets the stream reproduce the order
@@ -982,7 +1006,6 @@ impl Interp {
                     );
                     let value = self.roots.temp_at(registers, *src as usize);
                     self.echo_header_value(*role, value);
-                    pc += 1;
                 }
                 // One header value's own validation, in front of the next
                 // value's evaluation because that order is observable
@@ -995,7 +1018,6 @@ impl Interp {
                     let value = self.roots.temp_at(registers, *src as usize);
                     let values = header.get_or_insert_with(LoopHeaderValues::default);
                     self.accept_header_value(*role, value, values)?;
-                    pc += 1;
                 }
                 // The construct itself, from the values the ops above filed.
                 // `run_loop_with_header` is the same function the tree-walker
@@ -1003,12 +1025,9 @@ impl Interp {
                 // says that the tree-walker's does not: the body's clauses come
                 // from this chunk.
                 Op::LoopRun { index } => {
+                    debug_assert_names_the_clause(code, *index, clause, "LoopRun");
                     let index = *index as usize;
-                    let Some(instruction) = code.body.instructions.get(index) else {
-                        return Err(Loud::chunk_map_too_short().into());
-                    };
-                    let (InstructionKind::Do(body) | InstructionKind::Loop(body)) =
-                        &instruction.kind
+                    let (InstructionKind::Do(body) | InstructionKind::Loop(body)) = &clause.kind
                     else {
                         return Err(Loud::loop_op_off_its_node().into());
                     };
@@ -1016,7 +1035,7 @@ impl Interp {
                     let flow = self.run_loop_with_header(
                         code,
                         index,
-                        instruction,
+                        clause,
                         body,
                         source,
                         BodyEngine::Chunk { chunk, registers },
@@ -1058,6 +1077,28 @@ impl Interp {
             _ => Err(Loud::register_not_logical().into()),
         }
     }
+}
+
+/// Asserts, in debug, that the op naming instruction `index` from inside a
+/// clause region names that region's own clause.
+///
+/// **What licenses [`Interp::run_region_ops`] reading the instruction off its
+/// region instead of looking each op's `index` up.** Every index-bearing op
+/// `compile` emits inside a region is emitted from the arm of the instruction
+/// whose region it is, so the two are the same instruction by construction --
+/// `compile::assert_region_ops_name_their_clause` is that stated as a check on
+/// the emitted stream rather than as a sentence about the emitting code, and
+/// this is the run-time half for a stream that reached the driver some other
+/// way.
+fn debug_assert_names_the_clause(code: &Code<'_>, index: u32, clause: &Instruction, op: &str) {
+    debug_assert_eq!(
+        code.body
+            .instructions
+            .get(index as usize)
+            .map(std::ptr::from_ref),
+        Some(std::ptr::from_ref(clause)),
+        "a {op} op names an instruction that is not the clause of the region it sits in"
+    );
 }
 
 /// The op instruction `target` resumes at, or the loud failure a chunk whose

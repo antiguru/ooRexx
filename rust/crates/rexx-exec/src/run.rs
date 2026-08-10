@@ -6555,8 +6555,12 @@ impl Interp {
         )
     }
 
-    /// Expression `slot` of the instruction at `index`, evaluated as the
-    /// compiled stream's [`crate::ir::Op::EvalExpr`] asks.
+    /// Expression `slot` of `instruction`, evaluated as the compiled stream's
+    /// [`crate::ir::Op::EvalExpr`] asks.
+    ///
+    /// `instruction` is the clause of the region the op sits in, handed over by
+    /// the driver rather than looked up from the op's own index: the two are the
+    /// same instruction by construction and `compile` asserts it.
     ///
     /// The answer is the expression's own Rexx value. An `If` has one
     /// expression, slot `0`, and its value is a logical one: `eval_condition`
@@ -6575,12 +6579,9 @@ impl Interp {
     pub(crate) fn eval_chunk_expr(
         &mut self,
         code: &Code<'_>,
-        index: usize,
+        instruction: &Instruction,
         slot: u32,
     ) -> Result<ObjRef, Failure> {
-        let Some(instruction) = code.body.instructions.get(index) else {
-            return Err(Loud::chunk_map_too_short().into());
-        };
         match (&instruction.kind, slot) {
             (InstructionKind::If { condition, .. }, 0) => {
                 let holds = self.eval_if_condition(code, condition)?;

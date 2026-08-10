@@ -667,6 +667,7 @@ pub(crate) fn compile(
     assert_clause_regions_hold_no_clause_op(&ops);
     assert_trace_ops_open_a_clause_region(&ops);
     assert_literal_echoes_follow_their_load(&ops);
+    assert_region_ops_name_their_clause(&ops);
 
     Ok(Chunk {
         trace,
@@ -913,6 +914,70 @@ fn assert_literal_echoes_follow_their_load(ops: &[Op]) {
     }
 }
 
+/// **Every index-bearing op inside a [`Op::Clause`] region names that region's
+/// own clause.**
+///
+/// That is what lets the driver read the instruction off the region once and
+/// hand it to every op inside it, instead of looking each op's own `index` up
+/// again -- measured, three bounds-checked lookups of the same instruction per
+/// promoted clause where the tree-walker makes one. Each op keeps its `index`,
+/// because that is what says which instruction the op belongs to and it is what
+/// a golden stream is read against; nothing at run time resolves it.
+///
+/// The property holds by construction -- every one of these ops is emitted from
+/// the arm of the instruction whose region it is -- and that is exactly the kind
+/// of claim that stops holding without anything going red.
+///
+/// **What this adds is the shape of the failure, not coverage, and that is
+/// measured rather than assumed.** Making an assignment's value op name the
+/// instruction after it reddens six tests with this check removed -- the
+/// dual-engine population sweep, the branch, loop and case-file harnesses and the
+/// known-divergence table all notice -- so the suite already sees a mis-indexed
+/// op. What it sees is a divergence in a program's output; what this turns that
+/// into is a refusal at compile time naming the op and both instructions.
+///
+/// An unconditional `assert!` for [`assert_clause_regions_hold_no_clause_op`]'s
+/// reason, and it is the same linear scan's worth of work.
+fn assert_region_ops_name_their_clause(ops: &[Op]) {
+    for (at, op) in ops.iter().enumerate() {
+        let Op::Clause { index, end } = op else {
+            continue;
+        };
+        for (inside, op) in ops[at + 1..(*end as usize).min(ops.len())]
+            .iter()
+            .enumerate()
+        {
+            let named = match op {
+                Op::TraceClause { index }
+                | Op::EvalExpr { index, .. }
+                | Op::Store { index, .. }
+                | Op::Say { index, .. }
+                | Op::WhenTest { index, .. }
+                | Op::LoopRun { index } => Some(*index),
+                Op::Generic { .. }
+                | Op::TraceKeyword { .. }
+                | Op::LoopHeaderValue { .. }
+                | Op::Clause { .. }
+                | Op::SelectCaseText { .. }
+                | Op::EndBranch
+                | Op::EnterWhen { .. }
+                | Op::EnterOtherwise { .. }
+                | Op::Const { .. }
+                | Op::TraceLiteral { .. }
+                | Op::Jump { .. }
+                | Op::JumpUnless { .. } => None,
+            };
+            assert!(
+                named.is_none_or(|named| named == *index),
+                "the op at {} names instruction {} inside the region of clause {index}, so the \
+                 driver would hand it the wrong instruction",
+                at + 1 + inside,
+                named.unwrap_or_default()
+            );
+        }
+    }
+}
+
 // Test-only instrumentation: how many times `compile` has actually run. The
 // chunk-cache test (`golden_tests.rs`) needs this to tell "the chunk cache
 // compiled the body once" apart from "the second lookup happened not to
@@ -939,7 +1004,8 @@ pub(crate) fn compile_calls() -> usize {
 mod tests {
     use super::{
         Op, Registers, assert_clause_regions_hold_no_clause_op,
-        assert_literal_echoes_follow_their_load, assert_trace_ops_open_a_clause_region,
+        assert_literal_echoes_follow_their_load, assert_region_ops_name_their_clause,
+        assert_trace_ops_open_a_clause_region,
     };
 
     /// Two sibling clauses reuse the same registers, and a clause nested
@@ -1162,6 +1228,70 @@ mod tests {
                 dst: 0,
             },
             Op::JumpUnless { reg: 0, target: 4 },
+        ]);
+    }
+
+    /// An op inside a region that names the instruction *next* to the region's
+    /// clause, which is the arrangement the driver cannot detect.
+    ///
+    /// The driver reads the instruction off the region once and hands it to every
+    /// op inside it, so an op naming a neighbour is not a lookup that fails: it
+    /// silently evaluates the wrong instruction's expression, or writes through
+    /// the wrong assignment's target, and every line around it still matches.
+    #[test]
+    #[should_panic(expected = "names instruction 1 inside the region of clause 0")]
+    fn a_region_op_naming_a_neighbouring_instruction_is_refused() {
+        assert_region_ops_name_their_clause(&[
+            Op::Clause { index: 0, end: 3 },
+            Op::EvalExpr {
+                index: 1,
+                slot: 0,
+                dst: 0,
+            },
+            Op::Store { index: 0, src: 0 },
+        ]);
+    }
+
+    /// The same for the echo op, which carries an index of its own and reaches
+    /// a different function with it.
+    #[test]
+    #[should_panic(expected = "names instruction 2 inside the region of clause 1")]
+    fn a_trace_op_naming_a_neighbouring_instruction_is_refused() {
+        assert_region_ops_name_their_clause(&[
+            Op::Generic { index: 0 },
+            Op::Clause { index: 1, end: 4 },
+            Op::TraceClause { index: 2 },
+            Op::EvalExpr {
+                index: 1,
+                slot: 0,
+                dst: 0,
+            },
+        ]);
+    }
+
+    /// The neighbouring arrangement that must stay accepted: two regions, each
+    /// of whose ops names its own clause, with an index-bearing op *outside* any
+    /// region naming a third instruction.
+    ///
+    /// Without this the refusals above are satisfied by a check that refuses
+    /// every stream holding more than one instruction index -- and the ops past a
+    /// region's end genuinely do name other instructions, which is what
+    /// `Op::SelectCaseText` is.
+    #[test]
+    fn ops_naming_their_own_region_clause_are_accepted() {
+        assert_region_ops_name_their_clause(&[
+            Op::Clause { index: 0, end: 3 },
+            Op::TraceClause { index: 0 },
+            Op::Store { index: 0, src: 0 },
+            Op::SelectCaseText {
+                index: 7,
+                case: None,
+            },
+            Op::Clause { index: 1, end: 6 },
+            Op::Say {
+                index: 1,
+                src: Some(0),
+            },
         ]);
     }
 }
