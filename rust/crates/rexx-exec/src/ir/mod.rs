@@ -106,10 +106,14 @@ pub(crate) enum Op {
     /// instruction inside a loop is reachable from the stream at all.
     ///
     /// **The last op of a [`Op::Clause`] region, and inside it rather than
-    /// after it.** The whole loop runs inside the `DO` clause exactly as it
-    /// does on the tree-walker, which is what keeps the clause's temps frame
-    /// open across every pass -- a `DO OVER`'s target value is rooted there for
-    /// the loop's lifetime -- and its boundary where the tree-walker has it.
+    /// after it.** The whole loop runs inside the `DO` clause exactly as it does
+    /// on the tree-walker, so the clause's temps frame stays open across every
+    /// pass -- which is what roots the per-pass temporaries a `WHILE` or `UNTIL`
+    /// test pushes -- and the clause's boundary is where the tree-walker has it.
+    /// A header value that outlives the header is rooted by its **register**
+    /// rather than by that frame: `compile` allocates the header's registers in
+    /// the enclosing scope and releases them past the loop's `END`, so a
+    /// `DO OVER`'s target stays addressed for as long as `LoopState` holds it.
     /// The body's own clauses are not region ops: they are reached through
     /// `run_bounded`, which re-enters the driver for the body's range, so no op
     /// inside the region opens a clause.
