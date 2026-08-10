@@ -40,10 +40,15 @@
 //!
 //! # What two sizes buy, and the one workload that has none
 //!
-//! Running the same body at `n` and `2n` separates the per-pass cost from the
+//! Running the same body at two lengths separates the per-pass cost from the
 //! fixed cost exactly, because the fixed part cancels in the difference. That
 //! is the question every promotion task in this phase asks, and it is what
 //! settled "per promoted clause, zero per body entry".
+//!
+//! The two lengths are the program's own committed bound and **half** of it,
+//! not the bound and twice it -- see [`Workload::rendered`] for the axis that
+//! is killed by the address-space cap when it is doubled, and for why the
+//! committed bound has to be one of the two.
 //!
 //! A program's size is **derived from the program**, not declared beside it:
 //! [`Workload::classify`] reads the single `n = <integer>` line the benchmark
@@ -243,8 +248,12 @@ impl Workload {
         match bounds.as_slice() {
             [] => Ok(Workload::Fixed { name, text }),
             [bound] => {
-                if *bound == 0 {
-                    return Err(format!("{name}: its loop bound is 0, so it has no passes"));
+                // A bound of 0 or 1 has no distinct half, so there is no
+                // second length to difference against.
+                if *bound < 2 {
+                    return Err(format!(
+                        "{name}: its loop bound is {bound}, which has no distinct half to                          difference against"
+                    ));
                 }
                 Ok(Workload::Scaled {
                     name,
@@ -268,16 +277,29 @@ impl Workload {
 
     /// The program text to run at `size`, and the number of passes it makes.
     ///
-    /// The large length is exactly twice the small one, so the difference
-    /// between the two readings is the cost of `bound` further passes and the
-    /// fixed part cancels without an intercept having to be estimated.
+    /// **The large length is the program's own committed bound and the small
+    /// one is half of it**, rather than the bound and twice it. Two reasons,
+    /// and the first is a measurement this harness failed before it was
+    /// written this way:
+    ///
+    /// * A doubled `bench-programs/strings.rex` asks for 6.4 GB and is killed
+    ///   by `ADDRESS_SPACE_LIMIT_KIB`. Doubling changes the axis's *memory*
+    ///   behaviour as well as its pass count, which is a different program on
+    ///   the allocation-shaped axes rather than a longer one.
+    /// * The committed bound is the length every published figure in this
+    ///   phase was taken at, so keeping it as one of the two lengths makes the
+    ///   whole-program ratio directly comparable with the record instead of
+    ///   comparable with a doubled program nobody else ran.
+    ///
+    /// The difference is `bound - bound / 2` passes either way, so the
+    /// per-pass reduction is unaffected.
     fn rendered(&self, size: Size) -> (String, u64) {
         match self {
             Workload::Fixed { text, .. } => (text.clone(), 0),
             Workload::Scaled { text, bound, .. } => {
                 let passes = match size {
-                    Size::Small => *bound,
-                    Size::Large => bound * 2,
+                    Size::Small => bound / 2,
+                    Size::Large => *bound,
                 };
                 let rewritten = text
                     .lines()
@@ -775,8 +797,14 @@ mod tests {
             };
             let (small, small_passes) = workload.rendered(Size::Small);
             let (large, large_passes) = workload.rendered(Size::Large);
-            assert_eq!(small_passes, *bound);
-            assert_eq!(large_passes, bound * 2);
+            assert_eq!(
+                large_passes,
+                *bound,
+                "{}: the large length is not the program's own committed bound, so its                  whole-program ratio is not comparable with the published record",
+                workload.name()
+            );
+            assert_eq!(small_passes, bound / 2);
+            assert!(large_passes > small_passes);
 
             let without_bound = |source: &str| -> Vec<String> {
                 source
@@ -797,8 +825,8 @@ mod tests {
                 "{}: the two lengths differ somewhere other than the bound",
                 workload.name()
             );
-            assert!(small.contains(&format!("n = {bound}")));
-            assert!(large.contains(&format!("n = {}", bound * 2)));
+            assert!(large.contains(&format!("n = {bound}")));
+            assert!(small.contains(&format!("n = {}", bound / 2)));
         }
         assert!(seen > 0, "no benchmark program was classified");
     }
@@ -814,6 +842,7 @@ mod tests {
         let two = Workload::classify("two".into(), "n = 5\nsay 1\nn = 7\n".into());
         assert!(two.is_err(), "{two:?}");
         assert!(Workload::classify("zero".into(), "n = 0\n".into()).is_err());
+        assert!(Workload::classify("one".into(), "n = 1\n".into()).is_err());
     }
 
     /// A fixed workload runs at one size, a scaled one at two.
