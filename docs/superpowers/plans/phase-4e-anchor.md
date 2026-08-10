@@ -387,3 +387,65 @@ The percentages above are IR-arm-against-tree-walker-arm and are **not** compara
 tree-walker-vs-oracle ratios earlier in this document: this sitting ran no oracle at all.
 Re-deriving 3.33x and 4.40x against these numbers would be combining two sittings, which is the
 comparison this document's own method forbids.
+
+## Task 4c: the loop header flattened -- and why the wall-clock instrument answers nothing here
+
+BASE `de05ea58`, head `b6d54856`.
+Interleaved base-against-head within one sitting, `ulimit -v 8388608`, three rounds per cell, both
+arms of each binary selected through `REXX_ENGINE`.
+
+**Predicted before measuring: no movement on either axis, on either arm** -- `|delta| < 1%`.
+Everything this task moves is paid once per loop entry and neither axis enters a loop more than once.
+
+### The instrument comes first, because it decides what the rest is worth
+
+Two release builds of the base worktree differing **by one comment and nothing else** read, on
+`emptyloop`, 2.745 s and 2.959 s on the tree-walker arm (+7.8%) and 2.907 s and 3.152 s on the IR arm
+(+8.4%).
+Identical semantics, different sha256, different layout.
+
+So the ~2% this document records earlier and the up-to-6% Task 4b recorded are both understatements
+of what layout is worth on this axis, and **no cross-binary wall-clock or cycle claim about
+`emptyloop` means anything without a same-source control build beside it**.
+`instructions:u` is unaffected: it reads the same to within 1e-8 across runs of one binary and it is
+what the attribution below uses.
+
+### Instructions, which is the instrument that resolves this change
+
+| axis | arm | base | head | delta |
+|---|---|---:|---:|---:|
+| `emptyloop` (25e6) | tree-walker | 38.0007e9 | 37.8507e9 | **-0.395%** |
+| `emptyloop` | IR | 40.4007e9 | 40.3257e9 | **-0.186%** |
+| `varlookup` (19e6) | tree-walker | 71.8207e9 | 71.6307e9 | **-0.265%** |
+| `varlookup` | IR | 74.0437e9 | 73.9297e9 | **-0.154%** |
+
+The prediction was wrong: there is a movement, it is a saving, and it is **per clause** rather than
+per loop entry -- 150e6 instructions over 25e6 passes is exactly 6, and `varlookup`'s 190e6 over 38e6
+body clauses is 5.
+
+**The mechanism proposed for it was tested and refuted.** The candidate was dropping the `BodyEngine`
+argument from `step`, which is on the per-clause path: a control build of `b6d54856` with that
+argument put back, changing nothing else, reads 37.8507e9 and 40.3257e9 -- the head figures, to eight
+significant figures, on both arms.
+So the saving is somewhere else in the change and no route has been named for it.
+Per this document's own rule it is recorded and not claimed.
+
+### Cycles and wall clock, recorded and not attributed
+
+Head is slower on both arms and both axes -- `emptyloop` +6.2% tree-walker and +1.3% IR, `varlookup`
++1.8% and +4.5%, with cycles agreeing -- **while executing fewer instructions on all four cells**.
+The comment-only control build above moves the same cells by 7.8% and 8.4%, which is larger than
+three of those four numbers and comparable to the fourth.
+So these deltas are inside the instrument's own spread between builds of identical source and are not
+this task's, in either direction.
+
+### One observation the phase should check rather than inherit
+
+Within one binary at BASE, `emptyloop`'s IR arm read 2.919 s against its tree-walker arm's 2.735 s --
+IR slower by 6.7% -- where Task 4b-M recorded parity at `401e0df5` (IR 3.12x against 3.13x).
+Task 4b' and Task 6 landed in between, and Task 6 measured its own cost at +0.25%, which does not
+account for the rest.
+The two measurements also use different instruments: this one runs `rexx-run` directly under `perf`
+and 4b-M used the benchmark suite.
+**Nothing here establishes which, and criterion 4 rests on the answer**, so it is worth one
+same-instrument re-measurement before Task 11 reads either figure.
