@@ -34,11 +34,11 @@
 //! `bench-programs/`.
 
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use rexx_bench::arms::{
-    Arm, Build, Figure, Instrument, MINIMUM_ROUNDS, Measured, Size, Workload, measure,
+    Arm, Build, Figure, Instrument, MINIMUM_ROUNDS, Measured, Sitting, Size, Workload, measure,
 };
 
 /// Number of fields in a row. Named so [`row`] takes an array of exactly this
@@ -117,6 +117,7 @@ fn run(arguments: &[String]) -> Result<(), String> {
     let task = single(arguments, "--task").unwrap_or_else(|| "-".to_string());
     let commit = single(arguments, "--commit").unwrap_or_else(|| "-".to_string());
     let baseline = single(arguments, "--baseline").map(PathBuf::from);
+    let raw = single(arguments, "--raw").map(PathBuf::from);
     let workdir = single(arguments, "--workdir").map_or_else(
         || std::env::temp_dir().join(format!("rexx-arms-{}", std::process::id())),
         PathBuf::from,
@@ -140,6 +141,9 @@ fn run(arguments: &[String]) -> Result<(), String> {
         for line in report(&measured, &task, &commit) {
             println!("{line}");
             appended.push(line);
+        }
+        if let Some(path) = &raw {
+            write_raw(path, measured.sitting(), &task)?;
         }
         summarise(&measured);
     }
@@ -283,6 +287,32 @@ fn report(measured: &Measured, task: &str, commit: &str) -> Vec<String> {
         }
     }
     lines
+}
+
+/// Every individual reading, one line per run, appended to `path`.
+///
+/// Not a reduction and not a claim: it is what the reductions were computed
+/// from, kept so that a round that looks wrong can be identified instead of
+/// reasoned about.
+fn write_raw(path: &Path, sitting: &Sitting, task: &str) -> Result<(), String> {
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    for (round, build, arm, size, reading) in sitting.runs() {
+        writeln!(
+            file,
+            "{task}\t{}\t{build}\t{}\t{}\t{round}\t{}\t{}",
+            sitting.axis(),
+            arm.label(),
+            size.label(),
+            reading.count(Instrument::Instructions),
+            reading.count(Instrument::Cycles)
+        )
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    }
+    Ok(())
 }
 
 /// The human-readable table, on standard error beside the progress notes.

@@ -203,6 +203,15 @@ fn shell_args(binary: &Path, program: &Path, workdir: &Path, wrapper: &Wrapper) 
 /// a different instrument, and reporting that as the reading it asked for is
 /// the one error here that no downstream check could see. Callers get the
 /// array from [`Counted::events`] rather than writing the names again.
+///
+/// **A counter that was not enabled for the whole run is refused, and that is
+/// not defensiveness.** The fifth field is the percentage of the run the event
+/// was scheduled for, and when it is below 100 `perf` reports the count
+/// *scaled up* to what it would have been -- an estimate, printed in the same
+/// column and the same format as an exact count. On a quantity that is
+/// otherwise deterministic to eight significant figures, an estimate is
+/// indistinguishable from a real movement of a few per cent, which is larger
+/// than most of what this phase measures.
 pub fn parse_counters(stderr: &[u8], events: [&str; 2]) -> Option<Counters> {
     let text = String::from_utf8_lossy(stderr);
     let [wanted_cycles, wanted_instructions] = events;
@@ -217,9 +226,26 @@ pub fn parse_counters(stderr: &[u8], events: [&str; 2]) -> Option<Counters> {
             continue;
         };
         let event = event.trim();
+        if event != wanted_cycles && event != wanted_instructions {
+            continue;
+        }
+        let _run_time = fields.next();
+        // Absent rather than below 100 is accepted: `perf` omits the column
+        // for a single-event run on some versions, and there is no scaling to
+        // hide there. A column that is present and short is refused.
+        if let Some(enabled) = fields.next()
+            && !enabled.trim().is_empty()
+        {
+            let Ok(percent) = enabled.trim().parse::<f64>() else {
+                return None;
+            };
+            if percent < 99.995 {
+                return None;
+            }
+        }
         if event == wanted_cycles {
             cycles = Some(count);
-        } else if event == wanted_instructions {
+        } else {
             instructions = Some(count);
         }
     }
@@ -389,6 +415,30 @@ mod tests {
     /// A reading missing either event is no reading at all. Without this a
     /// multiplexed-out counter would be reported as a run that took zero
     /// cycles, which reads as the fastest run in the set.
+    /// A count `perf` scaled up because the event was not scheduled for the
+    /// whole run is not a count.
+    ///
+    /// The failure this rules out is silent by construction: the scaled figure
+    /// is printed in the same column and the same format as an exact one, and
+    /// a few per cent of scaling on an instruction count reads exactly like a
+    /// change to the program. Observed here as one round in ten reading 2.85%
+    /// high on a body whose instruction count is otherwise stable to eight
+    /// significant figures.
+    #[test]
+    fn a_scaled_counter_is_not_a_count() {
+        let user = Counted::User.events().unwrap();
+        let full = b"200088,,cycles:u,471330,100.00,,\n143200,,instructions:u,471330,100.00,,\n";
+        assert!(parse_counters(full, user).is_some());
+        let half = b"400176,,cycles:u,235665,50.00,,\n143200,,instructions:u,471330,100.00,,\n";
+        assert_eq!(parse_counters(half, user), None);
+        let nearly = b"200088,,cycles:u,471330,99.31,,\n143200,,instructions:u,471330,100.00,,\n";
+        assert_eq!(parse_counters(nearly, user), None);
+        // No percentage column at all is not a scaled reading, so it stays a
+        // reading: there is nothing there for `perf` to have scaled by.
+        let bare = b"200088,,cycles:u\n143200,,instructions:u\n";
+        assert!(parse_counters(bare, user).is_some());
+    }
+
     #[test]
     fn a_missing_counter_is_not_a_zero() {
         let total = Counted::Total.events().unwrap();

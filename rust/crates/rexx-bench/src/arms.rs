@@ -128,6 +128,13 @@ pub struct Reading {
 }
 
 impl Reading {
+    pub fn count(self, instrument: Instrument) -> u64 {
+        match instrument {
+            Instrument::Instructions => self.instructions,
+            Instrument::Cycles => self.cycles,
+        }
+    }
+
     fn on(self, instrument: Instrument) -> f64 {
         match instrument {
             Instrument::Instructions => self.instructions as f64,
@@ -477,6 +484,25 @@ impl Sitting {
 
     pub fn rounds(&self) -> usize {
         self.rounds
+    }
+
+    /// Every individual reading, in the order it was taken.
+    ///
+    /// **Emitted so that an excursion can be looked at rather than inferred
+    /// from a median's max.** One round of one cell here read 2.85% high on an
+    /// instruction count that is otherwise stable to eight significant
+    /// figures; the median absorbed it, which is the reduction working, and
+    /// nothing in the reduced output said which run it was.
+    pub fn runs(&self) -> impl Iterator<Item = (usize, &str, Arm, Size, Reading)> {
+        self.samples.iter().map(|sample| {
+            (
+                sample.round,
+                self.builds[sample.cell.build].label.as_str(),
+                sample.cell.arm,
+                sample.cell.size,
+                sample.reading,
+            )
+        })
     }
 
     fn find(&self, build: usize, arm: Arm, size: Size, round: usize) -> Option<&Sample> {
