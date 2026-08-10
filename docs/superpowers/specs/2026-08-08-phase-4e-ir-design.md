@@ -383,11 +383,17 @@ Not "meets `phase-4d-gate.md`'s bars" -- those are 4f's exit condition and 4f ru
 *Falsification:* the paired interleaved comparison Phase 4f's accept rule specifies, run between the two engine arms of one binary rather than between two binaries -- which removes the build-identity problem entirely, since both arms are the same build. An axis that comes out slower fails this criterion; it is not convertible into a recorded debt, because a debt here would hand 4f a regression to discharge before it starts.
 
 **Within one binary is not a convenience here, it is the only valid form, and that is measured (2026-08-10).**
-Code layout on this machine is worth **7.8% on `emptyloop`**: Task 4c built the same source twice, differing by **one comment**, and read 2.745 s against 2.959 s. Moritz puts the general envelope for Rust at nearer 20%.
+Task 4c built the same source twice, differing by **one comment**, and read 2.745 s against 2.959 s on `emptyloop` -- 7.8%. It attributed that to code layout, and **that attribution is wrong.**
+
+**Checked rather than assumed, and the answer is stronger than the claim it replaces.** Building the same tree with and without one added comment line, under this profile (`lto = "fat"`, `codegen-units = 1`, release is non-incremental by default), gives a **byte-identical `.text`** -- same sha256, same size, same load address -- with the two binaries differing only in a single debug-line entry. **The executed code is literally the same.**
+
+So the 7.8% is not codegen variance at all. It is **run-to-run variance in the measurement environment**, and that is the harder problem: layout could in principle be stabilised, and this cannot. It also means the figure bounds *repeated runs of one binary*, not just comparisons between two.
+
+Moritz suggested non-incremental builds if the noise is in the way. Release is already non-incremental, already one codegen unit, already fat-LTO -- so that lever is spent, and it was never the variable.
 
 Three consequences, and they are binding rather than advisory:
 
-* **A cross-binary wall-clock or cycle comparison below about 10% says nothing in this project.** Not "is weak evidence" -- says nothing, because a behaviour-neutral edit produces that much on its own.
+* **A wall-clock or cycle comparison below about 10% says nothing in this project unless its arms ran interleaved in one sitting.** Not "is weak evidence" -- says nothing, because two runs of a byte-identical `.text` produce that much on their own.
 * **Criterion 4 is therefore judged only within one binary, both arms, one sitting.** Both arms share a layout by construction, so the artifact cancels. Any reading of criterion 4 taken across two builds is inadmissible however many rounds it ran.
 * **Cross-binary attribution needs instruction counts.** `perf stat -e instructions:u` reproduced to eight significant figures across builds where wall-clock moved 7.8%, so it is the instrument for "what did this change cost", and wall-clock is the instrument only for the within-binary verdict.
 
