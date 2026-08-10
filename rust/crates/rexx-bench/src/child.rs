@@ -81,6 +81,35 @@ impl Side {
     }
 }
 
+/// Which `perf stat` events wrap the child, if any.
+///
+/// **The variant names the events, and the same value both builds the `-e`
+/// argument and reads the reply** ([`Counted::events`]). Asking for one pair
+/// and parsing another is a reading attributed to the wrong instrument, which
+/// nothing downstream could notice: a user-mode cycle count and a total one
+/// differ by a few per cent on these axes, not by an order of magnitude.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Counted {
+    /// No `perf stat` at all.
+    #[default]
+    Nothing,
+    /// `cycles` and `instructions` over every privilege level.
+    Total,
+    /// `cycles:u` and `instructions:u`, user mode only.
+    User,
+}
+
+impl Counted {
+    /// The two event names, cycles first, or `None` when nothing is counted.
+    pub fn events(self) -> Option<[&'static str; 2]> {
+        match self {
+            Counted::Nothing => None,
+            Counted::Total => Some(["cycles", "instructions"]),
+            Counted::User => Some(["cycles:u", "instructions:u"]),
+        }
+    }
+}
+
 /// What sits between `/bin/sh` and the interpreter, beyond the address-space
 /// cap and the working directory that every run gets.
 ///
@@ -98,7 +127,7 @@ pub struct Wrapper {
     /// Cycles are the quantity frequency scaling does not touch, which
     /// matters here because this machine exposes no `cpufreq` interface to
     /// fix a governor with -- `/sys` carries no `devices/system/cpu` at all.
-    pub counters: bool,
+    pub counters: Counted,
 }
 
 /// Hardware counters `perf stat` reported for one run.
@@ -148,12 +177,13 @@ fn shell_args(binary: &Path, program: &Path, workdir: &Path, wrapper: &Wrapper) 
     if let Some(cpus) = &wrapper.pin {
         args.extend(["taskset".to_string(), "-c".to_string(), cpus.clone()]);
     }
-    if wrapper.counters {
+    if let Some([cycles, instructions]) = wrapper.counters.events() {
         args.extend(
-            ["perf", "stat", "-x,", "-e", "cycles,instructions"]
+            ["perf", "stat", "-x,", "-e"]
                 .into_iter()
                 .map(str::to_string),
         );
+        args.push(format!("{cycles},{instructions}"));
     }
     args.push(binary.display().to_string());
     args.push(program.display().to_string());
@@ -167,8 +197,15 @@ fn shell_args(binary: &Path, program: &Path, workdir: &Path, wrapper: &Wrapper) 
 /// with `<not counted>` in the value field when the event was multiplexed out.
 /// A missing or unparsable value returns `None` for the whole reading rather
 /// than a zero: a zero cycle count would be a very fast run.
-pub fn parse_counters(stderr: &[u8]) -> Option<Counters> {
+///
+/// **`events` is the pair that was asked for, and the match is exact.** A
+/// caller that requested `cycles:u` and received `cycles` has been answered by
+/// a different instrument, and reporting that as the reading it asked for is
+/// the one error here that no downstream check could see. Callers get the
+/// array from [`Counted::events`] rather than writing the names again.
+pub fn parse_counters(stderr: &[u8], events: [&str; 2]) -> Option<Counters> {
     let text = String::from_utf8_lossy(stderr);
+    let [wanted_cycles, wanted_instructions] = events;
     let mut cycles = None;
     let mut instructions = None;
     for line in text.lines() {
@@ -179,10 +216,11 @@ pub fn parse_counters(stderr: &[u8]) -> Option<Counters> {
         let Ok(count) = value.trim().parse::<u64>() else {
             continue;
         };
-        match event.trim() {
-            "cycles" => cycles = Some(count),
-            "instructions" => instructions = Some(count),
-            _ => {}
+        let event = event.trim();
+        if event == wanted_cycles {
+            cycles = Some(count);
+        } else if event == wanted_instructions {
+            instructions = Some(count);
         }
     }
     Some(Counters {
@@ -210,7 +248,7 @@ mod tests {
             Path::new("/work"),
             &Wrapper {
                 pin: Some("3,19".to_string()),
-                counters: true,
+                counters: Counted::Total,
             },
         );
         let tail: Vec<&str> = args[5..].iter().map(String::as_str).collect();
@@ -231,6 +269,57 @@ mod tests {
         );
     }
 
+    /// The events named on the command line are the events [`Counted`] says
+    /// it counts, for every variant that counts anything.
+    ///
+    /// Asserted rather than read off the two sites, because the whole value of
+    /// routing both through `Counted::events` is that they cannot drift; a
+    /// spelling changed in one place and not the other produces a run counted
+    /// on one instrument and parsed as another, and every number downstream
+    /// still looks like a number.
+    #[test]
+    fn the_perf_argument_names_the_events_the_reading_is_parsed_by() {
+        for counted in [Counted::Total, Counted::User] {
+            let events = counted.events().expect("this variant counts something");
+            let args = shell_args(
+                Path::new("/bin/rexx"),
+                Path::new("/programs/arith.rex"),
+                Path::new("/work"),
+                &Wrapper {
+                    pin: None,
+                    counters: counted,
+                },
+            );
+            assert!(
+                args.contains(&format!("{},{}", events[0], events[1])),
+                "{counted:?} asks perf for something other than {events:?}: {args:?}"
+            );
+        }
+        assert_eq!(Counted::Nothing.events(), None);
+    }
+
+    /// A reading is attributed to the instrument that produced it, so
+    /// `perf stat -e cycles` cannot answer a request for `cycles:u`.
+    ///
+    /// The two differ by a few per cent on this crate's axes rather than by an
+    /// order of magnitude, so a silent substitution would read as a plausible
+    /// measurement rather than as a fault.
+    #[test]
+    fn a_total_counter_does_not_answer_for_a_user_one() {
+        let total = b"200088,,cycles,471330,100.00,,\n143200,,instructions,471330,100.00,,\n";
+        assert_eq!(
+            parse_counters(total, Counted::Total.events().unwrap()),
+            Some(Counters {
+                cycles: 200_088,
+                instructions: 143_200
+            })
+        );
+        assert_eq!(parse_counters(total, Counted::User.events().unwrap()), None);
+        let user = b"200088,,cycles:u,471330,100.00,,\n143200,,instructions:u,471330,100.00,,\n";
+        assert_eq!(parse_counters(user, Counted::Total.events().unwrap()), None);
+        assert!(parse_counters(user, Counted::User.events().unwrap()).is_some());
+    }
+
     /// A default wrapper adds nothing between the shell and the interpreter,
     /// and this is what keeps the committed baseline's harness unchanged: the
     /// suite's argument vector is byte for byte the one it built before this
@@ -241,7 +330,7 @@ mod tests {
             Wrapper::default(),
             Wrapper {
                 pin: None,
-                counters: false
+                counters: Counted::Nothing
             }
         );
         let args = shell_args(
@@ -289,7 +378,7 @@ mod tests {
         let stderr = b"6665338787,,cycles,2238865636,100.00,,\n\
                        16831183509,,instructions,2238865636,100.00,,\n";
         assert_eq!(
-            parse_counters(stderr),
+            parse_counters(stderr, Counted::Total.events().unwrap()),
             Some(Counters {
                 cycles: 6_665_338_787,
                 instructions: 16_831_183_509
@@ -302,11 +391,18 @@ mod tests {
     /// cycles, which reads as the fastest run in the set.
     #[test]
     fn a_missing_counter_is_not_a_zero() {
-        assert_eq!(parse_counters(b"6665338787,,cycles,1,100.00,,\n"), None);
+        let total = Counted::Total.events().unwrap();
         assert_eq!(
-            parse_counters(b"<not counted>,,cycles,,,,\n<not counted>,,instructions,,,,\n"),
+            parse_counters(b"6665338787,,cycles,1,100.00,,\n", total),
             None
         );
-        assert_eq!(parse_counters(b""), None);
+        assert_eq!(
+            parse_counters(
+                b"<not counted>,,cycles,,,,\n<not counted>,,instructions,,,,\n",
+                total
+            ),
+            None
+        );
+        assert_eq!(parse_counters(b"", total), None);
     }
 }

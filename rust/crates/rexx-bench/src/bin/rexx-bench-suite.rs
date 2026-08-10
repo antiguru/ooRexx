@@ -63,7 +63,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::time::Duration;
 
-use rexx_bench::child::{ADDRESS_SPACE_LIMIT_KIB, ORACLE_ROOT, Side, Wrapper, run};
+use rexx_bench::child::{ADDRESS_SPACE_LIMIT_KIB, Counted, ORACLE_ROOT, Side, Wrapper, run};
 use rexx_bench::timing::{MedianInterval, median_interval_indices};
 
 /// Paired measurements per axis.
@@ -198,7 +198,7 @@ fn main() -> ExitCode {
     // measurement says it is worth having.
     let wrapper = Wrapper {
         pin: flag_value(&arguments, "--pin"),
-        counters: false,
+        counters: Counted::Nothing,
     };
 
     verify_axis_list();

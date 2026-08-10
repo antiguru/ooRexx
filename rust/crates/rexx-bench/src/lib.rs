@@ -14,9 +14,11 @@
 //! two-interpreter suite (`src/bin/rexx-bench-suite.rs`) and the between-run
 //! band tool (`src/bin/rexx-bench-band.rs`): resolving `REXX_BENCH_BINARY`
 //! into a runnable `Interpreter`, locating `bench-programs/`, the subprocess
-//! timing core in [`timing`], and the one capped, directory-pinned way of
-//! launching either interpreter in [`child`].
+//! timing core in [`timing`], the one capped, directory-pinned way of
+//! launching either interpreter in [`child`], and the in-phase arm-against-arm
+//! measurement in [`arms`].
 
+pub mod arms;
 pub mod child;
 pub mod timing;
 

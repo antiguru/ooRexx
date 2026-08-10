@@ -69,7 +69,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use rexx_bench::child::{Side, Wrapper, parse_counters, run};
+use rexx_bench::child::{Counted, Side, Wrapper, parse_counters, run};
 
 /// Number of fields in a row. Named so [`row`] can take an array of exactly
 /// this length and the compiler, rather than a reader, keeps the header and
@@ -171,7 +171,14 @@ fn collect(arguments: &[String]) -> ExitCode {
     let warmup = flag_usize(arguments, "--warmup", 1);
     let wrapper = Wrapper {
         pin: flag(arguments, "--pin"),
-        counters: arguments.iter().any(|arg| arg == "--counters"),
+        // `Counted::Total` and not `Counted::User`: this program's rows are
+        // the between-run distribution the escalation rule reads, and the
+        // committed rows were taken over every privilege level.
+        counters: if arguments.iter().any(|arg| arg == "--counters") {
+            Counted::Total
+        } else {
+            Counted::Nothing
+        },
     };
     let header = arguments.iter().any(|arg| arg == "--header");
 
@@ -233,12 +240,11 @@ fn collect(arguments: &[String]) -> ExitCode {
                 if !sampled {
                     continue;
                 }
-                let counters = if wrapper.counters {
-                    parse_counters(&completed.stderr)
-                } else {
-                    None
-                };
-                if wrapper.counters && counters.is_none() {
+                let counters = wrapper
+                    .counters
+                    .events()
+                    .and_then(|events| parse_counters(&completed.stderr, events));
+                if wrapper.counters.events().is_some() && counters.is_none() {
                     eprintln!(
                         "rexx-bench-band: counters were requested and `perf stat` produced none \
                          on {} {}: {}",
