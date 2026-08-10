@@ -379,12 +379,19 @@ Each criterion carries what it cannot see and how it is falsified.
 *Cannot see:* speed; criterion 4 covers that.
 *Falsification:* the masked comparison `2026-07-30-phase-4a-executor-design.md:508` already specifies. A byte comparison is **not** the falsification and an earlier draft was wrong to ask for one: `rexxcps` prints wall-clock throughput and a self-calibrated iteration count, so two runs of the oracle against itself differ. The mask covers the calibrated count as well as the cps figure, because at the current ratio the two sides' `Averaged:` lines differ in shape.
 
-**4. On every benchmark axis the IR arm is not slower than the tree-walker arm, and the resulting ratios are recorded as Phase 4f's input state.**
+**4. The IR arm's ratios are recorded as Phase 4f's input state, on instruction and cycle counts, with the structural residual itemised.**
 
-Not "meets `phase-4d-gate.md`'s bars" -- those are 4f's exit condition and 4f runs after this phase. See [The bar](#the-bar).
+**The floor is withdrawn (2026-08-10, Moritz).** This criterion used to read "on every benchmark axis the IR arm is not slower than the tree-walker arm", and that floor was my addition to a spec whose own framing says the IR is a foundation rather than a speedup and that "where the two pull apart, the foundation wins and the ratio is 4f's problem". Two measurements retired it:
 
-*Cannot see:* whether the IR is *faster*, which this phase deliberately does not promise, and whether an axis moved for the reason a promotion predicted rather than by accident. The per-promotion predicted-versus-measured record is what carries the second.
-*Falsification:* the paired interleaved comparison Phase 4f's accept rule specifies, run between the two engine arms of one binary rather than between two binaries -- which removes the build-identity problem entirely, since both arms are the same build. An axis that comes out slower fails this criterion; it is not convertible into a recorded debt, because a debt here would hand 4f a regression to discharge before it starts.
+* **The residual is inherent to the two-level shape.** Task 7-M broke the per-promoted-clause cost down with callgrind, removed a quarter of it, and named what remains: a second dispatch level, the call boundary that exists so both engines share one clause wrapper, and values travelling through the register file. `in_clause` being a scoped closure is what forces two levels, and that is semantics rather than preference.
+* **The floor was not measurable at the precision it needed.** `emptyloop`'s wall ratio reads 0.9990 at one commit and 1.0228 at the next while both execute **identical** instruction counts -- 40,325,665,756 against 40,325,665,822, a difference of 66 in 40 billion. So a wall reading of this criterion carried at least ±2.3 points of pure code-placement sensitivity, demonstrated with the work held constant, against failures of 2 to 7 points.
+
+**What replaces the guard, because the guard existed for a real reason.** The worry behind the floor was handing 4f a regression it would discover rather than inherit. That is answered by *itemisation* instead of by a threshold: the residual is recorded instruction by instruction, with the one remaining removable item named and the reason it was not taken (it changes what a promotion emits). 4f starts informed.
+
+*Cannot see:* whether the IR is faster, which this phase does not promise; and whether an axis moved for the reason a promotion predicted. The per-promotion predicted-versus-measured record carries the second.
+*Falsification:* a recorded ratio per axis on both instruments, plus the itemised residual. A phase that reports a ratio without an instrument named, or a residual without a breakdown, has not met this.
+
+**Wall clock is not used for in-phase work (2026-08-10, Moritz).** Instructions and cycles only, until Phase 4f, where wall clock against the oracle is the deliverable rather than an instrument. **Both** counts are required for any claim, and that is measured rather than cautious: Task 7-M rejected a variant that looked best on instructions because it moved `emptyloop`'s cycle ratio from 1.00 to 1.15 **while its instruction count fell.** Neither instrument alone is sufficient.
 
 **Within one binary is not a convenience here, it is the only valid form, and that is measured (2026-08-10).**
 Task 4c built the same source twice, differing by **one comment**, and read 2.745 s against 2.959 s on `emptyloop` -- 7.8%. It attributed that to code layout, and **that attribution is wrong.**
