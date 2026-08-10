@@ -563,6 +563,40 @@ fn a_traced_select_echoes_its_header_and_each_listed_when() {
     );
 }
 
+/// **Two constructs ending at the same instruction both hand their registers
+/// back there.** A `DO` block closing one instruction before the `SELECT CASE`
+/// whose `WHEN` holds it wants the same release point, and the point releases to
+/// the *lower* of the two marks -- by that instruction both constructs are over,
+/// so every register above the lower one is dead.
+///
+/// The `SELECT CASE`'s own value is register 0 and the inner loop's two are 1 and
+/// 2, so the release at the `SELECT`'s `END` has to reach 0 and the loop after
+/// the whole thing gets 0 and 1 back. Releasing to the inner loop's own mark
+/// instead leaves register 0 allocated for the rest of the body and hands that
+/// loop 1 and 2.
+///
+/// **The reserved count does not tell the two apart and the assertion on it is
+/// context rather than the witness.** Three registers are live at the deepest
+/// point either way, and a release only decides which indices come *next*; the
+/// first version of this test asserted the count alone and passed under both.
+#[test]
+fn two_constructs_ending_at_one_instruction_release_to_the_lower_mark() {
+    let chunk = compile_for_test(
+        b"select case 1\n  when 1 then do i = 1 to 2\n    nop\n  end\nend\ndo j = 1 to 2\n            nop\nend\n",
+    )
+    .expect("compiles");
+    let stream = render(&chunk);
+    assert!(
+        stream
+            .contains("19: EvalExpr index=7 slot=0 dst=0\n20: LoopHeaderValue role=Initial src=0"),
+        "the loop after the whole SELECT did not get register 0 back: {stream}"
+    );
+    assert_eq!(
+        chunk.registers, 3,
+        "the SELECT CASE value and the inner loop's two bounds are live at once: {stream}"
+    );
+}
+
 /// `run_bounded`'s absorption guard is inclusive, so a construct's resume
 /// point can be `end`, which is one past its last instruction. A map that
 /// stops at `len - 1` panics there rather than at compile.

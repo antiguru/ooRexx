@@ -5365,10 +5365,17 @@ impl Interp {
         source: Option<&ProgramSource>,
         engine: BodyEngine<'_>,
     ) -> Result<Flow, Failure> {
-        let Some(plan) = loop_header_plan(body) else {
-            return Err(Loud::instruction(&instruction.kind).into());
+        // A refused `DO`/`LOOP` has no header to evaluate, and the refusal
+        // itself belongs to `run_loop_with_header` rather than here, so that
+        // both engines reach it through one function. The compiled stream
+        // emits an empty header region and that same op for a refused loop
+        // for exactly this reason: a compiler that refused on its own would
+        // be a second copy of the decision, and the copy that panicked
+        // instead was invisible to the whole workspace.
+        let values = match loop_header_plan(body) {
+            Some(plan) => self.eval_loop_header(code, body, &plan)?,
+            None => LoopHeaderValues::default(),
         };
-        let values = self.eval_loop_header(code, body, &plan)?;
         self.run_loop_with_header(code, index, instruction, body, source, engine, values)
     }
 
@@ -5502,6 +5509,17 @@ impl Interp {
         engine: BodyEngine<'_>,
         values: LoopHeaderValues,
     ) -> Result<Flow, Failure> {
+        // **The refusal, for both engines, and it has to be here rather than
+        // in each engine's own entry.** `loop_header_plan` answers `None` for
+        // exactly the three forms this crate does not run, and every arm below
+        // relies on that answer: `LoopKind::With` has no `LoopState`, and a
+        // `COUNTER` or a stem `OVER` reaches an `expect` on a value nothing
+        // evaluated. Measured, before this check existed: all three panicked on
+        // the compiled stream while failing loudly on the tree-walker, and no
+        // test in the workspace was red.
+        if loop_header_plan(body).is_none() {
+            return Err(Loud::instruction(&instruction.kind).into());
+        }
         let body_start = index + 1;
         let end_index = body
             .end

@@ -864,6 +864,12 @@ const CASE_DIR: &str = "tests/ir_dual_cases";
 /// oracle-measured expectation into a self-consistent one, in a diff that
 /// looks like any other expectation update. The refusal below is the tripwire,
 /// and the file's own header says how to regenerate a row instead.
+///
+/// A file whose subject is a deliberate deviation from the oracle says so in its
+/// own header and names what its bytes are instead -- `loop-refusals`, whose
+/// three forms the oracle implements and this crate declines. The refusal above
+/// applies to it for the same reason: a regenerated expectation would agree with
+/// whatever the code did.
 #[test]
 fn both_engines_agree_on_every_case_file() {
     assert!(

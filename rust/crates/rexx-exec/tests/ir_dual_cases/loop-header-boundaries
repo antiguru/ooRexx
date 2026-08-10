@@ -1,0 +1,296 @@
+# Where a DO/LOOP header's clause boundaries fall, which is the axis a
+# flattened header can get wrong and no shape case asks about.
+#
+# A loop header has more boundaries than a branch does, and they are not the
+# same event:
+#
+#   * the DO clause's own, which the header's expressions run inside;
+#   * one per pass for the re-test, whose clause is whichever instruction
+#     transferred control back to the loop -- the DO on the first pass, the END
+#     on a fall-through, an ITERATE that cut a pass short;
+#   * UNTIL's own, which is a separate decision point from the top-of-loop one.
+#
+# Each row queues a CALL ON handler from one of those places and observes where
+# it is delivered, because a promoted clause that opens a boundary and does not
+# discharge it is invisible to every test that only asks what a loop computes.
+#
+# Two rows are about a boundary leaving MORE work behind it. A delivered
+# handler can itself RAISE ... RETURN, queueing a second trap, and a clause
+# boundary delivers at most one without re-checking -- so the boundary that
+# delivered the first is not the last one with work, and the SIGL of the second
+# delivery is what says which boundary took it.
+#
+# Three rows are about the header's own ordering rather than its boundaries,
+# and they are here because the compiled form is what makes the ordering a
+# thing that can break: each header value is evaluated, echoed and validated
+# before the next value is evaluated at all.
+#
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every row
+# was measured to produce the identical bytes on both engines at `de05ea58`,
+# before the header was flattened -- which is what says a row can tell whether
+# it would ever have failed. One row differs from the oracle and says so in its
+# own comment. Regenerate a row by running its program under the oracle, never
+# with REWRITE=1 -- ir_dual.rs refuses to run at all under REWRITE for that
+# reason. Capture is:
+#
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+#
+# Expected lines are tagged so that no line of the block can be empty: an empty
+# line ends an expected block, and a program's own output may hold one.
+#
+# `/nonexistent/ir-dual-case.rex` is `ir_dual.rs`'s own INLINE_PATH, which a
+# raised condition's middle line prints. It is written out rather than stood in
+# for, because these blocks are compared verbatim and nothing substitutes into
+# them; running the same program under the oracle prints the oracle's own path
+# there instead.
+
+# a call on handler queued by a TO expression
+# The handler is queued while the header is being evaluated and has to run
+# before the first body clause reads the variable it sets -- both passes print
+# `set`. A header whose clause never ends would print `unset` twice.
+program
+call on user zx name h
+zv = 'unset'
+do i = 1 to raiser()
+  say 'body' zv
+end
+say 'after' zv
+exit
+raiser:
+raise user zx return 2
+h:
+zv = 'set'
+return
+----
+rc> 0
+out> body set
+out> body set
+out> after set
+
+# a handler queued by a TO expression that queues again
+# The premise a single boundary per construct gets wrong: `h` runs at the
+# header's boundary and its own RAISE queues `zy`, which nothing at that same
+# boundary delivers. SIGL 4 is the first body clause, so the second delivery is
+# the *next* boundary rather than the header's own -- and a header that
+# delivered both would report 3.
+program
+call on user zx name h
+call on user zy name g
+do i = 1 to raiser()
+  nop
+end
+say 'after'
+exit
+raiser:
+raise user zx return 1
+h:
+raise user zy return 1
+g:
+say 'G ran' sigl
+return
+----
+rc> 0
+out> G ran 4
+out> after
+
+# a call on handler failing at a DO header's own boundary
+# The failure the handler raises is attributed to the clause whose boundary ran
+# it, which is the DO's own -- the defect one construct over was a promoted IF
+# recording its own failure site but not its boundary's.
+#
+# **This row's two indents are not the oracle's.** The oracle prints
+# `    10 *-*     say 1/0` and `     2 *-*   do i = 1 to raiser()`, two columns
+# further in on each. Measured at `de05ea58` as well, on both engines, so it is
+# not this promotion's: it is the family `task-4bp-report.md` records, whose
+# `SELECT` header row is the same two-column gap. The row is here for the
+# attribution -- which clause is blamed -- and it pins our own answer so that a
+# promotion cannot move it quietly while the gap is open.
+program
+call on user zx name h
+do i = 1 to raiser()
+  nop
+end
+say 'after'
+exit
+raiser:
+raise user zx return 1
+h:
+say 1/0
+return
+----
+rc> 214
+err>     10 *-*   say 1/0
+err>      2 *-* do i = 1 to raiser()
+err> Error 42 running /nonexistent/ir-dual-case.rex line 10:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+# a call on handler queued by a WHILE condition
+# A different boundary from the header's: the re-test before pass 2 is its own
+# clause, and the handler it queues runs before that pass's body. So pass 1
+# reads `unset` and pass 2 reads `set`, which no single delivery point produces.
+program
+call on user zx name h
+zn = 0
+zv = 'unset'
+do while zn < 2 & cond()
+  zn = zn + 1
+  say 'pass' zn zv
+end
+say 'after' zv
+exit
+cond:
+if zn = 1 then raise user zx return 1
+return 1
+h:
+zv = 'set'
+return
+----
+rc> 0
+out> pass 1 unset
+out> pass 2 set
+out> after set
+
+# a handler queued by a WHILE condition that queues again
+# The re-queue at the per-pass boundary rather than at the header's. `zn` is 0
+# when `cond` raises, so this is the *first* test, whose clause is the DO's own
+# -- and SIGL 5 is the END, the clause of the boundary that took the second
+# delivery. The loop then runs one pass and stops.
+program
+call on user zx name h
+call on user zy name g
+zn = 0
+do while cond()
+  zn = zn + 1
+end
+say 'after' zn
+exit
+cond:
+if zn = 0 then raise user zx return 1
+return 0
+h:
+raise user zy return 1
+g:
+say 'G ran' sigl
+return
+----
+rc> 0
+out> G ran 5
+out> after 1
+
+# a call on handler queued by an UNTIL condition
+# UNTIL's own test is a third boundary, and SIGL 5 is the END rather than the
+# DO: an UNTIL is reached from whichever instruction transferred control back to
+# the loop, and after a pass that fell through that is the END.
+program
+call on user zx name h
+zn = 0
+do until done()
+  zn = zn + 1
+end
+say 'after' zn
+exit
+done:
+if zn = 1 then raise user zx return 0
+return zn >= 2
+h:
+say 'H ran' sigl
+return
+----
+rc> 0
+out> H ran 5
+out> after 2
+
+# a call on handler queued by a DO OVER target
+# The same header boundary for the one LoopKind whose header value survives the
+# whole construct: the target is bound to the control variable on the single
+# pass, and the handler still runs before that pass's body.
+program
+call on user zx name h
+zv = 'unset'
+do qq over raiser()
+  say 'body' qq zv
+end
+say 'after' zv
+exit
+raiser:
+raise user zx return 'T'
+h:
+zv = 'set'
+return
+----
+rc> 0
+out> body T set
+out> after set
+
+# procedure as a loop body's first instruction
+# A loop body does not inherit the first-instruction permission any more than a
+# branch does, so this is 17.1 -- the observable that says the header's promoted
+# clause spends the permission exactly as the unpromoted instruction did.
+program
+call sub 1
+exit
+sub:
+  do i = 1 to 1
+    procedure
+  end
+  return
+----
+rc> 239
+err>      5 *-*     procedure
+err>      1 *-* call sub 1
+err> Error 17 running /nonexistent/ir-dual-case.rex line 5:  Unexpected PROCEDURE.
+err> Error 17.1:  PROCEDURE is valid only when it is the first instruction executed after an internal CALL or function invocation.
+
+# a TO bound that is not numeric
+# The header's own failure, attributed to the DO clause and echoed with the
+# clause text up to the END of the header.
+program
+do i = 1 to 'a'
+  nop
+end
+----
+rc> 215
+err>      1 *-* do i = 1 to 'a'
+err> Error 41 running /nonexistent/ir-dual-case.rex line 1:  Bad arithmetic conversion.
+err> Error 41.1:  Nonnumeric value ("a") used in arithmetic operation.
+
+# a bad TO bound in front of a BY with a side effect
+# **The row that says each header value is validated before the next one is
+# evaluated.** `zf` says so when it runs, and it never runs: the TO bound fails
+# first. A stream that evaluated every value and then validated them would
+# print `zf ran` before the same error.
+program
+do i = 1 to 'a' by zf()
+  nop
+end
+exit
+zf:
+say 'zf ran'
+return 1
+----
+rc> 215
+err>      1 *-* do i = 1 to 'a' by zf()
+err> Error 41 running /nonexistent/ir-dual-case.rex line 1:  Bad arithmetic conversion.
+err> Error 41.1:  Nonnumeric value ("a") used in arithmetic operation.
+
+# a bad TO bound under trace r
+# **The row that says each header value is echoed before it is validated.** The
+# `>K>  "TO"` line is printed for the very value that then fails, so an echo
+# emitted after the validation would be missing here and nowhere else -- every
+# other traced header row echoes values that all pass.
+#
+# The second `do i = 1 to 'a' by 2` line is the failing clause's own echo, which
+# every raise inside a clause prints.
+program
+trace r
+do i = 1 to 'a' by 2
+  nop
+end
+----
+rc> 215
+err>      2 *-* do i = 1 to 'a' by 2
+err>        >K>   "TO" => "a"
+err>      2 *-* do i = 1 to 'a' by 2
+err> Error 41 running /nonexistent/ir-dual-case.rex line 2:  Bad arithmetic conversion.
+err> Error 41.1:  Nonnumeric value ("a") used in arithmetic operation.
