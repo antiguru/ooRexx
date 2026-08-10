@@ -72,6 +72,29 @@ slower side costs about 30 s -- inside the ceiling.
 Verified deterministic and side-effect-free before being committed: two runs from two different
 fresh directories produced byte-identical stdout (`done`), exit 0, empty stderr.
 
+## `emptyloop` is fold-fragile, and an optimiser must not be allowed to hide it
+
+Recorded 2026-08-10, after Moritz observed that const folding would make this axis's cost "go away".
+
+**It would, and that is the problem rather than the fix.**
+
+```rexx
+n = 25000000
+do i = 1 to n
+  nop
+end
+```
+
+The body is empty and the loop has exactly one observable effect: `i` is `25000001` afterwards. A folder strong enough to prove that collapses the whole construct to an assignment. Three consequences, and the axis exists because of the third:
+
+* The ratio against the oracle stops being a dispatch measurement and becomes "we deleted the work, they did it" -- the oracle does not fold.
+* **The clause-dispatch floor becomes unmeasurable**, which is the only reason this axis was added (Task 1).
+* This is the one axis whose `DO` body range holds **exactly one op**, which is the shape that exposes the driver's fixed per-entry cost. Fold it and the cost is invisible rather than absent.
+
+**So a task that folds this loop has not met exit criterion 4 on it; it has removed the instrument.** If a later phase lands folding, this axis needs a fold-resistant sibling -- a body whose single clause has an effect the folder must keep -- and the ratio must be read on that instead.
+
+**One thing that does fall out, and it is a real result rather than a caveat.** Folding a loop away is sound only when nothing observes the passes: no `trace i`, no per-clause `SIGL`, no clock read. D23's decision that the trace setting is an input to compilation is exactly the discriminator that makes it legal -- an **untraced** chunk may fold where a traced one may not. That was not the reason D23 was decided, and it is priced at Phase 9, where the spec licenses divergent trace from the first optimising pass that is not trace-neutral.
+
 ## Build identity
 
 | | |
