@@ -390,16 +390,25 @@ impl Interp {
                     // for the same clause anyway.
                     //
                     // **Read here, per promoted clause, rather than kept in a
-                    // local the loop refreshes -- and that is a measurement
+                    // local the loop initialises -- and that is a measurement
                     // rather than the obvious shape.** A local has to be
                     // initialised, and `bench-programs/emptyloop.rex`, whose
                     // body holds no promoted clause at all, enters `run_ops`
-                    // once per pass: initialising one there cost 40.30 to
-                    // 40.55 billion user instructions, 10 per pass, on a
-                    // program that has nothing for the answer to decide. Asked
-                    // here it is 40.30 billion again, and a clause that does
-                    // have an echo to decide pays one comparison -- the same
-                    // one `in_stepped_clause` used to make for it.
+                    // once per pass: it has nothing for the answer to decide
+                    // and would pay for it anyway. Measured with `perf stat -e
+                    // instructions:u` against 40.3009 billion user
+                    // instructions before this task:
+                    //
+                    //   * initialised at every `run_ops` entry -- 40.7259
+                    //     billion, 17 per pass;
+                    //   * read here -- 40.4009 billion, 4 per pass, and those
+                    //     four are the extra op variant in this match rather
+                    //     than the read, since this program reaches no
+                    //     `Clause` op at all.
+                    //
+                    // A clause that does have an echo to decide pays one
+                    // comparison, which is the one `in_stepped_clause` used to
+                    // make for it.
                     //
                     // It is also the shape with no premise about *who* can
                     // change the setting mid-body. A local refreshed after the
@@ -804,6 +813,8 @@ impl Interp {
                         return Err(Loud::chunk_map_too_short().into());
                     };
                     if !stale {
+                        #[cfg(test)]
+                        count_trace_op_echo();
                         // The indent the enclosing `Clause` op's own clause
                         // unit computed, read back rather than recomputed:
                         // `in_stepped_clause_with` sets this field to
@@ -985,6 +996,39 @@ fn count_clause_op_entry() {
 #[cfg(test)]
 pub(crate) fn clause_op_entries() -> usize {
     CLAUSE_OP_ENTRIES.with(std::cell::Cell::get)
+}
+
+// Test-only instrumentation: how many clause echoes this thread has emitted
+// from a chunk's own `Op::TraceClause`.
+//
+// **This is the only observable that says the compiled emission decision is
+// reached in production at all**, and without it the whole mechanism has no
+// witness. Two separate ways to make `Op::TraceClause` dead leave every
+// output-comparing test in the workspace green, because both are covered by
+// the run-time gate the driver falls back to and that gate prints the same
+// bytes: asking `chunk_for` for a chunk under a setting that is not the one in
+// force, and answering `stale` yes for every clause. Output cannot tell an
+// echo emitted by an op from the identical echo emitted by the clause unit;
+// this counts which one did it.
+//
+// Counted where the echo is *emitted*, not where the op is fetched, because
+// the second of those two mutations leaves the op in the stream and skips its
+// work -- a count of arrivals would stay green on it.
+//
+// Per thread for the reason `RUN_CHUNK_ENTRIES` is: see its own comment.
+#[cfg(test)]
+thread_local! {
+    static TRACE_OP_ECHOES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn count_trace_op_echo() {
+    TRACE_OP_ECHOES.with(|echoes| echoes.set(echoes.get() + 1));
+}
+
+#[cfg(test)]
+pub(crate) fn trace_op_echoes() -> usize {
+    TRACE_OP_ECHOES.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]

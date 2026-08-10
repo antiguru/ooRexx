@@ -494,19 +494,20 @@ fn chunk_for_compiles_a_body_once_across_repeated_lookups() {
 /// compilation (D23), so a cache keyed on `BodyKey` alone hands the body
 /// entered under the second setting a stream compiled for the first one.
 ///
-/// The three assertions answer three different degenerate caches, and the
-/// third is the one the key change is for:
+/// **Each assertion below answers a degenerate cache the others do not**,
+/// which is why they are written out rather than folded together:
 ///
 /// * `compile` ran twice, so the second setting was compiled for rather than
 ///   answered from the first setting's entry -- this is what a key that
 ///   ignores the setting fails;
 /// * the two chunks are distinct `Rc`s, so it is not one chunk handed back
 ///   under two names;
+/// * their rendered streams differ, so the setting decided something rather
+///   than producing the same ops twice;
 /// * and asking again under the *first* setting gives the *first* chunk back,
 ///   which is what says the second lookup added an entry rather than replacing
-///   one. A cache that evicted on a setting change passes the first two and
-///   fails this, and a program that toggles `TRACE` in a loop is what that
-///   costs.
+///   one. A cache that evicted on a setting change passes the rest and fails
+///   this, and a program that toggles `TRACE` in a loop is what that costs.
 #[test]
 fn one_body_under_two_trace_settings_is_two_cached_chunks() {
     let program = parse_program(b"if 1 = 1 then say 1\n".to_vec()).expect("test program parses");

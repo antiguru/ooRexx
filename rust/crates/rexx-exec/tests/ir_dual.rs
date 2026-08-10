@@ -830,143 +830,6 @@ const BRANCH_CASES: &[InlineCase] = &[
     },
 ];
 
-/// Programs whose `TRACE` setting is **not** the one the body was first
-/// entered under, which is the axis a compiled-in emission decision can get
-/// wrong and no other table here exercises.
-///
-/// The setting decides which trace ops a body compiles to, so every row below
-/// is a place where the setting in force when a clause runs can differ from
-/// the setting the chunk carrying that clause was compiled under. Two ways
-/// that happens, and both directions of each:
-///
-/// * a `TRACE` executed **inside** the body, after the chunk exists -- in a
-///   branch, and inside a loop body where the change has to reach the passes
-///   that follow it;
-/// * the same body **entered again** under a different setting, which is what
-///   makes the chunk cache's key a correctness question rather than a
-///   bookkeeping one.
-///
-/// **These are boundary cases, not shapes.** A promoted clause is where the
-/// echo is decided, so each row puts the setting change immediately before one
-/// -- an `IF` header, a `SELECT` header, a listed `WHEN` -- rather than before
-/// an ordinary clause, which would be answered by the tree-walker's own gate
-/// whatever this file's compiler did.
-///
-/// Every expected byte below was measured against the oracle before it was
-/// written down, and the two agree on all of them. Every row also passes with
-/// nothing promoted, which is what says a row can tell whether it would ever
-/// have failed.
-///
-/// **Written to be read with trailing blanks intact.** A `*-*` echo of an `IF`
-/// header ends in a space (the oracle's own clause text stops after the
-/// condition), and that byte is part of what is compared -- which is also why
-/// these rows are `&'static str` here rather than lines of an external data
-/// file, where a trailing blank does not survive ordinary editing.
-const TRACE_SETTING_CASES: &[InlineCase] = &[
-    InlineCase {
-        // The chunk is compiled untraced; the `TRACE` runs in the first `IF`'s
-        // own branch, and the second `IF` -- a promoted clause of the same
-        // chunk -- has to echo anyway.
-        name: "trace turned on inside a branch, before a later if",
-        program: "if 1 = 1 then trace r\nif 1 = 1 then say 'x'\n",
-        stdout: "x\n",
-        stderr: "     2 *-* if 1 = 1 \n       >>>   \"1\"\n     2 *-*   then\n     \
-                 2 *-*     say 'x'\n       >>>       \"x\"\n",
-        exit_code: 0,
-    },
-    InlineCase {
-        // The other direction, which a fallback that only ever *adds* an echo
-        // would pass: the chunk is compiled traced and the second `IF` must
-        // print nothing at all.
-        name: "trace turned off inside a branch, before a later if",
-        program: "trace r\nif 1 = 1 then trace n\nif 1 = 1 then say 'x'\n",
-        stdout: "x\n",
-        stderr: "     2 *-* if 1 = 1 \n       >>>   \"1\"\n     2 *-*   then\n     \
-                 2 *-*     trace n\n",
-        exit_code: 0,
-    },
-    InlineCase {
-        // Inside a loop body, so the change has to reach the *later passes*
-        // as well as the rest of the pass that made it -- the loop's own
-        // per-pass re-echo of `DO`/`END` is the surrounding evidence that it
-        // did.
-        name: "trace turned on inside a loop body, before a later if",
-        program: "do i = 1 to 2\n  if i = 1 then trace r\n  if i = 2 then say 'two'\nend\n",
-        stdout: "two\n",
-        stderr: "     3 *-*   if i = 2 \n       >>>     \"0\"\n     4 *-* end\n     \
-                 1 *-* do i = 1 to 2\n       >>>     \"1\"\n       >>>     \"2\"\n     \
-                 2 *-*   if i = 1 \n       >>>     \"0\"\n     3 *-*   if i = 2 \n       \
-                 >>>     \"1\"\n     3 *-*     then\n     3 *-*       say 'two'\n       \
-                 >>>         \"two\"\n     4 *-* end\n     1 *-* do i = 1 to 2\n       \
-                 >>>     \"2\"\n       >>>     \"3\"\n",
-        exit_code: 0,
-    },
-    InlineCase {
-        // The same body entered twice, untraced and then traced, in one
-        // process: the second entry has to echo the `IF` it reaches. A chunk
-        // cache that hands back whichever chunk was compiled first is what
-        // this row is about.
-        name: "one body entered untraced and then under trace r",
-        program: "call sub\ntrace r\ncall sub\nexit\nsub:\nif 1 = 1 then say 'in'\nreturn\n",
-        stdout: "in\nin\n",
-        stderr: "     3 *-* call sub\n     5 *-*   sub:\n     6 *-*   if 1 = 1 \n       \
-                 >>>     \"1\"\n     6 *-*     then\n     6 *-*       say 'in'\n       \
-                 >>>         \"in\"\n     7 *-*   return\n     4 *-* exit\n",
-        exit_code: 0,
-    },
-    InlineCase {
-        // **The row that reaches a chunk compiled to echo and then asks it not
-        // to.** Every row above whose `TRACE` is in the body itself compiles
-        // the body before that `TRACE` runs, so the chunk is the silent one
-        // and the only question is whether the echo can be added back. Here
-        // the body is *entered* with `trace r` already in force, so its chunk
-        // carries an echo op per promoted clause, and the `trace n` inside it
-        // is what has to withdraw them.
-        //
-        // The `3 *-* exit` line is the surrounding evidence that the
-        // withdrawal is per activation rather than global: `trace n` was
-        // executed in the callee's, and the caller's own next clause echoes.
-        name: "a body entered under trace r that then turns trace off",
-        program: "trace r\ncall sub\nexit\nsub:\nif 1 = 1 then trace n\n\
-                  if 1 = 1 then say 'x'\nreturn\n",
-        stdout: "x\n",
-        stderr: "     2 *-* call sub\n     4 *-*   sub:\n     5 *-*   if 1 = 1 \n       \
-                 >>>     \"1\"\n     5 *-*     then\n     5 *-*       trace n\n     3 *-* exit\n",
-        exit_code: 0,
-    },
-    InlineCase {
-        // A `SELECT`'s header and its listed `WHEN` are promoted clauses too,
-        // and each has an echo of its own -- so the row that says the fix is
-        // about clauses rather than about `IF`.
-        name: "trace turned on inside a branch, before a select",
-        program: "if 1 = 1 then trace r\nselect\n  when 1 = 0 then say 'a'\n  \
-                  otherwise say 'o'\nend\n",
-        stdout: "o\n",
-        stderr: "     2 *-* select\n     3 *-*   when 1 = 0 \n       >>>     \"0\"\n     \
-                 4 *-*   otherwise\n     4 *-*     say 'o'\n       >>>       \"o\"\n     \
-                 5 *-* end\n",
-        exit_code: 0,
-    },
-    InlineCase {
-        // **The one row that is a guard rather than a regression test.** It
-        // has no promoted clause in it at all: an assignment is `Generic`
-        // today, so both engines route the whole clause through `eval.rs` and
-        // the `>L>` line comes out of evaluating the literal. The spike
-        // promoted this assignment and dropped that line, because a native
-        // constant op does not evaluate anything. This row is what goes red
-        // when the first native expression op forgets to re-emit it, and the
-        // exact stderr comparison is what makes it able to: no corpus
-        // instrument here compares trace bytes unnormalised.
-        name: "trace i over a literal in an assignment",
-        program: "trace i\nn1 = 'lit'\nsay n1\n",
-        stdout: "lit\n",
-        stderr: "     2 *-* n1 = 'lit'\n       >L>   \"lit\"\n       >>>   \"lit\"\n       \
-                 >=>   N1 <= \"lit\"\n     3 *-* say n1\n       >V>   N1 => \"lit\"\n       \
-                 >>>   \"lit\"\n",
-        exit_code: 0,
-    },
-];
-
 /// Every [`LOOP_CASES`] program on both engines, byte for byte, and against
 /// the bytes the tree-walker produces for it.
 #[test]
@@ -974,16 +837,98 @@ fn both_engines_agree_on_every_loop_shape() {
     compare_inline_cases(LOOP_CASES);
 }
 
-/// Every [`TRACE_SETTING_CASES`] program, the same way.
-#[test]
-fn both_engines_agree_when_the_trace_setting_is_not_the_compiled_one() {
-    compare_inline_cases(TRACE_SETTING_CASES);
-}
-
 /// Every [`BRANCH_CASES`] program, the same way.
 #[test]
 fn both_engines_agree_on_every_branch_shape() {
     compare_inline_cases(BRANCH_CASES);
+}
+
+/// Where the case files this harness reads live.
+const CASE_DIR: &str = "tests/ir_dual_cases";
+
+/// The cases in [`CASE_DIR`], which are the ones written as data rather than
+/// as a `const` table in this file (the plan's Tech Stack section: a data file
+/// from Task 6 onward, and the three existing tables not retrofitted because
+/// they hold witnesses nothing else catches).
+///
+/// Each stanza is one program, run on **both** engines, asserting the same two
+/// halves `compare_inline_cases` does. The engines are compared against each
+/// other inside the callback, because that is a property of the pair and has
+/// no expected bytes to record; the tree-walker's own answer is what the
+/// stanza's expected block holds, so a change to it shows as a diff rather
+/// than as an assertion message.
+///
+/// **The expected bytes are the oracle's, so `REWRITE=1` must not reach
+/// them.** That is `datadriven`'s whole idiom -- regenerate the expectation
+/// from the implementation -- and it is exactly wrong here: it would turn an
+/// oracle-measured expectation into a self-consistent one, in a diff that
+/// looks like any other expectation update. The refusal below is the tripwire,
+/// and the file's own header says how to regenerate a row instead.
+#[test]
+fn both_engines_agree_on_every_case_file() {
+    assert!(
+        std::env::var_os("REWRITE").is_none(),
+        "REWRITE would replace this crate's oracle-measured expectations with whatever it \
+         currently prints. Regenerate a row from the oracle instead -- {CASE_DIR}'s own header \
+         has the command"
+    );
+    let mut cases = 0;
+    datadriven::walk(CASE_DIR, |file| {
+        file.run(|case| {
+            cases += 1;
+            assert_eq!(
+                case.directive, "program",
+                "unknown directive {:?}",
+                case.directive
+            );
+            render_both_engines(&case.input)
+        });
+    });
+    // A directory that produced no *stanzas* -- because it was emptied, renamed,
+    // or because every stanza's directive stopped being recognised -- otherwise
+    // passes this test with nothing run at all.
+    assert!(
+        cases > 0,
+        "{CASE_DIR} produced no cases, so this test asserts nothing"
+    );
+}
+
+/// Runs one case's program on both engines, asserts they agree, and renders
+/// the tree-walker's answer in the tagged form the case files record.
+///
+/// **Every line is tagged, so no line of an expected block can be empty.** A
+/// blank line is what ends such a block, and a program's own output may
+/// contain one; the tag also keeps a trailing blank -- which an `IF` header's
+/// `*-*` echo ends in, and which is compared -- away from the end of a line
+/// that would otherwise look empty.
+fn render_both_engines(program: &str) -> String {
+    let text = program.as_bytes().to_vec();
+    let tw = run(text.clone(), Engine::TreeWalker);
+    let ir = run(text, Engine::Ir);
+    assert_eq!(
+        String::from_utf8_lossy(&tw.stdout),
+        String::from_utf8_lossy(&ir.stdout),
+        "stdout differs between engines"
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&tw.stderr),
+        String::from_utf8_lossy(&ir.stderr),
+        "stderr differs between engines"
+    );
+    assert_eq!(tw.exit_code, ir.exit_code, "exit status differs");
+    assert_eq!(
+        ir.chunks_refused, 0,
+        "the ir arm refused the body and ran it on the tree-walker"
+    );
+
+    let mut out = format!("rc> {}\n", tw.exit_code);
+    for line in String::from_utf8_lossy(&tw.stdout).lines() {
+        out.push_str(&format!("out> {line}\n"));
+    }
+    for line in String::from_utf8_lossy(&tw.stderr).lines() {
+        out.push_str(&format!("err> {line}\n"));
+    }
+    out
 }
 
 /// Runs each case twice and asserts both halves: the two engines against each

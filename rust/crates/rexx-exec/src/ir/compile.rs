@@ -484,6 +484,7 @@ pub(crate) fn compile(
     }
 
     assert_clause_regions_hold_no_clause_op(&ops);
+    assert_trace_ops_open_a_clause_region(&ops);
 
     Ok(Chunk {
         trace,
@@ -595,6 +596,37 @@ fn assert_clause_regions_hold_no_clause_op(ops: &[Op]) {
     }
 }
 
+/// **Every [`Op::TraceClause`] is the first op of a [`Op::Clause`] region**,
+/// which is both halves of that op's own contract at once.
+///
+/// The echo reads `Interp::clause_state`'s value indent and the instruction
+/// the enclosing region opened, so an echo the driver reached outside a region
+/// prints against whatever the last clause left there. And the tree-walker
+/// echoes a clause before it computes anything, so an echo anywhere but first
+/// puts the clause's `*-*` line after a value line it must precede.
+///
+/// Checking it needs only the op before: a `Clause` whose `end` is past this
+/// position is a region that has just opened and has emitted nothing else yet.
+///
+/// An unconditional `assert!` for [`assert_clause_regions_hold_no_clause_op`]'s
+/// reason, and it is the same linear scan's worth of work.
+fn assert_trace_ops_open_a_clause_region(ops: &[Op]) {
+    for (at, op) in ops.iter().enumerate() {
+        if !matches!(op, Op::TraceClause { .. }) {
+            continue;
+        }
+        let opens_here = at
+            .checked_sub(1)
+            .and_then(|before| ops.get(before))
+            .is_some_and(|before| matches!(before, Op::Clause { end, .. } if *end as usize > at));
+        assert!(
+            opens_here,
+            "the trace op at {at} is not the first op of a Clause region, so it echoes against \
+             another clause's indent or after a value line it has to precede"
+        );
+    }
+}
+
 // Test-only instrumentation: how many times `compile` has actually run. The
 // chunk-cache test (`golden_tests.rs`) needs this to tell "the chunk cache
 // compiled the body once" apart from "the second lookup happened not to
@@ -619,7 +651,10 @@ pub(crate) fn compile_calls() -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{Op, Registers, assert_clause_regions_hold_no_clause_op};
+    use super::{
+        Op, Registers, assert_clause_regions_hold_no_clause_op,
+        assert_trace_ops_open_a_clause_region,
+    };
 
     /// Two sibling clauses reuse the same registers, and a clause nested
     /// inside another's mark does not.
@@ -739,6 +774,57 @@ mod tests {
             },
             Op::JumpUnless { reg: 0, target: 3 },
             Op::Generic { index: 1 },
+        ]);
+    }
+
+    /// A trace op that is inside a region but not at its head, which is the
+    /// half of [`Op::TraceClause`]'s contract that a check for "inside a
+    /// region" alone would miss.
+    ///
+    /// The arrangement is exactly what emitting the echo after the condition
+    /// produces, and it prints the clause's `*-*` line after the `>>>` line
+    /// that condition traces.
+    #[test]
+    #[should_panic(expected = "not the first op of a Clause region")]
+    fn a_trace_op_after_the_regions_first_op_is_refused() {
+        assert_trace_ops_open_a_clause_region(&[
+            Op::Clause { index: 0, end: 4 },
+            Op::EvalExpr {
+                index: 0,
+                slot: 0,
+                dst: 0,
+            },
+            Op::TraceClause { index: 0 },
+            Op::JumpUnless { reg: 0, target: 4 },
+        ]);
+    }
+
+    /// A trace op with no region open at all, the other way the contract is
+    /// broken: the echo would read whatever value indent the last clause left
+    /// behind.
+    #[test]
+    #[should_panic(expected = "not the first op of a Clause region")]
+    fn a_trace_op_outside_a_clause_region_is_refused() {
+        assert_trace_ops_open_a_clause_region(&[
+            Op::Generic { index: 0 },
+            Op::TraceClause { index: 1 },
+        ]);
+    }
+
+    /// The neighbouring arrangement that must stay accepted, without which
+    /// both refusals above are satisfied by a check that refuses every stream
+    /// carrying a trace op -- which would make every traced body a refusal.
+    #[test]
+    fn a_trace_op_at_the_head_of_a_clause_region_is_accepted() {
+        assert_trace_ops_open_a_clause_region(&[
+            Op::Clause { index: 0, end: 4 },
+            Op::TraceClause { index: 0 },
+            Op::EvalExpr {
+                index: 0,
+                slot: 0,
+                dst: 0,
+            },
+            Op::JumpUnless { reg: 0, target: 4 },
         ]);
     }
 }

@@ -257,6 +257,22 @@ pub(crate) struct ChunkTrace {
 
 impl ChunkTrace {
     /// What `compile` reads out of the setting in force.
+    ///
+    /// **`inline(always)`, and it is a measurement rather than a habit.** These
+    /// four -- this, [`ChunkTrace::echoes`], [`Interp::tracing_clause`] and
+    /// [`Interp::chunk_trace`] -- are the chain every clause of every body
+    /// walks on both engines, and without them the `ChunkTrace` this builds is
+    /// materialised instead of folded away. Removing all four costs
+    /// `bench-programs/emptyloop.rex` 100,000,000 user instructions, 38.0009
+    /// against 38.1009 billion on the tree-walker and 40.4009 against 40.5009
+    /// on the compiled stream (`perf stat -e instructions:u`). Measured as a
+    /// group and not one at a time, so the number belongs to the four
+    /// together.
+    ///
+    /// **They are the whole of "the tree-walker pays nothing for this type".**
+    /// It reads a projection only the compiled stream's compiler needs, so
+    /// without the folding it would be paying for a second engine's
+    /// bookkeeping.
     #[inline(always)]
     pub(crate) fn of(mode: TraceMode) -> ChunkTrace {
         ChunkTrace {
@@ -270,6 +286,10 @@ impl ChunkTrace {
     /// The `||` reduces to `clauses` in every mode but `L`, because `labels`
     /// is true wherever `clauses` is ([`TraceMode::labels`]'s own doc comment
     /// has the flag sets that make that so).
+    ///
+    /// **`inline(always)` is measured**: one of the group of four
+    /// [`ChunkTrace::of`] carries the number for, worth 100,000,000 user
+    /// instructions on `bench-programs/emptyloop.rex` between them.
     #[inline(always)]
     pub(crate) fn echoes(self, is_label: bool) -> bool {
         self.clauses || (self.labels && is_label)
@@ -575,6 +595,12 @@ impl Interp {
     /// `crate::ir::compile` asks the identical question at compile time and a
     /// second copy of it is how a chunk compiled to echo and a clause run
     /// without one would come to disagree.
+    ///
+    /// **`inline(always)` is measured**: one of the group of four
+    /// [`ChunkTrace::of`] carries the number for, worth 100,000,000 user
+    /// instructions on `bench-programs/emptyloop.rex` between them. This is
+    /// the one every clause of every body on either engine calls, so it is
+    /// where the group's cost is actually spent.
     #[inline(always)]
     pub(crate) fn tracing_clause(&self, is_label: bool) -> bool {
         self.chunk_trace().echoes(is_label)
@@ -582,6 +608,10 @@ impl Interp {
 
     /// The part of the setting in force that a chunk's identity depends on
     /// ([`ChunkTrace`]).
+    ///
+    /// **`inline(always)` is measured**: one of the group of four
+    /// [`ChunkTrace::of`] carries the number for, worth 100,000,000 user
+    /// instructions on `bench-programs/emptyloop.rex` between them.
     #[inline(always)]
     pub(crate) fn chunk_trace(&self) -> ChunkTrace {
         ChunkTrace::of(self.trace_mode())

@@ -4459,13 +4459,19 @@ impl Interp {
     /// whole stderr, and every other clause is silent.
     ///
     /// **`inline(always)`, and it is a measurement rather than a habit.** This
-    /// is one call per clause of every body on either engine, and the gate is
-    /// the whole of what an untraced run does here. Left to the inliner's own
-    /// judgement it is emitted as a function and
-    /// `bench-programs/emptyloop.rex` runs 2.80-2.82s on the tree-walker
-    /// against 2.73-2.75s with the same lines written out at the call site;
-    /// with the annotation it is that same level. Interleaved between arms
-    /// within one sitting, six sittings.
+    /// is one call per clause of every body on either engine, and on an
+    /// untraced run the gate is the whole of what it does. Left to the
+    /// inliner's own judgement it is emitted as a function and costs
+    /// `bench-programs/emptyloop.rex` **525,000,000 user instructions** --
+    /// 38.0009 against 38.5259 billion on the tree-walker, and 40.4009 against
+    /// 40.9259 on the compiled stream (`perf stat -e instructions:u`).
+    ///
+    /// **Counted in instructions and not in seconds, and that is not a
+    /// preference.** `emptyloop`'s wall clock on this machine moves about 2%
+    /// between builds that execute an identical instruction count, which is
+    /// larger than most of what is being decided here -- a wall-clock reading
+    /// reported a regression on the tree-walker arm that its own instruction
+    /// count denies.
     #[inline(always)]
     pub(crate) fn echo_stepped_clause(
         &mut self,

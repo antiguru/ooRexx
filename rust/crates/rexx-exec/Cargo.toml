@@ -26,6 +26,13 @@ rexx-num = { path = "../rexx-num" }
 rexx-inventory = { path = "../rexx-inventory" }
 
 [dev-dependencies]
+# Case tables as data files rather than `const` arrays in Rust sources, for
+# tables written from Task 6 onward (the plan's Tech Stack section). Test-only,
+# and the only dependency this workspace takes from outside it.
+# `default-features = false` drops its `async` feature, which is the whole of
+# what pulls `futures` in: nothing here runs a case asynchronously.
+datadriven = { version = "0.9.0", default-features = false }
+
 # `extract_assertions`, the row extractor `tests/assertions.rs` runs against
 # `ootest/ooRexx/base/expressions/`. Test-only: nothing in `src/` produces or
 # consumes an `AssertionRow`.

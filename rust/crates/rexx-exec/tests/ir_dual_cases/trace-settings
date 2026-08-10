@@ -1,0 +1,190 @@
+# Programs whose TRACE setting is not the one the body was first entered
+# under, which is the axis a compiled-in emission decision can get wrong and
+# no other case table exercises.
+#
+# The setting decides which trace ops a body compiles to, so every row here
+# is a place where the setting in force when a clause runs can differ from
+# the setting the chunk carrying that clause was compiled under. Two ways
+# that happens, and both directions of each: a TRACE executed inside the
+# body after the chunk exists, and the same body entered again under a
+# different setting.
+#
+# These are boundary cases, not shapes. A promoted clause is where the echo
+# is decided, so each row puts the setting change immediately before one --
+# an IF header, a SELECT header, a listed WHEN -- rather than before an
+# ordinary clause, which the tree-walker's own gate answers whatever the
+# compiler does.
+#
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every
+# row passed with nothing promoted, which is what says a row can tell
+# whether it would ever have failed. Regenerate a row by running its program
+# under the oracle, never with REWRITE=1 -- ir_dual.rs refuses to run at all
+# under REWRITE for that reason. Capture is:
+#
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+#
+# Expected lines are tagged so that no line of the block can be empty: an
+# empty line ends an expected block, and a program's own output may hold
+# one. Trailing blanks are part of what is compared -- an IF header's *-*
+# echo ends in one -- and are preserved verbatim by both this format and the
+# comparison.
+
+# trace turned on inside a branch, before a later if
+# The chunk is compiled untraced -- the body's own TRACE runs after it
+# exists -- so the second IF, a promoted clause of that same chunk, has to
+# echo anyway.
+program
+if 1 = 1 then trace r
+if 1 = 1 then say 'x'
+----
+rc> 0
+out> x
+err>      2 *-* if 1 = 1 
+err>        >>>   "1"
+err>      2 *-*   then
+err>      2 *-*     say 'x'
+err>        >>>       "x"
+
+# trace turned off inside a branch, before a later if
+# The other direction, which a fallback that only ever *adds* an echo would
+# pass: the second IF must print nothing at all.
+program
+trace r
+if 1 = 1 then trace n
+if 1 = 1 then say 'x'
+----
+rc> 0
+out> x
+err>      2 *-* if 1 = 1 
+err>        >>>   "1"
+err>      2 *-*   then
+err>      2 *-*     trace n
+
+# trace turned on inside a loop body, before a later if
+# Inside a loop body, so the change has to reach the later passes as well as
+# the rest of the pass that made it. The loop's own per-pass re-echo of DO
+# and END is the surrounding evidence that it did.
+program
+do i = 1 to 2
+  if i = 1 then trace r
+  if i = 2 then say 'two'
+end
+----
+rc> 0
+out> two
+err>      3 *-*   if i = 2 
+err>        >>>     "0"
+err>      4 *-* end
+err>      1 *-* do i = 1 to 2
+err>        >>>     "1"
+err>        >>>     "2"
+err>      2 *-*   if i = 1 
+err>        >>>     "0"
+err>      3 *-*   if i = 2 
+err>        >>>     "1"
+err>      3 *-*     then
+err>      3 *-*       say 'two'
+err>        >>>         "two"
+err>      4 *-* end
+err>      1 *-* do i = 1 to 2
+err>        >>>     "2"
+err>        >>>     "3"
+
+# one body entered untraced and then under trace r
+# The same body entered twice, untraced and then traced, in one process. A
+# chunk cache that hands back whichever chunk was compiled first is what
+# this row is about.
+program
+call sub
+trace r
+call sub
+exit
+sub:
+if 1 = 1 then say 'in'
+return
+----
+rc> 0
+out> in
+out> in
+err>      3 *-* call sub
+err>      5 *-*   sub:
+err>      6 *-*   if 1 = 1 
+err>        >>>     "1"
+err>      6 *-*     then
+err>      6 *-*       say 'in'
+err>        >>>         "in"
+err>      7 *-*   return
+err>      4 *-* exit
+
+# a body entered under trace r that then turns trace off
+# The row that reaches a chunk compiled to echo and then asks it not to.
+# Every row whose TRACE is in the body itself compiles that body before the
+# TRACE runs, so the chunk is the silent one; here the body is *entered*
+# with trace r in force, so its chunk carries an echo op per promoted
+# clause and the trace n inside it has to withdraw them.
+#
+# The `3 *-* exit` line is the surrounding evidence that the withdrawal is
+# per activation: trace n ran in the callee's, and the caller's own next
+# clause echoes.
+program
+trace r
+call sub
+exit
+sub:
+if 1 = 1 then trace n
+if 1 = 1 then say 'x'
+return
+----
+rc> 0
+out> x
+err>      2 *-* call sub
+err>      4 *-*   sub:
+err>      5 *-*   if 1 = 1 
+err>        >>>     "1"
+err>      5 *-*     then
+err>      5 *-*       trace n
+err>      3 *-* exit
+
+# trace turned on inside a branch, before a select
+# A SELECT's header and its listed WHEN are promoted clauses too, and each
+# has an echo of its own -- so the row that says the fix is about clauses
+# rather than about IF.
+program
+if 1 = 1 then trace r
+select
+  when 1 = 0 then say 'a'
+  otherwise say 'o'
+end
+----
+rc> 0
+out> o
+err>      2 *-* select
+err>      3 *-*   when 1 = 0 
+err>        >>>     "0"
+err>      4 *-*   otherwise
+err>      4 *-*     say 'o'
+err>        >>>       "o"
+err>      5 *-* end
+
+# trace i over a literal in an assignment
+# The one row that is a guard rather than a regression test. It has no
+# promoted clause at all: an assignment is Generic today, so both engines
+# route the whole clause through eval.rs and the >L> line comes out of
+# evaluating the literal. The spike promoted this assignment and dropped
+# that line, because a native constant op evaluates nothing. This row goes
+# red when the first native expression op forgets to re-emit it.
+program
+trace i
+n1 = 'lit'
+say n1
+----
+rc> 0
+out> lit
+err>      2 *-* n1 = 'lit'
+err>        >L>   "lit"
+err>        >>>   "lit"
+err>        >=>   N1 <= "lit"
+err>      3 *-* say n1
+err>        >V>   N1 => "lit"
+err>        >>>   "lit"

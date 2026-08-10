@@ -23,7 +23,7 @@
 //! what they assert stays true whatever the default becomes. Which engine the
 //! default *is* belongs to `Invocation`, and `invocation.rs` asserts it there.
 
-use super::{clause_op_entries, run_chunk_entries};
+use super::{clause_op_entries, run_chunk_entries, trace_op_echoes};
 use crate::{Engine, Invocation, Outcome, execute, run_program};
 
 /// The path these programs are reported under. Nothing reads it back: no
@@ -278,6 +278,92 @@ fn the_tree_walker_steps_no_clause_from_a_chunk() {
         "the tree-walker stepped {stepped} clauses from a chunk, so the engine \
          choice no longer decides which driver steps a clause"
     );
+}
+
+/// A body entered with `TRACE R` already in force echoes its promoted clause
+/// from the chunk's own [`crate::ir::Op::TraceClause`], rather than from the
+/// clause unit's run-time gate.
+///
+/// **This is the only observable that says the compiled emission decision is
+/// reached in production**, and it is a count for a sharper reason than the
+/// counts above are. There the two engines merely agree; here the driver
+/// deliberately *falls back* to the same gate the tree-walker uses whenever
+/// the setting in force is not the one the chunk was compiled under, and that
+/// fallback prints the identical bytes. So an implementation that never
+/// compiled a trace op, or compiled one and never ran it, produces byte-exact
+/// correct output on every program in the tree. Two mutations do exactly that
+/// -- asking `chunk_for` for a chunk under a constant setting rather than the
+/// one in force, and answering "stale" for every clause -- and both leave the
+/// whole workspace green without this.
+///
+/// **Entered with the setting in force, not setting it in the body**, and that
+/// is what the `CALL` is for: a body compiles when it is first entered, so a
+/// `TRACE` on the body's own first line runs *after* its chunk exists and the
+/// chunk is the untraced one. The callee inherits `trace r` at the call, so
+/// its chunk is compiled to echo.
+#[test]
+fn a_body_entered_under_trace_r_echoes_its_promoted_clause_from_the_chunk() {
+    const ENTERED_TRACED: &[u8] = b"\
+trace r
+call sub
+exit
+sub:
+  if 1 = 1 then nop
+  return
+";
+    let before = trace_op_echoes();
+    let outcome = execute(
+        TEST_PATH,
+        ENTERED_TRACED.to_vec(),
+        false,
+        Invocation::none().with_engine(Engine::Ir),
+    );
+    let echoed = trace_op_echoes() - before;
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(
+        echoed, 1,
+        "the compiled stream emitted {echoed} clause echoes from a trace op where the callee's \
+         one promoted clause owes one, so either its chunk was not compiled for the setting it \
+         was entered under or the op it carries did not run"
+    );
+}
+
+/// The two negative controls for the count above, and they are two because
+/// they answer two different degenerate counters.
+///
+/// A counter that never moved would satisfy the tree-walker row on its own; a
+/// counter that moved on every promoted clause regardless of setting would
+/// satisfy neither. The untraced row is the one that says the *setting*
+/// decides, since it runs the identical construct with everything but `TRACE`
+/// unchanged.
+#[test]
+fn no_trace_op_echoes_without_the_engine_or_without_the_setting() {
+    const ENTERED_TRACED: &[u8] = b"trace r\ncall sub\nexit\nsub:\n  if 1 = 1 then nop\n  return\n";
+    const ENTERED_UNTRACED: &[u8] = b"call sub\nexit\nsub:\n  if 1 = 1 then nop\n  return\n";
+
+    for (program, engine, described) in [
+        (
+            ENTERED_TRACED,
+            Engine::TreeWalker,
+            "the tree-walker runs it",
+        ),
+        (ENTERED_UNTRACED, Engine::Ir, "no TRACE is in force"),
+    ] {
+        let before = trace_op_echoes();
+        let outcome = execute(
+            TEST_PATH,
+            program.to_vec(),
+            false,
+            Invocation::none().with_engine(engine),
+        );
+        let echoed = trace_op_echoes() - before;
+        assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+        assert_eq!(
+            echoed, 0,
+            "{echoed} clause echoes came from a trace op where {described}, so the count no \
+             longer tracks the compiled emission decision"
+        );
+    }
 }
 
 /// Nothing in an ordinary program overflows the compiled stream's index
