@@ -686,8 +686,8 @@ pub(crate) fn compile(
 /// The ops that leave expression `slot` of instruction `index` in register
 /// `dst`.
 ///
-/// **Three shapes, and each split is what the expression is rather than what is
-/// convenient.** A literal's value is bytes the node already carries, so it
+/// **Each split is what the expression is rather than what is convenient.** A
+/// literal's value is bytes the node already carries, so it
 /// becomes a native [`Op::Const`] against the interned table plus the `>L>`
 /// line that loading it owes. A bare symbol's value is in a frame slot, so it
 /// becomes a native [`Op::Load`] plus the `>V>` line that reading it owes.

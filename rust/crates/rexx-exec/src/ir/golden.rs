@@ -77,8 +77,8 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::TraceLiteral { src } => {
                 out.push_str(&format!("{index}: TraceLiteral src={src}\n"));
             }
-            // **The `symbol` field is deliberately not rendered**, and it is the
-            // only op field this function leaves out. A `SymbolId`'s index is
+            // **The `symbol` field is deliberately not rendered.** A
+            // `SymbolId`'s index is
             // into the one symbol table `scan` pre-seeds with every keyword
             // spelling before it reads a byte of source, so the number a
             // program's own first symbol gets says nothing about that program

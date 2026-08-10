@@ -45,6 +45,15 @@ mod golden;
 #[cfg(test)]
 mod golden_tests;
 
+/// **The stream's own width, asserted rather than described.** Every op in
+/// every chunk pays for the widest variant, so a field added to one of them is
+/// a cost to all of them -- which is the argument [`ReadSlot`] rests on, and an
+/// argument about a width is worth nothing without the width. The widest
+/// payload today has tail padding for the discriminant to sit in; a variant
+/// that needs more than that grows the array, and this is where that shows up
+/// as a compile error rather than as a measurement somebody has to take again.
+const _: () = assert!(size_of::<Op>() == 12);
+
 /// One step in a compiled stream.
 ///
 /// **Every op that runs a clause carries its own instruction index**, and
@@ -457,8 +466,9 @@ pub(crate) enum BodyEngine<'a> {
 /// **A `u32` with one reserved value rather than an `Option<u32>`, and it is
 /// the op array that decides it.** An `Option<u32>` is eight bytes where this
 /// is four, which is the difference between an [`Op`] that stays the width
-/// every other variant already fits in and one that grows by a quarter -- paid
-/// by every op in every chunk, for a field two of them carry.
+/// every other variant already fits in and one that grows -- paid by every op
+/// in every chunk, for a field two of them carry. The assertion above [`Op`] is
+/// what holds that width rather than this sentence.
 ///
 /// **A compound never has one.** Its read goes through the *stem's* slot and a
 /// tail key resolved at the read site, so the symbol's own slot is not what it
