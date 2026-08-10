@@ -1314,57 +1314,17 @@ impl Interp {
         let first_instruction = std::mem::take(&mut self.procedure_permitted);
         match &instruction.kind {
             InstructionKind::Say { expression } => {
-                let line = match expression {
-                    Some(expression) => {
-                        let value = self.eval(code, expression)?;
-                        self.roots.push_temp(value);
-                        self.to_text(value).to_vec()
-                    }
-                    // `say` with no expression is a blank line. Still
-                    // traced (`RexxInstructionExpression::
-                    // evaluateStringExpression`'s own `else` arm:
-                    // `traceResult(GlobalNames::NULLSTRING)`), as an empty
-                    // string, not skipped.
-                    None => Vec::new(),
+                let value = match expression {
+                    Some(expression) => Some(self.eval(code, expression)?),
+                    None => None,
                 };
-                self.trace_result(self.clause_state.current_value_indent, &line);
-                self.out.extend_from_slice(&line);
-                self.out.push(b'\n');
+                self.say_evaluated(value);
                 Ok(Flow::Next)
             }
 
             InstructionKind::Assignment { target, value } => {
-                // The target dispatch itself is `assign_expr_target`, shared
-                // with `PARSE`; its own doc comment carries which shapes
-                // `addVariable` can build, and why its fourth arm is loud and
-                // is reachable from the other caller but not from this one.
                 let value = self.eval(code, value)?;
-                self.roots.push_temp(value);
-                // `>>>` fires before the assignment itself
-                // (`RexxInstructionAssignment::execute`: evaluate, trace,
-                // *then* assign), which matters only in that the traced
-                // value can never be affected by the write it precedes.
-                // Reads `current_value_indent` rather than recomputing
-                // `static_indent(index)` independently -- `step_in_temps_
-                // frame` already computed exactly this value (`indent_
-                // offset` included, F-EX1's own correction to F3) for this
-                // same instruction right before calling `step`, and a
-                // second computation of the identical quantity is how the
-                // two drift, which is exactly what happened here before
-                // this fix: this site's own copy never learned about the
-                // offset when the field was added.
-                let indent = self.clause_state.current_value_indent;
-                // One render for both lines, and `results` is the gate
-                // because it is the weaker of the two: `>>>` is gated on
-                // `results` and `>=>` on `intermediates`, and `results` is
-                // true wherever `intermediates` is. Guarding on
-                // `intermediates` instead would drop the `>>>` line under
-                // `TRACE R`.
-                let rendered = self.result_text(value);
-                if let Some(rendered) = &rendered {
-                    self.trace_result(indent, rendered);
-                }
-                self.assign_expr_target(code, target, value, rendered.as_deref(), indent)?;
+                self.assign_evaluated(code, target, value)?;
                 Ok(Flow::Next)
             }
 
@@ -2759,6 +2719,73 @@ impl Interp {
             }
             other => Err(Loud::expression(other).into()),
         }
+    }
+
+    /// Everything one `SAY` does once its expression has been evaluated:
+    /// `>>>`, then the line itself.
+    ///
+    /// `None` is the bare `SAY`, which is a blank line **and** a traced null
+    /// string rather than a skipped clause (`RexxInstructionExpression::
+    /// evaluateStringExpression`'s own `else` arm: `traceResult(GlobalNames::
+    /// NULLSTRING)`).
+    ///
+    /// **The one implementation both engines enter**: `step`'s own `Say` arm
+    /// evaluates and calls this, and `crate::ir::Op::Say` does the same with a
+    /// register's value, so the trace line and the output cannot come apart
+    /// between them.
+    pub(crate) fn say_evaluated(&mut self, value: Option<ObjRef>) {
+        let line = match value {
+            Some(value) => {
+                self.roots.push_temp(value);
+                self.to_text(value).to_vec()
+            }
+            None => Vec::new(),
+        };
+        self.trace_result(self.clause_state.current_value_indent, &line);
+        self.out.extend_from_slice(&line);
+        self.out.push(b'\n');
+    }
+
+    /// Everything one assignment does once its value has been evaluated:
+    /// `>>>`, then the write and the lines the write itself produces.
+    ///
+    /// **The one implementation both engines enter**, `step`'s own
+    /// `Assignment` arm and `crate::ir::Op::Store` alike -- which is what
+    /// keeps a stem target, a compound tail and the `>=>` line to one copy.
+    /// The target dispatch itself is [`Interp::assign_expr_target`], shared
+    /// with `PARSE`; its own doc comment carries which shapes `addVariable`
+    /// can build, and why its fourth arm is loud and is reachable from the
+    /// other caller but not from this one.
+    pub(crate) fn assign_evaluated(
+        &mut self,
+        code: &Code<'_>,
+        target: &Expr,
+        value: ObjRef,
+    ) -> Result<(), Failure> {
+        self.roots.push_temp(value);
+        // `>>>` fires before the assignment itself
+        // (`RexxInstructionAssignment::execute`: evaluate, trace, *then*
+        // assign), which matters only in that the traced value can never be
+        // affected by the write it precedes.
+        // Reads `current_value_indent` rather than recomputing
+        // `static_indent(index)` independently -- the clause unit already
+        // computed exactly this value (`indent_offset` included, F-EX1's own
+        // correction to F3) for this same instruction right before the clause
+        // ran, and a second computation of the identical quantity is how the
+        // two drift, which is exactly what happened here before this fix: this
+        // site's own copy never learned about the offset when the field was
+        // added.
+        let indent = self.clause_state.current_value_indent;
+        // One render for both lines, and `results` is the gate because it is
+        // the weaker of the two: `>>>` is gated on `results` and `>=>` on
+        // `intermediates`, and `results` is true wherever `intermediates` is.
+        // Guarding on `intermediates` instead would drop the `>>>` line under
+        // `TRACE R`.
+        let rendered = self.result_text(value);
+        if let Some(rendered) = &rendered {
+            self.trace_result(indent, rendered);
+        }
+        self.assign_expr_target(code, target, value, rendered.as_deref(), indent)
     }
 
     /// Writes `value` through one assignment *target expression*, and traces
@@ -6557,6 +6584,19 @@ impl Interp {
                 };
                 self.eval(code, expr)
             }
+            // An `Assignment`'s value and a `SAY`'s expression, slot `0`:
+            // whatever the expression came to, unvalidated and untagged. Both
+            // reach this arm only for an expression `compile` did not emit a
+            // native op for -- a literal is `crate::ir::Op::Const` instead --
+            // and both are trace-identical to the tree-walker's own arm here
+            // because this is the same `eval` call it makes.
+            (InstructionKind::Assignment { value, .. }, 0) => self.eval(code, value),
+            (
+                InstructionKind::Say {
+                    expression: Some(expression),
+                },
+                0,
+            ) => self.eval(code, expression),
             (kind, _) => Err(Loud::instruction(kind).into()),
         }
     }

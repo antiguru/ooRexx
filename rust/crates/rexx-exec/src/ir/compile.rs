@@ -13,7 +13,9 @@
 //! Decisions section: "compilation is whole-body and lazy: one body at a
 //! time, on first entry, cached").
 
-use rexx_parse::{CodeBody, Instruction, InstructionKind};
+use std::collections::HashMap;
+
+use rexx_parse::{CodeBody, Expr, ExprKind, Instruction, InstructionKind};
 
 use super::{Chunk, ChunkTooLarge, Op};
 use crate::plan::Plan;
@@ -89,6 +91,55 @@ impl Registers {
 
     fn high_water(&self) -> u16 {
         self.high_water
+    }
+}
+
+/// The constant table [`Op::Const`] indexes, built as the pass goes and
+/// **interned**: a literal written twice gets one entry.
+///
+/// **The interning is what the table is for, not a refinement of it.** Every
+/// entry is a heap allocation, so an un-interned table costs one allocation
+/// per literal *occurrence* -- which on a straight-line body is one per
+/// clause, paid at compile time -- and the mechanics spike measured that
+/// artifact swamping the difference it existed to measure.
+///
+/// `index` borrows the body's own literal bytes rather than owning a second
+/// copy of each key, so a repeated literal costs a hash and a comparison and
+/// no allocation at all. That is the whole reason this is a struct with a
+/// lifetime instead of a `HashMap<Box<[u8]>, u32>`: the owning form allocates
+/// once per *distinct* literal for the key as well as for the entry.
+struct Constants<'a> {
+    /// One entry per distinct literal, in the order they were first seen,
+    /// which is what [`Chunk::consts`] becomes.
+    ///
+    /// [`Chunk::consts`]: super::Chunk
+    values: Vec<Box<[u8]>>,
+    /// Which entry a literal's bytes already have.
+    index: HashMap<&'a [u8], u32>,
+}
+
+impl<'a> Constants<'a> {
+    fn new() -> Constants<'a> {
+        Constants {
+            values: Vec::new(),
+            index: HashMap::new(),
+        }
+    }
+
+    /// The entry `bytes` has, adding one if this is the first occurrence.
+    ///
+    /// The refusal is the constant half of the one error `compile` has (the
+    /// plan's Decisions section: "op, constant and instruction indices are
+    /// `u32`").
+    fn intern(&mut self, bytes: &'a [u8]) -> Result<u32, ChunkTooLarge> {
+        if let Some(&at) = self.index.get(bytes) {
+            return Ok(at);
+        }
+        let at =
+            u32::try_from(self.values.len()).map_err(|_| ChunkTooLarge { what: "constants" })?;
+        self.values.push(Box::from(bytes));
+        self.index.insert(bytes, at);
+        Ok(at)
     }
 }
 
@@ -195,10 +246,16 @@ enum PatchKind {
 /// becomes a [`Op::Clause`] region that evaluates its condition and jumps; a
 /// `SELECT` becomes one such region per listed `WHEN` as well as for its own
 /// header, laid out as a scan chain with a frame opened over whichever branch
-/// wins; every other instruction becomes [`Op::Generic`]. `plan` is not yet
-/// read:
-/// nothing compiled here needs a name-to-slot answer, but a task that
-/// promotes an assignment reads it to place the assignment's own `EvalExpr`.
+/// wins; an `Assignment` and a `SAY` each become a region that produces one
+/// value and then writes or prints it; every other instruction becomes
+/// [`Op::Generic`].
+///
+/// **`plan` is not read, and the reason is a design decision rather than a
+/// gap.** The one thing a compiled assignment could want from it is the slot
+/// its target resolves to, and `Op::Store` deliberately does not resolve
+/// targets: it goes through `Interp::assign_expr_target`, which is what
+/// `step`'s own arm calls, so a stem, a compound tail and the `>=>` line stay
+/// one implementation. Resolving the name here would be the second one.
 ///
 /// The one error is a machine width, not a language construct (the plan's
 /// Decisions section: "the compiler has one error, and it is a machine
@@ -226,6 +283,7 @@ pub(crate) fn compile(
     let mut ops: Vec<Op> = Vec::with_capacity(len);
     let mut op_of = Vec::with_capacity(len + 1);
     let mut registers = Registers::new();
+    let mut consts = Constants::new();
     let mut patches: Vec<Patch> = Vec::new();
     // Indexed by instruction: the op that goes in front of that instruction's
     // own, emitted at its `op_of` entry. A `Vec` keyed by the instruction the
@@ -510,6 +568,71 @@ pub(crate) fn compile(
                     when: instruction_index(index)?,
                 });
             }
+            // An assignment's clause is its value expression and the write,
+            // both inside the region: the write is what the clause *is*, and
+            // the boundary that follows it is where a `CALL ON` handler queued
+            // by the value expression runs -- measured, the handler sees the
+            // assignment already done.
+            InstructionKind::Assignment { value, .. } => {
+                let mark = registers.mark();
+                let dst = registers.alloc()?;
+                let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: 0,
+                });
+                push_echo(&mut ops, echo, instruction_index(index)?);
+                push_value(
+                    &mut ops,
+                    &mut consts,
+                    value,
+                    instruction_index(index)?,
+                    0,
+                    dst,
+                )?;
+                ops.push(Op::Store {
+                    index: instruction_index(index)?,
+                    src: dst,
+                });
+                close_region(&mut ops, at)?;
+                registers.release(mark);
+            }
+            // A `SAY` is the same shape with the print in place of the write,
+            // and one register fewer when it has no expression: the bare form
+            // prints a blank line and traces the null string, which is a
+            // decision `Op::Say` carries rather than an empty register.
+            InstructionKind::Say { expression } => {
+                let mark = registers.mark();
+                let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: 0,
+                });
+                push_echo(&mut ops, echo, instruction_index(index)?);
+                let src = match expression {
+                    Some(expression) => {
+                        let dst = registers.alloc()?;
+                        push_value(
+                            &mut ops,
+                            &mut consts,
+                            expression,
+                            instruction_index(index)?,
+                            0,
+                            dst,
+                        )?;
+                        Some(dst)
+                    }
+                    None => None,
+                };
+                ops.push(Op::Say {
+                    index: instruction_index(index)?,
+                    src,
+                });
+                close_region(&mut ops, at)?;
+                registers.release(mark);
+            }
             _ => ops.push(Op::Generic {
                 index: instruction_index(index)?,
             }),
@@ -549,7 +672,42 @@ pub(crate) fn compile(
         ops,
         op_of,
         registers: registers.high_water(),
+        consts: consts.values,
     })
+}
+
+/// The ops that leave expression `slot` of instruction `index` in register
+/// `dst`.
+///
+/// **Two shapes, and the split is what a literal is rather than what is
+/// convenient.** A literal's value is bytes the node already carries, so it
+/// becomes a native [`Op::Const`] against the interned table plus the `>L>`
+/// line that loading it owes. Everything else -- a variable read, an operator,
+/// a call, a constant symbol -- is evaluated by `eval.rs` through
+/// [`Op::EvalExpr`], which is trace-identical to what the tree-walker does with
+/// the same expression because it is the same call, and stays identical because
+/// nothing this region emits sits between one evaluation and the next.
+fn push_value<'a>(
+    ops: &mut Vec<Op>,
+    consts: &mut Constants<'a>,
+    expr: &'a Expr,
+    index: u32,
+    slot: u32,
+    dst: u16,
+) -> Result<(), ChunkTooLarge> {
+    match &expr.kind {
+        ExprKind::Literal(bytes) => {
+            ops.push(Op::Const {
+                dst,
+                konst: consts.intern(bytes)?,
+            });
+            // Behind the load rather than in front of it, because `eval.rs`
+            // emits this line post-order, with the value in hand.
+            ops.push(Op::TraceLiteral { src: dst });
+        }
+        _ => ops.push(Op::EvalExpr { index, slot, dst }),
+    }
+    Ok(())
 }
 
 /// Whether a promoted clause of `instruction` echoes under `trace`.

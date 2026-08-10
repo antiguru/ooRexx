@@ -697,6 +697,27 @@ impl Interp {
         push_value(&mut self.trace, ">L>", indent, value);
     }
 
+    /// One literal's own `>L>` line, from the value rather than from its text.
+    ///
+    /// **The one implementation both engines enter.** `eval.rs` reaches it
+    /// from its own post-order hook, as a side effect of evaluating the
+    /// literal; `crate::ir::Op::TraceLiteral` reaches it from a register,
+    /// because a native constant load evaluates nothing and so has no side
+    /// effect to carry the line -- which is exactly the defect the mechanics
+    /// spike shipped.
+    ///
+    /// The gate is asked before the value is rendered rather than inside
+    /// [`Interp::trace_literal`] alone, because rendering allocates a copy of
+    /// the value and an untraced run must not pay for it.
+    pub(crate) fn echo_literal(&mut self, value: ObjRef) {
+        if !self.tracing_intermediates() {
+            return;
+        }
+        let indent = self.clause_state.current_value_indent;
+        let text = self.to_text(value).to_vec();
+        self.trace_literal(indent, &text);
+    }
+
     /// `>V>` (`TRACE_PREFIX_VARIABLE`): a simple variable or bare stem's own
     /// read value, tagged with its own name, unquoted
     /// (`traceVariable`/`RexxActivation.hpp:341`-`342`, `quoteTag = false`).

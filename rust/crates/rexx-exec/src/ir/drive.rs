@@ -492,6 +492,10 @@ impl Interp {
                 // compiler does not produce.
                 Op::TraceClause { .. } => return Err(Loud::op_not_driven("TraceClause").into()),
                 Op::EvalExpr { .. } => return Err(Loud::op_not_driven("EvalExpr").into()),
+                Op::Const { .. } => return Err(Loud::op_not_driven("Const").into()),
+                Op::TraceLiteral { .. } => return Err(Loud::op_not_driven("TraceLiteral").into()),
+                Op::Store { .. } => return Err(Loud::op_not_driven("Store").into()),
+                Op::Say { .. } => return Err(Loud::op_not_driven("Say").into()),
                 Op::JumpUnless { .. } => return Err(Loud::op_not_driven("JumpUnless").into()),
                 Op::WhenTest { .. } => return Err(Loud::op_not_driven("WhenTest").into()),
                 Op::TraceKeyword { .. } => return Err(Loud::op_not_driven("TraceKeyword").into()),
@@ -841,6 +845,80 @@ impl Interp {
                     );
                     let value = self.eval_chunk_expr(code, *index as usize, *slot)?;
                     self.roots.set_temp(registers, *dst as usize, value);
+                    pc += 1;
+                }
+                // **The phase's first native expression op**: the literal's
+                // value, built from the chunk's own interned bytes through the
+                // same `Interp::literal` that `eval_node`'s `Literal` arm
+                // calls, with `eval.rs` not entered at all. It emits nothing --
+                // `Op::TraceLiteral` below is the line that loading a literal
+                // owes.
+                Op::Const { dst, konst } => {
+                    debug_assert!(
+                        chunk.holds_register(*dst),
+                        "op writes register {dst} outside the region the chunk reserved"
+                    );
+                    let Some(bytes) = chunk.konst(*konst) else {
+                        return Err(Loud::constant_out_of_range().into());
+                    };
+                    let value = self.literal(bytes);
+                    self.roots.set_temp(registers, *dst as usize, value);
+                    pc += 1;
+                }
+                // The `>L>` line of one literal. **Its own op**, because the
+                // load emits nothing and `eval.rs` emits this as a side effect
+                // of evaluating -- so a promoted clause with no such op drops
+                // the line while every line after it still matches.
+                Op::TraceLiteral { src } => {
+                    debug_assert!(
+                        chunk.holds_register(*src),
+                        "op reads register {src} outside the region the chunk reserved"
+                    );
+                    let value = self.roots.temp_at(registers, *src as usize);
+                    self.echo_literal(value);
+                    pc += 1;
+                }
+                // The write, through `Interp::assign_evaluated` -- the whole of
+                // what `step`'s own `Assignment` arm does past the evaluation,
+                // so the `>>>`/`>C>`/`>=>` lines and the stem and compound
+                // dispatch are that arm's rather than a second copy.
+                Op::Store { index, src } => {
+                    debug_assert!(
+                        chunk.holds_register(*src),
+                        "op reads register {src} outside the region the chunk reserved"
+                    );
+                    let Some(instruction) = code.body.instructions.get(*index as usize) else {
+                        return Err(Loud::chunk_map_too_short().into());
+                    };
+                    let InstructionKind::Assignment { target, .. } = &instruction.kind else {
+                        return Err(Loud::store_op_off_its_node().into());
+                    };
+                    let value = self.roots.temp_at(registers, *src as usize);
+                    self.assign_evaluated(code, target, value)?;
+                    pc += 1;
+                }
+                // The print, through `Interp::say_evaluated`, for the same
+                // reason `Op::Store` goes through `assign_evaluated`.
+                Op::Say { index, src } => {
+                    debug_assert!(
+                        matches!(
+                            code.body
+                                .instructions
+                                .get(*index as usize)
+                                .map(|instruction| &instruction.kind),
+                            Some(InstructionKind::Say { expression })
+                                if expression.is_some() == src.is_some()
+                        ),
+                        "a Say op names an instruction that is not a SAY of matching arity"
+                    );
+                    let value = src.map(|register| {
+                        debug_assert!(
+                            chunk.holds_register(register),
+                            "op reads register {register} outside the region the chunk reserved"
+                        );
+                        self.roots.temp_at(registers, register as usize)
+                    });
+                    self.say_evaluated(value);
                     pc += 1;
                 }
                 Op::JumpUnless { reg, target } => {

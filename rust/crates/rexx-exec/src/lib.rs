@@ -787,6 +787,34 @@ impl Loud {
         }
     }
 
+    /// A compiled `Store` op does not describe the assignment it was emitted
+    /// for -- an internal inconsistency, never a program error.
+    ///
+    /// [`Loud::select_op_off_its_node`]'s reasoning exactly, one instruction
+    /// over.
+    ///
+    /// [`Loud::select_op_off_its_node`]: Loud::select_op_off_its_node
+    fn store_op_off_its_node() -> Loud {
+        Loud {
+            message: "a compiled Store op does not name an assignment of its own body".to_string(),
+        }
+    }
+
+    /// A compiled `Const` op names a constant its own chunk does not carry --
+    /// an internal inconsistency, never a program error.
+    ///
+    /// `ir::compile` interns every constant it emits an op for into the same
+    /// chunk, so reaching this means the op and the table came apart. Loud
+    /// rather than an indexing panic, for the reason [`Loud::instruction`]
+    /// gives.
+    ///
+    /// [`Loud::instruction`]: Loud::instruction
+    fn constant_out_of_range() -> Loud {
+        Loud {
+            message: "a compiled Const op names no constant of its own chunk".to_string(),
+        }
+    }
+
     // **There is no `Loud::parse`, and its absence is the fix.** A fragment
     // that does not parse raises the oracle's own 27.901 at rc 229, through
     // `impl From<&ParseError> for Raised` (`error.rs`), which `run_fragment`

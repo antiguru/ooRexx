@@ -247,6 +247,82 @@ pub(crate) enum Op {
     /// scan falling past its last `WHEN`, and an absorbed `WHEN CASE`'s
     /// escape landing on the marker ([`crate::run::SelectEscape::Otherwise`]).
     EnterOtherwise { select: u32 },
+    /// Loads constant `konst` of [`Chunk::consts`] into register `dst`.
+    ///
+    /// **The phase's first native expression op**, and the whole of what makes
+    /// it native is that `eval.rs` is not entered: the literal's bytes come
+    /// from the chunk's own constant table and `Interp::literal` turns them
+    /// into the value, which is the same function `eval_node`'s own `Literal`
+    /// arm calls.
+    ///
+    /// **It emits nothing, and [`Op::TraceLiteral`] is why that is safe.**
+    /// `eval.rs` emits a literal's `>L>` line as a side effect of evaluating
+    /// it, so an op that only loads a value silently drops that line -- and
+    /// every line after it still matches, which is what let the mechanics
+    /// spike ship the defect. The emission is a separate op for exactly the
+    /// reason [`Op::TraceKeyword`] is one: an op that both computed and
+    /// emitted could not be ordered against its neighbours, and the ordering
+    /// is what a stream buys.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, whose clause owns the
+    /// value indent the line after this one traces at.
+    ///
+    /// **`ExprKind::Constant` does not compile to this**, and the reason is
+    /// where its bytes live rather than what it is: a constant symbol's value
+    /// is its own upcased spelling, which is in the symbol table, and
+    /// `compile` deliberately takes nothing but the body, the plan and the
+    /// trace setting -- `Interp::chunk_for`'s own doc comment turns that into
+    /// the cache key's completeness. A `Constant` therefore reaches
+    /// [`Op::EvalExpr`], which traces it identically because it is the same
+    /// `eval.rs` call.
+    Const { dst: u16, konst: u32 },
+    /// Echoes the `>L>` line of the literal in register `src`.
+    ///
+    /// **A separate op from the [`Op::Const`] that loaded it**, which is that
+    /// op's own doc comment. Emitted unconditionally rather than under
+    /// [`ChunkTrace`]'s decision the way [`Op::TraceClause`] is, for the
+    /// reason [`Op::TraceKeyword`] gives: the gate this line answers to is
+    /// `trace_mode().intermediates`, which [`ChunkTrace`] does not carry, and
+    /// widening it would put a second emission decision under a staleness rule
+    /// of its own. What the op form buys here is that the line exists at all,
+    /// not its elision.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, and immediately behind
+    /// the `Const` whose register it reads: `eval.rs` emits this line
+    /// post-order, with the value in hand, so a line emitted anywhere else
+    /// would print in the wrong place relative to the value lines around it.
+    TraceLiteral { src: u16 },
+    /// Writes register `src` through the target of the `Assignment` at
+    /// `index`, and traces the write.
+    ///
+    /// `Interp::assign_evaluated` is the whole of what `step`'s own
+    /// `Assignment` arm does once its value is computed, entered from here and
+    /// from there -- so the `>>>` result line, the `>C>` resolved-name line a
+    /// compound target announces, the `>=>` write line, and the stem and
+    /// compound-tail dispatch itself (`Interp::assign_expr_target`) are one
+    /// implementation rather than a second one beside it.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, whose clause is this
+    /// assignment's own: the indent every line above traces at and the
+    /// boundary the write precedes both belong to it.
+    Store { index: u32, src: u16 },
+    /// Prints the `SAY` at `index` from register `src`, or a blank line when
+    /// it has no expression at all.
+    ///
+    /// `Interp::say_evaluated` is the whole of what `step`'s own `Say` arm
+    /// does once its expression is computed, entered from here and from there.
+    /// The bare form is a blank line **and** a `>>>` line for the null string,
+    /// not a skipped clause, which is why `src` is an `Option` rather than a
+    /// register holding an empty value: the two are the same output and only
+    /// one of them is what the instruction says.
+    ///
+    /// `index` is read only by a debug assertion that the op still describes
+    /// the instruction it was emitted for -- the line and the indent this
+    /// clause prints at come from `Interp::clause_state`, which the enclosing
+    /// [`Op::Clause`] region's own clause unit set.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, for that reason.
+    Say { index: u32, src: Option<u16> },
     /// Continues at op `target`.
     Jump { target: u32 },
     /// Continues at op `target` unless register `reg` holds the logical value
@@ -351,6 +427,23 @@ pub(crate) struct Chunk {
     /// `Interp::run_chunk` reserves this many registers before running a
     /// chunk and truncates them away on the way out.
     registers: u16,
+    /// The literal values [`Op::Const`] loads, **one entry per distinct
+    /// literal** rather than one per occurrence.
+    ///
+    /// **The interning is measured rather than tidy.** An entry is a heap
+    /// allocation, so a table keyed by occurrence costs one allocation per
+    /// literal written -- which on a straight-line body is one per clause,
+    /// paid once at compile time. The mechanics spike measured that artifact
+    /// swamping the difference it existed to measure, and interning is what
+    /// removes it.
+    ///
+    /// **Interning is invisible to a running program**, which is the property
+    /// that makes it safe: `Op::Const` reads the bytes and builds a fresh
+    /// value from them through `Interp::literal` every time it runs, so two
+    /// occurrences of one literal share a table entry and share no value.
+    /// `assignment-and-say`'s "one literal written twice traces twice" row is
+    /// that stated as output.
+    consts: Vec<Box<[u8]>>,
 }
 
 impl Chunk {
@@ -372,6 +465,12 @@ impl Chunk {
     /// The setting this chunk's trace ops were emitted for.
     fn trace(&self) -> ChunkTrace {
         self.trace
+    }
+
+    /// The bytes of constant `at`, or `None` when the index is outside the
+    /// table this chunk was compiled with.
+    fn konst(&self, at: u32) -> Option<&[u8]> {
+        self.consts.get(at as usize).map(|bytes| &bytes[..])
     }
 
     /// Whether `reg` is inside the region `run_chunk` reserves for this

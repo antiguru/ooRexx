@@ -71,6 +71,21 @@ pub(crate) fn render(chunk: &Chunk) -> String {
                     render_register(*case)
                 ));
             }
+            Op::Const { dst, konst } => {
+                out.push_str(&format!("{index}: Const dst={dst} konst={konst}\n"));
+            }
+            Op::TraceLiteral { src } => {
+                out.push_str(&format!("{index}: TraceLiteral src={src}\n"));
+            }
+            Op::Store { index: at, src } => {
+                out.push_str(&format!("{index}: Store index={at} src={src}\n"));
+            }
+            Op::Say { index: at, src } => {
+                out.push_str(&format!(
+                    "{index}: Say index={at} src={}\n",
+                    render_register(*src)
+                ));
+            }
             Op::EndBranch => {
                 out.push_str(&format!("{index}: EndBranch\n"));
             }

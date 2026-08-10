@@ -188,10 +188,11 @@ impl Interp {
             // `Constant`'s own shape is reasoned from `Literal`'s measured
             // one, not independently probed (this crate's own report says
             // so) -- both are `>L>` with no tag.
-            ExprKind::Literal(_) | ExprKind::Constant(_) => {
-                let text = self.to_text(value).to_vec();
-                self.trace_literal(indent, &text);
-            }
+            // `echo_literal` rather than an open-coded render plus
+            // `trace_literal`, because the compiled stream's own
+            // `Op::TraceLiteral` emits the identical line from a register and
+            // the two must not be able to disagree about it.
+            ExprKind::Literal(_) | ExprKind::Constant(_) => self.echo_literal(value),
             // A bare stem read (`ExprKind::Stem`) no longer shares its
             // *read* with a simple variable's (`eval_node`'s own arms below
             // split them, branch review F4), but it traces identically:
