@@ -395,7 +395,8 @@ pub struct Outcome {
 /// the disagreement is the definition working rather than a defect.** It counts
 /// `eval` recursion, and the compiled stream produces some values without
 /// recursing at all: `crate::ir::Op::Const` builds a literal's value from the
-/// chunk's own constant table and never enters `eval`. So `say 'x'` reports
+/// chunk's own constant table and `crate::ir::Op::Load` reads a bare symbol's
+/// out of a frame slot, neither of them entering `eval`. So `say 'x'` reports
 /// `max_depth` 1 on the tree-walker and 0 on the compiled stream -- one level of
 /// `eval` against none -- and 0 is the honest answer for a run that recursed
 /// nowhere. **Nothing asserts it either way**: `tests/ir_dual.rs` compares
@@ -2160,16 +2161,35 @@ impl Interp {
     // `fragment_plan` and `slot_of` live in `plan.rs` (Task 6), beside
     // `Plan` itself.
 
-    /// Reads a variable, by the slot the plan already resolved its id to.
-    ///
-    /// Falls back to `slot_of` when the plan never saw the id, which the
-    /// spike's non-exhaustive `Plan::build` can produce and which Task 6's
-    /// exhaustive pass should not. The fallback is not dead weight even then:
-    /// it is the same path a name bound at run time takes.
+    /// Reads a variable, resolving its slot here.
     fn read(&mut self, code: &Code<'_>, id: SymbolId) -> (ObjRef, Novalue) {
-        let slot = match code.slots.get(&id) {
-            Some(slot) => *slot,
-            None => self.slot_of(code.symbols.name(id).as_bytes()),
+        self.read_at(code, id, None)
+    }
+
+    /// Reads a variable, by the slot the plan already resolved its id to, or
+    /// by `at` when a compiler resolved the same thing earlier.
+    ///
+    /// Falls back to `slot_of` when the plan never saw the id, which a
+    /// non-exhaustive `Plan::build` can produce and which the exhaustive pass
+    /// should not. The fallback is not dead weight even then: it is the same
+    /// path a name bound at run time takes.
+    ///
+    /// **`at` is that same resolution made at compile time**, from the `Plan`
+    /// whose `by_symbol` map `Code::slots` is a view of, so the two cannot be
+    /// different slots for one activation -- `Interp::run_ops` asserts that in
+    /// debug at the op that carries one.
+    pub(crate) fn read_at(
+        &mut self,
+        code: &Code<'_>,
+        id: SymbolId,
+        at: Option<usize>,
+    ) -> (ObjRef, Novalue) {
+        let slot = match at {
+            Some(slot) => slot,
+            None => match code.slots.get(&id) {
+                Some(slot) => *slot,
+                None => self.slot_of(code.symbols.name(id).as_bytes()),
+            },
         };
         let frame = self.activation().frame;
         match self.roots.slot(frame, slot) {

@@ -176,7 +176,22 @@ impl Interp {
     /// D15a's tombstone rule (item 1 above) for a slot this function
     /// touches but has no business changing the meaning of.
     pub(crate) fn read_stem(&mut self, name: &[u8]) -> ObjRef {
-        let slot = self.slot_of(name);
+        self.read_stem_at(name, None)
+    }
+
+    /// [`Interp::read_stem`] with the slot already in hand, which is what
+    /// `crate::ir::Op::Load` carries and what a read reached from `eval.rs`
+    /// never has.
+    ///
+    /// `at` is the same slot `slot_of` answers, resolved at compile time from
+    /// the `Plan` this activation runs with: `Plan::bind` puts a stem's own
+    /// `SymbolId` and its name on one slot together, so the id-keyed answer a
+    /// compiler took and the name-keyed one below cannot be two slots.
+    pub(crate) fn read_stem_at(&mut self, name: &[u8], at: Option<usize>) -> ObjRef {
+        let slot = match at {
+            Some(slot) => slot,
+            None => self.slot_of(name),
+        };
         let frame = self.activation().frame;
         if let Some(value) = self.roots.slot(frame, slot) {
             return value;

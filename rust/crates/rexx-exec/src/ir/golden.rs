@@ -15,7 +15,7 @@
 //! gives `render` a non-test caller, so an `allow` would be permanent rather
 //! than a placeholder for one.
 
-use super::{Chunk, Op};
+use super::{Chunk, Op, ReadSlot};
 
 /// Renders `chunk` as one line per op: `"{index}: {OpName}[ field=value]*"`.
 ///
@@ -77,6 +77,26 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::TraceLiteral { src } => {
                 out.push_str(&format!("{index}: TraceLiteral src={src}\n"));
             }
+            // **The `symbol` field is deliberately not rendered**, and it is the
+            // only op field this function leaves out. A `SymbolId`'s index is
+            // into the one symbol table `scan` pre-seeds with every keyword
+            // spelling before it reads a byte of source, so the number a
+            // program's own first symbol gets says nothing about that program
+            // and would move under any change to those tables. What identifies
+            // the symbol here without that is `at`, its own frame slot, which
+            // the plan assigns from the program alone;
+            // `a_compiled_read_names_the_symbol_its_expression_does` is what
+            // pins the id itself, against the parsed expression rather than
+            // against a number.
+            Op::Load { read, at, dst, .. } => {
+                out.push_str(&format!(
+                    "{index}: Load read={read:?} at={} dst={dst}\n",
+                    render_slot(*at)
+                ));
+            }
+            Op::TraceRead { read, src, .. } => {
+                out.push_str(&format!("{index}: TraceRead read={read:?} src={src}\n"));
+            }
             Op::Store { index: at, src } => {
                 out.push_str(&format!("{index}: Store index={at} src={src}\n"));
             }
@@ -113,6 +133,17 @@ pub(crate) fn render(chunk: &Chunk) -> String {
 fn render_register(register: Option<u16>) -> String {
     match register {
         Some(register) => register.to_string(),
+        None => "-".to_string(),
+    }
+}
+
+/// A compiled read's own slot, or `-` for a read that resolves its own.
+///
+/// The same shape [`render_register`] uses, so an absent operand reads the
+/// same way whichever field it is.
+fn render_slot(at: ReadSlot) -> String {
+    match at.resolved() {
+        Some(at) => at.to_string(),
         None => "-".to_string(),
     }
 }

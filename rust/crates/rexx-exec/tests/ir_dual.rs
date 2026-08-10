@@ -39,6 +39,16 @@
 //! the purpose-written case file for those instructions held out of the
 //! directory entirely.
 //!
+//! A bare-symbol read is the second such op and was falsified the same way,
+//! with a result worth writing down because it is not the same one. Making
+//! `crate::ir::Op::TraceRead`'s emission a no-op reddens
+//! [`both_engines_agree_on_every_case_file`], and it stays red with
+//! `ir_dual_cases/variable-reads` held out -- the `>V>` line a simple variable
+//! owes is already exercised by rows written for something else. What that file
+//! is the only catcher for is narrower: dropping the echo for a **bare stem**
+//! alone leaves every dual-engine test in the workspace green without it, and
+//! reddens this one with it.
+//!
 //! **The oracle differential cannot see the same defect**, because
 //! `tests/support/mod.rs` normalises the region such a line sits in. This
 //! comparison diffs raw stderr between the arms, so it can. Neither harness

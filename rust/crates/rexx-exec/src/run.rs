@@ -6610,9 +6610,10 @@ impl Interp {
             // An `Assignment`'s value and a `SAY`'s expression, slot `0`:
             // whatever the expression came to, unvalidated and untagged. Both
             // reach this arm only for an expression `compile` did not emit a
-            // native op for -- a literal is `crate::ir::Op::Const` instead --
-            // and both are trace-identical to the tree-walker's own arm here
-            // because this is the same `eval` call it makes.
+            // native op for -- a literal is `crate::ir::Op::Const` and a bare
+            // symbol is `crate::ir::Op::Load` instead -- and both are
+            // trace-identical to the tree-walker's own arm here because this is
+            // the same `eval` call it makes.
             (InstructionKind::Assignment { value, .. }, 0) => self.eval(code, value),
             (
                 InstructionKind::Say {

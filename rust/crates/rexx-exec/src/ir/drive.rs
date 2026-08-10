@@ -508,6 +508,8 @@ impl Interp {
                 Op::EvalExpr { .. } => return Err(Loud::op_not_driven("EvalExpr").into()),
                 Op::Const { .. } => return Err(Loud::op_not_driven("Const").into()),
                 Op::TraceLiteral { .. } => return Err(Loud::op_not_driven("TraceLiteral").into()),
+                Op::Load { .. } => return Err(Loud::op_not_driven("Load").into()),
+                Op::TraceRead { .. } => return Err(Loud::op_not_driven("TraceRead").into()),
                 Op::Store { .. } => return Err(Loud::op_not_driven("Store").into()),
                 Op::Say { .. } => return Err(Loud::op_not_driven("Say").into()),
                 Op::JumpUnless { .. } => return Err(Loud::op_not_driven("JumpUnless").into()),
@@ -923,6 +925,49 @@ impl Interp {
                     );
                     let value = self.roots.temp_at(registers, *src as usize);
                     self.echo_literal(value);
+                }
+                // **The second native expression op**: one bare symbol's own
+                // value, through the same `Interp::read_symbol` that
+                // `eval_node`'s `Variable`/`Stem`/`Compound` arms enter, with
+                // `eval.rs` itself not entered at all. It emits nothing --
+                // `Op::TraceRead` below is what reading a symbol owes.
+                Op::Load {
+                    symbol,
+                    read,
+                    at,
+                    dst,
+                } => {
+                    debug_assert!(
+                        chunk.holds_register(*dst),
+                        "op writes register {dst} outside the region the chunk reserved"
+                    );
+                    let at = at.resolved();
+                    // **The tripwire for a chunk run against a plan that is
+                    // not the one it was compiled from.** `at` was read out of
+                    // that plan's `by_symbol`, which is the map `code.slots`
+                    // is a view of, so a mismatch here is two different plans
+                    // for one body -- and it would read somebody else's slot
+                    // rather than fail, which is a wrong value found by
+                    // chasing it.
+                    debug_assert!(
+                        at.is_none() || code.slots.get(symbol).copied() == at,
+                        "a compiled read names a slot this body's plan does not give its symbol"
+                    );
+                    let value = self.read_symbol(code, *read, *symbol, at)?;
+                    self.roots.set_temp(registers, *dst as usize, value);
+                }
+                // The `>V>` line one read owes, and the `>C>` line in front of
+                // it when the read is a compound. **Its own op**, because the
+                // load emits nothing and `eval.rs` emits these as a side
+                // effect of evaluating -- so a promoted clause with no such op
+                // drops them while every line after them still matches.
+                Op::TraceRead { symbol, read, src } => {
+                    debug_assert!(
+                        chunk.holds_register(*src),
+                        "op reads register {src} outside the region the chunk reserved"
+                    );
+                    let value = self.roots.temp_at(registers, *src as usize);
+                    self.echo_symbol_read(code, *read, *symbol, value);
                 }
                 // The write, through `Interp::assign_evaluated` -- the whole of
                 // what `step`'s own `Assignment` arm does past the evaluation,

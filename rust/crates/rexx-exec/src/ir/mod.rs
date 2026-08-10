@@ -26,7 +26,9 @@
 //! (`Interp::engine`, from the `Invocation`).
 
 use rexx_core::FrameId;
+use rexx_parse::SymbolId;
 
+use crate::eval::SymbolRead;
 use crate::run::HeaderRole;
 use crate::trace::ChunkTrace;
 
@@ -320,6 +322,61 @@ pub(crate) enum Op {
     /// **It runs exactly where [`Op::Const`] does, so it has no performance
     /// evidence either** -- see that op's own note for the measurement.
     TraceLiteral { src: u16 },
+    /// Loads the value of the bare symbol `symbol` into register `dst`, by the
+    /// read [`SymbolRead`] names.
+    ///
+    /// **Native in the sense [`Op::Const`] is: `eval.rs` is not entered.**
+    /// `Interp::read_symbol` is the whole of what `eval_node`'s own
+    /// `Variable`/`Stem`/`Compound` arms do, entered from here and from there,
+    /// so the derived name an unset read answers, the `Body::Stem` a bare stem
+    /// miss allocates, the tail key a compound resolves and the `NOVALUE`
+    /// condition two of the three raise are one implementation rather than a
+    /// second one beside it. What is left out is `eval`'s own wrapper: the
+    /// depth bookkeeping D19 needs, which a bare symbol cannot recurse
+    /// through, and the post-order trace hook, which is the op below.
+    ///
+    /// **Only the whole expression, never a symbol inside one.** `x + 1`
+    /// compiles to [`Op::EvalExpr`] entire; nothing here descends into an
+    /// operator's operands.
+    ///
+    /// `at` is the slot the plan already resolved this symbol to, which is the
+    /// one thing this op knows that the tree-walker's own read has to work out
+    /// -- see [`ReadSlot`] for what carries it and why a compound never has
+    /// one.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, whose clause owns the
+    /// value indent the line after this one traces at, and the failure site a
+    /// `NOVALUE` raised here is reported against.
+    Load {
+        symbol: SymbolId,
+        read: SymbolRead,
+        at: ReadSlot,
+        dst: u16,
+    },
+    /// Echoes the `>V>` line of the read in register `src`, and the `>C>` line
+    /// a compound read owes in front of it.
+    ///
+    /// **A separate op from the [`Op::Load`] that read it**, for the reason
+    /// [`Op::TraceLiteral`] is separate from [`Op::Const`]: the load emits
+    /// nothing, `eval.rs` emits these lines as a side effect of *evaluating*
+    /// the expression, and a promoted clause with no such op drops them while
+    /// every line after them still matches. Emitted unconditionally rather
+    /// than under [`ChunkTrace`]'s decision, because the gate these lines
+    /// answer to is `trace_mode().intermediates`, which [`ChunkTrace`] does
+    /// not carry.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, and immediately behind
+    /// the `Load` whose register it reads and whose symbol and read kind it
+    /// repeats: `eval.rs` emits these post-order, with the value in hand.
+    /// `compile::assert_read_echoes_follow_their_load` is what makes that an
+    /// assertion rather than a sentence, and it checks all three -- an echo
+    /// behind the wrong load lands in the right place with the wrong value or
+    /// the wrong tag in it.
+    TraceRead {
+        symbol: SymbolId,
+        read: SymbolRead,
+        src: u16,
+    },
     /// Writes register `src` through the target of the `Assignment` at
     /// `index`, and traces the write.
     ///
@@ -392,6 +449,47 @@ pub(crate) enum BodyEngine<'a> {
         chunk: &'a Chunk,
         registers: FrameId,
     },
+}
+
+/// The frame slot [`Op::Load`] reads, resolved when this chunk was compiled,
+/// or the absence of one.
+///
+/// **A `u32` with one reserved value rather than an `Option<u32>`, and it is
+/// the op array that decides it.** An `Option<u32>` is eight bytes where this
+/// is four, which is the difference between an [`Op`] that stays the width
+/// every other variant already fits in and one that grows by a quarter -- paid
+/// by every op in every chunk, for a field two of them carry.
+///
+/// **A compound never has one.** Its read goes through the *stem's* slot and a
+/// tail key resolved at the read site, so the symbol's own slot is not what it
+/// reads; [`ReadSlot::UNRESOLVED`] is the honest answer and the run-time path
+/// is what resolves it, exactly as it does for the tree-walker.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ReadSlot(u32);
+
+impl ReadSlot {
+    /// No slot resolved: the read works its own out, which is what every read
+    /// did before there was a compiler to do it earlier.
+    pub(crate) const UNRESOLVED: ReadSlot = ReadSlot(u32::MAX);
+
+    /// The slot `at`, or [`ReadSlot::UNRESOLVED`] when it does not fit this
+    /// width.
+    ///
+    /// **Not a [`ChunkTooLarge`], which would refuse the whole body for
+    /// something that is only an optimisation.** A slot index past `u32` is a
+    /// frame with four billion names in it; the read still has a correct
+    /// answer, and it is the one the tree-walker computes.
+    fn of(at: usize) -> ReadSlot {
+        match u32::try_from(at) {
+            Ok(at) if at != ReadSlot::UNRESOLVED.0 => ReadSlot(at),
+            _ => ReadSlot::UNRESOLVED,
+        }
+    }
+
+    /// The slot, or `None` when this op carries none.
+    fn resolved(self) -> Option<usize> {
+        (self != ReadSlot::UNRESOLVED).then_some(self.0 as usize)
+    }
 }
 
 /// The one way [`compile`] can fail: a body that does not fit the index

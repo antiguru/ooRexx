@@ -66,7 +66,7 @@ use crate::value::{exact_small_int, within_digits};
 use crate::{Code, Failure, Interp, Loud, StackSpan};
 use rexx_core::{Decoded, NotNumeric, ObjRef};
 use rexx_num::{CompareOp, DivOp, Number, compare_decoded};
-use rexx_parse::{CallTarget, Expr, ExprKind, Operator, PrefixOp, compound_parts};
+use rexx_parse::{CallTarget, Expr, ExprKind, Operator, PrefixOp, SymbolId, compound_parts};
 
 /// D19's evaluation-depth limit: `eval`'s own recursion, one level per
 /// left-deep term, refuses anything past this depth with 11.1 ("Insufficient
@@ -102,6 +102,32 @@ use rexx_parse::{CallTarget, Expr, ExprKind, Operator, PrefixOp, compound_parts}
 /// this counter never in a position to see it) -- that path is closed by
 /// `rexx-parse`'s iterative `Drop`, not by this counter.
 const MAX_EVAL_DEPTH: usize = 100_000;
+
+/// Which of the three bare-symbol reads an expression is, carried where the
+/// `ExprKind` itself is not.
+///
+/// [`Interp::read_symbol`] and [`Interp::echo_symbol_read`] both dispatch on
+/// this, and `crate::ir::Op::Load` carries one because a compiled op holds no
+/// borrow of the node it was emitted for -- the same reason
+/// `crate::ir::Op::LoopHeaderValue` carries a `HeaderRole` rather than the
+/// keyword's own node.
+///
+/// **The three kinds it does not have are the three that are not a variable
+/// read.** `ExprKind::Constant`'s value is its own upcased spelling rather
+/// than anything stored, `ExprKind::DotVariable` traces `>E>` and
+/// `ExprKind::VariableReference` traces `>O>`; none reaches either function.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum SymbolRead {
+    /// `ExprKind::Variable`: one slot, and the derived name when it is unset.
+    Simple,
+    /// `ExprKind::Stem`: one slot too, but a miss allocates a real
+    /// `Body::Stem` there rather than deriving a name (`Interp::read_stem`).
+    Stem,
+    /// `ExprKind::Compound`: a stem slot and a tail key resolved at the read
+    /// site, neither of which is the symbol's own slot -- which is why a
+    /// compound is the kind a compiled read has no slot for.
+    Compound,
+}
 
 impl Interp {
     /// Evaluates one expression node, and keeps the depth bookkeeping D19
@@ -193,41 +219,16 @@ impl Interp {
             // `Op::TraceLiteral` emits the identical line from a register and
             // the two must not be able to disagree about it.
             ExprKind::Literal(_) | ExprKind::Constant(_) => self.echo_literal(value),
-            // A bare stem read (`ExprKind::Stem`) no longer shares its
-            // *read* with a simple variable's (`eval_node`'s own arms below
-            // split them, branch review F4), but it traces identically:
-            // both arms produce a tag and an already-computed value, and
-            // `>V>` shows the same two things regardless of which read
-            // produced the value -- measured only for a simple variable; a
-            // bare stem's own `>V>` is reasoned from that, not separately
-            // probed.
-            ExprKind::Variable(id) | ExprKind::Stem(id) => {
-                let tag = code.symbols.name(*id).as_bytes().to_vec();
-                let text = self.to_text(value).to_vec();
-                self.trace_variable(indent, &tag, &text);
-            }
-            // `>C>` then `>V>` -- measured (this task's report,
-            // `RexxActivation.cpp:4791`-`4802` read directly): a compound
-            // read always announces the fully-resolved name it used before
-            // showing what is stored there, whether or not the tail
-            // actually resolves. `tag` is the compound's own *unresolved*
-            // source spelling (`code.symbols.name(id)`, e.g. `A.I`);
-            // `resolved` is `stem_name` (the read site's own) concatenated
-            // with `tail_key`'s output, the read-site-derived name --
-            // matching `stem_get`'s own answer exactly when the read site
-            // and the stem object's own name agree, and diverging from it
-            // only through the aliasing this task's permitted files
-            // (`eval.rs`/`run.rs`/`lib.rs`/`trace.rs`) cannot reach into
-            // `stem.rs` to resolve the object's own name for -- a known,
-            // narrow gap, not silently assumed correct.
+            // The three bare-symbol reads, all through the one function
+            // `crate::ir::Op::TraceRead` enters from a register -- for the
+            // reason `echo_literal` above is one function: a compiled read
+            // emits nothing of its own, so the line has to come from an op,
+            // and the two emissions must not be able to disagree.
+            // `echo_symbol_read`'s own doc comment has what each kind owes.
+            ExprKind::Variable(id) => self.echo_symbol_read(code, SymbolRead::Simple, *id, value),
+            ExprKind::Stem(id) => self.echo_symbol_read(code, SymbolRead::Stem, *id, value),
             ExprKind::Compound(id) => {
-                let tag = code.symbols.name(*id).as_bytes().to_vec();
-                let (stem_name, _tails) = compound_parts(code.symbols.name(*id));
-                let mut resolved = stem_name.as_bytes().to_vec();
-                resolved.extend_from_slice(&self.tail_key(code, *id));
-                self.trace_compound_name(indent, &tag, &resolved);
-                let text = self.to_text(value).to_vec();
-                self.trace_variable(indent, &tag, &text);
+                self.echo_symbol_read(code, SymbolRead::Compound, *id, value);
             }
             // `.NIL`/`.TRUE`/`.FALSE` -- `>E>`, measured (this task's
             // report): **not** in the design spec's own "measured reachable
@@ -311,51 +312,135 @@ impl Interp {
         }
     }
 
+    /// One bare symbol's read: the whole of what `eval_node`'s own
+    /// `Variable`/`Stem`/`Compound` arms do, entered from there and from
+    /// `crate::ir::Op::Load`.
+    ///
+    /// **The three kinds are three different operations, which is why this
+    /// dispatches rather than resolving a slot once and reading it.**
+    ///
+    /// * A simple variable's miss derives its own upcased spelling and nothing
+    ///   more can ever observe the difference, so a `Body::Text` is the whole
+    ///   answer.
+    /// * A bare stem's miss must come back as a real, shared `Body::Stem`
+    ///   (`Interp::read_stem`), because the oracle's `createStemVariable` fires
+    ///   on any miss, reads included, and a read's result can be aliased (`b. =
+    ///   a.` with `a.` never touched, then `a.1 = 5`, then `say b.1` -> `5`).
+    ///   Rendering an unset stem alone cannot tell the two models apart -- both
+    ///   give the derived name -- which is exactly how this was missed the first
+    ///   time (branch review F4); aliasing is where the object's identity
+    ///   becomes observable.
+    /// * A compound raises `NOVALUE` on a miss exactly as a simple variable
+    ///   does, measured: `signal on novalue` with `say zunset.1` traps, with
+    ///   `SIGL` set to the reading clause. A **bare stem** does not -- `say
+    ///   zunsetstem.` under the same trap prints the derived name and carries
+    ///   on, rc unchanged -- which is why the arm below it has no
+    ///   `novalue_check` and the other two do.
+    ///
+    /// **`at` is the slot a compiler already resolved, and `None` is the
+    /// resolution every caller made before there was one.** `crate::ir::compile`
+    /// reads it out of the same `Plan` this activation runs with -- the map
+    /// `Code::slots` is a view of -- so the two are one answer resolved at two
+    /// times rather than two answers. A compound never carries one: its read
+    /// goes through the *stem's* slot and a tail key resolved at the read site,
+    /// neither of which is this symbol's own slot.
+    pub(crate) fn read_symbol(
+        &mut self,
+        code: &Code<'_>,
+        read: SymbolRead,
+        id: SymbolId,
+        at: Option<usize>,
+    ) -> Result<ObjRef, Failure> {
+        match read {
+            SymbolRead::Simple => {
+                let (value, novalue) = self.read_at(code, id, at);
+                self.novalue_check(novalue)?;
+                Ok(value)
+            }
+            SymbolRead::Stem => Ok(self.read_stem_at(code.symbols.name(id).as_bytes(), at)),
+            // `id` names the *whole* compound (its interned spelling is the
+            // full dotted text); `compound_parts` decomposes it into the
+            // stem's own name and the tail pieces `tail_key` (`stem.rs`)
+            // resolves into the one key `stem_get` looks up.
+            SymbolRead::Compound => {
+                debug_assert!(
+                    at.is_none(),
+                    "a compound read was handed a slot, and the slot it reads is the stem's"
+                );
+                let (stem_name, _tails) = compound_parts(code.symbols.name(id));
+                let key = self.tail_key(code, id);
+                let (value, novalue) = self.stem_get(stem_name.as_bytes(), &key);
+                self.novalue_check(novalue)?;
+                Ok(value)
+            }
+        }
+    }
+
+    /// The `>V>` line one bare-symbol read owes, and the `>C>` line a compound
+    /// owes in front of it.
+    ///
+    /// **The one implementation both engines enter**, for the reason
+    /// [`Interp::echo_literal`] is one: `eval.rs` emits these as a side effect
+    /// of evaluating the expression, and `crate::ir::Op::Load` evaluates
+    /// nothing -- so `crate::ir::Op::TraceRead` emits them from a register
+    /// instead, and the two must not be able to disagree about what they say.
+    ///
+    /// `>V>` is tagged with the symbol's own name and shows the value's text.
+    /// Measured for a simple variable; a bare stem's own `>V>` is reasoned from
+    /// that rather than separately probed, since both produce a tag and an
+    /// already-computed value and the line shows the same two things regardless
+    /// of which read produced it.
+    ///
+    /// `>C>` then `>V>` -- measured (`RexxActivation.cpp:4791`-`4802` read
+    /// directly): a compound read always announces the fully-resolved name it
+    /// used before showing what is stored there, whether or not the tail
+    /// actually resolves. The tag is the compound's own *unresolved* source
+    /// spelling (e.g. `A.I`); the resolved name is `compound_parts`' stem name
+    /// -- the read site's own -- concatenated with `tail_key`'s output, which
+    /// matches `stem_get`'s own answer exactly when the read site and the stem
+    /// object's own name agree, and diverges from it only through aliasing: a
+    /// known, narrow gap, not silently assumed correct.
+    ///
+    /// The gate is asked before anything is rendered, for the reason
+    /// `Interp::echo_literal` asks it there: rendering allocates a copy of a
+    /// value of any size, and an untraced run must not pay for it.
+    pub(crate) fn echo_symbol_read(
+        &mut self,
+        code: &Code<'_>,
+        read: SymbolRead,
+        id: SymbolId,
+        value: ObjRef,
+    ) {
+        if !self.tracing_intermediates() {
+            return;
+        }
+        let indent = self.clause_state.current_value_indent;
+        let tag = code.symbols.name(id).as_bytes().to_vec();
+        if read == SymbolRead::Compound {
+            let (stem_name, _tails) = compound_parts(code.symbols.name(id));
+            let mut resolved = stem_name.as_bytes().to_vec();
+            resolved.extend_from_slice(&self.tail_key(code, id));
+            self.trace_compound_name(indent, &tag, &resolved);
+        }
+        let text = self.to_text(value).to_vec();
+        self.trace_variable(indent, &tag, &text);
+    }
+
     fn eval_node(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Failure> {
         match &expr.kind {
             ExprKind::Literal(bytes) => Ok(self.literal(bytes)),
             // A constant's value is its own upcased spelling, which is
             // observable rather than incidental: `say 1e5` prints `1E5`.
             ExprKind::Constant(id) => Ok(self.literal(code.symbols.name(*id).as_bytes())),
-            ExprKind::Variable(id) => {
-                let (value, novalue) = self.read(code, *id);
-                self.novalue_check(novalue)?;
-                Ok(value)
-            }
-            // A bare stem read is NOT the same operation a simple variable's
-            // is, despite once looking that way from rendering-only
-            // evidence (branch review F4). An unset simple variable derives
-            // its own name and nothing more can ever observe the
-            // difference; an unset stem-named slot must come back as a real,
-            // shared `Body::Stem` object (`read_stem`, `stem.rs`), because
-            // the oracle's `createStemVariable` fires on any miss, reads
-            // included, and a read's result can be aliased (`b. = a.` with
-            // `a.` never touched, then `a.1 = 5`, then `say b.1` -> `5`).
-            // Rendering an unset stem alone cannot tell the two models
-            // apart (both give the derived name), which is exactly how this
-            // was missed the first time; aliasing is where the object's
-            // identity becomes observable.
-            ExprKind::Stem(id) => Ok(self.read_stem(code.symbols.name(*id).as_bytes())),
-
-            // `id` names the *whole* compound (its interned spelling is the
-            // full dotted text); `compound_parts` decomposes it into the
-            // stem's own name and the tail pieces `tail_key` (`stem.rs`,
-            // Task 5) resolves into the one key `stem_get` looks up.
-            ExprKind::Compound(id) => {
-                let (stem_name, _tails) = compound_parts(code.symbols.name(*id));
-                let key = self.tail_key(code, *id);
-                // A compound with no value raises `NOVALUE` exactly as a
-                // simple variable does, measured: `signal on novalue` with
-                // `say zunset.1` traps, with `SIGL` set to the reading
-                // clause. A **bare stem** does not -- `say zunsetstem.`
-                // under the same trap prints the derived name and carries
-                // on, rc unchanged -- which is why `ExprKind::Stem` above
-                // has no equivalent line and why this could not be done by
-                // routing all three reads through one place.
-                let (value, novalue) = self.stem_get(stem_name.as_bytes(), &key);
-                self.novalue_check(novalue)?;
-                Ok(value)
-            }
+            // The three bare-symbol reads, each through the one function
+            // `crate::ir::Op::Load` enters with the slot already resolved.
+            // They are three *different* operations sharing one entry point,
+            // not one operation under three spellings -- `read_symbol`'s own
+            // doc comment has what separates them -- so the dispatch is on a
+            // kind rather than absent.
+            ExprKind::Variable(id) => self.read_symbol(code, SymbolRead::Simple, *id, None),
+            ExprKind::Stem(id) => self.read_symbol(code, SymbolRead::Stem, *id, None),
+            ExprKind::Compound(id) => self.read_symbol(code, SymbolRead::Compound, *id, None),
 
             // The three admissible names (D15, "Expression evaluation"):
             // `.nil`, `.true`, `.false`. Anything else is Phase 5's

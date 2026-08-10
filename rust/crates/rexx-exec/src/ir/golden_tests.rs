@@ -16,7 +16,7 @@
 
 use std::rc::Rc;
 
-use rexx_parse::parse_program;
+use rexx_parse::{ExprKind, InstructionKind, parse_program};
 
 use super::golden::render;
 use super::{Chunk, ChunkTooLarge};
@@ -188,6 +188,146 @@ fn one_literal_written_twice_is_one_interned_constant() {
         chunk.consts,
         vec![Box::from(&b"dup"[..]), Box::from(&b"x"[..])],
         "three literal occurrences of two distinct values are two entries"
+    );
+}
+
+/// **A whole expression that is a bare symbol compiles to a native read**, in
+/// each of the three kinds, with the `>V>` line that reading it owes behind
+/// the load exactly as a literal's `>L>` line sits behind its `Const`.
+///
+/// **`at` is where the compile-time slot resolution shows, and the three kinds
+/// answer differently.** A simple variable and a bare stem each resolve to
+/// their own slot -- `1` here, because the plan assigns slots in source order
+/// and the assignment's target `ZW` is written first. A compound resolves to
+/// none: what its read goes through is the *stem's* slot and a tail key worked
+/// out at the read site, so `ZA.ZI`'s own symbol has no slot to carry and the
+/// run-time path is what finds them.
+#[test]
+fn a_bare_symbol_compiles_to_a_native_read_in_each_of_its_three_kinds() {
+    let simple = compile_for_test(b"zw = zv\n").expect("compiles");
+    assert_eq!(
+        render(&simple),
+        "0: Clause index=0 end=4\n\
+         1: Load read=Simple at=1 dst=0\n\
+         2: TraceRead read=Simple src=0\n\
+         3: Store index=0 src=0\n"
+    );
+    assert_eq!(simple.registers, 1);
+    assert!(
+        simple.consts.is_empty(),
+        "a read interns nothing: its value is in a frame slot, not in the chunk"
+    );
+
+    let stem = compile_for_test(b"zw = zs.\n").expect("compiles");
+    assert_eq!(
+        render(&stem),
+        "0: Clause index=0 end=4\n\
+         1: Load read=Stem at=1 dst=0\n\
+         2: TraceRead read=Stem src=0\n\
+         3: Store index=0 src=0\n"
+    );
+
+    let compound = compile_for_test(b"zw = za.zi\n").expect("compiles");
+    assert_eq!(
+        render(&compound),
+        "0: Clause index=0 end=4\n\
+         1: Load read=Compound at=- dst=0\n\
+         2: TraceRead read=Compound src=0\n\
+         3: Store index=0 src=0\n"
+    );
+}
+
+/// **The symbol a compiled read names is the one its own expression names**,
+/// which the rendered stream cannot say -- `render`'s own comment has why it
+/// prints no symbol index.
+///
+/// Asserted against the parsed expression rather than against a number, so
+/// nothing here moves when the pre-seeded symbol table does. The compound is
+/// the kind that needs it most: its `at` is `-`, so a compiler that loaded the
+/// assignment's *target* instead would render identically.
+#[test]
+fn a_compiled_read_names_the_symbol_its_expression_does() {
+    let program = parse_program(b"zw = za.zi\n".to_vec()).expect("test program parses");
+    let plan = Plan::build(&program.main, &program.symbols);
+    let chunk =
+        super::compile(&program.main, &plan, ChunkTrace::of(TraceMode::NORMAL)).expect("compiles");
+
+    let InstructionKind::Assignment { value, .. } = &program.main.instructions[0].kind else {
+        panic!("the program's one instruction is an assignment");
+    };
+    let ExprKind::Compound(id) = &value.kind else {
+        panic!("its value is a compound");
+    };
+    assert_eq!(
+        program.symbols.name(*id),
+        "ZA.ZI",
+        "the expression names the compound, not the target"
+    );
+
+    let named: Vec<_> = chunk
+        .ops
+        .iter()
+        .filter_map(|op| match op {
+            super::Op::Load { symbol, .. } | super::Op::TraceRead { symbol, .. } => Some(*symbol),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        named,
+        vec![*id, *id],
+        "the load and its echo both name the symbol the expression does"
+    );
+}
+
+/// A `SAY` whose whole expression is a bare symbol reads it natively too, so
+/// the promotion is the expression's rather than the assignment's.
+#[test]
+fn a_say_of_a_bare_symbol_compiles_to_a_native_read() {
+    let chunk = compile_for_test(b"say zv\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=4\n\
+         1: Load read=Simple at=0 dst=0\n\
+         2: TraceRead read=Simple src=0\n\
+         3: Say index=0 src=0\n"
+    );
+}
+
+/// **An expression that merely *contains* a symbol is not a read**, and stays
+/// on [`super::Op::EvalExpr`] entire.
+///
+/// The adjacent success the three cases above need: without it they are
+/// satisfied by a compiler that emits a load for any expression holding a
+/// symbol anywhere, which would evaluate `zv + 1` as `zv` and lose the
+/// arithmetic. Descending into an operator's operands is a later task's shape,
+/// and the two must not be confused because a `Load` for the operand alone
+/// produces a wrong answer that traces almost right.
+#[test]
+fn an_expression_that_only_contains_a_symbol_stays_on_the_general_path() {
+    let chunk = compile_for_test(b"zw = zv + 1\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=3\n\
+         1: EvalExpr index=0 slot=0 dst=0\n\
+         2: Store index=0 src=0\n"
+    );
+
+    // `.NIL` and `>zv` are the two expressions that look like a bare symbol
+    // read and are not one: the first traces `>E>` and the second `>O>`, so a
+    // `Load` for either would emit a `>V>` line the oracle does not print.
+    let dotvar = compile_for_test(b"zw = .nil\n").expect("compiles");
+    assert_eq!(
+        render(&dotvar),
+        "0: Clause index=0 end=3\n\
+         1: EvalExpr index=0 slot=0 dst=0\n\
+         2: Store index=0 src=0\n"
+    );
+    let reference = compile_for_test(b"zw = >zv\n").expect("compiles");
+    assert_eq!(
+        render(&reference),
+        "0: Clause index=0 end=3\n\
+         1: EvalExpr index=0 slot=0 dst=0\n\
+         2: Store index=0 src=0\n"
     );
 }
 

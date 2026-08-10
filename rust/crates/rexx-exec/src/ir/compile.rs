@@ -15,9 +15,10 @@
 
 use std::collections::HashMap;
 
-use rexx_parse::{CodeBody, Expr, ExprKind, Instruction, InstructionKind};
+use rexx_parse::{CodeBody, Expr, ExprKind, Instruction, InstructionKind, SymbolId};
 
-use super::{Chunk, ChunkTooLarge, Op};
+use super::{Chunk, ChunkTooLarge, Op, ReadSlot};
+use crate::eval::SymbolRead;
 use crate::plan::Plan;
 use crate::run::{HeaderPlan, if_targets, loop_header_plan, otherwise_range};
 use crate::trace::ChunkTrace;
@@ -250,12 +251,13 @@ enum PatchKind {
 /// value and then writes or prints it; every other instruction becomes
 /// [`Op::Generic`].
 ///
-/// **`plan` is not read, and the reason is a design decision rather than a
-/// gap.** The one thing a compiled assignment could want from it is the slot
-/// its target resolves to, and `Op::Store` deliberately does not resolve
-/// targets: it goes through `Interp::assign_expr_target`, which is what
+/// **`plan` is read for one thing only: the slot a promoted *read* resolves
+/// to.** A compiled assignment's **target** is deliberately not resolved here
+/// -- `Op::Store` goes through `Interp::assign_expr_target`, which is what
 /// `step`'s own arm calls, so a stem, a compound tail and the `>=>` line stay
-/// one implementation. Resolving the name here would be the second one.
+/// one implementation, and resolving the name here would be the second one. A
+/// read has no such second implementation to fall out of: `Interp::read_at`
+/// takes the slot it would otherwise resolve, from this same map.
 ///
 /// The one error is a machine width, not a language construct (the plan's
 /// Decisions section: "the compiler has one error, and it is a machine
@@ -273,7 +275,7 @@ enum PatchKind {
 /// carry would cache a chunk under a name that does not identify it.
 pub(crate) fn compile(
     body: &CodeBody,
-    _plan: &Plan,
+    plan: &Plan,
     trace: ChunkTrace,
 ) -> Result<Chunk, ChunkTooLarge> {
     #[cfg(test)]
@@ -586,6 +588,7 @@ pub(crate) fn compile(
                 push_value(
                     &mut ops,
                     &mut consts,
+                    plan,
                     value,
                     instruction_index(index)?,
                     0,
@@ -617,6 +620,7 @@ pub(crate) fn compile(
                         push_value(
                             &mut ops,
                             &mut consts,
+                            plan,
                             expression,
                             instruction_index(index)?,
                             0,
@@ -667,6 +671,7 @@ pub(crate) fn compile(
     assert_clause_regions_hold_no_clause_op(&ops);
     assert_trace_ops_open_a_clause_region(&ops);
     assert_literal_echoes_follow_their_load(&ops);
+    assert_read_echoes_follow_their_load(&ops);
     assert_region_ops_name_their_clause(&ops);
 
     Ok(Chunk {
@@ -681,17 +686,25 @@ pub(crate) fn compile(
 /// The ops that leave expression `slot` of instruction `index` in register
 /// `dst`.
 ///
-/// **Two shapes, and the split is what a literal is rather than what is
+/// **Three shapes, and each split is what the expression is rather than what is
 /// convenient.** A literal's value is bytes the node already carries, so it
 /// becomes a native [`Op::Const`] against the interned table plus the `>L>`
-/// line that loading it owes. Everything else -- a variable read, an operator,
-/// a call, a constant symbol -- is evaluated by `eval.rs` through
-/// [`Op::EvalExpr`], which is trace-identical to what the tree-walker does with
-/// the same expression because it is the same call, and stays identical because
-/// nothing this region emits sits between one evaluation and the next.
+/// line that loading it owes. A bare symbol's value is in a frame slot, so it
+/// becomes a native [`Op::Load`] plus the `>V>` line that reading it owes.
+/// Everything else -- an operator, a call, a constant symbol, a `.name`, a
+/// `>name` -- is evaluated by `eval.rs` through [`Op::EvalExpr`], which is
+/// trace-identical to what the tree-walker does with the same expression
+/// because it is the same call, and stays identical because nothing this region
+/// emits sits between one evaluation and the next.
+///
+/// **`expr` is the whole of the instruction's expression at `slot`, and only
+/// the whole of it is looked at.** An expression that merely *contains* a
+/// symbol falls to `EvalExpr` entire; nothing here descends into an operator's
+/// operands.
 fn push_value<'a>(
     ops: &mut Vec<Op>,
     consts: &mut Constants<'a>,
+    plan: &Plan,
     expr: &'a Expr,
     index: u32,
     slot: u32,
@@ -707,9 +720,59 @@ fn push_value<'a>(
             // emits this line post-order, with the value in hand.
             ops.push(Op::TraceLiteral { src: dst });
         }
+        // The three bare-symbol reads. **`ExprKind::Constant`,
+        // `ExprKind::DotVariable` and `ExprKind::VariableReference` are not
+        // among them and are not reads**: a constant's value is its own
+        // upcased spelling, which lives in the symbol table rather than in a
+        // slot ([`Op::Const`]'s own doc comment has why `compile` cannot reach
+        // it); the other two trace `>E>` and `>O>` rather than `>V>`.
+        ExprKind::Variable(id) => push_read(ops, plan, SymbolRead::Simple, *id, dst),
+        ExprKind::Stem(id) => push_read(ops, plan, SymbolRead::Stem, *id, dst),
+        ExprKind::Compound(id) => push_read(ops, plan, SymbolRead::Compound, *id, dst),
         _ => ops.push(Op::EvalExpr { index, slot, dst }),
     }
     Ok(())
+}
+
+/// The two ops one bare-symbol read is: the load, and the `>V>`/`>C>` line
+/// that reading it owes.
+///
+/// **The slot comes from the plan's own `by_symbol` map**, which is the map
+/// `Code::slots` is a view of at run time, so the compiled answer and the
+/// run-time one are one resolution made at two times rather than two
+/// resolutions. `Plan::build` is exhaustive over the body, so a symbol read by
+/// an instruction of it is bound -- but that is a property of another function,
+/// and a read whose symbol is not in the map simply resolves its own slot the
+/// way every read did before this op existed.
+///
+/// **A compound is never resolved here**, and it is the case that makes the
+/// unresolved arm ordinary rather than defensive: what a compound read goes
+/// through is the *stem's* slot and a tail key worked out at the read site, and
+/// `Plan::note_compound_name` binds those by name with no `SymbolId` to hang
+/// them on ([`ReadSlot`]'s own doc comment).
+///
+/// [`ReadSlot`]: super::ReadSlot
+fn push_read(ops: &mut Vec<Op>, plan: &Plan, read: SymbolRead, symbol: SymbolId, dst: u16) {
+    let at = match read {
+        SymbolRead::Simple | SymbolRead::Stem => plan
+            .by_symbol
+            .get(&symbol)
+            .map_or(ReadSlot::UNRESOLVED, |at| ReadSlot::of(*at)),
+        SymbolRead::Compound => ReadSlot::UNRESOLVED,
+    };
+    ops.push(Op::Load {
+        symbol,
+        read,
+        at,
+        dst,
+    });
+    // Behind the load rather than in front of it, because `eval.rs` emits
+    // these lines post-order, with the value in hand.
+    ops.push(Op::TraceRead {
+        symbol,
+        read,
+        src: dst,
+    });
 }
 
 /// Whether a promoted clause of `instruction` echoes under `trace`.
@@ -914,6 +977,46 @@ fn assert_literal_echoes_follow_their_load(ops: &[Op]) {
     }
 }
 
+/// **Every [`Op::TraceRead`] sits immediately behind the [`Op::Load`] it
+/// echoes**, reading that op's register and repeating its symbol and its read
+/// kind -- all three halves of that op's contract at once.
+///
+/// [`assert_literal_echoes_follow_their_load`]'s two failures, plus one a
+/// literal's echo cannot have: the tag. `>V>` names the symbol that was read,
+/// so an echo carrying another op's symbol prints the right value under the
+/// wrong name, and a compound's `>C>` line resolves *that* symbol's tail --
+/// which means a `read` that disagreed with the load's would emit a line the
+/// oracle prints nowhere, or drop one it prints.
+///
+/// An unconditional `assert!` for [`assert_clause_regions_hold_no_clause_op`]'s
+/// reason, and it is the same linear scan's worth of work.
+fn assert_read_echoes_follow_their_load(ops: &[Op]) {
+    for (at, op) in ops.iter().enumerate() {
+        let Op::TraceRead { symbol, read, src } = op else {
+            continue;
+        };
+        let loads_it = at
+            .checked_sub(1)
+            .and_then(|before| ops.get(before))
+            .is_some_and(|before| {
+                matches!(
+                    before,
+                    Op::Load {
+                        symbol: loaded,
+                        read: kind,
+                        dst,
+                        ..
+                    } if loaded == symbol && kind == read && dst == src
+                )
+            });
+        assert!(
+            loads_it,
+            "the read echo at {at} does not follow the load of the symbol and register it \
+             names, so it echoes a value or a name that op did not put there"
+        );
+    }
+}
+
 /// **Every index-bearing op inside a [`Op::Clause`] region names that region's
 /// own clause.**
 ///
@@ -964,6 +1067,8 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::EnterOtherwise { .. }
                 | Op::Const { .. }
                 | Op::TraceLiteral { .. }
+                | Op::Load { .. }
+                | Op::TraceRead { .. }
                 | Op::Jump { .. }
                 | Op::JumpUnless { .. } => None,
             };
@@ -1002,10 +1107,12 @@ pub(crate) fn compile_calls() -> usize {
 
 #[cfg(test)]
 mod tests {
+    use rexx_parse::{SymbolId, SymbolTable};
+
     use super::{
-        Op, Registers, assert_clause_regions_hold_no_clause_op,
-        assert_literal_echoes_follow_their_load, assert_region_ops_name_their_clause,
-        assert_trace_ops_open_a_clause_region,
+        Op, ReadSlot, Registers, SymbolRead, assert_clause_regions_hold_no_clause_op,
+        assert_literal_echoes_follow_their_load, assert_read_echoes_follow_their_load,
+        assert_region_ops_name_their_clause, assert_trace_ops_open_a_clause_region,
     };
 
     /// Two sibling clauses reuse the same registers, and a clause nested
@@ -1212,6 +1319,146 @@ mod tests {
                 src: Some(0),
             },
         ]);
+    }
+
+    /// A read echo in **front** of the load it reads, which prints whatever the
+    /// register held before the read reached it.
+    #[test]
+    #[should_panic(expected = "does not follow the load of the symbol and register it names")]
+    fn a_read_echo_in_front_of_its_load_is_refused() {
+        let (zv, _zw) = two_symbols();
+        assert_read_echoes_follow_their_load(&[
+            Op::Clause { index: 0, end: 4 },
+            Op::TraceRead {
+                symbol: zv,
+                read: SymbolRead::Simple,
+                src: 0,
+            },
+            Op::Load {
+                symbol: zv,
+                read: SymbolRead::Simple,
+                at: ReadSlot::UNRESOLVED,
+                dst: 0,
+            },
+            Op::Store { index: 0, src: 0 },
+        ]);
+    }
+
+    /// A read echo reading a register the op in front of it did not write: the
+    /// line lands in the right place with the wrong value in it.
+    #[test]
+    #[should_panic(expected = "does not follow the load of the symbol and register it names")]
+    fn a_read_echo_reading_another_register_is_refused() {
+        let (zv, _zw) = two_symbols();
+        assert_read_echoes_follow_their_load(&[
+            Op::Clause { index: 0, end: 4 },
+            Op::Load {
+                symbol: zv,
+                read: SymbolRead::Simple,
+                at: ReadSlot::UNRESOLVED,
+                dst: 0,
+            },
+            Op::TraceRead {
+                symbol: zv,
+                read: SymbolRead::Simple,
+                src: 1,
+            },
+            Op::Store { index: 0, src: 0 },
+        ]);
+    }
+
+    /// A read echo naming a **different symbol** from the load in front of it,
+    /// which is the failure a literal's echo cannot have and which neither
+    /// ordering nor the register would see: `>V>` is tagged with the name, so
+    /// the line prints the right value under the wrong one.
+    #[test]
+    #[should_panic(expected = "does not follow the load of the symbol and register it names")]
+    fn a_read_echo_naming_another_symbol_is_refused() {
+        let (zv, zw) = two_symbols();
+        assert_read_echoes_follow_their_load(&[
+            Op::Clause { index: 0, end: 4 },
+            Op::Load {
+                symbol: zv,
+                read: SymbolRead::Simple,
+                at: ReadSlot::UNRESOLVED,
+                dst: 0,
+            },
+            Op::TraceRead {
+                symbol: zw,
+                read: SymbolRead::Simple,
+                src: 0,
+            },
+            Op::Store { index: 0, src: 0 },
+        ]);
+    }
+
+    /// The same for the read kind, which decides whether the `>C>` line in
+    /// front of `>V>` is emitted at all.
+    #[test]
+    #[should_panic(expected = "does not follow the load of the symbol and register it names")]
+    fn a_read_echo_of_another_kind_is_refused() {
+        let (zv, _zw) = two_symbols();
+        assert_read_echoes_follow_their_load(&[
+            Op::Clause { index: 0, end: 4 },
+            Op::Load {
+                symbol: zv,
+                read: SymbolRead::Simple,
+                at: ReadSlot::UNRESOLVED,
+                dst: 0,
+            },
+            Op::TraceRead {
+                symbol: zv,
+                read: SymbolRead::Compound,
+                src: 0,
+            },
+            Op::Store { index: 0, src: 0 },
+        ]);
+    }
+
+    /// The neighbouring arrangement that must stay accepted, without which all
+    /// four refusals above are satisfied by a check that refuses every stream
+    /// carrying a read at all -- which would make every such body a refusal.
+    #[test]
+    fn a_read_echo_behind_its_own_load_is_accepted() {
+        let (zv, _zw) = two_symbols();
+        assert_read_echoes_follow_their_load(&[
+            Op::Clause { index: 0, end: 4 },
+            Op::Load {
+                symbol: zv,
+                read: SymbolRead::Simple,
+                at: ReadSlot::of(1),
+                dst: 0,
+            },
+            Op::TraceRead {
+                symbol: zv,
+                read: SymbolRead::Simple,
+                src: 0,
+            },
+            Op::Store { index: 0, src: 0 },
+        ]);
+    }
+
+    /// Two distinct `SymbolId`s, from a table of this test module's own so the
+    /// ids are the parser's rather than numbers invented here.
+    fn two_symbols() -> (SymbolId, SymbolId) {
+        let mut symbols = SymbolTable::default();
+        (symbols.intern("ZV"), symbols.intern("ZW"))
+    }
+
+    /// A slot too wide for a compiled read's own field is **not** a refusal:
+    /// the read still has a correct answer and the run-time path is what
+    /// computes it, so the whole body must not fall back to the tree-walker for
+    /// something that is only an optimisation.
+    ///
+    /// The reserved value is one below the width's own maximum, which is what
+    /// separates "no slot" from "the last slot that fits".
+    #[test]
+    fn a_slot_too_wide_for_a_compiled_read_is_unresolved_rather_than_refused() {
+        assert_eq!(ReadSlot::of(0).resolved(), Some(0));
+        let last = u32::MAX as usize - 1;
+        assert_eq!(ReadSlot::of(last).resolved(), Some(last));
+        assert_eq!(ReadSlot::of(u32::MAX as usize).resolved(), None);
+        assert_eq!(ReadSlot::UNRESOLVED.resolved(), None);
     }
 
     /// The neighbouring arrangement that must stay accepted, without which
