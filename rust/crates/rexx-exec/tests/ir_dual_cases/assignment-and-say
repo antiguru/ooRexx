@@ -1,0 +1,488 @@
+# What promoting an assignment and a SAY has to keep, in three kinds.
+#
+# **Shapes**, which ask what the instruction does: an assignment to a simple
+# symbol, to a whole stem, and to a compound whose tail is computed from a
+# variable; a SAY of a literal, of an expression, and of nothing at all.
+#
+# **Trace**, which is where a native expression op diverges first and where no
+# other instrument in this crate can see it. `eval.rs` emits a literal's `>L>`
+# line as a side effect of evaluating the literal; an op that only loads a
+# constant into a register does not, and every line after it still matches --
+# so only an exact stderr comparison catches the missing line, which is what
+# these rows are. Both directions are here: `trace i` rows require the `>L>`
+# line, and a `trace r` row requires its absence, because an emission that
+# ignored its own gate would print it under every setting.
+#
+# **Boundaries**, which ask whether the clause unit is discharged exactly once
+# where a promoted clause opens one -- the axis a table of shapes does not
+# reach. A CALL ON handler queued by the value expression has to run at that
+# instruction's own boundary, after the write and before the next clause; a
+# handler that fails there makes this clause the one blamed; and a handler that
+# itself RAISEs leaves a second trap queued behind it, which `in_clause`
+# delivers at the *next* boundary rather than at this one, so the second
+# delivery's SIGL says which clause took it.
+#
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every row
+# was measured to produce the identical bytes on both engines before the
+# instructions were promoted -- which is what says a row can tell whether it
+# would ever have failed. Regenerate a row by running its program under the
+# oracle, never with REWRITE=1 -- ir_dual.rs refuses to run at all under
+# REWRITE for that reason. Capture is:
+#
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+#
+# Expected lines are tagged so that no line of the block can be empty: an empty
+# line ends an expected block, and a program's own output may hold one -- a
+# bare SAY's does. Trailing blanks are part of what is compared: a clause echo
+# whose instruction ends at a keyword has one.
+#
+# `/nonexistent/ir-dual-case.rex` is `ir_dual.rs`'s own INLINE_PATH, which a
+# raised condition's middle line prints. It is written out rather than stood in
+# for, because these blocks are compared verbatim and nothing substitutes into
+# them; running the same program under the oracle prints the oracle's own path
+# there instead.
+
+# assignment to a simple symbol
+program
+n1 = 'abc'
+say n1
+----
+rc> 0
+out> abc
+
+# assignment to a whole stem, and to one of its tails
+# `st. = expr` is replace-and-rebind, so a tail nobody wrote answers the
+# default; `st.4 = ...` mutates one tail and leaves the rest at the default.
+program
+st. = 'dflt'
+say st.9
+st.4 = 'four'
+say st.4
+say st.zz
+----
+rc> 0
+out> dflt
+out> four
+out> dflt
+
+# assignment to a compound with a computed tail
+# The tail comes from `zi`'s value, so `aa.3` and `aa.zi` name one tail.
+program
+zi = 3
+aa.zi = 'v3'
+say aa.3
+say aa.zi
+----
+rc> 0
+out> v3
+out> v3
+
+# SAY of a literal, of nothing, and of an expression
+# A bare SAY is a blank line rather than a skipped one.
+program
+say 'lit'
+say
+say 1 + 2
+----
+rc> 0
+out> lit
+out> 
+out> 3
+
+# an unset variable read into an assignment is its own upcased name
+program
+n1 = zundef
+say n1
+----
+rc> 0
+out> ZUNDEF
+
+# SAY of a literal under trace i
+# **The row the whole promotion turns on.** `>L>` is the literal's own value
+# line, emitted by `eval.rs` as a side effect of evaluating it, and a native
+# constant op does not emit it. `>>>` follows and would still match, so this
+# is the one line a corpus comparison cannot see going missing.
+program
+trace i
+say 'lit'
+----
+rc> 0
+out> lit
+err>      2 *-* say 'lit'
+err>        >L>   "lit"
+err>        >>>   "lit"
+
+# assignment of a literal under trace i
+# Three lines in order: the literal's own, the instruction's result, and the
+# write. The last comes from `assign_expr_target`, which both engines share.
+program
+trace i
+n1 = 'abc'
+----
+rc> 0
+err>      2 *-* n1 = 'abc'
+err>        >L>   "abc"
+err>        >>>   "abc"
+err>        >=>   N1 <= "abc"
+
+# a stem and a computed compound assignment under trace i
+# A compound target announces the resolved name it wrote through (`>C>`)
+# before the write itself, and the tag stays the source spelling either way.
+program
+trace i
+zi = 3
+st. = 'dflt'
+aa.zi = 'v3'
+----
+rc> 0
+err>      2 *-* zi = 3
+err>        >L>   "3"
+err>        >>>   "3"
+err>        >=>   ZI <= "3"
+err>      3 *-* st. = 'dflt'
+err>        >L>   "dflt"
+err>        >>>   "dflt"
+err>        >=>   ST. <= "dflt"
+err>      4 *-* aa.zi = 'v3'
+err>        >L>   "v3"
+err>        >>>   "v3"
+err>        >C>   AA.ZI => "AA.3"
+err>        >=>   AA.ZI <= "v3"
+
+# the same two instructions under trace r
+# **The negative direction, and it is what a compiled-in emission decision
+# gets wrong.** `>L>` is gated on intermediates and `>>>` on results, so an
+# op that emitted the literal's line whenever it ran would add two lines here
+# that the oracle does not print.
+program
+trace r
+n1 = 'abc'
+say 'lit'
+----
+rc> 0
+out> lit
+err>      2 *-* n1 = 'abc'
+err>        >>>   "abc"
+err>      3 *-* say 'lit'
+err>        >>>   "lit"
+
+# one literal written twice traces twice
+# Interning is a compile-time property of the constant table, so it must not
+# change how many value lines run. One `>L>` per *occurrence*, not per entry.
+program
+trace i
+say 'dup'
+say 'dup'
+----
+rc> 0
+out> dup
+out> dup
+err>      2 *-* say 'dup'
+err>        >L>   "dup"
+err>        >>>   "dup"
+err>      3 *-* say 'dup'
+err>        >L>   "dup"
+err>        >>>   "dup"
+
+# a bare SAY and a two-term concatenation under trace i
+# The bare form still traces, as the null string. The concatenation is two
+# literal lines and an operator line, in the order the operands were
+# evaluated, which is what says a promoted clause did not reorder them.
+program
+trace i
+say
+n1 = 'zz' 'zz'
+----
+rc> 0
+out> 
+err>      2 *-* say
+err>        >>>   ""
+err>      3 *-* n1 = 'zz' 'zz'
+err>        >L>   "zz"
+err>        >L>   "zz"
+err>        >O>   " " => "zz zz"
+err>        >>>   "zz zz"
+err>        >=>   N1 <= "zz zz"
+
+# a nested arithmetic value under trace i
+# The value expression is not a literal at all, so its evaluation stays on
+# `eval.rs` and every intermediate line comes from there -- the pair with the
+# rows above, which says the promotion did not make the literal case a
+# separate implementation of the general one.
+program
+trace i
+n1 = 2 + 3 * 4
+----
+rc> 0
+err>      2 *-* n1 = 2 + 3 * 4
+err>        >L>   "2"
+err>        >L>   "3"
+err>        >L>   "4"
+err>        >O>   "*" => "12"
+err>        >O>   "+" => "14"
+err>        >>>   "14"
+err>        >=>   N1 <= "14"
+
+# a compound read in a SAY under trace i
+# The read announces its resolved name too, and the promoted clause is the
+# SAY rather than the assignment above it.
+program
+trace i
+zi = 3
+say aa.zi
+----
+rc> 0
+out> AA.3
+err>      2 *-* zi = 3
+err>        >L>   "3"
+err>        >>>   "3"
+err>        >=>   ZI <= "3"
+err>      3 *-* say aa.zi
+err>        >C>   AA.ZI => "AA.3"
+err>        >V>   AA.ZI => "AA.3"
+err>        >>>   "AA.3"
+
+# a SAY inside a matched WHEN's branch under trace i
+# The value lines sit at the branch's own indent rather than the SELECT's, so
+# a promoted clause that echoed a literal against a stale indent prints the
+# `>L>` line four columns short with every other line intact.
+program
+trace i
+select
+  when 1 = 1 then say 'w'
+end
+----
+rc> 0
+out> w
+err>      2 *-* select
+err>      3 *-*   when 1 = 1 
+err>        >L>     "1"
+err>        >L>     "1"
+err>        >O>     "=" => "1"
+err>        >>>     "1"
+err>      3 *-*     then
+err>      3 *-*       say 'w'
+err>        >L>         "w"
+err>        >>>         "w"
+
+# **A boundary case.** a call on handler queued by an assignment's value
+# The write completes before the handler runs -- `zq` reads `V` -- and the
+# handler's own write is visible to the next clause, so the boundary is
+# between the two and not after them.
+program
+call on user zx name h
+zv = 'unset'
+zq = raiser()
+say zv zq
+exit
+raiser:
+raise user zx return 'V'
+h:
+zv = 'set'
+return
+----
+rc> 0
+out> set V
+
+# **A boundary case.** a handler that queues again at an assignment's boundary
+# `h` runs at line 3's boundary and its own RAISE queues `zy`. `in_clause`
+# delivers at most one and does not re-check, so `g` waits for the *next*
+# clause's boundary -- SIGL 4, after `after` has already printed.
+program
+call on user zx name h
+call on user zy name g
+zq = raiser()
+say 'after'
+exit
+raiser:
+raise user zx return 'V'
+h:
+raise user zy return 1
+g:
+say 'G ran' sigl
+return
+----
+rc> 0
+out> after
+out> G ran 4
+
+# **A boundary case.** a handler that fails at a SAY's own boundary
+# The clause blamed is the SAY whose boundary ran the handler, not the
+# handler's own caller and not the clause after it. The SAY's output is
+# already on stdout, which is what says the boundary is after the write.
+program
+call on user zx name h
+say raiser()
+say 'after'
+exit
+raiser:
+raise user zx return 'V'
+h:
+say 1/0
+return
+----
+rc> 214
+out> V
+err>      8 *-*   say 1/0
+err>      2 *-* say raiser()
+err> Error 42 running /nonexistent/ir-dual-case.rex line 8:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+# **A boundary case.** a handler delivered per pass at an assignment in a loop
+# One delivery per pass, each at the body clause's own boundary, so the
+# counter the handler bumps is readable by the next clause of the same pass.
+program
+call on user zx name h
+zn = 0
+do i = 1 to 2
+  zq = raiser()
+  say 'pass' i zn
+end
+exit
+raiser:
+raise user zx return 'V'
+h:
+zn = zn + 1
+return
+----
+rc> 0
+out> pass 1 1
+out> pass 2 2
+
+# **A boundary case.** a handler queued by an assignment in a called label
+# The delivery is at the assignment's own boundary inside the callee, before
+# the callee's RETURN, so the caller sees the handler's write.
+program
+call on user zx name h
+zv = 'unset'
+call sub
+say 'after' zv
+exit
+sub:
+zq = raiser()
+return
+raiser:
+raise user zx return 'V'
+h:
+zv = 'set'
+return
+----
+rc> 0
+out> after set
+
+# **A boundary case.** procedure after an assignment in a called label
+# The first-instruction permission is spent by whichever clause the
+# activation granted it to, promoted or not, so a PROCEDURE behind an
+# assignment is 17.1.
+program
+call sub 1
+exit
+sub:
+  n1 = 1
+  procedure
+  return
+----
+rc> 239
+err>      5 *-*   procedure
+err>      1 *-* call sub 1
+err> Error 17 running /nonexistent/ir-dual-case.rex line 5:  Unexpected PROCEDURE.
+err> Error 17.1:  PROCEDURE is valid only when it is the first instruction executed after an internal CALL or function invocation.
+
+# SIGL at a CALL inside an assignment's value expression
+# The transfer's own line is the assignment's, which is set by the clause unit
+# rather than by the instruction.
+program
+zq = sub()
+say zq
+exit
+sub:
+say 'sigl' sigl
+return 1
+----
+rc> 0
+out> sigl 1
+out> 1
+
+# an assignment whose value raises
+# The clause echoed is the assignment's own, and nothing is written.
+program
+n1 = 'a' + 1
+----
+rc> 215
+err>      1 *-* n1 = 'a' + 1
+err> Error 41 running /nonexistent/ir-dual-case.rex line 1:  Bad arithmetic conversion.
+err> Error 41.1:  Nonnumeric value ("a") used in arithmetic operation.
+
+# a SAY whose expression raises
+program
+say 1/0
+----
+rc> 214
+err>      1 *-* say 1/0
+err> Error 42 running /nonexistent/ir-dual-case.rex line 1:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+# an assignment whose value reads an unset variable into a NOVALUE trap
+# The trap is offered once, by the activation the condition unwound, and SIGL
+# is the assignment's line.
+program
+signal on novalue
+n1 = zundef
+say 'unreached'
+exit
+novalue:
+say 'novalue' sigl
+----
+rc> 0
+out> novalue 2
+
+# an assignment and a SAY inside an INTERPRET fragment
+# A fragment compiles to no chunk at all, so its clauses stay on the
+# tree-walker under both engines -- this says the two instructions still work
+# from the arm the promotion left in place.
+program
+interpret "zq = 'frag'; say zq"
+say 'after'
+----
+rc> 0
+out> frag
+out> after
+
+# an assignment on an IF's false path, under trace r
+# The assignment is where the false path lands, so it is the instruction the
+# end-of-branch ops sit in front of: its own `*-*` echo has to print once, at
+# its own line.
+program
+trace r
+if 1 = 0 then say 'a'
+n1 = 'b'
+say n1
+----
+rc> 0
+out> b
+err>      2 *-* if 1 = 0 
+err>        >>>   "0"
+err>      3 *-* n1 = 'b'
+err>        >>>   "b"
+err>      4 *-* say n1
+err>        >>>   "b"
+
+# **A boundary case.** a handler queued by an IF's condition, read by a
+# promoted assignment in its branch and by the clause after it
+# One delivery, at the IF's own boundary, before either branch clause runs.
+program
+call on user zx name h
+zn = 0
+if raiser() = 'V' then say 'then' zn
+say 'after' zn
+exit
+raiser:
+raise user zx return 'V'
+h:
+zn = 1
+return
+----
+rc> 0
+out> then 1
+out> after 1
