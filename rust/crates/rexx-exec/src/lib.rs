@@ -775,6 +775,18 @@ impl Loud {
         }
     }
 
+    /// A compiled `DO`/`LOOP` op does not describe the loop it was emitted for
+    /// -- an internal inconsistency, never a program error.
+    ///
+    /// [`Loud::select_op_off_its_node`]'s reasoning exactly, one construct over.
+    ///
+    /// [`Loud::select_op_off_its_node`]: Loud::select_op_off_its_node
+    fn loop_op_off_its_node() -> Loud {
+        Loud {
+            message: "a compiled DO/LOOP op does not name a DO/LOOP of its own body".to_string(),
+        }
+    }
+
     // **There is no `Loud::parse`, and its absence is the fix.** A fragment
     // that does not parse raises the oracle's own 27.901 at rc 229, through
     // `impl From<&ParseError> for Raised` (`error.rs`), which `run_fragment`

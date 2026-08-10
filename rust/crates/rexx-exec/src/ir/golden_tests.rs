@@ -62,26 +62,168 @@ fn every_instruction_of_an_all_generic_body_compiles_to_one_generic_op() {
     assert_eq!(chunk.registers, 0);
 }
 
-/// The compiled form of the plan's own example loop.
+/// The compiled form of the plan's own example loop: the header is a clause
+/// region of its own and the construct is the op that closes it.
 ///
-/// Three instructions and three ops: the `DO` is [`super::Op::Loop`], and the
-/// body clause and the `END` are still `Generic`. The `END` op is never
+/// Three instructions -- `DO`, `nop`, `END` -- and the `DO`'s own region is six
+/// ops of the seven, laid out as **one group per header expression, in the order
+/// the expressions were written**:
+///
+/// * `1`-`2`: the control variable's starting value, evaluated and then
+///   validated. No `TraceKeyword` between them, because the oracle echoes no
+///   `>K>` line for an initial value.
+/// * `3`-`5`: the `TO` bound, evaluated, **echoed**, and then validated. The
+///   echo sits between the two, which is the whole reason this construct waited
+///   for the trace ops: `do i = 1 to 'a' by zf()` echoes `>K>  "TO" => "a"` and
+///   raises before `zf` is called, so neither the echo nor the validation may
+///   move past the next expression's evaluation.
+/// * `6`: the construct itself.
+///
+/// The body clause and the `END` are still `Generic`. The `END` op is never
 /// reached -- `run_bounded`'s range stops before it and the loop's own resume
 /// is one past it -- and it is emitted anyway because `op_of` is indexed by
 /// instruction, so an instruction without an op would shift every later entry.
 #[test]
-fn a_counted_loop_compiles_its_do_to_a_loop_op_and_its_body_to_generic() {
+fn a_counted_loop_compiles_its_header_to_a_clause_region_and_its_body_to_generic() {
     let chunk = compile_for_test(b"do i = 1 to 3\n  nop\nend\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Loop index=0\n\
-         1: Generic index=1\n\
-         2: Generic index=2\n"
+        "0: Clause index=0 end=7\n\
+         1: EvalExpr index=0 slot=0 dst=0\n\
+         2: LoopHeaderValue role=Initial src=0\n\
+         3: EvalExpr index=0 slot=1 dst=1\n\
+         4: TraceKeyword role=To src=1\n\
+         5: LoopHeaderValue role=To src=1\n\
+         6: LoopRun index=0\n\
+         7: Generic index=1\n\
+         8: Generic index=2\n"
     );
-    // The loop is driven by `run_loop`, which holds its control value in a
-    // `LoopState` of its own rather than in the chunk's register region, so
-    // nothing here allocates one.
-    assert_eq!(chunk.registers, 0);
+    // One register per header expression, and they are **not** released at the
+    // region's end: the loop runs from op 6 with the body's clauses stepped
+    // between, so a register handed out again there would be overwritten while
+    // the running loop still reads it.
+    assert_eq!(chunk.registers, 2);
+    assert_eq!(chunk.op_of, vec![0, 7, 8, 9]);
+}
+
+/// The same loop under `TRACE R`: the clause echo is an op of the region, and
+/// the header's own groups are unchanged behind it.
+///
+/// The pair with the test above is what says the setting decides *what is
+/// emitted* and nothing about the header's shape -- every group is the same
+/// three or two ops, one index further along.
+#[test]
+fn a_traced_counted_loop_echoes_its_do_clause_from_the_stream() {
+    let chunk = compile_for_test_under(b"do i = 1 to 3\n  nop\nend\n", traced()).expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=8\n\
+         1: TraceClause index=0\n\
+         2: EvalExpr index=0 slot=0 dst=0\n\
+         3: LoopHeaderValue role=Initial src=0\n\
+         4: EvalExpr index=0 slot=1 dst=1\n\
+         5: TraceKeyword role=To src=1\n\
+         6: LoopHeaderValue role=To src=1\n\
+         7: LoopRun index=0\n\
+         8: Generic index=1\n\
+         9: Generic index=2\n"
+    );
+    assert_eq!(chunk.registers, 2);
+}
+
+/// A block, and a `DO OVER`: the two ends of how much header a `DO`/`LOOP` can
+/// have, and both still one clause region ending in the construct.
+///
+/// A `DO` block has **no header expression at all**, so its region is the
+/// `LoopRun` op alone -- an empty region rather than none, because the clause
+/// and its boundary are owed either way. A `DO OVER ... FOR` has two
+/// expressions and echoes exactly one of them: measured, the oracle traces
+/// `>K>  "OVER"` for the target and nothing at all for the `FOR` count that
+/// follows it, unlike a controlled loop's `FOR`.
+#[test]
+fn a_block_has_an_empty_header_region_and_a_do_over_echoes_only_its_target() {
+    let block = compile_for_test(b"do\n  nop\nend\n").expect("compiles");
+    assert_eq!(
+        render(&block),
+        "0: Clause index=0 end=2\n\
+         1: LoopRun index=0\n\
+         2: Generic index=1\n\
+         3: Generic index=2\n"
+    );
+    assert_eq!(block.registers, 0, "a block evaluates nothing to hold");
+
+    let over = compile_for_test(b"do qq over 4.5 for 2\n  nop\nend\n").expect("compiles");
+    assert_eq!(
+        render(&over),
+        "0: Clause index=0 end=7\n\
+         1: EvalExpr index=0 slot=0 dst=0\n\
+         2: TraceKeyword role=Over src=0\n\
+         3: LoopHeaderValue role=Over src=0\n\
+         4: EvalExpr index=0 slot=1 dst=1\n\
+         5: LoopHeaderValue role=OverFor src=1\n\
+         6: LoopRun index=0\n\
+         7: Generic index=1\n\
+         8: Generic index=2\n"
+    );
+    assert_eq!(over.registers, 2);
+}
+
+/// **A nested loop's header registers sit above the enclosing loop's, and a
+/// following loop's reuse them.** This is the plan's Decisions section in an
+/// emitted stream: "a construct whose state outlives its member clauses
+/// allocates in the enclosing scope, before emitting them, so those releases
+/// cannot reclaim it."
+///
+/// The inner loop takes registers 2 and 3 rather than 0 and 1, because the
+/// outer loop is still running -- its `LoopState` reads the values registers 0
+/// and 1 root for as long as the body it encloses is being stepped. An
+/// allocator that released the outer loop's registers at its own region's end
+/// would hand 0 and 1 to the inner loop and overwrite a running loop's bound.
+///
+/// **And the adjacent success, which is what stops that being satisfied by
+/// never releasing at all:** the second of two loops written one after the
+/// other does reuse 0 and 1, because by the instruction after the first loop's
+/// `END` the first loop is over.
+#[test]
+fn a_nested_loops_registers_sit_above_the_enclosing_loops_and_a_later_loops_reuse_them() {
+    let nested = compile_for_test(b"do i = 1 to 2\n  do j = 1 to 2\n    nop\n  end\nend\n")
+        .expect("compiles");
+    assert_eq!(
+        render(&nested),
+        "0: Clause index=0 end=7\n\
+         1: EvalExpr index=0 slot=0 dst=0\n\
+         2: LoopHeaderValue role=Initial src=0\n\
+         3: EvalExpr index=0 slot=1 dst=1\n\
+         4: TraceKeyword role=To src=1\n\
+         5: LoopHeaderValue role=To src=1\n\
+         6: LoopRun index=0\n\
+         7: Clause index=1 end=14\n\
+         8: EvalExpr index=1 slot=0 dst=2\n\
+         9: LoopHeaderValue role=Initial src=2\n\
+         10: EvalExpr index=1 slot=1 dst=3\n\
+         11: TraceKeyword role=To src=3\n\
+         12: LoopHeaderValue role=To src=3\n\
+         13: LoopRun index=1\n\
+         14: Generic index=2\n\
+         15: Generic index=3\n\
+         16: Generic index=4\n"
+    );
+    assert_eq!(
+        nested.registers, 4,
+        "two loops are live at once, and never more"
+    );
+
+    let sequential = compile_for_test(b"do i = 1 to 2\n  nop\nend\ndo j = 1 to 2\n  nop\nend\n")
+        .expect("compiles");
+    assert_eq!(
+        sequential.registers, 2,
+        "the second loop reuses the registers the first one released past its END"
+    );
+    assert!(
+        render(&sequential).contains("12: EvalExpr index=3 slot=1 dst=1"),
+        "the second loop\'s own bound went somewhere other than register 1: {}",
+        render(&sequential)
+    );
 }
 
 /// The compiled `IF` with an `ELSE`, which is the shape the whole promotion

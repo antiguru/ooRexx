@@ -17,7 +17,7 @@ use rexx_parse::{CodeBody, Instruction, InstructionKind};
 
 use super::{Chunk, ChunkTooLarge, Op};
 use crate::plan::Plan;
-use crate::run::{if_targets, otherwise_range};
+use crate::run::{HeaderPlan, if_targets, loop_header_plan, otherwise_range};
 use crate::trace::ChunkTrace;
 
 /// The compile-time register stack (the plan's Decisions section: "register
@@ -190,7 +190,8 @@ enum PatchKind {
 ///
 /// Every instruction in `body.instructions` compiles (D21: "every
 /// instruction compiles, nothing refuses" is about instructions). A `DO` or
-/// `LOOP` becomes [`Op::Loop`], whose body clauses the driver steps; an `IF`
+/// `LOOP` becomes a [`Op::Clause`] region holding its header's own evaluation
+/// and ending in [`Op::LoopRun`], whose body clauses the driver steps; an `IF`
 /// becomes a [`Op::Clause`] region that evaluates its condition and jumps; a
 /// `SELECT` becomes one such region per listed `WHEN` as well as for its own
 /// header, laid out as a scan chain with a frame opened over whichever branch
@@ -264,10 +265,62 @@ pub(crate) fn compile(
         match &instruction.kind {
             // `DO` and `LOOP` are the same construct under two spellings
             // (`step`'s own arm matches them together), so they compile the
-            // same way.
-            InstructionKind::Do(_) | InstructionKind::Loop(_) => ops.push(Op::Loop {
-                index: instruction_index(index)?,
-            }),
+            // same way: the header's own clause region, then the op that runs
+            // the construct from what that region evaluated.
+            InstructionKind::Do(body_node) | InstructionKind::Loop(body_node) => {
+                // Allocated in the *enclosing* scope and released past the
+                // whole loop, because these registers are what roots the
+                // header's values while the loop runs: a `DO OVER`'s target
+                // lives in `LoopState` for the construct's lifetime, and a
+                // register released at a body clause's own boundary would be
+                // handed out again and overwritten while it is still in use.
+                let outer = registers.mark();
+                let plan = loop_header_plan(body_node);
+                let roles = plan.as_ref().map_or(&[][..], HeaderPlan::roles);
+                let mut header = Vec::with_capacity(roles.len());
+                for &role in roles {
+                    header.push((role, registers.alloc()?));
+                }
+                let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
+                // One op per value evaluated, one more for each value the
+                // oracle echoes a `>K>` line for, one more per value for its
+                // own validation, and `LoopRun` itself.
+                let region: u32 = header
+                    .iter()
+                    .map(|(role, _)| 2 + u32::from(role.keyword().is_some()))
+                    .sum::<u32>()
+                    + 1;
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: at + 1 + u32::from(echo) + region,
+                });
+                push_echo(&mut ops, echo, instruction_index(index)?);
+                for (slot, &(role, dst)) in header.iter().enumerate() {
+                    ops.push(Op::EvalExpr {
+                        index: instruction_index(index)?,
+                        slot: instruction_index(slot)?,
+                        dst,
+                    });
+                    if role.keyword().is_some() {
+                        ops.push(Op::TraceKeyword { role, src: dst });
+                    }
+                    ops.push(Op::LoopHeaderValue { role, src: dst });
+                }
+                ops.push(Op::LoopRun {
+                    index: instruction_index(index)?,
+                });
+                // Past the `END`, so nothing between here and there can reuse a
+                // register the running loop still reads. A loop whose `END` is
+                // the body's last instruction has nothing to hang the release
+                // on and needs none: there is nothing after it to hand the
+                // registers to.
+                if let Some(end) = body_node.end
+                    && end + 1 < len
+                {
+                    release_to(&mut release_at[end + 1], outer);
+                }
+            }
             // The `IF` clause is its condition and nothing else -- the branch
             // it chooses is not inside it, which is the boundary
             // `run.rs`'s own `If` arm measured (`SIGL` reports the `IF`'s line,
@@ -359,7 +412,7 @@ pub(crate) fn compile(
                 // instruction to hang the release on and needs none: there is
                 // nothing after it to hand the register to.
                 if select_end < len {
-                    release_at[select_end] = Some(outer);
+                    release_to(&mut release_at[select_end], outer);
                 }
                 // Where the scan goes once no listed `WHEN` is left, which is
                 // also where it starts when there is no `WHEN` at all.
@@ -560,6 +613,23 @@ fn emit_before(
     Ok(())
 }
 
+/// Records that `mark` is dead by the time the instruction this slot belongs to
+/// is reached, keeping **the lowest** mark any construct wants released there.
+///
+/// Two constructs can end at the same instruction -- a `DO` block closing one
+/// instruction before the `SELECT` whose `WHEN` holds it -- and by that point
+/// both have finished, so every register above the lower of the two marks is
+/// dead. Keeping the higher one instead would leave the outer construct's
+/// registers allocated for the rest of the body, which costs reservation
+/// without being wrong; keeping the lower one is what actually hands them back.
+fn release_to(slot: &mut Option<Mark>, mark: Mark) {
+    let lowest = match *slot {
+        Some(existing) if existing.0 <= mark.0 => existing,
+        _ => mark,
+    };
+    *slot = Some(lowest);
+}
+
 /// The index the next op will be pushed at, refused rather than wrapped.
 fn op_index(ops: &[Op]) -> Result<u32, ChunkTooLarge> {
     u32::try_from(ops.len()).map_err(|_| ChunkTooLarge { what: "op stream" })
@@ -570,13 +640,17 @@ fn instruction_index(index: usize) -> Result<u32, ChunkTooLarge> {
     u32::try_from(index).map_err(|_| ChunkTooLarge { what: "op stream" })
 }
 
-/// **No `Generic` or `Loop` op sits inside a [`Op::Clause`] region.**
+/// **No `Generic` op sits inside a [`Op::Clause`] region.**
 ///
-/// Both run a whole clause through `Interp::step_in_temps_frame`, which
-/// echoes the clause itself -- and the echo is not idempotent, so a clause
-/// already opened by a `Clause` op would echo twice. The compiler is where
-/// this can be checked at all: the driver sees one op at a time and cannot
-/// tell an op it reached by falling into a region from one it jumped to.
+/// It runs a whole clause through `Interp::step_in_temps_frame`, which echoes
+/// the clause itself -- and the echo is not idempotent, so a clause already
+/// opened by a `Clause` op would echo twice. The compiler is where this can be
+/// checked at all: the driver sees one op at a time and cannot tell an op it
+/// reached by falling into a region from one it jumped to.
+///
+/// [`Op::LoopRun`] is not one of these and is deliberately not checked for: it
+/// runs a construct whose *member* clauses are stepped by a nested driver
+/// entry, never a clause of the region's own instruction.
 ///
 /// An unconditional `assert!` rather than a `debug_assert!`, so the release
 /// build carries the same guarantee. It is one linear scan per body, once,
@@ -588,7 +662,7 @@ fn assert_clause_regions_hold_no_clause_op(ops: &[Op]) {
         };
         for inside in ops[at + 1..(*end as usize).min(ops.len())].iter() {
             assert!(
-                !matches!(inside, Op::Generic { .. } | Op::Loop { .. }),
+                !matches!(inside, Op::Generic { .. }),
                 "a Clause region at op {at} holds an op that opens a clause of its own, \
                  so the clause would be echoed twice"
             );

@@ -83,9 +83,9 @@ use crate::{
 use rexx_core::{Decoded, ObjRef, SlotFrame, SlotRef};
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
-    ConditionTrap, ControlExpr, Controlled, DirectiveKind, EndStyle, Expr, ExprKind, Fragment,
-    Instruction, InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource,
-    Raise, SymbolId, Trace, Use, UseTarget, VariableRef, compound_parts, parse_interpret,
+    ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Fragment, Instruction,
+    InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource, Raise,
+    SymbolId, Trace, Use, UseTarget, VariableRef, compound_parts, parse_interpret,
 };
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -634,6 +634,204 @@ impl ControlValue {
     }
 }
 
+/// What one expression of a `DO`/`LOOP` header is for.
+///
+/// **The role decides three things at once**, and they are one fact rather
+/// than three: which `>K>` tag the value is echoed under, how it is validated,
+/// and which field of [`LoopHeaderValues`] it lands in. Keeping them on one
+/// enum is what lets both engines evaluate a header through the same
+/// [`Interp::accept_header_value`] while differing only in *what drives* the
+/// sequence -- a Rust loop over [`HeaderPlan`], or the compiled stream's own
+/// ops.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum HeaderRole {
+    /// A controlled loop's own starting value. Echoed under no tag at all:
+    /// measured, `trace i` over `do ii = 1 to 2` shows the initial value's
+    /// `>L>` line and then `>K>   "TO"`, with no `>K>` of its own.
+    Initial,
+    To,
+    By,
+    /// A controlled loop's `FOR`.
+    For,
+    /// A bare `DO expr`'s repeat count, **echoed under the `FOR` tag**
+    /// (`run_loop`'s own measurement: the oracle traces a bare repeat count
+    /// under `FOR`, the same as an explicit `DO ... FOR n`), and validated
+    /// against 26.2 where a `FOR` is 26.3.
+    Count,
+    /// `DO name OVER expr`'s target, echoed under the `OVER` tag.
+    Over,
+    /// `DO name OVER expr FOR expr`'s count, which the oracle echoes nothing
+    /// for -- unlike every other count here.
+    OverFor,
+}
+
+impl HeaderRole {
+    /// The `>K>` tag this value's own echo carries, or `None` for the roles
+    /// the oracle echoes nothing for.
+    pub(crate) fn keyword(self) -> Option<&'static str> {
+        match self {
+            HeaderRole::Initial | HeaderRole::OverFor => None,
+            HeaderRole::To => Some("TO"),
+            HeaderRole::By => Some("BY"),
+            HeaderRole::For | HeaderRole::Count => Some("FOR"),
+            HeaderRole::Over => Some("OVER"),
+        }
+    }
+}
+
+/// The header expressions of one `DO`/`LOOP`, in **the order they are
+/// evaluated**, which is the order they were written in
+/// (`Controlled::order`, recorded because an expression can have side
+/// effects).
+///
+/// **One table, read by both engines.** `Interp::eval_loop_header` iterates it
+/// and `ir::compile` emits one group of ops per entry from the same iteration,
+/// so the evaluation order -- which is observable, and which interleaves
+/// evaluation with `>K>` emission -- is one implementation rather than a Rust
+/// loop and an op stream that have to be kept in step.
+///
+/// A fixed array rather than a `Vec`: a header is at most four expressions
+/// (`DO i = a TO b BY c FOR d`), and this is built once per loop entry on the
+/// tree-walker's own path.
+pub(crate) struct HeaderPlan {
+    roles: [HeaderRole; 4],
+    len: usize,
+}
+
+impl HeaderPlan {
+    fn new() -> HeaderPlan {
+        HeaderPlan {
+            roles: [HeaderRole::Initial; 4],
+            len: 0,
+        }
+    }
+
+    fn push(&mut self, role: HeaderRole) {
+        debug_assert!(
+            self.len < self.roles.len(),
+            "a DO/LOOP header has more expressions than TO, BY, FOR and one control value"
+        );
+        self.roles[self.len] = role;
+        self.len += 1;
+    }
+
+    /// The roles in evaluation order.
+    pub(crate) fn roles(&self) -> &[HeaderRole] {
+        &self.roles[..self.len]
+    }
+}
+
+/// The header of `body`, or `None` for a `DO`/`LOOP` this crate refuses
+/// **before evaluating anything**.
+///
+/// The three refusals are one answer here rather than three checks scattered
+/// through the construct, and that placement is the semantics: `do counter c
+/// with index i over x` fails loudly without evaluating `x`, and a stem `OVER`
+/// target is detected from its own syntax rather than by evaluating it
+/// (Deviation 1, `phase-4-exclusions.txt`: a stem target's tail order does not
+/// reproduce the oracle's).
+///
+/// `COUNTER`'s own running-count bookkeeping is Phase-5-shaped extra state that
+/// no other of `DO`/`LOOP`'s forms needs, and `DO WITH` sends `SUPPLIER` a
+/// message, which nothing in this crate answers.
+///
+/// **A parenthesised stem is caught too**, measured
+/// (`do_over_a_parenthesised_stem_target_is_also_caught`): a single
+/// parenthesised sub-expression collapses to that sub-expression's own
+/// `ExprKind` rather than being wrapped in `ExprKind::List`, so `(a.)` is
+/// already `ExprKind::Stem` here. What escapes is a stem reached through
+/// something that does not collapse this way -- a function call returning one
+/// -- and no test may write one either way.
+pub(crate) fn loop_header_plan(body: &Loop) -> Option<HeaderPlan> {
+    if body.counter.is_some() {
+        return None;
+    }
+    let mut plan = HeaderPlan::new();
+    match &body.kind {
+        // A block and a `FOREVER` loop each have no header expression at all.
+        LoopKind::Simple | LoopKind::Forever => {}
+        // `count_loop`'s own parser always calls `opt_expr`, which can answer
+        // `None`; nothing in this crate's tests reaches `DO` with truly
+        // nothing after it and no recognised keyword either, because
+        // `create_loop`'s own `at_end()` check catches a bare `DO` first and
+        // builds `LoopKind::Simple` instead.
+        LoopKind::Count(None) => {}
+        LoopKind::Count(Some(_)) => plan.push(HeaderRole::Count),
+        LoopKind::Controlled(ctrl) => {
+            plan.push(HeaderRole::Initial);
+            for entry in &ctrl.order {
+                plan.push(match entry {
+                    ControlExpr::To => HeaderRole::To,
+                    ControlExpr::By => HeaderRole::By,
+                    ControlExpr::For => HeaderRole::For,
+                });
+            }
+        }
+        LoopKind::Over {
+            target, for_count, ..
+        } => {
+            if matches!(target.kind, ExprKind::Stem(_)) {
+                return None;
+            }
+            plan.push(HeaderRole::Over);
+            if for_count.is_some() {
+                plan.push(HeaderRole::OverFor);
+            }
+        }
+        LoopKind::With { .. } => return None,
+    }
+    Some(plan)
+}
+
+/// The expression `role` names in `kind`, or `None` when that kind has no
+/// expression for it.
+///
+/// A `None` a caller reaches is a role that did not come from
+/// [`loop_header_plan`] for this same node, which is the one way the two can
+/// come apart.
+fn header_expr_for(kind: &LoopKind, role: HeaderRole) -> Option<&Expr> {
+    match (kind, role) {
+        (LoopKind::Count(expr), HeaderRole::Count) => expr.as_ref(),
+        (LoopKind::Controlled(ctrl), HeaderRole::Initial) => Some(&ctrl.initial),
+        (LoopKind::Controlled(ctrl), HeaderRole::To) => ctrl.to.as_ref(),
+        (LoopKind::Controlled(ctrl), HeaderRole::By) => ctrl.by.as_ref(),
+        (LoopKind::Controlled(ctrl), HeaderRole::For) => ctrl.for_count.as_ref(),
+        (LoopKind::Over { target, .. }, HeaderRole::Over) => Some(target),
+        (LoopKind::Over { for_count, .. }, HeaderRole::OverFor) => for_count.as_ref(),
+        _ => None,
+    }
+}
+
+/// The expression of `body`'s header at `slot` -- the compiled stream's own
+/// `Op::EvalExpr` addressing, where a slot is a position in
+/// [`HeaderPlan::roles`].
+fn loop_header_slot(body: &Loop, slot: u32) -> Option<&Expr> {
+    let plan = loop_header_plan(body)?;
+    let role = *plan.roles().get(slot as usize)?;
+    header_expr_for(&body.kind, role)
+}
+
+/// One `DO`/`LOOP` header's evaluated and validated values.
+///
+/// **Filled one role at a time, in evaluation order**, because the order is
+/// observable: `do i = 1 to 'a' by zf()` raises on `TO` before `BY` is
+/// evaluated at all, so a shape that gathered every value first and validated
+/// afterwards would call `zf` where the oracle does not.
+#[derive(Default)]
+pub(crate) struct LoopHeaderValues {
+    /// A controlled loop's starting value, rounded at the digits in force.
+    initial: Option<Number>,
+    to: Option<Number>,
+    by: Option<Number>,
+    /// A `FOR`'s own budget, from either a controlled loop's `FOR` or a
+    /// `DO OVER`'s.
+    for_remaining: Option<u64>,
+    /// A `DO OVER`'s target value.
+    over: Option<ObjRef>,
+    /// A bare `DO expr`'s repeat count.
+    count: Option<u64>,
+}
+
 /// What `eval_condition` should do with the value it just computed, beyond
 /// answering the caller's `bool` -- a caller-chosen variant rather than a
 /// decision `eval_condition` makes on its own, because the same function
@@ -1108,7 +1306,6 @@ impl Interp {
         index: usize,
         instruction: &Instruction,
         source: Option<&ProgramSource>,
-        engine: BodyEngine<'_>,
     ) -> Result<Flow, Failure> {
         // Taken on entry, unconditionally, so that this call consumes it and
         // every nested `step` below it -- a fragment's, an `IF` branch's --
@@ -1802,7 +1999,20 @@ impl Interp {
             // doc comment for why `Do`'s own arm never returns until the
             // entire loop is over, one way or another.
             InstructionKind::Do(body) | InstructionKind::Loop(body) => {
-                self.run_loop(code, index, instruction, body, source, engine)
+                // `BodyEngine::TreeWalker`, like every other `run_bounded`
+                // call on this page: **anything that reaches `step` is being
+                // stepped by the tree-walker.** A promoted `DO`/`LOOP` does
+                // not come through here at all -- its header is a compiled
+                // clause region and `ir::Op::LoopRun` enters
+                // `run_loop_with_header` with the chunk's own engine.
+                self.run_loop(
+                    code,
+                    index,
+                    instruction,
+                    body,
+                    source,
+                    BodyEngine::TreeWalker,
+                )
             }
 
             // `LEAVE`/`ITERATE`, bare or by name -- Task 11. Resolves to
@@ -4214,25 +4424,8 @@ impl Interp {
         instruction: &Instruction,
         source: Option<&ProgramSource>,
     ) -> Result<Flow, Failure> {
-        self.step_in_temps_frame_with(code, index, instruction, source, BodyEngine::TreeWalker)
-    }
-
-    /// [`Interp::step_in_temps_frame`], naming which driver steps the member
-    /// clauses of a construct this instruction resolves inside itself.
-    ///
-    /// `engine` is forwarded to `step` and reaches whichever construct
-    /// resolves its own members inside this call -- see [`BodyEngine`]'s own
-    /// doc comment for what it does and does not decide.
-    pub(crate) fn step_in_temps_frame_with(
-        &mut self,
-        code: &Code<'_>,
-        index: usize,
-        instruction: &Instruction,
-        source: Option<&ProgramSource>,
-        engine: BodyEngine<'_>,
-    ) -> Result<Flow, Failure> {
         match self.in_stepped_clause(code, index, instruction, source, |it| {
-            it.step(code, index, instruction, source, engine)
+            it.step(code, index, instruction, source)
         })? {
             ClauseOutcome::Ran(flow) => flow,
             ClauseOutcome::Ended(exit) => Ok(Flow::Exit(exit.value())),
@@ -5138,15 +5331,12 @@ impl Interp {
     /// hold: see `Flow::Leave`'s own doc comment for why a `Do` must never
     /// return to its caller mid-loop.
     ///
-    /// **`COUNTER` and `DO WITH` both take the loud path, checked first and
-    /// unconditionally.** The brief this task started from names both
-    /// explicitly and asks for a decision, not a silent fallthrough:
-    /// `COUNTER`'s own running-count bookkeeping is Phase-5-shaped extra
-    /// state that no other of `DO`/`LOOP`'s 21 other forms needs, and
-    /// `DO WITH` sends `SUPPLIER` a message, which nothing in this crate
-    /// answers (no message dispatch at all). Checked ahead of any header
-    /// evaluation, so `do counter c with index i over x` -- both keywords
-    /// at once -- fails loudly without evaluating `x` either.
+    /// **`COUNTER`, `DO WITH` and a stem `OVER` target all take the loud
+    /// path, decided before a single header expression is evaluated.** That
+    /// is [`loop_header_plan`]'s answer and its doc comment has why each of
+    /// the three is refused; deciding all three in one place is what makes
+    /// `do counter c with index i over x` -- two of them at once -- fail
+    /// loudly without evaluating `x` either.
     ///
     /// **One implementation, entered from both engines.** `engine` reaches
     /// exactly one thing: which driver steps each of the body's clauses
@@ -5154,6 +5344,14 @@ impl Interp {
     /// `WHILE`/`UNTIL`, not the label search, not a single trace echo -- which
     /// is what makes promoting `DO`/`LOOP` an extraction rather than a second
     /// loop to keep in step with this one.
+    ///
+    /// **The compiled stream enters at the second half rather than here.** A
+    /// promoted `DO`/`LOOP` evaluates its own header as ops
+    /// (`ir::Op::EvalExpr`, `ir::Op::TraceKeyword`, `ir::Op::LoopHeaderValue`)
+    /// and then reaches [`Interp::run_loop_with_header`] with the values they
+    /// produced, so the two engines share the *validation* of each value and
+    /// the whole of the construct below it, and differ only in what drives the
+    /// header's sequence.
     #[allow(
         clippy::too_many_arguments,
         reason = "the same argument `run_repeating`'s own allow makes: every parameter is state one DO/LOOP needs"
@@ -5167,10 +5365,143 @@ impl Interp {
         source: Option<&ProgramSource>,
         engine: BodyEngine<'_>,
     ) -> Result<Flow, Failure> {
-        if body.counter.is_some() || matches!(body.kind, LoopKind::With { .. }) {
+        let Some(plan) = loop_header_plan(body) else {
             return Err(Loud::instruction(&instruction.kind).into());
-        }
+        };
+        let values = self.eval_loop_header(code, body, &plan)?;
+        self.run_loop_with_header(code, index, instruction, body, source, engine, values)
+    }
 
+    /// Evaluates every expression of `body`'s header, in `plan`'s order,
+    /// echoing each value under its own `>K>` tag as it goes.
+    ///
+    /// **The interleaving is the semantics, not an implementation detail.**
+    /// The oracle evaluates `TO`, echoes it, validates it, and only then
+    /// evaluates `BY`: measured, `do i = 1 to 'a' by 2` echoes `>K>  "TO" =>
+    /// "a"` and raises 41.1 with no `>K>  "BY"` line at all. So the echo and
+    /// the validation both sit inside this loop rather than after it.
+    ///
+    /// `push_temp` roots each value for the whole of the `DO` clause, which is
+    /// what a `DO OVER`'s target needs: `LoopState::OverOnce` keeps it for the
+    /// loop's own lifetime, and the loop runs inside this clause.
+    fn eval_loop_header(
+        &mut self,
+        code: &Code<'_>,
+        body: &Loop,
+        plan: &HeaderPlan,
+    ) -> Result<LoopHeaderValues, Failure> {
+        let mut values = LoopHeaderValues::default();
+        for &role in plan.roles() {
+            let expr = header_expr_for(&body.kind, role)
+                .expect("the plan names only roles this node has an expression for");
+            let value = self.eval(code, expr)?;
+            self.roots.push_temp(value);
+            self.echo_header_value(role, value);
+            self.accept_header_value(role, value, &mut values)?;
+        }
+        Ok(values)
+    }
+
+    /// One header value's own `>K>` line, at the `DO`/`LOOP` clause's own
+    /// indent, for the roles the oracle echoes one for.
+    ///
+    /// **`current_value_indent` rather than a recomputed `static_indent`**, and
+    /// **not** `loop_indent` (`+2`, `WHILE`/`UNTIL`'s own level): measured,
+    /// `>K>   "TO" => "2"` sits at the same indent as `do i = 1 to 2` itself,
+    /// because these header expressions are evaluated once at loop entry,
+    /// before the body's own frame exists at all
+    /// (`control_setup_expressions_are_unindented_unlike_the_loop_body_they_precede`
+    /// makes the identical point about a *raise* at this same point).
+    ///
+    /// Read here rather than captured before the header's first evaluation, so
+    /// that both engines read the same field at the same point rather than
+    /// agreeing by an argument about what an evaluation can leave behind. The
+    /// two are the same answer: `resolve_and_run_call` restores
+    /// `current_value_indent` on the way out, which
+    /// `current_value_indent_is_restored_after_a_call` pins.
+    pub(crate) fn echo_header_value(&mut self, role: HeaderRole, value: ObjRef) {
+        let Some(keyword) = role.keyword() else {
+            return;
+        };
+        let text = self.to_text(value).to_vec();
+        self.trace_keyword(self.clause_state.current_value_indent, keyword, &text);
+    }
+
+    /// Validates one header value against whatever its role requires and files
+    /// it in `values`.
+    ///
+    /// `initial`/`to`/`by` need only be *numeric* (41.1 if not, via
+    /// `arith_operand` -- the same check ordinary arithmetic already makes),
+    /// never *whole*: measured, `do i = 1.5 to 3` is legal and steps by
+    /// fractional values. A count is the exception, checked against
+    /// `whole_nonneg` -- 26.2 for a bare `DO`'s own repeat count and 26.3 for a
+    /// `FOR`, which is the only way the two differ.
+    ///
+    /// **The digits in force are read where they are used**, which is the
+    /// oracle's "current `NUMERIC DIGITS` at loop entry" rule
+    /// (`round_via_unary_plus`'s own doc comment has the citation). Every read
+    /// inside one header gives the same answer: `NUMERIC DIGITS` changes only
+    /// by executing an instruction, this activation executes none between its
+    /// own header's expressions, and a called routine's own setting does not
+    /// survive its return.
+    pub(crate) fn accept_header_value(
+        &mut self,
+        role: HeaderRole,
+        value: ObjRef,
+        values: &mut LoopHeaderValues,
+    ) -> Result<(), Failure> {
+        match role {
+            HeaderRole::Initial => values.initial = Some(self.header_number(value)?),
+            HeaderRole::To => values.to = Some(self.header_number(value)?),
+            HeaderRole::By => values.by = Some(self.header_number(value)?),
+            HeaderRole::For | HeaderRole::OverFor => {
+                let text = self.to_text(value).to_vec();
+                values.for_remaining = Some(
+                    self.whole_nonneg(value)
+                        .ok_or_else(|| raised_for_count_not_whole(&text))?,
+                );
+            }
+            HeaderRole::Count => {
+                let text = self.to_text(value).to_vec();
+                values.count = Some(
+                    self.whole_nonneg(value)
+                        .ok_or_else(|| raised_repetition_count_not_whole(&text))?,
+                );
+            }
+            HeaderRole::Over => values.over = Some(value),
+        }
+        Ok(())
+    }
+
+    /// One controlled-loop header value as the `Number` the loop runs on:
+    /// numeric (41.1 if not) and rounded at the digits in force.
+    fn header_number(&mut self, value: ObjRef) -> Result<Number, Failure> {
+        let entry_digits = self.activation().settings.digits();
+        let operand = self.arith_operand(value)?;
+        Ok(round_via_unary_plus(&operand, entry_digits).map_err(Raised::from)?)
+    }
+
+    /// `run_loop` past its header: the construct itself, driven from the
+    /// values whichever engine evaluated that header produced.
+    ///
+    /// **This is the whole of the loop that is not its header**, and it is one
+    /// function so that a promoted `DO`/`LOOP` reaches every iteration, every
+    /// trace echo and the `LEAVE`/`ITERATE` search through the same code the
+    /// tree-walker does.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the same argument `run_repeating`'s own allow makes: every parameter is state one DO/LOOP needs"
+    )]
+    pub(crate) fn run_loop_with_header(
+        &mut self,
+        code: &Code<'_>,
+        index: usize,
+        instruction: &Instruction,
+        body: &Loop,
+        source: Option<&ProgramSource>,
+        engine: BodyEngine<'_>,
+        values: LoopHeaderValues,
+    ) -> Result<Flow, Failure> {
         let body_start = index + 1;
         let end_index = body
             .end
@@ -5178,7 +5509,7 @@ impl Interp {
         let resume = end_index + 1;
         let label = body.label;
 
-        match &body.kind {
+        let state = match &body.kind {
             // A block, not a loop: exactly one pass, and `WHILE`/`UNTIL`
             // can never be present (`create_loop`'s own parser only reaches
             // `LoopKind::Simple` through the bare, at-end-of-clause `DO`
@@ -5189,7 +5520,7 @@ impl Interp {
             // 28.1 on a bare `LEAVE` reaching it.
             LoopKind::Simple => {
                 let flow = self.run_bounded(code, body_start, end_index, source, engine)?;
-                match self.do_body_outcome(code, index, label, false, resume, flow)? {
+                return match self.do_body_outcome(code, index, label, false, resume, flow)? {
                     DoOutcome::Escaped(escape) => Ok(escape),
                     // Falls through to `END`, which `run_bounded`'s own
                     // `[body_start, end_index)` range never visits (the
@@ -5197,7 +5528,7 @@ impl Interp {
                     // unlike a repeating loop, a `Simple` block never runs
                     // this arm again, so one explicit echo here is the
                     // whole story, not a per-pass one the way
-                    // `run_repeating`'s own is. Measured, this task's
+                    // `run_repeating`'s own is. Measured, Task 11's
                     // report: `if 1 = 1 then do / say 'x' / end` traces
                     // `end` on its own line even though the block never
                     // repeats.
@@ -5231,168 +5562,60 @@ impl Interp {
                         }
                         Ok(Flow::Goto(resume))
                     }
-                }
-            }
-            LoopKind::Forever => self.run_repeating(
-                code,
-                index,
-                instruction,
-                body_start,
-                end_index,
-                resume,
-                label,
-                body.conditional.as_ref(),
-                source,
-                LoopState::Forever,
-                engine,
-            ),
-            LoopKind::Count(count_expr) => {
-                let remaining = match count_expr {
-                    Some(expr) => {
-                        let value = self.eval(code, expr)?;
-                        self.roots.push_temp(value);
-                        let text = self.to_text(value).to_vec();
-                        // `>K>   "FOR" => "2"`, once, at the `DO`'s own
-                        // level -- measured, this task's own report (F1,
-                        // found by review): the oracle traces a bare
-                        // repeat count under the `FOR` tag, the same as
-                        // an explicit `DO ... FOR n`'s own. Fires before
-                        // the `whole_nonneg` check below, matching every
-                        // other `>K>` site in this function (the value is
-                        // traced as evaluated, not as validated).
-                        // Reads `current_value_indent` rather than
-                        // recomputing `static_indent(index)`: `self.eval`
-                        // just above never touches that field (only
-                        // `step_in_temps_frame` does, for an
-                        // *instruction*, and evaluating `expr` steps none),
-                        // so it still holds exactly this `DO`'s own value.
-                        self.trace_keyword(self.clause_state.current_value_indent, "FOR", &text);
-                        self.whole_nonneg(value)
-                            .ok_or_else(|| raised_repetition_count_not_whole(&text))?
-                    }
-                    // Defensive, not measured: `count_loop`'s own parser
-                    // (`instruction.rs`) always calls `opt_expr`, which can
-                    // answer `None`, but nothing in this crate's own tests
-                    // reaches `DO` with truly nothing after it and no
-                    // recognised keyword either -- `create_loop`'s own
-                    // `at_end()` check catches a bare `DO` first and builds
-                    // `LoopKind::Simple` instead. A single pass, matching
-                    // `Simple`'s own behaviour, is the least surprising
-                    // answer if this is ever reached.
-                    None => 1,
                 };
-                self.run_repeating(
-                    code,
-                    index,
-                    instruction,
-                    body_start,
-                    end_index,
-                    resume,
-                    label,
-                    body.conditional.as_ref(),
-                    source,
-                    LoopState::Count { remaining },
-                    engine,
-                )
             }
-            LoopKind::Controlled(ctrl) => {
-                // Reads `current_value_indent` rather than recomputing --
-                // same reasoning as `Count`'s own `FOR`, just above.
-                let indent = self.clause_state.current_value_indent;
-                let state = self.setup_controlled(code, ctrl, indent)?;
-                self.run_repeating(
-                    code,
-                    index,
-                    instruction,
-                    body_start,
-                    end_index,
-                    resume,
-                    label,
-                    body.conditional.as_ref(),
-                    source,
-                    state,
-                    engine,
-                )
-            }
-            LoopKind::Over {
-                control,
-                target,
-                for_count,
-            } => {
-                // Deviation 1 (`phase-4-exclusions.txt`): a stem target's
-                // own tail order does not reproduce the oracle's (a
-                // balanced tree against our hash map), and no corpus
-                // program may contain one. Detected from `target`'s own
-                // *syntax*, never by evaluating it: `over a.` parses `a.`
-                // through the ordinary expression grammar, which recognises
-                // a bare trailing-dot token as `ExprKind::Stem` the same
-                // way a plain stem read anywhere else does, so a target
-                // that is a stem never needs evaluating to know it is out
-                // of scope.
-                //
-                // **Corrected after review**: an earlier version of this
-                // comment said a stem reached indirectly (`over (a.)`) is
-                // "not detected here". Measured (`do_over_a_parenthesised_
-                // stem_target_is_also_caught`), it *is*: a single
-                // parenthesised sub-expression collapses to that
-                // sub-expression's own `ExprKind` rather than being wrapped
-                // in `ExprKind::List`, so `(a.)` is already
-                // `ExprKind::Stem` by the time the `matches!` below runs,
-                // with nothing extra needed to catch it. What genuinely
-                // escapes this check is a stem reached through something
-                // that does not collapse this way -- a function call
-                // returning one, for instance -- and that gap is real, not
-                // a mistaken claim: no test may write one either way, so
-                // nothing observable depends on catching it, but the
-                // previous wording overstated the gap to include a case
-                // this check already closes.
-                if matches!(target.kind, ExprKind::Stem(_)) {
-                    return Err(Loud::instruction(&instruction.kind).into());
-                }
-                let value = self.eval(code, target)?;
-                self.roots.push_temp(value);
-                // `>K>   "OVER" => "abc"`, once, at the `DO`'s own level --
-                // measured, this task's report: fires on the first pass
-                // only, exactly like `TO`/`BY`/`FOR`, because `target` is
-                // evaluated once at loop entry here too. Reads `current_
-                // value_indent` rather than recomputing -- same reasoning
-                // as `Count`'s own `FOR`.
-                let over_indent = self.clause_state.current_value_indent;
-                let over_text = self.to_text(value).to_vec();
-                self.trace_keyword(over_indent, "OVER", &over_text);
-                let remaining = match for_count {
-                    Some(expr) => {
-                        let count_value = self.eval(code, expr)?;
-                        self.roots.push_temp(count_value);
-                        let text = self.to_text(count_value).to_vec();
-                        Some(
-                            self.whole_nonneg(count_value)
-                                .ok_or_else(|| raised_for_count_not_whole(&text))?,
-                        )
-                    }
-                    None => None,
-                };
-                self.run_repeating(
-                    code,
-                    index,
-                    instruction,
-                    body_start,
-                    end_index,
-                    resume,
-                    label,
-                    body.conditional.as_ref(),
-                    source,
-                    LoopState::OverOnce {
-                        control: *control,
-                        value,
-                        done: false,
-                        remaining,
-                    },
-                    engine,
-                )
-            }
+            LoopKind::Forever => LoopState::Forever,
+            // A bare `DO` with no expression at all runs a single pass,
+            // matching `Simple`'s own behaviour -- see `loop_header_plan`'s
+            // own note on why nothing in this crate's tests reaches it.
+            LoopKind::Count(_) => LoopState::Count {
+                remaining: values.count.unwrap_or(1),
+            },
+            LoopKind::Controlled(ctrl) => LoopState::Controlled {
+                control: ctrl.control,
+                // The header's own value, kept as the `Number` the header
+                // produced. The first re-test replaces it, and that is where
+                // the integer representation gets picked up.
+                current: ControlValue::Wide(
+                    values
+                        .initial
+                        .expect("a controlled loop's plan always names its initial value"),
+                ),
+                to: values.to,
+                by: match values.by {
+                    Some(by) => by,
+                    // No `round_via_unary_plus` needed on the default: a bare
+                    // literal `1` is already whole at any width, so rounding
+                    // it at the header's digits could only ever answer `1`
+                    // again.
+                    None => Number::parse("1").expect("the literal 1 always parses"),
+                },
+                for_remaining: values.for_remaining,
+                stepped: false,
+            },
+            LoopKind::Over { control, .. } => LoopState::OverOnce {
+                control: *control,
+                value: values
+                    .over
+                    .expect("a DO OVER's plan always names its target"),
+                done: false,
+                remaining: values.for_remaining,
+            },
             LoopKind::With { .. } => unreachable!("DO WITH takes the loud path above"),
-        }
+        };
+        self.run_repeating(
+            code,
+            index,
+            instruction,
+            body_start,
+            end_index,
+            resume,
+            label,
+            body.conditional.as_ref(),
+            source,
+            state,
+            engine,
+        )
     }
 
     /// The shared driver for every repeating `LoopKind` (everything but
@@ -6116,110 +6339,6 @@ impl Interp {
         }
     }
 
-    /// Evaluates a `Controlled` loop's header: `initial` first, then
-    /// whichever of `TO`/`BY`/`FOR` were written, in the order they were
-    /// written (`ctrl.order`, recorded because the expressions can have
-    /// side effects) -- never a fixed `TO`-then-`BY`-then-`FOR` order.
-    ///
-    /// `initial`/`to`/`by` need only be *numeric* (41.1 if not, via
-    /// `arith_operand` -- the same check ordinary arithmetic already
-    /// makes), never *whole*: measured, `do i = 1.5 to 3` is legal and
-    /// steps by fractional values. `by` defaults to `1` when absent.
-    /// `for_count` is the one exception, checked against `whole_nonneg`
-    /// (26.3) exactly like a bare `DO`'s own repeat count is (26.2).
-    /// `indent`: the `DO`/`LOOP` instruction's own `static_indent`, for
-    /// `>K>`'s own `TO`/`BY`/`FOR` lines -- **not** `loop_indent`
-    /// (`+2`, `WHILE`/`UNTIL`'s own level): measured, `>K>   "TO" => "2"`
-    /// sits at the same indent as `do i = 1 to 2` itself, because these
-    /// header expressions are evaluated once at loop entry, before the
-    /// body's own frame exists at all (`control_setup_expressions_are_
-    /// unindented_unlike_the_loop_body_they_precede`, this file's own test
-    /// from Task 11, makes the identical point about a *raise* at this
-    /// same point).
-    fn setup_controlled(
-        &mut self,
-        code: &Code<'_>,
-        ctrl: &Controlled,
-        indent: usize,
-    ) -> Result<LoopState, Failure> {
-        // Read once, not once per header component: nothing between here
-        // and the last `round_via_unary_plus` call below executes an
-        // instruction (only expression evaluation happens in a controlled
-        // loop's own header), and `NUMERIC DIGITS` only ever changes by
-        // running one, so one read stands in correctly for "current digits
-        // at loop entry," which is the oracle's own rule (`round_via_unary_
-        // plus`'s own doc comment has the citation).
-        let entry_digits = self.activation().settings.digits();
-        let initial_value = self.eval(code, &ctrl.initial)?;
-        self.roots.push_temp(initial_value);
-        let current = self.arith_operand(initial_value)?;
-        let current = round_via_unary_plus(&current, entry_digits).map_err(Raised::from)?;
-
-        let mut to = None;
-        let mut by = None;
-        let mut for_remaining = None;
-        for entry in &ctrl.order {
-            match entry {
-                ControlExpr::To => {
-                    let expr = ctrl
-                        .to
-                        .as_ref()
-                        .expect("ctrl.order names To only when ctrl.to is Some");
-                    let value = self.eval(code, expr)?;
-                    self.roots.push_temp(value);
-                    let text = self.to_text(value).to_vec();
-                    self.trace_keyword(indent, "TO", &text);
-                    let bound = self.arith_operand(value)?;
-                    to = Some(round_via_unary_plus(&bound, entry_digits).map_err(Raised::from)?);
-                }
-                ControlExpr::By => {
-                    let expr = ctrl
-                        .by
-                        .as_ref()
-                        .expect("ctrl.order names By only when ctrl.by is Some");
-                    let value = self.eval(code, expr)?;
-                    self.roots.push_temp(value);
-                    let text = self.to_text(value).to_vec();
-                    self.trace_keyword(indent, "BY", &text);
-                    let step = self.arith_operand(value)?;
-                    by = Some(round_via_unary_plus(&step, entry_digits).map_err(Raised::from)?);
-                }
-                ControlExpr::For => {
-                    let expr = ctrl
-                        .for_count
-                        .as_ref()
-                        .expect("ctrl.order names For only when ctrl.for_count is Some");
-                    let value = self.eval(code, expr)?;
-                    self.roots.push_temp(value);
-                    let text = self.to_text(value).to_vec();
-                    self.trace_keyword(indent, "FOR", &text);
-                    for_remaining = Some(
-                        self.whole_nonneg(value)
-                            .ok_or_else(|| raised_for_count_not_whole(&text))?,
-                    );
-                }
-            }
-        }
-        // No `round_via_unary_plus` needed on the default: a bare literal
-        // `1` is already whole at any width, so rounding it at `entry_
-        // digits` could only ever answer `1` again.
-        let by = match by {
-            Some(by) => by,
-            None => Number::parse("1").expect("the literal 1 always parses"),
-        };
-        Ok(LoopState::Controlled {
-            control: ctrl.control,
-            // The header's own value, kept as the `Number` the header
-            // produced. The first re-test replaces it, and that is where the
-            // integer representation gets picked up.
-            current: ControlValue::Wide(current),
-            to,
-            by,
-            for_remaining,
-            stepped: false,
-        })
-    }
-
     /// Writes `value` into `control`'s own variable, through whichever of
     /// the three shapes (`shape_of`) its own spelling is.
     ///
@@ -6398,6 +6517,18 @@ impl Interp {
                 },
                 0,
             ) => self.select_case(code, case_expr),
+            // A `DO`/`LOOP` header's `slot`th expression, in the order
+            // `loop_header_plan` puts them in -- the order they were written,
+            // which is the order they are evaluated. The expression is
+            // evaluated and nothing else: its `>K>` echo and its validation are
+            // ops of their own, because both have to happen before the next
+            // expression is evaluated at all.
+            (InstructionKind::Do(body) | InstructionKind::Loop(body), slot) => {
+                let Some(expr) = loop_header_slot(body, slot) else {
+                    return Err(Loud::instruction(&instruction.kind).into());
+                };
+                self.eval(code, expr)
+            }
             (kind, _) => Err(Loud::instruction(kind).into()),
         }
     }

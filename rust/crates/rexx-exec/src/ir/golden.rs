@@ -29,8 +29,16 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::Generic { index: at } => {
                 out.push_str(&format!("{index}: Generic index={at}\n"));
             }
-            Op::Loop { index: at } => {
-                out.push_str(&format!("{index}: Loop index={at}\n"));
+            Op::TraceKeyword { role, src } => {
+                out.push_str(&format!("{index}: TraceKeyword role={role:?} src={src}\n"));
+            }
+            Op::LoopHeaderValue { role, src } => {
+                out.push_str(&format!(
+                    "{index}: LoopHeaderValue role={role:?} src={src}\n"
+                ));
+            }
+            Op::LoopRun { index: at } => {
+                out.push_str(&format!("{index}: LoopRun index={at}\n"));
             }
             Op::Clause { index: at, end } => {
                 out.push_str(&format!("{index}: Clause index={at} end={end}\n"));

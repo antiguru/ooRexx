@@ -111,6 +111,16 @@ fn the_tree_walker_drives_no_chunk_at_all() {
 /// The `END` clause is not in the count and is not missing from it:
 /// `run_bounded`'s range stops before `END`, and the loop's own `Flow::Goto`
 /// resumes one past it, so no engine ever steps it.
+///
+/// **The count did not move when the header was flattened, and it is derivable
+/// that it could not.** A loop's `DO` clause is opened once either way: it used
+/// to be an op that handed the whole instruction to the clause unit, and it is
+/// now a `Clause` region whose ops evaluate the header and then run the
+/// construct. Both open exactly one clause for the `DO`, and the header's own
+/// re-evaluation on each later pass is not a clause of this body -- it is
+/// `run_repeating`'s own `in_clause`, which opens no clause of an instruction
+/// and steps none. What *would* move this count is the loop's per-pass header
+/// becoming a region of its own.
 #[test]
 fn the_ir_engine_steps_a_loop_body_from_the_chunk() {
     const COUNTED_LOOP: &[u8] = b"do i = 1 to 3\n  nop\nend\n";
@@ -135,7 +145,8 @@ fn the_ir_engine_steps_a_loop_body_from_the_chunk() {
 /// A `DO ... END` block's two body clauses are stepped from the chunk too.
 ///
 /// **A separate test from the counted loop's, because `LoopKind::Simple` is a
-/// separate arm of `run_loop` with a `run_bounded` call of its own**, and the
+/// separate arm of `run_loop_with_header` with a `run_bounded` call of its
+/// own**, and the
 /// counted loop's count cannot see it: leaving that one arm on the tree-walker
 /// leaves every other test in the workspace green, including the dual-engine
 /// sweep, which cannot tell the two drivers apart because both produce

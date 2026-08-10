@@ -27,6 +27,7 @@
 
 use rexx_core::FrameId;
 
+use crate::run::HeaderRole;
 use crate::trace::ChunkTrace;
 
 mod compile;
@@ -48,24 +49,77 @@ mod golden_tests;
 /// that is what lets it sit inside a region a jump lands in: the driver's
 /// program counter is an *op* index, so there is no instruction counter
 /// walking alongside it to read the index off. `Op::Generic` is what an
-/// unpromoted instruction compiles to and `Op::Loop` the same for a `DO`/
-/// `LOOP` whose body the driver steps; a promoted construct compiles to a
+/// unpromoted instruction compiles to; a promoted construct compiles to a
 /// `Clause` region followed by whatever jumps its control flow needs.
 pub(crate) enum Op {
     /// Delegates the instruction at `index` back to the tree-walker's own
     /// clause unit, which runs the whole clause.
     Generic { index: u32 },
-    /// A `DO`/`LOOP` at `index` whose **member clauses run from this chunk**.
+    /// Echoes the `>K>` line of one `DO`/`LOOP` header value, from register
+    /// `src`, under the tag [`HeaderRole`] gives it.
     ///
-    /// The construct itself is resolved by the same `Interp::run_loop` the
-    /// tree-walker enters -- header validation, every iteration,
-    /// `WHILE`/`UNTIL`, the `LEAVE`/`ITERATE` label search and every trace
-    /// echo are one implementation, entered from both engines, rather than
-    /// two. What this op changes is the one line inside it that was
-    /// engine-specific: the body's clauses are stepped from the compiled
-    /// stream instead of straight into the tree-walker's clause unit, so an
+    /// **A separate op from the [`Op::EvalExpr`] that produced the value, and
+    /// that is the whole reason this construct waited for the trace ops.** A
+    /// loop header interleaves evaluation and emission -- it evaluates `TO`,
+    /// echoes it, evaluates `BY`, echoes it, in the order the keywords were
+    /// written -- so an op that only evaluated could not reproduce the
+    /// ordering, and an op that did both would be the whole evaluate-and-trace
+    /// unit rather than the general expression op the later tasks need. With
+    /// the emission its own op, **the order in `Controlled::order` is the order
+    /// of ops**.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, whose clause is the
+    /// `DO`/`LOOP`'s own: the indent it echoes at is that clause's.
+    ///
+    /// Emitted unconditionally rather than under [`ChunkTrace`]'s decision the
+    /// way [`Op::TraceClause`] is, because the gate this line answers to is
+    /// `trace_mode().results` rather than the clause echo's, and a second
+    /// compiled emission decision would need a staleness rule of its own. What
+    /// the op form buys here is the ordering, not the elision.
+    TraceKeyword { role: HeaderRole, src: u16 },
+    /// Validates the `DO`/`LOOP` header value in register `src` for the role
+    /// it plays and files it for [`Op::LoopRun`].
+    ///
+    /// **Its own op, in front of the next value's evaluation**, because that
+    /// ordering is observable: `do i = 1 to 'a' by zf()` raises 41.1 on `TO`
+    /// and never calls `zf`, so a stream that gathered every value first and
+    /// validated afterwards would call it.
+    ///
+    /// `Interp::accept_header_value` is the one implementation of what each
+    /// role requires, entered from here and from the tree-walker's own
+    /// `eval_loop_header`.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, and the region must be
+    /// the one [`Op::LoopRun`] closes: the values it files have nowhere else to
+    /// go.
+    LoopHeaderValue { role: HeaderRole, src: u16 },
+    /// Runs the `DO`/`LOOP` at `index` from the header values the ops before it
+    /// filed, with **its body's clauses stepped from this chunk**.
+    ///
+    /// The construct itself is resolved by the same
+    /// `Interp::run_loop_with_header` the tree-walker reaches -- every
+    /// iteration, `WHILE`/`UNTIL`, the `LEAVE`/`ITERATE` label search and every
+    /// trace echo are one implementation, entered from both engines, rather
+    /// than two. What this op changes is the one line inside it that was
+    /// engine-specific: the body's clauses are stepped from the compiled stream
+    /// instead of straight into the tree-walker's clause unit, so an
     /// instruction inside a loop is reachable from the stream at all.
-    Loop { index: u32 },
+    ///
+    /// **The last op of a [`Op::Clause`] region, and inside it rather than
+    /// after it.** The whole loop runs inside the `DO` clause exactly as it
+    /// does on the tree-walker, which is what keeps the clause's temps frame
+    /// open across every pass -- a `DO OVER`'s target value is rooted there for
+    /// the loop's lifetime -- and its boundary where the tree-walker has it.
+    /// The body's own clauses are not region ops: they are reached through
+    /// `run_bounded`, which re-enters the driver for the body's range, so no op
+    /// inside the region opens a clause.
+    ///
+    /// **A `DO`/`LOOP` this crate refuses reaches this op too**, with an empty
+    /// header in front of it, because the refusal is
+    /// `run_loop_with_header`'s -- `run.rs`'s `loop_header_plan` decides it for
+    /// both engines, before anything is evaluated, and a compiler that refused
+    /// on its own would be a second copy of that decision.
+    LoopRun { index: u32 },
     /// Opens the promoted clause of the instruction at `index`. `end` is the
     /// op index one past this clause's last op -- the mark the register
     /// allocator releases to when the clause finishes (the plan's Decisions
@@ -80,10 +134,13 @@ pub(crate) enum Op {
     /// None of it may be elided with the echo, which is why the split is two
     /// ops rather than one op with a flag.
     ///
-    /// **No `Generic` or `Loop` op may sit inside `(here, end)`**, which
-    /// `compile` asserts: both run a whole clause through
-    /// `step_in_temps_frame`, which echoes the clause itself, and the echo is
-    /// not idempotent.
+    /// **No `Generic` op may sit inside `(here, end)`**, which `compile`
+    /// asserts: it runs a whole clause through `step_in_temps_frame`, which
+    /// echoes the clause itself, and the echo is not idempotent. An op that
+    /// runs a construct whose *members* are clauses is a different thing and is
+    /// allowed -- [`Op::LoopRun`] reaches the body's clauses through
+    /// `run_bounded`, which re-enters the driver rather than stepping a clause
+    /// here.
     Clause { index: u32, end: u32 },
     /// Echoes the `*-*` line of the clause of the instruction at `index`.
     ///

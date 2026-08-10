@@ -27,13 +27,13 @@
 //! `apply_flow` and `absorb`.
 
 use rexx_core::{Decoded, FrameId, ObjRef};
-use rexx_parse::{ProgramSource, SymbolId};
+use rexx_parse::{InstructionKind, ProgramSource, SymbolId};
 
 use super::{BodyEngine, Chunk, Op};
 use crate::clause::{ClauseOutcome, ClauseValue};
 use crate::run::{
-    Absorbed, Echo, Ended, Flow, SelectEscape, SelectResume, absorb, otherwise_range,
-    otherwise_resume, select_escape, select_parts, when_resume, when_targets,
+    Absorbed, Echo, Ended, Flow, LoopHeaderValues, SelectEscape, SelectResume, absorb,
+    otherwise_range, otherwise_resume, select_escape, select_parts, when_resume, when_targets,
 };
 use crate::{Code, Failure, Interp, Loud};
 
@@ -111,18 +111,30 @@ enum Settled {
     Escaped(Flow),
 }
 
-/// Where a promoted clause left the program counter.
+/// What a promoted clause's own ops answered: where they left the program
+/// counter, or the `Flow` a construct they resolved produced.
 ///
-/// A newtype so it can carry [`ClauseValue`]: `Interp::in_stepped_clause`
+/// A type of its own so it can carry [`ClauseValue`]: `Interp::in_clause`
 /// chooses what to root across a delivered `CALL ON` handler from its work's
-/// return type, and this answers `None` because a promoted clause's values
-/// live in the chunk's register region, which the clause's own temps frame is
-/// not the root for and does not unwind.
-struct ClauseNext(u32);
+/// return type. A counter position roots nothing, because a promoted clause's
+/// values live in the chunk's register region, which the clause's own temps
+/// frame is not the root for and does not unwind. A `Flow` does -- `Flow::Exit`
+/// carries a value whose only root can be that frame -- and it answers through
+/// `Flow`'s own implementation rather than a second copy of the rule.
+enum RegionEnd {
+    /// Continue at this op.
+    At(u32),
+    /// The construct this clause resolves inside itself answered this `Flow`,
+    /// which the enclosing range settles.
+    Flowed(Flow),
+}
 
-impl ClauseValue for ClauseNext {
+impl ClauseValue for RegionEnd {
     fn rooted(&self) -> Option<ObjRef> {
-        None
+        match self {
+            RegionEnd::At(_) => None,
+            RegionEnd::Flowed(flow) => flow.rooted(),
+        }
     }
 }
 
@@ -337,32 +349,6 @@ impl Interp {
                     let flow = self.step_in_temps_frame(code, index, instruction, source)?;
                     (flow, pc + 1)
                 }
-                // **The clause wrapper is the same one `Generic` takes**, and
-                // the whole of the difference is the `BodyEngine` it carries:
-                // the construct is resolved by `run_loop`, exactly as the
-                // tree-walker resolves it, and the engine decides only how
-                // each of its body's clauses is stepped. Writing a second loop
-                // here instead is the defect the dual-engine sweep exists to
-                // catch.
-                Op::Loop { index } => {
-                    #[cfg(test)]
-                    count_clause_op_entry();
-                    let index = *index as usize;
-                    let Some(instruction) = code.body.instructions.get(index) else {
-                        return Err(Loud::chunk_map_too_short().into());
-                    };
-                    if GRANTING {
-                        self.grant_procedure_permission(instruction);
-                    }
-                    let flow = self.step_in_temps_frame_with(
-                        code,
-                        index,
-                        instruction,
-                        source,
-                        BodyEngine::Chunk { chunk, registers },
-                    )?;
-                    (flow, pc + 1)
-                }
                 Op::Clause { index, end } => {
                     #[cfg(test)]
                     count_clause_op_entry();
@@ -435,6 +421,11 @@ impl Interp {
                             pc = next;
                             continue;
                         }
+                        // Settled against this range from the op past the
+                        // region, which is where an absorbed `Flow::Next`
+                        // continues -- the same position `pc + 1` is for an op
+                        // that runs one clause and no more.
+                        ClauseRegion::Flowed(flow) => (flow, end),
                         ClauseRegion::Exit(value) => (Flow::Exit(value), pc),
                     }
                 }
@@ -503,6 +494,11 @@ impl Interp {
                 Op::EvalExpr { .. } => return Err(Loud::op_not_driven("EvalExpr").into()),
                 Op::JumpUnless { .. } => return Err(Loud::op_not_driven("JumpUnless").into()),
                 Op::WhenTest { .. } => return Err(Loud::op_not_driven("WhenTest").into()),
+                Op::TraceKeyword { .. } => return Err(Loud::op_not_driven("TraceKeyword").into()),
+                Op::LoopHeaderValue { .. } => {
+                    return Err(Loud::op_not_driven("LoopHeaderValue").into());
+                }
+                Op::LoopRun { .. } => return Err(Loud::op_not_driven("LoopRun").into()),
             };
             // **Per clause, not per escaping flow.** A clause that left the
             // activation stack changed makes this loop's `code` describe a
@@ -771,7 +767,10 @@ impl Interp {
                 it.run_region_ops(code, chunk, registers, at, end, source, stale)
             })?;
         match outcome {
-            ClauseOutcome::Ran(next) => Ok(ClauseRegion::Continue(next?.0)),
+            ClauseOutcome::Ran(next) => Ok(match next? {
+                RegionEnd::At(next) => ClauseRegion::Continue(next),
+                RegionEnd::Flowed(flow) => ClauseRegion::Flowed(flow),
+            }),
             ClauseOutcome::Ended(exit) => Ok(ClauseRegion::Exit(exit.value())),
         }
     }
@@ -781,8 +780,8 @@ impl Interp {
     ///
     /// Only the ops that are part of a clause's own work appear here. An op
     /// that runs a whole clause of its own does not, and cannot: `compile`
-    /// asserts no `Generic` or `Loop` sits inside a region, because both echo
-    /// the clause and the echo is not idempotent.
+    /// asserts no `Generic` sits inside a region, because it echoes the clause
+    /// and the echo is not idempotent.
     #[expect(
         clippy::too_many_arguments,
         reason = "one caller, and every argument is a value that caller already holds"
@@ -796,7 +795,15 @@ impl Interp {
         end: u32,
         source: Option<&ProgramSource>,
         stale: bool,
-    ) -> Result<ClauseNext, Failure> {
+    ) -> Result<RegionEnd, Failure> {
+        // A `DO`/`LOOP` header's values, accumulated across this region's own
+        // ops because they are not `ObjRef`s and so have no register to live
+        // in: a bound is a `Number` and a budget is a count.
+        //
+        // **`None` until an op needs one**, so a region that is not a loop
+        // header -- an `IF`'s, a `WHEN`'s, a `SELECT`'s -- pays one discriminant
+        // store rather than the struct's own initialisation.
+        let mut header: Option<LoopHeaderValues> = None;
         let mut pc = at;
         while pc < end {
             let Some(op) = chunk.op_at_index(pc) else {
@@ -844,7 +851,7 @@ impl Interp {
                     if self.register_holds(registers, *reg)? {
                         pc += 1;
                     } else {
-                        return Ok(ClauseNext(*target));
+                        return Ok(RegionEnd::At(*target));
                     }
                 }
                 Op::WhenTest { index, case, dst } => {
@@ -875,11 +882,63 @@ impl Interp {
                     self.roots.set_temp(registers, *dst as usize, value);
                     pc += 1;
                 }
+                // The `>K>` line of one header value. **The emission is its
+                // own op**, which is what lets the stream reproduce the order
+                // the oracle evaluates and echoes a loop header in: evaluate
+                // `TO`, echo it, evaluate `BY`, echo it.
+                Op::TraceKeyword { role, src } => {
+                    debug_assert!(
+                        chunk.holds_register(*src),
+                        "op reads register {src} outside the region the chunk reserved"
+                    );
+                    let value = self.roots.temp_at(registers, *src as usize);
+                    self.echo_header_value(*role, value);
+                    pc += 1;
+                }
+                // One header value's own validation, in front of the next
+                // value's evaluation because that order is observable
+                // (`Op::LoopHeaderValue`'s own doc comment).
+                Op::LoopHeaderValue { role, src } => {
+                    debug_assert!(
+                        chunk.holds_register(*src),
+                        "op reads register {src} outside the region the chunk reserved"
+                    );
+                    let value = self.roots.temp_at(registers, *src as usize);
+                    let values = header.get_or_insert_with(LoopHeaderValues::default);
+                    self.accept_header_value(*role, value, values)?;
+                    pc += 1;
+                }
+                // The construct itself, from the values the ops above filed.
+                // `run_loop_with_header` is the same function the tree-walker
+                // reaches, and `BodyEngine::Chunk` is the one thing this call
+                // says that the tree-walker's does not: the body's clauses come
+                // from this chunk.
+                Op::LoopRun { index } => {
+                    let index = *index as usize;
+                    let Some(instruction) = code.body.instructions.get(index) else {
+                        return Err(Loud::chunk_map_too_short().into());
+                    };
+                    let (InstructionKind::Do(body) | InstructionKind::Loop(body)) =
+                        &instruction.kind
+                    else {
+                        return Err(Loud::loop_op_off_its_node().into());
+                    };
+                    let values = header.take().unwrap_or_default();
+                    let flow = self.run_loop_with_header(
+                        code,
+                        index,
+                        instruction,
+                        body,
+                        source,
+                        BodyEngine::Chunk { chunk, registers },
+                        values,
+                    )?;
+                    return Ok(RegionEnd::Flowed(flow));
+                }
                 Op::Jump { target } => {
-                    return Ok(ClauseNext(*target));
+                    return Ok(RegionEnd::At(*target));
                 }
                 Op::Generic { .. } => return Err(Loud::op_not_driven("Generic").into()),
-                Op::Loop { .. } => return Err(Loud::op_not_driven("Loop").into()),
                 Op::Clause { .. } => return Err(Loud::op_not_driven("Clause").into()),
                 Op::SelectCaseText { .. } => {
                     return Err(Loud::op_not_driven("SelectCaseText").into());
@@ -891,7 +950,7 @@ impl Interp {
                 Op::EndBranch => return Err(Loud::op_not_driven("EndBranch").into()),
             }
         }
-        Ok(ClauseNext(end))
+        Ok(RegionEnd::At(end))
     }
 
     /// Whether register `reg` holds the Rexx logical value `1`.
@@ -928,6 +987,10 @@ fn op_at(chunk: &Chunk, target: usize) -> Result<u32, Failure> {
 enum ClauseRegion {
     /// Continue at this op.
     Continue(u32),
+    /// The construct this clause resolved answered a `Flow` its enclosing range
+    /// has to settle -- a `DO`/`LOOP`'s own `Goto` past its `END`, or a
+    /// `LEAVE`/`ITERATE` it did not consume.
+    Flowed(Flow),
     /// A `CALL ON` handler ran at this clause's boundary and ended the whole
     /// program.
     Exit(Option<ObjRef>),
@@ -978,9 +1041,9 @@ pub(crate) fn run_chunk_entries() -> usize {
 // driven from the chunk from a body driven straight into the tree-walker.
 //
 // Counted where a clause *begins*, which is every op that opens one: a
-// `Generic`, a `Loop`, and a promoted `Clause` region. So a construct that
-// moves from one of those shapes to another does not change the count, and a
-// construct whose clauses stop reaching the stream does.
+// `Generic` and a promoted `Clause` region. So a construct that moves from one
+// of those shapes to another does not change the count, and a construct whose
+// clauses stop reaching the stream does.
 //
 // Per thread for the reason `RUN_CHUNK_ENTRIES` is: see its own comment.
 #[cfg(test)]
