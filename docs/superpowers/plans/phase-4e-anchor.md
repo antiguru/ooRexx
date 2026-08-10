@@ -493,3 +493,90 @@ The cost is attributed, on instruction counts, per `DO`-body pass, IR arm minus 
 **4b' owns +33 per pass, Task 4c owns +3, and Task 6 costs exactly zero on this axis.** So the
 structural remedy belongs to the frame stack rather than to any later promotion, and neither the
 `varlookup` residual's amortisation hypothesis nor this task's header work is where it sits.
+
+## Task 7: `Assignment` and `Say` promoted -- and the `varlookup` discharge
+
+BASE `caf16c90`, head `f55ea409`.
+`perf stat -e instructions:u`, base against head interleaved in one sitting, `ulimit -v 8388608`, one
+fresh empty directory; wall clock as criterion 4's estimator -- both arms of **one** binary through
+`REXX_ENGINE`, interleaved inside each round with the within-round order alternating, rounds outermost,
+9 pairs.
+
+**Predicted before measuring: the residual does not close, |delta| under 1% on the ratio, sign not
+predicted.** The reasoning was that amortisation cannot happen here: `varlookup`'s `DO` body is entered
+once per pass and holds the same two clauses either way, so the per-entry cost is untouched, and
+neither of its body clauses holds a literal -- `x = x + 1` is an operator and `y = x` a variable read,
+so the native constant op does not run on this axis even once inside the loop.
+
+### Instructions
+
+| axis | arm | base | head | delta |
+|---|---|---:|---:|---:|
+| `emptyloop` (25e6) | tree-walker | 37.8507e9 | 37.8507e9 | **+0.000%** |
+| `emptyloop` | IR | 40.3257e9 | 40.3257e9 | **+0.000%** |
+| `varlookup` (19e6) | tree-walker | 71.6307e9 | 72.5807e9 | **+1.326%** |
+| `varlookup` | IR | 73.9297e9 | 77.8437e9 | **+5.294%** |
+| `arith` | tree-walker | 30.4006e9 | 30.4631e9 | +0.206% |
+| `arith` | IR | 30.5158e9 | 30.7730e9 | +0.843% |
+| `compound` | tree-walker | 77.0129e9 | 77.2634e9 | +0.325% |
+| `compound` | IR | 77.6189e9 | 78.6489e9 | +1.327% |
+| `strings` | tree-walker | 84.8048e9 | 85.1798e9 | +0.442% |
+| `strings` | IR | 85.3657e9 | 86.9107e9 | +1.810% |
+| `alloc4c` | tree-walker | 15.9093e9 | 15.9842e9 | +0.471% |
+| `alloc4c` | IR | 16.0523e9 | 16.3613e9 | +1.925% |
+
+`emptyloop` is the control and it worked: its body is a single `nop`, this task promotes nothing in it,
+and both arms are identical to base at nine significant figures. **So every other row above is this
+task's, and none of it is the sitting's.**
+
+`arith`'s own base is not deterministic to better than about 0.08% -- 30.4006e9 twice and 30.4236e9
+once in one session -- so its row is +0.13% to +0.21%. It is the only axis where that was seen.
+
+### Criterion 4
+
+| axis | tree-walker median | IR median | IR/TW wall | IR faster | IR/TW instructions |
+|---|---:|---:|---:|---:|---:|
+| `varlookup` | 5.2210 s | 5.4941 s | **1.0523** | 0 of 9 | **1.0725** |
+| `emptyloop` | 2.9629 s | 2.9294 s | 0.9887 | 9 of 9 | 1.0654 |
+
+**`varlookup` still fails, and the amortisation hypothesis is refuted**: 1.0321 on instructions at base
+against 1.0725 at head, so the residual widened by 4 percentage points rather than closing.
+
+**`emptyloop`'s wall clock is the environment spread, caught happening.** Two sittings of this session
+read IR/TW 1.0526 and 0.9887 on binaries with *identical* instruction counts. The 0.9887 above is
+recorded and claimed for nothing, in either direction.
+
+### The remedy the number names
+
+IR arm minus tree-walker arm, on `varlookup`:
+
+| | per `DO`-body pass | per body clause |
+|---|---:|---:|
+| base | 121 | 60.5 |
+| head | 277 | **138.5** |
+
+**Task 7 adds 78 per body clause and zero per body entry**, which is the amortisation premise failing
+directly -- the quantity that grew is the one paid per clause. So hoisting the op range so it travels
+with `BodyEngine` addresses per-entry cost and cannot touch this, and a single-op fast path addresses a
+range holding one op where `varlookup`'s promoted regions hold three and four. What is left is **the
+two-level shape**: `run_clause_region` plus `run_region_ops`, two multi-argument calls and a second
+op-dispatch loop per promoted clause, against the tree-walker's one `step` dispatch. It multiplies with
+every further promotion.
+
+### The tree-walker column, which is the extraction and not the promotion
+
+Established by probe rather than argued: a build with `step`'s two arms written out inline, the shared
+functions left in place for the ops, reads `varlookup` 71.6307e9 and `emptyloop` 37.8507e9 on the
+tree-walker arm -- base exactly, nine significant figures, both axes -- with the IR arm unmoved. **That
+probe is not the remedy**, because writing the arms out while the shared function exists is two
+implementations of one instruction.
+
+What was measured instead: `#[inline]` on the pair recovers 722e6 on `varlookup`'s IR arm, 19 per body
+clause, and reads exactly zero on every tree-walker cell and on both `emptyloop` cells -- kept.
+`#[inline(always)]` recovers a further 76e6 there and costs `emptyloop` 550e6 on **both** arms, a
+program whose loop body enters neither function, so it perturbs `step`'s codegen rather than removing a
+call -- rejected. `#[inline(always)]` on `assign_expr_target` as well reads 72.7517e9 on `varlookup`'s
+tree-walker arm, worse than either -- rejected.
+
+No mechanism below "LLVM's inlining decisions in `step` changed" has been named for the residual +0.2%
+to +1.3%, so per this document's own rule it is recorded and not claimed.
