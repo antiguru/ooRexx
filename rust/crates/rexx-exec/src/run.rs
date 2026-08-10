@@ -2733,6 +2733,13 @@ impl Interp {
     /// evaluates and calls this, and `crate::ir::Op::Say` does the same with a
     /// register's value, so the trace line and the output cannot come apart
     /// between them.
+    ///
+    /// **`inline`, and it is a measurement rather than a habit** --
+    /// [`Interp::assign_evaluated`]'s own doc comment carries the numbers, since
+    /// the two annotations were measured together.
+    ///
+    /// [`Interp::assign_evaluated`]: Interp::assign_evaluated
+    #[inline]
     pub(crate) fn say_evaluated(&mut self, value: Option<ObjRef>) {
         let line = match value {
             Some(value) => {
@@ -2756,6 +2763,21 @@ impl Interp {
     /// with `PARSE`; its own doc comment carries which shapes `addVariable`
     /// can build, and why its fourth arm is loud and is reachable from the
     /// other caller but not from this one.
+    ///
+    /// **`inline` rather than `inline(always)`, and the difference was
+    /// measured on both.** With `perf stat -e instructions:u`, base against
+    /// head interleaved in one sitting, this annotation and
+    /// [`Interp::say_evaluated`]'s together are worth 722,000,000 user
+    /// instructions on the compiled stream's arm of
+    /// `bench-programs/varlookup.rex` -- 78.5657 against 77.8437 billion, 19
+    /// per body clause -- and read exactly zero on the tree-walker's arm and on
+    /// every cell of `bench-programs/emptyloop.rex`. `inline(always)` was
+    /// measured too and is worse overall: it recovers a further 76,000,000 here
+    /// and costs `emptyloop` 550,000,000 on **both** arms, a program whose loop
+    /// body enters neither function.
+    ///
+    /// [`Interp::say_evaluated`]: Interp::say_evaluated
+    #[inline]
     pub(crate) fn assign_evaluated(
         &mut self,
         code: &Code<'_>,
