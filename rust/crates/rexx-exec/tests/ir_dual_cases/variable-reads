@@ -1,0 +1,261 @@
+# What promoting a bare-symbol read has to keep, in three kinds.
+#
+# **Shapes**, which ask what the read answers: a set simple variable, one that
+# was never set (which answers its own upcased spelling), one whose value a
+# DROP took away, one a DROP reached through a run-time name, a bare stem, a
+# compound whose tail is computed from a variable, and one whose binding was
+# made by INTERPRET rather than by any clause of the compiled body.
+#
+# **Trace**, which is where a native read op diverges first and where no other
+# instrument in this crate can see it. `eval.rs` emits a variable's `>V>` line
+# as a side effect of evaluating it, and a compound's `>C>` line in front of
+# that; an op that only loads a value into a register emits neither, and every
+# line after the missing one still matches -- so only an exact stderr
+# comparison catches it, which is what these rows are. Both directions are
+# here: `trace i` rows require the lines, and a `trace r` row requires their
+# absence, because an emission that ignored its own gate would print them
+# under every setting.
+#
+# **Order**, which a compound is the only kind that can state: `>C>` announces
+# the fully-resolved name before `>V>` shows what is stored there, whether or
+# not the tail resolves to anything -- the `say za.4` row is the half where it
+# does not.
+#
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every row
+# was measured to produce the identical bytes on both engines before the read
+# was promoted -- which is what says a row can tell whether it would ever have
+# failed. Regenerate a row by running its program under the oracle, never with
+# REWRITE=1 -- ir_dual.rs refuses to run at all under REWRITE for that reason.
+# Capture is:
+#
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+#
+# Expected lines are tagged so that no line of the block can be empty: an empty
+# line ends an expected block, and a program's own output may hold one.
+# Trailing blanks are part of what is compared.
+
+# a set simple variable, read into an assignment and into a SAY
+program
+zv = 'val'
+zw = zv
+say zw
+----
+rc> 0
+out> val
+
+# the same two reads under trace i
+# `>V>` is tagged with the symbol's own name and shows the value; it precedes
+# the `>>>` result line, and for the assignment the `>=>` write line follows.
+program
+trace i
+zv = 'val'
+zw = zv
+say zv
+----
+rc> 0
+out> val
+err>      2 *-* zv = 'val'
+err>        >L>   "val"
+err>        >>>   "val"
+err>        >=>   ZV <= "val"
+err>      3 *-* zw = zv
+err>        >V>   ZV => "val"
+err>        >>>   "val"
+err>        >=>   ZW <= "val"
+err>      4 *-* say zv
+err>        >V>   ZV => "val"
+err>        >>>   "val"
+
+# an uninitialised symbol answers its own upcased spelling
+program
+zw = zundef
+say zw
+say zundef
+----
+rc> 0
+out> ZUNDEF
+out> ZUNDEF
+
+# and traces that derived name as the value it read
+program
+trace i
+zw = zundef
+say zundef
+----
+rc> 0
+out> ZUNDEF
+err>      2 *-* zw = zundef
+err>        >V>   ZUNDEF => "ZUNDEF"
+err>        >>>   "ZUNDEF"
+err>        >=>   ZW <= "ZUNDEF"
+err>      3 *-* say zundef
+err>        >V>   ZUNDEF => "ZUNDEF"
+err>        >>>   "ZUNDEF"
+
+# a symbol after DROP reads as uninitialised again
+program
+zv = 'val'
+drop zv
+zw = zv
+say zw
+----
+rc> 0
+out> ZV
+
+# the same under trace i, where the DROP's own clause echoes and shows nothing
+program
+trace i
+zv = 'val'
+drop zv
+zw = zv
+----
+rc> 0
+err>      2 *-* zv = 'val'
+err>        >L>   "val"
+err>        >>>   "val"
+err>        >=>   ZV <= "val"
+err>      3 *-* drop zv
+err>      4 *-* zw = zv
+err>        >V>   ZV => "ZV"
+err>        >>>   "ZV"
+err>        >=>   ZW <= "ZV"
+
+# a DROP whose target is named by another variable's value
+# `drop (zn)` learns the name at run time, so the slot it clears is reached
+# through the name path rather than through any symbol the parser saw there.
+program
+zn = 'ZFRESH'
+zfresh = 'set'
+drop (zn)
+zw = zfresh
+say zw
+----
+rc> 0
+out> ZFRESH
+
+# a compound whose tail is computed from a variable
+# `za.3` and `za.zi` name one tail; `za.4` was never written.
+program
+zi = 3
+za.zi = 'v3'
+zw = za.zi
+say zw
+say za.4
+----
+rc> 0
+out> v3
+out> ZA.4
+
+# the same reads under trace i
+# **The order row.** A compound read announces the fully-resolved name it used
+# (`>C>`) before showing what is stored there (`>V>`), and it does so whether
+# or not the tail resolves -- `za.4` resolves to nothing and still gets both
+# lines. The tag stays the source spelling on both.
+program
+trace i
+zi = 3
+za.zi = 'v3'
+zw = za.zi
+say za.4
+----
+rc> 0
+out> ZA.4
+err>      2 *-* zi = 3
+err>        >L>   "3"
+err>        >>>   "3"
+err>        >=>   ZI <= "3"
+err>      3 *-* za.zi = 'v3'
+err>        >L>   "v3"
+err>        >>>   "v3"
+err>        >C>   ZA.ZI => "ZA.3"
+err>        >=>   ZA.ZI <= "v3"
+err>      4 *-* zw = za.zi
+err>        >C>   ZA.ZI => "ZA.3"
+err>        >V>   ZA.ZI => "v3"
+err>        >>>   "v3"
+err>        >=>   ZW <= "v3"
+err>      5 *-* say za.4
+err>        >C>   ZA.4 => "ZA.4"
+err>        >V>   ZA.4 => "ZA.4"
+err>        >>>   "ZA.4"
+
+# a bare stem read
+# `zt` is a simple variable, so `zt.9` is a compound of a stem nothing wrote.
+program
+zs. = 'dflt'
+zt = zs.
+say zt
+say zt.9
+----
+rc> 0
+out> dflt
+out> ZT.9
+
+# a bare stem read under trace i traces `>V>`, the same line a simple variable
+# gets, with the stem's own trailing period in the tag
+program
+trace i
+zs. = 'dflt'
+zt = zs.
+----
+rc> 0
+err>      2 *-* zs. = 'dflt'
+err>        >L>   "dflt"
+err>        >>>   "dflt"
+err>        >=>   ZS. <= "dflt"
+err>      3 *-* zt = zs.
+err>        >V>   ZS. => "dflt"
+err>        >>>   "dflt"
+err>        >=>   ZT <= "dflt"
+
+# a binding INTERPRET made, read by a clause of the compiled body
+# The read is written in the body and the write is not, so the two have to
+# agree about which slot `zq` is without the write ever having been compiled.
+program
+interpret "zq = 'made'"
+zr = zq
+say zr
+----
+rc> 0
+out> made
+
+# the same under trace i, where the fragment's own clause echoes between the
+# INTERPRET's lines and the read's
+program
+trace i
+interpret "zq = 'made'"
+zr = zq
+----
+rc> 0
+err>      2 *-* interpret "zq = 'made'"
+err>        >L>   "zq = 'made'"
+err>        >>>   "zq = 'made'"
+err>      2 *-* zq = 'made'
+err>        >L>   "made"
+err>        >>>   "made"
+err>        >=>   ZQ <= "made"
+err>      3 *-* zr = zq
+err>        >V>   ZQ => "made"
+err>        >>>   "made"
+err>        >=>   ZR <= "made"
+
+# the reads of the first row under trace r
+# **The negative direction, and it is what a compiled-in emission decision
+# gets wrong.** `>V>` is gated on intermediates and `>>>` on results, so an op
+# that emitted the variable's line whenever it ran would add three lines here
+# that the oracle does not print.
+program
+trace r
+zv = 'val'
+zw = zv
+say zv
+----
+rc> 0
+out> val
+err>      2 *-* zv = 'val'
+err>        >>>   "val"
+err>      3 *-* zw = zv
+err>        >>>   "val"
+err>      4 *-* say zv
+err>        >>>   "val"
