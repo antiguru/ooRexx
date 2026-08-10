@@ -255,6 +255,13 @@ pub(crate) enum Op {
     /// into the value, which is the same function `eval_node`'s own `Literal`
     /// arm calls.
     ///
+    /// **`Interp::literal` and not `Interp::text`**, which is where the tagged
+    /// small integer a literal like `'1'` starts as comes from. That is a
+    /// representation choice rather than a behaviour -- `Interp::literal`'s own
+    /// doc comment says a `SmallInt` reaches every consumer in the crate
+    /// already -- so what the wrong call here would cost is an allocation per
+    /// pass, not an answer.
+    ///
     /// **It emits nothing, and [`Op::TraceLiteral`] is why that is safe.**
     /// `eval.rs` emits a literal's `>L>` line as a side effect of evaluating
     /// it, so an op that only loads a value silently drops that line -- and

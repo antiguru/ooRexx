@@ -756,17 +756,28 @@ impl Interp {
                 // clause is a clause and the permission is spent by whichever
                 // clause the activation granted it to.
                 //
-                // **Unobservable, and nothing here makes it observable.** Deleting
-                // this line changes no test's answer, and so does deleting the
-                // `grant_procedure_permission` call that precedes this clause. The
-                // reason is a property of what `compile` happens to emit -- an op
-                // that grants follows every `Clause` region it currently produces,
-                // and grants again before any `PROCEDURE` can be reached -- and
-                // **nothing enforces that property**: no assertion states it, and
-                // a promotion that emits a region followed by something else would
-                // make both lines load-bearing with nothing going red in between.
-                // They stay because the obligation belongs to the clause unit; do
-                // not read them as a guarantee that anything checks them.
+                // **Load-bearing, and so is the `grant_procedure_permission`
+                // call in front of this region -- each with a witness of its
+                // own.** Both were once unobservable, on the premise that an op
+                // which grants follows every region and grants again before any
+                // `PROCEDURE` is reached. Neither half of that holds, and each
+                // fails for a different reason:
+                //
+                // * a construct whose body clauses are stepped by a nested,
+                //   *non-granting* driver entry has no later grant at all, so
+                //   without this take a `PROCEDURE` as a loop body's first
+                //   instruction is permitted. Measured: dropping it makes
+                //   `tests/ir_dual_cases/loop-header-boundaries`' "procedure as
+                //   a loop body's first instruction" row diverge between the
+                //   engines, and nothing else in the workspace notices;
+                // * a promoted clause that *is* the activation's first
+                //   instruction has to consume `first_instruction_pending`
+                //   itself, or the next clause's grant consumes it instead and a
+                //   `PROCEDURE` behind a promoted clause is permitted. Measured:
+                //   dropping the grant makes
+                //   `tests/ir_dual_cases/assignment-and-say`'s "procedure after
+                //   an assignment in a called label" row diverge, and again
+                //   nothing else notices.
                 let _first_instruction = std::mem::take(&mut it.procedure_permitted);
                 it.run_region_ops(code, chunk, registers, at, end, source, stale)
             })?;

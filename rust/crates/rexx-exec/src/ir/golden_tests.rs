@@ -105,6 +105,48 @@ fn an_assignment_of_a_literal_compiles_to_a_constant_load_and_a_store() {
     assert_eq!(chunk.consts, vec![Box::from(&b"abc"[..])]);
 }
 
+/// **Two assignments in one body reserve one register between them**, which is
+/// the release at a promoted clause's own end doing its job.
+///
+/// Its own test rather than a line in the one above, because a body with a
+/// single assignment in it reserves one register whether or not anything is
+/// ever released -- so the single-assignment case cannot tell the two apart.
+/// Found by mutation: dropping the `registers.release(mark)` from the
+/// assignment arm left the whole workspace green, because every other stream
+/// that asserts a register count reaches it through a promoted `SAY` instead.
+/// Under that mutation the count here is 2, and it would grow with a body's
+/// length -- exactly the withdrawn whole-chunk monotonic counter the plan's
+/// Decisions section rejects.
+///
+/// The `SAY` is here for the same reason one instruction over, so that the
+/// pair is stated rather than left to whichever other test happens to cover
+/// it.
+#[test]
+fn two_assignments_and_two_says_in_one_body_reuse_one_register() {
+    let chunk = compile_for_test(b"n1 = 'a'\nn2 = 'b'\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=4\n\
+         1: Const dst=0 konst=0\n\
+         2: TraceLiteral src=0\n\
+         3: Store index=0 src=0\n\
+         4: Clause index=1 end=8\n\
+         5: Const dst=0 konst=1\n\
+         6: TraceLiteral src=0\n\
+         7: Store index=1 src=0\n"
+    );
+    assert_eq!(
+        chunk.registers, 1,
+        "the second assignment reuses the register the first one released"
+    );
+
+    let says = compile_for_test(b"say 'a'\nsay 'b'\n").expect("compiles");
+    assert_eq!(
+        says.registers, 1,
+        "the second SAY reuses the register the first one released"
+    );
+}
+
 /// **One literal written twice is one entry in the constant table, and both
 /// occurrences load it.**
 ///
