@@ -382,6 +382,17 @@ Not "meets `phase-4d-gate.md`'s bars" -- those are 4f's exit condition and 4f ru
 *Cannot see:* whether the IR is *faster*, which this phase deliberately does not promise, and whether an axis moved for the reason a promotion predicted rather than by accident. The per-promotion predicted-versus-measured record is what carries the second.
 *Falsification:* the paired interleaved comparison Phase 4f's accept rule specifies, run between the two engine arms of one binary rather than between two binaries -- which removes the build-identity problem entirely, since both arms are the same build. An axis that comes out slower fails this criterion; it is not convertible into a recorded debt, because a debt here would hand 4f a regression to discharge before it starts.
 
+**Within one binary is not a convenience here, it is the only valid form, and that is measured (2026-08-10).**
+Code layout on this machine is worth **7.8% on `emptyloop`**: Task 4c built the same source twice, differing by **one comment**, and read 2.745 s against 2.959 s. Moritz puts the general envelope for Rust at nearer 20%.
+
+Three consequences, and they are binding rather than advisory:
+
+* **A cross-binary wall-clock or cycle comparison below about 10% says nothing in this project.** Not "is weak evidence" -- says nothing, because a behaviour-neutral edit produces that much on its own.
+* **Criterion 4 is therefore judged only within one binary, both arms, one sitting.** Both arms share a layout by construction, so the artifact cancels. Any reading of criterion 4 taken across two builds is inadmissible however many rounds it ran.
+* **Cross-binary attribution needs instruction counts.** `perf stat -e instructions:u` reproduced to eight significant figures across builds where wall-clock moved 7.8%, so it is the instrument for "what did this change cost", and wall-clock is the instrument only for the within-binary verdict.
+
+**What this retires.** Every "this task moved axis X by N%" claim in this phase that was taken across two builds and is smaller than roughly 10% -- including Task 4b-M's headline that removing the shared regression put the tree-walker 7.0% and the IR arm 3.1% below the pre-driver binary in cycles. Its *attribution* stands, because the causes were confirmed on instruction counts; the **magnitudes** do not, and no later task should quote them.
+
 **5. The patch table has a working consumer: quickened small-integer arithmetic, with a measured win that reverts.**
 
 *Cannot see:* whether the specialised path re-validates its precondition, and whether the patch table is doing anything at all -- static specialisation with a dead `AtomicU32` beside it would pass.
