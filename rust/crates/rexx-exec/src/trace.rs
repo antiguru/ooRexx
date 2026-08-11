@@ -37,6 +37,7 @@ use crate::Interp;
 use crate::error::Raised;
 use rexx_core::ObjRef;
 use rexx_num::Number;
+use rexx_parse::Operator;
 
 /// The visible-output shape of the current `TRACE` setting, restricted to
 /// what pure-4a code can ever produce (D18 excludes commands, so
@@ -740,6 +741,30 @@ impl Interp {
             return;
         }
         push_tagged(&mut self.trace, ">E>", indent, false, tag, " => ", value);
+    }
+
+    /// The `>O>` line one binary operator's result owes, from the value
+    /// itself, at the indent the clause in force is tracing values at.
+    ///
+    /// **One function for both engines**, the shape [`Interp::echo_literal`]
+    /// has and for the same reason: `eval.rs` emits this line as a side effect
+    /// of *evaluating* a binary node, and a compiled `crate::ir::Op::Arith`
+    /// computes without evaluating, so the line has to come from an op of its
+    /// own (`crate::ir::Op::TraceOperator`). Two emissions that could disagree
+    /// about the tag or the indent would be a divergence nothing but an exact
+    /// stderr comparison could see.
+    ///
+    /// **Every binary operator traces this way** -- arithmetic, comparison,
+    /// logical and concatenation alike -- which is why the operator arrives as
+    /// an `Operator` rather than as the arithmetic subset: the tag is
+    /// `Operator::spelling`, whatever the family.
+    pub(crate) fn echo_operator(&mut self, op: Operator, value: ObjRef) {
+        if !self.tracing_intermediates() {
+            return;
+        }
+        let indent = self.clause_state.current_value_indent;
+        let text = self.to_text(value).to_vec();
+        self.trace_operator(indent, op.spelling().as_bytes(), &text);
     }
 
     /// `>O>` (`TRACE_PREFIX_OPERATOR`): a binary operator's own result,

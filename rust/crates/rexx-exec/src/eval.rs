@@ -257,10 +257,12 @@ impl Interp {
             // base `evaluate` is where the oracle's `traceOperator` call
             // sits, shared by every operator subclass the same way this one
             // `match` arm is shared here).
-            ExprKind::Binary { op, .. } => {
-                let text = self.to_text(value).to_vec();
-                self.trace_operator(indent, op.spelling().as_bytes(), &text);
-            }
+            // `echo_operator` rather than an open-coded render plus
+            // `trace_operator`, because the compiled stream's own
+            // `crate::ir::Op::TraceOperator` emits the identical line from a
+            // register and the two must not be able to disagree -- the reason
+            // `echo_literal` above is one function.
+            ExprKind::Binary { op, .. } => self.echo_operator(*op, value),
             // `>name`/`<name` traces as an **operator**, not as the read of
             // the variable it names: `>O>   ">" => "PQ"`, the referenced
             // variable's own *name* as the operator's value
@@ -705,28 +707,75 @@ impl Interp {
         let right_value = self.eval(code, right)?;
         self.roots.push_temp(right_value);
 
+        // The two halves in the order they are tried, which is the whole of
+        // what this function decides once its operands are values. Both are
+        // entered from `crate::ir::Op::Arith` as well, which is why they are
+        // functions rather than the two blocks they used to be: the compiled
+        // op has its operands in registers rather than in nodes, and
+        // everything past that point is the same arithmetic.
+        let value = match self.arith_small_int(op, left_value, right_value) {
+            Some(value) => value,
+            None => self.arith_general(op, left_value, right_value)?,
+        };
+
+        self.roots.pop_frame(frame);
+        Ok(value)
+    }
+
+    /// `left op right` on the small-integer path, or `None` when the general
+    /// path must run instead.
+    ///
+    /// Both operands already integers small enough to tag, and an operator
+    /// whose exact result is an integer too: [`Interp::arith_general`] is a
+    /// detour through a representation neither operand is in and the result
+    /// does not need. It is a detour that allocates -- `to_number` renders a
+    /// `SmallInt` to a `String` and reparses it, `add` builds a digit `Vec`,
+    /// and `number` renders that back to a `String` to decide the result is a
+    /// small integer after all -- so what this skips is five allocations, not
+    /// five instructions.
+    ///
+    /// [`small_int_arith`] answers `None` for every case where the two paths
+    /// could disagree, and `exact_small_int`'s own doc comment has why the
+    /// remaining ones cannot.
+    ///
+    /// **This is the whole of what `crate::ir::Op::Arith`'s quickened arm
+    /// runs, entered from there and from `eval_arithmetic` above**, so the
+    /// hint that arm reads decides only whether this is *tried*, never what it
+    /// answers.
+    pub(crate) fn arith_small_int(
+        &mut self,
+        op: Operator,
+        left_value: ObjRef,
+        right_value: ObjRef,
+    ) -> Option<ObjRef> {
+        let digits = self.activation().settings.digits();
+        match (left_value.decode(), right_value.decode()) {
+            (Decoded::SmallInt(left_int), Decoded::SmallInt(right_int)) => {
+                small_int_arith(op, left_int, right_int, digits)
+            }
+            _ => None,
+        }
+    }
+
+    /// `left op right` through `rexx-num`, the path every operand shape
+    /// reaches and the one [`Interp::arith_small_int`] falls through to.
+    ///
+    /// **Both operands must already be rooted by the caller**, because
+    /// everything below allocates: `eval_arithmetic` pushes them as temps of
+    /// the frame it opened, and `crate::ir::Op::Arith` has them in registers,
+    /// which are roots of the region `Interp::run_chunk` reserved.
+    ///
+    /// The settings are read here rather than passed in, so that an operation
+    /// computes under the ones in force at the moment it runs -- D15's rule,
+    /// and the reason a caller holding a `digits` from before cannot supply it.
+    pub(crate) fn arith_general(
+        &mut self,
+        op: Operator,
+        left_value: ObjRef,
+        right_value: ObjRef,
+    ) -> Result<ObjRef, Failure> {
         let digits = self.activation().settings.digits();
         let form = self.activation().settings.form();
-
-        // Both operands already integers small enough to tag, and an
-        // operator whose exact result is an integer too: the whole general
-        // path below is a detour through a representation neither operand is
-        // in and the result does not need. It is a detour that allocates --
-        // `to_number` renders a `SmallInt` to a `String` and reparses it,
-        // `add` builds a digit `Vec`, and `number` renders that back to a
-        // `String` to decide the result is a small integer after all -- so
-        // what this skips is five allocations, not five instructions.
-        //
-        // `small_int_arith` answers `None` for every case where the two
-        // paths could disagree, and `exact_small_int`'s own doc comment has
-        // why the remaining ones cannot.
-        if let (Decoded::SmallInt(left_int), Decoded::SmallInt(right_int)) =
-            (left_value.decode(), right_value.decode())
-            && let Some(result) = small_int_arith(op, left_int, right_int, digits)
-        {
-            self.roots.pop_frame(frame);
-            return Ok(result);
-        }
 
         let left_number = self.arith_operand(left_value)?;
 
@@ -753,9 +802,7 @@ impl Interp {
         }
         .map_err(Raised::from)?;
 
-        let value = self.number(result, saturate_digits(digits), form);
-        self.roots.pop_frame(frame);
-        Ok(value)
+        Ok(self.number(result, saturate_digits(digits), form))
     }
 
     /// Converts an arithmetic operand to a `Number`, or 41.1 with the

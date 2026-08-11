@@ -1,0 +1,288 @@
+# What promoting an arithmetic operator has to keep, in four kinds.
+#
+# **Shapes**, which ask what the operator answers: all seven operators, the
+# chains that make one operator's result another's operand, and the operand
+# forms a compiled operand register can hold.
+#
+# **Rounding**, which is where a small-integer fast path is wrong rather than
+# slow. Rexx rounds the *operands* before it operates and not only the answer,
+# so a guard that checked the result alone would answer the exact `i64` sum
+# where the oracle answers a rounded one. Measured: at DIGITS 3, `1000 - 25` is
+# `980` and not `975`. The rows here take every reason a compiled site has to
+# fall back -- an operand too wide, a result too wide, an operand that is not a
+# whole number at all -- and reach each one at a site an earlier pass already
+# ran with operands the fast path took.
+#
+# **Trace**, which is where a native arithmetic op diverges first and where no
+# other instrument in this crate can see it. `eval.rs` emits a binary
+# operator's `>O>` line as a side effect of evaluating it; an op that only
+# computes into a register emits nothing, and every line after the missing one
+# still matches -- so only an exact stderr comparison catches it. Both
+# directions are here: `trace i` rows require the lines, and a `trace r` row
+# requires their absence.
+#
+# **Family**, which arithmetic alone cannot state. Every binary operator traces
+# `>O>` with its own spelling -- concatenation, comparison and logical too --
+# and only arithmetic is promoted, so these rows are what says the unpromoted
+# families still emit theirs from `eval.rs`.
+#
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every row
+# was measured to produce the identical bytes on both engines before the
+# operator was promoted -- which is what says a row can tell whether it would
+# ever have failed. Regenerate a row by running its program under the oracle,
+# never with REWRITE=1 -- ir_dual.rs refuses to run at all under REWRITE for
+# that reason. Capture is:
+#
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+#
+# Expected lines are tagged so that no line of the block can be empty: an empty
+# line ends an expected block, and a program's own output may hold one.
+# Trailing blanks are part of what is compared.
+
+# all seven operators, over two variable operands
+program
+za = 7
+zb = 2
+say za + zb
+say za - zb
+say za * zb
+say za / zb
+say za % zb
+say za // zb
+say za ** zb
+----
+rc> 0
+out> 9
+out> 5
+out> 14
+out> 3.5
+out> 3
+out> 1
+out> 49
+
+# chains: one operator's result is the next one's operand, with precedence and
+# parentheses deciding which. The left-associative forms are what make a
+# compiled operand register hold an intermediate rather than a read.
+program
+za = 2
+zb = 3
+zc = 4
+say za + zb + zc
+say za + zb * zc
+say (za + zb) * zc
+say za - zb - zc
+say za * zb - zc + 1
+----
+rc> 0
+out> 9
+out> 14
+out> 20
+out> -5
+out> 3
+
+# an operand that is a call, which no compiled operand register can hold: the
+# whole expression is evaluated the way it was before there were arithmetic
+# ops, and answers the same.
+program
+zt = 5
+say length('abcd') + 1
+say zt + length('ab')
+say abs(-3) * zt
+say zt + 1 + length('x')
+----
+rc> 0
+out> 5
+out> 7
+out> 15
+out> 7
+
+# NUMERIC DIGITS 3: the operands are rounded before the operation, so the exact
+# integer answer is the wrong one. `1000 - 25` is `980`; `999 + 6` is `1005`,
+# which renders `1.01E+3`; `500 * 500` has operands inside the precision and a
+# result outside it.
+program
+numeric digits 3
+say 1000 - 25
+say 999 + 6
+say 500 * 500
+say 0.5 - 25
+----
+rc> 0
+out> 980
+out> 1.01E+3
+out> 2.50E+5
+out> -24.5
+
+# one site, run three times, whose operands leave the exact-integer range part
+# way through: the first pass is exact, and the two after it are not. A site
+# specialised on what it saw the first time has to give this up when it stops
+# holding.
+program
+numeric digits 3
+zn = 1
+do zi = 1 to 3
+  say zn - 25
+  zn = zn * 1000
+end
+----
+rc> 0
+out> -24
+out> 980
+out> 1.00E+6
+
+# NUMERIC DIGITS narrowed by a later clause of the same body, so a site that
+# was exact under the wider setting stops being exact without its operands
+# changing at all.
+program
+za = 300
+say za + 45
+numeric digits 2
+say za + 45
+numeric digits 9
+say za + 45
+----
+rc> 0
+out> 345
+out> 3.5E+2
+out> 345
+
+# NUMERIC FORM ENGINEERING, which decides how a result too wide for the
+# precision renders -- an exponent that is a multiple of three, and up to three
+# digits in front of the point. `1.01E+3` is unchanged by the setting, its
+# exponent already being one; `250E+3` is where the two forms part.
+program
+numeric digits 3
+numeric form engineering
+say 999 + 6
+say 500 * 500
+numeric form scientific
+say 999 + 6
+----
+rc> 0
+out> 1.01E+3
+out> 250E+3
+out> 1.01E+3
+
+# trace i: the `>O>` line one operator's result owes, after both operands' own
+# lines and in the order the operators are applied -- the inner `*` before the
+# outer `+`.
+program
+trace i
+za = 2
+zb = 3
+zc = za + zb * 4
+say zc - 1
+----
+rc> 0
+out> 13
+err>      2 *-* za = 2
+err>        >L>   "2"
+err>        >>>   "2"
+err>        >=>   ZA <= "2"
+err>      3 *-* zb = 3
+err>        >L>   "3"
+err>        >>>   "3"
+err>        >=>   ZB <= "3"
+err>      4 *-* zc = za + zb * 4
+err>        >V>   ZA => "2"
+err>        >V>   ZB => "3"
+err>        >L>   "4"
+err>        >O>   "*" => "12"
+err>        >O>   "+" => "14"
+err>        >>>   "14"
+err>        >=>   ZC <= "14"
+err>      5 *-* say zc - 1
+err>        >V>   ZC => "14"
+err>        >L>   "1"
+err>        >O>   "-" => "13"
+err>        >>>   "13"
+
+# trace r: the other direction. An emission that ignored its own gate would
+# print a `>O>` line here, where the setting asks for results alone.
+program
+trace r
+za = 2
+zc = za + 1
+say zc * 2
+----
+rc> 0
+out> 6
+err>      2 *-* za = 2
+err>        >>>   "2"
+err>      3 *-* zc = za + 1
+err>        >>>   "3"
+err>      4 *-* say zc * 2
+err>        >>>   "6"
+
+# every other binary family under trace i. Only arithmetic is promoted, so
+# these `>O>` lines still come from `eval.rs` -- and they are the rows that say
+# so, because a promotion that moved the whole `Binary` node would print them
+# from an op instead and could get the tag or the indent wrong.
+program
+trace i
+za = 2
+say za || 'x'
+say za = 2
+say za > 1 & za < 9
+say 'p' 'q'
+----
+rc> 0
+out> 2x
+out> 1
+out> 1
+out> p q
+err>      2 *-* za = 2
+err>        >L>   "2"
+err>        >>>   "2"
+err>        >=>   ZA <= "2"
+err>      3 *-* say za || 'x'
+err>        >V>   ZA => "2"
+err>        >L>   "x"
+err>        >O>   "||" => "2x"
+err>        >>>   "2x"
+err>      4 *-* say za = 2
+err>        >V>   ZA => "2"
+err>        >L>   "2"
+err>        >O>   "=" => "1"
+err>        >>>   "1"
+err>      5 *-* say za > 1 & za < 9
+err>        >V>   ZA => "2"
+err>        >L>   "1"
+err>        >O>   ">" => "1"
+err>        >V>   ZA => "2"
+err>        >L>   "9"
+err>        >O>   "<" => "1"
+err>        >O>   "&" => "1"
+err>        >>>   "1"
+err>      6 *-* say 'p' 'q'
+err>        >L>   "p"
+err>        >L>   "q"
+err>        >O>   " " => "p q"
+err>        >>>   "p q"
+
+# `**`'s exponent, which is not converted the way its base is: a base that will
+# not convert is 41.1 and an exponent that is not whole is 26.8, and the base's
+# failure is checked first.
+program
+say 2 ** 2.5
+----
+rc> 230
+err>      1 *-* say 2 ** 2.5
+err> Error 26 running /nonexistent/ir-dual-case.rex line 1:  Invalid whole number.
+err> Error 26.8:  Operand to the right of the power operator (**) must be a whole number; found "2.5".
+
+# a failure inside a chain: the clause the condition is reported against is the
+# whole assignment's, not the operator's, and the operators to the left of the
+# failing one have already run.
+program
+signal on syntax name zt
+za = 1
+zb = 'q'
+say za * 2 + zb + 4
+exit
+zt:
+say 'trapped' rc 'at' sigl
+----
+rc> 0
+out> trapped 41 at 4

@@ -377,6 +377,68 @@ fn no_trace_op_echoes_without_the_engine_or_without_the_setting() {
     }
 }
 
+/// A quickened arithmetic site handed operands the small-integer path cannot
+/// take answers what the general path answers.
+///
+/// **The precondition check the patch table is not allowed to remove.** A hint
+/// says a site *has* taken the small-integer path, never that it may skip the
+/// test -- so every arm that reads one re-decodes both operands and re-checks
+/// them against `DIGITS`, and falls through when either fails.
+///
+/// The program runs one pair of sites four times, and every pass but the first
+/// falls through for a **different** reason, each one preceded by a pass that
+/// took the fast path at the identical site:
+///
+/// * `zn = 1`: `1 - 25` and `1 * 500` are both exact at `DIGITS 3`, so both
+///   sites take the small-integer path and both are quickened;
+/// * `zn = 1000`: an **operand** wider than `DIGITS`. This is the case four
+///   hand-written probes missed, because Rexx rounds the operands before it
+///   operates and not only the answer: measured on the oracle, `1000 - 25` at
+///   `DIGITS 3` is `980` and not the exact `975`, so a guard that checked only
+///   the result would answer `975` here and be wrong by a rounding nobody
+///   would look for;
+/// * `zn = 500`: operands both inside `DIGITS`, **result** outside it --
+///   `500 * 500` is `2.50E+5`, so an `i64` that fits the tag is still not the
+///   value the general path produces;
+/// * `zn = 0.5`: an operand that is **not an integer at all**, so the decode
+///   itself fails rather than the range check.
+///
+/// Every expected byte was measured against the C++ oracle.
+#[test]
+fn a_quickened_site_falls_through_to_the_general_path() {
+    // A `SELECT` rather than a table of programs, because a fresh program is a
+    // fresh chunk with a fresh patch table: what this test needs is one site
+    // reached repeatedly, having already been quickened by an earlier pass.
+    const QUICKENED_THEN_WIDENED: &[u8] = b"\
+numeric digits 3
+zn = 1
+do zi = 1 to 4
+  say zn - 25
+  say zn * 500
+  select
+    when zi = 1 then zn = 1000
+    when zi = 2 then zn = 500
+    when zi = 3 then zn = 0.5
+    otherwise nop
+  end
+end
+";
+
+    let outcome = execute(
+        TEST_PATH,
+        QUICKENED_THEN_WIDENED.to_vec(),
+        false,
+        Invocation::none().with_engine(Engine::Ir),
+    );
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "-24\n500\n980\n5.00E+5\n475\n2.50E+5\n-24.5\n250\n",
+        "a quickened arithmetic site answered something other than the general path's answer \
+         for operands the small-integer path cannot take"
+    );
+}
+
 /// Nothing in an ordinary program overflows the compiled stream's index
 /// widths, so the refusal path is never taken and the counter it bumps stays
 /// at zero.
