@@ -79,10 +79,13 @@ Those bars are Phase 4f's exit condition, and 4f runs *after* this phase.
 Gating 4e on them would either make 4f unreachable or make it redundant, and 4e's own promotions are not the changes the parity bars were derived to measure.
 What this phase owes the gate document is an **input state**: the axis ratios re-measured under both engines, as the position 4f's loop starts from.
 
-**What this phase does own is a floor, and it can fail.**
-The IR arm must not be *slower* than the tree-walker arm on the benchmark axes, because the minimum promotion set covers what those axes execute, and a structural change that leaves 4f starting from a worse position has not paid for itself.
-The spike's one clean A/B put the promoted side slower, so this is a live outcome rather than a formality.
-[Exit gate](#exit-gate) criterion 4 states it as a criterion.
+**~~What this phase does own is a floor, and it can fail.~~ THE FLOOR IS WITHDRAWN (2026-08-10, Moritz, at `8e7ce246`), and this second statement of it was missed until the phase had already closed against the amended one.**
+It read: "the IR arm must not be *slower* than the tree-walker arm on the benchmark axes, because the minimum promotion set covers what those axes execute, and a structural change that leaves 4f starting from a worse position has not paid for itself."
+[Exit gate](#exit-gate) criterion 4 carries the withdrawal and the two measurements behind it; **read it there, because this section is not a second authority and never was.**
+
+**Recorded rather than deleted, because the duplication is the lesson.**
+A spec that states one rule in two places will be amended in one of them, and the copy that survives reads as current to whoever meets it first.
+`emptyloop` ships at **1.09223** on instructions, which this paragraph would have failed and which criterion 4 records as a fact rather than as a pass -- so the two texts disagreed about whether the phase could close, and only one of them had been kept up to date.
 
 Global Constraints `2026-07-27-rust-rewrite.md:39` is unamended here: "slower" means the criterion point estimate falls outside the C++ baseline's confidence interval on the slow side.
 That text names **Linux and macOS**, and `:35` requires every phase gate to run on all five platforms.
@@ -205,11 +208,18 @@ The stack also carries no balance assertion by decision, so watermark-truncate s
 
 ### The patch table
 
-The op stream stays immutable; a parallel `Vec<AtomicU32>` does not, read **only inside arms of ops that can specialise**, so an op that never quickens pays nothing.
+The op stream stays immutable; a parallel patch table does not, read **only inside arms of ops that can specialise**, so an op that never quickens pays nothing.
 
 * **A patch slot is a hint that never removes a precondition check.** The specialised path re-validates and falls through. For quickened arithmetic that means re-checking both operands are small integers within `DIGITS`.
-* **It survives Phase 6.** ooRexx shares routine bodies across activities; `Cell<Op>` is not `Sync`.
 * **The schema does not generalise to sends**, which [D22](#decisions-recorded-here) now says explicitly.
+
+**The slot is a `Cell<u32>`, not an `AtomicU32`, amended 2026-08-11 at `6257baa4` after Task 11 measured both.** This clause used to read "**it survives Phase 6** -- ooRexx shares routine bodies across activities; `Cell<Op>` is not `Sync`", and that argument was sound about the slot in isolation and wrong about the type it lives in.
+
+* **`Chunk` is not `Sync` regardless, and exactly one field makes it so.** `assert_sync::<Chunk>()` fails naming `Cell<Option<Resolved>>` in `CallSite` and nothing else, so the atomic bought a property the struct around it does not have. `Resolved` is two `usize`s plus a tag, too wide for a lock-free atomic, so that field cannot be converted to buy the property back.
+* **Chunks are handed out as `Rc<Chunk>`, and `Rc<T>` is neither `Send` nor `Sync` whatever `T` is.** So the bet was contingent on an `Rc`-to-`Arc` change that nothing has scheduled.
+* **It was not free.** Measured at 8 instructions per pass on `arith`, 2 on `compound` and 1 on `varlookup`.
+
+**Phase 6 inherits a decision, not a defect.** If routine bodies are ever shared across activities, both fields change together along with the `Rc`, and that is one edit in `PatchSlot`'s three methods plus `CallSite`. Paying for half of it now bought nothing.
 
 ## Trace
 
@@ -438,7 +448,7 @@ Three consequences, and they are binding rather than advisory:
 
 **5. The patch table has a working consumer: quickened small-integer arithmetic, with a measured win that reverts.**
 
-*Cannot see:* whether the specialised path re-validates its precondition, and whether the patch table is doing anything at all -- static specialisation with a dead `AtomicU32` beside it would pass.
+*Cannot see:* whether the specialised path re-validates its precondition, and whether the patch table is doing anything at all -- static specialisation with a dead patch table beside it would pass.
 *Falsification:* a test driving the quickened op with operands outside the small-integer range and asserting the general path's answer, **and** deleting the patch table moving the number.
 
 **6. The minimum promotion set is native, and its ops do the work.**
@@ -464,7 +474,7 @@ Landing it edits **two** lines: the roadmap row at `:442` and `:473`. `:473` was
 
 * **D20.** The IR lands as Phase 4e, entered after 4d-1's Task 8 writes `phase-4d-gate.md`, and **before** the optimisation loop rather than after it. Allocation, string representation and `rexx-num`'s scratch buffers are candidates for that loop, which is now Phase 4f; the 4d-2 that D20 originally named is superseded. The bar-before-optimisation property is already partly spent and D20 does not claim otherwise.
 * **D21.** Coverage is total, justified by incrementality and the reach of the drift gate. **Not** by the mandate; that argument is withdrawn as self-defeating. Coverage is total at the driver level; execution coverage grows only with promotion.
-* **D22.** The op stream is immutable and patch state lives in a parallel atomic table whose entries are hints that never remove a precondition check. Quickened small-integer arithmetic is the one consumer this phase builds, at `AtomicU32`.
+* **D22.** The op stream is immutable and patch state lives in a parallel atomic table whose entries are hints that never remove a precondition check. Quickened small-integer arithmetic is the one consumer this phase builds, at `Cell<u32>` (amended `6257baa4`; see [the patch table](#the-patch-table) for why the atomic was withdrawn).
   **The schema does not generalise to sends**: a send's precondition is "the lookup would still return this method", and checking that *is* the lookup. Real inline caches substitute behaviour identity plus invalidation on behaviour mutation.
 * **D23.** The trace setting is an input to compilation, realised as explicit trace instructions in the stream, **plus a per-clause staleness check that makes a stale chunk slow rather than wrong.** Divergent trace output is licensed only from the first optimising pass that is not trace-neutral, priced at Phase 9.
   **Amended 2026-08-09 after Task 6 measured the case the original wording gets wrong.** Compile-time-only is a wrong-output regression, because `TRACE` can change *within* a body after its chunk was compiled: `if 1 = 1 then trace r` followed by `if 1 = 1 then say 'x'` -- the oracle echoes the second `IF`, both engines did before this task, and a chunk compiled untraced would not. So the setting decides what a chunk *emits*, and a run-time check decides whether that chunk still applies.
