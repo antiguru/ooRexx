@@ -973,7 +973,7 @@ The accept rule asks for a paired interleaved comparison showing a reproducible 
 
 It lands because the question it answers is not "is this faster" but "what should the collector trigger on", and there the evidence is one-sided: the two signals are indistinguishable on everything this suite measures, and on the one shape that separates them the growth signal does a third of the work for the same footprint. **It is also the shape the reference implementation uses**, minus the half that does not port, which is a better warrant for a policy than a constant chosen here.
 
-Commit: read back from `git log` after committing, below.
+Commit: `3d14fdf46fe25e8e93392490a23594b7298996f5`, read back from `git log` after committing.
 
 #### What this entry cannot say
 
