@@ -26,6 +26,24 @@
 # and only arithmetic is promoted, so these rows are what says the unpromoted
 # families still emit theirs from `eval.rs`.
 #
+# **What this file is worth was measured rather than assumed, and most of it is
+# not mutation-catching.** Eight mutations of the arithmetic path were each
+# re-run with this file moved out of the directory: seven were caught anyway --
+# by tests that predate the promotion, by the golden op streams, or by the
+# population sweep -- and one was caught by nothing at all, in either
+# configuration. That one was `**`'s exponent routed through the ordinary
+# operand conversion, which is invisible to a `2 ** 2.5` row because `2.5`
+# converts and then fails as a whole number all the same; the `2 ** 'x'` row
+# below was written to close it and is this file's one sole catcher.
+#
+# **So the reason to keep the rest is that they pin oracle bytes, which is
+# something an engine-against-engine comparison structurally cannot do.** Both
+# arms of that comparison are this crate, so a shared arithmetic path that is
+# wrong the same way twice passes it; these rows say what the C++ interpreter
+# prints for shapes no corpus program covers -- the seven operators over one
+# pair of operands, a precedence chain, DIGITS narrowed mid-body, FORM
+# ENGINEERING, and a zero divisor under each dividing operator.
+#
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every row
 # was measured to produce the identical bytes on both engines before the
 # operator was promoted -- which is what says a row can tell whether it would
@@ -271,6 +289,33 @@ rc> 230
 err>      1 *-* say 2 ** 2.5
 err> Error 26 running /nonexistent/ir-dual-case.rex line 1:  Invalid whole number.
 err> Error 26.8:  Operand to the right of the power operator (**) must be a whole number; found "2.5".
+
+# **A nonnumeric exponent is 26.8 too, and that is what the row above cannot
+# say.** `2.5` converts and then fails as a whole number, so an exponent routed
+# through the ordinary operand conversion raises the identical 26.8 for it -- a
+# mutation doing exactly that was invisible to the whole workspace, including
+# the row above, and this row is what caught it. `'x'` does not convert at all,
+# so it separates the two paths: 26.8 through `**`'s own conversion, 41.1
+# through the operand one, and the base's failure winning when both are bad.
+program
+zq = 'x'
+signal on syntax name z1
+say 2 ** zq
+z1:
+say 'exponent' rc 'at' sigl
+signal on syntax name z2
+say zq ** 2
+z2:
+say 'base' rc 'at' sigl
+signal on syntax name z3
+say zq ** zq
+z3:
+say 'both' rc 'at' sigl
+----
+rc> 0
+out> exponent 26 at 3
+out> base 41 at 7
+out> both 41 at 11
 
 # a zero divisor, which is the third raise arithmetic makes and the only one of
 # the three that comes from `rexx-num` rather than from converting an operand.
