@@ -189,7 +189,7 @@ pub(crate) fn words(
     while scan.step() {
         count += 1;
     }
-    Ok(interp.text(count.to_string().as_bytes()))
+    Ok(interp.counted(count))
 }
 
 /// The word-position argument at `position`, converted but **not yet
@@ -249,7 +249,7 @@ pub(crate) fn word_index(
     } else {
         0
     };
-    Ok(interp.text(index.to_string().as_bytes()))
+    Ok(interp.counted(index))
 }
 
 /// `WORDLENGTH(string, n)`: how many bytes the `n`th word is, or 0.
@@ -267,7 +267,7 @@ pub(crate) fn word_length(
     } else {
         0
     };
-    Ok(interp.text(length.to_string().as_bytes()))
+    Ok(interp.counted(length))
 }
 
 /// `SUBWORD(string, n [,length])`: `length` words from the `n`th, as a slice
@@ -406,7 +406,7 @@ pub(crate) fn word_pos(
             .find(|at| haystack[at - 1..at - 1 + needle.len()] == needle[..])
             .unwrap_or(0)
     };
-    Ok(interp.text(found.to_string().as_bytes()))
+    Ok(interp.counted(found))
 }
 
 #[cfg(test)]

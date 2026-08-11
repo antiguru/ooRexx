@@ -72,6 +72,41 @@ impl Interp {
         self.text(bytes)
     }
 
+    /// A builtin's counted result -- a length, a position, an index or a
+    /// count -- as the inline tagged integer rather than as a heap string of
+    /// its own decimal digits.
+    ///
+    /// The two are the same value in the two representations D15 already has,
+    /// for the reason [`literal`] gives: a `SmallInt` renders through `i64`'s
+    /// `Display`, which is byte for byte what `value.to_string()` produces, so
+    /// the heap string this replaces was a second spelling of what the tag
+    /// says. Unlike [`number`] there is no `DIGITS` admissibility test to
+    /// make, and that is not an omission: a count is exact and integral by
+    /// construction, nothing rounded it, and the interpreter renders such a
+    /// result in full whatever `DIGITS` is in force -- measured, `numeric
+    /// digits 3 ; say length(copies('a',1234))` is `1234` and only
+    /// `length(...) + 0` is `1.23E+3`.
+    ///
+    /// What it saves is the render, the copy and the slot; what it saves at
+    /// the *consumer* is larger, because [`Interp::arith_small_int`] needs
+    /// both operands tagged and a heap operand alone sends the clause down the
+    /// general decimal path.
+    ///
+    /// The fallback cannot be reached by a count derived from a byte length --
+    /// `SMALL_INT_MAX` is 2^61 - 1 -- and is written rather than asserted
+    /// because a total function is cheaper here than a proof.
+    ///
+    /// [`literal`]: Interp::literal
+    /// [`number`]: Interp::number
+    pub(crate) fn counted(&mut self, value: usize) -> ObjRef {
+        if let Ok(value) = i64::try_from(value)
+            && let Some(handle) = ObjRef::small_int(value)
+        {
+            return handle;
+        }
+        self.text(value.to_string().as_bytes())
+    }
+
     /// [`text`], for a caller that already owns the bytes.
     ///
     /// **The copy `text` makes is a second allocation of the result's full

@@ -100,7 +100,7 @@ pub(crate) fn length(
     // The borrow of `interp` ends with this statement, which is what lets the
     // allocation below happen at all.
     let bytes = interp.to_text(value).len();
-    Ok(interp.text(bytes.to_string().as_bytes()))
+    Ok(interp.counted(bytes))
 }
 
 /// The upper-cased first letter of an option argument, checked against the
@@ -509,7 +509,7 @@ pub(crate) fn pos(
         None => haystack.len().saturating_sub(start) + 1,
     };
     let found = find_forward(&haystack, &needle, start - 1, range);
-    Ok(interp.text(found.to_string().as_bytes()))
+    Ok(interp.counted(found))
 }
 
 /// `LASTPOS(needle, haystack [,start] [,range])`.
@@ -541,7 +541,7 @@ pub(crate) fn lastpos(
         None => haystack.len(),
     };
     let found = find_backward(&haystack, &needle, start, range);
-    Ok(interp.text(found.to_string().as_bytes()))
+    Ok(interp.counted(found))
 }
 
 /// `REVERSE(string)`: the bytes back to front.
@@ -709,7 +709,7 @@ pub(crate) fn compare(
                 .map(|offset| shared + offset + 1)
         })
         .unwrap_or(0);
-    Ok(interp.text(mismatch.to_string().as_bytes()))
+    Ok(interp.counted(mismatch))
 }
 
 /// `COUNTSTR(needle, haystack)`: how many non-overlapping `needle`s
@@ -722,7 +722,7 @@ pub(crate) fn countstr(
     let needle = required_string(interp, args, 1);
     let haystack = required_string(interp, args, 2);
     let count = count_occurrences(&haystack, &needle, usize::MAX);
-    Ok(interp.text(count.to_string().as_bytes()))
+    Ok(interp.counted(count))
 }
 
 /// `CHANGESTR(needle, haystack, newneedle [,count])`.
@@ -883,7 +883,7 @@ pub(crate) fn verify(
             .position(|&byte| in_set(byte, &reference) == matching)
             .map_or(0, |offset| start + offset)
     };
-    Ok(interp.text(answer.to_string().as_bytes()))
+    Ok(interp.counted(answer))
 }
 
 /// `LOWER(string [,n] [,length])`.
@@ -956,6 +956,7 @@ mod tests {
     use super::super::dispatch;
     use crate::error::Failure;
     use crate::{Interp, error::Raised};
+    use rexx_core::{Decoded, ObjRef};
 
     /// Runs `name` over `arguments`, each `None` standing for an omitted
     /// interior position, and answers the result's own bytes.
@@ -971,6 +972,21 @@ mod tests {
             .collect();
         let result = dispatch(&mut interp, name, &args).expect("a builtin name")?;
         Ok(interp.to_text(result).into_owned())
+    }
+
+    /// [`call`], answering the handle as well as the bytes, for the one
+    /// property that is invisible in the bytes.
+    fn call_handle(name: &[u8], arguments: &[&[u8]]) -> (ObjRef, Vec<u8>) {
+        let mut interp = Interp::new();
+        let args: Vec<_> = arguments
+            .iter()
+            .map(|bytes| Some(interp.text(bytes)))
+            .collect();
+        let result = dispatch(&mut interp, name, &args)
+            .expect("a builtin name")
+            .expect("this call succeeds");
+        let bytes = interp.to_text(result).into_owned();
+        (result, bytes)
     }
 
     /// `call`, for the cases whose answer is the bytes and nothing else.
@@ -1760,5 +1776,62 @@ mod tests {
                 "{rendered:?} does not carry {expected:?}"
             );
         }
+    }
+
+    /// Every builtin whose answer is a count, a length, an index or a
+    /// position hands it back in the tagged representation, through
+    /// `Interp::counted`.
+    ///
+    /// **Nothing in the answer's bytes can tell the two representations
+    /// apart** -- that is exactly why the swap is safe -- so a call site put
+    /// back to `interp.text(n.to_string().as_bytes())` leaves every
+    /// byte-comparing test in this file and in `word.rs` green and fails
+    /// only here. The tag is also what the change is *for*: a heap operand
+    /// alone sends a clause down the general decimal path, because
+    /// `Interp::arith_small_int` answers only when both operands carry it.
+    ///
+    /// `dispatch` is the entry point rather than the ten implementations, so
+    /// this reaches `word.rs`'s four names as well as `string.rs`'s six --
+    /// one enumeration of the set, in one place.
+    #[test]
+    fn a_counted_answer_is_tagged_rather_than_a_heap_string() {
+        /// A builtin's name, the arguments to call it with, and the integer
+        /// its answer must decode to.
+        type CountedCase = (&'static [u8], &'static [&'static [u8]], i64);
+
+        let counted: &[CountedCase] = &[
+            (b"LENGTH", &[b"hello"], 5),
+            (b"POS", &[b"an", b"banana"], 2),
+            (b"LASTPOS", &[b"an", b"banana"], 4),
+            (b"COMPARE", &[b"abc", b"abd"], 3),
+            (b"COUNTSTR", &[b"a", b"banana"], 3),
+            (b"VERIFY", &[b"abcd", b"abc"], 4),
+            (b"WORDS", &[b"a b c"], 3),
+            (b"WORDINDEX", &[b"a b c", b"2"], 3),
+            (b"WORDLENGTH", &[b"a bb c", b"2"], 2),
+            (b"WORDPOS", &[b"b", b"a b c"], 2),
+        ];
+        for (name, arguments, expected) in counted {
+            let (handle, bytes) = call_handle(name, arguments);
+            assert!(
+                matches!(handle.decode(), Decoded::SmallInt(value) if value == *expected),
+                "{} answered {:?}, not SmallInt({expected})",
+                String::from_utf8_lossy(name),
+                handle.decode()
+            );
+            assert_eq!(bytes, expected.to_string().into_bytes());
+        }
+
+        // The adjacent success, and it is what pins the rule to *counted*
+        // answers rather than to "anything that looks like a number": a
+        // substring of digits keeps its own bytes and stays a heap string,
+        // because those bytes are the value and no integer stands behind
+        // them. `SUBSTR('012345',1,3)` is `012`, which no `SmallInt` renders.
+        let (handle, bytes) = call_handle(b"SUBSTR", &[b"012345", b"1", b"3"]);
+        assert!(
+            matches!(handle.decode(), Decoded::Heap { .. }),
+            "a substring is not a counted answer"
+        );
+        assert_eq!(bytes, b"012");
     }
 }
