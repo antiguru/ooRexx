@@ -41,6 +41,41 @@ Recorded in Task 9's report, absent from the gate document, unexplained.
 
 **Ends when** the mechanism is named with a build behind it, or after **three** candidate hypotheses have been tested and refuted. Record either outcome in this file.
 
+### Result: the extraction, confirmed by a build -- but not by the mechanism the item named
+
+Working notes in `.superpowers/sdd/2026-08-09-phase-4e-ir/handoff-perf-report.md`.
+Every figure below is a row of `rust/bench-baselines/phase-4e-arms.tsv` under task `item1`, or a `callgrind` reading named as such.
+
+**The fact reproduced, on the phase's own instrument.**
+One sitting, both arms, both sizes, five rounds, medians, `instructions:u`: `e63e8a00`'s tree-walker arm is 61843.919 per pass and `16077ea1`'s is 62030.499, so the move is **+186.580** against the recorded +186.6.
+
+**The bisect.**
+Three commits in that range carry Rust source the tree-walker reaches, and `16077ea1` itself changes only `tests/ir_dual_cases/arithmetic`.
+`b3345d91` -- the split -- is 62014.251, so it carries **+170.332 of the +186.580, or 91%**.
+A `callgrind` bisect over all five builds, exact and deterministic, puts the whole of it there: `e63e8a00` 57723.481, `b3345d91` 57884.108, and the three commits after it together -0.746.
+The two instruments disagree about the tail, 16.2 against -0.7, and that is recorded as measured rather than explained; they agree on which commit owns the move.
+
+**The confirming build.**
+`e63e8a00`'s pre-split body restored inline in `eval_arithmetic` at `16077ea1`, with `arith_small_int` and `arith_general` left in place for `Op::Arith`, reads **61868.915** -- recovering **161.584 of the 186.580, or 87%**, and landing 24.996 above `e63e8a00`.
+The same restore one commit earlier lands 23.045 above it on `callgrind`, so the residual belongs to `b3345d91` too and survives giving the tree-walker its body back.
+
+**The item's own account of the mechanism is wrong, and the correction matters for the sharing rule's price.**
+Neither half is a call: `nm -C` finds no `arith_small_int` and no `arith_general` symbol in any binary of the range, and `callgrind` records no call edge to either.
+Both are inlined into `eval_arithmetic` outright, and `eval_arithmetic` carries +137.67 of the +160.63 `callgrind` reads.
+So what the tree-walker pays is **the code LLVM emits for the shared shape, not two calls** -- which is why the price cannot be predicted from the call count, and why Task 7's measured band is the only thing that bounds it.
+
+**A refuted candidate, recorded so nobody retries it.**
+`arith_small_int` reads `activation().settings.digits()` before deciding, so the general path reads it twice where the pre-split body read it once.
+Moving that read inside the `SmallInt` arm removes exactly the second one and is semantically identical.
+It costs **78.05 more instructions per pass**, not fewer.
+
+**Closed as the item predicted: already known, now quantified on a third axis.**
+186.580 on 61843.919 is **0.302%**, inside the 0.2% to 1.3% band Task 7 measured for this shape.
+
+**What a fix would cost and buy, as 4f's input.**
+The only fix the measurements support is undoing the sharing for the tree-walker, which is exactly the build above: it buys back 161.584 per pass, 0.26% of that arm, and costs two copies of the arithmetic that have to be kept in step -- the defect the sharing rule exists to prevent.
+Not recommended here; recorded as the trade.
+
 ---
 
 ## Item 2: no corpus-wide assertion over the compiled op stream
@@ -131,6 +166,44 @@ Every op variant added to `Op` widens the dispatch that *every* op pays, includi
 * [ ] If refuted: record what was ruled out.
 
 **Ends when** the mechanism is named with a build behind it, or after **three** hypotheses have been tested and refuted.
+
+### Result: three hypotheses refuted, including the one the gate named -- and the axis moves 15 per pass under code that never runs
+
+Working notes in `.superpowers/sdd/2026-08-09-phase-4e-ir/handoff-perf-report.md`.
+Figures are rows of `rust/bench-baselines/phase-4e-arms.tsv` under task `item3`, or `callgrind` readings named as such.
+
+**The fact reproduced, and the two instruments agree.**
+`instructions:u`, one sitting, five rounds: `e63e8a00` has tw 1515.002 and ir 1634.002 for a gap of **119.000**, and head has tw 1518.002 and ir 1658.002 for a gap of **140.000** at ratio **1.09223**.
+`callgrind` reads 119.004 and 140.001 for the same two gaps, which is what licenses the bisect below to carry the same weight.
+
+**Where the +21 lands.**
+The IR arm's own cost splits exactly into a part that scales with the loop body's clause count and a part that does not, and `callgrind` confirms exactly one `run_ops` entry per pass whichever body runs.
+At `e63e8a00` it is 22.0 per `Op::Generic` plus 97.0 per entry; at head it is 31.0 plus 109.0.
+`emptyloop` pays one of each per pass, which is why it is the worst axis in the gate: **it has no second clause to amortise the 109 over**.
+Per commit, the two halves move as +7/+2 at `ea17a699`, +0/+4 at `f0d12ebe`, +2/+6 at `6b5fac3b`, and every one of those lands in `run_ops`' own self cost.
+
+**Hypothesis 1, the gate's candidate: the driver's `match` widening. Refuted, and in the wrong direction.**
+`Op` was given twelve and twenty-four further variants, each with an arm in both of `run_ops`' exhaustive matches, emitted by `compile` behind a condition never true at run time and not foldable at compile time, with `size_of::<Op>()` held at 12 by the crate's own assertion.
+The widening is real and demonstrable: `run_ops`' symbols grow from 12228 bytes to 13387, 14716 and 28354, and the spike's environment-variable name is in each spike binary and in no other.
+The gap per pass goes 140.001 to 136.005, 137.002 and 125.004 -- **cheaper every time**, confirmed on `rexx-arms` at the committed length, where the twelve-arm build reads a gap of **125.000 and a ratio of 1.08234** against the control's 140.000 and 1.09223.
+
+**Hypothesis 2, the op stream's stride. Ruled out without a build, by an assertion already in the tree.**
+`ir/mod.rs` carries `const _: () = assert!(size_of::<Op>() == 12);` at every commit in the range, so the width the driver indexes the stream at never moved.
+
+**Hypothesis 3, `Chunk` gaining fields.**
+`hints` arrives at `f0d12ebe` and `calls` at `6b5fac3b`, which are two of the three commits that move the axis, and `f0d12ebe` adds no `Op` variant at all.
+Two dead fields of exactly those shapes, constructed and never read, cost **zero**: 31.004 against 31.002 per op, 108.988 against 108.988 per entry.
+Refuted.
+
+**What is left, and it is the finding worth carrying into 4f.**
+The cost is real, it is IR-only, and it is not a function of anything the design controls: it is what LLVM emits for `run_ops` as that function grows, and it is not monotone in the function's size either.
+**A build differing from head only by code that never executes moves this axis by -15.000 per pass** -- 71% of the whole +21 the phase move is being attributed from, and 11% of the gap itself.
+So `emptyloop`'s instruction count carries a between-build codegen sensitivity larger than most of the individual steps it is used to measure, and a paired comparison on this axis has to clear that before its sign means anything.
+
+**What a fix would cost and buy, as 4f's input. Not built here.**
+The gate's own suggestions -- a jump table, a two-level encoding -- are aimed at the dispatch, and the dispatch is not what costs.
+The lever the numbers do support is the 109 per entry: it is paid because a promoted `DO` body re-enters `run_ops` once per pass, so a driver that keeps the loop inside would remove a term that is 78% of this axis' whole IR-only cost at head.
+That is a change to how a loop body is driven rather than to how an op is encoded, and its price on the axes that do promote is unmeasured.
 
 ---
 
