@@ -405,7 +405,19 @@ Each criterion carries what it cannot see and how it is falsified.
 *Cannot see:* whether the IR is faster, which this phase does not promise; and whether an axis moved for the reason a promotion predicted. The per-promotion predicted-versus-measured record carries the second.
 *Falsification:* a recorded ratio per axis on both instruments, plus the itemised residual. A phase that reports a ratio without an instrument named, or a residual without a breakdown, has not met this.
 
-**Wall clock is not used for in-phase work (2026-08-10, Moritz).** Instructions and cycles only, until Phase 4f, where wall clock against the oracle is the deliverable rather than an instrument. **Both** counts are required for any claim, and that is measured rather than cautious: Task 7-M rejected a variant that looked best on instructions because it moved `emptyloop`'s cycle ratio from 1.00 to 1.15 **while its instruction count fell.** Neither instrument alone is sufficient.
+**Wall clock is not used for in-phase work (2026-08-10, Moritz).** Instructions and cycles only, until Phase 4f, where wall clock against the oracle is the deliverable rather than an instrument. **Both** counts are required for any claim. Neither instrument alone is sufficient.
+
+**The reason is not the one first given, and the correction sharpens the rule (2026-08-11, Task 7-M2).** This paragraph used to justify itself by Task 7-M rejecting a variant that looked best on instructions while moving `emptyloop`'s cycle ratio from 1.00 to 1.15. That signature has now been found **six** times in this tree -- the `Driving` variant, `132c3395` on `emptyloop` and again on `compound`, Task 8 on `alloc4c`, `c1undone` on `varlookup`, and boxing `Raised` on `varlookup` -- and it has a measured common factor which is **not** the compiled arm.
+
+**In every one, the quantity that moves is the tree-walker arm's cycles per instruction: the denominator of every criterion-4 ratio, and an arm several of those changes never enter.** Measured at near-constant instruction counts, `varlookup`'s tree-walker IPC ranges 4.683 to 4.862 (3.8%) and `emptyloop`'s 4.464 to 4.755 (6.5%), while the same binary across three sittings varies 0.7% -- so the rest is between builds. Boxing `Raised` is the clean case: the **tree-walker** arm gets 12% faster in cycles for a 3% instruction saving, and the ratio reaches 1.169 without the compiled arm getting worse in absolute terms at all.
+
+Three consequences:
+
+* **A cycle ratio is comparable within a build and not across builds.** Both arms of one binary share a layout, so the artifact cancels inside the ratio and does not cancel between ratios.
+* **"Instructions fell and cycles rose" is not by itself evidence that a change is bad**, and this phase should stop citing `Driving` as a demonstrated hazard *of that change*. Rejecting `Driving` was still right -- seven instructions was not worth the risk -- but not for the reason recorded.
+* **The rule's real value is as a tripwire that says look at the denominator**, rather than as a veto on a change whose two instruments disagree.
+
+**A per-pass absolute figure is not comparable across sittings that used different lengths, and the gap is.** `varlookup`'s tree-walker arm reads 3824.00 instructions per pass in one sitting and 3832.00 in another **on the same binary**, because per-pass cost is not exactly constant in `n` -- `x` grows and its rendering lengthens, about 0.2% on a single arm's slope. **The IR-minus-tree-walker gap reads 81.00 in both**, because the effect is common to the arms and cancels. Quote the gap across sittings; quote a single arm's absolute per-pass figure only within one.
 
 **Within one binary is not a convenience here, it is the only valid form, and that is measured (2026-08-10).**
 Task 4c built the same source twice, differing by **one comment**, and read 2.745 s against 2.959 s on `emptyloop` -- 7.8%. It attributed that to code layout, and **that attribution is wrong.**
