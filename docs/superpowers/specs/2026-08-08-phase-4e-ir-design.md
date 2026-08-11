@@ -429,6 +429,13 @@ Three consequences:
 
 **A per-pass absolute figure is not comparable across sittings that used different lengths, and the gap is.** `varlookup`'s tree-walker arm reads 3824.00 instructions per pass in one sitting and 3832.00 in another **on the same binary**, because per-pass cost is not exactly constant in `n` -- `x` grows and its rendering lengthens, about 0.2% on a single arm's slope. **The IR-minus-tree-walker gap reads 81.00 in both**, because the effect is common to the arms and cancels. Quote the gap across sittings; quote a single arm's absolute per-pass figure only within one.
 
+**Instructions do have a between-build sensitivity, and the earlier statement of this was too strong (2026-08-11, the Phase 4e handoff, item 3).** This spec has said there is no instruction-count floor near 0.75%, on Task 7-M2's control -- a driver-only change reading 84 instructions apart in 4.04e10 on `emptyloop`. **That control added code to a function `emptyloop` never enters, and the refined rule is what separates the two cases.**
+
+* **Code added to a function you do not execute is free**, to 2e-9. That is 7-M2's measurement and it stands.
+* **Code added to a function you do execute is not free, even when the code itself never runs.** A build differing from head only by `Op` variants and their arms in `run_ops`' matches -- emitted behind a condition never true at run time, not foldable at compile time, with `size_of::<Op>()` held at 12 -- moves `emptyloop`'s gap by **-15.000 instructions per pass**, and *cheaper*, not dearer. That is 11% of the gap and **71% of the whole per-phase move it was being used to attribute.**
+
+**So `emptyloop` carries a between-build codegen sensitivity larger than most of the individual steps measured on it, and a paired comparison there must clear that before its sign means anything.** The mechanism is what LLVM emits for `run_ops` as that function grows, it is **not monotone in the function's size**, and no design decision controls it. Phase 4f inherits this axis with that caveat attached rather than as a clean baseline.
+
 **Within one binary is not a convenience here, it is the only valid form, and that is measured (2026-08-10).**
 Task 4c built the same source twice, differing by **one comment**, and read 2.745 s against 2.959 s on `emptyloop` -- 7.8%. It attributed that to code layout, and **that attribution is wrong.**
 
