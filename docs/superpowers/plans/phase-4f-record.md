@@ -982,3 +982,23 @@ Commit: `3d14fdf46fe25e8e93392490a23594b7298996f5`, read back from `git log` aft
 * **Nothing here reacts to payload bytes**, and the limitation is named in the code rather than closed. A program holding a few very large strings collects on neither policy.
 * **It re-measures no oracle ratio**, like every entry since entry 2.
 * **The `-2.02%` on `arith` and `+2.02%` on `alloc4c` are not results.** Their instruction columns are flat and this entry claims neither.
+
+---
+
+### Entry 8 -- a candidate added to the queue, not attempted: replace the global allocator
+
+**Added 2026-08-11 by Moritz.** This is a queue entry rather than an attempt; nothing was built or measured for it.
+
+**Why it belongs on the queue now rather than at entry 2.** Entry 2 ranked candidate 1 as "stop calling the allocator once per value", and its two levers both reduce the *number* of allocations. This is the third lever nobody listed: make each one cheaper. It moved from uninteresting to interesting because of what entry 6 landed -- **a heap that never collected never called `free` on a heap object at all**, and reclamation now pays a `free()` per reclaimed payload, which entry 6 measured as the whole of its cost on `arith` (+6.6%) and part of it on `alloc4c` (+2.7%).
+
+**The ceiling.** Entry 2 measured the glibc allocator family at **36.1% self on `strings`**, and entry 4 reproduced the shape after removing a third of that axis's allocations. Every axis except `emptyloop` shows the family in its top functions. **A replacement allocator does not remove an allocation; it changes what each one costs**, so the ceiling is a fraction of that 36.1% rather than the whole of it, and no honest number is available before it is built.
+
+**What is already available.** No `#[global_allocator]` is set anywhere in the workspace, so every allocation goes to glibc. `mimalloc` 0.1.52 and `tikv-jemallocator` 0.6.1 and 0.7.0 are in the offline cargo cache, so this needs no network.
+
+**The decision this candidate carries, and it is not a measurement.** `libmimalloc-sys` and `tikv-jemalloc-sys` both **compile and link a C library**. This project is a clean-room *Rust* reimplementation whose oracle is a C++ interpreter, and vendoring a C allocator to beat that interpreter is a choice about what the project is, not just about what is fast. It is also a new build dependency on five platforms, where `:35` requires every phase gate to run. **Whoever attempts this must have that decision made rather than assume it**, and a Rust-native allocator or an arena for payloads is the alternative that avoids the question entirely.
+
+**Why it is not ranked above candidates 4 to 7.** Those have measured ceilings on named mechanisms. This one's ceiling is a fraction of a share, its risk is a C dependency, and its win is orthogonal to every other candidate -- it will still be there after them, and it will be easier to judge once the allocation *count* work is done.
+
+**What would falsify it.** A paired run moving `strings` and `arith` by less than about 5%, which would say the allocator was never the cost that mattered at this size.
+
+**Its relationship to the payload-bytes blind spot.** Entry 7 recorded that neither trigger policy reacts to payload bytes, so a program holding a few very large strings collects on neither. A replacement allocator does not close that either; the two are independent and both remain open.
