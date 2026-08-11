@@ -43,7 +43,10 @@ Each rule below has already cost this project a session, a wrong measurement, or
 
 ## Repository hygiene
 
-* **No `unsafe`.** The workspace sets `unsafe_code = "forbid"`. If something appears to need it, stop and say so.
+* **No `unsafe` by default, and the workspace enforces it: `unsafe_code = "forbid"`. If something appears to need it, stop and say so** -- that has not changed, and it is still the answer in almost every case.
+  **What changed (2026-08-11, Moritz): `unsafe` is discouraged rather than banned, and may be allowed in a specific, self-contained situation.** The decision is his and is taken per site, never by the task that wants it.
+  **`forbid` is not `deny`, and the difference is the whole mechanism here: `forbid` cannot be overridden by an inner `#[allow(unsafe_code)]`.** So no local exception is even expressible today, which is deliberate -- a task that needs one has to stop and ask, which is the behaviour the rule wants. Changing the workspace to `deny` is what makes an exception possible, and it happens when a site is approved, not in advance.
+  **The bar a site has to clear**, so that "self-contained" does not erode into "convenient": the unsafety is confined to one module behind a safe interface; the invariant it rests on is stated at the site and is checkable by reading that module alone; a safe implementation is described and its cost measured rather than assumed; and it is covered by a test that would fail if the invariant broke. **A performance argument alone is not enough -- the measurement has to exist first.**
 * **Never `git add -A`.** Stage the exact paths you changed. Never `git reset --hard`, never force-push.
 * Scratch files live under the session scratchpad, **never in the repository**. Check `git status` before committing and remove anything stray.
 * **Commit first, then read the hash back with `git log`**, then quote it. Hashes written from memory have gone into records wrong twice.
