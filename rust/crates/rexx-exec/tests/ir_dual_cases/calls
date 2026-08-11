@@ -1,0 +1,431 @@
+# What promoting the call forms has to keep, across both routes into one
+# resolution.
+#
+# **Two routes**, because `CALL length 'abc'` and `say length('abc')` reach the
+# same four-step resolution -- internal label, builtin, ::ROUTINE, then the
+# external file this crate answers 43.1 for -- and a promotion that gave one
+# route a resolution of its own would let the two answer differently. Rows here
+# reach a label, a builtin, a ::ROUTINE and an unresolved name through both
+# spellings.
+#
+# **Where the search happens**, which is the one thing about a call that a
+# compiled op can get wrong while every test without an INTERPRET in it stays
+# green: resolution goes against the *running activation's* body, not against
+# the body a chunk was compiled from, and the two differ inside a fragment. A
+# fragment's own label table is always empty -- a label in interpreted text is
+# 47.1 -- so `interpret "call zsub"` is unresolvable to anything that searched
+# the fragment, and the oracle runs the enclosing program's `zsub:`.
+#
+# **Trace**, which for a call is `>A>` and `>F>`. `>A>` is unusual in that it
+# belongs to the call site rather than to the argument's own expression node, so
+# it is emitted where the arguments are evaluated and not by `eval.rs`'s own
+# post-order hook; `>F>` is the function route's alone and the `CALL` route
+# prints `>>>` for `RESULT` in its place. Both directions are here: `trace i`
+# rows require the lines and a `trace r` row requires their absence.
+#
+# **The clause boundary**, which is where a `CALL ON` handler queued by the
+# callee is delivered -- so a promoted `CALL` clause that lost its boundary
+# would run the handler somewhere else or not at all.
+#
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every row
+# was measured to produce the identical bytes on both engines before the call
+# was promoted -- which is what says a row can tell whether it would ever have
+# failed. Regenerate a row by running its program under the oracle, never with
+# REWRITE=1 -- ir_dual.rs refuses to run at all under REWRITE for that reason.
+# Capture is:
+#
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+#
+# Expected lines are tagged so that no line of the block can be empty: an empty
+# line ends an expected block, and a program's own output may hold one.
+# Trailing blanks are part of what is compared.
+
+# an internal label, with arguments and the RESULT it settles
+program
+zx = 4
+call zsub zx, 'q'
+say 'result=' result
+exit
+zsub:
+use arg za, zb
+say 'zsub' za zb
+return za + 1
+----
+rc> 0
+out> zsub 4 q
+out> result= 5
+
+# a CALL inside an INTERPRET fragment reaches the enclosing program's label
+# **The row a resolution against the compiled body cannot pass.** The fragment
+# is a body of its own whose label table is empty, and its `call zsub` still
+# finds `zsub:` in the program that ran the INTERPRET.
+program
+interpret "call zsub 1"
+say 'result=' result
+exit
+zsub:
+use arg za
+say 'zsub got' za
+return za + 1
+----
+rc> 0
+out> zsub got 1
+out> result= 2
+
+# the same under trace i, where the fragment's clause and the callee's echo at
+# lines and indents of their own
+program
+trace i
+interpret "call zsub"
+exit
+zsub:
+return 7
+----
+rc> 0
+err>      2 *-* interpret "call zsub"
+err>        >L>   "call zsub"
+err>        >>>   "call zsub"
+err>      2 *-* call zsub
+err>      4 *-*   zsub:
+err>      5 *-*   return 7
+err>        >L>     "7"
+err>        >>>     "7"
+err>        >>>   "7"
+err>      3 *-* exit
+
+# a CALL ON handler delivered at the calling clause's own boundary
+# The callee raises with RETURN, so the caller resumes and the trap is queued;
+# `sigl` reports the CALL's own line, which is what says the handler ran at that
+# clause's boundary rather than inside the callee or at the next clause.
+program
+call on user foo name uh
+zmark = 'NOMARK'
+call zsub
+say 'after call mark=' zmark 'result=' result
+exit
+zsub:
+raise user foo return 'SV'
+uh:
+zmark = 'HANDLER-AT' sigl
+return
+----
+rc> 0
+out> after call mark= HANDLER-AT 3 result= SV
+
+# a ::ROUTINE reached by CALL and as a function
+program
+call zrtn 3
+say 'result=' result
+say zrtn(4)
+exit
+::routine zrtn
+use arg zn
+return zn * 2
+----
+rc> 0
+out> result= 6
+out> 8
+
+# a builtin reached by CALL and as a function
+program
+call length 'abc'
+say result
+say length('abc')
+----
+rc> 0
+out> 3
+out> 3
+
+# the same two under trace i
+# **The row that separates the routes' trace.** Both emit `>A>` for the one
+# argument, from the same argument loop; only the function form emits `>F>`, and
+# only the CALL form emits the `>>>` its RESULT settle traces.
+program
+trace i
+call length 'abc'
+say result
+say length('abc')
+----
+rc> 0
+out> 3
+out> 3
+err>      2 *-* call length 'abc'
+err>        >L>   "abc"
+err>        >A>   "abc"
+err>        >>>   "3"
+err>      3 *-* say result
+err>        >V>   RESULT => "3"
+err>        >>>   "3"
+err>      4 *-* say length('abc')
+err>        >L>   "abc"
+err>        >A>   "abc"
+err>        >F>   LENGTH => "3"
+err>        >>>   "3"
+
+# a PROCEDURE EXPOSE callee
+# The callee's PROCEDURE is its first instruction, so the permission the calling
+# clause granted has to survive the call and be spent inside the callee.
+program
+zg = 'global'
+zl = 'local'
+call zsub
+say 'after' zg zl
+exit
+zsub:
+procedure expose zg
+say 'in sub' zg
+zg = 'changed'
+zl = 'shadow'
+return
+----
+rc> 0
+out> in sub global
+out> after changed local
+
+# arguments under trace i, one of them omitted
+# **The order row.** Each argument's own value lines precede its `>A>`, and an
+# omitted position traces an empty `>A>` rather than no line, holding its place
+# in the list.
+program
+trace i
+zx = 2
+call zsub zx + 1, , 'q'
+exit
+zsub:
+return 5
+----
+rc> 0
+err>      2 *-* zx = 2
+err>        >L>   "2"
+err>        >>>   "2"
+err>        >=>   ZX <= "2"
+err>      3 *-* call zsub zx + 1, , 'q'
+err>        >V>   ZX => "2"
+err>        >L>   "1"
+err>        >O>   "+" => "3"
+err>        >A>   "3"
+err>        >A>   ""
+err>        >L>   "q"
+err>        >A>   "q"
+err>      5 *-*   zsub:
+err>      6 *-*   return 5
+err>        >L>     "5"
+err>        >>>     "5"
+err>        >>>   "5"
+err>      4 *-* exit
+
+# the same call under trace r
+# **The negative direction.** `>A>` and the argument's own value lines are gated
+# on intermediates, so a call site that emitted them whenever it ran would add
+# four lines here that the oracle does not print. The two `>>>` that remain are
+# the callee's RETURN and the caller's RESULT, one value at two indents.
+program
+trace r
+zx = 2
+call zsub zx + 1
+say 'done'
+exit
+zsub:
+return 5
+----
+rc> 0
+out> done
+err>      2 *-* zx = 2
+err>        >>>   "2"
+err>      3 *-* call zsub zx + 1
+err>      6 *-*   zsub:
+err>      7 *-*   return 5
+err>        >>>     "5"
+err>        >>>   "5"
+err>      4 *-* say 'done'
+err>        >>>   "done"
+err>      5 *-* exit
+
+# CALL "name" never reaches the label table
+program
+call "ZSUB"
+say 'not reached'
+exit
+zsub:
+return 1
+----
+rc> 213
+err>      1 *-* call "ZSUB"
+err> Error 43 running /nonexistent/ir-dual-case.rex line 1:  Routine not found.
+err> Error 43.1:  Could not find routine "ZSUB".
+
+# a name that is neither a label, a builtin nor a ::ROUTINE
+program
+say 'before'
+call zorkolo
+say 'not reached'
+----
+rc> 213
+out> before
+err>      2 *-* call zorkolo
+err> Error 43 running /nonexistent/ir-dual-case.rex line 2:  Routine not found.
+err> Error 43.1:  Could not find routine "ZORKOLO".
+
+# an argument expression that raises, reported against the CALL's own clause
+# The callee never runs, which is what says the arguments are evaluated in the
+# caller and before anything is pushed.
+program
+say 'before'
+call zsub 1/0
+say 'not reached'
+exit
+zsub:
+return 1
+----
+rc> 214
+out> before
+err>      2 *-* call zsub 1/0
+err> Error 42 running /nonexistent/ir-dual-case.rex line 2:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+# a variable-reference argument, whose callee writes the caller's variable
+# `>zp` is the one argument form whose value is not the whole of what the callee
+# receives: the caller's slot travels with it, and a USE ARG > target writes
+# through it.
+program
+zp = 'orig'
+call zsub >zp
+say 'after' zp
+exit
+zsub:
+use arg >zq
+zq = 'written'
+return
+----
+rc> 0
+out> after written
+
+# one call site reached on every pass of a loop
+program
+do zi = 1 to 3
+  call zsub zi
+  say 'got' result
+end
+exit
+zsub:
+use arg zn
+return zn * 10
+----
+rc> 0
+out> got 10
+out> got 20
+out> got 30
+
+# resolution order, in both directions that can be shown at once
+# A builtin wins over a ::ROUTINE of the same name -- `max` reaches the builtin
+# through both spellings and the routine never runs -- and a label wins over
+# everything behind it.
+program
+say max(1, 9)
+call max 1, 9
+say result
+say 'label wins:' zlab(2)
+call zlab 3
+say result
+exit
+zlab:
+use arg zn
+return 'LABEL' zn
+::routine max
+return 'ROUTINE'
+----
+rc> 0
+out> 9
+out> 9
+out> label wins: LABEL 2
+out> LABEL 3
+
+# EXIT ends the program from a called label and only the routine from a ::ROUTINE
+program
+call zrtn
+say 'after routine' result
+call zlab
+say 'not reached'
+exit
+zlab:
+exit 3
+::routine zrtn
+exit 7
+----
+rc> 3
+out> after routine 7
+
+# two calls in one clause, under trace i
+# **The row that pins the calling clause's indent being restored.** The second
+# call's own `>A>` and `>F>` print at the caller's indent, not at the first
+# callee's last clause's, and the enclosing `>O>`/`>>>` follow at that indent
+# too.
+program
+trace i
+say zf(1) + zg(2)
+exit
+zf:
+use arg zn
+return zn * 10
+zg:
+use arg zn
+return zn * 100
+----
+rc> 0
+out> 210
+err>      2 *-* say zf(1) + zg(2)
+err>        >L>   "1"
+err>        >A>   "1"
+err>      4 *-*   zf:
+err>      5 *-*   use arg zn
+err>        >>>     "1"
+err>        >=>     ZN <= "1"
+err>      6 *-*   return zn * 10
+err>        >V>     ZN => "1"
+err>        >L>     "10"
+err>        >O>     "*" => "10"
+err>        >>>     "10"
+err>        >F>   ZF => "10"
+err>        >L>   "2"
+err>        >A>   "2"
+err>      7 *-*   zg:
+err>      8 *-*   use arg zn
+err>        >>>     "2"
+err>        >=>     ZN <= "2"
+err>      9 *-*   return zn * 100
+err>        >V>     ZN => "2"
+err>        >L>     "100"
+err>        >O>     "*" => "200"
+err>        >>>     "200"
+err>        >F>   ZG => "200"
+err>        >O>   "+" => "210"
+err>        >>>   "210"
+err>      3 *-* exit
+
+# CALL (expr), whose target is a value rather than a spelling
+# The value searches labels -- unlike CALL "name" -- and is not upcased on the
+# way in, so the two forms pull in opposite directions from each other.
+program
+znm = 'ZSUB'
+call (znm) 5
+say result
+exit
+zsub:
+use arg zn
+return zn + 1
+----
+rc> 0
+out> 6
+
+# a recursive function call, one call site under many live activations
+program
+say zfact(5)
+exit
+zfact:
+use arg zn
+if zn <= 1 then return 1
+return zn * zfact(zn - 1)
+----
+rc> 0
+out> 120
