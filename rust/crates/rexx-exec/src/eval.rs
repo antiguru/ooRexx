@@ -1068,26 +1068,46 @@ impl Interp {
 /// `left op right` as a tagged small integer, or `None` when the general
 /// arithmetic path must run instead.
 ///
-/// Only `+`, `-` and `*` are here, because only they take two integers to an
-/// integer. The other four are absent for reasons of their own, none of them
-/// a matter of effort:
+/// All seven arithmetic operators are here, each admitted only where its
+/// exact `i64` answer is the answer the interpreter gives:
 ///
-/// * `/` is not integer-valued at all (`1 / 3`).
-/// * `%` and `//` are defined in Rexx through that same rounded division and
-///   not through `i64`'s truncation, so they agree with it only where the
-///   division needs no rounding -- a condition on the operands, not on the
-///   result, and one this function's shape cannot state.
-/// * `**` leaves the tag's range for single-digit operands, so the guard
-///   would reject nearly everything it was handed.
+/// * `+`, `-` and `*` take two integers to an integer outright.
+/// * `%` truncates toward zero and `//` takes the dividend's sign, which is
+///   what `i64`'s own `/` and `%` do -- measured, `-7 % 3` is `-2`, `-7 // 3`
+///   is `-1` and `7 // -3` is `1`. Neither can need more room than the
+///   operand guard below has already allowed: `|left % right|` is at most
+///   `|left|` and `|left // right|` is below `|right|`, both of which that
+///   guard accepted.
+/// * `/` is the one of the seven whose exact result need not be an integer,
+///   so it is admitted only when the division leaves no remainder -- `6 / 2`
+///   is, `1 / 3` is not.
+/// * `**` is admitted for a non-negative exponent whose exact power fits both
+///   the tag and `digits`. `NumberString::power` reduces the exponent
+///   bitwise, so every intermediate is `base` raised to a prefix of that
+///   exponent and therefore no wider than the result itself; it also works at
+///   `digits` plus the exponent's own digit count plus one. So a result that
+///   needs no rounding is reached without any, and the exact answer is the
+///   interpreter's answer.
 ///
-/// The `checked_*` operators cover `*` overflowing `i64` outright; `+` and
-/// `-` on two 61-bit values cannot, and use the checked form only so the
-/// three arms read alike.
+/// **Every case this declines is answered by the general path, so a decline
+/// costs speed and never an answer** -- which is why the guards below are
+/// free to be stricter than the interpreter wherever stating the exact
+/// condition would be harder than the fast path is worth.
+///
+/// The `checked_*` forms carry two different jobs. On `*` and `**` they are
+/// the overflow test, and it is reachable. On `/`, `%` and `//` they are how
+/// a **zero divisor** declines, so the 42.3 the general path raises is still
+/// what a program sees. On `+` and `-` they are neither: two operands inside
+/// the tag cannot overflow `i64`, and the checked form is there only so the
+/// arms read alike.
 ///
 /// **Both operands are checked against `digits` before the operation, not
 /// just the result afterwards.** Rexx rounds the operands too, so an operand
 /// too wide for the precision makes the exact `i64` answer the wrong one --
-/// see [`exact_small_int`]'s own doc comment for the measured pair.
+/// see [`exact_small_int`]'s own doc comment for the measured pair. `**` does
+/// *not* round its base (`prepareOperatorNumber` is called there with
+/// `NOROUND`), so for that operator the shared guard is stricter than the
+/// interpreter rather than matching it.
 fn small_int_arith(op: Operator, left: i64, right: i64, digits: u64) -> Option<ObjRef> {
     if !within_digits(left, digits) || !within_digits(right, digits) {
         return None;
@@ -1096,9 +1116,25 @@ fn small_int_arith(op: Operator, left: i64, right: i64, digits: u64) -> Option<O
         Operator::Plus => left.checked_add(right),
         Operator::Subtract => left.checked_sub(right),
         Operator::Multiply => left.checked_mul(right),
+        Operator::IntDiv => left.checked_div(right),
+        Operator::Remainder => left.checked_rem(right),
+        Operator::Divide if left.checked_rem(right) == Some(0) => left.checked_div(right),
+        Operator::Power => small_int_power(left, right),
         _ => None,
     }?;
     exact_small_int(value, digits)
+}
+
+/// `base ** exponent` in `i64`, or `None` when [`small_int_arith`] must
+/// decline.
+///
+/// A negative exponent leaves the integers -- `2 ** -1` is `0.5` -- and is
+/// declined by the conversion rather than by a test of its own. So is an
+/// exponent past [`u32`], which no base but `0`, `1` and `-1` could survive
+/// anyway; those three would be exact, and they go to the general path with
+/// everything else rather than earning an arm of their own.
+fn small_int_power(base: i64, exponent: i64) -> Option<i64> {
+    base.checked_pow(u32::try_from(exponent).ok()?)
 }
 
 pub(crate) fn saturate_digits(digits: u64) -> u32 {
@@ -1312,16 +1348,27 @@ mod tests {
     /// at `DIGITS 3`, where the interpreter answers `980`. The general path
     /// is `rexx-num`, which is differentially validated against the oracle;
     /// agreeing with it is the property worth asserting.
+    ///
+    /// **The `expect` on the general path's own result is an assertion, not
+    /// a convenience.** A fast path that accepted an operation the general
+    /// path raises on -- a zero divisor, an exponent that overflows -- would
+    /// answer where the interpreter reports 42.3 or 26, and that is the shape
+    /// this line fails on.
     #[test]
     fn the_small_int_fast_path_answers_what_the_general_path_answers() {
         use rexx_num::Form;
 
-        let operands: [i64; 20] = [
+        let operands: [i64; 25] = [
             0,
             1,
             -1,
+            2,
+            -2,
+            3,
             5,
             -5,
+            7,
+            -7,
             25,
             -25,
             99,
@@ -1339,12 +1386,32 @@ mod tests {
             rexx_core::SMALL_INT_MIN,
         ];
         let precisions: [u64; 9] = [1, 2, 3, 5, 9, 15, 18, 19, 20];
-        let ops = [Operator::Plus, Operator::Subtract, Operator::Multiply];
         let forms = [Form::Scientific, Form::Engineering];
 
+        // Pinned to `is_arithmetic` in the direction that is a correctness
+        // claim: nothing listed here is outside the set `eval_arithmetic`
+        // dispatches. The other direction is not asserted and does not need
+        // to be -- an arithmetic operator missing from this list is one
+        // `small_int_arith`'s own `_` arm declines, which costs speed and
+        // cannot cost an answer.
+        let ops = [
+            Operator::Plus,
+            Operator::Subtract,
+            Operator::Multiply,
+            Operator::Divide,
+            Operator::IntDiv,
+            Operator::Remainder,
+            Operator::Power,
+        ];
+        assert!(ops.iter().all(|op| is_arithmetic(*op)));
+
         let mut interp = Interp::new();
-        let mut compared = 0usize;
-        for op in ops {
+        // Per operator rather than one total: `+` alone reaches the fast path
+        // thousands of times, so an aggregate count is satisfied by a guard
+        // that admits nothing else. Each operator has to be seen going fast
+        // on its own.
+        let mut compared = [0usize; 7];
+        for (index, op) in ops.into_iter().enumerate() {
             for left in operands {
                 for right in operands {
                     for digits in precisions {
@@ -1361,6 +1428,16 @@ mod tests {
                             Operator::Plus => left_number.add(&right_number, digits),
                             Operator::Subtract => left_number.sub(&right_number, digits),
                             Operator::Multiply => left_number.mul(&right_number, digits),
+                            Operator::Divide => {
+                                left_number.div(&right_number, digits, DivOp::Divide)
+                            }
+                            Operator::IntDiv => {
+                                left_number.div(&right_number, digits, DivOp::IntegerDivide)
+                            }
+                            Operator::Remainder => {
+                                left_number.div(&right_number, digits, DivOp::Remainder)
+                            }
+                            Operator::Power => left_number.pow(&right_number, digits),
                             other => unreachable!("{other:?} is not on the fast path"),
                         }
                         .expect("no arithmetic error on the general path either");
@@ -1379,17 +1456,102 @@ mod tests {
                                 "{left} {op:?} {right} at DIGITS {digits}, FORM {form:?}"
                             );
                         }
-                        compared += 1;
+                        compared[index] += 1;
                     }
                 }
             }
         }
-        // The grid is mostly refusals at the low precisions, so a guard that
-        // rejected everything would satisfy the loop above vacuously.
-        assert!(
-            compared > 1000,
-            "only {compared} pairs were on the fast path"
-        );
+        // The grid is mostly refusals at the low precisions, and `/` and `**`
+        // decline most of what they are handed by construction, so the floor
+        // is the one every operator clears rather than one scaled to the
+        // widest.
+        for (index, op) in ops.into_iter().enumerate() {
+            assert!(
+                compared[index] > 100,
+                "{op:?} reached the fast path only {} times over the grid",
+                compared[index]
+            );
+        }
+    }
+
+    /// `/` is the one arithmetic operator whose exact answer need not be an
+    /// integer, so the fast path takes it only when the division comes out
+    /// even -- and must take it then, or the guard is just a refusal.
+    #[test]
+    fn division_goes_fast_only_when_it_is_exact() {
+        let mut interp = Interp::new();
+
+        assert!(small_int_arith(Operator::Divide, 1, 3, 9).is_none());
+        assert!(small_int_arith(Operator::Divide, 7, 2, 9).is_none());
+
+        let fast = small_int_arith(Operator::Divide, 6, 2, 9).expect("6 / 2 is exact");
+        assert_eq!(&*interp.to_text(fast), b"3");
+        let fast = small_int_arith(Operator::Divide, -1000000, 1000, 9).expect("this is exact too");
+        assert_eq!(&*interp.to_text(fast), b"-1000");
+    }
+
+    /// A zero divisor leaves the fast path for all three division operators,
+    /// so the 42.3 the general path raises is still what a program sees.
+    #[test]
+    fn a_zero_divisor_leaves_the_fast_path() {
+        for op in [Operator::Divide, Operator::IntDiv, Operator::Remainder] {
+            assert!(
+                small_int_arith(op, 7, 0, 9).is_none(),
+                "{op:?} by zero was answered on the fast path"
+            );
+        }
+    }
+
+    /// The sign rule for `%` and `//` with a negative operand, which is the
+    /// half of this candidate a wrong `i64` intuition would get wrong
+    /// silently.
+    ///
+    /// Measured on the interpreter: `-7 % 3` is `-2` (truncated toward zero,
+    /// not floored to `-3`), `-7 // 3` is `-1` and `7 // -3` is `1` -- the
+    /// remainder takes the *dividend's* sign, not the divisor's.
+    #[test]
+    fn integer_division_truncates_toward_zero_and_the_remainder_follows_the_dividend() {
+        let mut interp = Interp::new();
+        let cases: [(Operator, i64, i64, &[u8]); 8] = [
+            (Operator::IntDiv, -7, 3, b"-2"),
+            (Operator::IntDiv, 7, -3, b"-2"),
+            (Operator::IntDiv, -7, -3, b"2"),
+            (Operator::IntDiv, 7, 3, b"2"),
+            (Operator::Remainder, -7, 3, b"-1"),
+            (Operator::Remainder, 7, -3, b"1"),
+            (Operator::Remainder, -7, -3, b"-1"),
+            (Operator::Remainder, 7, 3, b"1"),
+        ];
+        for (op, left, right, expected) in cases {
+            let fast = small_int_arith(op, left, right, 9)
+                .unwrap_or_else(|| panic!("{left} {op:?} {right} should go fast"));
+            assert_eq!(
+                &*interp.to_text(fast),
+                expected,
+                "{left} {op:?} {right} at DIGITS 9"
+            );
+        }
+    }
+
+    /// `**` takes a whole non-negative exponent whose exact power fits, and
+    /// nothing else -- a negative exponent leaves the integers, and a power
+    /// too wide for `DIGITS` would have to render exponentially.
+    #[test]
+    fn power_goes_fast_only_for_an_exact_non_negative_exponent() {
+        let mut interp = Interp::new();
+
+        assert!(small_int_arith(Operator::Power, 2, -1, 9).is_none());
+        assert!(small_int_arith(Operator::Power, 2, 1_000_000_000, 9).is_none());
+        // 2 ** 30 is 1073741824, ten digits, so under DIGITS 9 it rounds and
+        // renders as 1.07374182E+9.
+        assert!(small_int_arith(Operator::Power, 2, 30, 9).is_none());
+
+        let fast = small_int_arith(Operator::Power, 2, 30, 10).expect("ten digits is enough");
+        assert_eq!(&*interp.to_text(fast), b"1073741824");
+        let fast = small_int_arith(Operator::Power, -3, 3, 9).expect("a negative base is fine");
+        assert_eq!(&*interp.to_text(fast), b"-27");
+        let fast = small_int_arith(Operator::Power, 0, 0, 9).expect("Rexx defines this as 1");
+        assert_eq!(&*interp.to_text(fast), b"1");
     }
 
     /// The measured pair the guard exists for, and its neighbour that must
