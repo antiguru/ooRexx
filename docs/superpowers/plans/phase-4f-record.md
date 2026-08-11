@@ -457,3 +457,125 @@ Commit: `3cd2e80d13532a45b406da3fb390b55ea4a93c9a`, read back from `git log` aft
 * **The two instruments disagree on the small numbers and neither settles them.** The direct interleave puts `arith` at +1.52% and `varlookup` at +1.77%; the suite puts them at +2.78% and +0.75%. Only the instruction counts are reproducible enough to assert a direction, and they measure work rather than time.
 * **It re-profiles nothing.** `compound`'s shares are now all wrong -- the denominator moved by half -- and entry 2's queue entries for that axis are stale, exactly as the plan says they would be. The next candidate on `compound` needs a fresh profile, not entry 2's table.
 * **It says nothing about `%` and `**` in a real program.** `compound.rex` uses `//` alone. The other three operators are correct by the grids above and unmeasured for speed, because no axis in this suite uses them.
+
+### Entry 4 -- candidate 1, lever (a) attempted and **accepted**: a builtin's counted answer as the tag, not as a heap string
+
+**BASE is `18a8e0c8`**, the state entry 3 left. **Lever (b) -- reclamation, a trigger policy, `phase-4d-retention.md`'s -16% on `strings` -- was not touched and remains queued with that figure intact.** The accept rule judges one change against one preceding binary, and an attempt moving both levers would produce an accepted change whose mechanism nobody could name.
+
+#### The re-profile that chose the target, because entry 2's shares for `compound` are stale
+
+Entry 3 halved `compound` and entry 2's queue counted the allocations it removed, so the axis was re-profiled at head before anything was picked. Same instrument as entry 2: `samply` 0.13.1 `--save-only`, 1 kHz, `REXX_ENGINE=ir` set in the script, fresh empty directory, `ulimit -v 8388608`, analysed through `pollard` with `expand_inlines`. `strings` 9324 ms, 9390 samples, `unsymbolicated_pct` 0.021%; `compound` 3446 ms against entry 2's 6765, which is entry 3's halving showing up in the profiler.
+
+`strings`' allocator shares reproduce entry 2 -- glibc family 36.1% self, the arena side (`alloc_with_uncollected` + `ptr::write::<Slot>`) 8.0% -- but the **callers** are not what the queue assumed. The largest single malloc stacks on that axis are `Number::add_signed`, `truncated_to` and `aligned_to`, and `Interp::arith_general`'s whole subtree is **16.4%** of the axis. That is `total = total + length(joined)` running decimal addition on two values that are both small integers.
+
+**It runs there because `LENGTH` hands its answer back as a heap string.** `builtin::string::length` was `interp.text(bytes.to_string().as_bytes())`, and `Interp::arith_small_int` answers only when **both** operands decode to `SmallInt`. One untagged operand costs the whole clause: `Number::from_i64` for the tagged side, a parse for the untagged one, digit vectors through the add, and a render back. Ten builtins had that shape -- `LENGTH`, `POS`, `LASTPOS`, `COMPARE`, `COUNTSTR`, `VERIFY` in `string.rs` and `WORDS`, `WORDINDEX`, `WORDLENGTH`, `WORDPOS` in `word.rs`.
+
+#### The hypothesis, named before it was measured
+
+`Interp::counted(value: usize)` returns `ObjRef::small_int(value)` and the ten sites call it. **This is not a new kind of value**: `Interp::literal` already inlines a source literal whose bytes are the canonical rendering of a small integer, so a `SmallInt` reaches every consumer in the crate today, and what changes is which of D15's two existing representations a counted answer starts in.
+
+**There is no `DIGITS` admissibility test, and that is deliberate rather than omitted.** `Interp::number` needs one because a `Number` has already been rounded to the precision that produced it. A count has not been rounded by anything, and the interpreter renders it in full whatever `DIGITS` is in force -- measured on the oracle, `numeric digits 3 ; say length(copies('a',1234))` is `1234`, and only `length(...) + 0` is `1.23E+3`. The second half is `small_int_arith`'s existing `within_digits` guard declining an operand too wide for the precision, which is the same rule reached by the same code.
+
+#### Predicted movement, written down before the first round ran
+
+| axis | predicted | the reasoning behind it |
+|---|---|---|
+| `strings` | **-12% to -25%**, central -18% | `arith_general` is 16.4% of the axis and the whole of it is one clause falling off the small-integer path for want of a tag; plus `LENGTH`'s and `POS`'s own render, copy and slot |
+| peak RSS, `strings` | **-25% to -45%** | five heap objects per iteration become three |
+| `rexxcps` | -2% to -8% | calls `LENGTH`, `WORD` and `SUBSTR`, but diffusely |
+| `arith`, `compound`, `varlookup`, `alloc4c`, `emptyloop` | **0%**, band -1% to +1% | none of these programs calls a builtin whose result this changes |
+
+#### Build identity
+
+| | |
+|---|---|
+| BASE `rexx-run` | size=13816800, sha256 `08c55ab1d3a475838fa6311b4eb33a9e33504c75e0fde23881487abbda7c3450` -- **entry 3's HEAD binary reproduced byte for byte** from a clean `git status` at `18a8e0c8`, after `cargo clean -p rexx-exec -p rexx-bench --release` |
+| HEAD `rexx-run` | size=13756944, sha256 `0daf0817724aae9b08812096d19cae0c28f3ee0ed100f37029b053f4c5f380f2` |
+| oracle | the same three objects entry 1 fingerprints, unchanged |
+
+**The measured HEAD binary is the committed source's release build, and that was checked rather than assumed** -- entry 3 discarded a sitting over exactly this. The witness and the type alias added after the sitting are `#[cfg(test)]`, so rebuilding the release binary from the committed tree reproduces `0daf0817` byte for byte; it was rebuilt twice more, once after a full `cargo clean`, and hashed each time.
+
+#### The accept measurement: the two binaries alternating in one loop
+
+The accept rule's literal shape, and **not** `rexx-bench-suite`, so it is reported as its own instrument. Wall clock, `ulimit -v 8388608`, `REXX_ENGINE=ir`, one fresh empty working directory, the base/head order **rotated every round**. 2026-08-11 15:22:59 to 15:29:47 +02:00, seven rounds per axis, load average 1.51 to 1.93 across the sitting, every run exiting 0. Every axis but `rexxcps` printed a byte-identical stdout under both binaries in all seven rounds, hashed per run.
+
+| axis | base median | head median | head / base | rounds with that sign |
+|---|---:|---:|---:|---:|
+| `strings` | 9.2585 s | 6.9634 s | **-24.79%** | **7 of 7** |
+| `alloc4c` | 2.3520 s | 1.6523 s | **-29.75%** | **7 of 7** |
+| `varlookup` | 5.0142 s | 4.5163 s | -9.93% | 7 of 7 |
+| `compound` | 3.5019 s | 3.2700 s | -6.62% | 7 of 7 |
+| `emptyloop` | 2.9716 s | 2.8985 s | -2.46% | 7 of 7 |
+| `arith` | 3.1270 s | 3.1216 s | -0.17% | 5 of 7 |
+
+`rexxcps` is not read as wall time, for entry 1's reason. Both binaries self-calibrated to the identical `100 x 100`, so their own clauses-per-second figures are comparable: five rounds, order rotated, base median **2,270,198** against head **2,322,521** -- **+2.30%**, head ahead in all five.
+
+#### Two of the seven predictions were wrong, and only one of them was avoidable
+
+**`alloc4c` at -29.75% against a predicted 0%.** `alloc4c.rex`'s hot clause is `total = total + 3 + length(s)`. It calls `LENGTH`. The prediction said "none of these programs calls a builtin whose result this changes" without reading the program, and the program is forty lines of commentary above six lines of code. That is the whole error; nothing subtle went wrong.
+
+**`varlookup` -9.93%, `compound` -6.62% and `emptyloop` -2.46%, against a predicted 0% -- and these are *not* this candidate's mechanism.** Those three programs call no builtin at all. `perf stat -e instructions:u,cycles:u`, three runs per side, medians:
+
+| axis | instructions base | instructions head | change | cycles change | wall change |
+|---|---:|---:|---:|---:|---:|
+| `strings` | 86,239,817,791 | 70,096,926,555 | **-18.72%** | -24.36% | -24.79% |
+| `alloc4c` | 16,008,876,899 | 12,017,611,459 | **-24.93%** | -28.70% | -29.75% |
+| `varlookup` | 67,034,532,212 | 67,001,311,086 | **-0.05%** | **-10.07%** | -9.93% |
+| `compound` | 41,381,778,014 | 41,368,280,804 | **-0.03%** | **-7.29%** | -6.62% |
+| `emptyloop` | 41,353,097,384 | 41,337,639,544 | **-0.04%** | **-2.04%** | -2.46% |
+| `arith` | 30,053,874,969 | 30,052,572,617 | -0.00% | -0.18% | -0.17% |
+
+**Three axes execute the same instruction stream and retire it in 2% to 10% fewer cycles.** The binary shrank by 59,856 bytes when ten call sites stopped rendering integers to text, and this is what that bought: a code-layout effect, entry 3's displacement channel running the other way and an order of magnitude larger than the +0.60% entry 3 measured on `varlookup`. **It is a windfall this candidate did not aim at and cannot claim**, and the next change that moves the binary's size can take it back.
+
+**`arith` is what makes that a finding rather than a suspicion about the sitting.** It calls no builtin either, and it shows neither an instruction change nor a cycle change -- so the effect is axis-specific, not a sitting-wide bias favouring whichever binary ran second.
+
+#### Peak resident set, which is the candidate's own falsification check
+
+`/usr/bin/time -f %M`, same wrapper, one run per side.
+
+| axis | base | head | change |
+|---|---:|---:|---:|
+| `strings` | 3,728,016 KB | 2,511,244 KB | **-32.64%** |
+| `rexxcps` | 1,798,660 KB | 1,741,192 KB | -3.20% |
+| `varlookup` | 149,404 KB | 149,260 KB | -0.10% |
+| `compound` | 40,332 KB | 40,836 KB | +1.25% |
+| `arith` | 439,260 KB | 440,676 KB | +0.32% |
+
+The candidate's stated falsification was a paired run moving `strings` under about 10%, **or peak RSS not falling when it lands** -- which would have said the allocations counted were not the ones removed. It moved 24.79% and the resident set fell by a third, so neither fired.
+
+#### Correctness, which outranks the number
+
+**No divergence, on either engine.** Every probe ran from a fresh empty directory under the wrapper `rust/CLAUDE.md` fixes, stdout, stderr and exit status read separately.
+
+* **6,720 cases** -- the ten builtins over sixteen call shapes, ten subjects (empty, `0`, `00`, a 1234-byte string, an embedded-blanks string), six needles and seven `DIGITS` settings from 1 to 20 -- each answer then put through twenty uses: bare `say`, all six arithmetic operators, `=`, `==`, `<<`, `DATATYPE`, a compound tail key, `FORMAT`, `ABS`/`SIGN`/`TRUNC`, `MAX`/`MIN`, `RIGHT`/`LEFT`, concatenation, `PARSE VALUE` with a column pattern, and `WORD`, with syntax trapped and reported as its own `rc`. 126,084 output lines, **byte-identical to the oracle on stdout and stderr** on base and on head, and on `ir` and `tree-walker` alike. Base matching too is what makes it a control rather than a result.
+* **The grid can fail, and that was checked rather than argued.** `COUNTSTR` mutated to answer one fewer diverges from the oracle on 1,031 lines. The mutation was reverted from a copy and the release binary rehashed to `0daf0817`.
+* **What the grid cannot do is see the representation**, and that is the point of the change: `Body::Text{b"46"}` and `SmallInt(46)` are observationally identical, so no differential can tell them apart and none of these 6,720 cases would notice all ten call sites being put back. The representation is pinned by an assertion instead.
+* A `TRACE I` probe reproduces the oracle's own `>F> LENGTH => "5"` and the `>O> "+" => "6"` after it, byte for byte, before and after.
+
+The committed witness is `a_counted_answer_is_tagged_rather_than_a_heap_string`, which goes through `builtin::dispatch` -- so one enumeration reaches `word.rs`'s four names as well as `string.rs`'s six -- and asserts the **handle** decodes to the expected `SmallInt`, not only the bytes. Its adjacent success is `SUBSTR('012345',1,3)`, which must stay a heap string: `012` is bytes that are the value, with no integer behind them, and that is what pins the rule to *counted* answers rather than to "anything that looks like a number".
+
+**It adds coverage, which is a separate claim from being able to fail and was measured separately.** `WORDS` put back to `interp.text(...)` turns the witness red; the entire workspace suite run *without* the witness (`--skip`, `--no-fail-fast`) stays green under that same mutation. `word.rs` was restored from a copy and `sha256sum -c`'d, never `git checkout --`.
+
+Gates: `cargo test --workspace` **1433 passed, 0 failed, 4 ignored** in dev and **1433 passed, 0 failed, 4 ignored** in release, run counts read rather than exit status alone. Inside the release run, the corpus runner reported 10 passed and the dual-engine sweep 9 passed. **BASE was re-counted rather than inherited**: `cargo test --workspace -- --list` in a `git worktree` at `18a8e0c8` enumerates 1436, of which 4 are `#[ignore]`, so BASE runs **1432** -- agreeing with entry 3, and reached by listing rather than running, which is what avoids the 27 `ootest/`-path failures entry 3 records for that worktree. `cargo fmt --all --check` clean. `cargo clippy --workspace --all-targets -- -D warnings` clean from a full `cargo clean`, with `Checking rexx-exec` confirmed in the log -- and it was not clean the first time: the witness's case table tripped `clippy::type_complexity`, which is why the run from a cold target directory is the one that counts.
+
+#### Disposition: **accepted**
+
+The hypothesis is confirmed by the route it named, and the instruction count is the evidence: the two axes that call `LENGTH` retire 18.7% and 24.9% less work, the resident set on `strings` falls by a third, and no differential diverged.
+
+Accepted **with the windfall disclaimed rather than banked**: of the seven axes moved, two moved because this candidate removed work and three moved because the binary got smaller. `varlookup`, `compound` and `emptyloop` should be read as `18a8e0c8` + this build's layout, not as a result about them.
+
+Commit: `d9bf260ec7873e2b2f0b30624eb4b9d7efb3df5c`, read back from `git log` after committing.
+
+#### What was ruled out, and why, since the queue asked for one representation
+
+* **An inline digit buffer for `Number` -- the `smallvec` dead end the plan and this file both cite and neither can produce.** Not attempted, and this entry licenses nothing about it in either direction; the citation is still a claim with no measurement behind it. The reason it was not chosen: at head the `Number` allocations on `strings` are reached *because* a counted answer arrives untagged and forces the general decimal path. Removing the reason removes them wholesale -- 16.1 billion instructions -- where making each one cheaper leaves the path, the parse and the render in place. It is also a rewrite of `digits: Vec<u8>` across five files of `rexx-num`, against one new constructor and ten call sites here.
+* **Inlining a short string into `Body::Text`.** `Body` is 80 bytes, dominated by the cold `Stem` variant, so an inline buffer would cost nothing in width -- but the builtins **build** their results in a `Vec` (`builtin::buffer`, `Vec::new()` and extend) and hand it over by move, so the malloc has already happened before `Body` sees it. Inlining would mean rewriting each builtin's internals, not changing one representation.
+* **`required_string`'s `[u8]::to_vec`, 15.5% of `strings`** -- six copies of an argument per iteration, taken so the borrow of `interp` can end. Real, and larger than several queued candidates, but it is a borrow-structure change and not a representation, so it belongs to a candidate of its own rather than to this lever.
+
+#### What this entry cannot say
+
+* **It is one sitting on one Linux host**, unpinned, on a machine whose governor cannot be fixed.
+* **It did not run `rexx-bench-suite`, so it carries no oracle ratios.** Every figure above is against the immediately preceding binary, which is what the accept rule asks for and all it asks for. Where `strings` and `alloc4c` now sit against the oracle is unmeasured, and entry 2's warning stands either way: `alloc4c`'s oracle ratio has an inflated denominator and no candidate should be aimed at it.
+* **The layout windfall is reproducible for this pair of binaries and nothing more.** Three perf reps and seven wall rounds agree on it; whether it survives the next build is not something this entry measured, and the honest expectation is that it does not.
+* **It changed ten call sites and no others.** `state.rs` and `datetime.rs` render an integer answer to text the same way at fourteen further sites (`DIGITS`, `FUZZ`, `QUEUED`, `LINES`, `DATE('B')`, `TIME('T')` among them). None is reached by any axis in this suite, so none was changed and none was measured.
+* **`%` and `**` on a counted operand are correct by the grid above and unmeasured for speed**, because no axis in this suite puts one there.
