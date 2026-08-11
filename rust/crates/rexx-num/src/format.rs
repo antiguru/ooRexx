@@ -17,7 +17,7 @@
 //! layered on top of it. Measured against ooRexx 5.3.0; see
 //! `rust/corpus/num/form_notation.rex` and `format_trunc.rex`.
 
-use crate::{Form, Number};
+use crate::{Digits, Form, Number};
 
 /// What `FORMAT` can fail with. Both are error 93 (`Incorrect call to
 /// method`); the interpreter further distinguishes 93.941/93.942, but this
@@ -645,7 +645,7 @@ fn math_round_places(n: &Number, places: u32) -> Number {
         // `adjusted_decimals` is within `MAX_EXPONENT`, so `places` fits i32.
         return Number {
             negative: n.negative,
-            digits: vec![1],
+            digits: Digits::single(1),
             exponent: -(places as i32),
         };
     }
@@ -701,12 +701,12 @@ fn round_to_places(n: &Number, places: u32) -> Number {
         // exactly as a whole-number underflow already does.
         return Number {
             negative: false,
-            digits: vec![0],
+            digits: Digits::single(0),
             exponent: target_exponent,
         };
     }
     let keep = len - drop;
-    let mut kept: Vec<u8> = n.digits[..keep].to_vec();
+    let mut kept = Digits::from_slice(&n.digits[..keep]);
     if n.digits[keep] >= 5 {
         // A full carry chain (all-9s down to `keep`) grows the digit count
         // by one instead of shifting the exponent -- unlike `round_to`,
@@ -718,7 +718,7 @@ fn round_to_places(n: &Number, places: u32) -> Number {
         let mut i = keep;
         loop {
             if i == 0 {
-                kept.insert(0, 1);
+                kept.insert_front(1);
                 break;
             }
             i -= 1;
@@ -740,7 +740,7 @@ fn round_to_places(n: &Number, places: u32) -> Number {
         // takes the normal `assemble` path below.
         return Number {
             negative: false,
-            digits: vec![0],
+            digits: Digits::single(0),
             exponent: target_exponent,
         };
     }
@@ -768,7 +768,7 @@ fn truncate_to_places(n: &Number, places: u32) -> Number {
         // `assemble`, which would collapse it back to the canonical zero.
         return Number {
             negative: false,
-            digits: vec![0],
+            digits: Digits::single(0),
             exponent: target_exponent,
         };
     }
@@ -780,7 +780,11 @@ fn truncate_to_places(n: &Number, places: u32) -> Number {
     // there, which is exactly `Number::zero()` -- so `TRUNC(-0.5, 0)` still
     // drops its sign; it is only `places > 0` where preserving the exponent
     // here matters.
-    Number::assemble(n.negative, n.digits[..keep].to_vec(), target_exponent)
+    Number::assemble(
+        n.negative,
+        Digits::from_slice(&n.digits[..keep]),
+        target_exponent,
+    )
 }
 
 /// Splits `n` into plain sign/integer/decimal text, extends the decimal part

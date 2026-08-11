@@ -31,14 +31,14 @@
 //! Stripping the zero first, which is the obvious thing to do, gets every
 //! such case wrong.
 
-use crate::{ArithError, Number};
+use crate::{ArithError, Digits, Number};
 
 impl Number {
     /// Extends the digit vector downward so both operands share an exponent.
-    fn aligned_to(&self, exponent: i32) -> Vec<u8> {
+    fn aligned_to(&self, exponent: i32) -> Digits {
         let pad = (self.exponent - exponent).max(0) as usize;
         let mut digits = self.digits.clone();
-        digits.extend(std::iter::repeat_n(0u8, pad));
+        digits.extend_zeros(pad);
         digits
     }
 
@@ -198,7 +198,7 @@ impl Number {
         let dropped = self.digits.len() - max_length;
         Number {
             negative: self.negative,
-            digits: self.digits[..max_length].to_vec(),
+            digits: Digits::from_slice(&self.digits[..max_length]),
             exponent: self.exponent + dropped as i32,
         }
     }
@@ -220,9 +220,9 @@ fn compare_magnitudes(a: &[u8], b: &[u8]) -> std::cmp::Ordering {
 /// and throws the real digits away -- `1 + 1` at DIGITS 1 comes out as 0.
 /// Subtraction is different: its leading zero is a real digit produced by the
 /// borrow, and must be kept.
-fn add_magnitudes(a: &[u8], b: &[u8]) -> Vec<u8> {
+fn add_magnitudes(a: &[u8], b: &[u8]) -> Digits {
     let n = a.len().max(b.len());
-    let mut out = vec![0u8; n];
+    let mut out = Digits::zeros(n);
     let mut carry = 0u8;
     for i in 0..n {
         let x = a.len().checked_sub(i + 1).map_or(0, |k| a[k]);
@@ -232,15 +232,15 @@ fn add_magnitudes(a: &[u8], b: &[u8]) -> Vec<u8> {
         carry = sum / 10;
     }
     if carry > 0 {
-        out.insert(0, carry);
+        out.insert_front(carry);
     }
     out
 }
 
 /// `a - b`, where `a >= b` by magnitude.
-fn sub_magnitudes(a: &[u8], b: &[u8]) -> Vec<u8> {
+fn sub_magnitudes(a: &[u8], b: &[u8]) -> Digits {
     let n = a.len();
-    let mut out = vec![0u8; n];
+    let mut out = Digits::zeros(n);
     let mut borrow = 0i8;
     for i in 0..n {
         let x = a[n - 1 - i] as i8;
@@ -259,7 +259,7 @@ fn sub_magnitudes(a: &[u8], b: &[u8]) -> Vec<u8> {
 
 /// Removes `count` digits from the low end, as the C++ does by walking the
 /// end pointer backwards. Never empties the vector.
-fn drop_low_digits(digits: &mut Vec<u8>, count: i64) {
+fn drop_low_digits(digits: &mut Digits, count: i64) {
     let count = count.max(0) as usize;
     let keep = digits.len().saturating_sub(count).max(1);
     digits.truncate(keep);

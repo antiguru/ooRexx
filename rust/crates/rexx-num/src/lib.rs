@@ -21,9 +21,11 @@
 
 mod addsub;
 mod compare;
+mod digits;
 mod muldiv;
 mod pow;
 pub use compare::{CompareOp, compare, compare_bytes, compare_decoded};
+pub(crate) use digits::Digits;
 pub use muldiv::DivOp;
 mod settings;
 pub use settings::{Form, Settings, SettingsError};
@@ -408,7 +410,13 @@ pub struct Number {
     pub(crate) negative: bool,
     /// Most significant first, each value 0..=9. Never empty. Has no leading
     /// zero unless the value is zero, in which case it is exactly `[0]`.
-    pub(crate) digits: Vec<u8>,
+    ///
+    /// Held inline while it is short -- see [`digits`] for the capacity and
+    /// what fixes it. Every read of this field is a slice operation through
+    /// `Deref`, so the storage decision is invisible to the arithmetic.
+    ///
+    /// [`digits`]: crate::digits
+    pub(crate) digits: Digits,
     pub(crate) exponent: i32,
 }
 
@@ -418,7 +426,7 @@ impl Number {
     pub fn zero() -> Self {
         Number {
             negative: false,
-            digits: vec![0],
+            digits: Digits::single(0),
             exponent: 0,
         }
     }
@@ -439,7 +447,9 @@ impl Number {
         }
         // `unsigned_abs`, not `-value`: `i64::MIN` has no positive form.
         let mut magnitude = value.unsigned_abs();
-        let mut digits = Vec::with_capacity(20);
+        // An `i64` is at most nineteen decimal digits, which is one of the two
+        // bounds `INLINE_DIGITS` is chosen above, so this never allocates.
+        let mut digits = Digits::new();
         while magnitude > 0 {
             digits.push((magnitude % 10) as u8);
             magnitude /= 10;
@@ -670,7 +680,7 @@ impl Number {
             }
         }
 
-        let mut digits: Vec<u8> = Vec::new();
+        let mut digits = Digits::new();
         let mut seen_digit = false;
         let mut decimals: i32 = 0;
         let mut seen_point = false;
@@ -799,12 +809,12 @@ impl Number {
     }
 
     /// Strips leading zeros and collapses any zero to the canonical form.
-    pub(crate) fn assemble(negative: bool, mut digits: Vec<u8>, exponent: i32) -> Self {
+    pub(crate) fn assemble(negative: bool, mut digits: Digits, exponent: i32) -> Self {
         if digits.iter().all(|d| *d == 0) {
             return Number::zero();
         }
         let lead = digits.iter().take_while(|d| **d == 0).count();
-        digits.drain(..lead);
+        digits.drop_front(lead);
         Number {
             negative,
             digits,
@@ -958,7 +968,7 @@ impl Number {
             return self.clone();
         }
         let dropped = self.digits.len() - keep;
-        let mut kept: Vec<u8> = self.digits[..keep].to_vec();
+        let mut kept = Digits::from_slice(&self.digits[..keep]);
         let mut exponent = self.exponent + dropped as i32;
 
         if self.digits[keep] >= 5 {
@@ -967,7 +977,7 @@ impl Number {
             let mut i = keep;
             loop {
                 if i == 0 {
-                    kept.insert(0, 1);
+                    kept.insert_front(1);
                     kept.pop();
                     exponent += 1;
                     break;

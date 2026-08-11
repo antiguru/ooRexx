@@ -14,7 +14,7 @@
 //! Ported from `NumberString::power` (`NumberStringMath2.cpp:811`).
 
 use crate::muldiv::{strip_leading, subtract_multiple};
-use crate::{ArithError, MAX_EXPONENT, Number};
+use crate::{ArithError, Digits, MAX_EXPONENT, Number};
 
 impl Number {
     /// The value one.
@@ -199,7 +199,10 @@ fn divide_power(accum: &Number, digits: u64) -> Number {
     }
     div_char += 1;
 
-    let mut result: Vec<u8> = Vec::new();
+    // The reciprocal's digits become the returned number's, so they are built
+    // in the same representation; `left` above is the working dividend and
+    // never leaves this function.
+    let mut result = Digits::new();
     let mut this_digit: i32 = 0;
 
     // The outer loop yields one quotient digit per pass; the inner loop

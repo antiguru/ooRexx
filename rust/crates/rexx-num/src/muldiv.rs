@@ -14,7 +14,7 @@
 //! Ported from `NumberString::Multiply` (`NumberStringMath2.cpp:106`) and
 //! `NumberString::Division` (`:331`), which serves `/`, `%` and `//`.
 
-use crate::{ArithError, Number};
+use crate::{ArithError, Digits, Number};
 
 /// `NumberString::FAST_BUFFER` (`NumberStringClass.hpp:414`): below this
 /// working size the C++ divides in stack buffers and can never fail an
@@ -44,7 +44,7 @@ impl Number {
         let (kept, extra) = if product.len() > digits_usize {
             let keep = digits_usize + 1;
             (
-                product[..keep.min(product.len())].to_vec(),
+                Digits::from_slice(&product[..keep.min(product.len())]),
                 product.len() - keep,
             )
         } else {
@@ -79,7 +79,7 @@ impl Number {
 /// into the top position simply has one fewer digit -- unlike subtraction,
 /// where the zero left by a borrow is a real digit and must be counted.
 /// Keeping it here makes `1 * 1` round to 0 at DIGITS 1.
-fn mul_magnitudes(a: &[u8], b: &[u8]) -> Vec<u8> {
+fn mul_magnitudes(a: &[u8], b: &[u8]) -> Digits {
     let mut out = vec![0u16; a.len() + b.len()];
     for (i, x) in a.iter().rev().enumerate() {
         for (j, y) in b.iter().rev().enumerate() {
@@ -246,7 +246,7 @@ impl Number {
         if q_exp < 0 {
             let drop = (-q_exp) as usize;
             if drop >= q.len() {
-                q = vec![0];
+                q = Digits::single(0);
             } else {
                 q.truncate(q.len() - drop);
             }
@@ -300,14 +300,17 @@ impl Number {
 
 /// Divides two digit strings, returning `want` quotient digits, the residue,
 /// and how many powers of ten the quotient was scaled by.
-fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Vec<u8>, Vec<u8>, i32) {
+fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Digits, Vec<u8>, i32) {
     // The live remainder is `rem[start..]`: leading zeros are skipped by
     // advancing `start` instead of draining them out, which cost a memmove
     // on every subtraction pass. The dead prefix stays zero, so slicing from
     // `start` is always the whole value.
     let mut rem: Vec<u8> = Vec::new();
     let mut start = 0usize;
-    let mut q: Vec<u8> = Vec::new();
+    // The quotient becomes the result's digits, so it is built in the same
+    // representation they are; the working remainder above is scratch that
+    // never leaves this function and stays a plain vector.
+    let mut q = Digits::new();
     let mut shift = 0i32;
     let mut i = 0usize;
 
