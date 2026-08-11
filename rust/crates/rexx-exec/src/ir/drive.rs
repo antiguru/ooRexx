@@ -449,10 +449,14 @@ impl Interp {
                     // `Interp::leave_stepped_clause`, which
                     // `Interp::in_stepped_clause_with` is itself defined in
                     // terms of -- so a promoted clause and an unpromoted one
-                    // discharge the same list from the same code. Measured on
-                    // `bench-programs/varlookup.rex`, this shape runs the
-                    // compiled arm **71 instructions per pass below** the
-                    // tree-walker where the closure form ran it 81 above.
+                    // discharge the same list from the same code.
+                    //
+                    // What the shape is worth is an IR-minus-tree-walker gap
+                    // per pass, and it moves with every promotion landed after
+                    // it, so it is recorded per commit in
+                    // `bench-baselines/phase-4e-arms.tsv` rather than restated
+                    // here -- a row keyed by a hash cannot go stale where a
+                    // number written into this line can.
                     let entry = self.enter_stepped_clause(echo, code, index, clause, source);
                     // Taken on entry exactly as `step` takes it, because a
                     // promoted clause is a clause and the permission is spent
@@ -1157,13 +1161,12 @@ impl Interp {
 ///
 /// **What licenses [`Interp::run_ops`]' own `Op::Clause` arm reading the
 /// instruction off the region instead of looking each op's `index` up.** Every
-/// index-bearing op
-/// `compile` emits inside a region is emitted from the arm of the instruction
-/// whose region it is, so the two are the same instruction by construction --
-/// `compile::assert_region_ops_name_their_clause` is that stated as a check on
-/// the emitted stream rather than as a sentence about the emitting code, and
-/// this is the run-time half for a stream that reached the driver some other
-/// way.
+/// index-bearing op `compile` emits inside a region is emitted from the arm of
+/// the instruction whose region it is, so the two are the same instruction by
+/// construction -- `compile::assert_region_ops_name_their_clause` is that
+/// stated as a check on the emitted stream rather than as a sentence about the
+/// emitting code, and this is the run-time half for a stream that reached the
+/// driver some other way.
 fn debug_assert_names_the_clause(code: &Code<'_>, index: u32, clause: &Instruction, op: &str) {
     debug_assert_eq!(
         code.body
