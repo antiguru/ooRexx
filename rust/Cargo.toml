@@ -8,13 +8,18 @@ rust-version = "1.96.1"
 license = "CPL-1.0"
 
 [workspace.lints.rust]
-# `deny`, not `forbid`, and the difference is the point: `forbid` cannot be
-# overridden by an inner `#[allow(unsafe_code)]`, so it makes a per-site
-# exception inexpressible rather than merely deliberate. The policy is that
-# `unsafe` is discouraged and may be allowed in a specific, self-contained
-# situation -- see `CLAUDE.md` for the bar a site has to clear. `forbid` was
-# unintended.
-unsafe_code = "deny"
+# `forbid` here is deliberate and is specified by `2026-07-27-rust-rewrite.md:23`:
+# the choice of `forbid` versus `deny` at a crate root **is** the record of
+# whether that crate has been granted an unsafe exception, and `:32` makes the
+# list of roots carrying `deny` a reportable item at every phase exit.
+#
+# `unsafe` is discouraged rather than banned (`CLAUDE.md` carries the bar a site
+# must clear). An approved site does not relax this line: that one crate drops
+# `lints.workspace = true`, carries its own `#![deny(unsafe_code)]` at its root
+# and `#[allow(unsafe_code)]` on the single module. Relaxing this line instead
+# would put every crate into the state reserved for a granted exception, which
+# is what happened briefly on 2026-08-11 and was reverted.
+unsafe_code = "forbid"
 
 # Pinned rather than left to cargo's defaults, because both of this profile's
 # consumers are measurements and a default that moves is a measurement that
