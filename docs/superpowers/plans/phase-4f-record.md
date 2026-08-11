@@ -1203,7 +1203,7 @@ Accepted **with the displacement recorded and not netted out**: four axes retire
 
 **One thing this candidate does not do, and it was the brief's own hypothesis.** Entry 6's collector made `arith` slower, and the reasoning offered was that every value kept as a tagged immediate is an object never allocated, never marked and never freed -- so this would attack the regression's own mechanism. **Peak resident set says it did not**: 9,876 KB against 10,372, unchanged, because the set of values that are heap objects is exactly what this change was required not to move. What it removed is the *transient* rendering, not a retained object. The regression entry 8's re-measurement puts at +3.4% is more than covered by this candidate, and by a different mechanism than the one predicted.
 
-Commit: to be read back from `git log` and written in below.
+Commit: `e1f080fbb2969fed83691f2f7d7f676ba2ab0ac6`, read back from `git log` after committing.
 
 #### What this entry cannot say
 
