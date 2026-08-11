@@ -1528,3 +1528,50 @@ That is a Phase 4f finding to hand on rather than a candidate to attempt in it.
 * **The mechanism offered for `alloc4c`'s variance is a proposal.** No TLB or cache counter was read; what was measured is that its user time varies 2.8% run to run and that it touches 180 MB where `varlookup` touches 2.7 MB.
 * **It changed no code.** No candidate was attempted and no prototype was built; the binary profiled is entry 9's HEAD reproduced byte for byte, and the only files written were throwaway probes in the session scratchpad, run from fresh empty directories.
 * **Nothing here is a correctness statement.** Both sides printed identical bytes on every axis and every probe printed the same answer on both interpreters, which guards against measuring a run that did not do the work. No differential ran.
+
+---
+
+### Entry 11 -- two independent consultations, both of which say this loop has been optimising the wrong layer
+
+**Commissioned 2026-08-11 by Moritz.** Two agents were asked the same question with no sight of each other's answers, and both were required to write their recommendation **before** reading this record or the Phase 4e spec, then to add a section on where they agreed and disagreed with it. One was asked as a practitioner, one from the literature. Their full answers are in the session workspace, which is git-ignored, so what they establish is recorded here.
+
+**Neither ran anything.** Both were forbidden to build, benchmark or profile, because the expression spike owned the machine. **So everything below is a reading of code and of the existing profile, not a measurement**, and this record's own standard applies: a mechanism asserted without a build is a hypothesis. What makes it worth an entry is that two independent readings reached the same one.
+
+#### The convergent finding: it is representation, not dispatch
+
+**The framing this loop has been using -- "we have an instruction stream and we are still 5 to 7 times a tree-walker" -- reads as a paradox and is not one.** An instruction stream and a tree-walk differ in how the interpreter *arrives* at an operation, not in what the operation costs. The reference's arrival cost is a few nanoseconds out of a 60 ns clause; ours is a few nanoseconds out of 387 ns. **The IR is competing for a slice that was never large on either side.**
+
+What makes the reference fast is that its values are cheap, and both consultations cite the same code:
+
+* `RexxString` ends in `char stringData[4]` and `NumberString` in `char numberDigits[4]` -- trailing flexible arrays, so **a string or a number is one allocation with its bytes inline**, from a segment the interpreter bump-allocates.
+* Arithmetic works in `char resultBufFast[FAST_BUFFER]`, `FAST_BUFFER = 48` -- **a stack buffer, zero heap traffic for intermediates.**
+* `RexxInteger::plus` adds machine integers whenever both operands are valid under the current `DIGITS`, and `-10..100` are interned.
+* `CompoundVariableTail` builds a tail in a stack buffer with an inline `MAX_SYMBOL_LENGTH` array, **allocating nothing in the common case.**
+
+Against that, one of our short strings is a **96-byte arena slot plus a separate `malloc`** for its `Vec<u8>`, reached through a generation-checked handle; `Number` holds **one heap byte per decimal digit**; and `Interp::to_number` returns an **owned clone**, so merely reading a numeric variable allocates. On `i = i + 1` with one operand off the small-integer path this system performs on the order of four allocations where the reference performs zero to one. **That is 155 ns against 13 ns, and neither engine can do anything about it, because both engines share it.**
+
+**Inlining short payloads is what every comparable system does.** Ruby stores strings up to 23 bytes inside its 40-byte slot; CPython's compact unicode objects do the same; ooRexx does the same. For the decimal tower, decNumber -- written by Rexx's own author -- packs several digits into each coefficient unit rather than one per byte, and libmpdec, which became CPython's `_decimal`, uses base-10^9 limbs. **This system is the outlier.**
+
+#### The mechanism neither this record nor the Phase 4e work had named
+
+**In this codebase the borrow checker is a performance decision, and it has never been priced.**
+
+`Interp::to_text(&mut self) -> Cow<'_, [u8]>` borrows the **whole interpreter**, because it lazily fills the `num`/`text` caches. So any code needing two operands' bytes at once, or bytes plus a later allocation, cannot hold the borrow and **must buy its way out with an owned copy**. It appears in a profile only as `malloc`; it appears in review as a locally justified line; and the comments at those sites *explain* the copy rather than flagging it as a cost. `stem.rs:281` and `builtin/mod.rs:790` are named as the clearest instances, **and the second is on the hot path of the worst benchmark.**
+
+#### The criticism of this record's own arithmetic, which should be acted on
+
+**Entry 10's "removing every identified cost still leaves 4.4x and 5.5x" is challenged as unsupported, and the challenge is specific.** Summing independent removals assumes the costs are additive and disjoint. The argument copy, the payload `malloc`, the 96-byte slot write, and the collection the churn eventually triggers are **one cost with four names**. If the profile attributed them to four blocks and entry 10 subtracted all four, **the residual is inflated and the real post-fix figure is better than 4.4x.** If the profile grouped them, the residual is genuine and there is a mechanism nobody has named.
+
+**Those two cases lead to opposite decisions**, and the proposed test is cheap: land the free representation fixes, measure, and compare the delta against what the profile predicted. **If they disagree, entry 10's 4.4x and 5.5x are withdrawn.**
+
+#### The `Op` width budget, challenged on a different ground than it was defended on
+
+`const _: () = assert!(size_of::<Op>() == 12)` is correct discipline **in a bytecode VM where dispatch dominates**. Here dispatch does not dominate, and the budget is already distorting design: it is the stated reason `PlanSlot` is a sentinel `u32` rather than an `Option`, and the reason a call site's fields were pushed off the op into a side table.
+
+**Entry 10 answered a different question and its answer stands**: `run_ops`' self time is 1.1% to 4.9%, so *widening* `Op` cannot buy anything on dispatch. What was never measured is what the *budget* costs elsewhere. **A width budget defended by an assertion should be defended by a measurement, and there is not one.**
+
+#### What this changes
+
+* **The expression spike now tests a hypothesis rather than founding a plan.** If full expression promotion measures small, it corroborates both consultations; if it measures large, one of them is wrong in an interesting way.
+* **Representation work precedes the object model**, which is Moritz's own sequencing argument reinforced: the value layer sits *below* the object model, and Phase 5 will build 32 classes on whatever that layer is.
+* **Optimiser passes come last**, when there is a validated dispatch site and a workload -- `dispatch.rex` is scoped out of this bar and deferred to Phase 5, so the axis that would most reward an inline cache is not currently measured at all.
