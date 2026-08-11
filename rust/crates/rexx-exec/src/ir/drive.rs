@@ -375,13 +375,12 @@ impl Interp {
                     // **The instruction this whole region names**, fetched once
                     // and read by every index-bearing op inside the region
                     // rather than each resolving its own `index` against the
-                    // body. `compile::assert_region_ops_name_their_clause` is
-                    // what makes that checked rather than assumed, and
-                    // [`debug_assert_names_the_clause`] is the same check per
-                    // op in debug. It removes two bounds-checked lookups of the
-                    // same instruction per promoted assignment, worth 8
-                    // instructions per clause on
-                    // `bench-programs/varlookup.rex`.
+                    // body, which is a bounds-checked lookup of the same
+                    // instruction per op that would do it.
+                    // `compile::assert_region_ops_name_their_clause` is what
+                    // makes the two the same instruction by checking rather
+                    // than by assuming, and [`debug_assert_names_the_clause`]
+                    // is the same check per op in debug.
                     let Some(clause) = code.body.instructions.get(index) else {
                         return Err(Loud::chunk_map_too_short().into());
                     };
