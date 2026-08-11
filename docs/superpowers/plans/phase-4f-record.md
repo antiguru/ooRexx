@@ -135,15 +135,17 @@ The medians those ratios are computed from, in seconds, oracle then this crate. 
 
 Each arm's figure is the mean of its own two blocks; the spread column is the gap between those two blocks as a fraction of that mean, which is this sitting's answer to "how reproducible is an oracle ratio at head" and is the number a later escalation decision reads.
 
+**Every derived column in this entry is computed at full precision from the harness's printed medians and rounded once, at display.** Rounding a block's ratio to four places first and deriving from that moves a spread by a hundredth of a point and a distance below by up to five units, which is not a difference that means anything but is a difference a recomputation would report as a discrepancy.
+
 | axis | **IR / oracle** | spread | **tree-walker / oracle** | spread | IR against tree-walker | in the bar |
 |---|---:|---:|---:|---:|---:|---|
-| `alloc4c` | **1.9793x** | 1.09% | **1.9325x** | 0.61% | +2.42% | yes |
-| `arith` | **2.6658x** | 0.18% | **2.6677x** | 0.77% | -0.07% | yes |
+| `alloc4c` | **1.9793x** | 1.09% | **1.9325x** | 0.60% | +2.42% | yes |
+| `arith` | **2.6658x** | 0.17% | **2.6677x** | 0.77% | -0.07% | yes |
 | `compound` | **5.8982x** | 0.26% | **5.7189x** | 0.11% | +3.14% | yes |
 | `strings` | **10.5770x** | 0.18% | **10.5058x** | 0.65% | +0.68% | yes |
 | `varlookup` | **3.7409x** | 0.42% | **4.1870x** | 0.58% | **-10.65%** | yes |
 | `rexxcps` | **7.3466x** | 0.31% | **7.1162x** | 0.21% | +3.24% | yes |
-| `emptyloop` | **3.1816x** | 1.27% | **3.1163x** | 0.55% | +2.09% | no |
+| `emptyloop` | **3.1816x** | 1.27% | **3.1163x** | 0.54% | +2.09% | no |
 
 **The last column is a ratio of ratios taken from different blocks, and it is the weakest figure in this entry.** The two arms never ran inside one block, so it is not the within-build paired comparison `rexx-arms` produces and it must not be quoted as one; the ABBA order removes a linear drift from it and nothing removes the rest. Read against the spread columns beside it, `varlookup`, `compound` and `rexxcps` separate clearly, `alloc4c` and `emptyloop` separate weakly, and `strings` and `arith` do not separate at all.
 
@@ -154,10 +156,10 @@ The bar is **within noise of the oracle, or better, on every classic-Rexx axis**
 | axis | IR / oracle | distance from 1.0, in units of the gap between this axis's own two blocks | of this crate's wall time, the fraction that has to go |
 |---|---:|---:|---:|
 | `alloc4c` | 1.9793x | 45 | 49.5% |
-| `arith` | 2.6658x | 354 | 62.5% |
-| `compound` | 5.8982x | 318 | 83.0% |
-| `varlookup` | 3.7409x | 174 | 73.3% |
-| `rexxcps` | 7.3466x | 281 | 86.4% |
+| `arith` | 2.6658x | 359 | 62.5% |
+| `compound` | 5.8982x | 319 | 83.0% |
+| `varlookup` | 3.7409x | 173 | 73.3% |
+| `rexxcps` | 7.3466x | 280 | 86.4% |
 | `strings` | 10.5770x | 504 | 90.5% |
 
 **All six are NOT MET, and none of them escalates.** Unit 0's rule is that an axis far from 1.0 relative to its own spread is decided and earns no further measurement; the nearest of these sits 45 block-gaps away. `emptyloop`, which the bar does not bind, is 3.1816x at 54 block-gaps and is equally decided.
