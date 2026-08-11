@@ -331,3 +331,129 @@ Ranked by the largest ceiling on any bar-bound axis, as the loop's brief require
 * **The shares are not additive and no combination is predicted.** Allocator self time is inside every other subtree, and `phase-4d-attribution.md` measured P1, P2 and P3 both singly and together without being able to establish that no interaction exists.
 * **Nothing here is a correctness statement.** Both sides printed identical bytes on every axis, which guards against profiling a run that did not do the work. No differential ran.
 * **It changed no code.** No candidate was attempted, no prototype was built, and the binary profiled is byte-identical to entry 1's.
+
+### Entry 3 -- candidate 2 attempted and **accepted**: a small-integer path for `//`, `%`, `/` and `**`
+
+**The loop's first attempt.** BASE is `d44543c6`, the state entries 1 and 2 measured.
+
+#### The hypothesis, named before it was measured
+
+`small_int_arith` (`eval.rs`) matched `Plus`, `Subtract` and `Multiply` and answered `None` for the other four operators. So `compound.rex`'s hot clause `k = i // tails` -- two tagged small integers under `DIGITS 9` -- converted both operands to a `Number` with a digit vector, long-divided, and allocated the result. On the IR arm it is worse than that: `Op::Arith`'s per-site hint goes sticky-general the first time a site falls through, so from iteration 2 onward that site did not even try.
+
+The change is that one function plus a `small_int_power` helper beside it, and nothing else. **No fast path was added to the driver**, so the sharing rule is kept by construction: both engines still reach exactly one implementation, through `Interp::arith_small_int`.
+
+#### Predicted movement, written down before the first block ran
+
+| axis | predicted | the reasoning behind it |
+|---|---|---|
+| `compound` | **-35% to -52%**, central -45% | `phase-4d-attribution.md`'s P1 is this edit and measured -51.6%; entry 2's share for `Number::div` alone is 42.0% |
+| `arith` | **0%**, band -2% to +2% | its `**` and `//` have non-integer operands, and its `/` sites stop trying the fast path after one iteration |
+| `varlookup`, `strings`, `alloc4c`, `emptyloop`, `rexxcps` | **0%** | none of these programs contains any of the **four** operators this candidate adds, and `rexxcps`' single `%` is in its calibration section rather than its timed loop |
+
+**One line of the candidate's own text in entry 2 is wrong and this entry corrects it rather than repeating it.** Entry 2 says `arith` is out of reach because "its divisions have non-integer operands". Two of its three divisions do have them -- `c ** 2 // 5` and the `**` inside it -- but `a = i / 3` and `c = i / 7` divide a tagged small integer by a small-integer literal, and one iteration in three of `i / 3` is *exact*, which the new `/` arm answers. What actually keeps `arith` out of reach on the measured arm is the per-site hint: `i / 3` is inexact at `i = 1`, the site is marked general, and it never tries again. The prediction was right; the reason given for it was not, and on the tree-walker arm -- where there is no hint -- it would not have held.
+
+**Every axis predicted at 0% came in slightly positive, and that is a miss.** `compound`'s prediction held. The zeros did not: the direct interleave reads `arith` +1.52% and `varlookup` +1.77%, and the suite reads `emptyloop` +3.04% and `strings` +2.19% as well. The size is small and the mechanism turns out not to be arithmetic at all -- see the section on codegen below -- but it is written down here as a wrong prediction rather than absorbed into the result, because it is only visible as a miss by having been written first.
+
+#### Build identity
+
+| | |
+|---|---|
+| repo commit measured | `d44543c6` plus this entry's working-tree change to `eval.rs`, printed by the harness in all four blocks |
+| BASE `rexx-run` | size=13819064, sha256 `f166bb30215747c9753379d2009011f8956c6695bd5efce130711a1999c98255` -- **the same binary entries 1 and 2 measured**, rebuilt from a clean `git status` and reproducing their fingerprint byte for byte |
+| HEAD `rexx-run` | size=13816800, sha256 `08c55ab1d3a475838fa6311b4eb33a9e33504c75e0fde23881487abbda7c3450` |
+| `rexx-bench-suite` | sha256 `4949a32114e8bf728598a05575ff02043920a75ef68fb8b89f1972edccc0c694` -- **entry 1's harness binary exactly**, and one binary for all four blocks |
+| oracle | the same three objects entry 1 fingerprints, unchanged |
+
+An earlier sitting was **started and discarded** before any of the numbers below were taken. Two doc comments in `eval.rs` were corrected while its first block was running; a doc comment shifts the debug line table and so changes the binary, and the earlier HEAD build's sha256 (`db2c35b2...`) is not this one's. Measuring a binary that is not the committed source is the defect that would have been, so the sitting was stopped, the source finished, and everything below re-taken.
+
+#### The accept measurement: the two binaries alternating in one loop
+
+This is the accept rule's literal shape -- both binaries inside one loop, on one machine state -- and it is **not** `rexx-bench-suite`, so it is reported as its own instrument rather than as a suite figure. Wall clock, `ulimit -v 8388608` on both arms, `REXX_ENGINE=ir`, one fresh empty working directory, and the base/head order **rotated every round** so a drift across the sitting cannot become a binary difference. 2026-08-11 14:26:27 to 14:29:24 +02:00, seven rounds per axis, load average 6.12 falling to 2.09.
+
+`varlookup` is here as a control: it contains none of the four operators, so a change on it is not the mechanism.
+
+| axis | base median | head median | head / base | rounds with that sign |
+|---|---:|---:|---:|---:|
+| `compound` | 6.7235 s | 3.3663 s | **-49.93%** | **7 of 7** |
+| `arith` | 3.0583 s | 3.1047 s | **+1.52%** | 7 of 7 |
+| `varlookup` | 4.4589 s | 4.5376 s | **+1.77%** | 6 of 7 |
+
+Per-round, `compound` reads -50.7%, -49.1%, -49.2%, -50.0%, -50.8%, -50.4%, -49.6%. There is no round in which it is not about half.
+
+#### The same comparison in the configuration fixed at the top of this file
+
+Four blocks of `rexx-bench-suite`, one contiguous sitting 2026-08-11 14:30:11 to 14:57:19 +02:00, **ABBA over the two binaries** -- base, head, head, base -- each block itself an oracle/this-crate interleave over 9 sampled pairs. Every block exited 0, none printed a "not a baseline" section, and **every axis in every block printed the same bytes on both sides and under both binaries**, `compound` included at `5000000`. One-minute load average at the four block boundaries: 1.24, 1.80, 2.49, 3.66, ending at 4.29.
+
+This crate's median over the oracle's, recomputed from the two medians the harness prints:
+
+| axis | b1 base | b2 head | b3 head | b4 base | base arm | head arm | **change** | this sitting's own base/head block gaps |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `alloc4c` | 1.9665 | 1.9725 | 1.9669 | 1.9800 | 1.9733 | 1.9697 | **-0.18%** | 0.69% / 0.28% |
+| `arith` | 2.6363 | 2.6783 | 2.6900 | 2.5870 | 2.6117 | 2.6842 | **+2.78%** | 1.89% / 0.44% |
+| `compound` | 5.8022 | 2.9027 | 2.9644 | 5.8956 | 5.8489 | 2.9336 | **-49.84%** | 1.60% / 2.10% |
+| `emptyloop` | 3.1954 | 3.2891 | 3.2417 | 3.1427 | 3.1690 | 3.2654 | **+3.04%** | 1.66% / 1.45% |
+| `strings` | 10.4237 | 10.5706 | 10.6244 | 10.3174 | 10.3705 | 10.5975 | **+2.19%** | 1.02% / 0.51% |
+| `varlookup` | 3.6985 | 3.7515 | 3.7042 | 3.7015 | 3.7000 | 3.7279 | **+0.75%** | 0.08% / 1.27% |
+| `rexxcps` (cps) | 7.2079 | 6.9590 | 6.6522 | 6.2200 | 6.7137 | 6.8056 | not usable | 14.72% / 4.51% |
+
+**The last column is what the rest of the table has to be read against, and only `compound` clears it.** Every other axis moved by about the gap this sitting's own two same-binary blocks show, so the suite alone cannot call any of them. `compound` moved by thirty times its own gap.
+
+**`rexxcps` produced no usable figure this sitting and is recorded as such rather than as a small movement.** The oracle's own median clauses-per-second fell monotonically across the four blocks -- 16368501, 15561756, 14936464, 14003945, a 14.5% decline -- so the ratio's denominator was drifting under it. This crate's own cps, which that drift does not touch, is 2270910/2251441 on base against 2236218/2245342 on head: -0.90%, itself inside the base arm's own 0.86% block gap.
+
+**The machine was not as quiet as entry 1's.** In the ten minutes before the sitting, work outside this sandbox took the host to 96.5%, 96.9% and 96.5% busy in three samples, with load average climbing 1.29 -> 33.15 while `ps` inside the sandbox showed nothing running at all. The sitting was held until six consecutive ten-second samples read 85% idle or better, and started then. Load climbed again during it, which is what the `rexxcps` denominator is showing. The ABBA order removes a linear drift and removes nothing else.
+
+#### What moved, against entry 1
+
+Entry 1 puts `compound` at **5.8982x** on the IR arm. This sitting's base arm reads 5.8489x for the byte-identical binary in a different sitting -- 0.84% apart, well inside the roughly 4% between-run movement entry 1 quotes for that axis from `perf-baseline.md` with no code change at all. **Head is 2.9336x.**
+
+Entry 2's ceiling construction for this candidate was 42.0% of the axis, implying 5.8982x -> 3.42x. The measured landing is **2.93x**, past that ceiling, for the reason the candidate's own text predicted: the share is the division alone, and the change also removes the operand conversion, the result allocation and the root pushes around it.
+
+#### The hypothesis is confirmed by its own route, and the mechanism was checked directly
+
+`perf stat -e instructions:u` on the IR arm, a different configuration from the sitting and quoted only as a mechanism check:
+
+* **The fast path is genuinely entered.** A 200,000-iteration `k = i // 500` loop executes 2,041,601,642 instructions on base and 775,224,862 on head, printing the identical answer.
+* **And one differential really was vacuous, which is why that check exists.** Operands taken from `word()` are heap strings and never carry the tag, so the 41,508-case grid enters the fast path nowhere: base 1,967,696,843 instructions against head 1,968,468,181, **+0.04%**, which is the codegen cost the untouched axes show and not a path change. The grid whose operands are loop control variables runs 235,254,533 against 196,003,199, **-16.7%**. Both grids are kept -- the first is a control on the general path, the second is the witness -- but only the second could have failed.
+* **`compound` itself:** 75,348,780,466 instructions on base against 41,425,715,830 on head, -45.0%; cycles -49.5%, against the -49.9% wall.
+
+#### The cost this candidate has on axes the four new operators never reach, which the predictions missed
+
+`arith` and `varlookup` are each about 1.5% slower at head, and **neither reaches any of the four new arms on the measured engine** -- `arith` for the hint reason set out above, and `varlookup` because the only arithmetic it contains is `x = x + 1`, an operator that was already on the fast path and whose arm did not change. So this is not the mechanism doing extra work, and it was checked rather than assumed:
+
+Medians of three runs per side, with each side's own full range beside them, because a single-run difference of a tenth of a per cent would be worth nothing:
+
+| axis | base instructions | head instructions | change | base range | head range |
+|---|---:|---:|---:|---:|---:|
+| `arith` | 30,016,589,535 | 30,047,589,441 | **+0.10%** | 3.7e-4 | 1.7e-8 |
+| `varlookup` | 66,671,661,164 | 67,070,660,474 | **+0.60%** | 1.4e-8 | 2.2e-8 |
+
+`varlookup` executes 399 million more instructions for work that did not change, reproducible to eight figures. **The cause is codegen: `small_int_arith` grew, and its caller is inlined into `run_ops`, which is the one function every axis runs.** Cycles move further than instructions on both -- `arith` +1.18%, `varlookup` +1.92% -- so there is an IPC component on top of the instruction count.
+
+**This is a real cost channel for every future candidate that touches the arithmetic arm**, and it is worth more than this entry's own arithmetic: a change that adds nothing to a hot path can still charge that path half a per cent by displacing it, and only an instruction count separates that from measurement noise.
+
+#### Correctness, which outranks the number
+
+**No divergence, on either engine.** Every probe below ran from a fresh empty directory under the wrapper `rust/CLAUDE.md` fixes, with stdout, stderr and exit status read separately.
+
+* **41,508 cases** over `/`, `%`, `//` and `**`, operands from `0` to the tag's own limits including both signs, twelve `DIGITS` settings from 1 to 25, errors trapped and reported as their error number rather than aborting: **byte-identical to the oracle** on base and on head, and on `ir` and `tree-walker` alike. Base matching too is what makes it a control rather than a result.
+* **15,891 cases** with the operands arriving as **loop control variables**, which is how a program gets a tagged small integer: byte-identical to the oracle on both engines. This is the grid that actually enters the fast path -- 235M instructions on base against 196M on head -- and the first grid, which did not, is why that check exists.
+* The committed regression witness is `the_small_int_fast_path_answers_what_the_general_path_answers`, extended from three operators to seven: 25 operands squared by nine precisions by both `FORM`s, every fast answer compared against `rexx-num`'s own, with a **per-operator floor** so that `+` reaching the path thousands of times cannot satisfy the count on `/`'s behalf. Its `expect` on the general path's result is an assertion in its own right: a fast path that answered where the interpreter raises 42.3 or 26 fails on that line.
+* Four new witnesses beside it, each pairing a refusal with its adjacent success: `/` declining `1 / 3` and taking `6 / 2`; a zero divisor declining on all three division operators; the sign rule (`-7 % 3` is `-2`, `-7 // 3` is `-1`, `7 // -3` is `1`, measured on the interpreter); and `**` declining a negative exponent and `2 ** 30` under `DIGITS 9` while taking it under `DIGITS 10`.
+* **`**`'s guard rests on a read of the oracle's own algorithm, not on an inference.** `NumberString::power` reduces the exponent bitwise and works at `DIGITS` plus the exponent's digit count plus one, so every intermediate is the base raised to a prefix of the exponent and no wider than the result; a result needing no rounding is therefore reached without any. It also calls `prepareOperatorNumber` with `NOROUND`, which is why the shared operand guard is stricter than the interpreter for that one operator -- a decline costs speed and never an answer.
+
+Gates: `cargo test --workspace` **1432 passed, 0 failed** in dev and **1432 passed, 0 failed** in release. BASE's count was **re-counted rather than inherited from the brief**: 1428 run, which is 1432 less the four witnesses added here. It was counted in a `git worktree` at `d44543c6`, where 27 of those 1428 *fail* -- every one of them because the tests that read the C++ `ootest/` tree resolve it as `crates/rexx-exec/../../../ootest`, which exists only beside the real checkout. That is a property of the worktree and not of BASE, and it is written down so the next person to re-count this way does not read it as a regression. `cargo fmt --all --check` clean, `cargo clippy --workspace --all-targets -- -D warnings` clean from a `cargo clean`ed target directory with `Checking rexx-exec` confirmed in the log. The corpus runner and the dual-engine sweep are inside that count and reported 10 and 9 tests passed in the release run, read as counts rather than as exit statuses.
+
+#### Disposition: **accepted**
+
+The candidate's own falsification condition was a paired run moving `compound` by less than about 30%, or any differential divergence. It moved 49.9% with the sign holding in every one of seven direct alternations and in both suite alternations, and no differential diverged. **The hypothesis is confirmed by the route it named**, which the instruction count is the evidence for.
+
+Accepted **with the cost recorded**: about +1.5% on `arith` and `varlookup`, +2% to +3% on `emptyloop` and `strings` in the suite arm figures, from codegen rather than from work. Against `compound` falling from 5.90x to 2.93x that is a trade worth making once. It is not obviously worth making six times, and the next candidate to touch this code should read its own instruction count on an axis it does not mean to move.
+
+Commit: `3cd2e80d13532a45b406da3fb390b55ea4a93c9a`, read back from `git log` after committing.
+
+#### What this entry cannot say
+
+* **It is one sitting on one Linux host**, unpinned, on a machine whose governor cannot be fixed and whose host load is not under this session's control and was demonstrably not zero.
+* **The two instruments disagree on the small numbers and neither settles them.** The direct interleave puts `arith` at +1.52% and `varlookup` at +1.77%; the suite puts them at +2.78% and +0.75%. Only the instruction counts are reproducible enough to assert a direction, and they measure work rather than time.
+* **It re-profiles nothing.** `compound`'s shares are now all wrong -- the denominator moved by half -- and entry 2's queue entries for that axis are stale, exactly as the plan says they would be. The next candidate on `compound` needs a fresh profile, not entry 2's table.
+* **It says nothing about `%` and `**` in a real program.** `compound.rex` uses `//` alone. The other three operators are correct by the grids above and unmeasured for speed, because no axis in this suite uses them.
