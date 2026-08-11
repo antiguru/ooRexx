@@ -1213,3 +1213,43 @@ Commit: `e1f080fbb2969fed83691f2f7d7f676ba2ab0ac6`, read back from `git log` aft
 * **The equivalence is asserted over a generated population, not proved.** 101,528 cases with the boundaries in them is not every `Number`, and the population is this entry's own choice; a shape nobody thought of is a shape the floors cannot miss.
 * **`rexxcps`' +2.86% is a clauses-per-second figure**, not a wall ratio, and its -2.76% instruction count is what it rests on.
 * **The tree-walker was measured only for correctness.** Every wall, instruction and RSS figure is the IR arm; the predicate sits below both engines, so the tree-walker gets the same work removed and no benchmark here says by how much.
+
+### Entry 10 -- entry 9's displacement figures withdrawn: the instruction instrument does not resolve half a per cent here
+
+**No code change, no candidate.** This entry corrects entry 9, which is this record's own rule -- an entry that turned out wrong is corrected by a later entry saying so, not by editing the one that was wrong. Entry 9's disposition, its correctness results and its wall figures are untouched.
+
+**What prompted it.** The instruction column is what entry 9 used to separate work from layout on five axes it did not mean to move, and it read those counts at **three runs per side** on the strength of entry 5's finding that this instrument reproduces to eight figures (a full range of 1.4e-8 on `varlookup`). That is not what it does at head. Re-measured at **six runs per side**, on a host gated the way entry 8's re-measurement asks -- six consecutive five-second `/proc/stat` samples at or above 90% idle, reading 99.2% at the sixth -- each side's own full range is:
+
+| axis | entry 9's change | this run's change | base range | head range | resolved? |
+|---|---:|---:|---:|---:|---|
+| `arith` | -20.10% | **-20.08%** | 0.280% | 0.201% | **yes**, by two orders of magnitude |
+| `rexxcps` | -2.76% | **-2.64%** | 0.027% | 0.011% | **yes** |
+| `emptyloop` | +0.44% | +0.47% | 0.331% | 0.386% | marginal, 1.2x its own range |
+| `alloc4c` | +0.27% | +0.73% | 0.904% | 1.448% | **no** |
+| `varlookup` | +0.31% | +0.28% | 0.331% | 0.259% | **no** |
+| `compound` | +0.05% | +0.05% | 0.171% | 0.356% | **no** |
+| `strings` | +0.04% | +0.01% | 0.273% | 0.088% | **no** |
+
+#### The three corrections
+
+**1. Entry 9's "four axes execute measurably more" is withdrawn.** Four of those five movements are inside the instrument's own spread on the same axis, and the fifth is at the edge of it. The honest statement is that **no axis but `arith` and `rexxcps` shows an instruction move this instrument can resolve**, and that is a statement about the instrument rather than about the change.
+
+**2. "`varlookup` retires 136 million extra instructions for work that did not change" is withdrawn**, and with it the reading that entry 3's displacement channel ran again at a quarter of its size. The number is real arithmetic on two medians; what it is not is separated from the spread those medians sit in. Entry 3's own displacement finding is not disturbed -- it was measured on a different instrument state and reported ranges of 1.4e-8 and 3.7e-4 beside it, which this run cannot reproduce.
+
+**3. `varlookup` and `emptyloop` are left as wall movements with no measured cause.** Their wall figures stand -- `varlookup` +0.87% and +1.13% with the sign holding in 7 of 7 rounds in each of two sittings, `emptyloop` +0.76% and +0.60% at 6 of 7 -- and the attribution to extra instructions does not. Layout is the remaining candidate and nothing here measures it.
+
+#### What stands
+
+`arith` at **-20.08%** and `rexxcps` at **-2.64%** both reproduce at six runs with ranges two orders of magnitude below them, so entry 9's mechanism, its disposition and its 200,000-iteration probe pair are all unaffected: the probe that reaches the predicate moved -14.9% against a control at +0.34%, and the control's own +0.34% sits in the same unresolved band as the axes above, which is consistent with everything here.
+
+#### The method finding, which outlives this candidate
+
+**"Reproducible to eight figures" is a property of one axis on one binary at one time, and it was quoted here as a property of the instrument.** Measured at head, the same instrument's per-axis, per-arm full range runs from 0.011% to 1.45% -- a factor of a hundred across axes, with `alloc4c` the worst and `rexxcps` the best. Something changed between entry 5 and now; the collector landing between them is the obvious suspect and this entry establishes nothing about it.
+
+**The rule that follows: a displacement claim below about one per cent needs that axis's own range measured beside it, in the same run.** Three reps produce a median that looks authoritative and a range nobody printed. Entry 9 printed the median.
+
+#### What this entry cannot say
+
+* **It re-measures instructions only.** Entry 9's cycle column for the same five axes inherits exactly this problem and is equally unresolved; it was not re-run.
+* **It does not explain the spread.** Whether the collector, the allocator's address-space layout or something else widened it is unmeasured, and one candidate's re-measurement is the wrong instrument for that question.
+* **It changes no disposition.** Entry 9 was accepted on `arith` at -16.9% wall with -20.1% instructions behind it, and both survive at six reps.
