@@ -1253,3 +1253,278 @@ Commit: `e1f080fbb2969fed83691f2f7d7f676ba2ab0ac6`, read back from `git log` aft
 * **It re-measures instructions only.** Entry 9's cycle column for the same five axes inherits exactly this problem and is equally unresolved; it was not re-run.
 * **It does not explain the spread.** Whether the collector, the allocator's address-space layout or something else widened it is unmeasured, and one candidate's re-measurement is the wrong instrument for that question.
 * **It changes no disposition.** Entry 9 was accepted on `arith` at -16.9% wall with -20.1% instructions behind it, and both survive at six reps.
+
+### Entry 11 -- the second profiling pass, and the queue it re-ranks, at `2bbecac9`
+
+**No change, no hypothesis, no disposition.**
+This entry optimises nothing and attempts no candidate.
+It re-profiles the state seven accepted changes have left, re-measures every candidate still on entry 2's queue, and replaces that queue.
+
+**Why it exists.** Unit 0's re-profile cadence: "after every accepted change, re-profile the axes it moved. The shares are now different, and the next candidate is chosen from the new profile, not from the entry attribution."
+Entry 2's shares were measured at `610cb4ef`.
+Since then `compound`'s `//` went on the small-integer path, a builtin's counted answer comes back tagged, every simple-variable write and the loop control bind to integer slots, a collector runs where none ever did, its trigger changed signal, and the tag decision stopped rendering numbers to text.
+Every ceiling on entry 2's queue was a number about a binary that no longer exists.
+
+#### What was measured, and with which instrument
+
+**Two instruments, and which figures come from which is stated on every table below.**
+Oracle ratios are **timed** -- `rexx-bench-suite` under the configuration fixed at the top of this file.
+Shares are **sampled** -- `samply` 0.13.1 `--save-only`, analysed through `pollard` with `expand_inlines`.
+The probes at the end are **counted** -- `perf stat -e instructions:u`, which is a third configuration and is read for work rather than for time.
+
+| | |
+|---|---|
+| repo commit | `2bbecac9d7f9a81777511ff471c2755197dc50f0`, working tree clean before and after, printed by the harness in both blocks |
+| `rexx-run` | size=13849736, sha256 `35999021f97f24bb81e8c7a65083340084a8e1107087e11caf34dc8bc7f82141` -- **entry 9's HEAD binary reproduced byte for byte**, after `cargo clean -p rexx-exec -p rexx-core -p rexx-num -p rexx-bench --release` |
+| `rexx-bench-suite` | sha256 `4949a32114e8bf728598a05575ff02043920a75ef68fb8b89f1972edccc0c694` -- **entry 1's harness binary exactly** |
+| oracle | the same three objects entry 1 fingerprints, re-hashed here and unchanged: `bb5bb8cc...`, `42136c40...`, `3536b763...` |
+
+**The timed sitting is gated the way entry 8's re-measurement asks**: six consecutive five-second samples of host idle read from `/proc/stat`, reading 99.4, 99.0, 99.3, 99.1, 99.3 and 99.1 per cent before the first run.
+Two blocks, both `--engine ir`, 2026-08-11 19:50:59 to 20:00:38 +02:00, both exiting 0, neither printing a "not a baseline" section, every axis in both blocks reporting stdout stable within each side and identical across the two sides.
+One-minute load average 0.34 at the start and 1.06 at the end.
+
+**The arm was named on every run and a hostile inherited value was overridden**: the suite was launched with `REXX_ENGINE=bogus` in its environment and both blocks print `| this crate's engine | REXX_ENGINE=ir |` in their provenance, which is entry 1's check re-run rather than assumed.
+
+Thirteen profiles, one per axis per side, 1 kHz on this crate and 4 kHz on the oracle.
+Each from a fresh empty directory it `mkdir`s itself, `/dev/null` on stdin, `ulimit -v 8388608`, stdout and stderr as separate files, `REXX_ENGINE=ir` set in the script.
+Every profile exited 0 with an empty stderr and the bytes the suite records; `unsymbolicated_pct` ran 0.0% to 0.040% across the thirteen.
+Profile durations against the timed medians: `strings` 5537 ms against 5390/5416, `arith` 2486 against 2471/2474, `compound` 2820 against 2774/2779, `varlookup` 2639 against 2620/2622, `alloc4c` 1463 against 1477/1479, `rexxcps` 3933 against 3882/3906.
+`rexxcps` self-calibrated to the same `100 x 100` against the oracle's `200 x 100` under the profiler as in the sitting.
+
+**A share below is a subtree total unless it says self**, and shares from different rows must not be added.
+
+#### The current per-axis picture
+
+This crate's median wall time over the oracle's, recomputed at full precision from the two medians the harness prints, beside where entry 1 left each axis.
+
+| axis | b1 | b2 | **head** | block gap | entry 1 | move | distance from 1.0, in units of this axis's own block gap | of this crate's time, the fraction that has to go |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `alloc4c` | 1.2695 | 1.2785 | **1.2740x** | 0.71% | 1.9793x | **-35.6%** | 30 | 21.5% |
+| `arith` | 2.1239 | 2.1344 | **2.1291x** | 0.49% | 2.6658x | **-20.1%** | 108 | 53.0% |
+| `varlookup` | 2.1521 | 2.1614 | **2.1568x** | 0.43% | 3.7409x | **-42.3%** | 124 | 53.6% |
+| `compound` | 2.4139 | 2.4229 | **2.4184x** | 0.37% | 5.8982x | **-59.0%** | 157 | 58.6% |
+| `strings` | 6.2419 | 6.2914 | **6.2666x** | 0.79% | 10.5770x | **-40.8%** | 107 | 84.0% |
+| `rexxcps` (cps) | 6.4447 | 6.4425 | **6.4436x** | 0.03% | 7.3466x | **-12.3%** | 2426 | 84.5% |
+| `emptyloop` | 2.1830 | 2.1818 | **2.1824x** | 0.06% | 3.1816x | -31.4% | 928 | not in the bar |
+
+**All six bar-bound axes remain NOT MET and none escalates**, on Unit 0's rule that an axis far from 1.0 relative to its own spread is decided; the nearest sits 30 block-gaps away.
+`rexxcps` is a clauses-per-second ratio and not a wall-clock one, for entry 1's reason -- the two sides do different amounts of work.
+Median cps, oracle then this crate: 16641496 / 2582182 and 16527997 / 2565464.
+
+**The move column crosses seven commits and a sitting boundary, so it is not attributable to any one change**, and the per-change attributions are in entries 3 to 9.
+What it is good for is the denominator every ceiling below is a fraction of.
+
+`startup` remains not comparable and no ratio is taken: oracle 6.575 and 6.440 ms, this crate 1.943 and 1.699 ms.
+`alloc`, `dispatch` and `heapshape` exit 120 with `rexx-exec: a message send is not implemented (Phase 5)` in both blocks, as they have since entry 1.
+
+#### Where this crate's time goes at head, and where the oracle's goes on the same program
+
+Sampled. Ours as a fraction of our own run, the oracle's as a fraction of its own -- two different denominators, which is why the absolute seconds are given wherever the comparison carries a candidate.
+
+| block | `strings` | `rexxcps` | `arith` | `compound` | `varlookup` | `alloc4c` |
+|---|---:|---:|---:|---:|---:|---:|
+| glibc allocator family, self | 23.8% | 37.6% | 38.9% | 12.1% | -- | 23.4% |
+| this crate's arena, `alloc_with_uncollected` self | 3.7% | 2.4% | 1.0% | -- | -- | 1.9% |
+| `Heap::collect` | 5.2% | 7.6% | 2.5% | **0%** | **0%** | 9.9% |
+| builtin resolution (`is_builtin` + the table scan) | **17.4%** | 3.0% | -- | -- | -- | 6.4% |
+| the clause epilogue, `leave_clause` self | 3.7% | 1.1% | 1.3% | 5.3% | **32.0%** | 2.9% |
+| `ProgramSource::line_of` | 2.5% | 4.8% | 1.5% | 3.1% | 6.2% | **11.2%** |
+| `compound_parts`, the tail re-split | -- | -- | -- | **21.3%** | -- | 3.1% |
+| `Interp::slot_of`, the name-keyed map | -- | 5.8% | -- | **16.1%** | -- | 4.1% |
+| `read_at`'s id-keyed `HashMap<SymbolId, usize>` | 6.9% | 0.9% | -- | -- | -- | 2.6% |
+
+And the oracle, on the same six programs:
+
+| block | `strings` | `rexxcps` | `arith` | `compound` | `varlookup` | `alloc4c` |
+|---|---:|---:|---:|---:|---:|---:|
+| `MemoryObject::newObject` | 35.9% | 22.2% | **8.3%** | -- | 52.7% | **74.9%** |
+| `DeadObjectPool::findFit` self | 19.2% | 8.6% | 2.7% | 7.6% | 20.6% | 3.9% |
+| `MemoryObject::collect()` | 3.1% | 5.1% | 1.4% | -- | -- | **60.3%** |
+| `NumberString` and `Numerics::` self | -- | -- | **74.1%** | -- | -- | -- |
+| the per-clause loop, `RexxActivation::run` self | -- | 5.3% | -- | 1.8% | -- | -- |
+| builtin name resolution | **none** | **none** | -- | -- | -- | **none** |
+
+**Five things fall out of the two tables, and three of them change the queue.**
+
+* **`arith`'s decimal kernels are still not the gap, and the margin has widened.** Grouping every `NumberString` or `Numerics::` frame the oracle spends **74.1% self**, 92.5% total -- 0.871 s of a 1175 ms run. Grouping every `rexx_num::` frame this crate spends **21.2% self**, 82.7% total -- 0.527 s of a 2486 ms run. So this crate's kernels are about **1.65x faster** than the oracle's in absolute self time, against the roughly 1.5x entry 2 measured, and the whole of `arith`'s 2.13x sits in the allocation and copying around each `Number`. The oracle's whole `newObject` subtree on that axis is **8.3%**; this crate's glibc allocator family alone is **38.9%** self. **On `arith`, allocation is the differentiator and nothing else is.**
+* **On `strings` it is not.** Entry 2 gave the allocator 45.7% of that axis and implied 5.74x. At head this crate spends 27.5% there and **the oracle spends 35.9% of its own `strings` run in `newObject`** -- a larger share than ours. Removing the whole of this crate's allocation cost leaves 4.54x. The allocator is no longer where `strings`' gap lives.
+* **Builtin dispatch is.** `builtin::dispatch`'s whole subtree is 46.5% of `strings`, and 17.4 points of the axis are spent deciding *which* builtin to run. The oracle's `RexxExpressionFunction::evaluate` reaches its builtin through a translate-time jump thunk and no name resolution appears in its profile at all.
+* **`memcmp` on `compound` is still shared and still not the differentiator**, reproducing entry 2: this crate 17.1% self, the oracle **17.7% self**.
+* **`alloc4c`'s denominator is still inflated, reproducing entry 2 almost exactly.** `newObject` is **74.9%** of the oracle's run on that axis against entry 2's 74.5%, and `collect()` is **60.3%** against its 60.5%, with `CompoundTableElement::live` 22.1% self re-marking a growing table this crate never marks. The oracle's non-collector work is 0.397 x 1.163 s = 0.46 s against this crate's 1.477 s, so **on the work both sides actually do the axis is about 3.2x, not 1.27x**, and entry 2's instruction that no candidate be aimed at that ratio stands with a number behind it.
+
+#### The collector, profiled for the first time
+
+Entry 6 landed it, chose its policy on an argument rather than a measurement, and said so.
+This is the first profile of what it costs.
+
+**Marking and sweeping are not the cost. The `free()` of each reclaimed payload is the whole of it.**
+`Heap::collect`'s own self time is 0.3% of `strings`, 0.6% of `rexxcps` and 0.3% of `arith`; `core::ptr::drop_glue::<rexx_core::heap::Slot>` underneath it is **4.7%, 6.7%, 7.4% and 2.2%** of `strings`, `rexxcps`, `alloc4c` and `arith`.
+That is the same shape entry 6 measured on `arith` alone, now reproduced on four axes.
+
+**This rules out most of the new candidate population the re-profile was expected to propose.**
+Cheaper marking buys a fraction of half a per cent.
+A generational or incremental scheme changes *when* marking happens, and marking is not what is being paid.
+What is left is the payload: pooling it, reusing a swept slot's buffer for the next object of the same shape, or not giving each object a separately-allocated payload at all -- which is the same lever as "stop calling the allocator once per value", reached from the other end.
+
+**Two axes collect zero times and are unaffected**, `compound` and `varlookup`, which is entry 7's collection counts showing up in a profile.
+
+#### `rexxcps`, the axis nothing has been aimed at
+
+It is second-furthest from the bar and it has moved -12.3% without a single change aimed at it, which is what the other six changes' shared work bought it.
+
+**Its profile is the most allocator-dominated of any axis**: the glibc family is 37.6% self, this crate's arena another 2.4%, and the collector 7.6% on top -- 47.6% of the run in getting memory and giving it back.
+The oracle spends 22.2% on the same program.
+Beside that: `Interp::slot_of` 5.8%, `line_of` 4.8%, builtin resolution 3.0%, `spec_to_string::<i64>` 3.4%.
+
+**Its `slot_of` is stem and `PARSE` work, not simple variables.**
+The callers are `tail_key`'s `read_by_name` (31%), `stem_get` (20%), `assign_expr_target` under `exec_parse`'s `assign_targets` (34%) and `stem_set` (10%).
+Entry 5 bound the simple-variable write and the loop control to plan slots and deliberately left stems, compound targets and `PARSE` resolving by name; `rexxcps` is the axis that pays for that, and `compound` pays more.
+
+#### Whether `alloc4c` can be measured on this host: **no, not at the per-cent level**
+
+Entry 8 recorded that five sittings produced no usable wall figure on this axis and that the sign was unstable within sittings.
+This entry asks the prior question -- what can the instrument resolve here at all -- with two controls in the accept rule's own shape.
+Timed, nine rounds each, one binary, order rotated every round, gated on six `/proc/stat` samples at or above 90% idle (99.2%, 99.1%, 99.3%, 99.2%, 99.1%, 99.2%).
+
+| control | what it is | per-round range | median difference | rounds with the expected sign |
+|---|---|---:|---:|---:|
+| `alloc4c` null | `alloc4c.rex` against **itself** | -3.85% to +2.55% | -0.18% | 4 up, 4 down, 1 zero |
+| `alloc4c` +1% | `alloc4c.rex` against `bench-control/alloc4c-101.rex` | -3.70% to +6.05% | **+1.04%** | **4 of 9** |
+| `varlookup` null | `varlookup.rex` against **itself** | -0.87% to +3.21% | +0.07% | 7 up, 2 down |
+
+**A known +1% difference on `alloc4c` does not hold its sign across the alternations**, and the accept rule's own wording is that "reproducible" means the sign holds.
+Two identical arms differ by up to 3.85% in a round.
+An earlier sitting of the same null control, 20 minutes before, read a median of **+0.61%** where this one reads -0.18%, so even the median's sign moves between sittings.
+`varlookup` under the identical harness keeps six of its nine rounds inside 0.15%, and its two worst rounds are +3.21% and -0.87%.
+
+**It is not a duration effect and it is not host load.** `alloc4c` is the *shortest* axis at 1.48 s and the quietest possible host was gated for.
+The instrument load cannot touch says the same thing, which is entry 8's own method: user time alone, three runs, reads 1.41 / 1.42 / 1.45 s on `alloc4c` -- a 2.8% range -- against 2.61 / 2.60 / 2.60 on `varlookup`.
+What is different about the axis is its live set: peak resident 180,748 KB and 55,869 minor faults per run, against 2,740 KB and 203 faults on `varlookup`, with the fault count itself stable to one fault.
+So the varying quantity is what it costs to touch 180 MB, not how often it is touched -- **a mechanism this entry proposes and does not measure**; no TLB or cache counter was read.
+
+**What would be needed.** Not more rounds under the accept rule, which forbids them for candidate selection.
+Either an instrument that is not wall clock -- and `perf stat -e instructions:u` does not rescue it, entry 10 having measured `alloc4c`'s own per-arm instruction range at head as 0.90% and 1.45%, the worst of any axis -- or a variant of the program whose live set is small enough that the axis stops being a memory-system measurement.
+**Until then `alloc4c` cannot be a candidate's acceptance axis**, and a change may only be accepted on it if some other axis carries the verdict.
+That compounds with the finding above: its 1.27x is also not measuring the thing the axis is named for.
+
+#### The re-ranked queue
+
+Ranked by the largest share on a bar-bound axis, as entry 2 was, **not** by confidence and not by cost.
+Every ceiling is entry 1's construction: this axis's head ratio multiplied by one minus the share, on the assumption the cost goes to zero and nothing else grows.
+It is the loosest possible bound, the shares are not additive, and the sampled share is one sample of a distribution nobody characterised.
+
+**1. Allocation: fewer of them, and cheaper.** Ceiling **39.9% `arith`** (38.9% glibc self + 1.0% arena), **40.0% `rexxcps`**, 27.5% `strings`, 25.3% `alloc4c`, 12.1% `compound`.
+Implied `arith` 2.1291x -> **1.28x**, `rexxcps` 6.4436x -> 3.87x, `strings` 6.2666x -> 4.54x.
+*Mechanism, three levers and they are not equivalent.* **(a) An inline digit buffer for a small `Number`**, which is where `arith`'s allocations come from -- `drop_glue::<rexx_num::Number>` is 12.2% of that axis and `Number::clone` 7.7%, both of them the digit `Vec<u8>`. **(b) An inline buffer for a short string**, which entry 4 examined and set aside because the builtins build their result in a `Vec` before `Body` sees it. **(c) A different global allocator**, entry 8's queue addition, which changes what each call costs rather than how many there are.
+*Where the ceiling is real and where it is not.* On `arith` the oracle's whole `newObject` subtree is **8.3%** against this crate's 38.9% allocator family, so nearly the whole share is a differentiator. On `strings` the oracle's is **35.9%** against this crate's 27.5%, so it is not one at all, and a candidate aimed at `strings` through this lever is aimed at the wrong thing.
+*What would falsify it.* A paired run of lever (a) moving `arith` by less than about 15%; or peak resident set not falling.
+*Risk to the sharing rule: none.* `Heap`, `Slot` and `Number` sit below both engines.
+
+**2. The clause epilogue's 104-byte `Failure`.** Ceiling **32.0% on `varlookup`**, 5.3% `compound`, 3.7% `strings`, 2.9% `alloc4c`, 1.3% `arith`, 1.1% `rexxcps`.
+Implied `varlookup` 2.1568x -> **1.47x**, `compound` 2.4184x -> 2.29x.
+*This is entry 2's candidate 5 and it has not evaporated; it has become the largest single block on `varlookup`.* Entry 2 gave it 11.4% there. `Interp::leave_clause::<RegionEnd>` is **32.0% self** at head, inlined into `leave_stepped_clause` and thence into `run_ops::<false>`, which is where entry 2 read the two 104-byte stack-to-stack copies out of the asm.
+*The premise was re-read from this binary, not inherited.* `gdb -batch -ex 'print sizeof(rexx_exec::error::Failure)'` against the profiled `rexx-run` answers **104**, and `Raised` answers 104 -- so `Failure`'s width is still its cold arm's. `Flow` is 24.
+*Mechanism.* `Failure::Raised(Box<Raised>)` makes `Failure` pointer-sized and `Result<T, Failure>` fit in registers; `Raised` is built on the error path only.
+*What would falsify it, and it needs saying twice as loudly as entry 2 said it.* **Sampling attributes time; it does not attribute instructions**, and 32% of an axis attributed to a function whose source is three branches and a call is exactly the shape a mis-attributed stall produces. The confirming instrument is the change itself: re-read the asm to check the copies are gone, then take the paired run. If they vanish and `varlookup` moves less than about 10%, the attribution was wrong.
+*The oracle's own clause boundary* is 1.8% self on `compound` and 5.3% on `rexxcps`.
+*Risk to the sharing rule: none.* One type in `error.rs`; both engines return it.
+
+**3. A compound variable's tails, re-split from its source spelling on every access.** Ceiling **21.3% on `compound`**, 3.1% `alloc4c`; implied `compound` 2.4184x -> **1.90x**.
+*Mechanism.* `Interp::tail_key` is 28.5% of `compound` and `rexx_parse::ast::compound_parts` is 21.3% of the axis, reached from `tail_key`, from `read_symbol`'s `Compound` arm and from `assign_expr_target`. It takes the interned spelling of the whole dotted symbol, finds the first `.` with `str::find::<char>` (7.7% of the axis), splits the rest on `.` and collects a fresh `Vec<Tail>` (3.7%). **All of that is a pure function of the symbol id** and could be computed once when the plan is built.
+*The oracle does not do it, and that is measured rather than read.* Counted: the same 400,000-pass loop with the stem spelled `a.` and with it spelled `abcdefghijklmnopqrstuvwxyzabcdefghi.` -- same tail count, same iterations, same answer -- costs this crate **+274,756,342 instructions, +9.7%**, and the oracle **+16,582 instructions, +0.001%**. Thirty-four extra characters of source spelling cost this crate **687 instructions per pass** -- across the two compound accesses that pass makes -- and the oracle nothing at all. Both sides reproduced twice, this crate's two ranges 2.9e-5 and 2.5e-5 and the oracle's 2.0e-5.
+*What remains shared and must not be claimed.* The oracle's `CompoundVariableTail::buildTail` is 13.9% of its own `compound` run and `Numerics::formatWholeNumber` 7.3% self -- evaluating the tail expressions and rendering an integer tail to text, which this crate also pays (`spec_to_string::<i64>`, 4.6%). Only the **split** is this crate's alone.
+*What would falsify it.* A paired run moving `compound` by less than about 12%; or a divergence where a tail's spelling is not fixed at plan-build time -- `INTERPRET`, and a compound whose stem is aliased, are the two shapes to check.
+*Risk to the sharing rule: real.* The cached split belongs on the symbol table or the plan, where both engines read it, not on an `Op`.
+
+**4. Resolve a builtin call at compile time.** Ceiling **17.4% on `strings`** (`is_builtin` 9.0% + the linear `Iter<Builtin>::find` 8.4%), 6.4% `alloc4c`, 3.0% `rexxcps`; implied `strings` 6.2666x -> **5.18x**.
+*This is entry 2's candidate 6 and it has not evaporated either; its share has nearly doubled*, from 9.1%, because the axis around it shrank by 41% while the cost per call did not.
+*Mechanism, and it is worse than entry 2 recorded.* `is_builtin` runs **twice on every builtin call** -- once in `Interp::resolve_call` (`run.rs:3966`) and again at the top of `builtin::dispatch` (`builtin/mod.rs:677`) -- and each run is a `std::str::from_utf8` validation plus a `HashSet<&str>` lookup with SipHash. Then `IMPLEMENTED.iter().find(...)` walks a 58-entry table comparing byte slices. `_memcmp_evex_movbe` is 14.8% of `strings`, of which **6.3 points is that table scan** and 7.7 is genuine string searching inside `CHANGESTR` and `POS`.
+*The linear scan is confirmed by counting, with the oracle as the control for the bodies.* `LEFT` sits at table index 27 and `RIGHT` at 37. Over 400,000 calls this crate costs **+51 instructions per call** for the ten extra entries; the oracle costs **+18 per call** for the same two builtins, which is the body difference and nothing else. Net **about 3.3 instructions per table entry scanned**, so `SUBSTR`, at index 42, pays roughly 135 instructions of pure table walk on every call.
+*What would falsify it.* A paired run moving `strings` under about 8%.
+*Risk to the sharing rule: real if the resolved index goes in `Op` only.* It belongs on the plan or the instruction, where both engines read it.
+
+**5. The two variable maps that are still hash lookups.** Ceiling **16.1% on `compound`** (`Interp::slot_of`, name-keyed), 6.9% `strings` (`read_at`'s id-keyed map), 6.7% `rexxcps`, 6.7% `alloc4c`; implied `compound` 2.4184x -> **2.03x**, `strings` 6.2666x -> 5.83x.
+*Two sites, one mechanism: a hash where a dense index would do.*
+**(i) The id-keyed `HashMap<SymbolId, usize>`.** `eval.rs:443`-`445` pass `None` for the slot on every `ExprKind::Variable`, `Stem` and `Compound`, so **every variable read inside a compiled expression tree** resolves through that map -- `Op::Load` is the only reader that carries a slot. On `strings` the callers are `eval_argument` (68% of it), `concat` (20%) and `eval_arithmetic` (12%): a builtin's arguments, not its statements. `SymbolId` is an index, so the map can be a `Vec` and the lookup an array index.
+**(ii) The name-keyed `HashMap<Box<[u8]>, usize>` behind `Interp::slot_of`**, 16.1% of `compound` and 5.8% of `rexxcps`, reached by every stem read, stem write, compound tail resolution and `PARSE` target -- the set entry 5 deliberately left unresolved.
+*What would falsify it.* Lever (i) moving `strings` under about 4%; or a frame whose slots grow under a cached index, which is the check entry 5 already wrote the probes for.
+*Risk to the sharing rule: none for (i)*, which changes one data structure below both engines. **Real for (ii)**, for exactly the reason entry 2 and `compile.rs` both give: the resolution must stay an argument to the one `assign_expr_target`, never a second store path.
+
+**6. Stop binary-searching the line table once per stepped clause.** Ceiling **11.2% on `alloc4c`**, 6.2% `varlookup`, 4.8% `rexxcps`, 3.1% `compound`, 2.5% `strings`, 1.7% `arith`; implied `varlookup` 2.1568x -> **2.02x**, `rexxcps` 6.4436x -> 6.13x.
+*This is entry 2's candidate 7, and it has not evaporated: 6.2% -> 11.2% on `alloc4c`.*
+*Mechanism, unchanged.* `enter_stepped_clause` calls `clause_line` -> `ProgramSource::line_of`, a binary search over the line-offset table, unconditionally, because `SIGL` must stay correct whether or not `TRACE` is on. The line is a static property of the instruction.
+*Confirmed by counting, and this is the cleanest control in this entry.* The identical 400,000-iteration loop, preceded by 0, 1,000 and 20,000 comment lines, printing the identical answer: this crate executes 700,826,181 -> 762,806,995 -> 813,996,977 instructions, **+8.8%** and **+16.1%**. The oracle executes 327,489,517 -> 328,208,624 -> 341,845,566, **+0.22%** and **+4.4%** -- and its increment is not per clause, since it does not scale between the two padded files the way a per-clause cost must. **This crate's per-clause cost grows with the program's line count and the oracle's does not**, because its instruction objects carry their line. Reproduced twice per point, this crate's three ranges 1.8e-7, 1.9e-7 and 8.1e-7 and the oracle's 4.1e-6, 1.1e-5 and 6.5e-5.
+*Its loudest axis is now its most trustworthy one*, which reverses entry 2's warning: `alloc4c` and `rexxcps` carry it, and `emptyloop` is no longer where it reads highest.
+*Risk to the sharing rule: real.* Putting the line on the instruction keeps one implementation; putting it in `Op` alone leaves the tree-walker computing it a second way.
+
+**7. Make the collector's reclamation not cost a `free()` per object.** Ceiling **9.9% on `alloc4c`**, 7.6% `rexxcps`, 5.2% `strings`, 2.5% `arith`; implied `rexxcps` 6.4436x -> **5.95x**.
+*Mechanism, and it is the only one the profile supports.* `drop_glue::<Slot>` is 4.7% to 7.4% of the four axes that collect, and `Heap::collect`'s own self time is under 0.6% everywhere. Pool the payloads, or reuse a swept slot's buffer.
+*Explicitly not queued: cheaper marking, generational collection, incremental collection.* Marking is not measurably paid on any axis here, so their ceiling is a fraction of half a per cent, which Unit 0 disposes of at this distance.
+*It overlaps candidate 1 and the two must not be added*: an object that is never allocated is never freed either.
+*What would falsify it.* A paired run moving `rexxcps`' clauses per second by less than about 4%.
+*Risk to the sharing rule: none.* `Heap` sits below both engines.
+
+**Not re-ranked and still queued as entry 8 left it: replacing the global allocator.**
+It now has a per-axis picture rather than a single share, and it is lever (c) of candidate 1 above rather than an item of its own.
+The decision it carries is unchanged and is not a measurement: `libmimalloc-sys` and `tikv-jemalloc-sys` both compile and link a C library, in a clean-room Rust reimplementation, on five platforms.
+
+#### What evaporated
+
+* **`required_string`'s `[u8]::to_vec`.** Entry 4 measured it at **15.5% of `strings`** and set it aside as a borrow-structure change deserving a candidate of its own. At head it is **about 3.5%** of that axis, summed over its three callers inside `dispatch`. Two accepted changes shrank the axis around it and it is no longer worth a candidate.
+* **Candidate 1's ceiling on `strings`.** Entry 2 implied 5.74x from a 45.7% share. The share is 27.5% and **the oracle's own is 35.9%**, so the lever survives on `arith` and `rexxcps` and does not survive as a `strings` candidate. This is the one place the queue was aimed at the wrong axis.
+* **`alloc4c` as an acceptance axis**, for two independent reasons measured above: a known 1% difference does not hold its sign on it, and 60.3% of the oracle's time on that program is the oracle's own collector.
+* **Nothing else.** Entry 2's candidates 5, 6 and 7 are all still there and all three have **grown** as shares -- 11.4% -> 32.0%, 9.1% -> 17.4%, 6.2% -> 11.2% -- because seven accepted changes shrank the axes around costs that are fixed per clause and per call. That is the opposite of what a re-profile was expected to find, and it is the most useful thing in this entry: **a fixed per-clause cost gets more valuable every time something else is removed.**
+* **The `smallvec` dead end is still a citation with no measurement behind it.** Not chased here; entry 2's warning stands unchanged.
+
+#### Is the bar reachable
+
+**Not on any axis but `alloc4c` from this queue alone, and on `strings` and `rexxcps` not from any queue of this shape.**
+The arithmetic is set out rather than asserted, and it says two different things about two groups of axes.
+
+**The reclamation row is deliberately absent from every sum below**, because the `free()` it pays is counted once already inside the glibc allocator family's self time; adding candidate 7 to candidate 1 would double-count it.
+
+| axis | must go | the identified blocks the oracle does **not** also pay, summed | what remains if every one of them went to zero |
+|---|---:|---|---:|
+| `alloc4c` | 21.5% | 11.2 + 6.7 + 6.4 + 3.1 + 2.9 = **30.3** | **0.89x**, past the bar -- and unmeasurable |
+| `arith` | 53.0% | 39.9 allocation (the oracle's own is 8.3) + 1.5 + 1.3 = **42.7** | **1.22x** |
+| `varlookup` | 53.6% | 32.0 + 6.2 = **38.2** | **1.33x**, and 32 of those points are one candidate |
+| `compound` | 58.6% | 21.3 + 16.1 + 5.3 + 3.1 = **45.8** | **1.31x** |
+| `strings` | 84.0% | 17.4 + 6.9 + 3.7 + 2.5 = **30.5** | **4.35x** |
+| `rexxcps` | 84.5% | 5.8 + 4.8 + 3.0 + 1.1 = **14.7** | **5.50x** |
+
+**Read the last column first, because it is the finding: not one bar-bound axis except `alloc4c` reaches 1.0 even if every candidate on this queue lands in full.**
+
+**`arith`, `varlookup` and `compound` land between 1.22x and 1.33x, and that is a near miss rather than a wall.**
+Each has an unattributed remainder this pass did not decompose -- `varlookup`'s `run_repeating` self time is 9.4% and `run_ops`' own is 7.0%, `arith`'s `rexx_num` self time is 21.2% against an oracle that is 74.1% self and slower in absolute terms, `compound`'s `memcmp` is 17.1% and shared.
+A third profiling pass on those three, taken after this queue has been consumed, is where their last 25 per cent has to come from, and nothing here says it is not there.
+
+**`strings` and `rexxcps` are short by a factor of four at the same ceiling, and that is a wall.**
+It is not a shortfall in the queue; it is a statement about what is left over, and what is left over is not diffuse.
+On `strings`, after removing every block above, this crate spends about 3.9 s doing the string work the oracle does in about 0.55 s -- **7x** -- and `builtin::dispatch`'s subtree alone is about 2.5 s against the oracle's 0.52 s for the same 3,000,000 iterations.
+On `rexxcps` the comparison has to be per clause, because the two sides run different iteration counts: this crate's own printed figure is 387 ns per clause against the oracle's 60 ns, of which allocation is **155 ns** here and **13 ns** there, and giving this crate the oracle's own absolute per-clause allocation cost still leaves **4.1x**.
+
+**Stopping rule 2 has not fired and this entry does not claim it has.**
+It reads "re-profiling yields no candidate whose effect survives the pairing on an axis still short", and re-profiling yielded seven, four of them large.
+What the table says is narrower and must not be inflated into the rule: **no combination of the candidates this profile can name reaches 1.0 on `strings` or `rexxcps`**, and on the other four it reaches 0.89x to 1.33x, so those need this queue consumed and then re-profiling rather than a verdict now.
+The rule fires when a re-profile stops proposing candidates that survive the pairing. This one is not that re-profile.
+
+**The shape of change that would reach them, named because the plan asks for it.**
+Every candidate 3 to 6 above is the same defect wearing a different coat: **a fact the parser knew is re-derived at run time**, once per clause or once per call.
+The line is looked up by binary search; the builtin is found by name in a table, twice; the compound's tails are re-split from source text; the variable's slot is hashed.
+Phase 4e's IR removed exactly two of these, for the statement forms it compiles -- `Op::Load` and `Op::Store` carry slots -- and stopped at the statement boundary.
+`strings` and `rexxcps` are the two expression-heavy, call-heavy axes, and they are the two the IR's compile-time resolution never reached.
+**So the structural change is to extend compile-time resolution from statements to expressions**: every `ExprKind` node carrying what the plan already knows, rather than four separate local fixes each rediscovering that the answer was available earlier.
+It subsumes candidates 3, 4, 5 and 6, which together are 26.8 points of `strings` and 14.5 of `rexxcps`, so on its own it leaves those two axes at about **4.59x** and **5.51x**.
+**So it is necessary and it is not sufficient**, and what is left after it is the object model -- how a value is allocated, held and freed -- rather than any block a profile names.
+That is a Phase 4f finding to hand on rather than a candidate to attempt in it.
+
+#### What this entry cannot say
+
+* **It is one profiled run per axis per side.** Every share is a single sample of a distribution nobody characterised, and a re-profile will read a different small number. Entry 10's finding applies with full force: an instrument's reproducibility is a property of one axis on one binary at one time.
+* **Sampling attributes time; it does not attribute instructions.** Candidate 2 rests entirely on that distinction and its own text says so; candidates 3, 4 and 6 have counted probes behind them and the rest do not.
+* **The shares are not additive and no combination is predicted.** Allocator self time sits inside every other subtree, candidate 7 overlaps candidate 1, and candidates 4 and 5 overlap on the builtin call path.
+* **`emptyloop` was profiled and is not reported**, because the bar does not bind it and entry 2 already recorded that its codegen sensitivity makes it the axis least able to prove anything.
+* **The tree-walker was not measured at all.** Every figure here is the IR arm.
+* **The mechanism offered for `alloc4c`'s variance is a proposal.** No TLB or cache counter was read; what was measured is that its user time varies 2.8% run to run and that it touches 180 MB where `varlookup` touches 2.7 MB.
+* **It changed no code.** No candidate was attempted and no prototype was built; the binary profiled is entry 9's HEAD reproduced byte for byte, and the only files written were throwaway probes in the session scratchpad, run from fresh empty directories.
+* **Nothing here is a correctness statement.** Both sides printed identical bytes on every axis and every probe printed the same answer on both interpreters, which guards against measuring a run that did not do the work. No differential ran.
