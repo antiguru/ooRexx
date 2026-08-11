@@ -99,6 +99,41 @@ Every figure below is from entry 11's profile at `2bbecac9`, taken before the sp
 If expression promotion lands, `strings` shrinks by about a quarter and every share of that axis grows accordingly, while `rexxcps` barely moves.
 **So the per-axis rankings here are stable and the absolute ceilings are not**, and a third profiling pass belongs between the spike landing and any option below being pitched on a `strings` number.
 
+## Whether the `unsafe` ban ever shaped the value layer: no, and this was checked rather than assumed
+
+The policy correction raises a fair question: if any part of the current representation exists because `unsafe` looked unavailable, that constraint was never quite what it seemed and the choice deserves re-opening.
+**For the value layer the answer is no**, checked two ways on 2026-08-11.
+
+* **`git log -S'unsafe'` over `rust/crates/rexx-core/src/` and `rexx-num/src/lib.rs` returns nothing across all of history.** The string has never been added to or removed from the heap or the number, so no representation choice there was ever written against it, in either direction.
+* **No comment in either crate mentions `unsafe`.** Every mention in the whole crate tree is a comment, and all of them sit outside the value layer.
+
+**Four places the ban did visibly shape a choice, none of them a representation.**
+One is adjacent enough to name: `eval.rs`'s module doc rejects a `Drop` guard for the temps stack because it would need two live `&mut` borrows, and *"the only escapes are a raw pointer, which is `unsafe` for no strict need, and putting the `RootSet` behind a `RefCell`, which relaxes this crate's borrow discipline to fix something that is not a defect."*
+That is the borrow-checker-as-design-pressure pattern option D is about, noticed and priced -- and its second reason survives the policy change untouched, so nothing there is waiting on it.
+The other three are a string-mutation helper in `rexx-extract`, an `env::remove_var` call, and the benchmark harness.
+
+**The harness one is worth raising separately, because it is the instrument this loop judges every option with.**
+`rexx-bench`'s `child::run` caps the child's address space through a `/bin/sh` wrapper because *"`std::process::Command` has no rlimit hook and this workspace forbids the `unsafe` `pre_exec` that would give it one."*
+So the ban put a shell between the harness and every measured child, and the 4f plan separately records that the *"`/bin/sh`+`Instant` against bash+`date` split... contaminated the 7.2% figure"*.
+`pre_exec` plus `setrlimit` is now expressible, it is one module with a locally checkable invariant, and its safe alternative's cost is already written down rather than assumed -- which makes it the best-placed `unsafe` candidate in the tree.
+**It is not a representation option and is not proposed here**, but it should not be lost.
+
+## A conflict the correction leaves behind, which is Moritz's to settle
+
+**`320c2232d` says the `forbid` "crept in and was unintended". Global Constraints specifies it deliberately, and says why.**
+`2026-07-27-rust-rewrite.md:23` reads: *"A crate with no unsafe at all carries `#![forbid(unsafe_code)]` at the root. A crate that has been granted an unsafe module carries `#![deny(unsafe_code)]` at the root and `#[allow(unsafe_code)]` on that one module... So the choice of `forbid` versus `deny` at the root **is** the record of whether a crate has been granted an exception, and downgrading a root from `forbid` to `deny` is exactly the visible, reviewable event that bar 4 below is about."*
+`:32` then makes *"the list of crate roots carrying `deny` rather than `forbid`"* a reportable item at every phase exit, failing the gate if it grows without a decision block.
+
+**The policy is not in conflict -- the mechanism is.**
+The plan has always said `unsafe` is *"forbidden by default... and admitted only per-site, encapsulated and justified in writing"* under a four-bar protocol (`:13`, `:22-31`), which is what `rust/CLAUDE.md` now says in different words.
+**So the correction restores the plan's own policy and simultaneously discards the plan's chosen record of it**, by moving every crate to the state `:23` reserves for a crate that has been granted an exception, before any site exists.
+
+**This document does not settle it and one line would.**
+The plan's mechanism is recoverable without giving up anything Moritz asked for: keep `unsafe_code = "forbid"` in `[workspace.lints.rust]`, and when a site is approved, have that one crate drop `lints.workspace = true` and carry its own `#![deny(unsafe_code)]`.
+That leaves an approved exception fully expressible while keeping `forbid`-versus-`deny` meaning what `:23` says it means.
+**Either that, or `:23` and `:32` should be amended to say the workspace lint is no longer the record** -- because as the tree stands, the plan describes a mechanism the code no longer implements, and this project's rule is to correct the plan rather than leave the disagreement for a later reader to adjudicate.
+Flagged, not acted on: it is a decision block, not a task.
+
 ## The options
 
 Every option below is entered from both engines by construction, and this is checked rather than assumed.
@@ -106,19 +141,16 @@ Every option below is entered from both engines by construction, and this is che
 So `Heap`, `Body`, `Number` and the `Interp` value accessors sit below both arms, which is entry 11's own *"Risk to the sharing rule: none. `Heap`, `Slot` and `Number` sit below both engines."*
 **The one option where the rule bites is D**, because it changes an interface rather than a representation, and a borrowing accessor added for the IR while the tree-walker keeps the copying one is two implementations of one semantics.
 
-**None of the five needs `unsafe`, and that is the point of the option set rather than a happy accident.**
+**Five of the six options need no `unsafe`.**
 Every shape below -- an inline-buffer enum, `Cell`/`RefCell`, `Rc<[u8]>`, a side byte-arena -- is ordinary safe Rust.
-**What is not available in safe Rust is the reference's own trick**: `char stringData[4]` is a flexible array member, so the header and a run-time-sized payload share one allocation, and there is no safe spelling of that.
-The option set is deliberately the set of things that reach the same *effect* without it: an inline arm bounds the payload at compile time instead of at run time, which is what makes it expressible.
+The sixth, F, is the reference's own trick and it does need `unsafe`; it is costed against A rather than flagged and dropped, because the policy now permits it to be weighed.
 
 **The project's `unsafe` policy changed on 2026-08-11, while this document was being written, and it changed because of this work.**
-`140acfc37` and `320c2232d` record it: `unsafe` is now discouraged rather than banned, may be allowed in a specific self-contained situation by Moritz's decision per site, and the workspace lint is `unsafe_code = "deny"` (`rust/Cargo.toml:17`) rather than `forbid` -- `deny` still fails the build on any unapproved `unsafe`, but unlike `forbid` it leaves an approved per-site exception expressible.
+`140acfc37` and `320c2232d` record it: `unsafe` is discouraged rather than banned, may be allowed in a specific self-contained situation by Moritz's decision per site, and the workspace lint is `unsafe_code = "deny"` (`rust/Cargo.toml:17`) rather than `forbid` -- `deny` still fails the build on any unapproved `unsafe`, but unlike `forbid` it leaves an approved per-site exception expressible.
 `140acfc37`'s message names the trigger as this decision: *"whether that shape is reachable in safe Rust is now an open question rather than a closed one."*
 
-**Nothing here asks for it, and none of the five options should be read as opening the door.**
-`rust/CLAUDE.md` states the bar a site must clear: the unsafety confined to one module behind a safe interface, the invariant stated at the site and checkable by reading that module alone, a safe implementation described and *its cost measured rather than assumed*, and a test that fails if the invariant breaks -- and *"a performance argument alone is not enough -- the measurement has to exist first."*
-**Read against that bar, the correct sequence is exactly the one recommended below**: the safe options are the ones whose cost has to be measured before any `unsafe` alternative can even be proposed.
-If A measures well, the question closes; if A measures badly *because* the inline arm's fixed bound is the wrong shape, that measurement is the evidence a flexible-array site would need, and it is Moritz's decision and not a candidate's.
+**The bar, from `rust/CLAUDE.md`**: the unsafety confined to one module behind a safe interface, the invariant stated at the site and checkable by reading that module alone, a safe implementation described and *its cost measured rather than assumed*, a test that fails if the invariant breaks, and *"a performance argument alone is not enough -- the measurement has to exist first."*
+**That bar is not a formality here; it decides F, and it decides it against F for a reason that is structural rather than procedural.** See F.
 
 Entry 8's allocator swap, lever (c) of candidate 1, is an adjacent decision of the same kind but not the same one: `libmimalloc-sys` and `tikv-jemalloc-sys` compile and link a C library in a clean-room Rust reimplementation on five platforms, which is a policy question about the clean-room claim rather than about `unsafe`.
 
@@ -167,7 +199,7 @@ No `unsafe`.
 It is a rewrite of the digit representation reaching every module of `rexx-num` that does arithmetic, comparison or formatting, and its helper binaries.
 **Do not inherit the "five files" figure from entry 2, and do not inherit a list from this sentence either**; scope it against the tree at the time, because that set moves.
 
-**Landable and measurable alone.** Yes, and most cleanly of the five.
+**Landable and measurable alone.** Yes, and most cleanly of the six.
 Entry 11 already states the falsifier: *"a paired run of lever (a) moving `arith` by less than about 15%; or peak resident set not falling."*
 
 **One warning this option carries and cannot discharge.**
@@ -247,11 +279,43 @@ It is D1's own pre-registered fix and it is not withdrawn.
 A dominates it for short values at a fraction of the risk, and the fact that decides between them -- **the length distribution of the strings these benchmarks actually allocate** -- has never been measured.
 If that histogram says long strings carry the allocation, E moves ahead of A.
 
+### F -- the reference's own shape, which needs `unsafe`
+
+**What it changes.** `RexxString` ends in `char stringData[4]`: the object header and a run-time-sized payload are **one allocation**, bytes contiguous with the header.
+The Rust equivalent is a manually laid-out, variable-sized allocation reached through a raw pointer, with a `SAFETY` argument about layout and lifetime.
+There is no safe spelling of it: a safe Rust value's size is fixed at compile time, and that is exactly the property a flexible array member gives up.
+
+**Costed against A, and the answer is not "a few per cent" -- it is that for the case that matters F buys nothing over A.**
+This is derived from the code, not measured, and the derivation is the argument:
+
+* **Our object header is not separately allocated. It is a slot in a uniform `Vec<Slot>` arena**, which is D1(a) and is what makes the collector a `match` over `Body` rather than 148 hand-written `live()` methods.
+* **A variable-sized allocation cannot be a uniform slot.** So F, applied while the arena stands, gives `Body::Text` a thin raw pointer to a `(len, bytes)` block -- which is **still the slot plus one allocation, exactly two, exactly what we pay today.** The `unsafe` buys the *contiguity* of len-with-bytes and nothing else.
+* **The one allocation the reference gets comes from its header and payload being the same allocation**, and ours cannot be while the header lives in the arena.
+* **A's inline arm puts the bytes in the slot itself: one allocation, no second dependent load, for every string within the bound.** For those strings that is the reference's property exactly, reached in safe Rust.
+* **So F only wins above the inline bound**, where it saves one allocation against A -- and E saves the same one, safely.
+
+**Where F is genuinely better and nothing safe matches it**: a *long* string's bytes are contiguous with its header, so reading it is one cache miss rather than two.
+A does not help there, and E does not either, since a byte-arena index is a second load.
+**That is the whole of F's advantage, and it applies to exactly the population the length histogram has not yet measured.**
+
+**Getting the reference's one-allocation property in full means giving up the uniform slot, which is not a per-site exception -- it is reopening D1(a).**
+D1 already weighed that as option (c) and rejected it against this same bar: *"a raw-pointer heap would have to clear all four bars for a module that, by its nature, cannot encapsulate its invariant behind a safe API. That it cannot clear bar 2 is itself the argument against it."*
+Nothing in the policy correction disturbs that, because D1 rejected (c) on the bar and never on the lint.
+
+**Against the bar, F fails on two criteria today and neither is a formality.**
+*Confined to one module behind a safe interface*: the partial version is, the full version is not, because it is the heap.
+*A safe alternative described with its cost measured rather than assumed*: A **is** the safe alternative, and its cost is unmeasured -- so the bar is not clearable until A has run, whatever anyone believes about the answer.
+**Recommendation: not now, and the route to reconsidering it is A's measurement, not an argument.**
+If A lands and the long-string population turns out to carry the allocations, F becomes a real candidate for that population and it is Moritz's decision per site, not a candidate's.
+
+**What would falsify the comparison above.** If `size_of::<Body>()` at `HEAD` is small enough that an inline arm widens every slot, then A pays arena footprint on every value where F pays none, and the two stop being equivalent even for short strings.
+That is the same unmeasured `size_of` this document flags twice more, and it is one line.
+
 ## Recommended order
 
 **B, then the string-length histogram, then A, then D(ii), then C's replacement.**
 D(i) is folded into B's measurement rather than run separately.
-E is held unless the histogram picks it over A. C is declined.
+E is held unless the histogram picks it over A. C is declined. **F is declined now and reachable only through A's measurement**, which is what its own bar requires.
 
 **The reasoning.**
 
@@ -264,8 +328,9 @@ E is held unless the histogram picks it over A. C is declined.
 **Independent of each other:** A and B touch different crates and different variants; either can land first.
 C's replacement is independent of all four.
 **Ordered:** D(ii) after A; D(i) after B, or not at all.
-**Mutually exclusive:** A and E, since both decide what a `Body::Text` holds -- and the length histogram is what chooses between them, so it comes before either.
+**Mutually exclusive:** A, E and F, since all three decide what a `Body::Text` holds -- and the length histogram is what chooses among them, so it comes before any of them.
 **Superseded:** C by the existing `ObjRef` tag.
+**Blocked on a measurement rather than on a policy:** F, by its own bar, which asks for A's cost before a safe alternative can be called insufficient.
 
 **What would change this order.** One measurement: decompose `rexxcps`' 40.0% allocator family into `Text`, `Number` and tail keys.
 `rexxcps` is one of the two walls, B does nothing for it if its allocations are strings, and A does nothing for it if they are numbers.
@@ -315,5 +380,6 @@ The one figure this document declines to pass on is the `smallvec` result, check
 * **How `rexxcps`' 40.0% allocator family splits between `Text`, `Number` and tail keys.** Named above as the one measurement that would reorder the recommendation.
 * **Whether every `to_text` caller can take the `&self` peek.** The accessor is provably available for three of five arms; whether the call sites want it is a reading of `eval.rs`, `builtin/` and `ir/` that the spike's uncommitted state made unsafe to do now.
 * **Whether `Rc<[u8]>` is compatible with the eventual threading model.** `Outcome` must be `Send` and the crate has already declined `Rc` once for that reason; whether a heap value itself ever crosses a thread boundary is not established anywhere I could find.
+* **Whether long strings are a population worth an `unsafe` site at all.** F's only advantage over A is one cache miss on a string above the inline bound, and nobody knows how many of those these programs allocate. The same length histogram settles it, which is why it sits in the recommended order rather than in this list.
 * **Every share here predates the expression spike.** A third profiling pass, taken after expression promotion lands, is what makes the `strings` figures above usable again; the per-axis *rankings* should survive it and the *ceilings* will not. Settled by re-profiling, which the loop's own cadence requires anyway.
 * **What the `Op` width budget costs elsewhere.** Entry 11 records that `assert!(size_of::<Op>() == 12)` is defended by an assertion rather than a measurement, and that it has already distorted two design choices. It is not a value-representation question and is not decided here, but it is the same kind of unmeasured constraint and belongs in the same conversation.
