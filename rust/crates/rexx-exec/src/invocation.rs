@@ -188,7 +188,7 @@ impl Invocation {
         Invocation {
             argument: None,
             input: ProgramInput::Nothing,
-            engine: Engine::TreeWalker,
+            engine: Engine::Ir,
         }
     }
 
@@ -297,21 +297,20 @@ mod tests {
         }
     }
 
-    /// An invocation nobody chose an engine for runs on the tree-walker, and
-    /// the other two builders leave that choice alone.
+    /// An invocation nobody chose an engine for runs on the compiled stream,
+    /// and the other two builders leave that choice alone.
     ///
     /// `with_input` and `with_argument` both build from a `..` update, so a
     /// field added to this struct is carried by them silently or dropped by
     /// them silently depending on which side of the `..` it lands. That is
-    /// what the second half checks; the first is the default itself, which a
-    /// later task flips deliberately and which nothing else in this crate
-    /// states.
+    /// what the second half checks; the first is the default itself, which
+    /// nothing else in this crate states.
     #[test]
-    fn an_invocation_that_chose_no_engine_runs_on_the_tree_walker() {
-        assert_eq!(Invocation::none().into_parts().2, Engine::TreeWalker);
+    fn an_invocation_that_chose_no_engine_runs_on_the_compiled_stream() {
+        assert_eq!(Invocation::none().into_parts().2, Engine::Ir);
         assert_eq!(
             Invocation::with_argument(b"a".to_vec()).into_parts().2,
-            Engine::TreeWalker
+            Engine::Ir
         );
         assert_eq!(
             Invocation::none()

@@ -35,16 +35,17 @@ use std::process::ExitCode;
 /// binary can reach `Invocation::with_engine`.
 ///
 /// **Set-but-unrecognised is rejected, and that includes a value this platform
-/// will not decode.** Only an unset variable defaults. A typo, or a byte string
-/// that is not UTF-8, would otherwise run the tree-walker while the caller
-/// believed it had asked for the other engine -- which is worse than either
-/// running or refusing, because a benchmark would attribute the result to the
-/// wrong arm and read a comparison of one arm against itself as no movement.
+/// will not decode.** Only an unset variable defaults, to the same engine
+/// `Invocation::none` picks. A typo, or a byte string that is not UTF-8, would
+/// otherwise run whichever engine the default names while the caller believed
+/// it had asked for the other -- which is worse than either running or
+/// refusing, because a benchmark would attribute the result to the wrong arm
+/// and read a comparison of one arm against itself as no movement.
 fn engine_from_environment() -> rexx_exec::Engine {
     use std::env::VarError;
 
     match std::env::var("REXX_ENGINE") {
-        Err(VarError::NotPresent) => rexx_exec::Engine::TreeWalker,
+        Err(VarError::NotPresent) => rexx_exec::Engine::Ir,
         Ok(value) => match value.as_str() {
             "ir" => rexx_exec::Engine::Ir,
             "tree-walker" => rexx_exec::Engine::TreeWalker,
