@@ -339,57 +339,6 @@ impl Interp {
     }
 }
 
-/// Whether `value` qualifies for the inline `ObjRef::SmallInt` tag under
-/// `created_digits`, and its payload if so (D15).
-///
-/// **Decides by rendering, not by inspecting `Number`'s own fields** --
-/// `digits`/`exponent`/`negative` are `pub(crate)` to `rexx-num` and this
-/// crate cannot reach them, but that constraint turns out to force the right
-/// design rather than merely work around a wall: `format_form` is exactly
-/// what `to_text` calls for a heap `Body::Num`, so asking it the same
-/// question here **guarantees** a `SmallInt`'s rendering and a `Body::Num`'s
-/// rendering can never drift apart, which two independent implementations of
-/// "is this whole and narrow enough" could not promise. `Form::Scientific`
-/// below is a probe, not a decision: D15 states the two forms agree on plain
-/// (non-exponential) rendering, and an exponential rendering is refused
-/// regardless of which form chose its exponent grouping, so the probe form
-/// cannot bias the answer.
-///
-/// `value` is taken exactly as given, with **no rounding applied here**: the
-/// arithmetic operation that produced it already rounded to `created_digits`
-/// (`Number::add`/`sub`/`mul`/`div`/`pow` all end in `round_to(digits)`), and
-/// `format_form(created_digits, ..)` re-rounds to the identical precision, so
-/// this never rounds a second time to a *different* one.
-///
-/// The rendered string is admissible only when it is a bare, optionally
-/// signed decimal integer -- no `.` and no `E`:
-///
-/// * **No `.`:** a stored decimal place survives even when every digit after
-///   the point is a literal `0` -- measured, `20.00 + 0` prints `20.00`, not
-///   `20` -- and a `SmallInt` can only ever render as a bare integer, so a
-///   value whose own rendering has a point, however trailing-zero it is, is
-///   never eligible. `Number::whole_value` answers a related but different
-///   question (whether a value *converts* to a whole number under some
-///   precision, which it answers yes for `20.00`) and is the wrong function
-///   to reach for here for exactly that reason.
-/// * **No `E`:** `format_form` chose exponential form, which means the value
-///   does not fit `created_digits` in plain decimal -- exactly the condition
-///   under which a bare-integer rendering would be wrong. Measured under
-///   `DIGITS 1`: `15 + 0` rounds to `20`, which needs two plain digits and so
-///   renders `2E+1`; inlining it as `SmallInt(20)` would print `20` instead.
-/// * **Fits `SMALL_INT_MIN..=SMALL_INT_MAX`:** parsing the rendered digits
-///   into `i64` already refuses anything wider than 64 bits, and the range
-///   check narrows that further to the tag's 61, because `created_digits`
-///   carries no ceiling of its own -- `NUMERIC DIGITS` can be set far wider
-///   than either.
-///
-/// On a refusal, `number` below throws this rendering away rather than
-/// seeding `Body::Num`'s `text` cache with it: the probe always renders in
-/// `Scientific`, but a refusal by `E` means the value *is* exponential, where
-/// `Scientific` and `Engineering` disagree (D15's own `1E+10`/`10E+9` pair).
-/// Caching this string on an object whose `created_form` is `Engineering`
-/// would seed the cache with the wrong one; `to_text`'s own lazy fill, keyed
-/// off the object's real `created_form`, is what must produce it.
 /// The integer a literal's bytes spell, when those bytes are exactly that
 /// integer's own rendering.
 ///
@@ -487,24 +436,50 @@ pub(crate) fn exact_small_int(value: i64, digits: u64) -> Option<ObjRef> {
         .flatten()
 }
 
+/// Whether `value` qualifies for the inline `ObjRef::SmallInt` tag under
+/// `created_digits`, and its payload if so (D15).
+///
+/// **The question is what the value renders as**, because a `SmallInt`
+/// renders through `i64`'s `Display` and a heap `Body::Num` renders through
+/// `format_form(created_digits, created_form)`, so the tag is admissible
+/// exactly when those two agree. [`rendered_integer`] answers that from the
+/// number's own exponent and digit vector, and its contract is stated as the
+/// rendering: `rexx-num`'s `the_shape_predicate_answers_what_the_rendering_
+/// says` asserts the two agree over a generated population, which is what
+/// stops the two spellings of one rule drifting apart. The form the caller
+/// is under does not enter it -- the two forms agree wherever a rendering is
+/// plain, which is the only place this answers `Some`.
+///
+/// `value` is taken exactly as given, with **no rounding applied here**: the
+/// arithmetic operation that produced it already rounded to `created_digits`
+/// (`Number::add`/`sub`/`mul`/`div`/`pow` all end in `round_to(digits)`), and
+/// the rendering re-rounds to the identical precision, so this never rounds a
+/// second time to a *different* one.
+///
+/// A rendering is admissible only when it is a bare, optionally signed
+/// decimal integer -- no `.` and no `E`:
+///
+/// * **No `.`:** a stored decimal place survives even when every digit after
+///   the point is a literal `0` -- measured, `20.00 + 0` prints `20.00`, not
+///   `20` -- and a `SmallInt` can only ever render as a bare integer, so a
+///   value whose own rendering has a point, however trailing-zero it is, is
+///   never eligible. `Number::whole_value` answers a related but different
+///   question (whether a value *converts* to a whole number under some
+///   precision, which it answers yes for `20.00`) and is the wrong function
+///   to reach for here for exactly that reason.
+/// * **No `E`:** exponential form means the value does not fit
+///   `created_digits` in plain decimal -- exactly the condition under which a
+///   bare-integer rendering would be wrong. Measured under `DIGITS 1`:
+///   `15 + 0` rounds to `20`, which needs two plain digits and so renders
+///   `2E+1`; inlining it as `SmallInt(20)` would print `20` instead.
+/// * **Fits `SMALL_INT_MIN..=SMALL_INT_MAX`:** an `i64` already refuses
+///   anything wider than 64 bits, and the range check narrows that further to
+///   the tag's 61, because `created_digits` carries no ceiling of its own --
+///   `NUMERIC DIGITS` can be set far wider than either.
+///
+/// [`rendered_integer`]: Number::rendered_integer
 fn small_int_for(value: &Number, created_digits: u32) -> Option<i64> {
-    // The probe below allocates the very string this function exists to
-    // decide it does not need, so the common case is answered without it:
-    // `plain_integer` is `Some` exactly when the value is already a run of
-    // decimal digits at this precision, which is what the probe would have
-    // gone on to discover. It is deliberately a subset -- everything it
-    // declines still gets the full rendering treatment below, so the answer
-    // is unchanged and only the work is.
-    if let Some(whole) = value.plain_integer(u64::from(created_digits))
-        && (SMALL_INT_MIN..=SMALL_INT_MAX).contains(&whole)
-    {
-        return Some(whole);
-    }
-    let rendered = value.format_form(u64::from(created_digits), Form::Scientific);
-    if rendered.contains('.') || rendered.contains('E') {
-        return None;
-    }
-    let whole: i64 = rendered.parse().ok()?;
+    let whole = value.rendered_integer(u64::from(created_digits))?;
     (SMALL_INT_MIN..=SMALL_INT_MAX)
         .contains(&whole)
         .then_some(whole)
@@ -522,20 +497,32 @@ mod tests {
         Number::parse(text).expect("test literal parses")
     }
 
-    /// Everything `plain_integer` accepts renders as exactly that integer,
-    /// in either `FORM`.
+    /// The tag decision is the rendering's, at the tag's own boundary.
     ///
-    /// `small_int_for` answers from it without rendering, so the two must
-    /// not be able to disagree. The property is one-directional on purpose:
-    /// a `None` here means only "look properly", and the rendering probe
-    /// still runs, so a value this declines needs no assertion.
+    /// `rexx-num`'s `the_shape_predicate_answers_what_the_rendering_says`
+    /// holds `rendered_integer` to the rendering it names; what is this
+    /// crate's own is the narrowing on top of it, where a value that renders
+    /// as a plain integer is still refused for being wider than 61 bits. So
+    /// the oracle here is the whole decision written the way it used to be --
+    /// render, refuse a `.` or an `E`, parse back, then range-check -- and
+    /// the grid crosses the tag's limits with the precisions that reach them.
     ///
-    /// `Engineering` is asserted alongside `Scientific` because
-    /// `plain_integer` is never told which form is in force. That is sound
-    /// only while its acceptance implies plain rendering, where the two
-    /// forms cannot differ -- the assertion is what holds that.
+    /// The count floors are what stop it passing vacuously, and the second is
+    /// the one that matters: a decision equal to `plain_integer` plus the
+    /// range check satisfies every assertion below without it.
     #[test]
-    fn the_plain_integer_shortcut_agrees_with_the_rendering_probe() {
+    fn the_tag_decision_is_the_rendering_read_back() {
+        fn by_rendering(value: &Number, created_digits: u32) -> Option<i64> {
+            let rendered = value.format_form(u64::from(created_digits), Form::Scientific);
+            if rendered.contains('.') || rendered.contains('E') {
+                return None;
+            }
+            let whole: i64 = rendered.parse().ok()?;
+            (SMALL_INT_MIN..=SMALL_INT_MAX)
+                .contains(&whole)
+                .then_some(whole)
+        }
+
         let spellings = [
             "0",
             "0.00",
@@ -547,8 +534,26 @@ mod tests {
             "150",
             "1.50E+2",
             "12.0",
+            // Values whose *rounding* is the integer, which is the half of
+            // the set `plain_integer` cannot see: dropped digit below and
+            // above five, a carry, and both signs.
+            "1.4",
+            "2.5",
+            "12.4",
+            "12.5",
+            "-12.4",
+            "-12.5",
+            "19.6",
+            "99.4",
+            "99.6",
+            "9.996",
+            "123.456",
+            "1234.5678",
+            "2305843009213693951.4",
+            "2305843009213693952.4",
             "1.2E+3",
             "999",
+            "999.5",
             "1000",
             "1E+9",
             "1E+18",
@@ -557,35 +562,41 @@ mod tests {
             "1E-5",
             "-12345",
             "123456789012345678",
+            // The tag's limits, either side, and one past every `i64`.
+            "2305843009213693950",
             "2305843009213693951",
+            "2305843009213693952",
+            "-2305843009213693952",
+            "-2305843009213693953",
+            "9223372036854775807",
             "9999999999999999999999",
         ];
-        let precisions: [u32; 7] = [1, 2, 3, 9, 18, 19, 20];
+        let precisions: [u32; 12] = [1, 2, 3, 4, 5, 9, 18, 19, 20, 21, 22, 25];
 
-        let mut accepted = 0usize;
+        let mut tagged = 0usize;
+        let mut tagged_beyond_plain_integer = 0usize;
         for spelling in spellings {
             for digits in precisions {
                 let value = n(spelling);
-                let Some(whole) = value.plain_integer(u64::from(digits)) else {
-                    continue;
-                };
-                let expected = whole.to_string();
+                let decided = small_int_for(&value, digits);
                 assert_eq!(
-                    value.format_form(u64::from(digits), Form::Scientific),
-                    expected,
-                    "{spelling} at DIGITS {digits}, FORM SCIENTIFIC"
+                    decided,
+                    by_rendering(&value, digits),
+                    "{spelling} at DIGITS {digits}"
                 );
-                assert_eq!(
-                    value.format_form(u64::from(digits), Form::Engineering),
-                    expected,
-                    "{spelling} at DIGITS {digits}, FORM ENGINEERING"
-                );
-                accepted += 1;
+                if decided.is_some() {
+                    tagged += 1;
+                    if value.plain_integer(u64::from(digits)).is_none() {
+                        tagged_beyond_plain_integer += 1;
+                    }
+                }
             }
         }
+        assert!(tagged > 100, "only {tagged} of the grid was tagged at all");
         assert!(
-            accepted > 30,
-            "only {accepted} of the grid reached the shortcut, so this asserts almost nothing"
+            tagged_beyond_plain_integer > 10,
+            "only {tagged_beyond_plain_integer} tagged cases are outside `plain_integer`, \
+             so this asserts almost nothing about the values a narrower rule would drop"
         );
     }
 

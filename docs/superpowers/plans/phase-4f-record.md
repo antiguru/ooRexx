@@ -1065,3 +1065,151 @@ Entry 6's time-component measurement -- `/usr/bin/time`'s `%S`, `%U` and minor-f
 * **Three quiet sittings is not a distribution.** The quiet ranges above -- 0.13 to 3.41 points -- are a spread over three points, and the two widest are the two axes whose net is a small difference of larger numbers.
 * **It cannot say what the interferer was.** `ps` inside this sandbox showed nothing but this session's own agent at any point, exactly as entry 3 recorded, so the host's idle percentage is the only evidence of it.
 * **The quiet-run-up gate is not in any committed harness.** It was a shell loop in the scratchpad, and `rexx-bench-suite` has no such check. A later sitting that skips it can reproduce sitting 1 without noticing.
+
+### Entry 9 -- candidate 4 attempted and **accepted**: the tag decision read off the number's shape, not off a rendering of it
+
+**BASE is `c761c5f4`**, whose `rexx-run` reproduces entry 7's HEAD binary byte for byte from a clean `git status` -- which is what says the two intervening commits are the record and nothing else. The record-only commit `db0d2942`, carrying the re-measurement below, landed on the branch while this candidate was being built; it changes nothing under `rust/`, so the binary it names is the one measured here.
+
+**Two entries carry the number 8** -- the allocator queue addition and entry 6's re-measurement -- and this is the ninth by position. Where this entry cites one of them it says which.
+
+#### The hypothesis, named before it was measured
+
+`small_int_for` (`value.rs`) decides whether an arithmetic result becomes an inline `SmallInt` or a heap `Body::Num`. It answered cheaply when `Number::plain_integer` accepted, and otherwise called `format_form` -- a full decimal render into a fresh `String` -- scanned the result for a `.` and an `E`, parsed it back to an `i64`, and threw the string away. **Every arithmetic result on `arith` reached that line**, because `plain_integer` answers only for a value *already* written as an integer and `arith`'s results are decimals.
+
+The change is `Number::rendered_integer`, an exact predicate over the number's own exponent and digit vector, and the one call site that now goes through it. The rendering asks three questions -- what rounding to `DIGITS` does to the value's shape, whether the exponential trigger fires, and whether a decimal point is written -- and every one of them is a property of that shape rather than of the string. So the predicate is `round_to`'s branch decision, then `format_with`'s trigger, then the sign of the exponent, and it allocates nothing: the rounded copy and the rendered `String` both go.
+
+**The obvious shortcut is not this change, and the record already measured why.** Prototype P3 returned `None` whenever `plain_integer` declined: -16.3% on `arith`, but `compound` +1.6% and `strings` +2.7% *slower*, because the probe genuinely accepts values `plain_integer` declines -- every result whose *rounding* is the integer, `12.4` at `DIGITS 2` being the shape -- and dropping them turns those into heap objects. **Accepting the same set is the whole of the work**, and what holds it is an exhaustive equivalence check rather than an argument.
+
+#### Predicted movement, written down before the first timed run
+
+| axis | predicted | the reasoning behind it |
+|---|---|---|
+| `arith` | **-6% to -14%**, central -10% | entry 2's ceiling is 14.8% of the axis; the replacement is not free, since it does the same rounding and trigger arithmetic the render's first two steps do, so under the ceiling |
+| `compound`, `strings`, `varlookup`, `emptyloop`, `alloc4c`, `rexxcps` | **0%** in work terms, band -1% to +1% on instructions | since entries 3 and 4 their hot clauses stay on `arith_small_int`'s tagged path, which answers through `exact_small_int` and never builds a `Number`, so this predicate is not reached |
+| peak resident set | **no change anywhere** | the change alters neither which values are heap objects nor their size |
+
+**Two of the three were wrong, and the second is the avoidable one.**
+
+**`arith` came in at -16.9% against a -14% band edge.** The ceiling counted the render; the change also removes the `str::parse` after it and `round_to`'s clone of the digit vector -- and since entry 6 a clone is a `free()` as well as a `malloc`, which is the cost that entry naming itself.
+
+**`rexxcps` moved -2.76% in instructions against a predicted 0%, and the prediction was made without reading the program.** `samples/rexxcps.rex` contains `do j=1.1 to 2.2 by 1.1`, a **decimal** loop control: every pass adds `1.1` to a decimal and hands the result to this predicate. It also builds `acompound.key1.loop` from a `substr` result, an untagged operand that sends its `+ 1` down the general path. That is entry 4's error repeated -- "none of these programs calls a builtin whose result this changes", said of a program nobody had opened -- and it is written down as a miss rather than absorbed, because the axis it lands on is the one this candidate would otherwise have claimed nothing about.
+
+#### Build identity
+
+| | |
+|---|---|
+| BASE `rexx-run` | size=13832312, sha256 `8ef5c32e99503841b11aece93eb32200127366cf8b0742c12bc467212e1fe82d` -- **entry 7's HEAD binary reproduced byte for byte** at `c761c5f4`, after `cargo clean -p rexx-exec -p rexx-core -p rexx-num -p rexx-bench --release` |
+| HEAD `rexx-run` | size=13849736, sha256 `35999021f97f24bb81e8c7a65083340084a8e1107087e11caf34dc8bc7f82141`; the binary **grew** by 17,424 bytes |
+| oracle | the same three objects entry 1 fingerprints, re-hashed here and unchanged: `bb5bb8cc...`, `42136c40...`, `3536b763...` |
+
+**The measured HEAD binary is the committed source's release build**, rebuilt after a full `cargo clean` at the end of the gates and hashed again to `35999021`, byte-compared against the binary the sittings ran.
+
+#### The accept measurement: the two binaries alternating in one loop, twice
+
+The accept rule's literal shape, and **not** `rexx-bench-suite`. Wall clock, `ulimit -v 8388608`, `REXX_ENGINE=ir`, one fresh empty working directory, base/head order **rotated every round**, seven rounds per axis. All 168 runs exited 0 and each axis's stdout hash is identical across all fourteen runs of it in both sittings.
+
+**Sitting 2 is gated the way entry 8's re-measurement asks for**: six consecutive five-second samples of host idle read from `/proc/stat`, all at or above 90%, before the first run. It read 99.4, 99.0, 99.2, 99.1, 99.3 and 99.3. Sitting 1 ran before that entry landed, with `vmstat` showing 98% to 99% idle immediately before it and one-minute load average 0.65 rising to 1.10 across it.
+
+| axis | s1 base | s1 head | **s1** | s2 base | s2 head | **s2 (gated)** | rounds with that sign |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `arith` | 2.9608 s | 2.4704 s | **-16.56%** | 2.9582 s | 2.4575 s | **-16.93%** | **7 of 7 in both** |
+| `varlookup` | 2.5541 | 2.5763 | +0.87% | 2.5443 | 2.5730 | +1.13% | 7 of 7 in both |
+| `emptyloop` | 1.9505 | 1.9653 | +0.76% | 1.9487 | 1.9604 | +0.60% | 6 of 7 in both |
+| `compound` | 2.7723 | 2.7811 | +0.32% | 2.7815 | 2.7729 | -0.31% | 5 of 7 in both |
+| `strings` | 5.4177 | 5.4534 | +0.66% | 5.4989 | 5.4178 | -1.47% | 4 of 7 in both |
+| `alloc4c` | 1.4591 | 1.4819 | +1.56% | 1.4513 | 1.4534 | +0.14% | 5 of 7, then 4 of 7 |
+
+Per-round on `arith` in the gated sitting: -16.7%, -16.8%, -17.6%, -17.2%, -16.1%, -16.9%, -16.9%. There is no round in either sitting in which it is not about a sixth.
+
+**Three axes produced no usable wall figure and are recorded as such rather than as small movements.** `compound`, `strings` and `alloc4c` change sign between the two sittings and their sign does not hold inside either. That is the shape entry 8's re-measurement found on `alloc4c` and it is what the instruction column below is for.
+
+`rexxcps` is not read as wall time, for entry 1's reason. Both binaries self-calibrated to the identical `100 x 100`, so their clauses-per-second figures are comparable: five rounds, order rotated, base median **2,517,320** against head **2,589,453** -- **+2.86%**, head ahead in all five.
+
+#### Instructions beside cycles beside wall, which is what separates the work from the layout
+
+`perf stat -e instructions:u,cycles:u`, three runs per side per axis, arms alternating, medians. A different configuration from the sittings above and read for work rather than for time.
+
+| axis | instructions base | instructions head | change | cycles change | wall (gated) |
+|---|---:|---:|---:|---:|---:|
+| `arith` | 29,928,696,959 | 23,911,740,306 | **-20.10%** | -17.09% | -16.93% |
+| `rexxcps` | 37,961,632,660 | 36,915,319,357 | **-2.76%** | -3.56% | +2.86% cps |
+| `emptyloop` | 28,599,608,641 | 28,724,522,037 | +0.44% | +0.50% | +0.60% |
+| `varlookup` | 43,548,512,766 | 43,684,529,060 | **+0.31%** | +0.63% | +1.13% |
+| `alloc4c` | 11,212,656,827 | 11,242,704,364 | +0.27% | -1.82% | +0.14% |
+| `compound` | 37,228,690,278 | 37,246,304,463 | +0.05% | -0.09% | -0.31% |
+| `strings` | 63,152,777,126 | 63,180,769,526 | +0.04% | -0.79% | -1.47% |
+
+**Two axes execute measurably less work and four execute measurably more.** `arith` and `rexxcps` are the mechanism. The other four are entry 3's displacement channel: `varlookup` retires **136 million extra instructions for work that did not change**, on the same shape entry 3 measured at 399 million -- a function on the arithmetic path changed size and its caller is inlined into `run_ops`, which every axis runs. It is a quarter of what entry 3 charged and it is the price of touching this code.
+
+**`arith`'s instruction move is larger than its cycle move**, which is the opposite of entries 5 and 6, so what was removed retired at a *higher* instructions-per-cycle than what remains. Nothing here measures IPC and this entry does not explain it; rendering a decimal into a `String` is branch-light, arithmetic-heavy work, which is the shape that would do it.
+
+**`alloc4c`'s -1.82% in cycles against +0.27% in instructions and +0.14% in wall is not claimed.** `cycles:u` does not count the kernel, and entry 6 measured that axis as the one where kernel time still moves.
+
+#### The mechanism, measured directly rather than inferred from the axis
+
+Two 200,000-iteration probes, `perf stat -e instructions:u`, twice each, from a fresh empty directory, both printing the identical answer on both binaries.
+
+* **The clause that reaches the predicate**, `a = i / 3`: 1,254,429,248 instructions on base against **1,067,343,257** on head, **-14.9%**, answer `66666.6667` on both.
+* **The control, which does not**, `a = i + 1`: 349,414,903 against 350,614,491, **+0.34%**, answer `200001` on both. Two tagged operands stay on `arith_small_int` and never construct a `Number`, so the only thing this pair can show is the displacement -- and that is what it shows.
+
+That pair is what says the win is this predicate and not something else that moved with it.
+
+#### What P3's control says today, which is less than it did
+
+The candidate's own falsification named `compound` and `strings` getting slower the way P3's did. **They did not**: +0.32% and +0.66% in one sitting, -0.31% and -1.47% in the other, with the sign holding in neither and instruction counts of +0.05% and +0.04%. P3 moved them +1.6% and +2.7%.
+
+**That control is weaker now than when it was written, and this entry says so rather than banking it.** P3 was measured before entries 3 and 4. `compound`'s `//` and `strings`' `LENGTH` both built `Number`s then and both stay tagged now, so those two axes may no longer be sensitive to this predicate's width at all. Their not moving is consistent with the set being unchanged and is not evidence for it. **The evidence for the set is the equivalence check below.**
+
+#### Peak resident set, which moves nowhere and is recorded for that
+
+`/usr/bin/time -f %M`, same wrapper, one run per side: `arith` 9,876 KB against 10,372, `strings` 11,680 against 11,420, `varlookup` 2,476 against 2,544, `compound` 2,436 against 2,576, `alloc4c` 179,552 against 180,400, `emptyloop` 2,476 against 2,500. Every axis is within a few hundred KB and in both directions, which is what has to happen when the same values are heap objects as before.
+
+#### Correctness, which outranks the number, and here it *is* the work
+
+**The predicate's contract is an equivalence, so the test is that equivalence over a generated population rather than a list of interesting values.** `rexx-num`'s `the_shape_predicate_answers_what_the_rendering_says` runs the old implementation -- render, refuse a `.` or an `E`, parse back -- as the oracle for the new one: **101,528 cases**, 37 mantissas chosen for the shapes the two can disagree about crossed with exponents `-24..=24`, both signs, and precisions 0 to 25 plus 1000 and `u64::MAX`. **22,511 are accepted, and 777 of those are outside `plain_integer`** -- the set P3 dropped, and the floor asserting it is what stops the test passing for a predicate that is `plain_integer` in disguise. Every accepted case is asserted to render identically under `FORM ENGINEERING`, which is what lets the caller decide a representation without knowing the form in force.
+
+`the_tag_decision_is_the_rendering_read_back` (`value.rs`) does the same at the call site, where the tag's own 61-bit range narrows the answer further, over a grid crossing `i64::MAX`, `SMALL_INT_MAX` and one either side of each with twelve precisions.
+
+**The differential, on both engines, at BASE and at HEAD.** 26 generated programs -- one per `DIGITS` in `{1,2,3,4,5,6,9,10,15,18,19,20,25}` by both `FORM`s -- of 2,965 arithmetic cases each, **77,090 cases**, every case put through five uses that would show a representation change: the rendering itself, its length, `DATATYPE(v,'W')`, a re-render through `+ 0`, and a concatenation. Errors are trapped per case and reported as their number. Run on the oracle and on both binaries on both engines:
+
+* **All 156 descriptors are byte-identical between BASE and HEAD** -- 26 programs by two engines by stdout, stderr and exit status -- and the divergence-from-oracle set is identical line for line, 874 lines on every arm.
+* **Those 874 are one pre-existing gap and it is not this candidate's**: `DATATYPE(v,'W')` answers `0` where the oracle answers `1` for a whole number of 19 digits or more, because this crate asks `Number::whole_value(ARGUMENT_DIGITS)` and that constant is 18. It is identical at BASE, it is unrelated to representation, and it is recorded here because the grid surfaced it and nothing else in the record names it.
+* **The remaining 76,216 lines match the oracle on both binaries and both engines**, every rendering and every condition number among them.
+
+**Under the collector's stress mode**, because a representation change alters which values are heap objects: the same 26 programs through `run_program_collect_every_alloc`, which collects on *every* allocation -- **2,125,348 collections**, stdout, stderr and exit status identical to the plain run of each. The committed corpus stress harness is green too, and its `NO_ALLOCATION_PROGRAMS` set is the pin that matters here: it is committed data naming exactly which corpus programs allocate nothing, in both directions, so a predicate that moved one program's values between the tag and the heap reddens it.
+
+**Two mutations, and the pair is the finding.**
+
+* **Narrowing the predicate to `plain_integer`'s set -- which is P3 -- reddens all three new tests, and the entire workspace without them stays green: 1439 passed, 0 failed**, corpus differential and dual-engine sweep included. So nothing that existed before this entry could have caught it. That is the same fact entry 4 recorded from the other side -- `Body::Text{b"46"}` and `SmallInt(46)` are observationally identical -- and it is why the equivalence check is the instrument and the differential is not.
+* **Widening the exponential trigger by one** -- `adjusted > trigger` for `>=` -- reddens **8 existing tests**, the dual-engine sweep and both exempt-set harnesses among them. So the existing suite does catch a *wrong answer*; what it cannot catch is a *narrower set*, and those are different failures.
+
+`crates/rexx-num/src/lib.rs` was restored from a `cp` copy after each and `sha256sum -c`'d, never `git checkout --`, and the release binary was rebuilt and re-hashed to `35999021`.
+
+Gates: `cargo test --workspace` **1442 passed, 0 failed, 4 ignored** in dev and in release, run counts read rather than exit status alone. Inside the release run the corpus runner reported 10 passed and the dual-engine sweep 9. **BASE was re-counted rather than inherited, by running the suite at BASE before anything was edited**: **1440 passed, 0 failed, 4 ignored** in both profiles, which is entry 7's own figure; HEAD runs exactly two more, the two in `tests/rendered.rs` -- the third new test replaced one whose subject this change deletes. `cargo fmt --all --check` clean. `cargo clippy --workspace --all-targets -- -D warnings` clean from a full `cargo clean`, with `Checking rexx-num`, `Checking rexx-core` and `Checking rexx-exec` confirmed in the log.
+
+#### One false comment was removed rather than carried
+
+`value.rs` carried a fifty-line doc comment describing `small_int_for` as deciding **by rendering** -- "that constraint turns out to force the right design", "guarantees a `SmallInt`'s rendering and a `Body::Num`'s rendering can never drift apart, which two independent implementations could not promise" -- and it was attached to `canonical_small_int`, two functions away, so it described neither the code above it nor the code below it. This change makes the first half false as well as misplaced. It is moved onto `small_int_for` and rewritten: the no-drift guarantee is now held by an asserted equivalence rather than by construction, which is a weaker warrant and says so.
+
+#### Disposition: **accepted**
+
+The candidate's stated falsification was the replacement accepting a different set, shown by a differential divergence or by `compound` and `strings` getting slower as P3's did. Neither fired: 156 descriptors are byte-identical between the two binaries across 77,090 cases on both engines, 101,528 generated cases agree with the rendering they replace, and the two axes P3 moved did not move in either direction with a sign that held.
+
+**The hypothesis is confirmed by the route it named**, and the instruction count is the evidence: 6.0 billion fewer instructions on `arith`, with a probe pair isolating the clause that reaches the predicate (-14.9%) from one that does not (+0.34%).
+
+Entry 2's ceiling construction for this candidate was 14.8% of the axis, implying 2.6658x -> 2.27x. The measured wall landing is **-16.9%**, past that ceiling, and the entry names the two costs the share did not count rather than claiming the share was wrong: the `str::parse` after the render, and `round_to`'s clone of the digit vector, whose `free()` a heap that never collected never used to pay.
+
+Accepted **with the displacement recorded and not netted out**: four axes retire 0.04% to 0.44% more instructions for work that did not change, `varlookup` most at 136 million. Against `arith` losing a sixth of its wall time that is a trade worth making, and it is the second time this record has paid it.
+
+**One thing this candidate does not do, and it was the brief's own hypothesis.** Entry 6's collector made `arith` slower, and the reasoning offered was that every value kept as a tagged immediate is an object never allocated, never marked and never freed -- so this would attack the regression's own mechanism. **Peak resident set says it did not**: 9,876 KB against 10,372, unchanged, because the set of values that are heap objects is exactly what this change was required not to move. What it removed is the *transient* rendering, not a retained object. The regression entry 8's re-measurement puts at +3.4% is more than covered by this candidate, and by a different mechanism than the one predicted.
+
+Commit: to be read back from `git log` and written in below.
+
+#### What this entry cannot say
+
+* **It is two sittings on one Linux host**, unpinned, on a machine whose governor cannot be fixed. The second is gated on host idle; the first is not, and they agree on `arith` to 0.4 of a point.
+* **It did not run `rexx-bench-suite`, so it carries no oracle ratios.** Every figure is against the immediately preceding binary, which is what the accept rule asks for. Where `arith` now sits against the oracle is unmeasured; entry 1 had it at 2.6658x and three accepted changes have moved it since.
+* **`compound`, `strings` and `alloc4c` have no wall figure here at all.** Their signs flip between the two sittings and hold in neither, and only their instruction counts -- flat to within 0.05% to 0.27% -- say anything.
+* **The equivalence is asserted over a generated population, not proved.** 101,528 cases with the boundaries in them is not every `Number`, and the population is this entry's own choice; a shape nobody thought of is a shape the floors cannot miss.
+* **`rexxcps`' +2.86% is a clauses-per-second figure**, not a wall ratio, and its -2.76% instruction count is what it rests on.
+* **The tree-walker was measured only for correctness.** Every wall, instruction and RSS figure is the IR arm; the predicate sits below both engines, so the tree-walker gets the same work removed and no benchmark here says by how much.

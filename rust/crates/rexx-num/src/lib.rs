@@ -487,6 +487,110 @@ impl Number {
         Some(if self.negative { -value } else { value })
     }
 
+    /// The integer this **renders** as at `digits` precision, or `None` when
+    /// its rendering is not a plain run of decimal digits.
+    ///
+    /// This answers exactly what [`format_form`]`(digits, Form::Scientific)`
+    /// followed by an `i64` parse answers, decided over the exponent and the
+    /// digit vector instead of over the string. The rendering asks three
+    /// questions -- what rounding to `digits` does to the value's shape,
+    /// whether the exponential trigger fires, and whether a decimal point is
+    /// written -- and each is a property of that shape, so answering them
+    /// here costs neither the rounded copy nor the rendered `String`.
+    /// `the_shape_predicate_answers_what_the_rendering_says` is what holds
+    /// the two together.
+    ///
+    /// Strictly wider than [`plain_integer`], which answers only for a value
+    /// *already* written as an integer: `12.4` at `DIGITS 2` renders `12`,
+    /// and `plain_integer` declines it because the rounding has not happened
+    /// yet.
+    ///
+    /// `None` also covers a rendering that is a plain run of digits but too
+    /// wide for an `i64`, which is what the parse this replaces did with one.
+    ///
+    /// **The answer holds under `FORM ENGINEERING` too**, which is what lets
+    /// a caller decide a representation without knowing the form in force:
+    /// the exponential trigger does not read the form, and the grouping the
+    /// form does decide applies only once the rendering is exponential --
+    /// where the one case this accepts, a displayed exponent of zero, groups
+    /// to zero under both.
+    ///
+    /// [`format_form`]: Number::format_form
+    /// [`plain_integer`]: Number::plain_integer
+    pub fn rendered_integer(&self, digits: u64) -> Option<i64> {
+        // `round_to`'s three no-op cases, tested rather than taken: a
+        // sentinel `digits`, a value already inside the precision, and a
+        // zero all leave the number alone.
+        let keep = usize::try_from(digits).unwrap_or(usize::MAX);
+        let rounds = keep != 0 && self.digits.len() > keep && !self.is_zero();
+
+        // What rounding does to the shape. `round_to` holds the digit count
+        // at `keep` and lets the exponent absorb both the dropped digits and
+        // an all-nines carry, so the rounded value's length and exponent are
+        // known without rounding anything.
+        let round_up = rounds && self.digits[keep] >= 5;
+        let grew = round_up && self.digits[..keep].iter().all(|d| *d == 9);
+        let (length, exponent) = if rounds {
+            (
+                keep,
+                i64::from(self.exponent) + (self.digits.len() - keep) as i64 + i64::from(grew),
+            )
+        } else {
+            (self.digits.len(), i64::from(self.exponent))
+        };
+
+        // The two form questions, in `format_with`'s own order. `digits` is
+        // saturated into i64 rather than narrowed, for the reason `format`
+        // gives at its own comparison.
+        let adjusted = exponent + length as i64 - 1;
+        let trigger = i64::try_from(digits).unwrap_or(i64::MAX);
+        let plain = if adjusted >= trigger
+            || (adjusted < 0 && exponent.abs() > trigger.saturating_mul(2))
+        {
+            // Exponential: the mantissa carries a point unless it is one
+            // digit wide, and an `E` follows unless the exponent to be
+            // displayed is exactly zero, which is never written.
+            length == 1 && adjusted == 0
+        } else {
+            // Plain: a point is written exactly when digits sit to the right
+            // of it, which is what a negative exponent means.
+            exponent >= 0
+        };
+        if !plain {
+            return None;
+        }
+
+        if length as i64 + exponent > 19 {
+            // Wider than any `i64`, so the parse this replaces failed -- with
+            // one exception, a run of zeros, which is zero at any width. That
+            // arm answers for a shape the canonical zero (one digit, exponent
+            // zero) never has, and it is written rather than argued away so
+            // that this is a function of the shape alone.
+            return self.digits[..length].iter().all(|d| *d == 0).then_some(0);
+        }
+        // At most 19 digits and at most 19 trailing zeros from here, so the
+        // accumulation cannot leave i128 and every `i64` -- `i64::MIN`
+        // included, which has no positive form -- is reached exactly.
+        let mut value: i128 = 0;
+        for &digit in &self.digits[..length] {
+            value = value * 10 + i128::from(digit);
+        }
+        if grew {
+            // The all-nines carry: `round_to` writes a `1` and then zeros,
+            // and the extra position is already in `exponent` above.
+            value = 10i128.pow(length as u32 - 1);
+        } else if round_up {
+            value += 1;
+        }
+        for _ in 0..exponent {
+            value *= 10;
+        }
+        if self.negative {
+            value = -value;
+        }
+        i64::try_from(value).ok()
+    }
+
     /// The same magnitude with the sign cleared, which is what `ABS` needs
     /// and nothing here could otherwise express: `negative` is private to
     /// this crate.
