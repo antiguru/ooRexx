@@ -872,3 +872,113 @@ Commit: `967adba3e2dc638502c13ab2742122569a02fc47`, read back from `git log` aft
 * **Nothing here measures footprint in a test.** The witness added checks rooting, not memory, so a reintroduced leak that kept its roots correct would pass every gate in the workspace. That half of the coverage gap is still open and the exclusions row says so.
 * **`alloc4c`'s -1.72% under cause B alone is unexplained** and no mechanism offered covers it.
 * **The tree-walker was measured only through the stress populations.** Every wall, instruction and RSS figure above is the IR arm.
+
+### Entry 7 -- the trigger's **signal** changed, on the oracle's shape: the arena about to grow, not the live count
+
+**BASE is `967adba3`**, entry 6's own commit. This entry changes one condition and nothing else, and it is recorded separately because entry 6 is not wrong -- it measured what it measured -- and the record is appended to rather than rewritten.
+
+**It does not pass the accept rule and is not claimed to.** No bar-bound axis moves in work terms. It lands as a policy correction with a measurement behind it on a shape no axis has, and the section below says exactly what that measurement is and what it is not.
+
+#### Where the hypothesis came from, and the half of it that does not port
+
+Moritz read the oracle's own trigger. `NormalSegmentSet::handleAllocationFailure` (`interpreter/memory/MemorySegment.cpp:1135`) does three things in order: `collect()`, then `adjustMemorySize()` -- "now that we have good GC data, decide if we need to adjust the heap size" -- then retry the allocation. So the reference implementation allocates until it cannot, collects, and **sizes the heap from what the collection just learned**.
+
+**The first half is not available here and the correction came before anything was built.** The oracle can trigger on failure because it owns its segments. This crate takes each object's **payload** from `malloc`, and `malloc` does not fail -- it grows the process until the OOM killer arrives. There is no failure event to hang a trigger on.
+
+**The analogue is a branch that already existed.** `Heap::alloc_with_uncollected` either reuses a slot from `free_head` or pushes onto `slots`. The push arm is the moment the arena would grow, which is what allocation failure means to the oracle, and it costs nothing to detect. `Heap::will_grow` exposes it. Entry 6's doubling watermark is already `adjustMemorySize`'s half, so only the signal changed:
+
+```
+before   live_count()  >= collect_at
+after    will_grow()  &&  slot_capacity() >= collect_at
+```
+
+**Two facts about the heap this entry has to be accurate about, because the policy's limits follow from them.** Slots are *not* per-object `malloc`: `slots` is one growing `Vec<Slot>` with a free list, arena-allocated and reused after a collection. What goes through `malloc` individually is each object's payload inside `Body`. And **the trigger counts slots, not bytes** -- a few very large strings are few slots and a great deal of memory, and neither half of this policy reacts to them. That is written into `Interp::collect_at`'s own doc as a named limitation rather than left to be discovered; closing it needs payload sizes `Body` does not carry.
+
+#### Predicted movement, written down before the first measurement
+
+| where | predicted | the reasoning behind it |
+|---|---|---|
+| every benchmark axis | **no change at all**, identical collection counts | once the free list is exhausted, capacity and live count are the same number, so the two conditions fire at the same allocation |
+| a large live set that dies, then churn | **fewer collections, same peak RSS** | the free list holds the dead transient's slots; the live count has fallen back to the floor, so the old condition fires while thousands of swept slots sit unused |
+| peak resident set anywhere | **no change** | the policy decides *when* to reclaim, not *how much* |
+
+**All three held.** This is the first entry in this record whose predictions were not beaten or missed, and the reason is that it predicted no movement -- which is a weaker thing to get right.
+
+#### The measurement
+
+**On every axis the two conditions fire at the same allocations.** Collection counts, read from `Outcome::collections` through a pair of builds differing from the two below only by an `eprintln` behind an environment variable:
+
+| axis | live-count trigger | growth trigger | peak RSS, KB |
+|---|---:|---:|---|
+| `strings` | 274 | 274 | 11,480 / 11,444 |
+| `arith` | 52 | 52 | 10,732 / 10,596 |
+| `alloc4c` | 30 | 30 | 180,528 / 180,108 |
+| `compound` | **0** | **0** | 2,752 / 2,404 |
+| `varlookup` | **0** | **0** | 2,496 / 2,756 |
+| `emptyloop` | **0** | **0** | 2,496 / 2,440 |
+
+**On the shape the two differ on, the difference is a factor of two to three.** A program building a 200,000-tail stem, dropping it, then making a long tail of short-lived values -- every run printing the same two lines:
+
+| program | live-count trigger | growth trigger | peak RSS |
+|---|---:|---:|---|
+| 200,000 tails, dropped, then 1,000,000 churn | 19 collections | **8** | -- |
+| 200,000 tails, dropped, then 2,000,000 churn | 35 collections | **11** | 60,860 KB / 60,656 KB |
+
+Same footprint, same output, a third of the collector invocations.
+
+#### This entry corrects entry 6's attribution, which did not separate the two causes on memory
+
+**Three of the six axes collect zero times**, so `compound`'s 14.5x, `varlookup`'s 59.4x and `emptyloop`'s 71.1x falls in peak resident set are **entirely cause B** -- the loop's per-pass frames -- and owe nothing to the trigger. Entry 6 reported those multiples for the change as a whole and did not say which cause produced them. `strings`, `arith` and `alloc4c` are the axes cause A moves, and entry 6's split of the *instruction* cost already said so from the other side: the trigger's instruction cost is +3.49% and +6.82% on `arith` and `alloc4c` and about +0.2% on the other four.
+
+#### The wall clock moves and it is layout, disclaimed rather than banked
+
+Paired interleaved, base/head rotated every round, seven rounds per axis, 2026-08-11 18:27:04 to 18:31:04 +02:00, load average 0.31 rising to 0.98 -- the quietest sitting in this record -- all 84 runs exiting 0 with a stdout hash identical across all fourteen runs of each axis.
+
+| axis | e6 median | e7 median | change | rounds with that sign | instructions | cycles |
+|---|---:|---:|---:|---:|---:|---:|
+| `arith` | 3.0427 s | 2.9812 s | -2.02% | 7 of 7 | **+0.14%** | -1.81% |
+| `alloc4c` | 1.4435 s | 1.4726 s | +2.02% | 6 of 7 | **+0.15%** | +1.71% |
+| `emptyloop` | 1.9268 s | 1.9464 s | +1.02% | 6 of 7 | +0.06% | +1.35% |
+| `varlookup` | 2.5677 s | 2.5491 s | -0.72% | 7 of 7 | +0.03% | -1.21% |
+| `strings` | 5.4137 s | 5.4406 s | +0.50% | 4 of 7 | -0.02% | -3.20% |
+| `compound` | 2.7482 s | 2.7439 s | -0.15% | 6 of 7 | -0.07% | -0.25% |
+
+**No axis executes measurably different work**: every instruction column is inside 0.15%, which is what has to be true when the collection counts are identical. The wall and cycle columns move by up to 2% in both directions, and that is the layout channel entry 4 named -- a cycle move with no instruction move behind it. **`arith` at -2.02% in seven of seven rounds is not this candidate giving back a fifth of entry 6's regression**, and nothing here should be read that way.
+
+Peak resident set is unchanged on every axis: `arith` 10,120 / 10,720 KB, `compound` 2,424 / 2,784, `strings` 11,444 / 11,160, `varlookup` 2,540 / 2,472, `alloc4c` 180,448 / 180,284, `emptyloop` 2,456 / 2,436.
+
+#### Correctness
+
+**The whole workspace with collect-on-every-allocation forced on for every run**, re-run on this source because the trigger changed: every harness that runs a Rexx program is green, and the same 79 `rexx-exec` lib unit tests fail for the same reason entry 6 records -- test code holding an `ObjRef` in a Rust local across an allocation, which no watermark can reach.
+
+**The committed witness is `tests/collect_policy.rs`**, and it is the first thing in this tree that reads `Outcome::collections` on an *ordinary* run. `collect_stress.rs` cannot: that mode overrides the trigger, and every corpus program is far below the growth allowance, so under `run_program` they all collect zero times and pass whatever the policy is. Two tests, and the second is the adjacent case: with the `DROP` removed the live set stays live, there are no free slots to wait for, and the count must **not** fall -- which is what stops the first test being satisfied by a collector that simply fires less.
+
+**Both were mutation-checked, in both directions.** Reverting the condition to the live count reddens the first test and **the entire workspace without that file stays green**. Setting the growth allowance to `usize::MAX`, so nothing collects at all, reddens both.
+
+Gates: `cargo test --workspace` **1440 passed, 0 failed, 4 ignored** in dev and release -- BASE's 1438 plus the two above. `cargo fmt --all --check` clean. `cargo clippy --workspace --all-targets -- -D warnings` clean from a full `cargo clean`, with `Checking rexx-core` and `Checking rexx-exec` confirmed in the log. `rexx-run` sha256 `8ef5c32e99503841b11aece93eb32200127366cf8b0742c12bc467212e1fe82d`, size 13832312, reproduced from the committed source after that clean.
+
+#### Whether the IR should emit a GC op: **no**, and the reason is not "not yet"
+
+Raised alongside the trigger question, and it is a design question rather than a measurement, so it is answered here rather than tried.
+
+**What a VM emits is not "collect now" but a safepoint poll, and polls exist to stop *other threads*.** HotSpot puts them at loop back-edges and returns so that a thread requesting a collection can bring the others to a known state. This crate is single-threaded until Phase 6: there is nothing to stop, so a poll buys nothing and costs an op in `run_ops`' own loop -- the one function every axis runs, and the one entry 3 measured a 399-million-instruction displacement in.
+
+**The question an op could usefully answer is a different one -- where is the root set precise -- and the answer is that the precise point already exists and is not an op.** The clause boundary truncates the temps stack to a known watermark, once per clause, through an enter/leave pair that is already there. **This entry's own numbers are what say that matters**: three of six axes reclaim their whole footprint from cause B, which is precision and not frequency, and they collect zero times.
+
+**It is still not worth making the trigger.** Collecting only at clause boundaries would leave a single clause that allocates heavily -- a long concatenation chain, an `INTERPRET` fragment -- unable to collect at all while it ran, and the allocation site is where the pressure is actually known. Precision and trigger are different axes and this crate now has one of each, at no cost in instructions.
+
+#### Disposition: **accepted, and explicitly not as a performance candidate**
+
+The accept rule asks for a paired interleaved comparison showing a reproducible gain. **This shows none**: no axis moves in work terms, and the wall movements are layout in both directions. Judged as an optimisation it would be discarded.
+
+It lands because the question it answers is not "is this faster" but "what should the collector trigger on", and there the evidence is one-sided: the two signals are indistinguishable on everything this suite measures, and on the one shape that separates them the growth signal does a third of the work for the same footprint. **It is also the shape the reference implementation uses**, minus the half that does not port, which is a better warrant for a policy than a constant chosen here.
+
+Commit: read back from `git log` after committing, below.
+
+#### What this entry cannot say
+
+* **The collection counts were read from instrumented builds**, not from the two binaries the wall figures come from. They differ from those only by an `eprintln` behind an environment variable and by `Heap::will_grow` being `pub`, but they are not the same binaries and the counts are not a property of the ones that were timed.
+* **The transient shape is one program, not a family.** How the two signals compare across live-set sizes, churn lengths and object widths is unmeasured; three points were taken and all three favour the growth signal.
+* **Nothing here reacts to payload bytes**, and the limitation is named in the code rather than closed. A program holding a few very large strings collects on neither policy.
+* **It re-measures no oracle ratio**, like every entry since entry 2.
+* **The `-2.02%` on `arith` and `+2.02%` on `alloc4c` are not results.** Their instruction columns are flat and this entry claims neither.

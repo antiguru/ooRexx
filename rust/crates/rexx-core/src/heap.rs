@@ -298,6 +298,32 @@ impl Heap {
     pub fn live_count(&self) -> usize {
         self.live
     }
+
+    /// Whether the next allocation would **grow** the arena rather than reuse
+    /// a slot an earlier collection freed.
+    ///
+    /// The pressure signal a collector wants, and the reason it is exposed
+    /// rather than derived from `live_count` and `slot_capacity`: it is the
+    /// branch `alloc_with_uncollected` is about to take, so a caller testing
+    /// it is asking the allocator's own question and not reconstructing it.
+    ///
+    /// **It is this crate's stand-in for the oracle's allocation failure.**
+    /// `NormalSegmentSet::handleAllocationFailure`
+    /// (`interpreter/memory/MemorySegment.cpp:1135`) collects, then calls
+    /// `adjustMemorySize` -- "now that we have good GC data, decide if we
+    /// need to adjust the heap size" -- then retries. The oracle can trigger
+    /// on failure because it owns its segments; this crate takes each
+    /// object's payload from `malloc`, which does not fail, it grows the
+    /// process until the OOM killer arrives. There is no failure event here,
+    /// and this branch is the moment that means the same thing: the arena is
+    /// about to ask for more.
+    ///
+    /// It answers `true` for a fresh heap, which has no free list yet, so a
+    /// caller needs a growth allowance of its own as well -- exactly the
+    /// second half of the oracle's shape.
+    pub fn will_grow(&self) -> bool {
+        self.free_head.is_none()
+    }
 }
 
 impl Default for Heap {

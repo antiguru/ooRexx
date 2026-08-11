@@ -1796,9 +1796,13 @@ above.
   record below is kept rather than deleted, per this file's CLOSED DEFECTS
   convention. What changed, and what the same probes read afterwards:
 
-    CAUSE A. Interp::alloc_with (lib.rs) collects when the live-object count
-    reaches a watermark, set to twice the survivors after each collection
-    with a floor of 65,536 (COLLECT_FLOOR). Nothing collected before it.
+    CAUSE A. Interp::alloc_with (lib.rs) collects when the arena is about to
+    grow (Heap::will_grow) and has reached a watermark, set to twice the
+    survivors after each collection with a floor of 65,536 (COLLECT_FLOOR).
+    Nothing collected before it. The growth half of that condition landed in
+    record entry 7, on the shape of the oracle's own
+    NormalSegmentSet::handleAllocationFailure; entry 6 tested the live count
+    alone, and the two fire at identical points on every benchmark axis.
 
     CAUSE B. Interp::loop_advance's Controlled arm and Interp::eval_condition
     each open a RootSet frame around their own per-pass pushes and pop it
@@ -1811,6 +1815,11 @@ above.
   axes falls 41.1x on arith, 14.5x on compound, 220.1x on strings, 59.4x on
   varlookup, 71.1x on emptyloop, 151.8x on rexxcps and 2.1x on alloc4c --
   the last being the axis whose live set is genuinely large.
+
+  WHICH CAUSE PRODUCED WHICH FALL, since the two are separable and the row
+  above does not say: compound, varlookup and emptyloop collect ZERO times,
+  so their 14.5x, 59.4x and 71.1x are entirely cause B. Cause A is what moves
+  strings (274 collections), arith (52) and alloc4c (30).
 
   THE USER-VISIBLE SYMPTOM IS GONE. Under the same `ulimit -v 1048576`,
   arith and strings both complete at rc 0 with the correct answer where they

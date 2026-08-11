@@ -315,15 +315,15 @@ pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 /// thing the change affects, not the counter itself.
 pub const INTERPRETER_STACK_BYTES: usize = 512 * 1024 * 1024;
 
-/// The live-object count below which no ordinary run ever collects, and the
-/// floor every later watermark is raised to (see `Interp::collect_at`).
+/// The arena size below which no ordinary run ever collects, and the floor
+/// every later growth allowance is raised to (see `Interp::collect_at`).
 ///
-/// A heap of this many objects costs about 6 MB of arena slots, at the 96
-/// bytes per `Slot` `phase-4d-retention.md` measured, plus each object's own
-/// payload. Below it there is nothing worth reclaiming and a collection is
-/// pure cost: a program that allocates a few hundred values -- which is most
-/// of the corpus -- never collects at all, and pays one comparison per
-/// allocation for the trigger's existence.
+/// An arena of this many slots costs about 6 MB, at the 96 bytes per `Slot`
+/// `phase-4d-retention.md` measured, plus each object's own payload. Below it
+/// there is nothing worth reclaiming and a collection is pure cost: a program
+/// that allocates a few hundred values -- which is most of the corpus --
+/// never collects at all, and pays one branch per allocation for the
+/// trigger's existence.
 ///
 /// The number is a round power of two rather than a tuned one. It is the
 /// floor `phase-4d-retention.md`'s prototype used, kept so that this crate's
@@ -1708,13 +1708,28 @@ struct Interp {
     /// same flag and should not have to rename it away from a gate task's
     /// number.
     stress_collect: bool,
-    /// The live-object count at which [`Interp::alloc_with`] collects, and
-    /// the whole of this crate's trigger policy.
+    /// The arena size at which [`Interp::alloc_with`] collects, and half of
+    /// this crate's trigger policy. The other half is `Heap::will_grow`.
     ///
-    /// **A watermark on survivors, doubled after every collection, floored at
-    /// [`COLLECT_FLOOR`].** Collect when the heap holds this many live
-    /// objects; afterwards set it to twice what survived. Two properties come
-    /// out of that and nothing else was asked of it:
+    /// **Collect when the arena is about to grow AND it has reached this
+    /// many slots; afterwards set it to twice what survived, floored at
+    /// [`COLLECT_FLOOR`].** The two halves answer different questions and
+    /// both are needed:
+    ///
+    /// * **`will_grow` is the pressure event.** It is the moment the process
+    ///   would ask for more memory, which is what the oracle triggers on --
+    ///   see that method's own doc for why its allocation-failure signal does
+    ///   not port and this branch is the analogue that does. While swept
+    ///   slots remain there is nothing to gain by collecting again, and this
+    ///   is what stops it happening.
+    /// * **This watermark is the growth allowance.** A fresh heap has no free
+    ///   list, so `will_grow` alone would collect on every allocation
+    ///   forever, finding nothing. Doubling it from the survivors is the
+    ///   oracle's `adjustMemorySize` step: the collection's own result sets
+    ///   the next threshold rather than a constant somebody picked.
+    ///
+    /// Three properties come out of the pair, and nothing else was asked of
+    /// it:
     ///
     /// * **The peak is bounded by the live set rather than by the program's
     ///   total allocation.** Before this existed nothing collected at all, so
@@ -1727,11 +1742,25 @@ struct Interp {
     ///   whatever `n` is. That is what keeps a program with a genuinely large
     ///   live set -- `alloc4c.rex`'s growing compound table -- from
     ///   re-marking it on a schedule the live set itself sets.
+    /// * **A transient does not go on being paid for.** Measured, a program
+    ///   building 200,000 live tails, dropping them, then making 2,000,000
+    ///   short-lived values: 11 collections against the 35 a watermark on the
+    ///   *live count* alone performs, for the same peak resident set and the
+    ///   same output. The count-based form collects while thousands of swept
+    ///   slots sit unused, because live has fallen back to the floor.
     ///
-    /// It is a **policy** and policies invite tuning, so this one is fixed
-    /// and stated rather than searched: it is the shape `phase-4d-retention.
-    /// md` prototyped and measured, and a threshold tuned until a benchmark
-    /// number looked right would not survive a different workload.
+    /// **The blind spot, named rather than left to be discovered: this counts
+    /// slots, not bytes.** A slot is 96 bytes of arena; the object's payload
+    /// -- a string's bytes, a `Number`'s digit vector, a stem's map -- is a
+    /// separate `malloc` the heap does not size. So a few very large strings
+    /// are few slots and a great deal of memory, and neither half of this
+    /// policy reacts to them. Byte accounting would need payload sizes
+    /// `Body` does not carry today.
+    ///
+    /// It is a **policy** and policies invite tuning, so the numbers in it
+    /// are fixed and stated rather than searched: a threshold adjusted until
+    /// a benchmark number looked right would not survive a different
+    /// workload.
     collect_at: usize,
     /// Current `eval` recursion depth, and the deepest it has reached.
     ///
@@ -2364,11 +2393,12 @@ impl Interp {
     ///
     /// **Two things can make it collect first, and they are different
     /// questions.** `stress_collect` collects on *every* allocation and is a
-    /// test instrument (`run_program_collect_every_alloc`). `collect_at` is
-    /// the production trigger: an ordinary run collects when the live-object
-    /// count reaches the watermark that field's own doc comment defines. An
-    /// ordinary allocation therefore costs one `bool` test and one `usize`
-    /// comparison against a count the heap already maintains.
+    /// test instrument (`run_program_collect_every_alloc`). The other is the
+    /// production trigger, and it is two tests: the arena is about to grow,
+    /// and it has reached `collect_at` slots. `collect_at`'s own doc comment
+    /// defines the policy; the cost when it does not fire is an `Option`
+    /// discriminant test and a `usize` comparison, both against state the
+    /// heap already maintains.
     ///
     /// **Every allocation is a collection point, and that is what makes the
     /// rooting discipline load-bearing rather than advisory.** Before this
@@ -2413,7 +2443,9 @@ impl Interp {
         behaviour: rexx_core::BehaviourId,
         body: rexx_core::Body,
     ) -> ObjRef {
-        if self.stress_collect || self.heap.live_count() >= self.collect_at {
+        if self.stress_collect
+            || (self.heap.will_grow() && self.heap.slot_capacity() >= self.collect_at)
+        {
             let stats = self.heap.collect(&self.roots);
             // `pending_uninit` is what the collector resurrected so a finalizer
             // could run against a whole graph. Nothing in this crate sets
