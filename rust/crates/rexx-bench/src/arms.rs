@@ -95,11 +95,22 @@ impl Arm {
     /// The `REXX_ENGINE` value that selects this arm. `rexx-run` rejects a
     /// value it does not recognise rather than defaulting, so a typo here is
     /// a failed run rather than an arm silently measured against itself.
-    fn engine(self) -> &'static str {
+    pub fn engine(self) -> &'static str {
         match self {
             Arm::TreeWalker => "tree-walker",
             Arm::Ir => "ir",
         }
+    }
+
+    /// The arm a command line named, by the same spelling [`Arm::engine`]
+    /// writes.
+    ///
+    /// **One table, read both ways**, so a binary offering `--engine` cannot
+    /// accept a spelling the variable would reject or reject one it would
+    /// accept. `every_arm_parses_the_spelling_it_writes` asserts the round
+    /// trip rather than describing it.
+    pub fn parse(spelling: &str) -> Option<Arm> {
+        Arm::BOTH.into_iter().find(|arm| arm.engine() == spelling)
     }
 }
 
@@ -691,11 +702,7 @@ pub fn measure(
             .iter()
             .find(|(size, _, _)| *size == cell.size)
             .expect("every cell names a rendered size");
-        let side = Side {
-            label: "rust",
-            binary: builds[cell.build].binary.clone(),
-            env: vec![("REXX_ENGINE".to_string(), cell.arm.engine().to_string())],
-        };
+        let side = Side::rust(builds[cell.build].binary.clone(), cell.arm);
         let completed = run(&side, path, workdir, &wrapper)?;
         if !completed.succeeded() {
             return Err(format!(
@@ -856,6 +863,24 @@ mod tests {
         assert_eq!(fixed.sizes(), &[Size::Small]);
         let scaled = Workload::classify("scaled".into(), "n = 5\n".into()).unwrap();
         assert_eq!(scaled.sizes(), &[Size::Small, Size::Large]);
+    }
+
+    /// Every arm parses back from the spelling it writes, and nothing else
+    /// parses at all.
+    ///
+    /// The second half is the one with teeth: a `parse` that answered
+    /// `Some(TreeWalker)` for an unrecognised word would let `--engine ri`
+    /// measure the tree-walker while its caller believed it had asked for the
+    /// other engine, which is the failure `rexx-run` refuses a bad
+    /// `REXX_ENGINE` to avoid.
+    #[test]
+    fn every_arm_parses_the_spelling_it_writes() {
+        for arm in Arm::BOTH {
+            assert_eq!(Arm::parse(arm.engine()), Some(arm));
+        }
+        for other in ["", "ri", "IR", "tree walker", "treewalker", "tw", "default"] {
+            assert_eq!(Arm::parse(other), None, "`{other}` parsed as an arm");
+        }
     }
 
     /// No cell keeps its slot across the rounds.

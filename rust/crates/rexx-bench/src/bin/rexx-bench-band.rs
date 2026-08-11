@@ -69,6 +69,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use rexx_bench::arms::Arm;
 use rexx_bench::child::{Counted, Side, Wrapper, parse_counters, run};
 
 /// Number of fields in a row. Named so [`row`] can take an array of exactly
@@ -160,6 +161,21 @@ fn load_average() -> String {
 }
 
 fn collect(arguments: &[String]) -> ExitCode {
+    // Named rather than inherited, and it reaches the rows through the side's
+    // own label -- `rust-ir` or `rust-tw` in the `side` column, where a run
+    // reduced later says which arm produced it. Rows written before this
+    // choice existed read plain `rust` and are tree-walker rows; `summarise`
+    // branches on `oracle`, so both shapes still reduce.
+    let arm = match flag(arguments, "--engine") {
+        None => Arm::Ir,
+        Some(spelling) => match Arm::parse(&spelling) {
+            Some(arm) => arm,
+            None => {
+                eprintln!("rexx-bench-band: --engine {spelling}: expected `ir` or `tree-walker`");
+                return ExitCode::from(2);
+            }
+        },
+    };
     let pass = flag(arguments, "--pass").unwrap_or_else(|| "1".to_string());
     let config = flag(arguments, "--config").unwrap_or_else(|| "default".to_string());
     let axes: Vec<String> = flag(arguments, "--axes")
@@ -193,7 +209,7 @@ fn collect(arguments: &[String]) -> ExitCode {
         );
         return ExitCode::FAILURE;
     }
-    let rust = Side::rust(rust_binary);
+    let rust = Side::rust(rust_binary, arm);
 
     // Every child runs here rather than in the repository or in the
     // scratchpad root: the oracle resolves an unresolved call name against the

@@ -63,6 +63,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::time::Duration;
 
+use rexx_bench::arms::Arm;
 use rexx_bench::child::{ADDRESS_SPACE_LIMIT_KIB, Counted, ORACLE_ROOT, Side, Wrapper, run};
 use rexx_bench::timing::{MedianInterval, median_interval_indices};
 
@@ -187,6 +188,24 @@ const AXES: &[Axis] = &[
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().collect();
     let self_check = arguments.iter().any(|arg| arg == "--self-check");
+    // Which engine "this crate" means, named rather than inherited, and
+    // printed in the provenance block beside every other identity a ratio
+    // here depends on. The default is the engine `rexx-run` ships, so a run
+    // with no arguments measures what this crate now is; `phase-4e-anchor.md`
+    // and `perf-baseline.md` were taken before this choice existed and are
+    // tree-walker figures, so reproducing either needs
+    // `--engine tree-walker`. An unrecognised value is refused rather than
+    // defaulted, exactly as `rexx-run` refuses one.
+    let arm = match flag_value(&arguments, "--engine") {
+        None => Arm::Ir,
+        Some(spelling) => match Arm::parse(&spelling) {
+            Some(arm) => arm,
+            None => {
+                eprintln!("rexx-bench-suite: --engine {spelling}: expected `ir` or `tree-walker`");
+                return ExitCode::from(2);
+            }
+        },
+    };
     let (pairs, warmup, offset_pairs, offset_warmup) = if self_check {
         (1, 0, 3, 0)
     } else {
@@ -248,7 +267,7 @@ fn main() -> ExitCode {
     }
 
     let oracle = Side::oracle();
-    let rust = Side::rust(rust_binary.clone());
+    let rust = Side::rust(rust_binary.clone(), arm);
 
     let mut report = String::new();
     let mut failures: Vec<String> = Vec::new();
@@ -264,6 +283,7 @@ fn main() -> ExitCode {
         &oracle_binary,
         &objects,
         &rust_binary,
+        arm,
         pairs,
         warmup,
         offset_pairs,
@@ -678,6 +698,7 @@ fn write_provenance(
     oracle_binary: &Path,
     oracle_objects: &[PathBuf],
     rust_binary: &Path,
+    arm: Arm,
     pairs: usize,
     warmup: usize,
     offset_pairs: usize,
@@ -726,6 +747,16 @@ fn write_provenance(
         "| this crate `rexx-run` | `{}` -- {} |",
         rust_binary.display(),
         fingerprint(rust_binary)
+    );
+    // The engine belongs here for the same reason the sha256 does: it decides
+    // what the ratios below are ratios of, and a report that omits it can be
+    // compared against a baseline taken on the other arm with nothing to
+    // notice. Every figure recorded before this row existed is a tree-walker
+    // figure, because that is what `rexx-run` defaulted to at the time.
+    let _ = writeln!(
+        report,
+        "| this crate's engine | `REXX_ENGINE={}`, set by this harness on every run |",
+        arm.engine()
     );
     let _ = writeln!(
         report,
