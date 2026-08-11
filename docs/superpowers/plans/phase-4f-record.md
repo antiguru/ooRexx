@@ -579,3 +579,143 @@ Commit: `d9bf260ec7873e2b2f0b30624eb4b9d7efb3df5c`, read back from `git log` aft
 * **The layout windfall is reproducible for this pair of binaries and nothing more.** Three perf reps and seven wall rounds agree on it; whether it survives the next build is not something this entry measured, and the honest expectation is that it does not.
 * **It changed ten call sites and no others.** `state.rs` and `datetime.rs` render an integer answer to text the same way at fourteen further sites (`DIGITS`, `FUZZ`, `QUEUED`, `LINES`, `DATE('B')`, `TIME('T')` among them). None is reached by any axis in this suite, so none was changed and none was measured.
 * **`%` and `**` on a counted operand are correct by the grid above and unmeasured for speed**, because no axis in this suite puts one there.
+
+### Entry 5 -- candidate 3 attempted and **accepted**: every simple-variable write and the loop control bound to an integer slot
+
+**BASE is `217006fe`**, the state entry 4 left. Its `rexx-run` is entry 4's HEAD binary reproduced byte for byte, which is what says the two intervening commits are the record and nothing else.
+
+#### The re-profile that chose the sites, because entry 2's shares for `varlookup` are two accepted changes old
+
+Entry 4 explicitly disclaims `varlookup`'s movement in its own sitting as a code-layout windfall it cannot claim, so this axis's shares at head were unknown and were measured before anything was picked. Same instrument as entries 2 and 4: `samply` 0.13.1 `--save-only`, 1 kHz, `REXX_ENGINE=ir` set in the script, fresh empty directory, `ulimit -v 8388608`, analysed through `pollard` with `expand_inlines`. 4471 ms, 4468 samples, `unsymbolicated_pct` 0.0023%; the run's duration sits inside the head wall times below.
+
+A share is a subtree total unless it says self.
+
+| block at head | share | samples |
+|---|---:|---:|
+| `Interp::assign_expr_target` -- **site (i), the store side** | 26.9% | 1203 |
+| ... of which `Interp::slot_of`, the name-keyed `HashMap` | 20.0% | 894 |
+| ... of which `malloc`, which is the `Vec<u8>` copy of the name | 2.9% | 130 |
+| `bind_control` -> `slot_of` -- **site (ii), the control variable's write** | 7.6% | 338 |
+| `loop_advance` -> `read_at`, the id-keyed map -- **site (ii), its re-read** | 5.9% | 262 |
+| addressable total | 40.4% | 1803 |
+
+**All three of entry 2's sites are still there, and one of them turns out not to be a site of its own.** Entry 2 lists "(iii) the id-keyed map on reads the compiler could not resolve, 6.3% of the axis" separately from the loop control variable. At head every `read_at` sample that is not under `Op::Load`'s own `read_symbol` (2.8%, and that one already carries a compile-time slot) is the control variable's re-test read. So (iii) and (ii)'s read half are one block, 5.9%, and this entry takes **(i) and (ii)**; there is no third thing left to take on this axis. That is a finding about the queue rather than a shortfall.
+
+#### The hypothesis, named before it was measured
+
+`Op::Store { index, src }` carried no slot, so `assign_expr_target`'s `ExprKind::Variable` arm called `code.symbols.name(*id).as_bytes().to_vec()` and looked *that* up in `Plan::names`. The `Vec` existed only so `trace_assignment` could borrow it. `bind_control` did the same lookup once per loop pass for a variable whose slot is fixed when the loop is entered, and `loop_advance`'s re-test read went through the id-keyed map beside it.
+
+The change is that `Op::Store` carries a `PlanSlot` -- `ReadSlot` renamed, because the resolution is the same one for a read and a write -- and that `LoopState::Controlled` and `LoopState::OverOnce` carry the control variable's slot, taken once at loop entry by `control_slot`.
+
+**The sharing rule is kept by construction, and that is the whole of the design.** The slot is an **argument** to the one `Interp::assign_expr_target`, which both engines still enter: `Op::Store`'s arm in `drive.rs` passes what its op carries, the tree-walker's `Assignment` arm passes `None`, `PARSE` passes `None`, and `bind_control`'s stem and compound arms pass `None`. **No store path was added to the driver.** Only the `Variable` arm reads the argument, because it is the only one that writes a slot by name at all -- a stem write is `stem_assign` under a name and a compound write resolves a tail key at the write site.
+
+**`control_slot` reads the plan's map and never `Interp::slot_of`**, which is what makes it free of side effects: `slot_of` *grows* the frame for a name nobody has bound, and doing that at loop entry rather than at the first write would bind a name earlier than the interpreter does. A control it cannot answer for leaves both the write and the re-read resolving their own slot exactly as before.
+
+#### Predicted movement, written down before the first round ran
+
+| axis | predicted | the reasoning behind it |
+|---|---|---|
+| `varlookup` | **-22% to -34%**, central -28% | 40.4% addressable above, less `set_slot`, the frame read and the write itself, which all stay |
+| `compound` | -8% to -18%, central -12% | one store plus a controlled loop per pass; entry 2 gave this candidate 10.3% there |
+| `emptyloop` | -8% to -20%, central -12% | loop control only, no store; `loop_advance` was 53.9% of that axis in entry 2 |
+| `alloc4c` | -5% to -15%, central -9% | one store plus a controlled loop |
+| `arith` | -4% to -12%, central -7% | entry 2 gave 2.3%, taken before the loop-control half was part of the candidate |
+| `strings` | -3% to -10%, central -6% | entry 2 gave 4.6% |
+| `rexxcps` | 0% to -8% | assignments and a loop, diffusely |
+
+**No axis was predicted at 0%, so this candidate has no untouched-axis control of its own**, and the displacement channel entry 3 discovered cannot be read here the way entry 3 read it. What replaces it is an instruction count on **every** axis, beside cycles and beside wall: entry 4's layout windfall was three axes retiring the *same* instruction stream faster, and a change that moves instructions everywhere is separated from that by the instruction column rather than by an untouched axis.
+
+**Two predictions were beaten and none was missed.** `varlookup` came in at -41.2% against a -34% band edge and `emptyloop` at -31.4% against -20%. Both are the same error: the prediction counted the profiled blocks and not the `Vec<u8>` allocation and free on the traced-name copy, which `emptyloop` pays once per pass with no assignment in its body at all.
+
+#### Build identity
+
+| | |
+|---|---|
+| BASE `rexx-run` | size=13756944, sha256 `0daf0817724aae9b08812096d19cae0c28f3ee0ed100f37029b053f4c5f380f2` -- **entry 4's HEAD binary reproduced byte for byte**, from a clean `git status` at `217006fe` |
+| HEAD `rexx-run` | size=13762264, sha256 `ea3b80c84e11c5a85ba8b8efede9872f0226b57e8f69d479957202d49bfc3922`; the binary **grew** by 5,320 bytes |
+| oracle | the same three objects entry 1 fingerprints, re-hashed here and unchanged: `bb5bb8cc...`, `42136c40...`, `3536b763...` |
+
+**The measured HEAD binary is the committed source's release build, checked rather than assumed**, and the check was needed. A first sitting was taken, and then doc comments were corrected, a `debug_assert!` was added to `bind_control` and `cargo fmt` reflowed two hunks -- none of which changes what the release build executes, all of which move its sha256. **Everything below is re-taken on `ea3b80c8`**, and the source was reproduced back to it by rebuilding and comparing the hash rather than by reading the diff.
+
+#### The accept measurement: the two binaries alternating in one loop
+
+The accept rule's literal shape, and **not** `rexx-bench-suite`, so it is reported as its own instrument. Wall clock, `ulimit -v 8388608`, `REXX_ENGINE=ir`, one fresh empty working directory, the base/head order **rotated every round**. 2026-08-11 16:37:14 to 16:41:58 +02:00, seven rounds per axis, load average 1.89 to 2.38 across the sitting, every run exiting 0. All 42 rounds printed a byte-identical stdout under both binaries, hashed per run.
+
+| axis | base median | head median | head / base | rounds with that sign |
+|---|---:|---:|---:|---:|
+| `varlookup` | 4.4587 s | 2.6200 s | **-41.24%** | **7 of 7** |
+| `emptyloop` | 2.9010 s | 1.9895 s | **-31.42%** | **7 of 7** |
+| `compound` | 3.2301 s | 2.7969 s | **-13.41%** | **7 of 7** |
+| `strings` | 6.9198 s | 6.2433 s | -9.78% | **7 of 7** |
+| `alloc4c` | 1.6344 s | 1.5291 s | -6.44% | **7 of 7** |
+| `arith` | 3.1570 s | 2.9624 s | -6.16% | **7 of 7** |
+
+Per-round on `varlookup`: -41.5%, -41.1%, -41.5%, -41.4%, -40.9%, -41.2%, -41.2%. There is no round in which it is not about four tenths.
+
+`rexxcps` is not read as wall time, for entry 1's reason. Both binaries self-calibrated to the identical `100 x 100`, so their clauses-per-second figures are comparable: five rounds, order rotated, base median **2,307,138** against head **2,372,902** -- **+2.85%**, head ahead in all five.
+
+**A second sitting, 20 minutes earlier, on a binary differing from `ea3b80c8` in doc comments alone, read -41.41%, -31.12%, -13.27%, -8.93%, -5.85% and -5.53% on the same six axes.** It is not the accept measurement -- it timed a binary that is not the committed source -- but two sittings agreeing within 0.7 of a point on every axis is what this machine's reproducibility looks like at this size, and that is worth more here than a discarded sitting usually is.
+
+#### Instructions beside cycles beside wall, which is what says this is work rather than layout
+
+`perf stat -e instructions:u,cycles:u`, three runs per side per axis, arms alternating, medians. A different configuration from the sitting above and read for work rather than for time.
+
+| axis | instructions base | instructions head | change | cycles change | wall change |
+|---|---:|---:|---:|---:|---:|
+| `varlookup` | 66,999,520,289 | 43,092,993,940 | **-35.68%** | -42.05% | -41.24% |
+| `emptyloop` | 41,351,965,597 | 28,127,668,706 | **-31.98%** | -31.15% | -31.42% |
+| `compound` | 41,380,973,834 | 37,005,953,886 | **-10.57%** | -18.64% | -13.41% |
+| `strings` | 70,141,816,452 | 62,900,476,008 | **-10.32%** | -8.95% | -9.78% |
+| `alloc4c` | 11,926,274,026 | 10,697,093,981 | **-10.31%** | -12.26% | -6.44% |
+| `arith` | 30,020,655,807 | 28,865,243,876 | **-3.85%** | -4.06% | -6.16% |
+
+**Every axis executes measurably fewer instructions, so none of this is entry 4's windfall running again**, and the binary grew rather than shrank. What the columns do *not* settle is the remainder: on four of the six the cycle move is larger than the instruction move, by 6.4 points on `varlookup` and 8.1 on `compound`. Removing a hash of a byte string and the dependent load behind it is exactly the shape that raises instructions per cycle, but **nothing here measures IPC and this entry does not claim it** -- `alloc4c` and `strings` move the other way, and no mechanism offered covers both directions.
+
+#### Which of the two sites did the work, measured rather than apportioned
+
+A third binary was built from the committed source with `control_slot` answering `None` for everything, so site (ii)'s two resolutions are off and site (i) plus the per-pass name copy remain. Instructions, three runs per side, medians.
+
+| axis | base | site (i) only | both sites | site (i) alone | both |
+|---|---:|---:|---:|---:|---:|
+| `varlookup` | 67,018,860,368 | 51,214,434,083 | 43,092,993,940 | **-23.58%** | -35.70% |
+| `compound` | 41,421,553,228 | 39,201,392,608 | 37,005,953,886 | **-5.36%** | -10.66% |
+| `emptyloop` | 41,271,104,002 | 38,872,954,683 | 28,127,668,706 | **-5.81%** | -31.85% |
+
+`varlookup` is about two thirds the store side, `compound` about half each, and `emptyloop` is site (ii) almost entirely -- its loop body is a `NOP` and it contains no assignment at all, so its -5.81% under the site (i) build is the `Vec<u8>` name copy in `loop_advance`'s re-test and nothing else. **That is the piece the prediction missed**, and it is why two axes came in past their bands.
+
+#### Peak resident set, which moves nowhere and is recorded for that
+
+`/usr/bin/time -f %M`, same wrapper, one run per side: `strings` 2,511,212 KB against 2,511,112, `varlookup` 149,124 against 149,428, `alloc4c` 392,564 against 391,156, `arith` 438,420 against 438,176, `emptyloop` 194,692 against 196,980, `compound` 39,620 against 40,048. Within 1.2% on every axis and in both directions.
+
+**This candidate removes lookups and one small per-clause allocation, not retained storage**, so a resident set that had fallen would have wanted explaining. Entry 4's falsification -- "peak RSS not falling when it lands" -- is that candidate's and not this one's.
+
+#### Correctness, which outranks the number
+
+**No divergence, on either engine.** Every probe ran from a fresh empty directory under the wrapper `rust/CLAUDE.md` fixes, stdout, stderr and exit status read as three separate descriptors.
+
+* **The three shapes the candidate's own text names were probed first**, because a cached index that survives a frame growing is a wrong-answer defect and outranks any number here. `INTERPRET` binding new names inside a loop whose control slot was taken before it; `PROCEDURE EXPOSE` in a callee that then grows its own frame; a trap handler that assigns and grows the frame with the loop continuing after it; `DROP (v)` binding a name at run time; a loop **inside** an `INTERPRET` fragment, whose control slot comes from the fragment's own translated map; a `TRACE I` run over a store, a control write and a compound target; and stem, compound and `PARSE` targets together. Byte-identical to the oracle on `ir` and `tree-walker` alike.
+* **A 600-program grid**, crossing eight loop-control shapes by five write targets by five frame-growth events by three trace settings, each program its own process so a raising case aborts only itself. Run against BASE and against HEAD, on both engines: **all 2400 descriptors byte-identical between the two binaries**, and the divergence-from-oracle set identical line for line, 154 of 1200 program-and-engine comparisons on both. Those 154 are pre-existing gaps -- `CONDITION('D')`, a missing `>V>` on `DROP (v)`'s indirect value, a trace difference in a `SIGNAL ON SYNTAX` handler -- and the remaining **1046 match the oracle on BASE and still match on HEAD**.
+* **The grid can fail, and that was measured rather than argued.** `write_slot` answering one past the plan's slot takes the divergence count from 154 to 649; `control_slot` answering one past takes it to 800. Both mutations were reverted by `cp` from a copy and the release binary rehashed to `ea3b80c8`.
+
+The committed witnesses are `a_resolved_slot_still_names_its_variable_after_the_frame_grows`, which runs the three growth shapes in one program on **both** engines against bytes measured from the oracle, and `a_compound_control_resolves_its_tail_on_every_pass` beside it as the adjacent case -- a control whose slot must *not* be resolved early, where the body moves which tail it is and the oracle answers `8` where a resolved-once implementation answers `4`. Two compile-time witnesses in `golden_tests.rs` pin the emitted form: that a simple target carries the plan's slot while a stem and a compound target carry none, and that the slot a write carries comes from the plan rather than from the write's position in the stream.
+
+**Two coverage measurements, and one of them is negative.** A `control_slot` off by one reddens the growth witness *and* dozens of existing loop tests, so that witness is not the catcher for a wrong slot -- what is unique to it is the growth. And **widening `control_slot` to answer for a compound control leaves the entire workspace suite green**, including the witness written as its pair: `at` is read in `bind_control`'s `Simple` arm alone, selected by the same `shape_of` predicate, so the value is computed and discarded. That filter is unobservable, no test can pin it, and both the function and the test now say so rather than implying otherwise.
+
+Gates: `cargo test --workspace` **1437 passed, 0 failed, 4 ignored** in dev and **1437 passed, 0 failed, 4 ignored** in release, run counts read rather than exit status alone. Inside the release run the corpus runner reported 10 passed and the dual-engine sweep 9 passed. **BASE was re-counted rather than inherited, and the brief's figure was one behind**: `cargo test --workspace -- --list` in a `git worktree` at `217006fe` enumerates 1437, of which 4 are `#[ignore]`, so BASE runs **1433** -- entry 4's own figure for `d9bf260e`, which `217006fe` sits on top of as a record-only commit. The brief said 1432, which was BASE for entry 4 rather than for this one. HEAD lists 1441, exactly four more, which are the four witnesses above. `cargo fmt --all --check` clean. `cargo clippy --workspace --all-targets -- -D warnings` clean from a full `cargo clean`, with `Checking rexx-exec` confirmed in the log.
+
+#### Disposition: **accepted**
+
+The candidate's own falsification was a paired run moving `varlookup` by less than about 15%, **or a frame whose slots grow under a cached index**. It moved 41.24% with the sign holding in all seven alternations, no probe of the three named growth shapes diverged, and the 600-program grid is byte-identical to BASE across every descriptor. **The hypothesis is confirmed by the route it named**, and the instruction count is the evidence: 23.9 billion fewer instructions on `varlookup`, split two-to-one between the two sites by a third build.
+
+Entry 2's ceiling construction for this candidate was 41.7% of the axis. The measured wall landing is 41.24%, which is *at* that ceiling while the instruction count moved 35.68% -- so unlike entry 3, this one did not overshoot its share, and the gap between the two columns is the part this entry cannot attribute.
+
+Commit: `58dd6a24bc98d14e3f1473d90a4230203dc797da`, read back from `git log` after committing.
+
+#### What this entry cannot say
+
+* **It is one sitting on one Linux host**, unpinned, on a machine whose governor cannot be fixed.
+* **It did not run `rexx-bench-suite`, so it carries no oracle ratios.** Every figure above is against the immediately preceding binary, which is what the accept rule asks for and all it asks for. Where `varlookup` now sits against the oracle is unmeasured, and entry 4's disclaimer means it was already unknown going in.
+* **The cycle move exceeds the instruction move on four of six axes and this entry does not explain it.** IPC was not measured. The direction is what removing memory-dependent work does, and two axes go the other way.
+* **The tree-walker gets nothing from this and was not measured for it.** It passes `None` at every site, so its store still resolves its own slot; the only thing it gains is the `Vec<u8>` name copy removed from `assign_expr_target` and from `loop_advance`, which is shared. Every figure above is the IR arm.
+* **`Op` did not grow and the question of whether it should is untouched.** `Store { index: u32, at: PlanSlot, src: u16 }` is 10 bytes plus a discriminant and the `size_of::<Op>() == 12` assertion still holds unchanged.
+* **The `DO OVER` control's slot is carried and never exercised by a benchmark.** `LoopState::OverOnce` binds once, so the resolution saves one lookup per loop rather than one per pass; it is correct by the grid and worth nothing measurable.
