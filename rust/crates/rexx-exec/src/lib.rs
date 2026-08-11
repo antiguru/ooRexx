@@ -91,8 +91,8 @@ use error::{ClauseSite, Failure, FailureSite, Raised};
 mod eval;
 
 // The builtin functions: the name set (read from `rexx_inventory`, never
-// copied), the per-name arity, and the `dispatch` `resolve_and_run_call`
-// reaches after an internal label misses.
+// copied), the per-name arity, and the `dispatch` `Interp::invoke_call`
+// reaches for a name `resolve_call` answered `Resolved::Builtin` for.
 mod builtin;
 
 // The instruction loop (D16's "Control flow"): `Flow`, and `step` and its two

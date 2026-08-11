@@ -74,7 +74,7 @@ pub(crate) struct BodyKey {
     /// into a `&CodeBody`.
     ///
     /// `Interp::run` builds the main body's plan under `None`;
-    /// `resolve_and_run_call`'s `::ROUTINE` step builds a routine's under
+    /// `Interp::invoke_call`'s `::ROUTINE` step builds a routine's under
     /// `Some(index)`. A routine gets a plan of its own rather than sharing
     /// the caller's, and that is what makes its pool safe to isolate: a
     /// different `CodeBody` means a different name-to-slot map, so the

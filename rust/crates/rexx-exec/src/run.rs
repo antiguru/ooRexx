@@ -207,7 +207,7 @@ pub(crate) enum Flow {
     /// range for the body currently being stepped", which is exactly wrong
     /// for `SIGNAL`: the target always resolves against the running
     /// *activation's* own body (`resolve_signal_target`, mirroring
-    /// `resolve_and_run_call`'s identical fix for `CALL`), and inside an
+    /// `Interp::resolve_call`'s identical fix for `CALL`), and inside an
     /// `INTERPRET` fragment that body is a completely different `Code` from
     /// the one `run_fragment` is stepping.
     ///
@@ -347,10 +347,17 @@ pub(crate) struct SteppedClause {
 /// The fourth outcome -- none of the three below -- is not a variant: it
 /// raises 43.1 at the point of decision, so nothing downstream can hold a
 /// `Resolved` that has nothing to run. Three variants, three paths, and the
-/// paths differ in more than which code runs: `resolve_and_run_call`'s own
+/// paths differ in more than which code runs: [`Interp::invoke_call`]'s own
 /// doc comment has what the builtin path deliberately skips and what a
 /// `::ROUTINE` starts from instead of inheriting.
-enum Resolved {
+///
+/// **`Copy`, because a resolution is a value a call site may keep.**
+/// [`Interp::resolve_call`] answers one and nothing downstream mutates it;
+/// `crate::ir::Op::Call` records it against the op position it was resolved
+/// at, which needs the answer to be a plain value rather than a borrow of the
+/// table it came from.
+#[derive(Clone, Copy)]
+pub(crate) enum Resolved {
     /// A label in the *running activation's* body, at this instruction index.
     Label(usize),
     /// A builtin function name. Which builtin is `builtin::dispatch`'s own
@@ -2974,7 +2981,7 @@ impl Interp {
     }
 
     /// `SIGL`, set at the point of every control transfer -- `SIGNAL`'s own
-    /// two `step` arms and `resolve_and_run_call` (`CALL`, and `ExprKind::
+    /// two `step` arms and `Interp::invoke_call` (`CALL`, and `ExprKind::
     /// Call` through `eval_call`, `eval.rs`) -- to `line`, always `self.
     /// current_clause_line` at the call site (`lib.rs`'s own doc comment on
     /// that field has why it is a field and not a parameter here).
@@ -3801,7 +3808,7 @@ impl Interp {
     /// Resolves a `SIGNAL`/`SIGNAL VALUE` target against the running
     /// *activation's* own body -- not `code.body`, which differs inside an
     /// `INTERPRET` fragment (whose own `labels` is always empty, a label in
-    /// interpreted text being 47.1). Mirrors `resolve_and_run_call`'s
+    /// interpreted text being 47.1). Mirrors `Interp::resolve_call`'s
     /// identical fix for `CALL`, immediately below (`run.rs:2153-2154` in
     /// the tree this task started from) -- found there by running the
     /// composition rather than reading the code, and true of `SIGNAL` for
@@ -3829,80 +3836,51 @@ impl Interp {
         }
     }
 
-    /// Resolves `name`, evaluates the arguments and runs the resolved target
-    /// in its own nested activation -- the whole middle of a call, shared
-    /// between `exec_call` (`CALL`, which settles `RESULT` and translates
-    /// the outcome into a `Flow`) and `eval_call` (`ExprKind::Call`'s
-    /// expression form, `eval.rs`, Task 4, which never touches `RESULT` and
-    /// has no `Flow` to report through since `eval` returns a value, not a
-    /// step outcome).
+    /// Resolves `name` to the thing a call of it runs, with no argument
+    /// evaluated and nothing entered.
     ///
-    /// **Extracted rather than duplicated, by Task 4.** Both callers need
-    /// the identical resolution order, the identical argument-evaluation
-    /// discard, the identical `MAX_ACTIVATION_DEPTH` guard and the identical
-    /// three-piece indent bookkeeping around the nested `run_activation` --
-    /// measured to matter for the expression form too (`trace r` under a
-    /// flat `zz = f(1) + 1` echoes `f`'s own clauses at the calling clause's
-    /// indent plus two, the same D2r rule `CALL` already carries) -- and a
-    /// second hand-copied version of this is exactly the drift this crate's
-    /// other shared tables (`owners.rs`, `phase-4-exclusions.txt`) exist to
-    /// avoid one level up. Task 3's own logic is unchanged by the split: the
-    /// text moved, nothing about what it does did, and `exec_call`'s own
-    /// extensive test suite is what confirms that rather than a claim about
-    /// the diff.
+    /// **The resolution half of a call, and the seam every route goes
+    /// through.** `exec_call` (`CALL`), `eval_call` (`ExprKind::Call`'s
+    /// expression form, `eval.rs`) and `crate::ir::Op::Call` each ask this
+    /// and then hand the answer to [`Interp::invoke_call`], so the four-step
+    /// order below is decided in one place -- which is what stops `CALL
+    /// length 'abc'` and `say length('abc')` answering differently.
+    ///
+    /// **It takes no `Code`, and that is the contract rather than an
+    /// omission**: the search goes against the running *activation's* body,
+    /// which the body a caller happens to be walking is not inside an
+    /// `INTERPRET` fragment.
     ///
     /// `search_labels` is false for `CALL "name"` and for `ExprKind::Call`'s
     /// `CallTarget::Literal`, and its own call sites have the measurements.
     ///
-    /// **Resolution order is internal label, then builtin, then external**,
-    /// and the name is settled against all three *before* an argument is
-    /// evaluated, at the top of this function -- [`Resolved`]'s two variants
-    /// for the two that run something, and an immediate return for the third.
-    /// The order matters both ways round: a label wins over a builtin of the
-    /// same name, and a builtin wins over anything behind it.
+    /// **Resolution order is internal label, then builtin, then `::ROUTINE`,
+    /// then the external file this crate answers 43.1 in place of**, and the
+    /// name is settled against all four *before* an argument is evaluated --
+    /// [`Resolved`]'s three variants for the three that run something, and an
+    /// immediate raise for the fourth. The order matters both ways round: a
+    /// label wins over a builtin of the same name, and a builtin wins over
+    /// anything behind it.
     ///
-    /// A name that is neither is this crate's own declared gap, naming `4c`.
-    /// That is still the right answer for `CALL "SUB"` with `sub:` in the
-    /// program -- the oracle's own Error 43.1 there is a statement that
-    /// nothing outside the label table matched either, which is knowledge
-    /// this crate does not have.
-    ///
-    /// **A same-file `::routine` is what remains behind the builtin step**,
-    /// deferred rather than out of reach. Measured: `call zorkolo` into
-    /// `::routine zorkolo` dispatches on the oracle, where this falls through
-    /// to the loud answer. Whoever wires that step reads `builtin::dispatch`'s
-    /// `None` as the go-ahead, and it is a real answer rather than a
-    /// formality: a name that *collides* with a builtin must go to the
-    /// builtin, measured -- `::routine max` alongside `call max 1,2` still
-    /// calls the builtin -- so a `::routine` search placed in front of this
-    /// one would silently run the wrong routine. `Activation::body`'s own doc
-    /// has what that costs and what whoever closes it inherits.
-    ///
-    /// **The builtin outcome runs no activation at all**, which is measured
-    /// and is why it returns from the middle of this function rather than
-    /// joining the label path below: `builtin`'s own module doc has the three
-    /// observables -- `SIGL`, the `>A>` argument lines and the activation
-    /// level -- with the probe for each. The arguments are evaluated for it by
-    /// exactly the same loop the label path uses, which is what makes those
-    /// `>A>` lines identical without anything here arranging it.
-    pub(crate) fn resolve_and_run_call(
+    /// The external file is Phase 7's, and 43.1 is the oracle's own answer for
+    /// every program that has no such file beside it: measured in a clean
+    /// directory, `call zorkolo` gives 43.1 rc 213 `Could not find routine
+    /// "ZORKOLO".`
+    pub(crate) fn resolve_call(
         &mut self,
-        code: &Code<'_>,
         name: &[u8],
         search_labels: bool,
-        args: &[Option<Expr>],
-    ) -> Result<Ended, Failure> {
-        // **Resolved against the running *activation's* body, not against
-        // `code.body`, and the two differ inside an `INTERPRET` fragment.**
-        // A fragment's `labels` is always empty -- a label in interpreted
-        // text is error 47.1 -- so searching `code.body` would make every
-        // `CALL` inside a fragment unresolvable. Measured on the oracle:
-        // `interpret "call sub"` runs the enclosing program's `sub:`. Found
-        // by running the composition rather than by reading the code: the
-        // first version of this function searched `code.body` and passed
-        // every test that had no `INTERPRET` in it.
+    ) -> Result<Resolved, Failure> {
+        // **Resolved against the running *activation's* body, not against the
+        // body a caller is walking, and the two differ inside an `INTERPRET`
+        // fragment.** A fragment's `labels` is always empty -- a label in
+        // interpreted text is error 47.1 -- so searching the walked body would
+        // make every `CALL` inside a fragment unresolvable. Measured on the
+        // oracle: `interpret "call sub"` runs the enclosing program's `sub:`.
+        // Found by running the composition rather than by reading the code:
+        // the first version of this searched the walked body and passed every
+        // test that had no `INTERPRET` in it.
         let program = Rc::clone(&self.activation().program);
-        let program_id = self.activation().program_id;
         let selector = self.activation().body;
         let Some(activation_body) = body_of(&program, selector) else {
             return Err(Loud::missing_body().into());
@@ -3913,8 +3891,8 @@ impl Interp {
             None
         };
         // **The whole resolution happens here, upstream of the argument loop
-        // below**, and the shape is load-bearing rather than tidy. The
-        // builtin step needs its arguments already evaluated, so it cannot
+        // in `invoke_call`**, and the shape is load-bearing rather than tidy.
+        // The builtin step needs its arguments already evaluated, so it cannot
         // sit where the raising return sits; putting the lookup between the
         // label miss and that return would have placed it upstream of the
         // evaluation it consumes. Deciding all four outcomes first is what
@@ -3959,6 +3937,53 @@ impl Interp {
                 None => return Err(Raised::routine_not_found(name).into()),
             },
         };
+        Ok(resolved)
+    }
+
+    /// Evaluates the arguments of a call already resolved to `resolved` and
+    /// runs it, in its own nested activation where it has one.
+    ///
+    /// **The invocation half, and the counterpart to
+    /// [`Interp::resolve_call`].** Every route into a call reaches this:
+    /// `exec_call` (`CALL`, which goes on to settle `RESULT` and translate the
+    /// outcome into a `Flow`), `eval_call` (`ExprKind::Call`, `eval.rs`, which
+    /// never touches `RESULT` and has no `Flow` to report through since `eval`
+    /// returns a value rather than a step outcome), and `crate::ir::Op::Call`.
+    ///
+    /// **Shared rather than duplicated.** Every caller needs the identical
+    /// argument evaluation and its `>A>` lines, the identical
+    /// `MAX_ACTIVATION_DEPTH` guard and the identical five-piece level
+    /// bookkeeping around the nested `run_activation` -- measured to matter
+    /// for the expression form too (`trace r` under a flat `zz = f(1) + 1`
+    /// echoes `f`'s own clauses at the calling clause's indent plus two, the
+    /// same D2r rule `CALL` already carries) -- and a second hand-copied
+    /// version of this is exactly the drift this crate's other shared tables
+    /// (`owners.rs`, `phase-4-exclusions.txt`) exist to avoid one level up.
+    ///
+    /// **The builtin outcome runs no activation at all**, which is measured
+    /// and is why it returns from the middle of this function rather than
+    /// joining the label path below: `builtin`'s own module doc has the three
+    /// observables -- `SIGL`, the `>A>` argument lines and the activation
+    /// level -- with the probe for each. The arguments are evaluated for it by
+    /// exactly the same loop the label path uses, which is what makes those
+    /// `>A>` lines identical without anything here arranging it.
+    ///
+    /// `code` is the body the **argument expressions** are written in, which
+    /// is the caller's own and is not what `resolve_call` searched.
+    pub(crate) fn invoke_call(
+        &mut self,
+        code: &Code<'_>,
+        resolved: Resolved,
+        name: &[u8],
+        args: &[Option<Expr>],
+    ) -> Result<Ended, Failure> {
+        // The caller's own program and body selector, which a label callee
+        // inherits: the same pair `resolve_call` searched, read again here
+        // rather than threaded out of it, because what it is wanted for is
+        // building the callee rather than finding it.
+        let program = Rc::clone(&self.activation().program);
+        let program_id = self.activation().program_id;
+        let selector = self.activation().body;
 
         // **Evaluated in the caller, before anything is pushed**, which is
         // where the argument expressions' own variables live. Observable
@@ -3979,7 +4004,7 @@ impl Interp {
         // (Task 9). The indent is the *calling* clause's own, read fresh on
         // each pass rather than captured once, because an argument
         // expression can itself contain a call whose callee overwrites
-        // `current_value_indent` -- `resolve_and_run_call` restores it on
+        // `current_value_indent` -- `invoke_call` restores it on
         // the way out, so re-reading it is what keeps a second argument's
         // own line at the caller's indent rather than at the first
         // argument's callee's. Measured (`trace i`): `call sub 1,,3` traces
@@ -4323,6 +4348,25 @@ impl Interp {
         }
     }
 
+    /// [`Interp::resolve_call`] followed by [`Interp::invoke_call`], with
+    /// nothing remembered in between.
+    ///
+    /// **The uncached composition, which is what every tree-walker route
+    /// uses.** A call site that can name itself -- a compiled
+    /// `crate::ir::Op::Call`, which has an op position to hang an answer on --
+    /// keeps the resolution instead and calls the two halves itself; nothing
+    /// here has such a name, so it resolves afresh every time.
+    pub(crate) fn resolve_and_run_call(
+        &mut self,
+        code: &Code<'_>,
+        name: &[u8],
+        search_labels: bool,
+        args: &[Option<Expr>],
+    ) -> Result<Ended, Failure> {
+        let resolved = self.resolve_call(name, search_labels)?;
+        self.invoke_call(code, resolved, name, args)
+    }
+
     /// Evaluates one call argument, keeping the caller's slot when the
     /// argument is a variable reference (`>name` or `<name`).
     ///
@@ -4385,12 +4429,12 @@ impl Interp {
         })
     }
 
-    /// Runs one named `CALL`: `resolve_and_run_call`, then settle `RESULT`
-    /// and translate the outcome into this instruction's own `Flow`. See
-    /// `resolve_and_run_call`'s own doc for the resolution order, the
-    /// argument-evaluation and indent-bookkeeping detail this used to carry
-    /// directly, and why it is shared with `eval_call` (`eval.rs`, Task 4)
-    /// rather than duplicated.
+    /// Runs one named `CALL`: `resolve_call`, then [`Interp::invoke_named_call`].
+    ///
+    /// See `resolve_call`'s own doc for the resolution order and
+    /// `invoke_call`'s for the argument evaluation and indent bookkeeping this
+    /// used to carry directly, and why both are shared with `eval_call`
+    /// (`eval.rs`) rather than duplicated.
     fn exec_call(
         &mut self,
         code: &Code<'_>,
@@ -4398,12 +4442,32 @@ impl Interp {
         search_labels: bool,
         args: &[Option<Expr>],
     ) -> Result<Flow, Failure> {
-        // Captured before `resolve_and_run_call` runs the callee, which
-        // overwrites `current_value_indent` with its own clauses' -- this is
-        // the `CALL` clause's own printed indent, needed below for the
-        // caller-side `RESULT` trace.
+        let resolved = self.resolve_call(name, search_labels)?;
+        self.invoke_named_call(code, resolved, name, args)
+    }
+
+    /// The `CALL` instruction past its resolution: [`Interp::invoke_call`],
+    /// then settle `RESULT` and translate the outcome into this instruction's
+    /// own `Flow`.
+    ///
+    /// **Split from `exec_call` so that a compiled call site can enter here**
+    /// with a resolution it kept from an earlier execution
+    /// (`crate::ir::Op::Call`). Everything a `CALL` does that
+    /// `ExprKind::Call` does not is in this function and nowhere else, so the
+    /// two routes cannot come to settle `RESULT` differently.
+    pub(crate) fn invoke_named_call(
+        &mut self,
+        code: &Code<'_>,
+        resolved: Resolved,
+        name: &[u8],
+        args: &[Option<Expr>],
+    ) -> Result<Flow, Failure> {
+        // Captured before `invoke_call` runs the callee, which overwrites
+        // `current_value_indent` with its own clauses' -- this is the `CALL`
+        // clause's own printed indent, needed below for the caller-side
+        // `RESULT` trace.
         let base_indent = self.clause_state.current_value_indent;
-        let ended = self.resolve_and_run_call(code, name, search_labels, args)?;
+        let ended = self.invoke_call(code, resolved, name, args)?;
 
         let value = match ended {
             // `EXIT` inside the callee ends the program rather than the
@@ -12473,7 +12537,7 @@ mod tests {
     /// A `SIGNAL` target that matches no label in the running activation's
     /// own body is Error 16.1, "Label not found" -- unlike `CALL`'s own
     /// unresolved name, which still has a builtin/external fallback to defer
-    /// to (`resolve_and_run_call`'s own doc), `SIGNAL` has none, so this is
+    /// to (`Interp::resolve_call`'s own doc), `SIGNAL` has none, so this is
     /// the oracle's real answer and not a loud gap.
     #[test]
     fn signal_to_an_undefined_label_raises_16_1() {

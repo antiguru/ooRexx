@@ -562,18 +562,23 @@ impl Interp {
     /// **Resolution is four steps -- internal label, builtin, `::ROUTINE`,
     /// then an external Rexx file -- and none of them is in this function.**
     /// `eval_call` only decides the two inputs a `CallTarget` reduces to
-    /// (`name`, `search_labels`) below and hands them to
-    /// `resolve_and_run_call` (`run.rs`), which both this function and
-    /// `exec_call` (`CALL`) share, and which owns all four steps: the label
-    /// search (`activation_body.labels.get(name)`), the builtin table, the
+    /// (`name`, `search_labels`) below and hands them to `Interp::resolve_call`
+    /// (`run.rs`), which both this function and `exec_call` (`CALL`) share, and
+    /// which owns all four steps: the label search
+    /// (`activation_body.labels.get(name)`), the builtin table, the
     /// `::ROUTINE` lookup, and the 43.1 that stands in for the file search
     /// this crate does not do. Only the fourth is deferred, to **Phase 7**.
     /// Keeping them there rather than here is what stops `CALL length 'abc'`
     /// and `say length('abc')` answering differently. `eval_call` itself owns
     /// no expression-only resolution step; the only thing specific to this
-    /// call form is what happens *after* `resolve_and_run_call` returns
+    /// call form is what happens *after* `Interp::invoke_call` returns
     /// (`Ended`'s three cases, below), which `CALL` does not need because it
     /// never produces a value for an enclosing expression to use.
+    ///
+    /// **The two halves are entered here rather than through their
+    /// composition, and uncached**: an expression call has no name of its own
+    /// to remember an answer under, where a compiled `CALL` site has its op
+    /// position (`crate::ir::Op::Call`).
     ///
     /// **`CallTarget::Literal` never searches the label table, symmetric
     /// with `CALL "SUB"` (Task 3).** Its own doc in `rexx-parse` already
@@ -604,10 +609,11 @@ impl Interp {
             CallTarget::Symbol(id) => (code.symbols.name(*id).as_bytes(), true),
             CallTarget::Literal(bytes) => (bytes, false),
         };
-        match self.resolve_and_run_call(code, name, search_labels, args)? {
+        let resolved = self.resolve_call(name, search_labels)?;
+        match self.invoke_call(code, resolved, name, args)? {
             // `EXIT` inside the routine, or the routine falling off its own
             // end, ends the whole program exactly as it does when the same
-            // routine is reached through `CALL` (`resolve_and_run_call`'s
+            // routine is reached through `CALL` (`Interp::invoke_call`'s
             // own doc, `run.rs`). Propagated as `Failure::Exited` because
             // `eval`'s own return type is a plain `ObjRef` with no `Flow` to
             // carry the event through instead -- see that variant's own doc
@@ -2218,7 +2224,7 @@ mod tests {
 
     /// **Measured**: a caller's `RESULT` is unaffected by `f(1)` appearing in
     /// an expression, unlike `CALL`, which settles it on every return
-    /// (`resolve_and_run_call`'s own doc, `run.rs`). `result = 'before'`
+    /// (`Interp::invoke_named_call`'s own doc, `run.rs`). `result = 'before'`
     /// survives `zz = f(1)` untouched.
     #[test]
     fn an_internal_functions_expression_form_does_not_touch_result() {

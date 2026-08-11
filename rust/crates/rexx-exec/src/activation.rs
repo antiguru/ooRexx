@@ -371,7 +371,7 @@ pub(crate) struct Activation {
     /// `&CodeBody`, so the two spellings cannot come apart.
     ///
     /// `Some(i)` is a `::ROUTINE` activation, built by [`Activation::routine`]
-    /// from `resolve_and_run_call`'s third resolution step. The order in
+    /// from `Interp::resolve_call`'s third resolution step. The order in
     /// front of it is load-bearing rather than
     /// tidy -- internal label, then builtin, then `::ROUTINE` -- because a
     /// routine name that **collides** with a builtin must go to the builtin.

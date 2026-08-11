@@ -393,7 +393,7 @@ impl Raised {
     /// end of the routine with no `RETURN` at all: that is `Ended::Exited`,
     /// measured to end the whole program silently (rc 0, no stdout) rather
     /// than raise anything, exactly as falling off the end of a `CALL`ed
-    /// routine already does (`resolve_and_run_call`'s own doc, `run.rs`).
+    /// routine already does (`Interp::invoke_call`'s own doc, `run.rs`).
     pub(crate) fn no_data_returned(name: &[u8]) -> Raised {
         Raised::syntax(44, 1, vec![name.to_vec()])
     }
@@ -1430,7 +1430,7 @@ pub(crate) enum Failure {
     /// no such room, so this variant is what lets the same event travel
     /// through an expression instead: constructed once, in `eval_call`
     /// (`eval.rs`), and then propagated by every intervening `?` completely
-    /// unremarked -- `step_in_temps_frame`'s and `resolve_and_run_call`'s own
+    /// unremarked -- `step_in_temps_frame`'s and `Interp::invoke_call`'s own
     /// generic "an `Err` escaped, record a site and re-throw" paths do not
     /// need to know this variant exists, because sealing a site nothing
     /// prints is harmless (`execute`, `lib.rs`, never calls `Raised::report`
