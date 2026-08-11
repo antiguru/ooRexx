@@ -693,12 +693,14 @@ pub(crate) fn compile(
 /// The ops that leave expression `slot` of instruction `index` in register
 /// `dst`.
 ///
-/// **What compiles natively is [`native_shape`]'s answer**, and everything
-/// else -- a call, a constant symbol, a `.name`, a `>name`, and any operator
-/// with one of those anywhere inside it -- is evaluated by `eval.rs` through
-/// [`Op::EvalExpr`], which is trace-identical to what the tree-walker does with
-/// the same expression because it is the same call, and stays identical because
-/// nothing this region emits sits between one evaluation and the next.
+/// **What compiles natively is [`native_shape`]'s answer, and nothing here
+/// restates it** -- that function is the enumeration, and a second copy of the
+/// list in prose is one that stops agreeing with it. Everything it declines --
+/// a call and a `.name` are two such expressions -- is evaluated by `eval.rs`
+/// through [`Op::EvalExpr`], which is trace-identical to what the tree-walker
+/// does with the same expression because it is the same call, and stays
+/// identical because nothing this region emits sits between one evaluation and
+/// the next.
 ///
 /// **`expr` is the whole of the instruction's expression at `slot`, and the
 /// choice is taken for the whole of it.** An expression that merely *contains*
@@ -706,7 +708,8 @@ pub(crate) fn compile(
 /// compiled.
 #[expect(
     clippy::too_many_arguments,
-    reason = "four emission sinks and the four facts an EvalExpr needs to name its expression"
+    reason = "the emission sinks, the plan a read resolves its slot against, and the expression \
+              an EvalExpr has to name"
 )]
 fn push_value<'a>(
     ops: &mut Vec<Op>,

@@ -272,6 +272,41 @@ err>      1 *-* say 2 ** 2.5
 err> Error 26 running /nonexistent/ir-dual-case.rex line 1:  Invalid whole number.
 err> Error 26.8:  Operand to the right of the power operator (**) must be a whole number; found "2.5".
 
+# a zero divisor, which is the third raise arithmetic makes and the only one of
+# the three that comes from `rexx-num` rather than from converting an operand.
+# All three dividing operators raise it, and the untrapped form is what pins the
+# clause the report echoes.
+program
+zd = 0
+say 6 // zd
+----
+rc> 214
+err>      2 *-* say 6 // zd
+err> Error 42 running /nonexistent/ir-dual-case.rex line 2:  Arithmetic overflow/underflow.
+err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
+
+# the same divisor under each of the three dividing operators, trapped, so that
+# one row says all three reach it and says which clause SIGL lands on for each.
+program
+zd = 0
+signal on syntax name z1
+say 6 / zd
+z1:
+say 'divide' rc 'at' sigl
+signal on syntax name z2
+say 6 % zd
+z2:
+say 'intdiv' rc 'at' sigl
+signal on syntax name z3
+say 6 // zd
+z3:
+say 'remainder' rc 'at' sigl
+----
+rc> 0
+out> divide 42 at 3
+out> intdiv 42 at 7
+out> remainder 42 at 11
+
 # a failure inside a chain: the clause the condition is reported against is the
 # whole assignment's, not the operator's, and the operators to the left of the
 # failing one have already run.
