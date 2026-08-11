@@ -1002,3 +1002,66 @@ Commit: `3d14fdf46fe25e8e93392490a23594b7298996f5`, read back from `git log` aft
 **What would falsify it.** A paired run moving `strings` and `arith` by less than about 5%, which would say the allocator was never the cost that mattered at this size.
 
 **Its relationship to the payload-bytes blind spot.** Entry 7 recorded that neither trigger policy reacts to payload bytes, so a program holding a few very large strings collects on neither. A replacement allocator does not close that either; the two are independent and both remain open.
+
+### Entry 8 -- entry 6's wall figures re-taken on a quiet host, and two of them were wrong
+
+**No code change. Nothing here is a candidate.** This entry re-measures entry 6 and corrects it, which is what this record's own rule asks for: an entry that turned out wrong is corrected by a later entry saying so, not by editing the one that was wrong.
+
+**Why it was re-taken.** Moritz reported that another agent on this host had started using a great deal of CPU. Entry 6's sitting ran at one-minute load average 2.56 rising to 3.58; entry 7's ran at 0.31 to 0.98. Neither number is alarming on 32 CPUs, and load average is exactly the instrument entry 3 already recorded as inadequate here -- it saw the host at 96.5% busy while `ps` inside this sandbox showed nothing running at all.
+
+#### What was done differently
+
+**Host idle read directly from `/proc/stat` rather than inferred from load average**, and a sitting started only after **six consecutive five-second samples at or above 90% idle**. That gate is entry 3's discipline made mechanical.
+
+**It was needed, and it caught the interferer live.** The first attempt at the fourth sitting below started at **0.1% idle** -- the host went from 99.1% to 0.1% across two consecutive samples -- and its `varlookup` arm contains a single round reading **+39.0%** against a median of -3.8%. That sitting is kept in the table as the instrument's own worst case and is not read for anything else.
+
+#### Five sittings, same two binaries per column, seven rounds per axis, order rotated every round
+
+Sittings 1 to 3 are BASE `ea3b80c8` against entry 6's head `ae24900a`. Sittings 4 and 5 are BASE against entry 7's head `8ef5c32e`, which entry 7 established executes the same work to within 0.15% on every axis, so the two columns are comparable and the split is only which head was to hand.
+
+| axis | s1 busy | **s2 quiet** | **s3 quiet** | s4 *0.1% idle* | **s5 quiet** | quiet median | quiet range |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `strings` | -5.32% | **-10.83%** | **-10.61%** | -13.13% | **-11.34%** | **-10.83%** | 0.73pt |
+| `emptyloop` | -3.09% | -3.71% | -3.35% | -1.68% | -2.01% | **-3.35%** | 1.70pt |
+| `varlookup` | -2.25% | -2.56% | -2.85% | -3.83% | -3.24% | **-2.85%** | 0.69pt |
+| `compound` | -1.31% | -0.64% | -0.59% | -1.07% | -0.71% | **-0.64%** | 0.13pt |
+| `alloc4c` | **+2.69%** | -3.81% | -1.12% | -2.68% | -1.56% | **-1.56%** | 2.69pt |
+| `arith` | +6.63% | +3.39% | +5.47% | +0.98% | +2.06% | **+3.39%** | 3.41pt |
+
+Every run of all five sittings exited 0, and each axis's stdout hash is identical across all seventy runs of it.
+
+#### The three corrections to entry 6
+
+**1. `strings` is -10.8%, not -5.3%. Entry 6 understated its own headline by half.** The three quiet sittings read -10.83, -10.61 and -11.34, a range of 0.73 of a point, against the busy sitting's -5.32. That also moves it much closer to `phase-4d-retention.md`'s prototype prediction of -16%, and entry 6's explanation for the shortfall -- that entry 4 had already taken `strings`' base peak from 3.7 GB to 2.5 GB -- now accounts for the whole of the remaining gap rather than half of it.
+
+**2. `alloc4c` is not a regression, and it is not a result either.** Entry 6 reported +2.69% and read it as the collector costing most where the live set is genuinely large, which is what entry 2 predicted. Across five sittings it reads +2.69, -3.81, -1.12, -2.68 and -1.56, and the sign is unstable **within** sittings too -- 5 of 7 rounds in the two that are closest to zero. **The honest verdict is that this axis produced no usable wall figure**, and entry 6's sentence about it should be read as withdrawn rather than adjusted. Entry 2's prediction is neither confirmed nor refuted here.
+
+**3. `arith` is +3.4%, not +6.6%, and it is still the one real regression.** Its sign held in every one of the 35 rounds across all five sittings. The magnitude is the part that moves.
+
+#### Why those two axes are the unstable ones, from an instrument load cannot touch
+
+Entry 6's time-component measurement -- `/usr/bin/time`'s `%S`, `%U` and minor-fault count -- says where the win and the cost live, and both quantities are load-independent in a way a wall percentage is not. The win is kernel time saved on a heap that stopped growing; the cost is user time spent collecting and freeing. **Predict the net as (user added - system saved) over the base wall, and it lands on the quiet medians:**
+
+| axis | system saved | user added | predicted | quiet median |
+|---|---:|---:|---:|---:|
+| `strings` | 0.84 s | 0.17 s | **-10.90%** | -10.83% |
+| `arith` | 0.12 s | 0.26 s | **+4.75%** | +3.39% |
+| `alloc4c` | 0.13 s | 0.10 s | **-2.00%** | -1.56% |
+| `varlookup` | 0.02 s | -0.04 s | **-2.27%** | -2.85% |
+
+**`strings` is predicted to within 0.07 of a point.** `alloc4c` is the difference of two nearly equal quantities, 0.13 s against 0.10 s, which is exactly the shape whose sign a busy host can flip -- and did. `arith` is cost-dominated by two to one, which is why its sign never moved. **So this is not a choice between two sittings on the ground that one is quieter; the load-independent instrument independently predicts the quiet one.**
+
+#### What does not change
+
+* **Every peak resident set figure.** Resident set does not depend on CPU contention: `strings` 220x, `rexxcps` 152x, `emptyloop` 71x, `varlookup` 59x, `arith` 41x, `compound` 14.5x, `alloc4c` 2.1x all stand, as does `arith` and `strings` going from rc 134 to rc 0 under the standard address-space cap.
+* **Every instruction count**, in entry 6, in entry 7 and in the cause A/cause B split. Entry 5 measured this instrument reproducing to eight figures.
+* **Every correctness result.** No differential, no stress run and no gate is a timing measurement.
+* **Entry 7 entirely.** Its sitting was already on a quiet host (0.31 to 0.98), its conclusion was that the wall movements were layout, and its instruction columns -- flat to within 0.15% -- are what carried that. Nothing here disturbs it. Its `arith` -2.02% and `alloc4c` +2.02% remain disclaimed, and the sittings above are consistent with that: BASE to entry 7's head reads +2.06% on `arith` where BASE to entry 6's head reads +3.39%, a difference inside the spread of either.
+* **The disposition.** Entry 6 was accepted as a defect fix with its cost recorded. The cost is smaller than it recorded -- one axis at +3.4% rather than two axes at +6.6% and +2.7% -- so the trade is better, not worse.
+
+#### What this entry cannot say
+
+* **It does not re-run `rexxcps`**, whose clauses-per-second figure entry 6 took in the busy sitting. +5.52% at 5 of 5 stands unretested, and it is a throughput figure on a self-calibrating program rather than a wall ratio, so the mechanism above does not obviously apply to it.
+* **Three quiet sittings is not a distribution.** The quiet ranges above -- 0.13 to 3.41 points -- are a spread over three points, and the two widest are the two axes whose net is a small difference of larger numbers.
+* **It cannot say what the interferer was.** `ps` inside this sandbox showed nothing but this session's own agent at any point, exactly as entry 3 recorded, so the host's idle percentage is the only evidence of it.
+* **The quiet-run-up gate is not in any committed harness.** It was a shell loop in the scratchpad, and `rexx-bench-suite` has no such check. A later sitting that skips it can reproduce sitting 1 without noticing.

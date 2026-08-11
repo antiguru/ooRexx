@@ -1835,11 +1835,19 @@ above.
   today's reachable behaviour.
 
   WHAT THE CLOSING CHANGE COST, because it is not free: on the paired
-  interleaved wall-clock comparison arith is +6.6% and alloc4c +2.7%, while
-  strings is -5.3%, emptyloop -3.1%, varlookup -2.3% and compound -1.3%.
-  Reclamation pays a free() per reclaimed object that a leak never pays --
-  on arith, profiled at head, drop_glue::<Slot> is 4.5% of the run against
-  Heap::collect's own 0.3% self.
+  interleaved wall-clock comparison arith is +3.4%, and it is the only axis
+  that got slower. strings is -10.8%, emptyloop -3.4%, varlookup -2.9% and
+  compound -0.6%; alloc4c produced no usable figure, its sign flipping across
+  five sittings. Reclamation pays a free() per reclaimed object that a leak
+  never pays -- on arith, profiled at head, drop_glue::<Slot> is 4.5% of the
+  run against Heap::collect's own 0.3% self.
+
+  THESE ARE RECORD ENTRY 8'S FIGURES AND NOT ENTRY 6'S, which were taken on a
+  host another agent was loading and read arith +6.6%, strings -5.3% and
+  alloc4c +2.7%. Three sittings on a host verified at 90%+ idle before
+  starting agree with each other and with a prediction built from the
+  load-independent time components; entry 8 has both. Every peak RSS figure
+  above is unaffected -- resident set does not depend on CPU contention.
 
   WHAT IS STILL NOT CLOSED is the coverage gap this row's last limb
   describes: no harness reads peak resident set, and no corpus program runs
