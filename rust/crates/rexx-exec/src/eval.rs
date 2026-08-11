@@ -485,18 +485,9 @@ impl Interp {
             // rendering of the result is fixed at creation, D15's own rule,
             // but the DIGITS/FORM an operation computes *under* is always
             // the activation's current ones, read fresh on every call.
-            ExprKind::Binary {
-                op:
-                    op @ (Operator::Plus
-                    | Operator::Subtract
-                    | Operator::Multiply
-                    | Operator::Divide
-                    | Operator::IntDiv
-                    | Operator::Remainder
-                    | Operator::Power),
-                left,
-                right,
-            } => self.eval_arithmetic(code, *op, left, right),
+            ExprKind::Binary { op, left, right } if is_arithmetic(*op) => {
+                self.eval_arithmetic(code, *op, left, right)
+            }
 
             // The twelve comparison operators (D15's "Expression
             // evaluation": numeric-or-string `= \= <> >< > < >= <= \> \<`,
@@ -1158,6 +1149,22 @@ fn compare_op(op: Operator) -> CompareOp {
             "eval_node only dispatches the eighteen comparison operators here, got {other:?}"
         ),
     }
+}
+
+/// Whether `op` is one of the seven operators [`Interp::eval_arithmetic`]
+/// computes.
+///
+/// **The guard on `eval_node`'s own arithmetic arm, and so the one enumeration
+/// of the set** -- `crate::ir::compile` decides whether an expression compiles
+/// to `crate::ir::Op::Arith` by asking this, rather than by repeating the list
+/// where nothing would notice the two drifting apart. A compiler that promoted
+/// one operator more than this would run arithmetic on a concatenation.
+pub(crate) fn is_arithmetic(op: Operator) -> bool {
+    use Operator::*;
+    matches!(
+        op,
+        Plus | Subtract | Multiply | Divide | IntDiv | Remainder | Power
+    )
 }
 
 /// Whether `op` is one of the eight strict comparison operators -- decided

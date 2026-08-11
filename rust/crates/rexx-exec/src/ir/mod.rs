@@ -26,7 +26,7 @@
 //! (`Interp::engine`, from the `Invocation`).
 
 use rexx_core::FrameId;
-use rexx_parse::SymbolId;
+use rexx_parse::{Operator, SymbolId};
 
 use crate::eval::SymbolRead;
 use crate::run::HeaderRole;
@@ -304,14 +304,42 @@ pub(crate) enum Op {
     /// is its own upcased spelling, which is in the symbol table, and
     /// `compile` deliberately takes nothing but the body, the plan and the
     /// trace setting -- `Interp::chunk_for`'s own doc comment turns that into
-    /// the cache key's completeness. A `Constant` therefore reaches
-    /// [`Op::EvalExpr`], which traces it identically because it is the same
-    /// `eval.rs` call.
+    /// the cache key's completeness. [`Op::LoadConstant`] is what it compiles
+    /// to instead, naming the symbol and reading its spelling where the table
+    /// is in hand.
     Const { dst: u16, konst: u32 },
-    /// Echoes the `>L>` line of the literal in register `src`.
+    /// Loads the value of the constant symbol `symbol` into register `dst`:
+    /// its own upcased spelling, which is observable rather than incidental --
+    /// `say 1e5` prints `1E5`.
     ///
-    /// **A separate op from the [`Op::Const`] that loaded it**, which is that
-    /// op's own doc comment. Emitted unconditionally rather than under
+    /// **[`Op::Const`] with the bytes somewhere else, and that is the whole of
+    /// the difference.** Both build their value through `Interp::literal`,
+    /// which is what `eval_node`'s own `Literal` and `Constant` arms each call;
+    /// what separates them is that a quoted literal's bytes are in the node, so
+    /// the chunk can intern them, and a constant symbol's are in the symbol
+    /// table, which `compile` does not have. So the symbol travels in the op
+    /// and the spelling is read where `code` is in hand -- the same shape
+    /// [`Op::Load`] uses for the same reason.
+    ///
+    /// **Its echo is [`Op::TraceLiteral`], not an op of its own**, because the
+    /// line is the same one: `trace_intermediate` sends `Literal` and
+    /// `Constant` alike to `echo_literal`, both `>L>` with no tag.
+    ///
+    /// **This is what an unquoted number in an expression is**, which is why
+    /// promoting arithmetic needed it: `zx + 1` holds no `ExprKind::Literal` at
+    /// all, and with the `1` left unpromotable the whole expression falls to
+    /// [`Op::EvalExpr`] and no arithmetic op is emitted for it.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, whose clause owns the
+    /// value indent the line after this one traces at.
+    LoadConstant { symbol: SymbolId, dst: u16 },
+    /// Echoes the `>L>` line of the literal or constant symbol in register
+    /// `src`.
+    ///
+    /// **A separate op from the [`Op::Const`] or [`Op::LoadConstant`] that
+    /// loaded it**, which is that op's own doc comment. One echo for both,
+    /// because `trace_intermediate` sends both node kinds to the same
+    /// `echo_literal`. Emitted unconditionally rather than under
     /// [`ChunkTrace`]'s decision the way [`Op::TraceClause`] is, for the
     /// reason [`Op::TraceKeyword`] gives: the gate this line answers to is
     /// `trace_mode().intermediates`, which [`ChunkTrace`] does not carry, and
@@ -386,6 +414,66 @@ pub(crate) enum Op {
         read: SymbolRead,
         src: u16,
     },
+    /// Computes `lhs op rhs` into register `dst`, for the seven operators
+    /// `eval::is_arithmetic` names.
+    ///
+    /// **Native in the sense [`Op::Const`] and [`Op::Load`] are: `eval.rs` is
+    /// not entered, and neither is it for the operands.** An expression
+    /// compiles to this op only when *both* its operands compile to native ops
+    /// too, so `za + zb * 4` is six ops and no `eval` recursion, while
+    /// `length('ab') + 1` is one [`Op::EvalExpr`] entire -- a call has no
+    /// register to arrive in, and `EvalExpr` names an expression *slot* of an
+    /// instruction, which a subexpression is not.
+    ///
+    /// The arithmetic itself is `Interp::arith_small_int` and
+    /// `Interp::arith_general`, entered from here and from
+    /// `Interp::eval_arithmetic`, so the operand conversion, the seven
+    /// operators' own `rexx-num` calls, the 41.1 a nonnumeric operand raises
+    /// and the 26.8 a `**` exponent raises are one implementation rather than
+    /// a second one beside it. The two are tried in the order
+    /// `Interp::eval_arithmetic` tries them.
+    ///
+    /// **`lhs` may be `dst`, and usually is**: the left operand is evaluated
+    /// into the destination register and the right into a scratch one above
+    /// it, so a left-nested chain reuses two registers however deep it runs
+    /// rather than one per operator. Both sources are read before the
+    /// destination is written, which is what makes that safe.
+    ///
+    /// **It emits nothing, and [`Op::TraceOperator`] is why that is safe** --
+    /// [`Op::Const`]'s own doc comment has the mechanism, and `>O>` is the
+    /// line this op's evaluation used to emit as a side effect.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, whose clause owns the
+    /// value indent the line after this one traces at, and the failure site a
+    /// 41.1 raised here is reported against.
+    Arith {
+        op: Operator,
+        lhs: u16,
+        rhs: u16,
+        dst: u16,
+    },
+    /// Echoes the `>O>` line of the operator result in register `src`.
+    ///
+    /// **A separate op from the [`Op::Arith`] that computed it**, for the
+    /// reason [`Op::TraceLiteral`] is separate from [`Op::Const`]: the
+    /// computation emits nothing, `eval.rs` emits this line as a side effect of
+    /// *evaluating* a binary node, and a promoted clause with no such op drops
+    /// it while every line after it still matches. Emitted unconditionally
+    /// rather than under [`ChunkTrace`]'s decision, because the gate this line
+    /// answers to is `trace_mode().intermediates`, which [`ChunkTrace`] does
+    /// not carry.
+    ///
+    /// `op` is repeated here rather than read off the `Arith` behind it,
+    /// because the tag is the operator's own spelling and an echo carrying a
+    /// different one lands in the right place with the wrong tag in it.
+    /// `compile::assert_operator_echoes_follow_their_op` is what checks the
+    /// position, the register and the operator rather than assuming them.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, and immediately behind
+    /// the `Arith` whose register it reads: `eval.rs` emits this post-order,
+    /// with the value in hand, so an inner operator's line precedes the outer
+    /// one's exactly as the ops do.
+    TraceOperator { op: Operator, src: u16 },
     /// Writes register `src` through the target of the `Assignment` at
     /// `index`, and traces the write.
     ///

@@ -293,28 +293,36 @@ fn a_say_of_a_bare_symbol_compiles_to_a_native_read() {
     );
 }
 
-/// **An expression that merely *contains* a symbol is not a read**, and stays
-/// on [`super::Op::EvalExpr`] entire.
+/// **An expression that merely *contains* a symbol is not a read**, and the
+/// symbol's own load is not the expression's value.
 ///
 /// The adjacent success the three cases above need: without it they are
 /// satisfied by a compiler that emits a load for any expression holding a
 /// symbol anywhere, which would evaluate `zv + 1` as `zv` and lose the
-/// arithmetic. Descending into an operator's operands is a later task's shape,
-/// and the two must not be confused because a `Load` for the operand alone
-/// produces a wrong answer that traces almost right.
+/// arithmetic. What such an expression compiles to now is the read **and** the
+/// operator applied to it, which is the shape that has to be told from the bare
+/// read -- a `Load` alone would produce a wrong answer that traces almost
+/// right.
+///
+/// `.NIL` and `>zv` are the two expressions that look like a bare symbol read
+/// and are not one: the first traces `>E>` and the second `>O>`, so a `Load`
+/// for either would emit a `>V>` line the oracle does not print. Neither is
+/// arithmetic, so both stay on [`super::Op::EvalExpr`] entire.
 #[test]
-fn an_expression_that_only_contains_a_symbol_stays_on_the_general_path() {
+fn an_expression_that_only_contains_a_symbol_is_more_than_that_symbols_read() {
     let chunk = compile_for_test(b"zw = zv + 1\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=3\n\
-         1: EvalExpr index=0 slot=0 dst=0\n\
-         2: Store index=0 src=0\n"
+        "0: Clause index=0 end=8\n\
+         1: Load read=Simple at=1 dst=0\n\
+         2: TraceRead read=Simple src=0\n\
+         3: LoadConstant dst=1\n\
+         4: TraceLiteral src=1\n\
+         5: Arith op=+ lhs=0 rhs=1 dst=0\n\
+         6: TraceOperator op=+ src=0\n\
+         7: Store index=0 src=0\n"
     );
 
-    // `.NIL` and `>zv` are the two expressions that look like a bare symbol
-    // read and are not one: the first traces `>E>` and the second `>O>`, so a
-    // `Load` for either would emit a `>V>` line the oracle does not print.
     let dotvar = compile_for_test(b"zw = .nil\n").expect("compiles");
     assert_eq!(
         render(&dotvar),
@@ -328,6 +336,176 @@ fn an_expression_that_only_contains_a_symbol_stays_on_the_general_path() {
         "0: Clause index=0 end=3\n\
          1: EvalExpr index=0 slot=0 dst=0\n\
          2: Store index=0 src=0\n"
+    );
+}
+
+/// A chain of operators reuses **two** registers however long it runs, because
+/// each operator writes its result back into the register the next one reads as
+/// its left operand.
+///
+/// `za + zb + zc + zd` is left-nested, so the innermost `+` is reached first
+/// and every later one takes the register below it as `lhs` and the register
+/// above it as `rhs`. **The register economy is the assertion**: a compiler
+/// that gave every operand a register of its own renders the same ops with
+/// `lhs` and `dst` climbing, and would reserve one register per operator in a
+/// chain rather than two in total.
+#[test]
+fn a_chain_of_operators_reuses_the_destination_register() {
+    let chunk = compile_for_test(b"zw = za + zb + zc + zd\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=16\n\
+         1: Load read=Simple at=1 dst=0\n\
+         2: TraceRead read=Simple src=0\n\
+         3: Load read=Simple at=2 dst=1\n\
+         4: TraceRead read=Simple src=1\n\
+         5: Arith op=+ lhs=0 rhs=1 dst=0\n\
+         6: TraceOperator op=+ src=0\n\
+         7: Load read=Simple at=3 dst=1\n\
+         8: TraceRead read=Simple src=1\n\
+         9: Arith op=+ lhs=0 rhs=1 dst=0\n\
+         10: TraceOperator op=+ src=0\n\
+         11: Load read=Simple at=4 dst=1\n\
+         12: TraceRead read=Simple src=1\n\
+         13: Arith op=+ lhs=0 rhs=1 dst=0\n\
+         14: TraceOperator op=+ src=0\n\
+         15: Store index=0 src=0\n"
+    );
+    assert_eq!(
+        chunk.registers, 2,
+        "a chain of three operators reserved {} registers where two are enough",
+        chunk.registers
+    );
+}
+
+/// Precedence decides the nesting, and the nesting decides the op order -- so
+/// `za + zb * zc` multiplies first and needs a third register to hold the
+/// product while `za` waits below it.
+///
+/// **The adjacent case the chain above needs**: without it, a compiler that
+/// ignored precedence and folded left every time would still pass that one, and
+/// would compute `(za + zb) * zc` here. The `>O>` lines follow the ops, so this
+/// is also what puts the inner operator's echo before the outer one's.
+#[test]
+fn precedence_decides_which_operator_is_the_inner_one() {
+    let chunk = compile_for_test(b"zw = za + zb * zc\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=12\n\
+         1: Load read=Simple at=1 dst=0\n\
+         2: TraceRead read=Simple src=0\n\
+         3: Load read=Simple at=2 dst=1\n\
+         4: TraceRead read=Simple src=1\n\
+         5: Load read=Simple at=3 dst=2\n\
+         6: TraceRead read=Simple src=2\n\
+         7: Arith op=* lhs=1 rhs=2 dst=1\n\
+         8: TraceOperator op=* src=1\n\
+         9: Arith op=+ lhs=0 rhs=1 dst=0\n\
+         10: TraceOperator op=+ src=0\n\
+         11: Store index=0 src=0\n"
+    );
+    assert_eq!(
+        chunk.registers, 3,
+        "a right-nested operator reserved {} registers where three are needed",
+        chunk.registers
+    );
+}
+
+/// **An operand no register can hold takes the whole expression down with it**,
+/// however much of the rest would have compiled.
+///
+/// A call has no register to arrive in: [`super::Op::EvalExpr`] names an
+/// expression *slot* of an instruction, and a subexpression is not one, so an
+/// `EvalExpr` emitted for the operand alone would re-evaluate the whole
+/// expression -- calling the function again and computing the operator twice.
+/// The decision is therefore taken for the whole tree before anything is
+/// emitted.
+///
+/// The second case is the adjacent success: the same expression with the call
+/// replaced by a symbol does promote, so what the first case fixes is the call
+/// rather than the shape around it.
+#[test]
+fn an_operand_that_needs_eval_leaves_the_whole_expression_general() {
+    let chunk = compile_for_test(b"zw = length('ab') + 1\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=3\n\
+         1: EvalExpr index=0 slot=0 dst=0\n\
+         2: Store index=0 src=0\n"
+    );
+
+    let promoted = compile_for_test(b"zw = zv + 1\n").expect("compiles");
+    assert!(
+        render(&promoted).contains("Arith op=+"),
+        "the same shape without the call did not promote either, so the case above says nothing \
+         about the call"
+    );
+}
+
+/// **Only the seven arithmetic operators promote**, and the other binary
+/// families stay on [`super::Op::EvalExpr`] entire.
+///
+/// `eval::is_arithmetic` is the one enumeration of the set, asked by
+/// `eval_node`'s own dispatch and by the compiler, so this is what says the
+/// compiler is asking it rather than repeating it. A concatenation or a
+/// comparison run through `Interp::arith_general` would be a 41.1 where the
+/// oracle prints a string.
+#[test]
+fn only_the_arithmetic_operators_promote() {
+    for source in [
+        &b"zw = za || zb\n"[..],
+        &b"zw = za = zb\n"[..],
+        &b"zw = za & zb\n"[..],
+        &b"zw = za zb\n"[..],
+    ] {
+        let chunk = compile_for_test(source).expect("compiles");
+        assert_eq!(
+            render(&chunk),
+            "0: Clause index=0 end=3\n\
+             1: EvalExpr index=0 slot=0 dst=0\n\
+             2: Store index=0 src=0\n",
+            "{} promoted an operator that is not arithmetic",
+            String::from_utf8_lossy(source)
+        );
+    }
+
+    // The adjacent success: the same two operands under an operator that *is*
+    // arithmetic do promote, so the rows above are about the operator rather
+    // than about the operands.
+    let promoted = compile_for_test(b"zw = za - zb\n").expect("compiles");
+    assert!(
+        render(&promoted).contains("Arith op=-"),
+        "the same operands under an arithmetic operator did not promote either"
+    );
+}
+
+/// A bare constant symbol is a native load of its own, the way a quoted literal
+/// is -- and the two produce the same `>L>` echo, so one op serves both.
+///
+/// **The number in `zx + 1` is one of these and not an `ExprKind::Literal`**,
+/// which is why arithmetic promotion needed it: with the constant left
+/// unpromotable the whole expression falls to [`super::Op::EvalExpr`] and no
+/// arithmetic op is emitted at all.
+#[test]
+fn a_constant_symbol_is_a_native_load() {
+    let chunk = compile_for_test(b"zw = 1\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=4\n\
+         1: LoadConstant dst=0\n\
+         2: TraceLiteral src=0\n\
+         3: Store index=0 src=0\n"
+    );
+
+    // A quoted literal is the other load, against the chunk's own interned
+    // table, and it takes the identical echo.
+    let quoted = compile_for_test(b"zw = '1'\n").expect("compiles");
+    assert_eq!(
+        render(&quoted),
+        "0: Clause index=0 end=4\n\
+         1: Const dst=0 konst=0\n\
+         2: TraceLiteral src=0\n\
+         3: Store index=0 src=0\n"
     );
 }
 

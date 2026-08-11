@@ -74,6 +74,14 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::Const { dst, konst } => {
                 out.push_str(&format!("{index}: Const dst={dst} konst={konst}\n"));
             }
+            // The `symbol` field is not rendered, for the reason [`Op::Load`]'s
+            // is not: a `SymbolId`'s index is into a table pre-seeded with
+            // every keyword spelling, so the number says nothing about the
+            // program. What identifies this one is the register it lands in and
+            // the expression the test compiled.
+            Op::LoadConstant { dst, .. } => {
+                out.push_str(&format!("{index}: LoadConstant dst={dst}\n"));
+            }
             Op::TraceLiteral { src } => {
                 out.push_str(&format!("{index}: TraceLiteral src={src}\n"));
             }
@@ -96,6 +104,22 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             }
             Op::TraceRead { read, src, .. } => {
                 out.push_str(&format!("{index}: TraceRead read={read:?} src={src}\n"));
+            }
+            // The operator by its own spelling rather than by its `Debug`
+            // name, because the spelling is what the `>O>` line this op's
+            // echo prints carries, and a golden that read `Plus` could not
+            // say whether the tag would.
+            Op::Arith { op, lhs, rhs, dst } => {
+                out.push_str(&format!(
+                    "{index}: Arith op={} lhs={lhs} rhs={rhs} dst={dst}\n",
+                    op.spelling()
+                ));
+            }
+            Op::TraceOperator { op, src } => {
+                out.push_str(&format!(
+                    "{index}: TraceOperator op={} src={src}\n",
+                    op.spelling()
+                ));
             }
             Op::Store { index: at, src } => {
                 out.push_str(&format!("{index}: Store index={at} src={src}\n"));

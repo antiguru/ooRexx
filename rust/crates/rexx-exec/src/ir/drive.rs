@@ -582,6 +582,23 @@ impl Interp {
                                     let value = self.literal(bytes);
                                     self.roots.set_temp(registers, *dst as usize, value);
                                 }
+                                // A constant symbol's own value: its upcased
+                                // spelling, built through the same
+                                // `Interp::literal` `Op::Const` above uses and
+                                // read out of the symbol table `code` carries,
+                                // which is what `eval_node`'s own `Constant`
+                                // arm does. It emits nothing -- the
+                                // `Op::TraceLiteral` below is the line it owes
+                                // too, because both print `>L>`.
+                                Op::LoadConstant { symbol, dst } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*dst),
+                                        "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    let value = self.literal(code.symbols.name(*symbol).as_bytes());
+                                    self.roots.set_temp(registers, *dst as usize, value);
+                                }
                                 // The `>L>` line of one literal. **Its own op**,
                                 // because the load emits nothing and `eval.rs`
                                 // emits this as a side effect of evaluating --
@@ -650,6 +667,65 @@ impl Interp {
                                     );
                                     let value = self.roots.temp_at(registers, *src as usize);
                                     self.echo_symbol_read(code, *read, *symbol, value);
+                                }
+                                // **The third native expression op**: one
+                                // arithmetic operator applied to two registers,
+                                // through the same `Interp::arith_small_int`
+                                // and `Interp::arith_general` that
+                                // `eval_arithmetic` enters, with `eval.rs`
+                                // itself not entered at all -- for the operands
+                                // either, which is what the ops in front of
+                                // this one are. It emits nothing --
+                                // `Op::TraceOperator` below is what applying an
+                                // operator owes.
+                                Op::Arith { op, lhs, rhs, dst } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*lhs) && chunk.holds_register(*rhs),
+                                        "op reads registers {lhs}/{rhs} outside the region the \
+                                         chunk reserved"
+                                    );
+                                    debug_assert!(
+                                        chunk.holds_register(*dst),
+                                        "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    // **Both read before either is written**,
+                                    // which is what makes `lhs == dst` -- the
+                                    // shape a chain compiles to -- safe.
+                                    let left = self.roots.temp_at(registers, *lhs as usize);
+                                    let right = self.roots.temp_at(registers, *rhs as usize);
+                                    // The operands are rooted by the registers
+                                    // they came from, which is what
+                                    // `arith_general` requires of a caller and
+                                    // is why no frame is pushed here where
+                                    // `eval_arithmetic` pushes one: it has to
+                                    // root values held in Rust locals across
+                                    // the evaluation of the operand after them,
+                                    // and this op's operands were rooted before
+                                    // it ran.
+                                    let value = match self.arith_small_int(*op, left, right) {
+                                        Some(value) => value,
+                                        None => match self.arith_general(*op, left, right) {
+                                            Ok(value) => value,
+                                            Err(failure) => break 'region Err(failure),
+                                        },
+                                    };
+                                    self.roots.set_temp(registers, *dst as usize, value);
+                                }
+                                // The `>O>` line one operator owes. **Its own
+                                // op**, because the operation emits nothing and
+                                // `eval.rs` emits this as a side effect of
+                                // evaluating -- so a promoted clause with no
+                                // such op drops the line while every line after
+                                // it still matches.
+                                Op::TraceOperator { op, src } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*src),
+                                        "op reads register {src} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    let value = self.roots.temp_at(registers, *src as usize);
+                                    self.echo_operator(*op, value);
                                 }
                                 // The write, through `Interp::assign_evaluated`
                                 // -- the whole of what `step`'s own
@@ -914,9 +990,14 @@ impl Interp {
                 Op::TraceClause { .. } => return Err(Loud::op_not_driven("TraceClause").into()),
                 Op::EvalExpr { .. } => return Err(Loud::op_not_driven("EvalExpr").into()),
                 Op::Const { .. } => return Err(Loud::op_not_driven("Const").into()),
+                Op::LoadConstant { .. } => return Err(Loud::op_not_driven("LoadConstant").into()),
                 Op::TraceLiteral { .. } => return Err(Loud::op_not_driven("TraceLiteral").into()),
                 Op::Load { .. } => return Err(Loud::op_not_driven("Load").into()),
                 Op::TraceRead { .. } => return Err(Loud::op_not_driven("TraceRead").into()),
+                Op::Arith { .. } => return Err(Loud::op_not_driven("Arith").into()),
+                Op::TraceOperator { .. } => {
+                    return Err(Loud::op_not_driven("TraceOperator").into());
+                }
                 Op::Store { .. } => return Err(Loud::op_not_driven("Store").into()),
                 Op::Say { .. } => return Err(Loud::op_not_driven("Say").into()),
                 Op::JumpUnless { .. } => return Err(Loud::op_not_driven("JumpUnless").into()),

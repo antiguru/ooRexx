@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use rexx_parse::{CodeBody, Expr, ExprKind, Instruction, InstructionKind, SymbolId};
 
 use super::{Chunk, ChunkTooLarge, Op, ReadSlot};
-use crate::eval::SymbolRead;
+use crate::eval::{SymbolRead, is_arithmetic};
 use crate::plan::Plan;
 use crate::run::{HeaderPlan, if_targets, loop_header_plan, otherwise_range};
 use crate::trace::ChunkTrace;
@@ -588,6 +588,7 @@ pub(crate) fn compile(
                 push_value(
                     &mut ops,
                     &mut consts,
+                    &mut registers,
                     plan,
                     value,
                     instruction_index(index)?,
@@ -620,6 +621,7 @@ pub(crate) fn compile(
                         push_value(
                             &mut ops,
                             &mut consts,
+                            &mut registers,
                             plan,
                             expression,
                             instruction_index(index)?,
@@ -672,6 +674,7 @@ pub(crate) fn compile(
     assert_trace_ops_open_a_clause_region(&ops);
     assert_literal_echoes_follow_their_load(&ops);
     assert_read_echoes_follow_their_load(&ops);
+    assert_operator_echoes_follow_their_op(&ops);
     assert_region_ops_name_their_clause(&ops);
 
     Ok(Chunk {
@@ -686,28 +689,81 @@ pub(crate) fn compile(
 /// The ops that leave expression `slot` of instruction `index` in register
 /// `dst`.
 ///
-/// **Each split is what the expression is rather than what is convenient.** A
-/// literal's value is bytes the node already carries, so it
-/// becomes a native [`Op::Const`] against the interned table plus the `>L>`
-/// line that loading it owes. A bare symbol's value is in a frame slot, so it
-/// becomes a native [`Op::Load`] plus the `>V>` line that reading it owes.
-/// Everything else -- an operator, a call, a constant symbol, a `.name`, a
-/// `>name` -- is evaluated by `eval.rs` through [`Op::EvalExpr`], which is
-/// trace-identical to what the tree-walker does with the same expression
-/// because it is the same call, and stays identical because nothing this region
-/// emits sits between one evaluation and the next.
+/// **What compiles natively is [`native_shape`]'s answer**, and everything
+/// else -- a call, a constant symbol, a `.name`, a `>name`, and any operator
+/// with one of those anywhere inside it -- is evaluated by `eval.rs` through
+/// [`Op::EvalExpr`], which is trace-identical to what the tree-walker does with
+/// the same expression because it is the same call, and stays identical because
+/// nothing this region emits sits between one evaluation and the next.
 ///
-/// **`expr` is the whole of the instruction's expression at `slot`, and only
-/// the whole of it is looked at.** An expression that merely *contains* a
-/// symbol falls to `EvalExpr` entire; nothing here descends into an operator's
-/// operands.
+/// **`expr` is the whole of the instruction's expression at `slot`, and the
+/// choice is taken for the whole of it.** An expression that merely *contains*
+/// a call falls to `EvalExpr` entire, however much of the rest of it would have
+/// compiled.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "three emission sinks and the four facts an EvalExpr needs to name its expression"
+)]
 fn push_value<'a>(
     ops: &mut Vec<Op>,
     consts: &mut Constants<'a>,
+    registers: &mut Registers,
     plan: &Plan,
     expr: &'a Expr,
     index: u32,
     slot: u32,
+    dst: u16,
+) -> Result<(), ChunkTooLarge> {
+    if native_shape(expr) {
+        push_native(ops, consts, registers, plan, expr, dst)
+    } else {
+        ops.push(Op::EvalExpr { index, slot, dst });
+        Ok(())
+    }
+}
+
+/// Whether `expr` compiles to native ops entire, with `eval.rs` not entered
+/// for any part of it.
+///
+/// **Asked once, at the whole expression, and it is what licenses
+/// [`push_native`]'s own unreachable arm.** The recursion below descends into
+/// an operator's operands, and a subexpression has nowhere to fall back to: an
+/// [`Op::EvalExpr`] names an expression *slot* of an instruction, so emitting
+/// one for an operand would re-evaluate the whole instruction's expression
+/// instead of that operand. So the decision is taken for the whole tree before
+/// anything is emitted, and an expression with one call anywhere inside it
+/// stays one `EvalExpr`.
+fn native_shape(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Literal(_)
+        | ExprKind::Constant(_)
+        | ExprKind::Variable(_)
+        | ExprKind::Stem(_)
+        | ExprKind::Compound(_) => true,
+        ExprKind::Binary { op, left, right } => {
+            is_arithmetic(*op) && native_shape(left) && native_shape(right)
+        }
+        _ => false,
+    }
+}
+
+/// The ops that leave `expr` -- which [`native_shape`] has already accepted --
+/// in register `dst`.
+///
+/// **Each split is what the expression is rather than what is convenient.** A
+/// literal's value is bytes the node already carries, so it becomes a native
+/// [`Op::Const`] against the interned table plus the `>L>` line that loading it
+/// owes. A bare symbol's value is in a frame slot, so it becomes a native
+/// [`Op::Load`] plus the `>V>` line that reading it owes. An arithmetic
+/// operator's value is computed from its two operands' registers, so it becomes
+/// their ops followed by [`Op::Arith`] plus the `>O>` line that applying it
+/// owes.
+fn push_native<'a>(
+    ops: &mut Vec<Op>,
+    consts: &mut Constants<'a>,
+    registers: &mut Registers,
+    plan: &Plan,
+    expr: &'a Expr,
     dst: u16,
 ) -> Result<(), ChunkTooLarge> {
     match &expr.kind {
@@ -720,16 +776,49 @@ fn push_value<'a>(
             // emits this line post-order, with the value in hand.
             ops.push(Op::TraceLiteral { src: dst });
         }
-        // The three bare-symbol reads. **`ExprKind::Constant`,
-        // `ExprKind::DotVariable` and `ExprKind::VariableReference` are not
-        // among them and are not reads**: a constant's value is its own
-        // upcased spelling, which lives in the symbol table rather than in a
-        // slot ([`Op::Const`]'s own doc comment has why `compile` cannot reach
-        // it); the other two trace `>E>` and `>O>` rather than `>V>`.
+        // A constant symbol's value is its own upcased spelling, which lives
+        // in the symbol table rather than in the node -- so the symbol travels
+        // in the op and the spelling is read at run time, where the table is
+        // in hand. The echo behind it is the literal's, because the line is the
+        // same `>L>`.
+        ExprKind::Constant(id) => {
+            ops.push(Op::LoadConstant { symbol: *id, dst });
+            ops.push(Op::TraceLiteral { src: dst });
+        }
+        // The three bare-symbol reads. **`ExprKind::DotVariable` and
+        // `ExprKind::VariableReference` are not among them and are not
+        // reads**: they trace `>E>` and `>O>` rather than `>V>`.
         ExprKind::Variable(id) => push_read(ops, plan, SymbolRead::Simple, *id, dst),
         ExprKind::Stem(id) => push_read(ops, plan, SymbolRead::Stem, *id, dst),
         ExprKind::Compound(id) => push_read(ops, plan, SymbolRead::Compound, *id, dst),
-        _ => ops.push(Op::EvalExpr { index, slot, dst }),
+        ExprKind::Binary { op, left, right } => {
+            // **The left operand lands in `dst` itself and only the right one
+            // takes a register of its own**, which is what keeps a chain's
+            // register cost at two however long it runs: `za + zb + zc + zd`
+            // is left-nested, so each operator writes its result back into the
+            // register the next one reads as its left. Both sources are read
+            // before the destination is written, which is the whole of what
+            // makes the aliasing safe.
+            push_native(ops, consts, registers, plan, left, dst)?;
+            let mark = registers.mark();
+            let rhs = registers.alloc()?;
+            push_native(ops, consts, registers, plan, right, rhs)?;
+            ops.push(Op::Arith {
+                op: *op,
+                lhs: dst,
+                rhs,
+                dst,
+            });
+            // Behind the operation rather than in front of it, because
+            // `eval.rs` emits this line post-order, with the value in hand --
+            // so an inner operator's line precedes the outer one's.
+            ops.push(Op::TraceOperator { op: *op, src: dst });
+            // Held until the operation has run: the right operand's register
+            // is live right up to it, and a release any earlier would hand it
+            // out to the next operand of an enclosing operator.
+            registers.release(mark);
+        }
+        _ => unreachable!("push_value descends only into an expression native_shape accepted"),
     }
     Ok(())
 }
@@ -948,8 +1037,12 @@ fn assert_trace_ops_open_a_clause_region(ops: &[Op]) {
     }
 }
 
-/// **Every [`Op::TraceLiteral`] sits immediately behind the [`Op::Const`] whose
-/// own register it reads**, which is both halves of that op's contract at once.
+/// **Every [`Op::TraceLiteral`] sits immediately behind the [`Op::Const`] or
+/// [`Op::LoadConstant`] whose own register it reads**, which is both halves of
+/// that op's contract at once.
+///
+/// Either load, because the two produce the same `>L>` line and this op is the
+/// echo for both.
 ///
 /// `eval.rs` emits a literal's `>L>` line post-order, with the value in hand,
 /// so an echo in front of its load prints whatever the register held before --
@@ -968,7 +1061,12 @@ fn assert_literal_echoes_follow_their_load(ops: &[Op]) {
         let loads_it = at
             .checked_sub(1)
             .and_then(|before| ops.get(before))
-            .is_some_and(|before| matches!(before, Op::Const { dst, .. } if dst == src));
+            .is_some_and(|before| {
+                matches!(
+                    before,
+                    Op::Const { dst, .. } | Op::LoadConstant { dst, .. } if dst == src
+                )
+            });
         assert!(
             loads_it,
             "the literal echo at {at} does not follow the load of the register it reads, so it \
@@ -1013,6 +1111,42 @@ fn assert_read_echoes_follow_their_load(ops: &[Op]) {
             loads_it,
             "the read echo at {at} does not follow the load of the symbol and register it \
              names, so it echoes a value or a name that op did not put there"
+        );
+    }
+}
+
+/// **Every [`Op::TraceOperator`] sits immediately behind the [`Op::Arith`] it
+/// echoes**, reading that op's destination register and repeating its operator.
+///
+/// [`assert_read_echoes_follow_their_load`]'s three failures in this op's own
+/// terms. The position is what puts the line where `eval.rs` puts it -- and a
+/// chain emits one `Arith`/`TraceOperator` pair per operator, so an echo one
+/// place out prints the inner operator's line after the outer one's. The
+/// register is what makes it the right value, since a chain reuses `dst` for
+/// every operator in it. The operator is the tag: `>O>` names the operator that
+/// was applied, so an echo carrying another op's prints the right value under
+/// the wrong sign.
+///
+/// An unconditional `assert!` for [`assert_clause_regions_hold_no_clause_op`]'s
+/// reason, and it is the same linear scan's worth of work.
+fn assert_operator_echoes_follow_their_op(ops: &[Op]) {
+    for (at, op) in ops.iter().enumerate() {
+        let Op::TraceOperator { op: echoed, src } = op else {
+            continue;
+        };
+        let computes_it = at
+            .checked_sub(1)
+            .and_then(|before| ops.get(before))
+            .is_some_and(|before| {
+                matches!(
+                    before,
+                    Op::Arith { op: applied, dst, .. } if applied == echoed && dst == src
+                )
+            });
+        assert!(
+            computes_it,
+            "the operator echo at {at} does not follow the operation whose operator and register \
+             it names, so it echoes a value or a sign that op did not put there"
         );
     }
 }
@@ -1066,9 +1200,12 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::EnterWhen { .. }
                 | Op::EnterOtherwise { .. }
                 | Op::Const { .. }
+                | Op::LoadConstant { .. }
                 | Op::TraceLiteral { .. }
                 | Op::Load { .. }
                 | Op::TraceRead { .. }
+                | Op::Arith { .. }
+                | Op::TraceOperator { .. }
                 | Op::Jump { .. }
                 | Op::JumpUnless { .. } => None,
             };
