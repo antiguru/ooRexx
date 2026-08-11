@@ -5,6 +5,8 @@ Task 0.7. This is the number every later phase's D9 performance gate (Global Con
 than its C++ counterpart on this suite. Coming out worse than what is recorded here, on the
 platforms recorded here, is the definition of a gate failure.
 
+**Every "this crate" figure in this file is a tree-walker figure, and re-running the harness no longer produces one** (2026-08-11, `phase-4e-gate.md`). `rexx-run` defaulted to the tree-walker when these were measured and `rexx_bench::child::Side::rust` inherited that default; Phase 4e made the compiled stream the default and made the harness name the arm on every child and print it in its provenance block. So `rexx-bench-suite` with no arguments now measures the IR arm, and `--engine tree-walker` is what reproduces the arm these rows were taken on. Nothing here has been re-measured.
+
 **Two later sections do not belong to Task 0.7 and are marked as such.** The `rexxcps` section
 records both interpreters on the Phase 4a design spec's own R1-R4 criteria, measured 2026-08-06;
 the Phase 4d-1 section below it is the interleaved two-interpreter baseline, measured 2026-08-08.

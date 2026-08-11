@@ -1,5 +1,11 @@
 # Phase 4e anchor -- the tree-walker's benchmark figures, before the IR exists
 
+**Every figure in this document is a tree-walker figure, and re-running the command below no longer produces one.**
+`rexx-run` defaulted to the tree-walker when this was measured, and `rexx_bench::child::Side::rust` inherited that default rather than naming an arm, so "this crate" here means the tree-walker throughout.
+Both changed at `d9f68dd6` and `e9c76aa1`: the shipped default is the compiled stream, and `rexx-bench-suite` now names the arm on every child and prints it in its provenance block.
+**So `./target/release/rexx-bench-suite` with no arguments measures the IR arm; `--engine tree-walker` is what reproduces this document's arm.**
+A provenance block with no engine row, like the one below, predates the choice and is therefore a tree-walker run.
+
 **Superseded as Phase 4f's input state (2026-08-11, `phase-4e-gate.md`), and only in that role.**
 The gate records the IR arm against the tree-walker arm on instructions and cycles, within one binary, which is the state 4f starts from on the engine axis.
 This document's own figures are tree-walker against the **oracle**, on wall clock, taken before `Engine::Ir` existed, and they stand as the last measurement of that pair -- no oracle ran in any sitting behind the gate.

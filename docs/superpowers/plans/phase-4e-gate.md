@@ -21,9 +21,18 @@ Every verdict below carries what it could not see, and two of them carry a hole 
 
 Three places name an engine when nobody chose one, and they are not the same place.
 
-* `Invocation::none` -- **flipped to `Engine::Ir`**. This is the one the spec's criterion 1 means, and it is what every in-process harness reaches: `corpus.rs`, `trace_oracle.rs`, `assertions.rs`, `bif_assertions.rs`, `keyword_assertions.rs`, `collect_stress.rs` and `spike.rs` all build their invocation from it.
-* `rexx-run`'s `REXX_ENGINE` being unset -- **flipped to `Engine::Ir`**, so the shipped binary and the library agree. A set-but-unrecognised value is still refused rather than defaulted.
-* `Interp::new` -- **left at `Engine::TreeWalker`**, and this one is not a body-entry point: `execute` overwrites it from the `Invocation` before any body runs, so it is inert for every production route. What it does decide is the engine for `run.rs`'s own unit tests, which construct an `Interp` directly. See criterion 7.
+* `Invocation::none` -- **flipped to `Engine::Ir`**. This is the one the spec's criterion 1 means, and it is what an in-process harness reaches: every `tests/` file that builds an `Invocation` rather than choosing an engine now runs on the compiled stream, which is most of them.
+* `rexx-run`'s `REXX_ENGINE` being unset -- **flipped to `Engine::Ir`**, so the shipped binary and the library agree. A set-but-unrecognised value is still refused rather than defaulted. **Both now name one `Engine::DEFAULT`** rather than each carrying a literal, and each has a test pinning it from its own side -- because `Invocation::into_parts` is `pub(crate)`, so the library's test cannot see the binary's answer and the binary's cannot see the library's.
+* `Interp::new` -- **left at `Engine::TreeWalker`**, and this one is not a body-entry point: `execute` overwrites it from the `Invocation` before any body runs, so it is inert for every production route. What it decides is the arm for the unit tests throughout this crate that construct an `Interp` directly -- `run.rs`'s are the ones criterion 7 turns on, but `eval.rs`, `trace.rs`, `stem.rs`, `value.rs`, `plan.rs`, `queue.rs`, `builtin/` and `ir/golden_tests.rs` all do it too. See criterion 7.
+
+**A fourth place was found by the final review and it is the one that could have cost a later phase a wrong number.**
+`rexx_bench::child::Side::rust` handed its child an *empty* environment, so `REXX_ENGINE` came from whatever launched the harness and, unset, from `rexx-run`'s own default.
+`rexx-bench-suite` and `rexx-bench-band` are built on it, and both are the harnesses whose output goes into `perf-baseline.md` and `phase-4e-anchor.md`.
+So at `d9f68dd6` those two silently changed which engine they measure, against committed baselines taken on the other arm, with nothing in their output saying so.
+**`rexx-arms` was never affected** -- it sets the variable on every run, which is why every figure in this document is safe and why the sittings behind it are what they say they are.
+
+Fixed at the type level rather than by remembering: `Side::rust` takes the arm as a parameter and there is no constructor without one, the label it produces is `rust-ir` or `rust-tw` so a row or a message naming the side names the engine, `rexx-bench-suite` prints it in the provenance block beside the sha256s, and both binaries take `--engine` and refuse a spelling they do not recognise.
+`a_rust_side_names_its_arm_in_the_environment_and_in_its_label` is the guard; putting the empty environment back reddens it and **nothing else in the crate**, which is what says it adds coverage rather than merely being able to fail.
 
 ## Criterion 1: both engines agree, and the IR is the default
 
@@ -201,6 +210,22 @@ The mechanism this points at is the driver's own dispatch widening as the op set
 **It is the item 4f should cost first**, because it is the only one on either list that grows with each further promotion rather than shrinking, and Phase 5's sends are the next thing to widen the op set.
 Candidates nobody has measured: a jump table, a two-level op encoding, or splitting the hot arms out of the one `match`.
 
+### A third movement with no owner: `arith`'s tree-walker arm
+
+**On an arm Task 9 does not touch, and it is larger than either residual above.**
+
+`arith`'s **tree-walker** per-pass instruction count reads 61844.27 at `e63e8a00` and 62030.85 at `16077ea1` -- **+186.58 instructions per pass** across the Task 9 boundary.
+Task 9 promoted arithmetic into the compiled stream; the tree-walker arm compiles nothing and executes none of it.
+The same arm then moves a further +15.00 at Task 10, which executes no call on this axis either.
+
+Two things this is not, so that whoever picks it up does not re-derive them.
+It is not measurement noise: `instructions:u` reproduces to eight significant figures here, and the same arm reads 61809.27 and 61807.27 at the two boundaries before it, which is the size of a real no-movement row.
+It is not the ratio's cause: `arith`'s instruction ratio still falls 1.00353 to 0.98315 across that boundary, because the IR arm fell by 1755.
+
+**No mechanism is named and none is guessed.**
+Codegen moving under a change to a neighbouring module is the obvious candidate and it is also the candidate that gets offered for everything, which is why it is not claimed here.
+It is visible in the `per_pass`/`tw` rows of `phase-4e-arms.tsv` under task `11`, and it is the third of three movements this phase produced that nothing explains -- the other two being the `+22` above and Task 10's small mixed moves on the call-free axes.
+
 ### The instrument checked itself, three times, and one check is sharper than anything the phase had
 
 `5ab3028f` was measured in **three** independent sittings with different companion builds in each.
@@ -273,7 +298,10 @@ So a promotion that silently stopped firing for a construct the golden set does 
 **Met, and the second half of the falsification holds only under a build nothing re-runs.**
 
 The trace oracle harness passes in all four suite combinations, and it now runs on the IR arm: it builds its invocation from `Invocation::none`, which this task flipped.
-`ir_dual.rs` diffs raw stderr between the two arms across every population, so indent agreement *between the arms* is asserted there rather than normalised away.
+
+**What carries unnormalised trace between the two arms is `ir_dual_cases/trace-settings`, and it is worth naming precisely.**
+`ir_dual.rs` diffs raw stderr between the arms, but only across the populations *it* builds; the `tests/trace_oracle/` set is not one of them.
+So after the flip that set is IR-against-oracle only, with `tests/support/mod.rs` normalising the prefix region -- which is exactly the blind spot the spec names, and the case files are what sit in it.
 
 **The `run.rs` unit tests asserting exact stderr are the ones the spec flags, and they were tree-walker-only.**
 Measured rather than inferred, with the pair that makes it a measurement: a probe on `run.rs`'s own `run_source` helper reads **1 chunk driven and 2 clauses stepped from it** with `Interp::new` set to `Engine::Ir`, and **0 and 0** with it left at `Engine::TreeWalker`.
@@ -380,6 +408,19 @@ Neither converts into the other, and combining them would be the cross-sitting c
 * `rexxcps`: the oracle prints 16,929,196 clauses per second, the IR arm 2,288,610 and the tree-walker arm 2,351,589, in the same session from a fresh directory. Those are wall-clock figures and therefore 4f's instrument rather than this phase's; they are recorded so 4f has a starting point and not as a result of this gate. **One run each, no interleaving and no rounds**, so the two arms' 2.7 per cent difference says nothing.
 
 **The item 4f should cost first** is the +22 instructions per pass an all-`Generic` body now pays across Tasks 8, 9 and 10 for promotions it never executes, because it is the only one on either residual list that grows with each further promotion rather than shrinking.
+
+**Three movements this phase produced have no named mechanism, and all three are 4f's inheritance rather than open questions this gate is holding.**
+
+* the **+22** per pass on an all-`Generic` body, above;
+* **+186.58** per pass on `arith`'s *tree-walker* arm at the Task 9 boundary, on an arm that task does not touch;
+* Task 10's small mixed moves on the four axes that execute no call -- every tree-walker arm slower by 3 to 15 per pass, the IR arms split both ways.
+
+They may well be one mechanism seen three times. Nothing here establishes that either, and the reason to write them together is that a single explanation would be the cheapest possible finding for whoever looks.
+
+**Re-running `phase-4e-anchor.md`'s or `perf-baseline.md`'s own command now measures the IR arm, and both documents are tree-walker figures.**
+Every ratio in them was taken when `rexx-run` defaulted to the tree-walker and `Side::rust` inherited that default.
+`rexx-bench-suite --engine tree-walker` reproduces the arm they were taken on; a run with no arguments measures what this crate now ships and says so in its provenance block.
+Nothing in either document has been re-measured, and neither has been edited beyond the note at the head of the anchor saying what it is and is not.
 
 ## What this gate did not evaluate
 
