@@ -97,7 +97,7 @@ fn an_assignment_of_a_literal_compiles_to_a_constant_load_and_a_store() {
         "0: Clause index=0 end=4\n\
          1: Const dst=0 konst=0\n\
          2: TraceLiteral src=0\n\
-         3: Store index=0 src=0\n"
+         3: Store index=0 at=0 src=0\n"
     );
     // One register, released at the clause's own end, so a body of a hundred
     // assignments reserves one.
@@ -129,11 +129,11 @@ fn two_assignments_and_two_says_in_one_body_reuse_one_register() {
         "0: Clause index=0 end=4\n\
          1: Const dst=0 konst=0\n\
          2: TraceLiteral src=0\n\
-         3: Store index=0 src=0\n\
+         3: Store index=0 at=0 src=0\n\
          4: Clause index=1 end=8\n\
          5: Const dst=0 konst=1\n\
          6: TraceLiteral src=0\n\
-         7: Store index=1 src=0\n"
+         7: Store index=1 at=1 src=0\n"
     );
     assert_eq!(
         chunk.registers, 1,
@@ -210,7 +210,7 @@ fn a_bare_symbol_compiles_to_a_native_read_in_each_of_its_three_kinds() {
         "0: Clause index=0 end=4\n\
          1: Load read=Simple at=1 dst=0\n\
          2: TraceRead read=Simple src=0\n\
-         3: Store index=0 src=0\n"
+         3: Store index=0 at=0 src=0\n"
     );
     assert_eq!(simple.registers, 1);
     assert!(
@@ -224,7 +224,7 @@ fn a_bare_symbol_compiles_to_a_native_read_in_each_of_its_three_kinds() {
         "0: Clause index=0 end=4\n\
          1: Load read=Stem at=1 dst=0\n\
          2: TraceRead read=Stem src=0\n\
-         3: Store index=0 src=0\n"
+         3: Store index=0 at=0 src=0\n"
     );
 
     let compound = compile_for_test(b"zw = za.zi\n").expect("compiles");
@@ -233,7 +233,7 @@ fn a_bare_symbol_compiles_to_a_native_read_in_each_of_its_three_kinds() {
         "0: Clause index=0 end=4\n\
          1: Load read=Compound at=- dst=0\n\
          2: TraceRead read=Compound src=0\n\
-         3: Store index=0 src=0\n"
+         3: Store index=0 at=0 src=0\n"
     );
 }
 
@@ -320,7 +320,7 @@ fn an_expression_that_only_contains_a_symbol_is_more_than_that_symbols_read() {
          4: TraceLiteral src=1\n\
          5: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
          6: TraceOperator op=+ src=0\n\
-         7: Store index=0 src=0\n"
+         7: Store index=0 at=0 src=0\n"
     );
 
     let dotvar = compile_for_test(b"zw = .nil\n").expect("compiles");
@@ -328,14 +328,14 @@ fn an_expression_that_only_contains_a_symbol_is_more_than_that_symbols_read() {
         render(&dotvar),
         "0: Clause index=0 end=3\n\
          1: EvalExpr index=0 slot=0 dst=0\n\
-         2: Store index=0 src=0\n"
+         2: Store index=0 at=0 src=0\n"
     );
     let reference = compile_for_test(b"zw = >zv\n").expect("compiles");
     assert_eq!(
         render(&reference),
         "0: Clause index=0 end=3\n\
          1: EvalExpr index=0 slot=0 dst=0\n\
-         2: Store index=0 src=0\n"
+         2: Store index=0 at=0 src=0\n"
     );
 }
 
@@ -369,7 +369,7 @@ fn a_chain_of_operators_reuses_the_destination_register() {
          12: TraceRead read=Simple src=1\n\
          13: Arith op=+ hint=2 lhs=0 rhs=1 dst=0\n\
          14: TraceOperator op=+ src=0\n\
-         15: Store index=0 src=0\n"
+         15: Store index=0 at=0 src=0\n"
     );
     assert_eq!(
         chunk.registers, 2,
@@ -402,7 +402,7 @@ fn precedence_decides_which_operator_is_the_inner_one() {
          8: TraceOperator op=* src=1\n\
          9: Arith op=+ hint=1 lhs=0 rhs=1 dst=0\n\
          10: TraceOperator op=+ src=0\n\
-         11: Store index=0 src=0\n"
+         11: Store index=0 at=0 src=0\n"
     );
     assert_eq!(
         chunk.registers, 3,
@@ -431,7 +431,7 @@ fn an_operand_that_needs_eval_leaves_the_whole_expression_general() {
         render(&chunk),
         "0: Clause index=0 end=3\n\
          1: EvalExpr index=0 slot=0 dst=0\n\
-         2: Store index=0 src=0\n"
+         2: Store index=0 at=0 src=0\n"
     );
 
     let promoted = compile_for_test(b"zw = zv + 1\n").expect("compiles");
@@ -463,7 +463,7 @@ fn only_the_arithmetic_operators_promote() {
             render(&chunk),
             "0: Clause index=0 end=3\n\
              1: EvalExpr index=0 slot=0 dst=0\n\
-             2: Store index=0 src=0\n",
+             2: Store index=0 at=0 src=0\n",
             "{} promoted an operator that is not arithmetic",
             String::from_utf8_lossy(source)
         );
@@ -494,7 +494,7 @@ fn a_constant_symbol_is_a_native_load() {
         "0: Clause index=0 end=4\n\
          1: LoadConstant dst=0\n\
          2: TraceLiteral src=0\n\
-         3: Store index=0 src=0\n"
+         3: Store index=0 at=0 src=0\n"
     );
 
     // A quoted literal is the other load, against the chunk's own interned
@@ -505,7 +505,7 @@ fn a_constant_symbol_is_a_native_load() {
         "0: Clause index=0 end=4\n\
          1: Const dst=0 konst=0\n\
          2: TraceLiteral src=0\n\
-         3: Store index=0 src=0\n"
+         3: Store index=0 at=0 src=0\n"
     );
 }
 
@@ -1357,4 +1357,64 @@ fn a_trap_call_and_a_dynamic_call_stay_generic() {
          1: Generic index=1\n"
     );
     assert_eq!(chunk.registers, 0);
+}
+
+/// **A compiled write carries the plan's slot for a simple target and carries
+/// none for the other two**, which is the whole of what `write_slot` decides.
+///
+/// The pairing is what pins it: a simple target reads `at=0`, and the stem and
+/// compound targets beside it read `at=-` with the identical stream around
+/// them. An implementation that resolved every target's own symbol would give
+/// all three a number, and one that resolved none would give all three a dash
+/// -- and each of those is what one half of this test alone would still admit.
+///
+/// The stem and compound arms of `Interp::assign_expr_target` write through a
+/// name and through a tail key resolved at the write site; neither writes the
+/// symbol's own frame slot, so a number here would be a slot they do not use.
+#[test]
+fn a_compiled_write_names_a_slot_only_for_a_simple_target() {
+    let simple = compile_for_test(b"zw = 'v'\n").expect("compiles");
+    assert_eq!(
+        render(&simple),
+        "0: Clause index=0 end=4\n\
+         1: Const dst=0 konst=0\n\
+         2: TraceLiteral src=0\n\
+         3: Store index=0 at=0 src=0\n"
+    );
+
+    for source in [&b"zs. = 'v'\n"[..], &b"zs.zk = 'v'\n"[..]] {
+        let chunk = compile_for_test(source).expect("compiles");
+        assert_eq!(
+            render(&chunk),
+            "0: Clause index=0 end=4\n\
+             1: Const dst=0 konst=0\n\
+             2: TraceLiteral src=0\n\
+             3: Store index=0 at=- src=0\n",
+            "{} resolved a slot for a target that does not write one",
+            String::from_utf8_lossy(source)
+        );
+    }
+}
+
+/// The slot a write carries is the one the **plan** gives that name, not the
+/// order the writes appear in.
+///
+/// Two names written in the reverse order they were first read in: `zb` is
+/// read first, so the plan binds it to the lower slot, and the writes below
+/// carry `1` then `0` rather than `0` then `1`. A compiler numbering its own
+/// stores would print them the other way round and the interpreter would then
+/// write each value into the other variable's slot.
+#[test]
+fn a_compiled_writes_slot_comes_from_the_plan_rather_than_from_its_position() {
+    let chunk = compile_for_test(b"say zb za\nza = 1\nzb = 2\n").expect("compiles");
+    assert!(
+        render(&chunk).contains("Store index=1 at=1 src=0\n"),
+        "the first write did not take the plan's slot for its own name: {}",
+        render(&chunk)
+    );
+    assert!(
+        render(&chunk).contains("Store index=2 at=0 src=0\n"),
+        "the second write did not take the plan's slot for its own name: {}",
+        render(&chunk)
+    );
 }

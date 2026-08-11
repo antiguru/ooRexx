@@ -682,6 +682,10 @@ impl Interp {
                         value,
                         Some(&cursor.string()[piece.clone()]),
                         indent,
+                        // No compiler resolved a `PARSE` target: nothing
+                        // promotes the instruction, so the write resolves its
+                        // own slot.
+                        None,
                     )?;
                     // The `TRACE R` half of the pair -- see this module's own
                     // `exec_parse` doc for why it is a choice of prefix and

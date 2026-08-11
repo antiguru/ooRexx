@@ -585,3 +585,119 @@ zsub:
          without the compiled stream"
     );
 }
+
+/// **A slot resolved before the loop still names its own variable after the
+/// frame has grown under it**, which is the wrong-answer risk a compiled write
+/// and a kept control slot both carry.
+///
+/// Three growth events in one program, because a cached index survives or fails
+/// for one reason and each of these reaches it differently: an `INTERPRET`
+/// binding a name the plan never saw grows the frame **inside** the loop whose
+/// control slot was taken before it; `PROCEDURE EXPOSE` turns a slot of the
+/// callee's own frame into an alias of the caller's, so a write through the
+/// cached index has to land in the caller's storage; and the callee's own
+/// `INTERPRET` grows a frame that already holds an alias.
+///
+/// **The expected bytes are the oracle's**, measured on this program directly:
+/// `10 5` / `10 20 30 40` / `callee 17 4` / `caller 17`. `zc` and `zg` are
+/// compiled writes, `zi` and `zj` are control variables, and every one of them
+/// is read back after the growth that could have displaced it.
+///
+/// Run on **both engines**, which is what makes it the witness for the control
+/// slot as well as for the write. `Interp::run_loop_with_header` is shared, so
+/// a control slot resolved wrongly is wrong on both arms identically and the
+/// dual-engine sweep structurally cannot see it; only bytes pinned to the
+/// oracle can.
+///
+/// **It can fail, and it is not the only thing that would notice a wrong slot**
+/// -- measured, by making `control_slot` answer one past the plan's: this test
+/// reddens, and so do dozens of existing loop tests that never grow a frame at
+/// all. What is unique to it is the growth, not the slot.
+#[test]
+fn a_resolved_slot_still_names_its_variable_after_the_frame_grows() {
+    const GROWS_UNDER_A_CACHED_SLOT: &[u8] = b"\
+zc = 0
+do zi = 1 to 4
+  interpret 'zn' || zi || ' = ' || (zi * 10)
+  zc = zc + zi
+end
+say zc zi
+say zn1 zn2 zn3 zn4
+call sub
+say 'caller' zg
+exit
+sub: procedure expose zg
+  zg = 2
+  do zj = 1 to 3
+    zg = zg + zj
+  end
+  interpret 'zfresh = 9'
+  zg = zg + zfresh
+  say 'callee' zg zj
+  return
+";
+
+    for engine in [Engine::TreeWalker, Engine::Ir] {
+        let outcome = execute(
+            TEST_PATH,
+            GROWS_UNDER_A_CACHED_SLOT.to_vec(),
+            false,
+            Invocation::none().with_engine(engine),
+        );
+        assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stdout),
+            "10 5\n10 20 30 40\ncallee 17 4\ncaller 17\n",
+            "{engine:?} did not answer the oracle's own bytes for this program"
+        );
+    }
+}
+
+/// The adjacent case the test above needs to be pinned rather than
+/// coincidental: **a control variable whose slot must not be resolved early at
+/// all.**
+///
+/// A compound control names a different tail on every pass -- the body's own
+/// `zi = zi + 1` moves which tail `za.zi` is -- so the loop's bound keeps
+/// comparing against a fresh, still-default `0`, and it is the `LEAVE` that
+/// ends it at `8`. An implementation that resolved `za.zi` once and reused it
+/// prints `4`. The oracle's own answer, measured on this program: `8 1 1 1 1`.
+///
+/// **It catches `write_slot` resolving every target shape** -- measured, that
+/// mutation reddens this test along with the corpus differential, the
+/// dual-engine sweep and eight others, through the tripwire `Op::Store`'s arm
+/// in `drive.rs` carries.
+///
+/// **It does not catch the same widening of `control_slot`, and nothing in the
+/// suite does** -- measured, by making that function answer for a compound
+/// control too: nothing goes red. `at` is read in `bind_control`'s `Simple` arm
+/// alone, selected by the same `shape_of` predicate, so a slot resolved for a
+/// compound control is computed and discarded. That filter is unobservable and
+/// is kept for what it says rather than for what it stops.
+#[test]
+fn a_compound_control_resolves_its_tail_on_every_pass() {
+    const A_MOVING_TAIL: &[u8] = b"\
+za. = 0
+zi = 1
+do za.zi = 1 to 3
+  if zi > 7 then leave
+  zi = zi + 1
+end
+say zi za.1 za.2 za.3 za.8
+";
+
+    for engine in [Engine::TreeWalker, Engine::Ir] {
+        let outcome = execute(
+            TEST_PATH,
+            A_MOVING_TAIL.to_vec(),
+            false,
+            Invocation::none().with_engine(engine),
+        );
+        assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stdout),
+            "8 1 1 1 1\n",
+            "{engine:?} resolved a compound control's tail once instead of on every pass"
+        );
+    }
+}

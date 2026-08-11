@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use rexx_parse::{Call, CodeBody, Expr, ExprKind, Instruction, InstructionKind, SymbolId};
 
-use super::{Calls, Chunk, ChunkTooLarge, Hints, Op, ReadSlot};
+use super::{Calls, Chunk, ChunkTooLarge, Hints, Op, PlanSlot};
 use crate::eval::{SymbolRead, is_arithmetic};
 use crate::plan::Plan;
 use crate::run::{HeaderPlan, if_targets, loop_header_plan, otherwise_range};
@@ -251,13 +251,16 @@ enum PatchKind {
 /// value and then writes or prints it; every other instruction becomes
 /// [`Op::Generic`].
 ///
-/// **`plan` is read for one thing only: the slot a promoted *read* resolves
-/// to.** A compiled assignment's **target** is deliberately not resolved here
-/// -- `Op::Store` goes through `Interp::assign_expr_target`, which is what
-/// `step`'s own arm calls, so a stem, a compound tail and the `>=>` line stay
-/// one implementation, and resolving the name here would be the second one. A
-/// read has no such second implementation to fall out of: `Interp::read_at`
-/// takes the slot it would otherwise resolve, from this same map.
+/// **`plan` is read for one thing: the slot a promoted read or write resolves
+/// to.** The rule a compiled assignment's target has to keep is that a stem, a
+/// compound tail and the `>=>` line stay one implementation -- `Op::Store` goes
+/// through `Interp::assign_expr_target`, which is what `step`'s own arm calls,
+/// and a store path in the driver that wrote a slot itself would be the second
+/// one. What that rule forbids is the *dispatch*, not the resolution: the slot
+/// travels as an argument into that one function, which uses it in the arm
+/// where it means anything and ignores it in the two where it does not. A
+/// promoted read is the same shape one function over, `Interp::read_at` taking
+/// the slot it would otherwise resolve from this same map.
 ///
 /// The one error is a machine width, not a language construct (the plan's
 /// Decisions section: "the compiler has one error, and it is a machine
@@ -577,7 +580,7 @@ pub(crate) fn compile(
             // the boundary that follows it is where a `CALL ON` handler queued
             // by the value expression runs -- measured, the handler sees the
             // assignment already done.
-            InstructionKind::Assignment { value, .. } => {
+            InstructionKind::Assignment { target, value } => {
                 let mark = registers.mark();
                 let dst = registers.alloc()?;
                 let at = op_index(&ops)?;
@@ -600,6 +603,7 @@ pub(crate) fn compile(
                 )?;
                 ops.push(Op::Store {
                     index: instruction_index(index)?,
+                    at: write_slot(plan, target),
                     src: dst,
                 });
                 close_region(&mut ops, at)?;
@@ -874,16 +878,42 @@ fn push_native<'a>(
 /// unresolved arm ordinary rather than defensive: what a compound read goes
 /// through is the *stem's* slot and a tail key worked out at the read site, and
 /// `Plan::note_compound_name` binds those by name with no `SymbolId` to hang
-/// them on ([`ReadSlot`]'s own doc comment).
+/// them on ([`PlanSlot`]'s own doc comment).
 ///
-/// [`ReadSlot`]: super::ReadSlot
+/// [`PlanSlot`]: super::PlanSlot
+/// The slot one assignment *target* resolves to, or [`PlanSlot::UNRESOLVED`]
+/// for a target that does not write a slot by name.
+///
+/// **Simple variables only, and the other two arms are not omissions.** A stem
+/// target is `stem_assign`, which replaces the whole stem under its name; a
+/// compound target resolves a tail key at the write site and mutates one tail
+/// through `stem_set`. Neither writes the symbol's own frame slot, so there is
+/// no slot here for them to carry -- the same asymmetry [`PlanSlot`]'s own doc
+/// comment records for a compound *read*.
+///
+/// The map is the plan's `by_symbol`, which is what `Code::slots` is a view of
+/// at run time, so the compiled answer and `Interp::slot_of`'s are one
+/// resolution made at two times ([`push_read`]'s own doc comment has the
+/// argument in full).
+///
+/// [`PlanSlot`]: super::PlanSlot
+fn write_slot(plan: &Plan, target: &Expr) -> PlanSlot {
+    match &target.kind {
+        ExprKind::Variable(id) => plan
+            .by_symbol
+            .get(id)
+            .map_or(PlanSlot::UNRESOLVED, |at| PlanSlot::of(*at)),
+        _ => PlanSlot::UNRESOLVED,
+    }
+}
+
 fn push_read(ops: &mut Vec<Op>, plan: &Plan, read: SymbolRead, symbol: SymbolId, dst: u16) {
     let at = match read {
         SymbolRead::Simple | SymbolRead::Stem => plan
             .by_symbol
             .get(&symbol)
-            .map_or(ReadSlot::UNRESOLVED, |at| ReadSlot::of(*at)),
-        SymbolRead::Compound => ReadSlot::UNRESOLVED,
+            .map_or(PlanSlot::UNRESOLVED, |at| PlanSlot::of(*at)),
+        SymbolRead::Compound => PlanSlot::UNRESOLVED,
     };
     ops.push(Op::Load {
         symbol,
@@ -1292,7 +1322,7 @@ mod tests {
     use rexx_parse::{SymbolId, SymbolTable};
 
     use super::{
-        Op, ReadSlot, Registers, SymbolRead, assert_clause_regions_hold_no_generic_op,
+        Op, PlanSlot, Registers, SymbolRead, assert_clause_regions_hold_no_generic_op,
         assert_literal_echoes_follow_their_load, assert_read_echoes_follow_their_load,
         assert_region_ops_name_their_clause, assert_trace_ops_open_a_clause_region,
     };
@@ -1519,10 +1549,14 @@ mod tests {
             Op::Load {
                 symbol: zv,
                 read: SymbolRead::Simple,
-                at: ReadSlot::UNRESOLVED,
+                at: PlanSlot::UNRESOLVED,
                 dst: 0,
             },
-            Op::Store { index: 0, src: 0 },
+            Op::Store {
+                index: 0,
+                at: PlanSlot::UNRESOLVED,
+                src: 0,
+            },
         ]);
     }
 
@@ -1537,7 +1571,7 @@ mod tests {
             Op::Load {
                 symbol: zv,
                 read: SymbolRead::Simple,
-                at: ReadSlot::UNRESOLVED,
+                at: PlanSlot::UNRESOLVED,
                 dst: 0,
             },
             Op::TraceRead {
@@ -1545,7 +1579,11 @@ mod tests {
                 read: SymbolRead::Simple,
                 src: 1,
             },
-            Op::Store { index: 0, src: 0 },
+            Op::Store {
+                index: 0,
+                at: PlanSlot::UNRESOLVED,
+                src: 0,
+            },
         ]);
     }
 
@@ -1562,7 +1600,7 @@ mod tests {
             Op::Load {
                 symbol: zv,
                 read: SymbolRead::Simple,
-                at: ReadSlot::UNRESOLVED,
+                at: PlanSlot::UNRESOLVED,
                 dst: 0,
             },
             Op::TraceRead {
@@ -1570,7 +1608,11 @@ mod tests {
                 read: SymbolRead::Simple,
                 src: 0,
             },
-            Op::Store { index: 0, src: 0 },
+            Op::Store {
+                index: 0,
+                at: PlanSlot::UNRESOLVED,
+                src: 0,
+            },
         ]);
     }
 
@@ -1585,7 +1627,7 @@ mod tests {
             Op::Load {
                 symbol: zv,
                 read: SymbolRead::Simple,
-                at: ReadSlot::UNRESOLVED,
+                at: PlanSlot::UNRESOLVED,
                 dst: 0,
             },
             Op::TraceRead {
@@ -1593,7 +1635,11 @@ mod tests {
                 read: SymbolRead::Compound,
                 src: 0,
             },
-            Op::Store { index: 0, src: 0 },
+            Op::Store {
+                index: 0,
+                at: PlanSlot::UNRESOLVED,
+                src: 0,
+            },
         ]);
     }
 
@@ -1608,7 +1654,7 @@ mod tests {
             Op::Load {
                 symbol: zv,
                 read: SymbolRead::Simple,
-                at: ReadSlot::of(1),
+                at: PlanSlot::of(1),
                 dst: 0,
             },
             Op::TraceRead {
@@ -1616,7 +1662,11 @@ mod tests {
                 read: SymbolRead::Simple,
                 src: 0,
             },
-            Op::Store { index: 0, src: 0 },
+            Op::Store {
+                index: 0,
+                at: PlanSlot::UNRESOLVED,
+                src: 0,
+            },
         ]);
     }
 
@@ -1636,11 +1686,11 @@ mod tests {
     /// separates "no slot" from "the last slot that fits".
     #[test]
     fn a_slot_too_wide_for_a_compiled_read_is_unresolved_rather_than_refused() {
-        assert_eq!(ReadSlot::of(0).resolved(), Some(0));
+        assert_eq!(PlanSlot::of(0).resolved(), Some(0));
         let last = u32::MAX as usize - 1;
-        assert_eq!(ReadSlot::of(last).resolved(), Some(last));
-        assert_eq!(ReadSlot::of(u32::MAX as usize).resolved(), None);
-        assert_eq!(ReadSlot::UNRESOLVED.resolved(), None);
+        assert_eq!(PlanSlot::of(last).resolved(), Some(last));
+        assert_eq!(PlanSlot::of(u32::MAX as usize).resolved(), None);
+        assert_eq!(PlanSlot::UNRESOLVED.resolved(), None);
     }
 
     /// The neighbouring arrangement that must stay accepted, without which
@@ -1677,7 +1727,11 @@ mod tests {
                 slot: 0,
                 dst: 0,
             },
-            Op::Store { index: 0, src: 0 },
+            Op::Store {
+                index: 0,
+                at: PlanSlot::UNRESOLVED,
+                src: 0,
+            },
         ]);
     }
 
@@ -1711,7 +1765,11 @@ mod tests {
         assert_region_ops_name_their_clause(&[
             Op::Clause { index: 0, end: 3 },
             Op::TraceClause { index: 0 },
-            Op::Store { index: 0, src: 0 },
+            Op::Store {
+                index: 0,
+                at: PlanSlot::UNRESOLVED,
+                src: 0,
+            },
             Op::SelectCaseText {
                 index: 7,
                 case: None,

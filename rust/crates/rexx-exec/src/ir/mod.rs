@@ -57,7 +57,7 @@ mod corpus_shape_tests;
 
 /// **The stream's own width, asserted rather than described.** Every op in
 /// every chunk pays for the widest variant, so a field added to one of them is
-/// a cost to all of them -- which is the argument [`ReadSlot`] rests on, and an
+/// a cost to all of them -- which is the argument [`PlanSlot`] rests on, and an
 /// argument about a width is worth nothing without the width. The widest
 /// payload today has tail padding for the discriminant to sit in; a variant
 /// that needs more than that grows the array, and this is where that shows up
@@ -389,7 +389,7 @@ pub(crate) enum Op {
     ///
     /// `at` is the slot the plan already resolved this symbol to, which is the
     /// one thing this op knows that the tree-walker's own read has to work out
-    /// -- see [`ReadSlot`] for what carries it and why a compound never has
+    /// -- see [`PlanSlot`] for what carries it and why a compound never has
     /// one.
     ///
     /// **Only valid inside a [`Op::Clause`] region**, whose clause owns the
@@ -398,7 +398,7 @@ pub(crate) enum Op {
     Load {
         symbol: SymbolId,
         read: SymbolRead,
-        at: ReadSlot,
+        at: PlanSlot,
         dst: u16,
     },
     /// Echoes the `>V>` line of the read in register `src`, and the `>C>` line
@@ -502,10 +502,16 @@ pub(crate) enum Op {
     /// compound-tail dispatch itself (`Interp::assign_expr_target`) are one
     /// implementation rather than a second one beside it.
     ///
+    /// `at` is the slot the plan already resolved a **simple**-variable target
+    /// to, [`PlanSlot::UNRESOLVED`] for every other target shape, and it is
+    /// handed to `assign_expr_target` as an argument rather than acted on here
+    /// -- see that function for why the alternative is the defect the
+    /// dual-engine gate exists to catch.
+    ///
     /// **Only valid inside a [`Op::Clause`] region**, whose clause is this
     /// assignment's own: the indent every line above traces at and the
     /// boundary the write precedes both belong to it.
-    Store { index: u32, src: u16 },
+    Store { index: u32, at: PlanSlot, src: u16 },
     /// Prints the `SAY` at `index` from register `src`, or a blank line when
     /// it has no expression at all.
     ///
@@ -611,8 +617,14 @@ pub(crate) enum BodyEngine<'a> {
     },
 }
 
-/// The frame slot [`Op::Load`] reads, resolved when this chunk was compiled,
-/// or the absence of one.
+/// The frame slot a symbol resolves to, worked out when this chunk was
+/// compiled, or the absence of one.
+///
+/// **The same resolution for a read and for a write**, which is what makes it
+/// one type rather than two: [`Op::Load`] and [`Op::Store`] each carry one, and
+/// what the writing side does with it is pass it into the one
+/// `Interp::assign_expr_target` both engines enter, never a store path of its
+/// own.
 ///
 /// **A `u32` with one reserved value rather than an `Option<u32>`, and it is
 /// the op array that decides it.** An `Option<u32>` is eight bytes where this
@@ -621,35 +633,37 @@ pub(crate) enum BodyEngine<'a> {
 /// in every chunk, for a field two of them carry. The assertion above [`Op`] is
 /// what holds that width rather than this sentence.
 ///
-/// **A compound never has one.** Its read goes through the *stem's* slot and a
-/// tail key resolved at the read site, so the symbol's own slot is not what it
-/// reads; [`ReadSlot::UNRESOLVED`] is the honest answer and the run-time path
-/// is what resolves it, exactly as it does for the tree-walker.
+/// **A compound never has one, and neither does a stem target.** A compound's
+/// read goes through the *stem's* slot and a tail key resolved at the read
+/// site, so the symbol's own slot is not what it reads; a stem *write* is
+/// `stem_assign`, which is a name and not a slot at all. In both cases
+/// [`PlanSlot::UNRESOLVED`] is the honest answer and the run-time path is what
+/// resolves it, exactly as it does for the tree-walker.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) struct ReadSlot(u32);
+pub(crate) struct PlanSlot(u32);
 
-impl ReadSlot {
-    /// No slot resolved: the read works its own out, which is what every read
-    /// did before there was a compiler to do it earlier.
-    pub(crate) const UNRESOLVED: ReadSlot = ReadSlot(u32::MAX);
+impl PlanSlot {
+    /// No slot resolved: the read or write works its own out, which is what
+    /// every one of them did before there was a compiler to do it earlier.
+    pub(crate) const UNRESOLVED: PlanSlot = PlanSlot(u32::MAX);
 
-    /// The slot `at`, or [`ReadSlot::UNRESOLVED`] when it does not fit this
+    /// The slot `at`, or [`PlanSlot::UNRESOLVED`] when it does not fit this
     /// width.
     ///
     /// **Not a [`ChunkTooLarge`], which would refuse the whole body for
     /// something that is only an optimisation.** A slot index past `u32` is a
     /// frame with four billion names in it; the read still has a correct
     /// answer, and it is the one the tree-walker computes.
-    fn of(at: usize) -> ReadSlot {
+    pub(crate) fn of(at: usize) -> PlanSlot {
         match u32::try_from(at) {
-            Ok(at) if at != ReadSlot::UNRESOLVED.0 => ReadSlot(at),
-            _ => ReadSlot::UNRESOLVED,
+            Ok(at) if at != PlanSlot::UNRESOLVED.0 => PlanSlot(at),
+            _ => PlanSlot::UNRESOLVED,
         }
     }
 
     /// The slot, or `None` when this op carries none.
-    fn resolved(self) -> Option<usize> {
-        (self != ReadSlot::UNRESOLVED).then_some(self.0 as usize)
+    pub(crate) fn resolved(self) -> Option<usize> {
+        (self != PlanSlot::UNRESOLVED).then_some(self.0 as usize)
     }
 }
 

@@ -616,6 +616,8 @@ enum LoopState {
     /// budget, already validated, independent of `done`.
     OverOnce {
         control: SymbolId,
+        /// [`control_slot`], taken once when this loop was entered.
+        at: Option<usize>,
         value: ObjRef,
         done: bool,
         remaining: Option<u64>,
@@ -627,6 +629,15 @@ enum LoopState {
     /// `setup_controlled` already defaulted it to `1`.
     Controlled {
         control: SymbolId,
+        /// [`control_slot`], taken once when this loop was entered.
+        ///
+        /// **The one field here that is a cache rather than state**, and what
+        /// makes it safe is that a name's slot in a frame never moves: `Plan`
+        /// is immutable, an activation's `extra` bindings are only ever added
+        /// to, and `RootSet::grow_slots` appends. A slot that later becomes an
+        /// alias -- `PROCEDURE EXPOSE` -- keeps its index and is chased at
+        /// every read and write, so exposure does not invalidate this either.
+        at: Option<usize>,
         current: ControlValue,
         to: Option<Number>,
         by: Number,
@@ -1371,7 +1382,9 @@ impl Interp {
 
             InstructionKind::Assignment { target, value } => {
                 let value = self.eval(code, value)?;
-                self.assign_evaluated(code, target, value)?;
+                // `None`: this engine resolves nothing ahead of time, so the
+                // write resolves its own slot the way it always has.
+                self.assign_evaluated(code, target, value, None)?;
                 Ok(Flow::Next)
             }
 
@@ -2824,12 +2837,17 @@ impl Interp {
     /// body enters neither function.
     ///
     /// [`Interp::say_evaluated`]: Interp::say_evaluated
+    ///
+    /// `at` is forwarded to [`Interp::assign_expr_target`] unchanged and is
+    /// that function's parameter rather than this one's; `None` is what a
+    /// caller with no earlier resolution passes.
     #[inline]
     pub(crate) fn assign_evaluated(
         &mut self,
         code: &Code<'_>,
         target: &Expr,
         value: ObjRef,
+        at: Option<usize>,
     ) -> Result<(), Failure> {
         self.roots.push_temp(value);
         // `>>>` fires before the assignment itself
@@ -2854,7 +2872,7 @@ impl Interp {
         if let Some(rendered) = &rendered {
             self.trace_result(indent, rendered);
         }
-        self.assign_expr_target(code, target, value, rendered.as_deref(), indent)
+        self.assign_expr_target(code, target, value, rendered.as_deref(), indent, at)
     }
 
     /// Writes `value` through one assignment *target expression*, and traces
@@ -2895,6 +2913,22 @@ impl Interp {
     /// here: a `&[u8]` that is empty because tracing is off and a `&[u8]`
     /// that is empty because the value is the null string are the same value,
     /// and only one of them may be printed.
+    ///
+    /// **`at` is the slot a compiler already resolved a simple-variable target
+    /// to, and it is a parameter of *this* function rather than a store of its
+    /// own on purpose.** `crate::ir::Op::Store` carries one and the tree-walker
+    /// passes `None`, so both engines still arrive here and a stem target, a
+    /// compound tail and the `>=>` line stay one implementation -- a second
+    /// store path executed in the driver would be the two-implementations
+    /// defect the dual-engine gate exists to catch, however much faster it
+    /// measured. The three arms below are what makes that safe to widen: only
+    /// the first one writes a slot by name at all, so the other two ignore `at`
+    /// rather than needing a rule about it.
+    ///
+    /// **`None` is always correct.** The slot is then resolved here exactly as
+    /// it was before any caller could supply one, which is what
+    /// `Interp::slot_of` does; a supplied slot is the same resolution made
+    /// earlier, from the plan's own map, and never a different answer.
     pub(crate) fn assign_expr_target(
         &mut self,
         code: &Code<'_>,
@@ -2902,15 +2936,19 @@ impl Interp {
         value: ObjRef,
         rendered: Option<&[u8]>,
         indent: usize,
+        at: Option<usize>,
     ) -> Result<(), Failure> {
         match &target.kind {
             ExprKind::Variable(id) => {
-                let name = code.symbols.name(*id).as_bytes().to_vec();
-                let slot = self.slot_of(&name);
+                let name = code.symbols.name(*id).as_bytes();
+                let slot = match at {
+                    Some(slot) => slot,
+                    None => self.slot_of(name),
+                };
                 let frame = self.activation().frame;
                 self.roots.set_slot(frame, slot, value);
                 if let Some(rendered) = rendered {
-                    self.trace_assignment(indent, &name, rendered);
+                    self.trace_assignment(indent, name, rendered);
                 }
             }
             // `stem. = expr`: replace-and-rebind (D15a), through the
@@ -5801,6 +5839,7 @@ impl Interp {
             },
             LoopKind::Controlled(ctrl) => LoopState::Controlled {
                 control: ctrl.control,
+                at: control_slot(code, ctrl.control),
                 // The header's own value, kept as the `Number` the header
                 // produced. The first re-test replaces it, and that is where
                 // the integer representation gets picked up.
@@ -5823,6 +5862,7 @@ impl Interp {
             },
             LoopKind::Over { control, .. } => LoopState::OverOnce {
                 control: *control,
+                at: control_slot(code, *control),
                 value: values
                     .over
                     .expect("a DO OVER's plan always names its target"),
@@ -6300,6 +6340,7 @@ impl Interp {
             }
             LoopState::OverOnce {
                 control,
+                at,
                 value,
                 done,
                 remaining,
@@ -6315,11 +6356,12 @@ impl Interp {
                     *r -= 1;
                 }
                 *done = true;
-                self.bind_control(code, *control, loop_indent, *value)?;
+                self.bind_control(code, *control, loop_indent, *value, *at)?;
                 Ok(true)
             }
             LoopState::Controlled {
                 control,
+                at,
                 current,
                 to,
                 by,
@@ -6392,7 +6434,7 @@ impl Interp {
                 let form = self.activation().settings.form();
                 let re_tested = std::mem::replace(stepped, true);
                 if re_tested {
-                    let name = code.symbols.name(*control).as_bytes().to_vec();
+                    let name = code.symbols.name(*control).as_bytes();
                     // **`read`, not `read_by_name`: this is an evaluation and
                     // it can raise `NOVALUE`** (review round 1 re-review,
                     // NEW-1 -- a defect this arm shipped with, not a
@@ -6430,15 +6472,21 @@ impl Interp {
                     // the very next pass, so the loop's own `TO 3` bound
                     // keeps comparing against a fresh, still-default `0`
                     // tail instead of the one `a.i` incremented.
-                    let (previous, novalue, resolved) = match shape_of(&name) {
+                    let (previous, novalue, resolved) = match shape_of(name) {
                         NameShape::Simple => {
-                            let (value, novalue) = self.read(code, *control);
+                            // `read_at` with the slot `control_slot` took when
+                            // the loop was entered, which is the same
+                            // resolution this read made for itself on every
+                            // pass before -- `None` still makes it, so the two
+                            // shapes below and a control this resolution does
+                            // not reach are unaffected.
+                            let (value, novalue) = self.read_at(code, *control, *at);
                             (value, novalue, None)
                         }
                         // A bare stem never raises `NOVALUE` on read (`eval_
                         // node`'s own `ExprKind::Stem` arm has the citation),
                         // so there is no fallible read to thread through.
-                        NameShape::Stem => (self.read_stem(&name), Novalue::Set, None),
+                        NameShape::Stem => (self.read_stem(name), Novalue::Set, None),
                         NameShape::Compound => {
                             let (stem_name, _tails) = compound_parts(code.symbols.name(*control));
                             let key = self.tail_key(code, *control);
@@ -6457,14 +6505,14 @@ impl Interp {
                     // there, the same order `eval_node`'s `Compound` arm and
                     // its own tracing counterpart use for an ordinary read.
                     if let Some(resolved) = &resolved {
-                        self.trace_compound_name(loop_indent, &name, resolved);
+                        self.trace_compound_name(loop_indent, name, resolved);
                     }
                     // `result_text` for the pair, not `intermediate_text`:
                     // `>V>` is `intermediates` and `>>>` is `results`, and
                     // `results` is the weaker of the two, so it renders for
                     // either and drops neither.
                     if let Some(rendered) = self.result_text(previous) {
-                        self.trace_variable(loop_indent, &name, &rendered);
+                        self.trace_variable(loop_indent, name, &rendered);
                         self.trace_result(loop_indent, &rendered);
                     }
                     // The increment, on integers when it can be. `previous`
@@ -6508,7 +6556,7 @@ impl Interp {
                 if re_tested && let Some(rendered) = self.result_text(value) {
                     self.trace_result(loop_indent, &rendered);
                 }
-                self.bind_control(code, *control, bind_indent, value)?;
+                self.bind_control(code, *control, bind_indent, value, *at)?;
 
                 if let Some(r) = for_remaining
                     && *r == 0
@@ -6593,17 +6641,35 @@ impl Interp {
     /// three times, because `Controlled::control` is a bare `SymbolId` and
     /// the old code ran every shape through the simple-variable slot write
     /// unconditionally, so a compound's tail was never resolved at all.
+    ///
+    /// `at` is [`control_slot`]'s answer for this loop, taken once when it was
+    /// entered: the same resolution the `Simple` arm below makes for itself
+    /// when it is `None`, and read by that arm alone -- a stem or compound
+    /// control writes through a name rather than through a slot.
     fn bind_control(
         &mut self,
         code: &Code<'_>,
         control: SymbolId,
         indent: usize,
         value: ObjRef,
+        at: Option<usize>,
     ) -> Result<(), Failure> {
         match shape_of(code.symbols.name(control).as_bytes()) {
             NameShape::Simple => {
                 let name = code.symbols.name(control).as_bytes();
-                let slot = self.slot_of(name);
+                // The tripwire `crate::ir::Op::Load` and `Op::Store` each carry,
+                // on the one write that keeps its slot across passes rather
+                // than reading it out of an op: a kept index that is not the
+                // one this body's plan gives the name would write into another
+                // variable's slot rather than fail.
+                debug_assert!(
+                    at.is_none() || control_slot(code, control) == at,
+                    "a loop's kept control slot is not the one this body's plan gives its name"
+                );
+                let slot = match at {
+                    Some(slot) => slot,
+                    None => self.slot_of(name),
+                };
                 let frame = self.activation().frame;
                 self.roots.set_slot(frame, slot, value);
                 // `trace_assignment` carries its own `intermediates` gate, so
@@ -6642,7 +6708,9 @@ impl Interp {
                     span: 0..0,
                 };
                 let rendered = self.intermediate_text(value);
-                self.assign_expr_target(code, &target, value, rendered.as_deref(), indent)
+                // `None`, and not `at`: a stem write is `stem_assign` under a
+                // name, so there is no slot for it to be the slot of.
+                self.assign_expr_target(code, &target, value, rendered.as_deref(), indent, None)
             }
             NameShape::Compound => {
                 let target = Expr {
@@ -6650,7 +6718,9 @@ impl Interp {
                     span: 0..0,
                 };
                 let rendered = self.intermediate_text(value);
-                self.assign_expr_target(code, &target, value, rendered.as_deref(), indent)
+                // `None` for the reason the arm above passes it: a compound
+                // writes one tail through a key resolved on this pass.
+                self.assign_expr_target(code, &target, value, rendered.as_deref(), indent, None)
             }
         }
     }
@@ -8162,6 +8232,42 @@ pub(crate) enum NameShape {
     Simple,
     Stem,
     Compound,
+}
+
+/// The frame slot a loop's control variable writes and re-reads, resolved
+/// **once, when the loop is entered**, or `None` for a control this cannot
+/// answer for.
+///
+/// **Simple spellings only.** A stem control assigns the whole stem by name
+/// and a compound one resolves a tail key afresh on every pass -- measured,
+/// `a.=0; i=1; Do a.i=1 To 3; If i>7 Then Leave; i=i+1; End; say i` answers
+/// `8`, because the body moves which tail the control is -- so neither has
+/// a slot that could be resolved ahead of the pass that uses it.
+///
+/// **That filter is unobservable, and it is written down as such rather than
+/// defended as a guard.** `bind_control` reads this answer in its `Simple` arm
+/// alone, selected by the same `shape_of`, so a slot resolved for one of the
+/// other two shapes would be computed and discarded. Measured: answering for a
+/// compound control as well leaves the whole workspace suite green, this
+/// crate's own loop tests included. What it buys is that the value this
+/// function returns means what its name says at every call site, not that
+/// anything downstream is stopped.
+///
+/// **It reads the plan's own map and nothing else, which is what makes it
+/// free of side effects.** `Interp::slot_of` would *grow* the frame for a
+/// name nobody has bound, and doing that at loop entry rather than at the
+/// first write would bind a name earlier than the interpreter does. `None`
+/// leaves both the write and the re-read resolving their own slot exactly
+/// as they did before this existed.
+///
+/// The answers agree because they come from one map: `Plan::bind` gives a
+/// symbol the slot its *name* already has, so `by_symbol[id]` and
+/// `slot_of(name)` cannot disagree for a name the plan holds.
+fn control_slot(code: &Code<'_>, control: SymbolId) -> Option<usize> {
+    match shape_of(code.symbols.name(control).as_bytes()) {
+        NameShape::Simple => code.slots.get(&control).copied(),
+        NameShape::Stem | NameShape::Compound => None,
+    }
 }
 
 pub(crate) fn shape_of(name: &[u8]) -> NameShape {

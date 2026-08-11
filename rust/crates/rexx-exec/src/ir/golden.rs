@@ -15,7 +15,7 @@
 //! gives `render` a non-test caller, so an `allow` would be permanent rather
 //! than a placeholder for one.
 
-use super::{Chunk, Op, ReadSlot};
+use super::{Chunk, Op, PlanSlot};
 
 /// Renders `chunk` as one line per op: `"{index}: {OpName}[ field=value]*"`.
 ///
@@ -132,8 +132,15 @@ pub(crate) fn render(chunk: &Chunk) -> String {
                     op.spelling()
                 ));
             }
-            Op::Store { index: at, src } => {
-                out.push_str(&format!("{index}: Store index={at} src={src}\n"));
+            Op::Store {
+                index: node,
+                at,
+                src,
+            } => {
+                out.push_str(&format!(
+                    "{index}: Store index={node} at={} src={src}\n",
+                    render_slot(*at)
+                ));
             }
             Op::Say { index: at, src } => {
                 out.push_str(&format!(
@@ -180,11 +187,12 @@ fn render_register(register: Option<u16>) -> String {
     }
 }
 
-/// A compiled read's own slot, or `-` for a read that resolves its own.
+/// A compiled read's or write's own slot, or `-` for one that resolves its
+/// own.
 ///
 /// The same shape [`render_register`] uses, so an absent operand reads the
 /// same way whichever field it is.
-fn render_slot(at: ReadSlot) -> String {
+fn render_slot(at: PlanSlot) -> String {
     match at.resolved() {
         Some(at) => at.to_string(),
         None => "-".to_string(),

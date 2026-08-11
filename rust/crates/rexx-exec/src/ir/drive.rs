@@ -35,7 +35,7 @@
 //! what a clause boundary owes.
 
 use rexx_core::{Decoded, FrameId, ObjRef};
-use rexx_parse::{Call, Instruction, InstructionKind, ProgramSource, SymbolId};
+use rexx_parse::{Call, ExprKind, Instruction, InstructionKind, ProgramSource, SymbolId};
 
 use super::{BodyEngine, Chunk, Op};
 use crate::clause::{ClauseOutcome, ClauseValue};
@@ -768,7 +768,7 @@ impl Interp {
                                 // the `>>>`/`>C>`/`>=>` lines and the stem and
                                 // compound dispatch are that arm's rather than a
                                 // second copy.
-                                Op::Store { index, src } => {
+                                Op::Store { index, at, src } => {
                                     debug_assert!(
                                         chunk.holds_register(*src),
                                         "op reads register {src} outside the region the chunk \
@@ -779,8 +779,27 @@ impl Interp {
                                     else {
                                         break 'region Err(Loud::store_op_off_its_node().into());
                                     };
+                                    let at = at.resolved();
+                                    // `Op::Load`'s own tripwire, on the writing
+                                    // side: `at` came out of the plan this chunk
+                                    // was compiled from, `code.slots` is a view
+                                    // of that same map, and a mismatch is two
+                                    // different plans for one body -- which would
+                                    // write into somebody else's slot rather than
+                                    // fail.
+                                    debug_assert!(
+                                        at.is_none()
+                                            || matches!(
+                                                &target.kind,
+                                                ExprKind::Variable(id)
+                                                    if code.slots.get(id).copied() == at
+                                            ),
+                                        "a compiled write names a slot this body's plan does not \
+                                         give its target"
+                                    );
                                     let value = self.roots.temp_at(registers, *src as usize);
-                                    if let Err(failure) = self.assign_evaluated(code, target, value)
+                                    if let Err(failure) =
+                                        self.assign_evaluated(code, target, value, at)
                                     {
                                         break 'region Err(failure);
                                     }
