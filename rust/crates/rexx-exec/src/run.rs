@@ -3977,14 +3977,6 @@ impl Interp {
         name: &[u8],
         args: &[Option<Expr>],
     ) -> Result<Ended, Failure> {
-        // The caller's own program and body selector, which a label callee
-        // inherits: the same pair `resolve_call` searched, read again here
-        // rather than threaded out of it, because what it is wanted for is
-        // building the callee rather than finding it.
-        let program = Rc::clone(&self.activation().program);
-        let program_id = self.activation().program_id;
-        let selector = self.activation().body;
-
         // **Evaluated in the caller, before anything is pushed**, which is
         // where the argument expressions' own variables live. Observable
         // through failure, and the failure is real and measured: `call sub
@@ -4058,6 +4050,21 @@ impl Interp {
             Resolved::Label(target) => Entered::Label(target),
             Resolved::Routine(installed) => Entered::Routine(installed),
         };
+
+        // The caller's own program and body selector, which a label callee
+        // inherits: the same pair `resolve_call` searched, read again here
+        // rather than threaded out of it, because what they are wanted for is
+        // building the callee rather than finding it.
+        //
+        // **Below the builtin return rather than above it**, which is where
+        // the same three reads used to sit when resolution and invocation were
+        // one function: a builtin runs no activation at all, so it has no
+        // callee to build and the `Rc::clone` would be a refcount pair it
+        // never uses. Every builtin call in an expression reaches this, which
+        // is the shape `bench-programs/strings.rex` runs four of per pass.
+        let program = Rc::clone(&self.activation().program);
+        let program_id = self.activation().program_id;
+        let selector = self.activation().body;
 
         // `SIGL`, set here rather than before the argument loop above: the
         // oracle's own `internalCall` (`RexxActivation.cpp`, read directly)

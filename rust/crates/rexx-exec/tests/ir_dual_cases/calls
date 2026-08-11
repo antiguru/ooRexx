@@ -27,6 +27,17 @@
 # callee is delivered -- so a promoted `CALL` clause that lost its boundary
 # would run the handler somewhere else or not at all.
 #
+# **This file was measured thin, and is kept anyway.** Five mutations were
+# applied to the promotion and to the paths it enters -- no clause echo op for a
+# CALL, the `>A>` emission made a no-op, a kept resolution answering the wrong
+# thing, a compiled `CALL "name"` searching labels, and a ::ROUTINE search moved
+# in front of the builtin step -- and each was caught by something outside this
+# directory as well, so none of the rows below was the only catcher for any of
+# them. What the file is for is the half no mutation of the implementation
+# shows: the engine-against-engine sweep runs this crate on both arms, so a
+# line both engines emit from one shared function is one it structurally cannot
+# police, and these bytes are the oracle's rather than this crate's.
+#
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every row
 # was measured to produce the identical bytes on both engines before the call
 # was promoted -- which is what says a row can tell whether it would ever have
@@ -241,6 +252,50 @@ err>        >>>   "5"
 err>      4 *-* say 'done'
 err>        >>>   "done"
 err>      5 *-* exit
+
+# a CALL inside a body entered while the setting was already in force
+# **The row that reaches the compiled clause echo at all.** A chunk is compiled
+# for the setting in force when its body is entered, so in every row above --
+# where the `trace` clause is in the same body as the calls -- the chunk was
+# compiled silent and the clause unit answers the setting at run time instead.
+# Here the callee's body is entered under `trace i`, so its own `call zsub 7`
+# clause carries the echo op that decides the `*-*` line below.
+program
+trace i
+call zouter
+exit
+zouter:
+call zsub 7
+say 'outer got' result
+return
+zsub:
+use arg zn
+return zn + 1
+----
+rc> 0
+out> outer got 8
+err>      2 *-* call zouter
+err>      4 *-*   zouter:
+err>      5 *-*   call zsub 7
+err>        >L>     "7"
+err>        >A>     "7"
+err>      8 *-*     zsub:
+err>      9 *-*     use arg zn
+err>        >>>       "7"
+err>        >=>       ZN <= "7"
+err>     10 *-*     return zn + 1
+err>        >V>       ZN => "7"
+err>        >L>       "1"
+err>        >O>       "+" => "8"
+err>        >>>       "8"
+err>        >>>     "8"
+err>      6 *-*   say 'outer got' result
+err>        >L>     "outer got"
+err>        >V>     RESULT => "8"
+err>        >O>     " " => "outer got 8"
+err>        >>>     "outer got 8"
+err>      7 *-*   return
+err>      3 *-* exit
 
 # CALL "name" never reaches the label table
 program
