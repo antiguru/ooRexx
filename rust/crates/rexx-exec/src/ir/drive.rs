@@ -23,8 +23,16 @@
 //! `Interp::engine` chooses between the two -- and it discharges exactly the
 //! same per-clause obligations, through the same functions, because those
 //! were extracted from that loop rather than copied out of it:
-//! `grant_procedure_permission`, `in_stepped_clause`, `offer_to_trap`,
+//! `grant_procedure_permission`, the clause unit, `offer_to_trap`,
 //! `apply_flow` and `absorb`.
+//!
+//! **The clause unit is reached by its two halves here and by its closure form
+//! there, and they are two entry shapes into one implementation** --
+//! `Interp::enter_stepped_clause` and `Interp::leave_stepped_clause`, which
+//! `Interp::in_stepped_clause_with` is itself defined in terms of. That is what
+//! lets a promoted clause's ops run in this file's own loop, with no callee
+//! between the clause's two ends, without the driver owning a second copy of
+//! what a clause boundary owes.
 
 use rexx_core::{Decoded, FrameId, ObjRef};
 use rexx_parse::{Instruction, InstructionKind, ProgramSource, SymbolId};
@@ -364,16 +372,21 @@ impl Interp {
                     count_clause_op_entry();
                     let index = *index as usize;
                     let end = *end;
-                    // The instruction itself is fetched by `run_clause_region`,
-                    // which needs it whether or not this level grants: fetching
-                    // it here as well would be a second bounds-checked lookup
-                    // per promoted clause on the path that does not grant, which
-                    // is every clause inside a construct's body.
+                    // **The instruction this whole region names**, fetched once
+                    // and read by every index-bearing op inside the region
+                    // rather than each resolving its own `index` against the
+                    // body. `compile::assert_region_ops_name_their_clause` is
+                    // what makes that checked rather than assumed, and
+                    // [`debug_assert_names_the_clause`] is the same check per
+                    // op in debug. It removes two bounds-checked lookups of the
+                    // same instruction per promoted assignment, worth 8
+                    // instructions per clause on
+                    // `bench-programs/varlookup.rex`.
+                    let Some(clause) = code.body.instructions.get(index) else {
+                        return Err(Loud::chunk_map_too_short().into());
+                    };
                     if GRANTING {
-                        let Some(instruction) = code.body.instructions.get(index) else {
-                            return Err(Loud::chunk_map_too_short().into());
-                        };
-                        self.grant_procedure_permission(instruction);
+                        self.grant_procedure_permission(clause);
                     }
                     // **Whether the setting in force is still the one this
                     // chunk's trace ops were emitted for**, and the whole of
@@ -417,30 +430,421 @@ impl Interp {
                     // and the list is an internal enumeration; reading the
                     // setting where the answer is used needs nothing.
                     let stale = chunk.trace() != self.chunk_trace();
-                    match self.run_clause_region(
-                        code,
-                        chunk,
-                        registers,
-                        pc + 1,
-                        end,
-                        index,
-                        source,
-                        stale,
-                    )? {
-                        // A promoted clause produces no `Flow` of its own:
-                        // where it leaves the counter *is* its answer, which
-                        // is what a jump op is for. Only its boundary can end
-                        // the activation, and that is the `Exit` below.
-                        ClauseRegion::Continue(next) => {
-                            pc = next;
-                            continue;
+                    // **`stale` moves the clause echo from the stream back to
+                    // the run-time gate, in both directions at once.** The
+                    // region's own [`Op::TraceClause`] is skipped and
+                    // [`Echo::Gated`] is passed instead, so a chunk compiled to
+                    // echo under a setting that no longer does prints nothing,
+                    // and one compiled silent under a setting that now echoes
+                    // prints the same line the tree-walker would. The two have
+                    // to be one decision: doing only the first would leave a
+                    // `TRACE R` inside a body invisible to every promoted
+                    // clause after it, and only the second would leave `TRACE
+                    // N` unable to switch one off.
+                    let echo = if stale { Echo::Gated } else { Echo::Compiled };
+                    // **The clause unit, entered by its two halves rather than
+                    // by its closure form**, which is what puts the region's
+                    // ops in this function's own frame instead of a callee's.
+                    // There is one implementation of the clause boundary --
+                    // `Interp::enter_stepped_clause` and
+                    // `Interp::leave_stepped_clause`, which
+                    // `Interp::in_stepped_clause_with` is itself defined in
+                    // terms of -- so a promoted clause and an unpromoted one
+                    // discharge the same list from the same code. Measured on
+                    // `bench-programs/varlookup.rex`, this shape runs the
+                    // compiled arm **71 instructions per pass below** the
+                    // tree-walker where the closure form ran it 81 above.
+                    let entry = self.enter_stepped_clause(echo, code, index, clause, source);
+                    // Taken on entry exactly as `step` takes it, because a
+                    // promoted clause is a clause and the permission is spent
+                    // by whichever clause the activation granted it to.
+                    //
+                    // **Load-bearing, and so is the `grant_procedure_permission`
+                    // call in front of this region -- each with a witness of its
+                    // own.** Both were once unobservable, on the premise that an
+                    // op which grants follows every region and grants again
+                    // before any `PROCEDURE` is reached. Neither half of that
+                    // holds, and each fails for a different reason:
+                    //
+                    // * a construct whose body clauses are stepped by a nested,
+                    //   *non-granting* driver entry has no later grant at all,
+                    //   so without this take a `PROCEDURE` as a loop body's
+                    //   first instruction is permitted. Measured: dropping it
+                    //   makes `tests/ir_dual_cases/loop-header-boundaries`'
+                    //   "procedure as a loop body's first instruction" row
+                    //   diverge between the engines, and nothing else in the
+                    //   workspace notices;
+                    // * a promoted clause that *is* the activation's first
+                    //   instruction has to consume `first_instruction_pending`
+                    //   itself, or the next clause's grant consumes it instead
+                    //   and a `PROCEDURE` behind a promoted clause is permitted.
+                    //   Measured: dropping the grant makes
+                    //   `tests/ir_dual_cases/assignment-and-say`'s "procedure
+                    //   after an assignment in a called label" row diverge, and
+                    //   again nothing else notices.
+                    let _first_instruction = std::mem::take(&mut self.procedure_permitted);
+                    // The ops of this promoted clause, `[pc + 1, end)`, and
+                    // where they leave the counter.
+                    //
+                    // **A labelled block rather than a callee**, and the
+                    // failure path is what makes that possible: the clause's
+                    // result reaches `leave_stepped_clause` as a value, so an
+                    // op that fails leaves the region carrying it rather than
+                    // taking a `?` past the boundary that owes it a site.
+                    //
+                    // Only the ops that are part of a clause's own work appear
+                    // here. An op that runs a whole clause of its own does not,
+                    // and cannot: `compile` asserts no `Generic` sits inside a
+                    // region, because it echoes the clause and the echo is not
+                    // idempotent.
+                    //
+                    // The register mark the plan's Decisions section describes
+                    // is a compile-time quantity -- the allocator releases to it
+                    // when this region's ops were emitted -- so there is nothing
+                    // to release here: the registers this region wrote are
+                    // simply not addressed again.
+                    let ran: Result<RegionEnd, Failure> = 'region: {
+                        // A `DO`/`LOOP` header's values, accumulated across this
+                        // region's own ops because they are not `ObjRef`s and so
+                        // have no register to live in: a bound is a `Number` and
+                        // a budget is a count.
+                        //
+                        // **`None` until an op needs one**, so a region that is
+                        // not a loop header -- an `IF`'s, a `WHEN`'s, a
+                        // `SELECT`'s -- pays one discriminant store rather than
+                        // the struct's own initialisation.
+                        let mut header: Option<LoopHeaderValues> = None;
+                        let Some(ops) = chunk.ops_in(pc + 1, end) else {
+                            break 'region Err(Loud::chunk_map_too_short().into());
+                        };
+                        for region_op in ops {
+                            match region_op {
+                                // **No gate**: this op exists only in a chunk
+                                // compiled under a setting that echoes, which is
+                                // the decision. `stale` is the one thing that
+                                // can withdraw it, and then the clause unit has
+                                // already asked the current setting instead.
+                                Op::TraceClause { index } => {
+                                    debug_assert_names_the_clause(
+                                        code,
+                                        *index,
+                                        clause,
+                                        "TraceClause",
+                                    );
+                                    if !stale {
+                                        #[cfg(test)]
+                                        count_trace_op_echo();
+                                        // The indent this clause's own entry
+                                        // computed, read back rather than
+                                        // recomputed: `enter_stepped_clause`
+                                        // sets this field to `printed_indent`
+                                        // for the clause it is opening and
+                                        // nothing between there and here writes
+                                        // it, so the two engines cannot come to
+                                        // print an echo at two different indents
+                                        // for one clause.
+                                        let indent = self.clause_state.current_value_indent;
+                                        self.echo_compiled_clause(source, clause, indent);
+                                    }
+                                }
+                                Op::EvalExpr { index, slot, dst } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*dst),
+                                        "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    debug_assert_names_the_clause(code, *index, clause, "EvalExpr");
+                                    let value = match self.eval_chunk_expr(code, clause, *slot) {
+                                        Ok(value) => value,
+                                        Err(failure) => break 'region Err(failure),
+                                    };
+                                    self.roots.set_temp(registers, *dst as usize, value);
+                                }
+                                // **The phase's first native expression op**:
+                                // the literal's value, built from the chunk's
+                                // own interned bytes through the same
+                                // `Interp::literal` that `eval_node`'s `Literal`
+                                // arm calls, with `eval.rs` not entered at all.
+                                // It emits nothing -- `Op::TraceLiteral` below
+                                // is the line that loading a literal owes.
+                                Op::Const { dst, konst } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*dst),
+                                        "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    let Some(bytes) = chunk.konst(*konst) else {
+                                        break 'region Err(Loud::constant_out_of_range().into());
+                                    };
+                                    let value = self.literal(bytes);
+                                    self.roots.set_temp(registers, *dst as usize, value);
+                                }
+                                // The `>L>` line of one literal. **Its own op**,
+                                // because the load emits nothing and `eval.rs`
+                                // emits this as a side effect of evaluating --
+                                // so a promoted clause with no such op drops the
+                                // line while every line after it still matches.
+                                Op::TraceLiteral { src } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*src),
+                                        "op reads register {src} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    let value = self.roots.temp_at(registers, *src as usize);
+                                    self.echo_literal(value);
+                                }
+                                // **The second native expression op**: one bare
+                                // symbol's own value, through the same
+                                // `Interp::read_symbol` that `eval_node`'s
+                                // `Variable`/`Stem`/`Compound` arms enter, with
+                                // `eval.rs` itself not entered at all. It emits
+                                // nothing -- `Op::TraceRead` below is what
+                                // reading a symbol owes.
+                                Op::Load {
+                                    symbol,
+                                    read,
+                                    at,
+                                    dst,
+                                } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*dst),
+                                        "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    let at = at.resolved();
+                                    // **The tripwire for a chunk run against a
+                                    // plan that is not the one it was compiled
+                                    // from.** `at` was read out of that plan's
+                                    // `by_symbol`, which is the map `code.slots`
+                                    // is a view of, so a mismatch here is two
+                                    // different plans for one body -- and it
+                                    // would read somebody else's slot rather
+                                    // than fail, which is a wrong value found by
+                                    // chasing it.
+                                    debug_assert!(
+                                        at.is_none() || code.slots.get(symbol).copied() == at,
+                                        "a compiled read names a slot this body's plan does not \
+                                         give its symbol"
+                                    );
+                                    let value = match self.read_symbol(code, *read, *symbol, at) {
+                                        Ok(value) => value,
+                                        Err(failure) => break 'region Err(failure),
+                                    };
+                                    self.roots.set_temp(registers, *dst as usize, value);
+                                }
+                                // The `>V>` line one read owes, and the `>C>`
+                                // line in front of it when the read is a
+                                // compound. **Its own op**, because the load
+                                // emits nothing and `eval.rs` emits these as a
+                                // side effect of evaluating -- so a promoted
+                                // clause with no such op drops them while every
+                                // line after them still matches.
+                                Op::TraceRead { symbol, read, src } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*src),
+                                        "op reads register {src} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    let value = self.roots.temp_at(registers, *src as usize);
+                                    self.echo_symbol_read(code, *read, *symbol, value);
+                                }
+                                // The write, through `Interp::assign_evaluated`
+                                // -- the whole of what `step`'s own
+                                // `Assignment` arm does past the evaluation, so
+                                // the `>>>`/`>C>`/`>=>` lines and the stem and
+                                // compound dispatch are that arm's rather than a
+                                // second copy.
+                                Op::Store { index, src } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*src),
+                                        "op reads register {src} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    debug_assert_names_the_clause(code, *index, clause, "Store");
+                                    let InstructionKind::Assignment { target, .. } = &clause.kind
+                                    else {
+                                        break 'region Err(Loud::store_op_off_its_node().into());
+                                    };
+                                    let value = self.roots.temp_at(registers, *src as usize);
+                                    if let Err(failure) = self.assign_evaluated(code, target, value)
+                                    {
+                                        break 'region Err(failure);
+                                    }
+                                }
+                                // The print, through `Interp::say_evaluated`,
+                                // for the same reason `Op::Store` goes through
+                                // `assign_evaluated`.
+                                Op::Say { index, src } => {
+                                    debug_assert_names_the_clause(code, *index, clause, "Say");
+                                    debug_assert!(
+                                        matches!(
+                                            &clause.kind,
+                                            InstructionKind::Say { expression }
+                                                if expression.is_some() == src.is_some()
+                                        ),
+                                        "a Say op names an instruction that is not a SAY of \
+                                         matching arity"
+                                    );
+                                    let value = src.map(|register| {
+                                        debug_assert!(
+                                            chunk.holds_register(register),
+                                            "op reads register {register} outside the region the \
+                                             chunk reserved"
+                                        );
+                                        self.roots.temp_at(registers, register as usize)
+                                    });
+                                    self.say_evaluated(value);
+                                }
+                                Op::JumpUnless { reg, target } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*reg),
+                                        "op reads register {reg} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    match self.register_holds(registers, *reg) {
+                                        Ok(true) => {}
+                                        Ok(false) => break 'region Ok(RegionEnd::At(*target)),
+                                        Err(failure) => break 'region Err(failure),
+                                    }
+                                }
+                                Op::WhenTest { index, case, dst } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*dst),
+                                        "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    let case_text = match case {
+                                        Some(register) => {
+                                            debug_assert!(
+                                                chunk.holds_register(*register),
+                                                "op reads register {register} outside the region \
+                                                 the chunk reserved"
+                                            );
+                                            let value =
+                                                self.roots.temp_at(registers, *register as usize);
+                                            Some(self.to_text(value).to_vec())
+                                        }
+                                        None => None,
+                                    };
+                                    debug_assert_names_the_clause(code, *index, clause, "WhenTest");
+                                    let holds =
+                                        match self.scan_when(code, clause, case_text.as_deref()) {
+                                            Ok(holds) => holds,
+                                            Err(failure) => break 'region Err(failure),
+                                        };
+                                    // In range unconditionally: `SMALL_INT_MAX`
+                                    // is far above one. Stored as the logical
+                                    // value `Op::JumpUnless` reads back, exactly
+                                    // as an `IF`'s condition is.
+                                    let value =
+                                        ObjRef::small_int(i64::from(holds)).unwrap_or(ObjRef::NIL);
+                                    self.roots.set_temp(registers, *dst as usize, value);
+                                }
+                                // The `>K>` line of one header value. **The
+                                // emission is its own op**, which is what lets
+                                // the stream reproduce the order the oracle
+                                // evaluates and echoes a loop header in:
+                                // evaluate `TO`, echo it, evaluate `BY`, echo
+                                // it.
+                                Op::TraceKeyword { role, src } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*src),
+                                        "op reads register {src} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    let value = self.roots.temp_at(registers, *src as usize);
+                                    self.echo_header_value(*role, value);
+                                }
+                                // One header value's own validation, in front of
+                                // the next value's evaluation because that order
+                                // is observable (`Op::LoopHeaderValue`'s own doc
+                                // comment).
+                                Op::LoopHeaderValue { role, src } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*src),
+                                        "op reads register {src} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    let value = self.roots.temp_at(registers, *src as usize);
+                                    let values =
+                                        header.get_or_insert_with(LoopHeaderValues::default);
+                                    if let Err(failure) =
+                                        self.accept_header_value(*role, value, values)
+                                    {
+                                        break 'region Err(failure);
+                                    }
+                                }
+                                // The construct itself, from the values the ops
+                                // above filed. `run_loop_with_header` is the
+                                // same function the tree-walker reaches, and
+                                // `BodyEngine::Chunk` is the one thing this call
+                                // says that the tree-walker's does not: the
+                                // body's clauses come from this chunk.
+                                Op::LoopRun { index } => {
+                                    debug_assert_names_the_clause(code, *index, clause, "LoopRun");
+                                    let index = *index as usize;
+                                    let (InstructionKind::Do(body) | InstructionKind::Loop(body)) =
+                                        &clause.kind
+                                    else {
+                                        break 'region Err(Loud::loop_op_off_its_node().into());
+                                    };
+                                    let values = header.take().unwrap_or_default();
+                                    let flow = match self.run_loop_with_header(
+                                        code,
+                                        index,
+                                        clause,
+                                        body,
+                                        source,
+                                        BodyEngine::Chunk { chunk, registers },
+                                        values,
+                                    ) {
+                                        Ok(flow) => flow,
+                                        Err(failure) => break 'region Err(failure),
+                                    };
+                                    break 'region Ok(RegionEnd::Flowed(flow));
+                                }
+                                Op::Jump { target } => {
+                                    break 'region Ok(RegionEnd::At(*target));
+                                }
+                                Op::Generic { .. } => {
+                                    break 'region Err(Loud::op_not_driven("Generic").into());
+                                }
+                                Op::Clause { .. } => {
+                                    break 'region Err(Loud::op_not_driven("Clause").into());
+                                }
+                                Op::SelectCaseText { .. } => {
+                                    break 'region Err(Loud::op_not_driven("SelectCaseText").into());
+                                }
+                                Op::EnterWhen { .. } => {
+                                    break 'region Err(Loud::op_not_driven("EnterWhen").into());
+                                }
+                                Op::EnterOtherwise { .. } => {
+                                    break 'region Err(Loud::op_not_driven("EnterOtherwise").into());
+                                }
+                                Op::EndBranch => {
+                                    break 'region Err(Loud::op_not_driven("EndBranch").into());
+                                }
+                            }
                         }
-                        // Settled against this range from the op past the
-                        // region, which is where an absorbed `Flow::Next`
-                        // continues -- the same position `pc + 1` is for an op
-                        // that runs one clause and no more.
-                        ClauseRegion::Flowed(flow) => (flow, end),
-                        ClauseRegion::Exit(value) => (Flow::Exit(value), pc),
+                        Ok(RegionEnd::At(end))
+                    };
+                    match self.leave_stepped_clause(entry, code, index, clause, source, ran)? {
+                        ClauseOutcome::Ran(region) => match region? {
+                            // A promoted clause produces no `Flow` of its own:
+                            // where it leaves the counter *is* its answer, which
+                            // is what a jump op is for. Only its boundary can
+                            // end the activation, and that is the `Ended` below.
+                            RegionEnd::At(next) => {
+                                pc = next;
+                                continue;
+                            }
+                            // Settled against this range from the op past the
+                            // region, which is where an absorbed `Flow::Next`
+                            // continues -- the same position `pc + 1` is for an
+                            // op that runs one clause and no more.
+                            RegionEnd::Flowed(flow) => (flow, end),
+                        },
+                        ClauseOutcome::Ended(exit) => (Flow::Exit(exit.value()), pc),
                     }
                 }
                 // **A jump past this range's end is loud rather than a
@@ -498,10 +902,10 @@ impl Interp {
                     pc += 1;
                     continue;
                 }
-                // All three are only meaningful inside a `Clause` region, which
-                // `run_clause_region` walks: reaching one here means a jump
-                // landed in the middle of a region rather than on its
-                // `Clause`. Loud rather than a panic, which is this crate's
+                // The ops below are only meaningful inside a `Clause` region,
+                // which the `Op::Clause` arm above walks: reaching one here
+                // means a jump landed in the middle of a region rather than on
+                // its `Clause`. Loud rather than a panic, which is this crate's
                 // standing rule for a state the type system admits and the
                 // compiler does not produce.
                 Op::TraceClause { .. } => return Err(Loud::op_not_driven("TraceClause").into()),
@@ -731,381 +1135,6 @@ impl Interp {
         })
     }
 
-    /// One promoted clause: the ops of `(at - 1, end)`, run inside the same
-    /// clause wrapper an unpromoted instruction gets.
-    ///
-    /// `at` is the op after the `Clause` op itself. The register mark the
-    /// plan's Decisions section describes is a compile-time quantity -- the
-    /// allocator releases to it when this region's ops were emitted -- so
-    /// there is nothing to release here: the registers this region wrote are
-    /// simply not addressed again.
-    ///
-    /// **`stale` moves the clause echo from the stream back to the run-time
-    /// gate, in both directions at once.** The region's own
-    /// [`Op::TraceClause`] is skipped and [`crate::run::Echo::Gated`] is
-    /// passed instead, so a chunk compiled to echo under a setting that no
-    /// longer does prints nothing, and one compiled silent under a setting
-    /// that now echoes prints the same line the tree-walker would. The two
-    /// have to be one decision: doing only the first would leave a `TRACE R`
-    /// inside a body invisible to every promoted clause after it, and only
-    /// the second would leave `TRACE N` unable to switch one off.
-    ///
-    /// **The clause's instruction is fetched here rather than passed in, and the
-    /// two facts that decides are worth one line each.** The caller has to look
-    /// it up only when it grants the first-instruction permission, which is the
-    /// activation's own level and not the body of any construct -- so on the path
-    /// every clause inside a loop takes, the lookup happens once instead of
-    /// twice. And this argument list is one slot shorter than it would be with
-    /// the instruction added to it, which on this ABI is the difference between
-    /// nine slots and ten: passing the instruction *as well* was measured at a net
-    /// **1** instruction per promoted clause on `bench-programs/varlookup.rex`,
-    /// because the tenth slot gave back almost all of the 8 that not looking the
-    /// instruction up again is worth. Fetching it here costs no slot, and the two
-    /// together -- this lookup moved in, and the region's ops reading it -- are
-    /// worth 10 and 8 of the 19 instructions per promoted clause that came off
-    /// this path.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "one caller, and every argument is a value that caller already holds"
-    )]
-    fn run_clause_region(
-        &mut self,
-        code: &Code<'_>,
-        chunk: &Chunk,
-        registers: FrameId,
-        at: u32,
-        end: u32,
-        index: usize,
-        source: Option<&ProgramSource>,
-        stale: bool,
-    ) -> Result<ClauseRegion, Failure> {
-        let Some(instruction) = code.body.instructions.get(index) else {
-            return Err(Loud::chunk_map_too_short().into());
-        };
-        let echo = if stale { Echo::Gated } else { Echo::Compiled };
-        let outcome =
-            self.in_stepped_clause_with(echo, code, index, instruction, source, |it| {
-                // Taken on entry exactly as `step` takes it, because a promoted
-                // clause is a clause and the permission is spent by whichever
-                // clause the activation granted it to.
-                //
-                // **Load-bearing, and so is the `grant_procedure_permission`
-                // call in front of this region -- each with a witness of its
-                // own.** Both were once unobservable, on the premise that an op
-                // which grants follows every region and grants again before any
-                // `PROCEDURE` is reached. Neither half of that holds, and each
-                // fails for a different reason:
-                //
-                // * a construct whose body clauses are stepped by a nested,
-                //   *non-granting* driver entry has no later grant at all, so
-                //   without this take a `PROCEDURE` as a loop body's first
-                //   instruction is permitted. Measured: dropping it makes
-                //   `tests/ir_dual_cases/loop-header-boundaries`' "procedure as
-                //   a loop body's first instruction" row diverge between the
-                //   engines, and nothing else in the workspace notices;
-                // * a promoted clause that *is* the activation's first
-                //   instruction has to consume `first_instruction_pending`
-                //   itself, or the next clause's grant consumes it instead and a
-                //   `PROCEDURE` behind a promoted clause is permitted. Measured:
-                //   dropping the grant makes
-                //   `tests/ir_dual_cases/assignment-and-say`'s "procedure after
-                //   an assignment in a called label" row diverge, and again
-                //   nothing else notices.
-                let _first_instruction = std::mem::take(&mut it.procedure_permitted);
-                it.run_region_ops(code, chunk, registers, at, end, instruction, source, stale)
-            })?;
-        match outcome {
-            ClauseOutcome::Ran(next) => Ok(match next? {
-                RegionEnd::At(next) => ClauseRegion::Continue(next),
-                RegionEnd::Flowed(flow) => ClauseRegion::Flowed(flow),
-            }),
-            ClauseOutcome::Ended(exit) => Ok(ClauseRegion::Exit(exit.value())),
-        }
-    }
-
-    /// The ops of one promoted clause, `[at, end)`, and where they leave the
-    /// counter.
-    ///
-    /// Only the ops that are part of a clause's own work appear here. An op
-    /// that runs a whole clause of its own does not, and cannot: `compile`
-    /// asserts no `Generic` sits inside a region, because it echoes the clause
-    /// and the echo is not idempotent.
-    ///
-    /// **`clause` is the instruction every index-bearing op in here names**, so
-    /// an op reads it rather than resolving its own `index` against the body.
-    /// `compile::assert_region_ops_name_their_clause` is what makes that
-    /// checked rather than assumed, and
-    /// [`debug_assert_names_the_clause`] is the same check per op in debug. It
-    /// removes two bounds-checked lookups of the same instruction per promoted
-    /// assignment, worth 8 instructions per clause on
-    /// `bench-programs/varlookup.rex`.
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "one caller, and every argument is a value that caller already holds"
-    )]
-    fn run_region_ops(
-        &mut self,
-        code: &Code<'_>,
-        chunk: &Chunk,
-        registers: FrameId,
-        at: u32,
-        end: u32,
-        clause: &Instruction,
-        source: Option<&ProgramSource>,
-        stale: bool,
-    ) -> Result<RegionEnd, Failure> {
-        // A `DO`/`LOOP` header's values, accumulated across this region's own
-        // ops because they are not `ObjRef`s and so have no register to live
-        // in: a bound is a `Number` and a budget is a count.
-        //
-        // **`None` until an op needs one**, so a region that is not a loop
-        // header -- an `IF`'s, a `WHEN`'s, a `SELECT`'s -- pays one discriminant
-        // store rather than the struct's own initialisation.
-        let mut header: Option<LoopHeaderValues> = None;
-        let Some(ops) = chunk.ops_in(at, end) else {
-            return Err(Loud::chunk_map_too_short().into());
-        };
-        for op in ops {
-            match op {
-                // **No gate**: this op exists only in a chunk compiled under a
-                // setting that echoes, which is the decision. `stale` is the
-                // one thing that can withdraw it, and then the clause unit has
-                // already asked the current setting instead
-                // (`run_clause_region`).
-                Op::TraceClause { index } => {
-                    debug_assert_names_the_clause(code, *index, clause, "TraceClause");
-                    if !stale {
-                        #[cfg(test)]
-                        count_trace_op_echo();
-                        // The indent the enclosing `Clause` op's own clause
-                        // unit computed, read back rather than recomputed:
-                        // `in_stepped_clause_with` sets this field to
-                        // `printed_indent` for the clause it is opening and
-                        // nothing between there and here writes it, so the two
-                        // engines cannot come to print an echo at two
-                        // different indents for one clause.
-                        let indent = self.clause_state.current_value_indent;
-                        self.echo_compiled_clause(source, clause, indent);
-                    }
-                }
-                Op::EvalExpr { index, slot, dst } => {
-                    debug_assert!(
-                        chunk.holds_register(*dst),
-                        "op writes register {dst} outside the region the chunk reserved"
-                    );
-                    debug_assert_names_the_clause(code, *index, clause, "EvalExpr");
-                    let value = self.eval_chunk_expr(code, clause, *slot)?;
-                    self.roots.set_temp(registers, *dst as usize, value);
-                }
-                // **The phase's first native expression op**: the literal's
-                // value, built from the chunk's own interned bytes through the
-                // same `Interp::literal` that `eval_node`'s `Literal` arm
-                // calls, with `eval.rs` not entered at all. It emits nothing --
-                // `Op::TraceLiteral` below is the line that loading a literal
-                // owes.
-                Op::Const { dst, konst } => {
-                    debug_assert!(
-                        chunk.holds_register(*dst),
-                        "op writes register {dst} outside the region the chunk reserved"
-                    );
-                    let Some(bytes) = chunk.konst(*konst) else {
-                        return Err(Loud::constant_out_of_range().into());
-                    };
-                    let value = self.literal(bytes);
-                    self.roots.set_temp(registers, *dst as usize, value);
-                }
-                // The `>L>` line of one literal. **Its own op**, because the
-                // load emits nothing and `eval.rs` emits this as a side effect
-                // of evaluating -- so a promoted clause with no such op drops
-                // the line while every line after it still matches.
-                Op::TraceLiteral { src } => {
-                    debug_assert!(
-                        chunk.holds_register(*src),
-                        "op reads register {src} outside the region the chunk reserved"
-                    );
-                    let value = self.roots.temp_at(registers, *src as usize);
-                    self.echo_literal(value);
-                }
-                // **The second native expression op**: one bare symbol's own
-                // value, through the same `Interp::read_symbol` that
-                // `eval_node`'s `Variable`/`Stem`/`Compound` arms enter, with
-                // `eval.rs` itself not entered at all. It emits nothing --
-                // `Op::TraceRead` below is what reading a symbol owes.
-                Op::Load {
-                    symbol,
-                    read,
-                    at,
-                    dst,
-                } => {
-                    debug_assert!(
-                        chunk.holds_register(*dst),
-                        "op writes register {dst} outside the region the chunk reserved"
-                    );
-                    let at = at.resolved();
-                    // **The tripwire for a chunk run against a plan that is
-                    // not the one it was compiled from.** `at` was read out of
-                    // that plan's `by_symbol`, which is the map `code.slots`
-                    // is a view of, so a mismatch here is two different plans
-                    // for one body -- and it would read somebody else's slot
-                    // rather than fail, which is a wrong value found by
-                    // chasing it.
-                    debug_assert!(
-                        at.is_none() || code.slots.get(symbol).copied() == at,
-                        "a compiled read names a slot this body's plan does not give its symbol"
-                    );
-                    let value = self.read_symbol(code, *read, *symbol, at)?;
-                    self.roots.set_temp(registers, *dst as usize, value);
-                }
-                // The `>V>` line one read owes, and the `>C>` line in front of
-                // it when the read is a compound. **Its own op**, because the
-                // load emits nothing and `eval.rs` emits these as a side
-                // effect of evaluating -- so a promoted clause with no such op
-                // drops them while every line after them still matches.
-                Op::TraceRead { symbol, read, src } => {
-                    debug_assert!(
-                        chunk.holds_register(*src),
-                        "op reads register {src} outside the region the chunk reserved"
-                    );
-                    let value = self.roots.temp_at(registers, *src as usize);
-                    self.echo_symbol_read(code, *read, *symbol, value);
-                }
-                // The write, through `Interp::assign_evaluated` -- the whole of
-                // what `step`'s own `Assignment` arm does past the evaluation,
-                // so the `>>>`/`>C>`/`>=>` lines and the stem and compound
-                // dispatch are that arm's rather than a second copy.
-                Op::Store { index, src } => {
-                    debug_assert!(
-                        chunk.holds_register(*src),
-                        "op reads register {src} outside the region the chunk reserved"
-                    );
-                    debug_assert_names_the_clause(code, *index, clause, "Store");
-                    let InstructionKind::Assignment { target, .. } = &clause.kind else {
-                        return Err(Loud::store_op_off_its_node().into());
-                    };
-                    let value = self.roots.temp_at(registers, *src as usize);
-                    self.assign_evaluated(code, target, value)?;
-                }
-                // The print, through `Interp::say_evaluated`, for the same
-                // reason `Op::Store` goes through `assign_evaluated`.
-                Op::Say { index, src } => {
-                    debug_assert_names_the_clause(code, *index, clause, "Say");
-                    debug_assert!(
-                        matches!(
-                            &clause.kind,
-                            InstructionKind::Say { expression }
-                                if expression.is_some() == src.is_some()
-                        ),
-                        "a Say op names an instruction that is not a SAY of matching arity"
-                    );
-                    let value = src.map(|register| {
-                        debug_assert!(
-                            chunk.holds_register(register),
-                            "op reads register {register} outside the region the chunk reserved"
-                        );
-                        self.roots.temp_at(registers, register as usize)
-                    });
-                    self.say_evaluated(value);
-                }
-                Op::JumpUnless { reg, target } => {
-                    debug_assert!(
-                        chunk.holds_register(*reg),
-                        "op reads register {reg} outside the region the chunk reserved"
-                    );
-                    if !self.register_holds(registers, *reg)? {
-                        return Ok(RegionEnd::At(*target));
-                    }
-                }
-                Op::WhenTest { index, case, dst } => {
-                    debug_assert!(
-                        chunk.holds_register(*dst),
-                        "op writes register {dst} outside the region the chunk reserved"
-                    );
-                    let case_text = match case {
-                        Some(register) => {
-                            debug_assert!(
-                                chunk.holds_register(*register),
-                                "op reads register {register} outside the region the chunk \
-                                 reserved"
-                            );
-                            let value = self.roots.temp_at(registers, *register as usize);
-                            Some(self.to_text(value).to_vec())
-                        }
-                        None => None,
-                    };
-                    debug_assert_names_the_clause(code, *index, clause, "WhenTest");
-                    let holds = self.scan_when(code, clause, case_text.as_deref())?;
-                    // In range unconditionally: `SMALL_INT_MAX` is far above
-                    // one. Stored as the logical value `Op::JumpUnless` reads
-                    // back, exactly as an `IF`'s condition is.
-                    let value = ObjRef::small_int(i64::from(holds)).unwrap_or(ObjRef::NIL);
-                    self.roots.set_temp(registers, *dst as usize, value);
-                }
-                // The `>K>` line of one header value. **The emission is its
-                // own op**, which is what lets the stream reproduce the order
-                // the oracle evaluates and echoes a loop header in: evaluate
-                // `TO`, echo it, evaluate `BY`, echo it.
-                Op::TraceKeyword { role, src } => {
-                    debug_assert!(
-                        chunk.holds_register(*src),
-                        "op reads register {src} outside the region the chunk reserved"
-                    );
-                    let value = self.roots.temp_at(registers, *src as usize);
-                    self.echo_header_value(*role, value);
-                }
-                // One header value's own validation, in front of the next
-                // value's evaluation because that order is observable
-                // (`Op::LoopHeaderValue`'s own doc comment).
-                Op::LoopHeaderValue { role, src } => {
-                    debug_assert!(
-                        chunk.holds_register(*src),
-                        "op reads register {src} outside the region the chunk reserved"
-                    );
-                    let value = self.roots.temp_at(registers, *src as usize);
-                    let values = header.get_or_insert_with(LoopHeaderValues::default);
-                    self.accept_header_value(*role, value, values)?;
-                }
-                // The construct itself, from the values the ops above filed.
-                // `run_loop_with_header` is the same function the tree-walker
-                // reaches, and `BodyEngine::Chunk` is the one thing this call
-                // says that the tree-walker's does not: the body's clauses come
-                // from this chunk.
-                Op::LoopRun { index } => {
-                    debug_assert_names_the_clause(code, *index, clause, "LoopRun");
-                    let index = *index as usize;
-                    let (InstructionKind::Do(body) | InstructionKind::Loop(body)) = &clause.kind
-                    else {
-                        return Err(Loud::loop_op_off_its_node().into());
-                    };
-                    let values = header.take().unwrap_or_default();
-                    let flow = self.run_loop_with_header(
-                        code,
-                        index,
-                        clause,
-                        body,
-                        source,
-                        BodyEngine::Chunk { chunk, registers },
-                        values,
-                    )?;
-                    return Ok(RegionEnd::Flowed(flow));
-                }
-                Op::Jump { target } => {
-                    return Ok(RegionEnd::At(*target));
-                }
-                Op::Generic { .. } => return Err(Loud::op_not_driven("Generic").into()),
-                Op::Clause { .. } => return Err(Loud::op_not_driven("Clause").into()),
-                Op::SelectCaseText { .. } => {
-                    return Err(Loud::op_not_driven("SelectCaseText").into());
-                }
-                Op::EnterWhen { .. } => return Err(Loud::op_not_driven("EnterWhen").into()),
-                Op::EnterOtherwise { .. } => {
-                    return Err(Loud::op_not_driven("EnterOtherwise").into());
-                }
-                Op::EndBranch => return Err(Loud::op_not_driven("EndBranch").into()),
-            }
-        }
-        Ok(RegionEnd::At(end))
-    }
-
     /// Whether register `reg` holds the Rexx logical value `1`.
     ///
     /// The only writer of a register a `JumpUnless` reads is an `EvalExpr`
@@ -1127,8 +1156,9 @@ impl Interp {
 /// Asserts, in debug, that the op naming instruction `index` from inside a
 /// clause region names that region's own clause.
 ///
-/// **What licenses [`Interp::run_region_ops`] reading the instruction off its
-/// region instead of looking each op's `index` up.** Every index-bearing op
+/// **What licenses [`Interp::run_ops`]' own `Op::Clause` arm reading the
+/// instruction off the region instead of looking each op's `index` up.** Every
+/// index-bearing op
 /// `compile` emits inside a region is emitted from the arm of the instruction
 /// whose region it is, so the two are the same instruction by construction --
 /// `compile::assert_region_ops_name_their_clause` is that stated as a check on
@@ -1156,19 +1186,6 @@ fn op_at(chunk: &Chunk, target: usize) -> Result<u32, Failure> {
     chunk
         .op_at(target)
         .ok_or_else(|| Loud::chunk_map_too_short().into())
-}
-
-/// How a promoted clause finished.
-enum ClauseRegion {
-    /// Continue at this op.
-    Continue(u32),
-    /// The construct this clause resolved answered a `Flow` its enclosing range
-    /// has to settle -- a `DO`/`LOOP`'s own `Goto` past its `END`, or a
-    /// `LEAVE`/`ITERATE` it did not consume.
-    Flowed(Flow),
-    /// A `CALL ON` handler ran at this clause's boundary and ended the whole
-    /// program.
-    Exit(Option<ObjRef>),
 }
 
 // Test-only instrumentation: how many chunks this thread has driven.

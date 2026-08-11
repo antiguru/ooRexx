@@ -69,17 +69,31 @@
 //! the exit status -- see the report's fix-round-4 attack table.
 //!
 //! The clause's line and the clause's boundary are one operation with one
-//! entry point, [`Interp::in_clause`], whose body is a closure. That closes
-//! the whole family of "the two halves came apart" mutations round 3's token
-//! left open, because there is no longer a value in scope to mishandle:
-//! `let _token`, `drop(token)`, `std::mem::forget(token)`, an early `return`
-//! between the two halves and a `?` between them are none of them
-//! expressible. An early `return` *inside* the closure returns from the
-//! closure, and the boundary still runs; an early `return` outside it is
-//! after the boundary already ran.
+//! implementation -- [`Interp::enter_clause`] and [`Interp::leave_clause`] --
+//! and two entry shapes into it.
 //!
-//! Two things remain expressible, and they are named here rather than left
-//! for the next re-review to find:
+//! [`Interp::in_clause`] is the scoped shape, and its body is a closure. For
+//! everything that reaches the boundary that way, that closes the whole family
+//! of "the two halves came apart" mutations round 3's token left open, because
+//! there is no longer a value in scope to mishandle: `let _token`,
+//! `drop(token)`, `std::mem::forget(token)`, an early `return` between the two
+//! halves and a `?` between them are none of them expressible. An early
+//! `return` *inside* the closure returns from the closure, and the boundary
+//! still runs; an early `return` outside it is after the boundary already ran.
+//!
+//! The pair itself is the other shape, and it exists for a caller that has to
+//! run the clause's work in a loop of its own rather than in a callee --
+//! [`crate::ir`]'s driver, whose region ops the closure form puts behind a
+//! call. There the two halves are two statements and *can* come apart, so what
+//! narrows it is [`ClauseEntry`]: `leave_clause` takes one, nothing outside
+//! this module can build one, and it is `#[must_use]`. A leave with no enter in
+//! front of it does not compile; an enter whose token is dropped rather than
+//! spent warns. A token deliberately discarded with `let _ =` is reached by
+//! neither, and is named below with the rest of what this module's own
+//! `pub(crate)` surface admits.
+//!
+//! What remains expressible is named here rather than left for the next
+//! re-review to find:
 //!
 //! * **A site can decline to call `in_clause` at all.** Nothing in the type
 //!   system requires an instruction to be a clause. That is what the
@@ -102,11 +116,15 @@
 //!   tests, undetected. `deliver_pending_trap` is `pub(crate)` for the
 //!   mirror reason (a failed clause's own boundary runs from
 //!   `offer_to_trap`, not from `in_clause`), and nothing in the type system
-//!   stops it running a boundary paired with no line set at all. **This is
-//!   what is reachable through this module's own `pub(crate)` surface
-//!   today, not a proof that nothing else is** -- the property behind all
-//!   three is that a function this module must expose for one legitimate
-//!   caller is a function every other `pub(crate)` caller can also reach.
+//!   stops it running a boundary paired with no line set at all. The
+//!   enter/leave pair is the same shape once more: `run.rs` builds the
+//!   stepped clause's own two halves out of it, so both are `pub(crate)`,
+//!   and a caller that holds a [`ClauseEntry`] can spend it at a moment
+//!   other than the one it was taken at. **This is what is reachable
+//!   through this module's own `pub(crate)` surface today, not a proof that
+//!   nothing else is** -- the property behind every one of them is that a
+//!   function this module must expose for one legitimate caller is a
+//!   function every other `pub(crate)` caller can also reach.
 
 use crate::run::Flow;
 use crate::{Code, Ended, Failure, Interp, ObjRef};
@@ -305,6 +323,18 @@ impl ClauseValue for bool {
     }
 }
 
+/// A clause boundary that is open: [`Interp::enter_clause`] makes one and
+/// [`Interp::leave_clause`] spends it.
+///
+/// **Zero-sized, and carrying nothing is the point rather than an omission.**
+/// What the two halves have to hand each other is nothing at all -- the line
+/// goes on `Interp` where `SIGL` reads it, and the boundary reads the waiting
+/// condition off `Interp` too -- so this is the obligation itself. The private
+/// field is what makes it one: no other module can build one, so a leave with
+/// no enter in front of it does not compile.
+#[must_use]
+pub(crate) struct ClauseEntry(());
+
 /// How [`Interp::in_clause`] finished.
 ///
 /// The outer `Result`'s `Err` is the *handler's* own failure, never the
@@ -370,11 +400,11 @@ impl Interp {
     /// the activation, `offer_to_trap` is the one place that knows, and it
     /// delivers there.
     ///
-    /// **`inline(always)`, and it is a measurement rather than a habit** --
-    /// `Interp::in_stepped_clause`'s own doc comment carries the number, since
-    /// the two annotations were measured together and neither is worth much
-    /// alone: this is the inner of the two generic-over-a-closure layers every
-    /// stepped clause passes through.
+    /// **`inline(always)`, and it is a measurement rather than a habit.** This
+    /// is a layer generic over a closure, and left to the inliner's own
+    /// judgement such a layer is emitted as a function of its own that every
+    /// clause reaching it calls -- `Interp::in_stepped_clause`'s doc comment
+    /// carries the number, taken on that annotation and this one together.
     #[inline(always)]
     pub(crate) fn in_clause<T: ClauseValue>(
         &mut self,
@@ -382,6 +412,19 @@ impl Interp {
         line: usize,
         body: impl FnOnce(&mut Self) -> Result<T, Failure>,
     ) -> Result<ClauseOutcome<T>, Failure> {
+        let entry = self.enter_clause(line);
+        let ran = body(self);
+        self.leave_clause(entry, code, ran)
+    }
+
+    /// Opens the clause at `line`: everything [`Interp::in_clause`] does before
+    /// the clause's own work runs.
+    ///
+    /// Half of the clause unit rather than a function in its own right -- see
+    /// this module's doc comment for the two entry shapes and for what the
+    /// [`ClauseEntry`] does and does not close.
+    #[inline(always)]
+    pub(crate) fn enter_clause(&mut self, line: usize) -> ClauseEntry {
         // **The fourth-site tripwire** (fix round 4). A condition queued by
         // this activation's clause at line L that is still waiting when a
         // clause at a *different* line begins means some construct resolved
@@ -434,7 +477,26 @@ impl Interp {
             self.clause_state.current_clause_line
         );
         self.clause_state.current_clause_line = line;
-        let ran = body(self);
+        ClauseEntry(())
+    }
+
+    /// Closes the clause `entry` opened, around `ran` -- everything
+    /// [`Interp::in_clause`] does once the clause's own work has run.
+    ///
+    /// **The clause's failure arrives as a value rather than as an `Err` of
+    /// this call**, which is what lets a caller whose work is a loop rather
+    /// than a closure reach this at all: there is no `?` to take the failure
+    /// past the boundary, because the boundary is what the failure is handed
+    /// to. The `Err` this function answers is the *handler's*, exactly as
+    /// [`ClauseOutcome`]'s own doc comment describes.
+    #[inline(always)]
+    pub(crate) fn leave_clause<T: ClauseValue>(
+        &mut self,
+        entry: ClauseEntry,
+        code: &Code<'_>,
+        ran: Result<T, Failure>,
+    ) -> Result<ClauseOutcome<T>, Failure> {
+        let ClauseEntry(()) = entry;
         let Ok(value) = &ran else {
             // A clause that is unwinding never reached a boundary, so it
             // delivers nothing.

@@ -66,7 +66,7 @@
 
 use crate::activation::{Activation, Inherited, TraceEntry, Trap, TrappedCondition, body_of};
 use crate::builtin;
-use crate::clause::{ClauseOutcome, ClauseValue, HandlerExit};
+use crate::clause::{ClauseEntry, ClauseOutcome, ClauseValue, HandlerExit};
 use crate::error::{FailureSite, Raised, Search};
 use crate::eval::logical_value;
 use crate::ir::BodyEngine;
@@ -80,7 +80,7 @@ use crate::{
     ActiveCondition, Argument, CallContext, Code, Engine, Failure, InstalledRoutine, Interp, Loud,
     Novalue, PendingTrap,
 };
-use rexx_core::{Decoded, ObjRef, SlotFrame, SlotRef};
+use rexx_core::{Decoded, FrameId, ObjRef, SlotFrame, SlotRef};
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
     ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Fragment, Instruction,
@@ -299,6 +299,46 @@ pub(crate) enum Echo {
     /// and carries the decision as [`crate::ir::Op::TraceClause`] or as the
     /// absence of it.
     Compiled,
+}
+
+/// A stepped clause that is open: [`Interp::enter_stepped_clause`] makes one
+/// and [`Interp::leave_stepped_clause`] spends it.
+///
+/// It carries what the clause's two halves have to hand each other and nothing
+/// else -- the GC temps frame to truncate to, the watermark the debug tripwire
+/// compares against, and the [`ClauseEntry`] the boundary itself needs. Every
+/// other thing the second half does is computed from arguments the caller
+/// already holds, which is what keeps this three fields rather than a copy of
+/// the clause's own state.
+///
+/// **What the watermark checks, and why it is here rather than in
+/// `pop_frame`.** `pop_frame` truncates to a watermark rather than popping one
+/// frame, and its own doc comment forbids a balance assertion there: `eval.rs`
+/// sites open a frame and then use `?`, so their own `pop_frame` goes
+/// unreached on the error path and is healed by the clause unit's
+/// unconditional, outer truncation -- an assertion inside `pop_frame` would
+/// fire on the ordinary error path of a correct program. That healing is
+/// exactly what makes `Err` uninteresting to check and `Ok` interesting: on
+/// the `Ok` path every site did run its own `pop_frame`, so the stack must be
+/// back at or above where this step found it. Below it means a step popped
+/// temps it did not own -- someone else's roots, dropped early, which is the
+/// direction that could turn into a use-after-free once a collector runs for
+/// real.
+///
+/// **`#[must_use]`, and what that does and does not close.** Nothing outside
+/// `clause.rs` can build the `ClauseEntry` inside this, so a leave with no
+/// enter in front of it does not compile; an enter whose token is dropped
+/// rather than spent warns. A token deliberately discarded is reached by
+/// neither, which is the same standing exposure `clause.rs`'s module doc names
+/// for the rest of that module's `pub(crate)` surface.
+#[must_use]
+pub(crate) struct SteppedClause {
+    /// The clause boundary this entry opened.
+    entry: ClauseEntry,
+    /// The GC temps frame the clause's own work pushes into.
+    frame: FrameId,
+    /// `RootSet::temps_len` as the clause was opened.
+    temps_at_entry: usize,
 }
 
 /// What a called name resolved to, decided in one place before any argument
@@ -4536,9 +4576,10 @@ impl Interp {
     /// [`Interp::in_stepped_clause`], naming who emits this clause's `*-*`
     /// echo.
     ///
-    /// Split out for the compiled stream, whose promoted clauses carry the
-    /// echo as an op ([`Echo::Compiled`]); every other caller wants
-    /// [`Echo::Gated`] and reaches it through `in_stepped_clause` above.
+    /// A promoted clause can carry the echo as an op ([`Echo::Compiled`])
+    /// instead, so the answer is an argument rather than a constant. Two
+    /// shapes take it: this closure form, and [`Interp::enter_stepped_clause`]
+    /// for a caller running the clause's own work in a loop of its own.
     #[inline(always)]
     pub(crate) fn in_stepped_clause_with<T: ClauseValue>(
         &mut self,
@@ -4549,6 +4590,33 @@ impl Interp {
         source: Option<&ProgramSource>,
         work: impl FnOnce(&mut Self) -> Result<T, Failure>,
     ) -> Result<ClauseOutcome<T>, Failure> {
+        let entry = self.enter_stepped_clause(echo, code, index, instruction, source);
+        let ran = work(self);
+        self.leave_stepped_clause(entry, code, index, instruction, source, ran)
+    }
+
+    /// Opens a stepped clause of `code`: everything
+    /// [`Interp::in_stepped_clause_with`] owes before the clause's own work
+    /// runs.
+    ///
+    /// Half of the clause unit rather than a function in its own right. The
+    /// closure form above is the unit's contract and the other entry shape
+    /// into these same two halves; `clause.rs`'s module doc has why there are
+    /// two shapes, and [`SteppedClause`] has what the token does and does not
+    /// close.
+    ///
+    /// **`inline(always)` for the reason the closure form carries**, and the
+    /// measurement there was taken on the whole unit rather than on either
+    /// half.
+    #[inline(always)]
+    pub(crate) fn enter_stepped_clause(
+        &mut self,
+        echo: Echo,
+        code: &Code<'_>,
+        index: usize,
+        instruction: &Instruction,
+        source: Option<&ProgramSource>,
+    ) -> SteppedClause {
         // `DATE`/`TIME`'s per-clause clock cache (`activation.rs`'s own doc
         // on `Activation::clock_stale`) is invalidated **unconditionally,
         // once per call, on whichever activation is executing right now**,
@@ -4620,66 +4688,78 @@ impl Interp {
         // correct whether or not `TRACE` is on, and this is the one place
         // every stepped instruction, `SIGNAL`/`CALL` included, passes
         // through before its own `step` call runs.
-        // `in_clause` rather than a bare assignment: the clause line and the
-        // clause boundary are one operation (`clause.rs`), and the clause's
-        // whole body is the closure below.
+        // `enter_clause` rather than a bare assignment: the clause line and
+        // the clause boundary are one operation (`clause.rs`), and the
+        // `ClauseEntry` this hands back is what `leave_stepped_clause` spends
+        // on the matching half.
         let line = self
             .clause_line(source, instruction)
             .unwrap_or_else(|| self.clause_state.line());
-        let outcome = self.in_clause(code, line, |it| {
-            // **`Echo::Gated` asks whether the setting in force echoes this
-            // clause; `Echo::Compiled` is a clause whose chunk already
-            // answered that**, and emits the echo as an op of its own
-            // (`crate::ir::Op::TraceClause`) rather than here. The whole point
-            // of the second arm is that a chunk compiled under a setting that
-            // does not echo pays nothing at all for the decision -- no gate,
-            // no `clause_site`, no op.
-            if matches!(echo, Echo::Gated) {
-                it.echo_stepped_clause(source, instruction, indent);
-            }
-            // The debug tripwire I22 asks for, alongside `RootSet::temps_len`,
-            // its one prerequisite.
-            //
-            // **What it checks, and why it is here rather than in
-            // `pop_frame`.** `pop_frame` truncates to a watermark rather than
-            // popping one frame, and its own doc comment forbids a balance
-            // assertion there: six `eval.rs` sites open a frame and then use
-            // `?`, so their own `pop_frame` goes unreached on the error path
-            // and is healed by this function's unconditional, outer
-            // truncation -- an assertion inside `pop_frame` would fire on the
-            // ordinary error path of a correct program. That healing is
-            // exactly what makes `Err` uninteresting to check and `Ok`
-            // interesting: on the `Ok` path every site did run its own
-            // `pop_frame`, so the stack must be back at or above where this
-            // step found it. Below it means a step popped temps it did not
-            // own -- someone else's roots, dropped early, which is the
-            // direction that could turn into a use-after-free once a
-            // collector runs for real.
-            //
-            // Cheap enough to leave on in debug and absent in release: one
-            // `Vec::len` before and after, and a comparison.
-            let temps_at_entry = it.roots.temps_len();
-            let frame = it.roots.push_frame();
-            let ran = work(it);
-            debug_assert!(
-                ran.is_err() || it.roots.temps_len() >= temps_at_entry,
-                "step popped below its own temps watermark ({} -> {}), so it \
-                 discarded roots it did not push",
-                temps_at_entry,
-                it.roots.temps_len()
-            );
-            it.roots.pop_frame(frame);
-            if ran.is_err() {
-                it.record_failure_site(code, index, source, instruction);
-            }
-            ran
-        });
+        let entry = self.enter_clause(line);
+        // **`Echo::Gated` asks whether the setting in force echoes this
+        // clause; `Echo::Compiled` is a clause whose chunk already answered
+        // that**, and emits the echo as an op of its own
+        // (`crate::ir::Op::TraceClause`) rather than here. The whole point of
+        // the second arm is that a chunk compiled under a setting that does
+        // not echo pays nothing at all for the decision -- no gate, no
+        // `clause_site`, no op.
+        if matches!(echo, Echo::Gated) {
+            self.echo_stepped_clause(source, instruction, indent);
+        }
+        // The debug tripwire I22 asks for, alongside `RootSet::temps_len`, its
+        // one prerequisite. `SteppedClause` carries the watermark and the
+        // frame across to the matching half, which is where the check reads
+        // them; that type's own doc comment has what it checks and why it is
+        // there rather than in `pop_frame`.
+        //
+        // Cheap enough to leave on in debug and absent in release: one
+        // `Vec::len` before and after, and a comparison.
+        let temps_at_entry = self.roots.temps_len();
+        let frame = self.roots.push_frame();
+        SteppedClause {
+            entry,
+            frame,
+            temps_at_entry,
+        }
+    }
+
+    /// Closes the stepped clause `entry` opened, around `ran` -- everything
+    /// [`Interp::in_stepped_clause_with`] owes once the clause's own work has
+    /// run.
+    ///
+    /// **`ran` is the clause's own result as a value**, which is what lets a
+    /// caller whose work is a loop rather than a closure reach this at all;
+    /// `Interp::leave_clause` has the whole of that reasoning, and the `Err`
+    /// this answers is the boundary's rather than the clause's exactly as it
+    /// is there.
+    #[inline(always)]
+    pub(crate) fn leave_stepped_clause<T: ClauseValue>(
+        &mut self,
+        entry: SteppedClause,
+        code: &Code<'_>,
+        index: usize,
+        instruction: &Instruction,
+        source: Option<&ProgramSource>,
+        ran: Result<T, Failure>,
+    ) -> Result<ClauseOutcome<T>, Failure> {
+        debug_assert!(
+            ran.is_err() || self.roots.temps_len() >= entry.temps_at_entry,
+            "step popped below its own temps watermark ({} -> {}), so it \
+             discarded roots it did not push",
+            entry.temps_at_entry,
+            self.roots.temps_len()
+        );
+        self.roots.pop_frame(entry.frame);
+        if ran.is_err() {
+            self.record_failure_site(code, index, source, instruction);
+        }
+        let outcome = self.leave_clause(entry.entry, code, ran);
         // The clause's *own* failure came back as `Ran(Err(_))` and was
-        // recorded inside the closure above; this `Err` is the boundary's, and
-        // it is the same clause that owes the site. Recording it twice is
-        // harmless -- `record_failure_at`'s first-wins guard makes the second
-        // call a no-op -- and recording it in neither place is what the
-        // measurement in this function's doc comment describes.
+        // recorded just above; this `Err` is the boundary's, and it is the
+        // same clause that owes the site. Recording it twice is harmless --
+        // `record_failure_at`'s first-wins guard makes the second call a
+        // no-op -- and recording it in neither place is what the measurement
+        // in `in_stepped_clause_with`'s doc comment describes.
         if outcome.is_err() {
             self.record_failure_site(code, index, source, instruction);
         }
