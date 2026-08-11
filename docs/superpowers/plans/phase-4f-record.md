@@ -1742,3 +1742,58 @@ Commit: `4087e9d147e22f3251c13e6a8fd7855a0f01c7b4`, read back from `git log` aft
 * **The tree-walker was measured only for correctness.** Every wall, instruction and resident-set figure is the IR arm; `Number` sits below both engines, so the tree-walker gets the same work removed and no benchmark here says by how much.
 * **The equivalence is asserted over a generated population, not proved.** A shape nobody thought of is a shape the floors cannot miss.
 * **Nothing here re-profiles.** Unit 0's cadence asks for a re-profile of `arith` and `rexxcps` before the next candidate is chosen, and this entry does not supply it.
+
+---
+
+### Entry 13 -- the `smallvec` citation finally measured, and it says the option was already taken
+
+**No code change beyond three assertions, and no candidate.** Raised 2026-08-11 by Moritz after entry 12 landed: `smallvec` with its `union` and `const_generics` features is a different type from plain `smallvec`, and a measurement without them measures the wrong thing.
+
+**Two premises corrected first, because the rest turns on them.**
+
+**There was no `smallvec` measurement to re-take.** Entry 12 did not evaluate `smallvec`, inconclusively or otherwise; it hand-rolled a safe enum and accepted it. So this entry is the first time the crate has been measured in this repository at all -- which is what the record has been asking for since entry 2 cited a result that never existed.
+
+**"`Number` grows, so `Body` may grow, so every slot grows" did not happen, and entry 12 measured it rather than reasoning about it.** `Number` went 32 bytes to 40 while `Body` stayed at **80** and `Slot` at **96**, because `Body::Num`'s payload had eight bytes of headroom against `Body::Stem`'s, which is the variant that sets the width. The design document's sentence that option B does not move `Body`'s width is therefore true as written, and it is true of the plain enum -- **`union` is not what makes it true.**
+
+#### What `smallvec` actually measures, both features on
+
+A scratch crate against the offline cache, `smallvec = { version = "1.15.2", features = ["union", "const_generics"] }`, on the workspace toolchain **rustc 1.97.1**. Both features compile without complaint, so neither has an MSRV problem here -- checked rather than assumed.
+
+| inline capacity | `size_of::<SmallVec<[u8; N]>>` | the `Number` it yields | entry 12's hand-rolled enum |
+|---:|---:|---:|---:|
+| 7 to 15 | 24 | 32 | **24 / 32** |
+| 16 | **24** | **32** | 32 / 40 |
+| 17 to 24 | 32 | **40** | 32 / **40** |
+| 30 to 31 | 40 | 48 | 40 / 48 |
+
+**`SmallVec<[u8; 22]>` with `union` is 32 bytes, not 24.** The mechanism is in the crate's own source: `SmallVec<A>` is `{ capacity: usize, data: SmallVecData<A> }`, and with `union` that data is `union { inline: ManuallyDrop<MaybeUninit<A>>, heap: (NonNull<Item>, usize) }`. The union is `max(22, 16)` rounded to align 8 -- **24** -- and the `usize` sits beside it, not inside it. 24 bytes overall is reached at `[u8; 16]` and below.
+
+**Three consequences, and the first two decide it.**
+
+* **At the capacity the language asks for, `smallvec` yields exactly the `Number` entry 12 already ships: 40 bytes.** `Number::from_i64` is the door every tagged small integer takes into this crate and an `i64` is nineteen decimal digits, so the capacity has to be at least 19; every capacity from 17 to 24 gives 32/40. Switching would buy **zero bytes** in `Number`, in `Body`, or in the arena.
+* **The 24-byte target and the capacity target are mutually exclusive.** 24 bytes caps the inline arm at sixteen digits, three short of an `i64`, so `from_i64` would allocate for large integers -- and it would still not shrink `Body` or `Slot`, both of which are already unmoved.
+* **`union` buys exactly one capacity value over the plain enum at the 24-byte tier: sixteen rather than fifteen.** rustc niche-fills the enum using the `Vec` pointer's non-null niche, which is why the plain enum is *also* 24 bytes up to fifteen. The claim that a non-`union` `SmallVec` is necessarily wider than the `Vec<u8>` it replaces is not true of the enum shape below the niche's capacity; it becomes true above it.
+
+**So the framing "audited dependency versus our first `unsafe` module" has a third term, and it is the one in the tree.** The overlapping layout is what would need the unsafety, and at `Number` = 40 it buys nothing to be unsafe *for*. Entry 12 shipped safe Rust with the workspace lint untouched at `forbid`, and `Cargo.lock` still does not contain `smallvec` -- which independently confirms, a third time, that entry 2's citation had no dependency behind it.
+
+**Recommendation: do not take the dependency for this.** It is not withdrawn as an idea -- if a later capacity argument lands at sixteen digits or fewer, `union` buys eight bytes of `Number` and the crate is in the offline cache. Nothing at nineteen digits or above does.
+
+#### The three assertions, and each was shown to fail
+
+Moritz's other ask, and it is right on its own merits: a layout claim defended by a sentence has rotted in this repository, and `const _: () = assert!(...)` cannot.
+
+`size_of::<Number>() <= 40` in `rexx-num`, `size_of::<Body>() <= 80` and `size_of::<Slot>() <= 96` in `rexx-core`. **Upper bounds rather than equalities**, because the claim is that nothing widened; shrinking is free and needs no decision. **Each was tightened by one byte on its own and shown to stop the build** -- `evaluation panicked: assertion failed` for all three, `Body`'s and `Slot`'s tested separately because `rexx-num` failing first would otherwise have hidden them.
+
+**`Body`'s bound is expected to trip in Phase 5** and that is the point rather than a problem: the design document's own rule is that hot variants stay inline and narrow while a new class's instance state arrives boxed, and a widening should be a deliberate act with the boxed alternative weighed.
+
+**Compile-time only, checked rather than assumed.** The release binary's `.text` section is **byte-identical** to the binary entry 12 measured -- 987,817 bytes, sha256 `1d9d9996f6dab700a5e62c606f511ba2450155218dcb648c3b5f00507aa8e491` -- so entry 12's wall, instruction and resident-set figures still describe this tree. The whole-file hash moves, because `debug = true` embeds line tables that shifted; that is why the section and not the file is the instrument here.
+
+Gates: `cargo test --workspace` **1449 passed, 0 failed, 4 ignored** in dev and release, unchanged from entry 12. `cargo fmt --all --check` clean. `cargo clippy --workspace --all-targets -- -D warnings` clean from a full `cargo clean`, all four crates re-checked. The 22-program boundary differential re-run against this binary is byte-identical to entry 12's.
+
+Commit: `e4bf5f2cbda8364207c753c4318d6c1c95727c86`, read back from `git log` after committing.
+
+#### What this entry cannot say
+
+* **It measures widths, not speed.** Whether `smallvec`'s spill and growth code is faster or slower than the hand-rolled arm's is unmeasured, and at equal widths it would be a separate candidate with its own paired run rather than a reason to switch.
+* **It is one toolchain.** rustc 1.97.1 niche-fills the plain enum to 24 bytes up to fifteen digits; a toolchain that stopped doing so would move the left column and not the `smallvec` one. The assertions above are what would catch that.
+* **It does not revisit entry 2's citation as history.** What the citation claimed to have measured is still unknown; what is now known is that the type it names does not have the width the argument for it needs.
