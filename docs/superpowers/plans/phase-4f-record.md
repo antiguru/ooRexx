@@ -1575,3 +1575,170 @@ Against that, one of our short strings is a **96-byte arena slot plus a separate
 * **The expression spike now tests a hypothesis rather than founding a plan.** If full expression promotion measures small, it corroborates both consultations; if it measures large, one of them is wrong in an interesting way.
 * **Representation work precedes the object model**, which is Moritz's own sequencing argument reinforced: the value layer sits *below* the object model, and Phase 5 will build 32 classes on whatever that layer is.
 * **Optimiser passes come last**, when there is a validated dispatch site and a workload -- `dispatch.rex` is scoped out of this bar and deferred to Phase 5, so the axis that would most reward an inline cache is not currently measured at all.
+
+---
+
+### Entry 12 -- the value-representation design's option B attempted and **accepted**: a small `Number`'s digits held inline
+
+**BASE is `623f093f5`**, whose `rexx-run` reproduces entry 11's profiled binary **byte for byte** -- size 13849736, sha256 `35999021f97f24bb81e8c7a65083340084a8e1107087e11caf34dc8bc7f82141` -- after `cargo clean -p rexx-num -p rexx-core -p rexx-exec -p rexx-bench --release`. **Eight commits separate entry 11's profile at `2bbecac9` from BASE, and none of them touched a crate**: `git diff --stat 2bbecac9 623f093f5 -- rust/` is `rust/CLAUDE.md` and `rust/Cargo.toml` and nothing else, which the reproduced binary independently confirms. The expression spike's own commit is in that range and its code is **not** in this tree.
+
+This is the first option from `2026-08-11-value-representation-design.md` to be built. That document ranks it first and this entry does not re-argue the ranking.
+
+#### The hypothesis, named before it was measured
+
+`Number` was `{ negative: bool, digits: Vec<u8>, exponent: i32 }` -- **one heap allocation per number, one `free` to match it, and a fresh pair for every clone.** `digits` becomes `Digits`, an enum with an inline array for the small case and a `Vec<u8>` for the rest. It derefs to `[u8]`, so every read stays the slice operation it was; only construction and the in-place edits go through methods.
+
+**This is not a kernel change and must not be read as one.** Entry 11 measured this crate's decimal kernels at about **1.65x faster than the oracle's in absolute self time**. What this removes is the allocation and copying *around* the arithmetic.
+
+**Blast radius: `rexx-num` alone**, as the design document predicted -- `digits` is `pub(crate)`, no interpreter constructor was added, and both engines reach arithmetic through `Interp::arith_small_int` and `Interp::arith_general`. Five files changed, 54 insertions and 34 deletions, plus one new 535-line module.
+
+#### The inline capacity is 20, chosen from the language before anything was timed
+
+Two language bounds, and it is above both. **`NUMERIC DIGITS` defaults to 9**: every operator truncates its operands to `working_length(digits)` -- ten -- and an addition can carry into an eleventh digit, so eleven is the widest intermediate the default produces. **`Number::from_i64` is the door every tagged small integer takes into this crate**, and an `i64` is at most nineteen decimal digits; that function's own `Vec::with_capacity(20)` already wrote the bound down.
+
+**What bounds it above is layout and it was measured before the choice, not after.** `size_of::<Number>()` at BASE is **32**, `size_of::<Body>()` **80**, `size_of::<Slot>()` **96** (`gdb -batch -ex 'print sizeof(...)'` against the BASE binary -- two of them figures the design document lists as unsettled and could not run). A `size_of` probe over candidate capacities reads 24/32 bytes for `Digits`/`Number` at capacity 15 and below, 32/40 from 16 to 30, and 40/48 at 31 and above. `Body::Num` holds a `Number` beside a `u32`, a `Form` and an `Option<Vec<u8>>` -- 64 bytes against `Body::Stem`'s 72 -- so a `Number` may reach 40 bytes without `Body` moving and may not reach 48. **Measured at HEAD: `Number` 40, `Digits` 32, `Body` 80, `Slot` 96. No arena slot widened.**
+
+**One disclosure the number depends on, and it flatters this axis.** `bench-programs/arith.rex` switches to `NUMERIC DIGITS 20` for three of its five arithmetic assignments, and a 20-digit *result* fits a 20-digit inline arm **exactly** -- though that setting's 21-digit working intermediates still spill. The capacity was fixed from `i64`'s nineteen digits and pre-registered before the first timed run, and a capacity of 15 -- equally defensible from the default `DIGITS` alone -- would have left that half of the axis on the heap. So the axis's own second precision sits exactly on the boundary by coincidence, and `arith`'s figure below should be read knowing that.
+
+#### Predicted movement, written down before the first timed run
+
+| axis | predicted | measured |
+|---|---|---:|
+| `arith` | **-10% to -25%** wall, central -17% | **-15.41%** |
+| `rexxcps` | -1% to +3% clauses per second | **+4.78%** |
+| `strings` | 0%, band -2% to +2% | no usable wall figure |
+| `compound`, `varlookup`, `emptyloop` | 0%, band -1% to +1% instructions | +0.24%, +0.78%, +1.65% instructions |
+| `alloc4c` | no claim -- entry 11 struck it off as an acceptance axis | +1.32%, sign held in 2 of 7 |
+| peak resident set | **falls on `arith`**, unchanged elsewhere | `arith` -21.6%, elsewhere unresolved |
+| `size_of::<Body>()` | **80, unchanged** | 80 |
+
+**`rexxcps` was under-predicted and the reason is the same one entry 9 recorded against itself.** The prediction was made from "most of its allocation is strings and tail keys", which is a claim about a decomposition **entry 11 says nobody has taken**. It came in at +4.78% clauses per second on -12.25% instructions.
+
+#### Build identity
+
+| | |
+|---|---|
+| BASE `rexx-run` | size=13849736, sha256 `35999021f97f24bb81e8c7a65083340084a8e1107087e11caf34dc8bc7f82141` |
+| HEAD `rexx-run` | size=14003488, sha256 `753a91d6ef43e085f886784e690cc91cca5d99ecb37325310e9dfd0efb9234f5`; the binary **grew** by 153,752 bytes |
+| oracle | the same three objects entry 1 fingerprints, re-hashed and unchanged: `bb5bb8cc...`, `42136c40...`, `3536b763...` |
+
+Both binaries were built in the same working tree from a `cargo clean` of the four crates, so neither carries a path difference the other does not.
+
+#### The accept measurement: the two binaries alternating in one loop
+
+The accept rule's literal shape, and **not** `rexx-bench-suite`. Wall clock, `ulimit -v 8388608`, `REXX_ENGINE=ir`, a fresh empty working directory per run, base/head order **rotated every round**, seven rounds per axis. All 84 runs exited 0 and each axis's stdout hash is identical across all fourteen runs of it.
+
+**Gated the way entry 8's re-measurement asks**: six consecutive five-second samples of host idle read from `/proc/stat`, reading 96.4, 96.6, 96.1, 96.4, 96.4 and 96.2 per cent before the first run.
+
+| axis | base median | head median | **change** | rounds with that sign |
+|---|---:|---:|---:|---:|
+| `arith` | 2.4866 s | 2.1034 s | **-15.41%** | **7 of 7** |
+| `emptyloop` | 1.9621 | 1.9173 | -2.28% | 7 of 7 |
+| `varlookup` | 2.5911 | 2.5469 | -1.71% | 7 of 7 |
+| `compound` | 2.9139 | 2.8658 | -1.65% | 7 of 7 |
+| `strings` | 5.3636 | 5.3834 | +0.37% | 3 of 7 |
+| `alloc4c` | 1.5083 | 1.5282 | +1.32% | 2 of 7 |
+
+Per-round on `arith`: -15.62, -15.23, -15.73, -16.16, -15.07, -14.73, -15.34 per cent. There is no round in which it is not about a seventh.
+
+`rexxcps` is not read as wall time, for entry 1's reason. Both binaries self-calibrated to the identical `100 x 100`, printed and checked every round: five rounds, order rotated, base median **2,563,956** clauses per second against head **2,686,435** -- **+4.78%**, head ahead in **5 of 5**.
+
+#### Instructions beside wall, which is what separates the work from the layout
+
+`perf stat -e instructions:u`, **six runs per side**, arms alternating, medians, each arm's own full range printed beside it -- which is entry 10's rule and the reason entry 9's displacement column was withdrawn.
+
+| axis | instructions base | instructions head | change | base range | head range | wall |
+|---|---:|---:|---:|---:|---:|---:|
+| `arith` | 23,930,039,426 | 20,236,357,832 | **-15.44%** | 0.000% | 0.000% | -15.41% |
+| `rexxcps` | 36,957,184,703 | 32,430,510,414 | **-12.25%** | 0.067% | 0.026% | +4.78% cps |
+| `emptyloop` | 28,775,608,587 | 29,250,586,704 | **+1.65%** | 0.000% | 0.000% | -2.28% |
+| `varlookup` | 43,700,613,687 | 44,042,611,819 | **+0.78%** | 0.000% | 0.000% | -1.71% |
+| `strings` | 63,168,499,636 | 62,859,742,493 | -0.49% | 0.000% | 0.000% | +0.37% |
+| `compound` | 37,229,019,302 | 37,319,026,725 | +0.24% | 0.011% | 0.007% | -1.65% |
+
+**`arith`'s wall and its instruction count agree to three hundredths of a point.** That is work removed, not layout, and it is the whole of the case for this candidate.
+
+**Three axes moved in wall and moved the *other way* in instructions, and their wall gains are disclaimed rather than banked.** `emptyloop` -2.28%, `varlookup` -1.71% and `compound` -1.65% all held their sign in 7 of 7 rounds, and all three retire **more** instructions at head. That is a layout effect, and this entry does not claim it -- entries 4 and 7 disclaimed theirs on the same ground. Unlike entry 9's withdrawn column, these instruction movements **are** resolved: every arm's own full range is 0.011% or below, one to two orders of magnitude under the movements themselves.
+
+**So the displacement channel is real, it is measured, and it is about one per cent.** `emptyloop` at +1.65% is the worst of it and is the axis with no `Number` in its hot clause at all.
+
+#### Peak resident set, which is half the falsifier
+
+`/usr/bin/time -f %M`, same wrapper, **five runs per side**, medians with every run printed.
+
+| program | base | head | change |
+|---|---:|---:|---:|
+| `arith` | 10,676 KB (10,416 to 10,944) | **8,368 KB** (8,108 to 8,628) | **-21.6%** |
+| `varlookup` | 2,476 KB (2,244 to 2,756) | 2,528 KB (2,516 to 2,816) | not resolved |
+| `say 1` | 2,528 KB (2,516 to 2,532) | 2,472 KB (2,448 to 2,732) | not resolved |
+
+**`arith`'s two arms do not overlap across five runs each**, so the fall is the instrument's, not a median's. **`varlookup`'s apparent rise is not**: a first pass at three runs per side read 2,408 against 2,588 and looked like a real 7% rise; at five runs each arm's own spread is about 500 KB and the two overlap, so the honest statement is that this instrument does not resolve it here. The one-clause program is the control for the 153,752 bytes the binary grew, and it does not resolve a rise either.
+
+From a three-run pass on the remaining axes, recorded as unresolved for the same reason: `strings` 11,448 against 11,024, `compound` 2,516 against 2,472, `emptyloop` 2,464 against 2,448, `alloc4c` 180,240 against 179,976.
+
+#### The mechanism, measured directly rather than inferred from the axis
+
+Three 200,000-iteration probes, `perf stat -e instructions:u`, three runs each, medians, from a fresh empty directory, each printing the identical answer on both binaries. **The first two are the same clause at two precisions, one inside the inline arm and one outside it**, which is what isolates this change from anything else that moved with it.
+
+| probe | what it is | base | head | change |
+|---|---|---:|---:|---:|
+| `numeric digits 9; a = i / 3` | a nine-digit result, inside the arm | 1,067,342,015 | 1,001,378,796 | **-6.18%** |
+| `numeric digits 25; a = i / 3` | a twenty-five-digit result, outside it | 1,581,183,128 | 1,633,792,759 | **+3.33%** |
+| `a = i + 1` | never builds a `Number` at all | 346,183,133 | 350,002,498 | +1.10% |
+
+**The middle row is the cost this change carries and it is not netted out.** A program working above twenty digits pays the enum's tag and a wider `Number` to copy and still pays the allocation. The bottom row is the displacement floor, and it agrees with `varlookup` and `emptyloop` above.
+
+**`arith`'s -15.44% is larger than the isolated `/` probe's -6.18%** because that axis runs five arithmetic assignments per pass -- two at `DIGITS 9` and three at `DIGITS 20` -- where the probe runs one.
+
+#### What the design document asked this candidate to settle, and what it says
+
+`2026-08-11-value-representation-design.md` sets a test: *"land B, measure `arith`, and compare the delta against those two rows"* -- `drop_glue::<rexx_num::Number>` at 12.2% of the axis and `Number::clone` at 7.7%, which entry 11 forbids adding.
+
+**The measured move is -15.44% in instructions: larger than either row and smaller than their sum of 19.9.** By that document's own rule -- *"if the measured move is materially larger than either, the blocks were overlapping"* -- the two rows do overlap, and entry 11's residual arithmetic is inflated to that extent. It is **not** materially smaller than both, so the attribution was not wrong. This is one axis and one candidate; it is a data point for that question, not a verdict on it, and entry 11's 4.35x and 5.50x are not withdrawn here.
+
+#### Correctness, which outranks the number
+
+**A 93,632-case differential against the oracle, aimed at the capacity boundary, on both engines, at BASE and at HEAD.** 22 generated programs -- eleven `NUMERIC DIGITS` from 1 to 100 crossed with both `FORM`s -- each running 266 literals chosen to straddle twenty significant digits through 16 operations, plus 60 lines walking one value across the capacity in both directions inside a single computation. Every case reports the rendering, its length, a re-render through concatenation and `DATATYPE(v,'W')`, and traps its own syntax condition so one overflow does not truncate the rest.
+
+* **All 198 descriptors are byte-identical between BASE and HEAD** -- 22 programs by three arms by stdout, stderr and exit status.
+* **The IR and the tree-walker agree on every one of the 94,952 output lines**, at BASE and at HEAD.
+* **6,236 lines diverge from the oracle, identically at BASE and at HEAD, and every one of them is the same pre-existing gap entry 9 recorded**: `DATATYPE(v,'W')` answers `0` where the oracle answers `1` for a whole number of nineteen digits or more, because this crate asks `Number::whole_value(ARGUMENT_DIGITS)` and that constant is 18. Strip that one field and the divergence count is **zero**. The remaining 88,716 lines match the oracle byte for byte on both engines.
+
+**Under the collector's stress mode**, because a representation change alters what is a heap object: ten of the boundary programs -- the four `DIGITS` either side of the capacity and `DIGITS 9`, both forms -- through `run_program_collect_every_alloc`, **1,696,652 collections**, stdout, stderr and exit code identical to the plain run of each. The committed corpus stress gate (`the_l0_subset_passes_again_under_collect_on_every_allocation`) is green.
+
+**The in-crate equivalence, which is where a representation change is actually held.** `every_operation_answers_the_same_with_the_digits_on_the_heap` runs the whole public surface twice over a boundary population crossed with nine precisions -- once with the digits inline and once with the identical value forced onto the heap -- and asserts the answers are equal, through `add`, `sub`, `mul`, all three `div` forms, `compare`, `format`, `format_form(Engineering)`, `round_to`, `plain_integer`, `rendered_integer`, `abs`, `signum`, and `pow` separately. Measured by printing them once: **196 values, 56 of them already on the heap arm, and 349,272 checks.** It carries two floors -- a case count, and that some case reached the heap arm at all -- so a population that stopped generating cases, or one that never left the inline arm, fails rather than passes empty.
+
+**Two mutations, and the pair is the finding.**
+
+* **Dropping the shift out of `insert_front`'s inline arm -- a wrong *answer* -- reddens six existing tests**, `the_small_int_fast_path_answers_what_the_general_path_answers`, `both_engines_agree_on_every_case_file` and both exempt-set harnesses among them. So the suite as it stood catches a wrong digit.
+* **Dropping the zero-fill out of `extend_zeros`'s inline arm -- stale bytes surfacing as digits -- leaves the entire workspace green without the new tests: 1442 passed, 0 failed.** Only `the_in_place_edits_agree_with_a_vector_on_both_arms` catches it, and notably the 349,272-check equivalence test does not, because nothing in the arithmetic today calls `extend_zeros` on a buffer a `truncate` has shortened. **That is the representation-only hazard, and it is reachable by an ordinary future edit.**
+  **One thing weakens that mutation and is recorded rather than left out:** deleting the fill leaves `buf` unread in that arm, so `rustc` emits an unused-variable warning and the `-D warnings` gate refuses *that* spelling -- run rather than inferred: with the mutation in place `cargo clippy --workspace --all-targets -- -D warnings` exits 101 on `error: unused variable: `buf``. What the warning cannot see is the same defect written so the buffer is still touched -- filling the wrong value, or filling the wrong range -- and that is what the test is for.
+  Both runs used `--no-fail-fast` and read run counts; the file was restored from a `cp` copy and `sha256sum -c`'d after each, never `git checkout --`.
+
+Gates: `cargo test --workspace` **1449 passed, 0 failed, 4 ignored** in dev and in release, run counts read rather than exit status alone. Inside the release run the corpus runner reported 10 passed and 1 ignored, the dual-engine sweep 9, the collector stress harness 6. **BASE was re-counted rather than inherited, by running the suite at BASE before anything was edited**: **1442 passed, 0 failed, 4 ignored** in both profiles. HEAD runs seven more, all in the new module. `cargo fmt --all --check` clean. `cargo clippy --workspace --all-targets -- -D warnings` clean **from a full `cargo clean`**, with `Checking rexx-num`, `rexx-parse`, `rexx-core` and `rexx-exec` all confirmed in the log -- and it caught one lint in the new tests on the first, failing pass, so the run examined the code.
+
+**No `unsafe`.** The workspace lint is untouched at `forbid`, and nothing in this change wanted one: the inline arm is an ordinary enum whose `len` is a plain field, so a bug in it is a wrong digit rather than undefined behaviour, which is exactly what the mutations above demonstrate.
+
+#### Disposition: **accepted**
+
+Entry 11's falsifier was *"a paired run of lever (a) moving `arith` by less than about 15%; or peak resident set not falling."* `arith` moved **-15.41% wall and -15.44% instructions**, and `arith`'s peak resident set fell **21.6%** with non-overlapping ranges over five runs a side.
+
+**It clears the first half of that falsifier by four tenths of a point, and this entry does not pretend otherwise.** Had the capacity been 15 rather than 20 -- a choice equally defensible from `NUMERIC DIGITS 9` alone -- `arith.rex`'s `DIGITS 20` section would have stayed on the heap, and the number would probably have been under the bar. That last clause is a conjecture: no binary was built at 15 and none should be, because building one to see which capacity measures better is exactly what Unit 0 forbids. The capacity that saved it was fixed from `i64`'s width and written down before the first run, which is the only reason that sentence can be written at all.
+
+**The hypothesis is confirmed by the route it named**, and the probe pair is the evidence: the same clause is 6.18% cheaper when its result fits the arm and 3.33% dearer when it does not.
+
+Accepted **with three costs recorded and not netted out**: a program working above twenty digits retires about 3% more instructions; the displacement floor is about 1% on axes this does not touch, worst on `emptyloop` at +1.65%; and the binary grew 153,752 bytes.
+
+**What this did not remove, named so the next candidate is not sold twice.** Entry 11 gave candidate 1 a ceiling of 39.9% on `arith` and this took 15.4 of it. Scratch buffers that never become a `Number`'s digits still allocate, and three were read out of the source rather than enumerated exhaustively: `mul_magnitudes`' `Vec<u16>` accumulator, `long_divide`'s working remainder, and `divide_power`'s dividend. Each is the reference's `resultBufFast` in a place it has not been applied, and none was touched here because touching them would have confounded the attribution above.
+
+Commit: `4087e9d147e22f3251c13e6a8fd7855a0f01c7b4`, read back from `git log` after committing.
+
+#### What this entry cannot say
+
+* **It is one gated sitting on one Linux host**, unpinned, on a machine whose governor cannot be fixed. The rule that a handful of paired runs decides it is why there is not a second.
+* **It did not run `rexx-bench-suite`, so it carries no oracle ratios.** Where `arith` now sits against the oracle is unmeasured; entry 11 had it at 2.1291x.
+* **`strings` and `alloc4c` have no wall figure here at all.** Their signs hold in neither, which is what entry 11 predicted for `alloc4c` and what a -0.49% instruction move predicts for `strings`.
+* **`rexxcps`' +4.78% is a clauses-per-second figure**, not a wall ratio, and it rests on the -12.25% instruction count beside it. That instructions fell four times as far as throughput rose is unexplained here.
+* **The tree-walker was measured only for correctness.** Every wall, instruction and resident-set figure is the IR arm; `Number` sits below both engines, so the tree-walker gets the same work removed and no benchmark here says by how much.
+* **The equivalence is asserted over a generated population, not proved.** A shape nobody thought of is a shape the floors cannot miss.
+* **Nothing here re-profiles.** Unit 0's cadence asks for a re-profile of `arith` and `rexxcps` before the next candidate is chosen, and this entry does not supply it.
