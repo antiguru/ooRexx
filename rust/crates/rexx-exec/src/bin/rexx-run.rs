@@ -42,10 +42,22 @@ use std::process::ExitCode;
 /// refusing, because a benchmark would attribute the result to the wrong arm
 /// and read a comparison of one arm against itself as no movement.
 fn engine_from_environment() -> rexx_exec::Engine {
+    engine_from(std::env::var("REXX_ENGINE"))
+}
+
+/// [`engine_from_environment`]'s decision, over a value rather than over the
+/// process.
+///
+/// **Split out so it can be tested at all.** The environment is process-wide,
+/// `std::env::remove_var` is `unsafe` and this workspace forbids `unsafe`, and
+/// libtest runs its cases on threads of one process -- so a test that unset
+/// the variable would be both unwritable here and a race with every other
+/// test if it were written. Over a `Result` there is nothing to unset.
+fn engine_from(value: Result<String, std::env::VarError>) -> rexx_exec::Engine {
     use std::env::VarError;
 
-    match std::env::var("REXX_ENGINE") {
-        Err(VarError::NotPresent) => rexx_exec::Engine::Ir,
+    match value {
+        Err(VarError::NotPresent) => rexx_exec::Engine::DEFAULT,
         Ok(value) => match value.as_str() {
             "ir" => rexx_exec::Engine::Ir,
             "tree-walker" => rexx_exec::Engine::TreeWalker,
@@ -148,4 +160,41 @@ fn main() -> ExitCode {
     // instead fail and fall back to 255 for every one of them, indistinguishable
     // from `exit -1` alone, which is the bug this replaces.
     ExitCode::from(outcome.exit_code as u8)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::engine_from;
+    use rexx_exec::Engine;
+    use std::env::VarError;
+
+    /// An unset `REXX_ENGINE` gives the same engine a caller who built an
+    /// `Invocation` and chose nothing gets.
+    ///
+    /// **This binary is the one place naming an engine that the library's own
+    /// test cannot see.** `Invocation::into_parts` is `pub(crate)`, so
+    /// `invocation.rs` can pin the library half and nothing there reaches
+    /// this half; the two are pinned to one `Engine::DEFAULT` from opposite
+    /// sides instead. Without this, a flip applied to one and not the other
+    /// would leave `rexx-run` running an engine the library says is not the
+    /// default, and every gate would stay green.
+    #[test]
+    fn an_unset_variable_gives_the_librarys_own_default() {
+        assert_eq!(engine_from(Err(VarError::NotPresent)), Engine::DEFAULT);
+    }
+
+    /// Both recognised spellings still select what they name, so the default
+    /// above cannot be satisfied by a function that answers it for everything.
+    ///
+    /// The two rejecting arms are absent on purpose and not by oversight:
+    /// `reject_engine` ends the process, which libtest cannot survive to
+    /// assert on. What they refuse is stated where they are.
+    #[test]
+    fn each_spelling_selects_the_engine_it_names() {
+        assert_eq!(engine_from(Ok("ir".to_string())), Engine::Ir);
+        assert_eq!(
+            engine_from(Ok("tree-walker".to_string())),
+            Engine::TreeWalker
+        );
+    }
 }

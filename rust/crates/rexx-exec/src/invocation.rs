@@ -147,6 +147,19 @@ pub enum Engine {
     Ir,
 }
 
+impl Engine {
+    /// The engine a caller who did not choose gets.
+    ///
+    /// **A constant rather than a literal at each site, because there is more
+    /// than one site and they have to agree.** [`Invocation::none`] is one;
+    /// `bin/rexx-run.rs`'s unset `REXX_ENGINE` is the other, in a crate that
+    /// cannot see this one's private items and so could not be checked
+    /// against it. Both now name this, so the two cannot drift apart without
+    /// someone writing a literal back in -- and each has a test pinning it
+    /// here from its own side.
+    pub const DEFAULT: Engine = Engine::Ir;
+}
+
 /// Where `.input` -- the position `PULL`, `PARSE PULL` and `PARSE LINEIN` all
 /// advance -- reads its lines from.
 ///
@@ -188,7 +201,7 @@ impl Invocation {
         Invocation {
             argument: None,
             input: ProgramInput::Nothing,
-            engine: Engine::Ir,
+            engine: Engine::DEFAULT,
         }
     }
 
@@ -303,14 +316,17 @@ mod tests {
     /// `with_input` and `with_argument` both build from a `..` update, so a
     /// field added to this struct is carried by them silently or dropped by
     /// them silently depending on which side of the `..` it lands. That is
-    /// what the second half checks; the first is the default itself, which
-    /// nothing else in this crate states.
+    /// what the second half checks; the first is the default itself, pinned
+    /// to [`Engine::DEFAULT`] so that this and `bin/rexx-run.rs`'s own test
+    /// are pinning one value from two sides rather than two values that
+    /// happen to match today.
     #[test]
     fn an_invocation_that_chose_no_engine_runs_on_the_compiled_stream() {
-        assert_eq!(Invocation::none().into_parts().2, Engine::Ir);
+        assert_eq!(Engine::DEFAULT, Engine::Ir);
+        assert_eq!(Invocation::none().into_parts().2, Engine::DEFAULT);
         assert_eq!(
             Invocation::with_argument(b"a".to_vec()).into_parts().2,
-            Engine::Ir
+            Engine::DEFAULT
         );
         assert_eq!(
             Invocation::none()
