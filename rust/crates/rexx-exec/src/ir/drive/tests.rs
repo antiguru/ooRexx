@@ -23,8 +23,10 @@
 //! what they assert stays true whatever the default becomes. Which engine the
 //! default *is* belongs to `Invocation`, and `invocation.rs` asserts it there.
 
-use super::super::QUICKENING;
-use super::{arith_hint_skips, clause_op_entries, run_chunk_entries, trace_op_echoes};
+use super::super::{CALL_SITE_CACHE, QUICKENING};
+use super::{
+    arith_hint_skips, call_site_hits, clause_op_entries, run_chunk_entries, trace_op_echoes,
+};
 use crate::{Engine, Invocation, Outcome, execute, run_program};
 
 /// The path these programs are reported under. Nothing reads it back: no
@@ -489,4 +491,97 @@ fn no_body_is_refused_by_either_engine() {
             outcome.chunks_refused
         );
     }
+}
+
+/// A call site reached on every pass of a loop resolves **once** and answers
+/// from what it kept on every pass after that.
+///
+/// **The hit count is the half that says the table was read**, and without it
+/// this test is satisfied by a table nothing ever consults: a kept resolution
+/// and a fresh one are the same answer -- which is what makes keeping one safe
+/// -- so the bytes alone cannot tell which ran. [`super::call_site_hits`]'s own
+/// comment has why that is the observable.
+///
+/// **Two sites, resolving to two different things**, so the count is not one
+/// site's alone and a table that handed every site the first answer it stored
+/// would produce the wrong bytes rather than a smaller count: `zsub` is an
+/// internal label and `length` is a builtin, and a shared entry would call one
+/// of them four times.
+///
+/// The expected bytes were measured against the C++ oracle.
+#[test]
+fn a_call_site_resolves_once_and_answers_from_what_it_kept() {
+    const TWO_SITES_IN_A_LOOP: &[u8] = b"\
+do zi = 1 to 4
+  call zsub zi
+  say result
+  call length 'abcde'
+  say result
+end
+exit
+zsub:
+  use arg zn
+  return zn * 10
+";
+
+    let before = call_site_hits();
+    let outcome = execute(
+        TEST_PATH,
+        TWO_SITES_IN_A_LOOP.to_vec(),
+        false,
+        Invocation::none().with_engine(Engine::Ir),
+    );
+    let hits = call_site_hits() - before;
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(
+        String::from_utf8_lossy(&outcome.stdout),
+        "10\n5\n20\n5\n30\n5\n40\n5\n",
+        "a call site answered from a resolution that was not its own"
+    );
+    // Two sites, each resolving on the first pass and answering from the site
+    // on the three after it.
+    //
+    // **Zero with the table switched off, and asserted rather than skipped**,
+    // so that a measuring build has a green suite and this test still says
+    // which configuration it is in -- `a_quickened_site_falls_through_to_the_
+    // general_path`'s own shape, one table over.
+    let expected = if CALL_SITE_CACHE { 6 } else { 0 };
+    assert_eq!(
+        hits, expected,
+        "the two sites answered from a kept resolution {hits} times where {expected} was due, so \
+         the table is not being read back"
+    );
+}
+
+/// The tree-walker keeps nothing, so the same program hits no site at all.
+///
+/// The negative control for the test above, and a separate test for the reason
+/// [`the_tree_walker_drives_no_chunk_at_all`] is: a counter that never moved
+/// satisfies "nothing was kept" on its own, and only the pair says the count
+/// tracks the engine rather than the program.
+#[test]
+fn the_tree_walker_keeps_no_resolution() {
+    const ONE_SITE_IN_A_LOOP: &[u8] = b"\
+do zi = 1 to 4
+  call zsub zi
+end
+exit
+zsub:
+  return
+";
+
+    let before = call_site_hits();
+    let outcome = execute(
+        TEST_PATH,
+        ONE_SITE_IN_A_LOOP.to_vec(),
+        false,
+        Invocation::none().with_engine(Engine::TreeWalker),
+    );
+    let hits = call_site_hits() - before;
+    assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
+    assert_eq!(
+        hits, 0,
+        "the tree-walker answered {hits} calls from a kept resolution, so the table is reached \
+         without the compiled stream"
+    );
 }

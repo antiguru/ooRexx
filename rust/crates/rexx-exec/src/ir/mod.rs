@@ -25,13 +25,14 @@
 //! and `run_activation` is what chooses between it and the tree-walker
 //! (`Interp::engine`, from the `Invocation`).
 
+use std::cell::Cell;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use rexx_core::FrameId;
 use rexx_parse::{Operator, SymbolId};
 
 use crate::eval::SymbolRead;
-use crate::run::HeaderRole;
+use crate::run::{HeaderRole, Resolved};
 use crate::trace::ChunkTrace;
 
 mod compile;
@@ -154,10 +155,11 @@ pub(crate) enum Op {
     /// **No `Generic` op may sit inside `(here, end)`**, which `compile`
     /// asserts: it runs a whole clause through `step_in_temps_frame`, which
     /// echoes the clause itself, and the echo is not idempotent. An op that
-    /// runs a construct whose *members* are clauses is a different thing and is
-    /// allowed -- [`Op::LoopRun`] reaches the body's clauses through
-    /// `run_bounded`, which re-enters the driver rather than stepping a clause
-    /// here.
+    /// runs clauses belonging to something other than this region's own
+    /// instruction is a different thing and is allowed -- [`Op::LoopRun`]
+    /// reaches the body's clauses through `run_bounded` and [`Op::Call`]
+    /// reaches a callee's through `run_activation`, each re-entering a driver
+    /// rather than stepping a clause here.
     Clause { index: u32, end: u32 },
     /// Echoes the `*-*` line of the clause of the instruction at `index`.
     ///
@@ -514,6 +516,51 @@ pub(crate) enum Op {
     ///
     /// **Only valid inside a [`Op::Clause`] region**, for that reason.
     Say { index: u32, src: Option<u16> },
+    /// Runs the `CALL name` at `index`, from the resolution this site has kept
+    /// or a fresh one, and settles `RESULT` from what came back.
+    ///
+    /// `Interp::resolve_call` and `Interp::invoke_named_call` are the two
+    /// halves, entered from here and from `step`'s own `Call` arm -- so the
+    /// four-step resolution order, the argument loop with its `>A>` lines, the
+    /// `MAX_ACTIVATION_DEPTH` guard, the five pieces of level state saved
+    /// around the nested `run_activation` and the `RESULT` settle with its
+    /// `>>>` are one implementation rather than a second one beside it.
+    /// `eval_call` enters the same two for `ExprKind::Call`, which is what
+    /// stops `CALL length 'abc'` and `say length('abc')` answering
+    /// differently.
+    ///
+    /// **This op emits nothing of its own, and unlike every other computing op
+    /// in this stream it owes no echo op -- which is a conclusion rather than
+    /// an omission.** The lines a call produces are `>A>` per argument, the
+    /// argument expressions' own `>L>`/`>V>`/`>O>`, the callee's clause echoes,
+    /// and the `>>>` of the `RESULT` settle. Every one of them is emitted
+    /// inside the two halves above, which this op enters rather than replaces,
+    /// so there is no line here for an echo op to restore. That is the
+    /// difference between this promotion and [`Op::Const`]'s: a literal's value
+    /// was *taken away* from `eval.rs`, and a call's arguments were not.
+    ///
+    /// **The instrument that follows from it.** `tests/ir_dual.rs` compares the
+    /// two engines against each other, so a line both arms emit from one shared
+    /// function is a line it structurally cannot police -- measured, by making
+    /// the `>A>` emission a no-op: the sweep stays green and
+    /// `tests/ir_dual_cases/calls` reddens on four rows. The oracle-pinned rows
+    /// are what hold these lines, and the dual sweep is what holds the clause
+    /// echo this op's region newly decides at compile time.
+    ///
+    /// **Only `CALL name` and `CALL "name"`.** `CALL ON`/`OFF` resolves no name
+    /// at all, and `CALL (expr)` learns its name at run time, so neither
+    /// reaches this op -- `compile` leaves both as [`Op::Generic`].
+    ///
+    /// **The last op of a [`Op::Clause`] region, and inside it** rather than
+    /// after it: the whole call runs inside the `CALL` clause exactly as it
+    /// does on the tree-walker, so the clause boundary that follows it is where
+    /// a `CALL ON` handler the callee queued is delivered. The callee's own
+    /// clauses are not ops of this region -- they are a nested activation's,
+    /// reached through `run_activation`, which chooses its own engine.
+    ///
+    /// `site` is this call site's own slot in [`Chunk::calls`], **not** a
+    /// position in the op stream, for the reason [`Op::Arith`]'s `hint` is not.
+    Call { index: u32, site: u32 },
     /// Continues at op `target`.
     Jump { target: u32 },
     /// Continues at op `target` unless register `reg` holds the logical value
@@ -754,6 +801,103 @@ impl Hints {
     }
 }
 
+/// Whether a compiled call site keeps the resolution it made.
+///
+/// **The whole of the resolution table's removal, in one place**, for the
+/// reason [`QUICKENING`] is one: measuring what the table is worth is then a
+/// single edit rather than a change threaded through the driver's arm. With
+/// this `false`, [`Calls`] allocates nothing, no slot is read or written, and
+/// every [`Op::Call`] resolves afresh -- which is exactly what the tree-walker
+/// does for the same call.
+const CALL_SITE_CACHE: bool = true;
+
+/// One call site's kept resolution, or none yet.
+///
+/// **What makes keeping it correct is that nothing can invalidate it**, and
+/// each of the four resolution steps has its own reason. A `Resolved::Label`
+/// indexes the running activation's body, and a chunk is compiled per body and
+/// entered only for an activation of that body (`run_activation` looks its
+/// chunk up under the running activation's own `body_key`). The builtin table
+/// is static. `Interp::routines` is written only by `install_directives`,
+/// which runs once, before the first clause of the program. And the fourth
+/// step raises rather than resolving, so a failure is never recorded here at
+/// all -- a site that raised 43.1 asks again next time.
+///
+/// **`Cell` rather than the `AtomicU32` [`PatchSlot`] uses, and the difference
+/// is the payload rather than a change of mind.** That type's state is a `u32`,
+/// so an atomic costs it nothing and buys the `Sync` a shared routine body
+/// would one day need; a `Resolved` is wider than any lock-free atomic here can
+/// carry, so the same bet would cost either an encoding or a lock. Nothing in
+/// this crate crosses a thread today -- the chunk cache is an `Rc` map per
+/// `Interp` -- and this is the type that would have to change first if that
+/// stopped being true.
+struct CallSite(Cell<Option<Resolved>>);
+
+impl CallSite {
+    fn new() -> CallSite {
+        CallSite(Cell::new(None))
+    }
+
+    fn get(&self) -> Option<Resolved> {
+        self.0.get()
+    }
+
+    fn set(&self, resolved: Resolved) {
+        self.0.set(Some(resolved));
+    }
+}
+
+/// One chunk's resolution table: a slot per [`Op::Call`], indexed by that op's
+/// own `site` field.
+///
+/// **Dense over the ops that resolve rather than parallel to the op stream**,
+/// which is [`Hints`]' own argument one construct over.
+struct Calls {
+    /// One slot per call op, or **empty** when [`CALL_SITE_CACHE`] is off.
+    slots: Vec<CallSite>,
+    /// How many call ops have taken a slot, kept separately from `slots.len()`
+    /// so that the indices the ops carry are the same whether or not the table
+    /// exists -- [`Hints::next`]'s own reason, so that a golden op stream reads
+    /// identically under either setting.
+    next: u32,
+}
+
+impl Calls {
+    fn new() -> Calls {
+        Calls {
+            slots: Vec::new(),
+            next: 0,
+        }
+    }
+
+    /// Reserves the slot for one call op, answering the index it carries.
+    fn reserve(&mut self) -> Result<u32, ChunkTooLarge> {
+        let at = self.next;
+        self.next = at.checked_add(1).ok_or(ChunkTooLarge {
+            what: "call sites past u32",
+        })?;
+        if CALL_SITE_CACHE {
+            self.slots.push(CallSite::new());
+        }
+        Ok(at)
+    }
+
+    /// What site `at` resolved to last time, or `None` for a site that has not
+    /// resolved yet or has no slot at all -- which is what makes
+    /// [`CALL_SITE_CACHE`] off behave as no table rather than as a table that
+    /// answers wrongly.
+    fn resolved(&self, at: u32) -> Option<Resolved> {
+        self.slots.get(at as usize).and_then(CallSite::get)
+    }
+
+    /// Records what site `at` resolved to.
+    fn remember(&self, at: u32, resolved: Resolved) {
+        if let Some(slot) = self.slots.get(at as usize) {
+            slot.set(resolved);
+        }
+    }
+}
+
 /// One body's compiled instruction stream, cached on `Interp` under its
 /// `Plan`'s `BodyKey` **and the [`ChunkTrace`] it was compiled under**
 /// (`Interp::chunk_for`, in `plan.rs`).
@@ -813,11 +957,13 @@ pub(crate) struct Chunk {
     consts: Vec<Box<[u8]>>,
     /// The quickening hints [`Op::Arith`] reads, one per such op.
     ///
-    /// **The one mutable thing a running chunk owns**, and the op stream is
-    /// not it: an op is emitted once and never rewritten, so two activities
-    /// running one body see the same instructions and differ only in what
-    /// their sites have learned.
+    /// **One of the two mutable things a running chunk owns**, and the op
+    /// stream is not either of them: an op is emitted once and never
+    /// rewritten, so two activities running one body see the same instructions
+    /// and differ only in what their sites have learned.
     hints: Hints,
+    /// The resolutions [`Op::Call`] reads and writes, one per such op.
+    calls: Calls,
 }
 
 impl Chunk {
@@ -883,5 +1029,15 @@ impl Chunk {
     /// path ([`Hints::saw_general`]).
     fn saw_general(&self, at: u32) {
         self.hints.saw_general(at);
+    }
+
+    /// What call site `at` resolved to last time ([`Calls::resolved`]).
+    fn resolved_call(&self, at: u32) -> Option<Resolved> {
+        self.calls.resolved(at)
+    }
+
+    /// Records what call site `at` resolved to ([`Calls::remember`]).
+    fn remember_call(&self, at: u32, resolved: Resolved) {
+        self.calls.remember(at, resolved);
     }
 }

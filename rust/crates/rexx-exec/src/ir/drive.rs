@@ -35,7 +35,7 @@
 //! what a clause boundary owes.
 
 use rexx_core::{Decoded, FrameId, ObjRef};
-use rexx_parse::{Instruction, InstructionKind, ProgramSource, SymbolId};
+use rexx_parse::{Call, Instruction, InstructionKind, ProgramSource, SymbolId};
 
 use super::{BodyEngine, Chunk, Op};
 use crate::clause::{ClauseOutcome, ClauseValue};
@@ -809,6 +809,61 @@ impl Interp {
                                     });
                                     self.say_evaluated(value);
                                 }
+                                // The call, through the same
+                                // `Interp::resolve_call` and
+                                // `Interp::invoke_named_call` that `step`'s own
+                                // `Call` arm reaches -- so the resolution
+                                // order, the argument loop with its `>A>`
+                                // lines, the depth guard, the level state saved
+                                // around the nested activation and the `RESULT`
+                                // settle are that arm's rather than a second
+                                // copy. This op emits nothing itself and owes
+                                // no echo op, because it took no line away from
+                                // `eval.rs`: `Op::Call`'s own doc comment has
+                                // the argument and the measurement behind it.
+                                Op::Call { index, site } => {
+                                    debug_assert_names_the_clause(code, *index, clause, "Call");
+                                    let InstructionKind::Call(call) = &clause.kind else {
+                                        break 'region Err(Loud::call_op_off_its_node().into());
+                                    };
+                                    let Call::Named {
+                                        name,
+                                        literal,
+                                        args,
+                                    } = &**call
+                                    else {
+                                        break 'region Err(Loud::call_op_off_its_node().into());
+                                    };
+                                    // **The site's own kept answer, and the
+                                    // resolution when it has none.** Nothing
+                                    // invalidates one -- `CallSite`'s own doc
+                                    // comment has the reason per resolution
+                                    // step -- so a hit needs no guard and there
+                                    // is none. A raise is deliberately not
+                                    // recorded: `resolve_call` answers `Err`
+                                    // for a name that matched nothing, and a
+                                    // site that raised asks again.
+                                    let resolved = match chunk.resolved_call(*site) {
+                                        Some(resolved) => {
+                                            #[cfg(test)]
+                                            count_call_site_hit();
+                                            resolved
+                                        }
+                                        None => match self.resolve_call(name, !*literal) {
+                                            Ok(resolved) => {
+                                                chunk.remember_call(*site, resolved);
+                                                resolved
+                                            }
+                                            Err(failure) => break 'region Err(failure),
+                                        },
+                                    };
+                                    let flow =
+                                        match self.invoke_named_call(code, resolved, name, args) {
+                                            Ok(flow) => flow,
+                                            Err(failure) => break 'region Err(failure),
+                                        };
+                                    break 'region Ok(RegionEnd::Flowed(flow));
+                                }
                                 Op::JumpUnless { reg, target } => {
                                     debug_assert!(
                                         chunk.holds_register(*reg),
@@ -1035,6 +1090,7 @@ impl Interp {
                 }
                 Op::Store { .. } => return Err(Loud::op_not_driven("Store").into()),
                 Op::Say { .. } => return Err(Loud::op_not_driven("Say").into()),
+                Op::Call { .. } => return Err(Loud::op_not_driven("Call").into()),
                 Op::JumpUnless { .. } => return Err(Loud::op_not_driven("JumpUnless").into()),
                 Op::WhenTest { .. } => return Err(Loud::op_not_driven("WhenTest").into()),
                 Op::TraceKeyword { .. } => return Err(Loud::op_not_driven("TraceKeyword").into()),
@@ -1433,6 +1489,34 @@ fn count_arith_hint_skip() {
 #[cfg(test)]
 pub(crate) fn arith_hint_skips() -> usize {
     ARITH_HINT_SKIPS.with(std::cell::Cell::get)
+}
+
+// Test-only instrumentation: how many times this thread has run a compiled call
+// from the resolution its site had already kept.
+//
+// **The only observable that says the resolution table is read in production at
+// all**, and it is `ARITH_HINT_SKIPS`' argument one op over: a kept resolution
+// and a fresh one are the same answer -- that is what makes keeping it safe --
+// so no program's output can tell which one ran, and a table nothing consulted
+// would leave every output-comparing test in the workspace green.
+//
+// Counted at the hit rather than at the store, because a count of stores would
+// stay green on a table that is written and never read.
+//
+// Per thread for the reason `RUN_CHUNK_ENTRIES` is: see its own comment.
+#[cfg(test)]
+thread_local! {
+    static CALL_SITE_HITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn count_call_site_hit() {
+    CALL_SITE_HITS.with(|hits| hits.set(hits.get() + 1));
+}
+
+#[cfg(test)]
+pub(crate) fn call_site_hits() -> usize {
+    CALL_SITE_HITS.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]

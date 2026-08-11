@@ -141,6 +141,14 @@ pub(crate) fn render(chunk: &Chunk) -> String {
                     render_register(*src)
                 ));
             }
+            // The `site` field is rendered, for the reason [`Op::Arith`]'s
+            // `hint` is: it is an index this compiler hands out from the
+            // program alone, so a golden reading `site=1` for the second call
+            // op is what says the table is dense over these ops rather than
+            // over the stream.
+            Op::Call { index: at, site } => {
+                out.push_str(&format!("{index}: Call index={at} site={site}\n"));
+            }
             Op::EndBranch => {
                 out.push_str(&format!("{index}: EndBranch\n"));
             }

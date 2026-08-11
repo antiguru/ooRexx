@@ -1272,3 +1272,89 @@ fn one_body_under_two_trace_settings_is_two_cached_chunks() {
         "the first setting's chunk was evicted rather than kept beside the second's"
     );
 }
+
+/// A `CALL` compiles to a clause region holding one call op, and **no
+/// register**.
+///
+/// The two ops are the whole of what the tree-walker's own `Call` arm is,
+/// split at the one seam a stream can use: the clause boundary, which
+/// [`super::Op::Clause`] owns, and the call itself, which
+/// [`super::Op::Call`] runs through the same `Interp::resolve_call` and
+/// `Interp::invoke_named_call` that `step`'s own arm reaches.
+///
+/// **The register count is the assertion that says where this promotion
+/// stops.** A call's arguments are expressions, and every other promoted
+/// instruction evaluates its expression into a register -- this one does not,
+/// because an argument is not an `ObjRef`: a `>name` reference carries the
+/// caller's slot with it, which no register holds. So the arguments stay
+/// `invoke_call`'s, and with them every `>A>` line and every intermediate the
+/// argument expressions emit.
+#[test]
+fn a_call_compiles_to_a_clause_region_and_one_call_op() {
+    let chunk = compile_for_test(b"call zsub 1\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=2\n\
+         1: Call index=0 site=0\n"
+    );
+    assert_eq!(chunk.registers, 0);
+    // And nothing is interned: the argument's literal is evaluated from its
+    // own node by `invoke_call`, not loaded from this chunk's table.
+    assert!(chunk.consts.is_empty());
+}
+
+/// **Each call site takes a site index of its own, dense over the call ops.**
+///
+/// The same shape [`super::Op::Arith`]'s `hint` uses and for the same reason:
+/// the table a site's resolution is remembered in is indexed off the op rather
+/// than off the op's position, so a stream carries no entry for the ops that
+/// never resolve anything and the driver's loop needs no counter beside it.
+///
+/// Two calls of the **same** name, which is what makes this about the site
+/// rather than about the name: a table keyed by name would hand both the same
+/// entry, and the numbering below is what says it does not.
+#[test]
+fn each_call_site_takes_a_resolution_site_of_its_own() {
+    let chunk = compile_for_test(b"call zsub 1\ncall zsub 2\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=2\n\
+         1: Call index=0 site=0\n\
+         2: Clause index=1 end=4\n\
+         3: Call index=1 site=1\n"
+    );
+}
+
+/// Under a setting that echoes, the region carries its clause echo op in front
+/// of the call -- the position the tree-walker's own clause unit echoes at,
+/// before anything the clause does.
+#[test]
+fn a_traced_call_carries_its_clause_echo_in_front_of_the_call() {
+    let chunk = compile_for_test_under(b"call zsub 1\n", traced()).expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=3\n\
+         1: TraceClause index=0\n\
+         2: Call index=0 site=0\n"
+    );
+}
+
+/// **`CALL ON`/`CALL OFF` and `CALL (expr)` are not promoted**, and each is
+/// unpromoted for a reason of its own rather than by oversight.
+///
+/// `CALL ON` resolves no name at all: it edits the activation's trap table,
+/// which is `exec_condition_trap`'s and has nothing a call site could
+/// remember. `CALL (expr)` learns its name at run time, so a site cannot hold
+/// a resolution for it without a guard comparing the name it was resolved
+/// for -- and a guarded cache is exactly the shape this task has no evidence
+/// about (D24, amended).
+#[test]
+fn a_trap_call_and_a_dynamic_call_stay_generic() {
+    let chunk = compile_for_test(b"call on error name zh\ncall (zn)\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Generic index=0\n\
+         1: Generic index=1\n"
+    );
+    assert_eq!(chunk.registers, 0);
+}

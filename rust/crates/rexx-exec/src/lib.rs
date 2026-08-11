@@ -818,6 +818,21 @@ impl Loud {
         }
     }
 
+    /// A compiled `Call` op does not describe the `CALL name` it was emitted
+    /// for -- an internal inconsistency, never a program error.
+    ///
+    /// [`Loud::select_op_off_its_node`]'s reasoning exactly, one instruction
+    /// over, with the extra step that `ir::compile` emits this op only for the
+    /// `Named` form: reaching it means the op names an instruction whose
+    /// `CALL` is one of the three forms that stay `Op::Generic`.
+    ///
+    /// [`Loud::select_op_off_its_node`]: Loud::select_op_off_its_node
+    fn call_op_off_its_node() -> Loud {
+        Loud {
+            message: "a compiled Call op does not name a CALL name of its own body".to_string(),
+        }
+    }
+
     /// A compiled `Const` op names a constant its own chunk does not carry --
     /// an internal inconsistency, never a program error.
     ///

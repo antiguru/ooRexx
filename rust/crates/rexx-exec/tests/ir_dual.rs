@@ -20,7 +20,8 @@
 //! instruction the compiler has not promoted delegates its clause back to the
 //! tree-walker's own clause unit, and a construct resolved by one function
 //! entered from both arms -- `Interp::run_loop`, `Interp::assign_evaluated`,
-//! `Interp::say_evaluated` -- answers identically on both by construction. So
+//! `Interp::say_evaluated`, `Interp::invoke_call` -- answers identically on
+//! both by construction. So
 //! this comparison is not evidence that any of *those* is right; that is what
 //! the oracle harnesses are for, and the two halves compose.
 //!

@@ -15,9 +15,9 @@
 
 use std::collections::HashMap;
 
-use rexx_parse::{CodeBody, Expr, ExprKind, Instruction, InstructionKind, SymbolId};
+use rexx_parse::{Call, CodeBody, Expr, ExprKind, Instruction, InstructionKind, SymbolId};
 
-use super::{Chunk, ChunkTooLarge, Hints, Op, ReadSlot};
+use super::{Calls, Chunk, ChunkTooLarge, Hints, Op, ReadSlot};
 use crate::eval::{SymbolRead, is_arithmetic};
 use crate::plan::Plan;
 use crate::run::{HeaderPlan, if_targets, loop_header_plan, otherwise_range};
@@ -287,6 +287,7 @@ pub(crate) fn compile(
     let mut registers = Registers::new();
     let mut consts = Constants::new();
     let mut hints = Hints::new();
+    let mut calls = Calls::new();
     let mut patches: Vec<Patch> = Vec::new();
     // Indexed by instruction: the op that goes in front of that instruction's
     // own, emitted at its `op_of` entry. A `Vec` keyed by the instruction the
@@ -642,6 +643,30 @@ pub(crate) fn compile(
                 close_region(&mut ops, at)?;
                 registers.release(mark);
             }
+            // A `CALL name`/`CALL "name"` clause is the call and nothing else,
+            // and it takes **no register**: an argument is not an `ObjRef` --
+            // a `>name` reference carries the caller's own slot with it -- so
+            // the arguments stay `Interp::invoke_call`'s, together with every
+            // `>A>` line and every intermediate their expressions emit.
+            //
+            // The other three `Call` forms fall to `Generic` below.
+            // `CALL ON`/`OFF` resolves no name at all, `CALL (expr)` learns
+            // its name at run time and `CALL ns:name` is Phase 5's loud gap;
+            // the first two have their own witnesses in `golden_tests.rs`.
+            InstructionKind::Call(call) if matches!(&**call, Call::Named { .. }) => {
+                let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: 0,
+                });
+                push_echo(&mut ops, echo, instruction_index(index)?);
+                ops.push(Op::Call {
+                    index: instruction_index(index)?,
+                    site: calls.reserve()?,
+                });
+                close_region(&mut ops, at)?;
+            }
             _ => ops.push(Op::Generic {
                 index: instruction_index(index)?,
             }),
@@ -687,6 +712,7 @@ pub(crate) fn compile(
         registers: registers.high_water(),
         consts: consts.values,
         hints,
+        calls,
     })
 }
 
@@ -994,9 +1020,11 @@ fn instruction_index(index: usize) -> Result<u32, ChunkTooLarge> {
 /// checked at all: the driver sees one op at a time and cannot tell an op it
 /// reached by falling into a region from one it jumped to.
 ///
-/// [`Op::LoopRun`] is not one of these and is deliberately not checked for: it
-/// runs a construct whose *member* clauses are stepped by a nested driver
-/// entry, never a clause of the region's own instruction.
+/// An op that runs clauses belonging to something other than this region's own
+/// instruction is not one of these and is deliberately not checked for:
+/// [`Op::LoopRun`]'s are its construct's body, stepped by a nested driver entry,
+/// and [`Op::Call`]'s are a nested activation's, stepped by a driver of its
+/// own.
 ///
 /// An unconditional `assert!` rather than a `debug_assert!`, so the release
 /// build carries the same guarantee. It is one linear scan per body, once,
@@ -1200,6 +1228,7 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::Store { index, .. }
                 | Op::Say { index, .. }
                 | Op::WhenTest { index, .. }
+                | Op::Call { index, .. }
                 | Op::LoopRun { index } => Some(*index),
                 Op::Generic { .. }
                 | Op::TraceKeyword { .. }
