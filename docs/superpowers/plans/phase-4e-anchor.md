@@ -1,5 +1,11 @@
 # Phase 4e anchor -- the tree-walker's benchmark figures, before the IR exists
 
+**Superseded as Phase 4f's input state (2026-08-11, `phase-4e-gate.md`), and only in that role.**
+The gate records the IR arm against the tree-walker arm on instructions and cycles, within one binary, which is the state 4f starts from on the engine axis.
+This document's own figures are tree-walker against the **oracle**, on wall clock, taken before `Engine::Ir` existed, and they stand as the last measurement of that pair -- no oracle ran in any sitting behind the gate.
+The two do not convert into each other and combining them is the cross-sitting comparison this project's method forbids.
+The per-task sections below (Task 4a, Task 4c, Task 7) keep their wall-clock figures as a record of what was decided on; their **magnitudes** are retired by the spec's rule about cross-build claims under 10 per cent, and no later task should quote them.
+
 Task 1 of Phase 4e (`docs/superpowers/plans/2026-08-09-phase-4e-ir.md`).
 The `spike/bytecode-vm` figures this phase's tasks used to cite are withdrawn: no bench-results
 file, no harness script, no build identity, and no empty-loop program ever existed in
