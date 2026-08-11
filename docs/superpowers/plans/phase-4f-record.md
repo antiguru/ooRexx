@@ -861,7 +861,7 @@ The candidate's stated falsification was peak RSS not falling by at least an ord
 
 **The hypothesis is confirmed by the route it named** on memory, where the instruction and page-fault columns both agree. It is **not** confirmed on `strings`' wall time: the prototype's -16% came from an axis peaking at 3.7 GB, entry 4 already took that to 2.5 GB, and what is left is -5.3%.
 
-Commit: read back from `git log` after committing, below.
+Commit: `967adba3e2dc638502c13ab2742122569a02fc47`, read back from `git log` after committing.
 
 #### What this entry cannot say
 
