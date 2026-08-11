@@ -1642,7 +1642,7 @@ struct Interp {
     /// currently unwinding and is first-wins; this is the record of levels
     /// already sealed. `run.rs`'s `seal_site_level` moves one into the other
     /// and is called by exactly the constructs that open a level --
-    /// `run_fragment` and `resolve_and_run_call`. Keeping the two apart is
+    /// `run_fragment` and `Interp::invoke_call`. Keeping the two apart is
     /// what lets the guard stay a plain `is_none()` rather than a "did
     /// anything get recorded since the current level opened" watermark, and
     /// it is why the single-site behaviour falls out unchanged
@@ -1732,7 +1732,7 @@ struct Interp {
     /// The call that entered the running activation: what `USE ARG` reads.
     ///
     /// **Saved and restored around every call, alongside the four pieces of
-    /// level state `resolve_and_run_call` already saves.** That is the same
+    /// level state `Interp::invoke_call` already saves.** That is the same
     /// discipline Task 4's own review finding was about -- a fifth piece of
     /// per-activation state added without a restore is invisible until two
     /// activations per clause are reachable, and then wrong. Everything a
@@ -1885,7 +1885,7 @@ struct InstalledRoutine {
 /// The name and arguments of one call in progress.
 ///
 /// One struct rather than two `Interp` fields so that the save-and-restore
-/// in `resolve_and_run_call` is a single `mem::replace`: two fields would be
+/// in `Interp::invoke_call` is a single `mem::replace`: two fields would be
 /// two places to forget, which is precisely the defect shape this is
 /// modelled to avoid.
 #[derive(Default)]
@@ -2525,7 +2525,7 @@ fn execute(
         // outlive every clause: `step_in_temps_frame` truncates the
         // temporaries stack back to a watermark it takes on entry, and every
         // such watermark sits above this push. This is the same mechanism
-        // `resolve_and_run_call` uses to keep a call's own arguments reachable
+        // `Interp::invoke_call` uses to keep a call's own arguments reachable
         // (`run.rs`, the `push_temp(argument.value())` beside the argument
         // list it builds); `call_context` itself is not walked by the
         // collector, so without this the value is unreachable the first time

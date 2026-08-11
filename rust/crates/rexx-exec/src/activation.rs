@@ -424,7 +424,7 @@ pub(crate) struct Activation {
     /// too -- `Interp::run` is what pops that one.
     ///
     /// It also decides a second thing, and getting only the first right is a
-    /// silent bug: `resolve_and_run_call` moves the callee's `extra` back into
+    /// silent bug: `Interp::invoke_call` moves the callee's `extra` back into
     /// the caller on return, which is correct exactly when the two shared a
     /// pool. For a `PROCEDURE` callee it would overwrite the caller's own
     /// run-time name bindings with the callee's isolated ones.
@@ -773,7 +773,7 @@ impl Activation {
     /// that measure it, one per field it would otherwise have copied, and
     /// there is no arm here that could accidentally start copying one.
     ///
-    /// `owns_frame` is true, so `resolve_and_run_call` pops the frame on the
+    /// `owns_frame` is true, so `Interp::invoke_call` pops the frame on the
     /// way out and does **not** move `extra` back into the caller. That is
     /// the same pair `PROCEDURE` already sets, and it is right here for a
     /// stronger reason than there: a routine has a different `CodeBody` and

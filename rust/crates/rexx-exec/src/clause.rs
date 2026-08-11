@@ -108,7 +108,7 @@
 //!   that to `lib.rs` while withholding it from `lib.rs`'s other children --
 //!   that reset is loud in its own right (`SIGL` 0 is not a line).
 //!   `save_clause_state`/`restore_clause_state` are `pub(crate)` for the
-//!   same reason, so `resolve_and_run_call` can put a callee's caller state
+//!   same reason, so `Interp::invoke_call` can put a callee's caller state
 //!   back after the callee returns; nothing stops `run.rs` from restoring a
 //!   *stale* [`SavedClauseState`] at a moment other than the one it was
 //!   taken from, which sets a nonzero line with no boundary attached at
@@ -131,7 +131,7 @@ use crate::{Code, Ended, Failure, Interp, ObjRef};
 
 /// Every piece of state `step_in_temps_frame` sets fresh, unconditionally, on
 /// **every** instruction it steps -- and so every field a caller pushing a
-/// nested activation (`resolve_and_run_call`, `run.rs`) must save before the
+/// nested activation (`Interp::invoke_call`, `run.rs`) must save before the
 /// callee runs and restore after it returns, because the callee's own
 /// `step_in_temps_frame` calls overwrite these exactly as the caller's own
 /// next clause would.
@@ -202,10 +202,10 @@ pub(crate) struct ClauseState {
     pub(crate) current_value_indent: usize,
     /// The line the clause currently being stepped starts at -- **`SIGL`'s**
     /// own value, one control transfer away from being read, and the exact
-    /// analogue of `current_value_indent` just above: `resolve_and_run_call`
+    /// analogue of `current_value_indent` just above: `Interp::invoke_call`
     /// (`CALL`, and `ExprKind::Call`'s expression form through `eval_call`,
     /// `eval.rs`) and `SIGNAL`'s own two `step` arms all need "which line is
-    /// this transfer's own", and `eval_call` reaches `resolve_and_run_call`
+    /// this transfer's own", and `eval_call` reaches `invoke_call`
     /// from arbitrarily deep inside an expression tree with no `source`/
     /// `instruction` of its own to compute it from -- threading either
     /// through `eval`/`eval_node`'s entire recursive call graph is exactly
@@ -250,12 +250,12 @@ impl ClauseState {
 /// access to the line, and `ClauseState` itself is not `Copy`, so the only
 /// way `run.rs` can write the clause line as part of a whole-struct
 /// assignment is by restoring a value some [`Interp::in_clause`] set.
-/// `current_value_indent` is readable because `resolve_and_run_call` computes
+/// `current_value_indent` is readable because `Interp::invoke_call` computes
 /// the callee's own base indent from it.
 pub(crate) struct SavedClauseState(ClauseState);
 
 impl SavedClauseState {
-    /// The saved intermediate-value indent, which `resolve_and_run_call`
+    /// The saved intermediate-value indent, which `Interp::invoke_call`
     /// reads to compute the callee's own base indent (that clause's printed
     /// indent plus two, D2r).
     pub(crate) fn value_indent(&self) -> usize {
@@ -514,7 +514,7 @@ impl Interp {
         }
     }
 
-    /// Takes a copy of the clause state for `resolve_and_run_call` to put
+    /// Takes a copy of the clause state for `Interp::invoke_call` to put
     /// back after the callee has run.
     ///
     /// Here rather than in `run.rs` because the fields are private to this

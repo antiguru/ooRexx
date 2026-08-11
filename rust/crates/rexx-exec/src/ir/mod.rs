@@ -818,10 +818,19 @@ const CALL_SITE_CACHE: bool = true;
 /// indexes the running activation's body, and a chunk is compiled per body and
 /// entered only for an activation of that body (`run_activation` looks its
 /// chunk up under the running activation's own `body_key`). The builtin table
-/// is static. `Interp::routines` is written only by `install_directives`,
-/// which runs once, before the first clause of the program. And the fourth
-/// step raises rather than resolving, so a failure is never recorded here at
-/// all -- a site that raised 43.1 asks again next time.
+/// is static. **`Interp::routines` never rebinds a name it has already
+/// bound**: a second `::ROUTINE` directive for one is refused outright with
+/// 99.903 (`install_directives`, `lib.rs`, whose own comment has the oracle
+/// measurement), so a name that resolves to a routine keeps that routine for
+/// the rest of the run however many programs are loaded. And the fourth step
+/// raises rather than resolving, so a failure is never recorded here at all --
+/// a site that raised 43.1 asks again next time.
+///
+/// **The property the table needs is that one, and not "the map is written
+/// once"**, which is a stronger thing that happens to be true today and would
+/// stop being the reason if a `::REQUIRES` or an external-file call ever
+/// installed a routine mid-run. Append-only is what the refusal enforces, and
+/// append-only is enough.
 ///
 /// **`Cell` rather than the `AtomicU32` [`PatchSlot`] uses, and the difference
 /// is the payload rather than a change of mind.** That type's state is a `u32`,
@@ -829,8 +838,12 @@ const CALL_SITE_CACHE: bool = true;
 /// would one day need; a `Resolved` is wider than any lock-free atomic here can
 /// carry, so the same bet would cost either an encoding or a lock. Nothing in
 /// this crate crosses a thread today -- the chunk cache is an `Rc` map per
-/// `Interp` -- and this is the type that would have to change first if that
-/// stopped being true.
+/// `Interp` -- and **this field is the whole of what stops a [`Chunk`] being
+/// `Sync`**. Measured, by requiring `Chunk: Sync` in a throwaway `const` and
+/// reading rustc's answer: it names `Cell<Option<Resolved>>` and nothing else,
+/// so every other field, [`PatchSlot`] included, already satisfies it. This is
+/// therefore the one type that would have to change first if a chunk ever
+/// crossed a thread.
 struct CallSite(Cell<Option<Resolved>>);
 
 impl CallSite {
@@ -957,8 +970,7 @@ pub(crate) struct Chunk {
     consts: Vec<Box<[u8]>>,
     /// The quickening hints [`Op::Arith`] reads, one per such op.
     ///
-    /// **One of the two mutable things a running chunk owns**, and the op
-    /// stream is not either of them: an op is emitted once and never
+    /// **Mutable where the op stream is not**: an op is emitted once and never
     /// rewritten, so two activities running one body see the same instructions
     /// and differ only in what their sites have learned.
     hints: Hints,

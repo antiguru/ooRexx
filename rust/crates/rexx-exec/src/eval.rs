@@ -195,7 +195,7 @@ impl Interp {
     /// `>L>`/`>V>`/`>E>`/`>C>`/`>O>`/`>P>`/`>F>`, dispatched on `expr.kind`
     /// (`>A>` is not here: an argument's line belongs to the *call site*
     /// that evaluated it, not to the argument expression's own node --
-    /// `resolve_and_run_call`, `run.rs`, owns it) --
+    /// `Interp::invoke_call`, `run.rs`, owns it) --
     /// `eval`'s own hook, called once per node with `value` already
     /// computed. A no-op immediately when `!self.tracing_intermediates()`
     /// (`TRACE I` only; `TRACE R` never reaches any of these, measured),
@@ -541,7 +541,7 @@ impl Interp {
             // there is no reference *object* to build here.
             //
             // What makes `>` more than a no-op is `USE ARG >name`, and that
-            // path never reaches this arm: `resolve_and_run_call` evaluates
+            // path never reaches this arm: `Interp::invoke_call` evaluates
             // a call's arguments through `eval_argument` instead, which
             // keeps the caller's slot alongside this same value. Only an
             // argument written `>something` at the call site carries one,

@@ -1175,7 +1175,7 @@ impl Interp {
             // nested `run_bounded` (an `IF` branch, a `WHEN` body) shares
             // this activation's traps and must not get a second offer, and
             // a callee's own offer already happened in its own copy of this
-            // loop before `resolve_and_run_call` re-threw. See
+            // loop before `invoke_call` re-threw. See
             // `offer_to_trap` for the search rules and for why only a
             // `SIGNAL ON` trap can take a failure at all.
             let flow =
@@ -5625,7 +5625,7 @@ impl Interp {
     /// Read here rather than captured before the header's first evaluation, so
     /// that both engines read the same field at the same point rather than
     /// agreeing by an argument about what an evaluation can leave behind. The
-    /// two are the same answer: `resolve_and_run_call` restores
+    /// two are the same answer: `Interp::invoke_call` restores
     /// `current_value_indent` on the way out, which
     /// `current_value_indent_is_restored_after_a_call` pins.
     pub(crate) fn echo_header_value(&mut self, role: HeaderRole, value: ObjRef) {
@@ -7086,7 +7086,7 @@ impl Interp {
     /// clause's own `step_in_temps_frame` to fill on the way out.
     ///
     /// **Called only on an error path, and only by a construct that opened a
-    /// level** -- `run_fragment` and `resolve_and_run_call`. The rule is the
+    /// level** -- `run_fragment` and `Interp::invoke_call`. The rule is the
     /// same for both: seal before the failure
     /// leaves the callee, never after. Sealing a level that recorded nothing
     /// is a no-op, which is what gives a fragment that failed to parse one
@@ -12024,7 +12024,7 @@ mod tests {
     }
 
     /// **Review finding C1, Task 4 fix round 1.** `current_value_indent` is
-    /// a fourth piece of level state `resolve_and_run_call` must restore on
+    /// a fourth piece of level state `Interp::invoke_call` must restore on
     /// the way out, alongside `activation_indent`/`indent_offset`/
     /// `clause_line_override` (that function's own doc comment) -- and this
     /// is the shape that tells a version missing the restore apart from a
@@ -12078,7 +12078,7 @@ mod tests {
     /// (Task 6 fix round 2): `current_clause_line` (bundled with it into
     /// `ClauseState`, whose own doc comment states the property that puts
     /// both fields in one save/restore rather than two) is a piece of level
-    /// state `resolve_and_run_call` must restore on the way out, and shipped
+    /// state `Interp::invoke_call` must restore on the way out, and shipped
     /// once already without that restore -- the second field of this exact
     /// shape to do so, after `current_value_indent` itself went unrestored
     /// until the test just above this one caught it at Task 4.
@@ -13086,7 +13086,7 @@ mod tests {
     /// would still be correct and would simply hold one frame per call
     /// forever, which `do 100000; call sub; end` turns into 100,000 rooted
     /// frames. Both paths are checked here because they share the one
-    /// `pop_slots` call whose position in `resolve_and_run_call` is the whole
+    /// `pop_slots` call whose position in `Interp::invoke_call` is the whole
     /// point -- outside the `Ok` arm, not inside it.
     ///
     /// The property is that frames balance, so this counts **frames** and not
@@ -13744,7 +13744,7 @@ mod tests {
     /// finding was a piece of per-activation state a call failed to restore,
     /// invisible until two activations per clause were reachable.
     /// `Interp::call_context` is the fifth such piece; without the restore in
-    /// `resolve_and_run_call`, the second `USE ARG` below reads the *inner*
+    /// `Interp::invoke_call`, the second `USE ARG` below reads the *inner*
     /// call's arguments and prints `inner-arg`.
     #[test]
     fn a_callers_arguments_survive_a_nested_call() {
@@ -14102,7 +14102,7 @@ mod tests {
     /// `two` reports `SIGL`, which is the quantity Tasks 4 and 6 each shipped
     /// a defect on: it must be the enclosing clause's line (2), not `one`'s
     /// raise line (6), not the handler's (11). It is right because
-    /// `clause_state` lives in `ClauseState` and `resolve_and_run_call`
+    /// `clause_state` lives in `ClauseState` and `Interp::invoke_call`
     /// restores it whole -- the mechanism the brief asked this route to
     /// test, verified rather than assumed.
     #[test]
@@ -16092,7 +16092,7 @@ mod tests {
     /// **The other direction cannot be asserted here, and is asserted in the
     /// corpus instead.** A callee does inherit the caller's pair, both
     /// halves, and `Activation::address`' own doc has the oracle transcript
-    /// -- but a callee never writes anything back and `resolve_and_run_call`
+    /// -- but a callee never writes anything back and `Interp::invoke_call`
     /// pops it unconditionally on both paths, so no in-crate test can read a
     /// callee's own state. `corpus/lang/address_env.rex`'s E block reads it
     /// from inside the callee with `ADDRESS()`, and uses two named
