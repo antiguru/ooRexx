@@ -678,7 +678,13 @@ impl Interp {
                                 // this one are. It emits nothing --
                                 // `Op::TraceOperator` below is what applying an
                                 // operator owes.
-                                Op::Arith { op, lhs, rhs, dst } => {
+                                Op::Arith {
+                                    op,
+                                    hint,
+                                    lhs,
+                                    rhs,
+                                    dst,
+                                } => {
                                     debug_assert!(
                                         chunk.holds_register(*lhs) && chunk.holds_register(*rhs),
                                         "op reads registers {lhs}/{rhs} outside the region the \
@@ -703,7 +709,36 @@ impl Interp {
                                     // the evaluation of the operand after them,
                                     // and this op's operands were rooted before
                                     // it ran.
-                                    let value = match self.arith_small_int(*op, left, right) {
+                                    //
+                                    // **The hint decides only which path is
+                                    // tried first, and removes no check.** The
+                                    // small-integer path re-decodes both
+                                    // operands and re-checks them against
+                                    // `DIGITS` on every execution -- Rexx
+                                    // rounds the operands before it operates,
+                                    // so an operand too wide for the precision
+                                    // makes the exact answer the wrong one --
+                                    // and answers `None` for every case where
+                                    // the two paths could disagree. Both are
+                                    // therefore correct for every operand, and
+                                    // what the hint can change is speed alone.
+                                    let mut quick = None;
+                                    if chunk.tries_small_int(*hint) {
+                                        quick = self.arith_small_int(*op, left, right);
+                                        // The one state change a site makes,
+                                        // and it makes it at most once: a site
+                                        // that has fallen through skips the
+                                        // attempt from here on, so the store
+                                        // never repeats and the line the table
+                                        // sits on is not dirtied again.
+                                        if quick.is_none() {
+                                            chunk.saw_general(*hint);
+                                        }
+                                    } else {
+                                        #[cfg(test)]
+                                        count_arith_hint_skip();
+                                    }
+                                    let value = match quick {
                                         Some(value) => value,
                                         None => match self.arith_general(*op, left, right) {
                                             Ok(value) => value,
@@ -1367,6 +1402,37 @@ fn count_trace_op_echo() {
 #[cfg(test)]
 pub(crate) fn trace_op_echoes() -> usize {
     TRACE_OP_ECHOES.with(std::cell::Cell::get)
+}
+
+// Test-only instrumentation: how many times this thread has skipped the
+// small-integer path because a site's hint said it had already fallen through.
+//
+// **The only observable that says the patch table is read in production at
+// all.** Both paths answer identically for every operand -- that is what makes
+// a hint safe -- so no program's output can tell which one ran, and a table
+// that was never consulted would leave every output-comparing test in the
+// workspace green. Deleting the table is not even a behaviour change: every
+// site then tries the small-integer path and falls through, which is what the
+// op does with no table at all.
+//
+// Counted at the skip rather than at the load, because that is the branch the
+// table exists to take: a count of loads would stay green on a table whose
+// state never changed.
+//
+// Per thread for the reason `RUN_CHUNK_ENTRIES` is: see its own comment.
+#[cfg(test)]
+thread_local! {
+    static ARITH_HINT_SKIPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn count_arith_hint_skip() {
+    ARITH_HINT_SKIPS.with(|skips| skips.set(skips.get() + 1));
+}
+
+#[cfg(test)]
+pub(crate) fn arith_hint_skips() -> usize {
+    ARITH_HINT_SKIPS.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]

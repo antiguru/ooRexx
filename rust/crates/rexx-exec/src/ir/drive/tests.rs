@@ -23,7 +23,8 @@
 //! what they assert stays true whatever the default becomes. Which engine the
 //! default *is* belongs to `Invocation`, and `invocation.rs` asserts it there.
 
-use super::{clause_op_entries, run_chunk_entries, trace_op_echoes};
+use super::super::QUICKENING;
+use super::{arith_hint_skips, clause_op_entries, run_chunk_entries, trace_op_echoes};
 use crate::{Engine, Invocation, Outcome, execute, run_program};
 
 /// The path these programs are reported under. Nothing reads it back: no
@@ -404,6 +405,12 @@ fn no_trace_op_echoes_without_the_engine_or_without_the_setting() {
 ///   itself fails rather than the range check.
 ///
 /// Every expected byte was measured against the C++ oracle.
+///
+/// **The skip count is the half that says the table was read**, and without it
+/// this test is satisfied by a patch table nothing ever consults: both paths
+/// answer identically for every operand, so the bytes alone cannot tell which
+/// one ran. [`super::arith_hint_skips`]'s own comment has why that is the
+/// observable and not the load.
 #[test]
 fn a_quickened_site_falls_through_to_the_general_path() {
     // A `SELECT` rather than a table of programs, because a fresh program is a
@@ -424,18 +431,34 @@ do zi = 1 to 4
 end
 ";
 
+    let before = arith_hint_skips();
     let outcome = execute(
         TEST_PATH,
         QUICKENED_THEN_WIDENED.to_vec(),
         false,
         Invocation::none().with_engine(Engine::Ir),
     );
+    let skipped = arith_hint_skips() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
         String::from_utf8_lossy(&outcome.stdout),
         "-24\n500\n980\n5.00E+5\n475\n2.50E+5\n-24.5\n250\n",
         "a quickened arithmetic site answered something other than the general path's answer \
          for operands the small-integer path cannot take"
+    );
+    // Two sites, each falling through on the second pass and skipping the
+    // attempt on the two after it.
+    //
+    // **Zero with the table switched off, and asserted rather than skipped**,
+    // so that the exit criterion's own measuring build has a green suite and
+    // this test still says which configuration it is in. The bytes above are
+    // required either way, which is the half that is about the precondition
+    // rather than about the table.
+    let expected = if QUICKENING { 4 } else { 0 };
+    assert_eq!(
+        skipped, expected,
+        "the two sites skipped the small-integer attempt {skipped} times where {expected} was \
+         due, so the hint is not being read back"
     );
 }
 

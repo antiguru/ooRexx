@@ -25,6 +25,8 @@
 //! and `run_activation` is what chooses between it and the tree-walker
 //! (`Interp::engine`, from the `Invocation`).
 
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use rexx_core::FrameId;
 use rexx_parse::{Operator, SymbolId};
 
@@ -430,8 +432,9 @@ pub(crate) enum Op {
     /// `Interp::eval_arithmetic`, so the operand conversion, the seven
     /// operators' own `rexx-num` calls, the 41.1 a nonnumeric operand raises
     /// and the 26.8 a `**` exponent raises are one implementation rather than
-    /// a second one beside it. The two are tried in the order
-    /// `Interp::eval_arithmetic` tries them.
+    /// a second one beside it. **What this op adds is the order they are tried
+    /// in, which [`Chunk::hints`] makes a per-site decision** -- see
+    /// [`PatchSlot`] for what a hint may and may not do.
     ///
     /// **`lhs` may be `dst`, and usually is**: the left operand is evaluated
     /// into the destination register and the right into a scratch one above
@@ -448,6 +451,12 @@ pub(crate) enum Op {
     /// 41.1 raised here is reported against.
     Arith {
         op: Operator,
+        /// This site's own slot in [`Chunk::hints`] -- **not** a position in
+        /// the op stream. The table is dense over the ops that can specialise,
+        /// keyed off the op the way [`Chunk::consts`] is, so a stream carries
+        /// no entry for the ops that never quicken and the driver's own loop
+        /// needs no counter walking beside it to find one.
+        hint: u32,
         lhs: u16,
         rhs: u16,
         dst: u16,
@@ -611,6 +620,140 @@ pub(crate) struct ChunkTooLarge {
     pub(crate) what: &'static str,
 }
 
+/// Whether a compiled arithmetic site keeps a hint about which path to try
+/// first.
+///
+/// **The whole of the patch table's removal, in one place**, so that measuring
+/// what the table is worth is a single edit rather than a change threaded
+/// through the driver's arms. With this `false`, [`Hints`] allocates nothing,
+/// no slot is loaded or stored, and every [`Op::Arith`] tries the
+/// small-integer path and falls through to the general one -- which is exactly
+/// what the op does with no table at all. A win that survives the switch was
+/// the static promotion of the operands and the operator, not the quickening.
+const QUICKENING: bool = true;
+
+/// The state a site starts in and stays in while the small-integer path keeps
+/// answering: try that path first.
+const TRY_SMALL_INT: u32 = 0;
+
+/// The state a site moves to the first time the small-integer path answers
+/// `None`: go straight to the general one.
+const GENERAL: u32 = 1;
+
+/// One arithmetic site's hint.
+///
+/// **A hint never removes a precondition check** (D22). What it decides is
+/// which of `Interp::arith_small_int` and `Interp::arith_general` is *tried
+/// first*, and both are correct for every operand: the small-integer path
+/// answers `None` for every case where the two could disagree, so a site that
+/// skips it computes the same value more slowly, and a site that tries it
+/// re-decodes both operands and re-checks them against `DIGITS` every time.
+/// Nothing here can make an answer wrong; it can only make one slower.
+///
+/// **The state only ever moves one way**, from [`TRY_SMALL_INT`] to
+/// [`GENERAL`], so the store happens at most once per site and a demoted site
+/// pays no store at all. The cost of that is a site whose operands leave the
+/// exact-integer range once and return: it keeps the general path afterwards.
+/// Re-arming needs a policy -- a counter, an interval -- and there is no
+/// measurement here to choose one from, so the simple monotone rule is what
+/// this builds.
+///
+/// **`AtomicU32` rather than `Cell<u32>`, for two reasons of different
+/// strength.** The one that bites today is interior mutability at all: a chunk
+/// is reached as `&Chunk` through an `Rc`, so a site cannot record anything
+/// without it, and `Cell<u32>` would serve. The one that does not bite yet is
+/// `Sync`: ooRexx shares routine bodies across activities, and a `Cell` could
+/// not survive that -- but nothing in this crate crosses a thread today, since
+/// the chunk cache is an `Rc` map per `Interp`. So the atomic is a
+/// forward-compatibility bet rather than a present necessity, and what it
+/// costs against a plain read is a number this type is shaped to make
+/// measurable: the three methods below are the only place the choice appears.
+struct PatchSlot(AtomicU32);
+
+impl PatchSlot {
+    fn new() -> PatchSlot {
+        PatchSlot(AtomicU32::new(TRY_SMALL_INT))
+    }
+
+    /// **`Relaxed`, and the ordering is not a shortcut**: the value is a hint
+    /// that orders nothing else, no other memory is published with it, and
+    /// every state it can hold is correct to read at any time. A racing pair
+    /// of activities can only both decide the same site is general.
+    fn get(&self) -> u32 {
+        self.0.load(Ordering::Relaxed)
+    }
+
+    fn set(&self, state: u32) {
+        self.0.store(state, Ordering::Relaxed);
+    }
+}
+
+/// One chunk's patch table: a hint per [`Op::Arith`], indexed by that op's own
+/// `hint` field.
+///
+/// **Dense over the ops that can specialise rather than parallel to the op
+/// stream**, which is what makes D22's "an op that never quickens pays
+/// nothing" true of the driver's loop and not just of its arms. A table
+/// indexed by op position would need the position, and a region's ops are
+/// walked as a slice -- so finding it would mean a counter incremented for
+/// every op in every region, paid by the ops the table has no entry for.
+struct Hints {
+    /// One slot per arithmetic op, or **empty** when [`QUICKENING`] is off.
+    slots: Vec<PatchSlot>,
+    /// How many arithmetic ops have taken a slot.
+    ///
+    /// Kept separately from `slots.len()` so that the indices the ops carry are
+    /// the same whether or not the table exists -- a golden op stream then
+    /// reads identically under either setting, and the switch measures the
+    /// table rather than also moving what compiled.
+    next: u32,
+}
+
+impl Hints {
+    fn new() -> Hints {
+        Hints {
+            slots: Vec::new(),
+            next: 0,
+        }
+    }
+
+    /// Reserves the slot for one arithmetic op, answering the index it
+    /// carries.
+    ///
+    /// A [`ChunkTooLarge`] past `u32`, for the reason every other index in this
+    /// stream has one: the op's field is that wide.
+    fn reserve(&mut self) -> Result<u32, ChunkTooLarge> {
+        let at = self.next;
+        self.next = at.checked_add(1).ok_or(ChunkTooLarge {
+            what: "arithmetic sites past u32",
+        })?;
+        if QUICKENING {
+            self.slots.push(PatchSlot::new());
+        }
+        Ok(at)
+    }
+
+    /// Whether site `at` is still worth trying the small-integer path for.
+    ///
+    /// `true` for a slot this table does not have, which is what makes
+    /// [`QUICKENING`] off behave as no table at all rather than as a table
+    /// that answers no.
+    fn tries_small_int(&self, at: u32) -> bool {
+        !QUICKENING
+            || self
+                .slots
+                .get(at as usize)
+                .is_none_or(|slot| slot.get() == TRY_SMALL_INT)
+    }
+
+    /// Records that site `at` has had the small-integer path answer `None`.
+    fn saw_general(&self, at: u32) {
+        if QUICKENING && let Some(slot) = self.slots.get(at as usize) {
+            slot.set(GENERAL);
+        }
+    }
+}
+
 /// One body's compiled instruction stream, cached on `Interp` under its
 /// `Plan`'s `BodyKey` **and the [`ChunkTrace`] it was compiled under**
 /// (`Interp::chunk_for`, in `plan.rs`).
@@ -668,6 +811,13 @@ pub(crate) struct Chunk {
     /// `assignment-and-say`'s "one literal written twice traces twice" row is
     /// that stated as output.
     consts: Vec<Box<[u8]>>,
+    /// The quickening hints [`Op::Arith`] reads, one per such op.
+    ///
+    /// **The one mutable thing a running chunk owns**, and the op stream is
+    /// not it: an op is emitted once and never rewritten, so two activities
+    /// running one body see the same instructions and differ only in what
+    /// their sites have learned.
+    hints: Hints,
 }
 
 impl Chunk {
@@ -721,5 +871,17 @@ impl Chunk {
     /// both the write and the read.
     fn holds_register(&self, reg: u16) -> bool {
         reg < self.registers
+    }
+
+    /// Whether arithmetic site `at` is still worth trying the small-integer
+    /// path for ([`Hints::tries_small_int`]).
+    fn tries_small_int(&self, at: u32) -> bool {
+        self.hints.tries_small_int(at)
+    }
+
+    /// Records that arithmetic site `at` has fallen through to the general
+    /// path ([`Hints::saw_general`]).
+    fn saw_general(&self, at: u32) {
+        self.hints.saw_general(at);
     }
 }

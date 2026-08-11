@@ -318,7 +318,7 @@ fn an_expression_that_only_contains_a_symbol_is_more_than_that_symbols_read() {
          2: TraceRead read=Simple src=0\n\
          3: LoadConstant dst=1\n\
          4: TraceLiteral src=1\n\
-         5: Arith op=+ lhs=0 rhs=1 dst=0\n\
+         5: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
          6: TraceOperator op=+ src=0\n\
          7: Store index=0 src=0\n"
     );
@@ -359,15 +359,15 @@ fn a_chain_of_operators_reuses_the_destination_register() {
          2: TraceRead read=Simple src=0\n\
          3: Load read=Simple at=2 dst=1\n\
          4: TraceRead read=Simple src=1\n\
-         5: Arith op=+ lhs=0 rhs=1 dst=0\n\
+         5: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
          6: TraceOperator op=+ src=0\n\
          7: Load read=Simple at=3 dst=1\n\
          8: TraceRead read=Simple src=1\n\
-         9: Arith op=+ lhs=0 rhs=1 dst=0\n\
+         9: Arith op=+ hint=1 lhs=0 rhs=1 dst=0\n\
          10: TraceOperator op=+ src=0\n\
          11: Load read=Simple at=4 dst=1\n\
          12: TraceRead read=Simple src=1\n\
-         13: Arith op=+ lhs=0 rhs=1 dst=0\n\
+         13: Arith op=+ hint=2 lhs=0 rhs=1 dst=0\n\
          14: TraceOperator op=+ src=0\n\
          15: Store index=0 src=0\n"
     );
@@ -398,9 +398,9 @@ fn precedence_decides_which_operator_is_the_inner_one() {
          4: TraceRead read=Simple src=1\n\
          5: Load read=Simple at=3 dst=2\n\
          6: TraceRead read=Simple src=2\n\
-         7: Arith op=* lhs=1 rhs=2 dst=1\n\
+         7: Arith op=* hint=0 lhs=1 rhs=2 dst=1\n\
          8: TraceOperator op=* src=1\n\
-         9: Arith op=+ lhs=0 rhs=1 dst=0\n\
+         9: Arith op=+ hint=1 lhs=0 rhs=1 dst=0\n\
          10: TraceOperator op=+ src=0\n\
          11: Store index=0 src=0\n"
     );

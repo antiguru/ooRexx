@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use rexx_parse::{CodeBody, Expr, ExprKind, Instruction, InstructionKind, SymbolId};
 
-use super::{Chunk, ChunkTooLarge, Op, ReadSlot};
+use super::{Chunk, ChunkTooLarge, Hints, Op, ReadSlot};
 use crate::eval::{SymbolRead, is_arithmetic};
 use crate::plan::Plan;
 use crate::run::{HeaderPlan, if_targets, loop_header_plan, otherwise_range};
@@ -286,6 +286,7 @@ pub(crate) fn compile(
     let mut op_of = Vec::with_capacity(len + 1);
     let mut registers = Registers::new();
     let mut consts = Constants::new();
+    let mut hints = Hints::new();
     let mut patches: Vec<Patch> = Vec::new();
     // Indexed by instruction: the op that goes in front of that instruction's
     // own, emitted at its `op_of` entry. A `Vec` keyed by the instruction the
@@ -589,6 +590,7 @@ pub(crate) fn compile(
                     &mut ops,
                     &mut consts,
                     &mut registers,
+                    &mut hints,
                     plan,
                     value,
                     instruction_index(index)?,
@@ -622,6 +624,7 @@ pub(crate) fn compile(
                             &mut ops,
                             &mut consts,
                             &mut registers,
+                            &mut hints,
                             plan,
                             expression,
                             instruction_index(index)?,
@@ -683,6 +686,7 @@ pub(crate) fn compile(
         op_of,
         registers: registers.high_water(),
         consts: consts.values,
+        hints,
     })
 }
 
@@ -702,12 +706,13 @@ pub(crate) fn compile(
 /// compiled.
 #[expect(
     clippy::too_many_arguments,
-    reason = "three emission sinks and the four facts an EvalExpr needs to name its expression"
+    reason = "four emission sinks and the four facts an EvalExpr needs to name its expression"
 )]
 fn push_value<'a>(
     ops: &mut Vec<Op>,
     consts: &mut Constants<'a>,
     registers: &mut Registers,
+    hints: &mut Hints,
     plan: &Plan,
     expr: &'a Expr,
     index: u32,
@@ -715,7 +720,7 @@ fn push_value<'a>(
     dst: u16,
 ) -> Result<(), ChunkTooLarge> {
     if native_shape(expr) {
-        push_native(ops, consts, registers, plan, expr, dst)
+        push_native(ops, consts, registers, hints, plan, expr, dst)
     } else {
         ops.push(Op::EvalExpr { index, slot, dst });
         Ok(())
@@ -762,6 +767,7 @@ fn push_native<'a>(
     ops: &mut Vec<Op>,
     consts: &mut Constants<'a>,
     registers: &mut Registers,
+    hints: &mut Hints,
     plan: &Plan,
     expr: &'a Expr,
     dst: u16,
@@ -799,12 +805,13 @@ fn push_native<'a>(
             // register the next one reads as its left. Both sources are read
             // before the destination is written, which is the whole of what
             // makes the aliasing safe.
-            push_native(ops, consts, registers, plan, left, dst)?;
+            push_native(ops, consts, registers, hints, plan, left, dst)?;
             let mark = registers.mark();
             let rhs = registers.alloc()?;
-            push_native(ops, consts, registers, plan, right, rhs)?;
+            push_native(ops, consts, registers, hints, plan, right, rhs)?;
             ops.push(Op::Arith {
                 op: *op,
+                hint: hints.reserve()?,
                 lhs: dst,
                 rhs,
                 dst,

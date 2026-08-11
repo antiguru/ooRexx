@@ -109,9 +109,20 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             // name, because the spelling is what the `>O>` line this op's
             // echo prints carries, and a golden that read `Plus` could not
             // say whether the tag would.
-            Op::Arith { op, lhs, rhs, dst } => {
+            // The `hint` field is rendered, unlike [`Op::Load`]'s `symbol`,
+            // because it is an index this compiler hands out from the program
+            // alone: a golden reading `hint=1` for the second arithmetic op is
+            // what says the table is dense over these ops rather than over the
+            // stream.
+            Op::Arith {
+                op,
+                hint,
+                lhs,
+                rhs,
+                dst,
+            } => {
                 out.push_str(&format!(
-                    "{index}: Arith op={} lhs={lhs} rhs={rhs} dst={dst}\n",
+                    "{index}: Arith op={} hint={hint} lhs={lhs} rhs={rhs} dst={dst}\n",
                     op.spelling()
                 ));
             }
