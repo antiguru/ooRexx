@@ -420,6 +420,16 @@ pub struct Number {
     pub(crate) exponent: i32,
 }
 
+/// A `Number` at 40 bytes is what `rexx-core`'s `Body::Num` absorbs without
+/// `Body` growing, and `Body`'s width is every arena slot's width. Measured
+/// either side of the inline digit buffer landing: `Number` 32 then 40, with
+/// `Body` 80 and `Slot` 96 both times.
+///
+/// An upper bound rather than an equality, because the claim this defends is
+/// that no slot widened -- shrinking is free and does not need a decision.
+/// `rexx-core`'s own bound on `Body` is the other half and stands beside it.
+const _: () = assert!(size_of::<Number>() <= 40);
+
 impl Number {
     /// The canonical zero. Every spelling of zero collapses to this: the
     /// oracle prints `0` for `-0`, `0.0` and `00.00` alike.

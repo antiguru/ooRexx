@@ -22,6 +22,14 @@ enum Slot {
     Live { object: Object, generation: u32 },
 }
 
+/// **The arena holds one of these per object**, so this is the number a
+/// footprint claim is actually about -- `Body`'s own bound in `body.rs` is
+/// the term that moves it. Measured at 96 across a change that took
+/// `rexx_num::Number` from 32 bytes to 40 without either width shifting.
+///
+/// An upper bound rather than an equality, for the reason `Body`'s carries.
+const _: () = assert!(size_of::<Slot>() <= 96);
+
 impl Slot {
     fn generation(&self) -> u32 {
         match self {

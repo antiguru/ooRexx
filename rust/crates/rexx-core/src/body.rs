@@ -111,6 +111,18 @@ pub enum Body {
     WeakRef(ObjRef),
 }
 
+/// **A `Body` is every object in the heap, and `Slot` is what the arena holds
+/// one of per object**, so a variant that widens either widens the footprint of
+/// programs that never construct it. Measured at 80 and 96 across a change that
+/// took `Number` from 32 bytes to 40 -- `Body::Num`'s payload had headroom
+/// against `Body::Stem`'s, which is what set the width then and sets it now.
+///
+/// Upper bounds rather than equalities: the claim is that nothing widened, and
+/// shrinking needs no decision. **Phase 5 adds variants and is expected to trip
+/// this**, which is the point -- widening the arena for a cold value kind should
+/// be a deliberate act with a boxed alternative weighed, not a side effect.
+const _: () = assert!(size_of::<Body>() <= 80);
+
 impl Body {
     /// Appends every object this one can reach.
     ///
