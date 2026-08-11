@@ -8,7 +8,13 @@ rust-version = "1.96.1"
 license = "CPL-1.0"
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+# `deny`, not `forbid`, and the difference is the point: `forbid` cannot be
+# overridden by an inner `#[allow(unsafe_code)]`, so it makes a per-site
+# exception inexpressible rather than merely deliberate. The policy is that
+# `unsafe` is discouraged and may be allowed in a specific, self-contained
+# situation -- see `CLAUDE.md` for the bar a site has to clear. `forbid` was
+# unintended.
+unsafe_code = "deny"
 
 # Pinned rather than left to cargo's defaults, because both of this profile's
 # consumers are measurements and a default that moves is a measurement that
