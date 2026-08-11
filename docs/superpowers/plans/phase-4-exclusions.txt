@@ -1792,6 +1792,53 @@ above.
   diagnosis, the massif call stacks and the prototype figures are in
   docs/superpowers/plans/phase-4d-retention.md.
 
+  *** BOTH CAUSES ARE CLOSED (Phase 4f, record entry 6). *** The measured
+  record below is kept rather than deleted, per this file's CLOSED DEFECTS
+  convention. What changed, and what the same probes read afterwards:
+
+    CAUSE A. Interp::alloc_with (lib.rs) collects when the live-object count
+    reaches a watermark, set to twice the survivors after each collection
+    with a floor of 65,536 (COLLECT_FLOOR). Nothing collected before it.
+
+    CAUSE B. Interp::loop_advance's Controlled arm and Interp::eval_condition
+    each open a RootSet frame around their own per-pass pushes and pop it
+    within the pass. BOTH sites, which this row required.
+
+  RE-MEASURED at the closing commit, 8,000,000 iterations, same wrapper:
+  `do i = 1 to n; nop; end` 64,708 -> 2,772 KB; `do n while zz; nop; end`
+  64,680 -> 2,768 KB; `do n until zz; nop; end` 63,688 -> 2,784 KB; and
+  `do n; yy = 'abc'; end` 1,000,080 -> 11,028 KB. Peak RSS on the benchmark
+  axes falls 41.1x on arith, 14.5x on compound, 220.1x on strings, 59.4x on
+  varlookup, 71.1x on emptyloop, 151.8x on rexxcps and 2.1x on alloc4c --
+  the last being the axis whose live set is genuinely large.
+
+  THE USER-VISIBLE SYMPTOM IS GONE. Under the same `ulimit -v 1048576`,
+  arith and strings both complete at rc 0 with the correct answer where they
+  aborted at rc 134 with an empty stdout.
+
+  THE UNDER-ROOTED WINDOW THIS ROW WARNED A TRIGGER WOULD HAVE TO SWEEP FOR
+  IS ALSO CLOSED, and it was real: a Heap::collect forced immediately before
+  Interp::exit_code_for panicked on `a live value` in four harnesses.
+  Interp::apply_flow now roots an activation's value past the temps frame
+  (Interp::root_exit_value). The trigger itself never fires inside that
+  window -- the whole workspace stays green with collect-on-every-allocation
+  forced on for every run -- so the leak was in the design rather than in
+  today's reachable behaviour.
+
+  WHAT THE CLOSING CHANGE COST, because it is not free: on the paired
+  interleaved wall-clock comparison arith is +6.6% and alloc4c +2.7%, while
+  strings is -5.3%, emptyloop -3.1%, varlookup -2.3% and compound -1.3%.
+  Reclamation pays a free() per reclaimed object that a leak never pays --
+  on arith, profiled at head, drop_glue::<Slot> is 4.5% of the run against
+  Heap::collect's own 0.3% self.
+
+  WHAT IS STILL NOT CLOSED is the coverage gap this row's last limb
+  describes: no harness reads peak resident set, and no corpus program runs
+  long enough for one to matter. The regression witness added with the fix
+  (a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop, collect_stress
+  .rs) checks ROOTING under collect-on-every-allocation, not footprint, so a
+  reintroduced leak that keeps its roots correct would still pass it.
+
   WHAT A USER SEES. Under the project's standard `ulimit -v 1048576` two of
   the five runnable benchmark axes die:
 
@@ -1871,10 +1918,12 @@ above.
   only, so those figures bound the counted form and say nothing about what
   closing the WHILE/UNTIL site is worth.
 
-  NO OWNER IS ASSIGNED HERE. 4d-2 is the phase unit that would take it, and
-  the diagnosis document is written for whoever does. A trigger policy must
-  first sweep rexx-exec for the under-rooted window `Heap::collect`'s own doc
-  comment records, because the corpus is too small to hit one.
+  WHO TOOK IT. Nobody, when this row was written: 4d-2 was the phase unit
+  that would have, and the diagnosis document was written for whoever did.
+  Phase 4f's optimisation loop took it as its candidate 1 lever (b), which
+  is where the closing figures above come from -- the loop reached it as the
+  largest remaining performance candidate rather than as a defect, and it is
+  both.
 
   WHY THE DIFFERENTIAL SUITE CANNOT SEE THIS, AND THIS LIMB IS THE ONE THAT
   GENERALISES. Neither the corpus harness nor the trace harness reads peak

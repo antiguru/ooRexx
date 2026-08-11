@@ -1275,11 +1275,30 @@ impl Interp {
             // (`resolve_signal_target`), which is exactly the body `code` is
             // bound to.
             Flow::Signal(target) => self.activation_mut().pc = target,
-            Flow::Exit(value) => return Ok(Some(Ended::Exited(value))),
+            // **The one place an activation's value stops being a clause's
+            // temporary**, which is why the root that outlives the temps
+            // stack is taken here rather than at each of the half-dozen
+            // constructs that can produce one. `EXIT`, a top-level `RETURN`,
+            // a `RAISE` with an `EXIT` tail and a handler's own exit all
+            // arrive as one of these two variants; every one of them can end
+            // up as the value `execute` hands `exit_code_for`, and by then
+            // the frame that rooted it has been popped. See
+            // [`Interp::root_exit_value`] for the measurement.
+            Flow::Exit(value) => {
+                if let Some(value) = value {
+                    self.root_exit_value(value);
+                }
+                return Ok(Some(Ended::Exited(value)));
+            }
             // The activation boundary `Flow::Return` was added to reach.
             // Every construct between the `RETURN` and here forwarded it
             // untouched; this is the one consumer.
-            Flow::Return(value) => return Ok(Some(Ended::Returned(value))),
+            Flow::Return(value) => {
+                if let Some(value) = value {
+                    self.root_exit_value(value);
+                }
+                return Ok(Some(Ended::Returned(value)));
+            }
             // Task 11: a `LEAVE`/`ITERATE` that reached the very top of the
             // program -- nothing anywhere, at any nesting depth, ever
             // matched it. This is the exhausted-search family, 28.1 (bare
@@ -1433,25 +1452,17 @@ impl Interp {
                     Some(expression) => {
                         let value = self.eval(code, expression)?;
                         // Rooted for exactly one clause, like every other
-                        // `eval` result -- and that is shorter than this
-                        // value actually needs. `step_in_temps_frame` pops
-                        // this temp unconditionally right after `step`
-                        // returns, before `Flow::Exit` ever reaches
-                        // `run_activation`, so from that pop through `run`'s
-                        // activation teardown and into `execute`'s
-                        // `exit_code_for` call, this `ObjRef` is an
-                        // **under-rooted** value -- longer and later than
-                        // any other window in this crate. Benign only
-                        // because nothing on that path allocates or
-                        // collects (`Heap::alloc_with_uncollected` never
-                        // collects on its own, and `to_number`/`to_text` read
-                        // an existing object rather than making one, which is
-                        // why Task 16's stress mode never fires inside this
-                        // window either); once a collector exists,
-                        // this needs a root that survives past the
-                        // temps-frame pop -- a global, or a dedicated field
-                        // on `Interp` -- rather than the one-clause
-                        // `push_temp` every other instruction result gets.
+                        // `eval` result -- and that is shorter than this value
+                        // needs. `step_in_temps_frame` pops
+                        // it before `Flow::Exit` has even reached
+                        // `run_activation`. From that pop, through the
+                        // activation teardown, to `execute`'s `exit_code_for`
+                        // call, nothing on the temps stack names this value --
+                        // longer and later than any other window in this
+                        // crate. `root_exit_value` (`lib.rs`) is the root that
+                        // survives it, and its own doc has the measurement
+                        // that says this is a real window rather than a
+                        // theoretical one.
                         self.roots.push_temp(value);
                         // `>>>`, at this `EXIT`'s own clause indent (Task 9).
                         // Measured on a three-line program with no condition
@@ -4565,19 +4576,19 @@ impl Interp {
     /// C++ does, and it is why `step` can push freely without deciding when to
     /// let go.
     ///
-    /// **No longer quite true of a `DO`/`LOOP` clause, since Task 11
-    /// (F-EX4, branch review, Minor).** `run_loop`/`run_repeating` resolve
-    /// an entire multi-pass loop inside this one call -- the doc comment
-    /// two paragraphs below explains why a `Goto`-shaped re-entry cannot be
-    /// used instead -- so everything pushed per pass (`eval_condition`'s own
-    /// `push_temp` for every `WHILE`/`UNTIL` test, one `ObjRef` per
-    /// iteration) accumulates for the loop's whole run rather than one
-    /// iteration's. Not a correctness defect: nothing collects mid-run, and
-    /// the temps are rooted throughout, so a stress collector sees nothing
-    /// but live roots. It costs memory a future collector cannot reclaim
-    /// early (a `do while` running 10^7 passes holds ~10^7 dead-but-rooted
-    /// temps in one frame), and it means "one clause" describes every
-    /// instruction here except this one.
+    /// **A `DO`/`LOOP` clause is the one instruction whose frame outlives a
+    /// single pass, and the two sites that pushed per pass now carry frames
+    /// of their own.** `run_loop`/`run_repeating` resolve an entire
+    /// multi-pass loop inside this one call -- the doc comment two paragraphs
+    /// below explains why a `Goto`-shaped re-entry cannot be used instead --
+    /// so anything pushed per pass and left to *this* frame would accumulate
+    /// for the loop's whole run rather than one iteration's, at one `ObjRef`
+    /// per pass plus whatever heap object each one pins. `loop_advance`'s
+    /// `Controlled` arm and `eval_condition` are the two that push per pass,
+    /// and each opens and pops a frame around its own pushes; the header
+    /// values `eval_loop_header` pushes are deliberately *not* inside either,
+    /// because a `DO OVER`'s target has to stay reachable for the loop's own
+    /// lifetime and this frame is the one that gives it that.
     ///
     /// **Also resolves the failing clause's site, when one escapes and
     /// `source` is `Some`.** Moved here from `run_activation`'s own error
@@ -6433,6 +6444,17 @@ impl Interp {
                 let fuzz = self.activation().settings.fuzz();
                 let form = self.activation().settings.form();
                 let re_tested = std::mem::replace(stepped, true);
+                // **One pass's own temps frame, released before the next pass
+                // opens one.** The enclosing `step_in_temps_frame` belongs to
+                // the whole `DO` instruction, so without this every root
+                // pushed below survives until the *loop* ends rather than
+                // until the *pass* does -- one `ObjRef` per iteration, and
+                // each one pins whatever heap object it names. Popped after
+                // `bind_control` has written the new value into the control
+                // variable's own storage, which is what roots it from there
+                // on; the `?` paths below leave it to the outer truncation,
+                // exactly as `pop_frame`'s own doc describes.
+                let pass = self.roots.push_frame();
                 if re_tested {
                     let name = code.symbols.name(*control).as_bytes();
                     // **`read`, not `read_by_name`: this is an evaluation and
@@ -6552,11 +6574,23 @@ impl Interp {
                     let number = current.number().into_owned();
                     self.number(number, crate::eval::saturate_digits(digits), form)
                 };
+                // Rooted before anything else can allocate: the render below
+                // builds a `Vec`, and `bind_control`'s compound arm resolves a
+                // tail key, which allocates in the arena. Nothing collected
+                // between this allocation and the write before the trigger
+                // existed, so this push closes a window that was inert rather
+                // than absent.
+                self.roots.push_temp(value);
                 let bind_indent = if re_tested { loop_indent } else { do_indent };
                 if re_tested && let Some(rendered) = self.result_text(value) {
                     self.trace_result(loop_indent, &rendered);
                 }
                 self.bind_control(code, *control, bind_indent, value, *at)?;
+                // The control variable's own storage now roots `value`, and
+                // `previous` is dead, so the pass's frame goes here. The three
+                // `return Ok(false)` paths below end the loop, whose enclosing
+                // frame truncates past this one anyway.
+                self.roots.pop_frame(pass);
 
                 if let Some(r) = for_remaining
                     && *r == 0
@@ -6869,6 +6903,17 @@ impl Interp {
         raise: fn(&[u8]) -> Raised,
     ) -> Result<bool, Failure> {
         let value = self.eval(code, condition)?;
+        // **The test's own temps frame, and it is a per-pass frame for the two
+        // callers that are loop headers.** `WHILE` and `UNTIL` re-evaluate
+        // their condition once per pass inside the enclosing `DO`
+        // instruction's single frame, so the push below accumulates one
+        // `ObjRef` per pass -- and one pinned heap object per pass whenever
+        // the condition's result is one -- for the whole of the loop's run.
+        // The value is never handed back (this answers a `bool`), so a frame
+        // closed here releases it at the right time for every caller,
+        // `IF`/`WHEN` included. The `?` path below leaves the pop to the outer
+        // truncation, as `pop_frame`'s own doc describes.
+        let frame = self.roots.push_frame();
         self.roots.push_temp(value);
         let text = self.to_text(value).to_vec();
         match trace {
@@ -6891,6 +6936,7 @@ impl Interp {
                 self.trace_keyword(indent, keyword, &text);
             }
         }
+        self.roots.pop_frame(frame);
         if matches!(condition.kind, ExprKind::Logical(_)) {
             // `eval_logical_list` already validated every element and
             // answers exactly `b"0"`/`b"1"` (its own doc comment), so this

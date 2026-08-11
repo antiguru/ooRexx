@@ -719,3 +719,156 @@ Commit: `58dd6a24bc98d14e3f1473d90a4230203dc797da`, read back from `git log` aft
 * **The tree-walker gets nothing from this and was not measured for it.** It passes `None` at every site, so its store still resolves its own slot; the only thing it gains is the `Vec<u8>` name copy removed from `assign_expr_target` and from `loop_advance`, which is shared. Every figure above is the IR arm.
 * **`Op` did not grow and the question of whether it should is untouched.** `Store { index: u32, at: PlanSlot, src: u16 }` is 10 bytes plus a discriminant and the `size_of::<Op>() == 12` assertion still holds unchanged.
 * **The `DO OVER` control's slot is carried and never exercised by a benchmark.** `LoopState::OverOnce` binds once, so the resolution saves one lookup per loop rather than one per pass; it is correct by the grid and worth nothing measurable.
+
+### Entry 6 -- candidate 1, lever (b) attempted and **accepted**: reclamation, and a loop's per-pass roots released per pass
+
+**BASE is `bebf38ee`**, the state entry 5 left. Its `rexx-run` reproduces entry 5's HEAD binary byte for byte from a clean `git status`, which is what says the intervening commit is the record and nothing else.
+
+**This is a defect fix that is also the queue's largest remaining candidate**, and the two framings do not agree about how to read the result. `phase-4-exclusions.txt` carried both causes under KNOWN GAPS; that row is now marked closed in place, with the re-measured figures, per that file's own CLOSED DEFECTS convention.
+
+#### The framing, corrected before anything was written
+
+**Nothing triggered a collection at all.** `Heap::collect` had two production callers: `Interp::alloc_with` gated on `stress_collect`, which only `run_program_collect_every_alloc` sets, and the `GC('Force')` builtin. So this was not a "collect more often" change.
+
+**And a trigger alone would not have fixed the growth.** `Interp::loop_advance` pushed one root per pass for a counted loop's control variable and `Interp::eval_condition` one per `WHILE`/`UNTIL` test, both into the single `step_in_temps_frame` belonging to the whole `DO` instruction. Those roots are live by definition, so a collector cannot reclaim through them.
+
+**Both were still exactly as `phase-4d-retention.md` measured them, re-checked at BASE** before anything was touched, 8,000,000 iterations, `/usr/bin/time -v` under `ulimit -v 8388608` from a fresh empty directory, every run exiting 0 and printing `ok`: `do n; nop; end` flat at 2,484 KB, `do i = 1 to n; nop; end` 64,708 KB, `do n while zz; nop; end` 64,680 KB, `do n until zz; nop; end` 63,688 KB, `do n; yy = 'abc'; end` 1,000,080 KB.
+
+#### The change
+
+**Cause A -- a trigger policy, and it is fixed rather than searched.** `Interp::alloc_with` collects when `Heap::live_count()` reaches a watermark, and sets the next watermark to twice the survivors, floor `COLLECT_FLOOR` = 65,536 objects. Two properties are what it was chosen for, and both are arguments rather than measurements: the peak is bounded by a multiple of the *live set* instead of by the program's total allocation, and the collector's total work is bounded by a constant times the program's total allocation, because between two collections the program must allocate at least as many objects as the first left alive. It is the shape `phase-4d-retention.md`'s prototype used, kept so this entry's landing can be read against that document's prediction. **It was measured once and not tuned.** Unit 0's rule is the reason: a threshold adjusted until a benchmark number looked right would not survive a different workload, and the record would stop being evidence.
+
+**Cause B -- both sites, not one.** `loop_advance`'s `Controlled` arm opens a `RootSet` frame before its per-pass pushes and pops it once `bind_control` has written the new control value into the variable's own storage; `eval_condition` opens one around its own push and pops it before answering. **The `eval_condition` site was taken as well**, and the brief left that optional. It is two lines, it is the identical shape, and `phase-4-exclusions.txt`'s own text says a fix to `loop_advance` alone "turns every axis green and leaves `DO WHILE` and `DO UNTIL` growing without bound". It also **cannot confound the numbers below**: no benchmark axis contains a `WHILE` or an `UNTIL`, so that half of the change is invisible to every wall-clock figure in this entry and is measured by the probes instead.
+
+**One new root, which is not bookkeeping.** `loop_advance` did not root the value it binds. Between `Interp::number` creating it and `bind_control` writing it, a trace render allocates and a compound control resolves a tail key -- so the frame alone would have been a use-after-free rather than a fix. That push is load-bearing and the mutation section below is the evidence.
+
+#### The prediction, and what it was
+
+The brief supplied the prototype's figures as a prior to check rather than a result to reproduce: peak RSS falling **42x on `arith`, 60x on `varlookup`, 298x on `strings`**, and `strings` **16% faster**. **The prior held on memory and did not on time**, and it is worth saying exactly how: the RSS multiples came in at 41.1x, 59.4x and 220.1x -- the third lower because entry 4 had already taken `strings`' base peak from 3.7 GB to 2.5 GB -- while `strings`' wall win is -5.3% rather than -16%, for the same reason.
+
+**The prior contained no prediction at all for `arith`'s or `alloc4c`'s wall time, and that is exactly where the surprise landed.** `phase-4d-retention.md` reported both as inside its own noise at n=3. They are not: `arith` is +6.6% and `alloc4c` +2.7%, both reproducible. Nothing was predicted, so nothing was missed -- and a candidate whose prior is silent on two of six axes is a candidate whose prior was thin, which is the thing to carry forward rather than the number.
+
+#### Build identity
+
+| | |
+|---|---|
+| BASE `rexx-run` | size=13762264, sha256 `ea3b80c84e11c5a85ba8b8efede9872f0226b57e8f69d479957202d49bfc3922` -- **entry 5's HEAD binary reproduced byte for byte** at `bebf38ee` |
+| HEAD `rexx-run` | size=13925200, sha256 `ae24900aa72300de1b1d3cf1a274a5c74aed741a58b7708e449d177c9723018d`; the binary **grew** by 162,936 bytes |
+| the third binary | `COLLECT_FLOOR` set to `usize::MAX` and nothing else changed, so cause B is in and cause A is out: sha256 `9afe461af4369a5a206c2caac61e01fa02eabac5efda4fab3d59c6cdff2fc8da` |
+| oracle | the same three objects entry 1 fingerprints, re-hashed and unchanged: `bb5bb8cc...`, `42136c40...`, `3536b763...` |
+
+**The measured HEAD binary is the committed source's release build**, rebuilt from a `cargo clean`ed tree after the clippy run and hashed again to `ae24900a`.
+
+#### The accept measurement: the two binaries alternating in one loop
+
+The accept rule's literal shape, and **not** `rexx-bench-suite`. Wall clock, `ulimit -v 8388608`, `REXX_ENGINE=ir`, one fresh empty working directory, base/head order **rotated every round**. 2026-08-11 17:48:42 to 17:52:56 +02:00, seven rounds per axis, load average 2.56 rising to 3.58, all 84 runs exiting 0, and each axis's stdout hashed per run and identical across all fourteen.
+
+| axis | base median | head median | head / base | rounds with that sign |
+|---|---:|---:|---:|---:|
+| `strings` | 6.0931 s | 5.7692 s | **-5.32%** | **7 of 7** |
+| `emptyloop` | 2.0033 s | 1.9414 s | **-3.09%** | **7 of 7** |
+| `varlookup` | 2.6902 s | 2.6295 s | **-2.25%** | **7 of 7** |
+| `compound` | 2.8218 s | 2.7849 s | -1.31% | 6 of 7 |
+| `alloc4c` | 1.5849 s | 1.6276 s | **+2.69%** | 5 of 7 |
+| `arith` | 3.0023 s | 3.2015 s | **+6.63%** | 7 of 7 |
+
+Per-round on `arith`: +5.6%, +5.3%, +6.7%, +7.3%, +6.8%, +5.7%, +8.4%. There is no round in which it is not slower, and it is the largest single move on this table.
+
+`rexxcps` is not read as wall time, for entry 1's reason. Both binaries self-calibrated to the identical `100 x 100`: five rounds, order rotated, base median **2,393,798** clauses per second against head **2,526,039** -- **+5.52%**, head ahead in all five.
+
+#### Peak resident set, which is what this candidate is actually for
+
+`/usr/bin/time -f %M`, same wrapper, one run per side.
+
+| axis | base | head | fall |
+|---|---:|---:|---:|
+| `strings` | 2,511,564 KB | 11,408 KB | **220.1x** |
+| `rexxcps` | 1,744,052 KB | 11,488 KB | **151.8x** |
+| `emptyloop` | 197,496 KB | 2,776 KB | **71.1x** |
+| `varlookup` | 149,648 KB | 2,516 KB | **59.4x** |
+| `arith` | 440,184 KB | 10,704 KB | **41.1x** |
+| `compound` | 41,072 KB | 2,824 KB | **14.5x** |
+| `alloc4c` | 392,972 KB | 180,396 KB | 2.1x |
+| `startup` | 2,788 KB | 3,008 KB | 0.9x |
+
+`alloc4c` is the one axis whose live set is genuinely large, so 2.1x is what a collector can reach there and not a shortfall. `startup` goes the other way by 220 KB, which is the binary's own growth.
+
+**The user-visible symptom is gone**, and that is the defect rather than the number. Under the project's standard `ulimit -v 1048576`, at BASE `arith.rex` and `strings.rex` both die at rc 134 with an empty stdout and `memory allocation of 402653184 bytes failed` on stderr; at HEAD both exit 0 with `4629643519330627.7808` and `138000000`.
+
+#### Where the time went, which the wall clock alone gets backwards
+
+`perf stat -e instructions:u,cycles:u`, three runs per side per axis, arms alternating, medians. A different configuration from the sitting above.
+
+| axis | instructions base | instructions head | change | cycles change | wall change |
+|---|---:|---:|---:|---:|---:|
+| `varlookup` | 43,103,417,693 | 43,523,113,088 | +0.97% | -0.59% | -2.25% |
+| `emptyloop` | 28,127,015,102 | 28,635,681,040 | +1.81% | +1.24% | -3.09% |
+| `compound` | 37,026,601,429 | 37,169,537,787 | +0.39% | -0.92% | -1.31% |
+| `strings` | 62,941,012,332 | 63,197,495,286 | +0.41% | **+6.54%** | **-5.32%** |
+| `alloc4c` | 10,718,049,587 | 11,258,970,022 | +5.05% | +6.96% | +2.69% |
+| `arith` | 28,881,521,649 | 29,956,994,783 | +3.72% | +11.68% | +6.63% |
+
+**`strings` retires 6.5% more user cycles and finishes 5.3% sooner, and both are true.** `cycles:u` does not count the kernel. Minor page faults and the two time components, one run per side: `strings` 627,872 faults and 0.84 s system at base against **2,427 faults and 0.00 s** at head, with user time going the other way, 5.26 s to 5.43 s. `varlookup` 37,261 -> 136 faults, `arith` 109,760 -> 2,208, `alloc4c` 114,356 -> 55,802. **The win is kernel time on a heap that never stopped growing; the cost is user time.** Entry 2 was reading the same thing from the other side when it found `mprotect`, `munmap` and `sysmalloc` in `strings`' own profile.
+
+#### Which cause did what, measured rather than apportioned
+
+The third binary above has cause B in and cause A out. Instructions, three runs per side, medians.
+
+| axis | base | cause B only | both | cause B alone | cause A adds |
+|---|---:|---:|---:|---:|---:|
+| `arith` | 28,881,090,013 | 28,894,985,743 | 29,903,747,781 | +0.05% | **+3.49%** |
+| `alloc4c` | 10,712,944,869 | 10,528,680,671 | 11,247,204,773 | -1.72% | **+6.82%** |
+| `emptyloop` | 28,125,666,059 | 28,525,608,865 | 28,625,608,689 | **+1.42%** | +0.35% |
+| `varlookup` | 43,092,659,884 | 43,396,613,244 | 43,548,613,556 | +0.71% | +0.35% |
+| `compound` | 37,019,025,702 | 37,099,899,846 | 37,189,905,316 | +0.22% | +0.24% |
+| `strings` | 62,924,005,067 | 63,031,788,325 | 63,138,170,564 | +0.17% | +0.17% |
+
+**The whole of the instruction cost on `arith` and `alloc4c` is the trigger, and the frames are free everywhere except `emptyloop`**, where two `Vec` operations per pass on a loop that does nothing else read +1.42%. `alloc4c`'s -1.72% under cause B alone is not a mechanism -- nothing in that change can remove work from an axis with no per-pass root to release -- and it is left unexplained rather than claimed.
+
+#### Why reclamation costs what it costs, profiled rather than reasoned
+
+`samply` 0.13.1 `--save-only`, 1 kHz, `REXX_ENGINE=ir`, fresh empty directory, analysed through `pollard` with `expand_inlines`; `unsymbolicated_pct` 0.0% at head and 0.012% at base. **The two profiles were taken separately and are not interleaved, so only the shares are read and the durations are not.**
+
+On `arith` at head, `Interp::alloc_with`'s whole subtree is **5.5%** of the run. `Heap::collect` is **4.8% total and 0.3% self**, and `core::ptr::drop_glue::<rexx_core::heap::Slot>` under it is **4.5%**. The glibc free family is 15.3% self at head against 9.0% at base.
+
+**So the cost is not marking and it is not sweeping: it is the `free()` of each reclaimed object's payload, which a leak never pays.** A heap that never collects never calls `free` on a heap object at all. `arith` is the axis with the highest allocation-to-work ratio and a tiny live set, so it pays the whole of that and gets only the page-fault saving back; `alloc4c` pays it on top of marking a live set that is genuinely large, which is what entry 2 predicted when it said a collector "will move it the wrong way".
+
+#### Correctness, which outranks the number by more than usual here
+
+**This is a garbage collector, so the instrument matters more than the result.** `run_program_collect_every_alloc` sets `stress_collect`, which collects on *every* allocation -- strictly more often than any watermark -- so a program that survives it survives the trigger. A swept slot's generation is incremented, so a stale handle **misses** rather than aliasing, and the failure is a loud `a live value` or a wrong answer rather than a silent read of another object.
+
+* **The whole workspace, with collect-on-every-allocation forced on for every run.** Every harness that runs a Rexx program is green: the corpus differential against the oracle, the dual-engine sweep, the trace oracle, the `ootest` assertion, `bif` and `keyword` harnesses, `collect_stress` itself. **79 tests fail, and all 79 are `rexx-exec`'s own lib unit tests** -- `let true_value = interp.text(b"1"); let false_value = interp.text(b"0");` holds the first handle in a Rust local across the second allocation. That is test code, and no unit test reaches 65,536 live objects, so the production trigger cannot fire there.
+* **The dual-engine populations under the stress mode on both arms**, by patching `ir_dual.rs`'s own comparison to run each case a third and fourth time: corpus 121 cases, `bif` 5,185, `expressions` 4,259, `keyword` 896 -- **10,461 cases, 20,922 stress runs, 182,106 collections**, every one byte-identical to its own plain run on stdout, stderr and exit status. 1,954 of those runs collected nothing, which is the documented shape of a program whose every value is an inlined small integer. The file was restored from a copy afterwards and `sha256sum -c`'d, never `git checkout --`.
+* **The differential against the oracle is unchanged**: the corpus runner reports 10 passed and the dual-engine sweep 9 in the release run, read as counts.
+
+**One real unrooted window was found, and closing it is part of this change.** `Heap::collect`'s own doc named it and left it to whoever wired in a collector: `EXIT`'s result is rooted by a one-clause temp that `leave_stepped_clause` pops before `Flow::Exit` reaches `run_activation`, and nothing names it from there to `exit_code_for`. A `Heap::collect` forced immediately before `exit_code_for` **panicked on `a live value` in four harnesses**. `Interp::apply_flow` now takes a root that outlives the temps stack (`Interp::root_exit_value`, `add_global`) at the one place an activation's value stops being a clause's temporary -- both the `Flow::Exit` and the `Flow::Return` arm, so `EXIT`, a top-level `RETURN`, a `RAISE` with an `EXIT` tail and a handler's own exit are all covered without enumerating them. With it, the same forced-collect probe leaves the whole workspace green. **Both arms are needed, measured rather than assumed**: rooting `Flow::Exit` alone leaves three harnesses panicking under that probe, because a top-level `RETURN` reaches `exit_code_for` too. An earlier attempt that rooted at the *producers* instead -- the `EXIT` instruction and the `RAISE` tail -- left them red as well, and that is what moved the root to the one consumer.
+
+**The trigger itself never fires inside that window**, which is why the stress mode had never found it: nothing on the path from the pop to `exit_code_for` allocates. That is a property of today's code rather than an invariant, which is the reason it was closed rather than written down as benign.
+
+**The committed witness is `a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop`** (`collect_stress.rs`), five loop shapes on both engines under collect-on-every-allocation, every expected string measured on the oracle. Its fifth row -- a compound control stepped by `BY 0.5`, so the bound value is a heap object and the write resolves a tail key -- is the one that fails; the first four are the adjacent successes that pin the failure to that shape rather than to loops. A fourth column says per row whether the row allocates at all, in both directions, because `do i = 1 to 3` allocates nothing and asserting that it collects would assert something false.
+
+**It adds coverage, which is a separate claim from being able to fail, and both mutations were measured.** Moving the `pop_frame` to before `bind_control`, and separately deleting the `push_temp` of the bound value, each redden this witness -- and **the entire workspace suite without it stays green under both**, the 10,461-case sweep included with the stress mode on. `run.rs` was restored from a copy and `sha256sum -c`'d after each.
+
+**And one of the three sites cannot be pinned by any test, which is stated rather than implied.** Popping `eval_condition`'s frame *before* its `to_text` leaves the entire workspace green, including the new witness. Nothing allocates between the push and the last use of the value, so the root there is unobservable -- the same shape `collect_stress.rs` already records for `eval_arithmetic`'s `right_value`. The frame around it is a memory-lifetime device, and its correctness rests on the value never being handed back rather than on a measurement.
+
+Gates: `cargo test --workspace` **1438 passed, 0 failed, 4 ignored** in dev and in release, run counts read rather than exit status alone. **BASE was re-counted rather than inherited, and the brief's figure was five behind**: `cargo test --workspace -- --list` in a `git worktree` at `bebf38ee` enumerates 1441, of which 4 are `#[ignore]`, so BASE runs **1437** -- entry 5's own HEAD figure. The brief said 1432, which was BASE for entry 4 and is the same stale figure entry 5's brief carried. HEAD runs exactly one more, the witness above. `cargo fmt --all --check` clean. `cargo clippy --workspace --all-targets -- -D warnings` clean from a full `cargo clean`, with `Checking rexx-core` and `Checking rexx-exec` confirmed in the log.
+
+#### Disposition: **accepted**
+
+The candidate's stated falsification was peak RSS not falling by at least an order of magnitude on `strings`, or any differential divergence, or the stress harness finding an unrooted value. `strings` fell **220x**; nothing diverged; the harness did find one unrooted value, which was the `EXIT` window the tree already had on record, and it is closed in this change rather than carried.
+
+**Accepted with the cost recorded and not netted out.** Four axes get faster and two get slower, and the two that get slower are bar-bound: `arith` +6.6% and `alloc4c` +2.7%. The mechanism is named and measured -- reclamation pays a `free()` per object -- so this is a known trade rather than an unexplained regression. It is taken because the alternative is a program whose live set is two integers aborting at rc 134 with no Rexx condition, no traceback and its output lost, which is a defect and not a performance property.
+
+**The hypothesis is confirmed by the route it named** on memory, where the instruction and page-fault columns both agree. It is **not** confirmed on `strings`' wall time: the prototype's -16% came from an axis peaking at 3.7 GB, entry 4 already took that to 2.5 GB, and what is left is -5.3%.
+
+Commit: read back from `git log` after committing, below.
+
+#### What this entry cannot say
+
+* **It is one sitting on one Linux host**, unpinned, on a machine whose governor cannot be fixed.
+* **It did not run `rexx-bench-suite`, so it carries no oracle ratios.** Every figure is against the immediately preceding binary. Where `arith` and `alloc4c` now sit against the oracle is unmeasured, and both moved the wrong way.
+* **The trigger policy was measured once, at one setting, and nothing here says it is the right one.** `COLLECT_FLOOR` at 65,536 and a doubling watermark are an argument about amortisation, not a measured optimum, and the entry deliberately does not contain a sweep over thresholds.
+* **The `eval_condition` half of cause B is measured by probes and by no benchmark.** No axis in this suite is a `WHILE`, an `UNTIL` or a `FOREVER`, which is the blind spot `phase-4-exclusions.txt` warned about; what says that half works is the 8,000,000-iteration probe going from 64,680 KB to 2,768 KB, not any axis above.
+* **Nothing here measures footprint in a test.** The witness added checks rooting, not memory, so a reintroduced leak that kept its roots correct would pass every gate in the workspace. That half of the coverage gap is still open and the exclusions row says so.
+* **`alloc4c`'s -1.72% under cause B alone is unexplained** and no mechanism offered covers it.
+* **The tree-walker was measured only through the stress populations.** Every wall, instruction and RSS figure above is the IR arm.

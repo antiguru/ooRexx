@@ -77,34 +77,25 @@ impl Heap {
 
     /// Marks from the roots, then sweeps everything unmarked.
     ///
-    /// **Until Task 16, nothing in the interpreter called this at all, and
-    /// one known under-rooted window was waiting for the day something
-    /// did.** `alloc_with_uncollected` never collects on its own, so
-    /// `rexx-exec` has a value that lives past the temps frame that rooted
-    /// it: `EXIT`'s result, from the wrapper's `pop_frame` through to
-    /// `exit_code_for`. It is written up at that site in `run.rs`, and the
-    /// fix is a root that outlives a clause rather than the one-clause
-    /// `push_temp` every other instruction result gets. Task 16 gave
-    /// `rexx-exec` an opt-in stress mode (`Interp::alloc_with`, `lib.rs`)
-    /// that calls this after every allocation when enabled; it is still off
-    /// by default, so this paragraph's "nothing calls this" becomes "nothing
-    /// calls this unless asked to" rather than going stale outright.
+    /// **`rexx-exec` calls this on its own now**, from `Interp::alloc_with`
+    /// (`lib.rs`) when the live-object count reaches that module's watermark,
+    /// as well as on every allocation under the opt-in stress mode
+    /// `run_program_collect_every_alloc` turns on. So every allocation site in
+    /// that crate is a collection point, and a value held only in a Rust local
+    /// across one is a use-after-free rather than a cost.
     ///
-    /// The pointer is here, rather than only there, because the person who
-    /// wires a collector into the interpreter permanently is the one who
-    /// turns that window into a use-after-free, and this is the function
-    /// they will be looking at. Sweep `rexx-exec` for the same shape before
-    /// doing it: an unrooted window is invisible to the compiler and shows
-    /// up as a wrong value rather than a crash.
+    /// **A missed root does not show as a crash, and the instrument that finds
+    /// one is the stress mode.** It collects strictly more often than any
+    /// watermark can, so a program that survives it survives the production
+    /// trigger. A stale handle *misses* rather than aliasing -- a swept slot's
+    /// generation is incremented, which is what the generation is for -- so
+    /// the failure is a loud `a live value` or a wrong answer, never a silent
+    /// read of another object.
     ///
-    /// **That window does not block 4a's collect-on-every-allocation gate
-    /// criterion, and this comment used to imply it did.** Nothing between
-    /// that pop and `exit_code_for` calls `alloc_with_uncollected`: the
-    /// conversion fills a `Number` in place or parses onto the Rust heap.
-    /// So a faithful collect-on-every-allocation mode never fires inside the
-    /// window, and the criterion can be met with the window still open. It
-    /// is a debt against a future *permanent* collector, not an obstacle to
-    /// the gate.
+    /// The one window this crate's own callers used to leave open is closed:
+    /// `EXIT`'s result outlives the temps frame that rooted it, all the way to
+    /// `exit_code_for`, and `Interp::root_exit_value` is the root that spans
+    /// it. Its doc comment carries the measurement.
     pub fn collect(&mut self, roots: &RootSet) -> CollectStats {
         self.collections += 1;
         self.marks.clear();

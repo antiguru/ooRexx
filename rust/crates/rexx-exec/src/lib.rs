@@ -315,6 +315,27 @@ pub const NOT_IMPLEMENTED_EXIT: i32 = 120;
 /// thing the change affects, not the counter itself.
 pub const INTERPRETER_STACK_BYTES: usize = 512 * 1024 * 1024;
 
+/// The live-object count below which no ordinary run ever collects, and the
+/// floor every later watermark is raised to (see `Interp::collect_at`).
+///
+/// A heap of this many objects costs about 6 MB of arena slots, at the 96
+/// bytes per `Slot` `phase-4d-retention.md` measured, plus each object's own
+/// payload. Below it there is nothing worth reclaiming and a collection is
+/// pure cost: a program that allocates a few hundred values -- which is most
+/// of the corpus -- never collects at all, and pays one comparison per
+/// allocation for the trigger's existence.
+///
+/// The number is a round power of two rather than a tuned one. It is the
+/// floor `phase-4d-retention.md`'s prototype used, kept so that this crate's
+/// measured landing can be read against that document's prediction rather
+/// than against a threshold chosen after seeing the result.
+const COLLECT_FLOOR: usize = 65_536;
+
+/// The globals entry [`Interp::root_exit_value`] writes. A name rather than an
+/// index because `RootSet::add_global` is keyed by name and replaces in place,
+/// which is the behaviour wanted here.
+const EXIT_VALUE_ROOT: &str = "the program's exit value";
+
 /// What one interpreter run produced.
 ///
 /// `stdout` and `stderr` are the sinks themselves rather than a handle to
@@ -1687,6 +1708,31 @@ struct Interp {
     /// same flag and should not have to rename it away from a gate task's
     /// number.
     stress_collect: bool,
+    /// The live-object count at which [`Interp::alloc_with`] collects, and
+    /// the whole of this crate's trigger policy.
+    ///
+    /// **A watermark on survivors, doubled after every collection, floored at
+    /// [`COLLECT_FLOOR`].** Collect when the heap holds this many live
+    /// objects; afterwards set it to twice what survived. Two properties come
+    /// out of that and nothing else was asked of it:
+    ///
+    /// * **The peak is bounded by the live set rather than by the program's
+    ///   total allocation.** Before this existed nothing collected at all, so
+    ///   a loop's peak resident set was everything it had ever allocated --
+    ///   `strings.rex` reached 2.5 GB with a live set of a few values.
+    /// * **The collector's total work is bounded by a constant times the
+    ///   program's total allocation.** Between two collections the program
+    ///   must allocate at least as many objects as the first one left alive,
+    ///   so a marking pass over `n` survivors is paid for by `n` allocations,
+    ///   whatever `n` is. That is what keeps a program with a genuinely large
+    ///   live set -- `alloc4c.rex`'s growing compound table -- from
+    ///   re-marking it on a schedule the live set itself sets.
+    ///
+    /// It is a **policy** and policies invite tuning, so this one is fixed
+    /// and stated rather than searched: it is the shape `phase-4d-retention.
+    /// md` prototyped and measured, and a threshold tuned until a benchmark
+    /// number looked right would not survive a different workload.
+    collect_at: usize,
     /// Current `eval` recursion depth, and the deepest it has reached.
     ///
     /// Task 11 turns `depth` into D19's guard by comparing it against a limit
@@ -1995,6 +2041,7 @@ impl Interp {
             failure_sites: Vec::new(),
             clause_line_override: None,
             stress_collect: false,
+            collect_at: COLLECT_FLOOR,
             depth: 0,
             max_depth: 0,
             stack_entry: 0,
@@ -2275,6 +2322,34 @@ impl Interp {
         }
     }
 
+    /// Roots a value that has to outlive the clause that produced it, all the
+    /// way to [`Interp::exit_code_for`].
+    ///
+    /// **The one value in this crate whose lifetime the temps stack cannot
+    /// express.** `EXIT`'s result is pushed as an ordinary one-clause temp,
+    /// and `leave_stepped_clause` pops that frame before `Flow::Exit` has even
+    /// reached `run_activation` -- so from there through the activation
+    /// teardown and into `execute`'s conversion, nothing on the temps stack
+    /// names it. `add_global` is the root that survives, because nothing
+    /// truncates the globals list.
+    ///
+    /// **Measured, which is why this exists rather than a comment arguing the
+    /// window is benign.** A `Heap::collect` placed immediately before
+    /// `exit_code_for` swept the value and panicked on `a live value` in four
+    /// harnesses; with this root taken, the same probe leaves the whole
+    /// workspace green. The trigger itself never fires inside the window --
+    /// the workspace is also green with collect-on-every-allocation forced on
+    /// for every run -- but that says only that nothing on today's path
+    /// allocates, which is a property of the code rather than an invariant of
+    /// the design.
+    ///
+    /// One name, replaced rather than accumulated, so a routine whose own
+    /// `EXIT` becomes a `RETURN` to its caller (`run.rs`'s `Entered::Routine`
+    /// arm) can run any number of times and hold one value at a time.
+    fn root_exit_value(&mut self, value: ObjRef) {
+        self.roots.add_global(EXIT_VALUE_ROOT, value);
+    }
+
     /// Turns on Task 16's collect-on-every-allocation stress mode. Only
     /// `execute`'s `collect_every_alloc` arm calls this, right after
     /// construction and before `run`; nothing else needs to flip it, and
@@ -2287,22 +2362,26 @@ impl Interp {
     /// crate goes through, so that Task 16's stress mode has exactly one
     /// place to hook rather than one per call site.
     ///
-    /// **Off by default, and provably inert when off**: with
-    /// `stress_collect` false (the constructed default, and the only value
-    /// `run_program` ever leaves it at), this
-    /// is `self.heap.alloc_with_uncollected(behaviour, body)` and nothing
-    /// else -- one call, one `if` that does not take its branch, no new
-    /// allocation, no new borrow of `self.roots`. Every existing caller
-    /// (`value.rs`'s `text`/`number`, `stem.rs`'s two stem constructors) was
-    /// renamed from `self.heap.alloc_with` to `self.alloc_with` with no
-    /// other change at the call site, so the behaviour those four sites saw
-    /// before this task is exactly what they see now with the mode off.
+    /// **Two things can make it collect first, and they are different
+    /// questions.** `stress_collect` collects on *every* allocation and is a
+    /// test instrument (`run_program_collect_every_alloc`). `collect_at` is
+    /// the production trigger: an ordinary run collects when the live-object
+    /// count reaches the watermark that field's own doc comment defines. An
+    /// ordinary allocation therefore costs one `bool` test and one `usize`
+    /// comparison against a count the heap already maintains.
     ///
-    /// **On, it is `Heap::collect(&self.roots)` followed by
-    /// `Heap::alloc_with_uncollected`.** `self.heap` and `self.roots` are
-    /// sibling fields, so this borrows each independently and needs no
-    /// interior mutability or unsafe cell to call one method with a
-    /// borrow of the other in scope.
+    /// **Every allocation is a collection point, and that is what makes the
+    /// rooting discipline load-bearing rather than advisory.** Before this
+    /// trigger existed, a value held only in a Rust local across another
+    /// allocation was inert -- nothing swept, so nothing noticed. Now it is a
+    /// use-after-free that shows up as a wrong answer. `push_temp` the value
+    /// before anything else can allocate; the instrument that finds the ones
+    /// that were missed is `run_program_collect_every_alloc`, which collects
+    /// strictly more often than any watermark can.
+    ///
+    /// `self.heap` and `self.roots` are sibling fields, so this borrows each
+    /// independently and needs no interior mutability or unsafe cell to call
+    /// one method with a borrow of the other in scope.
     ///
     /// **Collecting BEFORE the allocation, not after, and this was not the
     /// first thing tried.** An earlier version of this method collected
@@ -2334,8 +2413,25 @@ impl Interp {
         behaviour: rexx_core::BehaviourId,
         body: rexx_core::Body,
     ) -> ObjRef {
-        if self.stress_collect {
-            self.heap.collect(&self.roots);
+        if self.stress_collect || self.heap.live_count() >= self.collect_at {
+            let stats = self.heap.collect(&self.roots);
+            // `pending_uninit` is what the collector resurrected so a finalizer
+            // could run against a whole graph. Nothing in this crate sets
+            // `Object::has_uninit`, because `UNINIT` needs a class to define
+            // it and message sends are Phase 5, so the list is empty and there
+            // is nothing to deliver. The day something sets that flag, this is
+            // the site that owes the delivery -- which is why the value is
+            // named here rather than dropped at the call.
+            debug_assert!(
+                stats.pending_uninit.is_empty(),
+                "an object was resurrected for UNINIT and nothing here runs a finalizer"
+            );
+            // **Not raised for the stress mode**, which collects on every
+            // allocation by definition and must not have its watermark moved
+            // out from under it.
+            if !self.stress_collect {
+                self.collect_at = COLLECT_FLOOR.max(stats.live.saturating_mul(2));
+            }
         }
         self.heap.alloc_with_uncollected(behaviour, body)
     }

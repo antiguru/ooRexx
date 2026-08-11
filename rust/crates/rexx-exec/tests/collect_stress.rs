@@ -454,3 +454,106 @@ fn values_compound_write_roots_the_old_value_before_the_stems_first_allocation()
     }
     assert!(total_collections > 0);
 }
+
+/// A loop's own per-pass roots survive the pass they belong to.
+///
+/// `Interp::loop_advance`'s `Controlled` arm opens a temps frame of its own
+/// and pops it once `bind_control` has written the new control value into the
+/// variable's storage. Both halves are load-bearing and the frame's boundary
+/// is not obvious from the site: the value is created by `Interp::number`,
+/// then *rendered* for a trace line and then written through a path that can
+/// resolve a compound tail -- both of which allocate, and either of which can
+/// collect.
+///
+/// **The rows that catch it are the ones where the loop's own values are heap
+/// objects.** A counted loop over small integers puts a tagged immediate in
+/// the control variable and allocates nothing per pass, so it is green under
+/// any placement of the frame; a `BY 0.5` control is a `Number` on the arena
+/// and a `cv.j` control resolves a tail key on every write. Rows 1 to 3 are
+/// the adjacent successes that pin the failure to the second shape rather
+/// than to loops in general.
+///
+/// **Checked by deleting its subject, twice, and by the harder check
+/// beside it.** Moving the `pop_frame` to before `bind_control`, and
+/// separately removing the `push_temp` of the bound value, each panic row 5
+/// on `a live value`; the plain run of the same programs stays green under
+/// both, so nothing but the collector sees it. And the whole workspace suite
+/// **without this test** stays green under both mutations as well -- the
+/// 10,461-case dual-engine sweep included, run with the stress mode on for
+/// every case -- so these rows add coverage rather than merely being able to
+/// fail.
+///
+/// Every expected string is the oracle's own, measured on `build/bin/rexx`.
+#[test]
+fn a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop() {
+    /// The fourth column is whether the row allocates at all. A counted loop
+    /// over small integers does not -- `Interp::literal` and the tagged
+    /// control value keep every one of its values off the heap -- so it can
+    /// have no rooting defect and asserting it collects would be asserting
+    /// something false. Stated per row and in both directions, like
+    /// [`NO_ALLOCATION_PROGRAMS`] above: a row that stops allocating has had
+    /// its subject taken away, and a row that starts has gained one.
+    struct Row {
+        name: &'static str,
+        program: &'static str,
+        stdout: &'static str,
+        allocates: bool,
+    }
+    let rows = [
+        Row {
+            name: "a counted loop over small integers, which allocates nothing per pass",
+            program: "do i = 1 to 3\n  say i\nend\n",
+            stdout: "1\n2\n3\n",
+            allocates: false,
+        },
+        Row {
+            name: "a WHILE test whose value is a heap object, with an allocating body",
+            program: "k = 0\ndo while k < 3\n  k = k + 1\n  zz = 'x' || k\nend\nsay zz k\n",
+            stdout: "x3 3\n",
+            allocates: true,
+        },
+        Row {
+            name: "the same for UNTIL",
+            program: "n = 0\ndo until n >= 2\n  n = n + 1\n  q = n || 'p'\nend\nsay q n\n",
+            stdout: "2p 2\n",
+            allocates: true,
+        },
+        Row {
+            name: "a compound control whose values are still small integers",
+            program: "j = 2\ndo cv.j = 1 to 3\n  say cv.j\nend\n",
+            stdout: "1\n2\n3\n",
+            allocates: true,
+        },
+        Row {
+            name: "the failing shape: a compound control stepped by a fraction",
+            program: "j = 7\ndo cv.j = 1.5 to 2.5 by 0.5\n  say cv.j\nend\nsay cv.7\n",
+            stdout: "1.5\n2.0\n2.5\n3.0\n",
+            allocates: true,
+        },
+    ];
+    for row in rows {
+        for engine in [rexx_exec::Engine::TreeWalker, rexx_exec::Engine::Ir] {
+            let path = format!("<loop-pass-rooting: {}>", row.name);
+            let stress = run_program_collect_every_alloc(
+                &path,
+                row.program.as_bytes().to_vec(),
+                rexx_exec::Invocation::none().with_engine(engine),
+            );
+            assert_eq!(
+                String::from_utf8_lossy(&stress.stdout),
+                row.stdout,
+                "{}, under collect-on-every-allocation",
+                row.name
+            );
+            assert_eq!(
+                stress.collections > 0,
+                row.allocates,
+                "{} collected {} times, against the row's own claim that it \
+                 allocates: {}",
+                row.name,
+                stress.collections,
+                row.allocates
+            );
+        }
+    }
+}
