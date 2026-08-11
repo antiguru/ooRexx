@@ -26,7 +26,6 @@
 //! (`Interp::engine`, from the `Invocation`).
 
 use std::cell::Cell;
-use std::sync::atomic::{AtomicU32, Ordering};
 
 use rexx_core::FrameId;
 use rexx_parse::{Operator, SymbolId};
@@ -705,33 +704,33 @@ const GENERAL: u32 = 1;
 /// measurement here to choose one from, so the simple monotone rule is what
 /// this builds.
 ///
-/// **`AtomicU32` rather than `Cell<u32>`, for two reasons of different
-/// strength.** The one that bites today is interior mutability at all: a chunk
-/// is reached as `&Chunk` through an `Rc`, so a site cannot record anything
-/// without it, and `Cell<u32>` would serve. The one that does not bite yet is
-/// `Sync`: ooRexx shares routine bodies across activities, and a `Cell` could
-/// not survive that -- but nothing in this crate crosses a thread today, since
-/// the chunk cache is an `Rc` map per `Interp`. So the atomic is a
-/// forward-compatibility bet rather than a present necessity, and what it
-/// costs against a plain read is a number this type is shaped to make
-/// measurable: the three methods below are the only place the choice appears.
-struct PatchSlot(AtomicU32);
+/// **`Cell<u32>`, and the reason is that the alternative's bet cannot be
+/// collected.** What bites today is interior mutability at all: a chunk is
+/// reached as `&Chunk` through an `Rc`, so a site cannot record anything
+/// without it. An `AtomicU32` would add `Sync` on top of that, against the day
+/// ooRexx shares a routine body across activities -- but a chunk reaches its
+/// caller as `Rc<Chunk>`, and an `Rc` is neither `Send` nor `Sync` whatever it
+/// holds, so that day needs a different owner before it needs a different slot;
+/// and [`CallSite`] one construct over holds a `Cell` whose payload is too wide
+/// for a lock-free atomic, so a `Chunk` is not `Sync` either way. The atomic
+/// therefore bought a property nothing could observe, at a price that was
+/// measured rather than assumed: **8 instructions per pass on `arith`, 2 on
+/// `compound`, 1 on `varlookup` and 0 on `emptyloop`**, two builds of one
+/// sitting, `instructions:u`. The three methods below are the only place the
+/// choice appears, so pricing the other one again is the same three lines.
+struct PatchSlot(Cell<u32>);
 
 impl PatchSlot {
     fn new() -> PatchSlot {
-        PatchSlot(AtomicU32::new(TRY_SMALL_INT))
+        PatchSlot(Cell::new(TRY_SMALL_INT))
     }
 
-    /// **`Relaxed`, and the ordering is not a shortcut**: the value is a hint
-    /// that orders nothing else, no other memory is published with it, and
-    /// every state it can hold is correct to read at any time. A racing pair
-    /// of activities can only both decide the same site is general.
     fn get(&self) -> u32 {
-        self.0.load(Ordering::Relaxed)
+        self.0.get()
     }
 
     fn set(&self, state: u32) {
-        self.0.store(state, Ordering::Relaxed);
+        self.0.set(state);
     }
 }
 
@@ -832,18 +831,15 @@ const CALL_SITE_CACHE: bool = true;
 /// installed a routine mid-run. Append-only is what the refusal enforces, and
 /// append-only is enough.
 ///
-/// **`Cell` rather than the `AtomicU32` [`PatchSlot`] uses, and the difference
-/// is the payload rather than a change of mind.** That type's state is a `u32`,
-/// so an atomic costs it nothing and buys the `Sync` a shared routine body
-/// would one day need; a `Resolved` is wider than any lock-free atomic here can
-/// carry, so the same bet would cost either an encoding or a lock. Nothing in
-/// this crate crosses a thread today -- the chunk cache is an `Rc` map per
-/// `Interp` -- and **this field is the whole of what stops a [`Chunk`] being
-/// `Sync`**. Measured, by requiring `Chunk: Sync` in a throwaway `const` and
-/// reading rustc's answer: it names `Cell<Option<Resolved>>` and nothing else,
-/// so every other field, [`PatchSlot`] included, already satisfies it. This is
-/// therefore the one type that would have to change first if a chunk ever
-/// crossed a thread.
+/// **A `Cell`, and a `Resolved` is what forces it rather than a preference.**
+/// A `Resolved` is wider than any lock-free atomic here can carry, so an atomic
+/// slot would cost either an encoding or a lock, where [`PatchSlot`]'s state is
+/// a `u32` that either could hold. **This field is the whole of what stops a
+/// [`Chunk`] being `Sync`**: measured, by requiring `Chunk: Sync` in a throwaway
+/// `const` and reading rustc's answer, which names `Cell<Option<Resolved>>` and
+/// nothing else. So this is the type that would have to change first if a chunk
+/// ever crossed a thread -- and until it does, no other field buys anything by
+/// being `Sync` on its own, which is the measurement [`PatchSlot`] records.
 struct CallSite(Cell<Option<Resolved>>);
 
 impl CallSite {
