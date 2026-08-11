@@ -53,12 +53,66 @@ So a promotion that silently stopped firing for a construct the golden set does 
 
 **The design question this must answer, and it is not obvious.** A committed golden op stream per corpus program is thousands of lines that churn on every promotion, which is a maintenance cost the phase should not hand 4f. **The cheaper shape is an invariant rather than a transcript**: assert over each program's compiled stream that no instruction the minimum promotion set covers emitted `Op::Generic`. That catches a promotion ceasing to fire, needs no committed bytes, and does not churn when an unrelated op is added.
 
-* [ ] Decide between the transcript and the invariant, and **write the reason down** -- if the invariant is chosen, say what it cannot see that a transcript would.
-* [ ] Build it over `corpus_cases()`.
-* [ ] **Prove it can fail**: pick a promotion, make `compile` fall through to `Op::Generic` for it, confirm the assertion reddens and names the program. Restore, rebuild.
-* [ ] **Then prove it adds coverage**: apply that same mutation with the new assertion removed, and record what else caught it. If the existing suite catches it identically, say so -- the assertion may still be worth having as a cheaper and more direct signal, but that is a different claim from "it adds coverage".
+* [x] Decide between the transcript and the invariant, and **write the reason down** -- if the invariant is chosen, say what it cannot see that a transcript would.
+* [x] Build it over `corpus_cases()`.
+* [x] **Prove it can fail**: pick a promotion, make `compile` fall through to `Op::Generic` for it, confirm the assertion reddens and names the program. Restore, rebuild.
+* [x] **Then prove it adds coverage**: apply that same mutation with the new assertion removed, and record what else caught it. If the existing suite catches it identically, say so -- the assertion may still be worth having as a cheaper and more direct signal, but that is a different claim from "it adds coverage".
 
 **Ends when** the assertion exists with both proofs recorded, or when the design question resolves to "not worth building" **with the reason written down**.
+
+### Result: built, as an invariant, with both proofs recorded
+
+`rust/crates/rexx-exec/src/ir/corpus_shape_tests.rs`, one test.
+Working notes in `.superpowers/sdd/2026-08-09-phase-4e-ir/handoff-item2-report.md`.
+
+**The shape: the invariant, at both levels the promotion set has, with expectations derived from each body's own parse tree.**
+An instruction of a covered kind must have opened an `Op::Clause` region and must not have emitted `Op::Generic`; an instruction outside the set carries no claim, so a future promotion cannot redden it.
+For an `Assignment` or a `SAY` -- the two constructs whose value expression can compile natively -- the last value-producing op in the clause region must be exactly what the expression's shape calls for, `Const`/`LoadConstant`/`Load`/`Arith`/`EvalExpr`.
+That second half is **bidirectional**, which is what lets it see arithmetic promoting where it should not as well as ceasing to promote.
+
+**The transcript was rejected for the cost the item names.**
+**The op-kind count summary was judged on the same terms and also rejected**: it is still a committed artefact with a regeneration step, and it churns whenever any op is added, removed or split for a program even when the promotion set has not moved.
+What it buys over the invariant is a changed count of the trace ops, and `ir_dual.rs` already diffs raw stderr between the two arms over the corpus population -- executed bytes rather than compiled shape, which is the stronger instrument.
+
+**What the invariant cannot see.**
+It reads an op's *kind* and never its fields, so a wrong register, jump target, region `end`, constant index or `SymbolId` passes; a transcript would catch those.
+It says nothing about the ops it does not name, so a dropped `TraceLiteral`, `TraceRead`, `TraceOperator`, `EndBranch` or `Jump` passes.
+It is a claim about what compilation emitted, not about what running it does.
+The item's own wording -- "it cannot see an op emitted wrongly, only one not emitted at all" -- holds at the instruction level and is too pessimistic at the expression level, and holds for operands at both.
+
+**One correction to the item's premises.**
+`ir/golden.rs` is **not** ungated: `ir/mod.rs` declares `mod golden;` under `#[cfg(test)]`.
+So `render` is unreachable from an integration test and the assertion cannot sit beside `corpus_cases()` in `tests/ir_dual.rs`; it is a unit-test module inside the crate, matching on `Op` variants directly, and uses `render` only to print the offending stream in the failure message.
+The population is taken from the `corpus/phase-*.txt` directory listing rather than from a third copy of `SUBSET_FILES`, and `::ROUTINE`/`::METHOD`/`::ATTRIBUTE` bodies are swept as well as `main`.
+
+**Anti-vacuity, asserted rather than described**: the population is non-empty and larger than one, the body count is at least the program count, and every construct of the minimum promotion set and every expression root is observed at least once by the sweep.
+
+**Proof 1, it can fail.**
+`CALL name`'s match guard made unreachable so it falls to `Op::Generic`.
+Red, naming the program: `lang/address_env.rex main: instruction 31 (CALL name) is in the minimum promotion set and compiled to Op::Generic`.
+Restored from `cp`, `sha256sum -c` OK, rebuilt, green.
+
+**Proof 2, and the two mutations give opposite answers.**
+
+* **Against a promotion that stops firing outright, it adds nothing.**
+  With the assertion removed and the same `CALL name` mutation applied, `--no-fail-fast`, the existing suite catches it in three `ir::golden_tests` tests and one `ir::drive::tests` test, and `tests/spike.rs` aborts on a stack overflow.
+  Recorded as what it is: a more direct signal, not new coverage.
+* **Against a promotion that stops firing conditionally, nothing else in the workspace sees it.**
+  `native_shape`'s recursion bounded at depth 8 -- a change 4f might reasonably want, since `push_native` recurses once per operator.
+  With the assertion: 1427 passed, **1 failed**, the new test alone.
+  Without it: **1427 passed, 0 failed, exit 0**.
+  Every promoted expression in the golden set is hand-written and shallow, `corpus/lang/deep_nested_expr.rex` is one assignment nesting three thousand terms on purpose, and a bound between them is invisible to every hand-written witness.
+
+Both mutations are recorded in the file's own module doc, so the limit travels with the code rather than only with this document.
+
+**Gates.**
+`cargo fmt --all --check` exit 0, `cargo clippy --workspace --all-targets -- -D warnings` exit 0.
+`cargo test --workspace` dev: 1428 passed, 0 failed, 4 ignored, exit 0.
+`cargo test --workspace --release` under all four STRICT gates: 1428 passed, 0 failed, 4 ignored, exit 0, with four `mode: STRICT` banners read from the uncaptured stream.
+BASE is 1427 in both profiles, so the delta is the one test added.
+
+**No profiler, benchmark or oracle run was taken**, and nothing here makes a performance claim.
+The one performance question this leaves open, if anyone wants it settled: the sweep parses and compiles every corpus body on each `cargo test` run, and whether that is worth naming is a `cargo test` wall-clock question rather than an interpreter one.
 
 ---
 

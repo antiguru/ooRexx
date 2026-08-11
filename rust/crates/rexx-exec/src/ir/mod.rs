@@ -48,6 +48,13 @@ mod golden;
 #[cfg(test)]
 mod golden_tests;
 
+// The corpus-wide statement of the same promotion set `golden_tests` pins per
+// construct: an invariant derived from each body's own instructions rather
+// than a committed stream, so it holds over every corpus program without
+// anything to regenerate. Its module doc has what it cannot see.
+#[cfg(test)]
+mod corpus_shape_tests;
+
 /// **The stream's own width, asserted rather than described.** Every op in
 /// every chunk pays for the widest variant, so a field added to one of them is
 /// a cost to all of them -- which is the argument [`ReadSlot`] rests on, and an
