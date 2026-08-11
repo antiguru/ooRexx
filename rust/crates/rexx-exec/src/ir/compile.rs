@@ -698,7 +698,7 @@ pub(crate) fn compile(
         }
     }
 
-    assert_clause_regions_hold_no_clause_op(&ops);
+    assert_clause_regions_hold_no_generic_op(&ops);
     assert_trace_ops_open_a_clause_region(&ops);
     assert_literal_echoes_follow_their_load(&ops);
     assert_read_echoes_follow_their_load(&ops);
@@ -1026,10 +1026,16 @@ fn instruction_index(index: usize) -> Result<u32, ChunkTooLarge> {
 /// and [`Op::Call`]'s are a nested activation's, stepped by a driver of its
 /// own.
 ///
+/// **`Generic` and not "any op that opens a clause", which the name used to
+/// say.** A nested [`Op::Clause`] inside a region is ordinary and not a
+/// defect: an `IF`'s region spans its branches, and each branch's clauses are
+/// regions of their own. So this scan names the one op whose presence is
+/// wrong, and the two exclusions above say why the others are not it.
+///
 /// An unconditional `assert!` rather than a `debug_assert!`, so the release
 /// build carries the same guarantee. It is one linear scan per body, once,
 /// against a compile that has already walked the same list.
-fn assert_clause_regions_hold_no_clause_op(ops: &[Op]) {
+fn assert_clause_regions_hold_no_generic_op(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
         let Op::Clause { end, .. } = op else {
             continue;
@@ -1056,7 +1062,7 @@ fn assert_clause_regions_hold_no_clause_op(ops: &[Op]) {
 /// Checking it needs only the op before: a `Clause` whose `end` is past this
 /// position is a region that has just opened and has emitted nothing else yet.
 ///
-/// An unconditional `assert!` for [`assert_clause_regions_hold_no_clause_op`]'s
+/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
 /// reason, and it is the same linear scan's worth of work.
 fn assert_trace_ops_open_a_clause_region(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
@@ -1089,7 +1095,7 @@ fn assert_trace_ops_open_a_clause_region(ops: &[Op]) {
 /// comes apart, and it is the one no ordering check would see: the line would
 /// be in the right place with the wrong value in it.
 ///
-/// An unconditional `assert!` for [`assert_clause_regions_hold_no_clause_op`]'s
+/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
 /// reason, and it is the same linear scan's worth of work.
 fn assert_literal_echoes_follow_their_load(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
@@ -1124,7 +1130,7 @@ fn assert_literal_echoes_follow_their_load(ops: &[Op]) {
 /// which means a `read` that disagreed with the load's would emit a line the
 /// oracle prints nowhere, or drop one it prints.
 ///
-/// An unconditional `assert!` for [`assert_clause_regions_hold_no_clause_op`]'s
+/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
 /// reason, and it is the same linear scan's worth of work.
 fn assert_read_echoes_follow_their_load(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
@@ -1165,7 +1171,7 @@ fn assert_read_echoes_follow_their_load(ops: &[Op]) {
 /// was applied, so an echo carrying another op's prints the right value under
 /// the wrong sign.
 ///
-/// An unconditional `assert!` for [`assert_clause_regions_hold_no_clause_op`]'s
+/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
 /// reason, and it is the same linear scan's worth of work.
 fn assert_operator_echoes_follow_their_op(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
@@ -1211,7 +1217,7 @@ fn assert_operator_echoes_follow_their_op(ops: &[Op]) {
 /// op. What it sees is a divergence in a program's output; what this turns that
 /// into is a refusal at compile time naming the op and both instructions.
 ///
-/// An unconditional `assert!` for [`assert_clause_regions_hold_no_clause_op`]'s
+/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
 /// reason, and it is the same linear scan's worth of work.
 fn assert_region_ops_name_their_clause(ops: &[Op]) {
     for (at, op) in ops.iter().enumerate() {
@@ -1286,7 +1292,7 @@ mod tests {
     use rexx_parse::{SymbolId, SymbolTable};
 
     use super::{
-        Op, ReadSlot, Registers, SymbolRead, assert_clause_regions_hold_no_clause_op,
+        Op, ReadSlot, Registers, SymbolRead, assert_clause_regions_hold_no_generic_op,
         assert_literal_echoes_follow_their_load, assert_read_echoes_follow_their_load,
         assert_region_ops_name_their_clause, assert_trace_ops_open_a_clause_region,
     };
@@ -1381,7 +1387,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "holds an op that opens a clause of its own")]
     fn a_generic_op_inside_a_clause_region_is_refused() {
-        assert_clause_regions_hold_no_clause_op(&[
+        assert_clause_regions_hold_no_generic_op(&[
             Op::Clause { index: 0, end: 3 },
             Op::EvalExpr {
                 index: 0,
@@ -1400,7 +1406,7 @@ mod tests {
     /// and every body a tree-walker body.
     #[test]
     fn a_generic_op_after_a_clause_region_is_accepted() {
-        assert_clause_regions_hold_no_clause_op(&[
+        assert_clause_regions_hold_no_generic_op(&[
             Op::Clause { index: 0, end: 3 },
             Op::EvalExpr {
                 index: 0,

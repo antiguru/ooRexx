@@ -1958,15 +1958,19 @@ impl Argument {
 }
 
 impl Interp {
-    /// `stress_collect` always starts `false` here rather than as a second
-    /// parameter: `Interp::new` has well over a hundred callers, almost all
-    /// of them unit tests in files this task is not permitted to touch
-    /// (`run.rs`, `eval.rs`, `plan.rs`, `trace.rs`), so widening its
-    /// signature would force edits far outside this task's granted scope
-    /// for a flag only two callers (`execute`, below) ever need to set.
-    /// [`Interp::stress_collect`] flips it after construction instead,
-    /// which is exactly as inert for every existing caller as adding a
-    /// field with a fixed default already is.
+    /// **Every field a caller might want to vary starts at a fixed value
+    /// here and is set after construction**, so this signature does not grow
+    /// a parameter for each one. `stress_collect` and `engine` are both of
+    /// that shape: `execute` sets each from what it was handed, and every
+    /// other caller -- the unit tests throughout this crate, which is nearly
+    /// all of them -- gets the value below.
+    ///
+    /// **`engine` starting at `TreeWalker` is therefore not the default
+    /// engine**, which is [`Engine::DEFAULT`] and reaches an `Interp` through
+    /// `execute`. What this value decides is the arm those unit tests run on,
+    /// and it is the tree-walker: measured, by setting it to `Engine::Ir` and
+    /// counting what the driver did -- 1 chunk driven and 2 clauses stepped
+    /// from it against 0 and 0 -- with the whole suite green either way.
     fn new() -> Interp {
         Interp {
             heap: Heap::new(),

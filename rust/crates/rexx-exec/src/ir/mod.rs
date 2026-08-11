@@ -38,9 +38,10 @@ mod compile;
 mod drive;
 pub(crate) use compile::compile;
 
-// `render`, the golden-test serialiser, has no caller outside `golden_tests.rs`
-// and the plan's ten tasks never give it one -- gated here rather than carrying
-// a permanent `#[allow(dead_code)]` for a caller that is never coming.
+// `render`, the golden-test serialiser, is a test-only rendering of the op
+// stream: nothing the interpreter does at run time reads a chunk back as text.
+// Gated here rather than carrying a permanent `#[allow(dead_code)]`, so a
+// production caller for it would not compile rather than passing unnoticed.
 #[cfg(test)]
 mod golden;
 
