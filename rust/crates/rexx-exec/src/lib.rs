@@ -865,13 +865,20 @@ impl Loud {
         }
     }
 
-    /// A compiled `Call` op does not describe the `CALL name` it was emitted
-    /// for -- an internal inconsistency, never a program error.
+    /// A compiled op that runs or traces a call does not describe the call it
+    /// was emitted for -- an internal inconsistency, never a program error.
     ///
-    /// [`Loud::select_op_off_its_node`]'s reasoning exactly, one instruction
-    /// over, with the extra step that `ir::compile` emits this op only for the
-    /// `Named` form: reaching it means the op names an instruction whose
-    /// `CALL` is one of the three forms that stay `Op::Generic`.
+    /// [`Loud::select_op_off_its_node`]'s reasoning exactly, shared by the ops
+    /// that reach a call:
+    ///
+    /// * `Op::Call`, which `ir::compile` emits only for a `CALL` instruction's
+    ///   `Named` form, so reaching it there means the op names an instruction
+    ///   that is not a `CALL` at all, or one whose `CALL` is a form that stays
+    ///   `Op::Generic`;
+    /// * `Op::CallExpr`, whose `slot` and `path` reach no node of the clause,
+    ///   or reach one that is not a call;
+    /// * `Op::TraceFunction`, whose echo walks that same address to the node
+    ///   it describes and finds nothing at the end of it.
     ///
     /// [`Loud::select_op_off_its_node`]: Loud::select_op_off_its_node
     fn call_op_off_its_node() -> Loud {

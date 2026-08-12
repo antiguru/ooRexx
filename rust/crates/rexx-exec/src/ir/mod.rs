@@ -466,9 +466,13 @@ pub(crate) enum Op {
     /// depth bookkeeping D19 needs, which a bare symbol cannot recurse
     /// through, and the post-order trace hook, which is the op below.
     ///
-    /// **Only the whole expression, never a symbol inside one.** `x + 1`
-    /// compiles to [`Op::EvalExpr`] entire; nothing here descends into an
-    /// operator's operands.
+    /// **Emitted wherever the descent reaches a bare symbol -- as a slot's
+    /// whole expression, and inside one.** `zv + 1` compiles to this op and
+    /// the operator applied to it, because an operator's operands are compiled
+    /// to ops of their own. A symbol the descent never walks to gets none -- a
+    /// call's arguments go back through `eval.rs` -- and neither does one
+    /// inside a slot that falls to [`Op::EvalExpr`] entire, which is the whole
+    /// slot's choice rather than this node's.
     ///
     /// `at` is the slot the plan already resolved this symbol to, which is the
     /// one thing this op knows that the tree-walker's own read has to work out
@@ -508,20 +512,21 @@ pub(crate) enum Op {
         read: SymbolRead,
         src: u16,
     },
-    /// Computes `lhs op rhs` into register `dst`, for the seven operators
+    /// Computes `lhs op rhs` into register `dst`, for the operators
     /// `eval::is_arithmetic` names.
     ///
     /// **Native in the sense [`Op::Const`] and [`Op::Load`] are: `eval.rs` is
     /// not entered, and neither is it for the operands.** An expression
     /// compiles to this op only when *both* its operands compile to native ops
-    /// too, so `za + zb * 4` is six ops and no `eval` recursion, while
-    /// `length('ab') + 1` is one [`Op::EvalExpr`] entire -- a call has no
-    /// register to arrive in, and `EvalExpr` names an expression *slot* of an
-    /// instruction, which a subexpression is not.
+    /// too, so `za + zb * 4` runs with no `eval` recursion in it, while a slot
+    /// holding one node with no op of its own -- a `.NIL`, or a call the
+    /// address does not reach -- is one [`Op::EvalExpr`] entire, because
+    /// `EvalExpr` names an expression *slot* of an instruction, which a
+    /// subexpression is not.
     ///
     /// The arithmetic itself is `Interp::arith_small_int` and
     /// `Interp::arith_general`, entered from here and from
-    /// `Interp::eval_arithmetic`, so the operand conversion, the seven
+    /// `Interp::eval_arithmetic`, so the operand conversion, the arithmetic
     /// operators' own `rexx-num` calls, the 41.1 a nonnumeric operand raises
     /// and the 26.8 a `**` exponent raises are one implementation rather than
     /// a second one beside it. **What this op adds is the order they are tried

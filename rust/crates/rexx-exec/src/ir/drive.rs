@@ -770,10 +770,10 @@ impl Interp {
                                     let value = self.roots.temp_at(registers, *src as usize);
                                     self.echo_symbol_read(code, *read, *symbol, value);
                                 }
-                                // **The third native expression op**: one
-                                // arithmetic operator applied to two registers,
-                                // through the same `Interp::arith_small_int`
-                                // and `Interp::arith_general` that
+                                // **A native expression op**: one arithmetic
+                                // operator applied to two registers, through
+                                // the same `Interp::arith_small_int` and
+                                // `Interp::arith_general` that
                                 // `eval_arithmetic` enters, with `eval.rs`
                                 // itself not entered at all -- for the operands
                                 // either, which is what the ops in front of

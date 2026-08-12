@@ -438,8 +438,8 @@ fn a_say_of_a_bare_symbol_compiles_to_a_native_read() {
 ///
 /// `.NIL` and `>zv` are the two expressions that look like a bare symbol read
 /// and are not one: the first traces `>E>` and the second `>O>`, so a `Load`
-/// for either would emit a `>V>` line the oracle does not print. Neither is
-/// arithmetic, so both stay on [`super::Op::EvalExpr`] entire.
+/// for either would emit a `>V>` line the oracle does not print. Neither is a
+/// term `native_shape` accepts, so both stay on [`super::Op::EvalExpr`] entire.
 #[test]
 fn an_expression_that_only_contains_a_symbol_is_more_than_that_symbols_read() {
     let chunk = compile_for_test(b"zw = zv + 1\n").expect("compiles");
