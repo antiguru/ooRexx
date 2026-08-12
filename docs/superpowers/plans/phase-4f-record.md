@@ -2574,3 +2574,60 @@ No mechanism is established here; the plausible one is that a variant changes ru
 * **Nothing about a *widened variant*, which is what would actually land.** Both wide arms widen the enum by adding a dead variant; Task 3's alternative widens `Op::CallExpr` itself and adds none. The width column is the right prediction for it and the variant column is not, but the exact change was not built.
 * **Six axes, one machine, one afternoon.** `rexxcps` was not run.
 * **It says nothing about whether the assertion should stay.** What it says is that the number in it may be sixteen without paying for it here.
+
+### Entry 25 -- the expression-promotion plan attempted and **accepted with a reproducible regression on three axes**: every operator native, and a call promoted wherever an address reaches it
+
+`docs/superpowers/plans/2026-08-12-expression-promotion.md`, four tasks, `ec649c0bc..8a48bbb1d`.
+Entry 23 closed with "three of `strings`' four calls are promoted, not four" and "what the remaining widening is worth on that axis is unmeasured here".
+This is that measurement, plus the operators entry 23 did not touch.
+
+#### What landed
+
+* **`Op::Binary`** for the concatenation, comparison and logical operators, through one `Interp::apply_binary` that `eval_node` also enters, with `concat_values`/`compare_values`/`logical_values` split out of the three functions that used to own an operand prologue each.
+* **`Op::Prefix`** and **`Op::TracePrefix`**, through `Interp::apply_prefix`. A separate echo op because a prefix operator's line is `>P>` and a binary operator's is `>O>`.
+* **`NodePath`**, a bit-encoded route from an expression slot's root to a node, carried in `Op::CallExpr` and `Op::TraceFunction`; `Interp::chunk_node_at` is the descent. `size_of::<Op>()` went from 12 to 16 on entry 24's measurement.
+* **A call promotes wherever an address reaches it inside a slot that compiles natively.** `push_value`'s root-call special case is gone.
+
+#### The sitting
+
+The accept rule's literal shape, **not** `rexx-bench-suite`.
+Wall clock, `ulimit -v 8388608`, `REXX_ENGINE=ir`, a fresh empty working directory per run, stdout hashed per run.
+**Three arms in one sitting** -- `ec649c0bc` (base), `87f0e0d32` (after the operators), `8a48bbb1d` (after the address and the nested call) -- so the drift cancels across all three comparisons rather than only within two separate ones.
+Nine rounds per axis, arm order through all six permutations.
+2026-08-12 20:12 to 20:18 +02:00, behind the host-idle gate, load average 1.06 to 1.15.
+All 162 runs exited 0, and **every axis printed a byte-identical stdout under all three binaries in all nine rounds**.
+
+| axis | base | operators | + nested call | operators | nested call | whole plan |
+|---|---:|---:|---:|---|---|---|
+| `strings` | 3.6673 | 3.6259 | 3.2990 | -1.13%, 6/9 | **-9.02%, 9/9** | **-10.04%, 9/9** |
+| `alloc4c` | 1.2539 | 1.2478 | 1.1539 | -0.48%, 6/9 | **-7.53%, 9/9** | **-7.98%, 9/9** |
+| `compound` | 2.7980 | 2.7594 | 2.7491 | -1.38%, 9/9 | -0.37%, 6/9 | -1.75%, 9/9 |
+| `arith` | 2.2014 | 2.2738 | 2.2886 | **+3.29%, 0/9** | +0.65% | **+3.96%, 0/9** |
+| `varlookup` | 2.4419 | 2.5407 | 2.5683 | **+4.05%, 0/9** | +1.08% | **+5.18%, 0/9** |
+| `emptyloop` | 1.4420 | 1.5114 | 1.5382 | **+4.82%, 0/9** | +1.77% | **+6.67%, 0/9** |
+
+The round counts are how many of nine rounds the later arm was *faster*, so `0/9` means the later arm lost every round.
+
+#### Instructions, which change what the wall clock means
+
+`perf stat -e instructions:u`, one run per arm, a different configuration from the sitting and quoted as a mechanism check rather than as a suite figure.
+
+| axis | base | head | difference |
+|---|---:|---:|---|
+| `strings` | 47,943,770,024 | 44,565,789,512 | **-7.05%** |
+| `varlookup` | 43,700,817,052 | 44,384,817,866 | +1.57% |
+| `emptyloop` | 27,525,811,377 | 27,525,811,294 | **-0.0000003%** |
+
+**`emptyloop` executes the same instructions and takes 6.67% longer in every round.** Eighty-three instructions separate the two binaries out of twenty-seven and a half billion, so the regression on that axis is **not the interpreter doing more work**; it is where the code landed. `varlookup` is a little of both. `strings` removed real work and the wall gain exceeds it.
+
+#### What this entry does not claim
+
+* **The mechanism of the regression is not established.** It has entry 24's signature -- that entry measured a **dead** `Op` variant, constructed and driven nowhere, costing `emptyloop` 3.00% at 9/9, and this plan added three real variants for a first-increment cost of +4.82% on that axis -- and it is the right order of magnitude. But the control that would attribute it was not built: head with the new ops present and nothing emitting them. Until that exists, "three more variants cost this" is a hypothesis with a matching fingerprint, not a measurement.
+* **`compound`'s -1.75% at 9/9 is unexplained.** That axis holds no concatenation, no prefix operator and no call. It is small and it is consistent, and no mechanism is offered.
+* **The instruction counts are one run per arm**, not an interleave. They are reproducible to a few hundred parts per billion on this machine (entry 1 measured the same counter twice at 763411912 and 763411673), which is why one run is quoted; the wall-clock figures are the nine-round ones.
+* **`rexxcps` was not run.** It remains the worst axis by fraction still to lose and nothing in this plan was aimed at it.
+
+#### Accepted, and what follows
+
+Moritz accepted the movement on 2026-08-12.
+**The variant count is now a measured cost rather than an aesthetic one**, which turns merging op variants into an optimisation candidate with a number attached: `Op::Arith` folding into `Op::Binary` with the hint field, or the trace ops collapsing into one carrying a tag. Measured against exactly these axes, with the control this entry says is missing.
