@@ -41,8 +41,9 @@
 # the one the operand-combination rows below were written for, because this
 # file's own logical stanza could not see it before them -- reddens
 # `assertions.rs`'s `the_exempt_set_matches_the_current_blocked_rows`, which
-# runs rows extracted from ooTest rather than anything written here: the
-# not-passing count rises from the committed 35 to 42.
+# runs rows extracted from ooTest rather than anything written here: seven of
+# those rows stop passing, so the not-passing set no longer matches the
+# committed exempt list and that test's own equality fails.
 #
 # The row written to close that blind spot did not make the file a sole
 # catcher even for the mutation it closes -- and these rows do not have to be
