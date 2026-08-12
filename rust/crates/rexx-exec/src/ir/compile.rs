@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use rexx_parse::{Call, CodeBody, Expr, ExprKind, Instruction, InstructionKind, SymbolId};
 
 use super::{Calls, Chunk, ChunkTooLarge, Hints, Op, PlanSlot};
-use crate::eval::{SymbolRead, is_arithmetic};
+use crate::eval::{SymbolRead, is_arithmetic, is_native_binary};
 use crate::plan::Plan;
 use crate::run::{HeaderPlan, if_targets, loop_header_plan, otherwise_range};
 use crate::trace::ChunkTrace;
@@ -806,7 +806,7 @@ fn native_shape(expr: &Expr) -> bool {
         | ExprKind::Stem(_)
         | ExprKind::Compound(_) => true,
         ExprKind::Binary { op, left, right } => {
-            is_arithmetic(*op) && native_shape(left) && native_shape(right)
+            is_native_binary(*op) && native_shape(left) && native_shape(right)
         }
         _ => false,
     }
@@ -821,8 +821,8 @@ fn native_shape(expr: &Expr) -> bool {
 /// owes. A bare symbol's value is in a frame slot, so it becomes a native
 /// [`Op::Load`] plus the `>V>` line that reading it owes. An arithmetic
 /// operator's value is computed from its two operands' registers, so it becomes
-/// their ops followed by [`Op::Arith`] plus the `>O>` line that applying it
-/// owes.
+/// their ops followed by [`Op::Arith`] or [`Op::Binary`] plus the `>O>` line
+/// that applying it owes.
 fn push_native<'a>(
     ops: &mut Vec<Op>,
     consts: &mut Constants<'a>,
@@ -869,12 +869,26 @@ fn push_native<'a>(
             let mark = registers.mark();
             let rhs = registers.alloc()?;
             push_native(ops, consts, registers, hints, plan, right, rhs)?;
-            ops.push(Op::Arith {
-                op: *op,
-                hint: hints.reserve()?,
-                lhs: dst,
-                rhs,
-                dst,
+            // **Only arithmetic takes a hint slot**, because only arithmetic
+            // has a second path for one to choose. `Chunk::hints` is dense over
+            // the ops that can specialise, so a slot reserved for an operator
+            // that never reads one would shift every later arithmetic site's
+            // index by one and hand it somebody else's decision.
+            ops.push(if is_arithmetic(*op) {
+                Op::Arith {
+                    op: *op,
+                    hint: hints.reserve()?,
+                    lhs: dst,
+                    rhs,
+                    dst,
+                }
+            } else {
+                Op::Binary {
+                    op: *op,
+                    lhs: dst,
+                    rhs,
+                    dst,
+                }
             });
             // Behind the operation rather than in front of it, because
             // `eval.rs` emits this line post-order, with the value in hand --
@@ -1216,12 +1230,13 @@ fn assert_read_echoes_follow_their_load(ops: &[Op]) {
     }
 }
 
-/// **Every [`Op::TraceOperator`] sits immediately behind the [`Op::Arith`] it
-/// echoes**, reading that op's destination register and repeating its operator.
+/// **Every [`Op::TraceOperator`] sits immediately behind the [`Op::Arith`] or
+/// [`Op::Binary`] it echoes**, reading that op's destination register and
+/// repeating its operator.
 ///
 /// [`assert_read_echoes_follow_their_load`]'s three failures in this op's own
 /// terms. The position is what puts the line where `eval.rs` puts it -- and a
-/// chain emits one `Arith`/`TraceOperator` pair per operator, so an echo one
+/// chain emits one operation/`TraceOperator` pair per operator, so an echo one
 /// place out prints the inner operator's line after the outer one's. The
 /// register is what makes it the right value, since a chain reuses `dst` for
 /// every operator in it. The operator is the tag: `>O>` names the operator that
@@ -1241,7 +1256,8 @@ fn assert_operator_echoes_follow_their_op(ops: &[Op]) {
             .is_some_and(|before| {
                 matches!(
                     before,
-                    Op::Arith { op: applied, dst, .. } if applied == echoed && dst == src
+                    Op::Arith { op: applied, dst, .. } | Op::Binary { op: applied, dst, .. }
+                        if applied == echoed && dst == src
                 )
             });
         assert!(
@@ -1309,6 +1325,7 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::Load { .. }
                 | Op::TraceRead { .. }
                 | Op::Arith { .. }
+                | Op::Binary { .. }
                 | Op::TraceOperator { .. }
                 | Op::Jump { .. }
                 | Op::JumpUnless { .. } => None,

@@ -489,70 +489,42 @@ impl Interp {
 
             ExprKind::Prefix { op, operand } => self.eval_prefix(code, *op, operand),
 
-            // Concatenation (D15's "Expression evaluation": `Abuttal`,
-            // `Blank`, `||`, over bytes). `Abuttal` and `||` join directly;
-            // `Blank` inserts exactly one space, regardless of how much
-            // whitespace separated the terms in source -- measured, `'a'
-            // 'b'` is `a b` whether one space or several sit between them
-            // in the original text, because the scanner has already
-            // collapsed that distinction into "this is a Blank operator"
-            // before the parser ever sees it.
-            ExprKind::Binary {
-                op: op @ (Operator::Concatenate | Operator::Abuttal | Operator::Blank),
-                left,
-                right,
-            } => {
-                let separator: &[u8] = if *op == Operator::Blank { b" " } else { b"" };
-                self.concat(code, left, right, separator)
-            }
-
             // Arithmetic (D15's "Expression evaluation": `+ - * / % // **`,
             // through `rexx-num` under the settings in force *now* -- the
             // rendering of the result is fixed at creation, D15's own rule,
             // but the DIGITS/FORM an operation computes *under* is always
-            // the activation's current ones, read fresh on every call.
+            // the activation's current ones, read fresh on every call. Ahead
+            // of the arm below, which is every *other* binary operator, so
+            // that arithmetic reaches `eval_arithmetic`: `**`'s exponent is
+            // not converted the way its base is, and that asymmetry has
+            // nowhere to live in a shared operand path.
             ExprKind::Binary { op, left, right } if is_arithmetic(*op) => {
                 self.eval_arithmetic(code, *op, left, right)
             }
 
-            // The twelve comparison operators (D15's "Expression
-            // evaluation": numeric-or-string `= \= <> >< > < >= <= \> \<`,
-            // and strict `== \== >> << >>= <<= \>> \<<`), all through
-            // `rexx-num`'s `compare_decoded` -- see `eval_compare`'s own
-            // doc comment for why no string comparison is written here.
-            ExprKind::Binary {
-                op:
-                    op @ (Operator::Equal
-                    | Operator::BackslashEqual
-                    | Operator::GreaterThan
-                    | Operator::BackslashGreaterThan
-                    | Operator::LessThan
-                    | Operator::BackslashLessThan
-                    | Operator::GreaterThanEqual
-                    | Operator::LessThanEqual
-                    | Operator::StrictEqual
-                    | Operator::StrictBackslashEqual
-                    | Operator::StrictGreaterThan
-                    | Operator::StrictBackslashGreaterThan
-                    | Operator::StrictLessThan
-                    | Operator::StrictBackslashLessThan
-                    | Operator::StrictGreaterThanEqual
-                    | Operator::StrictLessThanEqual
-                    | Operator::LessThanGreaterThan
-                    | Operator::GreaterThanLessThan),
-                left,
-                right,
-            } => self.eval_compare(code, *op, left, right),
-
-            // `&`/`|`/`&&`: always evaluate and check both operands, never
-            // short-circuited (measured, see `eval_logical`'s own doc
-            // comment) -- the opposite of `ExprKind::Logical`'s own rule
-            // just below.
-            ExprKind::Binary {
-                op: op @ (Operator::And | Operator::Or | Operator::Xor),
-                left,
-                right,
-            } => self.eval_logical(code, *op, left, right),
+            // Concatenation, the eighteen comparison operators and `&`/`|`/
+            // `&&` (D15's "Expression evaluation"), which share this operand
+            // prologue exactly: **both operands are always evaluated, left
+            // then right, and never short-circuited** -- measured, `say (0 &
+            // 'x')` raises 34.901 on `"x"` though the result is already
+            // decided. What each operator then does with two values is
+            // `apply_binary`, entered from here and from
+            // `crate::ir::Op::Binary`.
+            ExprKind::Binary { op, left, right }
+                if is_native_binary(*op) && !is_arithmetic(*op) =>
+            {
+                let frame = self.roots.push_frame();
+                let left_value = self.eval(code, left)?;
+                self.roots.push_temp(left_value);
+                let right_value = self.eval(code, right)?;
+                self.roots.push_temp(right_value);
+                // The result is unrooted from `apply_binary`'s return to
+                // whatever the caller of this does with it, and nothing
+                // between the two allocates.
+                let result = self.apply_binary(*op, left_value, right_value);
+                self.roots.pop_frame(frame);
+                result
+            }
 
             // The comma-separated conditional list (`IF a, b THEN`, and
             // `WHEN`/`GUARD`/`WHILE`/`UNTIL`'s own versions of the same
@@ -865,24 +837,27 @@ impl Interp {
     }
 
     /// The shared body of `||`/`Abuttal` (no separator) and `Blank` (one
-    /// space). Established here rather than retrofitted: a value held only
-    /// in a Rust local across an allocation is invisible to the collector,
-    /// so both operands are pushed to `RootSet` before the join, which
-    /// allocates, runs -- the same discipline the concatenation arm always
-    /// used, now shared by all three operators that need it.
-    fn concat(
+    /// space).
+    ///
+    /// `Blank` inserts exactly one space, regardless of how much whitespace
+    /// separated the terms in source -- measured, `'a'  'b'` is `a b` whether
+    /// one space or several sit between them in the original text, because the
+    /// scanner has already collapsed that distinction into "this is a Blank
+    /// operator" before the parser ever sees it. That is why the separator is a
+    /// caller's argument and not read off the source span.
+    ///
+    /// **Both operands must already be rooted by the caller**, because the join
+    /// below allocates and a value held only in a Rust local across an
+    /// allocation is invisible to the collector. [`Interp::arith_general`]'s
+    /// contract, for the same reason: `eval_node` pushes them as temps of the
+    /// frame it opened, and `crate::ir::Op::Binary` has them in registers,
+    /// which are roots of the region `Interp::run_chunk` reserved.
+    fn concat_values(
         &mut self,
-        code: &Code<'_>,
-        left: &Expr,
-        right: &Expr,
+        left_value: ObjRef,
+        right_value: ObjRef,
         separator: &[u8],
     ) -> Result<ObjRef, Failure> {
-        let frame = self.roots.push_frame();
-        let left_value = self.eval(code, left)?;
-        self.roots.push_temp(left_value);
-        let right_value = self.eval(code, right)?;
-        self.roots.push_temp(right_value);
-
         // Both operands' bytes are read through shared borrows, which can be
         // live at once -- and that is the whole change here. The left operand
         // used to be copied into an owned buffer for no reason except that
@@ -900,17 +875,19 @@ impl Interp {
         bytes.extend_from_slice(right_bytes);
         let joined = self.text_owned(bytes);
 
-        // `joined` is unrooted from here to the caller's own `push_temp`,
-        // and nothing between the two allocates.
-        self.roots.pop_frame(frame);
         Ok(joined)
     }
 
-    /// The twelve comparison operators, all through `rexx-num`'s
+    /// The eighteen comparison operators (D15's "Expression evaluation":
+    /// numeric-or-string `= \= <> >< > < >= <= \> \<`, and strict
+    /// `== \== >> << >>= <<= \>> \<<`), all through `rexx-num`'s
     /// `compare_decoded` -- **no string comparison is written here**, per
     /// the plan's own instruction and this crate's standing rule against a
     /// second copy of logic `rexx-num` already owns (the same rule
     /// `compare.rs`'s own module doc states for its three entry points).
+    ///
+    /// **Both operands must already be rooted by the caller**, for the reason
+    /// [`Interp::concat_values`] states: the result value below allocates.
     ///
     /// Calls `to_number` for the non-strict family only, and never for
     /// strict operators, which `compare_decoded` never even inspects a
@@ -923,19 +900,12 @@ impl Interp {
     /// already-parsed `Number` is what the plan's "do not quietly defeat
     /// the cache by using the `&str` entry point" is about, not a
     /// prohibition on calling `to_number` at all.
-    fn eval_compare(
+    fn compare_values(
         &mut self,
-        code: &Code<'_>,
         op: Operator,
-        left: &Expr,
-        right: &Expr,
+        left_value: ObjRef,
+        right_value: ObjRef,
     ) -> Result<ObjRef, Failure> {
-        let frame = self.roots.push_frame();
-        let left_value = self.eval(code, left)?;
-        self.roots.push_temp(left_value);
-        let right_value = self.eval(code, right)?;
-        self.roots.push_temp(right_value);
-
         // Every `&mut` read this comparison needs happens first -- the two
         // parses, and the two settings -- so that the byte reads below can be
         // shared borrows taken together. `to_number` hands back an owned
@@ -972,7 +942,6 @@ impl Interp {
         .map_err(Raised::from)?;
 
         let result = self.text(if holds { b"1" } else { b"0" });
-        self.roots.pop_frame(frame);
         Ok(result)
     }
 
@@ -982,22 +951,21 @@ impl Interp {
     /// both raise 34.901 on `"x"` even though the result is already
     /// decided by the first operand alone, and `say ('y' & 'x')` (both
     /// bad) reports `"y"`, the left operand's own text, not `"x"`. The
-    /// opposite rule from `ExprKind::Logical`'s comma list, just below,
-    /// which does short-circuit -- both are implemented exactly as
-    /// measured rather than made to agree with each other.
-    fn eval_logical(
+    /// opposite rule from `ExprKind::Logical`'s comma list, below, which
+    /// does short-circuit -- both are implemented exactly as measured rather
+    /// than made to agree with each other. The evaluation half of that rule
+    /// belongs to whoever calls this: the check half is here, and it checks
+    /// the operand it was handed second even when the first already decided
+    /// the answer.
+    ///
+    /// **Both operands must already be rooted by the caller**, for the reason
+    /// [`Interp::concat_values`] states: the result value below allocates.
+    fn logical_values(
         &mut self,
-        code: &Code<'_>,
         op: Operator,
-        left: &Expr,
-        right: &Expr,
+        left_value: ObjRef,
+        right_value: ObjRef,
     ) -> Result<ObjRef, Failure> {
-        let frame = self.roots.push_frame();
-        let left_value = self.eval(code, left)?;
-        self.roots.push_temp(left_value);
-        let right_value = self.eval(code, right)?;
-        self.roots.push_temp(right_value);
-
         let left_text = self.to_text(left_value).to_vec();
         let left_bool = logical_value(&left_text).ok_or_else(|| Raised::not_logical(&left_text))?;
         let right_text = self.to_text(right_value).to_vec();
@@ -1008,12 +976,41 @@ impl Interp {
             Operator::And => left_bool && right_bool,
             Operator::Or => left_bool || right_bool,
             Operator::Xor => left_bool != right_bool,
-            _ => unreachable!("eval_node only dispatches And/Or/Xor here"),
+            other => return Err(Loud::binary_operator(other).into()),
         };
 
         let result = self.text(if holds { b"1" } else { b"0" });
-        self.roots.pop_frame(frame);
         Ok(result)
+    }
+
+    /// `left op right` for every binary operator whose two operands are just
+    /// values by the time it runs -- concatenation, comparison and logical.
+    ///
+    /// **The one dispatch both engines enter**: `eval_node`'s own binary arm
+    /// evaluates the operands out of the tree and `crate::ir::Op::Binary` reads
+    /// them out of registers, and everything past that point is this function,
+    /// so the two cannot come to disagree about what an operator answers.
+    ///
+    /// Arithmetic is **not** here and keeps [`Interp::eval_arithmetic`]:
+    /// `**`'s exponent is not converted the way its base is, so it does not
+    /// share the operand handling the three families below do, and its
+    /// compiled site carries a quickening hint no other operator has.
+    ///
+    /// **Both operands must already be rooted by the caller**, for the reason
+    /// [`Interp::concat_values`] states.
+    pub(crate) fn apply_binary(
+        &mut self,
+        op: Operator,
+        left: ObjRef,
+        right: ObjRef,
+    ) -> Result<ObjRef, Failure> {
+        match op {
+            Operator::Concatenate | Operator::Abuttal => self.concat_values(left, right, b""),
+            Operator::Blank => self.concat_values(left, right, b" "),
+            op if is_comparison(op) => self.compare_values(op, left, right),
+            Operator::And | Operator::Or | Operator::Xor => self.logical_values(op, left, right),
+            op => Err(Loud::binary_operator(op).into()),
+        }
     }
 
     /// `ExprKind::Logical`: the comma-separated conditional list `IF a, b,
@@ -1249,7 +1246,7 @@ fn compare_op(op: Operator) -> CompareOp {
         StrictBackslashGreaterThan => CompareOp::StrictLessEqual,
         StrictBackslashLessThan => CompareOp::StrictGreaterEqual,
         other => unreachable!(
-            "eval_node only dispatches the eighteen comparison operators here, got {other:?}"
+            "apply_binary only dispatches the eighteen comparison operators here, got {other:?}"
         ),
     }
 }
@@ -1268,6 +1265,66 @@ pub(crate) fn is_arithmetic(op: Operator) -> bool {
         op,
         Plus | Subtract | Multiply | Divide | IntDiv | Remainder | Power
     )
+}
+
+/// Whether `op` is one of the three operators [`Interp::concat_values`] joins
+/// bytes for: `||`, the abuttal the parser synthesises between two adjacent
+/// terms, and the blank between two terms with whitespace in it.
+fn is_concatenation(op: Operator) -> bool {
+    use Operator::*;
+    matches!(op, Concatenate | Abuttal | Blank)
+}
+
+/// Whether `op` is one of the eighteen operators [`Interp::compare_values`]
+/// compares under, the ten numeric-or-string and the eight strict.
+///
+/// **The guard on `Interp::apply_binary`'s own comparison arm, and so the one
+/// enumeration of the set** -- `compare_op` translates each of these to a
+/// `rexx-num` `CompareOp`, and an operator in one list and not the other is a
+/// comparison that reaches the translation with nothing to translate to.
+fn is_comparison(op: Operator) -> bool {
+    use Operator::*;
+    matches!(
+        op,
+        Equal
+            | BackslashEqual
+            | GreaterThan
+            | BackslashGreaterThan
+            | LessThan
+            | BackslashLessThan
+            | GreaterThanEqual
+            | LessThanEqual
+            | StrictEqual
+            | StrictBackslashEqual
+            | StrictGreaterThan
+            | StrictBackslashGreaterThan
+            | StrictLessThan
+            | StrictBackslashLessThan
+            | StrictGreaterThanEqual
+            | StrictLessThanEqual
+            | LessThanGreaterThan
+            | GreaterThanLessThan
+    )
+}
+
+/// Whether `op` is one of the three operators [`Interp::logical_values`]
+/// computes.
+fn is_logical(op: Operator) -> bool {
+    use Operator::*;
+    matches!(op, And | Or | Xor)
+}
+
+/// Whether `op` has a native op of its own, which is what licenses
+/// `crate::ir::compile` compiling it to registers rather than leaving its
+/// whole expression to `crate::ir::Op::EvalExpr`.
+///
+/// **A positive enumeration of the four families rather than "everything but
+/// the prefix `\`"**, so that an operator added to `rexx_parse::Operator` is
+/// not promotable until somebody says it is: the compiler would otherwise emit
+/// an op for it, and the driver would reach `Interp::apply_binary` with no arm
+/// to answer from.
+pub(crate) fn is_native_binary(op: Operator) -> bool {
+    is_arithmetic(op) || is_concatenation(op) || is_comparison(op) || is_logical(op)
 }
 
 /// The bytes a call target names, and whether an internal label may answer it.
@@ -2208,6 +2265,24 @@ mod tests {
         program
     }
 
+    /// The engine both boundary tests below run their chain on, and the
+    /// choice is a statement about the subject rather than a convenience.
+    ///
+    /// `MAX_EVAL_DEPTH` is `eval`'s own counter. `crate::ir::compile` promotes
+    /// a chain of native operators to ops that reach the operator with its
+    /// operands already in registers, so on the compiled engine this program
+    /// never enters `eval` and there is no depth for the counter to count.
+    ///
+    /// **What that costs is stated rather than implied: the limit is the
+    /// tree-walker's, and the compiled engine runs a chain past it.**
+    /// Measured -- `say 'a'` followed by 100,000 `||''` is rc 245 on the
+    /// tree-walker and rc 0 on the compiled one, and `say 1` followed by
+    /// 100,000 `+0` was already that pair before any operator but arithmetic
+    /// was promoted.
+    fn depth_limited() -> crate::Invocation {
+        crate::Invocation::none().with_engine(crate::Engine::TreeWalker)
+    }
+
     /// **Why this goes through `run_program` and not a direct `eval` call.**
     /// The only sized stack in the workspace is inside `run_program`
     /// (`lib.rs`'s own `INTERPRETER_STACK_BYTES`); a `cargo test` thread's
@@ -2242,7 +2317,7 @@ mod tests {
         let outcome = crate::run_program(
             "depth-boundary-at.rex",
             chain(MAX_EVAL_DEPTH),
-            crate::Invocation::none(),
+            depth_limited(),
         );
         assert_eq!(
             outcome.exit_code,
@@ -2267,7 +2342,7 @@ mod tests {
         let outcome = crate::run_program(
             "depth-boundary-past.rex",
             chain(MAX_EVAL_DEPTH + 1),
-            crate::Invocation::none(),
+            depth_limited(),
         );
         assert_eq!(
             outcome.exit_code,

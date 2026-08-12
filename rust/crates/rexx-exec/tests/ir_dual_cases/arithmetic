@@ -23,8 +23,11 @@
 #
 # **Family**, which arithmetic alone cannot state. Every binary operator traces
 # `>O>` with its own spelling -- concatenation, comparison and logical too --
-# and only arithmetic is promoted, so these rows are what says the unpromoted
-# families still emit theirs from `eval.rs`.
+# and each family reaches that line by a different route through `eval.rs`, so
+# these rows are what says the four agree on the tag, the indent and the order
+# whichever route they took. The other three families' own rows are in
+# `operators` beside this file; what these add is the four together in one
+# clause stream.
 #
 # **What this file is worth was measured rather than assumed, and most of it is
 # not mutation-catching.** Eight mutations of the arithmetic path were each
@@ -233,10 +236,11 @@ err>        >>>   "3"
 err>      4 *-* say zc * 2
 err>        >>>   "6"
 
-# every other binary family under trace i. Only arithmetic is promoted, so
-# these `>O>` lines still come from `eval.rs` -- and they are the rows that say
-# so, because a promotion that moved the whole `Binary` node would print them
-# from an op instead and could get the tag or the indent wrong.
+# every other binary family under trace i, in one clause stream with the
+# arithmetic rows above: the tag each family prints, and the order an operator's
+# own line takes among its operands'. A promotion that moved one family's node
+# and not another's would print these from an op and could get the tag or the
+# indent wrong for the family it moved.
 program
 trace i
 za = 2

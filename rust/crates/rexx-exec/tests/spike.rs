@@ -259,6 +259,13 @@ fn a_loud_failure_message_does_not_grow_with_the_expression() {
 /// on the constant carries the dated row; this comment exists so `grep`
 /// for the figure finds it beside the test that produces it too, not only
 /// in a report a later reader may never open.
+///
+/// **On the tree-walker, because the frame this costs is `eval`'s.** The
+/// compiled engine promotes a chain of native operators to ops that reach the
+/// operator with its operands already in registers, so this program does not
+/// enter `eval` there at all and there is no frame to price; `eval::tests`'
+/// `depth_limited` (`src/eval.rs`) carries the measurement of what the two
+/// engines do with a chain this deep.
 #[test]
 fn records_the_stack_cost_of_one_eval_frame() {
     const TERMS: usize = 100_000;
@@ -269,7 +276,11 @@ fn records_the_stack_cost_of_one_eval_frame() {
     }
     program.push(b'\n');
 
-    let outcome = run_program(SPIKE_PATH, program, rexx_exec::Invocation::none());
+    let outcome = run_program(
+        SPIKE_PATH,
+        program,
+        rexx_exec::Invocation::none().with_engine(rexx_exec::Engine::TreeWalker),
+    );
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
         outcome.stdout, b"a\n",

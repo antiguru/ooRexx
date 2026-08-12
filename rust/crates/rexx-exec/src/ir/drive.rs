@@ -827,6 +827,47 @@ impl Interp {
                                     };
                                     self.roots.set_temp(registers, *dst as usize, value);
                                 }
+                                // **Every other binary operator**: one
+                                // concatenation, comparison or logical
+                                // operator applied to two registers, through
+                                // the same `Interp::apply_binary` that
+                                // `eval_node`'s own binary arm enters, with
+                                // `eval.rs` itself not entered at all -- for
+                                // the operands either, which is what the ops in
+                                // front of this one are. It emits nothing --
+                                // `Op::TraceOperator` below is what applying an
+                                // operator owes.
+                                Op::Binary { op, lhs, rhs, dst } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*lhs) && chunk.holds_register(*rhs),
+                                        "op reads registers {lhs}/{rhs} outside the region the \
+                                         chunk reserved"
+                                    );
+                                    debug_assert!(
+                                        chunk.holds_register(*dst),
+                                        "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    // **Both read before either is written**,
+                                    // which is what makes `lhs == dst` -- the
+                                    // shape a chain compiles to -- safe.
+                                    let left = self.roots.temp_at(registers, *lhs as usize);
+                                    let right = self.roots.temp_at(registers, *rhs as usize);
+                                    // The operands are rooted by the registers
+                                    // they came from, which is what
+                                    // `apply_binary` requires of a caller and
+                                    // is why no frame is pushed here where
+                                    // `eval_node`'s own arm pushes one: it has
+                                    // to root values held in Rust locals across
+                                    // the evaluation of the operand after them,
+                                    // and this op's operands were rooted before
+                                    // it ran.
+                                    let value = match self.apply_binary(*op, left, right) {
+                                        Ok(value) => value,
+                                        Err(failure) => break 'region Err(failure),
+                                    };
+                                    self.roots.set_temp(registers, *dst as usize, value);
+                                }
                                 // The `>O>` line one operator owes. **Its own
                                 // op**, because the operation emits nothing and
                                 // `eval.rs` emits this as a side effect of
@@ -1184,6 +1225,7 @@ impl Interp {
                 Op::Load { .. } => return Err(Loud::op_not_driven("Load").into()),
                 Op::TraceRead { .. } => return Err(Loud::op_not_driven("TraceRead").into()),
                 Op::Arith { .. } => return Err(Loud::op_not_driven("Arith").into()),
+                Op::Binary { .. } => return Err(Loud::op_not_driven("Binary").into()),
                 Op::TraceOperator { .. } => {
                     return Err(Loud::op_not_driven("TraceOperator").into());
                 }

@@ -1,0 +1,328 @@
+# What promoting a concatenation, a comparison or a logical operator has to
+# keep, in four kinds.
+#
+# **Shapes**, which ask what the operator answers: all three concatenation
+# spellings, both comparison families, all three logical operators, and an
+# operand that is itself an operator.
+#
+# **Settings**, which is where a comparison reads state a concatenation does
+# not. `NUMERIC DIGITS` rounds the operands before they are compared, so
+# narrowing it makes two different numbers equal; `NUMERIC FUZZ` widens that
+# further by subtracting from the working precision. A strict comparison reads
+# neither -- it compares bytes -- and the rows put the two side by side under
+# the same settings so that one row says which family read what.
+#
+# **Failure**, which for these operators is nearly all in the operands.
+# Concatenation renders both operands and cannot itself raise; a comparison
+# falls back to a string compare rather than failing when an operand will not
+# convert. The one raise an operator here makes of its own is the logical
+# family's 34.901, and its rows pin both halves of the measured rule: **both
+# operands are checked even when the first has already decided the answer**,
+# and when both are bad it is the **left** operand's text that is reported.
+#
+# **Trace**, which is where a native op diverges first and where no other
+# instrument in this crate can see it. `eval.rs` emits a binary operator's
+# `>O>` line as a side effect of evaluating it; an op that only computes into
+# a register emits nothing, and every line after the missing one still matches
+# -- so only an exact stderr comparison catches it. Both directions are here:
+# a `trace i` row requires the lines, and a `trace r` row requires their
+# absence. The `trace i` row carries the abuttal, whose tag is the empty
+# string, and the blank, whose tag is one space -- two tags an implementation
+# reading a spelling off the source span would get wrong and no other row can
+# see.
+#
+# **What this file is worth was measured rather than assumed, and it is not
+# mutation-catching.** Three mutations of the promoted path were each re-run
+# with this file moved out of the directory, and every one was caught anyway:
+# dropping the `>O>` echo behind the new op reddens `calls`, whose own row
+# holds a blank operator; checking a logical operator's right operand before
+# its left reddens a unit test written for that rule; and a comparison that
+# ignores `NUMERIC FUZZ` reddens another.
+#
+# **So the reason to keep these rows is that they pin oracle bytes, which is
+# something an engine-against-engine comparison structurally cannot do**: both
+# arms of that comparison are this crate, so a shared path that is wrong the
+# same way twice passes it, and a unit test says what this crate should print
+# rather than what the C++ interpreter does.
+#
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every row
+# was measured to produce the identical bytes on both engines before these
+# operators were promoted as well as after -- which is what says a row can
+# tell whether it would ever have failed. Regenerate a row by running its
+# program under the oracle, never with REWRITE=1 -- ir_dual.rs refuses to run
+# at all under REWRITE for that reason. Capture is:
+#
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+#
+# run from a fresh empty directory: the scratchpad is on the oracle's
+# external-routine search path and a program calling an unresolved name finds
+# a stale file there and runs it.
+#
+# Expected lines are tagged so that no line of the block can be empty: an empty
+# line ends an expected block, and a program's own output may hold one.
+# Trailing blanks are part of what is compared.
+
+# all three concatenation spellings, over the same two operands: `||`, the
+# abuttal between two terms with nothing between them, and the blank between
+# two terms with whitespace. **The blank inserts exactly one space however much
+# whitespace separated the terms** -- the fourth and fifth rows are the same
+# expression under one space and under four, and they answer identically,
+# because the scanner has collapsed that distinction before the parser sees it.
+# The last rows chain the three spellings, which is what makes one join's
+# result the next one's operand register.
+program
+za = 'p'
+zb = 'q'
+say za || zb
+say za'r'
+say za zb
+say za    zb
+say 'a' || za || zb
+say za || zb 'r'
+say za'r'zb
+----
+rc> 0
+out> pq
+out> pr
+out> p q
+out> p q
+out> apq
+out> pq r
+out> prq
+
+# the two comparison families over the same operands. The non-strict one
+# compares numerically when both sides convert (`'1' = '1.0'`) and drops to a
+# string compare when either does not (`'ABC' < 'abd'`); the strict one
+# compares bytes always, so it separates `1` from `1.0` and keeps the blank in
+# `' 1'` that the numeric compare ignores.
+program
+za = '1'
+zb = '1.0'
+say za = zb
+say za == zb
+say ' 1' = 1
+say ' 1' == 1
+say 'ABC' < 'abd'
+say 'ABC' >> 'abd'
+say za \= zb
+say za \== zb
+say 2 <> 3
+say 2 >< 2
+----
+rc> 0
+out> 1
+out> 0
+out> 1
+out> 0
+out> 1
+out> 0
+out> 0
+out> 1
+out> 1
+out> 0
+
+# NUMERIC DIGITS narrowed, which a comparison reads and a concatenation does
+# not: the operands are rounded to the precision before they are compared, so
+# at DIGITS 4 `1.0001` and `1` are equal and at DIGITS 9 they are not. The
+# strict row under the same setting is the control -- `==` compares bytes and
+# the setting cannot move it.
+program
+numeric digits 4
+say 1.0001 = 1
+say 1.001 = 1
+say 1.0001 == 1
+numeric digits 9
+say 1.0001 = 1
+----
+rc> 0
+out> 1
+out> 0
+out> 0
+out> 0
+
+# NUMERIC FUZZ, the other setting a comparison reads: it subtracts from the
+# precision the comparison works at, so at FUZZ 3 two numbers differing in the
+# seventh digit compare equal and two differing in the fourth do not. The last
+# row puts FUZZ back to zero at the same site, so one row says the setting is
+# read when the comparison runs rather than when the clause was compiled.
+program
+numeric fuzz 3
+say 1000000 = 1000001
+say 1000000 == 1000001
+say 1000000 = 1000100
+numeric fuzz 0
+say 1000000 = 1000001
+----
+rc> 0
+out> 1
+out> 0
+out> 0
+out> 0
+
+# the three logical operators over every combination of two logical operands.
+# `&&` is exclusive-or, which is what separates it from `|` in the fourth and
+# seventh rows.
+program
+say 1 & 1
+say 1 & 0
+say 0 & 1
+say 1 | 0
+say 0 | 0
+say 1 && 1
+say 1 && 0
+say 0 && 0
+----
+rc> 0
+out> 1
+out> 0
+out> 0
+out> 1
+out> 0
+out> 0
+out> 1
+out> 0
+
+# **both operands are checked even when the first has already decided the
+# answer**: `0 & 'x'` is false whatever the right operand is, and the oracle
+# raises 34.901 on `"x"` all the same. An implementation that short-circuited
+# would print `0` here.
+program
+say (0 & 'x')
+----
+rc> 222
+err>      1 *-* say (0 & 'x')
+err> Error 34 running /nonexistent/ir-dual-case.rex line 1:  Logical value not 0 or 1.
+err> Error 34.901:  Logical value must be exactly "0" or "1"; found "x".
+
+# both operands bad, where the substitution says which one was checked first:
+# the report names `"y"`, the **left** operand's own text.
+program
+say ('y' & 'x')
+----
+rc> 222
+err>      1 *-* say ('y' & 'x')
+err> Error 34 running /nonexistent/ir-dual-case.rex line 1:  Logical value not 0 or 1.
+err> Error 34.901:  Logical value must be exactly "0" or "1"; found "y".
+
+# a failure reached through each family, trapped, so that one row says which
+# clause SIGL lands on for each. Concatenation and comparison have no raise of
+# their own -- a concatenation renders whatever it is given and a comparison
+# falls back to a string compare -- so what fails inside them is an operand,
+# and the clause the condition is reported against is the whole `SAY`'s. The
+# logical row is the operator's own 34.901 beside them.
+program
+signal on syntax name z1
+say (1/0) = 1
+z1:
+say 'compare' rc 'at' sigl
+signal on syntax name z2
+say 'a' || (1/0)
+z2:
+say 'concat' rc 'at' sigl
+signal on syntax name z3
+say ('y' & 'x')
+z3:
+say 'logical' rc 'at' sigl
+----
+rc> 0
+out> compare 42 at 2
+out> concat 42 at 6
+out> logical 34 at 10
+
+# an operand that is itself an operator, which is what puts an intermediate in
+# a compiled operand register rather than a read. Precedence decides which is
+# the inner one: concatenation binds tighter than comparison, so the third and
+# fourth rows agree without the parentheses mattering.
+program
+za = 'p'
+zb = 'q'
+say (za || zb) = 'pq'
+say za || zb = 'pq'
+say 1 = 1 & 2 = 2
+say ('a' 'b') || ('c' 'd')
+say (za = 'p') && (zb = 'q')
+say za || zb || za zb
+----
+rc> 0
+out> 1
+out> 1
+out> 1
+out> a bc d
+out> 0
+out> pqp q
+
+# trace i: the `>O>` line each operator's result owes, after both operands' own
+# lines and in the order the operators are applied -- the inner `>` and `<`
+# before the outer `&`. The tags are the operators' own spellings, including
+# the abuttal's empty string and the blank's single space.
+program
+trace i
+za = 2
+zb = 'q'
+zc = za || zb
+say zc = '2q'
+say za'r'
+say za zb
+say za > 1 & za < 9
+----
+rc> 0
+out> 1
+out> 2r
+out> 2 q
+out> 1
+err>      2 *-* za = 2
+err>        >L>   "2"
+err>        >>>   "2"
+err>        >=>   ZA <= "2"
+err>      3 *-* zb = 'q'
+err>        >L>   "q"
+err>        >>>   "q"
+err>        >=>   ZB <= "q"
+err>      4 *-* zc = za || zb
+err>        >V>   ZA => "2"
+err>        >V>   ZB => "q"
+err>        >O>   "||" => "2q"
+err>        >>>   "2q"
+err>        >=>   ZC <= "2q"
+err>      5 *-* say zc = '2q'
+err>        >V>   ZC => "2q"
+err>        >L>   "2q"
+err>        >O>   "=" => "1"
+err>        >>>   "1"
+err>      6 *-* say za'r'
+err>        >V>   ZA => "2"
+err>        >L>   "r"
+err>        >O>   "" => "2r"
+err>        >>>   "2r"
+err>      7 *-* say za zb
+err>        >V>   ZA => "2"
+err>        >V>   ZB => "q"
+err>        >O>   " " => "2 q"
+err>        >>>   "2 q"
+err>      8 *-* say za > 1 & za < 9
+err>        >V>   ZA => "2"
+err>        >L>   "1"
+err>        >O>   ">" => "1"
+err>        >V>   ZA => "2"
+err>        >L>   "9"
+err>        >O>   "<" => "1"
+err>        >O>   "&" => "1"
+err>        >>>   "1"
+
+# trace r: the other direction. An emission that ignored its own gate would
+# print a `>O>` line here, where the setting asks for results alone.
+program
+trace r
+za = 2
+zc = za || 'x'
+say zc = '2x'
+----
+rc> 0
+out> 1
+err>      2 *-* za = 2
+err>        >>>   "2"
+err>      3 *-* zc = za || 'x'
+err>        >>>   "2x"
+err>      4 *-* say zc = '2x'
+err>        >>>   "1"

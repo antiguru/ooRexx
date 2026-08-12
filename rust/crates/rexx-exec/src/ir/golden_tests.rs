@@ -474,21 +474,30 @@ fn an_operand_that_needs_eval_leaves_the_whole_expression_general() {
     );
 }
 
-/// **Only the seven arithmetic operators promote**, and the other binary
-/// families stay on [`super::Op::EvalExpr`] entire.
+/// **The value shapes that still do not promote**, which stay on
+/// [`super::Op::EvalExpr`] entire however ordinary the rest of the expression
+/// around them is.
 ///
-/// `eval::is_arithmetic` is the one enumeration of the set, asked by
-/// `eval_node`'s own dispatch and by the compiler, so this is what says the
-/// compiler is asking it rather than repeating it. A concatenation or a
-/// comparison run through `Interp::arith_general` would be a 41.1 where the
-/// oracle prints a string.
+/// `eval::is_native_binary` is the one enumeration of the promotable operator
+/// set, asked by `eval_node`'s own dispatch and by the compiler, so what this
+/// pins is the other side of it: a term with no native op keeps its whole
+/// expression general, and widening the operator set does not widen the term
+/// set with it. A `.NIL` read through `Op::Load` would name a frame slot no
+/// environment symbol has.
+///
+/// `ExprKind::Logical`, the comma list, is out of the native set too and is
+/// not a row here: it appears only in a condition, and a condition is compiled
+/// to `Op::EvalExpr` whatever its shape, so a row for it would pass under
+/// every implementation of this function's subject.
 #[test]
-fn only_the_arithmetic_operators_promote() {
+fn the_value_shapes_outside_the_native_set_stay_general() {
     for source in [
-        &b"zw = za || zb\n"[..],
-        &b"zw = za = zb\n"[..],
-        &b"zw = za & zb\n"[..],
-        &b"zw = za zb\n"[..],
+        // An environment symbol, which traces `>E>` rather than `>V>`.
+        &b"zw = .nil\n"[..],
+        &b"zw = .nil || za\n"[..],
+        // `>name` in a value position, which is a node of its own around the
+        // read rather than the read.
+        &b"zw = >za\n"[..],
     ] {
         let chunk = compile_for_test(source).expect("compiles");
         assert_eq!(
@@ -496,18 +505,66 @@ fn only_the_arithmetic_operators_promote() {
             "0: Clause index=0 end=3\n\
              1: EvalExpr index=0 slot=0 dst=0\n\
              2: Store index=0 at=0 src=0\n",
-            "{} promoted an operator that is not arithmetic",
+            "{} promoted a value shape outside the native set",
             String::from_utf8_lossy(source)
         );
     }
 
-    // The adjacent success: the same two operands under an operator that *is*
-    // arithmetic do promote, so the rows above are about the operator rather
-    // than about the operands.
-    let promoted = compile_for_test(b"zw = za - zb\n").expect("compiles");
+    // The adjacent success: the same concatenation with the environment symbol
+    // replaced by an ordinary variable does promote, so the row above is about
+    // the term rather than about the operator holding it.
+    let promoted = compile_for_test(b"zw = zv || za\n").expect("compiles");
     assert!(
-        render(&promoted).contains("Arith op=-"),
-        "the same operands under an arithmetic operator did not promote either"
+        render(&promoted).contains("Binary op=||"),
+        "the same shape without the environment symbol did not promote either\n{}",
+        render(&promoted)
+    );
+}
+
+/// A concatenation, a comparison and a logical operator each compile to
+/// `Op::Binary`, and arithmetic still compiles to `Op::Arith`.
+///
+/// **The pair is the test.** Either half alone is satisfied by a compiler
+/// that emits one op for every operator; together they pin the split, which
+/// is that only arithmetic carries a quickening hint.
+#[test]
+fn every_binary_operator_but_arithmetic_compiles_to_one_op() {
+    // One operator per family, over the same two operands, so the streams
+    // differ in the operator alone.
+    for (source, spelling) in [
+        (&b"za = zb || zc\n"[..], "||"),
+        (&b"za = zb = zc\n"[..], "="),
+        (&b"za = zb & zc\n"[..], "&"),
+    ] {
+        let chunk = compile_for_test(source).expect("compiles");
+        assert_eq!(
+            render(&chunk),
+            format!(
+                "0: Clause index=0 end=8\n\
+                 1: Load read=Simple at=1 dst=0\n\
+                 2: TraceRead read=Simple src=0\n\
+                 3: Load read=Simple at=2 dst=1\n\
+                 4: TraceRead read=Simple src=1\n\
+                 5: Binary op={spelling} lhs=0 rhs=1 dst=0\n\
+                 6: TraceOperator op={spelling} src=0\n\
+                 7: Store index=0 at=0 src=0\n"
+            ),
+            "{} did not compile to one Binary op",
+            String::from_utf8_lossy(source)
+        );
+    }
+
+    let chunk = compile_for_test(b"za = zb + zc\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=8\n\
+         1: Load read=Simple at=1 dst=0\n\
+         2: TraceRead read=Simple src=0\n\
+         3: Load read=Simple at=2 dst=1\n\
+         4: TraceRead read=Simple src=1\n\
+         5: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
+         6: TraceOperator op=+ src=0\n\
+         7: Store index=0 at=0 src=0\n"
     );
 }
 

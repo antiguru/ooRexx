@@ -42,8 +42,8 @@
 //! `compile` would move with the code it is checking and could never redden.
 //! The price is that the two can drift, and the drift is loud in both
 //! directions: an operator dropped from the promoted set leaves an
-//! `Op::EvalExpr` where an `Op::Arith` is expected, and one added leaves an
-//! `Op::Arith` where an `Op::EvalExpr` is expected. Either reddens and names
+//! `Op::EvalExpr` where a computing op is expected, and one added leaves a
+//! computing op where an `Op::EvalExpr` is expected. Either reddens and names
 //! the program.
 //!
 //! **What this catches that the rest of the suite does not, measured rather
@@ -91,6 +91,7 @@ enum Root {
     LoadConstant,
     Load,
     Arith,
+    Binary,
     CallExpr,
     EvalExpr,
 }
@@ -107,6 +108,7 @@ impl Root {
             Op::LoadConstant { .. } => Some(Root::LoadConstant),
             Op::Load { .. } => Some(Root::Load),
             Op::Arith { .. } => Some(Root::Arith),
+            Op::Binary { .. } => Some(Root::Binary),
             Op::EvalExpr { .. } => Some(Root::EvalExpr),
             Op::CallExpr { .. } => Some(Root::CallExpr),
             Op::Generic { .. }
@@ -165,10 +167,10 @@ fn promoted_as(kind: &InstructionKind, index: usize, listed: &[usize]) -> Option
 /// in.
 ///
 /// A restatement of `native_shape` followed by `push_native`, over the parse
-/// tree alone. The seven arithmetic operators are spelled out rather than
-/// asked of `eval::is_arithmetic`, which is what `compile` asks: an
-/// expectation computed by the code under test is an expectation that agrees
-/// with it whatever it does.
+/// tree alone. Every operator is spelled out below rather than asked of
+/// `eval::is_arithmetic` or `eval::is_native_binary`, which is what `compile`
+/// asks: an expectation computed by the code under test is an expectation that
+/// agrees with it whatever it does.
 fn root_of(expr: &Expr) -> Root {
     match &expr.kind {
         // A call at the root, and only at the root: `push_value` decides this
@@ -178,10 +180,14 @@ fn root_of(expr: &Expr) -> Root {
         ExprKind::Literal(_) => Root::Const,
         ExprKind::Constant(_) => Root::LoadConstant,
         ExprKind::Variable(_) | ExprKind::Stem(_) | ExprKind::Compound(_) => Root::Load,
-        ExprKind::Binary { op, left, right }
-            if arithmetic(*op) && native(left) && native(right) =>
-        {
-            Root::Arith
+        ExprKind::Binary { op, left, right } if native(left) && native(right) => {
+            if arithmetic(*op) {
+                Root::Arith
+            } else if other_family(*op) {
+                Root::Binary
+            } else {
+                Root::EvalExpr
+            }
         }
         _ => Root::EvalExpr,
     }
@@ -196,7 +202,9 @@ fn native(expr: &Expr) -> bool {
         | ExprKind::Variable(_)
         | ExprKind::Stem(_)
         | ExprKind::Compound(_) => true,
-        ExprKind::Binary { op, left, right } => arithmetic(*op) && native(left) && native(right),
+        ExprKind::Binary { op, left, right } => {
+            (arithmetic(*op) || other_family(*op)) && native(left) && native(right)
+        }
         _ => false,
     }
 }
@@ -213,6 +221,44 @@ fn arithmetic(op: Operator) -> bool {
             | Operator::IntDiv
             | Operator::Remainder
             | Operator::Power
+    )
+}
+
+/// The operators `Interp::apply_binary` computes -- concatenation, comparison
+/// and logical -- as this file's own statement of that set, spelled out for
+/// the reason [`arithmetic`] is.
+///
+/// The prefix `\` is deliberately in neither list: the parser builds an
+/// `ExprKind::Prefix` from it, so no expression this walks can hold one as a
+/// binary operator, and a row for it here would be an expectation about a tree
+/// shape the corpus cannot contain.
+fn other_family(op: Operator) -> bool {
+    matches!(
+        op,
+        Operator::Concatenate
+            | Operator::Abuttal
+            | Operator::Blank
+            | Operator::Equal
+            | Operator::BackslashEqual
+            | Operator::GreaterThan
+            | Operator::BackslashGreaterThan
+            | Operator::LessThan
+            | Operator::BackslashLessThan
+            | Operator::GreaterThanEqual
+            | Operator::LessThanEqual
+            | Operator::StrictEqual
+            | Operator::StrictBackslashEqual
+            | Operator::StrictGreaterThan
+            | Operator::StrictBackslashGreaterThan
+            | Operator::StrictLessThan
+            | Operator::StrictBackslashLessThan
+            | Operator::StrictGreaterThanEqual
+            | Operator::StrictLessThanEqual
+            | Operator::LessThanGreaterThan
+            | Operator::GreaterThanLessThan
+            | Operator::And
+            | Operator::Or
+            | Operator::Xor
     )
 }
 
@@ -471,6 +517,7 @@ fn every_corpus_body_compiles_the_minimum_promotion_set_to_its_own_ops() {
         Root::LoadConstant,
         Root::Load,
         Root::Arith,
+        Root::Binary,
         Root::EvalExpr,
     ] {
         assert!(

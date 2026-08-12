@@ -38,8 +38,8 @@
 
 use rexx_core::{Heap, ObjRef, RootSet, SlotRef};
 use rexx_parse::{
-    AnnotationTarget, CodeBody, Directive, DirectiveKind, ExprKind, InstructionKind, PrefixOp,
-    Program, SymbolId, SymbolTable, parse_program,
+    AnnotationTarget, CodeBody, Directive, DirectiveKind, ExprKind, InstructionKind, Operator,
+    PrefixOp, Program, SymbolId, SymbolTable, parse_program,
 };
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -555,6 +555,32 @@ impl Loud {
     fn expression(kind: &ExprKind) -> Loud {
         Loud {
             message: owned_message(&form_name(kind), expr_owner(kind)),
+        }
+    }
+
+    /// A binary operator that no family of `Interp::apply_binary` claims -- an
+    /// internal inconsistency, never a program error.
+    ///
+    /// `Operator::Backslash` is the operator this is about: it is the prefix
+    /// `\` token, and the parser builds an `ExprKind::Prefix` from it rather
+    /// than an `ExprKind::Binary`, so no program reaches this by writing one.
+    /// An operator added to `rexx_parse::Operator` and left out of
+    /// `eval::is_native_binary` would reach it too.
+    ///
+    /// Loud rather than an `unreachable!` for the reason [`Loud::instruction`]'s
+    /// own doc gives: a guarantee the parser makes is not one the type system
+    /// enforces, and an abort is precisely the outcome the failing-loudly rule
+    /// exists to exclude.
+    ///
+    /// The variant's own name rather than its spelling, because
+    /// `Operator::Abuttal`'s spelling is the empty string and a message naming
+    /// it would name nothing. `Operator`'s derived `Debug` is one word with no
+    /// tree behind it, unlike [`Loud::expression`]'s subject.
+    ///
+    /// [`Loud::instruction`]: Loud::instruction
+    fn binary_operator(op: Operator) -> Loud {
+        Loud {
+            message: format!("binary operator {op:?} has no implementation"),
         }
     }
 
@@ -3169,6 +3195,13 @@ mod tests {
     /// The assertion is equality of the two spans rather than a bound on either,
     /// because the property is "the span does not depend on what else ran" and a
     /// bound would pass for both the fixed and the broken version.
+    ///
+    /// **On the tree-walker, because the recursion this measures is `eval`'s.**
+    /// `ir::compile` promotes a chain of native operators to ops that reach the
+    /// operator with its operands in registers, so on the compiled engine this
+    /// chain does not enter `eval` at all and both spans would be the depth of
+    /// nothing -- equal, and equal for the wrong reason. `eval::tests`'
+    /// `depth_limited` carries the measurement behind that.
     #[test]
     fn the_stack_span_does_not_depend_on_what_else_the_program_evaluated() {
         let mut alone = b"say 'a'".to_vec();
@@ -3180,8 +3213,9 @@ mod tests {
         let mut then_a_fragment = alone.clone();
         then_a_fragment.extend_from_slice(b"interpret \"say 'b'\"\n");
 
-        let alone = run_program(TEST_PATH, alone, crate::Invocation::none());
-        let then_a_fragment = run_program(TEST_PATH, then_a_fragment, crate::Invocation::none());
+        let on_eval = || crate::Invocation::none().with_engine(crate::Engine::TreeWalker);
+        let alone = run_program(TEST_PATH, alone, on_eval());
+        let then_a_fragment = run_program(TEST_PATH, then_a_fragment, on_eval());
 
         assert_eq!(alone.exit_code, 0, "stderr: {:?}", alone.stderr);
         assert_eq!(

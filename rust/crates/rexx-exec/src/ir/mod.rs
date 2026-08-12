@@ -508,9 +508,49 @@ pub(crate) enum Op {
         rhs: u16,
         dst: u16,
     },
+    /// Computes `lhs op rhs` into register `dst`, for the concatenation,
+    /// comparison and logical operators -- every operator `eval::
+    /// is_native_binary` names and `eval::is_arithmetic` does not.
+    ///
+    /// **Native in the sense [`Op::Const`] and [`Op::Load`] are: `eval.rs` is
+    /// not entered, and neither is it for the operands**, on [`Op::Arith`]'s
+    /// own terms and under the same whole-expression decision.
+    ///
+    /// The operator itself is `Interp::apply_binary`, entered from here and
+    /// from `eval_node`'s own binary arm, so the join `Blank` puts one space
+    /// in, the comparison settings a strict operator never reads, the 34.901 a
+    /// non-logical operand raises and the substitution it carries are one
+    /// implementation rather than a second one beside it.
+    ///
+    /// **What this op does not have is [`Op::Arith`]'s hint, and that is the
+    /// whole of the difference between the two.** Arithmetic has two paths to
+    /// choose between and these operators have one, so there is nothing here
+    /// for a per-site decision to decide. [`Chunk::hints`] is dense over the
+    /// ops that *can* specialise: a slot reserved for this op and never read
+    /// would shift every later arithmetic site's own index by one, which is a
+    /// wrong answer rather than a wasted word.
+    ///
+    /// **`lhs` may be `dst`, and usually is**, for [`Op::Arith`]'s reason and
+    /// with the same guarantee behind it: both sources are read before the
+    /// destination is written.
+    ///
+    /// **It emits nothing, and [`Op::TraceOperator`] is why that is safe** --
+    /// [`Op::Const`]'s own doc comment has the mechanism, and `>O>` is the
+    /// line this op's evaluation used to emit as a side effect.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, whose clause owns the
+    /// value indent the line after this one traces at, and the failure site a
+    /// 34.901 raised here is reported against.
+    Binary {
+        op: Operator,
+        lhs: u16,
+        rhs: u16,
+        dst: u16,
+    },
     /// Echoes the `>O>` line of the operator result in register `src`.
     ///
-    /// **A separate op from the [`Op::Arith`] that computed it**, for the
+    /// **A separate op from the [`Op::Arith`] or [`Op::Binary`] that computed
+    /// it**, for the
     /// reason [`Op::TraceLiteral`] is separate from [`Op::Const`]: the
     /// computation emits nothing, `eval.rs` emits this line as a side effect of
     /// *evaluating* a binary node, and a promoted clause with no such op drops
@@ -519,14 +559,14 @@ pub(crate) enum Op {
     /// answers to is `trace_mode().intermediates`, which [`ChunkTrace`] does
     /// not carry.
     ///
-    /// `op` is repeated here rather than read off the `Arith` behind it,
+    /// `op` is repeated here rather than read off the operation behind it,
     /// because the tag is the operator's own spelling and an echo carrying a
     /// different one lands in the right place with the wrong tag in it.
     /// `compile::assert_operator_echoes_follow_their_op` is what checks the
     /// position, the register and the operator rather than assuming them.
     ///
     /// **Only valid inside a [`Op::Clause`] region**, and immediately behind
-    /// the `Arith` whose register it reads: `eval.rs` emits this post-order,
+    /// the operation whose register it reads: `eval.rs` emits this post-order,
     /// with the value in hand, so an inner operator's line precedes the outer
     /// one's exactly as the ops do.
     TraceOperator { op: Operator, src: u16 },
