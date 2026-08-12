@@ -2631,3 +2631,78 @@ The round counts are how many of nine rounds the later arm was *faster*, so `0/9
 
 Moritz accepted the movement on 2026-08-12.
 **The variant count is now a measured cost rather than an aesthetic one**, which turns merging op variants into an optimisation candidate with a number attached: `Op::Arith` folding into `Op::Binary` with the hint field, or the trace ops collapsing into one carrying a tag. Measured against exactly these axes, with the control this entry says is missing.
+
+### Entry 26 -- what the intermediate echo ops cost when nothing is traced, and a control span that is wider than the effect on every axis it was measured against
+
+A price probe, not a candidate patch, and **nothing from it was merged**.
+Base `0459167cc8c513eda448b5bb3a66cb0fdd64a836`.
+Measured by a subagent in a detached worktree on 2026-08-12/13; the full report is at `.superpowers/sdd/2026-08-12-condition-promotion/echo-op-price.md`, which is git-ignored, so the numbers below are the record of it.
+**Not reproduced by a second party.** The arms, the byte-identity checks and the round counts are that agent's; what is quoted here is quoted with that provenance.
+
+#### The question
+
+`Op::TraceClause`, the clause echo, is emitted only when the chunk's compile-time trace setting echoes -- `echoes()` and `push_echo()` decide it.
+The *intermediate* echoes are not: `push_native` pushes `Op::TraceLiteral` behind every literal and constant symbol, `Op::TraceRead` behind every symbol read, `Op::TraceOperator` behind every binary operator, `Op::TracePrefix` behind every prefix operator and `Op::TraceFunction` behind every call, unconditionally.
+So a promoted expression carries about one echo op per leaf and per operator, and each is a dispatch, a register read and a call that asks whether intermediates are traced and returns.
+
+**Why unconditional is the current answer**: the ops being present is what lets a `TRACE I` executed mid-run start printing without recompiling the chunk.
+A build that omits them is wrong in general, which is why this is a probe.
+
+#### Four arms, not three
+
+* **A** -- head.
+* **B** -- gated at emission, the trace setting threaded into `push_native`/`push_value`/`push_read`.
+* **C** -- B's plumbing exactly, flag forced so every echo op is still emitted.
+* **D** -- the same again, forced the other way round.
+
+The fourth arm was the measuring agent's own decision, taken after A-vs-C came out the same size as B-vs-C.
+B, C and D differ in one line.
+
+#### Wall clock, twenty interleaved rounds, order rotated, idle gate 90.4% to 94.8%
+
+| axis | B vs C | B faster | A vs C (control) | A faster | C vs D | A vs D |
+|---|---:|---|---:|---|---:|---:|
+| `rexxcps` | -0.44% | 14/20 | -0.60% | 16/20 | -0.28% | -0.87% |
+| `arith` | -8.03% | 20/20 | **-8.29%** | 20/20 | +3.48% | -5.10% |
+| `varlookup` | -7.25% | 20/20 | -4.32% | 20/20 | +0.19% | -4.14% |
+| `strings` | -1.76% | 19/20 | -3.48% | 20/20 | +0.72% | -2.78% |
+| `alloc4c` | -1.92% | 18/20 | -0.28% | 13/20 | -0.93% | -1.21% |
+
+**The control movement is the result.**
+On `arith` the three identical-behaviour arms span 9.04%, and head beats its own control 20/20 in the same direction and with the same unanimity as the "improvement".
+B lands inside the A/C/D band on `rexxcps`, `arith` and `strings`.
+It is outside on `varlookup` (-3.06% against the fastest identical build, 20/20) and `alloc4c` (-1.65%, 18/20), both under the resolution floor.
+A separate sixteen-round three-arm sitting replicated all of it.
+
+#### Instructions, which the layout does not reach
+
+`perf stat`. C and D agree to 0.00% and the run-to-run spread is at or below 0.09%, so this instrument sees the op stream rather than where it landed.
+
+| axis | B vs A |
+|---|---:|
+| `rexxcps` | -1.64% |
+| `arith` | -2.57% |
+| `varlookup` | **-8.17%** |
+| `strings` | -1.76% |
+| `alloc4c` | -4.26% |
+
+A three-probe differential prices one echo op, executed with nothing traced, at **40 user instructions for `Op::TraceLiteral`, 45 for `Op::TraceRead` and 61 for `Op::TraceOperator`**.
+The model built from those three predicted `arith`'s removed instructions to 0.001% against a figure it had not been given.
+
+#### The program's own TRACE and ADDRESS clauses
+
+Arm A only, `rexxcps` at a fixed `count=100`/`averaging=100` because removing clauses invalidates the program's own clauses-per-second figure, which assumes a fixed count per iteration.
+Removing its `trace value tracevar` and `trace value trace(); address value address()` clauses: 3.2556 s to 3.1877 s, **-2.09%, faster in 20 of 20 rounds**, instructions -1.82%.
+Those clauses cost more instructions than every intermediate echo op in the whole program.
+
+#### What this entry claims, and does not
+
+* **The ops are real work and not measurable time.** Between 1.64% and 8.17% of retired instructions, and no wall-clock win that survives its own control.
+* **It does not say the ops are free.** It says this instrument cannot see them on these axes at this size.
+* **It is not a verdict on gating.** A correct version costs more than arm B, which silently stops printing intermediates when a `TRACE I` runs mid-program -- demonstrated directly, and caught by the dual-engine tests and six `trace_oracle` transcripts, which is what a real design would have to keep.
+* **The finding worth acting on is the unit price**: spending 40 to 61 instructions to decide *not* to print puts the gate in the per-op path. Hoisting it helps the traced and the untraced case both and keeps a mid-run `TRACE I` correct. What the wall clock above says is how little that can be worth on these five axes.
+
+#### Two side findings
+
+* **No compile-time assertion requires an echo op to be present.** All six are of the form "for each echo op present, check the op before it", so an echo dropped by accident is invisible to `compile.rs`, and the corpus sweep is the only net. Worth knowing before anything is built on top of the emission decision.
+* **The control span is wider than this record's stated resolution floor, on `arith`.** Entry 25 accepted a +3.96% regression on that axis at 0/9. That figure sits inside the range identical builds produced here for nothing. Entry 25's `strings` and `alloc4c` gains are far outside it and are not in question; its three regressions are, and the next measurement on these axes needs two do-nothing controls rather than one.
