@@ -32,7 +32,7 @@ Neither line has any op today: each falls to `Op::EvalExpr` entire.
 * **`rust/CLAUDE.md` binds every task in this plan**, in full: the oracle wrapper, the probe rules, the gate rules, the repository hygiene rules and the comment rules.
   Read it before starting.
 * **`const _: () = assert!(size_of::<Op>() == 12)` in `ir/mod.rs` stays and is not relaxed.**
-  Every op this plan adds fits inside it; that was checked with the compiler on 2026-08-12 by adding the five candidate variants and building.
+  Every op this plan adds fits inside it; that was checked with the compiler on 2026-08-12 by adding the candidate variants and building.
   A variant that trips it is a design error in this plan -- report it rather than widening the assertion.
 * **No second implementation of anything `eval.rs` already owns.**
   A native op enters the same function `eval_node` enters, with the operands already in hand.
@@ -134,7 +134,7 @@ pub(crate) fn apply_binary(
 }
 ```
 
-`is_comparison` is a new free function in `eval.rs` beside `is_arithmetic`, enumerating the eighteen operators `eval_node`'s comparison arm lists today, moved out of that arm rather than copied.
+`is_comparison` is a new free function in `eval.rs` beside `is_arithmetic`, enumerating the operators `eval_node`'s comparison arm lists today, moved out of that arm rather than copied.
 
 `eval_node`'s three arms (concatenation, comparison, logical) collapse into **one** arm that runs the prologue and calls `apply_binary`:
 
@@ -152,7 +152,7 @@ ExprKind::Binary { op, left, right } if is_native_binary(*op) && !is_arithmetic(
 ```
 
 Place it **after** the arithmetic arm, so arithmetic still reaches `eval_arithmetic`.
-The measured behaviour each of the three collapsed arms documented -- `Blank` inserting exactly one space, the eighteen comparison operators, "both operands always evaluated, never short-circuited" -- must survive as doc comments on the functions that now own it.
+The measured behaviour each of the three collapsed arms documented -- `Blank` inserting exactly one space, the comparison operators it names, "both operands always evaluated, never short-circuited" -- must survive as doc comments on the functions that now own it.
 Deleting a true comment to make the change easier is forbidden.
 
 `Loud::binary_operator` is a new loud message for the one `Operator` no family claims, `Operator::Backslash` (the prefix `\` token, which the parser never builds an `ExprKind::Binary` from).
@@ -160,7 +160,7 @@ Follow the shape of the loud messages already in `loud.rs`.
 **Do not write `unreachable!` here**: this project has shipped six wrong "cannot be reached" claims.
 
 **The promotion.**
-`eval::is_native_binary(op) -> bool` is `is_arithmetic(op) || is_concatenation(op) || is_comparison(op) || is_logical(op)`, spelled as a positive enumeration of the four families so that an operator added to `rexx_parse::Operator` does not silently become promotable.
+`eval::is_native_binary(op) -> bool` is `is_arithmetic(op) || is_concatenation(op) || is_comparison(op) || is_logical(op)`, spelled as a positive enumeration of the families so that an operator added to `rexx_parse::Operator` does not silently become promotable.
 
 In `ir/compile.rs`:
 
@@ -237,7 +237,7 @@ Never run `select; when 1 = 0 then; when 2 = 2 then nop; end`, `say date('M','0'
 
 Write `tests/ir_dual_cases/operators` with a header saying what the file is for, and stanzas covering:
 
-* all three concatenation spellings, `||`, abuttal and blank, including that `Blank` inserts exactly one space however much whitespace separated the terms;
+* every concatenation spelling -- `||`, abuttal and blank -- including that `Blank` inserts exactly one space however much whitespace separated the terms;
 * a comparison from the strict family and one from the non-strict family, plus one under a narrowed `NUMERIC DIGITS` and one under a non-zero `NUMERIC FUZZ`, which is where a comparison reads settings a concatenation does not;
 * `&`, `|` and `&&`, including the measured case that **both** operands are checked even when the first decides the answer;
 * an operand that is itself an operator, so the nesting is covered;
@@ -332,7 +332,7 @@ fn a_prefix_operator_compiles_to_a_native_op_and_its_own_echo() {
 
 `Root` gains a `Prefix` variant; `root_of` and `native` restate the widened set independently.
 
-- [ ] **Step 5: add prefix stanzas to `tests/ir_dual_cases/operators`**, under Task 1's rules for that file -- oracle-captured bytes, a fresh empty directory, no `REWRITE` -- covering all three prefix operators, a prefix applied to an operator's result, a prefix applied to a prefix, `\` on a non-logical value, and `-` on a non-numeric value, with a `trace i` stanza so the `>P>` line's position is compared.
+- [ ] **Step 5: add prefix stanzas to `tests/ir_dual_cases/operators`**, under Task 1's rules for that file -- oracle-captured bytes, a fresh empty directory, no `REWRITE` -- covering `+`, `-` and `\`, a prefix applied to an operator's result, a prefix applied to a prefix, `\` on a non-logical value, and `-` on a non-numeric value, with a `trace i` stanza so the `>P>` line's position is compared.
 
 - [ ] **Step 6: gates, as Task 1 Step 7.**
 
