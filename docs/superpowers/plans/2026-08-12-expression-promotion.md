@@ -31,9 +31,10 @@ Neither line has any op today: each falls to `Op::EvalExpr` entire.
   Never modify `interpreter/`, `samples/`, `build/`, `ootest/`.
 * **`rust/CLAUDE.md` binds every task in this plan**, in full: the oracle wrapper, the probe rules, the gate rules, the repository hygiene rules and the comment rules.
   Read it before starting.
-* **`const _: () = assert!(size_of::<Op>() == 12)` in `ir/mod.rs` stays and is not relaxed.**
-  Every op this plan adds fits inside it; that was checked with the compiler on 2026-08-12 by adding the candidate variants and building.
-  A variant that trips it is a design error in this plan -- report it rather than widening the assertion.
+* **`const _: () = assert!(size_of::<Op>())` is measured, never assumed, and never edited to match what a change happens to produce.**
+  It read `== 12` when this plan was written and reads `== 16` now: Task 3 widened it, on entry 24's sitting, after Moritz offered the sixteen bytes.
+  So the constraint is not a number -- it is that **a width change needs a measurement and the doc comment beside the assertion has to say which one**, and that a variant which trips the assertion unexpectedly is a design error to report rather than to accommodate.
+  Take the check yourself rather than citing this line, and read the build output **unpiped**: the first two attempts at it here both reported a pass they had not taken, because the diagnostic list went through `head -4` and the `E0080` was the fifth line (Task 3's own text has the full account).
 * **No second implementation of anything `eval.rs` already owns.**
   A native op enters the same function `eval_node` enters, with the operands already in hand.
   This is the rule `Op::Arith`, `Op::Load` and `Op::CallExpr` were each built under, and their doc comments state it.
