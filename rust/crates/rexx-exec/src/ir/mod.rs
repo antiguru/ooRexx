@@ -55,22 +55,27 @@ mod golden_tests;
 #[cfg(test)]
 mod corpus_shape_tests;
 
-/// **The stream's own width, asserted rather than described.** Every op in
-/// every chunk pays for the widest variant, so a field added to one of them is
-/// a cost to all of them -- which is the argument [`PlanSlot`] rests on, and an
-/// argument about a width is worth nothing without the width. The widest
-/// payload has tail padding for the discriminant to sit in; a variant that
-/// needs more than that grows the array, and this is where that shows up as a
-/// compile error rather than as a measurement somebody has to take again.
+/// **The stream's width, asserted so that a change to it is a compile error.**
+/// Every op in every chunk is as wide as the widest variant, so the width is a
+/// fact about the whole array rather than about the variant that sets it, and a
+/// variant that outgrows this number grows every op there is. That is what this
+/// line catches, at the moment it happens, rather than leaving it to a
+/// measurement somebody has to take again. The widest payload has tail padding
+/// for the discriminant to sit in, which is why sixteen is an equality and not
+/// a bound.
 ///
-/// **The number is measured rather than chosen.** The record's entry 24 sat a
-/// twelve-byte head build against a control carrying a dead variant at that
-/// same width and against a sixteen-byte build, nine rounds per axis, because
-/// widening an enum by adding a variant moves two things at once and a two-arm
-/// reading cannot tell them apart. Every axis's width column came out
-/// negative, and the cost that reading had charged to the width belongs to
-/// *having an extra variant* -- which widening a variant already here is not.
-/// So sixteen rests on that sitting, not on an argument from cache lines.
+/// **What sixteen costs was measured, and on these axes it was nothing.** The
+/// record's entry 24 sat a twelve-byte head build against a control carrying a
+/// dead variant at that same width and against a sixteen-byte build, nine
+/// rounds per axis, because widening an enum by adding a variant moves two
+/// things at once and a two-arm reading cannot tell them apart. Every axis's
+/// width column came out negative, and the cost that reading had charged to the
+/// width belongs to *having an extra variant* instead. **The entry says in its
+/// own voice that it did not build the change that landed here**: both its wide
+/// arms widen the enum by adding a dead variant, where widening a variant
+/// already present adds none -- and it calls the width column the right
+/// prediction for that case. So sixteen rests on the sitting plus that
+/// prediction, and not on an argument from cache lines.
 const _: () = assert!(size_of::<Op>() == 16);
 
 /// One step in a compiled stream.
@@ -792,9 +797,16 @@ impl NodePath {
     /// whose sentinel already sits at the top bit leaves a shorter path, and a
     /// shorter path resolves to some *other* node. A refusal costs an address
     /// nobody can give out; a dropped sentinel costs a wrong one.
-    #[allow(
-        dead_code,
-        reason = "no production caller builds a path with a step in it"
+    // `cfg_attr(not(test), ...)` because the unit tests below do call this, so
+    // an unconditional `expect` is unfulfilled under `--all-targets` and warns.
+    // `expect` rather than `allow` so that the first production caller reddens
+    // this line instead of leaving a stale exemption behind it.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "no production caller builds a path with a step in it"
+        )
     )]
     pub(crate) fn child(self, right: bool) -> Option<NodePath> {
         (self.0 >> (u32::BITS - 1) == 0).then(|| NodePath(self.0 << 1 | u32::from(right)))
@@ -820,13 +832,12 @@ impl NodePath {
 /// `Interp::assign_expr_target` both engines enter, never a store path of its
 /// own.
 ///
-/// **A `u32` with one reserved value rather than an `Option<u32>`, and it is
-/// the op array that weighs it.** An `Option<u32>` is eight bytes where this is
-/// four, and it is a field [`Op::Load`] and [`Op::Store`] carry, so the cost is
-/// paid by every op in every chunk rather than by those two. Whether the wider
-/// one would *break* the width is the assertion above [`Op`]'s to say and not
-/// this sentence's: measured 2026-08-12, with this type holding an
-/// `Option<u32>` that assertion still passes.
+/// **A `u32` with one reserved value rather than an `Option<u32>`, and the op
+/// array does not force that.** An `Option<u32>` is eight bytes where this is
+/// four, and it is a field [`Op::Load`] and [`Op::Store`] carry -- but
+/// measured 2026-08-12, the assertion above [`Op`] passes with this type
+/// holding one. So the reserved value buys no width at all here, and anything
+/// resting on it has to rest on something else.
 ///
 /// **A compound never has one, and neither does a stem target.** A compound's
 /// read goes through the *stem's* slot and a tail key resolved at the read

@@ -16390,15 +16390,23 @@ mod tests {
     /// the arms below are reachable here without a program that compiles to a
     /// non-[`NodePath::ROOT`] address existing to reach them.
     ///
-    /// `zz = -za + f(1)` is asymmetric at both levels on purpose: the call is
-    /// the `+`'s right operand and the prefix its left, so a descent taking
-    /// the steps in the wrong order, or the wrong branch, arrives at a node of
-    /// a different kind rather than at a node that merely looks alike.
+    /// `zz = -za + zb * f(1)` is asymmetric at both levels on purpose. The
+    /// **branch** is pinned by the two-step variables: `ZA` hangs off the
+    /// prefix and `ZB` off the multiplication, so a step down the wrong child
+    /// lands on the other name rather than on something that merely looks
+    /// alike. The **order** is pinned by `ZB` alone, whose address is `[right,
+    /// left]`: read innermost first that is `[left, right]`, the `right` step
+    /// off a prefix, which has nowhere to go -- so a descent that walked the
+    /// steps backwards finds nothing where this finds `ZB`.
     #[test]
     fn a_paths_steps_land_on_the_node_it_names() {
-        let program = parse_program(b"zz = -za + f(1)".to_vec()).expect("test program parses");
+        let program = parse_program(b"zz = -za + zb * f(1)".to_vec()).expect("test program parses");
         let instruction = &program.main.instructions[0];
         let node = |path| Interp::chunk_node_at(instruction, 0, path);
+        let variable_at = |path| match node(path).map(|node| &node.kind) {
+            Some(ExprKind::Variable(id)) => program.symbols.name(*id).to_string(),
+            found => panic!("expected a variable at this address, found {found:?}"),
+        };
 
         let root = node(NodePath::ROOT).expect("slot 0 is the assignment's value");
         assert!(matches!(root.kind, ExprKind::Binary { .. }));
@@ -16411,21 +16419,30 @@ mod tests {
         ));
         assert!(matches!(
             node(right).expect("the right operand is there").kind,
+            ExprKind::Binary { .. }
+        ));
+
+        assert_eq!(variable_at(left.child(false).expect("two steps fit")), "ZA");
+        assert_eq!(
+            variable_at(right.child(false).expect("two steps fit")),
+            "ZB"
+        );
+        assert!(matches!(
+            node(right.child(true).expect("two steps fit"))
+                .expect("the call is the multiplication's right operand")
+                .kind,
             ExprKind::Call { .. }
         ));
 
         // A prefix has one child and it is the `false` step, so the `true` one
-        // has nowhere to go.
-        assert!(matches!(
-            node(left.child(false).expect("two steps fit"))
-                .expect("the prefix operand is there")
-                .kind,
-            ExprKind::Variable(_)
-        ));
+        // has nowhere to go; a call has no children at all; and slot 1 is not
+        // an address this names.
         assert!(node(left.child(true).expect("two steps fit")).is_none());
-
-        // A step off a leaf, and a slot this addressing does not name at all.
-        assert!(node(right.child(false).expect("two steps fit")).is_none());
+        let past_the_call = right
+            .child(true)
+            .and_then(|path| path.child(false))
+            .expect("three steps fit");
+        assert!(node(past_the_call).is_none());
         assert!(Interp::chunk_node_at(instruction, 1, NodePath::ROOT).is_none());
     }
 }
