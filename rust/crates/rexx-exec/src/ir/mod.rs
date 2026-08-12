@@ -231,9 +231,10 @@ pub(crate) enum Op {
     /// `Interp::chunk_node_at` is the descent that resolves it. A node the
     /// descent cannot reach, or one that is not a call when it arrives, is
     /// `Loud::call_op_off_its_node` rather than a panic. Which nodes `compile`
-    /// gives an op to is `push_value`'s decision, and `golden_tests`'s
-    /// `a_call_at_the_root_of_a_value_takes_its_own_op_and_a_nested_one_does_not`
-    /// is what states it.
+    /// gives an op to is `native_shape`'s decision -- every call an address
+    /// reaches -- and `golden_tests`'s `a_call_promotes_at_the_root_and_below_it`
+    /// and `a_call_nested_past_the_paths_width_leaves_the_slot_general` are
+    /// what state it.
     ///
     /// **It owes the `>F>` line itself**, through [`Op::TraceFunction`] behind
     /// it, for the reason every native op owes its own echo: `eval`'s
@@ -797,17 +798,6 @@ impl NodePath {
     /// whose sentinel already sits at the top bit leaves a shorter path, and a
     /// shorter path resolves to some *other* node. A refusal costs an address
     /// nobody can give out; a dropped sentinel costs a wrong one.
-    // `cfg_attr(not(test), ...)` because the unit tests below do call this, so
-    // an unconditional `expect` is unfulfilled under `--all-targets` and warns.
-    // `expect` rather than `allow` so that the first production caller reddens
-    // this line instead of leaving a stale exemption behind it.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "no production caller builds a path with a step in it"
-        )
-    )]
     pub(crate) fn child(self, right: bool) -> Option<NodePath> {
         (self.0 >> (u32::BITS - 1) == 0).then(|| NodePath(self.0 << 1 | u32::from(right)))
     }
@@ -1100,8 +1090,8 @@ impl CallSite {
     }
 }
 
-/// One chunk's resolution table: a slot per [`Op::Call`], indexed by that op's
-/// own `site` field.
+/// One chunk's resolution table: a slot per call op -- [`Op::Call`] and
+/// [`Op::CallExpr`] alike -- indexed by that op's own `site` field.
 ///
 /// **Dense over the ops that resolve rather than parallel to the op stream**,
 /// which is [`Hints`]' own argument one construct over.

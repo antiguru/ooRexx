@@ -19,7 +19,7 @@ use std::rc::Rc;
 use rexx_parse::{ExprKind, InstructionKind, parse_program};
 
 use super::golden::render;
-use super::{Chunk, ChunkTooLarge};
+use super::{Chunk, ChunkTooLarge, NodePath};
 use crate::Interp;
 use crate::plan::{BodyKey, Plan, ProgramId};
 use crate::trace::{ChunkTrace, TraceMode};
@@ -49,32 +49,127 @@ fn traced() -> ChunkTrace {
     ChunkTrace::of(crate::trace::mode_from_setting(b"r").expect("R is a valid TRACE setting"))
 }
 
-/// A call at the root of an assignment's value compiles to
-/// [`super::Op::CallExpr`], and the same call one operator down does not.
+/// A call compiles to [`super::Op::CallExpr`] wherever it sits in a value, and
+/// the address the op carries is the route down to it: the same call at the
+/// root, as a left operand and as a right operand gets the same op under a
+/// different address each time.
 ///
-/// **The pair is the test.** Either half alone is satisfied by a compiler that
-/// promotes calls everywhere or nowhere; together they pin the restriction
-/// `push_value` actually applies, which is that a slot is the finest address
-/// an op has, so only a call that *is* the slot's expression has one to name.
+/// **The cases together are the test and no one of them alone.** The root case
+/// is satisfied by a compiler that promotes only a call that *is* the slot's
+/// expression;
+/// the left one is satisfied by one that writes a fixed address into
+/// every nested call's op; and the right one is what separates the address
+/// from the descent that produced it, because a compiler stepping into the
+/// left child whatever the operand would render `root.L` under both.
 ///
-/// The `site` field is expected as `0` for the promoted case, which is the
-/// first reservation in the chunk -- an assertion about the reservation being
-/// dense over call ops, and it would redden if a site were reserved for
-/// something that emitted no call op.
+/// The `site` field is expected as `0`, which is the first reservation in the
+/// chunk -- an assertion about the reservation being dense over call ops, and
+/// it would redden if a site were reserved for something that emitted no call
+/// op.
+///
+/// **The register count is the last case and it is not decoration.** A nested
+/// call writes the `dst` its parent gave it and takes no register of its own,
+/// so two calls over one operator cost what `zb + zc` costs; a call that
+/// allocated a register for itself would render the same ops and reserve more.
 #[test]
-fn a_call_at_the_root_of_a_value_takes_its_own_op_and_a_nested_one_does_not() {
-    let promoted = compile_for_test(b"zz = length('abc')").expect("the chunk fits");
+fn a_call_promotes_at_the_root_and_below_it() {
+    let root = compile_for_test(b"zz = length('abc')").expect("the chunk fits");
     assert_eq!(
-        render(&promoted),
+        render(&root),
         "0: Clause index=0 end=4\n\
          1: CallExpr index=0 slot=0 path=root site=0 dst=0\n\
          2: TraceFunction index=0 slot=0 path=root src=0\n\
          3: Store index=0 at=0 src=0\n"
     );
 
-    let nested = compile_for_test(b"zz = length('abc') + 1").expect("the chunk fits");
+    let left = compile_for_test(b"zz = length('abc') + 1").expect("the chunk fits");
     assert_eq!(
-        render(&nested),
+        render(&left),
+        "0: Clause index=0 end=8\n\
+         1: CallExpr index=0 slot=0 path=root.L site=0 dst=0\n\
+         2: TraceFunction index=0 slot=0 path=root.L src=0\n\
+         3: LoadConstant dst=1\n\
+         4: TraceLiteral src=1\n\
+         5: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
+         6: TraceOperator op=+ src=0\n\
+         7: Store index=0 at=0 src=0\n"
+    );
+
+    let right = compile_for_test(b"zz = 1 + length('abc')").expect("the chunk fits");
+    assert_eq!(
+        render(&right),
+        "0: Clause index=0 end=8\n\
+         1: LoadConstant dst=0\n\
+         2: TraceLiteral src=0\n\
+         3: CallExpr index=0 slot=0 path=root.R site=0 dst=1\n\
+         4: TraceFunction index=0 slot=0 path=root.R src=1\n\
+         5: Arith op=+ hint=0 lhs=0 rhs=1 dst=0\n\
+         6: TraceOperator op=+ src=0\n\
+         7: Store index=0 at=0 src=0\n"
+    );
+
+    let two_calls = compile_for_test(b"zz = length('ab') + length('cd')").expect("the chunk fits");
+    assert_eq!(
+        two_calls.registers,
+        2,
+        "two calls over one operator reserved {} registers, where a nested call takes none of \
+         its own\n{}",
+        two_calls.registers,
+        render(&two_calls)
+    );
+}
+
+/// A call the address cannot reach leaves the whole slot general, which is the
+/// answer it had before there was an address at all.
+///
+/// **The refusal is pinned by its neighbour.** The same shape one operator
+/// shallower promotes, and its op spells out every step of the descent, so
+/// what the deeper case fixes is `NodePath`'s own width rather than some other
+/// bound sitting nearby -- without that half, a compiler giving up at any
+/// depth whatever would pass.
+///
+/// **The width is taken from `NodePath` rather than written down here**, so
+/// what this states is that `compile` promotes exactly as deep as an address
+/// reaches and no deeper. The width's own number is pinned by
+/// `super::tests::a_node_path_carries_thirty_one_steps_and_refuses_the_thirty_second`,
+/// which is where a change to it belongs.
+#[test]
+fn a_call_nested_past_the_paths_width_leaves_the_slot_general() {
+    // `zz = zb + (zb + (... length('abc') ...))`, right-nested so that the
+    // call sits `depth` steps down and every one of those steps is the `R`
+    // one.
+    fn nested(depth: usize) -> Vec<u8> {
+        let mut source = b"zz = ".to_vec();
+        for _ in 0..depth {
+            source.extend_from_slice(b"zb + (");
+        }
+        source.extend_from_slice(b"length('abc')");
+        source.extend(std::iter::repeat_n(b')', depth));
+        source
+    }
+
+    let mut path = NodePath::ROOT;
+    let mut width = 0usize;
+    while let Some(deeper) = path.child(true) {
+        path = deeper;
+        width += 1;
+    }
+
+    let at_the_width = compile_for_test(&nested(width)).expect("the chunk fits");
+    let rendered = render(&at_the_width);
+    let address = format!("root{}", ".R".repeat(width));
+    assert!(
+        rendered.contains(&format!("CallExpr index=0 slot=0 path={address} site=0 ")),
+        "the call at the deepest address a NodePath carries did not take one\n{rendered}"
+    );
+    assert!(
+        !rendered.contains("EvalExpr"),
+        "a slot whose every node has an op still fell back to eval.rs\n{rendered}"
+    );
+
+    let past_the_width = compile_for_test(&nested(width + 1)).expect("the chunk fits");
+    assert_eq!(
+        render(&past_the_width),
         "0: Clause index=0 end=3\n\
          1: EvalExpr index=0 slot=0 dst=0\n\
          2: Store index=0 at=0 src=0\n"
@@ -440,37 +535,6 @@ fn precedence_decides_which_operator_is_the_inner_one() {
         chunk.registers, 3,
         "a right-nested operator reserved {} registers where three are needed",
         chunk.registers
-    );
-}
-
-/// **An operand no register can hold takes the whole expression down with it**,
-/// however much of the rest would have compiled.
-///
-/// A call has no register to arrive in: [`super::Op::EvalExpr`] names an
-/// expression *slot* of an instruction, and a subexpression is not one, so an
-/// `EvalExpr` emitted for the operand alone would re-evaluate the whole
-/// expression -- calling the function again and computing the operator twice.
-/// The decision is therefore taken for the whole tree before anything is
-/// emitted.
-///
-/// The second case is the adjacent success: the same expression with the call
-/// replaced by a symbol does promote, so what the first case fixes is the call
-/// rather than the shape around it.
-#[test]
-fn an_operand_that_needs_eval_leaves_the_whole_expression_general() {
-    let chunk = compile_for_test(b"zw = length('ab') + 1\n").expect("compiles");
-    assert_eq!(
-        render(&chunk),
-        "0: Clause index=0 end=3\n\
-         1: EvalExpr index=0 slot=0 dst=0\n\
-         2: Store index=0 at=0 src=0\n"
-    );
-
-    let promoted = compile_for_test(b"zw = zv + 1\n").expect("compiles");
-    assert!(
-        render(&promoted).contains("Arith op=+"),
-        "the same shape without the call did not promote either, so the case above says nothing \
-         about the call"
     );
 }
 

@@ -6,7 +6,12 @@
 # prefix operators `+`, `-` and `\`, and an operand that is itself an operator
 # -- including a prefix over a prefix and a prefix over a binary operator's
 # result, which is where an operand register holds an intermediate rather than
-# a read.
+# a read. An operand that is a **call** is the other way an operand register
+# is filled by something other than a read, and it is the one whose op is
+# addressed rather than computed: the op carries the route down to the call's
+# own node, so the rows put the call on each side of an operator and under a
+# prefix, where a route that always stepped the same way lands on the wrong
+# node.
 #
 # **Settings**, which is where a comparison reads state a concatenation does
 # not. `NUMERIC DIGITS` rounds the operands before they are compared, so
@@ -30,15 +35,21 @@
 # operator's, over its one operand -- and `\` and `-` fail *differently* on
 # the same operand: `\` checks text and gives 34.901 where `-` converts and
 # gives 41.1, so the rows put `'abc'` under each.
+# A call operand adds places a failure can come from that a read cannot: from
+# inside the call's own argument list, from the callee, and from the operator
+# over the value the call answered. The rows separate them by condition
+# number under one trap.
 #
 # **Trace**, which is where a native op diverges first and where no other
 # instrument in this crate can see it. `eval.rs` emits a binary operator's
 # `>O>` line and a prefix operator's `>P>` line as a side effect of evaluating
-# them; an op that only computes into
+# them, and a call's `>F>` line the same way; an op that only computes into
 # a register emits nothing, and every line after the missing one still matches
 # -- so only an exact stderr comparison catches it. Both directions are here:
 # a `trace i` row requires the lines, and a `trace r` row requires their
-# absence. The `trace i` row carries the abuttal, whose tag is the empty
+# absence. What a nested call adds is a *position*: its `>F>` sits between the
+# `>A>` of its own argument and the `>O>` or `>P>` of the operator holding it,
+# which is a place only an operator around the call can put it. The `trace i` row carries the abuttal, whose tag is the empty
 # string, and the blank, whose tag is one space. Neither has any source text
 # under it, so an implementation reading a spelling off the source span gets
 # both wrong, and no other row can see that. **The prefix `\` has no row of
@@ -569,3 +580,153 @@ err>      3 *-* zb = -za
 err>        >>>   "-2"
 err>      4 *-* say \(za = 3)
 err>        >>>   "1"
+
+# an operand that is a call, which is where an operand register is filled by an
+# op that runs the call rather than by a read or by an inner operator. The call
+# stands on each side of the operator in turn, and under every family: an op
+# whose route always stepped into the left operand would land on `1` in
+# `say 1 + length(za)`, which is not a call at all.
+program
+za = 'ab'
+zb = 3
+say length(za) + 1
+say 1 + length(za)
+say 'n=' || length(za)
+say length(za) = 2
+say length(za) > 1 & zb > 1
+say length(za) length(za)
+say zb || length(za) || zb
+----
+rc> 0
+out> 3
+out> 3
+out> n=2
+out> 1
+out> 1
+out> 2 2
+out> 323
+
+# a call under a prefix operator, which is the one-operand case of the stanza
+# above. `- -length(za)` puts the call two steps down with neither step the
+# one a binary operator's right operand takes, so a route that spelled a
+# prefix's only operand the way it spells a right operand finds nothing there.
+program
+za = 'abc'
+say -length(za)
+say +length(za)
+say \(length(za) = 3)
+say - -length(za)
+say -length(za) + 1
+----
+rc> 0
+out> -3
+out> 3
+out> 0
+out> 3
+out> -2
+
+# two calls in one expression, and a call inside another call's argument. **The
+# two calls are of different routines**, which is what says each op resolves a
+# name of its own: measured, handing every call op in a chunk the same
+# resolution site reddens this stanza, where a stanza whose calls were all
+# `length` would pass under exactly that mutation. They stand in both orders so
+# that neither position is the only one covered.
+# The arguments are the other half. A call's arguments are not compiled, so the
+# `substr` in `length(substr(za, 2))` and the `||` in the row below it are
+# evaluated by the argument loop and by `eval.rs`, with the outer call the only
+# node here holding an op.
+program
+za = 'abcd'
+say length(za) + length(za)
+say length(za) || pos('c', za)
+say pos('c', za) || length(za)
+say length(substr(za, 2))
+say length(substr(za, 2) || 'xy')
+say max(length(za), length(substr(za, 2)))
+----
+rc> 0
+out> 8
+out> 43
+out> 34
+out> 3
+out> 5
+out> 4
+
+# a failure reached through a call in a nested position, trapped, so that one
+# row says what is reported and which clause SIGL lands on for each place the
+# failure comes from: the divide inside the call's own argument list gives 42,
+# the argument the callee wanted and did not get gives 40, and the operator
+# converting what the call answered gives 41. SIGL is the whole `SAY`'s clause
+# in every one, which is the same answer this file's other trapped stanza
+# records for an operand that is not a call.
+program
+signal on syntax name z1
+say 1 + length(1/0)
+z1:
+say 'in-arg' rc 'at' sigl
+signal on syntax name z2
+say 'q' + length('ab')
+z2:
+say 'operator' rc 'at' sigl
+signal on syntax name z3
+say 1 + substr('abc')
+z3:
+say 'callee' rc 'at' sigl
+----
+rc> 0
+out> in-arg 42 at 2
+out> operator 41 at 6
+out> callee 40 at 10
+
+# trace i: where the `>F>` line a nested call owes sits. **After the `>V>` and
+# `>A>` lines its own argument produced and before the `>O>` or `>P>` of the
+# operator holding it**, and in operand order when one expression holds two
+# calls -- so an echo emitted in front of its call op would print `>F>` ahead
+# of `>A>`, and one emitted at the end of the clause would print it after the
+# operator's line.
+program
+trace i
+za = 'ab'
+zb = length(za) + 1
+say 'n' || length(za)
+say -length(za)
+say length(za) + length(zb)
+----
+rc> 0
+out> n2
+out> -2
+out> 3
+err>      2 *-* za = 'ab'
+err>        >L>   "ab"
+err>        >>>   "ab"
+err>        >=>   ZA <= "ab"
+err>      3 *-* zb = length(za) + 1
+err>        >V>   ZA => "ab"
+err>        >A>   "ab"
+err>        >F>   LENGTH => "2"
+err>        >L>   "1"
+err>        >O>   "+" => "3"
+err>        >>>   "3"
+err>        >=>   ZB <= "3"
+err>      4 *-* say 'n' || length(za)
+err>        >L>   "n"
+err>        >V>   ZA => "ab"
+err>        >A>   "ab"
+err>        >F>   LENGTH => "2"
+err>        >O>   "||" => "n2"
+err>        >>>   "n2"
+err>      5 *-* say -length(za)
+err>        >V>   ZA => "ab"
+err>        >A>   "ab"
+err>        >F>   LENGTH => "2"
+err>        >P>   "-" => "-2"
+err>        >>>   "-2"
+err>      6 *-* say length(za) + length(zb)
+err>        >V>   ZA => "ab"
+err>        >A>   "ab"
+err>        >F>   LENGTH => "2"
+err>        >V>   ZB => "3"
+err>        >A>   "3"
+err>        >F>   LENGTH => "1"
+err>        >O>   "+" => "3"
+err>        >>>   "3"

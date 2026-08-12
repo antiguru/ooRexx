@@ -729,20 +729,25 @@ pub(crate) fn compile(
 /// **What compiles natively is [`native_shape`]'s answer, and nothing here
 /// restates it** -- that function is the enumeration, and a second copy of the
 /// list in prose is one that stops agreeing with it. Everything it declines --
-/// a call and a `.name` are two such expressions -- is evaluated by `eval.rs`
+/// a `.name` is one such expression -- is evaluated by `eval.rs`
 /// through [`Op::EvalExpr`], which is trace-identical to what the tree-walker
 /// does with the same expression because it is the same call, and stays
 /// identical because nothing this region emits sits between one evaluation and
 /// the next.
 ///
 /// **`expr` is the whole of the instruction's expression at `slot`, and the
-/// choice is taken for the whole of it.** An expression that merely *contains*
-/// a call falls to `EvalExpr` entire, however much of the rest of it would have
+/// choice is taken for the whole of it.** An expression holding one node with
+/// no op falls to `EvalExpr` entire, however much of the rest of it would have
 /// compiled.
+///
+/// **[`NodePath::ROOT`] is where the address starts**, because `expr` *is*
+/// slot `slot`'s own expression: the route down to it has no steps in it, and
+/// every step below is one [`native_shape`] and [`push_native`] take together
+/// as they descend.
 #[expect(
     clippy::too_many_arguments,
-    reason = "the emission sinks, the plan a read resolves its slot against, and the expression \
-              an EvalExpr has to name"
+    reason = "the emission sinks, the plan a read resolves its slot against, and the address an \
+              EvalExpr or a call op has to name"
 )]
 fn push_value<'a>(
     ops: &mut Vec<Op>,
@@ -756,32 +761,20 @@ fn push_value<'a>(
     slot: u32,
     dst: u16,
 ) -> Result<(), ChunkTooLarge> {
-    // **A call at the root of the slot takes its own op**, which is
-    // [`Op::CallExpr`], and the only thing it changes about running the call is
-    // that the resolution comes from a site instead of being made afresh. The
-    // address it carries is [`NodePath::ROOT`], which is that root said in the
-    // terms the op addresses nodes in.
-    if let ExprKind::Call { .. } = &expr.kind {
-        let slot = u16::try_from(slot).map_err(|_| ChunkTooLarge {
-            what: "expression slots past u16",
-        })?;
-        ops.push(Op::CallExpr {
+    if native_shape(expr, Some(NodePath::ROOT)) {
+        push_native(
+            ops,
+            consts,
+            registers,
+            hints,
+            calls,
+            plan,
+            expr,
             index,
             slot,
-            path: NodePath::ROOT,
-            site: calls.reserve()?,
+            Some(NodePath::ROOT),
             dst,
-        });
-        ops.push(Op::TraceFunction {
-            index,
-            slot,
-            path: NodePath::ROOT,
-            src: dst,
-        });
-        return Ok(());
-    }
-    if native_shape(expr) {
-        push_native(ops, consts, registers, hints, plan, expr, dst)
+        )
     } else {
         ops.push(Op::EvalExpr { index, slot, dst });
         Ok(())
@@ -797,25 +790,53 @@ fn push_value<'a>(
 /// [`Op::EvalExpr`] names an expression *slot* of an instruction, so emitting
 /// one for an operand would re-evaluate the whole instruction's expression
 /// instead of that operand. So the decision is taken for the whole tree before
-/// anything is emitted, and an expression with one call anywhere inside it
-/// stays one `EvalExpr`.
-fn native_shape(expr: &Expr) -> bool {
+/// anything is emitted, and an expression with one unpromotable node anywhere
+/// inside it stays one `EvalExpr`.
+///
+/// **`path` is `expr`'s own address**, the route [`push_native`] writes into
+/// an op emitted for this node, and `None` is a node the width of a
+/// [`NodePath`] does not reach. **Only the call arm reads it.** A call's op
+/// names the node it sits at, so a call with no address has no op; every other
+/// shape here is computed from registers and is addressed by nothing, so a
+/// depth past the width costs it nothing and a call-free expression promotes
+/// however deep it runs.
+fn native_shape(expr: &Expr, path: Option<NodePath>) -> bool {
     match &expr.kind {
         ExprKind::Literal(_)
         | ExprKind::Constant(_)
         | ExprKind::Variable(_)
         | ExprKind::Stem(_)
         | ExprKind::Compound(_) => true,
+        // A call needs an address, and a node past the width has none. The
+        // whole slot then falls to `Op::EvalExpr`, which is the answer it had
+        // before there was an address at all.
+        ExprKind::Call { .. } => path.is_some(),
         ExprKind::Binary { op, left, right } => {
-            is_native_binary(*op) && native_shape(left) && native_shape(right)
+            is_native_binary(*op)
+                && native_shape(left, descend(path, false))
+                && native_shape(right, descend(path, true))
         }
         // No operator condition beside the operand's, unlike the arm above:
         // `Interp::apply_prefix` matches `PrefixOp` exhaustively, so a variant
         // added to that enum is a compile error there rather than an operator
         // silently promoted here.
-        ExprKind::Prefix { operand, .. } => native_shape(operand),
+        ExprKind::Prefix { operand, .. } => native_shape(operand, descend(path, false)),
         _ => false,
     }
+}
+
+/// The address of one child of the node addressed by `path`: the right child
+/// when `right`, and the left or only one otherwise.
+///
+/// `None` for a child the width does not reach, and `None` propagated from a
+/// parent that had no address either -- the two are the same answer here,
+/// because what a caller does with it is the same.
+///
+/// The `right` flag is the one `Interp::chunk_node_at` reads back, and the
+/// children it names are the ones that descent walks: a binary operator's two
+/// operands and a prefix operator's only one.
+fn descend(path: Option<NodePath>, right: bool) -> Option<NodePath> {
+    path?.child(right)
 }
 
 /// The ops that leave `expr` -- which [`native_shape`] has already accepted --
@@ -829,14 +850,26 @@ fn native_shape(expr: &Expr) -> bool {
 /// value is computed from its two operands' registers, so it becomes their ops
 /// followed by [`Op::Arith`] or [`Op::Binary`] plus the `>O>` line that
 /// applying it owes, and a prefix operator's is the same with one operand,
-/// [`Op::Prefix`] and the `>P>` line that operator's own trace is.
+/// [`Op::Prefix`] and the `>P>` line that operator's own trace is. A call's
+/// value is what running it answers, so it becomes [`Op::CallExpr`] plus the
+/// `>F>` line that owes -- and that op is addressed rather than computed,
+/// which is why `index`, `slot` and `path` come down here at all.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the emission sinks, the plan a read resolves its slot against, and the address a \
+              call op has to name"
+)]
 fn push_native<'a>(
     ops: &mut Vec<Op>,
     consts: &mut Constants<'a>,
     registers: &mut Registers,
     hints: &mut Hints,
+    calls: &mut Calls,
     plan: &Plan,
     expr: &'a Expr,
+    index: u32,
+    slot: u32,
+    path: Option<NodePath>,
     dst: u16,
 ) -> Result<(), ChunkTooLarge> {
     match &expr.kind {
@@ -872,10 +905,34 @@ fn push_native<'a>(
             // register the next one reads as its left. Both sources are read
             // before the destination is written, which is the whole of what
             // makes the aliasing safe.
-            push_native(ops, consts, registers, hints, plan, left, dst)?;
+            push_native(
+                ops,
+                consts,
+                registers,
+                hints,
+                calls,
+                plan,
+                left,
+                index,
+                slot,
+                descend(path, false),
+                dst,
+            )?;
             let mark = registers.mark();
             let rhs = registers.alloc()?;
-            push_native(ops, consts, registers, hints, plan, right, rhs)?;
+            push_native(
+                ops,
+                consts,
+                registers,
+                hints,
+                calls,
+                plan,
+                right,
+                index,
+                slot,
+                descend(path, true),
+                rhs,
+            )?;
             // **Only arithmetic takes a hint slot**, because only arithmetic
             // has a second path for one to choose. `Chunk::hints` is dense over
             // the ops that can specialise, so a slot reserved for an operator
@@ -912,7 +969,19 @@ fn push_native<'a>(
             // above states: the operand is read before the destination is
             // written, so a chain of prefixes costs the registers its innermost
             // term does and no more.
-            push_native(ops, consts, registers, hints, plan, operand, dst)?;
+            push_native(
+                ops,
+                consts,
+                registers,
+                hints,
+                calls,
+                plan,
+                operand,
+                index,
+                slot,
+                descend(path, false),
+                dst,
+            )?;
             ops.push(Op::Prefix {
                 op: *op,
                 src: dst,
@@ -926,6 +995,33 @@ fn push_native<'a>(
             // traces `>P>`, which is a different line from the `>O>` every
             // binary operator traces.
             ops.push(Op::TracePrefix { op: *op, src: dst });
+        }
+        // **A call takes its own op wherever it sits**, which is
+        // [`Op::CallExpr`], and the only thing that op changes about running
+        // the call is that the resolution comes from a site instead of being
+        // made afresh. What it needs and no other arm here does is an address:
+        // the value is not computed from operand registers, so the driver goes
+        // back to the node to find the target and the arguments.
+        ExprKind::Call { .. } => {
+            let slot = u16::try_from(slot).map_err(|_| ChunkTooLarge {
+                what: "expression slots past u16",
+            })?;
+            let path = path.expect("native_shape accepts a call only where an address reaches it");
+            ops.push(Op::CallExpr {
+                index,
+                slot,
+                path,
+                site: calls.reserve()?,
+                dst,
+            });
+            // Behind the call rather than in front of it, because `eval.rs`
+            // emits this line post-order, with the value in hand.
+            ops.push(Op::TraceFunction {
+                index,
+                slot,
+                path,
+                src: dst,
+            });
         }
         _ => unreachable!("push_value descends only into an expression native_shape accepted"),
     }

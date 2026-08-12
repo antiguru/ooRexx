@@ -102,9 +102,10 @@ out> 20
 out> -5
 out> 3
 
-# an operand that is a call, which no compiled operand register can hold: the
-# whole expression is evaluated the way it was before there were arithmetic
-# ops, and answers the same.
+# an operand that is a call, which fills its operand register from an op that
+# runs the call rather than from a read or an inner operator. The last row puts
+# the call at the far end of an operator chain, where the register it lands in
+# is the one the enclosing operator reads as its right.
 program
 zt = 5
 say length('abcd') + 1

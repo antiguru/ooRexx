@@ -55,16 +55,23 @@
 //!   and `drive/tests.rs` as well, and aborts `tests/spike.rs` on a stack
 //!   overflow. **For that mutation this file adds nothing**; it is a more
 //!   direct signal rather than a new one.
-//! * Bounding `native_shape`'s recursion at depth 8 -- a promotion that keeps
-//!   firing for every shape `golden_tests.rs` writes and stops firing for a
-//!   deeper one -- reddens **this and nothing else in the workspace**. That is
-//!   the class this file exists for. Every promoted expression in the golden
-//!   set is hand-written and shallow, while `corpus/lang/deep_nested_expr.rex`
-//!   is a single assignment whose header says it nests three thousand terms on
-//!   purpose, so a bound between the two is invisible to every hand-written
-//!   witness. `push_native` recurses once per operator, so such a bound is a
-//!   change Phase 4f might reasonably want, which is what makes the class live
-//!   rather than hypothetical.
+//! * Bounding `native_shape` at depth 8 -- a promotion that keeps firing for a
+//!   shallow shape and stops firing for a deeper one -- reddens **this and
+//!   `golden_tests.rs`'s
+//!   `a_call_nested_past_the_paths_width_leaves_the_slot_general`, and nothing
+//!   else in the workspace**. That is the class this file exists for, and the
+//!   depth bound has two halves that those two witnesses split between them.
+//!   Measured 2026-08-12, on two mutations run over the whole workspace with
+//!   `--no-fail-fast`: refusing *every node* past depth 8 reddens both, while
+//!   refusing only an *address* past depth 8 reddens the golden test alone and
+//!   leaves this file green. `corpus/lang/deep_nested_expr.rex` is why -- a
+//!   single assignment whose header says it nests three thousand terms on
+//!   purpose and holds no call anywhere in them, so it reaches a bound on
+//!   nodes and cannot reach one on addresses. The golden test reaches both,
+//!   by generating a nesting and putting a call at the bottom of it.
+//!   `push_native` recurses once per operator, so such a bound is a change
+//!   Phase 4f might reasonably want, which is what makes the class live rather
+//!   than hypothetical.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -176,14 +183,15 @@ fn promoted_as(kind: &InstructionKind, index: usize, listed: &[usize]) -> Option
 /// agrees with it whatever it does.
 fn root_of(expr: &Expr) -> Root {
     match &expr.kind {
-        // A call at the root, and only at the root: `push_value` decides this
-        // one before it asks `native_shape` at all, because a slot is the
-        // finest address an op has and a nested call has none to give.
+        // A call at the root is the whole slot's expression, so the route down
+        // to it has no steps and every address reaches it. A call *below* the
+        // root is an operand and never the last op, so it is [`native`]'s
+        // business rather than this function's.
         ExprKind::Call { .. } => Root::CallExpr,
         ExprKind::Literal(_) => Root::Const,
         ExprKind::Constant(_) => Root::LoadConstant,
         ExprKind::Variable(_) | ExprKind::Stem(_) | ExprKind::Compound(_) => Root::Load,
-        ExprKind::Binary { op, left, right } if native(left) && native(right) => {
+        ExprKind::Binary { op, left, right } if native(left, 1) && native(right, 1) => {
             if arithmetic(*op) {
                 Root::Arith
             } else if other_family(*op) {
@@ -197,24 +205,43 @@ fn root_of(expr: &Expr) -> Root {
         // its operator, and one that did not would leave an `Op::EvalExpr`
         // where this arm calls for `Root::Prefix` -- which reddens rather than
         // passes, so the arm is the claim and not an assumption behind it.
-        ExprKind::Prefix { operand, .. } if native(operand) => Root::Prefix,
+        ExprKind::Prefix { operand, .. } if native(operand, 1) => Root::Prefix,
         _ => Root::EvalExpr,
     }
 }
 
+/// The deepest a call can sit below its slot's root and still be addressed by
+/// an op of its own: one step per bit a `u32` holds below the sentinel bit
+/// that marks where the route starts.
+///
+/// Written out here rather than read off `super::NodePath`, for the reason the
+/// module doc gives about the operator sets: a bound taken from the code under
+/// test moves with it and could never redden.
+const DEEPEST_ADDRESSED_CALL: usize = 31;
+
 /// Whether every part of `expr` has a native op, which is what licenses the
-/// whole tree compiling without `eval.rs` being entered.
-fn native(expr: &Expr) -> bool {
+/// whole tree compiling without `eval.rs` being entered. `depth` is how many
+/// operators stand between `expr` and its slot's own root.
+///
+/// **Only a call reads `depth`.** A call's op carries the route down to the
+/// node, so a call standing deeper than a route reaches has no op and takes
+/// its whole slot general with it; every other shape here is computed into a
+/// register the operator above names, is addressed by nothing, and promotes
+/// however deep it stands.
+fn native(expr: &Expr, depth: usize) -> bool {
     match &expr.kind {
         ExprKind::Literal(_)
         | ExprKind::Constant(_)
         | ExprKind::Variable(_)
         | ExprKind::Stem(_)
         | ExprKind::Compound(_) => true,
+        ExprKind::Call { .. } => depth <= DEEPEST_ADDRESSED_CALL,
         ExprKind::Binary { op, left, right } => {
-            (arithmetic(*op) || other_family(*op)) && native(left) && native(right)
+            (arithmetic(*op) || other_family(*op))
+                && native(left, depth + 1)
+                && native(right, depth + 1)
         }
-        ExprKind::Prefix { operand, .. } => native(operand),
+        ExprKind::Prefix { operand, .. } => native(operand, depth + 1),
         _ => false,
     }
 }
@@ -465,6 +492,35 @@ fn corpus_programs() -> Vec<String> {
 /// message.
 #[test]
 fn every_corpus_body_compiles_the_minimum_promotion_set_to_its_own_ops() {
+    // **On the stack the interpreter compiles bodies on, and that is not a
+    // precaution.** `compile`'s expression walk takes a frame per operator,
+    // and `corpus/lang/deep_nested_expr.rex` is one assignment nesting three
+    // thousand of them. `Interp` never meets that on a libtest thread --
+    // `on_interpreter_thread` gives it `INTERPRETER_STACK_BYTES` -- and this
+    // sweep is the one caller that reaches `compile` directly, so it is the
+    // one that has to ask for the same stack. Measured 2026-08-12 with the
+    // sweep called inline instead: it aborts the whole test binary at
+    // `RUST_MIN_STACK=2621440` and passes at `2883584`, against a libtest
+    // thread's own 2 MiB.
+    //
+    // A stack overflow is not a test failure -- Rust's guard page aborts the
+    // process, taking every other test in the binary with it -- which is why
+    // this is a stack size rather than a depth the sweep watches.
+    //
+    // A panic is resumed on this thread rather than turned into a failure of
+    // its own, so an assertion below still reports its own message.
+    let sweep = std::thread::Builder::new()
+        .stack_size(crate::INTERPRETER_STACK_BYTES)
+        .spawn(sweep_every_corpus_body)
+        .expect("spawning the sweep thread");
+    if let Err(panic) = sweep.join() {
+        std::panic::resume_unwind(panic);
+    }
+}
+
+/// The sweep itself, split out so that the test above is the thread it runs
+/// on and nothing else.
+fn sweep_every_corpus_body() {
     let dir = corpus_dir();
     let programs = corpus_programs();
     let mut seen = Seen::default();

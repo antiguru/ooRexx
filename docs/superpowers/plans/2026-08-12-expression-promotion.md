@@ -510,31 +510,39 @@ If any other test's expectation changes, stop: the refactor was not behaviour-pr
 
 **The change.**
 `native_shape` accepts `ExprKind::Call` -- at the root and at any depth the path can carry.
-It therefore has to know the depth, so it takes the path being built:
+It therefore has to know the depth, so it takes the address of the node it is asked about:
 
 ```rust
-fn native_shape(expr: &Expr, path: NodePath) -> bool {
+fn native_shape(expr: &Expr, path: Option<NodePath>) -> bool {
     match &expr.kind {
         ExprKind::Literal(_) | ExprKind::Constant(_)
         | ExprKind::Variable(_) | ExprKind::Stem(_) | ExprKind::Compound(_) => true,
-        // A call needs an address, and a path past its width has none. The
+        // A call needs an address, and a node past the width has none. The
         // whole slot then falls to `Op::EvalExpr`, which is the answer it
         // already had.
-        ExprKind::Call { .. } => true,
-        ExprKind::Prefix { operand, .. } => {
-            path.child(false).is_some_and(|inner| native_shape(operand, inner))
-        }
+        ExprKind::Call { .. } => path.is_some(),
+        ExprKind::Prefix { operand, .. } => native_shape(operand, descend(path, false)),
         ExprKind::Binary { op, left, right } => {
             is_native_binary(*op)
-                && path.child(false).is_some_and(|inner| native_shape(left, inner))
-                && path.child(true).is_some_and(|inner| native_shape(right, inner))
+                && native_shape(left, descend(path, false))
+                && native_shape(right, descend(path, true))
         }
         _ => false,
     }
 }
+
+fn descend(path: Option<NodePath>, right: bool) -> Option<NodePath> {
+    path?.child(right)
+}
 ```
 
-The `Call` arm answers `true` unconditionally: the depth it sits at was already charged by the `child` call that descended to it.
+**Only the `Call` arm reads the address, and that is the whole of the design.**
+Every other shape here is computed into a register the node above names and is addressed by nothing, so a depth past the width costs it nothing.
+
+**An earlier version of this section charged the depth at every node** -- `path: NodePath`, each operator arm answering `path.child(..).is_some_and(..)` and the `Call` arm answering `true` unconditionally -- and that is a defect rather than a simplification.
+It de-promotes any *call-free* expression nesting more operators than the width carries, which today compiles to native ops entire.
+`rust/corpus/lang/deep_nested_expr.rex` is exactly such a program: a single assignment of three thousand `1 +` terms and no call anywhere in it.
+Measured 2026-08-12, its main body's chunk is **12004 ops, 2999 of them `Arith` and none of them `EvalExpr`, before and after this task**; under the charge-everywhere version the whole assignment would have become one `Op::EvalExpr`, which is a plan for an optimisation making a corpus program slower.
 
 `push_native` gains a `Call` arm, and takes the path alongside the expression.
 The arm is what `push_value` does today for a root call, with the address coming from the path rather than being `ROOT`:
@@ -547,7 +555,13 @@ ExprKind::Call { .. } => {
 ```
 
 `push_value`'s own special case for a root call is then **deleted**: `native_shape` accepts it and `push_native` emits it, which is the same stream by a shorter route.
-`push_native` needs `index` and `slot` for the address, so thread them through.
+`push_native` needs `index`, `slot` and `calls` for the address and the resolution site, so thread them through; both it and `push_value` then carry a `clippy::too_many_arguments` expectation, which this file already precedents.
+
+**One thing threading them costs, measured rather than predicted.**
+`compile`'s expression walk takes a stack frame per operator, and the wider parameter lists make each frame bigger.
+`ir::corpus_shape_tests` compiles `deep_nested_expr.rex` directly on a libtest thread, and measured 2026-08-12 that sweep was passing with under 128 KiB of a 2 MiB stack to spare *before* this task -- it aborts at `RUST_MIN_STACK=1966080` and passes at `2097152` -- so the wider frames tipped it into a stack overflow.
+No other harness noticed, because every other one reaches `compile` through `Interp`, which runs on a thread with `INTERPRETER_STACK_BYTES`.
+The fix is for that sweep to compile on the same stack the interpreter compiles on rather than on a libtest thread's; it is not a reason to keep the parameter lists narrow.
 
 **The register discipline is unchanged and must stay so.**
 A nested call writes to the `dst` its parent gave it, exactly like a `Const` or a `Load`, and takes no register of its own.
