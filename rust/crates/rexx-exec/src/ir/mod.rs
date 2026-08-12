@@ -761,6 +761,33 @@ pub(crate) enum Op {
     /// [`Op::EvalExpr`] is: the register it reads is one that region wrote,
     /// and the region's own end is where that register is released.
     JumpUnless { reg: u16, target: u32 },
+    /// Validates the `IF` condition value in `reg`, emits the `>>>` line it
+    /// owes, and leaves the logical value [`Op::JumpUnless`] reads back in
+    /// that same register.
+    ///
+    /// **This is the tail of what an `IF`'s condition used to be one
+    /// [`Op::EvalExpr`] for.** That op evaluated the expression *and*
+    /// validated it, through `Interp::eval_if_condition`; here the expression
+    /// is native ops and this is the rest. `eval_chunk_expr`'s own `If` arm
+    /// stays, whole, for the conditions `native_shape` declines -- those
+    /// compile to one `EvalExpr` doing both halves, and no op of this kind
+    /// follows one.
+    ///
+    /// **One register, read and written**, because the value it validates is
+    /// the value it replaces: `Interp::condition_value` answers a `bool`, and
+    /// the Rexx logical value of that answer is what a jump tests. A second
+    /// register would hold the unvalidated value that nothing reads again.
+    ///
+    /// **A native condition is never a comma list**, because
+    /// `native_shape` has no `ExprKind::Logical` arm and takes its decision
+    /// for the whole expression at once. That is what licenses the driver
+    /// passing `checked: false`: nothing upstream of this op has validated
+    /// the value, so 34.1 is the right raiser and 34.6 cannot be owed here.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, whose clause is the
+    /// `IF`: the indent its `>>>` prints at and the clause a failure is blamed
+    /// on are that region's.
+    Condition { index: u32, reg: u16 },
 }
 
 /// Which driver steps the member clauses of a construct that resolves the

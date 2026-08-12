@@ -386,9 +386,21 @@ pub(crate) fn compile(
             // The `IF` clause is its condition and nothing else -- the branch
             // it chooses is not inside it, which is the boundary
             // `run.rs`'s own `If` arm measured (`SIGL` reports the `IF`'s line,
-            // not the branch's). So the region is exactly two ops and the
-            // register the condition lands in is released at its end.
-            InstructionKind::If { false_target, .. } => {
+            // not the branch's). So the region is the condition's ops and the
+            // jump that reads them, and the register the condition lands in is
+            // released at its end.
+            //
+            // **`push_value` is deliberately not used here, because the
+            // fallback is not the same op.** A condition `native_shape`
+            // declines stays one `Op::EvalExpr` doing the whole job,
+            // validation and `>>>` included, through `eval_chunk_expr`'s own
+            // `If` arm -- so an `Op::Condition` behind it would trace the value
+            // twice and validate it twice.
+            InstructionKind::If {
+                condition,
+                false_target,
+                ..
+            } => {
                 let targets = if_targets(&body.instructions, *false_target);
                 let mark = registers.mark();
                 let dst = registers.alloc()?;
@@ -399,11 +411,31 @@ pub(crate) fn compile(
                     end: 0,
                 });
                 push_echo(&mut ops, echo, instruction_index(index)?);
-                ops.push(Op::EvalExpr {
-                    index: instruction_index(index)?,
-                    slot: 0,
-                    dst,
-                });
+                if native_shape(condition, Some(NodePath::ROOT)) {
+                    push_native(
+                        &mut ops,
+                        &mut consts,
+                        &mut registers,
+                        &mut hints,
+                        &mut calls,
+                        plan,
+                        condition,
+                        instruction_index(index)?,
+                        0,
+                        Some(NodePath::ROOT),
+                        dst,
+                    )?;
+                    ops.push(Op::Condition {
+                        index: instruction_index(index)?,
+                        reg: dst,
+                    });
+                } else {
+                    ops.push(Op::EvalExpr {
+                        index: instruction_index(index)?,
+                        slot: 0,
+                        dst,
+                    });
+                }
                 let jump = op_index(&ops)?;
                 ops.push(Op::JumpUnless {
                     reg: dst,
@@ -1521,6 +1553,7 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::Call { index, .. }
                 | Op::CallExpr { index, .. }
                 | Op::TraceFunction { index, .. }
+                | Op::Condition { index, .. }
                 | Op::LoopRun { index } => Some(*index),
                 Op::Generic { .. }
                 | Op::TraceKeyword { .. }

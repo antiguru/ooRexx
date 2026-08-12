@@ -105,11 +105,11 @@ enum Root {
 }
 
 impl Root {
-    /// The `Root` an emitted op is, or `None` for an op that produces no
-    /// value.
+    /// The `Root` an emitted op is, or `None` for an op that is not one an
+    /// expression's own value can end in.
     ///
     /// Exhaustive with no catch-all, so an op variant added to [`Op`] has to
-    /// be classified here rather than silently counting as "not a value".
+    /// be classified here rather than silently counting as "not a root".
     fn of(op: &Op) -> Option<Root> {
         match op {
             Op::Const { .. } => Some(Root::Const),
@@ -140,7 +140,8 @@ impl Root {
             | Op::EnterWhen { .. }
             | Op::EnterOtherwise { .. }
             | Op::Jump { .. }
-            | Op::JumpUnless { .. } => None,
+            | Op::JumpUnless { .. }
+            | Op::Condition { .. } => None,
         }
     }
 }
@@ -344,6 +345,8 @@ fn listed_whens(body: &CodeBody) -> Vec<usize> {
 struct Seen {
     constructs: BTreeMap<&'static str, usize>,
     roots: BTreeMap<Root, usize>,
+    /// How many promoted clauses carry an `Op::Condition`.
+    native_conditions: usize,
 }
 
 /// Checks one body's compiled stream against what its instructions call for,
@@ -393,13 +396,27 @@ fn check_body(body: &CodeBody, symbols: &rexx_parse::SymbolTable, where_: &str, 
             )
         });
 
-        // The value expression, for the two constructs that have one that can
-        // compile natively. Every other promoted construct evaluates through
-        // `Op::EvalExpr` unconditionally, so there is nothing here to state
-        // about it that its presence in the stream has not already said.
+        // Whether this clause carries a compiled condition. Counted because
+        // the `If` row below says nothing at all on a corpus whose every
+        // condition is outside the native set: `root_of` would call for
+        // `Root::EvalExpr` and the stream would hold one, and the row would
+        // pass without the promotion ever having fired.
+        if region.iter().any(|op| matches!(op, Op::Condition { .. })) {
+            seen.native_conditions += 1;
+        }
+
+        // The value expression, for the constructs whose expression `compile`
+        // offers to `push_native`. The rest evaluate through `Op::EvalExpr`
+        // unconditionally, so there is nothing here to state about them that
+        // the op's presence in the stream has not already said.
+        //
+        // An `IF`'s condition ends in its expression's own root op, with
+        // `Op::Condition` and `Op::JumpUnless` behind it and neither of those
+        // a `Root`, so the same scan back finds it.
         let value = match &instruction.kind {
             InstructionKind::Assignment { value, .. } => Some(value),
             InstructionKind::Say { expression } => expression.as_ref(),
+            InstructionKind::If { condition, .. } => Some(condition),
             _ => continue,
         };
         let expected = value.map(root_of);
@@ -589,6 +606,11 @@ fn sweep_every_corpus_body() {
     assert!(
         seen.constructs.contains_key("DO") || seen.constructs.contains_key("LOOP"),
         "no corpus body contains a promoted DO or LOOP"
+    );
+    assert!(
+        seen.native_conditions > 0,
+        "no corpus clause compiled its condition to native ops, so the IF rows above hold only \
+         because every condition declined"
     );
     for root in [
         Root::CallExpr,

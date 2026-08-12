@@ -41,8 +41,9 @@ use super::{BodyEngine, Chunk, Op};
 use crate::clause::{ClauseOutcome, ClauseValue};
 use crate::eval::call_target_name;
 use crate::run::{
-    Absorbed, Echo, Ended, Flow, LoopHeaderValues, SelectEscape, SelectResume, absorb,
-    otherwise_range, otherwise_resume, select_escape, select_parts, when_resume, when_targets,
+    Absorbed, ConditionTrace, Echo, Ended, Flow, LoopHeaderValues, SelectEscape, SelectResume,
+    absorb, otherwise_range, otherwise_resume, raised_if_not_logical, select_escape, select_parts,
+    when_resume, when_targets,
 };
 use crate::{Code, Failure, Interp, Loud};
 
@@ -1079,6 +1080,48 @@ impl Interp {
                                         };
                                     break 'region Ok(RegionEnd::Flowed(flow));
                                 }
+                                // An `IF` condition's validation and its `>>>`
+                                // line, through the same
+                                // `Interp::condition_value` the tree-walker's
+                                // own `eval_condition` reaches -- so the
+                                // trace, the temps frame, the readback and the
+                                // 34.1 raiser are that function's rather than
+                                // a second copy. The register is read and
+                                // written in place: what a jump tests is the
+                                // logical value of the answer, and the
+                                // unvalidated value has no reader left.
+                                Op::Condition { index, reg } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*reg),
+                                        "op reads register {reg} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    debug_assert_names_the_clause(
+                                        code,
+                                        *index,
+                                        clause,
+                                        "Condition",
+                                    );
+                                    let value = self.roots.temp_at(registers, *reg as usize);
+                                    // Read live rather than compiled in, for
+                                    // the reason `eval_if_condition` reads it
+                                    // live: a nested activation moves it.
+                                    let indent = self.clause_state.current_value_indent;
+                                    let holds = match self.condition_value(
+                                        value,
+                                        ConditionTrace::Result(indent),
+                                        false,
+                                        raised_if_not_logical,
+                                    ) {
+                                        Ok(holds) => holds,
+                                        Err(failure) => break 'region Err(failure),
+                                    };
+                                    // In range unconditionally: `SMALL_INT_MAX`
+                                    // is far above one.
+                                    let logical =
+                                        ObjRef::small_int(i64::from(holds)).unwrap_or(ObjRef::NIL);
+                                    self.roots.set_temp(registers, *reg as usize, logical);
+                                }
                                 Op::JumpUnless { reg, target } => {
                                     debug_assert!(
                                         chunk.holds_register(*reg),
@@ -1314,6 +1357,7 @@ impl Interp {
                     return Err(Loud::op_not_driven("TraceFunction").into());
                 }
                 Op::JumpUnless { .. } => return Err(Loud::op_not_driven("JumpUnless").into()),
+                Op::Condition { .. } => return Err(Loud::op_not_driven("Condition").into()),
                 Op::WhenTest { .. } => return Err(Loud::op_not_driven("WhenTest").into()),
                 Op::TraceKeyword { .. } => return Err(Loud::op_not_driven("TraceKeyword").into()),
                 Op::LoopHeaderValue { .. } => {

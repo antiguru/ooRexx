@@ -879,15 +879,18 @@ fn a_nested_loops_registers_sit_above_the_enclosing_loops_and_a_later_loops_reus
 /// them across two engines.
 ///
 /// The six instructions are `IF`, `THEN`, `say 'a'`, `ELSE`, `say 'b'`,
-/// `say 'c'`. Three ops are the `IF`'s own clause -- the region that evaluates
-/// the condition and branches on it -- and two more close the true branch,
-/// sitting between its last op and the `ELSE`'s own op so that neither
-/// instruction's entry in `op_of` moves.
+/// `say 'c'`. The `IF`'s own clause is the region that computes the condition
+/// and branches on it: `1 = 1` is native, so it is the two constant loads,
+/// the comparison and their three echo lines, then `Condition` -- the
+/// validation and the `>>>` that the condition still owes -- and the jump that
+/// reads the register `Condition` left its answer in. Two more ops close the
+/// true branch, sitting between its last op and the `ELSE`'s own op so that
+/// neither instruction's entry in `op_of` moves.
 ///
 /// The three things a reader should check by eye are the two jump targets and
-/// what sits between them: `JumpUnless` goes to op 10, the `ELSE` marker, and
-/// `Jump` goes to op 15, `say 'c'`'s own clause, past the whole `ELSE` branch,
-/// with `EndBranch` at op 8 -- the boundary a promoted construct owes once the
+/// what sits between them: `JumpUnless` goes to op 16, the `ELSE` marker, and
+/// `Jump` goes to op 21, `say 'c'`'s own clause, past the whole `ELSE` branch,
+/// with `EndBranch` at op 14 -- the boundary a promoted construct owes once the
 /// branch it chose has finished.
 ///
 /// **The `JumpUnless` target is past that `EndBranch`, and that is measured**:
@@ -895,7 +898,7 @@ fn a_nested_loops_registers_sit_above_the_enclosing_loops_and_a_later_loops_reus
 /// over it on the false path, where an `IF` whose condition is false runs no
 /// such boundary at all.
 ///
-/// **`op_of[3]` is 8 and not 10**, which is the other half of the same
+/// **`op_of[3]` is 14 and not 16**, which is the other half of the same
 /// mechanism: the `ELSE`'s entry in the resume table is the pair of ops that
 /// close the branch in front of it, so a `Flow::Goto(3)` -- a nested `DO`
 /// block resuming at
@@ -909,30 +912,38 @@ fn an_if_with_an_else_compiles_to_a_clause_region_and_two_jumps() {
         compile_for_test(b"if 1 = 1 then say 'a'\nelse say 'b'\nsay 'c'\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=3\n\
-         1: EvalExpr index=0 slot=0 dst=0\n\
-         2: JumpUnless reg=0 target=10\n\
-         3: Generic index=1\n\
-         4: Clause index=2 end=8\n\
-         5: Const dst=0 konst=0\n\
-         6: TraceLiteral src=0\n\
-         7: Say index=2 src=0\n\
-         8: EndBranch\n\
-         9: Jump target=15\n\
-         10: Generic index=3\n\
-         11: Clause index=4 end=15\n\
-         12: Const dst=0 konst=1\n\
-         13: TraceLiteral src=0\n\
-         14: Say index=4 src=0\n\
-         15: Clause index=5 end=19\n\
-         16: Const dst=0 konst=2\n\
-         17: TraceLiteral src=0\n\
-         18: Say index=5 src=0\n"
+        "0: Clause index=0 end=9\n\
+         1: LoadConstant dst=0\n\
+         2: TraceLiteral src=0\n\
+         3: LoadConstant dst=1\n\
+         4: TraceLiteral src=1\n\
+         5: Binary op== lhs=0 rhs=1 dst=0\n\
+         6: TraceOperator op== src=0\n\
+         7: Condition index=0 reg=0\n\
+         8: JumpUnless reg=0 target=16\n\
+         9: Generic index=1\n\
+         10: Clause index=2 end=14\n\
+         11: Const dst=0 konst=0\n\
+         12: TraceLiteral src=0\n\
+         13: Say index=2 src=0\n\
+         14: EndBranch\n\
+         15: Jump target=21\n\
+         16: Generic index=3\n\
+         17: Clause index=4 end=21\n\
+         18: Const dst=0 konst=1\n\
+         19: TraceLiteral src=0\n\
+         20: Say index=4 src=0\n\
+         21: Clause index=5 end=25\n\
+         22: Const dst=0 konst=2\n\
+         23: TraceLiteral src=0\n\
+         24: Say index=5 src=0\n"
     );
-    // One register throughout: the condition's is released at the `IF`'s own
-    // clause end, so each promoted `SAY` below gets the same one back.
-    assert_eq!(chunk.registers, 1);
-    assert_eq!(chunk.op_of, vec![0, 3, 4, 8, 11, 15, 19]);
+    // Two registers throughout: the comparison's right operand takes one of
+    // its own beside the register the condition lands in, and both are
+    // released at the `IF`'s own clause end, so each promoted `SAY` below gets
+    // register 0 back.
+    assert_eq!(chunk.registers, 2);
+    assert_eq!(chunk.op_of, vec![0, 9, 10, 14, 17, 21, 25]);
     // Three distinct literals, one entry each, in the order they were first
     // seen -- which is the order the `konst` fields above read.
     assert_eq!(
@@ -950,26 +961,62 @@ fn an_if_with_an_else_compiles_to_a_clause_region_and_two_jumps() {
 /// is one the driver would run for nothing.
 ///
 /// The end-of-branch boundary is still emitted, and is still the true path's
-/// alone: the branch falls into `EndBranch` at op 8 and the `JumpUnless` goes
-/// past it to op 9.
+/// alone: the branch falls into `EndBranch` at op 14 and the `JumpUnless` goes
+/// past it to op 15.
 #[test]
 fn an_if_with_no_else_emits_no_branch_end_jump() {
     let chunk = compile_for_test(b"if 1 = 0 then say 'a'\nsay 'b'\n").expect("compiles");
     assert_eq!(
         render(&chunk),
+        "0: Clause index=0 end=9\n\
+         1: LoadConstant dst=0\n\
+         2: TraceLiteral src=0\n\
+         3: LoadConstant dst=1\n\
+         4: TraceLiteral src=1\n\
+         5: Binary op== lhs=0 rhs=1 dst=0\n\
+         6: TraceOperator op== src=0\n\
+         7: Condition index=0 reg=0\n\
+         8: JumpUnless reg=0 target=15\n\
+         9: Generic index=1\n\
+         10: Clause index=2 end=14\n\
+         11: Const dst=0 konst=0\n\
+         12: TraceLiteral src=0\n\
+         13: Say index=2 src=0\n\
+         14: EndBranch\n\
+         15: Clause index=3 end=19\n\
+         16: Const dst=0 konst=1\n\
+         17: TraceLiteral src=0\n\
+         18: Say index=3 src=0\n"
+    );
+    assert_eq!(chunk.registers, 2);
+}
+
+/// **A condition outside the native set stays one [`super::Op::EvalExpr`] and
+/// takes no `Condition` op**, which is the adjacent refusal to the two streams
+/// above.
+///
+/// The fallback is not the same op with a piece missing: that `EvalExpr` runs
+/// `Interp::eval_if_condition`, which evaluates the expression *and* validates
+/// it *and* emits its `>>>`, so a `Condition` behind it would trace the value
+/// a second time and validate it a second time. `.nil` is
+/// `ExprKind::DotVariable`, which `native_shape` has no arm for.
+///
+/// **What this catches that the rest of the suite does not, measured rather
+/// than argued.** Emitting a `Condition` behind the fallback's own `EvalExpr`
+/// -- the shape `push_value` would have produced -- reddens this test and
+/// nothing else. Measured 2026-08-12, the whole workspace under
+/// `--no-fail-fast`.
+#[test]
+fn a_condition_outside_the_native_set_stays_one_eval_expr() {
+    let chunk = compile_for_test(b"if .nil then nop\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
         "0: Clause index=0 end=3\n\
          1: EvalExpr index=0 slot=0 dst=0\n\
-         2: JumpUnless reg=0 target=9\n\
+         2: JumpUnless reg=0 target=6\n\
          3: Generic index=1\n\
-         4: Clause index=2 end=8\n\
-         5: Const dst=0 konst=0\n\
-         6: TraceLiteral src=0\n\
-         7: Say index=2 src=0\n\
-         8: EndBranch\n\
-         9: Clause index=3 end=13\n\
-         10: Const dst=0 konst=1\n\
-         11: TraceLiteral src=0\n\
-         12: Say index=3 src=0\n"
+         4: Generic index=2\n\
+         5: EndBranch\n"
     );
     assert_eq!(chunk.registers, 1);
 }
@@ -981,10 +1028,11 @@ fn an_if_with_no_else_emits_no_branch_end_jump() {
 /// `JumpUnless` targets are past both, because neither false path ran a
 /// branch.
 ///
-/// Two `IF`s in one body reuse the same register, which is what the
+/// Two `IF`s in one body reuse the same registers, which is what the
 /// allocator's stack discipline buys over the spike's withdrawn monotonic
-/// counter: under that counter the inner `IF` would take register 1 and the
-/// high-water mark would grow with a body's length rather than with its depth.
+/// counter: under that counter the inner `IF` would take registers 2 and 3 and
+/// the high-water mark would grow with a body's length rather than with its
+/// depth.
 ///
 /// **What this does not pin, stated because an earlier version of this comment
 /// claimed it did.** It says nothing about a `Mark` carrying a *position*: a
@@ -998,33 +1046,45 @@ fn an_if_with_no_else_emits_no_branch_end_jump() {
 /// Decisions section names as a loop's control value, is what will make it
 /// observable in an emitted stream.
 #[test]
-fn nested_ifs_reuse_one_register() {
+fn nested_ifs_reuse_their_registers() {
     let chunk =
         compile_for_test(b"if 1 = 1 then\n  if 2 = 2 then say 'a'\nsay 'b'\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=3\n\
-         1: EvalExpr index=0 slot=0 dst=0\n\
-         2: JumpUnless reg=0 target=14\n\
-         3: Generic index=1\n\
-         4: Clause index=2 end=7\n\
-         5: EvalExpr index=2 slot=0 dst=0\n\
-         6: JumpUnless reg=0 target=14\n\
-         7: Generic index=3\n\
-         8: Clause index=4 end=12\n\
-         9: Const dst=0 konst=0\n\
-         10: TraceLiteral src=0\n\
-         11: Say index=4 src=0\n\
-         12: EndBranch\n\
-         13: EndBranch\n\
-         14: Clause index=5 end=18\n\
-         15: Const dst=0 konst=1\n\
-         16: TraceLiteral src=0\n\
-         17: Say index=5 src=0\n"
+        "0: Clause index=0 end=9\n\
+         1: LoadConstant dst=0\n\
+         2: TraceLiteral src=0\n\
+         3: LoadConstant dst=1\n\
+         4: TraceLiteral src=1\n\
+         5: Binary op== lhs=0 rhs=1 dst=0\n\
+         6: TraceOperator op== src=0\n\
+         7: Condition index=0 reg=0\n\
+         8: JumpUnless reg=0 target=26\n\
+         9: Generic index=1\n\
+         10: Clause index=2 end=19\n\
+         11: LoadConstant dst=0\n\
+         12: TraceLiteral src=0\n\
+         13: LoadConstant dst=1\n\
+         14: TraceLiteral src=1\n\
+         15: Binary op== lhs=0 rhs=1 dst=0\n\
+         16: TraceOperator op== src=0\n\
+         17: Condition index=2 reg=0\n\
+         18: JumpUnless reg=0 target=26\n\
+         19: Generic index=3\n\
+         20: Clause index=4 end=24\n\
+         21: Const dst=0 konst=0\n\
+         22: TraceLiteral src=0\n\
+         23: Say index=4 src=0\n\
+         24: EndBranch\n\
+         25: EndBranch\n\
+         26: Clause index=5 end=30\n\
+         27: Const dst=0 konst=1\n\
+         28: TraceLiteral src=0\n\
+         29: Say index=5 src=0\n"
     );
     assert_eq!(
-        chunk.registers, 1,
-        "the inner IF reuses the register the outer one released"
+        chunk.registers, 2,
+        "the inner IF reuses the registers the outer one released"
     );
 }
 
@@ -1105,7 +1165,7 @@ fn a_select_with_an_otherwise_compiles_to_a_scan_chain_and_two_frames() {
 /// register a `WHEN` takes for its own answer cannot reclaim it.
 ///
 /// **This is the first emitted stream where `Mark` carrying a position is
-/// observable**, which `nested_ifs_reuse_one_register` says it is not for an
+/// observable**, which `nested_ifs_reuse_their_registers` says it is not for an
 /// `IF`. The `CASE` value is register 0 and outlives every member clause --
 /// the second `WHEN` is tested after the first `WHEN`'s branch has already run
 /// -- while the two `WHEN`s share register 1 between them. An allocator whose
@@ -1200,11 +1260,12 @@ fn a_select_with_no_otherwise_scans_out_onto_its_own_end() {
 /// rather than what any op does.
 ///
 /// **The echo is each region's first op, not its last.** The tree-walker echoes
-/// a clause before it computes anything, so the `>>>` line an `IF`'s condition
-/// produces follows the `*-*` line; an echo emitted after the `EvalExpr` would
-/// reverse them and no register or jump would move.
+/// a clause before it computes anything, so every line the condition produces
+/// -- its operands' `>L>`, its operator's `>O>`, and the `>>>` of the value it
+/// settles on -- follows the `*-*` line; an echo emitted after the condition's
+/// ops would reverse them and no register or jump would move.
 ///
-/// **The whole traced order of a promoted `SAY` is readable off ops 5 to 9**:
+/// **The whole traced order of a promoted `SAY` is readable off ops 11 to 15**:
 /// the clause echo, the constant load, the literal's own `>L>` line, and the
 /// print with its `>>>`. Three of those four lines come from three different
 /// ops, and the oracle prints them in exactly that order
@@ -1216,34 +1277,40 @@ fn a_traced_if_carries_its_clause_echo_as_an_op_of_the_region() {
         .expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=4\n\
+        "0: Clause index=0 end=10\n\
          1: TraceClause index=0\n\
-         2: EvalExpr index=0 slot=0 dst=0\n\
-         3: JumpUnless reg=0 target=12\n\
-         4: Generic index=1\n\
-         5: Clause index=2 end=10\n\
-         6: TraceClause index=2\n\
-         7: Const dst=0 konst=0\n\
-         8: TraceLiteral src=0\n\
-         9: Say index=2 src=0\n\
-         10: EndBranch\n\
-         11: Jump target=18\n\
-         12: Generic index=3\n\
-         13: Clause index=4 end=18\n\
-         14: TraceClause index=4\n\
-         15: Const dst=0 konst=1\n\
-         16: TraceLiteral src=0\n\
-         17: Say index=4 src=0\n\
-         18: Clause index=5 end=23\n\
-         19: TraceClause index=5\n\
-         20: Const dst=0 konst=2\n\
-         21: TraceLiteral src=0\n\
-         22: Say index=5 src=0\n"
+         2: LoadConstant dst=0\n\
+         3: TraceLiteral src=0\n\
+         4: LoadConstant dst=1\n\
+         5: TraceLiteral src=1\n\
+         6: Binary op== lhs=0 rhs=1 dst=0\n\
+         7: TraceOperator op== src=0\n\
+         8: Condition index=0 reg=0\n\
+         9: JumpUnless reg=0 target=18\n\
+         10: Generic index=1\n\
+         11: Clause index=2 end=16\n\
+         12: TraceClause index=2\n\
+         13: Const dst=0 konst=0\n\
+         14: TraceLiteral src=0\n\
+         15: Say index=2 src=0\n\
+         16: EndBranch\n\
+         17: Jump target=24\n\
+         18: Generic index=3\n\
+         19: Clause index=4 end=24\n\
+         20: TraceClause index=4\n\
+         21: Const dst=0 konst=1\n\
+         22: TraceLiteral src=0\n\
+         23: Say index=4 src=0\n\
+         24: Clause index=5 end=29\n\
+         25: TraceClause index=5\n\
+         26: Const dst=0 konst=2\n\
+         27: TraceLiteral src=0\n\
+         28: Say index=5 src=0\n"
     );
     // The echo op addresses no register, so the extra op changes nothing the
     // driver has to reserve.
-    assert_eq!(chunk.registers, 1);
-    assert_eq!(chunk.op_of, vec![0, 4, 5, 10, 13, 18, 23]);
+    assert_eq!(chunk.registers, 2);
+    assert_eq!(chunk.op_of, vec![0, 10, 11, 16, 19, 24, 29]);
 }
 
 /// A traced `SELECT CASE`: **one echo per promoted clause, and exactly one**.

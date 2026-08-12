@@ -6818,13 +6818,15 @@ impl Interp {
     /// whole of one. [`NodePath::ROOT`] is the whole of it, so a call that is
     /// the slot's own expression resolves with no descent at all.
     ///
-    /// The slot arms are a subset of [`Interp::eval_chunk_expr`]'s and must
-    /// stay one: a slot that function evaluates by some other rule -- an
-    /// `If`'s condition is validated to `0`/`1`, a `DO` header's value is
-    /// filed -- must never reach here, because the op behind this would take
-    /// the value as it comes and lose that. Only the slots whose value *is*
-    /// taken as it comes are listed: an `Assignment`'s value and a `SAY`'s
-    /// expression.
+    /// **The slot arms are the slots `compile` enters `push_native` for**, and
+    /// they are a subset of [`Interp::eval_chunk_expr`]'s that must stay one.
+    /// An addressed op exists only where the whole slot compiled natively, so
+    /// a slot `compile` leaves on [`crate::ir::Op::EvalExpr`] entire -- a
+    /// `SELECT CASE`'s expression, a `DO` header's value -- holds no node any
+    /// op names and must never reach here. An `IF`'s condition is in both
+    /// functions and they do different halves of it: this resolves a call
+    /// inside a condition that compiled, and `eval_chunk_expr`'s own `If` arm
+    /// evaluates the conditions that declined.
     ///
     /// `None` for a slot this does not name and for a step that lands on a
     /// node with no such child. Both are `Loud::call_op_off_its_node` at the
@@ -6843,6 +6845,7 @@ impl Interp {
                 },
                 0,
             ) => expression,
+            (InstructionKind::If { condition, .. }, 0) => condition,
             _ => return None,
         };
         for right in path.steps() {
@@ -8729,7 +8732,7 @@ fn raised_dot_led(found: &[u8]) -> Raised {
 /// `Error_Logical_value_if`, catalogue text "Value of expression following
 /// IF keyword must be exactly \"0\" or \"1\"; found \"...\"", one
 /// substitution, the operand's own rendered text.
-fn raised_if_not_logical(found: &[u8]) -> Raised {
+pub(crate) fn raised_if_not_logical(found: &[u8]) -> Raised {
     Raised::syntax(34, 1, vec![found.to_vec()])
 }
 

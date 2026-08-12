@@ -219,6 +219,9 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::JumpUnless { reg, target } => {
                 out.push_str(&format!("{index}: JumpUnless reg={reg} target={target}\n"));
             }
+            Op::Condition { index: at, reg } => {
+                out.push_str(&format!("{index}: Condition index={at} reg={reg}\n"));
+            }
         }
     }
     out
