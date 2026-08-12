@@ -535,8 +535,11 @@ A nested call writes to the `dst` its parent gave it, exactly like a `Const` or 
 
 **The depth divergence, stated rather than discovered.**
 `Op::CallExpr`'s arm enters `enter_eval_node` once, so a promoted nested call's arguments start at the depth the call itself sits at rather than at the depth the tree-walker would have reached by recursing through each enclosing node.
-This is not new -- a promoted `Op::Arith` chain already skips one `eval` per operator -- and it is observable only through `MAX_EVAL_DEPTH` on an expression nested deeply enough to hit it.
-Record it in the record entry; do not add a mechanism for it.
+This is not new and it is measured: on 2026-08-12, at head before this plan, `zv = 1` followed by 100,001 `+0` terms answered **rc 245 on the tree-walker and rc 0 on the compiled engine**, because a promoted operator chain is flat ops with no `eval` recursion for `MAX_EVAL_DEPTH` to count.
+Every task in this plan widens the set of expressions that reach it -- Task 1 to concatenation, comparison and logical, Task 2 to the prefix operators, Task 4 to a nested call.
+`MAX_EVAL_DEPTH` is a guard on *this crate's* Rust stack rather than an oracle behaviour (`eval.rs`'s own doc comment: the oracle's cliff is far lower and it segfaults above it), and the compiled engine has no run-time recursion to guard -- checked to 700,000 terms, rc 0.
+So the divergence is the guard not firing where it has nothing to protect, not a wrong answer.
+Record it in the record entry; do not add a mechanism for it, and do not let a task quietly re-pin a test to one engine without saying which of the two the test is now about.
 
 **Steps:**
 
