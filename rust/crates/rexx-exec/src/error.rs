@@ -1417,7 +1417,7 @@ impl From<&ParseError> for Raised {
 #[derive(Debug)]
 pub(crate) enum Failure {
     Loud(Loud),
-    Raised(Raised),
+    Raised(Box<Raised>),
     /// **Not a failure at all** -- `EXIT` inside a routine reached through
     /// `ExprKind::Call`'s expression form (Task 4), or that routine falling
     /// off its own end, either of which ends the whole program exactly as
@@ -1450,7 +1450,7 @@ impl From<Loud> for Failure {
 
 impl From<Raised> for Failure {
     fn from(raised: Raised) -> Failure {
-        Failure::Raised(raised)
+        Failure::Raised(Box::new(raised))
     }
 }
 

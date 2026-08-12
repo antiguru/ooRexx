@@ -3207,7 +3207,7 @@ impl Interp {
                     unreachable!("matched Failure::Raised immediately above")
                 };
                 raised.delivery.search = Search::Here;
-                return Err(raised.into());
+                return Err(Failure::Raised(raised));
             }
             // The outermost activation is the only one allowed to look.
             Search::Top if self.activations.len() > 1 => return Err(failure),
@@ -3276,7 +3276,7 @@ impl Interp {
         // What a later `RAISE PROPAGATE` re-raises. See `exec_raise_
         // propagate` for what is and is not measured about it.
         self.active_condition = Some(ActiveCondition {
-            raised,
+            raised: *raised,
             site,
             sites,
         });
