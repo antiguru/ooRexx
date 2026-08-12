@@ -91,7 +91,7 @@ out> apq
 out> pq r
 out> prq
 
-# the two comparison families over the same operands. The non-strict one
+# both comparison families over the same operands. The non-strict one
 # compares numerically when both sides convert (`'1' = '1.0'`) and drops to a
 # string compare when either does not (`'ABC' < 'abd'`); the strict one
 # compares bytes always, so it separates `1` from `1.0` and keeps the blank in
@@ -127,7 +127,7 @@ out> 0
 # at DIGITS 4 `1.0001` and `1` are equal and at DIGITS 9 they are not. **The
 # strict rows are the control and there is one at each setting**, which is what
 # says the setting cannot move a byte comparison -- a single strict row would
-# only have said the two families differ where it sat.
+# only have said the families differ where it sat.
 program
 numeric digits 4
 say 1.0001 = 1

@@ -1007,7 +1007,7 @@ impl Interp {
     ///
     /// Arithmetic is **not** here and keeps [`Interp::eval_arithmetic`]:
     /// `**`'s exponent is not converted the way its base is, so it does not
-    /// share the operand handling the three families below do, and its
+    /// share the operand handling the families below do, and its
     /// compiled site carries a quickening hint no other operator has.
     ///
     /// **Both operands must already be rooted by the caller**, for the reason
