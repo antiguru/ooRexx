@@ -1,0 +1,155 @@
+# What a DO/LOOP header's values print while they are being computed.
+#
+# A header slot used to be one `Op::EvalExpr`: `eval.rs` for the whole
+# expression, with the `>K>` echo and the validation as ops behind it. The
+# expression is now its own native ops where `native_shape` accepts it, and
+# `Op::LoopHeaderValue` is still what the slot owes -- so what moved is which
+# code emits a value's intermediate trace lines, and where the `>K>` sits among
+# them.
+#
+# The rows are transcripts: each is one program whose stdout, stderr and exit
+# status are recorded byte for byte, so a line that appears, disappears or
+# moves shows as a diff.
+#
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, on both
+# engines, before this file was written -- except the one row whose own comment
+# says which line the oracle prints and this crate does not. Regenerate a row
+# by running its program under the oracle, never with REWRITE=1 -- ir_dual.rs
+# refuses to run at all under REWRITE for that reason. Capture is:
+#
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+#
+# Expected lines are tagged so that no line of the block can be empty: an empty
+# line ends an expected block, and a program's own output may hold one. A
+# trailing blank inside a line is part of what is compared, and the tag is what
+# keeps one away from the end of a line that would otherwise look empty.
+
+# trace i over a TO/BY/FOR header, which is the `>K>` order per header value
+# The interleave is the property: each value's own intermediate lines come
+# first, then that value's `>K>`, then the next value is evaluated at all. The
+# initial value has intermediate lines and no `>K>` of its own, and the TO
+# bound is a symbol read rather than a literal, so the run of lines is not one
+# shape repeated.
+program
+trace i
+zn = 6
+do zi = 1 to zn by 2 for 2
+  say zi
+end
+----
+rc> 0
+out> 1
+out> 3
+err>      2 *-* zn = 6
+err>        >L>   "6"
+err>        >>>   "6"
+err>        >=>   ZN <= "6"
+err>      3 *-* do zi = 1 to zn by 2 for 2
+err>        >L>   "1"
+err>        >V>   ZN => "6"
+err>        >K>   "TO" => "6"
+err>        >L>   "2"
+err>        >K>   "BY" => "2"
+err>        >L>   "2"
+err>        >K>   "FOR" => "2"
+err>        >=>   ZI <= "1"
+err>      4 *-*   say zi
+err>        >V>     ZI => "1"
+err>        >>>     "1"
+err>      5 *-* end
+err>      3 *-* do zi = 1 to zn by 2 for 2
+err>        >V>     ZI => "1"
+err>        >>>     "1"
+err>        >>>     "3"
+err>        >=>     ZI <= "3"
+err>      4 *-*   say zi
+err>        >V>     ZI => "3"
+err>        >>>     "3"
+err>      5 *-* end
+err>      3 *-* do zi = 1 to zn by 2 for 2
+err>        >V>     ZI => "3"
+err>        >>>     "3"
+err>        >>>     "5"
+err>        >=>     ZI <= "5"
+
+# trace i over a header whose bound is a call
+# The call takes an `Op::CallExpr` addressed at slot 1 of the DO, which resolves
+# only because `Interp::chunk_node_at` descends a header slot through
+# `loop_header_slot`. The argument's `>A>` and the call's own `>F>` sit in front
+# of the `>K>` the bound owes, so this row holds the address and the order at
+# once.
+program
+trace i
+zs = 'ab'
+do zi = 1 to length(zs)
+  say zi
+end
+----
+rc> 0
+out> 1
+out> 2
+err>      2 *-* zs = 'ab'
+err>        >L>   "ab"
+err>        >>>   "ab"
+err>        >=>   ZS <= "ab"
+err>      3 *-* do zi = 1 to length(zs)
+err>        >L>   "1"
+err>        >V>   ZS => "ab"
+err>        >A>   "ab"
+err>        >F>   LENGTH => "2"
+err>        >K>   "TO" => "2"
+err>        >=>   ZI <= "1"
+err>      4 *-*   say zi
+err>        >V>     ZI => "1"
+err>        >>>     "1"
+err>      5 *-* end
+err>      3 *-* do zi = 1 to length(zs)
+err>        >V>     ZI => "1"
+err>        >>>     "1"
+err>        >>>     "2"
+err>        >=>     ZI <= "2"
+err>      4 *-*   say zi
+err>        >V>     ZI => "2"
+err>        >>>     "2"
+err>      5 *-* end
+err>      3 *-* do zi = 1 to length(zs)
+err>        >V>     ZI => "2"
+err>        >>>     "2"
+err>        >>>     "3"
+err>        >=>     ZI <= "3"
+
+# trace i over a DO OVER ... FOR
+#
+# **This row's expected block is not the oracle's.** The oracle prints
+# `       >K>   "FOR" => "1"` after the `>L>   "1"` line, and this crate prints
+# nothing for that value: `HeaderRole::OverFor::keyword()` answers `None`.
+# Measured 2026-08-12 on both engines and under `trace r` as well as `trace i`,
+# with `do qq over 4.5 for 2` giving the same one-line gap -- so it is neither
+# this promotion's nor this program's. The row is here because it pins our own
+# answer while the gap is open: the OVER target's `>K>` follows its value's own
+# lines, and the FOR count's absence is a single line rather than a shifted
+# block.
+program
+trace i
+zs = 'abc'
+do qq over zs for 1
+  say qq
+end
+----
+rc> 0
+out> abc
+err>      2 *-* zs = 'abc'
+err>        >L>   "abc"
+err>        >>>   "abc"
+err>        >=>   ZS <= "abc"
+err>      3 *-* do qq over zs for 1
+err>        >V>   ZS => "abc"
+err>        >K>   "OVER" => "abc"
+err>        >L>   "1"
+err>        >=>     QQ <= "abc"
+err>      4 *-*   say qq
+err>        >V>     QQ => "abc"
+err>        >>>     "abc"
+err>      5 *-* end
+err>      3 *-* do qq over zs for 1

@@ -718,8 +718,15 @@ pub(crate) enum HeaderRole {
     Count,
     /// `DO name OVER expr`'s target, echoed under the `OVER` tag.
     Over,
-    /// `DO name OVER expr FOR expr`'s count, which the oracle echoes nothing
-    /// for -- unlike every other count here.
+    /// `DO name OVER expr FOR expr`'s count, which this crate echoes nothing
+    /// for.
+    ///
+    /// **That is a divergence rather than a match, measured 2026-08-12**: the
+    /// oracle prints `>K>   "FOR" => "1"` for `do qq over zs for 1`, on both
+    /// `trace i` and `trace r`, where this crate prints nothing. Both engines
+    /// here agree with each other, so it is a keyword this table withholds and
+    /// not anything the compiled form does. `ir_dual_cases/loop-header-values`
+    /// holds the transcript, which is what stops the gap moving unnoticed.
     OverFor,
 }
 
@@ -861,9 +868,16 @@ fn header_expr_for(kind: &LoopKind, role: HeaderRole) -> Option<&Expr> {
 }
 
 /// The expression of `body`'s header at `slot` -- the compiled stream's own
-/// `Op::EvalExpr` addressing, where a slot is a position in
-/// [`HeaderPlan::roles`].
-fn loop_header_slot(body: &Loop, slot: u32) -> Option<&Expr> {
+/// addressing, where a slot is a position in [`HeaderPlan::roles`].
+///
+/// **The one resolution, read by the compiler and by both of the driver's
+/// entries.** `ir::compile` asks it which expression a slot's ops are emitted
+/// for, [`Interp::eval_chunk_expr`] asks it which expression an
+/// `ir::Op::EvalExpr` at that slot evaluates, and [`Interp::chunk_node_at`]
+/// asks it which expression an addressed op descends from -- so a slot means
+/// the same thing to all three by construction rather than by three tables
+/// agreeing.
+pub(crate) fn loop_header_slot(body: &Loop, slot: u32) -> Option<&Expr> {
     let plan = loop_header_plan(body)?;
     let role = *plan.roles().get(slot as usize)?;
     header_expr_for(&body.kind, role)
@@ -5597,9 +5611,10 @@ impl Interp {
     /// loop to keep in step with this one.
     ///
     /// **The compiled stream enters at the second half rather than here.** A
-    /// promoted `DO`/`LOOP` evaluates its own header as ops
-    /// (`ir::Op::EvalExpr`, `ir::Op::TraceKeyword`, `ir::Op::LoopHeaderValue`)
-    /// and then reaches [`Interp::run_loop_with_header`] with the values they
+    /// promoted `DO`/`LOOP` evaluates its own header as ops -- one group per
+    /// entry of the same [`HeaderPlan`] this function iterates, each ending in
+    /// the `ir::Op::LoopHeaderValue` that validates and files that value --
+    /// and then reaches [`Interp::run_loop_with_header`] with what they
     /// produced, so the two engines share the *validation* of each value and
     /// the whole of the construct below it, and differ only in what drives the
     /// header's sequence.
@@ -6826,11 +6841,11 @@ impl Interp {
     /// they are a subset of [`Interp::eval_chunk_expr`]'s that must stay one.
     /// An addressed op exists only where the whole slot compiled natively, so
     /// a slot `compile` leaves on [`crate::ir::Op::EvalExpr`] entire -- a
-    /// `SELECT CASE`'s expression, a `DO` header's value -- holds no node any
-    /// op names and must never reach here. An `IF`'s condition is in both
-    /// functions and they do different halves of it: this resolves a call
-    /// inside a condition that compiled, and `eval_chunk_expr`'s own `If` arm
-    /// evaluates the conditions that declined.
+    /// `SELECT CASE`'s expression -- holds no node any op names and must never
+    /// reach here. An `IF`'s condition and a `DO`/`LOOP` header's values are in
+    /// both functions and the two do different halves of each: this resolves a
+    /// call inside a slot that compiled, and `eval_chunk_expr`'s own arms
+    /// evaluate the slots that declined.
     ///
     /// `None` for a slot this does not name and for a step that lands on a
     /// node with no such child. Both are `Loud::call_op_off_its_node` at the
@@ -6850,6 +6865,14 @@ impl Interp {
                 0,
             ) => expression,
             (InstructionKind::If { condition, .. }, 0) => condition,
+            // A `DO`/`LOOP` header's `slot`th expression, resolved through the
+            // same `loop_header_slot` the compiler emitted the slot's ops from
+            // and the same one `eval_chunk_expr` evaluates a declining slot
+            // with. Every slot of a header is addressable, not just one, which
+            // is why this arm binds `slot` rather than matching a number.
+            (InstructionKind::Do(body) | InstructionKind::Loop(body), slot) => {
+                loop_header_slot(body, u32::from(slot))?
+            }
             _ => return None,
         };
         for right in path.steps() {

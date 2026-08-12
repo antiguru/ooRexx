@@ -239,11 +239,25 @@ The fallback stays one `Op::EvalExpr` for that slot; a header with one declining
 - [ ] **Step 3: pin the streams**
 
 `golden_tests.rs`: `do i = 1 to n` renders its bound's ops; `do i = 1 to length(s)` renders a `CallExpr` addressed at the header slot.
+Two more the dispatched list did not ask for and the code needs: a header with one declining slot beside a native one, which is what says each slot decides for itself; and a header operand's register going back to the body, which is the hazard the enclosing-scope allocation creates.
+
+`corpus_shape_tests.rs` states the header expectation per slot as well, because its comment saying every construct but an assignment, a `SAY` and an `IF` evaluates through `Op::EvalExpr` unconditionally is what this step falsifies.
 
 - [ ] **Step 4: the differential cases**
 
-Oracle-captured, under `trace r` and `trace i`: a counted loop, a `to`/`by`/`for` combination, a `DO FOREVER`, and a header whose bound is a call.
-The `>K>` order per header value is the property most at risk and must have a case.
+`tests/ir_dual_cases/loop-header-values`, oracle-captured: `trace i` over a `to`/`by`/`for` header, which is the `>K>` order per header value interleaved with the values' own intermediate lines; `trace i` over a header whose bound is a call, which is the address `chunk_node_at` resolves; and a `DO OVER ... FOR`, whose block is **not** the oracle's and whose own comment says which line the oracle prints and this crate does not.
+
+**Two rows the dispatched list asked for are not here, and the second is a finding rather than a trim.**
+A `DO FOREVER` row was captured, matched the oracle on both engines, and was then deleted: a `FOREVER` header holds no expression, so nothing this task changed can reach it, and no mutation reddened it.
+A plain counted loop is the same shape as the `to`/`by`/`for` row with fewer keywords, so the two were written as one row.
+
+**What the captures found instead is a pre-existing divergence: the oracle echoes `>K>   "FOR"` for a `DO OVER ... FOR`'s count and this crate echoes nothing**, measured on both engines under `trace r` and `trace i`, on `do qq over zs for 1` and on `do qq over 4.5 for 2`.
+`HeaderRole::OverFor::keyword()` answers `None`, and two doc comments asserted that as a match with the oracle; both are corrected and the transcript is committed.
+Fixing the behaviour is not this task's and is not done here.
+
+**No mutation was found that any row of this file uniquely catches**, and six were run over the whole workspace (Task 2's report has the table).
+Every one is caught by a pre-existing test, and the case-file harness's own catcher is a `loop-header-boundaries` row every time -- that file is alphabetically first and `datadriven` stops at the first mismatch, so these rows are not even reached under those mutations.
+They are kept as transcripts, and what each adds over the tree's existing populations is in the report: the call row and the `DO OVER ... FOR` row record shapes nothing else holds, while the `to`/`by`/`for` row is a third keyword and a symbol bound on top of the two-keyword `trace i` interleave `trace_oracle/controlled_loop.rex` already runs.
 
 - [ ] **Step 5: gates, then commit** (same commands as Task 1 Step 11)
 

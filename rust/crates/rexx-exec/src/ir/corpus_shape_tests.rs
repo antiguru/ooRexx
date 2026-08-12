@@ -346,6 +346,9 @@ struct Seen {
     roots: BTreeMap<Root, usize>,
     /// How many promoted clauses carry an `Op::Condition`.
     native_conditions: usize,
+    /// How many `DO`/`LOOP` header slots compiled to something other than one
+    /// `Op::EvalExpr`.
+    native_header_values: usize,
 }
 
 /// Checks one body's compiled stream against what its instructions call for,
@@ -404,10 +407,53 @@ fn check_body(body: &CodeBody, symbols: &rexx_parse::SymbolTable, where_: &str, 
             seen.native_conditions += 1;
         }
 
+        // **A `DO`/`LOOP` header is a list of expressions rather than one**, so
+        // its expectation is per slot. Each `Op::LoopHeaderValue` ends one
+        // slot's group, and a group starts where the one before it ended, or at
+        // the region's own start for the first. The last `Root` in a group is
+        // what that slot's expression must end in: neither `Op::TraceKeyword`
+        // nor `Op::LoopHeaderValue` is a `Root`, so the scan back inside a
+        // group finds the expression's own op and nothing else.
+        //
+        // **`loop_header_slot` is asked which expression a slot holds, and that
+        // is a dependency this file otherwise avoids.** It is the resolution
+        // `compile` emits from, so a slot resolving to the wrong expression
+        // would agree with itself here; what stays independent is [`root_of`],
+        // which is the axis this file is about. A slot the header has no
+        // expression for is `Root::EvalExpr` for the reason `compile` leaves it
+        // one: it is a slot that stays general.
+        if let InstructionKind::Do(loop_) | InstructionKind::Loop(loop_) = &instruction.kind {
+            let mut slot = 0u32;
+            let mut group = 0;
+            for (op_at, op) in region.iter().enumerate() {
+                if !matches!(op, Op::LoopHeaderValue { .. }) {
+                    continue;
+                }
+                let expected =
+                    crate::run::loop_header_slot(loop_, slot).map_or(Root::EvalExpr, root_of);
+                let actual = region[group..op_at].iter().filter_map(Root::of).next_back();
+                assert_eq!(
+                    actual,
+                    Some(expected),
+                    "{where_}: instruction {index} ({construct}) has a header slot {slot} \
+                     calling for {expected:?} and a compiled group ending in {actual:?}\n{}",
+                    render(&chunk)
+                );
+                *seen.roots.entry(expected).or_default() += 1;
+                if expected != Root::EvalExpr {
+                    seen.native_header_values += 1;
+                }
+                group = op_at + 1;
+                slot += 1;
+            }
+            continue;
+        }
+
         // The value expression, for the constructs whose expression `compile`
-        // offers to `push_native`. The rest evaluate through `Op::EvalExpr`
-        // unconditionally, so there is nothing here to state about them that
-        // the op's presence in the stream has not already said.
+        // offers to `push_native` as a whole slot. A `SELECT`'s and a
+        // `WHEN CASE`'s evaluate through `Op::EvalExpr` unconditionally, so
+        // there is nothing here to state about them that the op's presence in
+        // the stream has not already said.
         //
         // An `IF`'s condition ends in its expression's own root op, with
         // `Op::Condition` and `Op::JumpUnless` behind it and neither of those
@@ -610,6 +656,11 @@ fn sweep_every_corpus_body() {
         seen.native_conditions > 0,
         "no corpus clause compiled its condition to native ops, so the IF rows above hold only \
          because every condition declined"
+    );
+    assert!(
+        seen.native_header_values > 0,
+        "no corpus DO/LOOP header slot compiled to native ops, so the header rows above hold \
+         only because every header expression declined"
     );
     for root in [
         Root::CallExpr,

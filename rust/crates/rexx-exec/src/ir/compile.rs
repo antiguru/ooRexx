@@ -20,7 +20,7 @@ use rexx_parse::{Call, CodeBody, Expr, ExprKind, Instruction, InstructionKind, S
 use super::{Calls, Chunk, ChunkTooLarge, Hints, NodePath, Op, PlanSlot};
 use crate::eval::{SymbolRead, is_arithmetic, is_native_binary};
 use crate::plan::Plan;
-use crate::run::{HeaderPlan, if_targets, loop_header_plan, otherwise_range};
+use crate::run::{HeaderPlan, if_targets, loop_header_plan, loop_header_slot, otherwise_range};
 use crate::trace::ChunkTrace;
 
 /// The compile-time register stack (the plan's Decisions section: "register
@@ -340,12 +340,16 @@ pub(crate) fn compile(
                 // register released at a body clause's own boundary would be
                 // handed out again and overwritten while it is still in use.
                 let outer = registers.mark();
-                let plan = loop_header_plan(body_node);
-                let roles = plan.as_ref().map_or(&[][..], HeaderPlan::roles);
+                // Named apart from `plan`, which this arm reads too: a slot
+                // that compiles natively resolves its reads against it,
+                // exactly as an assignment's value does.
+                let header_plan = loop_header_plan(body_node);
+                let roles = header_plan.as_ref().map_or(&[][..], HeaderPlan::roles);
                 let mut header = Vec::with_capacity(roles.len());
                 for &role in roles {
                     header.push((role, registers.alloc()?));
                 }
+                let header_top = registers.mark();
                 let at = op_index(&ops)?;
                 let echo = echoes(trace, instruction);
                 // One group per header expression, and `LoopRun` inside the
@@ -358,16 +362,54 @@ pub(crate) fn compile(
                 });
                 push_echo(&mut ops, echo, instruction_index(index)?);
                 for (slot, &(role, dst)) in header.iter().enumerate() {
-                    ops.push(Op::EvalExpr {
-                        index: instruction_index(index)?,
-                        slot: instruction_index(slot)?,
-                        dst,
-                    });
+                    let slot = instruction_index(slot)?;
+                    // **Each slot decides for itself**, so a header holding one
+                    // expression outside the native set keeps native ops for
+                    // its others. A slot `loop_header_slot` has no expression
+                    // for takes the same answer as one `native_shape` declines,
+                    // and they are one arm because they are one answer: the
+                    // slot stays a whole `Op::EvalExpr`, which is what it was
+                    // before any of it compiled. `run.rs`'s own
+                    // `eval_chunk_expr` is where a slot with no expression then
+                    // ends up, and it is loud there.
+                    match loop_header_slot(body_node, slot) {
+                        Some(expr) if native_shape(expr, Some(NodePath::ROOT)) => push_native(
+                            &mut ops,
+                            &mut consts,
+                            &mut registers,
+                            &mut hints,
+                            &mut calls,
+                            plan,
+                            expr,
+                            instruction_index(index)?,
+                            slot,
+                            Some(NodePath::ROOT),
+                            dst,
+                        )?,
+                        _ => ops.push(Op::EvalExpr {
+                            index: instruction_index(index)?,
+                            slot,
+                            dst,
+                        }),
+                    }
                     if role.keyword().is_some() {
                         ops.push(Op::TraceKeyword { role, src: dst });
                     }
                     ops.push(Op::LoopHeaderValue { role, src: dst });
                 }
+                // The header's own registers and nothing above them, which is
+                // what makes the allocation above safe to leave standing for
+                // the loop's whole lifetime: an operand register `push_native`
+                // took for a slot is released inside that call, so nothing a
+                // body clause is handed later can be one the running loop still
+                // reads. `a_header_operands_register_goes_back_to_the_body`
+                // pins the same property from the emitted stream.
+                debug_assert_eq!(
+                    registers.mark().0,
+                    header_top.0,
+                    "a header slot left a register allocated above the header's own, and the \
+                     loop's body would be handed it while the loop is still running"
+                );
                 ops.push(Op::LoopRun {
                     index: instruction_index(index)?,
                 });
@@ -743,6 +785,7 @@ pub(crate) fn compile(
     assert_operator_echoes_follow_their_op(&ops);
     assert_prefix_echoes_follow_their_op(&ops);
     assert_call_echoes_follow_their_op(&ops);
+    assert_keyword_echoes_precede_their_value(&ops);
     assert_region_ops_name_their_clause(&ops);
 
     Ok(Chunk {
@@ -1507,6 +1550,55 @@ fn assert_call_echoes_follow_their_op(ops: &[Op]) {
             "the function echo at {at} does not follow the call whose address and register it \
              names, so it echoes a value that call did not produce or reads a node that call \
              did not run"
+        );
+    }
+}
+
+/// **Every [`Op::TraceKeyword`] is immediately followed by the
+/// [`Op::LoopHeaderValue`] that files the value it echoes**, reading that op's
+/// register and naming that op's role.
+///
+/// The other echo ops here look one place *back*, at the op that computed their
+/// register. This one cannot: a header value is its expression's own ops, so
+/// what sits in front of a `>K>` is the last of those -- a load, an operation,
+/// a call, each with its own echo behind it, or one [`Op::EvalExpr`] where the
+/// slot declined. What is fixed is the pair on the other side: the echo and the
+/// validation of one header value, in that order and on one register.
+///
+/// Both halves of that pairing are measured on the oracle and recorded in
+/// `ir_dual_cases/loop-header-boundaries`: `do i = 1 to 'a' by 2` under
+/// `trace r` prints `>K>   "TO" => "a"` for the very value that then raises
+/// 41.1, so the echo precedes the validation; and `do i = 1 to 'a' by zf()`
+/// never calls `zf`, so the validation precedes the next value's evaluation.
+/// An echo separated from its value by anything is one of those two orders
+/// broken.
+///
+/// **What this adds is the shape of the failure, not coverage, and that is
+/// measured rather than assumed.** Emitting the echo in front of the slot's own
+/// ops instead of behind them reddens thirteen tests with this check removed --
+/// the loop-shape and population sweeps, the case files, `trace_oracle`'s
+/// control-variable transcripts and the pinned streams -- because the echo then
+/// reads a register nothing has written and prints `>K>   "TO" => "The NIL
+/// object"`. What this turns that into is a refusal at compile time naming the
+/// op.
+///
+/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
+/// reason, and it is the same linear scan's worth of work.
+fn assert_keyword_echoes_precede_their_value(ops: &[Op]) {
+    for (at, op) in ops.iter().enumerate() {
+        let Op::TraceKeyword { role: echoed, src } = op else {
+            continue;
+        };
+        let files_it = ops.get(at + 1).is_some_and(|next| {
+            matches!(
+                next,
+                Op::LoopHeaderValue { role, src: filed } if role == echoed && filed == src
+            )
+        });
+        assert!(
+            files_it,
+            "the keyword echo at {at} is not in front of the header value it names, so it echoes \
+             a value or a keyword that op does not file"
         );
     }
 }

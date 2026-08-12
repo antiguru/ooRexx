@@ -713,19 +713,25 @@ fn a_constant_symbol_is_a_native_load() {
 /// The compiled form of the plan's own example loop: the header is a clause
 /// region of its own and the construct is the op that closes it.
 ///
-/// Three instructions -- `DO`, `nop`, `END` -- and the `DO`'s own region is six
-/// ops of the seven, laid out as **one group per header expression, in the order
-/// the expressions were written**:
+/// Three instructions -- `DO`, `nop`, `END` -- and the `DO`'s own region is
+/// laid out as **one group per header expression, in the order the expressions
+/// were written**:
 ///
-/// * `1`-`2`: the control variable's starting value, evaluated and then
-///   validated. No `TraceKeyword` between them, because the oracle echoes no
+/// * `1`-`3`: the control variable's starting value, computed and then
+///   validated. No `TraceKeyword` in the group, because the oracle echoes no
 ///   `>K>` line for an initial value.
-/// * `3`-`5`: the `TO` bound, evaluated, **echoed**, and then validated. The
+/// * `4`-`7`: the `TO` bound, computed, **echoed**, and then validated. The
 ///   echo sits between the two, which is the whole reason this construct waited
 ///   for the trace ops: `do i = 1 to 'a' by zf()` echoes `>K>  "TO" => "a"` and
 ///   raises before `zf` is called, so neither the echo nor the validation may
 ///   move past the next expression's evaluation.
-/// * `6`: the construct itself.
+/// * `8`: the construct itself.
+///
+/// **A header value is its expression's own native ops where `native_shape`
+/// accepts the expression**, and one `Op::EvalExpr` where it does not. `1` and
+/// `3` are constant symbols, so each is an `Op::LoadConstant` and the `>L>`
+/// echo a load owes; `Op::LoopHeaderValue` is what the slot still owes either
+/// way, which is why this promotion needed no op of its own.
 ///
 /// The body clause and the `END` are still `Generic`. The `END` op is never
 /// reached -- `run_bounded`'s range stops before it and the loop's own resume
@@ -736,22 +742,24 @@ fn a_counted_loop_compiles_its_header_to_a_clause_region_and_its_body_to_generic
     let chunk = compile_for_test(b"do i = 1 to 3\n  nop\nend\n").expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=7\n\
-         1: EvalExpr index=0 slot=0 dst=0\n\
-         2: LoopHeaderValue role=Initial src=0\n\
-         3: EvalExpr index=0 slot=1 dst=1\n\
-         4: TraceKeyword role=To src=1\n\
-         5: LoopHeaderValue role=To src=1\n\
-         6: LoopRun index=0\n\
-         7: Generic index=1\n\
-         8: Generic index=2\n"
+        "0: Clause index=0 end=9\n\
+         1: LoadConstant dst=0\n\
+         2: TraceLiteral src=0\n\
+         3: LoopHeaderValue role=Initial src=0\n\
+         4: LoadConstant dst=1\n\
+         5: TraceLiteral src=1\n\
+         6: TraceKeyword role=To src=1\n\
+         7: LoopHeaderValue role=To src=1\n\
+         8: LoopRun index=0\n\
+         9: Generic index=1\n\
+         10: Generic index=2\n"
     );
     // One register per header expression, and they are **not** released at the
-    // region's end: the loop runs from op 6 with the body's clauses stepped
+    // region's end: the loop runs from op 8 with the body's clauses stepped
     // between, so a register handed out again there would be overwritten while
     // the running loop still reads it.
     assert_eq!(chunk.registers, 2);
-    assert_eq!(chunk.op_of, vec![0, 7, 8, 9]);
+    assert_eq!(chunk.op_of, vec![0, 9, 10, 11]);
 }
 
 /// The same loop under `TRACE R`: the clause echo is an op of the region, and
@@ -759,22 +767,24 @@ fn a_counted_loop_compiles_its_header_to_a_clause_region_and_its_body_to_generic
 ///
 /// The pair with the test above is what says the setting decides *what is
 /// emitted* and nothing about the header's shape -- every group is the same
-/// three or two ops, one index further along.
+/// ops, one index further along.
 #[test]
 fn a_traced_counted_loop_echoes_its_do_clause_from_the_stream() {
     let chunk = compile_for_test_under(b"do i = 1 to 3\n  nop\nend\n", traced()).expect("compiles");
     assert_eq!(
         render(&chunk),
-        "0: Clause index=0 end=8\n\
+        "0: Clause index=0 end=10\n\
          1: TraceClause index=0\n\
-         2: EvalExpr index=0 slot=0 dst=0\n\
-         3: LoopHeaderValue role=Initial src=0\n\
-         4: EvalExpr index=0 slot=1 dst=1\n\
-         5: TraceKeyword role=To src=1\n\
-         6: LoopHeaderValue role=To src=1\n\
-         7: LoopRun index=0\n\
-         8: Generic index=1\n\
-         9: Generic index=2\n"
+         2: LoadConstant dst=0\n\
+         3: TraceLiteral src=0\n\
+         4: LoopHeaderValue role=Initial src=0\n\
+         5: LoadConstant dst=1\n\
+         6: TraceLiteral src=1\n\
+         7: TraceKeyword role=To src=1\n\
+         8: LoopHeaderValue role=To src=1\n\
+         9: LoopRun index=0\n\
+         10: Generic index=1\n\
+         11: Generic index=2\n"
     );
     assert_eq!(chunk.registers, 2);
 }
@@ -784,10 +794,13 @@ fn a_traced_counted_loop_echoes_its_do_clause_from_the_stream() {
 ///
 /// A `DO` block has **no header expression at all**, so its region is the
 /// `LoopRun` op alone -- an empty region rather than none, because the clause
-/// and its boundary are owed either way. A `DO OVER ... FOR` has two
-/// expressions and echoes exactly one of them: measured, the oracle traces
-/// `>K>  "OVER"` for the target and nothing at all for the `FOR` count that
-/// follows it, unlike a controlled loop's `FOR`.
+/// and its boundary are owed either way. A `DO OVER ... FOR` has an expression
+/// for the target and one for the count, and emits a `TraceKeyword` for the
+/// target alone, which is `HeaderRole::OverFor::keyword()` answering `None`.
+///
+/// **That answer diverges from the oracle**, and that doc comment carries the
+/// measurement; the stream here is this crate's, not the oracle's, for that one
+/// line.
 #[test]
 fn a_block_has_an_empty_header_region_and_a_do_over_echoes_only_its_target() {
     let block = compile_for_test(b"do\n  nop\nend\n").expect("compiles");
@@ -803,17 +816,131 @@ fn a_block_has_an_empty_header_region_and_a_do_over_echoes_only_its_target() {
     let over = compile_for_test(b"do qq over 4.5 for 2\n  nop\nend\n").expect("compiles");
     assert_eq!(
         render(&over),
-        "0: Clause index=0 end=7\n\
-         1: EvalExpr index=0 slot=0 dst=0\n\
-         2: TraceKeyword role=Over src=0\n\
-         3: LoopHeaderValue role=Over src=0\n\
-         4: EvalExpr index=0 slot=1 dst=1\n\
-         5: LoopHeaderValue role=OverFor src=1\n\
-         6: LoopRun index=0\n\
-         7: Generic index=1\n\
-         8: Generic index=2\n"
+        "0: Clause index=0 end=9\n\
+         1: LoadConstant dst=0\n\
+         2: TraceLiteral src=0\n\
+         3: TraceKeyword role=Over src=0\n\
+         4: LoopHeaderValue role=Over src=0\n\
+         5: LoadConstant dst=1\n\
+         6: TraceLiteral src=1\n\
+         7: LoopHeaderValue role=OverFor src=1\n\
+         8: LoopRun index=0\n\
+         9: Generic index=1\n\
+         10: Generic index=2\n"
     );
     assert_eq!(over.registers, 2);
+}
+
+/// A header bound that is a bare symbol, and one that is a call.
+///
+/// The symbol takes `Op::Load` and the `>V>` echo behind it, the call takes
+/// `Op::CallExpr` and the `>F>` echo behind it -- the same ops an assignment's
+/// value takes for the same expressions, because it is the same `push_native`
+/// descent. What is a header's own is the address: the call op names slot `1`
+/// of the `DO` and `root` below it, which is the address
+/// `Interp::chunk_node_at` resolves back through `loop_header_slot`. Without
+/// that resolution the op reaches `Loud::call_op_off_its_node` at run time
+/// rather than at compile time.
+#[test]
+fn a_header_bound_that_is_a_symbol_and_one_that_is_a_call_take_their_own_ops() {
+    let symbol = compile_for_test(b"do i = 1 to zn\n  nop\nend\n").expect("compiles");
+    assert_eq!(
+        render(&symbol),
+        "0: Clause index=0 end=9\n\
+         1: LoadConstant dst=0\n\
+         2: TraceLiteral src=0\n\
+         3: LoopHeaderValue role=Initial src=0\n\
+         4: Load read=Simple at=1 dst=1\n\
+         5: TraceRead read=Simple src=1\n\
+         6: TraceKeyword role=To src=1\n\
+         7: LoopHeaderValue role=To src=1\n\
+         8: LoopRun index=0\n\
+         9: Generic index=1\n\
+         10: Generic index=2\n"
+    );
+
+    let call = compile_for_test(b"do i = 1 to length(zs)\n  nop\nend\n").expect("compiles");
+    assert_eq!(
+        render(&call),
+        "0: Clause index=0 end=9\n\
+         1: LoadConstant dst=0\n\
+         2: TraceLiteral src=0\n\
+         3: LoopHeaderValue role=Initial src=0\n\
+         4: CallExpr index=0 slot=1 path=root site=0 dst=1\n\
+         5: TraceFunction index=0 slot=1 path=root src=1\n\
+         6: TraceKeyword role=To src=1\n\
+         7: LoopHeaderValue role=To src=1\n\
+         8: LoopRun index=0\n\
+         9: Generic index=1\n\
+         10: Generic index=2\n"
+    );
+}
+
+/// **One header expression outside the native set leaves the others native**,
+/// because each slot is its own decision.
+///
+/// `.nil` is an `ExprKind::DotVariable`, which `native_shape` declines, so slot
+/// `0` is one `Op::EvalExpr` doing that slot's whole evaluation -- and slot `1`
+/// beside it is still the constant symbol's own load. `Op::LoopHeaderValue`
+/// follows either, which is what lets the two forms sit in one header at all.
+#[test]
+fn a_header_slot_outside_the_native_set_leaves_the_other_slots_native() {
+    let chunk = compile_for_test(b"do i = .nil to 3\n  nop\nend\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=8\n\
+         1: EvalExpr index=0 slot=0 dst=0\n\
+         2: LoopHeaderValue role=Initial src=0\n\
+         3: LoadConstant dst=1\n\
+         4: TraceLiteral src=1\n\
+         5: TraceKeyword role=To src=1\n\
+         6: LoopHeaderValue role=To src=1\n\
+         7: LoopRun index=0\n\
+         8: Generic index=1\n\
+         9: Generic index=2\n"
+    );
+}
+
+/// **A register `push_native` took for an operand inside a header goes back
+/// before the body's clauses are emitted**, and the header's own registers do
+/// not.
+///
+/// The two are allocated from one stack and released at opposite ends of the
+/// loop: `zn + 1` needs a second register for its right operand, which
+/// `push_native` hands back as soon as the `Op::Arith` has read it, while the
+/// two the header values land in are held past the `END`. So the body's
+/// assignment is handed register 2 -- the operand's -- and a header temporary
+/// that outlived its slot would push that assignment to register 3 and be
+/// overwritten by it, because `Op::LoopRun` steps the body from inside this
+/// same region while the header's values are still being read.
+#[test]
+fn a_header_operands_register_goes_back_to_the_body() {
+    let chunk = compile_for_test(b"do i = 1 to zn + 1\n  zx = 5\nend\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=13\n\
+         1: LoadConstant dst=0\n\
+         2: TraceLiteral src=0\n\
+         3: LoopHeaderValue role=Initial src=0\n\
+         4: Load read=Simple at=1 dst=1\n\
+         5: TraceRead read=Simple src=1\n\
+         6: LoadConstant dst=2\n\
+         7: TraceLiteral src=2\n\
+         8: Arith op=+ hint=0 lhs=1 rhs=2 dst=1\n\
+         9: TraceOperator op=+ src=1\n\
+         10: TraceKeyword role=To src=1\n\
+         11: LoopHeaderValue role=To src=1\n\
+         12: LoopRun index=0\n\
+         13: Clause index=1 end=17\n\
+         14: LoadConstant dst=2\n\
+         15: TraceLiteral src=2\n\
+         16: Store index=1 at=2 src=2\n\
+         17: Generic index=2\n"
+    );
+    assert_eq!(
+        chunk.registers, 3,
+        "the operand's register is the body's, so three is the high-water mark"
+    );
 }
 
 /// **A nested loop's header registers sit above the enclosing loop's, and a
@@ -838,23 +965,27 @@ fn a_nested_loops_registers_sit_above_the_enclosing_loops_and_a_later_loops_reus
         .expect("compiles");
     assert_eq!(
         render(&nested),
-        "0: Clause index=0 end=7\n\
-         1: EvalExpr index=0 slot=0 dst=0\n\
-         2: LoopHeaderValue role=Initial src=0\n\
-         3: EvalExpr index=0 slot=1 dst=1\n\
-         4: TraceKeyword role=To src=1\n\
-         5: LoopHeaderValue role=To src=1\n\
-         6: LoopRun index=0\n\
-         7: Clause index=1 end=14\n\
-         8: EvalExpr index=1 slot=0 dst=2\n\
-         9: LoopHeaderValue role=Initial src=2\n\
-         10: EvalExpr index=1 slot=1 dst=3\n\
-         11: TraceKeyword role=To src=3\n\
-         12: LoopHeaderValue role=To src=3\n\
-         13: LoopRun index=1\n\
-         14: Generic index=2\n\
-         15: Generic index=3\n\
-         16: Generic index=4\n"
+        "0: Clause index=0 end=9\n\
+         1: LoadConstant dst=0\n\
+         2: TraceLiteral src=0\n\
+         3: LoopHeaderValue role=Initial src=0\n\
+         4: LoadConstant dst=1\n\
+         5: TraceLiteral src=1\n\
+         6: TraceKeyword role=To src=1\n\
+         7: LoopHeaderValue role=To src=1\n\
+         8: LoopRun index=0\n\
+         9: Clause index=1 end=18\n\
+         10: LoadConstant dst=2\n\
+         11: TraceLiteral src=2\n\
+         12: LoopHeaderValue role=Initial src=2\n\
+         13: LoadConstant dst=3\n\
+         14: TraceLiteral src=3\n\
+         15: TraceKeyword role=To src=3\n\
+         16: LoopHeaderValue role=To src=3\n\
+         17: LoopRun index=1\n\
+         18: Generic index=2\n\
+         19: Generic index=3\n\
+         20: Generic index=4\n"
     );
     assert_eq!(
         nested.registers, 4,
@@ -868,7 +999,9 @@ fn a_nested_loops_registers_sit_above_the_enclosing_loops_and_a_later_loops_reus
         "the second loop reuses the registers the first one released past its END"
     );
     assert!(
-        render(&sequential).contains("12: EvalExpr index=3 slot=1 dst=1"),
+        render(&sequential).contains(
+            "17: TraceKeyword role=To src=1\n18: LoopHeaderValue role=To src=1\n19: LoopRun index=3"
+        ),
         "the second loop\'s own bound went somewhere other than register 1: {}",
         render(&sequential)
     );
@@ -1401,8 +1534,9 @@ fn two_constructs_ending_at_one_instruction_release_to_the_lower_mark() {
     .expect("compiles");
     let stream = render(&chunk);
     assert!(
-        stream
-            .contains("19: EvalExpr index=7 slot=0 dst=0\n20: LoopHeaderValue role=Initial src=0"),
+        stream.contains(
+            "21: LoadConstant dst=0\n22: TraceLiteral src=0\n23: LoopHeaderValue role=Initial src=0"
+        ),
         "the loop after the whole SELECT did not get register 0 back: {stream}"
     );
     assert_eq!(

@@ -93,8 +93,8 @@ pub(crate) enum Op {
     /// Echoes the `>K>` line of one `DO`/`LOOP` header value, from register
     /// `src`, under the tag [`HeaderRole`] gives it.
     ///
-    /// **A separate op from the [`Op::EvalExpr`] that produced the value, and
-    /// that is the whole reason this construct waited for the trace ops.** A
+    /// **A separate op from whatever produced the value, and that is the whole
+    /// reason this construct waited for the trace ops.** A
     /// loop header interleaves evaluation and emission -- it evaluates `TO`,
     /// echoes it, evaluates `BY`, echoes it, in the order the keywords were
     /// written -- so an op that only evaluated could not reproduce the
