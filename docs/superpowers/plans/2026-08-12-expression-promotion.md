@@ -372,7 +372,9 @@ What lands instead:
 * `Op::TraceFunction { index: u32, slot: u16, path: NodePath, src: u16 }`.
 * `NodePath` stays -- it is the encoding, not the table -- and so does `chunk_node_at`, taking `slot` and `path` as two arguments rather than a `NodeAddr`.
 
-**Check the width with the compiler before writing anything else**, and report rather than improvising if either op does not fit sixteen.
+**The width was checked with the compiler on 2026-08-12 and both ops fit**: with `path: u32` on each, `size_of::<Op>() == 16` holds, and the same build panics at 15 and at 20.
+
+**Read that check's own trap before running any variant of it.** A first attempt added the fields, saw no `E0080`, and read that as the assertion passing. It was not evaluated at all: four `E0063`/`E0027` field errors stood in front of it, and const evaluation does not run while they do -- setting the assertion to a value that cannot be true produced no panic either, which is what exposed it. Fix every field error first, then read the assertion, and prove it is live by making it fail on purpose once.
 
 **`NodePath`.**
 In `ir/mod.rs`:
@@ -466,9 +468,10 @@ fn a_node_paths_steps_come_back_outermost_first() {
 
 - [ ] **Step 2: run them and watch them fail.**
 
-- [ ] **Step 3: add `NodeAddr`, `Chunk::nodes`, and `chunk_node_at`; change the two ops and their arms; delete `chunk_call_at` and `chunk_expr_at`.**
+- [ ] **Step 3: widen the assertion, add `path` to both ops and `chunk_node_at`; change their arms; delete `chunk_call_at` and `chunk_expr_at`.**
 
-`compile`'s `push_value` passes `NodeAddr { slot, path: NodePath::ROOT }`, which is exactly today's behaviour written in the new terms.
+`compile`'s `push_value` passes `NodePath::ROOT`, which is exactly today's behaviour written in the new terms.
+The assertion becomes `size_of::<Op>() == 16`, and **its doc comment has to be rewritten rather than have its number edited**: the paragraph above it argues the budget from "every op in every chunk pays for the widest variant", and what entry 24 measured is that the width itself was free on these axes while *adding a variant* was not. State what was measured and cite the entry.
 
 - [ ] **Step 4: update `golden.rs` and every golden expectation whose rendered `CallExpr`/`TraceFunction` fields changed.**
 
@@ -528,9 +531,8 @@ The arm is what `push_value` does today for a root call, with the address coming
 
 ```rust
 ExprKind::Call { .. } => {
-    let at = nodes.push(NodeAddr { slot, path })?;
-    ops.push(Op::CallExpr { index, at, site: calls.reserve()?, dst });
-    ops.push(Op::TraceFunction { index, at, src: dst });
+    ops.push(Op::CallExpr { index, slot, path, site: calls.reserve()?, dst });
+    ops.push(Op::TraceFunction { index, slot, path, src: dst });
 }
 ```
 
