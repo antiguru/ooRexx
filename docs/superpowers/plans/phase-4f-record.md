@@ -2021,3 +2021,93 @@ Nothing about the crate's quality bears on that, which is why the maturity answe
 If `Body::Stem` were boxed, or if Phase 5 added a variant that made `Body::Text` the width-setting variant, the 24-byte tier would start to bind and 23-in-24 would be the best shape available.
 Neither is true today, and the assertions `body.rs` and `heap.rs` already carry are what would announce it.
 The crate is in the offline cache and this entry does not withdraw it as an idea; it records that the constraint it is good at does not currently exist.
+
+---
+
+### Entry 16 -- the design's option A attempted and **accepted with its falsifier tripped**: a short string's bytes held in the slot
+
+**BASE is `4fa6c3e4d`. HEAD is `ce048e041`.**
+The HEAD binary this entry's figures were taken on is byte-identical to the one `cargo build --release` produces from the committed tree, checked with `cmp` after the measurement rather than assumed.
+
+This is the second option from `2026-08-11-value-representation-design.md` to be built, and the one entry 14's histogram selected.
+
+#### The hypothesis, named before it was measured
+
+`Body::Text` carried a `Vec<u8>`, so **every string was a second allocation reached through a pointer**, with a `free` to match it and a fresh pair for every clone.
+`bytes` becomes a `Bytes`: a two-armed enum whose inline arm holds the payload in the slot itself and whose other arm is the `Vec<u8>` that was always there.
+This is what `RexxString`'s trailing `char stringData[4]` buys the C++ interpreter.
+
+#### The capacity is 54, and it is the layout's number rather than the benchmark's
+
+Entry 14 disclosed the trap in advance: `strings.rex`'s pangram is 43 bytes and its concatenation 46, **so any capacity from 46 to 54 inlines 100% of that axis**, and a 54 chosen because the benchmark stops below it would measure exactly the same as a 46 chosen the same way.
+
+54 is instead the largest capacity at which `size_of::<Body>() <= 80` still holds, and that is **checked rather than stated**.
+Built at 55, three lines fail to compile: `body.rs`'s `size_of::<Body>() <= 80`, `bytes.rs`'s `size_of::<Bytes>() <= 56` and `heap.rs`'s `size_of::<Slot>() <= 96`.
+Measured at HEAD: `Bytes` 56, `Body` 80. No arena slot widened.
+
+#### Measured movement
+
+Wall clock in the accept rule's literal shape -- `ulimit -v 8388608`, `REXX_ENGINE=ir`, a fresh empty working directory per run, base/head order rotated every round, seven rounds an axis.
+**All 84 runs exited 0 and each axis's stdout hash is identical across all fourteen runs of it.**
+Instruction counts are from `rexx-arms`, five rounds, IR arm.
+
+| axis | wall | sign held | instructions |
+|---|---|---|---|
+| `strings` | **-8.26%** | 7 of 7 | -2.95% |
+| `alloc4c` | **-11.89%** | 7 of 7 | -5.71% |
+| `arith` | +4.39% | 0 of 7 | +0.03% |
+| `emptyloop` | +5.91% | 0 of 7 | **+0.000%** |
+| `varlookup` | +2.29% | 0 of 7 | +0.09% |
+| `compound` | +1.72% | 0 of 7 | +0.02% |
+
+`strings`, `alloc4c`, `arith`, `emptyloop` and `varlookup` have disjoint base and head ranges; `compound`'s overlap.
+The six-axis geometric mean is **-1.2%**, offered as a summary and not as a gate -- no rule in this phase is stated on it.
+
+**Peak resident set on `strings` fell from 11476 kB to 8624 kB**, three interleaved pairs, ranges disjoint at 11200..11652 against 8352..8676.
+
+#### The falsifier, and it is tripped
+
+The falsifier was *"`strings` moving less than about 10%, or peak resident set not falling, or `size_of::<Body>()` moving off 80."*
+Resident set fell by a quarter and `Body` is still 80.
+**`strings` moved -8.26% on wall and -2.95% on instructions, and both are short of about 10%.**
+
+**The axis that moved most is not the axis the hypothesis named.**
+`alloc4c` moved half again as far as `strings` on wall and nearly twice as far on instructions.
+Per this file's own contract, a change reaching its target by a route other than its stated hypothesis has not confirmed it: **the mechanism is confirmed and the magnitude and the ranking are not.**
+
+#### The four regressions are not layout, and not the width either
+
+The obvious reading -- four axes moving in wall while their instruction counts stand still is a layout effect, which entries 4, 7 and 12 disclaimed on that ground -- **was tested and is wrong.**
+
+* **Not layout.** Three semantically identical HEAD builds, differing only in a never-entered padding function and spanning 11.5 kB of `.text`, read +6.23%, +6.40% and +6.59% of cycles on `emptyloop`. A 0.36-point spread against a 6.23-point gap.
+* **Not the width.** Built at capacity 6, where `Bytes` is 24 bytes and so **exactly the `Vec<u8>` it replaced**, `emptyloop` still costs +6.33%.
+* **Not the frontend, the branch predictor, the instruction cache or the data cache.** At head `emptyloop` retires the same instructions to 0.000%, and takes 320M more cycles while issuing 51.7M *fewer* d-cache loads, 615 fewer d-cache misses, 2201 fewer branch misses and 1903 fewer icache misses. Frontend stalls rise 39% but are 8.4M cycles of a 320M-cycle gap.
+
+**Every counter available here is flat or better at head, and the cycles are worse.**
+The cost is structural -- it follows the enum in `Body::Text` and not its size -- and **it is unexplained and left open**, not disclaimed.
+
+#### What the tests are worth, which took two mutations to establish
+
+The first mutation was **non-discriminating and proved nothing**: an off-by-one in the inline read (`&buf[..len]` to `&buf[..len.saturating_sub(1)]`) fails 378 pre-existing tests, so a red suite under it says nothing about whether the new tests carry their own weight.
+It also **allocated without bound and was OOM-killed at an anonymous resident set of 111777896 kB**, taking the session with it; the re-run was capped, and `CLAUDE.md` now carries `memcap` in Gates for that reason.
+
+The discriminating mutation is representation-only: `<=` to `<` at both constructors, so the boundary length stops inlining and reads back identical bytes.
+**Without the new tests it passes 1449 and fails 0 -- the whole pre-existing suite is blind to it. With them exactly three fail, and all three are new.**
+
+Suite at HEAD: **1455 passed, 0 failed** in both the dev and release profiles, against 1449 at BASE.
+Eight generated programs were run on the oracle, the IR arm and the tree-walker arm at both BASE and HEAD: **all 72 descriptors are identical between BASE and HEAD**, and the two arms agree everywhere. One oracle divergence on `b04_numeric` is present at BASE too and is not this change's.
+
+#### Disposition: **accepted**, on Moritz's decision, with the falsifier recorded as tripped
+
+The case accepted is not a wall-clock case.
+It is the quarter of the resident set, the work genuinely removed on the two string axes, and that option A is the prerequisite the design document names for D(ii), whose accessor borrows from the payload type this changes.
+
+**What this entry does not claim:**
+
+* **Not a wall-clock win overall.** Four of six axes are reproducibly slower and the six-axis mean is negative by about a point.
+* **No oracle ratios.** `rexx-bench-suite` was not run, so where any axis now sits against the oracle is unmeasured.
+* **The tree-walker was measured for correctness only.** Every wall, instruction and resident-set figure above is the IR arm.
+* **`rexxcps` was not measured here at all**, and entry 14's spill count of 7 creations in 11,910,838 on that axis is the only thing said about it.
+
+**The open item this leaves is the largest one in the queue**: something about an enum in `Body::Text` costs the IR interpreter about 6% on axes that create no strings, at constant instruction count and with every cache and predictor counter improving.
+Until that is understood, every later candidate measured against this HEAD inherits it.
