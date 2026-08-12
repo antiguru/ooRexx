@@ -559,8 +559,13 @@ ExprKind::Call { .. } => {
 
 **One thing threading them costs, measured rather than predicted.**
 `compile`'s expression walk takes a stack frame per operator, and the wider parameter lists make each frame bigger.
-`ir::corpus_shape_tests` compiles `deep_nested_expr.rex` directly on a libtest thread, and measured 2026-08-12 that sweep was passing with under 128 KiB of a 2 MiB stack to spare *before* this task -- it aborts at `RUST_MIN_STACK=1966080` and passes at `2097152` -- so the wider frames tipped it into a stack overflow.
-No other harness noticed, because every other one reaches `compile` through `Interp`, which runs on a thread with `INTERPRETER_STACK_BYTES`.
+`ir::corpus_shape_tests` compiled `deep_nested_expr.rex` on a libtest thread, and measured 2026-08-12 that sweep was passing with under 128 KiB of a 2 MiB stack to spare *before* this task -- it aborts at `RUST_MIN_STACK=1966080` and passes at `2097152` -- so the wider frames tipped it into a stack overflow.
+It now runs the sweep on a thread of `INTERPRETER_STACK_BYTES` and resumes the panic on the test thread, which is the stack the interpreter compiles bodies on anyway.
+
+**No other harness noticed, and the reason is not that the others are protected.**
+`golden_tests` calls `compile` directly on libtest threads too, and `plan.rs`'s own unit tests reach it through `Interp::chunk_for` on libtest threads.
+What separates them is that **no other direct caller compiles a body this deep** -- `deep_nested_expr.rex` nests thousands of operators on purpose and the hand-written cases are shallow.
+So the margin those callers have is the shallowness of their inputs, not a bigger stack, and a hand-written case deep enough would overflow them the same way.
 The fix is for that sweep to compile on the same stack the interpreter compiles on rather than on a libtest thread's; it is not a reason to keep the parameter lists narrow.
 
 **The register discipline is unchanged and must stay so.**
