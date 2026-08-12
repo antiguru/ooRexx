@@ -60,7 +60,7 @@ Stated here so that a reviewer does not read an omission as a gap.
 ## Files
 
 * Modify `rust/crates/rexx-exec/src/eval.rs` -- the operand/operator split, and the shared `apply_binary`/`apply_prefix`.
-* Modify `rust/crates/rexx-exec/src/ir/mod.rs` -- the new `Op` variants, `NodePath`, `NodeAddr`, `Chunk::nodes`.
+* Modify `rust/crates/rexx-exec/src/ir/mod.rs` -- the new `Op` variants and `NodePath`.
 * Modify `rust/crates/rexx-exec/src/ir/compile.rs` -- `native_shape`, `push_native`, `push_value`.
 * Modify `rust/crates/rexx-exec/src/ir/drive.rs` -- the new arms, and the two arms whose address changes.
 * Modify `rust/crates/rexx-exec/src/ir/golden.rs` -- the test-only renderer, which is exhaustive over `Op`.
@@ -398,24 +398,27 @@ with:
 * `fn child(self, right: bool) -> Option<NodePath>` -- `None` when the sentinel would be shifted out, which is the thirty-second step.
 * `fn steps(self) -> impl Iterator<Item = bool>` -- the bits below the sentinel, outermost first.
 
-`NodeAddr` is `{ slot: u16, path: NodePath }`, `Copy`.
-
-`Chunk` gains `nodes: Vec<NodeAddr>` with the same "dense over the ops that need it" doc argument `Hints` and `Calls` carry, and `fn node(&self, at: u16) -> Option<NodeAddr>`.
-`compile` builds it alongside `hints` and `calls`; pushing past `u16::MAX` is `ChunkTooLarge { what: "expression addresses past u16" }`.
+(A `NodeAddr` struct, a `Chunk::nodes` table, its reserve call and its `ChunkTooLarge` stood here.
+They are what the "table is withdrawn" paragraph above withdraws: the path travels in the op, so there is nothing for a table to hold and nothing on the driver's hot path to look up.
+Removed 2026-08-12, during Task 3, because the paragraph and this passage contradicted each other and a task briefed from the passage would have built the table the paragraph deletes.)
 
 **The descent.**
 In `run.rs`, `Interp::chunk_call_at` and `Interp::chunk_expr_at` are replaced by one function:
 
 ```rust
-/// The expression an op's address names: expression `addr.slot` of
-/// `instruction`, then `addr.path`'s steps down from its root.
-pub(crate) fn chunk_node_at(instruction: &Instruction, addr: NodeAddr) -> Option<&Expr> {
-    let mut node = match (&instruction.kind, addr.slot) {
+/// The expression an op's address names: expression `slot` of `instruction`,
+/// then `path`'s steps down from that slot's root.
+pub(crate) fn chunk_node_at(
+    instruction: &Instruction,
+    slot: u16,
+    path: NodePath,
+) -> Option<&Expr> {
+    let mut node = match (&instruction.kind, slot) {
         (InstructionKind::Assignment { value, .. }, 0) => value,
         (InstructionKind::Say { expression: Some(expression) }, 0) => expression,
         _ => return None,
     };
-    for right in addr.path.steps() {
+    for right in path.steps() {
         node = match (&node.kind, right) {
             (ExprKind::Binary { left, .. }, false) => left,
             (ExprKind::Binary { right, .. }, true) => right,
@@ -496,7 +499,7 @@ If any other test's expectation changes, stop: the refactor was not behaviour-pr
 
 **Interfaces:**
 
-* Consumes: Task 3's `NodePath`/`NodeAddr`/`Chunk::nodes`, and Tasks 1 and 2's widened `native_shape`.
+* Consumes: Task 3's `NodePath` and its `Op::CallExpr`/`Op::TraceFunction` `path` field, and Tasks 1 and 2's widened `native_shape`.
 
 **The change.**
 `native_shape` accepts `ExprKind::Call` -- at the root and at any depth the path can carry.
