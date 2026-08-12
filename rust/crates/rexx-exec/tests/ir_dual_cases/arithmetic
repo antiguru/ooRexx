@@ -23,11 +23,11 @@
 #
 # **Family**, which arithmetic alone cannot state. Every binary operator traces
 # `>O>` with its own spelling -- concatenation, comparison and logical too --
-# and each family reaches that line by a different route through `eval.rs`, so
-# these rows are what says the four agree on the tag, the indent and the order
-# whichever route they took. The other three families' own rows are in
-# `operators` beside this file; what these add is the four together in one
-# clause stream.
+# so these rows are what says the families agree on the tag, the indent and the
+# order. Where they differ is in what computes the value behind the line, which
+# is why a row per family is worth more than more rows for one. The other
+# families' own rows are in `operators` beside this file; what these add is all
+# of them together in one clause stream.
 #
 # **What this file is worth was measured rather than assumed, and most of it is
 # not mutation-catching.** Eight mutations of the arithmetic path were each
@@ -238,9 +238,11 @@ err>        >>>   "6"
 
 # every other binary family under trace i, in one clause stream with the
 # arithmetic rows above: the tag each family prints, and the order an operator's
-# own line takes among its operands'. A promotion that moved one family's node
-# and not another's would print these from an op and could get the tag or the
-# indent wrong for the family it moved.
+# own line takes among its operands'. On the compiled engine every line here
+# comes from an op sitting behind the operation rather than from evaluating the
+# node, and this harness requires the two engines to agree byte for byte -- so a
+# family whose op carried the wrong tag, or sat in the wrong place, shows up
+# here as a line under the wrong sign or in the wrong order.
 program
 trace i
 za = 2

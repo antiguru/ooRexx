@@ -7003,7 +7003,7 @@ impl Interp {
     /// opposite of a plain `WHEN`'s comma list, which is an AND checked for
     /// `0`/`1` -- `ast.rs`'s own doc comment on `WhenCase`).
     ///
-    /// **Reasoned rather than routed through `eval_compare`'s own
+    /// **Reasoned rather than routed through `apply_binary`'s own
     /// `Operator::StrictEqual`, and this is why.** The design's own
     /// "Expression evaluation" section states the strict family's rule in
     /// full: "there is no padding and the shorter string is less" -- for an
@@ -7013,9 +7013,11 @@ impl Interp {
     /// `==` on the two `Vec<u8>`s below and needs no numeric awareness or
     /// `rexx-num` call to compute. Measured, matching D15's own example:
     /// `select case '007'` does not match `when 7`, because `"007"` and
-    /// `"7"` are not byte-identical. Calling `eval_compare` would work too,
-    /// but needs a second `eval.rs` visibility bump beyond the one already
-    /// asked for and approved for `logical_value`. This way needs none.
+    /// `"7"` are not byte-identical. Calling `apply_binary` would answer the
+    /// same and is reachable from here, but only one side of this comparison
+    /// is a value: it would mean allocating one to hold `case_text` so that
+    /// `compare_values` could render it straight back to the bytes already
+    /// in hand.
     /// `indent` traces two `>>>` lines per value tested, up to and including
     /// whichever one matches (`WhenCaseInstruction.cpp:154`/`158`:
     /// `traceResult(compareValue)` then `traceResult(result)`, "result"
@@ -8922,7 +8924,7 @@ fn raised_iterate_wrong_kind(found: &[u8]) -> Raised {
 /// Whether `a < b`, numerically, through `rexx-num`'s own `compare_decoded`
 /// rather than a hand-rolled sign comparison -- this crate's standing rule
 /// against a second copy of a comparison `rexx-num` already owns
-/// (`eval_compare`'s own doc comment states it for the twelve expression
+/// (`compare_values`' own doc comment states it for the expression
 /// operators; a controlled loop's own bound test and its `BY`'s sign are
 /// the same rule applied to two `Number`s this crate already holds, not a
 /// different one).
@@ -14458,7 +14460,7 @@ mod tests {
     /// **Inherited item I16, re-verified against a real trap rather than
     /// argued.** I16 concluded that `SIGNAL ON SYNTAX` cannot accumulate a
     /// temps leak, resting entirely on `step_in_temps_frame` being the single
-    /// chokepoint that heals the six `?`-skipped `pop_frame` sites in
+    /// chokepoint that heals the `?`-skipped `pop_frame` sites in
     /// `eval.rs`. The conclusion is measured here rather than inherited: two
     /// hundred trap-and-resume cycles and
     /// four hundred must leave the same number of live temps, and a leak of

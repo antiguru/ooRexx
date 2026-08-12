@@ -13,11 +13,11 @@
 //! concatenation, comparison and logic.
 //!
 //! `eval`/`eval_node`/`stack_span` moved here from Task 3's spike, extended
-//! (Task 7) with `Stem`, `Compound`, `DotVariable`'s three admissible names,
-//! `Prefix`, the seven arithmetic operators and the two concatenation forms
-//! `||` did not already cover, and (Task 8) with the twelve comparison
-//! operators (through `rexx-num`'s `compare_decoded`, never a hand-written
-//! string comparison), the three binary logical operators `&`/`|`/`&&`, and
+//! (Task 7) with `Stem`, `Compound`, `DotVariable`'s admissible names,
+//! `Prefix`, the arithmetic operators and the concatenation forms
+//! `||` did not already cover, and (Task 8) with the comparison operators
+//! (through `rexx-num`'s `compare_decoded`, never a hand-written
+//! string comparison), the binary logical operators `&`/`|`/`&&`, and
 //! `ExprKind::Logical` (the comma-separated conditional list `IF a, b THEN`
 //! desugars to), and (Task 4, 4b) `ExprKind::Call`, the internal-function
 //! form (`f(...)`/`"f"(...)`) -- see `eval_call`'s own doc for the
@@ -26,19 +26,27 @@
 //! evaluates to the referenced variable's own value -- the arm's own comment
 //! has the measurement, and why `USE ARG >name` does not come through here.
 //! Every other `ExprKind` -- `QualifiedCall`, `Message`, `ClassResolver`,
-//! `List`, and any `DotVariable` beyond the three -- still fails loudly
+//! `List`, and any `DotVariable` beyond those -- still fails loudly
 //! through the existing, exhaustive `form_name`.
 //!
-//! **Six functions here open a temps frame and then use `?`, so a raised
-//! condition leaves their own `pop_frame` unreached. That is deliberate, and
-//! Tasks 10 and 11 should copy it rather than repair it.** `eval_prefix`,
-//! `eval_arithmetic`, `concat`, `eval_compare`, `eval_logical` and
-//! `eval_logical_list` are the six. `step_in_temps_frame` pops
-//! unconditionally with an outer watermark, and `pop_frame` truncates rather
-//! than popping one frame, so the skipped inner frames are discarded when the
-//! failing instruction returns. Nothing accumulates: an instruction is the
-//! granularity at which the temps stack is guaranteed balanced, not an
-//! expression.
+//! **A function here that opens a temps frame and then evaluates through `?`
+//! leaves its own `pop_frame` unreached when that evaluation raises. That is
+//! deliberate, and Tasks 10 and 11 should copy it rather than repair it.**
+//! `step_in_temps_frame` pops unconditionally with an outer watermark, and
+//! `pop_frame` truncates rather than popping one frame, so the skipped inner
+//! frames are discarded when the failing instruction returns. Nothing
+//! accumulates: an instruction is the granularity at which the temps stack is
+//! guaranteed balanced, not an expression.
+//!
+//! **The other side of that is a frame popped on the failure path, and it is
+//! equally safe.** `eval_node`'s binary arm binds `apply_binary`'s result and
+//! pops before returning it, so an *operator's* own raise discards its
+//! operands where the `?` on an *operand's* evaluation skips past. Both are
+//! correct for the same reason -- `pop_frame` truncates to a watermark the arm
+//! took itself, so it can only discard what that arm rooted -- plus one thing
+//! the failure path needs on its own: nothing the failure carries away is a
+//! root. `Failure::Exited` is the variant that carries an `ObjRef`, and the
+//! functions `apply_binary` dispatches to build only `Raised` and `Loud`.
 //!
 //! The alternative was measured and rejected rather than left untried. A
 //! `Drop` guard cannot be written here at all, because it would have to hold
@@ -502,8 +510,8 @@ impl Interp {
                 self.eval_arithmetic(code, *op, left, right)
             }
 
-            // Concatenation, the eighteen comparison operators and `&`/`|`/
-            // `&&` (D15's "Expression evaluation"), which share this operand
+            // Concatenation, comparison and `&`/`|`/`&&`
+            // (D15's "Expression evaluation"), which share this operand
             // prologue exactly: **both operands are always evaluated, left
             // then right, and never short-circuited** -- measured, `say (0 &
             // 'x')` raises 34.901 on `"x"` though the result is already
@@ -518,6 +526,12 @@ impl Interp {
                 self.roots.push_temp(left_value);
                 let right_value = self.eval(code, right)?;
                 self.roots.push_temp(right_value);
+                // Bound rather than propagated with `?`, so the frame is
+                // popped on the failure path too -- an operator's own raise
+                // discards its operands here, where the `?` on an operand's
+                // evaluation above leaves them for `step_in_temps_frame` to
+                // truncate. The module doc has why both are safe.
+                //
                 // The result is unrooted from `apply_binary`'s return to
                 // whatever the caller of this does with it, and nothing
                 // between the two allocates.
@@ -878,7 +892,7 @@ impl Interp {
         Ok(joined)
     }
 
-    /// The eighteen comparison operators (D15's "Expression evaluation":
+    /// The comparison operators (D15's "Expression evaluation":
     /// numeric-or-string `= \= <> >< > < >= <= \> \<`, and strict
     /// `== \== >> << >>= <<= \>> \<<`), all through `rexx-num`'s
     /// `compare_decoded` -- **no string comparison is written here**, per
@@ -1019,7 +1033,7 @@ impl Interp {
     /// comment).
     ///
     /// **Short-circuits on the first element that checks out false**,
-    /// unlike `&` (`eval_logical`'s own doc comment). Measured with `if 0,
+    /// unlike `&` (`logical_values`' own doc comment). Measured with `if 0,
     /// (1/0) then nop` followed by `say 'reached'`, which prints `reached`
     /// and exits 0, and `if 1, 0, (1/0) then nop`, which does the same with
     /// three elements. Every element up to and including the first false one
@@ -1213,12 +1227,12 @@ pub(crate) fn logical_value(text: &[u8]) -> Option<bool> {
     }
 }
 
-/// `Operator` -> `rexx-num`'s `CompareOp`, for the eighteen `Operator`
-/// variants `eval_node` dispatches to `eval_compare`. `CompareOp` has only
-/// twelve variants: `\=`/`<>`/`><` (`BackslashEqual`/`LessThanGreaterThan`/
+/// `Operator` -> `rexx-num`'s `CompareOp`, for the `Operator` variants
+/// `apply_binary` dispatches to `compare_values`. **Several operators share
+/// one `CompareOp`**: `\=`/`<>`/`><` (`BackslashEqual`/`LessThanGreaterThan`/
 /// `GreaterThanLessThan`) all mean `NotEqual` (`compare.rs`'s own doc
 /// comment: the interpreter's operator table repeats one method pointer for
-/// all three), and the four backslash-negated forms invert their positive
+/// them), and the backslash-negated forms invert their positive
 /// counterpart's sense rather than getting a `CompareOp` of their own: `\>`
 /// ("not greater than") is `LessEqual`, `\<` is `GreaterEqual`, and their
 /// strict siblings `\>>`/`\<<` map the same way onto `StrictLessEqual`/
@@ -1246,12 +1260,12 @@ fn compare_op(op: Operator) -> CompareOp {
         StrictBackslashGreaterThan => CompareOp::StrictLessEqual,
         StrictBackslashLessThan => CompareOp::StrictGreaterEqual,
         other => unreachable!(
-            "apply_binary only dispatches the eighteen comparison operators here, got {other:?}"
+            "apply_binary only dispatches the comparison operators here, got {other:?}"
         ),
     }
 }
 
-/// Whether `op` is one of the seven operators [`Interp::eval_arithmetic`]
+/// Whether `op` is one of the operators [`Interp::eval_arithmetic`]
 /// computes.
 ///
 /// **The guard on `eval_node`'s own arithmetic arm, and so the one enumeration
@@ -1267,16 +1281,16 @@ pub(crate) fn is_arithmetic(op: Operator) -> bool {
     )
 }
 
-/// Whether `op` is one of the three operators [`Interp::concat_values`] joins
-/// bytes for: `||`, the abuttal the parser synthesises between two adjacent
-/// terms, and the blank between two terms with whitespace in it.
+/// Whether `op` is one of the operators [`Interp::concat_values`] joins bytes
+/// for: `||`, the abuttal the parser synthesises between two adjacent terms,
+/// and the blank between two terms with whitespace in it.
 fn is_concatenation(op: Operator) -> bool {
     use Operator::*;
     matches!(op, Concatenate | Abuttal | Blank)
 }
 
-/// Whether `op` is one of the eighteen operators [`Interp::compare_values`]
-/// compares under, the ten numeric-or-string and the eight strict.
+/// Whether `op` is one of the operators [`Interp::compare_values`] compares
+/// under, the numeric-or-string family and the strict one.
 ///
 /// **The guard on `Interp::apply_binary`'s own comparison arm, and so the one
 /// enumeration of the set** -- `compare_op` translates each of these to a
@@ -1307,8 +1321,7 @@ fn is_comparison(op: Operator) -> bool {
     )
 }
 
-/// Whether `op` is one of the three operators [`Interp::logical_values`]
-/// computes.
+/// Whether `op` is one of the operators [`Interp::logical_values`] computes.
 fn is_logical(op: Operator) -> bool {
     use Operator::*;
     matches!(op, And | Or | Xor)
@@ -1318,8 +1331,8 @@ fn is_logical(op: Operator) -> bool {
 /// `crate::ir::compile` compiling it to registers rather than leaving its
 /// whole expression to `crate::ir::Op::EvalExpr`.
 ///
-/// **A positive enumeration of the four families rather than "everything but
-/// the prefix `\`"**, so that an operator added to `rexx_parse::Operator` is
+/// **A positive enumeration of the families rather than "everything but the
+/// prefix `\`"**, so that an operator added to `rexx_parse::Operator` is
 /// not promotable until somebody says it is: the compiler would otherwise emit
 /// an op for it, and the driver would reach `Interp::apply_binary` with no arm
 /// to answer from.
@@ -2029,10 +2042,10 @@ mod tests {
         // Not a behaviour difference visible from the answer alone (the
         // numeric family gives the same result whether or not the cache
         // was already warm) -- what this actually exercises is that
-        // eval_compare, reading `x` back out through a variable, still
+        // compare_values, reading `x` back out through a variable, still
         // takes the numeric path on an object whose `num` cache this test
         // itself already filled, rather than `to_number` inside
-        // eval_compare somehow needing a cold object to work at all.
+        // compare_values somehow needing a cold object to work at all.
         // 007 and 7 comparing numerically equal (not "0" -- a byte compare
         // would disagree with the leading zero) is what proves the
         // numeric path, not the string one, ran.

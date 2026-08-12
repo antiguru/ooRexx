@@ -1,9 +1,9 @@
 # What promoting a concatenation, a comparison or a logical operator has to
-# keep, in four kinds.
+# keep, by kind.
 #
-# **Shapes**, which ask what the operator answers: all three concatenation
-# spellings, both comparison families, all three logical operators, and an
-# operand that is itself an operator.
+# **Shapes**, which ask what the operator answers: every concatenation
+# spelling, both comparison families, every logical operator, and an operand
+# that is itself an operator.
 #
 # **Settings**, which is where a comparison reads state a concatenation does
 # not. `NUMERIC DIGITS` rounds the operands before they are compared, so
@@ -15,7 +15,7 @@
 # **Failure**, which for these operators is nearly all in the operands.
 # Concatenation renders both operands and cannot itself raise; a comparison
 # falls back to a string compare rather than failing when an operand will not
-# convert. The one raise an operator here makes of its own is the logical
+# convert. The raise an operator here makes of its own is the logical
 # family's 34.901, and its rows pin both halves of the measured rule: **both
 # operands are checked even when the first has already decided the answer**,
 # and when both are bad it is the **left** operand's text that is reported.
@@ -27,7 +27,7 @@
 # -- so only an exact stderr comparison catches it. Both directions are here:
 # a `trace i` row requires the lines, and a `trace r` row requires their
 # absence. The `trace i` row carries the abuttal, whose tag is the empty
-# string, and the blank, whose tag is one space -- two tags an implementation
+# string, and the blank, whose tag is one space -- tags an implementation
 # reading a spelling off the source span would get wrong and no other row can
 # see.
 #
@@ -63,13 +63,13 @@
 # line ends an expected block, and a program's own output may hold one.
 # Trailing blanks are part of what is compared.
 
-# all three concatenation spellings, over the same two operands: `||`, the
+# every concatenation spelling, over the same two operands: `||`, the
 # abuttal between two terms with nothing between them, and the blank between
 # two terms with whitespace. **The blank inserts exactly one space however much
-# whitespace separated the terms** -- the fourth and fifth rows are the same
-# expression under one space and under four, and they answer identically,
-# because the scanner has collapsed that distinction before the parser sees it.
-# The last rows chain the three spellings, which is what makes one join's
+# whitespace separated the terms** -- `say za zb` is written twice, once with
+# one space and once with four, and the two answer identically, because the
+# scanner has collapsed that distinction before the parser sees it.
+# The last rows chain the spellings, which is what makes one join's
 # result the next one's operand register.
 program
 za = 'p'
@@ -124,9 +124,10 @@ out> 0
 
 # NUMERIC DIGITS narrowed, which a comparison reads and a concatenation does
 # not: the operands are rounded to the precision before they are compared, so
-# at DIGITS 4 `1.0001` and `1` are equal and at DIGITS 9 they are not. The
-# strict row under the same setting is the control -- `==` compares bytes and
-# the setting cannot move it.
+# at DIGITS 4 `1.0001` and `1` are equal and at DIGITS 9 they are not. **The
+# strict rows are the control and there is one at each setting**, which is what
+# says the setting cannot move a byte comparison -- a single strict row would
+# only have said the two families differ where it sat.
 program
 numeric digits 4
 say 1.0001 = 1
@@ -134,18 +135,23 @@ say 1.001 = 1
 say 1.0001 == 1
 numeric digits 9
 say 1.0001 = 1
+say 1.0001 == 1
 ----
 rc> 0
 out> 1
 out> 0
 out> 0
 out> 0
+out> 0
 
 # NUMERIC FUZZ, the other setting a comparison reads: it subtracts from the
-# precision the comparison works at, so at FUZZ 3 two numbers differing in the
-# seventh digit compare equal and two differing in the fourth do not. The last
-# row puts FUZZ back to zero at the same site, so one row says the setting is
-# read when the comparison runs rather than when the clause was compiled.
+# precision the comparison works at, so at FUZZ 3 `1000000` and `1000001`
+# compare equal, differing in the seventh significant digit, while `1000000`
+# and `1000100`, differing in the fifth, do not. FUZZ then goes back to zero at
+# the same site, so the rows say the setting is read when the comparison runs
+# rather than when the clause was compiled. **The strict rows are the control
+# and there is one at each setting**, for the reason the DIGITS stanza above
+# gives.
 program
 numeric fuzz 3
 say 1000000 = 1000001
@@ -153,33 +159,46 @@ say 1000000 == 1000001
 say 1000000 = 1000100
 numeric fuzz 0
 say 1000000 = 1000001
+say 1000000 == 1000001
 ----
 rc> 0
 out> 1
 out> 0
 out> 0
 out> 0
+out> 0
 
-# the three logical operators over every combination of two logical operands.
-# `&&` is exclusive-or, which is what separates it from `|` in the fourth and
-# seventh rows.
+# each logical operator over every combination of two logical operands, which
+# is what makes the rows separate the operators from each other rather than
+# only exercise them. `|` and `&&` agree everywhere except on two true
+# operands, so `say 1 | 1` and `say 1 && 1` are the pair that tells exclusive-or
+# from inclusive -- without both, an implementation computing one as the other
+# answers every row identically.
 program
 say 1 & 1
 say 1 & 0
 say 0 & 1
+say 0 & 0
+say 1 | 1
 say 1 | 0
+say 0 | 1
 say 0 | 0
 say 1 && 1
 say 1 && 0
+say 0 && 1
 say 0 && 0
 ----
 rc> 0
 out> 1
 out> 0
 out> 0
+out> 0
+out> 1
+out> 1
 out> 1
 out> 0
 out> 0
+out> 1
 out> 1
 out> 0
 
@@ -232,8 +251,9 @@ out> logical 34 at 10
 
 # an operand that is itself an operator, which is what puts an intermediate in
 # a compiled operand register rather than a read. Precedence decides which is
-# the inner one: concatenation binds tighter than comparison, so the third and
-# fourth rows agree without the parentheses mattering.
+# the inner one: concatenation binds tighter than comparison, so
+# `say (za || zb) = 'pq'` and `say za || zb = 'pq'` agree without the
+# parentheses mattering.
 program
 za = 'p'
 zb = 'q'

@@ -209,7 +209,7 @@ fn native(expr: &Expr) -> bool {
     }
 }
 
-/// The seven operators `Interp::eval_arithmetic` computes, as this file's own
+/// The operators `Interp::eval_arithmetic` computes, as this file's own
 /// statement of the set.
 fn arithmetic(op: Operator) -> bool {
     matches!(
