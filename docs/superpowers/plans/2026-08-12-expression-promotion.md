@@ -8,7 +8,7 @@
 **Architecture:** three additions to the op stream and one address widening.
 `Op::Binary` computes concatenation, comparison and logical operators from two registers, through one `Interp::apply_binary` that `eval_node` also enters.
 `Op::Prefix` does the same for `+`/`-`/`\`, through `Interp::apply_prefix`.
-A call's op stops naming an expression *slot* and starts naming an entry in a new per-chunk address table, which carries the slot and a bit-encoded path down to the node -- so a call anywhere inside a promotable expression gets an op, where today only a call that **is** the whole slot does.
+A call's op stops naming an expression *slot* alone and starts naming a slot plus a bit-encoded route down to the node -- so a call anywhere inside a promotable expression gets an op, where today only a call that **is** the whole slot does.
 
 **Tech stack:** Rust 2024, the `rexx-exec` crate, `cargo test`/`clippy`/`fmt` from `rust/`.
 
@@ -363,7 +363,7 @@ Every existing test must stay green with no expectation edited except the two re
 **The table is withdrawn: put the path in the op and widen the assertion to sixteen.**
 This task was designed around a side table because `Op::CallExpr` at `{ index: u32, slot: u16, path: u16, site: u16, dst: u16 }` is twelve bytes of payload and breaks `size_of::<Op>() == 12`.
 Moritz then offered sixteen bytes, and the record's entry 24 measured it: nine rounds, three arms, and **the width column is negative on every axis** while the cost a two-arm reading found belongs to *having an extra variant*, which this change does not do.
-So `NodePath`, `NodeAddr` and `Chunk::nodes` are all withdrawn, and with them the reserve call, the `ChunkTooLarge` for addresses past `u16`, and the table lookup on the driver's hot path.
+So `NodeAddr` and `Chunk::nodes` are withdrawn, and with them the reserve call, the `ChunkTooLarge` for addresses past `u16`, and the table lookup on the driver's hot path. `NodePath` is the encoding rather than the table and stays.
 
 What lands instead:
 
@@ -374,7 +374,14 @@ What lands instead:
 
 **The width was checked with the compiler on 2026-08-12 and both ops fit**: with `path: u32` on each, `size_of::<Op>() == 16` holds, and the same build panics at 15 and at 20.
 
-**Read that check's own trap before running any variant of it.** A first attempt added the fields, saw no `E0080`, and read that as the assertion passing. It was not evaluated at all: four `E0063`/`E0027` field errors stood in front of it, and const evaluation does not run while they do -- setting the assertion to a value that cannot be true produced no panic either, which is what exposed it. Fix every field error first, then read the assertion, and prove it is live by making it fail on purpose once.
+**Read that check's own trap before running any variant of it, and note that the trap is not the one the first two attempts wrote down.**
+A first attempt added the fields, saw no `E0080`, and read that as the assertion passing.
+It was not: the build output was piped through `head -4`, the four `E0063`/`E0027` field errors filled those lines, and the `E0080` was the fifth.
+Setting the assertion to a value that cannot be true produced no visible panic either, for the same reason, which is what made the artifact look like a mechanism.
+That produced a false explanation -- "const evaluation does not run while field errors stand" -- which reached this plan and a commit message; a later probe then refined it to "`E0063`/`E0027` suppress it, `E0308` does not", which is false in the same way and for the same reason.
+**Measured 2026-08-12, unpiped:** adding a field to `Op::CallExpr` and leaving every site unedited gives `E0063`, `E0027` **and** `E0080` together.
+Const evaluation runs.
+So the only rule needed is: **never read a diagnostic list through `head`**, prove the assertion is live by making it fail on purpose once, and read the whole output when it does.
 
 **`NodePath`.**
 In `ir/mod.rs`:
