@@ -2516,3 +2516,61 @@ Wall and cycles are medians of three interleaved rounds; the seven-round wall si
 * **No oracle ratios.**
 * **The tree-walker arm was measured for correctness only.**
 * **Nothing was measured about the `Op` width budget**, which this change fitted inside rather than tested.
+
+### Entry 24 -- the `Op` width budget measured at last, and the naive reading of it inverted by its own control
+
+Entry 11's consultation called `const _: () = assert!(size_of::<Op>() == 12)` undefended by measurement, and entry 23 closed with "nothing was measured about the `Op` width budget, which this change fitted inside rather than tested".
+Moritz then said he did not mind sixteen bytes -- it aligns better with cache lines -- which turned the question from a preference into one worth settling, because a free sixteen bytes deletes the side table the nested-call address was going to need.
+
+#### The arms
+
+Three binaries, all built from `1ccb81199`'s tree, `--release`, the workspace profile.
+
+| arm | what it is | `size_of::<Op>()` |
+|---|---|---:|
+| A | head, untouched | 12 |
+| C | head plus `Pad { a: u32, b: u16 }`, never constructed, never emitted, never driven | 12 |
+| B | head plus `Pad { a: u32, b: u32, c: u32 }`, likewise dead | 16 |
+
+**C is the arm that makes this a width measurement rather than a diff measurement.**
+B differs from A in two ways at once -- it has an extra variant *and* it is wider -- and this project has already withdrawn four regressions (entry 17) after a control with no semantics moved the same axes as far.
+C carries the extra variant and keeps the width, so **B against C is the width** and **C against A is having a variant at all**.
+The width the assertion states is what forces the two `Pad` shapes apart: rustc packs the tag into a niche at twelve bytes, and three `u32`s carry no niche.
+
+Both control arms are the "feature present, nothing emitting it" shape rather than "the feature removed", which is the shape entry 19 records as the one that can distinguish rather than only disclaim.
+
+#### The sitting
+
+The accept rule's literal shape and **not** `rexx-bench-suite`, so it is its own instrument.
+Wall clock, `ulimit -v 8388608`, `REXX_ENGINE=ir`, a fresh empty working directory per run, `/dev/null` on stdin, stdout hashed per run.
+Nine rounds per axis, **arm order rotated through all six permutations** so a drift across the sitting cannot become an arm difference.
+2026-08-12 16:47 to 16:56 +02:00, behind the host-idle gate (six consecutive five-second `/proc/stat` samples at or above 90% idle; the gate refused for most of the afternoon and this is the window it passed).
+Load average 1.06 to 1.19 across the sitting.
+All 162 runs exited 0, and **every axis printed a byte-identical stdout under all three binaries in all nine rounds**.
+
+| axis | A mean | C mean | B mean | C vs A -- the variant | B vs C -- **the width** |
+|---|---:|---:|---:|---|---|
+| `emptyloop` | 1.5096 | 1.5549 | 1.5434 | **+3.00%**, 9/9 slower | -0.74%, 0/9 |
+| `compound` | 2.7465 | 2.7852 | 2.7704 | **+1.41%**, 9/9 slower | -0.53%, 3/9 |
+| `strings` | 3.6669 | 3.7169 | 3.6778 | +1.36%, 6/9 slower | -1.05%, 3/9 |
+| `alloc4c` | 1.2410 | 1.2530 | 1.2471 | +0.97%, 7/9 slower | -0.47%, 3/9 |
+| `varlookup` | 2.6029 | 2.6044 | 2.5908 | +0.06%, 7/9 slower | -0.52%, 4/9 |
+| `arith` | 2.2404 | 2.2191 | 2.2120 | -0.95%, 2/9 slower | -0.32%, 5/9 |
+
+#### What it says
+
+**Sixteen bytes is free on these axes, and the cost the two-arm reading found was the variant rather than the width.**
+A first sitting compared A against B alone and read `emptyloop` +2.35% at 9/9 -- wait for the control and that same axis splits into +3.00% for the variant and **-0.74% for the width, with B at or under C in every one of nine rounds**.
+Every axis's width column is negative.
+The direction is consistent; the magnitudes are not claimed, because only `emptyloop`'s round count separates from chance and every figure here sits under entry 17's floor.
+
+**The variant cost is the finding nobody was looking for.** Adding a dead variant -- constructed nowhere, emitted nowhere, driven nowhere -- costs `emptyloop` 3.00% at 9/9 and `compound` 1.41% at 9/9.
+That is consistent with entry 23's control, which measured two new `Op` variants at +0.15% to +2.25% of instructions on the axes that emit neither.
+No mechanism is established here; the plausible one is that a variant changes rustc's discriminant assignment and so every match's dispatch, but that is a hypothesis and this entry does not test it.
+
+#### What this entry does not claim
+
+* **No instruction or cycle counts.** Wall clock only, deliberately: `perf stat` moves the ratio on every axis (entry 1), and the question was whether the width costs under the rule the bar is stated on. What the width does to instructions per cycle is unmeasured, and it is the mechanism a cache-line argument would actually run through.
+* **Nothing about a *widened variant*, which is what would actually land.** Both wide arms widen the enum by adding a dead variant; Task 3's alternative widens `Op::CallExpr` itself and adds none. The width column is the right prediction for it and the variant column is not, but the exact change was not built.
+* **Six axes, one machine, one afternoon.** `rexxcps` was not run.
+* **It says nothing about whether the assertion should stay.** What it says is that the number in it may be sixteen without paying for it here.

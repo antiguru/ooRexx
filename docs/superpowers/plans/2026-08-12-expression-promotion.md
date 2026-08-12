@@ -354,17 +354,25 @@ fn a_prefix_operator_compiles_to_a_native_op_and_its_own_echo() {
 **Interfaces:**
 
 * Consumes: nothing from Tasks 1 and 2.
-* Produces: `ir::NodePath`, `ir::NodeAddr`, `Chunk::nodes`, `Op::CallExpr { index: u32, at: u16, site: u16, dst: u16 }`, `Op::TraceFunction { index: u32, at: u16, src: u16 }`, `Interp::chunk_node_at(instruction: &Instruction, addr: NodeAddr) -> Option<&Expr>`.
+* Produces: `ir::NodePath`, `Op::CallExpr { index: u32, slot: u16, path: NodePath, site: u16, dst: u16 }`, `Op::TraceFunction { index: u32, slot: u16, path: NodePath, src: u16 }`, `Interp::chunk_node_at(instruction: &Instruction, slot: u16, path: NodePath) -> Option<&Expr>`.
 
 **This task promotes nothing new.**
 It is the address widening on its own, so that Task 4 is a change to `native_shape` and `push_native` alone.
 Every existing test must stay green with no expectation edited except the two rendered field names.
 
-**Why a table rather than a wider op.**
-`Op::CallExpr` today is `{ index: u32, slot: u16, site: u16, dst: u16 }`, which is ten bytes and fits the twelve-byte budget.
-Adding a `path: u16` beside it makes twelve bytes of payload and **breaks** `size_of::<Op>() == 12`.
-Checked with the compiler on 2026-08-12 by building both shapes.
-So the address moves into a table and the op keeps a `u16` index into it.
+**The table is withdrawn: put the path in the op and widen the assertion to sixteen.**
+This task was designed around a side table because `Op::CallExpr` at `{ index: u32, slot: u16, path: u16, site: u16, dst: u16 }` is twelve bytes of payload and breaks `size_of::<Op>() == 12`.
+Moritz then offered sixteen bytes, and the record's entry 24 measured it: nine rounds, three arms, and **the width column is negative on every axis** while the cost a two-arm reading found belongs to *having an extra variant*, which this change does not do.
+So `NodePath`, `NodeAddr` and `Chunk::nodes` are all withdrawn, and with them the reserve call, the `ChunkTooLarge` for addresses past `u16`, and the table lookup on the driver's hot path.
+
+What lands instead:
+
+* `const _: () = assert!(size_of::<Op>() == 16)`, with its doc comment saying what entry 24 measured rather than restating the old budget's argument.
+* `Op::CallExpr { index: u32, slot: u16, path: NodePath, site: u16, dst: u16 }`.
+* `Op::TraceFunction { index: u32, slot: u16, path: NodePath, src: u16 }`.
+* `NodePath` stays -- it is the encoding, not the table -- and so does `chunk_node_at`, taking `slot` and `path` as two arguments rather than a `NodeAddr`.
+
+**Check the width with the compiler before writing anything else**, and report rather than improvising if either op does not fit sixteen.
 
 **`NodePath`.**
 In `ir/mod.rs`:
