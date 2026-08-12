@@ -83,9 +83,9 @@ use crate::{
 use rexx_core::{Decoded, FrameId, ObjRef, SlotFrame, SlotRef};
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
-    ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Fragment, Instruction,
-    InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource, Raise,
-    SymbolId, Trace, Use, UseTarget, VariableRef, compound_parts, parse_interpret,
+    CallTarget, ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Fragment,
+    Instruction, InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource,
+    Raise, SymbolId, Trace, Use, UseTarget, VariableRef, compound_parts, parse_interpret,
 };
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -6808,6 +6808,56 @@ impl Interp {
             ConditionTrace::Result(indent),
             raised_if_not_logical,
         )
+    }
+
+    /// The call at expression `slot` of `instruction`, when that slot's whole
+    /// expression **is** a call.
+    ///
+    /// The addressing is [`crate::ir::Op::EvalExpr`]'s exactly -- an
+    /// instruction index and a slot -- and that is the whole reason the
+    /// promotion this serves is restricted to a call at the root. A slot names
+    /// an expression, not a node inside one, so a call nested in a larger
+    /// expression has no address to give an op and stays inside the
+    /// `EvalExpr` that covers the whole tree.
+    ///
+    /// The arms are a subset of [`Interp::eval_chunk_expr`]'s and must stay
+    /// one: a slot that function evaluates by some other rule -- an `If`'s
+    /// condition is validated to `0`/`1`, a `DO` header's value is filed --
+    /// must never reach here, because the op below would evaluate it as a
+    /// plain value and lose that. Only the two slots whose value is taken as
+    /// it comes are listed.
+    pub(crate) fn chunk_call_at(
+        instruction: &Instruction,
+        slot: u32,
+    ) -> Option<(&CallTarget, &[Option<Expr>])> {
+        let expr = match (&instruction.kind, slot) {
+            (InstructionKind::Assignment { value, .. }, 0) => value,
+            (
+                InstructionKind::Say {
+                    expression: Some(expression),
+                },
+                0,
+            ) => expression,
+            _ => return None,
+        };
+        match &expr.kind {
+            ExprKind::Call { target, args } => Some((target, args)),
+            _ => None,
+        }
+    }
+
+    /// The whole expression at `slot`, for the trace hook a native op owes.
+    pub(crate) fn chunk_expr_at(instruction: &Instruction, slot: u32) -> Option<&Expr> {
+        match (&instruction.kind, slot) {
+            (InstructionKind::Assignment { value, .. }, 0) => Some(value),
+            (
+                InstructionKind::Say {
+                    expression: Some(expression),
+                },
+                0,
+            ) => Some(expression),
+            _ => None,
+        }
     }
 
     /// Expression `slot` of `instruction`, evaluated as the compiled stream's

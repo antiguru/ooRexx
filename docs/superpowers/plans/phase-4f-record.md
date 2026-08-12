@@ -2468,3 +2468,51 @@ Entry 11 put candidate 4 at **17.4% of `strings`** and an implied landing of 6.2
 * **No oracle ratios.** Entry 20's were taken at `1767f1ff9`, which is this BASE, so they are current for BASE and not for HEAD.
 * **The tree-walker arm was measured for correctness only.**
 * **No profile.** Whether the remaining resolution work is where the model says it is has not been re-sampled.
+
+### Entry 23 -- queue candidate 4's second half attempted and **accepted**: a call at the root of a value keeps its resolution
+
+**BASE is `5678d5f1b`**, entry 22's HEAD.
+
+#### What it is
+
+Entry 22 left one hash of the name per call, plus `resolve_call`'s `Rc::clone` of the program and its label-map lookup. Removing those needs the resolution **kept at the call site**, which the statement form has had since 4e: `Op::Call` carries a `site`, and `Chunk` holds a `Calls` table of what each site last resolved to. The expression form had no op and so no site.
+
+`Op::CallExpr { index, slot, site, dst }` is that op, and **the one thing it does that `Op::EvalExpr` does not is skip `resolve_call`.** The argument loop with its `>A>` lines, the depth guard, the activation bookkeeping and the three `Ended` arms -- 44.1 for a routine that returns nothing among them -- are the same functions `eval.rs` calls on the same node. `eval_call` was split at the resolution so both engines enter the second half rather than one of them carrying a copy.
+
+**Only at the root of a slot's expression.** A slot is the finest address an op has, so a call nested inside a larger expression has none to give and stays inside the `EvalExpr` covering the whole tree. `zz = f(1)` promotes; `zz = f(1) + 1` does not. That is the same fact `native_shape`'s own doc gives about operands, and a golden test pins both halves of it -- either alone is satisfied by a compiler that promotes calls everywhere or nowhere.
+
+**Two pieces of `eval`'s per-node work had to be shared rather than skipped**, and both were found by asking what `eval` does that a native op bypasses:
+
+* **`enter_eval_node`**, extracted from `eval`. A call's *arguments* go back through `eval`, so an op that skipped the depth bookkeeping would start them one level shallower than the tree-walker does and move the depth at which a deep argument raises 5.3.
+* **`Op::TraceFunction`**, behind the call op, for the `>F>` line `eval`'s post-order hook emits and this op does not reach. The same pattern `Op::Const`/`Op::TraceLiteral` already use.
+
+#### The width budget decided two field types
+
+At `u32` each, `CallExpr`'s four fields make the variant 16 bytes and `assert!(size_of::<Op>() == 12)` fails. `slot` and `site` are `u16`, and the call-site index narrowed from `u32` to `u16` throughout -- guarded with `ChunkTooLarge` rather than assumed, the same answer every other index in the module gives. **The budget entry 11's consultation called undefended is still undefended, and this entry did not test it; it fitted inside it.**
+
+#### Measured movement, with a control
+
+Three arms interleaved within every round: BASE, **the ops present and nothing emitting them**, and HEAD. That middle arm is the control this change needs -- it separates "the op stream changed" from "the enum and the driver's match grew", which are different costs paid by different axes.
+
+Wall and cycles are medians of three interleaved rounds; the seven-round wall sitting taken separately against BASE agrees on every sign.
+
+| axis | instructions, control | instructions, HEAD | wall, control | wall, HEAD |
+|---|---:|---:|---:|---:|
+| `strings` | +2.55% | **-4.76%** | +0.19% | **-11.08%** |
+| `alloc4c` | +2.25% | +2.25% | -0.10% | +2.76% |
+| `compound` | +0.15% | +0.15% | +0.24% | +2.84% |
+| `arith` | +0.24% | +0.24% | -2.47% | +4.69% |
+| `varlookup` | +0.44% | +0.44% | -0.26% | -0.79% |
+| `emptyloop` | +0.46% | +0.46% | +0.31% | +0.49% |
+
+**On every axis that emits no call op the two instruction columns are identical.** So the whole of the instruction increase on those five -- 0.15% to 2.25% -- is two more `Op` variants and two more arms in the driver's match, paid whether or not anything is emitted. On `strings` the control is +2.55% and HEAD is -4.76%, so **the emission itself is worth 7.3 instruction points** and pays for the enum four times over on that axis.
+
+**The wall regressions are not attributable and are not claimed.** `alloc4c`, `compound` and `arith` move +2.76%, +2.84% and +4.69% at instruction counts identical to the control's, and the control moves the same axes by -2.47% to +0.31%. `arith` is the clearest: two binaries whose instruction counts on that axis differ by **0.00%** sit **7.2 points apart** in wall clock across this sitting. That is entry 17's floor, demonstrated again and at the size entry 17 measured it.
+
+#### What this entry does not claim
+
+* **`alloc4c`'s +2.25% of instructions is real and unexplained.** It is the largest price the enum's growth charges any axis, it is present in the control, and no mechanism was found for why that axis pays five times what `compound` pays. `alloc4c` runs no `CallExpr`: its only call, `length(s)`, is nested inside `total + 3 + length(s)` and stays an `EvalExpr`.
+* **Three of `strings`' four calls are promoted, not four.** `length(joined)` is nested and stays. What the remaining widening is worth on that axis is unmeasured here.
+* **No oracle ratios.**
+* **The tree-walker arm was measured for correctness only.**
+* **Nothing was measured about the `Op` width budget**, which this change fitted inside rather than tested.

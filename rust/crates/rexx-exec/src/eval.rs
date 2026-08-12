@@ -61,7 +61,7 @@
 //! `Failure`.
 
 use crate::error::Raised;
-use crate::run::Ended;
+use crate::run::{Ended, Resolved};
 use crate::value::{exact_small_int, within_digits};
 use crate::{Code, Failure, Interp, Loud, StackSpan};
 use rexx_core::{Decoded, NotNumeric, ObjRef};
@@ -146,9 +146,30 @@ impl Interp {
     /// The two ends are written **together**, when the maximum is beaten, so
     /// they always describe one call chain; `StackSpan`'s doc has the
     /// measurement that made that necessary.
-    pub(crate) fn eval(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Failure> {
-        let probe = 0u8;
-        let here = &probe as *const u8 as usize;
+    /// [`Interp::eval`]'s own per-node entry: the stack-span bookkeeping and
+    /// D19's evaluation-depth limit, in one place because there is now more
+    /// than one caller.
+    ///
+    /// **The second caller is the compiled stream.** A native op evaluates a
+    /// node without entering `eval` at all, and for most of them that is
+    /// invisible -- an `Op::Const` has no operands to recurse into, so the
+    /// depth it would have counted bounds nothing. A call is different: its
+    /// *arguments* go back through `eval`, so a call op that skipped this
+    /// would start them one level shallower than the tree-walker does and move
+    /// the depth at which a deeply nested argument raises 5.3. Calling this is
+    /// what keeps the two engines' answer to that identical rather than nearly
+    /// so.
+    ///
+    /// `anchor` is any address inside the caller's own frame; its value is
+    /// never read, only its position, which is what makes the span a
+    /// measurement of the real stack rather than of the recursion count.
+    ///
+    /// **The caller owes the matching `self.depth -= 1`** on every exit path,
+    /// the raising ones included, exactly as `eval` does below. Not a guard
+    /// type, because the trace hook on the way out needs the value in hand, so
+    /// both halves would have to be threaded through one anyway.
+    pub(crate) fn enter_eval_node<T>(&mut self, anchor: *const T) -> Result<(), Failure> {
+        let here = anchor as usize;
 
         self.depth += 1;
         if self.depth == 1 {
@@ -174,7 +195,12 @@ impl Interp {
             self.depth -= 1;
             return Err(Raised::insufficient_stack().into());
         }
+        Ok(())
+    }
 
+    pub(crate) fn eval(&mut self, code: &Code<'_>, expr: &Expr) -> Result<ObjRef, Failure> {
+        let probe = 0u8;
+        self.enter_eval_node(&raw const probe)?;
         let value = self.eval_node(code, expr);
         self.depth -= 1;
         // `TRACE I`'s own value events (D17), and the **single insertion
@@ -205,7 +231,7 @@ impl Interp {
     /// `expr.kind`'s own already-computed pieces (a `SymbolId`'s name, an
     /// operator's spelling) are read directly; nothing re-derives a value
     /// `eval_node` already produced.
-    fn trace_intermediate(&mut self, code: &Code<'_>, expr: &Expr, value: ObjRef) {
+    pub(crate) fn trace_intermediate(&mut self, code: &Code<'_>, expr: &Expr, value: ObjRef) {
         if !self.tracing_intermediates() {
             return;
         }
@@ -605,11 +631,27 @@ impl Interp {
         target: &CallTarget,
         args: &[Option<Expr>],
     ) -> Result<ObjRef, Failure> {
-        let (name, search_labels): (&[u8], bool) = match target {
-            CallTarget::Symbol(id) => (code.symbols.name(*id).as_bytes(), true),
-            CallTarget::Literal(bytes) => (bytes, false),
-        };
+        let (name, search_labels) = call_target_name(code, target);
         let resolved = self.resolve_call(name, search_labels)?;
+        self.eval_call_resolved(code, resolved, name, args)
+    }
+
+    /// [`eval_call`]'s second half: everything after the resolution.
+    ///
+    /// **Split so the compiled stream can supply a resolution it kept rather
+    /// than making a fresh one**, and split rather than copied because the
+    /// three `Ended` arms below are measured behaviour -- 44.1 in particular
+    /// is the expression form's own answer and `CALL` has no equivalent -- and
+    /// a second copy of them is one free to stop agreeing.
+    ///
+    /// [`eval_call`]: Interp::eval_call
+    pub(crate) fn eval_call_resolved(
+        &mut self,
+        code: &Code<'_>,
+        resolved: Resolved,
+        name: &[u8],
+        args: &[Option<Expr>],
+    ) -> Result<ObjRef, Failure> {
         match self.invoke_call(code, resolved, name, args)? {
             // `EXIT` inside the routine, or the routine falling off its own
             // end, ends the whole program exactly as it does when the same
@@ -1226,6 +1268,19 @@ pub(crate) fn is_arithmetic(op: Operator) -> bool {
         op,
         Plus | Subtract | Multiply | Divide | IntDiv | Remainder | Power
     )
+}
+
+/// The bytes a call target names, and whether an internal label may answer it.
+///
+/// One place rather than two, because the pair is what decides which routine
+/// runs: `CALL 'MAX'` skipping the internal `max:` label is measured
+/// behaviour, and the compiled stream has to reach the same answer as
+/// `eval.rs` from the same node.
+pub(crate) fn call_target_name<'a>(code: &Code<'a>, target: &'a CallTarget) -> (&'a [u8], bool) {
+    match target {
+        CallTarget::Symbol(id) => (code.symbols.name(*id).as_bytes(), true),
+        CallTarget::Literal(bytes) => (bytes, false),
+    }
 }
 
 /// Whether `op` is one of the eight strict comparison operators -- decided

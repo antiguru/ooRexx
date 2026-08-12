@@ -55,6 +55,25 @@ pub(crate) fn render(chunk: &Chunk) -> String {
                     "{index}: EvalExpr index={at} slot={slot} dst={dst}\n"
                 ));
             }
+            Op::CallExpr {
+                index: at,
+                slot,
+                site,
+                dst,
+            } => {
+                out.push_str(&format!(
+                    "{index}: CallExpr index={at} slot={slot} site={site} dst={dst}\n"
+                ));
+            }
+            Op::TraceFunction {
+                index: at,
+                slot,
+                src,
+            } => {
+                out.push_str(&format!(
+                    "{index}: TraceFunction index={at} slot={slot} src={src}\n"
+                ));
+            }
             Op::SelectCaseText { index: at, case } => {
                 out.push_str(&format!(
                     "{index}: SelectCaseText index={at} case={}\n",

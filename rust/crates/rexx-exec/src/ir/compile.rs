@@ -595,6 +595,7 @@ pub(crate) fn compile(
                     &mut consts,
                     &mut registers,
                     &mut hints,
+                    &mut calls,
                     plan,
                     value,
                     instruction_index(index)?,
@@ -630,6 +631,7 @@ pub(crate) fn compile(
                             &mut consts,
                             &mut registers,
                             &mut hints,
+                            &mut calls,
                             plan,
                             expression,
                             instruction_index(index)?,
@@ -746,12 +748,37 @@ fn push_value<'a>(
     consts: &mut Constants<'a>,
     registers: &mut Registers,
     hints: &mut Hints,
+    calls: &mut Calls,
     plan: &Plan,
     expr: &'a Expr,
     index: u32,
     slot: u32,
     dst: u16,
 ) -> Result<(), ChunkTooLarge> {
+    // **A call at the root of the slot takes its own op**, which is
+    // [`Op::CallExpr`], and the only thing it changes about running the call is
+    // that the resolution comes from a site instead of being made afresh. A
+    // call *inside* a larger expression does not and cannot: a slot is the
+    // finest address an op has, so there is nothing for an op to name. That is
+    // the same restriction `native_shape`'s own doc gives for operands, arrived
+    // at from the same fact.
+    if let ExprKind::Call { .. } = &expr.kind {
+        let slot = u16::try_from(slot).map_err(|_| ChunkTooLarge {
+            what: "expression slots past u16",
+        })?;
+        ops.push(Op::CallExpr {
+            index,
+            slot,
+            site: calls.reserve()?,
+            dst,
+        });
+        ops.push(Op::TraceFunction {
+            index,
+            slot,
+            src: dst,
+        });
+        return Ok(());
+    }
     if native_shape(expr) {
         push_native(ops, consts, registers, hints, plan, expr, dst)
     } else {
@@ -1265,6 +1292,8 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::Say { index, .. }
                 | Op::WhenTest { index, .. }
                 | Op::Call { index, .. }
+                | Op::CallExpr { index, .. }
+                | Op::TraceFunction { index, .. }
                 | Op::LoopRun { index } => Some(*index),
                 Op::Generic { .. }
                 | Op::TraceKeyword { .. }

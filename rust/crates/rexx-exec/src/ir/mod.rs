@@ -198,6 +198,44 @@ pub(crate) enum Op {
     /// expression came to, kept for every `WHEN CASE` of that `SELECT` to be
     /// compared against.
     EvalExpr { index: u32, slot: u32, dst: u16 },
+    /// Runs the call that **is** expression `slot` of the instruction at
+    /// `index`, into register `dst`, through the resolution site `site` keeps.
+    ///
+    /// **The one thing this does that [`Op::EvalExpr`] does not is skip
+    /// `resolve_call`.** Everything else is the same code on the same node:
+    /// the argument loop with its `>A>` lines, the depth guard, the activation
+    /// bookkeeping and the three `Ended` arms are `invoke_call`'s and
+    /// `eval_call_resolved`'s, entered from here exactly as `eval.rs` enters
+    /// them. That is deliberate rather than minimal -- a call's observable
+    /// surface is large (`SIGL`, the activation level, 44.1 for a routine that
+    /// returns nothing) and none of it is worth a second implementation for
+    /// the sake of one lookup.
+    ///
+    /// **Only at the root of a slot's expression**, because a slot is the
+    /// finest address an op has: `Interp::chunk_call_at` answers `None` for
+    /// anything else, and a call nested inside a larger expression stays
+    /// inside the `EvalExpr` covering the whole tree. So `zz = f(1)` promotes
+    /// and `zz = f(1) + 1` does not.
+    ///
+    /// **It owes the `>F>` line itself**, through [`Op::TraceFunction`] behind
+    /// it, for the reason every native op owes its own echo: `eval`'s
+    /// post-order hook is what emits it and this op does not go through
+    /// `eval`.
+    ///
+    /// **`slot` and `site` are `u16` where [`Op::EvalExpr`]'s slot is `u32`**,
+    /// and that is the width budget deciding rather than a preference: at
+    /// `u32` each this variant is 16 bytes and `size_of::<Op>() == 12` fails.
+    /// Both bounds are guarded rather than assumed -- a chunk that would
+    /// exceed either is refused with `ChunkTooLarge`, the same answer every
+    /// other index in this module gives.
+    CallExpr {
+        index: u32,
+        slot: u16,
+        site: u16,
+        dst: u16,
+    },
+    /// The `>F>` line [`Op::CallExpr`] owes, for the value now in `src`.
+    TraceFunction { index: u32, slot: u16, src: u16 },
     /// Hands the `SELECT` at `index` the text an **absorbed** `WHEN CASE`
     /// compares against, from register `case`, or clears it for a plain
     /// `SELECT` that has no `CASE` expression at all.
@@ -573,7 +611,7 @@ pub(crate) enum Op {
     ///
     /// `site` is this call site's own slot in [`Chunk::calls`], **not** a
     /// position in the op stream, for the reason [`Op::Arith`]'s `hint` is not.
-    Call { index: u32, site: u32 },
+    Call { index: u32, site: u16 },
     /// Continues at op `target`.
     Jump { target: u32 },
     /// Continues at op `target` unless register `reg` holds the logical value
@@ -734,7 +772,8 @@ const GENERAL: u32 = 1;
 /// caller as `Rc<Chunk>`, and an `Rc` is neither `Send` nor `Sync` whatever it
 /// holds, so that day needs a different owner before it needs a different slot;
 /// and [`CallSite`] one construct over holds a `Cell` whose payload is too wide
-/// for a lock-free atomic, so a `Chunk` is not `Sync` either way. The atomic
+/// for a lock-free atomic, so a `Chunk` is not `Sync` either way -- both of
+/// which rustc confirms, and [`CallSite`]'s own doc has that answer in full. The atomic
 /// therefore bought a property nothing could observe, at a price that was
 /// measured rather than assumed: **8 instructions per pass on `arith`, 2 on
 /// `compound`, 1 on `varlookup` and 0 on `emptyloop`**, two builds of one
@@ -856,12 +895,27 @@ const CALL_SITE_CACHE: bool = true;
 /// **A `Cell`, and a `Resolved` is what forces it rather than a preference.**
 /// A `Resolved` is wider than any lock-free atomic here can carry, so an atomic
 /// slot would cost either an encoding or a lock, where [`PatchSlot`]'s state is
-/// a `u32` that either could hold. **This field is the whole of what stops a
-/// [`Chunk`] being `Sync`**: measured, by requiring `Chunk: Sync` in a throwaway
-/// `const` and reading rustc's answer, which names `Cell<Option<Resolved>>` and
-/// nothing else. So this is the type that would have to change first if a chunk
-/// ever crossed a thread -- and until it does, no other field buys anything by
-/// being `Sync` on its own, which is the measurement [`PatchSlot`] records.
+/// a `u32` that either could hold.
+///
+/// **What stops a [`Chunk`] being `Sync` is this field and [`PatchSlot`], and
+/// an earlier version of this comment claimed it was this one alone.** Re-taken
+/// 2026-08-12 the way the claim says to take it -- `const _: () = { const fn
+/// assert_sync<T: Sync>() {} assert_sync::<Chunk>(); }` -- and rustc answers
+/// with two errors, `Cell<Option<Resolved>>` through `Calls` and `Cell<u32>`
+/// through `Hints`, and nothing else. Two fields, both of them a per-site
+/// cache, and no third.
+///
+/// **Neither should become an atomic before `Rc<Chunk>` becomes an `Arc`**, and
+/// that ordering is [`PatchSlot`]'s own argument rather than a new one: an `Rc`
+/// is neither `Send` nor `Sync` whatever it holds, so a `Sync` slot inside one
+/// buys a property nothing can observe -- and that comment carries the price of
+/// buying it early, **8 instructions per pass on `arith`**, measured. What has
+/// changed since it was written is only this field's arithmetic: `Resolved`'s
+/// builtin arm now carries a `u16` row rather than nothing, so two of the three
+/// arms would fit a `u64` and only `Resolved::Routine`, which is two `usize`s,
+/// still would not. An encoding that declines that arm -- leaving such a site to
+/// resolve afresh, exactly as a site that raised already does -- is what an
+/// atomic version would be, and it is work for the day the owner changes.
 struct CallSite(Cell<Option<Resolved>>);
 
 impl CallSite {
@@ -890,7 +944,7 @@ struct Calls {
     /// so that the indices the ops carry are the same whether or not the table
     /// exists -- [`Hints::next`]'s own reason, so that a golden op stream reads
     /// identically under either setting.
-    next: u32,
+    next: u16,
 }
 
 impl Calls {
@@ -902,10 +956,10 @@ impl Calls {
     }
 
     /// Reserves the slot for one call op, answering the index it carries.
-    fn reserve(&mut self) -> Result<u32, ChunkTooLarge> {
+    fn reserve(&mut self) -> Result<u16, ChunkTooLarge> {
         let at = self.next;
         self.next = at.checked_add(1).ok_or(ChunkTooLarge {
-            what: "call sites past u32",
+            what: "call sites past u16",
         })?;
         if CALL_SITE_CACHE {
             self.slots.push(CallSite::new());
@@ -917,12 +971,12 @@ impl Calls {
     /// resolved yet or has no slot at all -- which is what makes
     /// [`CALL_SITE_CACHE`] off behave as no table rather than as a table that
     /// answers wrongly.
-    fn resolved(&self, at: u32) -> Option<Resolved> {
+    fn resolved(&self, at: u16) -> Option<Resolved> {
         self.slots.get(at as usize).and_then(CallSite::get)
     }
 
     /// Records what site `at` resolved to.
-    fn remember(&self, at: u32, resolved: Resolved) {
+    fn remember(&self, at: u16, resolved: Resolved) {
         if let Some(slot) = self.slots.get(at as usize) {
             slot.set(resolved);
         }
@@ -1062,12 +1116,12 @@ impl Chunk {
     }
 
     /// What call site `at` resolved to last time ([`Calls::resolved`]).
-    fn resolved_call(&self, at: u32) -> Option<Resolved> {
+    fn resolved_call(&self, at: u16) -> Option<Resolved> {
         self.calls.resolved(at)
     }
 
     /// Records what call site `at` resolved to ([`Calls::remember`]).
-    fn remember_call(&self, at: u32, resolved: Resolved) {
+    fn remember_call(&self, at: u16, resolved: Resolved) {
         self.calls.remember(at, resolved);
     }
 }

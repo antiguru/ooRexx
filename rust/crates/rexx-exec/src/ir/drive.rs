@@ -39,6 +39,7 @@ use rexx_parse::{Call, ExprKind, Instruction, InstructionKind, ProgramSource, Sy
 
 use super::{BodyEngine, Chunk, Op};
 use crate::clause::{ClauseOutcome, ClauseValue};
+use crate::eval::call_target_name;
 use crate::run::{
     Absorbed, Echo, Ended, Flow, LoopHeaderValues, SelectEscape, SelectResume, absorb,
     otherwise_range, otherwise_resume, select_escape, select_parts, when_resume, when_targets,
@@ -549,6 +550,85 @@ impl Interp {
                                         let indent = self.clause_state.current_value_indent;
                                         self.echo_compiled_clause(source, clause, indent);
                                     }
+                                }
+                                // **The one thing this does that `EvalExpr`
+                                // does not is skip `resolve_call`.** The
+                                // argument loop, the `>A>` lines, the
+                                // activation bookkeeping and the three `Ended`
+                                // arms are the same functions `eval.rs` calls
+                                // on the same node; only the resolution comes
+                                // from the site instead of being made again.
+                                //
+                                // `enter_eval_node` is called because the
+                                // *arguments* go back through `eval`, and a
+                                // call that skipped it would start them one
+                                // level shallower than the tree-walker does --
+                                // see that function's own doc.
+                                Op::CallExpr {
+                                    index,
+                                    slot,
+                                    site,
+                                    dst,
+                                } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*dst),
+                                        "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    debug_assert_names_the_clause(code, *index, clause, "CallExpr");
+                                    let Some((target, args)) =
+                                        Interp::chunk_call_at(clause, u32::from(*slot))
+                                    else {
+                                        break 'region Err(Loud::call_op_off_its_node().into());
+                                    };
+                                    let (name, search_labels) = call_target_name(code, target);
+                                    // A raise is deliberately not recorded, and
+                                    // a hit needs no guard: `CallSite`'s own
+                                    // doc has both reasons, and they are the
+                                    // same ones `Op::Call` reads them for.
+                                    let resolved = match chunk.resolved_call(*site) {
+                                        Some(resolved) => {
+                                            #[cfg(test)]
+                                            count_call_site_hit();
+                                            resolved
+                                        }
+                                        None => match self.resolve_call(name, search_labels) {
+                                            Ok(resolved) => {
+                                                chunk.remember_call(*site, resolved);
+                                                resolved
+                                            }
+                                            Err(failure) => break 'region Err(failure),
+                                        },
+                                    };
+                                    let probe = 0u8;
+                                    if let Err(failure) = self.enter_eval_node(&raw const probe) {
+                                        break 'region Err(failure);
+                                    }
+                                    let value = self.eval_call_resolved(code, resolved, name, args);
+                                    self.depth -= 1;
+                                    let value = match value {
+                                        Ok(value) => value,
+                                        Err(failure) => break 'region Err(failure),
+                                    };
+                                    self.roots.set_temp(registers, *dst as usize, value);
+                                }
+                                // The `>F>` line the op above owes, emitted
+                                // behind it because `eval`'s own hook is
+                                // post-order and this is the same line.
+                                Op::TraceFunction { index, slot, src } => {
+                                    debug_assert_names_the_clause(
+                                        code,
+                                        *index,
+                                        clause,
+                                        "TraceFunction",
+                                    );
+                                    let Some(expr) =
+                                        Interp::chunk_expr_at(clause, u32::from(*slot))
+                                    else {
+                                        break 'region Err(Loud::call_op_off_its_node().into());
+                                    };
+                                    let value = self.roots.temp_at(registers, *src as usize);
+                                    self.trace_intermediate(code, expr, value);
                                 }
                                 Op::EvalExpr { index, slot, dst } => {
                                     debug_assert!(
@@ -1110,6 +1190,10 @@ impl Interp {
                 Op::Store { .. } => return Err(Loud::op_not_driven("Store").into()),
                 Op::Say { .. } => return Err(Loud::op_not_driven("Say").into()),
                 Op::Call { .. } => return Err(Loud::op_not_driven("Call").into()),
+                Op::CallExpr { .. } => return Err(Loud::op_not_driven("CallExpr").into()),
+                Op::TraceFunction { .. } => {
+                    return Err(Loud::op_not_driven("TraceFunction").into());
+                }
                 Op::JumpUnless { .. } => return Err(Loud::op_not_driven("JumpUnless").into()),
                 Op::WhenTest { .. } => return Err(Loud::op_not_driven("WhenTest").into()),
                 Op::TraceKeyword { .. } => return Err(Loud::op_not_driven("TraceKeyword").into()),

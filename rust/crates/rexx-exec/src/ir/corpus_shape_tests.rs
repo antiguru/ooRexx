@@ -91,6 +91,7 @@ enum Root {
     LoadConstant,
     Load,
     Arith,
+    CallExpr,
     EvalExpr,
 }
 
@@ -107,6 +108,7 @@ impl Root {
             Op::Load { .. } => Some(Root::Load),
             Op::Arith { .. } => Some(Root::Arith),
             Op::EvalExpr { .. } => Some(Root::EvalExpr),
+            Op::CallExpr { .. } => Some(Root::CallExpr),
             Op::Generic { .. }
             | Op::TraceKeyword { .. }
             | Op::LoopHeaderValue { .. }
@@ -121,6 +123,7 @@ impl Root {
             | Op::Store { .. }
             | Op::Say { .. }
             | Op::Call { .. }
+            | Op::TraceFunction { .. }
             | Op::EndBranch
             | Op::EnterWhen { .. }
             | Op::EnterOtherwise { .. }
@@ -168,6 +171,10 @@ fn promoted_as(kind: &InstructionKind, index: usize, listed: &[usize]) -> Option
 /// with it whatever it does.
 fn root_of(expr: &Expr) -> Root {
     match &expr.kind {
+        // A call at the root, and only at the root: `push_value` decides this
+        // one before it asks `native_shape` at all, because a slot is the
+        // finest address an op has and a nested call has none to give.
+        ExprKind::Call { .. } => Root::CallExpr,
         ExprKind::Literal(_) => Root::Const,
         ExprKind::Constant(_) => Root::LoadConstant,
         ExprKind::Variable(_) | ExprKind::Stem(_) | ExprKind::Compound(_) => Root::Load,

@@ -49,6 +49,38 @@ fn traced() -> ChunkTrace {
     ChunkTrace::of(crate::trace::mode_from_setting(b"r").expect("R is a valid TRACE setting"))
 }
 
+/// A call at the root of an assignment's value compiles to
+/// [`super::Op::CallExpr`], and the same call one operator down does not.
+///
+/// **The pair is the test.** Either half alone is satisfied by a compiler that
+/// promotes calls everywhere or nowhere; together they pin the restriction
+/// `push_value` actually applies, which is that a slot is the finest address
+/// an op has, so only a call that *is* the slot's expression has one to name.
+///
+/// The `site` field is expected as `0` for the promoted case, which is the
+/// first reservation in the chunk -- an assertion about the reservation being
+/// dense over call ops, and it would redden if a site were reserved for
+/// something that emitted no call op.
+#[test]
+fn a_call_at_the_root_of_a_value_takes_its_own_op_and_a_nested_one_does_not() {
+    let promoted = compile_for_test(b"zz = length('abc')").expect("the chunk fits");
+    assert_eq!(
+        render(&promoted),
+        "0: Clause index=0 end=4\n\
+         1: CallExpr index=0 slot=0 site=0 dst=0\n\
+         2: TraceFunction index=0 slot=0 src=0\n\
+         3: Store index=0 at=0 src=0\n"
+    );
+
+    let nested = compile_for_test(b"zz = length('abc') + 1").expect("the chunk fits");
+    assert_eq!(
+        render(&nested),
+        "0: Clause index=0 end=3\n\
+         1: EvalExpr index=0 slot=0 dst=0\n\
+         2: Store index=0 at=0 src=0\n"
+    );
+}
+
 /// An instruction whose clause this compiler emits [`super::Op::Generic`] for
 /// gets exactly one op, carrying its own index.
 ///
