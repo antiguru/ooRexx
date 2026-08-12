@@ -174,7 +174,8 @@ No `unsafe`.
 **It probably costs nothing in slot width, and that is an estimate from recorded figures rather than a measurement.**
 `d1-decision.md` measured `size_of::<Body>() == 80` at `ad7c36f0`, dominated by `Stem`, with `Text`'s own payload *"around 40 bytes"*.
 An inline arm of about 22 bytes keeps `Bytes` the same width as the `Vec<u8>` it replaces, so `Text` stays near 40 and `Body` stays at `Stem`'s 80.
-**Falsified by one line I was not permitted to run**: print `size_of::<Body>()` and `size_of::<Bytes>()` at `HEAD`, before and after.
+~~**Falsified by one line I was not permitted to run**: print `size_of::<Body>()` and `size_of::<Bytes>()` at `HEAD`, before and after.~~
+**Measured 2026-08-12, entry 14, and the estimate was right for the wrong reason: it costs nothing in slot width, and it would still cost nothing at more than twice that capacity.** `Body` is 80 and `Slot` is 96 for every inline capacity up to **54**; 55 is the first that widens both by eight. So "keep `Bytes` inside 24 bytes" is not the constraint, and a capacity chosen against it would leave two thirds of the `strings` axis on the heap for no saving.
 
 **Landable and measurable alone.** Yes.
 Pre-stated falsifier: a paired run moving `rexxcps` clauses per second by less than about 5%, or peak resident set not falling.
@@ -279,6 +280,10 @@ It is D1's own pre-registered fix and it is not withdrawn.
 A dominates it for short values at a fraction of the risk, and the fact that decides between them -- **the length distribution of the strings these benchmarks actually allocate** -- has never been measured.
 If that histogram says long strings carry the allocation, E moves ahead of A.
 
+**Measured 2026-08-12, entry 14 of `phase-4f-record.md`: it does not, and E stays behind A.**
+At an inline capacity of 54 -- which the same entry measures as free, `Body` unchanged at 80 and `Slot` at 96 -- the strings A does not reach are 7 creations out of 11,910,838 on `rexxcps`, none at all on `strings` or `alloc4c`, and 20 out of 2,425 in the corpus.
+E is still not withdrawn: it is what a *later* population of long strings would want, and nothing in these two populations is one.
+
 ### F -- the reference's own shape, which needs `unsafe`
 
 **What it changes.** `RexxString` ends in `char stringData[4]`: the object header and a run-time-sized payload are **one allocation**, bytes contiguous with the header.
@@ -322,6 +327,7 @@ E is held unless the histogram picks it over A. C is declined. **F is declined n
 * **B first**, because it is the most contained option here (one crate, no interpreter surface), it is aimed at the axis whose excess the profile decomposes least ambiguously (`arith`: ours 39.9% against the oracle's 8.3%), entry 11 has already written its falsifier, and it replaces a cited-but-absent `smallvec` result with a real number. It also does not move `Body`'s width, so it cannot perturb A.
 * **The histogram next**, because it is not a candidate at all -- it is one instrumented run, it decides A against E, and getting it wrong means building the larger of the two twice.
 * **A third**, aimed at `rexxcps` and `compound`, explicitly not at `strings`.
+  **Corrected 2026-08-12 by the histogram this order calls for, recorded as entry 14 of `phase-4f-record.md`: `compound` allocates one heap object in its whole run, a single `Stem`, and no `Body::Text` ever, so A cannot move it at all.** `arith` and `varlookup` are likewise zero. A's reachable axes are `rexxcps`, `strings` and `alloc4c`, and the sentence above already forbids the middle one.
 * **D(ii) fourth**, after A, because A changes the payload type its accessor would borrow from.
 * **C's replacement last**, because it is small and it is the only one whose worth is two profile rows with no oracle-side comparison at all.
 
@@ -376,10 +382,10 @@ The one figure this document declines to pass on is the `smallvec` result, check
 
 * **Whether the residual is one cost with four names.** Settled by landing B or A and comparing the measured delta against the profile's prediction. This is the experiment both consultations asked for, and it is the first thing the next candidate produces.
 * **`size_of::<Body>()` and `size_of::<Number>()` at `HEAD`.** The 80-byte figure is `d1-decision.md`'s, measured at `ad7c36f0`; commits since may have moved it. One line of `std::mem::size_of`, which I was not permitted to run, and A's "costs nothing in slot width" claim rests on it.
-* **The length distribution of allocated strings.** Decides A's inline-arm size, decides whether A or E is the right shape, and nobody has measured it. A histogram of the lengths reaching `Interp::text_owned` per axis settles it.
+* **The length distribution of allocated strings.** ~~Decides A's inline-arm size, decides whether A or E is the right shape, and nobody has measured it.~~ **Settled 2026-08-12, entry 14 of `phase-4f-record.md`: it picks A, declines E and F, and declines a dependency.** It also moves the question the capacity is chosen against: `size_of::<Body>()` stays at 80 and `size_of::<Slot>()` at 96 for every inline capacity up to **54**, so the 24-byte `Vec<u8>` width this document assumed as the budget is not the binding constraint.
 * **How `rexxcps`' 40.0% allocator family splits between `Text`, `Number` and tail keys.** Named above as the one measurement that would reorder the recommendation.
 * **Whether every `to_text` caller can take the `&self` peek.** The accessor is provably available for three of five arms; whether the call sites want it is a reading of `eval.rs`, `builtin/` and `ir/` that the spike's uncommitted state made unsafe to do now.
 * **Whether `Rc<[u8]>` is compatible with the eventual threading model.** `Outcome` must be `Send` and the crate has already declined `Rc` once for that reason; whether a heap value itself ever crosses a thread boundary is not established anywhere I could find.
-* **Whether long strings are a population worth an `unsafe` site at all.** F's only advantage over A is one cache miss on a string above the inline bound, and nobody knows how many of those these programs allocate. The same length histogram settles it, which is why it sits in the recommended order rather than in this list.
+* **Whether long strings are a population worth an `unsafe` site at all.** ~~F's only advantage over A is one cache miss on a string above the inline bound, and nobody knows how many of those these programs allocate.~~ **Settled 2026-08-12, entry 14: no.** Above capacity 54 that population is 7 creations out of 11,910,838 on `rexxcps`, none at all on `strings` or `alloc4c`, and 20 out of 2,425 in the corpus.
 * **Every share here predates the expression spike.** A third profiling pass, taken after expression promotion lands, is what makes the `strings` figures above usable again; the per-axis *rankings* should survive it and the *ceilings* will not. Settled by re-profiling, which the loop's own cadence requires anyway.
 * **What the `Op` width budget costs elsewhere.** Entry 11 records that `assert!(size_of::<Op>() == 12)` is defended by an assertion rather than a measurement, and that it has already distorted two design choices. It is not a value-representation question and is not decided here, but it is the same kind of unmeasured constraint and belongs in the same conversation.

@@ -1797,3 +1797,160 @@ Commit: `e4bf5f2cbda8364207c753c4318d6c1c95727c86`, read back from `git log` aft
 * **It measures widths, not speed.** Whether `smallvec`'s spill and growth code is faster or slower than the hand-rolled arm's is unmeasured, and at equal widths it would be a separate candidate with its own paired run rather than a reason to switch.
 * **It is one toolchain.** rustc 1.97.1 niche-fills the plain enum to 24 bytes up to fifteen digits; a toolchain that stopped doing so would move the left column and not the `smallvec` one. The assertions above are what would catch that.
 * **It does not revisit entry 2's citation as history.** What the citation claimed to have measured is still unknown; what is now known is that the type it names does not have the width the argument for it needs.
+
+---
+
+### Entry 14 -- the string-length histogram, which the design document asks for before A, E or F: it picks A, and it says A cannot touch three of the six axes
+
+**A measurement, not a candidate.** Nothing was built to keep and nothing landed.
+`2026-08-11-value-representation-design.md` puts this between B and A because *"it is not a candidate at all -- it is one instrumented run, it decides A against E, and getting it wrong means building the larger of the two twice."*
+**No timed comparison was taken and none is reported**, so the host-idle gate the accept rule carries does not apply here and was not observed.
+
+**BASE is `68e1c4681b92a12e44d9790285fd42457af537cb`.**
+Its `rexx-run` is size 14003504, sha256 `cc0315ac4307c341cf0308b7705d9e127d002e199b0804bd15edcce7b128bb8d`, built from `cargo clean -p rexx-core -p rexx-exec --release`.
+The three instrumented files were restored from `cp -a` copies and `sha256sum -c`'d, never `git checkout --`, and the rebuild that followed the restore reproduces that hash **byte for byte**.
+
+#### What was counted, and where
+
+**One counter in `Heap::alloc_with_uncollected`**, which is the single funnel every arena allocation takes, so the population is every `Body::Text` this crate creates rather than every one that happens to pass through `Interp::text_owned`.
+Exact buckets for each length below 65536, plus an overflow counter and a running maximum, plus one counter per `Body` variant so that a `Text` count of zero has a denominator.
+Dumped from `rexx-run`'s `main` when `REXX_TEXT_HIST` names a file.
+**Counting, not sampling**, which is entry 11's warning applied: this question is about how many `malloc` calls disappear, and a length that occurs once has to be as visible as one that occurs a million times.
+No `unsafe`; the counters are relaxed atomics and the workspace lint was untouched.
+
+**Four controls, each run rather than asserted.**
+
+* `say 'hello'` reports exactly one creation at length 5.
+* `do i = 1 to 5 ; s = copies('a', i) ; end` reports ten: six at length 1 (the `'a'` literal once per pass, plus `copies('a',1)`), and one each at 2, 3, 4 and 5.
+* `x = 0 ; do i = 1 to 100 ; x = x + 1 ; end` reports **zero allocations of every variant**, so an axis reading zero below is reading a real zero and not an instrument floor.
+* With `REXX_TEXT_HIST` unset, no file is written at all.
+
+**And the instrument changes no behaviour, which was measured rather than argued.**
+All 70 corpus programs were run on the instrumented binary and on BASE's: **210 descriptors -- exit status, stdout hash and stderr hash for each -- and `diff` is empty.**
+
+#### The distribution, by creation count
+
+IR arm, `ulimit -v 8388608`, a fresh empty working directory per run, stdin closed.
+Axes are `rust/bench-programs/*.rex` plus `/home/moritz/dev/repos/ooRexx/samples/rexxcps.rex`, which self-calibrated to the same `100 x 100` entry 12 recorded.
+The corpus is all 70 `.rex` files under `rust/corpus`, each its own process, pooled.
+Percentiles are nearest rank: the smallest length whose cumulative count reaches the rank.
+
+| population | `Body::Text` created | <=15 | <=23 | <=31 | median | p90 | p99 | max | mean |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| `strings` | 18,000,001 | 66.67% | 66.67% | 66.67% | 3 | 46 | 46 | 46 | 16.83 |
+| `rexxcps` | 11,910,838 | 84.72% | 94.12% | 95.30% | 3 | 21 | 33 | 66 | 6.44 |
+| `compound` | **0** | -- | -- | -- | -- | -- | -- | -- | -- |
+| `varlookup` | **0** | -- | -- | -- | -- | -- | -- | -- | -- |
+| `arith` | **0** | -- | -- | -- | -- | -- | -- | -- | -- |
+| `alloc4c` | 2,000,000 | 100.00% | 100.00% | 100.00% | 4 | 10 | 10 | 11 | 6.94 |
+| **axes pooled** | 31,910,839 | 75.49% | 79.00% | 79.44% | 3 | 43 | 46 | 66 | 12.34 |
+| **corpus (70)** | 2,425 | 84.78% | 93.11% | 96.78% | 5 | 19 | 46 | 251 | 8.17 |
+
+**Three of the six axes create no `Body::Text` at all, and that is the largest single finding here.**
+It is not that they create few; it is zero, on runs of five million, nineteen million and five hundred thousand iterations.
+
+#### What those three axes allocate instead, which is why the zeros are readable
+
+| axis | `Text` | `Num` | `Stem` | total arena allocations |
+|---|---:|---:|---:|---:|
+| `strings` | 18,000,001 | 0 | 0 | 18,000,001 |
+| `rexxcps` | 11,910,838 | 830,205 | 140,001 | 12,881,044 |
+| `arith` | 0 | 3,469,314 | 0 | 3,469,314 |
+| `compound` | 0 | 0 | 1 | **1** |
+| `varlookup` | 0 | 0 | 0 | **0** |
+| `alloc4c` | 2,000,000 | 0 | 1 | 2,000,001 |
+| corpus | 2,425 | 111 | 16 | 2,552 |
+
+`Array`, `Instance` and `WeakRef` are zero in every population.
+
+* **`compound` allocates one heap object in a five-million-iteration run**, a single `Stem`, and nothing else ever.
+  So entry 11's *"on `compound` the allocator family is 12.1%"* is **not** arena traffic: it is the `Vec<u8>` tail keys and the `HashMap` growth inside that one `Stem`, neither of which is a `Body` and neither of which A, E or F touches.
+* **`varlookup` allocates nothing at all**, which the third control predicted and which makes it useless as an acceptance axis for any of the three.
+* **`arith` is `Num` and only `Num`**, which is entry 12 aimed exactly right and A aimed at nothing.
+
+**So the design document's "A third, aimed at `rexxcps` and `compound`" is half wrong**, and the half that is wrong is the axis whose allocator share the document quotes for it.
+A's reachable axes are `rexxcps`, `strings` and `alloc4c`, and the document forbids selling it on `strings`.
+
+#### `size_of::<Body>()` and `size_of::<Slot>()` at every capacity considered
+
+A scratch crate outside the workspace, replicating `Body`, `Object` and `Slot` field for field, because `Slot` is private to `rexx-core::heap`.
+**The replica carrying a plain `Vec<u8>` is the control and it reads 80 and 96**, which is exactly what `body.rs` and `heap.rs` assert today, so the other rows are measuring the thing they claim to.
+The inline shape measured is `enum { Inline { len: u8, buf: [u8; CAP] }, Heap(Vec<u8>) }` -- entry 12's shape, in safe Rust.
+
+| `Body::Text`'s payload | its width | `size_of::<Body>()` | `size_of::<Slot>()` |
+|---|---:|---:|---:|
+| `Vec<u8>`, today | 24 | 80 | 96 |
+| inline capacity 7, 15 | 24 | 80 | 96 |
+| inline capacity 16, 20, 22, 23, 24, 30 | 32 | 80 | 96 |
+| inline capacity 31, 32 | 40 | 80 | 96 |
+| inline capacity 39, 46 | 48 | 80 | 96 |
+| inline capacity 47 to 54 | 56 | 80 | 96 |
+| **inline capacity 55** | 64 | **88** | **104** |
+| `compact_bytes::CompactBytes`, 23 inline | 24 | 80 | 96 |
+| `compact_bytes::CompactBytesSlice`, 15 inline | 16 | 80 | 96 |
+
+**Capacity 54 is the largest that costs nothing, and 55 is the first that widens both by eight.**
+The boundary was found by measuring every capacity from 46 to 55 rather than by rounding a rule.
+The reason is entry 13's: `Body::Stem` sets the width, `Body::Text` has headroom against it, and here that headroom is far larger than the 24-byte figure the brief for this measurement started from.
+
+#### What the data picks
+
+**Option A, hand-rolled, with the capacity taken from the layout ceiling and not from any axis.**
+
+* **E is declined, and the histogram is what declines it.**
+  E's entire advantage over A is the strings A does not reach.
+  At capacity 54 that population is **7 creations out of 11,910,838 on `rexxcps`, none at all on `strings` or `alloc4c`, and 20 out of 2,425 in the corpus.**
+  A side byte-arena would add compaction to the sweep for that.
+* **F is declined for the same reason, and this is the measurement F's own bar asked for.**
+  The design document is explicit that F's only advantage over A is one cache miss on a string above the inline bound.
+  That is the same seven-in-twelve-million population.
+* **A dependency is not warranted, and this is entry 13's shape a second time.**
+  `compact_bytes`' selling point is 23 inline bytes in the width of a `Vec<u8>`, reached through a `union` and `unsafe`.
+  Measured, 24 bytes is not the budget: **56 is**, and a safe hand-rolled enum at that width offers capacity 54 against `CompactBytes`' 23.
+  The crate packs tightly against a constraint that does not bind, exactly as `smallvec` did for `Number`.
+  Its fixed variant, `CompactBytesSlice`, is the right *shape* for an immutable Rexx string and offers 15; its growable one offers 23; neither reaches 54, and `Body` is 80 with either.
+
+**On the capacity, and the coincidence that has to be disclosed before anyone reads the coverage figures.**
+`strings.rex`'s pangram is 43 bytes and its concatenation is 46, so **a capacity anywhere in 46 to 54 inlines 100.00% of that axis and a capacity of 31 inlines 66.67% of it.**
+That is entry 12's `arith.rex`-at-`DIGITS 20` hazard in a new place, and the defence has to be the same one: **the capacity must be fixed from the layout before the axis is consulted.**
+The layout says 54, measured above; 54 is above 46 rather than at it, and the corpus -- an independent population -- puts 99.175% at or below 54 with 20 creations above it.
+**A capacity chosen at 46 because that is where `strings.rex` stops would be fitting the representation to the benchmark and should be refused even though it measures the same.**
+
+**What the choice is actually between**, since every capacity to 54 is free in the arena:
+
+| capacity | axes pooled | `rexxcps` | corpus |
+|---:|---:|---:|---:|
+| 15 | 75.49% | 84.72% | 84.78% |
+| 23 | 79.00% | 94.12% | 93.11% |
+| 31 | 79.44% | 95.30% | 96.78% |
+| 54 | 7 creations short of all | 7 short of all | 99.175% |
+
+The step from 31 to 54 is worth **6,560,005 of the 31,910,839 axis creations** and costs nothing in `Body` or `Slot`.
+Its only cost is that constructing a short string writes a 56-byte payload rather than a 24-byte one, which is stores against a `malloc`, and it is unmeasured.
+
+#### Do the axes and the corpus disagree
+
+**They disagree about capacity and agree about the option.**
+Below 46 the corpus is consistently more inlinable than the axes -- 84.78% against 75.49% at 15, 93.11% against 79.00% at 23, 96.78% against 79.44% at 31 -- and the whole of that gap is `strings.rex` putting a third of the pooled axis population at 43 and 46 bytes.
+At capacity 54 they converge and both are within a rounding error of complete.
+**Neither population contains a long-string population worth an option of its own**, which is the answer to the design document's *"whether long strings are a population worth an `unsafe` site at all"*: measured, no.
+
+**The corpus's tail is longer than any axis's and it is not what it looks like.**
+Its maximum is 251 bytes, in `lang/address_env.rex`, whose own header says it exercises *"the 250-byte name limit"* -- a deliberate boundary probe, not a naturally occurring value.
+The six corpus programs whose longest creation exceeds 60 bytes are `address_env.rex` (251), `condition_traps.rex` (103), `source_arg.rex` (88), `state_builtins.rex` (79), `parse_sources.rex` (77) and `digits_rounding.rex` (62).
+
+#### What this entry cannot say
+
+* **It counts surviving payloads, not `malloc` calls, and for `concat` those differ by a factor of two.**
+  `Interp::concat` (`eval.rs:844-847` at BASE) builds `bytes`, then calls `self.text(&bytes)`, which is `text_owned(bytes.to_vec())` -- so one `Body::Text` from a concatenation is **two** payload allocations today, and this instrument sees one of them.
+  A inlines the survivor and leaves the working buffer, so on `strings`, where all 3,000,000 of the 46-byte creations come from `||`, **A removes one allocation of two rather than the allocation.**
+  That is D's territory, and this measurement makes D(ii) look larger relative to A on that axis than the design document's ranking implies.
+* **It says nothing about speed.** Which capacity is faster, and whether A moves any axis at all, is a paired run this entry did not take and must not be inferred from a coverage percentage.
+* **It is the IR arm only.** `Heap` sits below both engines so the population is the same by construction, and that was not checked here.
+* **`rexxcps`' counts are from a self-calibrated run under instrumentation**, which reported 2,603,891 clauses per second against entry 12's uninstrumented 2,686,435 -- about 3% slower, same `100 x 100`. The shape is what is used above, not the count.
+* **A benchmark axis is not a workload.** Six programs and a differential corpus written to be deterministic are what exists; neither is a sample of real Rexx, and the corpus in particular is built to probe boundaries rather than to be representative.
+* **It does not re-profile.** Every share this entry compares itself against is entry 11's, taken at `2bbecac9` before both the expression spike and entry 12.
+
+**No work commit, because nothing landed.**
+Every other entry names the commit its change went in as; this one has none to name, and the instrumented build exists only in the paragraph above describing how it was reverted.
+The scratch crate that measured the widths lives outside the repository and `Cargo.lock` is untouched, which is checkable: `compact_bytes` does not appear in it.
