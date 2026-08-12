@@ -38,7 +38,7 @@
 # A call operand adds places a failure can come from that a read cannot: from
 # inside the call's own argument list, from the callee, and from the operator
 # over the value the call answered. The rows separate them by condition
-# number under one trap.
+# number, each under a `SIGNAL ON SYNTAX` of its own.
 #
 # **Trace**, which is where a native op diverges first and where no other
 # instrument in this crate can see it. `eval.rs` emits a binary operator's
@@ -49,11 +49,12 @@
 # a `trace i` row requires the lines, and a `trace r` row requires their
 # absence. What a nested call adds is a *position*: its `>F>` sits between the
 # `>A>` of its own argument and the `>O>` or `>P>` of the operator holding it,
-# which is a place only an operator around the call can put it. The `trace i` row carries the abuttal, whose tag is the empty
-# string, and the blank, whose tag is one space. Neither has any source text
-# under it, so an implementation reading a spelling off the source span gets
-# both wrong, and no other row can see that. **The prefix `\` has no row of
-# that shape and cannot have one here.** What would exercise it is a `\`
+# which is a place only an operator around the call can put it.
+# The `trace i` row for the binary operators carries the abuttal, whose tag is
+# the empty string, and the blank, whose tag is one space. Neither has any
+# source text under it, so an implementation reading a spelling off the source
+# span gets both wrong, and no other row can see that. **The prefix `\` has no
+# row of that shape and cannot have one here.** What would exercise it is a `\`
 # written `0xAA` or `0xAC`: measured, the oracle tags `\`, `0xAA` and `0xAC`
 # alike as `>P>   "\"`, so for the non-ASCII pair the canonical spelling and
 # the source bytes differ. But neither byte is valid UTF-8, and both the

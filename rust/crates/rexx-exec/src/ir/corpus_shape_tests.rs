@@ -47,8 +47,8 @@
 //! the program.
 //!
 //! **What this catches that the rest of the suite does not, measured rather
-//! than argued.** Two mutations were applied to `compile` and the whole
-//! workspace run under each with `--no-fail-fast`.
+//! than argued.** Each mutation below was applied to `compile` and the whole
+//! workspace run under it with `--no-fail-fast`.
 //!
 //! * Making `CALL name` fall through to `Op::Generic` -- a whole promotion
 //!   ceasing to fire -- reddens this, and reddens tests in `golden_tests.rs`
@@ -217,6 +217,16 @@ fn root_of(expr: &Expr) -> Root {
 /// Written out here rather than read off `super::NodePath`, for the reason the
 /// module doc gives about the operator sets: a bound taken from the code under
 /// test moves with it and could never redden.
+///
+/// **Only a corpus program nesting a call deeper than this can falsify the
+/// number, and that is the price of the independence.** A `NodePath` whose
+/// width moved would redden
+/// `super::tests::a_node_path_carries_thirty_one_steps_and_refuses_the_thirty_second`
+/// and `golden_tests`'s
+/// `a_call_nested_past_the_paths_width_leaves_the_slot_general` while this
+/// number went on calling for `Root::EvalExpr` at the depths the wider address
+/// had just reached. Whoever widens one widens this, and this sentence is what
+/// says so.
 const DEEPEST_ADDRESSED_CALL: usize = 31;
 
 /// Whether every part of `expr` has a native op, which is what licenses the
@@ -495,13 +505,15 @@ fn every_corpus_body_compiles_the_minimum_promotion_set_to_its_own_ops() {
     // **On the stack the interpreter compiles bodies on, and that is not a
     // precaution.** `compile`'s expression walk takes a frame per operator,
     // and `corpus/lang/deep_nested_expr.rex` is one assignment nesting three
-    // thousand of them. `Interp` never meets that on a libtest thread --
-    // `on_interpreter_thread` gives it `INTERPRETER_STACK_BYTES` -- and this
-    // sweep is the one caller that reaches `compile` directly, so it is the
-    // one that has to ask for the same stack. Measured 2026-08-12 with the
-    // sweep called inline instead: it aborts the whole test binary at
-    // `RUST_MIN_STACK=2621440` and passes at `2883584`, against a libtest
-    // thread's own 2 MiB.
+    // thousand of them. Calling `compile` from a libtest thread is ordinary --
+    // `golden_tests` does it throughout -- and what is not ordinary is doing
+    // it on a body this deep, which is why this sweep is the one that
+    // overflowed and why it is this sweep that asks for a stack rather than
+    // the callers around it. `INTERPRETER_STACK_BYTES` is the size because
+    // that is what `on_interpreter_thread` gives the same walk in production.
+    // Measured 2026-08-12 with the sweep called inline instead: it aborts the
+    // whole test binary at `RUST_MIN_STACK=2621440` and passes at `2883584`,
+    // against a libtest thread's own 2 MiB.
     //
     // A stack overflow is not a test failure -- Rust's guard page aborts the
     // process, taking every other test in the binary with it -- which is why
@@ -579,6 +591,7 @@ fn sweep_every_corpus_body() {
         "no corpus body contains a promoted DO or LOOP"
     );
     for root in [
+        Root::CallExpr,
         Root::Const,
         Root::LoadConstant,
         Root::Load,

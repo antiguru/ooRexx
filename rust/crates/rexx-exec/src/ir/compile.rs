@@ -710,6 +710,7 @@ pub(crate) fn compile(
     assert_read_echoes_follow_their_load(&ops);
     assert_operator_echoes_follow_their_op(&ops);
     assert_prefix_echoes_follow_their_op(&ops);
+    assert_call_echoes_follow_their_op(&ops);
     assert_region_ops_name_their_clause(&ops);
 
     Ok(Chunk {
@@ -1422,6 +1423,58 @@ fn assert_prefix_echoes_follow_their_op(ops: &[Op]) {
             computes_it,
             "the prefix echo at {at} does not follow the operation whose operator and register \
              it names, so it echoes a value or a sign that op did not put there"
+        );
+    }
+}
+
+/// **Every [`Op::TraceFunction`] sits immediately behind the [`Op::CallExpr`]
+/// it echoes**, reading that op's destination register and repeating its whole
+/// address.
+///
+/// The failures [`assert_operator_echoes_follow_their_op`] checks for -- the
+/// position, the register and the tag -- in this op's own terms, and the tag
+/// is a different thing here. `>F>` carries no operator; what it carries is
+/// the node, because `trace_intermediate` reads the expression at the address
+/// to decide the tag it prints under. So the pair has to agree on `index`,
+/// `slot` **and** `path`, and an echo addressing some other node lands the
+/// right value on the wrong line -- or, where that node is not a call at all,
+/// raises `Loud::call_op_off_its_node` at run time from an op `compile` was
+/// content with.
+///
+/// **The width of a call op's address is what makes this worth asserting.** An
+/// address that is only ever [`NodePath::ROOT`] agrees by construction; one
+/// that carries a route agrees only because [`push_native`]'s call arm was
+/// written to push the same one twice.
+///
+/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
+/// reason, and it is the same linear scan's worth of work.
+fn assert_call_echoes_follow_their_op(ops: &[Op]) {
+    for (at, op) in ops.iter().enumerate() {
+        let Op::TraceFunction {
+            index: echoed,
+            slot: echoed_slot,
+            path: echoed_path,
+            src,
+        } = op
+        else {
+            continue;
+        };
+        let runs_it = at
+            .checked_sub(1)
+            .and_then(|before| ops.get(before))
+            .is_some_and(|before| {
+                matches!(
+                    before,
+                    Op::CallExpr { index, slot, path, dst, .. }
+                        if index == echoed && slot == echoed_slot && path == echoed_path
+                            && dst == src
+                )
+            });
+        assert!(
+            runs_it,
+            "the function echo at {at} does not follow the call whose address and register it \
+             names, so it echoes a value that call did not produce or reads a node that call \
+             did not run"
         );
     }
 }

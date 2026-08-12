@@ -230,11 +230,19 @@ pub(crate) enum Op {
     /// `slot`'s own root, [`NodePath::ROOT`] naming that root itself, and
     /// `Interp::chunk_node_at` is the descent that resolves it. A node the
     /// descent cannot reach, or one that is not a call when it arrives, is
-    /// `Loud::call_op_off_its_node` rather than a panic. Which nodes `compile`
-    /// gives an op to is `native_shape`'s decision -- every call an address
-    /// reaches -- and `golden_tests`'s `a_call_promotes_at_the_root_and_below_it`
-    /// and `a_call_nested_past_the_paths_width_leaves_the_slot_general` are
-    /// what state it.
+    /// `Loud::call_op_off_its_node` rather than a panic.
+    ///
+    /// **An address reaching a call is necessary and not sufficient.**
+    /// `native_shape` decides for a whole expression slot at once, so a call
+    /// takes one of these when every node of its slot compiles natively *and*
+    /// the address reaches the call; a single sibling term with no op of its
+    /// own leaves the whole slot on [`Op::EvalExpr`] and this call with
+    /// nothing. `golden_tests`'s `a_call_promotes_at_the_root_and_below_it`
+    /// states where an op is taken,
+    /// `a_call_nested_past_the_paths_width_leaves_the_slot_general` states the
+    /// address running out, and
+    /// `the_value_shapes_outside_the_native_set_stay_general` states the
+    /// sibling taking the call down with it.
     ///
     /// **It owes the `>F>` line itself**, through [`Op::TraceFunction`] behind
     /// it, for the reason every native op owes its own echo: `eval`'s
@@ -260,6 +268,13 @@ pub(crate) enum Op {
     /// because the line is traced against the node: `trace_intermediate` reads
     /// the expression to decide the tag it prints under, so an echo addressing
     /// some other node would put the right value on the wrong line.
+    /// `compile::assert_call_echoes_follow_their_op` is what checks the
+    /// position, the register and the whole address rather than assuming them.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, and immediately behind
+    /// the call whose register it reads: `eval.rs` emits this post-order, with
+    /// the value in hand, so a call inside an operand prints its line before
+    /// the operator holding it prints one.
     TraceFunction {
         index: u32,
         slot: u16,

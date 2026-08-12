@@ -49,18 +49,23 @@ fn traced() -> ChunkTrace {
     ChunkTrace::of(crate::trace::mode_from_setting(b"r").expect("R is a valid TRACE setting"))
 }
 
-/// A call compiles to [`super::Op::CallExpr`] wherever it sits in a value, and
-/// the address the op carries is the route down to it: the same call at the
-/// root, as a left operand and as a right operand gets the same op under a
-/// different address each time.
+/// A call compiles to [`super::Op::CallExpr`] wherever an address reaches it
+/// inside a slot that compiles natively, and the address the op carries is the
+/// route down to it: the same call at the root, as a left operand and as a
+/// right operand gets the same op under a different address each time.
+///
+/// **It is not that a call promotes wherever it is written**, which is the
+/// half this test cannot show: the choice is taken for the whole slot, so a
+/// sibling term with no op takes the call down with it, and
+/// `the_value_shapes_outside_the_native_set_stay_general` is where that row
+/// is.
 ///
 /// **The cases together are the test and no one of them alone.** The root case
 /// is satisfied by a compiler that promotes only a call that *is* the slot's
-/// expression;
-/// the left one is satisfied by one that writes a fixed address into
-/// every nested call's op; and the right one is what separates the address
-/// from the descent that produced it, because a compiler stepping into the
-/// left child whatever the operand would render `root.L` under both.
+/// expression; the left one is satisfied by one that writes a fixed address
+/// into every nested call's op; and the right one is what separates the
+/// address from the descent that produced it, because a compiler stepping into
+/// the left child whatever the operand would render `root.L` under both.
 ///
 /// The `site` field is expected as `0`, which is the first reservation in the
 /// chunk -- an assertion about the reservation being dense over call ops, and
@@ -553,6 +558,15 @@ fn precedence_decides_which_operator_is_the_inner_one() {
 /// not a row here: it appears only in a condition, and a condition is compiled
 /// to `Op::EvalExpr` whatever its shape, so a row for it would pass under
 /// every implementation of this function's subject.
+///
+/// **One row holds a call, and that is what it is for.** A call has an op of
+/// its own and an address that reaches it there, so it is the one term where
+/// "the whole slot or none of it" can be got wrong in the direction of
+/// promoting too much: an implementation emitting a call's op inside a slot it
+/// then covers with an `Op::EvalExpr` would run the call twice and print its
+/// `>F>` line twice. Measured 2026-08-12, that mutation applied to
+/// `push_value` passes the **whole workspace** with this row held out and
+/// reddens here with it.
 #[test]
 fn the_value_shapes_outside_the_native_set_stay_general() {
     for source in [
@@ -562,6 +576,9 @@ fn the_value_shapes_outside_the_native_set_stay_general() {
         // `>name` in a value position, which is a node of its own around the
         // read rather than the read.
         &b"zw = >za\n"[..],
+        // A call beside a term with no op: the address reaches the call and
+        // the slot still goes general, because the choice is the slot's.
+        &b"zw = .nil || length('a')\n"[..],
     ] {
         let chunk = compile_for_test(source).expect("compiles");
         assert_eq!(
