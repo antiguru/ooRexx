@@ -14,11 +14,10 @@
 # further by subtracting from the working precision. A strict comparison reads
 # neither -- it compares bytes -- and the rows put the two side by side under
 # the same settings so that one row says which family read what.
-# The prefix `-` reads `NUMERIC DIGITS` too, and that is what says it is `0 -
-# x` rather than a sign flip on the operand's own digits: at DIGITS 1 the
-# oracle answers `-1E+4` for `-12345` and the identical `-1E+4` for `0 -
-# 12345`. A `\` row at the same setting is that stanza's control, because the
-# text check reads no setting at all.
+# The prefix `-` reads `NUMERIC DIGITS` too, and that setting is what says it
+# is `0 - x` rather than a sign flip on the operand's own digits. Both forms
+# are rows of the same stanza under the same setting, so the file shows that
+# agreement rather than citing it from somewhere a reader cannot run.
 #
 # **Failure**, which for these operators is nearly all in the operands.
 # Concatenation renders both operands and cannot itself raise; a comparison
@@ -40,13 +39,24 @@
 # -- so only an exact stderr comparison catches it. Both directions are here:
 # a `trace i` row requires the lines, and a `trace r` row requires their
 # absence. The `trace i` row carries the abuttal, whose tag is the empty
-# string, and the blank, whose tag is one space -- tags an implementation
-# reading a spelling off the source span would get wrong and no other row can
-# see. **A prefix operator's line is `>P>` and never `>O>`**, and those bytes
-# are already pinned for the tree-walker by `tests/trace_oracle`'s own
-# `prefix_operators` witness, which runs on that engine alone. What the `trace
-# i` prefix row adds is the compiled clause: that an op stream emits the line
-# at all, and where it falls among the operand's own lines.
+# string, and the blank, whose tag is one space. Neither has any source text
+# under it, so an implementation reading a spelling off the source span gets
+# both wrong, and no other row can see that. **The prefix `\` has no row of
+# that shape and cannot have one here.** What would exercise it is a `\`
+# written `0xAA` or `0xAC`: measured, the oracle tags `\`, `0xAA` and `0xAC`
+# alike as `>P>   "\"`, so for the non-ASCII pair the canonical spelling and
+# the source bytes differ. But neither byte is valid UTF-8, and both the
+# program and the `*-*` echo in its expected block would carry one, while
+# `datadriven` reads this file through `fs::read_to_string`. Every `\` below is
+# the ASCII one, whose span and canonical spelling are the same bytes.
+#
+# **A prefix operator's line is `>P>` and never `>O>`**, and
+# `tests/trace_oracle`'s `prefix_operators` witness already pins those bytes on
+# the **compiled** engine: `check_witness` runs `Invocation::none()`, whose
+# engine is `Engine::DEFAULT`, which is `Engine::Ir`. What the `trace i` prefix
+# row adds is the other arm -- the tree-walker's own bytes, and the two engines
+# agreeing on them line for line, which `render_both_engines` asserts before
+# the expected block below is compared at all.
 #
 # **What this file is worth was measured rather than assumed, and it is not
 # mutation-catching.** Four mutations of the promoted binary path were each
@@ -377,11 +387,14 @@ err>      4 *-* say zc = '2x'
 err>        >>>   "1"
 
 # each prefix operator over a read and over a literal, which is the whole of
-# what one applied to a plain term answers. The two rows that could distinguish
-# a sign flip on the operand's own digits from the subtraction `-` actually is
-# are `-0`, which answers `0` and not `-0`, and `-'7.50'`, which keeps the
-# operand's trailing zero -- measured, `say 0 - 0` and `say 0 - 7.50` give the
-# identical `0` and `-7.50`.
+# what one applied to a plain term answers. `-0`, `+'7'` and `-'7.50'` each
+# have the `0 + x`/`0 - x` the operator is implemented as on the row below, so
+# that agreement is in the file rather than cited from a probe: the zero comes
+# back `0` and not `-0`, and the trailing zero survives, under both forms.
+# **What these rows cannot do is tell a sign flip from the subtraction**, since
+# a sign flip on the operand's own digits keeps a trailing zero too and answers
+# `0` for `-0` as well. The stanza that separates them is the `NUMERIC DIGITS`
+# one below.
 program
 za = 3
 zb = 0
@@ -392,8 +405,11 @@ say +5
 say -5
 say \1
 say -0
+say 0 - 0
 say +'7'
+say 0 + 7
 say -'7.50'
+say 0 - 7.50
 ----
 rc> 0
 out> 3
@@ -403,7 +419,10 @@ out> 5
 out> -5
 out> 0
 out> 0
+out> 0
 out> 7
+out> 7
+out> -7.50
 out> -7.50
 
 # a prefix over something other than a plain term: over another prefix, over a
@@ -442,23 +461,27 @@ out> -4
 out> -2
 out> 0
 
-# NUMERIC DIGITS, which the prefix `-` and `+` read and the prefix `\` does
-# not: the operand is rounded to the precision, so at DIGITS 1 a five-digit
-# operand comes back in exponential notation and at DIGITS 9 it comes back
-# whole. **The `\` row is the control**, and it says the setting cannot reach
-# a text check.
+# NUMERIC DIGITS, and **this is where a sign flip on the operand's own digits
+# and the subtraction `-` actually is come apart**: at DIGITS 1 the answer
+# comes back rounded to one significant digit, so `-12345` answers `-1E+4`
+# where a sign flip answers `-12345`. The `0 - 12345` beside it is what
+# says that answer is the subtraction's own, and the DIGITS 9 pair is the
+# control at the other setting -- both forms come back whole there, so the
+# rounding belongs to the setting and not to the operator.
 program
 numeric digits 1
 say -12345
+say 0 - 12345
 say +12345
-say \0
 numeric digits 9
 say -12345
+say 0 - 12345
 ----
 rc> 0
 out> -1E+4
+out> -1E+4
 out> 1E+4
-out> 1
+out> -12345
 out> -12345
 
 # `\` on a value that is not logical: a **text** check and never a numeric one,
@@ -488,8 +511,8 @@ err> Error 41.1:  Nonnumeric value ("abc") used in arithmetic operation.
 # operand's own lines and in the order the operators are applied -- so a prefix
 # over a prefix prints the inner one's line first, and a prefix over a binary
 # operator prints after that operator's `>O>`. The tags are the operators' own
-# spellings, and `\`'s is the one an implementation reading a source span would
-# get wrong.
+# spellings, and each prefix of a chain prints its own rather than the outer
+# one's twice.
 program
 trace i
 za = 2

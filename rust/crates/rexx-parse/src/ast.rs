@@ -83,8 +83,8 @@ impl PrefixOp {
     /// The canonical source spelling, which is what a `>P>` trace line carries
     /// as its tag.
     ///
-    /// Canonical for [`Operator::spelling`]'s reason and in the one case that
-    /// has it: `\`, `0xAA` and `0xAC` all scan to one `Operator::Backslash`
+    /// Canonical for [`Operator::spelling`]'s reason, in the case that has it:
+    /// `\`, `0xAA` and `0xAC` all scan to one `Operator::Backslash`
     /// (`scanner.rs`'s own operator arm) and that token is what
     /// `message_subterm`'s `Not` comes from, so this answers the ASCII
     /// spelling rather than the source bytes.

@@ -39,7 +39,7 @@
 use rexx_core::{Heap, ObjRef, RootSet, SlotRef};
 use rexx_parse::{
     AnnotationTarget, CodeBody, Directive, DirectiveKind, ExprKind, InstructionKind, Operator,
-    PrefixOp, Program, SymbolId, SymbolTable, parse_program,
+    Program, SymbolId, SymbolTable, parse_program,
 };
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -922,16 +922,11 @@ fn form_name(kind: &ExprKind) -> String {
         ExprKind::DotVariable(_) => "an environment symbol",
         // The two operator forms name the operator, because "a dyadic
         // operator is not implemented" does not tell a reader which one to
-        // go and implement. Both spellings are `&'static`.
+        // go and implement. Each asks its own operator type for the spelling,
+        // which is where the canonical bytes live and what the trace line for
+        // that operator carries.
         ExprKind::Prefix { op, .. } => {
-            return format!(
-                "the prefix operator `{}`",
-                match op {
-                    PrefixOp::Plus => "+",
-                    PrefixOp::Minus => "-",
-                    PrefixOp::Not => "\\",
-                }
-            );
+            return format!("the prefix operator `{}`", op.spelling());
         }
         ExprKind::Binary { op, .. } => {
             return format!("the operator `{}`", op.spelling());
