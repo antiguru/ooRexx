@@ -252,19 +252,25 @@ Two more the dispatched list did not ask for and the code needs: a header with o
 
 - [ ] **Step 4: the differential cases**
 
-`tests/ir_dual_cases/loop-header-values`, oracle-captured: `trace i` over a `to`/`by`/`for` header, which is the `>K>` order per header value interleaved with the values' own intermediate lines; `trace i` over a header whose bound is a call, which is the address `chunk_node_at` resolves; and a `DO OVER ... FOR`, whose block is **not** the oracle's and whose own comment says which line the oracle prints and this crate does not.
+`tests/ir_dual_cases/loop-header-values`, oracle-captured: `trace i` over a `to`/`by`/`for` header, which is the `>K>` order per header value interleaved with the values' own intermediate lines; `trace r` over the same header, where the `>K>` lines are the whole of the block; `trace i` over a header whose bound is a call, which is the address `chunk_node_at` resolves; and a `DO OVER ... FOR`, whose block is **not** the oracle's and whose own comment says which line the oracle prints and this crate does not.
 
-**Two rows the dispatched list asked for are not here, and the second is a finding rather than a trim.**
-A `DO FOREVER` row was captured, matched the oracle on both engines, and was then deleted: a `FOREVER` header holds no expression, so nothing this task changed can reach it, and no mutation reddened it.
+**Each row is measured to catch something, with every other case file held out of the directory**, which is the only way to ask the question.
+The `to`/`by`/`for` row and the `trace r` row each catch the keyword echo emitted in front of its slot's ops; the call row catches `chunk_node_at` losing its `DO`/`LOOP` arm, and separately the call op addressed at slot `0`.
+The file stays green when the header stops compiling natively, which is the promotion's contract: the bytes do not move.
+None of these is a *unique* catch -- each of those mutations reddens pre-existing tests too.
+
+**How the harness reports a shared failure is filesystem order and says nothing about the tree.**
+`datadriven::walk` builds its list from `fs::read_dir` and never sorts, and it visits every file rather than stopping at the first; what stops this harness is the engine-vs-engine `assert_eq!` inside the callback, which panics out of `walk` at the first disagreeing stanza in whichever file `read_dir` happened to return first.
+The repository tree returns `loop-header-boundaries` before `loop-header-values`; a worktree of the same commit returned them the other way round.
+**Task 2's first report concluded from that ordering that these rows catch nothing at all. That conclusion was wrong and so was every clause of the mechanism behind it**, and it is recorded here because this paragraph is what the next reader of a case file will believe.
+
+**One row the dispatched list asked for is not here.**
+A `DO FOREVER` row was captured, matched the oracle on both engines, and was then deleted: a `FOREVER` header holds no expression, so nothing this task changed can reach it.
 A plain counted loop is the same shape as the `to`/`by`/`for` row with fewer keywords, so the two were written as one row.
 
 **What the captures found instead is a pre-existing divergence: the oracle echoes `>K>   "FOR"` for a `DO OVER ... FOR`'s count and this crate echoes nothing**, measured on both engines under `trace r` and `trace i`, on `do qq over zs for 1` and on `do qq over 4.5 for 2`.
-`HeaderRole::OverFor::keyword()` answers `None`, and two doc comments asserted that as a match with the oracle; both are corrected and the transcript is committed.
-Fixing the behaviour is not this task's and is not done here.
-
-**No mutation was found that any row of this file uniquely catches**, and six were run over the whole workspace (Task 2's report has the table).
-Every one is caught by a pre-existing test, and the case-file harness's own catcher is a `loop-header-boundaries` row every time -- that file is alphabetically first and `datadriven` stops at the first mismatch, so these rows are not even reached under those mutations.
-They are kept as transcripts, and what each adds over the tree's existing populations is in the report: the call row and the `DO OVER ... FOR` row record shapes nothing else holds, while the `to`/`by`/`for` row is a third keyword and a symbol bound on top of the two-keyword `trace i` interleave `trace_oracle/controlled_loop.rex` already runs.
+`HeaderRole::keyword()` answers `None` for that role, and its own doc and two others asserted that as a match with the oracle; all three are corrected and the transcript is committed.
+Fixing the behaviour is not this task's and is not done here; it wants a task and a ledger entry of its own.
 
 - [ ] **Step 5: gates, then commit** (same commands as Task 1 Step 11)
 

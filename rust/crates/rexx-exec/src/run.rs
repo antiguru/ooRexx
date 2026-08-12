@@ -732,7 +732,12 @@ pub(crate) enum HeaderRole {
 
 impl HeaderRole {
     /// The `>K>` tag this value's own echo carries, or `None` for the roles
-    /// the oracle echoes nothing for.
+    /// this table withholds one from.
+    ///
+    /// **A `None` here is not one answer**, and each variant's own doc says
+    /// which it is: `Initial` is measured to match the oracle, which echoes no
+    /// `>K>` for a control variable's starting value, and `OverFor` is measured
+    /// not to.
     pub(crate) fn keyword(self) -> Option<&'static str> {
         match self {
             HeaderRole::Initial | HeaderRole::OverFor => None,

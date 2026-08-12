@@ -94,14 +94,13 @@ pub(crate) enum Op {
     /// `src`, under the tag [`HeaderRole`] gives it.
     ///
     /// **A separate op from whatever produced the value, and that is the whole
-    /// reason this construct waited for the trace ops.** A
-    /// loop header interleaves evaluation and emission -- it evaluates `TO`,
-    /// echoes it, evaluates `BY`, echoes it, in the order the keywords were
-    /// written -- so an op that only evaluated could not reproduce the
-    /// ordering, and an op that did both would be the whole evaluate-and-trace
-    /// unit rather than the general expression op the later tasks need. With
-    /// the emission its own op, **the order in `Controlled::order` is the order
-    /// of ops**.
+    /// reason this construct waited for the trace ops.** A loop header
+    /// interleaves evaluation and emission -- it evaluates `TO`, echoes it,
+    /// evaluates `BY`, echoes it, in the order the keywords were written -- so
+    /// an op that only evaluated could not reproduce the ordering, and an op
+    /// that did both would be the whole evaluate-and-trace unit rather than the
+    /// general expression op the later tasks need. With the emission its own
+    /// op, **the order in `Controlled::order` is the order of ops**.
     ///
     /// **Only valid inside a [`Op::Clause`] region**, whose clause is the
     /// `DO`/`LOOP`'s own: the indent it echoes at is that clause's.

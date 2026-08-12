@@ -397,18 +397,30 @@ pub(crate) fn compile(
                     }
                     ops.push(Op::LoopHeaderValue { role, src: dst });
                 }
-                // The header's own registers and nothing above them, which is
-                // what makes the allocation above safe to leave standing for
-                // the loop's whole lifetime: an operand register `push_native`
-                // took for a slot is released inside that call, so nothing a
-                // body clause is handed later can be one the running loop still
-                // reads. `a_header_operands_register_goes_back_to_the_body`
-                // pins the same property from the emitted stream.
+                // **The header's own registers, exactly: neither more nor
+                // fewer.** An equality rather than a bound, because the two
+                // directions are different defects and only one of them is
+                // harmful.
+                //
+                // Above `header_top` is a register a slot allocated and did not
+                // hand back. Nothing reuses it until the `END`, so it is waste
+                // rather than corruption -- measured, leaking one per slot with
+                // this line removed leaves the whole `ir_dual` suite green and
+                // moves the pinned streams that hold a `DO`, and nothing
+                // else.
+                //
+                // Below `header_top` is a header value's own register handed
+                // back early, which `LoopState` still reads for the rest of the
+                // construct: that is the hazard the enclosing-scope allocation
+                // above exists to prevent, and it is what the equality guards
+                // against a future change. `push_native` cannot produce it
+                // today, because it releases only to a mark it took itself.
                 debug_assert_eq!(
                     registers.mark().0,
                     header_top.0,
-                    "a header slot left a register allocated above the header's own, and the \
-                     loop's body would be handed it while the loop is still running"
+                    "the register top after the header is not the header's own: above it is a \
+                     register nothing reuses until the END, below it is a header value handed \
+                     to the body while the loop still reads it"
                 );
                 ops.push(Op::LoopRun {
                     index: instruction_index(index)?,
@@ -1575,12 +1587,11 @@ fn assert_call_echoes_follow_their_op(ops: &[Op]) {
 ///
 /// **What this adds is the shape of the failure, not coverage, and that is
 /// measured rather than assumed.** Emitting the echo in front of the slot's own
-/// ops instead of behind them reddens thirteen tests with this check removed --
-/// the loop-shape and population sweeps, the case files, `trace_oracle`'s
-/// control-variable transcripts and the pinned streams -- because the echo then
-/// reads a register nothing has written and prints `>K>   "TO" => "The NIL
-/// object"`. What this turns that into is a refusal at compile time naming the
-/// op.
+/// ops instead of behind them, with this check removed, moves the population,
+/// loop-shape and case-file sweeps, `trace_oracle`'s control-variable
+/// transcripts and every pinned `DO` stream -- because the echo then reads a
+/// register nothing has written and prints `>K>   "TO" => "The NIL object"`.
+/// What this turns that into is a refusal at compile time naming the op.
 ///
 /// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
 /// reason, and it is the same linear scan's worth of work.

@@ -713,9 +713,9 @@ fn a_constant_symbol_is_a_native_load() {
 /// The compiled form of the plan's own example loop: the header is a clause
 /// region of its own and the construct is the op that closes it.
 ///
-/// Three instructions -- `DO`, `nop`, `END` -- and the `DO`'s own region is
-/// laid out as **one group per header expression, in the order the expressions
-/// were written**:
+/// The body is `DO`, `nop`, `END`, and the `DO`'s own region is laid out as
+/// **one group per header expression, in the order the expressions were
+/// written**:
 ///
 /// * `1`-`3`: the control variable's starting value, computed and then
 ///   validated. No `TraceKeyword` in the group, because the oracle echoes no
@@ -908,11 +908,29 @@ fn a_header_slot_outside_the_native_set_leaves_the_other_slots_native() {
 /// The two are allocated from one stack and released at opposite ends of the
 /// loop: `zn + 1` needs a second register for its right operand, which
 /// `push_native` hands back as soon as the `Op::Arith` has read it, while the
-/// two the header values land in are held past the `END`. So the body's
-/// assignment is handed register 2 -- the operand's -- and a header temporary
-/// that outlived its slot would push that assignment to register 3 and be
-/// overwritten by it, because `Op::LoopRun` steps the body from inside this
-/// same region while the header's values are still being read.
+/// registers the header values land in are held past the `END`. Register 2 is
+/// where that meets: the operand takes it, gives it back, and the body's
+/// assignment is handed the same one.
+///
+/// **The stream pins both ways of getting that wrong, and they are opposite
+/// failures.** Measured, each as its own mutation, and in both directions the
+/// whole `ir_dual` suite stays green -- the population sweep included:
+///
+/// * `push_native` never releasing the operand's register puts the assignment
+///   at register 3. That wastes a register and overwrites nothing. This test
+///   and `a_chain_of_operators_reuses_the_destination_register` move, and
+///   nothing else in the crate.
+/// * The header's own registers released at the region's end instead of past
+///   the `END` puts the assignment at register 0 -- a value `LoopState` reads
+///   for the rest of the construct, written over by a body clause, because
+///   `Op::LoopRun` steps the body from inside this same region. This test and
+///   `a_nested_loops_registers_sit_above_the_enclosing_loops_and_a_later_loops_reuse_them`
+///   move, and nothing else in the crate.
+///
+/// **So the harmful direction is not visible to any differential harness in the
+/// tree**, and the reason is that a header value's `ObjRef` is rooted by its
+/// register only on the compiled engine, and nothing in the corpus collects
+/// while a loop is running.
 #[test]
 fn a_header_operands_register_goes_back_to_the_body() {
     let chunk = compile_for_test(b"do i = 1 to zn + 1\n  zx = 5\nend\n").expect("compiles");

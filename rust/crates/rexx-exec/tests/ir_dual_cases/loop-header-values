@@ -11,6 +11,16 @@
 # status are recorded byte for byte, so a line that appears, disappears or
 # moves shows as a diff.
 #
+# **What this file catches was measured with every other case file held out of
+# the directory**, which is the only way to ask the question: the harness's own
+# engine-vs-engine `assert_eq!` panics out of `datadriven::walk` at the first
+# disagreeing stanza in any file, and `walk` visits files in `fs::read_dir`
+# order, so which file reports a shared failure is filesystem order rather than
+# anything about the tree. Alone, this file reddens
+# `both_engines_agree_on_every_case_file` under three mutations; each row's own
+# comment names the one it caught. It stays green when the header simply stops
+# compiling natively, which is the promotion's contract: the bytes do not move.
+#
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, on both
 # engines, before this file was written -- except the one row whose own comment
 # says which line the oracle prints and this crate does not. Regenerate a row
@@ -31,6 +41,11 @@
 # initial value has intermediate lines and no `>K>` of its own, and the TO
 # bound is a symbol read rather than a literal, so the run of lines is not one
 # shape repeated.
+#
+# Measured with the rest of the directory held out, this is the row that catches
+# the keyword echo being emitted in front of its slot's ops instead of behind
+# them: every `>K>` then reads a register nothing has written and prints
+# "The NIL object".
 program
 trace i
 zn = 6
@@ -73,12 +88,55 @@ err>        >>>     "3"
 err>        >>>     "5"
 err>        >=>     ZI <= "5"
 
+# trace r over the same header, where the `>K>` lines are the whole of it
+# The same values under a setting that prints no intermediate line at all, which
+# is what separates the echo order from the values' own ops: `trace i` shows a
+# `>K>` sitting among the lines its value produced, and this shows them adjacent
+# and in the order the keywords were written.
+#
+# Measured as the only stanza in the directory, this row catches that same
+# echo-position mutation on its own, with no intermediate line in the block to
+# move.
+program
+trace r
+zn = 6
+do zi = 1 to zn by 2 for 2
+  say zi
+end
+----
+rc> 0
+out> 1
+out> 3
+err>      2 *-* zn = 6
+err>        >>>   "6"
+err>      3 *-* do zi = 1 to zn by 2 for 2
+err>        >K>   "TO" => "6"
+err>        >K>   "BY" => "2"
+err>        >K>   "FOR" => "2"
+err>      4 *-*   say zi
+err>        >>>     "1"
+err>      5 *-* end
+err>      3 *-* do zi = 1 to zn by 2 for 2
+err>        >>>     "1"
+err>        >>>     "3"
+err>      4 *-*   say zi
+err>        >>>     "3"
+err>      5 *-* end
+err>      3 *-* do zi = 1 to zn by 2 for 2
+err>        >>>     "3"
+err>        >>>     "5"
+
 # trace i over a header whose bound is a call
 # The call takes an `Op::CallExpr` addressed at slot 1 of the DO, which resolves
 # only because `Interp::chunk_node_at` descends a header slot through
 # `loop_header_slot`. The argument's `>A>` and the call's own `>F>` sit in front
 # of the `>K>` the bound owes, so this row holds the address and the order at
 # once.
+#
+# Measured with the rest of the directory held out, this is the row that catches
+# `chunk_node_at` losing its DO/LOOP arm, and separately the call op being
+# addressed at slot 0 rather than at its own slot: both leave the ir arm
+# printing nothing where the tree-walker prints "1" and "2".
 program
 trace i
 zs = 'ab'
