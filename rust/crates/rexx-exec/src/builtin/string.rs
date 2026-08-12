@@ -61,8 +61,8 @@
 use rexx_core::ObjRef;
 
 use super::{
-    buffer, count_of, length_of, optional_string, pad_byte, position_of, required_string,
-    whole_number,
+    buffer, count_of, length_of, optional_string, pad_byte, position_of, required_render,
+    required_string, whole_number,
 };
 use crate::Interp;
 use crate::error::{Failure, Raised};
@@ -309,10 +309,11 @@ pub(crate) fn substr(
     name: &[u8],
     args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
-    let string = required_string(interp, args, 1);
     let start = whole_number(interp, name, args, 2)?.expect("check_arity admitted the position");
     let requested = whole_number(interp, name, args, 3)?;
     let pad = pad_byte(interp, name, args, 4)?.unwrap_or(b' ');
+    let string = required_render(interp, args, 1);
+    let string = string.text(interp);
 
     let start = position_of(start)? - 1;
     // The default is everything from the start position on, which is nothing
@@ -495,10 +496,15 @@ pub(crate) fn pos(
     name: &[u8],
     args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
-    let needle = required_string(interp, args, 1);
-    let haystack = required_string(interp, args, 2);
+    // The numeric arguments are converted first so that the two strings can
+    // be read through shared borrows afterwards; `required_render`'s own doc
+    // carries why moving them is not observable.
     let start = whole_number(interp, name, args, 3)?;
     let requested = whole_number(interp, name, args, 4)?;
+    let needle = required_render(interp, args, 1);
+    let haystack = required_render(interp, args, 2);
+    let needle = needle.text(interp);
+    let haystack = haystack.text(interp);
 
     let start = match start {
         Some(value) => position_of(value)?,
@@ -508,7 +514,7 @@ pub(crate) fn pos(
         Some(value) => length_of(value)?,
         None => haystack.len().saturating_sub(start) + 1,
     };
-    let found = find_forward(&haystack, &needle, start - 1, range);
+    let found = find_forward(haystack, needle, start - 1, range);
     Ok(interp.counted(found))
 }
 
@@ -731,25 +737,37 @@ pub(crate) fn changestr(
     name: &[u8],
     args: &[Option<ObjRef>],
 ) -> Result<ObjRef, Failure> {
-    let needle = required_string(interp, args, 1);
-    let haystack = required_string(interp, args, 2);
-    let replacement = required_string(interp, args, 3);
     let requested = whole_number(interp, name, args, 4)?;
+    let needle = required_render(interp, args, 1);
+    let haystack = required_render(interp, args, 2);
+    let replacement = required_render(interp, args, 3);
+    let needle = needle.text(interp);
+    let haystack = haystack.text(interp);
+    let replacement = replacement.text(interp);
 
     let limit = match requested {
         Some(value) => count_of(value, 3)?,
         None => usize::MAX,
     };
-    let changes = count_occurrences(&haystack, &needle, limit);
+    let changes = count_occurrences(haystack, needle, limit);
     if changes == 0 {
-        return Ok(interp.text_owned(haystack));
+        // The one place in this function where the borrow shape still costs
+        // something: the answer is the haystack itself, and handing borrowed
+        // bytes to a call that needs `&mut` means copying them first. The old
+        // code owned them already and paid the same copy on every call
+        // instead of only on this branch, which no benchmark here takes.
+        let unchanged = haystack.to_vec();
+        return Ok(interp.text_owned(unchanged));
     }
-    let mut out = Vec::new();
+    // Sized before anything is written: `changes` occurrences of `needle`
+    // each become `replacement`, and nothing else moves.
+    let grown = haystack.len() + changes * replacement.len();
+    let mut out = Vec::with_capacity(grown.saturating_sub(changes * needle.len()));
     let mut next = 0;
     for _ in 0..changes {
-        let found = find_forward(&haystack, &needle, next, haystack.len());
+        let found = find_forward(haystack, needle, next, haystack.len());
         out.extend_from_slice(&haystack[next..found - 1]);
-        out.extend_from_slice(&replacement);
+        out.extend_from_slice(replacement);
         next = found - 1 + needle.len();
     }
     out.extend_from_slice(&haystack[next..]);

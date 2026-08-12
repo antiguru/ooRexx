@@ -2241,3 +2241,87 @@ Whether collapsing the driver to one level is worth anything on top of this is *
 * **No oracle ratios.** `rexx-bench-suite` was not run.
 * **Resident set was not re-measured.** Boxing moves an error payload to the heap on a path that is not taken in any of these runs, so no movement is expected, but none was measured either.
 * **The tree-walker arm was measured for correctness only**, as in entries 12 and 16.
+
+### Entry 19 -- the design's option D(ii) attempted and **accepted**: a shared-borrow accessor for bytes, and three things that rode in with it
+
+**BASE for the comparison is `a10164993`**, entry 18's HEAD, whose binary this sitting reproduced byte for byte (`27cbe3a2...`) before anything was changed.
+
+#### What the option is
+
+Entry 11's second consultation named a mechanism this record had never priced: `Interp::to_text(&mut self)` borrows the whole interpreter, because it fills two lazy caches.
+So any code wanting two operands' bytes at once, or one operand's bytes and then any further call, cannot hold what it returns and buys its way out with an owned copy.
+The value-representation design turns that into option D(ii): a `&self` accessor, ordered fourth and after option A, "because A changes the payload type its accessor would borrow from".
+
+The accessor is a pair, and the pair is the part worth stating.
+`try_text(&self) -> Option<&[u8]>` answers for `Nil`, a `Body::Text`, a `Body::Stem` and a rendered `Body::Num`; it answers `None` for a tagged small integer and for a `Body::Num` nobody has rendered yet, and both are "there is nothing to borrow" rather than "there is no text".
+`render(&mut self) -> Rendered` turns the second cause into the first and carries the bytes for the first.
+A call site does every `&mut` thing it needs first, calls `render` once per value, and then takes all its shared borrows together.
+
+`Rendered` holds the `ObjRef` it was made for. That is not tidiness: the two halves of a converted call site are deliberately far apart -- every `&mut` use goes between them -- so pairing one value's `Rendered` with another value's read is a mistake that is available to make and would produce the wrong string silently. Holding the ref means the call site never names it twice.
+
+**A stem's `default` redirect is chased inside `try_text`**, where `to_text` has to answer it with an owned copy: two shared borrows of `self` can coexist and two `&mut` ones cannot, so the recursion returns its result directly. The mechanism the option is about, applied to the value model's own internals.
+
+#### What was converted, and what was not
+
+Four sites, chosen because they are on a measured axis:
+
+* `Interp::concat` (`||`, `Abuttal`, `Blank`) -- both operands read through shared borrows, into a buffer sized before anything is written, handed to `text_owned` rather than copied again by `text`.
+* `Interp::eval_compare` -- the two parses and the two settings reads move in front of the two byte reads.
+* `pos`, `substr` and `changestr` -- through a new `required_render`, with each builtin's numeric and pad arguments converted before its strings are read.
+* `stem_get`'s clone of the stem's own name, which is not a `to_text` at all but is the same mechanism: a copy bought to release a borrow.
+
+**Not converted:** `eval_logical`, and the rest of `builtin/`'s `required_string` callers.
+They are the same mechanism and none of them is on any axis measured here, so converting them would enlarge the diff without moving a number. `required_string` stays as the helper for a builtin that interleaves `&mut` work with its string reads.
+
+**Reordering a builtin's argument conversions is not observable**, and that is the load-bearing claim under the conversions: reading a string cannot fail -- `to_text` is total -- so no error can change place, and the two caches it fills are pure.
+
+#### Measured movement
+
+Wall clock in the accept rule's shape -- `ulimit -v 8388608`, `REXX_ENGINE=ir`, fresh empty working directory per run, arm order rotated every round, seven rounds an axis, three arms interleaved in one sitting, host-idle gate passed after 11 samples.
+**All 126 wall runs exited 0, and each axis's stdout hash is identical across all three arms.**
+Instructions and cycles are a separate pass, `perf stat -e instructions:u,cycles:u`, three interleaved rounds an axis, medians.
+
+| axis | instructions | cycles | wall | rounds head beats BASE |
+|---|---|---|---|---|
+| `strings` | **-8.29%** | **-13.41%** | **-14.08%** | 7 of 7 |
+| `compound` | **-1.42%** | +0.41% | -0.61% | 7 of 7 |
+| `alloc4c` | +0.23% | +4.30% | +0.23% | 1 of 7 |
+| `emptyloop` | +0.00% | -0.54% | -0.67% | 6 of 7 |
+| `arith` | -0.00% | -1.14% | -1.10% | 5 of 7 |
+| `varlookup` | -0.00% | +0.51% | +0.39% | 3 of 7 |
+
+**Three axes report an instruction count identical to BASE's to two decimal places**, which is what they should report: `emptyloop`, `arith` and `varlookup` execute none of the changed code. Their wall movements, -1.10% to +0.39%, are therefore the instrument's own spread and not results.
+
+#### The floor, demonstrated inside this sitting rather than argued
+
+Entry 17 established that these axes cannot resolve a change that only perturbs the two megafunctions' register allocation, and put the floor near seven points.
+**This sitting contains a direct instance.** The middle arm is `head` with `render` changed to always copy -- same code shape everywhere, byte-identical stdout, and a body `compound.rex` never executes, since that program has no concatenation, no comparison and no string builtin.
+That arm ran **6.81% slower than BASE on `compound`** while executing **1.42% fewer instructions** than BASE.
+
+So `compound`'s -0.61% of wall is not the result on that axis. Its -1.42% of instructions is, and it is the `stem_get` clone: a compound read that resolves used to allocate and free a boxed slice to serve a branch it never takes, and a compound read that resolves is the whole of that axis.
+
+#### What the -8.29% on `strings` actually decomposes into, which is not what the option predicted
+
+The three-arm sitting and one further ablation arm split it. Every figure is instructions, median of three interleaved rounds:
+
+| mechanism | of `strings`' instructions |
+|---|---|
+| `changestr`'s result buffer sized before it is written, rather than grown from empty | **-5.09%** |
+| the owned copies `render` stops making | -2.64% |
+| `concat`'s sizing and `text_owned`, and the reordering | about -0.56% |
+| **all three** | **-8.29%** |
+
+**The largest piece is not the borrow shape.** `changestr` built its answer in a `Vec::new()` and grew it, so a 43-byte result reallocated five times; it now allocates once. That fix is independent of D(ii) -- the old code could have had it -- and it rode in because the function was being rewritten anyway. Recorded here because a correct decision carrying a false reason is a shape this loop has produced before, and the reason for this one is measured rather than assumed.
+
+**So D(ii)'s own falsifier needs stating twice, because the two readings differ.**
+As written -- "a paired run moving `strings` by less than about 3%" -- it is **cleared**, and not narrowly.
+Applied to the mechanism it was written about, the copies alone are **-2.64%** and would **trip** it.
+
+#### What this entry does not claim
+
+* **`alloc4c` is +0.23% of instructions**, a small increase, and the likely cause is named rather than measured: `render` probes `try_text` before falling back, so a heap operand costs one extra heap lookup against `to_text`'s one. It shows on the axis whose concatenation is two operands per iteration and nothing else. Not chased.
+* **`arith`'s standing +3.40% against entry 16's BASE is untouched and still unexplained.** This change does not execute on that axis.
+* **No oracle ratios.** `rexx-bench-suite` has now not been run for entries 16, 18 or 19, and `strings` has moved a long way across those three.
+* **Resident set was not re-measured.**
+* **The tree-walker arm was measured for correctness only.**
+* **The two new tests do not add wrong-answer coverage**, and this was checked rather than assumed. Three representation-only mutations of `try_text` -- drop the stem redirect, never answer for a rendered number, never answer for a defaultless stem -- were each run against the suite with the two new tests skipped, and the pre-existing suite caught all three (2, 9 and 4 failures, the last after a harness abort). What the new tests carry is the `None` contract, which nothing observable from Rexx can express.

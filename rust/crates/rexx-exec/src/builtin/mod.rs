@@ -72,6 +72,7 @@ use std::sync::OnceLock;
 use rexx_core::ObjRef;
 
 use crate::error::{Failure, Raised};
+use crate::value::Rendered;
 use crate::{Interp, Loud};
 
 mod convert;
@@ -763,6 +764,27 @@ fn arg(args: &[Option<ObjRef>], position: usize) -> Option<ObjRef> {
 fn required_string(interp: &mut Interp, args: &[Option<ObjRef>], position: usize) -> Vec<u8> {
     let value = arg(args, position).expect("check_arity admitted this required argument");
     interp.to_text(value).into_owned()
+}
+
+/// The argument at 1-based `position` prepared for a shared borrow, for a
+/// builtin that reads more than one string or reads one across a further call
+/// on the interpreter.
+///
+/// The counterpart to [`required_string`], and the reason to prefer it: that
+/// one copies the bytes out, and the copy is not what the caller wanted -- it
+/// is what the caller had to buy to release `to_text`'s `&mut`. Reading
+/// through [`Rendered::text`] instead costs nothing for a string argument,
+/// which is nearly all of them.
+///
+/// **Every `&mut` call the builtin makes has to happen before this one.**
+/// That is a real constraint on the call sites and it reorders them: the
+/// numeric and pad arguments are converted first, then the strings are read.
+/// The reordering is not observable, because reading a string cannot fail --
+/// [`Interp::to_text`] is total -- so no error can change place, and the two
+/// lazy caches it fills are pure.
+fn required_render(interp: &mut Interp, args: &[Option<ObjRef>], position: usize) -> Rendered {
+    let value = arg(args, position).expect("check_arity admitted this required argument");
+    interp.render(value)
 }
 
 /// The rendered bytes of an optional argument.

@@ -259,6 +259,90 @@ impl Interp {
         }
     }
 
+    /// The bytes of `value`, borrowed from the value itself, or `None` when
+    /// this value has no bytes anywhere for a shared borrow to reach.
+    ///
+    /// **The point of this function is its `&self`, and the cost it removes
+    /// is not its own body.** [`to_text`] takes `&mut self` because it fills
+    /// two lazy caches, so a caller that wants two operands' bytes at once,
+    /// or one operand's bytes and then any further call on the interpreter,
+    /// cannot hold what `to_text` returns -- and has to buy its way out with
+    /// an owned copy. Those copies are invisible in review, because each one
+    /// is locally correct and locally explained. A shared borrow composes,
+    /// so callers that only *read* bytes stop paying for the borrow shape.
+    ///
+    /// `None` has exactly two causes and both are "there is nothing to
+    /// borrow", never "this value has no text":
+    ///
+    /// * a tagged small integer, whose digits are stored nowhere at all --
+    ///   the value *is* the integer, and its rendering is computed fresh
+    ///   every time it is asked for;
+    /// * a `Body::Num` whose `text` cache is still empty, which needs the
+    ///   `&mut` fill only [`to_text`] can do.
+    ///
+    /// [`render`] turns the second cause into the first and the first into
+    /// an owned buffer, so the two together let a caller take shared borrows
+    /// of several values at once. Use them as a pair; on its own this
+    /// function's `None` arm is a fallback every caller would have to write
+    /// itself.
+    ///
+    /// **A stem's `default` redirect is chased here**, where [`to_text`] has
+    /// to answer it with a `Cow::Owned` copy: two shared borrows of `self`
+    /// can coexist, so the recursive call's result can be returned directly.
+    /// That is the same mechanism this function exists for, applied to the
+    /// value model's own internals.
+    ///
+    /// [`to_text`]: Interp::to_text
+    /// [`render`]: Interp::render
+    pub(crate) fn try_text(&self, value: ObjRef) -> Option<&[u8]> {
+        match value.decode() {
+            Decoded::Nil => return Some(b"The NIL object"),
+            Decoded::SmallInt(_) => return None,
+            Decoded::Heap { .. } => {}
+        }
+
+        let object = self.heap.get(value).expect("a live value");
+        match &object.body {
+            Body::Text { bytes, .. } => Some(bytes.as_slice()),
+            Body::Num { text, .. } => text.as_deref(),
+            Body::Stem {
+                default: Some(default),
+                ..
+            } => self.try_text(*default),
+            Body::Stem { name, .. } => Some(name),
+            other => unreachable!("the value model only creates Text, Num and Stem, got {other:?}"),
+        }
+    }
+
+    /// Makes `value`'s bytes reachable by [`try_text`], and carries the ones
+    /// that can never be.
+    ///
+    /// The `Rendered` this hands back is empty in the case that matters: it
+    /// means "a later `try_text` on this value returns `Some`", and a caller
+    /// reading several values calls this for every one of them first, then
+    /// takes all its shared borrows at once. It is non-empty for a tagged
+    /// small integer, or a stem resolving to one, and then costs exactly what
+    /// [`to_text`] costs today -- which is what makes converting a call site
+    /// a pure improvement rather than a trade.
+    ///
+    /// The `Cow` match below is the whole implementation and it is not a
+    /// shortcut: `to_text` returns `Cow::Borrowed` precisely when it has left
+    /// the bytes somewhere in the heap, and `Cow::Owned` precisely when it
+    /// has not.
+    ///
+    /// [`try_text`]: Interp::try_text
+    /// [`to_text`]: Interp::to_text
+    pub(crate) fn render(&mut self, value: ObjRef) -> Rendered {
+        if self.try_text(value).is_some() {
+            return Rendered { value, owned: None };
+        }
+        let owned = match self.to_text(value) {
+            Cow::Borrowed(_) => None,
+            Cow::Owned(bytes) => Some(bytes),
+        };
+        Rendered { value, owned }
+    }
+
     /// Converts any value to a `Number`, or `NotNumeric` if it can never be
     /// one.
     ///
@@ -499,6 +583,38 @@ pub(crate) fn exact_small_int(value: i64, digits: u64) -> Option<ObjRef> {
 ///   `NUMERIC DIGITS` can be set far wider than either.
 ///
 /// [`rendered_integer`]: Number::rendered_integer
+/// What [`Interp::render`] left behind for one value: nothing, because the
+/// value's own bytes are now borrowable, or the bytes themselves, because
+/// they live nowhere a borrow can reach.
+///
+/// **It carries the `ObjRef` it was made for on purpose.** In a converted
+/// call site the two halves are deliberately far apart -- every `&mut` use of
+/// the interpreter happens between them, which is the whole reason the split
+/// exists -- so pairing one value's `Rendered` with another value's read is a
+/// mistake that is available to make and would produce the wrong string
+/// silently. Holding the `ObjRef` here means the call site never names it
+/// twice.
+pub(crate) struct Rendered {
+    value: ObjRef,
+    owned: Option<Vec<u8>>,
+}
+
+impl Rendered {
+    /// The bytes, borrowed from the interpreter's heap wherever
+    /// [`Interp::render`] left them there.
+    ///
+    /// The shared borrow is the point: several of these can be live at once,
+    /// which is what lets a caller read two operands without copying either.
+    pub(crate) fn text<'a>(&'a self, interp: &'a Interp) -> &'a [u8] {
+        match &self.owned {
+            Some(bytes) => bytes,
+            None => interp
+                .try_text(self.value)
+                .expect("`render` carried no bytes, so it left them borrowable"),
+        }
+    }
+}
+
 fn small_int_for(value: &Number, created_digits: u32) -> Option<i64> {
     let whole = value.rendered_integer(u64::from(created_digits))?;
     (SMALL_INT_MIN..=SMALL_INT_MAX)
@@ -799,6 +915,136 @@ mod tests {
         let rounded_20 = interp.to_number(x).unwrap().add(&n("0"), 20).unwrap();
         let at_20 = interp.number(rounded_20, 20, Form::Scientific);
         assert_eq!(&*interp.to_text(at_20), b"1.234567890123456789");
+    }
+
+    /// Every shape a value can take, read through the borrowing pair, gives
+    /// the bytes `to_text` gives.
+    ///
+    /// This is the whole correctness claim for `try_text`/`render`: they are
+    /// an accessor with a different borrow, not a different answer. The
+    /// table is the value model's own variant list rather than a sample --
+    /// `Nil`, a tagged small integer, a short and a long `Body::Text`, a
+    /// `Body::Num` both before and after anything has rendered it, and the
+    /// three stem shapes -- because a `None` that quietly fell through to a
+    /// wrong-but-plausible answer is exactly what a sample would miss.
+    ///
+    /// Reading `to_text` **second** on each row is deliberate: it fills the
+    /// caches, so a `try_text` that only ever answered for already-rendered
+    /// values would pass a test that asked in the other order.
+    #[test]
+    fn the_borrowing_accessor_answers_what_to_text_answers() {
+        let mut interp = Interp::new();
+
+        let short = interp.text(b"abc");
+        let long = interp.text(&[b'z'; INLINE_BYTES + 40]);
+        let small = interp.number(n("7"), 9, Form::Scientific);
+        let heap_number = interp.number(n("1.5"), 9, Form::Scientific);
+        let rendered_number = interp.number(n("2.5"), 9, Form::Scientific);
+        let _ = interp.to_text(rendered_number);
+
+        let five = interp.number(n("5"), 9, Form::Scientific);
+        let with_default = interp.alloc_with(
+            BehaviourId::STEM,
+            Body::Stem {
+                name: b"A.".to_vec().into(),
+                default: Some(five),
+                tails: HashMap::new(),
+            },
+        );
+        let bare = interp.alloc_with(
+            BehaviourId::STEM,
+            Body::Stem {
+                name: b"Q.".to_vec().into(),
+                default: None,
+                tails: HashMap::new(),
+            },
+        );
+        let aliasing = interp.alloc_with(
+            BehaviourId::STEM,
+            Body::Stem {
+                name: b"B.".to_vec().into(),
+                default: Some(with_default),
+                tails: HashMap::new(),
+            },
+        );
+
+        for value in [
+            ObjRef::NIL,
+            short,
+            long,
+            small,
+            heap_number,
+            rendered_number,
+            with_default,
+            bare,
+            aliasing,
+        ] {
+            let rendered = interp.render(value);
+            let borrowed = rendered.text(&interp).to_vec();
+            let expected = interp.to_text(value).into_owned();
+            assert_eq!(
+                String::from_utf8_lossy(&borrowed),
+                String::from_utf8_lossy(&expected),
+                "{value:?}"
+            );
+        }
+    }
+
+    /// `try_text` answers `None` for exactly two causes, and both are "there
+    /// is nothing to borrow" rather than "there is no text".
+    ///
+    /// Pinned separately from the agreement test above because the `None`
+    /// arm is the one a caller has to handle: an accessor that answered
+    /// `Some` here -- with the empty slice, say, or with a `Body::Num`'s
+    /// unfilled cache read as blank -- would pass every agreement check that
+    /// rendered first, and silently give the wrong string to the callers
+    /// that do not.
+    #[test]
+    fn try_text_answers_only_where_the_bytes_already_exist() {
+        let mut interp = Interp::new();
+
+        // Cause one: the digits of a tagged small integer are stored nowhere
+        // at all, so nothing renders it into existence and `render` has to
+        // carry them.
+        let small = interp.number(n("7"), 9, Form::Scientific);
+        assert!(matches!(small.decode(), Decoded::SmallInt(7)));
+        assert_eq!(interp.try_text(small), None);
+        let _ = interp.to_text(small);
+        assert_eq!(
+            interp.try_text(small),
+            None,
+            "rendering a SmallInt stores nothing"
+        );
+
+        // Cause two: a heap number's `text` cache is empty until something
+        // fills it, and filling it is the `&mut` this pair exists to move.
+        let number = interp.number(n("1.5"), 9, Form::Scientific);
+        assert_eq!(interp.try_text(number), None);
+        let _ = interp.to_text(number);
+        assert_eq!(interp.try_text(number), Some(&b"1.5"[..]));
+
+        // And a stem chasing a default is answered by the *default's* bytes,
+        // which is what `to_text` has to copy and this does not -- so it
+        // inherits the default's own answer, `None` included.
+        let stem = interp.alloc_with(
+            BehaviourId::STEM,
+            Body::Stem {
+                name: b"A.".to_vec().into(),
+                default: Some(small),
+                tails: HashMap::new(),
+            },
+        );
+        assert_eq!(interp.try_text(stem), None, "the default is a SmallInt");
+        let text = interp.text(b"held");
+        let stem_of_text = interp.alloc_with(
+            BehaviourId::STEM,
+            Body::Stem {
+                name: b"B.".to_vec().into(),
+                default: Some(text),
+                tails: HashMap::new(),
+            },
+        );
+        assert_eq!(interp.try_text(stem_of_text), Some(&b"held"[..]));
     }
 
     #[test]

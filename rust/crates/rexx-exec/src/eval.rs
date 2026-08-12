@@ -841,10 +841,22 @@ impl Interp {
         let right_value = self.eval(code, right)?;
         self.roots.push_temp(right_value);
 
-        let mut bytes = self.to_text(left_value).to_vec();
+        // Both operands' bytes are read through shared borrows, which can be
+        // live at once -- and that is the whole change here. The left operand
+        // used to be copied into an owned buffer for no reason except that
+        // reading the right one needed its own `&mut`, so a two-operand join
+        // allocated three times: the copy, the buffer it grew into, and the
+        // result. It allocates once now, into a buffer sized before anything
+        // is written and handed straight to the value.
+        let left_rendered = self.render(left_value);
+        let right_rendered = self.render(right_value);
+        let left_bytes = left_rendered.text(self);
+        let right_bytes = right_rendered.text(self);
+        let mut bytes = Vec::with_capacity(left_bytes.len() + separator.len() + right_bytes.len());
+        bytes.extend_from_slice(left_bytes);
         bytes.extend_from_slice(separator);
-        bytes.extend_from_slice(&self.to_text(right_value));
-        let joined = self.text(&bytes);
+        bytes.extend_from_slice(right_bytes);
+        let joined = self.text_owned(bytes);
 
         // `joined` is unrooted from here to the caller's own `push_temp`,
         // and nothing between the two allocates.
@@ -882,9 +894,11 @@ impl Interp {
         let right_value = self.eval(code, right)?;
         self.roots.push_temp(right_value);
 
-        let left_bytes = self.to_text(left_value).into_owned();
-        let right_bytes = self.to_text(right_value).into_owned();
-
+        // Every `&mut` read this comparison needs happens first -- the two
+        // parses, and the two settings -- so that the byte reads below can be
+        // shared borrows taken together. `to_number` hands back an owned
+        // `Number`, so nothing here outlives its own statement, and the
+        // operand copies the old order forced are gone.
         let strict = is_strict_compare(op);
         let left_number = if strict {
             None
@@ -899,10 +913,15 @@ impl Interp {
 
         let digits = self.activation().settings.digits();
         let fuzz = self.activation().settings.fuzz();
+
+        let left_rendered = self.render(left_value);
+        let right_rendered = self.render(right_value);
+        let left_bytes = left_rendered.text(self);
+        let right_bytes = right_rendered.text(self);
         let holds = compare_decoded(
-            &left_bytes,
+            left_bytes,
             left_number.as_ref(),
-            &right_bytes,
+            right_bytes,
             right_number.as_ref(),
             digits,
             fuzz,

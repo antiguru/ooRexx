@@ -256,29 +256,21 @@ impl Interp {
             None => return (self.derived_tail_name(stem_name, key), Novalue::Unset),
         };
 
-        // `resolved` and `object_name` are both computed, fully, before any
-        // further `self` call, so the borrow on `self.heap` below never has
-        // to overlap one. `object_name` is cloned (a small, boxed slice)
-        // rather than borrowed, for the same reason.
-        let (resolved, object_name) = {
+        // `resolved` is computed, fully, before any further `self` call, so
+        // the borrow on `self.heap` never has to overlap one.
+        let resolved = {
             let object = self.heap.get(stem_value).expect("a live value");
-            let Body::Stem {
-                name,
-                default,
-                tails,
-            } = &object.body
-            else {
+            let Body::Stem { default, tails, .. } = &object.body else {
                 unreachable!(
                     "a stem-named slot holds only Body::Stem, got {}",
                     body_variant_name(&object.body)
                 );
             };
-            let resolved = match tails.get(key) {
+            match tails.get(key) {
                 Some(Some(value)) => Some(*value),
                 Some(None) => None, // the tombstone: absent from the default too
                 None => *default,   // an untouched tail falls back to the default
-            };
-            (resolved, name.clone())
+            }
         };
 
         match resolved {
@@ -286,7 +278,24 @@ impl Interp {
             // An object exists but this key does not resolve: derive from
             // the OBJECT's own name, not the read site's -- see this
             // function's doc comment for why the two can differ.
-            None => (self.derived_tail_name(&object_name, key), Novalue::Unset),
+            //
+            // **The name is cloned inside this arm and not beside `resolved`
+            // above**, which is where it used to be. `derived_tail_name` needs
+            // `&mut self`, so the name cannot be borrowed across the call and
+            // has to be copied -- but only here. Hoisting the clone out made
+            // every resolving read allocate and free a boxed slice to serve a
+            // branch it never takes, and a compound read that resolves is the
+            // whole of the `compound` axis.
+            None => {
+                let object_name = {
+                    let object = self.heap.get(stem_value).expect("a live value");
+                    let Body::Stem { name, .. } = &object.body else {
+                        unreachable!("the same object matched Body::Stem a moment ago");
+                    };
+                    name.clone()
+                };
+                (self.derived_tail_name(&object_name, key), Novalue::Unset)
+            }
         }
     }
 
