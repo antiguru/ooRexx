@@ -160,6 +160,22 @@ pub(crate) fn render(chunk: &Chunk) -> String {
                     op.spelling()
                 ));
             }
+            // The operator by its own spelling, for the reason
+            // [`Op::Arith`]'s is: it is the tag the `>P>` line this op's echo
+            // prints carries, and a golden reading `Minus` could not say
+            // whether the tag would.
+            Op::Prefix { op, src, dst } => {
+                out.push_str(&format!(
+                    "{index}: Prefix op={} src={src} dst={dst}\n",
+                    op.spelling()
+                ));
+            }
+            Op::TracePrefix { op, src } => {
+                out.push_str(&format!(
+                    "{index}: TracePrefix op={} src={src}\n",
+                    op.spelling()
+                ));
+            }
             Op::Store {
                 index: node,
                 at,

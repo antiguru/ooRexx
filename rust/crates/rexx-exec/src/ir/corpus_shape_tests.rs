@@ -92,6 +92,7 @@ enum Root {
     Load,
     Arith,
     Binary,
+    Prefix,
     CallExpr,
     EvalExpr,
 }
@@ -109,6 +110,7 @@ impl Root {
             Op::Load { .. } => Some(Root::Load),
             Op::Arith { .. } => Some(Root::Arith),
             Op::Binary { .. } => Some(Root::Binary),
+            Op::Prefix { .. } => Some(Root::Prefix),
             Op::EvalExpr { .. } => Some(Root::EvalExpr),
             Op::CallExpr { .. } => Some(Root::CallExpr),
             Op::Generic { .. }
@@ -122,6 +124,7 @@ impl Root {
             | Op::TraceLiteral { .. }
             | Op::TraceRead { .. }
             | Op::TraceOperator { .. }
+            | Op::TracePrefix { .. }
             | Op::Store { .. }
             | Op::Say { .. }
             | Op::Call { .. }
@@ -189,6 +192,12 @@ fn root_of(expr: &Expr) -> Root {
                 Root::EvalExpr
             }
         }
+        // No operator condition beside the operand's, unlike the arm above.
+        // The expectation this file states is that a prefix promotes whatever
+        // its operator, and one that did not would leave an `Op::EvalExpr`
+        // where this arm calls for `Root::Prefix` -- which reddens rather than
+        // passes, so the arm is the claim and not an assumption behind it.
+        ExprKind::Prefix { operand, .. } if native(operand) => Root::Prefix,
         _ => Root::EvalExpr,
     }
 }
@@ -205,6 +214,7 @@ fn native(expr: &Expr) -> bool {
         ExprKind::Binary { op, left, right } => {
             (arithmetic(*op) || other_family(*op)) && native(left) && native(right)
         }
+        ExprKind::Prefix { operand, .. } => native(operand),
         _ => false,
     }
 }
@@ -518,6 +528,7 @@ fn every_corpus_body_compiles_the_minimum_promotion_set_to_its_own_ops() {
         Root::Load,
         Root::Arith,
         Root::Binary,
+        Root::Prefix,
         Root::EvalExpr,
     ] {
         assert!(

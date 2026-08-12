@@ -37,7 +37,7 @@ use crate::Interp;
 use crate::error::Raised;
 use rexx_core::ObjRef;
 use rexx_num::Number;
-use rexx_parse::Operator;
+use rexx_parse::{Operator, PrefixOp};
 
 /// The visible-output shape of the current `TRACE` setting, restricted to
 /// what pure-4a code can ever produce (D18 excludes commands, so
@@ -775,6 +775,30 @@ impl Interp {
             return;
         }
         push_operator(&mut self.trace, ">O>", indent, op, value);
+    }
+
+    /// The `>P>` line one prefix operator's result owes, from the value
+    /// itself, at the indent the clause in force is tracing values at.
+    ///
+    /// **One function for both engines**, the shape [`Interp::echo_operator`]
+    /// has and for the same reason: `eval.rs` emits this line as a side effect
+    /// of *evaluating* a prefix node, and a compiled `crate::ir::Op::Prefix`
+    /// computes without evaluating, so the line has to come from an op of its
+    /// own (`crate::ir::Op::TracePrefix`).
+    ///
+    /// **A prefix operator's line is `>P>` and never `>O>`**, which is why
+    /// this is a function of its own rather than [`Interp::echo_operator`]
+    /// with a `PrefixOp`: the two markers are different bytes, reproducing the
+    /// C++ `tracePrefix`/`traceOperator` pair that calls one
+    /// `traceOperatorValue` with a different `TracePrefix` each
+    /// ([`Interp::trace_prefix_op`] has the citation).
+    pub(crate) fn echo_prefix_op(&mut self, op: PrefixOp, value: ObjRef) {
+        if !self.tracing_intermediates() {
+            return;
+        }
+        let indent = self.clause_state.current_value_indent;
+        let text = self.to_text(value).to_vec();
+        self.trace_prefix_op(indent, op.spelling().as_bytes(), &text);
     }
 
     /// `>P>` (`TRACE_PREFIX_PREFIX`): a prefix operator's own result, the

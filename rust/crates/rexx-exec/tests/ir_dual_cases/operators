@@ -1,9 +1,12 @@
-# What promoting a concatenation, a comparison or a logical operator has to
-# keep, by kind.
+# What promoting a concatenation, a comparison, a logical operator or a
+# prefix operator has to keep, by kind.
 #
 # **Shapes**, which ask what the operator answers: every concatenation
-# spelling, both comparison families, every logical operator, and an operand
-# that is itself an operator.
+# spelling, both comparison families, every logical operator, each of the
+# prefix operators `+`, `-` and `\`, and an operand that is itself an operator
+# -- including a prefix over a prefix and a prefix over a binary operator's
+# result, which is where an operand register holds an intermediate rather than
+# a read.
 #
 # **Settings**, which is where a comparison reads state a concatenation does
 # not. `NUMERIC DIGITS` rounds the operands before they are compared, so
@@ -11,29 +14,44 @@
 # further by subtracting from the working precision. A strict comparison reads
 # neither -- it compares bytes -- and the rows put the two side by side under
 # the same settings so that one row says which family read what.
+# The prefix `-` reads `NUMERIC DIGITS` too, and that is what says it is `0 -
+# x` rather than a sign flip on the operand's own digits: at DIGITS 1 the
+# oracle answers `-1E+4` for `-12345` and the identical `-1E+4` for `0 -
+# 12345`. A `\` row at the same setting is that stanza's control, because the
+# text check reads no setting at all.
 #
 # **Failure**, which for these operators is nearly all in the operands.
 # Concatenation renders both operands and cannot itself raise; a comparison
 # falls back to a string compare rather than failing when an operand will not
-# convert. The raise an operator here makes of its own is the logical
+# convert. The raise a binary operator here makes of its own is the logical
 # family's 34.901, and its rows pin both halves of the measured rule: **both
 # operands are checked even when the first has already decided the answer**,
 # and when both are bad it is the **left** operand's text that is reported.
+# The prefix operators are the other way round -- the failure is the
+# operator's, over its one operand -- and `\` and `-` fail *differently* on
+# the same operand: `\` checks text and gives 34.901 where `-` converts and
+# gives 41.1, so the rows put `'abc'` under each.
 #
 # **Trace**, which is where a native op diverges first and where no other
 # instrument in this crate can see it. `eval.rs` emits a binary operator's
-# `>O>` line as a side effect of evaluating it; an op that only computes into
+# `>O>` line and a prefix operator's `>P>` line as a side effect of evaluating
+# them; an op that only computes into
 # a register emits nothing, and every line after the missing one still matches
 # -- so only an exact stderr comparison catches it. Both directions are here:
 # a `trace i` row requires the lines, and a `trace r` row requires their
 # absence. The `trace i` row carries the abuttal, whose tag is the empty
 # string, and the blank, whose tag is one space -- tags an implementation
 # reading a spelling off the source span would get wrong and no other row can
-# see.
+# see. **A prefix operator's line is `>P>` and never `>O>`**, and those bytes
+# are already pinned for the tree-walker by `tests/trace_oracle`'s own
+# `prefix_operators` witness, which runs on that engine alone. What the `trace
+# i` prefix row adds is the compiled clause: that an op stream emits the line
+# at all, and where it falls among the operand's own lines.
 #
 # **What this file is worth was measured rather than assumed, and it is not
-# mutation-catching.** Four mutations of the promoted path were each re-run
-# with this file moved out of the directory, and every one was caught anyway:
+# mutation-catching.** Four mutations of the promoted binary path were each
+# re-run with this file moved out of the directory, and every one was caught
+# anyway:
 # dropping the `>O>` echo behind the new op reddens `calls`, whose own row
 # holds a blank operator; checking a logical operator's right operand before
 # its left reddens a unit test written for that rule; a comparison that
@@ -356,4 +374,175 @@ err>        >>>   "2"
 err>      3 *-* zc = za || 'x'
 err>        >>>   "2x"
 err>      4 *-* say zc = '2x'
+err>        >>>   "1"
+
+# each prefix operator over a read and over a literal, which is the whole of
+# what one applied to a plain term answers. The two rows that could distinguish
+# a sign flip on the operand's own digits from the subtraction `-` actually is
+# are `-0`, which answers `0` and not `-0`, and `-'7.50'`, which keeps the
+# operand's trailing zero -- measured, `say 0 - 0` and `say 0 - 7.50` give the
+# identical `0` and `-7.50`.
+program
+za = 3
+zb = 0
+say +za
+say -za
+say \zb
+say +5
+say -5
+say \1
+say -0
+say +'7'
+say -'7.50'
+----
+rc> 0
+out> 3
+out> -3
+out> 1
+out> 5
+out> -5
+out> 0
+out> 0
+out> 7
+out> -7.50
+
+# a prefix over something other than a plain term: over another prefix, over a
+# binary operator's result, and as a binary operator's own operand -- which is
+# what puts an intermediate in a compiled operand register rather than a read.
+# **A prefix takes a whole message subterm before any dyadic operator is
+# considered**, so `-2 ** 2` is 4 and `-za + 1` is `(-za) + 1`; the
+# parenthesised rows beside them are the pair that says so, since `-(2 ** 2)`
+# answers -4 and `-(za + 1)` answers -4 where the unparenthesised forms answer
+# 4 and -2.
+program
+za = 3
+zb = 1
+say - -za
+say -(-za)
+say \\zb
+say -(za + 1)
+say -(za || za)
+say \(za = 3)
+say \(za > 9)
+say -2 ** 2
+say -(2 ** 2)
+say -za + 1
+say \zb & zb
+----
+rc> 0
+out> 3
+out> 3
+out> 1
+out> -4
+out> -33
+out> 0
+out> 1
+out> 4
+out> -4
+out> -2
+out> 0
+
+# NUMERIC DIGITS, which the prefix `-` and `+` read and the prefix `\` does
+# not: the operand is rounded to the precision, so at DIGITS 1 a five-digit
+# operand comes back in exponential notation and at DIGITS 9 it comes back
+# whole. **The `\` row is the control**, and it says the setting cannot reach
+# a text check.
+program
+numeric digits 1
+say -12345
+say +12345
+say \0
+numeric digits 9
+say -12345
+----
+rc> 0
+out> -1E+4
+out> 1E+4
+out> 1
+out> -12345
+
+# `\` on a value that is not logical: a **text** check and never a numeric one,
+# so the report is 34.901 with the operand's own text and not the 41.1 an
+# arithmetic conversion would give.
+program
+say \'abc'
+----
+rc> 222
+err>      1 *-* say \'abc'
+err> Error 34 running /nonexistent/ir-dual-case.rex line 1:  Logical value not 0 or 1.
+err> Error 34.901:  Logical value must be exactly "0" or "1"; found "abc".
+
+# `-` on the same value that is not numeric, which is the row beside the one
+# above: the operand is converted first, so this is 41.1 where `\` on the
+# identical operand is 34.901. Either row alone would be satisfied by an
+# implementation that gave one number to both.
+program
+say -'abc'
+----
+rc> 215
+err>      1 *-* say -'abc'
+err> Error 41 running /nonexistent/ir-dual-case.rex line 1:  Bad arithmetic conversion.
+err> Error 41.1:  Nonnumeric value ("abc") used in arithmetic operation.
+
+# trace i: the `>P>` line each prefix operator's result owes, after its
+# operand's own lines and in the order the operators are applied -- so a prefix
+# over a prefix prints the inner one's line first, and a prefix over a binary
+# operator prints after that operator's `>O>`. The tags are the operators' own
+# spellings, and `\`'s is the one an implementation reading a source span would
+# get wrong.
+program
+trace i
+za = 2
+zb = -za
+say \(za = 3)
+say -(za + 1)
+say - -za
+----
+rc> 0
+out> 1
+out> -3
+out> 2
+err>      2 *-* za = 2
+err>        >L>   "2"
+err>        >>>   "2"
+err>        >=>   ZA <= "2"
+err>      3 *-* zb = -za
+err>        >V>   ZA => "2"
+err>        >P>   "-" => "-2"
+err>        >>>   "-2"
+err>        >=>   ZB <= "-2"
+err>      4 *-* say \(za = 3)
+err>        >V>   ZA => "2"
+err>        >L>   "3"
+err>        >O>   "=" => "0"
+err>        >P>   "\" => "1"
+err>        >>>   "1"
+err>      5 *-* say -(za + 1)
+err>        >V>   ZA => "2"
+err>        >L>   "1"
+err>        >O>   "+" => "3"
+err>        >P>   "-" => "-3"
+err>        >>>   "-3"
+err>      6 *-* say - -za
+err>        >V>   ZA => "2"
+err>        >P>   "-" => "-2"
+err>        >P>   "-" => "2"
+err>        >>>   "2"
+
+# trace r: the other direction for `>P>`, which is a gate of its own rather
+# than the one the `>O>` row above tests. An emission that ignored it would
+# print a `>P>` line here, where the setting asks for results alone.
+program
+trace r
+za = 2
+zb = -za
+say \(za = 3)
+----
+rc> 0
+out> 1
+err>      2 *-* za = 2
+err>        >>>   "2"
+err>      3 *-* zb = -za
+err>        >>>   "-2"
+err>      4 *-* say \(za = 3)
 err>        >>>   "1"

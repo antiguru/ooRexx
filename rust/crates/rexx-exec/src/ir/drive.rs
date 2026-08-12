@@ -883,6 +883,59 @@ impl Interp {
                                     let value = self.roots.temp_at(registers, *src as usize);
                                     self.echo_operator(*op, value);
                                 }
+                                // **A prefix operator**: `+`, `-` or `\`
+                                // applied to one register, through the same
+                                // `Interp::apply_prefix` that
+                                // `Interp::eval_prefix` enters, with `eval.rs`
+                                // itself not entered at all -- for the operand
+                                // either, which is what the ops in front of
+                                // this one are. It emits nothing --
+                                // `Op::TracePrefix` below is what applying an
+                                // operator owes.
+                                Op::Prefix { op, src, dst } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*src),
+                                        "op reads register {src} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    debug_assert!(
+                                        chunk.holds_register(*dst),
+                                        "op writes register {dst} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    // **Read before the destination is
+                                    // written**, which is what makes `src ==
+                                    // dst` -- the shape a prefix compiles to --
+                                    // safe.
+                                    let value = self.roots.temp_at(registers, *src as usize);
+                                    // The operand is rooted by the register it
+                                    // came from, which is what `apply_prefix`
+                                    // requires of a caller and is why no frame
+                                    // is pushed here where `eval_prefix` pushes
+                                    // one: it has to root a value held in a
+                                    // Rust local across the operator's own
+                                    // allocation, and this op's operand was
+                                    // rooted before it ran.
+                                    let value = match self.apply_prefix(*op, value) {
+                                        Ok(value) => value,
+                                        Err(failure) => break 'region Err(failure),
+                                    };
+                                    self.roots.set_temp(registers, *dst as usize, value);
+                                }
+                                // The `>P>` line one prefix operator owes.
+                                // **Its own op**, for the reason
+                                // `Op::TraceOperator` above is, and a different
+                                // op from it because `>P>` is a different line
+                                // from `>O>`.
+                                Op::TracePrefix { op, src } => {
+                                    debug_assert!(
+                                        chunk.holds_register(*src),
+                                        "op reads register {src} outside the region the chunk \
+                                         reserved"
+                                    );
+                                    let value = self.roots.temp_at(registers, *src as usize);
+                                    self.echo_prefix_op(*op, value);
+                                }
                                 // The write, through `Interp::assign_evaluated`
                                 // -- the whole of what `step`'s own
                                 // `Assignment` arm does past the evaluation, so
@@ -1229,6 +1282,8 @@ impl Interp {
                 Op::TraceOperator { .. } => {
                     return Err(Loud::op_not_driven("TraceOperator").into());
                 }
+                Op::Prefix { .. } => return Err(Loud::op_not_driven("Prefix").into()),
+                Op::TracePrefix { .. } => return Err(Loud::op_not_driven("TracePrefix").into()),
                 Op::Store { .. } => return Err(Loud::op_not_driven("Store").into()),
                 Op::Say { .. } => return Err(Loud::op_not_driven("Say").into()),
                 Op::Call { .. } => return Err(Loud::op_not_driven("Call").into()),

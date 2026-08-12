@@ -39,14 +39,16 @@
 //! guaranteed balanced, not an expression.
 //!
 //! **The other side of that is a frame popped on the failure path, and it is
-//! equally safe.** `eval_node`'s binary arm binds `apply_binary`'s result and
-//! pops before returning it, so an *operator's* own raise discards its
-//! operands where the `?` on an *operand's* evaluation skips past. Both are
-//! correct for the same reason -- `pop_frame` truncates to a watermark the arm
-//! took itself, so it can only discard what that arm rooted -- plus one thing
-//! the failure path needs on its own: nothing the failure carries away is a
-//! root. `Failure::Exited` is the variant that carries an `ObjRef`, and the
-//! functions `apply_binary` dispatches to build only `Raised` and `Loud`.
+//! equally safe.** `eval_node`'s binary arm and `eval_prefix` bind their
+//! operator's result and pop before returning it, so an *operator's* own raise
+//! discards everything the site rooted, where the `?` on an *operand's*
+//! evaluation skips past. Both are correct for the same reason -- `pop_frame`
+//! truncates to a watermark the site took itself, so it can only discard what
+//! that site rooted -- plus one thing the failure path needs on its own:
+//! nothing the failure carries away is a root. `Failure::Exited` is the
+//! variant that carries an `ObjRef`, and neither the functions `apply_binary`
+//! dispatches to nor `apply_prefix`'s own arms build anything but `Raised` and
+//! `Loud`.
 //!
 //! The alternative was measured and rejected rather than left untried. A
 //! `Drop` guard cannot be written here at all, because it would have to hold
@@ -275,15 +277,14 @@ impl Interp {
                 let text = self.to_text(value).to_vec();
                 self.trace_dotvar(indent, &tag, &text);
             }
-            ExprKind::Prefix { op, .. } => {
-                let spelling = match op {
-                    PrefixOp::Plus => "+",
-                    PrefixOp::Minus => "-",
-                    PrefixOp::Not => "\\",
-                };
-                let text = self.to_text(value).to_vec();
-                self.trace_prefix_op(indent, spelling.as_bytes(), &text);
-            }
+            // `>P>`, not `>O>` -- a prefix operator's line is its own, which
+            // is why this is not the arm below with a different operator type.
+            // `echo_prefix_op` rather than an open-coded render plus
+            // `trace_prefix_op`, because the compiled stream's own
+            // `crate::ir::Op::TracePrefix` emits the identical line from a
+            // register and the two must not be able to disagree -- the reason
+            // `echo_literal` above is one function.
+            ExprKind::Prefix { op, .. } => self.echo_prefix_op(*op, value),
             // Every binary operator, arithmetic, comparison, logical and
             // concatenation alike, traces as `>O>` -- not independently
             // probed for every family, reasoned from the arithmetic
@@ -659,13 +660,12 @@ impl Interp {
         }
     }
 
-    /// `+`/`-`/`\`, the three prefix operators (D15's "Expression
-    /// evaluation"). `+`/`-` are arithmetic -- measured, `numeric digits 1
-    /// ; say -12345` gives `-1E+4`, the same rounding `0 - 12345` gives, so
-    /// they are implemented as exactly that rather than a sign flip on the
-    /// operand's own digits. `\` is a **text** check, never a numeric one:
-    /// measured, `say \'abc'` is 34.901, not 41.1, so a non-numeric operand
-    /// is not converted first and does not fail as "nonnumeric".
+    /// `+`/`-`/`\` (D15's "Expression evaluation"), over an operand this
+    /// evaluates out of the tree.
+    ///
+    /// The operand prologue alone: what the operator then does with one value
+    /// is [`Interp::apply_prefix`], entered from here and from
+    /// `crate::ir::Op::Prefix`.
     fn eval_prefix(
         &mut self,
         code: &Code<'_>,
@@ -675,7 +675,36 @@ impl Interp {
         let frame = self.roots.push_frame();
         let value = self.eval(code, operand)?;
         self.roots.push_temp(value);
+        // Bound rather than propagated with `?`, so the frame is popped on the
+        // failure path too -- the shape `eval_node`'s own binary arm has, and
+        // the module doc has why both it and the `?` above are safe.
+        //
+        // The result is unrooted from `apply_prefix`'s return to whatever the
+        // caller of this does with it, and nothing between the two allocates.
+        let result = self.apply_prefix(op, value);
+        self.roots.pop_frame(frame);
+        result
+    }
 
+    /// `op value` for the prefix operators `+`, `-` and `\`.
+    ///
+    /// **The one dispatch both engines enter**: `eval_prefix` above evaluates
+    /// the operand out of the tree and `crate::ir::Op::Prefix` reads it out of
+    /// a register, and everything past that point is this function, so the two
+    /// cannot come to disagree about what a prefix operator answers.
+    /// [`Interp::apply_binary`]'s arrangement, with one operand.
+    ///
+    /// `+`/`-` are arithmetic -- measured, `numeric digits 1
+    /// ; say -12345` gives `-1E+4`, the same rounding `0 - 12345` gives, so
+    /// they are implemented as exactly that rather than a sign flip on the
+    /// operand's own digits. `\` is a **text** check, never a numeric one:
+    /// measured, `say \'abc'` is 34.901, not 41.1, so a non-numeric operand
+    /// is not converted first and does not fail as "nonnumeric".
+    ///
+    /// **The operand must already be rooted by the caller**, for the reason
+    /// [`Interp::concat_values`] states: both arms below allocate the value
+    /// they answer with.
+    pub(crate) fn apply_prefix(&mut self, op: PrefixOp, value: ObjRef) -> Result<ObjRef, Failure> {
         let result = match op {
             PrefixOp::Plus | PrefixOp::Minus => {
                 let number = self.arith_operand(value)?;
@@ -699,8 +728,6 @@ impl Interp {
                 self.text(flipped)
             }
         };
-
-        self.roots.pop_frame(frame);
         Ok(result)
     }
 

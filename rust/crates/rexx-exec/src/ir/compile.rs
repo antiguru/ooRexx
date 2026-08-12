@@ -709,6 +709,7 @@ pub(crate) fn compile(
     assert_literal_echoes_follow_their_load(&ops);
     assert_read_echoes_follow_their_load(&ops);
     assert_operator_echoes_follow_their_op(&ops);
+    assert_prefix_echoes_follow_their_op(&ops);
     assert_region_ops_name_their_clause(&ops);
 
     Ok(Chunk {
@@ -808,6 +809,11 @@ fn native_shape(expr: &Expr) -> bool {
         ExprKind::Binary { op, left, right } => {
             is_native_binary(*op) && native_shape(left) && native_shape(right)
         }
+        // No operator condition beside the operand's, unlike the arm above:
+        // `Interp::apply_prefix` matches `PrefixOp` exhaustively, so a variant
+        // added to that enum is a compile error there rather than an operator
+        // silently promoted here.
+        ExprKind::Prefix { operand, .. } => native_shape(operand),
         _ => false,
     }
 }
@@ -819,10 +825,11 @@ fn native_shape(expr: &Expr) -> bool {
 /// literal's value is bytes the node already carries, so it becomes a native
 /// [`Op::Const`] against the interned table plus the `>L>` line that loading it
 /// owes. A bare symbol's value is in a frame slot, so it becomes a native
-/// [`Op::Load`] plus the `>V>` line that reading it owes. An arithmetic
-/// operator's value is computed from its two operands' registers, so it becomes
-/// their ops followed by [`Op::Arith`] or [`Op::Binary`] plus the `>O>` line
-/// that applying it owes.
+/// [`Op::Load`] plus the `>V>` line that reading it owes. A binary operator's
+/// value is computed from its two operands' registers, so it becomes their ops
+/// followed by [`Op::Arith`] or [`Op::Binary`] plus the `>O>` line that
+/// applying it owes, and a prefix operator's is the same with one operand,
+/// [`Op::Prefix`] and the `>P>` line that operator's own trace is.
 fn push_native<'a>(
     ops: &mut Vec<Op>,
     consts: &mut Constants<'a>,
@@ -898,6 +905,27 @@ fn push_native<'a>(
             // is live right up to it, and a release any earlier would hand it
             // out to the next operand of an enclosing operator.
             registers.release(mark);
+        }
+        ExprKind::Prefix { op, operand } => {
+            // **The operand lands in `dst` itself and no register is taken**,
+            // which is the one-operand case of the discipline the binary arm
+            // above states: the operand is read before the destination is
+            // written, so a chain of prefixes costs the registers its innermost
+            // term does and no more.
+            push_native(ops, consts, registers, hints, plan, operand, dst)?;
+            ops.push(Op::Prefix {
+                op: *op,
+                src: dst,
+                dst,
+            });
+            // Behind the operation rather than in front of it, because
+            // `eval.rs` emits this line post-order, with the value in hand --
+            // so an inner operator's line precedes the outer one's.
+            //
+            // `Op::TracePrefix` and not `Op::TraceOperator`: a prefix operator
+            // traces `>P>`, which is a different line from the `>O>` every
+            // binary operator traces.
+            ops.push(Op::TracePrefix { op: *op, src: dst });
         }
         _ => unreachable!("push_value descends only into an expression native_shape accepted"),
     }
@@ -1268,6 +1296,40 @@ fn assert_operator_echoes_follow_their_op(ops: &[Op]) {
     }
 }
 
+/// **Every [`Op::TracePrefix`] sits immediately behind the [`Op::Prefix`] it
+/// echoes**, reading that op's destination register and repeating its operator.
+///
+/// The failures [`assert_operator_echoes_follow_their_op`] checks for -- the
+/// position, the register and the tag -- in this op's own terms. The tag is the
+/// one worth spelling out again: `>P>` carries the prefix operator's own
+/// spelling, so an echo behind the wrong [`Op::Prefix`], or one carrying a
+/// `PrefixOp` that operation does not, lands in the right place with the wrong
+/// sign in it.
+///
+/// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
+/// reason, and it is the same linear scan's worth of work.
+fn assert_prefix_echoes_follow_their_op(ops: &[Op]) {
+    for (at, op) in ops.iter().enumerate() {
+        let Op::TracePrefix { op: echoed, src } = op else {
+            continue;
+        };
+        let computes_it = at
+            .checked_sub(1)
+            .and_then(|before| ops.get(before))
+            .is_some_and(|before| {
+                matches!(
+                    before,
+                    Op::Prefix { op: applied, dst, .. } if applied == echoed && dst == src
+                )
+            });
+        assert!(
+            computes_it,
+            "the prefix echo at {at} does not follow the operation whose operator and register \
+             it names, so it echoes a value or a sign that op did not put there"
+        );
+    }
+}
+
 /// **Every index-bearing op inside a [`Op::Clause`] region names that region's
 /// own clause.**
 ///
@@ -1327,6 +1389,8 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::Arith { .. }
                 | Op::Binary { .. }
                 | Op::TraceOperator { .. }
+                | Op::Prefix { .. }
+                | Op::TracePrefix { .. }
                 | Op::Jump { .. }
                 | Op::JumpUnless { .. } => None,
             };

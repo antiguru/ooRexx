@@ -28,7 +28,7 @@
 use std::cell::Cell;
 
 use rexx_core::FrameId;
-use rexx_parse::{Operator, SymbolId};
+use rexx_parse::{Operator, PrefixOp, SymbolId};
 
 use crate::eval::SymbolRead;
 use crate::run::{HeaderRole, Resolved};
@@ -570,6 +570,56 @@ pub(crate) enum Op {
     /// with the value in hand, so an inner operator's line precedes the outer
     /// one's exactly as the ops do.
     TraceOperator { op: Operator, src: u16 },
+    /// Computes `op src` into register `dst`, for the prefix operators `+`,
+    /// `-` and `\`.
+    ///
+    /// **Native in the sense [`Op::Const`] and [`Op::Load`] are: `eval.rs` is
+    /// not entered, and neither is it for the operand**, on [`Op::Arith`]'s
+    /// own terms and under the same whole-expression decision.
+    ///
+    /// The operator itself is `Interp::apply_prefix`, entered from here and
+    /// from `Interp::eval_prefix`, so the rounding `-za` takes from the
+    /// activation's `DIGITS`, the 41.1 a nonnumeric operand raises and the
+    /// 34.901 `\` raises on a non-logical one are one implementation rather
+    /// than a second one beside it.
+    ///
+    /// **`src` may be `dst`**, for [`Op::Arith`]'s reason and with the same
+    /// guarantee behind it: the source is read before the destination is
+    /// written.
+    ///
+    /// **It emits nothing, and [`Op::TracePrefix`] is why that is safe** --
+    /// [`Op::Const`]'s own doc comment has the mechanism, and `>P>` is the
+    /// line `eval.rs` emits as a side effect of evaluating a prefix node.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, whose clause owns the
+    /// value indent the line after this one traces at, and the failure site a
+    /// 41.1 raised here is reported against.
+    Prefix { op: PrefixOp, src: u16, dst: u16 },
+    /// Echoes the `>P>` line of the prefix-operator result in register `src`.
+    ///
+    /// **A separate op from the [`Op::Prefix`] that computed it**, for the
+    /// reason [`Op::TraceOperator`] is separate from [`Op::Binary`]: the
+    /// computation emits nothing, `eval.rs` emits this line as a side effect of
+    /// *evaluating* a prefix node, and a promoted clause with no such op drops
+    /// it while every line after it still matches.
+    ///
+    /// **A different op from [`Op::TraceOperator`], because `>P>` is a
+    /// different line from `>O>`** -- `Interp::trace_prefix_op` and
+    /// `Interp::trace_operator` are the two emissions, and that function's own
+    /// doc has the C++ pair behind them. An echo that reused the binary op
+    /// would put the right value on the wrong line, which is also why this
+    /// carries a `PrefixOp` where that one carries an `Operator`.
+    ///
+    /// `op` is repeated here rather than read off the operation behind it, for
+    /// [`Op::TraceOperator`]'s reason, and
+    /// `compile::assert_prefix_echoes_follow_their_op` is what checks the
+    /// position, the register and the operator rather than assuming them.
+    ///
+    /// **Only valid inside a [`Op::Clause`] region**, and immediately behind
+    /// the operation whose register it reads: `eval.rs` emits this post-order,
+    /// with the value in hand, so an inner operator's line precedes the outer
+    /// one's exactly as the ops do.
+    TracePrefix { op: PrefixOp, src: u16 },
     /// Writes register `src` through the target of the `Assignment` at
     /// `index`, and traces the write.
     ///

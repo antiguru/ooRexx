@@ -568,6 +568,37 @@ fn every_binary_operator_but_arithmetic_compiles_to_one_op() {
     );
 }
 
+/// A prefix operator compiles to its own op and its own echo, and the echo
+/// carries the operator: `\` and `-` trace different lines from one value.
+///
+/// **`+`, `-` and `\` are one test.** A single row is satisfied by a compiler
+/// that writes one fixed operator into every echo, and the tag is the half of
+/// a `>P>` line that can be wrong while its position and its register are
+/// right -- which is what the rows differing in the operator alone separate.
+#[test]
+fn a_prefix_operator_compiles_to_a_native_op_and_its_own_echo() {
+    for (source, spelling) in [
+        (&b"za = +zb\n"[..], "+"),
+        (&b"za = -zb\n"[..], "-"),
+        (&b"za = \\zb\n"[..], "\\"),
+    ] {
+        let chunk = compile_for_test(source).expect("compiles");
+        assert_eq!(
+            render(&chunk),
+            format!(
+                "0: Clause index=0 end=6\n\
+                 1: Load read=Simple at=1 dst=0\n\
+                 2: TraceRead read=Simple src=0\n\
+                 3: Prefix op={spelling} src=0 dst=0\n\
+                 4: TracePrefix op={spelling} src=0\n\
+                 5: Store index=0 at=0 src=0\n"
+            ),
+            "{} did not compile to one Prefix op and its own echo",
+            String::from_utf8_lossy(source)
+        );
+    }
+}
+
 /// A bare constant symbol is a native load of its own, the way a quoted literal
 /// is -- and the two produce the same `>L>` echo, so one op serves both.
 ///
