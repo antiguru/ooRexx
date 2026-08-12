@@ -32,9 +32,17 @@ The instrumented build was made in a scratch `CARGO_TARGET_DIR` and the tree res
 `PARSE` and `THEN` are larger than `RETURN` but are not expression work: the survey's rule (`2026-08-12-remaining-promotion-survey.md`) is that promoting an instruction whose body is one `exec_*` call saves one dispatch, and neither has an expression a native op could replace.
 `RETURN` is here because it was asked for and is the `SAY` template with a different tail; its measured share is the last row of that table.
 
-**The comma list is not in this plan.**
-It appears in no benchmark program and nowhere in `rexxcps`, so nothing measures it, and its compiled form needs a forward jump *inside* a clause region -- which the driver cannot do, because a region is `for region_op in ops` over a slice and every jump op ends the region.
-Task 1 promotes the seam it would sit on; the list itself stays on `Op::EvalExpr`, which is what it does today.
+**The comma list is not in this plan, and the reason first given for that was wrong.**
+The reason that holds is that nothing measures it: it occurs in no benchmark program and nowhere in `rexxcps`, and a depth-tracking scan of the corpus found it in one program.
+So there is no axis to state a prediction against.
+
+The reason first given -- that its compiled form needs a forward jump inside a clause region, which a region cannot take -- is false, and this plan's own commit message carries it.
+A false element **is** the branch: the false target is one value for the whole list (`if_targets(..).false_target`, already resolved through `PatchKind::Enter`), so each element's false exit ends the region exactly as `Op::JumpUnless` does, and no jump inside a region is needed.
+Measured on the oracle 2026-08-12, `trace r` over `if 1, 1 then nop` prints `>>>` for each element and once more for the list's own result, and over `if 0, 1 then nop` prints the false element's line and the list result's; an op that ends the region can emit both before it branches.
+
+Two further corrections to what that paragraph rested on.
+`&` and `|` do **not** short-circuit -- measured, `if 0 & (1/0) then nop` raises 42.3 on the oracle, and both already compile to `Op::Binary` -- so the comma list is the only short-circuiting construct in the language and the only thing that would ever have wanted such a jump.
+`Op::Jump`'s in-region arm is unreachable today, because `compile` emits `Op::Jump` only outside a region.
 
 ## Global constraints
 
