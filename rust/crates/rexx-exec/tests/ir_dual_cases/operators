@@ -32,12 +32,21 @@
 # see.
 #
 # **What this file is worth was measured rather than assumed, and it is not
-# mutation-catching.** Three mutations of the promoted path were each re-run
+# mutation-catching.** Four mutations of the promoted path were each re-run
 # with this file moved out of the directory, and every one was caught anyway:
 # dropping the `>O>` echo behind the new op reddens `calls`, whose own row
 # holds a blank operator; checking a logical operator's right operand before
-# its left reddens a unit test written for that rule; and a comparison that
-# ignores `NUMERIC FUZZ` reddens another.
+# its left reddens a unit test written for that rule; a comparison that
+# ignores `NUMERIC FUZZ` reddens another; and `|` computing exclusive-or --
+# the one the operand-combination rows below were written for, because this
+# file's own logical stanza could not see it before them -- reddens
+# `assertions.rs`'s `the_exempt_set_matches_the_current_blocked_rows`, which
+# runs rows extracted from ooTest rather than anything written here: the
+# not-passing count rises from the committed 35 to 42.
+#
+# The row written to close that blind spot did not make the file a sole
+# catcher even for the mutation it closes -- and these rows do not have to be
+# sole catchers to earn their place.
 #
 # **So the reason to keep these rows is that they pin oracle bytes, which is
 # something an engine-against-engine comparison structurally cannot do**: both
@@ -171,9 +180,10 @@ out> 0
 # each logical operator over every combination of two logical operands, which
 # is what makes the rows separate the operators from each other rather than
 # only exercise them. `|` and `&&` agree everywhere except on two true
-# operands, so `say 1 | 1` and `say 1 && 1` are the pair that tells exclusive-or
-# from inclusive -- without both, an implementation computing one as the other
-# answers every row identically.
+# operands, so that is where the rows telling exclusive-or from inclusive have
+# to be: `say 1 && 1` answers `0` and catches `&&` computed as `|`, `say 1 | 1`
+# answers `1` and catches `|` computed as `&&`, and each catches its own
+# direction alone -- it takes both rows to cover both directions.
 program
 say 1 & 1
 say 1 & 0

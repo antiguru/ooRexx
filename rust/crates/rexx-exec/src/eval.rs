@@ -1232,14 +1232,15 @@ pub(crate) fn logical_value(text: &[u8]) -> Option<bool> {
 /// one `CompareOp`**: `\=`/`<>`/`><` (`BackslashEqual`/`LessThanGreaterThan`/
 /// `GreaterThanLessThan`) all mean `NotEqual` (`compare.rs`'s own doc
 /// comment: the interpreter's operator table repeats one method pointer for
-/// them), and the backslash-negated forms invert their positive
-/// counterpart's sense rather than getting a `CompareOp` of their own: `\>`
-/// ("not greater than") is `LessEqual`, `\<` is `GreaterEqual`, and their
-/// strict siblings `\>>`/`\<<` map the same way onto `StrictLessEqual`/
-/// `StrictGreaterEqual`. Verified against the oracle (this task's report),
-/// not derived from the names alone -- `\>>`/`\<<` are strict-family byte
-/// comparisons, where "greater"/"less" do not carry the numeric intuition
-/// their spelling suggests.
+/// them), and `\>`/`\<` with their strict siblings `\>>`/`\<<` invert their
+/// positive counterpart's sense rather than getting a `CompareOp` of their
+/// own: `\>` ("not greater than") is `LessEqual`, `\<` is `GreaterEqual`,
+/// `\>>` is `StrictLessEqual` and `\<<` is `StrictGreaterEqual`. `\==` is
+/// **not** among them -- it has `StrictNotEqual` to itself -- and `\=` is one
+/// of the operators sharing `NotEqual` above. Verified against the oracle
+/// (this task's report), not derived from the names alone -- `\>>`/`\<<` are
+/// strict-family byte comparisons, where "greater"/"less" do not carry the
+/// numeric intuition their spelling suggests.
 fn compare_op(op: Operator) -> CompareOp {
     use Operator::*;
     match op {

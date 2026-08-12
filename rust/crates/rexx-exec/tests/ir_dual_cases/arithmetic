@@ -1,6 +1,6 @@
-# What promoting an arithmetic operator has to keep, in four kinds.
+# What promoting an arithmetic operator has to keep, by kind.
 #
-# **Shapes**, which ask what the operator answers: all seven operators, the
+# **Shapes**, which ask what the operator answers: every operator, the
 # chains that make one operator's result another's operand, and the operand
 # forms a compiled operand register can hold.
 #
@@ -43,7 +43,7 @@
 # something an engine-against-engine comparison structurally cannot do.** Both
 # arms of that comparison are this crate, so a shared arithmetic path that is
 # wrong the same way twice passes it; these rows say what the C++ interpreter
-# prints for shapes no corpus program covers -- the seven operators over one
+# prints for shapes no corpus program covers -- every operator over one
 # pair of operands, a precedence chain, DIGITS narrowed mid-body, FORM
 # ENGINEERING, and a zero divisor under each dividing operator.
 #
@@ -61,7 +61,7 @@
 # line ends an expected block, and a program's own output may hold one.
 # Trailing blanks are part of what is compared.
 
-# all seven operators, over two variable operands
+# every operator, over two variable operands
 program
 za = 7
 zb = 2
@@ -323,10 +323,9 @@ out> exponent 26 at 3
 out> base 41 at 7
 out> both 41 at 11
 
-# a zero divisor, which is the third raise arithmetic makes and the only one of
-# the three that comes from `rexx-num` rather than from converting an operand.
-# All three dividing operators raise it, and the untrapped form is what pins the
-# clause the report echoes.
+# a zero divisor, which raises 42.3 from `rexx-num` rather than from
+# converting an operand. `/`, `%` and `//` all raise it, and the untrapped form
+# is what pins the clause the report echoes.
 program
 zd = 0
 say 6 // zd
@@ -336,8 +335,8 @@ err>      2 *-* say 6 // zd
 err> Error 42 running /nonexistent/ir-dual-case.rex line 2:  Arithmetic overflow/underflow.
 err> Error 42.3:  Arithmetic overflow; divisor must not be zero.
 
-# the same divisor under each of the three dividing operators, trapped, so that
-# one row says all three reach it and says which clause SIGL lands on for each.
+# the same divisor under each dividing operator, trapped, so that one row says
+# every one of them reaches it and says which clause SIGL lands on for each.
 program
 zd = 0
 signal on syntax name z1
