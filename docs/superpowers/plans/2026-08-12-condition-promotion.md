@@ -79,7 +79,7 @@ These bind every task in this plan, in full.
 
 `run.rs`.
 Everything past `let value = self.eval(code, condition)?;` moves into a function both engines enter.
-`checked` is the comma list's own answer: `eval_logical_list` has already validated every element, so its result is read back rather than re-checked, and re-checking it would report 34.6 as 34.1.
+`checked` says whether the value arrives already validated as exactly `0`/`1`, in which case the answer is read back rather than checked again.
 
 ```rust
 fn eval_condition(
@@ -197,20 +197,9 @@ Add one expectation for a declining condition (`if .nil then nop`) that still re
 
 * `if 1, 'x' then nop` -- 34.6, the comma list's own raiser, and the only comma-list condition run on both engines anywhere in the tree
 * `trace i` over an `IF` whose condition is an operator over a call, for the intermediate lines and their order
-* `trace r` over a declining condition, for the lines the one `Op::EvalExpr` still owes when no `Op::Condition` follows it: `if .nil then nop`, which traces and then refuses, and `if 1, 1 then nop`, which traces and does not
+* `trace r` over a declining condition, for the lines the one `Op::EvalExpr` still owes when no `Op::Condition` follows it: `if .nil then nop`, which traces and then refuses, and `if 1, 1 then say 'both'`, which traces and does not
 
-**This list is shorter than the one Task 1 was dispatched with.**
-The dispatched list also asked for a plain true and a plain false condition, `if 'x' then nop` for 34.1, an `IF` under `trace r`, and an `IF` inside a routine called from a loop for the live indent.
-All five stanzas were written and captured from the oracle first, and then dropped, on two different grounds.
-
-Two were **measured** out: each was held out of the directory while the mutation it was supposed to catch was re-run over the whole workspace, and each was still caught without it -- the 34.1 row's mutation on `BRANCH_CASES`' own `if 'x' then say 'y'`, the live-indent row's on a `trace-settings` stanza.
-The other three were **argued** out, by shape rather than by mutation: a plain true condition, a plain false one and an `IF` under `trace r` are the shapes those same two tables already hold, and no mutation of their own was run.
-`rust/CLAUDE.md`'s rule is that a row which can fail is not a row that adds coverage, so all five went rather than being kept.
-
-Two `trace r` rows replaced them, for a gap the dispatched list did not cover: a **declining** condition under trace.
-`if 1, 1 then nop` is the one that carries an instrument -- measured, it catches a second validating op emitted behind the fallback, which before it reddened one op-stream test and nothing that runs a program -- and `if .nil then nop` is the refusing shape beside it, which raises before such an op could run.
-
-**One copy of a wrong version of this paragraph is not editable.** `0459167cc`'s commit message says all four rows "were measured out rather than argued out ... each held out while the mutation it was supposed to catch was re-run", which is true of two of them and counts kinds where five stanzas went. This paragraph is the correction.
+This list is shorter than the one Task 1 was dispatched with; `task-1-report.md` records which rows went and what decided each.
 
 - [ ] **Step 11: gates**
 

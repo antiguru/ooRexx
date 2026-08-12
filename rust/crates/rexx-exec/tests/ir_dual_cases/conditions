@@ -86,9 +86,9 @@ err> Error 34.1:  Value of expression following IF keyword must be exactly "0" o
 
 # a declining condition under trace that does not refuse: a comma list prints
 # a `>>>` per element it evaluates, from `eval_logical_list`, and one more for
-# the list's own result, from the tail every condition enters. Measured, this
-# row catches a second validating op emitted behind the fallback -- the ir arm
-# prints a fourth `>>>` the oracle does not -- where the row above raises
+# the list's own result, from the tail a condition's value enters. Measured,
+# this row catches a second validating op emitted behind the fallback -- the ir
+# arm prints a fourth `>>>` the oracle does not -- where the row above raises
 # before such an op could run at all.
 program
 trace r

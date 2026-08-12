@@ -6967,9 +6967,8 @@ impl Interp {
     /// the value.** `ExprKind::Logical` is evaluated through `eval`'s own
     /// dispatch to `eval_logical_list`, which checks that each element it
     /// evaluates is exactly `0`/`1`, raises 34.6 on the first that is not,
-    /// stops at the first that is `0` -- measured, `if 0, 'x' then nop` exits
-    /// 0 on the oracle and never evaluates `'x'` -- and otherwise answers
-    /// `b"0"` or `b"1"` and nothing else. So the `checked` this hands
+    /// stops at the first that is `0`, and otherwise answers `b"0"` or `b"1"`
+    /// and nothing else. So the `checked` this hands
     /// [`Interp::condition_value`] spares a check that could not have failed,
     /// rather than one that would have raised the wrong number. A single,
     /// non-list expression never passes through `eval_logical_list` at all
@@ -7010,9 +7009,8 @@ impl Interp {
     /// of a register with nothing having validated it, so it passes `false`;
     /// measured, a driver that passed `true` there answers `if 'x' then` false
     /// instead of raising 34.1. [`Interp::eval_condition`] passes `true` only
-    /// for a comma list, whose own evaluation already raised on any element
-    /// that was not `0`/`1` -- so its result arrives here exactly `b"0"` or
-    /// `b"1"` and the skipped check is one that could not have failed.
+    /// for a comma list, and `eval_logical_list` answers `b"0"` or `b"1"` and
+    /// nothing else, so the check it skips is one that could not have failed.
     /// Measured: forcing that `true` to `false` leaves the whole workspace
     /// green, which is what says the tree-walker's half of this flag is a
     /// spared check rather than a different answer.
@@ -7058,9 +7056,6 @@ impl Interp {
         }
         self.roots.pop_frame(frame);
         if checked {
-            // `eval_logical_list` already validated every element and
-            // answers exactly `b"0"`/`b"1"` (its own doc comment), so this
-            // is a plain readback rather than a second check.
             Ok(text == b"1")
         } else {
             logical_value(&text).ok_or_else(|| raise(&text).into())

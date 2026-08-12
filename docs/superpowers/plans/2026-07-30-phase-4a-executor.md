@@ -736,7 +736,7 @@ Include the two shapes that discriminate a wrong jump target, because Phase 3 ca
 
 **A `WhenCase`'s comma is a value list, an OR of `==` tests, and this is the opposite of a plain `WHEN`'s comma.** Measured: `select case 2` with `when 1, 2 then say 'hit'` prints `hit`, while a plain `when 1, 2` on a non-logical value raises 34.6. The two commas parse into the same-looking node and mean opposite things, so an implementer who handles one and reuses it for the other gets a silently wrong answer rather than a failure. `ast.rs:801-815` records the distinction.
 
-**Do not check a comma-list condition yourself.** A single-expression condition that is not `0` or `1` raises **34.1** under `IF` and **34.2** under `WHEN`. A comma list raises **34.6** from inside `eval_logical_list`, which already does it, and re-checking the result would replace 34.6 with 34.1. Measured across all four keywords, and the rule is that the sub-number is decided by the clause being a list at all, not by which element failed: `if 'x', 1 then` is 34.6, not 34.1.
+**Do not check a comma-list condition yourself.** A single-expression condition that is not `0` or `1` raises **34.1** under `IF` and **34.2** under `WHEN`. A comma list raises **34.6** from inside `eval_logical_list`, which already does it. Measured across all four keywords, and the rule is that the sub-number is decided by the clause being a list at all, not by which element failed: `if 'x', 1 then` is 34.6, not 34.1.
 
 A `SELECT` that reaches its `END` with no `WHEN` taken is **7.3**, and **the clause it echoes is the `END`, not the `SELECT`** (measured, rc 249). Raise it from the wrong arm and stdout and the exit code still match; only the stderr echo shows it.
 
