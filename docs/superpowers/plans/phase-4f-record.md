@@ -1954,3 +1954,70 @@ The six corpus programs whose longest creation exceeds 60 bytes are `address_env
 **No work commit, because nothing landed.**
 Every other entry names the commit its change went in as; this one has none to name, and the instrumented build exists only in the paragraph above describing how it was reverted.
 The scratch crate that measured the widths lives outside the repository and `Cargo.lock` is untouched, which is checkable: `compact_bytes` does not appear in it.
+
+---
+
+### Entry 15 -- `compact_bytes` is mature, the narrow question is answered yes, and the band the question is asked in has a fourth member
+
+**No new measurement and no code.** Everything below is entry 14's data read against a question put to it afterwards, plus one fact from outside this repository.
+
+**The maturity caveat is withdrawn, on Moritz's say-so, 2026-08-12.**
+Entry 14 evaluated `compact_bytes` 0.2.1 rather than assuming it, and the version number raised a fair question about putting a young crate under every string value.
+**Moritz answers it: `compact_bytes` is used in Materialize, a production database, and he considers it mature.**
+So it is not an unproven dependency and must not be weighed as one.
+
+**Entry 14's decline does not rest on maturity and never did, but one clause of it reads as though it might.**
+That entry says the crate's inline arm is *"reached through a `union` and `unsafe`"*.
+That is a true description of the mechanism and it was **not** a reason; it is struck here so no later reader can mistake it for one.
+The reason was, and remains, the one below.
+
+#### The narrow question: does the distribution need more than fifteen inline bytes
+
+**Yes, and on the axis A is aimed at it needs more than twenty-three too.**
+Allocations inlined, by count, since the cost being removed is one `malloc` per string:
+
+| population | created | inlined at 15 | inlined at 23 | inlined at 54 | 15 to 23 buys | 23 to 54 buys |
+|---|---:|---:|---:|---:|---:|---:|
+| `strings` | 18,000,001 | 12,000,000 | 12,000,000 | 18,000,001 | **0** | 6,000,001 |
+| `rexxcps` | 11,910,838 | 10,090,815 | 11,210,825 | 11,910,831 | 1,120,010 | 700,006 |
+| `alloc4c` | 2,000,000 | 2,000,000 | 2,000,000 | 2,000,000 | 0 | 0 |
+| axes pooled | 31,910,839 | 24,090,815 | 25,210,825 | 31,910,832 | 1,120,010 | 6,700,007 |
+| corpus | 2,425 | 2,056 | 2,258 | 2,405 | 202 | 147 |
+
+* **Fifteen is not enough**: it leaves 7,820,024 of 31,910,839 axis creations and 369 of 2,425 corpus creations on the heap.
+* **`CompactBytes`' twenty-three is a real gain on `rexxcps` and the corpus** -- 1,120,010 allocations and 202 -- and **exactly zero on `strings`**, whose population has nothing at all between 3 bytes and 43.
+* **Twenty-three is dominated on every population by a capacity that is also free.**
+
+#### The band the question was asked in has a fourth member, and it is the one that decides
+
+The question was framed as three bands: free below sixteen, `compact_bytes` alone from sixteen to twenty-three, and above twenty-three an inline arm widens `Body::Text` and has to be checked against `Body::Stem` before anyone calls it free.
+**Entry 14 ran that check, and the fourth band is twenty-four to fifty-four, where a plain safe enum widens `Body::Text` and `Body` does not move.**
+
+| shape | `Bytes` width | `size_of::<Body>()` | `size_of::<Slot>()` |
+|---|---:|---:|---:|
+| `Vec<u8>`, today | 24 | 80 | 96 |
+| `CompactBytes`, 23 inline | 24 | 80 | 96 |
+| plain enum, capacity 15 | 24 | 80 | 96 |
+| plain enum, capacity 23 | 32 | 80 | 96 |
+| plain enum, capacity 54 | 56 | 80 | 96 |
+| plain enum, capacity 55 | 64 | **88** | **104** |
+
+**No per-variant payload figure appears in that table on purpose, and the reason is worth recording.**
+This entry's probe measures a variant's fields as a standalone struct, and that is **not** the quantity the record means by *"`Body::Stem`'s 72-byte payload"*, which is the contribution inside the enum after rustc packs the discriminant into padding.
+Measured here: `ObjRef` is 8 bytes with **no niche**, so `Option<ObjRef>` is 16, and a standalone `Stem` struct is 80 where the record's in-enum figure is 72.
+The two conventions differ by variant and cannot be compared, so only `Bytes`, `Body` and `Slot` -- all measured the same way, against a `Vec<u8>` control that reproduces `body.rs`'s and `heap.rs`'s own assertions -- are quoted.
+
+**"Stays inside the current width" is true of `compact_bytes`, and it is a property of a width that costs nothing.**
+`Body::Text`'s payload is not what the arena pays for; `Body` and `Slot` are.
+So the premise separating band two from band three -- that widening `Body::Text` is the thing to avoid -- is the wrong invariant, and it is the whole of the disagreement.
+
+#### What this leaves
+
+**The recommendation is unchanged and the reason is now narrower: `CompactBytes` gives capacity 23 at zero cost, and a plain safe enum gives capacity 54 at the same zero cost.**
+It is dominated, not rejected.
+Nothing about the crate's quality bears on that, which is why the maturity answer changes no number here.
+
+**Where `compact_bytes` would win, stated so this is not read as a general verdict on it.**
+If `Body::Stem` were boxed, or if Phase 5 added a variant that made `Body::Text` the width-setting variant, the 24-byte tier would start to bind and 23-in-24 would be the best shape available.
+Neither is true today, and the assertions `body.rs` and `heap.rs` already carry are what would announce it.
+The crate is in the offline cache and this entry does not withdraw it as an idea; it records that the constraint it is good at does not currently exist.
