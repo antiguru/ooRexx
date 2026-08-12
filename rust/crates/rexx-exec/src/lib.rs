@@ -883,7 +883,7 @@ impl Loud {
     /// [`Loud::select_op_off_its_node`]: Loud::select_op_off_its_node
     fn call_op_off_its_node() -> Loud {
         Loud {
-            message: "a compiled Call op does not name a CALL name of its own body".to_string(),
+            message: "a compiled call op does not name a call of its own body".to_string(),
         }
     }
 
