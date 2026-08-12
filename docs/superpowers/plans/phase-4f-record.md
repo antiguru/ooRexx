@@ -2173,3 +2173,71 @@ A layout perturbation is not that control and neither is a width sweep -- entry 
 * **Breaking up `Interp::step` and `run_loop_with_header`.** Until they are, every change touching `Body` reads as several per cent on axes it never executes, and no attribution to the change itself is trustworthy. This is a measurement problem before it is a performance one.
 
 **A fix was attempted and rejected**: `#[inline(never)]` on the two `Bytes` constructors recovers about a fifth of the movement and holds the string wins, but it buys an out-of-line call on every string construction to chase a number this entry has just shown is not attributable. Not proposed.
+
+---
+
+### Entry 18 -- entry 17's first candidate attempted and **accepted**: the raised condition boxed, and 104 bytes off every loop iteration
+
+**BASE for the comparison is `4fa6c3e4d`**, the same base entry 16 used, so the two entries' columns are directly comparable.
+**HEAD is `46501f45f`.**
+
+#### The hypothesis, named before it was measured
+
+Entry 17 named this candidate from the subagent's disassembly and got one fact about it wrong, which is corrected here.
+**The report called `Result<Flow, Failure>` a 24-byte value. It was 104.**
+`Flow` is 24; `Loud` is 24; `Raised` is **104** -- a `Cow<'static, str>`, a `Vec<Substitution>`, two `Option<Vec<u8>>` and a `Delivery` -- and it sat inline in `Failure::Raised`, so the whole `Result` took its width.
+
+The error arm is never taken on a hot path, and the success arm paid for it on every return.
+`run_repeating`'s `loop` at `run.rs:5988` calls `run_bounded(..)?` at `run.rs:6088`, **once per DO-loop iteration**, so a 104-byte value was built through memory and immediately destructured on every pass of every loop in the language.
+
+#### The change, and why it is two lines
+
+`Raised` moves behind a `Box`. **`Failure` goes 104 to 24 and `Result<Flow, Failure>` goes 104 to 32.**
+
+The blast radius was expected to be the 117 sites naming `Failure::Raised` and was **two lines**, which is worth recording because the estimate was wrong by two orders of magnitude:
+
+* the existing `impl From<Raised> for Failure` absorbs every `?` and every `.into()`, which is how the value is constructed almost everywhere;
+* `Deref` absorbs every match arm that binds the payload and reads a field.
+
+The compiler found exactly two sites: a re-raise in `search_caller` that now **keeps** the box rather than unboxing and reboxing it, and one move into `ActiveCondition` that unboxes.
+
+#### Measured movement
+
+Wall clock in the accept rule's shape -- `ulimit -v 8388608`, `REXX_ENGINE=ir`, fresh empty working directory per run, side order rotated every round, seven rounds an axis, three builds interleaved in one sitting.
+**All 126 runs exited 0, and each axis's stdout hash is identical across BASE, entry 16's HEAD and this HEAD.**
+
+| axis | entry 16's HEAD | this HEAD | beats entry 16's HEAD | instructions |
+|---|---|---|---|---|
+| `emptyloop` | +5.73% | **-20.67%** | 7 of 7 | **-6.67%** |
+| `compound` | +1.78% | **-3.21%** | 7 of 7 | -0.27% |
+| `varlookup` | +2.36% | +0.10% | 7 of 7 | -1.81% |
+| `arith` | +4.49% | +3.40% | 6 of 7 | -0.19% |
+| `strings` | -6.74% | -5.56% | 0 of 7 | -0.93% |
+| `alloc4c` | -11.87% | -10.58% | 1 of 7 | -0.83% |
+
+**The six-axis geometric mean against BASE moves from -1.2% to -6.4%.**
+
+**`emptyloop`'s instruction count falls 6.67% beside its 20.67% of wall**, which is what makes this attributable at all: entry 17 established that these four axes cannot resolve a change that merely perturbs the two megafunctions' register allocation, and an instrument-agreed instruction move is not that.
+
+**`strings` and `alloc4c` give back about a point of cycles while their instruction counts fall.** Cycles moving against instructions is entry 17's floor exactly, it is not read as a cost, and both axes remain far ahead of BASE.
+
+#### Is the two-level driver to blame
+
+**Partly, and the split is worth stating because it decides where to look next.**
+
+The nesting did not make the value large -- `Raised` inline in `Failure` did that, and the same 104 bytes would cross a single-level driver's returns too.
+**What the nesting decides is how often it is paid.** `run_repeating` and `run_bounded` are the outer and inner halves of the driver, and the boundary between them is crossed once per loop iteration, so the cost is multiplied by exactly the quantity a benchmark loop maximises.
+
+The evidence is in the instruction column and not in the wall column.
+`emptyloop` saves **6.67%** of its instructions; every other axis saves between 0.19% and 1.81%.
+`emptyloop` is the axis whose iterations do the least work besides crossing that boundary, so it pays the crossing at the highest rate and recovers the most when the crossing gets cheaper.
+
+**So: the type's width was the cost, the two-level driver was the multiplier, and the width was much the cheaper half to fix.**
+Whether collapsing the driver to one level is worth anything on top of this is **unmeasured** and is not claimed here.
+
+#### What this entry does not claim
+
+* **`arith` is still +3.40% against BASE and is not explained.** Entry 17 could not find its proximate stall either. It is the only axis this change leaves regressed.
+* **No oracle ratios.** `rexx-bench-suite` was not run.
+* **Resident set was not re-measured.** Boxing moves an error payload to the heap on a path that is not taken in any of these runs, so no movement is expected, but none was measured either.
+* **The tree-walker arm was measured for correctness only**, as in entries 12 and 16.
