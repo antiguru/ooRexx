@@ -897,7 +897,7 @@ pub(crate) struct LoopHeaderValues {
 /// (their own `>K>` instead, never a bare `>>>` alongside it, also
 /// measured) and the two are genuinely different oracle behaviours, not
 /// two spellings of one.
-enum ConditionTrace<'a> {
+pub(crate) enum ConditionTrace<'a> {
     /// `IF`/`WHEN`'s own `>>>`.
     Result(usize),
     /// `WHILE`/`UNTIL`'s own `>K>`, tagged `"WHILE"`/`"UNTIL"`.
@@ -6929,12 +6929,13 @@ impl Interp {
     /// Evaluates `condition` and answers whether it holds, for `IF`/`WHEN`.
     ///
     /// **A comma list checks itself, but a single expression does not, and
-    /// this is the one place that gap gets closed.** `ExprKind::Logical` (a
+    /// this is where the difference is decided.** `ExprKind::Logical` (a
     /// comma list) is evaluated through `eval`'s own dispatch to
     /// `eval_logical_list` exactly like any other expression, which already
     /// validates every element is exactly `0`/`1` and raises 34.6 on the
-    /// first that is not -- re-checking its result here would misreport
-    /// that failure as 34.1/34.2. A single, non-list expression never
+    /// first that is not -- so it reaches [`Interp::condition_value`] already
+    /// `checked`, and re-checking its result there would misreport that
+    /// failure as 34.1/34.2. A single, non-list expression never
     /// passes through `eval_logical_list` at all (there is no list to
     /// iterate), so nothing has checked it yet. `raise` is the
     /// keyword-specific raiser for exactly that case (34.1 `IF`, 34.2
@@ -6949,6 +6950,30 @@ impl Interp {
         raise: fn(&[u8]) -> Raised,
     ) -> Result<bool, Failure> {
         let value = self.eval(code, condition)?;
+        let checked = matches!(condition.kind, ExprKind::Logical(_));
+        self.condition_value(value, trace, checked, raise)
+    }
+
+    /// Everything an evaluated condition value still owes: its `>>>` or `>K>`
+    /// line, and the answer to whether it holds.
+    ///
+    /// **Split from the evaluation so that the tail is one implementation**,
+    /// entered by any caller that has a condition value in hand however it
+    /// came by it.
+    ///
+    /// `checked` is whether whatever produced `value` has already validated it
+    /// as exactly `0`/`1`, in which case the answer is read back rather than
+    /// checked again -- [`Interp::eval_condition`]'s own doc comment has which
+    /// shape that is and what re-checking it would misreport. `raise` is the
+    /// keyword-specific raiser for the unchecked case (34.1 `IF`, 34.2
+    /// `WHEN`).
+    pub(crate) fn condition_value(
+        &mut self,
+        value: ObjRef,
+        trace: ConditionTrace<'_>,
+        checked: bool,
+        raise: fn(&[u8]) -> Raised,
+    ) -> Result<bool, Failure> {
         // **The test's own temps frame, and it is a per-pass frame for the two
         // callers that are loop headers.** `WHILE` and `UNTIL` re-evaluate
         // their condition once per pass inside the enclosing `DO`
@@ -6983,7 +7008,7 @@ impl Interp {
             }
         }
         self.roots.pop_frame(frame);
-        if matches!(condition.kind, ExprKind::Logical(_)) {
+        if checked {
             // `eval_logical_list` already validated every element and
             // answers exactly `b"0"`/`b"1"` (its own doc comment), so this
             // is a plain readback rather than a second check.
