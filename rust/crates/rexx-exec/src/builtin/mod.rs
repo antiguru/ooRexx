@@ -66,7 +66,7 @@
 //!   echoes one line, the same call inside `sub:` echoes two (the failing
 //!   clause, then `call sub`).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
 use rexx_core::ObjRef;
@@ -675,21 +675,98 @@ pub(crate) fn dispatch(
     name: &[u8],
     args: &[Option<ObjRef>],
 ) -> Option<Result<ObjRef, Failure>> {
-    if !is_builtin(name) {
-        return None;
+    let target = resolve(name)?;
+    Some(run(interp, name, target, args))
+}
+
+/// Which builtin a resolved name runs, decided once where the name is
+/// resolved rather than found again on every call.
+///
+/// **A row index, and not a copy of the row.** [`Resolved::Builtin`] used to
+/// carry nothing, and its doc gave the reason: the arity check and the code
+/// live on one row, so carrying "which builtin" beside the resolution would be
+/// a second copy free to drift from it. That argument is about the row's
+/// *contents*. An index names the one row and cannot disagree with it, and it
+/// is what lets a call site keep its answer.
+///
+/// [`Resolved::Builtin`]: crate::Resolved::Builtin
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum BuiltinTarget {
+    /// The row of [`IMPLEMENTED`] that runs this name.
+    Row(u16),
+    /// A name this crate declares in scope and runs nothing for.
+    ///
+    /// **A resolution rather than a miss**, for exactly
+    /// [`is_excluded_builtin`]'s reason: the oracle answers this name, so it
+    /// must reach neither a `::ROUTINE` nor 43.1. It reaches the loud declared
+    /// gap instead, and [`run`] is where that happens.
+    Gap,
+}
+
+/// Every implemented builtin's row, keyed by the bytes a call site spells.
+///
+/// Built once, from [`IMPLEMENTED`] itself, so it cannot name a row the table
+/// does not have or miss one it does.
+fn rows() -> &'static HashMap<&'static [u8], u16> {
+    static ROWS: OnceLock<HashMap<&'static [u8], u16>> = OnceLock::new();
+    ROWS.get_or_init(|| {
+        IMPLEMENTED
+            .iter()
+            .enumerate()
+            .map(|(at, builtin)| {
+                let at = u16::try_from(at).expect("the builtin table is far under u16");
+                (builtin.name, at)
+            })
+            .collect()
+    })
+}
+
+/// Resolves `name` to what will run it, or `None` when it is not a builtin at
+/// all and resolution should carry on to a `::ROUTINE`.
+///
+/// **This is the whole of the lookup, and it used to be two.** Resolution
+/// asked [`is_builtin`] -- one hash of the name -- and then [`dispatch`]
+/// hashed it a second time and walked [`IMPLEMENTED`] comparing byte slices
+/// until it matched. Entry 11 of the phase 4f record measured the pair at
+/// **17.4% of the `strings` axis**, 9.0% in the set lookup and 8.4% in the
+/// scan, and the scan is the half that grows with the table.
+pub(crate) fn resolve(name: &[u8]) -> Option<BuiltinTarget> {
+    // **The row map is asked first, and that ordering is the second half of
+    // the saving.** Every row's name is in scope -- asserted by
+    // `every_implemented_row_names_an_in_scope_builtin`, which is what makes a hit
+    // here conclusive without asking the set as well. So a call to a builtin this
+    // crate runs, which is every call any benchmark here makes, hashes the
+    // name once rather than twice.
+    if let Some(row) = rows().get(name) {
+        return Some(BuiltinTarget::Row(*row));
     }
-    let Some(builtin) = IMPLEMENTED.iter().find(|builtin| builtin.name == name) else {
+    // A miss is not yet an answer: the name may still be in scope with no row
+    // here, and that difference is `Gap`. This is the cold half.
+    is_builtin(name).then_some(BuiltinTarget::Gap)
+}
+
+/// Runs the builtin `target` names over already-evaluated arguments.
+///
+/// `name` is the call site's own spelling and is used only to report the
+/// declared gap; the row's own [`Builtin::name`] is what a running builtin is
+/// handed, which is what keeps `CENTER` and `CENTRE` one function.
+pub(crate) fn run(
+    interp: &mut Interp,
+    name: &[u8],
+    target: BuiltinTarget,
+    args: &[Option<ObjRef>],
+) -> Result<ObjRef, Failure> {
+    let BuiltinTarget::Row(row) = target else {
         // A builtin name this crate has no code for. It reads as the same
         // declared gap an unresolved name gets, and deliberately so: a
         // builtin *is* a routine as far as the message is concerned, the
         // owning phase is the same one, and `tests/keyword_assertions.rs`
         // reads the owner out of exactly this shape.
-        return Some(Err(Loud::unresolved_call(name).into()));
+        return Err(Loud::unresolved_call(name).into());
     };
-    if let Err(failure) = check_arity(builtin, args) {
-        return Some(Err(failure));
-    }
-    Some((builtin.run)(interp, builtin.name, args))
+    let builtin = &IMPLEMENTED[row as usize];
+    check_arity(builtin, args)?;
+    (builtin.run)(interp, builtin.name, args)
 }
 
 /// The 40.x incorrect-call checks every builtin shares, in the order the
@@ -914,6 +991,70 @@ mod tests {
         assert!(!is_builtin(b"length"), "the table is not case-folded");
         assert!(!is_builtin(b"ZORKOLO"));
         assert!(!is_builtin(&[0xff, 0xfe]), "and does not need valid UTF-8");
+    }
+
+    /// [`resolve`] partitions the in-scope set exactly, and answers `None`
+    /// for everything outside it.
+    ///
+    /// **The partition is what the reordering inside `resolve` depends on.**
+    /// That function asks the row map before the in-scope set and treats a hit
+    /// as conclusive, which is only sound if every row is in scope -- the test
+    /// below -- and only *complete* if every in-scope name without a row still
+    /// answers `Gap`, which is this one. Derived from the two collections
+    /// rather than from a list written here, so a name added to either is
+    /// covered without this test being edited -- which is how it came to
+    /// record that the gap set is currently empty.
+    #[test]
+    fn resolve_partitions_the_in_scope_set_into_rows_and_gaps() {
+        let mut rows_seen = 0;
+        let mut gaps_seen = 0;
+        for name in in_scope() {
+            let bytes = name.as_bytes();
+            match (rows().get(bytes), resolve(bytes)) {
+                (Some(row), Some(BuiltinTarget::Row(answered))) => {
+                    assert_eq!(*row, answered, "{name} resolved to the wrong row");
+                    rows_seen += 1;
+                }
+                (None, Some(BuiltinTarget::Gap)) => gaps_seen += 1,
+                (row, answered) => {
+                    panic!("{name}: row map says {row:?}, resolve says {answered:?}")
+                }
+            }
+        }
+        assert_eq!(
+            rows_seen,
+            IMPLEMENTED.len(),
+            "every row is reachable by name"
+        );
+
+        // **`BuiltinTarget::Gap` is unreachable today, and this is where that
+        // is written down.** Phase 4's in-scope set and this crate's table are
+        // currently the same 66 names, so no call can produce it -- found by
+        // this test failing an earlier assertion that demanded a gap exist.
+        //
+        // The arm stays regardless, and the reason is that the two sets are
+        // not tied statically: `in_scope()` is derived per process from
+        // `rexx_inventory`, so widening it without adding a row makes `Gap`
+        // live again. Without the arm, such a name would fall past the builtin
+        // step to the `::ROUTINE` lookup and then to 43.1 -- exactly what
+        // `is_excluded_builtin`'s own doc gives the measurement against. This
+        // assertion is what turns that widening into a failure here rather
+        // than into a wrong answer at run time.
+        assert_eq!(
+            gaps_seen,
+            0,
+            "an in-scope builtin has no row: {} in scope against {} rows",
+            in_scope().len(),
+            IMPLEMENTED.len()
+        );
+
+        assert_eq!(resolve(b"ZORKOLO"), None, "not a builtin at all");
+        assert_eq!(resolve(b"length"), None, "the table is not case-folded");
+        assert_eq!(
+            resolve(&[0xff, 0xfe]),
+            None,
+            "and does not need valid UTF-8"
+        );
     }
 
     /// Every implemented row names a real in-scope builtin.

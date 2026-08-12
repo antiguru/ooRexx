@@ -2386,3 +2386,85 @@ It moved -12.8% since entry 11 as a side effect. Entry 11 already named it one o
 * **No profile.** This is the timed instrument only; no `samply` run was taken and no share is attributed. Entry 11's shares are now nine commits old and should not be read as current.
 * **No per-change attribution.** The move columns cross four accepted changes and a sitting boundary, exactly as entry 11's did.
 * **The tree-walker arm was not run**, so this entry says nothing about the arm ratio.
+
+### Entry 21 -- is the two-level driver avoidable: measured, and mostly it is already gone
+
+**No change landed.** Entry 18 left the question open -- "whether collapsing the driver to one level is worth anything on top of this is **unmeasured** and is not claimed here" -- and this entry closes it.
+
+#### The two levels are source structure, not two calls
+
+Read out of the binary rather than the source: `nm -C --print-size` on `rexx-run` at `1767f1ff9` has **no symbol for `run_repeating` and none for `run_bounded_from_chunk`**. Both are already inlined into `run_loop_with_header`, which is 0x360e = 13,838 bytes.
+
+What survives as a call is one thing: `run_ops::<false>`, 0x2adf = 10,975 bytes, entered once per loop iteration through `run_bounded_from_chunk`'s single statement. That call is the whole of the boundary entry 18's 104-byte `Result` was crossing.
+
+#### What forcing it away costs and buys
+
+`#[inline(always)]` on `run_ops` removes the symbol. Three interleaved rounds an axis, medians:
+
+| axis | instructions | cycles |
+|---|---:|---:|
+| `varlookup` | **-0.83%** | -1.85% |
+| `emptyloop` | **-0.64%** | -1.48% |
+| `compound` | -0.34% | +6.24% |
+| `strings` | -0.10% | -0.02% |
+
+**So the remaining boundary is worth six to eight tenths of a per cent of instructions on the two clause-dispatch axes**, an order of magnitude below the 6.67% entry 18's width fix took off `emptyloop`, and `compound`'s +6.24% of cycles beside -0.34% of instructions is entry 17's floor again on an axis where nothing real moved.
+
+**Not landed**, and the reason is in the same file it would be landed in. `ir/drive.rs` already carries a comment recording that bundling `run_ops`' four range-invariant arguments into a struct "does what it promises to `instructions:u` -- 6 fewer per range entry -- and on `cycles:u` it moves both arms of `bench-programs/emptyloop.rex` far more than that in opposite directions". This is the same size of change against the same pair of megafunctions that entry 17 measured as sitting at the edge of register allocation, and a one-line `inline(always)` that grows `run_activation`'s copy of the op loop is exactly the kind of thing that gets its instruction win back in cycles somewhere unmeasured. **It is worth about 0.7% and it is available; it should ride with a change that has its own reason to re-measure these axes, not on its own.**
+
+### Entry 22 -- queue candidate 4's first half attempted and **accepted**: a builtin resolved to a row, not re-found on every call
+
+**BASE is `1767f1ff9`.**
+
+#### What the linear scan actually costs, which is the question this entry started as
+
+`builtin::dispatch` ended with `IMPLEMENTED.iter().find(|builtin| builtin.name == name)` -- a walk of the 66-row table comparing byte slices, on **every builtin call**.
+
+**Counted first.** `strings.rex` calls `POS` (row 37), `SUBSTR` (46), `CHANGESTR` (12) and `LENGTH` (32), so one iteration walks **131 rows** and the run walks **393,000,000**.
+
+**Then measured, by replacing the scan with a name-to-row map and changing nothing else.** Three interleaved rounds:
+
+| | `strings` |
+|---|---:|
+| instructions removed | **1,035,000,000** |
+| ... as a share | **-1.87%** |
+| per row visited | **2.6 instructions** |
+| cycles | **-3.76%** |
+| wall | -3.63% |
+
+**Entry 11 sampled `Iter<Builtin>::find` at 8.4% of this axis. It is 1.87% of the instructions and 3.76% of the cycles.** The scan is a tight, perfectly predicted loop over about two kilobytes of static table, so it costs far less per row than a sampled share suggests -- and it costs about twice as much in cycles as in instructions, which is the memory walk showing up. **Entry 11's own warning, written for the candidate one place above this one, applies here and was right: "sampling attributes time; it does not attribute instructions."**
+
+#### The change, which is two edits to one file
+
+* **`Resolved`'s builtin arm gains a target.** `builtin::resolve(name) -> Option<BuiltinTarget>` answers `Row(u16)` or `Gap`; `builtin::run` indexes. The old doc said carrying "which builtin" beside the resolution would split the arity check from the code and let the two drift -- that argument is about the row's *contents*, and an index names the one row and cannot disagree with it.
+* **The row map is asked before the in-scope set.** Resolution used to hash the name for `is_builtin` and then hash it again inside `dispatch`. A hit in the row map is conclusive because every row is in scope, which `every_implemented_row_names_an_in_scope_builtin` already asserted, so the common case now hashes once.
+
+**The second edit is the larger half by instructions and the smaller by time**: one hash rather than two is **-7.06%** of `strings`' instructions but only -2.40% of its cycles, where the scan is the other way round.
+
+#### Measured movement
+
+Seven rounds an axis for wall, three for the counters, arms alternating within every round, host-idle gate passed, all 84 wall runs exit 0, every axis's stdout hash identical across both arms.
+
+| axis | instructions | cycles | wall | rounds |
+|---|---:|---:|---:|---:|
+| `strings` | **-8.80%** | **-6.21%** | **-5.46%** | 7 of 7 |
+| `alloc4c` | **-4.30%** | **-5.24%** | **-4.21%** | 7 of 7 |
+| `arith` | -0.00% | -1.09% | -0.89% | 7 of 7 |
+| `varlookup` | -0.00% | -0.48% | -0.53% | 5 of 7 |
+| `compound` | -0.00% | -0.66% | -0.18% | 3 of 7 |
+| `emptyloop` | -0.00% | -0.29% | +0.24% | 3 of 7 |
+
+**Four axes report an instruction count identical to BASE's to two decimal places** -- they call no builtin -- so their wall columns are the floor and are not read as results. The two axes that call builtins move on both instruments.
+
+#### Against entry 11's estimate for this candidate
+
+Entry 11 put candidate 4 at **17.4% of `strings`** and an implied landing of 6.2666x -> 5.18x. **This half of it delivers 8.80% of instructions and 5.46% of wall.** The estimate is about twice the outcome, and the split between its two named parts is the other way round from the sampling: the set lookup it gave 9.0% is the bigger half in instructions and the scan it gave 8.4% is the bigger half in cycles.
+
+**The other half of the candidate is not built.** What remains per call is one hash of the name, plus `resolve_call`'s `Rc::clone` of the program and its label-map lookup. Removing those needs the resolution kept at the call site, which for the expression form needs an `Op::CallExpr` -- the spike's own staging, and the next increment.
+
+#### What this entry does not claim
+
+* **`BuiltinTarget::Gap` is unreachable today**, and that was found by a test written to assert the opposite. Phase 4's in-scope set and this crate's table are the same 66 names. The arm stays because the two sets are derived separately at run time, and the test now asserts the gap set is empty so that widening one without the other fails here rather than answering wrongly.
+* **No oracle ratios.** Entry 20's were taken at `1767f1ff9`, which is this BASE, so they are current for BASE and not for HEAD.
+* **The tree-walker arm was measured for correctness only.**
+* **No profile.** Whether the remaining resolution work is where the model says it is has not been re-sampled.
