@@ -69,7 +69,7 @@ use crate::builtin;
 use crate::clause::{ClauseEntry, ClauseOutcome, ClauseValue, HandlerExit};
 use crate::error::{FailureSite, Raised, Search};
 use crate::eval::logical_value;
-use crate::ir::BodyEngine;
+use crate::ir::{BodyEngine, NodePath};
 use crate::plan::BodyKey;
 use crate::trace::{
     is_whole_number, mode_from_setting, raised_invalid_trace_letter,
@@ -83,9 +83,9 @@ use crate::{
 use rexx_core::{Decoded, FrameId, ObjRef, SlotFrame, SlotRef};
 use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
-    CallTarget, ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Fragment,
-    Instruction, InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource,
-    Raise, SymbolId, Trace, Use, UseTarget, VariableRef, compound_parts, parse_interpret,
+    ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Fragment, Instruction,
+    InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource, Raise,
+    SymbolId, Trace, Use, UseTarget, VariableRef, compound_parts, parse_interpret,
 };
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -6810,27 +6810,32 @@ impl Interp {
         )
     }
 
-    /// The call at expression `slot` of `instruction`, when that slot's whole
-    /// expression **is** a call.
+    /// The expression an op's address names: expression `slot` of
+    /// `instruction`, then `path`'s steps down from that slot's root.
     ///
-    /// The addressing is [`crate::ir::Op::EvalExpr`]'s exactly -- an
-    /// instruction index and a slot -- and that is the whole reason the
-    /// promotion this serves is restricted to a call at the root. A slot names
-    /// an expression, not a node inside one, so a call nested in a larger
-    /// expression has no address to give an op and stays inside the
-    /// `EvalExpr` that covers the whole tree.
+    /// **The address is a slot and a route, not a slot alone**, which is what
+    /// lets an op name a node *inside* an expression rather than only the
+    /// whole of one. [`NodePath::ROOT`] is the whole of it, so a call that is
+    /// the slot's own expression resolves with no descent at all.
     ///
-    /// The arms are a subset of [`Interp::eval_chunk_expr`]'s and must stay
-    /// one: a slot that function evaluates by some other rule -- an `If`'s
-    /// condition is validated to `0`/`1`, a `DO` header's value is filed --
-    /// must never reach here, because the op below would evaluate it as a
-    /// plain value and lose that. Only the two slots whose value is taken as
-    /// it comes are listed.
-    pub(crate) fn chunk_call_at(
+    /// The slot arms are a subset of [`Interp::eval_chunk_expr`]'s and must
+    /// stay one: a slot that function evaluates by some other rule -- an
+    /// `If`'s condition is validated to `0`/`1`, a `DO` header's value is
+    /// filed -- must never reach here, because the op behind this would take
+    /// the value as it comes and lose that. Only the slots whose value *is*
+    /// taken as it comes are listed: an `Assignment`'s value and a `SAY`'s
+    /// expression.
+    ///
+    /// `None` for a slot this does not name and for a step that lands on a
+    /// node with no such child. Both are `Loud::call_op_off_its_node` at the
+    /// caller, which is this crate's standing answer for a stream state that
+    /// cannot arise rather than a panic.
+    pub(crate) fn chunk_node_at(
         instruction: &Instruction,
-        slot: u32,
-    ) -> Option<(&CallTarget, &[Option<Expr>])> {
-        let expr = match (&instruction.kind, slot) {
+        slot: u16,
+        path: NodePath,
+    ) -> Option<&Expr> {
+        let mut node = match (&instruction.kind, slot) {
             (InstructionKind::Assignment { value, .. }, 0) => value,
             (
                 InstructionKind::Say {
@@ -6840,24 +6845,15 @@ impl Interp {
             ) => expression,
             _ => return None,
         };
-        match &expr.kind {
-            ExprKind::Call { target, args } => Some((target, args)),
-            _ => None,
+        for right in path.steps() {
+            node = match (&node.kind, right) {
+                (ExprKind::Binary { left, .. }, false) => left,
+                (ExprKind::Binary { right, .. }, true) => right,
+                (ExprKind::Prefix { operand, .. }, false) => operand,
+                _ => return None,
+            };
         }
-    }
-
-    /// The whole expression at `slot`, for the trace hook a native op owes.
-    pub(crate) fn chunk_expr_at(instruction: &Instruction, slot: u32) -> Option<&Expr> {
-        match (&instruction.kind, slot) {
-            (InstructionKind::Assignment { value, .. }, 0) => Some(value),
-            (
-                InstructionKind::Say {
-                    expression: Some(expression),
-                },
-                0,
-            ) => Some(expression),
-            _ => None,
-        }
+        Some(node)
     }
 
     /// Expression `slot` of `instruction`, evaluated as the compiled stream's
@@ -16384,5 +16380,52 @@ mod tests {
                 String::from_utf8_lossy(source)
             );
         }
+    }
+
+    /// [`Interp::chunk_node_at`]'s steps land on the node the path names, and
+    /// answer `None` for a step that has nowhere to go.
+    ///
+    /// **The descent tested at its own steps rather than through a compiled
+    /// op.** A path resolves the same whether or not anything emits one, so
+    /// the arms below are reachable here without a program that compiles to a
+    /// non-[`NodePath::ROOT`] address existing to reach them.
+    ///
+    /// `zz = -za + f(1)` is asymmetric at both levels on purpose: the call is
+    /// the `+`'s right operand and the prefix its left, so a descent taking
+    /// the steps in the wrong order, or the wrong branch, arrives at a node of
+    /// a different kind rather than at a node that merely looks alike.
+    #[test]
+    fn a_paths_steps_land_on_the_node_it_names() {
+        let program = parse_program(b"zz = -za + f(1)".to_vec()).expect("test program parses");
+        let instruction = &program.main.instructions[0];
+        let node = |path| Interp::chunk_node_at(instruction, 0, path);
+
+        let root = node(NodePath::ROOT).expect("slot 0 is the assignment's value");
+        assert!(matches!(root.kind, ExprKind::Binary { .. }));
+
+        let left = NodePath::ROOT.child(false).expect("one step fits");
+        let right = NodePath::ROOT.child(true).expect("one step fits");
+        assert!(matches!(
+            node(left).expect("the left operand is there").kind,
+            ExprKind::Prefix { .. }
+        ));
+        assert!(matches!(
+            node(right).expect("the right operand is there").kind,
+            ExprKind::Call { .. }
+        ));
+
+        // A prefix has one child and it is the `false` step, so the `true` one
+        // has nowhere to go.
+        assert!(matches!(
+            node(left.child(false).expect("two steps fit"))
+                .expect("the prefix operand is there")
+                .kind,
+            ExprKind::Variable(_)
+        ));
+        assert!(node(left.child(true).expect("two steps fit")).is_none());
+
+        // A step off a leaf, and a slot this addressing does not name at all.
+        assert!(node(right.child(false).expect("two steps fit")).is_none());
+        assert!(Interp::chunk_node_at(instruction, 1, NodePath::ROOT).is_none());
     }
 }

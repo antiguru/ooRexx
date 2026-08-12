@@ -567,6 +567,7 @@ impl Interp {
                                 Op::CallExpr {
                                     index,
                                     slot,
+                                    path,
                                     site,
                                     dst,
                                 } => {
@@ -576,8 +577,15 @@ impl Interp {
                                          reserved"
                                     );
                                     debug_assert_names_the_clause(code, *index, clause, "CallExpr");
-                                    let Some((target, args)) =
-                                        Interp::chunk_call_at(clause, u32::from(*slot))
+                                    // The address resolves to a node, and the
+                                    // pair this op needs is that node's own.
+                                    // The match is here rather than inside the
+                                    // descent, which answers with an
+                                    // expression so that the echo op below can
+                                    // address a node of any kind.
+                                    let Some(ExprKind::Call { target, args }) =
+                                        Interp::chunk_node_at(clause, *slot, *path)
+                                            .map(|node| &node.kind)
                                     else {
                                         break 'region Err(Loud::call_op_off_its_node().into());
                                     };
@@ -615,15 +623,29 @@ impl Interp {
                                 // The `>F>` line the op above owes, emitted
                                 // behind it because `eval`'s own hook is
                                 // post-order and this is the same line.
-                                Op::TraceFunction { index, slot, src } => {
+                                Op::TraceFunction {
+                                    index,
+                                    slot,
+                                    path,
+                                    src,
+                                } => {
                                     debug_assert_names_the_clause(
                                         code,
                                         *index,
                                         clause,
                                         "TraceFunction",
                                     );
-                                    let Some(expr) =
-                                        Interp::chunk_expr_at(clause, u32::from(*slot))
+                                    // **The gate in front of the descent, not
+                                    // only inside `trace_intermediate`.** That
+                                    // function returns immediately under the
+                                    // same condition, so this changes no
+                                    // output; what it changes is that an
+                                    // untraced run walks no path to reach a
+                                    // node it is not going to print.
+                                    if !self.tracing_intermediates() {
+                                        continue;
+                                    }
+                                    let Some(expr) = Interp::chunk_node_at(clause, *slot, *path)
                                     else {
                                         break 'region Err(Loud::call_op_off_its_node().into());
                                     };

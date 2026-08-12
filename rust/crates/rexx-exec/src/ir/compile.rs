@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use rexx_parse::{Call, CodeBody, Expr, ExprKind, Instruction, InstructionKind, SymbolId};
 
-use super::{Calls, Chunk, ChunkTooLarge, Hints, Op, PlanSlot};
+use super::{Calls, Chunk, ChunkTooLarge, Hints, NodePath, Op, PlanSlot};
 use crate::eval::{SymbolRead, is_arithmetic, is_native_binary};
 use crate::plan::Plan;
 use crate::run::{HeaderPlan, if_targets, loop_header_plan, otherwise_range};
@@ -758,11 +758,9 @@ fn push_value<'a>(
 ) -> Result<(), ChunkTooLarge> {
     // **A call at the root of the slot takes its own op**, which is
     // [`Op::CallExpr`], and the only thing it changes about running the call is
-    // that the resolution comes from a site instead of being made afresh. A
-    // call *inside* a larger expression does not and cannot: a slot is the
-    // finest address an op has, so there is nothing for an op to name. That is
-    // the same restriction `native_shape`'s own doc gives for operands, arrived
-    // at from the same fact.
+    // that the resolution comes from a site instead of being made afresh. The
+    // address it carries is [`NodePath::ROOT`], which is that root said in the
+    // terms the op addresses nodes in.
     if let ExprKind::Call { .. } = &expr.kind {
         let slot = u16::try_from(slot).map_err(|_| ChunkTooLarge {
             what: "expression slots past u16",
@@ -770,12 +768,14 @@ fn push_value<'a>(
         ops.push(Op::CallExpr {
             index,
             slot,
+            path: NodePath::ROOT,
             site: calls.reserve()?,
             dst,
         });
         ops.push(Op::TraceFunction {
             index,
             slot,
+            path: NodePath::ROOT,
             src: dst,
         });
         return Ok(());

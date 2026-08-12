@@ -15,7 +15,7 @@
 //! gives `render` a non-test caller, so an `allow` would be permanent rather
 //! than a placeholder for one.
 
-use super::{Chunk, Op, PlanSlot};
+use super::{Chunk, NodePath, Op, PlanSlot};
 
 /// Renders `chunk` as one line per op: `"{index}: {OpName}[ field=value]*"`.
 ///
@@ -58,20 +58,24 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::CallExpr {
                 index: at,
                 slot,
+                path,
                 site,
                 dst,
             } => {
                 out.push_str(&format!(
-                    "{index}: CallExpr index={at} slot={slot} site={site} dst={dst}\n"
+                    "{index}: CallExpr index={at} slot={slot} path={} site={site} dst={dst}\n",
+                    render_path(*path)
                 ));
             }
             Op::TraceFunction {
                 index: at,
                 slot,
+                path,
                 src,
             } => {
                 out.push_str(&format!(
-                    "{index}: TraceFunction index={at} slot={slot} src={src}\n"
+                    "{index}: TraceFunction index={at} slot={slot} path={} src={src}\n",
+                    render_path(*path)
                 ));
             }
             Op::SelectCaseText { index: at, case } => {
@@ -229,6 +233,23 @@ fn render_register(register: Option<u16>) -> String {
         Some(register) => register.to_string(),
         None => "-".to_string(),
     }
+}
+
+/// The route an op's address takes down from its slot's root: `root` for the
+/// slot's own expression, and a step per child below it, `L` into a binary
+/// operator's left or a prefix operator's operand and `R` into a binary
+/// operator's right.
+///
+/// Spelled out rather than rendered as the encoding's own integer, because a
+/// golden expectation is read by a person: `root.L.R` says where the op sits
+/// and the bits behind it do not.
+fn render_path(path: NodePath) -> String {
+    let mut out = "root".to_string();
+    for right in path.steps() {
+        out.push('.');
+        out.push(if right { 'R' } else { 'L' });
+    }
+    out
 }
 
 /// A compiled read's or write's own slot, or `-` for one that resolves its

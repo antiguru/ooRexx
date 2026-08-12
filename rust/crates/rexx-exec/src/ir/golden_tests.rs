@@ -67,8 +67,8 @@ fn a_call_at_the_root_of_a_value_takes_its_own_op_and_a_nested_one_does_not() {
     assert_eq!(
         render(&promoted),
         "0: Clause index=0 end=4\n\
-         1: CallExpr index=0 slot=0 site=0 dst=0\n\
-         2: TraceFunction index=0 slot=0 src=0\n\
+         1: CallExpr index=0 slot=0 path=root site=0 dst=0\n\
+         2: TraceFunction index=0 slot=0 path=root src=0\n\
          3: Store index=0 at=0 src=0\n"
     );
 

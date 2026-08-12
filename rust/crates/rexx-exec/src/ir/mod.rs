@@ -59,10 +59,19 @@ mod corpus_shape_tests;
 /// every chunk pays for the widest variant, so a field added to one of them is
 /// a cost to all of them -- which is the argument [`PlanSlot`] rests on, and an
 /// argument about a width is worth nothing without the width. The widest
-/// payload today has tail padding for the discriminant to sit in; a variant
-/// that needs more than that grows the array, and this is where that shows up
-/// as a compile error rather than as a measurement somebody has to take again.
-const _: () = assert!(size_of::<Op>() == 12);
+/// payload has tail padding for the discriminant to sit in; a variant that
+/// needs more than that grows the array, and this is where that shows up as a
+/// compile error rather than as a measurement somebody has to take again.
+///
+/// **The number is measured rather than chosen.** The record's entry 24 sat a
+/// twelve-byte head build against a control carrying a dead variant at that
+/// same width and against a sixteen-byte build, nine rounds per axis, because
+/// widening an enum by adding a variant moves two things at once and a two-arm
+/// reading cannot tell them apart. Every axis's width column came out
+/// negative, and the cost that reading had charged to the width belongs to
+/// *having an extra variant* -- which widening a variant already here is not.
+/// So sixteen rests on that sitting, not on an argument from cache lines.
+const _: () = assert!(size_of::<Op>() == 16);
 
 /// One step in a compiled stream.
 ///
@@ -198,7 +207,7 @@ pub(crate) enum Op {
     /// expression came to, kept for every `WHEN CASE` of that `SELECT` to be
     /// compared against.
     EvalExpr { index: u32, slot: u32, dst: u16 },
-    /// Runs the call that **is** expression `slot` of the instruction at
+    /// Runs the call at `path` inside expression `slot` of the instruction at
     /// `index`, into register `dst`, through the resolution site `site` keeps.
     ///
     /// **The one thing this does that [`Op::EvalExpr`] does not is skip
@@ -211,11 +220,15 @@ pub(crate) enum Op {
     /// returns nothing) and none of it is worth a second implementation for
     /// the sake of one lookup.
     ///
-    /// **Only at the root of a slot's expression**, because a slot is the
-    /// finest address an op has: `Interp::chunk_call_at` answers `None` for
-    /// anything else, and a call nested inside a larger expression stays
-    /// inside the `EvalExpr` covering the whole tree. So `zz = f(1)` promotes
-    /// and `zz = f(1) + 1` does not.
+    /// **`slot` and `path` together are the address**, and `path` is what
+    /// makes it finer than an expression slot: it is the route down from slot
+    /// `slot`'s own root, [`NodePath::ROOT`] naming that root itself, and
+    /// `Interp::chunk_node_at` is the descent that resolves it. A node the
+    /// descent cannot reach, or one that is not a call when it arrives, is
+    /// `Loud::call_op_off_its_node` rather than a panic. Which nodes `compile`
+    /// gives an op to is `push_value`'s decision, and `golden_tests`'s
+    /// `a_call_at_the_root_of_a_value_takes_its_own_op_and_a_nested_one_does_not`
+    /// is what states it.
     ///
     /// **It owes the `>F>` line itself**, through [`Op::TraceFunction`] behind
     /// it, for the reason every native op owes its own echo: `eval`'s
@@ -223,19 +236,30 @@ pub(crate) enum Op {
     /// `eval`.
     ///
     /// **`slot` and `site` are `u16` where [`Op::EvalExpr`]'s slot is `u32`**,
-    /// and that is the width budget deciding rather than a preference: at
-    /// `u32` each this variant is 16 bytes and `size_of::<Op>() == 12` fails.
-    /// Both bounds are guarded rather than assumed -- a chunk that would
-    /// exceed either is refused with `ChunkTooLarge`, the same answer every
-    /// other index in this module gives.
+    /// and that is the width budget deciding rather than a preference:
+    /// widening either to `u32` makes this variant 20 bytes and the assertion
+    /// above [`Op`] fails. Both bounds are guarded rather than assumed -- a
+    /// chunk that would exceed either is refused with `ChunkTooLarge`, the
+    /// same answer every other index in this module gives.
     CallExpr {
         index: u32,
         slot: u16,
+        path: NodePath,
         site: u16,
         dst: u16,
     },
     /// The `>F>` line [`Op::CallExpr`] owes, for the value now in `src`.
-    TraceFunction { index: u32, slot: u16, src: u16 },
+    ///
+    /// **It carries its call op's address rather than only its register**,
+    /// because the line is traced against the node: `trace_intermediate` reads
+    /// the expression to decide the tag it prints under, so an echo addressing
+    /// some other node would put the right value on the wrong line.
+    TraceFunction {
+        index: u32,
+        slot: u16,
+        path: NodePath,
+        src: u16,
+    },
     /// Hands the `SELECT` at `index` the text an **absorbed** `WHEN CASE`
     /// compares against, from register `case`, or clears it for a plain
     /// `SELECT` that has no `CASE` expression at all.
@@ -745,6 +769,48 @@ pub(crate) enum BodyEngine<'a> {
     },
 }
 
+/// The route from an expression slot's root down to the node one op names.
+///
+/// **One bit per step, most significant first, behind a sentinel `1`.** A step
+/// descends into one of at most two children -- a binary operator's left or
+/// right, a prefix operator's only operand, which are the arms
+/// `Interp::chunk_node_at` walks -- so a step is a bit, and a `u32` holds
+/// thirty-one of them before the sentinel falls off the top.
+/// [`NodePath::ROOT`] is the slot's own expression, which is what a call that
+/// *is* the whole slot carries.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct NodePath(u32);
+
+impl NodePath {
+    /// The slot's own expression: the sentinel alone, with no steps below it.
+    pub(crate) const ROOT: NodePath = NodePath(1);
+
+    /// One step further down, into the right child when `right` and the left
+    /// or only child otherwise, or `None` when this width has no room for it.
+    ///
+    /// **`None` rather than a silently dropped sentinel.** Shifting a path
+    /// whose sentinel already sits at the top bit leaves a shorter path, and a
+    /// shorter path resolves to some *other* node. A refusal costs an address
+    /// nobody can give out; a dropped sentinel costs a wrong one.
+    #[allow(
+        dead_code,
+        reason = "no production caller builds a path with a step in it"
+    )]
+    pub(crate) fn child(self, right: bool) -> Option<NodePath> {
+        (self.0 >> (u32::BITS - 1) == 0).then(|| NodePath(self.0 << 1 | u32::from(right)))
+    }
+
+    /// The steps below the sentinel, **outermost first**: the order a descent
+    /// from the slot's root walks them in.
+    pub(crate) fn steps(self) -> impl Iterator<Item = bool> {
+        // The sentinel is the highest set bit, so its position is how many
+        // steps sit below it -- zero for `ROOT`, whose value is the sentinel
+        // alone.
+        let depth = u32::BITS - 1 - self.0.leading_zeros();
+        (0..depth).rev().map(move |bit| self.0 >> bit & 1 == 1)
+    }
+}
+
 /// The frame slot a symbol resolves to, worked out when this chunk was
 /// compiled, or the absence of one.
 ///
@@ -755,11 +821,12 @@ pub(crate) enum BodyEngine<'a> {
 /// own.
 ///
 /// **A `u32` with one reserved value rather than an `Option<u32>`, and it is
-/// the op array that decides it.** An `Option<u32>` is eight bytes where this
-/// is four, which is the difference between an [`Op`] that stays the width
-/// every other variant already fits in and one that grows -- paid by every op
-/// in every chunk, for a field two of them carry. The assertion above [`Op`] is
-/// what holds that width rather than this sentence.
+/// the op array that weighs it.** An `Option<u32>` is eight bytes where this is
+/// four, and it is a field [`Op::Load`] and [`Op::Store`] carry, so the cost is
+/// paid by every op in every chunk rather than by those two. Whether the wider
+/// one would *break* the width is the assertion above [`Op`]'s to say and not
+/// this sentence's: measured 2026-08-12, with this type holding an
+/// `Option<u32>` that assertion still passes.
 ///
 /// **A compound never has one, and neither does a stem target.** A compound's
 /// read goes through the *stem's* slot and a tail key resolved at the read
@@ -1213,5 +1280,39 @@ impl Chunk {
     /// Records what call site `at` resolved to ([`Calls::remember`]).
     fn remember_call(&self, at: u16, resolved: Resolved) {
         self.calls.remember(at, resolved);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NodePath;
+
+    /// A path round-trips the steps it was built from, and refuses the step
+    /// past its width rather than silently dropping the sentinel.
+    #[test]
+    fn a_node_path_carries_thirty_one_steps_and_refuses_the_thirty_second() {
+        let mut path = NodePath::ROOT;
+        assert_eq!(path.steps().count(), 0);
+        for step in 0..31 {
+            path = path.child(step % 2 == 0).expect("thirty-one steps fit");
+        }
+        assert_eq!(path.steps().count(), 31);
+        assert!(path.child(false).is_none());
+    }
+
+    /// The steps come back outermost first, which is the order the descent
+    /// walks them in -- a path read innermost first would land on the wrong
+    /// node in every asymmetric expression.
+    ///
+    /// **Asymmetric on purpose.** A path of one step, or of two equal ones,
+    /// reads the same in either direction and would be satisfied by the
+    /// reversed iterator this pins against.
+    #[test]
+    fn a_node_paths_steps_come_back_outermost_first() {
+        let path = NodePath::ROOT
+            .child(true)
+            .and_then(|path| path.child(false))
+            .expect("two steps fit");
+        assert_eq!(path.steps().collect::<Vec<_>>(), [true, false]);
     }
 }
