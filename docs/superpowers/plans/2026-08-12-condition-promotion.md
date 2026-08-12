@@ -199,11 +199,18 @@ Add one expectation for a declining condition (`if .nil then nop`) that still re
 * `trace i` over an `IF` whose condition is an operator over a call, for the intermediate lines and their order
 * `trace r` over a declining condition, for the lines the one `Op::EvalExpr` still owes when no `Op::Condition` follows it: `if .nil then nop`, which traces and then refuses, and `if 1, 1 then nop`, which traces and does not
 
-**This list is shorter than the one Task 1 was dispatched with, and the four rows that went were measured out rather than argued out.**
-The dispatched list also asked for a plain true and false condition, `if 'x' then nop` for 34.1, an `IF` under `trace r`, and an `IF` inside a routine called from a loop for the live indent.
-Each was written, captured from the oracle, and then held out of the directory while the mutation it was supposed to catch was re-run over the whole workspace: the 34.1 row's mutation still reddened on `BRANCH_CASES`' own `if 'x' then say 'y'`, the live-indent row's still reddened on a `trace-settings` stanza, and the plain and `trace r` rows are the same shapes as rows those two tables already hold.
-`rust/CLAUDE.md`'s rule is that a row which can fail is not a row that adds coverage, so they were deleted rather than kept.
-The `trace r` rows above replaced them, for a gap the dispatched list did not cover at all: a **declining** condition under trace, which is where a second validating op behind the fallback would print a line the oracle does not.
+**This list is shorter than the one Task 1 was dispatched with.**
+The dispatched list also asked for a plain true and a plain false condition, `if 'x' then nop` for 34.1, an `IF` under `trace r`, and an `IF` inside a routine called from a loop for the live indent.
+All five stanzas were written and captured from the oracle first, and then dropped, on two different grounds.
+
+Two were **measured** out: each was held out of the directory while the mutation it was supposed to catch was re-run over the whole workspace, and each was still caught without it -- the 34.1 row's mutation on `BRANCH_CASES`' own `if 'x' then say 'y'`, the live-indent row's on a `trace-settings` stanza.
+The other three were **argued** out, by shape rather than by mutation: a plain true condition, a plain false one and an `IF` under `trace r` are the shapes those same two tables already hold, and no mutation of their own was run.
+`rust/CLAUDE.md`'s rule is that a row which can fail is not a row that adds coverage, so all five went rather than being kept.
+
+Two `trace r` rows replaced them, for a gap the dispatched list did not cover: a **declining** condition under trace.
+`if 1, 1 then nop` is the one that carries an instrument -- measured, it catches a second validating op emitted behind the fallback, which before it reddened one op-stream test and nothing that runs a program -- and `if .nil then nop` is the refusing shape beside it, which raises before such an op could run.
+
+**One copy of a wrong version of this paragraph is not editable.** `0459167cc`'s commit message says all four rows "were measured out rather than argued out ... each held out while the mutation it was supposed to catch was re-run", which is true of two of them and counts kinds where five stanzas went. This paragraph is the correction.
 
 - [ ] **Step 11: gates**
 

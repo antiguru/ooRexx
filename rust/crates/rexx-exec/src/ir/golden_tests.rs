@@ -1134,12 +1134,6 @@ fn an_if_with_no_else_emits_no_branch_end_jump() {
 /// it *and* emits its `>>>`, so a `Condition` behind it would trace the value
 /// a second time and validate it a second time. `.nil` is
 /// `ExprKind::DotVariable`, which `native_shape` has no arm for.
-///
-/// **What this catches that the rest of the suite does not, measured rather
-/// than argued.** Emitting a `Condition` behind the fallback's own `EvalExpr`
-/// -- the shape `push_value` would have produced -- reddens this test and
-/// nothing else. Measured 2026-08-12, the whole workspace under
-/// `--no-fail-fast`.
 #[test]
 fn a_condition_outside_the_native_set_stays_one_eval_expr() {
     let chunk = compile_for_test(b"if .nil then nop\n").expect("compiles");

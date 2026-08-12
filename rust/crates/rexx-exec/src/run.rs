@@ -6960,9 +6960,11 @@ impl Interp {
     ///
     /// **A comma list checks itself, and it does so before this function has
     /// the value.** `ExprKind::Logical` is evaluated through `eval`'s own
-    /// dispatch to `eval_logical_list`, which validates every element is
-    /// exactly `0`/`1`, raises 34.6 on the first that is not, and otherwise
-    /// answers `b"0"` or `b"1"` and nothing else. So the `checked` this hands
+    /// dispatch to `eval_logical_list`, which checks that each element it
+    /// evaluates is exactly `0`/`1`, raises 34.6 on the first that is not,
+    /// stops at the first that is `0` -- measured, `if 0, 'x' then nop` exits
+    /// 0 on the oracle and never evaluates `'x'` -- and otherwise answers
+    /// `b"0"` or `b"1"` and nothing else. So the `checked` this hands
     /// [`Interp::condition_value`] spares a check that could not have failed,
     /// rather than one that would have raised the wrong number. A single,
     /// non-list expression never passes through `eval_logical_list` at all
@@ -9759,8 +9761,7 @@ mod tests {
         assert_eq!(raised.additional, vec![b"x".to_vec()]);
     }
 
-    /// A comma list is 34.6 regardless of which element fails, never 34.1 --
-    /// re-checking `eval_logical_list`'s own result would misreport it.
+    /// A comma list is 34.6 regardless of which element fails, never 34.1.
     /// Measured against the oracle (brief's own transcript).
     #[test]
     fn if_condition_that_is_a_comma_list_raises_34_6_not_34_1() {

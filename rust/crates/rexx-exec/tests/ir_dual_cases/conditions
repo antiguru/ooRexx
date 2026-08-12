@@ -68,10 +68,10 @@ err>      3 *-*     say 'long'
 err>        >L>       "long"
 err>        >>>       "long"
 
-# a declining condition under trace: the whole line sequence comes from the
-# one `Op::EvalExpr`, which traces the value it evaluated and then refuses
-# it. The `>>>` appears once, and the refusal is 34.1 because a single
-# expression is not a list.
+# a declining condition under trace: with no `Op::Condition` behind it, the one
+# `Op::EvalExpr` still owes the `>>>` and the refusal, and both are here. The
+# `>>>` appears once, and the refusal is 34.1 because a single expression is
+# not a list.
 program
 trace r
 if .nil then nop
@@ -85,10 +85,11 @@ err> Error 34 running /nonexistent/ir-dual-case.rex line 2:  Logical value not 0
 err> Error 34.1:  Value of expression following IF keyword must be exactly "0" or "1"; found "The NIL object".
 
 # a declining condition under trace that does not refuse: a comma list prints
-# a `>>>` per element and one more for the list's own result, all from inside
-# `eval`. Measured, this row is what catches a second validating op emitted
-# behind the fallback -- the ir arm prints a fourth `>>>` the oracle does not,
-# where the row above raises before that op could run at all.
+# a `>>>` per element it evaluates, from `eval_logical_list`, and one more for
+# the list's own result, from the tail every condition enters. Measured, this
+# row catches a second validating op emitted behind the fallback -- the ir arm
+# prints a fourth `>>>` the oracle does not -- where the row above raises
+# before such an op could run at all.
 program
 trace r
 if 1, 1 then say 'both'
