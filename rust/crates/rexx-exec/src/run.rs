@@ -6792,9 +6792,13 @@ impl Interp {
     /// An `IF`'s own condition, evaluated as the whole of the `IF` clause's
     /// work.
     ///
-    /// **The one implementation, entered from both engines**: `step`'s `If`
-    /// arm calls it inside its own `in_clause`, and `Op::EvalExpr` calls it
-    /// for the compiled form's `Clause` region. The indent it traces at is
+    /// **The tree-walker's entry, and the compiled stream's only for a
+    /// condition `native_shape` declined**: `step`'s `If` arm calls it inside
+    /// its own `in_clause`, and `Op::EvalExpr` calls it for the compiled
+    /// form's `Clause` region. A condition that compiled does not come through
+    /// here at all -- its ops leave the value in a register and
+    /// `crate::ir::Op::Condition` enters [`Interp::condition_value`] with it,
+    /// which is the half the two share. The indent it traces at is
     /// read from `current_value_indent` rather than recomputed, for the same
     /// reason `Assignment`'s own arm reads it: `in_stepped_clause` has already
     /// set it to this clause's own printed indent, and recomputing
@@ -6931,20 +6935,22 @@ impl Interp {
 
     /// Evaluates `condition` and answers whether it holds, for `IF`/`WHEN`.
     ///
-    /// **A comma list checks itself, but a single expression does not, and
-    /// this is where the difference is decided.** `ExprKind::Logical` (a
-    /// comma list) is evaluated through `eval`'s own dispatch to
-    /// `eval_logical_list` exactly like any other expression, which already
-    /// validates every element is exactly `0`/`1` and raises 34.6 on the
-    /// first that is not -- so it reaches [`Interp::condition_value`] already
-    /// `checked`, and re-checking its result there would misreport that
-    /// failure as 34.1/34.2. A single, non-list expression never
-    /// passes through `eval_logical_list` at all (there is no list to
-    /// iterate), so nothing has checked it yet. `raise` is the
-    /// keyword-specific raiser for exactly that case (34.1 `IF`, 34.2
-    /// `WHEN`) -- measured across both, `if 'x', 1 then` is 34.6 (a list,
-    /// regardless of which element failed) while `if 'x' then` is 34.1 (not
-    /// a list at all).
+    /// **A comma list checks itself, and it does so before this function has
+    /// the value.** `ExprKind::Logical` is evaluated through `eval`'s own
+    /// dispatch to `eval_logical_list`, which validates every element is
+    /// exactly `0`/`1`, raises 34.6 on the first that is not, and otherwise
+    /// answers `b"0"` or `b"1"` and nothing else. So the `checked` this hands
+    /// [`Interp::condition_value`] spares a check that could not have failed,
+    /// rather than one that would have raised the wrong number. A single,
+    /// non-list expression never passes through `eval_logical_list` at all
+    /// (there is no list to iterate), so nothing has checked it yet, and
+    /// `raise` is the keyword-specific raiser for that case (34.1 `IF`, 34.2
+    /// `WHEN`).
+    ///
+    /// **What the two numbers distinguish is where the raise happened, and
+    /// that is measured**: `if 'x', 1 then` is 34.6 on the oracle, from inside
+    /// the list and whichever element failed, while `if 'x' then` is 34.1,
+    /// from the keyword.
     fn eval_condition(
         &mut self,
         code: &Code<'_>,
@@ -6966,10 +6972,20 @@ impl Interp {
     ///
     /// `checked` is whether whatever produced `value` has already validated it
     /// as exactly `0`/`1`, in which case the answer is read back rather than
-    /// checked again -- [`Interp::eval_condition`]'s own doc comment has which
-    /// shape that is and what re-checking it would misreport. `raise` is the
-    /// keyword-specific raiser for the unchecked case (34.1 `IF`, 34.2
-    /// `WHEN`).
+    /// checked again. `raise` is the keyword-specific raiser for the unchecked
+    /// case (34.1 `IF`, 34.2 `WHEN`).
+    ///
+    /// **The flag decides an answer for the compiled caller and not for the
+    /// tree-walker.** `crate::ir::Op::Condition` hands over a value it read out
+    /// of a register with nothing having validated it, so it passes `false`;
+    /// measured, a driver that passed `true` there answers `if 'x' then` false
+    /// instead of raising 34.1. [`Interp::eval_condition`] passes `true` only
+    /// for a comma list, whose own evaluation already raised on any element
+    /// that was not `0`/`1` -- so its result arrives here exactly `b"0"` or
+    /// `b"1"` and the skipped check is one that could not have failed.
+    /// Measured: forcing that `true` to `false` leaves the whole workspace
+    /// green, which is what says the tree-walker's half of this flag is a
+    /// spared check rather than a different answer.
     pub(crate) fn condition_value(
         &mut self,
         value: ObjRef,

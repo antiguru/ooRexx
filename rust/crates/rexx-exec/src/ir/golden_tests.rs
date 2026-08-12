@@ -939,9 +939,10 @@ fn an_if_with_an_else_compiles_to_a_clause_region_and_two_jumps() {
          24: Say index=5 src=0\n"
     );
     // Two registers throughout: the comparison's right operand takes one of
-    // its own beside the register the condition lands in, and both are
-    // released at the `IF`'s own clause end, so each promoted `SAY` below gets
-    // register 0 back.
+    // its own beside the register the condition lands in, and gives it back
+    // inside `push_native`'s own binary arm as soon as the operation has run.
+    // The condition's own register is released at the `IF`'s clause end, so
+    // each promoted `SAY` below gets register 0 back.
     assert_eq!(chunk.registers, 2);
     assert_eq!(chunk.op_of, vec![0, 9, 10, 14, 17, 21, 25]);
     // Three distinct literals, one entry each, in the order they were first

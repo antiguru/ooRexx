@@ -195,12 +195,15 @@ Add one expectation for a declining condition (`if .nil then nop`) that still re
 
 `tests/ir_dual_cases/conditions`, every expected block captured from the oracle by running the stanza's program under the wrapper above, from a fresh empty directory:
 
-* a true and a false condition, plain
-* `if 'x' then nop` -- 34.1, and the message must still name `IF`
-* `if 1, 'x' then nop` -- 34.6, the comma list's own raiser, which pins that the fallback did not change
-* `trace r` over an `IF`, for the `>>>` line and its indent
+* `if 1, 'x' then nop` -- 34.6, the comma list's own raiser, and the only comma-list condition run on both engines anywhere in the tree
 * `trace i` over an `IF` whose condition is an operator over a call, for the intermediate lines and their order
-* an `IF` inside a routine called from a loop, for the live indent
+* `trace r` over a declining condition, for the lines the one `Op::EvalExpr` still owes when no `Op::Condition` follows it: `if .nil then nop`, which traces and then refuses, and `if 1, 1 then nop`, which traces and does not
+
+**This list is shorter than the one Task 1 was dispatched with, and the four rows that went were measured out rather than argued out.**
+The dispatched list also asked for a plain true and false condition, `if 'x' then nop` for 34.1, an `IF` under `trace r`, and an `IF` inside a routine called from a loop for the live indent.
+Each was written, captured from the oracle, and then held out of the directory while the mutation it was supposed to catch was re-run over the whole workspace: the 34.1 row's mutation still reddened on `BRANCH_CASES`' own `if 'x' then say 'y'`, the live-indent row's still reddened on a `trace-settings` stanza, and the plain and `trace r` rows are the same shapes as rows those two tables already hold.
+`rust/CLAUDE.md`'s rule is that a row which can fail is not a row that adds coverage, so they were deleted rather than kept.
+The `trace r` rows above replaced them, for a gap the dispatched list did not cover at all: a **declining** condition under trace, which is where a second validating op behind the fallback would print a line the oracle does not.
 
 - [ ] **Step 11: gates**
 

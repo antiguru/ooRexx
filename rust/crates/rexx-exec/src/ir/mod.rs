@@ -368,9 +368,10 @@ pub(crate) enum Op {
     /// pass, not an answer.
     ///
     /// **This op has no performance evidence in either direction, and that is
-    /// measured rather than an omission.** A literal in an assignment's value
-    /// position or a `SAY`'s expression position is what emits it, and no
-    /// registered benchmark axis has one **inside a measured loop**: counting
+    /// measured rather than an omission.** `push_native`'s literal arm is what
+    /// emits it, so a literal in any slot `compile` offers that function
+    /// compiles to one -- and no registered benchmark axis executes one
+    /// **inside a measured loop**: counting
     /// executions on each axis at `n` and at `2n` gives a figure independent of
     /// `n` every time -- one execution on `bench-programs/emptyloop.rex` (its
     /// closing `say 'done'`) and one on `bench-programs/strings.rex` (the

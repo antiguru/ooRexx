@@ -3,26 +3,14 @@
 # The condition used to be one `Op::EvalExpr` doing the whole job: evaluate the
 # expression, trace the value, validate it as exactly "0"/"1", answer the jump.
 # It is now the expression's own native ops followed by `Op::Condition`, which
-# is the rest. Three kinds of row hold that split.
+# is the rest -- except where `native_shape` declines the expression, and then
+# it is still the whole job in one op.
 #
-# **The answer**, which asks whether the jump still goes the same way: a true
-# condition and a false one, on the same shape.
-#
-# **The refusals**, which are where the split could report the wrong error.
-# `if 'x' then` is 34.1 and its message still names the IF keyword; `if 1, 'x'
-# then` is 34.6, the comma list's own raiser, which `Op::Condition` never sees
-# because `native_shape` has no `ExprKind::Logical` arm and the whole list
-# stays on `Op::EvalExpr`. That row is what says the fallback still does the
-# whole job rather than half of it.
-#
-# **Trace**, which is where a promoted expression diverges first and where the
-# oracle differential cannot see it, because `tests/support/mod.rs` normalises
-# the region these lines sit in. The `>>>` a condition owes now comes from an
-# op of its own rather than from the evaluation, so its presence, its position
-# among the operand and operator lines, and its indent are all this file's to
-# hold. The indent is read live rather than compiled in, and the last row is
-# what makes that observable: the same IF, in a routine called from a loop,
-# prints its `>>>` at the callee's own elevation.
+# The rows here are transcripts rather than a coverage set: each is one program
+# whose stdout, stderr and exit status are recorded byte for byte, so a line
+# that appears, disappears or moves shows as a diff. The shapes they hold are a
+# condition that is a comma list, one that is an operator above a call, and a
+# declining condition under trace.
 #
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, on both
 # engines, before this file was written. Regenerate a row by running its
@@ -40,38 +28,10 @@
 # raised condition's middle line prints. Running the same program under the
 # oracle prints the oracle's own path there instead.
 
-# a condition that holds, and one that does not: the same shape, the two
-# ways the jump can go.
-program
-if 1 = 1 then say 'taken'
-else say 'not taken'
-----
-rc> 0
-out> taken
-
-# the false path, which runs no end-of-branch boundary at all
-program
-if 1 = 2 then say 'taken'
-else say 'not taken'
-----
-rc> 0
-out> not taken
-
-# 34.1: a single condition that is neither "0" nor "1". The message names
-# the IF keyword, which is the raiser `Op::Condition` hands
-# `condition_value` rather than a generic one.
-program
-if 'x' then nop
-----
-rc> 222
-err>      1 *-* if 'x' 
-err> Error 34 running /nonexistent/ir-dual-case.rex line 1:  Logical value not 0 or 1.
-err> Error 34.1:  Value of expression following IF keyword must be exactly "0" or "1"; found "x".
-
-# 34.6: a comma list, whose elements `eval_logical_list` validates itself.
-# `native_shape` declines the list, so this whole condition stays one
-# `Op::EvalExpr` -- and the sub-number is what says so, because a
-# re-check on top of the list's own answer would report 34.1 here.
+# 34.6, a comma list: the raiser is `eval_logical_list`'s own, per element,
+# rather than the IF keyword's 34.1. `native_shape` has no `ExprKind::Logical`
+# arm, so the whole condition stays one `Op::EvalExpr` and no `Op::Condition`
+# is emitted behind it.
 program
 if 1, 'x' then nop
 ----
@@ -80,29 +40,11 @@ err>      1 *-* if 1, 'x'
 err> Error 34 running /nonexistent/ir-dual-case.rex line 1:  Logical value not 0 or 1.
 err> Error 34.6:  Value of logical list expression element must be exactly "0" or "1"; found "x".
 
-# trace r over an IF: the condition's own `>>>` line, at the IF's indent,
-# with no operand or operator line beside it under this setting.
-program
-trace r
-zn = 4
-if zn > 3 then say 'big'
-else say 'small'
-----
-rc> 0
-out> big
-err>      2 *-* zn = 4
-err>        >>>   "4"
-err>      3 *-* if zn > 3 
-err>        >>>   "1"
-err>      3 *-*   then
-err>      3 *-*     say 'big'
-err>        >>>       "big"
-
-# trace i over an IF whose condition is an operator over a call, for the
-# intermediate lines and their order: the argument, the function's own
-# `>F>`, the right operand, the operator, and the condition's `>>>` last.
-# The call takes an `Op::CallExpr` addressed at `root.L`, which is the
-# descent `Interp::chunk_node_at` resolves for an IF's slot.
+# trace i over an IF whose condition is an operator above a call, for the
+# intermediate lines and their order: the argument, the function's own `>F>`,
+# the right operand, the operator, and the condition's `>>>` last.
+# The call takes an `Op::CallExpr` addressed at `root.L`, which is the descent
+# `Interp::chunk_node_at` resolves for an IF's slot.
 program
 trace i
 zs = 'abcd'
@@ -126,44 +68,42 @@ err>      3 *-*     say 'long'
 err>        >L>       "long"
 err>        >>>       "long"
 
-# an IF inside a routine called from a loop, for the live indent: the
-# `>>>` prints at the callee's own elevation, which an indent read at
-# compile time could not know. Both passes are here, so the row holds the
-# false answer and the true one at the same elevation.
+# a declining condition under trace: the whole line sequence comes from the
+# one `Op::EvalExpr`, which traces the value it evaluated and then refuses
+# it. The `>>>` appears once, and the refusal is 34.1 because a single
+# expression is not a list.
 program
 trace r
-do zi = 1 to 2
-  call sub zi
-end
-exit
-sub:
-if arg(1) = 2 then say 'two'
-return
+if .nil then nop
+say 'after'
+----
+rc> 222
+err>      2 *-* if .nil 
+err>        >>>   "The NIL object"
+err>      2 *-* if .nil 
+err> Error 34 running /nonexistent/ir-dual-case.rex line 2:  Logical value not 0 or 1.
+err> Error 34.1:  Value of expression following IF keyword must be exactly "0" or "1"; found "The NIL object".
+
+# a declining condition under trace that does not refuse: a comma list prints
+# a `>>>` per element and one more for the list's own result, all from inside
+# `eval`. Measured, this row is what catches a second validating op emitted
+# behind the fallback -- the ir arm prints a fourth `>>>` the oracle does not,
+# where the row above raises before that op could run at all.
+program
+trace r
+if 1, 1 then say 'both'
+say 'after'
 ----
 rc> 0
-out> two
-err>      2 *-* do zi = 1 to 2
-err>        >K>   "TO" => "2"
-err>      3 *-*   call sub zi
-err>      6 *-*     sub:
-err>      7 *-*     if arg(1) = 2 
-err>        >>>       "0"
-err>      8 *-*     return
-err>      4 *-* end
-err>      2 *-* do zi = 1 to 2
-err>        >>>     "1"
-err>        >>>     "2"
-err>      3 *-*   call sub zi
-err>      6 *-*     sub:
-err>      7 *-*     if arg(1) = 2 
-err>        >>>       "1"
-err>      7 *-*       then
-err>      7 *-*         say 'two'
-err>        >>>           "two"
-err>      8 *-*     return
-err>      4 *-* end
-err>      2 *-* do zi = 1 to 2
-err>        >>>     "2"
-err>        >>>     "3"
-err>      5 *-* exit
+out> both
+out> after
+err>      2 *-* if 1, 1 
+err>        >>>   "1"
+err>        >>>   "1"
+err>        >>>   "1"
+err>      2 *-*   then
+err>      2 *-*     say 'both'
+err>        >>>       "both"
+err>      3 *-* say 'after'
+err>        >>>   "after"
 

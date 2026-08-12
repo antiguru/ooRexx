@@ -1056,7 +1056,7 @@ fn push_native<'a>(
                 src: dst,
             });
         }
-        _ => unreachable!("push_value descends only into an expression native_shape accepted"),
+        _ => unreachable!("this descends only into an expression native_shape accepted"),
     }
     Ok(())
 }

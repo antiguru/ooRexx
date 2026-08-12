@@ -1578,9 +1578,9 @@ impl Interp {
 
     /// Whether register `reg` holds the Rexx logical value `1`.
     ///
-    /// The only writer of a register a `JumpUnless` reads is an `EvalExpr`
-    /// whose expression `eval_condition` has already validated as exactly
-    /// `0` or `1`, so this is a readback rather than a second check --
+    /// The op that decided the branch has already written its answer here, as
+    /// the small integer of the `bool` it computed, so this is a readback
+    /// rather than a second check --
     /// re-deriving the answer from the value's text would be a second
     /// implementation of the rule that decides a branch. Anything else in the
     /// register means the two ops came apart, which is loud rather than a

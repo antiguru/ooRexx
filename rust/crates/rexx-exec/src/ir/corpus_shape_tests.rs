@@ -174,8 +174,7 @@ fn promoted_as(kind: &InstructionKind, index: usize, listed: &[usize]) -> Option
     }
 }
 
-/// The op the value expression of a promoted `Assignment` or `SAY` must end
-/// in.
+/// The op the expression [`check_body`] hands this must end in.
 ///
 /// A restatement of `native_shape` followed by `push_native`, over the parse
 /// tree alone. Every operator is spelled out below rather than asked of
