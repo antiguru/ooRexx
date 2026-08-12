@@ -2345,6 +2345,8 @@ This entry pays it. The bar is stated against the oracle, and for four accepted 
 | idle gate | passed at the first six samples, 98.2 to 99.4 per cent |
 | same work both sides | every axis: stable within each side, identical across sides, bytes quoted in the report |
 
+**The harness report this table comes from is committed verbatim as `phase-4f-oracle-64a7a7aa4.md`**, so every figure here can be checked against the one the instrument printed rather than retyped.
+
 **One block, not two.** Entries 1 and 11 ran two blocks and used the gap between them as this instrument's own resolution. There is no block gap here, so a movement smaller than the roughly half a per cent those entries measured is not resolved by this sitting, and none of the movements below is that small.
 
 #### Where the axes now sit
