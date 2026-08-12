@@ -2111,3 +2111,65 @@ It is the quarter of the resident set, the work genuinely removed on the two str
 
 **The open item this leaves is the largest one in the queue**: something about an enum in `Body::Text` costs the IR interpreter about 6% on axes that create no strings, at constant instruction count and with every cache and predictor counter improving.
 Until that is understood, every later candidate measured against this HEAD inherits it.
+
+---
+
+### Entry 17 -- entry 16's four regressions **withdrawn**: a control with no semantics moves the same axes as far
+
+**No new code and no change of disposition.** Option A stays accepted at `ce048e041`. What is withdrawn is entry 16's attribution of the four non-string regressions to the change.
+
+#### The control that settles it
+
+`Repr` collapsed to its single `Heap(Vec<u8>)` arm: no inline storage, no discriminant, the same 24-byte layout as the `Vec<u8>` it replaced, the same API and the same call sites.
+**By construction it does what BASE did.**
+Its stdout is byte-identical to BASE's and HEAD's on every axis below.
+
+Measured by a subagent and then **reproduced independently on a different harness**, which is why it is here rather than in a scratch file:
+
+| axis | the change | null control, subagent | null control, reproduced |
+|---|---|---|---|
+| `emptyloop` | +6.58% | +2.37% | +3.07% |
+| `arith` | +4.45% | -0.49% | +0.78% |
+| `varlookup` | +2.46% | **+6.98%** | **+6.78%** |
+| `compound` | +1.77% | +1.60% | +1.53% |
+
+Instruction counts across all three builds spread by **0.0001% to 0.0863%** -- every build does the same work.
+
+**On `varlookup` the null control is worse than the change under investigation.**
+A change with no semantics has no business producing that number, and that it does is the finding.
+
+#### What this withdraws, and what it leaves standing
+
+**Withdrawn:** entry 16's *"the cost is structural -- it follows the enum in `Body::Text` and not its size -- and it is unexplained and left open"*, and its framing of the four regressions as the largest open item in the queue.
+The cost does not follow the enum. It follows **touching `Body` at all**.
+`ce048e041`'s commit message carries the withdrawn sentence and cannot be edited; this entry is the correction of record.
+
+**Not withdrawn:** entry 16's eliminations, every one of which survives -- not code layout, not the type's width, not the frontend, branch predictor, icache or dcache.
+They were true and they were the wrong controls: all three vary something *about* the change, and none of them asks what a change of the same shape and no semantics is worth.
+
+**Also not withdrawn:** the two string axes. `strings` -8.26% wall / -2.95% instructions and `alloc4c` -11.89% / -5.71% are instruction-backed on both, so they are work removed and not allocation. The resident-set fall of a quarter stands.
+
+#### Why the instrument fails here
+
+`Interp::step` is 8005 instructions and `run_loop_with_header` 2814, and under `lto = "fat"` with `codegen-units = 1` their register allocation is whole-program and sits at the edge.
+The measured signature is a **1:1 opcode swap, not added work**: base's `mov %r14,%rdi` ten times becomes head's `mov <slot>(%rsp),%rbx` nine times -- a register move replaced by a stack reload, which is exactly why the instruction count does not move while the cycles do.
+Of the nine functions carrying `emptyloop`'s self time, **six are byte-for-byte identical** between the binaries; `loop_advance::{closure#2}` is 20% of runtime, unchanged instruction for instruction, and costs 27% more.
+
+The proximate stall on `emptyloop` is **store-to-load forwarding** (`r0224`, the only instrument that sees this effect -- it has no instruction-count and no cache signature): +23.79M forwarding failures against a +343.7M cycle gap, **14.4 cycles each, the whole of it**, with forwarding *hits* flat and per-run ranges disjoint.
+The site is `run.rs:6088`, the `?` on a 24-byte `Result<Flow, Failure>` built by three 8-byte stores and re-read as a 16-byte load spanning two of them, which cannot forward.
+**BASE already pays about 243M of these per `emptyloop` run**, roughly 9.7 an iteration; HEAD moved one more load onto the wrong side of a cliff the interpreter was already standing on.
+The proximate stall on `arith`, `varlookup` and `compound` is **not** store forwarding and was not identified. That is left unguessed.
+
+#### The consequence for this phase's accept rule, which is the real output
+
+**These four axes cannot resolve a change that touches `Body`.** The resolution floor for such a change is about seven points, established by a control that changes nothing.
+
+**Every future candidate touching `Body` carries a null control of the same shape, or its non-target axes are not read.**
+A layout perturbation is not that control and neither is a width sweep -- entry 16 ran both and they agreed with each other and with the wrong answer.
+
+#### Two candidates this produced, both independent of option A
+
+* **The `Result<Flow, Failure>` at `run.rs:6088`.** Shrinking it to 16 bytes, or returning a shape LLVM keeps in registers, helps **BASE and HEAD alike** and is worth doing on its own merits rather than as a regression fix. It will not move `arith`, `varlookup` or `compound`.
+* **Breaking up `Interp::step` and `run_loop_with_header`.** Until they are, every change touching `Body` reads as several per cent on axes it never executes, and no attribution to the change itself is trustworthy. This is a measurement problem before it is a performance one.
+
+**A fix was attempted and rejected**: `#[inline(never)]` on the two `Bytes` constructors recovers about a fifth of the movement and holds the string wins, but it buys an out-of-line call on every string construction to chase a number this entry has just shown is not attributable. Not proposed.
