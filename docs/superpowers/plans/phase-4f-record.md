@@ -2325,3 +2325,62 @@ Applied to the mechanism it was written about, the copies alone are **-2.64%** a
 * **Resident set was not re-measured.**
 * **The tree-walker arm was measured for correctness only.**
 * **The two new tests do not add wrong-answer coverage**, and this was checked rather than assumed. Three representation-only mutations of `try_text` -- drop the stem redirect, never answer for a rendered number, never answer for a defaultless stem -- were each run against the suite with the two new tests skipped, and the pre-existing suite caught all three (2, 9 and 4 failures, the last after a harness abort). What the new tests carry is the `None` contract, which nothing observable from Rexx can express.
+
+### Entry 20 -- the oracle ratios, owed since entry 11 and taken at last, at `64a7a7aa4`
+
+**No change, no hypothesis, no disposition.**
+Entries 12, 16, 18 and 19 each recorded "**No oracle ratios.** `rexx-bench-suite` was not run", and by entry 19 that debt covered a change that moved one axis 14% of wall.
+This entry pays it. The bar is stated against the oracle, and for four accepted changes nobody knew where any axis sat.
+
+#### Provenance
+
+| | |
+|---|---|
+| repo commit | `64a7a7aa4762e6f1c1ac6b667df976bf17aeced3`, tree clean |
+| `rexx-bench-suite` | sha256 `4949a321...` -- **entry 1's harness binary exactly**, so the instrument has not moved across the whole phase |
+| `rexx-run` | sha256 `4178780b...`, size 13848192 -- entry 19's HEAD |
+| oracle | the same three objects entry 1 fingerprints, re-hashed and unchanged: `bb5bb8cc...`, `42136c40...`, `3536b763...` |
+| configuration | the one fixed at the top of this file: `Wrapper::default()`, `ulimit -v 8388608` both sides, fresh empty working directory per child, 9 sampled pairs and 1 warm-up, oracle and this crate alternating |
+| arm | `REXX_ENGINE=ir`, and a hostile `REXX_ENGINE=bogus` was set in the launching environment for entry 1's check -- the report prints `ir` |
+| idle gate | passed at the first six samples, 98.2 to 99.4 per cent |
+| same work both sides | every axis: stable within each side, identical across sides, bytes quoted in the report |
+
+**One block, not two.** Entries 1 and 11 ran two blocks and used the gap between them as this instrument's own resolution. There is no block gap here, so a movement smaller than the roughly half a per cent those entries measured is not resolved by this sitting, and none of the movements below is that small.
+
+#### Where the axes now sit
+
+| axis | entry 1 (`ir`) | entry 11 | **now** | since 11 | since 1 | of entry 1's excess over the oracle, the part now gone | of this crate's time, the fraction that still has to go |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `alloc4c` | 1.9793x | 1.2740x | **1.1665x** | -8.4% | -41.1% | 83% | 14.3% |
+| `emptyloop` | 3.1816x | 2.1824x | **1.6856x** | **-22.8%** | -47.0% | 69% | 40.7% |
+| `arith` | 2.6658x | 2.1291x | **1.9258x** | -9.5% | -27.8% | 44% | 48.1% |
+| `varlookup` | 3.7409x | 2.1568x | **2.1101x** | -2.2% | -43.6% | 59% | 52.6% |
+| `compound` | 5.8982x | 2.4184x | **2.3667x** | -2.1% | -59.9% | 72% | 57.7% |
+| `strings` | 10.5770x | 6.2666x | **4.9831x** | **-20.5%** | -52.9% | 58% | 79.9% |
+| `rexxcps` (cps) | 7.3466x | 6.4436x | **5.6173x** | -12.8% | -23.5% | 27% | 82.2% |
+
+**All seven remain NOT MET**, and the bar is "within measurement noise of the oracle or better".
+The nearest axis is `alloc4c` at 1.17x and the two walls are `strings` at 4.98x and `rexxcps` at 5.62x.
+
+`startup` remains not comparable and no ratio is taken.
+`alloc`, `dispatch` and `heapshape` still exit 120 with `rexx-exec: a message send is not implemented (Phase 5)`, as they have since entry 1.
+
+#### What this says that the per-change entries could not
+
+**The two axes that moved most since entry 11 are the two the last two accepted changes were aimed at**, and the sizes are consistent with what those entries measured in isolation:
+
+* `strings` -20.5%, against entry 19's -14.08% of wall on that axis. The extra is entry 12's, which had no oracle figure either.
+* `emptyloop` -22.8%, against entry 18's -20.67%.
+
+That agreement is the useful part. It is the first cross-check this phase has that the paired same-binary instrument and the oracle instrument are telling the same story, and they are.
+
+**`rexxcps` is now the worst axis by "fraction that still has to go" and nothing this phase has done was aimed at it.**
+It moved -12.8% since entry 11 as a side effect. Entry 11 already named it one of the two walls and observed that its 40.0% allocator family has never been decomposed into `Text`, `Number` and tail keys -- **that decomposition is still not taken, and it is still the cheapest thing that would reorder the candidate queue.**
+
+**`compound` and `varlookup` have gone nearly flat** -- -2.1% and -2.2% across four accepted changes -- while sitting at 2.37x and 2.11x with more than half their time to lose. Whatever is left on those two is not what entries 12 to 19 were removing.
+
+#### What this entry does not claim
+
+* **No profile.** This is the timed instrument only; no `samply` run was taken and no share is attributed. Entry 11's shares are now nine commits old and should not be read as current.
+* **No per-change attribution.** The move columns cross four accepted changes and a sitting boundary, exactly as entry 11's did.
+* **The tree-walker arm was not run**, so this entry says nothing about the arm ratio.
