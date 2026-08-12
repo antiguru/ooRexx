@@ -539,6 +539,14 @@ This is not new and it is measured: on 2026-08-12, at head before this plan, `zv
 Every task in this plan widens the set of expressions that reach it -- Task 1 to concatenation, comparison and logical, Task 2 to the prefix operators, Task 4 to a nested call.
 `MAX_EVAL_DEPTH` is a guard on *this crate's* Rust stack rather than an oracle behaviour (`eval.rs`'s own doc comment: the oracle's cliff is far lower and it segfaults above it), and the compiled engine has no run-time recursion to guard -- checked to 700,000 terms, rc 0.
 So the divergence is the guard not firing where it has nothing to protect, not a wrong answer.
+
+**It is accepted, and the decision is Moritz's, taken 2026-08-12.**
+Not returning a stack overflow is a property of a different evaluation strategy; there is no formal semantics here for either engine to be measured against, so the two are allowed to diverge on it, and managing the divergence is worth some effort because the alternative is forcing a shape on the compiled engine to reproduce a limit that exists only to protect the other one's Rust stack.
+
+**The licence is that narrow and does not generalise.**
+What is accepted is the depth guard not firing where the compiled engine does not recurse.
+Everything else the two engines do must still agree byte for byte, which is what `tests/ir_dual.rs` and the corpus sweep are for, and a divergence found anywhere else is a defect rather than an instance of this.
+
 Record it in the record entry; do not add a mechanism for it, and do not let a task quietly re-pin a test to one engine without saying which of the two the test is now about.
 
 **Steps:**
