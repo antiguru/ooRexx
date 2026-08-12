@@ -1,4 +1,4 @@
-use rexx_core::{BehaviourId, Body, Heap, ObjRef, RootSet};
+use rexx_core::{BehaviourId, Body, Bytes, Heap, ObjRef, RootSet};
 use std::collections::HashMap;
 
 #[test]
@@ -6,7 +6,7 @@ fn unreachable_objects_are_swept() {
     let mut heap = Heap::new();
     let roots = RootSet::new();
     heap.alloc(Body::Text {
-        bytes: b"garbage".to_vec(),
+        bytes: Bytes::from_slice(b"garbage"),
         num: None,
     });
     let stats = heap.collect(&roots);
@@ -19,12 +19,12 @@ fn objects_reachable_from_a_root_survive() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
     let kept = heap.alloc(Body::Text {
-        bytes: b"kept".to_vec(),
+        bytes: Bytes::from_slice(b"kept"),
         num: None,
     });
     roots.add_global(".KEPT", kept);
     heap.alloc(Body::Text {
-        bytes: b"dropped".to_vec(),
+        bytes: Bytes::from_slice(b"dropped"),
         num: None,
     });
     let stats = heap.collect(&roots);
@@ -38,7 +38,7 @@ fn transitively_reachable_objects_survive() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
     let leaf = heap.alloc(Body::Text {
-        bytes: b"leaf".to_vec(),
+        bytes: Bytes::from_slice(b"leaf"),
         num: None,
     });
     let holder = heap.alloc(Body::Array(vec![leaf]));
@@ -66,12 +66,12 @@ fn swept_slots_are_reused_by_the_next_allocation() {
     let mut heap = Heap::new();
     let roots = RootSet::new();
     heap.alloc(Body::Text {
-        bytes: b"x".to_vec(),
+        bytes: Bytes::from_slice(b"x"),
         num: None,
     });
     heap.collect(&roots);
     let reused = heap.alloc(Body::Text {
-        bytes: b"y".to_vec(),
+        bytes: Bytes::from_slice(b"y"),
         num: None,
     });
     assert_eq!(
@@ -87,12 +87,12 @@ fn a_handle_to_a_swept_object_does_not_alias_the_slots_next_occupant() {
     let mut heap = Heap::new();
     let roots = RootSet::new();
     let stale = heap.alloc(Body::Text {
-        bytes: b"x".to_vec(),
+        bytes: Bytes::from_slice(b"x"),
         num: None,
     });
     heap.collect(&roots);
     let reused = heap.alloc(Body::Text {
-        bytes: b"y".to_vec(),
+        bytes: Bytes::from_slice(b"y"),
         num: None,
     });
     assert_ne!(stale, reused, "reuse must bump the generation");
@@ -101,7 +101,7 @@ fn a_handle_to_a_swept_object_does_not_alias_the_slots_next_occupant() {
         "the stale handle reads as a miss"
     );
     assert!(
-        matches!(heap.get(reused).map(|o| &o.body), Some(Body::Text { bytes, .. }) if bytes == b"y")
+        matches!(heap.get(reused).map(|o| &o.body), Some(Body::Text { bytes, .. }) if bytes.as_slice() == b"y")
     );
 }
 
@@ -110,11 +110,11 @@ fn a_stems_tails_and_default_are_traced() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
     let tail = heap.alloc(Body::Text {
-        bytes: b"kept".to_vec(),
+        bytes: Bytes::from_slice(b"kept"),
         num: None,
     });
     let default = heap.alloc(Body::Text {
-        bytes: b"dflt".to_vec(),
+        bytes: Bytes::from_slice(b"dflt"),
         num: None,
     });
     let mut tails = HashMap::new();
@@ -141,7 +141,7 @@ fn slot_frames_keep_locals_alive_and_release_them_on_pop() {
     let mut roots = RootSet::new();
     let frame = roots.push_slots(2);
     let v = heap.alloc(Body::Text {
-        bytes: b"local".to_vec(),
+        bytes: Bytes::from_slice(b"local"),
         num: None,
     });
     roots.set_slot(frame, 0, v);
@@ -230,7 +230,7 @@ fn a_cleared_slot_is_unset_and_differs_from_one_holding_nil() {
     let frame = roots.push_slots(2);
 
     let five = heap.alloc(Body::Text {
-        bytes: b"5".to_vec(),
+        bytes: Bytes::from_slice(b"5"),
         num: None,
     });
     roots.set_slot(frame, 0, five);
@@ -270,7 +270,7 @@ fn a_cleared_slot_stops_being_a_root() {
     let frame = roots.push_slots(1);
 
     let v = heap.alloc(Body::Text {
-        bytes: b"dropped".to_vec(),
+        bytes: Bytes::from_slice(b"dropped"),
         num: None,
     });
     roots.set_slot(frame, 0, v);
@@ -308,7 +308,7 @@ fn growth_does_not_recycle_a_cleared_slot() {
     let frame = roots.push_slots(1);
 
     let v = heap.alloc(Body::Text {
-        bytes: b"a".to_vec(),
+        bytes: Bytes::from_slice(b"a"),
         num: None,
     });
     roots.set_slot(frame, 0, v);

@@ -10,6 +10,7 @@
 /*----------------------------------------------------------------------------*/
 
 use crate::ObjRef;
+use crate::bytes::Bytes;
 use rexx_num::{Form, Number};
 use std::collections::HashMap;
 
@@ -63,8 +64,13 @@ pub enum Body {
     /// nineteen-digit value under `DIGITS 20`, both read from the one stored
     /// parse. An implementation that "helpfully" rounds at fill time creates
     /// exactly the staleness this tri-state exists to avoid.
+    ///
+    /// `bytes` is a [`Bytes`] and not a `Vec<u8>`: a short string's bytes live
+    /// in the slot itself, which is what `RexxString`'s trailing
+    /// `char stringData[4]` buys the interpreter. See that type for where its
+    /// capacity comes from.
     Text {
-        bytes: Vec<u8>,
+        bytes: Bytes,
         num: Option<Result<Box<Number>, NotNumeric>>,
     },
     /// A value whose identity is its number (D15). `created_digits` and
@@ -116,6 +122,10 @@ pub enum Body {
 /// programs that never construct it. Measured at 80 and 96 across a change that
 /// took `Number` from 32 bytes to 40 -- `Body::Num`'s payload had headroom
 /// against `Body::Stem`'s, which is what set the width then and sets it now.
+///
+/// **This bound is where [`Bytes`]'s inline capacity comes from.** That
+/// capacity is the largest one this assertion still holds at, so raising it is
+/// not a tuning knob: the next byte trips this line, which is the point.
 ///
 /// Upper bounds rather than equalities: the claim is that nothing widened, and
 /// shrinking needs no decision. **Phase 5 adds variants and is expected to trip

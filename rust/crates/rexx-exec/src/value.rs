@@ -32,7 +32,9 @@
 //! comment on `NotNumeric`).
 
 use crate::Interp;
-use rexx_core::{BehaviourId, Body, Decoded, NotNumeric, ObjRef, SMALL_INT_MAX, SMALL_INT_MIN};
+use rexx_core::{
+    BehaviourId, Body, Bytes, Decoded, NotNumeric, ObjRef, SMALL_INT_MAX, SMALL_INT_MIN,
+};
 use rexx_num::{Form, Number};
 use std::borrow::Cow;
 
@@ -43,8 +45,15 @@ impl Interp {
     /// stronger -- it must not be read as "not a number" for a value nobody
     /// has converted yet, which is the whole reason the cache is a tri-state
     /// rather than a plain `Option<Number>`.
+    ///
+    /// Builds the `Bytes` from the slice directly rather than going through
+    /// [`text_owned`]: a short string is copied into the slot and never
+    /// allocates at all, where a `to_vec` first would allocate a buffer only
+    /// to free it again.
+    ///
+    /// [`text_owned`]: Interp::text_owned
     pub(crate) fn text(&mut self, bytes: &[u8]) -> ObjRef {
-        self.text_owned(bytes.to_vec())
+        self.text_bytes(Bytes::from_slice(bytes))
     }
 
     /// A source literal's value, inlined as a tagged integer when the
@@ -119,8 +128,19 @@ impl Interp {
     /// `ulimit -v 1048576`: `say length(copies('a',400000000))` needs 400 MB
     /// once, which fits, and twice, which does not.
     ///
+    /// **A result at or under `INLINE_BYTES` is copied into the slot and the
+    /// caller's buffer freed here**, which is one allocation released early
+    /// rather than one added; the guarantee above is about the results that
+    /// are large, which are exactly the ones that stay on the heap arm.
+    ///
     /// [`text`]: Interp::text
     pub(crate) fn text_owned(&mut self, bytes: Vec<u8>) -> ObjRef {
+        self.text_bytes(Bytes::from_vec(bytes))
+    }
+
+    /// The one place a `Body::Text` is built, so the `num` cache's initial
+    /// state is stated once.
+    fn text_bytes(&mut self, bytes: Bytes) -> ObjRef {
         self.alloc_with(BehaviourId::STRING, Body::Text { bytes, num: None })
     }
 
@@ -304,6 +324,7 @@ impl Interp {
                 match &mut object.body {
                     Body::Num { value, .. } => Ok(value.clone()),
                     Body::Text { bytes, num } => {
+                        let bytes = bytes.as_slice();
                         let cached = num.get_or_insert_with(|| match std::str::from_utf8(bytes) {
                             Ok(text) => Number::parse(text).map(Box::new).ok_or(NotNumeric),
                             Err(_) => Err(NotNumeric),
@@ -488,6 +509,7 @@ fn small_int_for(value: &Number, created_digits: u32) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rexx_core::INLINE_BYTES;
     use rexx_num::DivOp;
     use std::collections::HashMap;
 
@@ -609,17 +631,57 @@ mod tests {
     /// and a copy would be a second allocation of the same size that no
     /// `try_reserve` can catch. A `text_owned` rewritten as
     /// `self.text(&bytes)` fails here and nowhere else.
+    ///
+    /// **The buffer is longer than `INLINE_BYTES` on purpose**, and its length
+    /// is derived from that constant rather than written out, so this cannot
+    /// quietly stop testing the guarantee if the capacity moves. A result that
+    /// fits inline *is* copied into the slot, and that is not a breach of the
+    /// promise: the results whose size comes from user input are the large
+    /// ones, and those are exactly the ones the inline arm never takes.
     #[test]
     fn text_owned_takes_the_buffer_rather_than_copying_it() {
+        let long = vec![b'q'; INLINE_BYTES + 1];
         let mut interp = Interp::new();
         let mut bytes = Vec::new();
-        bytes.try_reserve_exact(64).expect("64 bytes are available");
-        bytes.extend_from_slice(b"the buffer this test follows");
+        bytes
+            .try_reserve_exact(long.len())
+            .expect("the buffer is available");
+        bytes.extend_from_slice(&long);
         let address = bytes.as_ptr();
 
         let value = interp.text_owned(bytes);
         assert_eq!(interp.to_text(value).as_ptr(), address);
-        assert_eq!(&*interp.to_text(value), b"the buffer this test follows");
+        assert_eq!(&*interp.to_text(value), &long[..]);
+    }
+
+    /// The two construction entry points and the boundary between the arms,
+    /// held at the interpreter's own surface rather than only inside `Bytes`.
+    ///
+    /// A value reads back the same bytes on either arm, and a length that
+    /// fits is *not* a separate allocation -- checked by asking whether the
+    /// bytes `to_text` hands back lie inside the arena slot they came from,
+    /// which is the observable difference and the whole point of the change.
+    #[test]
+    fn a_short_value_holds_its_bytes_in_the_slot_and_a_long_one_does_not() {
+        for len in [0, 1, INLINE_BYTES - 1, INLINE_BYTES, INLINE_BYTES + 1, 400] {
+            let source: Vec<u8> = (0..len).map(|i| b'a' + (i % 26) as u8).collect();
+            let mut interp = Interp::new();
+
+            for value in [interp.text(&source), interp.text_owned(source.clone())] {
+                assert_eq!(&*interp.to_text(value), &source[..], "bytes at {len}");
+                let Decoded::Heap { slot, .. } = value.decode() else {
+                    panic!("a heap string at {len}")
+                };
+                let inline = interp
+                    .heap
+                    .get(value)
+                    .is_some_and(|object| match &object.body {
+                        Body::Text { bytes, .. } => bytes.is_inline(),
+                        other => panic!("a Body::Text at {len}, got {other:?}"),
+                    });
+                assert_eq!(inline, len <= INLINE_BYTES, "arm at {len}, slot {slot}");
+            }
+        }
     }
 
     // The plan's own draft sketched these five tests as calls to

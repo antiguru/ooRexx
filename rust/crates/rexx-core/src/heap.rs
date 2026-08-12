@@ -346,6 +346,7 @@ mod retire_tests {
     //! can allocate 2^30 times -- so it is exercised from inside the module,
     //! where the slot's generation can be forced directly.
     use super::*;
+    use crate::bytes::Bytes;
     use crate::{Decoded, GENERATION_MAX, RootSet};
 
     #[test]
@@ -353,7 +354,7 @@ mod retire_tests {
         let mut heap = Heap::new();
         let roots = RootSet::new();
         let r = heap.alloc(Body::Text {
-            bytes: b"old".to_vec(),
+            bytes: Bytes::from_slice(b"old"),
             num: None,
         });
         let Decoded::Heap { slot, .. } = r.decode() else {
@@ -365,7 +366,7 @@ mod retire_tests {
         let stale = ObjRef::heap(slot, GENERATION_MAX);
         heap.collect(&roots);
         let next = heap.alloc(Body::Text {
-            bytes: b"new".to_vec(),
+            bytes: Bytes::from_slice(b"new"),
             num: None,
         });
         assert_eq!(

@@ -1,4 +1,4 @@
-use rexx_core::{Body, Heap, ObjRef, RootSet};
+use rexx_core::{Body, Bytes, Heap, ObjRef, RootSet};
 
 #[test]
 fn an_object_with_uninit_is_reported_rather_than_swept_immediately() {
@@ -19,7 +19,7 @@ fn a_weak_reference_does_not_keep_its_target_alive() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
     let target = heap.alloc(Body::Text {
-        bytes: b"target".to_vec(),
+        bytes: Bytes::from_slice(b"target"),
         num: None,
     });
     let weak = heap.alloc(Body::WeakRef(target));
@@ -36,7 +36,7 @@ fn a_cleared_weak_reference_reads_as_nil() {
     let mut heap = Heap::new();
     let mut roots = RootSet::new();
     let target = heap.alloc(Body::Text {
-        bytes: b"target".to_vec(),
+        bytes: Bytes::from_slice(b"target"),
         num: None,
     });
     let weak = heap.alloc(Body::WeakRef(target));

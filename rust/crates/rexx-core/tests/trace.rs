@@ -1,10 +1,10 @@
-use rexx_core::{Body, ObjRef};
+use rexx_core::{Body, Bytes, ObjRef};
 
 #[test]
 fn a_string_reaches_nothing() {
     let mut out = Vec::new();
     Body::Text {
-        bytes: b"x".to_vec(),
+        bytes: Bytes::from_slice(b"x"),
         num: None,
     }
     .trace(&mut out);

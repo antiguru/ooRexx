@@ -9,7 +9,7 @@
 //! body variant).
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use rexx_core::{Body, Heap, ObjRef, RootSet};
+use rexx_core::{Body, Bytes, Heap, ObjRef, RootSet};
 use std::hint::black_box;
 
 const OUTER: usize = 1_000;
@@ -28,7 +28,7 @@ fn build_graph() -> (Heap, RootSet) {
             // constant would collapse the graph to ~1,001 objects and make
             // the pause meaningless.
             elems.push(heap.alloc(Body::Text {
-                bytes: format!("e{j}").into_bytes(),
+                bytes: Bytes::from_vec(format!("e{j}").into_bytes()),
                 num: None,
             }));
         }
@@ -59,7 +59,7 @@ fn build_graph() -> (Heap, RootSet) {
     let mut root_keys = Vec::with_capacity(OUTER);
     for i in 0..OUTER {
         root_keys.push(heap.alloc(Body::Text {
-            bytes: format!("K{}", i + 1).into_bytes(),
+            bytes: Bytes::from_vec(format!("K{}", i + 1).into_bytes()),
             num: None,
         }));
     }
@@ -79,7 +79,7 @@ fn allocation(c: &mut Criterion) {
             let mut heap = Heap::new();
             for j in 0..1_000_000usize {
                 heap.alloc(Body::Text {
-                    bytes: format!("e{j}").into_bytes(),
+                    bytes: Bytes::from_vec(format!("e{j}").into_bytes()),
                     num: None,
                 });
             }
