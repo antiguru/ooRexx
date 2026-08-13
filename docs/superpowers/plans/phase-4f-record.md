@@ -2811,34 +2811,12 @@ Every `rexxcps` run self-calibrated to `100 x 100`, checked on each arm's own ou
 | axis | `cb4f27d1c` to `b3e8cf4d2` (the split) | `b3e8cf4d2` to head (the slots) |
 |---|---:|---:|
 | `compound` | -17.70% | -9.12% |
-| `rexxcps` | -7.14% | -2.61% |
+| `rexxcps` | -7.19% | -2.61% |
 | `alloc4c` | not measured by Task 1 | -3.19% |
-
-**`rexxcps`' Task 1 column is a correction, and the size of the correction is the size of the arm's noise.**
-It was first published here as -7.19%, carried from Task 1's report, whose base was a single run that came out higher than all three base runs that report had taken minutes earlier.
-Re-measured for this correction, three interleaved rounds at one fixed binary path: base `cb4f27d1c` 28,598,071,071 / 28,592,601,793 / 28,588,567,089 against `b3e8cf4d2` 26,550,119,275 / 26,550,118,216 / 26,546,064,392, medians **-7.14%**.
-Task 1's reviewer measured the same pair independently at -7.12%, and this entry's own arms imply -7.16%.
-The base arm's spread over six runs is 0.033%, which is why three honest readings of one effect differ in the second decimal, and why **-7.1%** is the figure that survives re-measurement.
 
 #### The control axes, and a correction to what "control" meant
 
-**All of the +0.04% to +0.60% above belongs to Task 1**, and on the four axes holding no compound variable Task 2's own movement is **below what this instrument resolves**.
-
-That is a bound and not a measurement, and the bound had to be measured before the sentence could be written. Three runs per arm, both arms staged at one fixed path, interleaved, one sitting:
-
-| axis | same-binary span, base | same-binary span, head | arm to arm, minimum against minimum |
-|---|---:|---:|---:|
-| `emptyloop` | 1,333 | 1,078 | -419 |
-| `strings` | 652 | 881 | +6 |
-| `varlookup` | 332 | 474 | +523 |
-| `arith` | 258 | 33 | +192 |
-
-Every arm-to-arm figure is the size of the spread the same binary produces against itself, and the four disagree in sign and magnitude with the one-run-per-arm figures this entry first carried (-48, +43, -903, +505) and with a reviewer's independent two-run replication (+229, -558, -506, -699).
-**`strings`, `varlookup` and `arith` have each come out with both signs across those three sittings.** `emptyloop` has not: it read -903, -506 and -419, negative every time, but every one of those is smaller than the 1,078 to 1,333 the same binary spans against itself on that axis -- so the bound covers it, and a repeated sign inside the spread is not evidence of a movement.
-
-So the statement these axes support is: Task 2 moves them by **under about a thousand instructions out of twenty to forty-five billion**, which is the instrument's own resolution here. Task 1's movement on the same four is 7.3 million to 266 million instructions, between 5,500 and 200,000 times that bound, which is why Task 1's share is attributable at all and Task 2's is not.
-
-(An earlier version of this paragraph gave the four differences as signed one-run figures. They are withdrawn, not corrected: arm-internal spread had been measured for `rexxcps`, where the effect is 2.61%, and not for these axes, where the claimed effect was one part in a billion -- so the figures were three digits from an instrument with none here. The conclusion they were offered for is unchanged and is reproduced by every sitting.)
+**All of the +0.04% to +0.60% above belongs to Task 1.** Measured separately, Task 2 moved the four axes holding no compound variable by **43 to 903 instructions** out of twenty to forty-five billion -- `strings` -48, `varlookup` +43, `emptyloop` -903, `arith` +505 -- which is the same op stream, not small drift.
 
 **The plan named `compound` as the only loop axis holding compound variables, and that was false.**
 `alloc4c`'s inner loop is `tab.i = i`: a compound with a variable tail piece, which is exactly what the plan changes.
@@ -2846,19 +2824,6 @@ It was caught by measuring rather than by reading -- `alloc4c` moved 3.19% on Ta
 Task 1's table does not carry an `alloc4c` row, which is why the claim survived it.
 The plan's text has been corrected in place with what was removed and why.
 **A control axis that is not a control invents a cost that is really a benefit**, and the only thing that separated the two here was reading the program the number came from.
-
-#### The cost side, on the one path that pays for this
-
-`Interp::fragment_plan` builds a whole `Plan` for an `INTERPRET` fragment and keeps only the id-to-slot translation out of it, so from Task 1 onward it also builds and discards a `compounds` table on every execution of every `INTERPRET`.
-A fragment's `Code` carries no plan on purpose -- its ids belong to its own `SymbolTable` -- so it splits its own spelling at every compound reference, and that split now allocates an owned `CompoundName` where the old code borrowed slices out of the interned name.
-
-**Measured by Task 1's reviewer rather than by either task**, and quoted with that provenance: `perf stat -e instructions:u`, three interleaved runs per arm at one fixed binary path, on `do i = 1 to 200000; interpret "x = i + 1"; end`.
-Base `cb4f27d1c` 48.48 / 48.64 / 48.66 G against head 49.02 / 49.13 / 49.16 G, the arms non-overlapping: **+1.0%**.
-The same loop with the `INTERPRET` taken out moved **+0.45%**, which is this plan's codegen drift on a program it cannot otherwise touch, so roughly half a percent is attributable to the fragment path rather than to layout.
-
-**No axis in the table above holds an `INTERPRET`**, which is why nothing else in this entry sees it, and it is also why the figure needed a program written for it.
-Accepted rather than fixed, against -7.1% on `rexxcps` and -25.19% on `compound`.
-The cheap form, if it is ever worth taking, is a build mode that skips `compounds` for a fragment plan.
 
 #### Disposition
 
@@ -2869,5 +2834,57 @@ Nothing else moved by a measurable amount under Task 2, and only Task 1's shared
 
 #### What this entry does not claim
 
-* **No time figure.** How much of a quarter of `compound`'s instruction stream is worth in seconds is not stated, for entry 27's reason. The `INTERPRET` cost above is on the same instrument and is not a time figure either.
+* **No time figure.** How much of a quarter of `compound`'s instruction stream is worth in seconds is not stated, for entry 27's reason.
 * **The remaining name hashing is not gone.** A compound's *stem* still resolves by name at every reference (`stem_get`/`stem_set` open with `slot_of`), and a compound `DO` control variable's tail pieces still do, because the whole dotted name holds the slot and giving its parts slots would move the body's frame layout. Both are named in Task 2's report as work this plan did not take.
+
+### Entry 29 -- corrections to entry 28, and the rule that says they belong here
+
+**Entry 28 was twice edited in place, and this entry exists because that is not how this record works.**
+`67927f216` changed a figure inside it and added a paragraph; `c993b6479` withdrew four figures and added two sections.
+Both edits are good work and neither was hidden -- the second names the withdrawn figures inside the entry it edited -- but the rule at the top of this file is that an entry that turned out wrong is corrected by a later entry saying so, precisely so a reader can see what was believed and when.
+Entry 28 has been restored to the text committed at `df3c34087`, and everything those two commits added is below, with who measured it.
+
+#### `rexxcps`' Task 1 column: -7.19% withdrawn, **-7.1%** stands
+
+Entry 28 published -7.19%, carried from Task 1's report, whose base was a single run higher than all three base runs the same report had taken minutes earlier.
+Three readings of the same pair exist: Task 1's implementer re-measured at **-7.14%** over three interleaved rounds at one fixed binary path (base `cb4f27d1c` 28,598,071,071 / 28,592,601,793 / 28,588,567,089 against `b3e8cf4d2` 26,550,119,275 / 26,550,118,216 / 26,546,064,392, medians); Task 1's reviewer measured the same pair independently at **-7.12%**; entry 28's own arms imply **-7.16%**.
+The base arm's spread over six runs is **0.033%**, which is why three honest readings differ in the second decimal.
+**The correction is to the precision, not the value**: three digits were being claimed from an instrument that supports two here, and -7.1% is what survives re-measurement.
+
+#### The four control axes: the signed figures are withdrawn, the conclusion is not
+
+Entry 28 stated Task 2's movement on the four axes holding no compound variable as `strings` -48, `varlookup` +43, `emptyloop` -903, `arith` +505 instructions.
+**Those four figures are withdrawn.** Arm-internal spread had been measured for `rexxcps`, where the effect is 2.61%, and not for these axes, where the claimed effect is one part in a billion.
+
+Measured afterwards by Task 2's implementer -- three runs per arm, both arms at one fixed path, interleaved, one sitting:
+
+| axis | same-binary span, base | same-binary span, head | arm to arm |
+|---|---:|---:|---:|
+| `emptyloop` | 1,333 | 1,078 | -419 |
+| `strings` | 652 | 881 | +6 |
+| `varlookup` | 332 | 474 | +523 |
+| `arith` | 258 | 33 | +192 |
+
+Every arm-to-arm figure is inside the span the same binary produces against itself.
+Across the three sittings that exist -- entry 28's one-run figures, Task 2's reviewer's two-run replication (+229, -558, -506, -699), and the table above -- `strings`, `varlookup` and `arith` have each come out with **both signs**.
+`emptyloop` has not: -903, -506, -419, negative every time. It is still inside its own 1,078-to-1,333 span, so the bound covers it, but **a repeated sign inside the spread is not evidence of a movement** and the exception is recorded rather than smoothed over.
+
+**What these axes support is a bound**: Task 2 moves them by under about a thousand instructions out of twenty to forty-five billion, which is this instrument's resolution here.
+Task 1's movement on the same four is 7.3 million to 266 million instructions, thousands of times that bound, which is why Task 1's share is attributable and Task 2's is not.
+
+#### The cost side: `INTERPRET` pays for this plan
+
+`Interp::fragment_plan` builds a whole `Plan` for an `INTERPRET` fragment and keeps only the id-to-slot translation, so from Task 1 onward it also builds and discards a `compounds` table on every execution of every `INTERPRET`.
+A fragment's `Code` carries no plan on purpose -- its ids belong to its own `SymbolTable` -- so it splits its own spelling at every compound reference, and that split now allocates an owned name where the old code borrowed slices out of the interned one.
+
+**Measured by Task 1's reviewer**, quoted with that provenance: `perf stat -e instructions:u`, three interleaved runs per arm at one fixed path, on `do i = 1 to 200000; interpret "x = i + 1"; end`.
+Base `cb4f27d1c` 48.48 / 48.64 / 48.66 G against head 49.02 / 49.13 / 49.16 G, arms non-overlapping: **+1.0%**.
+The same loop with the `INTERPRET` removed moved **+0.45%**, this plan's codegen drift on a program it cannot otherwise touch, so about half a percent is the fragment path rather than layout.
+
+**No axis in entry 28's table holds an `INTERPRET`**, which is why nothing else saw it and why the figure needed a program written for it.
+Accepted rather than fixed, against -7.1% on `rexxcps` and -25.19% on `compound`.
+The cheap form, if it is ever worth taking, is a build mode that skips the compound table for a fragment plan.
+
+#### What entry 29 does not change
+
+Entry 28's three subject-axis figures, its split-by-task table apart from the `rexxcps` cell above, its correction of what "control" meant on `alloc4c`, and its disposition all stand, and all were reproduced independently by Task 2's reviewer at -25.20%, -9.97% and -9.56%.
