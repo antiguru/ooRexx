@@ -1040,19 +1040,33 @@ mod tests {
         }
     }
 
-    /// `build` records a compound's split under **the compound's own id**,
-    /// in each of the three syntactic positions a compound-shaped symbol
-    /// reaches the pass through: an expression (`note`), a `DROP` target
-    /// (`note_variable_ref`), and a `DO` control variable (`bind`).
+    /// `build` records a compound's split under **the compound's own id**.
     ///
-    /// **What this catches that no output comparison can.** A missing or
-    /// misaddressed entry is not a wrong answer -- `Code::compound` falls
-    /// back to splitting the spelling and produces the identical key -- so a
-    /// mutation that keys the table wrongly, or that never fills it for one
-    /// of these positions, leaves every corpus program and every `tail_key`
-    /// assertion green. Only reading the table back says so. The pieces are
-    /// spelled out here rather than compared against `CompoundName::split`,
-    /// which would be the same function on both sides of the assertion.
+    /// The rows are a compound written as an expression, as a `DROP` target
+    /// and as a `DO` control variable, which is one row per filler they
+    /// reach: `note_compound_name` for the first two (through `note` and
+    /// through `note_variable_ref`) and `bind` for the third (through
+    /// `note_loop`). `note_variable_ref` also carries an `EXPOSE`,
+    /// `PROCEDURE EXPOSE` and `USE LOCAL` target, and `bind` also carries a
+    /// `PARSE VAR` source (`note_parse`) -- which is why the control
+    /// variable's fix went into `bind` rather than beside `note_loop`'s own
+    /// call, and measured, `i = 3; a.i = 'p q'; parse var a.i x y; say x y`
+    /// prints `p q` on the oracle and on both engines.
+    ///
+    /// **What this catches that no output comparison can: an entry that is
+    /// never written.** `Code::compound` falls back to splitting the
+    /// spelling and hands back the identical pieces, so a filler that stops
+    /// running leaves every corpus program and every `tail_key` assertion
+    /// green. Only reading the table back says so. The pieces are spelled
+    /// out here rather than compared against `CompoundName::split`, which
+    /// would be the same function on both sides of the assertion.
+    ///
+    /// **An entry written under the wrong id is a different failure, and not
+    /// what this test is needed for.** Nothing falls back for one: the table
+    /// answers, with another symbol's split, so it is a wrong answer rather
+    /// than a slow path. Measured, shifting every entry one id along reddens
+    /// output-level tests in `run.rs` and the corpus sweep as well as this
+    /// one.
     ///
     /// The control-variable row is the one that was measured wrong: before
     /// `bind` recorded a split, `do aa.ii = 1 to 2` reached `tail_key` with

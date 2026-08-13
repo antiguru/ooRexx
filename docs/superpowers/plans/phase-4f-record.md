@@ -2811,8 +2811,14 @@ Every `rexxcps` run self-calibrated to `100 x 100`, checked on each arm's own ou
 | axis | `cb4f27d1c` to `b3e8cf4d2` (the split) | `b3e8cf4d2` to head (the slots) |
 |---|---:|---:|
 | `compound` | -17.70% | -9.12% |
-| `rexxcps` | -7.19% | -2.61% |
+| `rexxcps` | -7.14% | -2.61% |
 | `alloc4c` | not measured by Task 1 | -3.19% |
+
+**`rexxcps`' Task 1 column is a correction, and the size of the correction is the size of the arm's noise.**
+It was first published here as -7.19%, carried from Task 1's report, whose base was a single run that came out higher than all three base runs that report had taken minutes earlier.
+Re-measured for this correction, three interleaved rounds at one fixed binary path: base `cb4f27d1c` 28,598,071,071 / 28,592,601,793 / 28,588,567,089 against `b3e8cf4d2` 26,550,119,275 / 26,550,118,216 / 26,546,064,392, medians **-7.14%**.
+Task 1's reviewer measured the same pair independently at -7.12%, and this entry's own arms imply -7.16%.
+The base arm's spread over six runs is 0.033%, which is why three honest readings of one effect differ in the second decimal, and why **-7.1%** is the figure that survives re-measurement.
 
 #### The control axes, and a correction to what "control" meant
 
@@ -2825,6 +2831,19 @@ Task 1's table does not carry an `alloc4c` row, which is why the claim survived 
 The plan's text has been corrected in place with what was removed and why.
 **A control axis that is not a control invents a cost that is really a benefit**, and the only thing that separated the two here was reading the program the number came from.
 
+#### The cost side, on the one path that pays for this
+
+`Interp::fragment_plan` builds a whole `Plan` for an `INTERPRET` fragment and keeps only the id-to-slot translation out of it, so from Task 1 onward it also builds and discards a `compounds` table on every execution of every `INTERPRET`.
+A fragment's `Code` carries no plan on purpose -- its ids belong to its own `SymbolTable` -- so it splits its own spelling at every compound reference, and that split now allocates an owned `CompoundName` where the old code borrowed slices out of the interned name.
+
+**Measured by Task 1's reviewer rather than by either task**, and quoted with that provenance: `perf stat -e instructions:u`, three interleaved runs per arm at one fixed binary path, on `do i = 1 to 200000; interpret "x = i + 1"; end`.
+Base `cb4f27d1c` 48.48 / 48.64 / 48.66 G against head 49.02 / 49.13 / 49.16 G, the arms non-overlapping: **+1.0%**.
+The same loop with the `INTERPRET` taken out moved **+0.45%**, which is this plan's codegen drift on a program it cannot otherwise touch, so roughly half a percent is attributable to the fragment path rather than to layout.
+
+**No axis in the table above holds an `INTERPRET`**, which is why nothing else in this entry sees it, and it is also why the figure needed a program written for it.
+Accepted rather than fixed, against -7.1% on `rexxcps` and -25.19% on `compound`.
+The cheap form, if it is ever worth taking, is a build mode that skips `compounds` for a fragment plan.
+
 #### Disposition
 
 **Accepted, and the hypothesis is confirmed by route as well as by outcome.**
@@ -2834,5 +2853,5 @@ Nothing else moved by a measurable amount under Task 2, and only Task 1's shared
 
 #### What this entry does not claim
 
-* **No time figure.** How much of a quarter of `compound`'s instruction stream is worth in seconds is not stated, for entry 27's reason.
+* **No time figure.** How much of a quarter of `compound`'s instruction stream is worth in seconds is not stated, for entry 27's reason. The `INTERPRET` cost above is on the same instrument and is not a time figure either.
 * **The remaining name hashing is not gone.** A compound's *stem* still resolves by name at every reference (`stem_get`/`stem_set` open with `slot_of`), and a compound `DO` control variable's tail pieces still do, because the whole dotted name holds the slot and giving its parts slots would move the body's frame layout. Both are named in Task 2's report as work this plan did not take.

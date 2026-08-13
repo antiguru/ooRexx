@@ -1,26 +1,25 @@
-# How a compound variable's name splits, across every shape the split can take.
+# How a compound variable's name splits, one shape of the split per row.
 #
 # `Plan::compounds` records the split of a compound-shaped name once, at plan
 # build time, and `Interp::tail_key` reads it instead of splitting the interned
 # spelling at every reference. A name splits into a stem and pieces; a piece is
 # a constant when it is empty or starts with a digit and a variable otherwise;
 # a variable piece contributes its *current value*, verbatim and
-# case-sensitively; and the pieces join with periods. These rows are one shape
-# of that per row.
+# case-sensitively; and the pieces join with periods.
 #
-# The rows a precomputed split can get wrong in a way nothing else notices:
+# **Every row here is a transcript and claims nothing about what it catches,
+# except the fragment row.** That one is a measured witness: with the compound
+# half of a fragment's `Code` pointed at the enclosing body's plan, it is the
+# only red test in the workspace, and with this file taken out of the directory
+# under that same mutation nothing reddens at all. Its own stanza header says
+# how it is arranged and what the mutation prints.
 #
-# * **A tail variable whose value changes between references.** The split is a
-#   constant of the source; the key is not. A table that cached the resolved
-#   key rather than the split would print the first value twice.
-# * **A `DO` control variable that is itself compound.** Its tail is resolved on
-#   every pass, from the enclosing body's plan, and `zi = 'k'` with `do zb.zi`
-#   separates the piece's lowercase *value* from the upcased spelling `zb.k`.
-# * **A compound inside an `INTERPRET`, and an `INTERPRET` inside a loop.** A
-#   fragment carries its own `SymbolTable`, so its ids mean nothing against the
-#   enclosing body's plan and it must split its own spelling. The loop is what
-#   catches a fragment reading an entry addressed by an id from the wrong
-#   table, since a fresh parse renumbers.
+# The neighbouring rows were checked for the same thing and do not have it.
+# `run.rs`'s `a_compound_control_variables_tail_re_resolves_every_pass` already
+# covered the `DO`-control shape before this file existed. The changing-tail row
+# describes a wrong implementation this crate does not have -- a table caching
+# the resolved key rather than the split -- so there is nothing here to mutate
+# into it, and no mutation was run for it.
 #
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Regenerate a
 # row by running its program under the oracle, never with REWRITE=1 --
