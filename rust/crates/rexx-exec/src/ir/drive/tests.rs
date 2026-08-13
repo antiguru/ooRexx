@@ -155,10 +155,10 @@ fn the_ir_engine_steps_a_loop_body_from_the_chunk() {
 /// sweep, which cannot tell the two drivers apart because both produce
 /// identical bytes.
 ///
-/// **At the top of the body, not inside an `IF`.** `If` steps its own branch
-/// through the tree-walker (that promotion is not this task's), so a block
-/// written as `if 1 = 1 then do ... end` never reaches the stream at all and a
-/// count taken over one would be satisfied by the `IF`, not by the block.
+/// **At the top of the body, not inside an `IF`.** An enclosing `IF` puts its
+/// own clause into the same count -- the next test is the one that measures
+/// that -- so a block written as `if 1 = 1 then do ... end` would give a
+/// number that is not the block's alone.
 #[test]
 fn the_ir_engine_steps_a_simple_blocks_body_from_the_chunk() {
     let before = clause_op_entries();
