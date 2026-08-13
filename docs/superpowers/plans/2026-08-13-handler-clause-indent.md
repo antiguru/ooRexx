@@ -33,6 +33,16 @@ The two instances are **in opposite directions**: one handler's clauses are too 
 That is the reason to treat them as one investigation and not two fixes.
 Either one quantity -- the indent live across a transfer -- is restored in one path and not another, in which case one change fixes both and the directions are explained by which side each path errs on; or they are separate, in which case a fix for one must be shown not to move the other.
 
+**The leading hypothesis, reasoned rather than measured.**
+The two transfers are not the same kind of transfer.
+`SIGNAL ON` unwinds -- control reaches a label in the top-level program and the raising activation is gone -- so the handler's clauses belong at the program's indent, which is what the oracle prints and what this crate fails to restore.
+`CALL ON` invokes the handler as a subroutine, so its clauses belong one level deeper, which is again what the oracle prints and again not what this crate does.
+One rule covers both: **this crate keeps whatever indent is live at the transfer, where the oracle sets it from the kind of transfer.**
+That predicts the two directions from one cause, and it predicts that a fix which only restores an indent will fix the `SIGNAL` instance and leave the `CALL ON` one exactly as wrong as it is now.
+It rests on two recorded instances and the language's own semantics, not on a measurement -- testing it is Step 3's job, and it is stated here so that Step 3 has something to refute.
+
+**A caution about which side is wrong.** This project has found genuine oracle defects, one of them in trace indent itself: two loop-exit paths in the C++, one restoring the indent and one bare-decrementing it, so a completed loop under-indents the clauses after it. That one is unfiled and is not this. But "the oracle is wrong here" is a live possibility that Step 1's transcripts should be read against rather than assumed away.
+
 - [ ] **Step 1: reproduce both, side by side, and write the transcripts down** before changing anything. Both are pre-existing, so a capture taken now is a baseline that a fix has to move in exactly the two expected places.
 
 - [ ] **Step 2: find where the indent is saved and restored across an activation boundary**, and where a trap transfer bypasses it. `current_value_indent` lives in `clause_state`; `run.rs` already carries a comment about a handler's own indent near the `CALL ON` delivery.
