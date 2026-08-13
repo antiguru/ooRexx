@@ -126,6 +126,27 @@ pub(crate) struct CompoundName {
     /// The stem half, its trailing period included (`compound_parts`' own
     /// convention, matching `addCompound`, `LanguageParser.cpp:2153`).
     pub(crate) stem: Box<[u8]>,
+    /// The slot the plan holding this entry bound `stem` to, so that finding
+    /// the stem object at a reference costs an index rather than a hash of the
+    /// stem's bytes.
+    ///
+    /// **`None` is a stem the plan assigned no slot**, and it is an ordinary
+    /// outcome rather than a gap, the same one `TailPiece::Variable`'s own
+    /// `at` records: `Plan::bind` records a split and assigns nothing, and
+    /// `CompoundName::split` is entered by an `INTERPRET` fragment with no
+    /// plan at all. `Interp::stem_slot` resolves the name the ordinary way
+    /// when there is none, exactly as every stem accessor did before this
+    /// field existed.
+    ///
+    /// A `Some` slot is never a *different* answer from resolving the name.
+    /// `Interp::slot_of` reads the plan's own name map first and the
+    /// activation's `extra` only after it misses, and a slot lands here only
+    /// because `slot_for` put `stem` in that same map -- so for a stem that
+    /// carries one, `extra` was already unreachable. A stem that carries
+    /// **none** does reach `extra`, measured: `do za.zi = 1 to 3` binds the
+    /// whole `ZA.ZI` and nothing named `ZA.`, so the loop's own read grows
+    /// `ZA.` into `extra` and hits it on every pass.
+    pub(crate) stem_at: Option<usize>,
     /// The tail pieces in source order.
     pub(crate) tails: Box<[TailPiece]>,
 }
@@ -143,15 +164,16 @@ impl CompoundName {
     /// always has one (`ast.rs`), and `Plan::note_variable_ref` checks before
     /// it calls.
     ///
-    /// **Every variable piece comes back with no slot**, because how a name
-    /// splits is a property of the text alone while a slot is a property of
-    /// the plan the entry is going into, and this function is entered by a
-    /// fragment that has no plan at all. `note_compound_name` fills the slots
-    /// in afterwards, for the entries that get any.
+    /// **The stem and every variable piece come back with no slot**, because
+    /// how a name splits is a property of the text alone while a slot is a
+    /// property of the plan the entry is going into, and this function is
+    /// entered by a fragment that has no plan at all. `note_compound_name`
+    /// fills the slots in afterwards, for the entries that get any.
     pub(crate) fn split(name: &str) -> CompoundName {
         let (stem, tails) = compound_parts(name);
         CompoundName {
             stem: stem.as_bytes().into(),
+            stem_at: None,
             tails: tails
                 .into_iter()
                 .map(|tail| match tail {
@@ -566,14 +588,15 @@ impl Plan {
     /// `Procedure`/`Use Local` target's, once `note_variable_ref` has
     /// already established it is compound- or stem-shaped.
     ///
-    /// Registers by name alone, with no slot bound to `id` and none to a
-    /// piece: neither the stem prefix nor a tail piece has a `SymbolId` of
-    /// its own -- `compound_parts` only ever hands back a borrowed slice of
-    /// the one interned spelling a `Compound` id carries, and a piece was
-    /// never a token the scanner saw (`ast.rs`'s own `Compound` doc comment
-    /// says so). That is exactly why `stem.rs`'s `tail_key`/`read_by_name`
-    /// resolve both of these purely by name, which is what makes `names`,
-    /// not `by_symbol`, the correct table for them to land on.
+    /// Registers by name alone, with no slot bound to `id`: neither the stem
+    /// prefix nor a tail piece has a `SymbolId` of its own --
+    /// `compound_parts` only ever hands back a borrowed slice of the one
+    /// interned spelling a `Compound` id carries, and a piece was never a
+    /// token the scanner saw (`ast.rs`'s own `Compound` doc comment says so).
+    /// That is what makes `names`, not `by_symbol`, the correct table for
+    /// them to land on -- and the slot each one lands on is kept on the entry
+    /// rather than dropped, so that a reference indexes the frame instead of
+    /// hashing the name again.
     ///
     /// `id` is the whole compound's own id, and it addresses `compounds`
     /// rather than being bound to a slot. Every caller has one: `note`'s
@@ -585,7 +608,11 @@ impl Plan {
     /// the entry is addressed by the id the reader will present.
     fn note_compound_name(&mut self, id: SymbolId, name: &str) {
         let mut entry = CompoundName::split(name);
-        self.slot_for(&entry.stem);
+        // The stem's slot, kept for the same reason each piece's is: a
+        // compound reference reads or writes the stem object through it, so
+        // finding it costs an index into the frame instead of hashing the
+        // stem's bytes at every reference.
+        entry.stem_at = Some(self.slot_for(&entry.stem));
         for piece in &mut entry.tails {
             if let TailPiece::Variable { name, at } = piece {
                 // The slot this pass was already computing and dropping. It
@@ -703,8 +730,9 @@ impl Plan {
     /// piece, which is what separates this from `note_compound_name`: `name`
     /// is bound whole above, and adding slots for its parts here would move
     /// every later slot number in the body -- a change to frame layout, not
-    /// to how a name splits. So the entry this writes has `at: None` on every
-    /// variable piece, and `Interp::join_tails` resolves those by name.
+    /// to how a name splits. So the entry this writes has `stem_at: None` and
+    /// `at: None` on every variable piece, and `Interp::stem_slot` and
+    /// `Interp::join_tails` resolve those by name.
     ///
     /// **An entry already recorded is left alone**, which matters when one id
     /// reaches `note_compound_name` as well -- `say v.i` and then `do v.i = 1
@@ -876,7 +904,7 @@ impl Interp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::planned_code;
+    use crate::{Novalue, planned_code};
     use rexx_parse::{Program, parse_interpret, parse_program};
 
     /// `indent_of` answers what `static_indent` answers, for every index.
@@ -1076,12 +1104,12 @@ mod tests {
     /// no entry and re-split its name on every pass.
     ///
     /// **The slots are part of what is asserted, and `note_compound_name` and
-    /// `bind` disagree about them.** `note_compound_name` puts each variable
-    /// piece on the slot it assigned that piece's name; `bind` assigns none,
-    /// so `AA.II`'s piece carries `None` while `DD.JJ`'s and `V.I.7`'s carry
-    /// a number. The numbers are spelled out rather than looked back up out of
-    /// `plan.names`, which would be the same map on both sides of the
-    /// assertion.
+    /// `bind` disagree about them.** `note_compound_name` puts the stem and
+    /// each variable piece on the slot it assigned that name; `bind` assigns
+    /// none, so `AA.II`'s stem and piece both carry `None` while `DD.JJ`'s and
+    /// `V.I.7`'s carry a number. The numbers are spelled out rather than
+    /// looked back up out of `plan.names`, which would be the same map on both
+    /// sides of the assertion.
     #[test]
     fn build_records_a_compounds_split_under_the_compounds_own_id() {
         let source = b"drop dd.jj; do aa.ii = 1 to 2; say v.i.7; end";
@@ -1125,6 +1153,7 @@ mod tests {
                 "DD.JJ",
                 CompoundName {
                     stem: b"DD.".as_slice().into(),
+                    stem_at: Some(0),
                     tails: vec![variable("JJ", Some(1))].into(),
                 },
             ),
@@ -1132,6 +1161,7 @@ mod tests {
                 "AA.II",
                 CompoundName {
                     stem: b"AA.".as_slice().into(),
+                    stem_at: None,
                     tails: vec![variable("II", None)].into(),
                 },
             ),
@@ -1139,6 +1169,7 @@ mod tests {
                 "V.I.7",
                 CompoundName {
                     stem: b"V.".as_slice().into(),
+                    stem_at: Some(3),
                     tails: vec![variable("I", Some(4)), constant("7")].into(),
                 },
             ),
@@ -1338,6 +1369,71 @@ mod tests {
         assert!(
             interp.activation().extra.contains_key(b"ZI".as_slice()),
             "the piece must be recorded in extra, which is the source a \
+             precomputed slot would have skipped"
+        );
+    }
+
+    /// **A compound's stem can be bound in `extra` rather than in the plan,
+    /// and this is the shape that reaches it.**
+    ///
+    /// The stem half of the question its neighbour above answers for a tail
+    /// piece, and the answer is the same: `do za.zi = 1 to 3` binds the whole
+    /// dotted `ZA.ZI` to one slot and binds neither `ZA.` nor `ZI`, so the
+    /// plan has no name `ZA.` at all. The loop's own read therefore misses
+    /// the plan, misses `extra`, and grows the frame -- recording `ZA.` in
+    /// `extra`, which is where every later pass finds it. Measured on an
+    /// interpreter instrumented to print each growth: that loop grows `ZA.`
+    /// once and hits `extra` for it on every pass, alongside `ZI`.
+    ///
+    /// That is why the stem's slot is an `Option` and not a `usize`. It is
+    /// also why a precomputed one cannot shadow an `extra` binding: a slot is
+    /// put on the stem by `slot_for`, which is what puts the name in
+    /// `plan.names`, and `Interp::slot_of` reads `plan.names` before `extra`
+    /// -- so a stem either carries a slot and never consults `extra`, or
+    /// carries none and resolves exactly as it did before slots existed.
+    #[test]
+    fn a_stem_with_no_plan_slot_binds_in_extra() {
+        let mut interp = Interp::new();
+        let program =
+            parse_program(b"do za.zi = 1 to 3\nnop\nend".to_vec()).expect("test program parses");
+        let (InstructionKind::Do(loop_) | InstructionKind::Loop(loop_)) =
+            &program.main.instructions[0].kind
+        else {
+            panic!(
+                "expected a DO first, got {:?}",
+                program.main.instructions[0].kind
+            );
+        };
+        let LoopKind::Controlled(controlled) = &loop_.kind else {
+            panic!("expected a controlled loop, got {:?}", loop_.kind);
+        };
+        let id = controlled.control;
+
+        let plan = Plan::build(&program.main, &program.symbols);
+        assert_eq!(
+            plan.slot_of(b"ZA."),
+            None,
+            "the plan binds the whole ZA.ZI and nothing named ZA."
+        );
+        assert_eq!(expect_entry(&plan, id).stem_at, None);
+
+        let program = activate(&mut interp, program);
+        let plan = Plan::build(&program.main, &program.symbols);
+        let code = planned_code(&program, &plan);
+        let (stem_name, stem_at) = code.stem(id);
+        assert_eq!(stem_name, b"ZA.");
+        assert_eq!(stem_at, None);
+
+        // Nothing has been written, so the tail derives its own name from the
+        // read site's spelling -- the ordinary uninitialised compound read,
+        // reached here through `extra` and growth.
+        let key = interp.tail_key(&code, id);
+        let (value, novalue) = interp.stem_get_at(stem_name, stem_at, &key);
+        assert_eq!(novalue, Novalue::Unset);
+        assert_eq!(&*interp.to_text(value), b"ZA.ZI");
+        assert!(
+            interp.activation().extra.contains_key(b"ZA.".as_slice()),
+            "the stem must be recorded in extra, which is the source a \
              precomputed slot would have skipped"
         );
     }

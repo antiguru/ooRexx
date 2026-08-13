@@ -267,6 +267,50 @@ impl Interp {
         stem
     }
 
+    /// The frame slot a compound's stem is held in: the one the upfront pass
+    /// recorded on the entry, or the full three-source resolution of
+    /// `stem_name` when the entry carries none.
+    ///
+    /// **Where the `_at` accessors below decide it**, shared rather than
+    /// written out at each one, so a precomputed slot and a resolved one
+    /// cannot come to mean different things depending on which accessor was
+    /// entered. A bare stem's own operations do not come through here:
+    /// `stem_assign` and `replace_stem` take the whole spelling of an
+    /// `ExprKind::Stem` or of a run-time string, which is not a compound's
+    /// stem half, and no caller has a slot to hand them.
+    ///
+    /// `at` is the same slot `slot_of` answers, taken by `Plan::
+    /// note_compound_name` from the `Plan` this activation runs with, so it
+    /// is one resolution made at two times rather than two resolutions --
+    /// the same relationship `read_stem_at` and `read_by_name_at` already
+    /// carry.
+    ///
+    /// **`None` is always correct**, and it is what a run-time name, an
+    /// `INTERPRET` fragment's own split and a `DO` control variable's entry
+    /// all pass: the slot is then resolved here exactly as it was before any
+    /// caller could supply one. That last case is not hypothetical -- `do
+    /// za.zi = 1 to 3` binds the whole `ZA.ZI` and nothing named `ZA.`, so
+    /// the stem grows into the activation's `extra` and is found there on
+    /// every pass.
+    fn stem_slot(&mut self, stem_name: &[u8], at: Option<usize>) -> usize {
+        // **The tripwire for an entry resolved against a plan that is not the
+        // running activation's.** A slot lands on a stem because
+        // `Plan::slot_for` put its name in that plan's own name map, and
+        // `Interp::slot_of` reads that map before it reads `extra` -- so the
+        // two agree for as long as the entry and the activation come from one
+        // plan, and `Code::plan` is what pairs them. Mismatched, this reads
+        // whatever else lives at that index rather than failing, which is a
+        // wrong value found by chasing it.
+        debug_assert!(
+            at.is_none() || self.activation().plan.slot_of(stem_name) == at,
+            "a compound's stem names a slot this activation's plan does not give its name"
+        );
+        match at {
+            Some(slot) => slot,
+            None => self.slot_of(stem_name),
+        }
+    }
+
     /// Reads a tail: `stem_name` is the **read site's** own name (used only
     /// to find the slot), including its trailing period; `key` is
     /// `tail_key`'s output.
@@ -306,7 +350,19 @@ impl Interp {
     /// since `signal on novalue` traps on `say zunset.1` whether or not the
     /// stem itself has ever been assigned.
     pub(crate) fn stem_get(&mut self, stem_name: &[u8], key: &[u8]) -> (ObjRef, Novalue) {
-        let slot = self.slot_of(stem_name);
+        self.stem_get_at(stem_name, None, key)
+    }
+
+    /// [`Interp::stem_get`] with the stem's slot already in hand, which is
+    /// what `CompoundName::stem_at` carries when the plan that recorded the
+    /// entry assigned one. [`Interp::stem_slot`] is what `at` means here.
+    pub(crate) fn stem_get_at(
+        &mut self,
+        stem_name: &[u8],
+        at: Option<usize>,
+        key: &[u8],
+    ) -> (ObjRef, Novalue) {
+        let slot = self.stem_slot(stem_name, at);
         let frame = self.activation().frame;
         let stem_value = match self.roots.slot(frame, slot) {
             Some(v) => v,
@@ -364,7 +420,20 @@ impl Interp {
     /// `q.1='x'` with `q.` never itself assigned still leaves `q.2`
     /// deriving its own name rather than falling back to anything).
     pub(crate) fn stem_set(&mut self, stem_name: &[u8], key: &[u8], value: ObjRef) {
-        let slot = self.slot_of(stem_name);
+        self.stem_set_at(stem_name, None, key, value);
+    }
+
+    /// [`Interp::stem_set`] with the stem's slot already in hand, which is
+    /// what `CompoundName::stem_at` carries when the plan that recorded the
+    /// entry assigned one. [`Interp::stem_slot`] is what `at` means here.
+    pub(crate) fn stem_set_at(
+        &mut self,
+        stem_name: &[u8],
+        at: Option<usize>,
+        key: &[u8],
+        value: ObjRef,
+    ) {
+        let slot = self.stem_slot(stem_name, at);
         let frame = self.activation().frame;
         match self.roots.slot(frame, slot) {
             Some(stem_value) => {
@@ -400,7 +469,14 @@ impl Interp {
     /// the name), so this is a genuine no-op rather than an auto-vivified
     /// object nobody would ever observe the difference from.
     pub(crate) fn stem_drop_tail(&mut self, stem_name: &[u8], key: &[u8]) {
-        let slot = self.slot_of(stem_name);
+        self.stem_drop_tail_at(stem_name, None, key);
+    }
+
+    /// [`Interp::stem_drop_tail`] with the stem's slot already in hand, which
+    /// is what `CompoundName::stem_at` carries when the plan that recorded
+    /// the entry assigned one. [`Interp::stem_slot`] is what `at` means here.
+    pub(crate) fn stem_drop_tail_at(&mut self, stem_name: &[u8], at: Option<usize>, key: &[u8]) {
+        let slot = self.stem_slot(stem_name, at);
         let frame = self.activation().frame;
         if let Some(stem_value) = self.roots.slot(frame, slot) {
             let object = self.heap.get_mut(stem_value).expect("a live value");

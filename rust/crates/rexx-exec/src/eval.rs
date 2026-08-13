@@ -404,9 +404,9 @@ impl Interp {
                     at.is_none(),
                     "a compound read was handed a slot, and the slot it reads is the stem's"
                 );
-                let stem_name = code.stem_name(id);
+                let (stem_name, stem_at) = code.stem(id);
                 let key = self.tail_key(code, id);
-                let (value, novalue) = self.stem_get(stem_name, &key);
+                let (value, novalue) = self.stem_get_at(stem_name, stem_at, &key);
                 self.novalue_check(novalue)?;
                 Ok(value)
             }
@@ -454,7 +454,10 @@ impl Interp {
         let indent = self.clause_state.current_value_indent;
         let tag = code.symbols.name(id).as_bytes().to_vec();
         if read == SymbolRead::Compound {
-            let mut resolved = code.stem_name(id).to_vec();
+            // The slot is not wanted here: this builds the printed name
+            // and reads nothing.
+            let (stem_name, _) = code.stem(id);
+            let mut resolved = stem_name.to_vec();
             resolved.extend_from_slice(&self.tail_key(code, id));
             self.trace_compound_name(indent, &tag, &resolved);
         }

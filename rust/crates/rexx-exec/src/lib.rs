@@ -1308,11 +1308,20 @@ impl<'a> Code<'a> {
 
     /// The stem half of the compound `id` names, its trailing period
     /// included -- the name whose slot holds the stem object a tail is read
-    /// out of or written into.
-    fn stem_name(&self, id: SymbolId) -> &'a [u8] {
+    /// out of or written into -- **and that slot, when the entry carries
+    /// one**.
+    ///
+    /// The name and the slot come back together rather than from separate
+    /// methods, so that a caller reaching for the name has to say what it
+    /// does about the slot.
+    /// `None` is the answer for a body with no plan, and for an entry
+    /// `Plan::bind` recorded, which assigns the stem no slot; it means
+    /// "resolve it the ordinary way", which is what every stem accessor did
+    /// before the slot was kept.
+    fn stem(&self, id: SymbolId) -> (&'a [u8], Option<usize>) {
         match self.compound(id) {
-            Some(entry) => &entry.stem,
-            None => compound_parts(self.symbols.name(id)).0.as_bytes(),
+            Some(entry) => (&entry.stem, entry.stem_at),
+            None => (compound_parts(self.symbols.name(id)).0.as_bytes(), None),
         }
     }
 }

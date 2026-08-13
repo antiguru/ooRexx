@@ -258,3 +258,78 @@ out> one
 out> ZV.ZI
 out> one
 out> ZV.1
+
+# a stem's own operations, with compound reads through it on either side
+#
+# The stem half of the split, which a compound reference resolves before it
+# resolves any tail. `zs. = 'dflt'` replaces the whole object and gives it a
+# default, so an unwritten tail answers `dflt` and the bare stem renders as
+# that default rather than as its own name; a written tail answers what was
+# written. `drop zs.` replaces the object again with an empty one, after which
+# the same tail derives its resolved name and the bare stem renders its own.
+# A transcript, claiming nothing about what it catches.
+program
+zs. = 'dflt'
+zi = 1
+say zs.zi
+zs.zi = 'one'
+say zs.zi
+say zs.
+drop zs.
+say zs.zi
+say zs.
+zs.2 = 'two'
+say zs.2 zs.9
+----
+rc> 0
+out> dflt
+out> one
+out> dflt
+out> ZS.1
+out> ZS.
+out> two ZS.9
+
+# PROCEDURE EXPOSE of a stem, written through on both sides of the call
+#
+# The exposed name is the stem alone, so the callee's own plan holds `ZP.` and
+# reaches the caller's object through the alias; the tail is resolved
+# separately in each body, against that body's own `ZJ`/`ZI`. The write the
+# callee makes under its own tail is therefore visible to the caller under a
+# different tail of the one stem. A transcript, claiming nothing about what it
+# catches.
+program
+zi = 3
+zp.zi = 'outer'
+call zsub
+say zp.3 zp.4
+exit
+zsub:
+procedure expose zp.
+zj = 4
+zp.zj = 'inner'
+say zp.3
+return
+----
+rc> 0
+out> outer
+out> outer inner
+
+# a compound inside an INTERPRET, on both sides of the stem's slot question
+#
+# `ZQ.` is a stem the enclosing body names for itself, so the enclosing plan
+# holds it; the fragment resolves the same spelling to the same place and the
+# reads after it see the fragment's write. `ZR.` is named by no line of the
+# enclosing body at all, so the plan never holds it and both fragments reach it
+# through the activation's run-time bindings instead. A transcript, claiming
+# nothing about what it catches.
+program
+interpret "zq.1 = 'frag'"
+say zq.1
+say zq.
+interpret "zr.2 = 'only'"
+interpret "say zr.2"
+----
+rc> 0
+out> frag
+out> ZQ.
+out> only

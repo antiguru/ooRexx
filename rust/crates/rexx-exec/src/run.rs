@@ -3065,9 +3065,10 @@ impl Interp {
             // `key`.
             ExprKind::Compound(id) => {
                 let tag = code.symbols.name(*id).as_bytes().to_vec();
-                let stem_name = code.stem_name(*id).to_vec();
+                let (stem_name, stem_at) = code.stem(*id);
+                let stem_name = stem_name.to_vec();
                 let key = self.tail_key(code, *id);
-                self.stem_set(&stem_name, &key, value);
+                self.stem_set_at(&stem_name, stem_at, &key, value);
                 let mut resolved = stem_name;
                 resolved.extend_from_slice(&key);
                 self.trace_compound_name(indent, &tag, &resolved);
@@ -6597,9 +6598,9 @@ impl Interp {
                         // so there is no fallible read to thread through.
                         NameShape::Stem => (self.read_stem(name), Novalue::Set, None),
                         NameShape::Compound => {
-                            let stem_name = code.stem_name(*control);
+                            let (stem_name, stem_at) = code.stem(*control);
                             let key = self.tail_key(code, *control);
-                            let (value, novalue) = self.stem_get(stem_name, &key);
+                            let (value, novalue) = self.stem_get_at(stem_name, stem_at, &key);
                             let mut resolved = stem_name.to_vec();
                             resolved.extend_from_slice(&key);
                             (value, novalue, Some(resolved))
@@ -7499,9 +7500,9 @@ impl Interp {
             VariableRef::Direct(id) => {
                 let name = code.symbols.name(*id);
                 if shape_of(name.as_bytes()) == NameShape::Compound {
-                    let stem_name = code.stem_name(*id);
+                    let (stem_name, stem_at) = code.stem(*id);
                     let key = self.tail_key(code, *id);
-                    self.stem_drop_tail(stem_name, &key);
+                    self.stem_drop_tail_at(stem_name, stem_at, &key);
                 } else {
                     self.drop_by_name(name.as_bytes());
                 }

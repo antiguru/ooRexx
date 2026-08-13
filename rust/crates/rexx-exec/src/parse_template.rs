@@ -555,12 +555,13 @@ impl Interp {
                 Ok(value)
             }
             crate::run::NameShape::Compound => {
-                let stem_name = code.stem_name(id).to_vec();
+                let (stem_name, stem_at) = code.stem(id);
+                let stem_name = stem_name.to_vec();
                 let key = self.tail_key(code, id);
                 let mut resolved = stem_name.clone();
                 resolved.extend_from_slice(&key);
                 self.trace_compound_name(indent, &name, &resolved);
-                let (value, novalue) = self.stem_get(&stem_name, &key);
+                let (value, novalue) = self.stem_get_at(&stem_name, stem_at, &key);
                 self.novalue_check(novalue)?;
                 let text = self.to_text(value).to_vec();
                 self.trace_variable(indent, &name, &text);
