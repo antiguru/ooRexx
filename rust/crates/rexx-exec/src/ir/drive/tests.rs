@@ -220,10 +220,13 @@ fn the_ir_engine_steps_an_ifs_chosen_branch_from_the_chunk() {
 /// wins are all stepped from the chunk.
 ///
 /// **The only observable that separates a promoted `SELECT` from an unpromoted
-/// one**, for the reason the `IF` count above is a count: the construct is
-/// resolved through the same `scan_when`, `when_targets`, `select_escape` and
-/// `leave_select` either way, so both engines print the same bytes for every
-/// program and nothing in the output says which drove it. With the whole
+/// one**, for the reason the `IF` count above is a count: the construct's
+/// targets and escapes are resolved through the same `when_targets`,
+/// `select_escape` and `leave_select` either way, and a `WHEN`'s own condition
+/// reaches the same `Interp::condition_value` on either engine -- whether it
+/// gets there through `scan_when` or through the ops
+/// `crate::ir::Op::Condition` ends. So both engines print the same bytes for
+/// every program and nothing in the output says which drove it. With the whole
 /// construct left on the tree-walker the count is 2 on either path -- the
 /// `SELECT`'s own clause and the one clause after it -- with the scan, the
 /// branch and the `END` reached through `run_bounded`'s tree-walker arm and

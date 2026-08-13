@@ -1,0 +1,162 @@
+# What promoting a plain `WHEN`'s condition has to keep.
+#
+# The condition used to be part of one `Op::WhenTest` doing the whole job:
+# evaluate the expression, trace the value, validate it as exactly "0"/"1",
+# answer the jump. It is now the expression's own native ops followed by
+# `Op::Condition` tagged `WHEN` -- except where `native_shape` declines the
+# expression, and then it is still the whole job in one `Op::WhenTest`.
+#
+# A `WHEN CASE` never had a condition at all: its values are compared against
+# the enclosing `SELECT CASE`'s text, and it stays on `Op::WhenTest` whatever
+# its values look like. An absorbed `WHEN` -- one that is another `WHEN`'s
+# consequence rather than a branch its `SELECT` collected -- stays on
+# `Op::Generic`. The last two rows here are those two shapes, and what they
+# record is that the bytes did not move.
+#
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, on both
+# engines, before this file was written. Regenerate a row by running its
+# program under the oracle, never with REWRITE=1 -- ir_dual.rs refuses to run
+# at all under REWRITE for that reason. Capture is:
+#
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+#
+# Expected lines are tagged so that no line of the block can be empty, and
+# trailing blanks are part of what is compared: a `WHEN` header's `*-*` echo
+# ends in one, because the instruction ends at the THEN keyword.
+#
+# `/nonexistent/ir-dual-case.rex` is `ir_dual.rs`'s own INLINE_PATH, which a
+# raised condition's middle line prints. Running the same program under the
+# oracle prints the oracle's own path there instead.
+
+# 34.2, the WHEN keyword's own raiser, from a condition that compiled.
+# `Op::Condition`'s keyword tag is what picks 34.2 over an `IF`'s 34.1, and
+# this row is measured to redden when a `WHEN`'s op is emitted tagged `If`.
+# **Not a unique catch, and the difference is the instrument**: the op-stream
+# pins and the corpus shape sweep read the tag out of the compiled stream and
+# redden under the same mutation, while this is the only row anywhere that
+# sees the wrong sub-number in a program's own stderr. The extracted-program
+# sweep does not see it at all, which is what says no corpus program raises
+# 34.2 from a condition that compiled.
+program
+trace r
+select
+  when 'x' then nop
+end
+----
+rc> 222
+err>      2 *-* select
+err>      3 *-*   when 'x' 
+err>        >>>     "x"
+err>      3 *-*   when 'x' 
+err> Error 34 running /nonexistent/ir-dual-case.rex line 3:  Logical value not 0 or 1.
+err> Error 34.2:  Value of expression following WHEN keyword must be exactly "0" or "1"; found "x".
+
+# trace i over a call inside a WHEN's condition, in a scan that runs one WHEN
+# out before matching the next. The call takes an `Op::CallExpr` addressed at
+# `root.L`, which is the descent `Interp::chunk_node_at`'s own `When` arm
+# resolves; without that arm the driver reaches `Loud::call_op_off_its_node`
+# instead of calling anything. Measured to redden when that arm is removed --
+# on stdout, `medium` against nothing at all -- and **not a unique catch**: the
+# extracted-program sweep, the branch-shape table and the exempt-set gate all
+# redden under it too.
+# The intermediate lines and their order are the rest of what is pinned: the
+# argument, the function's own `>F>`, the right operand, the operator, and the
+# condition's `>>>` last, once per WHEN tested.
+program
+trace i
+zs = 'abcd'
+select
+  when length(zs) > 9 then say 'long'
+  when length(zs) > 3 then say 'medium'
+  otherwise say 'short'
+end
+----
+rc> 0
+out> medium
+err>      2 *-* zs = 'abcd'
+err>        >L>   "abcd"
+err>        >>>   "abcd"
+err>        >=>   ZS <= "abcd"
+err>      3 *-* select
+err>      4 *-*   when length(zs) > 9 
+err>        >V>     ZS => "abcd"
+err>        >A>     "abcd"
+err>        >F>     LENGTH => "4"
+err>        >L>     "9"
+err>        >O>     ">" => "0"
+err>        >>>     "0"
+err>      5 *-*   when length(zs) > 3 
+err>        >V>     ZS => "abcd"
+err>        >A>     "abcd"
+err>        >F>     LENGTH => "4"
+err>        >L>     "3"
+err>        >O>     ">" => "1"
+err>        >>>     "1"
+err>      5 *-*     then
+err>      5 *-*       say 'medium'
+err>        >L>         "medium"
+err>        >>>         "medium"
+
+# A `SELECT CASE` under trace i, whose `WHEN`s are `WhenCase` nodes and stay on
+# `Op::WhenTest`. What it records is the shape a promoted condition has to
+# leave alone -- two `>>>` lines per value tested, the value's own and the
+# comparison's outcome, which is `Interp::test_case_when`'s pair rather than a
+# condition's single line -- and the `>K>   "CASE"` echo above them.
+# Measured to redden when an `Op::Condition` is emitted behind the
+# `Op::WhenTest` a declining `WHEN` or a `WhenCase` keeps: a third `>>>` after
+# each pair. **Not a unique catch**: the branch-shape table and the op-stream
+# pins redden under it too.
+program
+trace i
+select case 1 + 1
+  when 1 then say 'one'
+  when 2 then say 'two'
+  otherwise say 'other'
+end
+----
+rc> 0
+out> two
+err>      2 *-* select case 1 + 1
+err>        >L>   "1"
+err>        >L>   "1"
+err>        >O>   "+" => "2"
+err>        >K>   "CASE" => "2"
+err>      3 *-*   when 1 
+err>        >L>     "1"
+err>        >>>     "1"
+err>        >>>     "0"
+err>      4 *-*   when 2 
+err>        >L>     "2"
+err>        >>>     "2"
+err>        >>>     "1"
+err>      4 *-*     then
+err>      4 *-*       say 'two'
+err>        >L>         "two"
+err>        >>>         "two"
+
+# A transcript, claiming nothing about catching -- no mutation run against this
+# file reddened it. An absorbed `WHEN` under
+# trace r. The inner `WHEN` is the outer one's consequence rather than a branch
+# the `SELECT` collected, so it has no `when_info` entry and compiles to
+# `Op::Generic`. Its condition is evaluated and traced, its own consequence
+# never runs, and control leaves the `SELECT` without reaching the
+# `OTHERWISE` -- the last of which is why `say 'after'` is the only stdout.
+program
+trace r
+select
+  when 1 = 1 then when 2 = 2 then say 'inner'
+  otherwise say 'other'
+end
+say 'after'
+----
+rc> 0
+out> after
+err>      2 *-* select
+err>      3 *-*   when 1 = 1 
+err>        >>>     "1"
+err>      3 *-*     then
+err>      3 *-*       when 2 = 2 
+err>        >>>         "1"
+err>      6 *-* say 'after'
+err>        >>>   "after"

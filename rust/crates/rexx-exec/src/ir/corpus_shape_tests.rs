@@ -82,7 +82,7 @@ use rexx_parse::{
 };
 
 use super::golden::render;
-use super::{Chunk, Op};
+use super::{Chunk, ConditionKeyword, Op};
 use crate::plan::Plan;
 use crate::trace::{ChunkTrace, TraceMode};
 
@@ -344,8 +344,12 @@ fn listed_whens(body: &CodeBody) -> Vec<usize> {
 struct Seen {
     constructs: BTreeMap<&'static str, usize>,
     roots: BTreeMap<Root, usize>,
-    /// How many promoted clauses carry an `Op::Condition`.
-    native_conditions: usize,
+    /// How many promoted clauses carry an `Op::Condition`, keyed by the
+    /// keyword the op is tagged with. Keyed rather than counted in one number,
+    /// because a corpus holding a native `IF` condition and no native `WHEN`
+    /// one would leave the `WHEN` row below vacuous while the total still
+    /// looked healthy.
+    native_conditions: BTreeMap<&'static str, usize>,
     /// How many `DO`/`LOOP` header slots compiled to something other than one
     /// `Op::EvalExpr`.
     native_header_values: usize,
@@ -398,13 +402,22 @@ fn check_body(body: &CodeBody, symbols: &rexx_parse::SymbolTable, where_: &str, 
             )
         });
 
-        // Whether this clause carries a compiled condition. Counted because
-        // the `If` row below says nothing at all on a corpus whose every
-        // condition is outside the native set: `root_of` would call for
-        // `Root::EvalExpr` and the stream would hold one, and the row would
-        // pass without the promotion ever having fired.
-        if region.iter().any(|op| matches!(op, Op::Condition { .. })) {
-            seen.native_conditions += 1;
+        // Whether this clause carries a compiled condition, and for which
+        // keyword. Counted because the `If` and `When` rows below say nothing
+        // at all on a corpus whose every condition is outside the native set:
+        // `root_of` would call for `Root::EvalExpr`, the stream would hold
+        // what a declining condition compiles to, and both rows would pass
+        // without the promotion ever having fired.
+        for op in region.iter() {
+            if let Op::Condition { keyword, .. } = op {
+                *seen
+                    .native_conditions
+                    .entry(match keyword {
+                        ConditionKeyword::If => "IF",
+                        ConditionKeyword::When => "WHEN",
+                    })
+                    .or_default() += 1;
+            }
         }
 
         // **A `DO`/`LOOP` header is a list of expressions rather than one**, so
@@ -449,22 +462,34 @@ fn check_body(body: &CodeBody, symbols: &rexx_parse::SymbolTable, where_: &str, 
             continue;
         }
 
-        // The value expression, for the constructs whose expression `compile`
-        // offers to `push_native` as a whole slot. A `SELECT`'s and a
-        // `WHEN CASE`'s evaluate through `Op::EvalExpr` unconditionally, so
-        // there is nothing here to state about them that the op's presence in
-        // the stream has not already said.
+        // The expression a promoted clause's region must end in, for the
+        // constructs whose expression `compile` offers to `push_native` as a
+        // whole slot. A `SELECT`'s own expression is offered to no such thing
+        // and evaluates through `Op::EvalExpr` unconditionally; a `WHEN
+        // CASE`'s values are compared inside `Op::WhenTest`. Neither is a slot
+        // this file has anything to state about that the op's presence in the
+        // stream has not already said.
         //
         // An `IF`'s condition ends in its expression's own root op, with
         // `Op::Condition` and `Op::JumpUnless` behind it and neither of those
         // a `Root`, so the same scan back finds it.
-        let value = match &instruction.kind {
-            InstructionKind::Assignment { value, .. } => Some(value),
-            InstructionKind::Say { expression } => expression.as_ref(),
-            InstructionKind::If { condition, .. } => Some(condition),
+        //
+        // A plain `WHEN`'s condition is the same expression offered the same
+        // way, and `None` is what it calls for when the offer is declined:
+        // its fallback is one `Op::WhenTest`, which is not a `Root` at all,
+        // where an `IF`'s is an `Op::EvalExpr`, which is. So the two
+        // constructs differ here in exactly one arm and the difference is the
+        // fallback op, not the promotion.
+        let expected = match &instruction.kind {
+            InstructionKind::Assignment { value, .. } => Some(root_of(value)),
+            InstructionKind::Say { expression } => expression.as_ref().map(root_of),
+            InstructionKind::If { condition, .. } => Some(root_of(condition)),
+            InstructionKind::When { condition, .. } => match root_of(condition) {
+                Root::EvalExpr => None,
+                root => Some(root),
+            },
             _ => continue,
         };
-        let expected = value.map(root_of);
         let actual = region.iter().filter_map(Root::of).next_back();
         assert_eq!(
             actual,
@@ -652,11 +677,13 @@ fn sweep_every_corpus_body() {
         seen.constructs.contains_key("DO") || seen.constructs.contains_key("LOOP"),
         "no corpus body contains a promoted DO or LOOP"
     );
-    assert!(
-        seen.native_conditions > 0,
-        "no corpus clause compiled its condition to native ops, so the IF rows above hold only \
-         because every condition declined"
-    );
+    for keyword in ["IF", "WHEN"] {
+        assert!(
+            seen.native_conditions.contains_key(keyword),
+            "no corpus {keyword} compiled its condition to native ops, so the {keyword} rows \
+             above hold only because every condition declined"
+        );
+    }
     assert!(
         seen.native_header_values > 0,
         "no corpus DO/LOOP header slot compiled to native ops, so the header rows above hold \

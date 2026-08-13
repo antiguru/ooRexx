@@ -15,7 +15,7 @@
 //! gives `render` a non-test caller, so an `allow` would be permanent rather
 //! than a placeholder for one.
 
-use super::{Chunk, NodePath, Op, PlanSlot};
+use super::{Chunk, ConditionKeyword, NodePath, Op, PlanSlot};
 
 /// Renders `chunk` as one line per op: `"{index}: {OpName}[ field=value]*"`.
 ///
@@ -219,8 +219,15 @@ pub(crate) fn render(chunk: &Chunk) -> String {
             Op::JumpUnless { reg, target } => {
                 out.push_str(&format!("{index}: JumpUnless reg={reg} target={target}\n"));
             }
-            Op::Condition { index: at, reg } => {
-                out.push_str(&format!("{index}: Condition index={at} reg={reg}\n"));
+            Op::Condition {
+                index: at,
+                reg,
+                keyword,
+            } => {
+                out.push_str(&format!(
+                    "{index}: Condition index={at} reg={reg} keyword={}\n",
+                    render_condition_keyword(*keyword)
+                ));
             }
         }
     }
@@ -235,6 +242,17 @@ fn render_register(register: Option<u16>) -> String {
     match register {
         Some(register) => register.to_string(),
         None => "-".to_string(),
+    }
+}
+
+/// Which keyword an [`Op::Condition`] validates for, as the keyword itself:
+/// the tag decides which raiser answers a value that is not `0`/`1`, and a
+/// golden expectation reading `IF` or `WHEN` is what makes that visible in the
+/// stream rather than only in a program's stderr.
+fn render_condition_keyword(keyword: ConditionKeyword) -> &'static str {
+    match keyword {
+        ConditionKeyword::If => "IF",
+        ConditionKeyword::When => "WHEN",
     }
 }
 

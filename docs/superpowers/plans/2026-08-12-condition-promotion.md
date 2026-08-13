@@ -293,9 +293,19 @@ Check the width holds, unpiped.
 `run.rs`, `chunk_node_at`: the `(InstructionKind::When { condition, .. }, 0)` arm.
 `eval_chunk_expr` has no `When` arm today, because a `WHEN` reached the driver through `Op::WhenTest` rather than `Op::EvalExpr`; the subset rule `chunk_node_at`'s doc states is about slots *that function evaluates*, so adding an arm here without one there needs that doc corrected rather than quietly broken.
 
+**The doc was corrected, and no `When` arm was added to `eval_chunk_expr`.**
+Such an arm would be unreachable: nothing emits an `Op::EvalExpr` for a `WHEN` slot, because a `WHEN` whose condition declines keeps `Op::WhenTest` doing the whole job.
+The containment is the wrong invariant in both directions -- a `SELECT CASE`'s expression is in `eval_chunk_expr` and not in `chunk_node_at` -- and what replaces it is the rule the arms actually follow: `chunk_node_at`'s arms are the slots `compile` offers to `push_native`, and a slot is in both functions exactly when it is offered to `push_native` *and* its declining fallback is `Op::EvalExpr`.
+
 - [ ] **Step 4: pin the streams, add the differential cases, run the gates, commit**
 
 Cases: a matching and a non-matching `WHEN`, `when 'x' then` for 34.2, a `SELECT CASE` whose `WHEN` is a `WhenCase` (unchanged), an absorbed `WHEN` (unchanged), and `trace r`/`trace i` over each.
+
+**Two of those rows were already in the tree and were not written again.**
+`assignment-and-say`'s "a SAY inside a matched WHEN's branch under trace i" is a matching `WHEN` with a native condition, and `trace-settings`' "trace turned on inside a branch, before a select" is a non-matching one under `trace r`; both stayed green through this task, which is what says the promotion moved no bytes.
+`tests/ir_dual_cases/when-conditions` holds the four rows that were not already covered, and `task-3-report.md` has the mutation table each row's claim rests on.
+None of the four is a *unique* catch: every mutation that reddens one reddens an op-stream pin or a pre-existing harness as well.
+The absorbed-`WHEN` row caught nothing under any mutation run and says so in its own comment.
 
 ---
 

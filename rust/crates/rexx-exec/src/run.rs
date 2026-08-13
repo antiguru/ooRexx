@@ -5252,6 +5252,14 @@ impl Interp {
 
     /// One listed `WHEN`/`WHEN CASE`'s own condition, and whether it holds.
     ///
+    /// **The tree-walker's entry for both, and the compiled stream's for a
+    /// `WHEN CASE` and for a `WHEN` whose condition `native_shape`
+    /// declined**: a plain `WHEN` whose condition compiled does not come
+    /// through here at all -- its ops leave the value in a register and
+    /// `crate::ir::Op::Condition` enters [`Interp::condition_value`] with it,
+    /// which is the half the two share, tagged so that 34.2 is still the
+    /// raiser.
+    ///
     /// **The work of one clause, and nothing a clause owes around it.** The
     /// caller opens the clause with [`Interp::in_stepped_clause`], so the
     /// `*-*` echo, the value indent this reads back, the `SIGL` line, the
@@ -6843,14 +6851,21 @@ impl Interp {
     /// the slot's own expression resolves with no descent at all.
     ///
     /// **The slot arms are the slots `compile` enters `push_native` for**, and
-    /// they are a subset of [`Interp::eval_chunk_expr`]'s that must stay one.
-    /// An addressed op exists only where the whole slot compiled natively, so
-    /// a slot `compile` leaves on [`crate::ir::Op::EvalExpr`] entire -- a
-    /// `SELECT CASE`'s expression -- holds no node any op names and must never
-    /// reach here. An `IF`'s condition and a `DO`/`LOOP` header's values are in
-    /// both functions and the two do different halves of each: this resolves a
-    /// call inside a slot that compiled, and `eval_chunk_expr`'s own arms
-    /// evaluate the slots that declined.
+    /// that is the whole rule. An addressed op exists only where the whole
+    /// slot compiled natively, so a slot `compile` never offers to
+    /// `push_native` -- a `SELECT CASE`'s expression -- holds no node any op
+    /// names and must never reach here.
+    ///
+    /// **These are not a subset of [`Interp::eval_chunk_expr`]'s arms, and
+    /// containment is the wrong invariant to hold them to**, because the two
+    /// functions answer different questions: this one resolves a call inside a
+    /// slot that compiled, and that one evaluates a slot that declined. A slot
+    /// is in both exactly when it is offered to `push_native` *and* its
+    /// declining fallback is [`crate::ir::Op::EvalExpr`], and slots part
+    /// company in both directions: a plain `WHEN`'s condition is here and not
+    /// there, because a declining one stays on [`crate::ir::Op::WhenTest`]
+    /// doing the whole job, and a `SELECT CASE`'s expression is there and not
+    /// here, because it is never offered to `push_native` at all.
     ///
     /// `None` for a slot this does not name and for a step that lands on a
     /// node with no such child. Both are `Loud::call_op_off_its_node` at the
@@ -6870,6 +6885,10 @@ impl Interp {
                 0,
             ) => expression,
             (InstructionKind::If { condition, .. }, 0) => condition,
+            // A **plain** `WHEN`'s condition. A `WhenCase`'s values are not a
+            // condition and compile to no native op at all, so no address ever
+            // names one and this arm does not answer for them.
+            (InstructionKind::When { condition, .. }, 0) => condition,
             // A `DO`/`LOOP` header's `slot`th expression, resolved through the
             // same `loop_header_slot` the compiler emitted the slot's ops from
             // and the same one `eval_chunk_expr` evaluates a declining slot
@@ -8780,10 +8799,11 @@ pub(crate) fn raised_if_not_logical(found: &[u8]) -> Raised {
 /// 34.2: a single (non-list) `WHEN` condition is not exactly `0` or `1`.
 /// `Error_Logical_value_when`, the same shape as `raised_if_not_logical`
 /// with `WHEN`'s own sub-number -- a plain `WHEN`'s comma list is the
-/// opposite case (`WhenCase`'s doc comment) and never reaches this raiser,
-/// since `eval_condition` only calls it when `condition.kind` is not
-/// `ExprKind::Logical`.
-fn raised_when_not_logical(found: &[u8]) -> Raised {
+/// opposite case (`WhenCase`'s doc comment) and never reaches this raiser:
+/// [`Interp::eval_condition`] hands a list over already `checked`, and
+/// `crate::ir::compile`'s `native_shape` declines `ExprKind::Logical`, so a
+/// list never becomes a `crate::ir::Op::Condition` either.
+pub(crate) fn raised_when_not_logical(found: &[u8]) -> Raised {
     Raised::syntax(34, 2, vec![found.to_vec()])
 }
 

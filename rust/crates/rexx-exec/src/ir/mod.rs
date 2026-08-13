@@ -30,8 +30,9 @@ use std::cell::Cell;
 use rexx_core::FrameId;
 use rexx_parse::{Operator, PrefixOp, SymbolId};
 
+use crate::error::Raised;
 use crate::eval::SymbolRead;
-use crate::run::{HeaderRole, Resolved};
+use crate::run::{HeaderRole, Resolved, raised_if_not_logical, raised_when_not_logical};
 use crate::trace::ChunkTrace;
 
 mod compile;
@@ -297,6 +298,15 @@ pub(crate) enum Op {
     /// Tests the listed `WHEN`/`WHEN CASE` at `index` and stores whether it
     /// holds in register `dst`, as the Rexx logical value [`Op::JumpUnless`]
     /// reads back.
+    ///
+    /// **The whole job in one op**, which is what a `WHEN CASE` needs and what
+    /// a plain `WHEN` falls back to: it evaluates, traces and (for a plain
+    /// `WHEN`) validates, through `Interp::scan_when`. A plain `WHEN` whose
+    /// condition `native_shape` accepts compiles to that condition's own ops
+    /// and an [`Op::Condition`] instead, and no op of this kind is emitted for
+    /// it. A `WHEN CASE` never takes that route: its values are compared
+    /// against the enclosing `SELECT CASE`'s text rather than validated as a
+    /// logical value, which is not what [`Op::Condition`] does.
     ///
     /// `case` is the register the enclosing `SELECT CASE` left its own value
     /// in, and `None` for a plain `SELECT`. It is a register of the
@@ -761,17 +771,17 @@ pub(crate) enum Op {
     /// [`Op::EvalExpr`] is: the register it reads is one that region wrote,
     /// and the region's own end is where that register is released.
     JumpUnless { reg: u16, target: u32 },
-    /// Validates the `IF` condition value in `reg`, emits the `>>>` line it
-    /// owes, and leaves the logical value [`Op::JumpUnless`] reads back in
-    /// that same register.
+    /// Validates the condition value in `reg`, emits the `>>>` line it owes,
+    /// and leaves the logical value [`Op::JumpUnless`] reads back in that same
+    /// register.
     ///
-    /// **This is the tail of what an `IF`'s condition used to be one
-    /// [`Op::EvalExpr`] for.** That op evaluated the expression *and*
-    /// validated it, through `Interp::eval_if_condition`; here the expression
-    /// is native ops and this is the rest. `eval_chunk_expr`'s own `If` arm
-    /// stays, whole, for the conditions `native_shape` declines -- those
-    /// compile to one `EvalExpr` doing both halves, and no op of this kind
-    /// follows one.
+    /// **This is the tail of what a condition used to be one
+    /// [`Op::EvalExpr`] or one [`Op::WhenTest`] for.** Those ops evaluate the
+    /// expression *and* validate it, through `Interp::eval_if_condition` and
+    /// `Interp::scan_when`; here the expression is native ops and this is the
+    /// rest. Both of those ops stay, whole, for the conditions `native_shape`
+    /// declines -- one op doing both halves, with no op of this kind behind
+    /// it.
     ///
     /// **One register, read and written**, because the value it validates is
     /// the value it replaces: `Interp::condition_value` answers a `bool`, and
@@ -782,12 +792,45 @@ pub(crate) enum Op {
     /// `native_shape` has no `ExprKind::Logical` arm and takes its decision
     /// for the whole expression at once. That is what licenses the driver
     /// passing `checked: false`: nothing upstream of this op has validated
-    /// the value, so 34.1 is the right raiser and 34.6 cannot be owed here.
+    /// the value, so [`ConditionKeyword::raiser`] is the right raiser and 34.6
+    /// cannot be owed here.
     ///
     /// **Only valid inside a [`Op::Clause`] region**, whose clause is the
-    /// `IF`: the indent its `>>>` prints at and the clause a failure is blamed
-    /// on are that region's.
-    Condition { index: u32, reg: u16 },
+    /// `IF` or the `WHEN`: the indent its `>>>` prints at and the clause a
+    /// failure is blamed on are that region's.
+    Condition {
+        index: u32,
+        reg: u16,
+        keyword: ConditionKeyword,
+    },
+}
+
+/// Which keyword's condition an [`Op::Condition`] is validating.
+///
+/// **A tag on one op rather than two ops**, because the two arms would
+/// otherwise be the same arm twice: an `IF`'s condition and a plain `WHEN`'s
+/// reach `Interp::condition_value` with the same
+/// `ConditionTrace::Result(indent)` and the same `checked: false`, and differ
+/// only in which raiser answers a value that is not exactly `0`/`1`.
+#[derive(Clone, Copy)]
+pub(crate) enum ConditionKeyword {
+    If,
+    When,
+}
+
+impl ConditionKeyword {
+    /// The raiser for a condition value that is not exactly `0` or `1`.
+    ///
+    /// Measured on the oracle: `if 'x' then nop` is 34.1 and
+    /// `select; when 'x' then nop; end` is 34.2, and the two catalogue texts
+    /// name their own keyword ("following IF keyword", "following WHEN
+    /// keyword"). That difference is the whole of what this tag decides.
+    pub(crate) fn raiser(self) -> fn(&[u8]) -> Raised {
+        match self {
+            ConditionKeyword::If => raised_if_not_logical,
+            ConditionKeyword::When => raised_when_not_logical,
+        }
+    }
 }
 
 /// Which driver steps the member clauses of a construct that resolves the

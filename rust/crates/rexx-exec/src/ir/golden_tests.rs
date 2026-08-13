@@ -1070,7 +1070,7 @@ fn an_if_with_an_else_compiles_to_a_clause_region_and_two_jumps() {
          4: TraceLiteral src=1\n\
          5: Binary op== lhs=0 rhs=1 dst=0\n\
          6: TraceOperator op== src=0\n\
-         7: Condition index=0 reg=0\n\
+         7: Condition index=0 reg=0 keyword=IF\n\
          8: JumpUnless reg=0 target=16\n\
          9: Generic index=1\n\
          10: Clause index=2 end=14\n\
@@ -1127,7 +1127,7 @@ fn an_if_with_no_else_emits_no_branch_end_jump() {
          4: TraceLiteral src=1\n\
          5: Binary op== lhs=0 rhs=1 dst=0\n\
          6: TraceOperator op== src=0\n\
-         7: Condition index=0 reg=0\n\
+         7: Condition index=0 reg=0 keyword=IF\n\
          8: JumpUnless reg=0 target=15\n\
          9: Generic index=1\n\
          10: Clause index=2 end=14\n\
@@ -1204,7 +1204,7 @@ fn nested_ifs_reuse_their_registers() {
          4: TraceLiteral src=1\n\
          5: Binary op== lhs=0 rhs=1 dst=0\n\
          6: TraceOperator op== src=0\n\
-         7: Condition index=0 reg=0\n\
+         7: Condition index=0 reg=0 keyword=IF\n\
          8: JumpUnless reg=0 target=26\n\
          9: Generic index=1\n\
          10: Clause index=2 end=19\n\
@@ -1214,7 +1214,7 @@ fn nested_ifs_reuse_their_registers() {
          14: TraceLiteral src=1\n\
          15: Binary op== lhs=0 rhs=1 dst=0\n\
          16: TraceOperator op== src=0\n\
-         17: Condition index=2 reg=0\n\
+         17: Condition index=2 reg=0 keyword=IF\n\
          18: JumpUnless reg=0 target=26\n\
          19: Generic index=3\n\
          20: Clause index=4 end=24\n\
@@ -1238,21 +1238,28 @@ fn nested_ifs_reuse_their_registers() {
 /// and one per listed `WHEN`, chained by the `JumpUnless` each `WHEN` ends
 /// with, and a frame opened over whichever branch wins.
 ///
-/// The eleven instructions are `SELECT`, `WHEN`, `THEN`, `say 'a'`, `WHEN`,
-/// `THEN`, `say 'b'`, `OTHERWISE`, `say 'o'`, `END`, `say 'after'`.
+/// The instructions are `SELECT`, `WHEN`, `THEN`, `say 'a'`, `WHEN`, `THEN`,
+/// `say 'b'`, `OTHERWISE`, `say 'o'`, `END`, `say 'after'`.
+///
+/// **Each listed `WHEN`'s region is its condition compiled, exactly as an
+/// `IF`'s is**: `1 = 0` is native, so the region is the two constant loads,
+/// the comparison, their echo lines, then `Condition` -- the validation and
+/// the `>>>` the condition still owes -- and the jump that reads the register
+/// `Condition` left its answer in. `keyword=WHEN` is what selects 34.2 over an
+/// `IF`'s 34.1 for a value that is not exactly `0`/`1`.
 ///
 /// The three things a reader should check by eye are the jump targets:
 ///
-/// * the first `WHEN`'s `JumpUnless` goes to op 11, the **second `WHEN`'s own
+/// * the first `WHEN`'s `JumpUnless` goes to op 17, the **second `WHEN`'s own
 ///   clause region**, which is the scan continuing;
-/// * the second `WHEN`'s goes to op 20, the `EnterOtherwise` in front of the
+/// * the second `WHEN`'s goes to op 32, the `EnterOtherwise` in front of the
 ///   `OTHERWISE` marker, which is the scan running out;
 /// * and nothing jumps past a branch, because a branch is left by the frame
-///   `EnterWhen` opened rather than by an op -- reaching op 20 by falling out
+///   `EnterWhen` opened rather than by an op -- reaching op 32 by falling out
 ///   of the second `WHEN`'s branch is that branch's `op_end`, and the driver
 ///   closes the frame there instead of running the op.
 ///
-/// **`op_of[7]` is 20 and not 21**, which is the other half of the same
+/// **`op_of[7]` is 32 and not 33**, which is the other half of the same
 /// mechanism: an absorbed `WHEN CASE`'s escape landing exactly on the
 /// `OTHERWISE` marker has to open the frame the marker's branch runs under,
 /// and that is what putting `EnterOtherwise` at the resume entry does.
@@ -1267,43 +1274,56 @@ fn a_select_with_an_otherwise_compiles_to_a_scan_chain_and_two_frames() {
         render(&chunk),
         "0: Clause index=0 end=1\n\
          1: SelectCaseText index=0 case=-\n\
-         2: Clause index=1 end=5\n\
-         3: WhenTest index=1 case=- dst=0\n\
-         4: JumpUnless reg=0 target=11\n\
-         5: EnterWhen select=0 when=1\n\
-         6: Generic index=2\n\
-         7: Clause index=3 end=11\n\
-         8: Const dst=0 konst=0\n\
-         9: TraceLiteral src=0\n\
-         10: Say index=3 src=0\n\
-         11: Clause index=4 end=14\n\
-         12: WhenTest index=4 case=- dst=0\n\
-         13: JumpUnless reg=0 target=20\n\
-         14: EnterWhen select=0 when=4\n\
-         15: Generic index=5\n\
-         16: Clause index=6 end=20\n\
-         17: Const dst=0 konst=1\n\
-         18: TraceLiteral src=0\n\
-         19: Say index=6 src=0\n\
-         20: EnterOtherwise select=0\n\
-         21: Generic index=7\n\
-         22: Clause index=8 end=26\n\
-         23: Const dst=0 konst=2\n\
-         24: TraceLiteral src=0\n\
-         25: Say index=8 src=0\n\
-         26: Generic index=9\n\
-         27: Clause index=10 end=31\n\
-         28: Const dst=0 konst=3\n\
-         29: TraceLiteral src=0\n\
-         30: Say index=10 src=0\n"
+         2: Clause index=1 end=11\n\
+         3: LoadConstant dst=0\n\
+         4: TraceLiteral src=0\n\
+         5: LoadConstant dst=1\n\
+         6: TraceLiteral src=1\n\
+         7: Binary op== lhs=0 rhs=1 dst=0\n\
+         8: TraceOperator op== src=0\n\
+         9: Condition index=1 reg=0 keyword=WHEN\n\
+         10: JumpUnless reg=0 target=17\n\
+         11: EnterWhen select=0 when=1\n\
+         12: Generic index=2\n\
+         13: Clause index=3 end=17\n\
+         14: Const dst=0 konst=0\n\
+         15: TraceLiteral src=0\n\
+         16: Say index=3 src=0\n\
+         17: Clause index=4 end=26\n\
+         18: LoadConstant dst=0\n\
+         19: TraceLiteral src=0\n\
+         20: LoadConstant dst=1\n\
+         21: TraceLiteral src=1\n\
+         22: Binary op== lhs=0 rhs=1 dst=0\n\
+         23: TraceOperator op== src=0\n\
+         24: Condition index=4 reg=0 keyword=WHEN\n\
+         25: JumpUnless reg=0 target=32\n\
+         26: EnterWhen select=0 when=4\n\
+         27: Generic index=5\n\
+         28: Clause index=6 end=32\n\
+         29: Const dst=0 konst=1\n\
+         30: TraceLiteral src=0\n\
+         31: Say index=6 src=0\n\
+         32: EnterOtherwise select=0\n\
+         33: Generic index=7\n\
+         34: Clause index=8 end=38\n\
+         35: Const dst=0 konst=2\n\
+         36: TraceLiteral src=0\n\
+         37: Say index=8 src=0\n\
+         38: Generic index=9\n\
+         39: Clause index=10 end=43\n\
+         40: Const dst=0 konst=3\n\
+         41: TraceLiteral src=0\n\
+         42: Say index=10 src=0\n"
     );
     assert_eq!(
-        chunk.registers, 1,
-        "the second WHEN reuses the register the first one released"
+        chunk.registers, 2,
+        "the second WHEN reuses the registers the first one released, and a \
+         comparison's right operand takes one beside the answer's own"
     );
     assert_eq!(
         chunk.op_of,
-        vec![0, 2, 6, 7, 11, 15, 16, 20, 22, 26, 27, 31]
+        vec![0, 2, 12, 13, 17, 27, 28, 32, 34, 38, 39, 43]
     );
 }
 
@@ -1365,7 +1385,8 @@ fn a_select_cases_own_value_outlives_the_registers_its_whens_take() {
 
 /// Without an `OTHERWISE` the scan runs out onto the `END`, whose own 7.3 is
 /// what "every WHEN was false" means -- so the last `WHEN`'s `JumpUnless`
-/// names the `END`'s **own** op and no frame is open when it runs.
+/// names the `END`'s **own** op (17, the `Generic`) and no frame is open when
+/// it runs.
 ///
 /// The neighbouring case to the one above, and it is what says the
 /// `EnterOtherwise` there belongs to the `OTHERWISE` rather than being emitted
@@ -1379,20 +1400,127 @@ fn a_select_with_no_otherwise_scans_out_onto_its_own_end() {
         render(&chunk),
         "0: Clause index=0 end=1\n\
          1: SelectCaseText index=0 case=-\n\
+         2: Clause index=1 end=11\n\
+         3: LoadConstant dst=0\n\
+         4: TraceLiteral src=0\n\
+         5: LoadConstant dst=1\n\
+         6: TraceLiteral src=1\n\
+         7: Binary op== lhs=0 rhs=1 dst=0\n\
+         8: TraceOperator op== src=0\n\
+         9: Condition index=1 reg=0 keyword=WHEN\n\
+         10: JumpUnless reg=0 target=17\n\
+         11: EnterWhen select=0 when=1\n\
+         12: Generic index=2\n\
+         13: Clause index=3 end=17\n\
+         14: Const dst=0 konst=0\n\
+         15: TraceLiteral src=0\n\
+         16: Say index=3 src=0\n\
+         17: Generic index=4\n\
+         18: Clause index=5 end=22\n\
+         19: Const dst=0 konst=1\n\
+         20: TraceLiteral src=0\n\
+         21: Say index=5 src=0\n"
+    );
+}
+
+/// **A `WHEN`'s condition outside the native set stays one
+/// [`super::Op::WhenTest`] and takes no `Condition` op**, which is the
+/// adjacent refusal to the two `SELECT` streams above and the sibling of
+/// `a_condition_outside_the_native_set_stays_one_eval_expr`.
+///
+/// The fallback is not the same op with a piece missing: that `WhenTest` runs
+/// `Interp::scan_when`, which evaluates the condition *and* validates it *and*
+/// emits its `>>>`, so a `Condition` behind it would trace the value a second
+/// time and validate it a second time. `.nil` is `ExprKind::DotVariable`,
+/// which `native_shape` has no arm for.
+#[test]
+fn a_when_condition_outside_the_native_set_stays_one_when_test() {
+    let chunk = compile_for_test(b"select\n  when .nil then nop\nend\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=1\n\
+         1: SelectCaseText index=0 case=-\n\
          2: Clause index=1 end=5\n\
          3: WhenTest index=1 case=- dst=0\n\
-         4: JumpUnless reg=0 target=11\n\
+         4: JumpUnless reg=0 target=8\n\
          5: EnterWhen select=0 when=1\n\
          6: Generic index=2\n\
-         7: Clause index=3 end=11\n\
-         8: Const dst=0 konst=0\n\
-         9: TraceLiteral src=0\n\
-         10: Say index=3 src=0\n\
-         11: Generic index=4\n\
-         12: Clause index=5 end=16\n\
-         13: Const dst=0 konst=1\n\
-         14: TraceLiteral src=0\n\
-         15: Say index=5 src=0\n"
+         7: Generic index=3\n\
+         8: Generic index=4\n"
+    );
+}
+
+/// A call inside a `WHEN`'s condition takes an [`super::Op::CallExpr`]
+/// addressed at slot `0` and the route down to it, which is what
+/// `Interp::chunk_node_at`'s own `When` arm resolves. `root.L` is that route:
+/// the `>` is the condition's own root and the call is its left operand.
+///
+/// The address is the whole of what makes the op runnable: without that arm
+/// the descent answers `None` and the driver reaches
+/// `Loud::call_op_off_its_node` instead of calling anything.
+#[test]
+fn a_call_in_a_whens_condition_is_addressed_at_the_conditions_slot() {
+    let chunk = compile_for_test(b"zs = 'abcd'\nselect\n  when length(zs) > 3 then nop\nend\n")
+        .expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=4\n\
+         1: Const dst=0 konst=0\n\
+         2: TraceLiteral src=0\n\
+         3: Store index=0 at=0 src=0\n\
+         4: Clause index=1 end=5\n\
+         5: SelectCaseText index=1 case=-\n\
+         6: Clause index=2 end=15\n\
+         7: CallExpr index=2 slot=0 path=root.L site=0 dst=0\n\
+         8: TraceFunction index=2 slot=0 path=root.L src=0\n\
+         9: LoadConstant dst=1\n\
+         10: TraceLiteral src=1\n\
+         11: Binary op=> lhs=0 rhs=1 dst=0\n\
+         12: TraceOperator op=> src=0\n\
+         13: Condition index=2 reg=0 keyword=WHEN\n\
+         14: JumpUnless reg=0 target=18\n\
+         15: EnterWhen select=1 when=2\n\
+         16: Generic index=3\n\
+         17: Generic index=4\n\
+         18: Generic index=5\n"
+    );
+}
+
+/// An **absorbed** `WHEN` -- one that is itself another `WHEN`'s consequence
+/// rather than a branch its `SELECT` collected -- compiles to
+/// [`super::Op::Generic`] and takes no region, so nothing this promotion emits
+/// reaches it.
+///
+/// The instructions are `SELECT`, `WHEN 1 = 1`, `THEN`, `WHEN 2 = 2`, `THEN`,
+/// `nop`, `END`, so instruction 3 is the absorbed one and op 13 is its whole
+/// compiled form. There is no `Clause index=3` anywhere in the stream.
+///
+/// The pair with the streams above is the point: a listed `WHEN` and an
+/// absorbed one are the same instruction kind, and what tells them apart is
+/// whether some `SELECT` named the index.
+#[test]
+fn an_absorbed_when_compiles_to_generic() {
+    let chunk = compile_for_test(b"select\n  when 1 = 1 then when 2 = 2 then nop\nend\n")
+        .expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=1\n\
+         1: SelectCaseText index=0 case=-\n\
+         2: Clause index=1 end=11\n\
+         3: LoadConstant dst=0\n\
+         4: TraceLiteral src=0\n\
+         5: LoadConstant dst=1\n\
+         6: TraceLiteral src=1\n\
+         7: Binary op== lhs=0 rhs=1 dst=0\n\
+         8: TraceOperator op== src=0\n\
+         9: Condition index=1 reg=0 keyword=WHEN\n\
+         10: JumpUnless reg=0 target=16\n\
+         11: EnterWhen select=0 when=1\n\
+         12: Generic index=2\n\
+         13: Generic index=3\n\
+         14: Generic index=4\n\
+         15: Generic index=5\n\
+         16: Generic index=6\n"
     );
 }
 
@@ -1431,7 +1559,7 @@ fn a_traced_if_carries_its_clause_echo_as_an_op_of_the_region() {
          5: TraceLiteral src=1\n\
          6: Binary op== lhs=0 rhs=1 dst=0\n\
          7: TraceOperator op== src=0\n\
-         8: Condition index=0 reg=0\n\
+         8: Condition index=0 reg=0 keyword=IF\n\
          9: JumpUnless reg=0 target=18\n\
          10: Generic index=1\n\
          11: Clause index=2 end=16\n\

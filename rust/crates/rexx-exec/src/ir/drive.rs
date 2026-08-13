@@ -42,8 +42,8 @@ use crate::clause::{ClauseOutcome, ClauseValue};
 use crate::eval::call_target_name;
 use crate::run::{
     Absorbed, ConditionTrace, Echo, Ended, Flow, LoopHeaderValues, SelectEscape, SelectResume,
-    absorb, otherwise_range, otherwise_resume, raised_if_not_logical, select_escape, select_parts,
-    when_resume, when_targets,
+    absorb, otherwise_range, otherwise_resume, select_escape, select_parts, when_resume,
+    when_targets,
 };
 use crate::{Code, Failure, Interp, Loud};
 
@@ -1080,17 +1080,24 @@ impl Interp {
                                         };
                                     break 'region Ok(RegionEnd::Flowed(flow));
                                 }
-                                // An `IF` condition's validation and its `>>>`
-                                // line, through the same
-                                // `Interp::condition_value` the tree-walker's
-                                // own `eval_condition` reaches -- so the
-                                // trace, the temps frame, the readback and the
-                                // 34.1 raiser are that function's rather than
-                                // a second copy. The register is read and
-                                // written in place: what a jump tests is the
-                                // logical value of the answer, and the
-                                // unvalidated value has no reader left.
-                                Op::Condition { index, reg } => {
+                                // An `IF`'s or a plain `WHEN`'s condition
+                                // validation and its `>>>` line, through the
+                                // same `Interp::condition_value` the
+                                // tree-walker's own `eval_condition` reaches
+                                // -- so the trace, the temps frame, the
+                                // readback and the raiser are that function's
+                                // rather than a second copy. One arm for both
+                                // keywords, because the raiser is the only
+                                // thing that differs and the op carries it.
+                                // The register is read and written in place:
+                                // what a jump tests is the logical value of
+                                // the answer, and the unvalidated value has no
+                                // reader left.
+                                Op::Condition {
+                                    index,
+                                    reg,
+                                    keyword,
+                                } => {
                                     debug_assert!(
                                         chunk.holds_register(*reg),
                                         "op reads register {reg} outside the region the chunk \
@@ -1111,7 +1118,7 @@ impl Interp {
                                         value,
                                         ConditionTrace::Result(indent),
                                         false,
-                                        raised_if_not_logical,
+                                        keyword.raiser(),
                                     ) {
                                         Ok(holds) => holds,
                                         Err(failure) => break 'region Err(failure),

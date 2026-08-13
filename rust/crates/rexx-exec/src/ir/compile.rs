@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use rexx_parse::{Call, CodeBody, Expr, ExprKind, Instruction, InstructionKind, SymbolId};
 
-use super::{Calls, Chunk, ChunkTooLarge, Hints, NodePath, Op, PlanSlot};
+use super::{Calls, Chunk, ChunkTooLarge, ConditionKeyword, Hints, NodePath, Op, PlanSlot};
 use crate::eval::{SymbolRead, is_arithmetic, is_native_binary};
 use crate::plan::Plan;
 use crate::run::{HeaderPlan, if_targets, loop_header_plan, loop_header_slot, otherwise_range};
@@ -482,6 +482,7 @@ pub(crate) fn compile(
                     ops.push(Op::Condition {
                         index: instruction_index(index)?,
                         reg: dst,
+                        keyword: ConditionKeyword::If,
                     });
                 } else {
                     ops.push(Op::EvalExpr {
@@ -637,11 +638,43 @@ pub(crate) fn compile(
                     end: 0,
                 });
                 push_echo(&mut ops, echo, instruction_index(index)?);
-                ops.push(Op::WhenTest {
-                    index: instruction_index(index)?,
-                    case: info.case,
-                    dst,
-                });
+                // **Only a plain `WHEN`'s condition promotes.** A `WhenCase`
+                // holds a list of values compared against the enclosing
+                // `SELECT CASE`'s own text through `Interp::test_case_when`,
+                // which is not a condition at all: it traces two `>>>` lines
+                // per value and raises nothing for a value that is not
+                // `0`/`1`. So it stays on `Op::WhenTest`, which is the op that
+                // does that whole job, and so does a `When` whose condition
+                // `native_shape` declines.
+                match &instruction.kind {
+                    InstructionKind::When { condition, .. }
+                        if native_shape(condition, Some(NodePath::ROOT)) =>
+                    {
+                        push_native(
+                            &mut ops,
+                            &mut consts,
+                            &mut registers,
+                            &mut hints,
+                            &mut calls,
+                            plan,
+                            condition,
+                            instruction_index(index)?,
+                            0,
+                            Some(NodePath::ROOT),
+                            dst,
+                        )?;
+                        ops.push(Op::Condition {
+                            index: instruction_index(index)?,
+                            reg: dst,
+                            keyword: ConditionKeyword::When,
+                        });
+                    }
+                    _ => ops.push(Op::WhenTest {
+                        index: instruction_index(index)?,
+                        case: info.case,
+                        dst,
+                    }),
+                }
                 let jump = op_index(&ops)?;
                 ops.push(Op::JumpUnless {
                     reg: dst,
