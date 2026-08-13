@@ -277,7 +277,9 @@ impl Interp {
     /// entered. A bare stem's own operations do not come through here:
     /// `stem_assign` and `replace_stem` take the whole spelling of an
     /// `ExprKind::Stem` or of a run-time string, which is not a compound's
-    /// stem half, and no caller has a slot to hand them.
+    /// stem half, and no caller passes them a slot. A caller reached from an
+    /// `ExprKind::Stem` could: that spelling has one, and `run.rs`'s
+    /// `control_slot` has the measurement.
     ///
     /// `at` is the same slot `slot_of` answers, taken by `Plan::
     /// note_compound_name` from the `Plan` this activation runs with, so it

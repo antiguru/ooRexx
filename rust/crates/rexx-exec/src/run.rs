@@ -6773,8 +6773,10 @@ impl Interp {
     ///
     /// `at` is [`control_slot`]'s answer for this loop, taken once when it was
     /// entered: the same resolution the `Simple` arm below makes for itself
-    /// when it is `None`, and read by that arm alone -- a stem or compound
-    /// control writes through a name rather than through a slot.
+    /// when it is `None`, and read by that arm alone, because [`control_slot`]
+    /// answers `None` for a stem control and for a compound one -- for the
+    /// compound because there is no slot to answer with, for the stem because
+    /// its slot is not carried, which that function's own doc separates.
     fn bind_control(
         &mut self,
         code: &Code<'_>,
@@ -6837,8 +6839,9 @@ impl Interp {
                     span: 0..0,
                 };
                 let rendered = self.intermediate_text(value);
-                // `None`, and not `at`: a stem write is `stem_assign` under a
-                // name, so there is no slot for it to be the slot of.
+                // `None` because `control_slot` declines a stem control, which
+                // makes `at` `None` here too; its doc says why, and it is not
+                // that the slot does not exist.
                 self.assign_expr_target(code, &target, value, rendered.as_deref(), indent, None)
             }
             NameShape::Compound => {
@@ -6847,8 +6850,9 @@ impl Interp {
                     span: 0..0,
                 };
                 let rendered = self.intermediate_text(value);
-                // `None` for the reason the arm above passes it: a compound
-                // writes one tail through a key resolved on this pass.
+                // `None` because a compound writes one tail through a key
+                // resolved on this pass, so the symbol's own slot is not what
+                // is written and there is none to carry.
                 self.assign_expr_target(code, &target, value, rendered.as_deref(), indent, None)
             }
         }
@@ -8516,11 +8520,19 @@ pub(crate) enum NameShape {
 /// **once, when the loop is entered**, or `None` for a control this cannot
 /// answer for.
 ///
-/// **Simple spellings only.** A stem control assigns the whole stem by name
-/// and a compound one resolves a tail key afresh on every pass -- measured,
-/// `a.=0; i=1; Do a.i=1 To 3; If i>7 Then Leave; i=i+1; End; say i` answers
-/// `8`, because the body moves which tail the control is -- so neither has
-/// a slot that could be resolved ahead of the pass that uses it.
+/// **Simple spellings only, and a stem control and a compound control are
+/// declined for different reasons.**
+/// A compound control resolves a tail key afresh on every pass --
+/// measured, `a.=0; i=1; Do a.i=1 To 3; If i>7 Then Leave; i=i+1; End; say i`
+/// answers `8`, because the body moves which tail the control is -- so there
+/// is no slot to resolve ahead of the pass that uses it.
+/// A stem control **does** have one: `Plan::bind` puts its own spelling and
+/// its own id on a single slot, and `stem_assign` resolves that same spelling
+/// to that same slot on every pass. Measured, `do cv. = 1 to 3` on both
+/// engines: `by_symbol` answers `Some(0)` and `slot_of` then computes `0`, on
+/// every write the loop makes. `None` here records that nothing reads it yet,
+/// the same disposition `crate::ir::compile::write_slot` writes down for a
+/// stem assignment target, and not that there is nothing to read.
 ///
 /// **That filter is unobservable, and it is written down as such rather than
 /// defended as a guard.** `bind_control` reads this answer in its `Simple` arm

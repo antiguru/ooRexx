@@ -1265,10 +1265,10 @@ fn push_native<'a>(
 /// The slot one assignment *target* resolves to, or [`PlanSlot::UNRESOLVED`]
 /// for a target that does not write a slot by name.
 ///
-/// **Simple variables only, and the two other target shapes differ from each
-/// other.** A compound target resolves a tail key at the write site and
-/// mutates one tail through `stem_set`, which writes the *stem's* slot and not
-/// the symbol's own -- the same asymmetry [`PlanSlot`]'s own doc comment
+/// **Simple variables only, and a stem target and a compound target differ
+/// from each other.** A compound target resolves a tail key at the write site
+/// and mutates one tail through `stem_set`, which writes the *stem's* slot and
+/// not the symbol's own -- the same asymmetry [`PlanSlot`]'s own doc comment
 /// records for a compound *read*, and there is no slot here to carry. A stem
 /// target is `stem_assign`, which does write the symbol's own slot, resolved
 /// from the same spelling `Plan::bind` bound the symbol's id to; that one is

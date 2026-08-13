@@ -2974,3 +2974,43 @@ The bucket that did not fall last time fell.
 * **No time figure**, for entry 27's reason.
 * **`arith`'s +0.06% is not attributed.** It is reported, and the control that would separate drift from layout was not built.
 * **The stem is not the last name-keyed lookup on this path.** `stem_assign` and `replace_stem` -- a bare stem's own write and `DROP` of a whole stem -- still open with `slot_of`, and the slot they want is already in the plan's `by_symbol` under the `ExprKind::Stem` symbol's own id; a compound `DO` control variable's stem and tail pieces still resolve by name, because the whole dotted name holds the slot. Both are named in the task's report as work this plan did not take.
+
+### Entry 31 -- corrections to entry 30: `arith` is a bound and not a cause, and where the profile shares may not be paired
+
+**Entry 30 stated a cause where it has only a bound, and this entry says so rather than editing it.**
+The rule at the top of this file, which entry 29 exists to restate, is that an entry that turned out wrong is corrected by a later entry.
+Entry 30 is left exactly as committed at `73d470474`.
+
+#### `arith`: "so this is codegen drift" is withdrawn; the bound stands
+
+Entry 30 wrote, of `arith`'s +12,040,137 instructions:
+
+> So this is **codegen drift** on a program the change cannot otherwise touch ... **No attribution beyond that is offered**: ... separating drift from layout needs a do-nothing control this entry did not build.
+
+Those two sentences disagree by one notch, and the first is the one to drop.
+Drift and binary layout are two candidate causes; the control that separates them was not built; so the evidence reaches "**not the change's semantics**" and stops there.
+**What the evidence does support, completely:** `arith` holds no compound variable, measured two ways -- the accessor-level probe is silent on it under both engines, and every variable in `bench-programs/arith.rex` is simple with no period outside a comment -- so no line this change touches can run on it.
+**What it does not support:** naming which of drift or layout produced the movement.
+The task's own report carried the careful wording, "I offer no attribution beyond that", and that sentence did not reach the repository document. This entry is where it lands.
+
+The movement itself is not in doubt and got stronger after entry 30 was written: the task's reviewer re-measured it on a second set of binaries in a second sitting at **+0.059%**, within 186 instructions of entry 30's figure, with same-binary spans of 1,681 and 712.
+
+**`5eaa3c8e8`'s commit message carries the same sentence** ("so it is codegen drift and the cost side") and **cannot be edited**. This entry is the correction of record for it.
+
+#### The profile shares in entry 30 may not be paired across sittings, and the caveat sits below the figures it disclaims
+
+Entry 30 quotes the plan's `8.61%` -> `9.33%` bucket under "Cause, stated by the plan before the task", and its own base-against-head bucket table much further down, with the non-comparability caveat under the **table** rather than at the first mention.
+A reader going top to bottom meets the caveat in time; a reader who pairs "went up, 8.61% to 9.33%" with "head 5.34/4.68/5.24%" has done so before reaching it.
+**Neither of those numbers may be subtracted from the other.** They come from different sittings with different `perf` invocations, and a sampled share is a share of whatever else was running -- the same measurement taken with `--call-graph=dwarf` instead of without it moved the identical bucket from 7.42% to 7.56-7.75% on one arm.
+The only comparison entry 30 makes, and the only one either entry supports, is **base `9513c8b13` against head `5eaa3c8e8` within one sitting**.
+
+#### One more site for the work entry 30 names as left over
+
+Entry 30's closing section says a bare stem write's slot is already in `by_symbol` and unused. It names `stem_assign` and `replace_stem`, which is where the lookup happens; it does not name the callers, and they do not all cost the same.
+The task's reviewer found the one that matters most: `run.rs`'s `bind_control` reaches a bare stem write **on every pass of a stem-controlled `DO`**, where `control_slot` answers `None` by choice.
+Measured, `do cv. = 1 to 3` on both engines, by the reviewer and again by the implementer in this fix round: `by_symbol=Some(0)`, `slot_of=0`, on every write the loop makes.
+So the leftover work pays per iteration there and per statement elsewhere. **No bench axis has a stem control variable**, so nothing in entry 30's table would have shown it.
+
+#### What entry 31 does not change
+
+Every measured figure in entry 30 -- the seven-row instruction table, the seven-row spread table, the bucket table and its members, and the disposition -- stands, and the four figures the task's reviewer re-took independently reproduce them (`compound` -9.87%, `alloc4c` -3.16%, `rexxcps` -2.17%, `arith` +0.059%).
