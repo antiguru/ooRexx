@@ -40,6 +40,9 @@ So the remaining gap is not in any bucket; it is a tax on every clause and every
 
 Ordered by mechanism confidence first and share second, so the cheap certainties bank early and reduce the noise the expensive ones must be measured through.
 
+**A bound over Units 1, 2 and part of 5, measured and easy to forget.** A build with **all** per-clause bookkeeping stripped bounded the win at **19% on `varlookup` and about 5% elsewhere** -- and it could not run `rexxcps` at all, because removing `clock_stale` breaks `TIME('R')` into a divide-by-zero, which incidentally proves the bookkeeping is load-bearing rather than ceremonial.
+So Units 1 and 2 are worth single digits on most axes and are ordered first for confidence and for noise reduction, **not** because they are large. Anyone who reads this order as a ranking by size has misread it.
+
 **Unit 1 -- the clause line.** A field or a plan-side table replacing a per-clause binary search. **This is the fix this project has already made twice** (`static_indent`, and the compound-name family's four applications): a constant of the source text computed once in the pass that already walks it. Smallest, highest confidence, and it makes the driver bucket cleaner to read.
 
 **Unit 2 -- the activation.** Hoist the current activation so a clause pays one resolution rather than six-plus. Bounded, local to the driver, no representation question.
@@ -47,8 +50,11 @@ Ordered by mechanism confidence first and share second, so the cheap certainties
 **Unit 3 -- the error path.** The five-layer `Result` chain. **This is the first unit that may need the divergence licence** (see below): the happy-path cost is the chain's shape, and some of the shape exists to reproduce the oracle's exact failure sites. Design first, and say plainly which part is mechanism and which is semantics.
 
 **Unit 4 -- arithmetic working storage.** The `FAST_BUFFER` analogue. Largest single share.
-**Two warnings this unit must carry into its design.**
-The `smallvec`-for-`Number::digits` result that this project's own record and my notes both cite as a measured rejection **has no measurement behind it** -- `phase-4f-record.md:284` records that searches of the working tree, of `git log -S` over all refs and of `.superpowers/` find the string only in the sentences citing it. Treat it as an open question and measure it, or find the original figures.
+**The `smallvec` figures exist and are recorded here, because the repository lost them.**
+`phase-4f-record.md:284` records that searches of the working tree, of `git log -S` over all refs and of `.superpowers/` could not produce them. They were held outside the repository. They are:
+**measured across four inline sizes with `union` and `const_generics`, interleaved, `Vec` wins every cell** -- `arith` +18% to +30%, a digits-9 decimal loop +14% to +21%, and **N=64, which inlines every working length either workload produces, is still 18% behind.**
+So inline capacity is not the variable, and the conclusion is the one this unit is built on: **the fix is not cheaper allocations, it is not allocating** -- a scratch buffer threaded through the operation, which is what `FAST_BUFFER` is.
+`smallvec` 1.15.2 resolves offline from the local registry cache if anyone revisits it.
 And entry's own reasoning against it stands independently and is stronger: on `strings`, `Number` allocations are reached *because* a counted answer arrives untagged and forces the general decimal path, so **removing the reason removes them wholesale where making each one cheaper leaves the path, the parse and the render in place.**
 
 **Unit 5 -- rooting.** Replace the per-clause and per-`eval`-site `RootSet` frame with a bump-pointer stack the collector scans in place. Biggest, riskiest, touches the collector's contract with every value, and `2026-08-11-value-representation-design.md` already sets out options for the value layer -- **that document is this unit's starting point and must not be re-derived.**
