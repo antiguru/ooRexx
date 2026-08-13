@@ -11,15 +11,20 @@
 # status are recorded byte for byte, so a line that appears, disappears or
 # moves shows as a diff.
 #
-# **What this file catches was measured with every other case file held out of
-# the directory**, which is the only way to ask the question: the harness's own
-# engine-vs-engine `assert_eq!` panics out of `datadriven::walk` at the first
-# disagreeing stanza in any file, and `walk` visits files in `fs::read_dir`
-# order, so which file reports a shared failure is filesystem order rather than
-# anything about the tree. Alone, this file reddens
-# `both_engines_agree_on_every_case_file` under three mutations; each row's own
-# comment names the one it caught. It stays green when the header simply stops
-# compiling natively, which is the promotion's contract: the bytes do not move.
+# **What this file catches was measured with the rest of the directory held
+# out, and per row**, which is the only way to ask the question: the harness's
+# own engine-vs-engine `assert_eq!` panics out of `datadriven::walk` at the
+# first disagreeing stanza in any file, and `walk` visits files in
+# `fs::read_dir` order, so which file -- and which row of it -- reports a
+# shared failure is filesystem order and stanza order rather than anything
+# about the tree.
+#
+# **Every row here reddens `both_engines_agree_on_every_case_file` on its own**
+# under two mutations of the header's compilation: the keyword echo emitted in
+# front of its slot's ops, and every slot resolving to slot 0. The call row
+# catches two more that the other rows do not, and its own comment names them.
+# The file stays green when the header stops compiling natively, which is the
+# promotion's contract: the bytes do not move.
 #
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, on both
 # engines, before this file was written -- except the one row whose own comment
@@ -42,10 +47,8 @@
 # bound is a symbol read rather than a literal, so the run of lines is not one
 # shape repeated.
 #
-# Measured with the rest of the directory held out, this is the row that catches
-# the keyword echo being emitted in front of its slot's ops instead of behind
-# them: every `>K>` then reads a register nothing has written and prints
-# "The NIL object".
+# Under the echo-position mutation the header describes, every `>K>` here reads
+# a register nothing has written and prints "The NIL object".
 program
 trace i
 zn = 6
@@ -94,9 +97,9 @@ err>        >=>     ZI <= "5"
 # `>K>` sitting among the lines its value produced, and this shows them adjacent
 # and in the order the keywords were written.
 #
-# Measured as the only stanza in the directory, this row catches that same
-# echo-position mutation on its own, with no intermediate line in the block to
-# move.
+# It catches the echo-position mutation with no intermediate line in the block
+# to move, which is what makes it a different instrument from the row above
+# rather than a shorter copy of it.
 program
 trace r
 zn = 6
@@ -133,10 +136,11 @@ err>        >>>     "5"
 # of the `>K>` the bound owes, so this row holds the address and the order at
 # once.
 #
-# Measured with the rest of the directory held out, this is the row that catches
-# `chunk_node_at` losing its DO/LOOP arm, and separately the call op being
-# addressed at slot 0 rather than at its own slot: both leave the ir arm
-# printing nothing where the tree-walker prints "1" and "2".
+# **The two the other rows do not catch**, each measured with this stanza as
+# the only one in the directory, and each measured to leave the other three
+# rows green: `chunk_node_at` losing its DO/LOOP arm, and the call op addressed
+# at slot 0 rather than at its own slot. Both leave the ir arm printing nothing
+# where the tree-walker prints "1" and "2".
 program
 trace i
 zs = 'ab'
@@ -184,10 +188,17 @@ err>        >=>     ZI <= "3"
 # nothing for that value: `HeaderRole::OverFor::keyword()` answers `None`.
 # Measured 2026-08-12 on both engines and under `trace r` as well as `trace i`,
 # with `do qq over 4.5 for 2` giving the same one-line gap -- so it is neither
-# this promotion's nor this program's. The row is here because it pins our own
-# answer while the gap is open: the OVER target's `>K>` follows its value's own
-# lines, and the FOR count's absence is a single line rather than a shifted
-# block.
+# this promotion's nor this program's. The row pins our own answer while the
+# gap is open: the OVER target's `>K>` follows its value's own lines, and the
+# FOR count's absence is a single line rather than a shifted block.
+#
+# **It is also the only trace-level record of a `DO OVER ... FOR` in this
+# crate** -- no other test or case file runs that shape under trace at all --
+# which is why the gap has nothing else holding it.
+#
+# `docs/superpowers/plans/2026-08-13-over-for-keyword.md` is the open task for
+# printing that line. Its Step 4 has to rewrite this block, because closing the
+# gap changes what this crate prints here.
 program
 trace i
 zs = 'abc'

@@ -713,7 +713,7 @@ fn a_constant_symbol_is_a_native_load() {
 /// The compiled form of the plan's own example loop: the header is a clause
 /// region of its own and the construct is the op that closes it.
 ///
-/// The body is `DO`, `nop`, `END`, and the `DO`'s own region is laid out as
+/// The program is `DO`, `nop`, `END`, and the `DO`'s own region is laid out as
 /// **one group per header expression, in the order the expressions were
 /// written**:
 ///
@@ -913,19 +913,24 @@ fn a_header_slot_outside_the_native_set_leaves_the_other_slots_native() {
 /// assignment is handed the same one.
 ///
 /// **The stream pins both ways of getting that wrong, and they are opposite
-/// failures.** Measured, each as its own mutation, and in both directions the
-/// whole `ir_dual` suite stays green -- the population sweep included:
+/// failures.** Measured, each as its own mutation over the whole workspace:
 ///
-/// * `push_native` never releasing the operand's register puts the assignment
-///   at register 3. That wastes a register and overwrites nothing. This test
-///   and `a_chain_of_operators_reuses_the_destination_register` move, and
-///   nothing else in the crate.
 /// * The header's own registers released at the region's end instead of past
 ///   the `END` puts the assignment at register 0 -- a value `LoopState` reads
 ///   for the rest of the construct, written over by a body clause, because
-///   `Op::LoopRun` steps the body from inside this same region. This test and
+///   `Op::LoopRun` steps the body from inside this same region. The `ir_dual`
+///   suite stays green, population sweep included; this test and
 ///   `a_nested_loops_registers_sit_above_the_enclosing_loops_and_a_later_loops_reuse_them`
-///   move, and nothing else in the crate.
+///   move, and nothing else in the workspace.
+/// * `push_native` never releasing the operand's register puts the assignment
+///   at register 3, which wastes a register and overwrites nothing. **That
+///   reading needs `compile`'s own `debug_assert_eq!` on the header's register
+///   top removed as well**, because with it in place the assertion fires before
+///   this test reaches `render` -- and the mutation is then loud rather than
+///   quiet, reaching `both_engines_agree_across_every_population`, which fails
+///   on the assertion's message. With both removed, this test and
+///   `a_chain_of_operators_reuses_the_destination_register` move and nothing
+///   else does.
 ///
 /// **So the harmful direction is not visible to any differential harness in the
 /// tree**, and the reason is that a header value's `ObjRef` is rooted by its

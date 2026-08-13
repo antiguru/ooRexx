@@ -243,8 +243,9 @@ Two more the dispatched list did not ask for and the code needs: a header with o
 
 `tests/ir_dual_cases/loop-header-values`, oracle-captured: `trace i` over a `to`/`by`/`for` header, which is the `>K>` order per header value interleaved with the values' own intermediate lines; `trace r` over the same header, where the `>K>` lines are the whole of the block; `trace i` over a header whose bound is a call, which is the address `chunk_node_at` resolves; and a `DO OVER ... FOR`, whose block is **not** the oracle's and whose own comment says which line the oracle prints and this crate does not.
 
-**Each row is measured to catch something, with every other case file held out of the directory**, which is the only way to ask the question.
-The `to`/`by`/`for` row and the `trace r` row each catch the keyword echo emitted in front of its slot's ops; the call row catches `chunk_node_at` losing its `DO`/`LOOP` arm, and separately the call op addressed at slot `0`.
+**Every row is measured to catch something on its own, each run as the only stanza in the directory**, which is the only way to ask the question.
+All four catch the keyword echo emitted in front of its slot's ops, and all four catch every header slot resolving to slot `0`.
+The call row catches two more the other three do not, measured green on those three: `chunk_node_at` losing its `DO`/`LOOP` arm, and the call op addressed at slot `0`.
 The file stays green when the header stops compiling natively, which is the promotion's contract: the bytes do not move.
 None of these is a *unique* catch -- each of those mutations reddens pre-existing tests too.
 
@@ -259,7 +260,8 @@ A plain counted loop is the same shape as the `to`/`by`/`for` row with fewer key
 
 **What the captures found instead is a pre-existing divergence: the oracle echoes `>K>   "FOR"` for a `DO OVER ... FOR`'s count and this crate echoes nothing**, measured on both engines under `trace r` and `trace i`, on `do qq over zs for 1` and on `do qq over 4.5 for 2`.
 `HeaderRole::keyword()` answers `None` for that role, and its own doc and two others asserted that as a match with the oracle; all three are corrected and the transcript is committed.
-Fixing the behaviour is not this task's and is not done here; it wants a task and a ledger entry of its own.
+**That transcript is the only trace-level record of a `DO OVER ... FOR` in the crate** -- no other test or case file runs the shape under trace, checked across `tests/`, `src/` and the corpus -- which is why the gap has nothing else holding it.
+Fixing the behaviour is not this task's and is not done here: it is `docs/superpowers/plans/2026-08-13-over-for-keyword.md`, whose Step 4 has to rewrite that row, because closing the gap changes what this crate prints there.
 
 - [ ] **Step 5: gates, then commit** (same commands as Task 1 Step 11)
 

@@ -405,9 +405,8 @@ pub(crate) fn compile(
                 // Above `header_top` is a register a slot allocated and did not
                 // hand back. Nothing reuses it until the `END`, so it is waste
                 // rather than corruption -- measured, leaking one per slot with
-                // this line removed leaves the whole `ir_dual` suite green and
-                // moves the pinned streams that hold a `DO`, and nothing
-                // else.
+                // this line removed leaves the `ir_dual` suite green and moves
+                // golden streams and nothing else.
                 //
                 // Below `header_top` is a header value's own register handed
                 // back early, which `LoopState` still reads for the rest of the
@@ -1621,10 +1620,10 @@ fn assert_call_echoes_follow_their_op(ops: &[Op]) {
 /// **What this adds is the shape of the failure, not coverage, and that is
 /// measured rather than assumed.** Emitting the echo in front of the slot's own
 /// ops instead of behind them, with this check removed, moves the population,
-/// loop-shape and case-file sweeps, `trace_oracle`'s control-variable
-/// transcripts and every pinned `DO` stream -- because the echo then reads a
-/// register nothing has written and prints `>K>   "TO" => "The NIL object"`.
-/// What this turns that into is a refusal at compile time naming the op.
+/// loop-shape and case-file sweeps and `trace_oracle`'s control-variable
+/// transcripts -- because the echo then reads a register nothing has written
+/// and prints `>K>   "TO" => "The NIL object"`. What this turns that into is a
+/// refusal at compile time naming the op.
 ///
 /// An unconditional `assert!` for [`assert_clause_regions_hold_no_generic_op`]'s
 /// reason, and it is the same linear scan's worth of work.
