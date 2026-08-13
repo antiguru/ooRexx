@@ -3185,3 +3185,39 @@ The discipline the caption is reaching for -- measure the instrument's spread be
 
 Entry 32's instruction table, its accessor-probe attribution, its bucket table, its direct `slot_of` count, its `PARSE`-target successor and its disposition all stand.
 The `alloc4c` and `strings` rows are the only figures whose reading changes, and neither carries any part of the disposition.
+
+### Entry 34 -- what entry 33's own review found in entry 33
+
+Correcting entry 33 by appending, in the shape entry 33 used on entry 32.
+Found by the scoped re-review of `866d07d1b..851b18fce`, verified against the tree at `851b18fce` by the controller.
+No measurement is withdrawn and no disposition moves.
+
+#### The withdrawn quantifier came back one paragraph later
+
+Entry 33 withdraws entry 32's "thousands of times their spans" for `alloc4c` and `strings`, and then closes with "those axes still moved by more than the instrument's resolution".
+That sentence covers `strings`, whose move of -15,000,396 is smaller than the 36,000,462 span entry 33 itself restores two paragraphs above it.
+**`strings` supports a bound and nothing else, in entry 33's closing sentence as much as in entry 32's table.**
+What survives for the rest of the group is that their moves are outside their own spans, which is what the multiples table shows and what the closing sentence should have said.
+
+#### A set count, in the entry that removed set counts
+
+"So the quantifier holds for three of the five" counts a set whose members the table directly above it names.
+The count carries nothing the table does not, and it was written in the round that took the same construction out of the plan file.
+
+#### The plan file's counts were not all removed, and the fix section says they were
+
+`2026-08-13-bare-stem-slot.md` still read "The first two were named by the implementer; the third by its reviewer" after the round that reported the plan file's counts gone.
+Corrected in the plan file at this entry's commit; the completeness claim in the fix-round report is what was wrong, not the correction it describes.
+
+#### An equality that was never measured
+
+"Reverting that one line puts `emptyloop` back on base exactly" appears in entry 32, in `control_slot`'s doc and in the plan file's Status block.
+The partial-revert table it cites reads **27,150,813,214 against a base of 27,150,813,500**, a difference of 286 -- inside that axis's own span, and so indistinguishable from base rather than equal to it.
+The reading does not change: the +2 a pass is attributed to that one line either way.
+**The word does.** An exact equality is a stronger claim than the instrument can make, and this entry's family has spent four rounds learning that the sentence beside a correct number is where the false claims live.
+Corrected in `control_slot`'s doc and in the plan file; entry 32's copy stands where it is, corrected here.
+
+#### Where this leaves the family
+
+Approved at `851b18fce`, gates re-run unpiped by the controller: `cargo fmt --all --check` 0, `cargo clippy --workspace --all-targets -- -D warnings` 0 with no warning lines, `cargo test --workspace --no-fail-fast` rc 0 at 1483 passed, 0 failed, 4 ignored.
+Entry 32's successor stands unchanged: `PARSE` targets, whose call site in `parse_template.rs` passes the literal `None` that this task measured the price of replacing.

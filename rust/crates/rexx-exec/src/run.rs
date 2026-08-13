@@ -8586,9 +8586,11 @@ pub(crate) enum NameShape {
 /// +50,000,000 and `do i = 1 to 19000000` with two simple assignments at
 /// +38,000,000, where the same binary against itself spans 1,348 and 1,576.
 /// **Attributed by partial revert and not by reading the assembly**: undoing
-/// that one line and nothing else puts the first back on base exactly, and
-/// recomputing the slot inside the arm instead costs +100,000,000. Why the
-/// generated code changes was not established. Taking the slot from the entry
+/// that one line and nothing else returns the first to a figure
+/// indistinguishable from base -- 27,150,813,214 against a base of
+/// 27,150,813,500, inside that axis's own span -- and recomputing the slot
+/// inside the arm instead costs +100,000,000. Why the generated code changes
+/// was not established. Taking the slot from the entry
 /// leaves both axes where they were and keeps the stem loop's own saving.
 ///
 /// **Declining the compound is unobservable, and it is written down as such

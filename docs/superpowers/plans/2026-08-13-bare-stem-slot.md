@@ -5,7 +5,7 @@
 **Status:** done, 2026-08-13. Found by the stem-slot task of `2026-08-13-stem-slot-resolution.md`, which corrected the comments that denied it and deliberately did not take the optimisation; the per-iteration site was found by that task's review. **Confirmed real by both**, and taken here.
 
 **Corrected by the task, after measuring: Step 2's route is the wrong one, and taking it costs more than the whole optimisation is worth.**
-The obvious shape -- carrying the slot in `Option<usize>` from `control_slot` through `bind_control` into `assign_expr_target`, and from `write_slot` through `Op::Store` -- replaces a compile-time `None` at `bind_control`'s stem call site with a value, and that alone costs **2 instructions on every pass of every controlled loop**, stem-controlled or not: `emptyloop` +50,000,012, `varlookup` +38,000,036, where the same binary against itself spans 1,348 and 1,576. Attributed by partial revert: undoing that one line and nothing else puts `emptyloop` back on base exactly, and recomputing the slot inside the arm instead costs +100,000,000. Why the generated code changes was not established.
+The obvious shape -- carrying the slot in `Option<usize>` from `control_slot` through `bind_control` into `assign_expr_target`, and from `write_slot` through `Op::Store` -- replaces a compile-time `None` at `bind_control`'s stem call site with a value, and that alone costs **2 instructions on every pass of every controlled loop**, stem-controlled or not: `emptyloop` +50,000,012, `varlookup` +38,000,036, where the same binary against itself spans 1,348 and 1,576. Attributed by partial revert: undoing that one line and nothing else returns `emptyloop` to a figure indistinguishable from base (27,150,813,214 against a base of 27,150,813,500, inside that axis's own span), and recomputing the slot inside the arm instead costs +100,000,000. Why the generated code changes was not established.
 What works is to take the slot from the plan's own `CompoundName` entry -- `Plan::bind` records it there for a stem-shaped name, since such a name is its own stem half -- leaving every call site's argument constant. That serves **both** engines, where the compiled-op route serves one. See entry 32 of `phase-4f-record.md`.
 
 ## What was believed, and what is true
@@ -23,7 +23,7 @@ This is the same shape as the applications already landed -- `compound_parts` re
 * **`replace_stem`**, the other bare-stem operation `stem.rs` leaves resolving by name. Per statement.
 * **`bind_control`'s `NameShape::Stem` arm**, where `control_slot` answers `None` **by choice** and the slot it could answer is `Some(0)`. **Reached on every pass of a stem-controlled `DO`, so this one pays per iteration.**
 
-The first two were named by the implementer; the third by its reviewer, and it is the one worth the task.
+The implementer named the sites above the last; its reviewer named that one, and it is the one worth the task.
 
 ## What makes this a task rather than a patch
 
