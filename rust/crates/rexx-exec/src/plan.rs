@@ -260,8 +260,8 @@ pub(crate) struct Plan {
     /// **What the search cost tracks the body's line count**, measured on the
     /// same axes by dividing each axis's instruction saving by its own count
     /// above: 40.0 instructions per removed search on a 7-line program, 42.0
-    /// on an 8-line one, about 53 on the three 12-to-14-line ones, 75.3 on a
-    /// 51-line one and 94.7 on `rexxcps`' 198 lines. The planning spike
+    /// on an 8-line one, about 53 on each of the 12-to-14-line ones, 75.3 on
+    /// a 51-line one and 94.7 on `rexxcps`' 198 lines. The planning spike
     /// concluded the opposite from probe arms that returned deliberately
     /// wrong line numbers, whose long-program arm the plan itself disowns as
     /// contaminated; the depth is real and it is most of the spread.

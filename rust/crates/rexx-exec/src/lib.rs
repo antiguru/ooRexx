@@ -1269,7 +1269,8 @@ struct Code<'a> {
     /// activation.
     slots: &'a HashMap<SymbolId, usize>,
     /// The upfront pass's answers about **this** body: its clause indents
-    /// (`Plan::indents`) and how each of its compound names splits
+    /// (`Plan::indents`), the line each of its clauses sits on
+    /// (`Plan::lines`), and how each of its compound names splits
     /// (`Plan::compounds`).
     ///
     /// A field here for the same reason `slots` is one: an `INTERPRET`
@@ -1278,8 +1279,9 @@ struct Code<'a> {
     /// off the activation without being the wrong body's.
     ///
     /// **`None` means there is no upfront pass to consult**, and each reader
-    /// falls back to computing its own answer -- what `printed_indent` and
-    /// `Code::compound` both did before either table existed. An `INTERPRET`
+    /// falls back to computing its own answer -- what `printed_indent`,
+    /// `Interp::clause_line_at` and `Code::compound` each did before their
+    /// own table existed. An `INTERPRET`
     /// fragment is that case, and it is `None` rather than the fragment's own
     /// local plan on purpose: `Interp::fragment_plan` does build one, but its
     /// slot numbers are local to the fragment and only its returned

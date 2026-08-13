@@ -7,7 +7,7 @@
 **One finding below did not survive the task, and it is left standing here with this pointer rather than rewritten**, because it is what the task was given.
 "What survives, and it is the design fact this unit turns on" concludes that the search *depth* is not the cost.
 The landed fix measures the opposite: dividing each axis's saving by its own count of removed searches gives 40.0 instructions on a 7-line program rising monotonically to 94.7 on `rexxcps`' 198 lines.
-The spike read otherwise from its `rexxcps` arm, which this plan itself disowns as contaminated two paragraphs earlier -- the arm's *table* was disowned and its *design conclusion* was kept, and the conclusion was the part built on it.
+The spike read otherwise from its `rexxcps` arm, which this plan itself disowns as contaminated in the paragraph above it -- the arm's *table* was disowned and its *design conclusion* was kept, and the conclusion was the part built on it.
 The unit's decision is unaffected: a table is preferred to a faster search not because the search is shallow but because a search that is not made costs neither its call nor its depth.
 `phase-4f-record.md`'s entry 35 has the numbers.
 
@@ -85,7 +85,7 @@ A fragment's clauses all read the enclosing `INTERPRET` clause's line through `c
 
 ## What this task must not do
 
-* **Do not make the search faster.** The spike says depth is not the cost. A better search is a change with a measurement attached to the wrong quantity.
+* **Do not make the search faster.** A search that is not made costs neither its call nor its depth, which bounds anything a faster search could return. (The reason originally given here -- that depth is not the cost -- was refuted by the task; see the pointer at the top of this file and entry 35.)
 * **Do not put a line on `Instruction`.** That is the parse-side design, it touches every construction site, and the executor is the only reader.
 * **Do not change what any program observes.** `SIGL`, the `*-*` trace line and every condition's reported line must be byte-identical, on both engines, across the corpus. This unit spends none of the phase's divergence licence.
 * **Do not quote a wall-clock figure.** The phase's instrument is the instruction counter, for the reason its own section gives.
