@@ -14,7 +14,11 @@ Each task here reuses the seam those tasks established: `native_shape` decides, 
 Measured 2026-08-12 on `samples/rexxcps.rex`, with a temporary per-clause counter in the driver's `Op::Clause`, `Op::Generic` and `Op::EvalExpr` arms, one run at `count=2`/`averaging=2` (the program self-calibrates, so the counts are proportions rather than a fixed workload).
 The instrumented build was made in a scratch `CARGO_TARGET_DIR` and the tree restored afterwards; `git status` was clean before this plan was written.
 
-| clause kind | executions | how it runs today |
+**The table is a measurement, not a description of the tree.**
+Every task in this plan falsifies a row of it on purpose -- that is what the tasks are for -- so the rows are dated rather than maintained.
+Reading a row as current is the error; the tasks below say what each one became.
+
+| clause kind | executions | how it ran at `0459167cc`, when this was measured |
 |---|---:|---|
 | `IF` | 375,427 | promoted, and **every one** runs an `Op::EvalExpr` for its condition |
 | assignment | 308,403 | promoted, no `eval` |
