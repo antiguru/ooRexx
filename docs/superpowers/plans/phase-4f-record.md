@@ -2822,7 +2822,23 @@ The base arm's spread over six runs is 0.033%, which is why three honest reading
 
 #### The control axes, and a correction to what "control" meant
 
-**All of the +0.04% to +0.60% above belongs to Task 1.** Measured separately, Task 2 moved the four axes holding no compound variable by **43 to 903 instructions** out of twenty to forty-five billion -- `strings` -48, `varlookup` +43, `emptyloop` -903, `arith` +505 -- which is the same op stream, not small drift.
+**All of the +0.04% to +0.60% above belongs to Task 1**, and on the four axes holding no compound variable Task 2's own movement is **below what this instrument resolves**.
+
+That is a bound and not a measurement, and the bound had to be measured before the sentence could be written. Three runs per arm, both arms staged at one fixed path, interleaved, one sitting:
+
+| axis | same-binary span, base | same-binary span, head | arm to arm, minimum against minimum |
+|---|---:|---:|---:|
+| `emptyloop` | 1,333 | 1,078 | -419 |
+| `strings` | 652 | 881 | +6 |
+| `varlookup` | 332 | 474 | +523 |
+| `arith` | 258 | 33 | +192 |
+
+Every arm-to-arm figure is the size of the spread the same binary produces against itself, and the four disagree in sign and magnitude with the one-run-per-arm figures this entry first carried (-48, +43, -903, +505) and with a reviewer's independent two-run replication (+229, -558, -506, -699).
+**`strings`, `varlookup` and `arith` have each come out with both signs across those three sittings.** `emptyloop` has not: it read -903, -506 and -419, negative every time, but every one of those is smaller than the 1,078 to 1,333 the same binary spans against itself on that axis -- so the bound covers it, and a repeated sign inside the spread is not evidence of a movement.
+
+So the statement these axes support is: Task 2 moves them by **under about a thousand instructions out of twenty to forty-five billion**, which is the instrument's own resolution here. Task 1's movement on the same four is 7.3 million to 266 million instructions, between 5,500 and 200,000 times that bound, which is why Task 1's share is attributable at all and Task 2's is not.
+
+(An earlier version of this paragraph gave the four differences as signed one-run figures. They are withdrawn, not corrected: arm-internal spread had been measured for `rexxcps`, where the effect is 2.61%, and not for these axes, where the claimed effect was one part in a billion -- so the figures were three digits from an instrument with none here. The conclusion they were offered for is unchanged and is reproduced by every sitting.)
 
 **The plan named `compound` as the only loop axis holding compound variables, and that was false.**
 `alloc4c`'s inner loop is `tab.i = i`: a compound with a variable tail piece, which is exactly what the plan changes.

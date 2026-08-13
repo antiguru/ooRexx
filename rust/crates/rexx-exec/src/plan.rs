@@ -592,10 +592,13 @@ impl Plan {
                 // is kept on the piece so that resolving the piece at a
                 // reference costs an index into the frame instead of hashing
                 // the name: measured by `perf record` over
-                // `samples/rexxcps.rex` (`REXX_ENGINE=ir`,
-                // `count=100`/`averaging=100`, 999 Hz), hashing a `&[u8]` was
-                // 4.43% of self time with SipHash's own `write` at a further
-                // 3.29% and `Interp::slot_of` at 1.72%.
+                // `samples/rexxcps.rex` at `5dc12a403`, before this work
+                // (`REXX_ENGINE=ir`, `count=100`/`averaging=100`, 999 Hz),
+                // hashing a `&[u8]` was 4.43% of self time with SipHash's own
+                // `write` at a further 3.29% and `Interp::slot_of` at 1.72%.
+                // The commit belongs with the figures: this function is what
+                // takes that work out, so re-profiling at head will not find
+                // them.
                 *at = Some(self.slot_for(name));
             }
         }
@@ -1076,9 +1079,9 @@ mod tests {
     /// `bind` disagree about them.** `note_compound_name` puts each variable
     /// piece on the slot it assigned that piece's name; `bind` assigns none,
     /// so `AA.II`'s piece carries `None` while `DD.JJ`'s and `V.I.7`'s carry
-    /// a number. The
-    /// numbers are spelled out rather than looked back up out of `plan.names`,
-    /// which would be the same map on both sides of the assertion.
+    /// a number. The numbers are spelled out rather than looked back up out of
+    /// `plan.names`, which would be the same map on both sides of the
+    /// assertion.
     #[test]
     fn build_records_a_compounds_split_under_the_compounds_own_id() {
         let source = b"drop dd.jj; do aa.ii = 1 to 2; say v.i.7; end";
@@ -1217,6 +1220,61 @@ mod tests {
             [TailPiece::Variable {
                 name: b"I".as_slice().into(),
                 at: Some(1),
+            }]
+        );
+    }
+
+    /// The other build order for one symbol, which rests on the other
+    /// filler's rule.
+    ///
+    /// `do v.i = 1 to 2` reaches `bind` first and records a slotless entry;
+    /// the `say v.i` after the loop then reaches `note_compound_name`, whose
+    /// write is **unconditional** and is what replaces that entry with the
+    /// slotted one. Its neighbour above covers the reverse order, where
+    /// `bind`'s `get_or_insert_with` is what preserves the slots -- between
+    /// them the two rules are pinned in the direction each one decides.
+    /// Neither order can be seen from output: both end with a key resolved
+    /// the same way, and a piece with no slot answers identically through
+    /// `read_by_name`.
+    #[test]
+    fn a_compound_seen_after_the_control_variable_still_gets_its_slots() {
+        let source = b"do v.i = 1 to 2; end; say v.i";
+        let program = parse_program(source.to_vec()).expect("test program parses");
+        let plan = Plan::build(&program.main, &program.symbols);
+
+        let (InstructionKind::Do(loop_) | InstructionKind::Loop(loop_)) =
+            &program.main.instructions[0].kind
+        else {
+            panic!(
+                "expected a DO first, got {:?}",
+                program.main.instructions[0].kind
+            );
+        };
+        let LoopKind::Controlled(controlled) = &loop_.kind else {
+            panic!("expected a controlled loop, got {:?}", loop_.kind);
+        };
+        let id = controlled.control;
+
+        let last = program.main.instructions.last().expect("a body");
+        let InstructionKind::Say {
+            expression: Some(expr),
+        } = &last.kind
+        else {
+            panic!("expected a SAY last, got {:?}", last.kind);
+        };
+        let ExprKind::Compound(say_id) = expr.kind else {
+            panic!("expected a compound expression, got {:?}", expr.kind);
+        };
+        assert_eq!(say_id, id);
+
+        // `V.I` whole takes slot 0 from `bind`, then `V.` and `I` take 1 and
+        // 2 from `note_compound_name`. The piece's slot is 2, so the entry
+        // that survived is the second one.
+        assert_eq!(
+            expect_entry(&plan, id).tails.as_ref(),
+            [TailPiece::Variable {
+                name: b"I".as_slice().into(),
+                at: Some(2),
             }]
         );
     }
