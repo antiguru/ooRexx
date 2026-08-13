@@ -1966,3 +1966,136 @@ fn a_compiled_writes_slot_comes_from_the_plan_rather_than_from_its_position() {
         render(&chunk)
     );
 }
+
+/// **A `RETURN` and an `EXIT` compile to one op tagged with their keyword**,
+/// with the value's own ops in front of it exactly as a `SAY`'s are, and
+/// `src=-` for the bare form.
+///
+/// The tag is the whole of what tells the two apart in the stream: the ops
+/// around it are identical, and what differs is the `Flow` the driver answers,
+/// which decides whether a called label's clause resumes its caller or ends
+/// the program.
+///
+/// **`src=-` is not `src` holding a null string**, and the two forms differ in
+/// what the *caller* sees: a bare `RETURN` leaves `RESULT` unset where `RETURN
+/// ''` sets it, so a register holding an empty value would answer the wrong
+/// thing for one of them. Neither bare clause emits a value op at all, which
+/// is what the two-op region says.
+#[test]
+fn a_return_and_an_exit_compile_to_one_op_tagged_with_their_keyword() {
+    let chunk = compile_for_test(b"return 1\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=4\n\
+         1: LoadConstant dst=0\n\
+         2: TraceLiteral src=0\n\
+         3: Return index=0 src=0 keyword=RETURN\n"
+    );
+
+    let bare = compile_for_test(b"return\n").expect("compiles");
+    assert_eq!(
+        render(&bare),
+        "0: Clause index=0 end=2\n\
+         1: Return index=0 src=- keyword=RETURN\n"
+    );
+
+    let exit = compile_for_test(b"exit 1\n").expect("compiles");
+    assert_eq!(
+        render(&exit),
+        "0: Clause index=0 end=4\n\
+         1: LoadConstant dst=0\n\
+         2: TraceLiteral src=0\n\
+         3: Return index=0 src=0 keyword=EXIT\n"
+    );
+
+    let bare_exit = compile_for_test(b"exit\n").expect("compiles");
+    assert_eq!(
+        render(&bare_exit),
+        "0: Clause index=0 end=2\n\
+         1: Return index=0 src=- keyword=EXIT\n"
+    );
+}
+
+/// **A `PUSH` and a `QUEUE` compile to one op tagged with the end of the queue
+/// the line lands on**, the bare form included.
+///
+/// The four clauses are one program so that the register reuse is visible: the
+/// second clause writes register `0` again, which the first released at its
+/// own region's end, and the two bare clauses take none.
+#[test]
+fn a_push_and_a_queue_compile_to_one_op_tagged_with_their_end() {
+    let chunk = compile_for_test(b"push 'a'\nqueue 'b'\npush\nqueue\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=4\n\
+         1: Const dst=0 konst=0\n\
+         2: TraceLiteral src=0\n\
+         3: Queue index=0 src=0 keyword=PUSH\n\
+         4: Clause index=1 end=8\n\
+         5: Const dst=0 konst=1\n\
+         6: TraceLiteral src=0\n\
+         7: Queue index=1 src=0 keyword=QUEUE\n\
+         8: Clause index=2 end=10\n\
+         9: Queue index=2 src=- keyword=PUSH\n\
+         10: Clause index=3 end=12\n\
+         11: Queue index=3 src=- keyword=QUEUE\n"
+    );
+}
+
+/// **A `RETURN` whose expression is outside the native set keeps its own op**,
+/// with one [`super::Op::EvalExpr`] in front of it -- which is the `SAY`
+/// fallback and **not** the `IF` one.
+///
+/// The difference is what the declining op still owes. An `IF`'s
+/// `Op::EvalExpr` evaluates the condition *and* validates it *and* traces it,
+/// so nothing follows it; here the `EvalExpr` only evaluates, and the `>>>`
+/// line and the `Flow` are still owed by the op behind it. `.nil` is
+/// `ExprKind::DotVariable`, which `native_shape` has no arm for.
+#[test]
+fn a_return_expression_outside_the_native_set_keeps_its_return_op() {
+    let chunk = compile_for_test(b"return .nil\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=3\n\
+         1: EvalExpr index=0 slot=0 dst=0\n\
+         2: Return index=0 src=0 keyword=RETURN\n"
+    );
+}
+
+/// A call that is the whole of a `RETURN`'s expression takes an
+/// [`super::Op::CallExpr`] addressed at slot `0` with no descent, which is
+/// what `Interp::chunk_node_at`'s own arm for these instructions resolves.
+///
+/// Without that arm the descent answers `None` and the driver reaches
+/// `Loud::call_op_off_its_node` instead of calling anything.
+#[test]
+fn a_call_in_a_returns_expression_is_addressed_at_the_returns_slot() {
+    let chunk = compile_for_test(b"return length(zs)\n").expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=4\n\
+         1: CallExpr index=0 slot=0 path=root site=0 dst=0\n\
+         2: TraceFunction index=0 slot=0 path=root src=0\n\
+         3: Return index=0 src=0 keyword=RETURN\n"
+    );
+}
+
+/// A promoted `EXIT` compiled under a setting that echoes carries its clause
+/// echo as a [`super::Op::TraceClause`] of its own, in front of the value's
+/// ops.
+///
+/// The sibling of the `SAY` and `IF` rows for the same decision (D23), and
+/// what it adds is that the ops this task emits sit inside a region whose echo
+/// is compiled in rather than gated at run time.
+#[test]
+fn a_traced_exit_carries_its_clause_echo_op() {
+    let chunk = compile_for_test_under(b"exit 2\n", traced()).expect("compiles");
+    assert_eq!(
+        render(&chunk),
+        "0: Clause index=0 end=5\n\
+         1: TraceClause index=0\n\
+         2: LoadConstant dst=0\n\
+         3: TraceLiteral src=0\n\
+         4: Return index=0 src=0 keyword=EXIT\n"
+    );
+}

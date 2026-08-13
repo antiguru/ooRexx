@@ -20,7 +20,10 @@ use rexx_parse::{Call, CodeBody, Expr, ExprKind, Instruction, InstructionKind, S
 use super::{Calls, Chunk, ChunkTooLarge, ConditionKeyword, Hints, NodePath, Op, PlanSlot};
 use crate::eval::{SymbolRead, is_arithmetic, is_native_binary};
 use crate::plan::Plan;
-use crate::run::{HeaderPlan, if_targets, loop_header_plan, loop_header_slot, otherwise_range};
+use crate::run::{
+    HeaderPlan, QueueKeyword, ReturnKeyword, if_targets, loop_header_plan, loop_header_slot,
+    otherwise_range,
+};
 use crate::trace::ChunkTrace;
 
 /// The compile-time register stack (the plan's Decisions section: "register
@@ -763,6 +766,99 @@ pub(crate) fn compile(
                 ops.push(Op::Say {
                     index: instruction_index(index)?,
                     src,
+                });
+                close_region(&mut ops, at)?;
+                registers.release(mark);
+            }
+            // `RETURN` and `EXIT` are the `SAY` shape with a `Flow` in place
+            // of the print, and one arm rather than two because the keyword is
+            // all that differs -- read off the kind here exactly as `step`'s
+            // own `PUSH`/`QUEUE` arm reads its end of the queue.
+            //
+            // **The op is the last of the region and control does not come
+            // back to it**, so nothing follows it inside the region and
+            // `close_region` marks the end the driver settles the `Flow`
+            // against.
+            InstructionKind::Return { expression } | InstructionKind::Exit { expression } => {
+                let keyword = if matches!(instruction.kind, InstructionKind::Return { .. }) {
+                    ReturnKeyword::Return
+                } else {
+                    ReturnKeyword::Exit
+                };
+                let mark = registers.mark();
+                let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: 0,
+                });
+                push_echo(&mut ops, echo, instruction_index(index)?);
+                let src = match expression {
+                    Some(expression) => {
+                        let dst = registers.alloc()?;
+                        push_value(
+                            &mut ops,
+                            &mut consts,
+                            &mut registers,
+                            &mut hints,
+                            &mut calls,
+                            plan,
+                            expression,
+                            instruction_index(index)?,
+                            0,
+                            dst,
+                        )?;
+                        Some(dst)
+                    }
+                    None => None,
+                };
+                ops.push(Op::Return {
+                    index: instruction_index(index)?,
+                    src,
+                    keyword,
+                });
+                close_region(&mut ops, at)?;
+                registers.release(mark);
+            }
+            // `PUSH` and `QUEUE` are the `SAY` shape with the queue in place
+            // of the print, one arm for the reason the pair above is one.
+            InstructionKind::Push { expression } | InstructionKind::Queue { expression } => {
+                let keyword = if matches!(instruction.kind, InstructionKind::Push { .. }) {
+                    QueueKeyword::Push
+                } else {
+                    QueueKeyword::Queue
+                };
+                let mark = registers.mark();
+                let at = op_index(&ops)?;
+                let echo = echoes(trace, instruction);
+                ops.push(Op::Clause {
+                    index: instruction_index(index)?,
+                    end: 0,
+                });
+                push_echo(&mut ops, echo, instruction_index(index)?);
+                let src = match expression {
+                    Some(expression) => {
+                        let dst = registers.alloc()?;
+                        push_value(
+                            &mut ops,
+                            &mut consts,
+                            &mut registers,
+                            &mut hints,
+                            &mut calls,
+                            plan,
+                            expression,
+                            instruction_index(index)?,
+                            0,
+                            dst,
+                        )?;
+                        Some(dst)
+                    }
+                    None => None,
+                };
+                ops.push(Op::Queue {
+                    index: instruction_index(index)?,
+                    src,
+                    keyword,
                 });
                 close_region(&mut ops, at)?;
                 registers.release(mark);
@@ -1684,6 +1780,8 @@ fn assert_region_ops_name_their_clause(ops: &[Op]) {
                 | Op::EvalExpr { index, .. }
                 | Op::Store { index, .. }
                 | Op::Say { index, .. }
+                | Op::Return { index, .. }
+                | Op::Queue { index, .. }
                 | Op::WhenTest { index, .. }
                 | Op::Call { index, .. }
                 | Op::CallExpr { index, .. }

@@ -134,6 +134,8 @@ impl Root {
             | Op::TracePrefix { .. }
             | Op::Store { .. }
             | Op::Say { .. }
+            | Op::Return { .. }
+            | Op::Queue { .. }
             | Op::Call { .. }
             | Op::TraceFunction { .. }
             | Op::EndBranch
@@ -169,6 +171,10 @@ fn promoted_as(kind: &InstructionKind, index: usize, listed: &[usize]) -> Option
         InstructionKind::WhenCase { .. } if listed.contains(&index) => Some("WHEN CASE"),
         InstructionKind::Assignment { .. } => Some("assignment"),
         InstructionKind::Say { .. } => Some("SAY"),
+        InstructionKind::Return { .. } => Some("RETURN"),
+        InstructionKind::Exit { .. } => Some("EXIT"),
+        InstructionKind::Push { .. } => Some("PUSH"),
+        InstructionKind::Queue { .. } => Some("QUEUE"),
         InstructionKind::Call(call) if matches!(&**call, Call::Named { .. }) => Some("CALL name"),
         _ => None,
     }
@@ -482,7 +488,15 @@ fn check_body(body: &CodeBody, symbols: &rexx_parse::SymbolTable, where_: &str, 
         // fallback op, not the promotion.
         let expected = match &instruction.kind {
             InstructionKind::Assignment { value, .. } => Some(root_of(value)),
-            InstructionKind::Say { expression } => expression.as_ref().map(root_of),
+            // A `SAY`, a `RETURN`, an `EXIT`, a `PUSH` and a `QUEUE` are one
+            // row: each offers its whole expression to `push_native` and each
+            // bare form holds none, so `None` here is a clause whose region
+            // ends in no `Root` at all.
+            InstructionKind::Say { expression }
+            | InstructionKind::Return { expression }
+            | InstructionKind::Exit { expression }
+            | InstructionKind::Push { expression }
+            | InstructionKind::Queue { expression } => expression.as_ref().map(root_of),
             InstructionKind::If { condition, .. } => Some(root_of(condition)),
             InstructionKind::When { condition, .. } => match root_of(condition) {
                 Root::EvalExpr => None,
@@ -666,6 +680,10 @@ fn sweep_every_corpus_body() {
         "WHEN CASE",
         "assignment",
         "SAY",
+        "RETURN",
+        "EXIT",
+        "PUSH",
+        "QUEUE",
         "CALL name",
     ] {
         assert!(

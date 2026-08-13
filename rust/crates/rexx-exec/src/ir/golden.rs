@@ -16,6 +16,7 @@
 //! than a placeholder for one.
 
 use super::{Chunk, ConditionKeyword, NodePath, Op, PlanSlot};
+use crate::run::{QueueKeyword, ReturnKeyword};
 
 /// Renders `chunk` as one line per op: `"{index}: {OpName}[ field=value]*"`.
 ///
@@ -196,6 +197,32 @@ pub(crate) fn render(chunk: &Chunk) -> String {
                     render_register(*src)
                 ));
             }
+            // The keyword is rendered for [`Op::Condition`]'s reason: it
+            // decides which `Flow` the op answers, and a golden expectation
+            // reading `RETURN` or `EXIT` is what makes that visible in the
+            // stream rather than only in what a called label does.
+            Op::Return {
+                index: at,
+                src,
+                keyword,
+            } => {
+                out.push_str(&format!(
+                    "{index}: Return index={at} src={} keyword={}\n",
+                    render_register(*src),
+                    render_return_keyword(*keyword)
+                ));
+            }
+            Op::Queue {
+                index: at,
+                src,
+                keyword,
+            } => {
+                out.push_str(&format!(
+                    "{index}: Queue index={at} src={} keyword={}\n",
+                    render_register(*src),
+                    render_queue_keyword(*keyword)
+                ));
+            }
             // The `site` field is rendered, for the reason [`Op::Arith`]'s
             // `hint` is: it is an index this compiler hands out from the
             // program alone, so a golden reading `site=1` for the second call
@@ -253,6 +280,24 @@ fn render_condition_keyword(keyword: ConditionKeyword) -> &'static str {
     match keyword {
         ConditionKeyword::If => "IF",
         ConditionKeyword::When => "WHEN",
+    }
+}
+
+/// Which keyword an [`Op::Return`] ends the activation for, as the keyword
+/// itself: the tag decides whether a called label's clause resumes its caller
+/// or ends the program.
+fn render_return_keyword(keyword: ReturnKeyword) -> &'static str {
+    match keyword {
+        ReturnKeyword::Return => "RETURN",
+        ReturnKeyword::Exit => "EXIT",
+    }
+}
+
+/// Which end of the queue an [`Op::Queue`] writes to, as the keyword itself.
+fn render_queue_keyword(keyword: QueueKeyword) -> &'static str {
+    match keyword {
+        QueueKeyword::Push => "PUSH",
+        QueueKeyword::Queue => "QUEUE",
     }
 }
 

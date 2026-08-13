@@ -341,6 +341,20 @@ Cases: a bare `RETURN`, `RETURN` with an expression, `RETURN` from a routine who
 
 - [ ] **Step 4: gates, then commit**
 
+**The answer was neither of the two the interfaces section offered: two ops, each with a keyword tag.**
+The premise behind "one op with a tag" is false in the code -- the four tails do not differ only by which `Flow` they answer.
+`RETURN` and `EXIT` are the same tail but for the `Flow` constructor, and `PUSH`/`QUEUE` are the same tail but for which end of the queue; between the two groups, the trace rule differs (`result_text` only when there is a value, against `to_text` always, with the bare form tracing a null string), the side effect differs, and the region end differs, since a `PUSH` answers `Flow::Next` and does not end its region.
+So `Op::Return { index, src, keyword }` and `Op::Queue { index, src, keyword }`, with `ReturnKeyword` and `QueueKeyword` beside the shared halves in `run.rs`.
+`task-4-report.md` has the table the decision was read off, and the third option it rejected (folding `PUSH`/`QUEUE` into `Op::Say` with a sink tag).
+
+**Four of the six shapes Step 3 asks for were already in the tree and were not written again**; the case file's own header names each and where it lives.
+`tests/ir_dual_cases/return-and-queue` holds the four that were not: an `EXIT` with a value from a called label, a `PUSH`/`QUEUE` read back by `PARSE PULL`, `RETURN ''` against a bare `RETURN` through the caller's `RESULT`, and a call inside a `RETURN`'s expression.
+**One of them is a unique catch, measured in both directions**: with `Interp::queue_evaluated` emitting no `>>>`, that file is the only red test in the workspace, and with it held out of the directory the workspace is green under the same mutation.
+Both engines take that mutation, so the engine comparison cannot see it, and the harness that compares `corpus/lang/push_queue.rex` against the oracle gates only under `REXX_CORPUS_GATE`.
+
+**A divergence found and left alone**: a `SIGNAL ON SYNTAX` handler's clauses echo one indent too deep when the raise happened inside a called routine.
+Measured on both engines, identical bytes on each, and reproduced with no `RETURN` or `EXIT` anywhere on the trapped path, so it is the callee's indent not being restored across the transfer and not this task's.
+
 ---
 
 ## Measurement, after all four land

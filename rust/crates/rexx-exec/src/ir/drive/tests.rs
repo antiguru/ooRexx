@@ -297,7 +297,7 @@ fn the_tree_walker_steps_no_clause_from_a_chunk() {
     );
 }
 
-/// A body entered with `TRACE R` already in force echoes its promoted clause
+/// A body entered with `TRACE R` already in force echoes its promoted clauses
 /// from the chunk's own [`crate::ir::Op::TraceClause`], rather than from the
 /// clause unit's run-time gate.
 ///
@@ -338,10 +338,10 @@ sub:
     let echoed = trace_op_echoes() - before;
     assert_eq!(outcome.exit_code, 0, "stderr: {:?}", outcome.stderr);
     assert_eq!(
-        echoed, 1,
+        echoed, 2,
         "the compiled stream emitted {echoed} clause echoes from a trace op where the callee's \
-         one promoted clause owes one, so either its chunk was not compiled for the setting it \
-         was entered under or the op it carries did not run"
+         promoted clauses -- its IF and its RETURN -- owe one each, so either its chunk was not \
+         compiled for the setting it was entered under or the ops it carries did not run"
     );
 }
 

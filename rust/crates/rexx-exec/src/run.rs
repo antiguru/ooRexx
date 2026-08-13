@@ -923,6 +923,30 @@ pub(crate) enum ConditionTrace<'a> {
     Keyword(usize, &'a str),
 }
 
+/// Which keyword ended the activation, for [`Interp::returned_value`].
+///
+/// **A tag rather than two functions**, because the two arms would otherwise
+/// be the same arm twice: `RETURN` and `EXIT` root, trace and carry their
+/// value identically, and differ only in which [`Flow`] they answer.
+#[derive(Clone, Copy)]
+pub(crate) enum ReturnKeyword {
+    Return,
+    Exit,
+}
+
+/// Which end of the queue a line lands on, for [`Interp::queue_evaluated`].
+///
+/// **A tag rather than two functions**, for [`ReturnKeyword`]'s reason and
+/// with a witness in `step`'s own history: `PUSH` and `QUEUE` were already one
+/// arm choosing between `Queue::push` and `Queue::queue`, and this is that
+/// choice named. See `queue.rs`'s module doc for the measured LIFO/FIFO order
+/// the two spellings produce.
+#[derive(Clone, Copy)]
+pub(crate) enum QueueKeyword {
+    Push,
+    Queue,
+}
+
 impl Interp {
     // ---- the instruction loop, which is what this spike is for ----
 
@@ -1457,7 +1481,7 @@ impl Interp {
                 Ok(Flow::Next)
             }
 
-            // `EXIT` with a result: the spike had only the bare form
+            // `EXIT`, bare or with a result: the spike had only the bare form
             // (`expression: None` matched literally, nothing else reaching
             // this arm at all). The value crosses out of the instruction loop
             // as `Flow::Exit`, unconverted -- `Interp::exit_code_for` (`lib.rs`)
@@ -1466,44 +1490,16 @@ impl Interp {
             // come from inside a fragment (`run_fragment`'s own propagating
             // arm, below), and the conversion needs nothing this loop knows
             // that `execute` does not already have.
+            //
+            // The rooting, the `>>>` line and the `Flow` are
+            // `Interp::returned_value`'s, shared with `RETURN`'s arm below and
+            // with `crate::ir::Op::Return`.
             InstructionKind::Exit { expression } => {
                 let value = match expression {
-                    Some(expression) => {
-                        let value = self.eval(code, expression)?;
-                        // Rooted for exactly one clause, like every other
-                        // `eval` result -- and that is shorter than this value
-                        // needs. `step_in_temps_frame` pops
-                        // it before `Flow::Exit` has even reached
-                        // `run_activation`. From that pop, through the
-                        // activation teardown, to `execute`'s `exit_code_for`
-                        // call, nothing on the temps stack names this value --
-                        // longer and later than any other window in this
-                        // crate. `root_exit_value` (`lib.rs`) is the root that
-                        // survives it, and its own doc has the measurement
-                        // that says this is a real window rather than a
-                        // theoretical one.
-                        self.roots.push_temp(value);
-                        // `>>>`, at this `EXIT`'s own clause indent (Task 9).
-                        // Measured on a three-line program with no condition
-                        // and no call in it -- `trace r` / `say 'a'` /
-                        // `exit 0` traces `>>>   "0"` after the `exit 0`
-                        // echo -- so this belongs to the instruction, not to
-                        // anything around it, and the bare form (`expression:
-                        // None`) traces no line at all because there is no
-                        // value: `RexxInstructionExit::execute`
-                        // (`ExitInstruction.cpp`) evaluates through
-                        // `RexxInstructionExpression::evaluateExpression`
-                        // (`RexxInstruction.cpp:223`-`235`, read directly),
-                        // whose own `traceResult` runs only inside the
-                        // `expression != OREF_NULL` arm.
-                        if let Some(rendered) = self.result_text(value) {
-                            self.trace_result(self.clause_state.current_value_indent, &rendered);
-                        }
-                        Some(value)
-                    }
+                    Some(expression) => Some(self.eval(code, expression)?),
                     None => None,
                 };
-                Ok(Flow::Exit(value))
+                Ok(self.returned_value(value, ReturnKeyword::Exit))
             }
 
             // A label is a traced no-op: the C++'s own `execute` on a label
@@ -2172,24 +2168,16 @@ impl Interp {
             // other variants expresses that, and why the main body's own
             // `RETURN` ends the program.
             //
-            // The value's `>>>` fires **here**, at the `RETURN`'s own clause
-            // indent, and the caller traces a *second* one at its own --
-            // measured, `return 9` from a routine called at top level prints
-            // `>>>     "9"` then `>>>   "9"`, two lines for one value at two
-            // indents. `exec_call` owns the second; this owns the first.
+            // The rooting, the `>>>` line and the `Flow` are
+            // `Interp::returned_value`'s, whose own doc has the two-indent
+            // measurement that says which of the two `>>>` lines a returned
+            // value produces belongs here.
             InstructionKind::Return { expression } => {
                 let value = match expression {
-                    Some(expression) => {
-                        let value = self.eval(code, expression)?;
-                        self.roots.push_temp(value);
-                        if let Some(rendered) = self.result_text(value) {
-                            self.trace_result(self.clause_state.current_value_indent, &rendered);
-                        }
-                        Some(value)
-                    }
+                    Some(expression) => Some(self.eval(code, expression)?),
                     None => None,
                 };
-                Ok(Flow::Return(value))
+                Ok(self.returned_value(value, ReturnKeyword::Return))
             }
 
             // `SIGNAL label` and `SIGNAL VALUE`. `Signal::Trap` (`SIGNAL
@@ -2262,33 +2250,23 @@ impl Interp {
             // this instruction and is not derivable from the grammar.
             InstructionKind::Raise(raise) => self.exec_raise(code, raise),
 
-            // `PUSH`/`QUEUE line` (I15). Both evaluate to string
-            // form and trace the result exactly like `SAY` above -- the
-            // oracle's own `RexxInstructionQueue::execute` shares `SAY`'s
-            // `RexxInstructionExpression::evaluateStringExpression`
-            // (`QueueInstruction.cpp:69`), differing only in which end of
-            // the queue the value lands on, decided below by which variant
-            // matched (review round 1's M4: one arm, not two copies that can
-            // drift). See `queue.rs`'s own module doc for the measured LIFO
-            // (`PUSH`)/FIFO (`QUEUE`) order; reading a line back is
-            // `Interp::pull_line`'s (`input.rs`), not this arm's.
+            // `PUSH`/`QUEUE line` (I15). One arm, not two copies that can
+            // drift (review round 1's M4): the two spellings differ only in
+            // which end of the queue the value lands on, decided below by
+            // which variant matched. The rendering, the `>>>` line and the
+            // write are `Interp::queue_evaluated`'s, shared with
+            // `crate::ir::Op::Queue`.
             InstructionKind::Push { expression } | InstructionKind::Queue { expression } => {
-                let line = match expression {
-                    Some(expression) => {
-                        let value = self.eval(code, expression)?;
-                        self.roots.push_temp(value);
-                        self.to_text(value).to_vec()
-                    }
-                    // No expression queues a null string, traced as one --
-                    // the same `else` arm `SAY`'s own blank line takes.
-                    None => Vec::new(),
+                let value = match expression {
+                    Some(expression) => Some(self.eval(code, expression)?),
+                    None => None,
                 };
-                self.trace_result(self.clause_state.current_value_indent, &line);
-                if matches!(instruction.kind, InstructionKind::Push { .. }) {
-                    self.queue.push(line);
+                let keyword = if matches!(instruction.kind, InstructionKind::Push { .. }) {
+                    QueueKeyword::Push
                 } else {
-                    self.queue.queue(line);
-                }
+                    QueueKeyword::Queue
+                };
+                self.queue_evaluated(value, keyword);
                 Ok(Flow::Next)
             }
 
@@ -2841,6 +2819,85 @@ impl Interp {
         self.trace_result(self.clause_state.current_value_indent, &line);
         self.out.extend_from_slice(&line);
         self.out.push(b'\n');
+    }
+
+    /// Everything a `RETURN` or an `EXIT` does once its expression has been
+    /// evaluated: its `>>>`, and the `Flow` that leaves the activation.
+    ///
+    /// **The one implementation both engines enter**: `step`'s own `Return`
+    /// and `Exit` arms evaluate and call this, and `crate::ir::Op::Return`
+    /// does the same with a register's value.
+    ///
+    /// `None` is the bare form, which traces **no line at all** -- unlike a
+    /// bare `SAY`, which traces the null string. The oracle's
+    /// `RexxInstructionExit::execute` (`ExitInstruction.cpp`) evaluates
+    /// through `RexxInstructionExpression::evaluateExpression`
+    /// (`RexxInstruction.cpp:223`-`235`, read directly), whose own
+    /// `traceResult` runs only inside the `expression != OREF_NULL` arm; a
+    /// bare `RETURN` leaves `RESULT` unset where `RETURN ''` sets it, which is
+    /// the same distinction in the caller.
+    ///
+    /// The value's `>>>` fires **here**, at this clause's own indent, and a
+    /// caller reading `RESULT` traces a *second* one at its own -- measured,
+    /// `return 9` from a routine called at top level prints `>>>     "9"` then
+    /// `>>>   "9"`, two lines for one value at two indents. `exec_call` owns
+    /// the second; this owns the first. Measured for `EXIT` on a three-line
+    /// program with no condition and no call in it -- `trace r` / `say 'a'` /
+    /// `exit 0` traces `>>>   "0"` after the `exit 0` echo -- so the line
+    /// belongs to the instruction and not to anything around it.
+    ///
+    /// **The rooting here is shorter than the value needs, and that is
+    /// `EXIT`'s window rather than a general one.** The temp is rooted for
+    /// exactly one clause, like every other `eval` result;
+    /// `step_in_temps_frame` pops it before `Flow::Exit` has even reached
+    /// `run_activation`, and from that pop, through the activation teardown,
+    /// to `execute`'s `exit_code_for` call, nothing on the temps stack names
+    /// this value. `root_exit_value` (`lib.rs`) is the root that survives it,
+    /// and its own doc has the measurement that says this is a real window
+    /// rather than a theoretical one. The compiled engine's own register is a
+    /// second root for the same value while its region runs, so this push is
+    /// redundant there and harmless.
+    pub(crate) fn returned_value(&mut self, value: Option<ObjRef>, keyword: ReturnKeyword) -> Flow {
+        if let Some(value) = value {
+            self.roots.push_temp(value);
+            if let Some(rendered) = self.result_text(value) {
+                self.trace_result(self.clause_state.current_value_indent, &rendered);
+            }
+        }
+        match keyword {
+            ReturnKeyword::Return => Flow::Return(value),
+            ReturnKeyword::Exit => Flow::Exit(value),
+        }
+    }
+
+    /// Everything a `PUSH` or a `QUEUE` does once its expression has been
+    /// evaluated: the `>>>` line, and the line itself onto one end of the
+    /// queue.
+    ///
+    /// **The one implementation both engines enter**, `step`'s own arm and
+    /// `crate::ir::Op::Queue` alike.
+    ///
+    /// **`SAY`'s tail with a different sink**, and that is the oracle's own
+    /// shape rather than a convenience here: `RexxInstructionQueue::execute`
+    /// shares `SAY`'s `RexxInstructionExpression::evaluateStringExpression`
+    /// (`QueueInstruction.cpp:69`), so the value is rendered to string form
+    /// and traced exactly as [`Interp::say_evaluated`] renders and traces it,
+    /// and `None` queues a null string traced as one rather than being a
+    /// skipped clause. Reading a line back is `Interp::pull_line`'s
+    /// (`input.rs`), not this function's.
+    pub(crate) fn queue_evaluated(&mut self, value: Option<ObjRef>, keyword: QueueKeyword) {
+        let line = match value {
+            Some(value) => {
+                self.roots.push_temp(value);
+                self.to_text(value).to_vec()
+            }
+            None => Vec::new(),
+        };
+        self.trace_result(self.clause_state.current_value_indent, &line);
+        match keyword {
+            QueueKeyword::Push => self.queue.push(line),
+            QueueKeyword::Queue => self.queue.queue(line),
+        }
     }
 
     /// Everything one assignment does once its value has been evaluated:
@@ -6878,8 +6935,23 @@ impl Interp {
     ) -> Option<&Expr> {
         let mut node = match (&instruction.kind, slot) {
             (InstructionKind::Assignment { value, .. }, 0) => value,
+            // The one expression of an instruction that computes a value and
+            // does something with it, slot `0`. A bare form holds no
+            // expression at all, so it names no node and matches no arm here.
             (
                 InstructionKind::Say {
+                    expression: Some(expression),
+                }
+                | InstructionKind::Return {
+                    expression: Some(expression),
+                }
+                | InstructionKind::Exit {
+                    expression: Some(expression),
+                }
+                | InstructionKind::Push {
+                    expression: Some(expression),
+                }
+                | InstructionKind::Queue {
                     expression: Some(expression),
                 },
                 0,
@@ -6962,16 +7034,29 @@ impl Interp {
                 };
                 self.eval(code, expr)
             }
-            // An `Assignment`'s value and a `SAY`'s expression, slot `0`:
-            // whatever the expression came to, unvalidated and untagged. Both
-            // reach this arm only for an expression `compile` did not emit a
-            // native op for -- a literal is `crate::ir::Op::Const` and a bare
-            // symbol is `crate::ir::Op::Load` instead -- and both are
-            // trace-identical to the tree-walker's own arm here because this is
-            // the same `eval` call it makes.
+            // An `Assignment`'s value, and the one expression of a `SAY`, a
+            // `RETURN`, an `EXIT`, a `PUSH` or a `QUEUE`, slot `0`: whatever
+            // the expression came to, unvalidated and untagged. Each reaches
+            // this arm only for an expression `compile` did not emit a native
+            // op for -- a literal is `crate::ir::Op::Const` and a bare symbol
+            // is `crate::ir::Op::Load` instead -- and each is trace-identical
+            // to the tree-walker's own arm here because this is the same
+            // `eval` call it makes.
             (InstructionKind::Assignment { value, .. }, 0) => self.eval(code, value),
             (
                 InstructionKind::Say {
+                    expression: Some(expression),
+                }
+                | InstructionKind::Return {
+                    expression: Some(expression),
+                }
+                | InstructionKind::Exit {
+                    expression: Some(expression),
+                }
+                | InstructionKind::Push {
+                    expression: Some(expression),
+                }
+                | InstructionKind::Queue {
                     expression: Some(expression),
                 },
                 0,

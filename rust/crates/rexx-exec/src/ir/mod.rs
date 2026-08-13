@@ -32,7 +32,10 @@ use rexx_parse::{Operator, PrefixOp, SymbolId};
 
 use crate::error::Raised;
 use crate::eval::SymbolRead;
-use crate::run::{HeaderRole, Resolved, raised_if_not_logical, raised_when_not_logical};
+use crate::run::{
+    HeaderRole, QueueKeyword, Resolved, ReturnKeyword, raised_if_not_logical,
+    raised_when_not_logical,
+};
 use crate::trace::ChunkTrace;
 
 mod compile;
@@ -717,6 +720,59 @@ pub(crate) enum Op {
     ///
     /// **Only valid inside a [`Op::Clause`] region**, for that reason.
     Say { index: u32, src: Option<u16> },
+    /// Ends the activation at `index` with the value in register `src`, or
+    /// with no value at all for the bare form, and answers the `Flow` its
+    /// keyword calls for.
+    ///
+    /// `Interp::returned_value` is the whole of what `step`'s own `Return` and
+    /// `Exit` arms do once their expression is computed, entered from here and
+    /// from there -- so the rooting, the `>>>` line and the choice of `Flow`
+    /// are one implementation rather than a second one beside it.
+    ///
+    /// **`src` is an `Option` because the two forms are different
+    /// instructions, not the same one with an empty value**, and the
+    /// difference is measured on the oracle: after `call zempty` where
+    /// `zempty:` is `return ''`, the caller's `say 'x:' result` prints `x: `,
+    /// and after a bare `return` it prints `x: RESULT`, which is what an unset
+    /// Rexx variable renders as. Nor does either form trace a `>>>` line for a
+    /// value it does not have. A register holding the null string would answer
+    /// the first for both.
+    ///
+    /// **The last op of a [`Op::Clause`] region, and inside it**: the driver
+    /// ends the region with `RegionEnd::Flowed`, which is what [`Op::Call`]'s
+    /// arm does with the `Flow` a call answers. Whatever follows this op in
+    /// the stream is unreachable through it.
+    ///
+    /// `index` is read only by a debug assertion that the op still describes
+    /// the instruction it was emitted for, for [`Op::Say`]'s reason.
+    Return {
+        index: u32,
+        src: Option<u16>,
+        keyword: ReturnKeyword,
+    },
+    /// Queues the line in register `src` at the end its keyword names, or the
+    /// null string for the bare form, for the `PUSH`/`QUEUE` at `index`.
+    ///
+    /// `Interp::queue_evaluated` is the whole of what `step`'s own arm does
+    /// once its expression is computed, entered from here and from there, so
+    /// the string rendering, the `>>>` line and the write are one
+    /// implementation.
+    ///
+    /// **`src` is an `Option` for the reason [`Op::Say`]'s is**, and the
+    /// answer is the same one: the bare form queues a null string **and**
+    /// traces it, rather than being a skipped clause, so the two are the same
+    /// stored line and only one of them is what the instruction says.
+    ///
+    /// **This op does not end its region**, unlike [`Op::Return`]: a `PUSH`
+    /// and a `QUEUE` answer `Flow::Next`, so the region ends where a
+    /// [`Op::Say`]'s does.
+    ///
+    /// `index` is read only by a debug assertion, for [`Op::Say`]'s reason.
+    Queue {
+        index: u32,
+        src: Option<u16>,
+        keyword: QueueKeyword,
+    },
     /// Runs the `CALL name` at `index`, from the resolution this site has kept
     /// or a fresh one, and settles `RESULT` from what came back.
     ///

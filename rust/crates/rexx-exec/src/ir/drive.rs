@@ -1025,6 +1025,81 @@ impl Interp {
                                     });
                                     self.say_evaluated(value);
                                 }
+                                // The end of the activation, through
+                                // `Interp::returned_value`, for the same
+                                // reason `Op::Say` goes through
+                                // `say_evaluated`: the `>>>` line, the root
+                                // and the choice between `Flow::Return` and
+                                // `Flow::Exit` are that function's rather than
+                                // a second copy.
+                                //
+                                // **The region ends here**, carrying the
+                                // `Flow` out to `settle` exactly as
+                                // `Op::Call`'s arm does with the `Flow` a call
+                                // answers. The value leaves this clause inside
+                                // that `Flow`, so what roots it across the
+                                // boundary is `RegionEnd`'s own `ClauseValue`,
+                                // which forwards to `ClauseValue for Flow` --
+                                // the same rule `step`'s arm reaches through
+                                // `in_clause`, rather than a second copy.
+                                Op::Return {
+                                    index,
+                                    src,
+                                    keyword,
+                                } => {
+                                    debug_assert_names_the_clause(code, *index, clause, "Return");
+                                    debug_assert!(
+                                        matches!(
+                                            &clause.kind,
+                                            InstructionKind::Return { expression }
+                                                | InstructionKind::Exit { expression }
+                                                if expression.is_some() == src.is_some()
+                                        ),
+                                        "a Return op names an instruction that is not a RETURN or \
+                                         an EXIT of matching arity"
+                                    );
+                                    let value = src.map(|register| {
+                                        debug_assert!(
+                                            chunk.holds_register(register),
+                                            "op reads register {register} outside the region the \
+                                             chunk reserved"
+                                        );
+                                        self.roots.temp_at(registers, register as usize)
+                                    });
+                                    let flow = self.returned_value(value, *keyword);
+                                    break 'region Ok(RegionEnd::Flowed(flow));
+                                }
+                                // The queue write and its `>>>`, through
+                                // `Interp::queue_evaluated`. This one does not
+                                // end the region: a `PUSH` and a `QUEUE`
+                                // answer `Flow::Next`, so the region ends
+                                // where a `SAY`'s does.
+                                Op::Queue {
+                                    index,
+                                    src,
+                                    keyword,
+                                } => {
+                                    debug_assert_names_the_clause(code, *index, clause, "Queue");
+                                    debug_assert!(
+                                        matches!(
+                                            &clause.kind,
+                                            InstructionKind::Push { expression }
+                                                | InstructionKind::Queue { expression }
+                                                if expression.is_some() == src.is_some()
+                                        ),
+                                        "a Queue op names an instruction that is not a PUSH or a \
+                                         QUEUE of matching arity"
+                                    );
+                                    let value = src.map(|register| {
+                                        debug_assert!(
+                                            chunk.holds_register(register),
+                                            "op reads register {register} outside the region the \
+                                             chunk reserved"
+                                        );
+                                        self.roots.temp_at(registers, register as usize)
+                                    });
+                                    self.queue_evaluated(value, *keyword);
+                                }
                                 // The call, through the same
                                 // `Interp::resolve_call` and
                                 // `Interp::invoke_named_call` that `step`'s own
@@ -1358,6 +1433,8 @@ impl Interp {
                 Op::TracePrefix { .. } => return Err(Loud::op_not_driven("TracePrefix").into()),
                 Op::Store { .. } => return Err(Loud::op_not_driven("Store").into()),
                 Op::Say { .. } => return Err(Loud::op_not_driven("Say").into()),
+                Op::Return { .. } => return Err(Loud::op_not_driven("Return").into()),
+                Op::Queue { .. } => return Err(Loud::op_not_driven("Queue").into()),
                 Op::Call { .. } => return Err(Loud::op_not_driven("Call").into()),
                 Op::CallExpr { .. } => return Err(Loud::op_not_driven("CallExpr").into()),
                 Op::TraceFunction { .. } => {

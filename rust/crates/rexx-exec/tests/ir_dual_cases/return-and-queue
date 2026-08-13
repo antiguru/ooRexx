@@ -1,0 +1,223 @@
+# What promoting `RETURN`, `EXIT`, `PUSH` and `QUEUE` has to keep.
+#
+# All four used to be one `Op::Generic` delegating the whole clause back to
+# the tree-walker. Each is now a `Clause` region: its expression's own native
+# ops, then one op that consumes the value. `Op::Return` carries the keyword
+# that decides between `Flow::Return` and `Flow::Exit` and ends its region
+# with it; `Op::Queue` carries the end of the queue the line lands on and ends
+# no region, because a `PUSH` and a `QUEUE` answer `Flow::Next`.
+#
+# A bare form takes no register at all -- `src` is `None` and not a register
+# holding a null string, because the two are different instructions: a bare
+# `RETURN` leaves `RESULT` unset where `RETURN ''` sets it, and a bare
+# `RETURN`/`EXIT` traces no value line where a bare `PUSH`/`QUEUE` traces the
+# null string it queues.
+#
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, on both
+# engines, before this file was written. Regenerate a row by running its
+# program under the oracle, never with REWRITE=1 -- ir_dual.rs refuses to run
+# at all under REWRITE for that reason. Capture is:
+#
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+#
+# Expected lines are tagged so that no line of the block can be empty, and
+# trailing blanks are part of what is compared: `after empty: ` below ends in
+# one, because `RETURN ''` sets `RESULT` to the null string.
+#
+# Rows the shapes here would otherwise call for, already in the tree and not
+# written again:
+#
+#   * a bare `RETURN` under `trace r` -- `trace-settings`' "one body entered
+#     untraced and then under trace r", whose callee ends on one and traces no
+#     value line after its echo;
+#   * a bare `RETURN` under `trace i`, and a `RETURN` whose expression is an
+#     operator, with the caller's own `RESULT` line -- `calls`' "a CALL inside
+#     a body entered while the setting was already in force";
+#   * a `RETURN` with a value read back through `RESULT` under `trace r` --
+#     `calls`' "the same call under trace r", the two `>>>` at two indents;
+#   * `EXIT` ending the program from a called label and only the routine from
+#     a `::ROUTINE`, untraced -- `calls`' own row for it;
+#   * an `EXIT` with a value under `trace r` at top level, against the oracle
+#     on the default engine -- `tests/trace_oracle/exit_value.rex`;
+#   * `PUSH`/`QUEUE` and their bare forms traced under `trace r`, against the
+#     oracle -- `corpus/lang/push_queue.rex`, which is in this harness's own
+#     corpus population as well.
+
+# EXIT with a value, from a called label, under trace r
+# The keyword tag is what makes this `EXIT` rather than `RETURN`: a `Flow`
+# that unwound to the activation boundary instead of out of the program would
+# resume the caller, print `not reached` and exit 0. Measured to redden when
+# `compile` tags an `EXIT`'s op `ReturnKeyword::Return`, on stdout between the
+# engines -- **not a unique catch**: the two op-stream pins for this op read
+# the tag out of the compiled stream, and `run::tests::exit_inside_a_routine_
+# ends_the_routine_where_a_labels_exit_ends_the_program` and
+# `eval::tests::an_exit_inside_a_routine_reached_by_expression_call_ends_the_
+# whole_program` see the wrong flow in a program's own answer.
+# It reddens for the `>>>` line too, when `Interp::returned_value` stops
+# emitting it -- a mutation both engines take, so what sees it here is the
+# oracle-measured block rather than the engine comparison. That one is not
+# unique either: `tests/trace_oracle/exit_value.rex` and three `run::tests`
+# indent witnesses redden with it.
+program
+trace r
+call zsub
+say 'not reached'
+exit
+zsub:
+exit 5
+----
+rc> 5
+err>      2 *-* call zsub
+err>      5 *-*   zsub:
+err>      6 *-*   exit 5
+err>        >>>     "5"
+
+# PUSH and QUEUE interleaved, read back by PARSE PULL, under trace r
+# The read-back is what makes the two spellings tell each other apart: three
+# lines written `c`, `b`, `a` come back `a`, `c`, `b`, which is the LIFO/FIFO
+# interleaving and not any one end used twice.
+# The bare `QUEUE` is the second half: it queues a null string **and** traces
+# it, so the `>>>   ""` and the `[]` from the line that reads it back are one
+# clause's evidence that the bare form is not a skipped clause.
+# Measured to redden when `compile` tags a `QUEUE`'s op `QueueKeyword::Push`
+# -- `a b c` where the oracle answers `a c b` -- which is not a unique catch:
+# the op-stream pin, the extracted-program sweep, `pull_queue_covers_the_line_
+# reading_sources_in_both_modes` and the exempt-set gate all redden with it.
+# **The `>>>` line is a unique catch**, and that is measured rather than
+# argued: with `Interp::queue_evaluated` emitting no trace line, this row is
+# the only red test in the workspace, and with this file held out of the
+# directory the whole workspace is green under the same mutation. Both engines
+# take that mutation, so the engine comparison cannot see it and the
+# oracle-measured block is what does; `corpus/lang/push_queue.rex` traces the
+# same lines but is compared against the oracle only in a report-mode harness.
+program
+trace r
+push 'c'
+queue 'b'
+push 'a'
+parse pull za
+parse pull zb
+parse pull zc
+say za zb zc
+queue
+parse pull zd
+say '[' || zd || ']'
+exit
+----
+rc> 0
+out> a c b
+out> []
+err>      2 *-* push 'c'
+err>        >>>   "c"
+err>      3 *-* queue 'b'
+err>        >>>   "b"
+err>      4 *-* push 'a'
+err>        >>>   "a"
+err>      5 *-* parse pull za
+err>        >K>   "PULL" => "a"
+err>        >>>   "a"
+err>        >>>   "a"
+err>      6 *-* parse pull zb
+err>        >K>   "PULL" => "c"
+err>        >>>   "c"
+err>        >>>   "c"
+err>      7 *-* parse pull zc
+err>        >K>   "PULL" => "b"
+err>        >>>   "b"
+err>        >>>   "b"
+err>      8 *-* say za zb zc
+err>        >>>   "a c b"
+err>      9 *-* queue
+err>        >>>   ""
+err>     10 *-* parse pull zd
+err>        >K>   "PULL" => ""
+err>        >>>   ""
+err>        >>>   ""
+err>     11 *-* say '[' || zd || ']'
+err>        >>>   "[]"
+err>     12 *-* exit
+
+# RETURN '' against a bare RETURN, and what the caller's RESULT reads
+# The row `src: Option<u16>` exists for. `RETURN ''` sets `RESULT` to the null
+# string and traces it; a bare `RETURN` leaves `RESULT` unset, which an
+# unset Rexx variable renders as its own uppercased name -- so `after bare:
+# RESULT` is the whole discrimination, and a compiled form that handed the
+# bare clause a register holding an empty value would print `after bare: `
+# for both.
+# Measured with this row as the only stanza in the directory: it reddens when
+# the compiled `Op::Return` drops the value it was handed, printing `after
+# empty: RESULT` where the oracle prints `after empty: `. Not a unique catch
+# -- that mutation reddens the extracted-program sweep, the branch-shape
+# table and a dozen `run::tests` besides. The degenerate implementation the
+# paragraph above describes was measured too, by giving the bare form a
+# register holding the null string: what catches that first is the arity
+# `debug_assert` in `Op::Return`'s own driver arm, not any row here.
+program
+trace r
+call zempty
+say 'after empty:' result
+call zbare
+say 'after bare:' result
+exit
+zempty:
+return ''
+zbare:
+return
+----
+rc> 0
+out> after empty: 
+out> after bare: RESULT
+err>      2 *-* call zempty
+err>      7 *-*   zempty:
+err>      8 *-*   return ''
+err>        >>>     ""
+err>        >>>   ""
+err>      3 *-* say 'after empty:' result
+err>        >>>   "after empty: "
+err>      4 *-* call zbare
+err>      9 *-*   zbare:
+err>     10 *-*   return
+err>      5 *-* say 'after bare:' result
+err>        >>>   "after bare: RESULT"
+err>      6 *-* exit
+
+# a call inside a RETURN's expression, under trace i
+# The call takes an `Op::CallExpr` addressed at slot `0`, which is the descent
+# `Interp::chunk_node_at`'s own arm for these instructions resolves; without
+# that arm the driver reaches `Loud::call_op_off_its_node` instead of calling
+# anything.
+# Measured to redden when that arm loses its `RETURN`/`EXIT`/`PUSH`/`QUEUE`
+# alternatives -- `got 5` against nothing at all -- and **not a unique
+# catch**: the extracted-program sweep, the clause-value boundary witness and
+# the exempt-set gate redden under it too.
+# The intermediate lines and their order are the rest of what is pinned: the
+# argument, the function's own `>F>`, the right operand, the operator, the
+# `RETURN`'s own `>>>`, and the caller's second `>>>` for the same value at
+# its own indent.
+program
+trace i
+call zsub
+say 'got' result
+exit
+zsub:
+return length('abcd') + 1
+----
+rc> 0
+out> got 5
+err>      2 *-* call zsub
+err>      5 *-*   zsub:
+err>      6 *-*   return length('abcd') + 1
+err>        >L>     "abcd"
+err>        >A>     "abcd"
+err>        >F>     LENGTH => "4"
+err>        >L>     "1"
+err>        >O>     "+" => "5"
+err>        >>>     "5"
+err>        >>>   "5"
+err>      3 *-* say 'got' result
+err>        >L>   "got"
+err>        >V>   RESULT => "5"
+err>        >O>   " " => "got 5"
+err>        >>>   "got 5"
+err>      4 *-* exit

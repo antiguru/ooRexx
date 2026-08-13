@@ -22,11 +22,11 @@
 /* stdout, and crates/rexx-exec/tests/input_oracle.rs's `queue-round-trip`  */
 /* row does it against a console holding different lines.                   */
 /*                                                                           */
-/* Ends with a bare EXIT, not `exit 0`: condition_traps.rex's own header     */
-/* already recorded why -- an EXIT with a value has a pre-existing,          */
-/* unrelated gap in this crate's own EXIT arm (its >>> line is not traced),  */
-/* and a program exercising a different construct should not diverge for    */
-/* that reason.                                                             */
+/* Ends with a bare EXIT, not `exit 0`, and that is now a fact about this    */
+/* program rather than a refusal. The gap it was written around -- an EXIT   */
+/* with a value tracing no >>> line of its own -- is closed, as              */
+/* condition_traps.rex's own header records, and the shape is pinned         */
+/* against the oracle by tests/trace_oracle/exit_value.rex.                  */
 
 trace r
 a = 'hello'
