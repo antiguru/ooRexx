@@ -128,6 +128,10 @@ impl Interp {
     /// fragment splits for itself go through the identical join: whichever
     /// produced them, a piece is joined, rendered and resolved here and
     /// nowhere else.
+    ///
+    /// **A piece's slot is used when it has one and its name is resolved when
+    /// it does not**, and both go through `read_by_name_at`, so what a piece
+    /// reads and what it derives when unset are one implementation either way.
     fn join_tails(&mut self, tails: &[TailPiece]) -> Vec<u8> {
         let mut key = Vec::new();
         for (index, piece) in tails.iter().enumerate() {
@@ -136,8 +140,23 @@ impl Interp {
             }
             match piece {
                 TailPiece::Constant(text) => key.extend_from_slice(text),
-                TailPiece::Variable(name) => {
-                    let value = self.read_by_name(name);
+                TailPiece::Variable { name, at } => {
+                    // **The tripwire for pieces resolved against a plan that
+                    // is not the running activation's.** A slot lands on a
+                    // piece because `Plan::slot_for` put its name in that
+                    // plan's own name map, and `Interp::slot_of` reads that
+                    // map before it reads `extra` -- so the two agree for as
+                    // long as the entry and the activation come from one
+                    // plan, and `Code::plan` is what pairs them. Mismatched,
+                    // this reads whatever else lives at that index rather
+                    // than failing, which is a wrong value found by chasing
+                    // it.
+                    debug_assert!(
+                        at.is_none() || self.activation().plan.slot_of(name) == *at,
+                        "a compound tail piece names a slot this activation's plan does not \
+                         give its name"
+                    );
+                    let value = self.read_by_name_at(name, *at);
                     key.extend_from_slice(&self.to_text(value));
                 }
             }
@@ -162,7 +181,27 @@ impl Interp {
     /// the result is aliased rather than only rendered -- see `read_stem`'s
     /// own doc comment and the module doc's correction.
     pub(crate) fn read_by_name(&mut self, name: &[u8]) -> ObjRef {
-        let slot = self.slot_of(name);
+        self.read_by_name_at(name, None)
+    }
+
+    /// [`Interp::read_by_name`] with the slot already in hand, which is what a
+    /// tail piece carries when the plan that recorded it assigned one
+    /// (`TailPiece::Variable`).
+    ///
+    /// `at` is the same slot `slot_of` answers, resolved by the upfront pass
+    /// from the `Plan` this activation runs with, so it is one resolution made
+    /// at two times rather than two resolutions -- the same relationship
+    /// `read_stem_at`'s own `at` has, and `join_tails` carries the debug
+    /// tripwire for it.
+    ///
+    /// **`None` is always correct**, and it is what a fragment's own split and
+    /// every caller that starts from a run-time string pass: the slot is then
+    /// resolved here exactly as it was before any caller could supply one.
+    fn read_by_name_at(&mut self, name: &[u8], at: Option<usize>) -> ObjRef {
+        let slot = match at {
+            Some(slot) => slot,
+            None => self.slot_of(name),
+        };
         let frame = self.activation().frame;
         match self.roots.slot(frame, slot) {
             Some(value) => value,

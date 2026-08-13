@@ -97,7 +97,24 @@ pub(crate) enum TailPiece {
     /// variable name and stands for itself.
     Constant(Box<[u8]>),
     /// A simple variable whose value supplies this piece.
-    Variable(Box<[u8]>),
+    ///
+    /// `at` is the slot the plan holding this entry bound `name` to, so that
+    /// reading the piece costs an index rather than a hash of its bytes.
+    /// **`None` is a piece the plan assigned no slot**, and it is an ordinary
+    /// outcome rather than a gap: `Plan::bind` records a split and assigns
+    /// nothing, for the reason its own doc comment gives, so an entry existing
+    /// does not mean its pieces carry slots. `Interp::read_by_name_at`
+    /// resolves the name the ordinary way when there is none, exactly as every
+    /// piece did before this field existed.
+    ///
+    /// A `Some` slot is never a *different* answer from resolving the name.
+    /// `Interp::slot_of` reads the plan's own name map first and the
+    /// activation's `extra` only after it misses, and a slot lands here only
+    /// because `slot_for` put `name` in that same map -- so for a piece that
+    /// carries one, `extra` was already unreachable. `Interp::join_tails`
+    /// carries the debug tripwire for the premise that can break, which is the
+    /// entry belonging to some plan other than the running activation's.
+    Variable { name: Box<[u8]>, at: Option<usize> },
 }
 
 /// A compound's name, split into the pieces `Interp::tail_key` joins.
@@ -125,6 +142,12 @@ impl CompoundName {
     /// caller already guarantees it -- a `Compound` expression's own spelling
     /// always has one (`ast.rs`), and `Plan::note_variable_ref` checks before
     /// it calls.
+    ///
+    /// **Every variable piece comes back with no slot**, because how a name
+    /// splits is a property of the text alone while a slot is a property of
+    /// the plan the entry is going into, and this function is entered by a
+    /// fragment that has no plan at all. `note_compound_name` fills the slots
+    /// in afterwards, for the entries that get any.
     pub(crate) fn split(name: &str) -> CompoundName {
         let (stem, tails) = compound_parts(name);
         CompoundName {
@@ -133,7 +156,10 @@ impl CompoundName {
                 .into_iter()
                 .map(|tail| match tail {
                     Tail::Constant(piece) => TailPiece::Constant(piece.as_bytes().into()),
-                    Tail::Variable(piece) => TailPiece::Variable(piece.as_bytes().into()),
+                    Tail::Variable(piece) => TailPiece::Variable {
+                        name: piece.as_bytes().into(),
+                        at: None,
+                    },
                 })
                 .collect(),
         }
@@ -558,11 +584,19 @@ impl Plan {
     /// `drop_variable` reads it through `tail_key` under this same id, so
     /// the entry is addressed by the id the reader will present.
     fn note_compound_name(&mut self, id: SymbolId, name: &str) {
-        let entry = CompoundName::split(name);
+        let mut entry = CompoundName::split(name);
         self.slot_for(&entry.stem);
-        for piece in &entry.tails {
-            if let TailPiece::Variable(name) = piece {
-                self.slot_for(name);
+        for piece in &mut entry.tails {
+            if let TailPiece::Variable { name, at } = piece {
+                // The slot this pass was already computing and dropping. It
+                // is kept on the piece so that resolving the piece at a
+                // reference costs an index into the frame instead of hashing
+                // the name: measured by `perf record` over
+                // `samples/rexxcps.rex` (`REXX_ENGINE=ir`,
+                // `count=100`/`averaging=100`, 999 Hz), hashing a `&[u8]` was
+                // 4.43% of self time with SipHash's own `write` at a further
+                // 3.29% and `Interp::slot_of` at 1.72%.
+                *at = Some(self.slot_for(name));
             }
         }
         self.compounds[id.index()] = Some(entry);
@@ -666,12 +700,21 @@ impl Plan {
     /// piece, which is what separates this from `note_compound_name`: `name`
     /// is bound whole above, and adding slots for its parts here would move
     /// every later slot number in the body -- a change to frame layout, not
-    /// to how a name splits.
+    /// to how a name splits. So the entry this writes has `at: None` on every
+    /// variable piece, and `Interp::join_tails` resolves those by name.
+    ///
+    /// **An entry already recorded is left alone**, which matters when one id
+    /// reaches `note_compound_name` as well -- `say v.i` and then `do v.i = 1
+    /// to 2` name one symbol. Either entry holds the identical split, since
+    /// they split the identical spelling, and they differ only in whether the
+    /// pieces carry slots; overwriting would therefore change no answer and
+    /// would throw away `note_compound_name`'s slots for every reference in
+    /// the body, in whichever order the pass happened to reach them.
     fn bind(&mut self, id: SymbolId, name: &str) {
         let slot = self.slot_for(name.as_bytes());
         self.by_symbol.insert(id, slot);
         if name.contains('.') {
-            self.compounds[id.index()] = Some(CompoundName::split(name));
+            self.compounds[id.index()].get_or_insert_with(|| CompoundName::split(name));
         }
     }
 
@@ -1014,13 +1057,24 @@ mod tests {
     /// The control-variable row is the one that was measured wrong: before
     /// `bind` recorded a split, `do aa.ii = 1 to 2` reached `tail_key` with
     /// no entry and re-split its name on every pass.
+    ///
+    /// **The slots are part of what is asserted, and `note_compound_name` and
+    /// `bind` disagree about them.** `note_compound_name` puts each variable
+    /// piece on the slot it assigned that piece's name; `bind` assigns none,
+    /// so `AA.II`'s piece carries `None` while `DD.JJ`'s and `V.I.7`'s carry
+    /// a number. The
+    /// numbers are spelled out rather than looked back up out of `plan.names`,
+    /// which would be the same map on both sides of the assertion.
     #[test]
     fn build_records_a_compounds_split_under_the_compounds_own_id() {
         let source = b"drop dd.jj; do aa.ii = 1 to 2; say v.i.7; end";
         let program = parse_program(source.to_vec()).expect("test program parses");
         let plan = Plan::build(&program.main, &program.symbols);
 
-        let variable = |text: &str| TailPiece::Variable(text.as_bytes().into());
+        let variable = |text: &str, at: Option<usize>| TailPiece::Variable {
+            name: text.as_bytes().into(),
+            at,
+        };
         let constant = |text: &str| TailPiece::Constant(text.as_bytes().into());
 
         let mut found: Vec<(&str, &CompoundName)> = Vec::new();
@@ -1054,29 +1108,166 @@ mod tests {
                 "DD.JJ",
                 CompoundName {
                     stem: b"DD.".as_slice().into(),
-                    tails: vec![variable("JJ")].into(),
+                    tails: vec![variable("JJ", Some(1))].into(),
                 },
             ),
             (
                 "AA.II",
                 CompoundName {
                     stem: b"AA.".as_slice().into(),
-                    tails: vec![variable("II")].into(),
+                    tails: vec![variable("II", None)].into(),
                 },
             ),
             (
                 "V.I.7",
                 CompoundName {
                     stem: b"V.".as_slice().into(),
-                    tails: vec![variable("I"), constant("7")].into(),
+                    tails: vec![variable("I", Some(4)), constant("7")].into(),
                 },
             ),
         ];
+        // The slot numbers above are the pass's own, in the order it assigned
+        // them: `DD.` then `JJ` for the `DROP`, `AA.II` whole for the control
+        // variable, then `V.` and `I` for the `SAY`. Asserted here so that a
+        // reader can see where 1 and 4 come from, and so that a change to the
+        // assignment order fails on the map rather than only on the pieces.
+        let mut names: Vec<(&[u8], usize)> = plan
+            .names
+            .iter()
+            .map(|(name, slot)| (&**name, *slot))
+            .collect();
+        names.sort_by_key(|(_, slot)| *slot);
+        assert_eq!(
+            names,
+            vec![
+                (b"DD.".as_slice(), 0),
+                (b"JJ".as_slice(), 1),
+                (b"AA.II".as_slice(), 2),
+                (b"V.".as_slice(), 3),
+                (b"I".as_slice(), 4),
+            ]
+        );
         let expected: Vec<(&str, &CompoundName)> = expected
             .iter()
             .map(|(name, entry)| (*name, entry))
             .collect();
         assert_eq!(found, expected);
+    }
+
+    /// One symbol recorded by `note_compound_name` and by `bind` keeps the
+    /// slots, whichever order the pass reaches them in.
+    ///
+    /// `say v.i` takes `V.I` through `note_compound_name`, which assigns `V.`
+    /// and `I` slots; `do v.i = 1 to 2` then takes the **same** id through
+    /// `bind`, which assigns none. An overwrite there would leave the body's
+    /// every reference to `V.I` resolving its piece by name again, and change
+    /// no answer while doing it -- so nothing that compares output can see
+    /// this, and only the entry says so.
+    #[test]
+    fn a_control_variable_does_not_take_the_slots_off_a_compound_already_seen() {
+        let source = b"say v.i; do v.i = 1 to 2; end";
+        let program = parse_program(source.to_vec()).expect("test program parses");
+        let plan = Plan::build(&program.main, &program.symbols);
+
+        let InstructionKind::Say {
+            expression: Some(expr),
+        } = &program.main.instructions[0].kind
+        else {
+            panic!(
+                "expected a SAY first, got {:?}",
+                program.main.instructions[0].kind
+            );
+        };
+        let ExprKind::Compound(id) = expr.kind else {
+            panic!("expected a compound expression, got {:?}", expr.kind);
+        };
+        // The same id in both positions is the whole premise, so it is
+        // checked rather than assumed: `bind` addresses `compounds` by the
+        // control variable's id, and if that were a different symbol from the
+        // `SAY`'s there would be no overwrite to guard against.
+        let (InstructionKind::Do(loop_) | InstructionKind::Loop(loop_)) =
+            &program.main.instructions[1].kind
+        else {
+            panic!(
+                "expected a DO second, got {:?}",
+                program.main.instructions[1].kind
+            );
+        };
+        let LoopKind::Controlled(controlled) = &loop_.kind else {
+            panic!("expected a controlled loop, got {:?}", loop_.kind);
+        };
+        assert_eq!(controlled.control, id);
+
+        assert_eq!(
+            expect_entry(&plan, id).tails.as_ref(),
+            [TailPiece::Variable {
+                name: b"I".as_slice().into(),
+                at: Some(1),
+            }]
+        );
+    }
+
+    /// **A compound tail piece can be bound in `extra` rather than in the
+    /// plan, and this is the shape that reaches it.**
+    ///
+    /// `do za.zi = 1 to 3` binds the whole dotted `ZA.ZI` to one slot and
+    /// binds neither `ZA.` nor `ZI`, so the plan has no name `ZI` at all.
+    /// Resolving the piece at run time therefore misses the plan, misses
+    /// `extra`, and grows the frame -- recording `ZI` in `extra`, which is
+    /// where every later pass of the loop finds it. Measured on an
+    /// interpreter instrumented to print each growth: the loop above grows
+    /// `ZI` once and hits `extra` for it on every pass.
+    ///
+    /// That is why a piece's slot is an `Option` and not a `usize`. It is
+    /// also why a precomputed slot cannot shadow an `extra` binding: a slot
+    /// is put on a piece by `slot_for`, which is what puts the name in
+    /// `plan.names`, and `Interp::slot_of` reads `plan.names` before `extra`
+    /// -- so a piece either carries a slot and never consults `extra`, or
+    /// carries none and resolves exactly as it did before slots existed.
+    #[test]
+    fn a_tail_piece_with_no_plan_slot_binds_in_extra() {
+        let mut interp = Interp::new();
+        let program =
+            parse_program(b"do za.zi = 1 to 3\nnop\nend".to_vec()).expect("test program parses");
+        let (InstructionKind::Do(loop_) | InstructionKind::Loop(loop_)) =
+            &program.main.instructions[0].kind
+        else {
+            panic!(
+                "expected a DO first, got {:?}",
+                program.main.instructions[0].kind
+            );
+        };
+        let LoopKind::Controlled(controlled) = &loop_.kind else {
+            panic!("expected a controlled loop, got {:?}", loop_.kind);
+        };
+        let id = controlled.control;
+
+        let plan = Plan::build(&program.main, &program.symbols);
+        assert_eq!(
+            plan.slot_of(b"ZI"),
+            None,
+            "the plan binds the whole ZA.ZI and nothing named ZI"
+        );
+        assert_eq!(
+            expect_entry(&plan, id).tails.as_ref(),
+            [TailPiece::Variable {
+                name: b"ZI".as_slice().into(),
+                at: None,
+            }]
+        );
+
+        let program = activate(&mut interp, program);
+        let plan = Plan::build(&program.main, &program.symbols);
+        let code = planned_code(&program, &plan);
+        // Unset, so the piece derives its own spelling -- the ordinary
+        // uninitialised read, reached here through `extra` and growth.
+        let key = interp.tail_key(&code, id);
+        assert_eq!(key, b"ZI");
+        assert!(
+            interp.activation().extra.contains_key(b"ZI".as_slice()),
+            "the piece must be recorded in extra, which is the source a \
+             precomputed slot would have skipped"
+        );
     }
 
     fn symbols_name(program: &Program, id: SymbolId) -> &str {

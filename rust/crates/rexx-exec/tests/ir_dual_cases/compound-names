@@ -205,3 +205,57 @@ out> 2
 out> 3
 out> 1 ZB.K
 out> 2 ZB.K
+
+# a tail piece introduced by an INTERPRET, on both sides of the slot question
+#
+# The first half is a piece the enclosing plan does hold: `zv.zi` puts `ZI` on
+# a slot, the fragment's `zi = 4` resolves that same name and writes the same
+# slot, and the read after it sees 4. The second half is a piece the plan holds
+# no slot for at all: `do za.zk` binds the whole `ZA.ZK` and nothing named
+# `ZK`, so the fragment's `zk = 9` binds `ZK` in the activation's run-time
+# bindings instead, and the loop's tail resolves through those on every pass.
+# `3` and not `2` because a controlled loop leaves its control variable holding
+# the value that failed the test, and that final write goes to the same tail.
+program
+interpret "zi = 4"
+zv.zi = 'via fragment'
+say zv.zi
+say zv.4
+interpret "zk = 9"
+do za.zk = 1 to 2
+  nop
+end
+say za.9
+----
+rc> 0
+out> via fragment
+out> via fragment
+out> 3
+
+# one compound read either side of a DROP of its tail variable, and of its own
+# tail
+#
+# `drop (zn)` names its target by `zn`'s *value*, at run time. The piece it
+# drops is `ZI`, which the plan does hold a slot for, so the drop clears that
+# slot rather than binding anything new -- and the read after it finds the
+# piece unset and derives `ZI`, which keys a tail that was never written.
+# Setting `zi` again reaches the original tail, so the drop moved the key and
+# not the tail. The last pair is the tail's own `DROP`: a tombstone, which
+# derives the resolved name rather than falling back to a stem default.
+program
+zi = 1
+zv.zi = 'one'
+say zv.zi
+zn = 'ZI'
+drop (zn)
+say zv.zi
+zi = 1
+say zv.zi
+drop zv.zi
+say zv.zi
+----
+rc> 0
+out> one
+out> ZV.ZI
+out> one
+out> ZV.1
