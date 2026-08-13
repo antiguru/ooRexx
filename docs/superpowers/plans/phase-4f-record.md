@@ -3136,3 +3136,52 @@ An accessor-level probe -- `stem_assign_at` and `read_stem_at` instrumented -- w
 * **No cause for the five compound-free axes' movement**, for entry 31's reason. A do-nothing control still does not exist, and this is the second entry in a row to say so.
 * **The bucket is not claimed to have fallen.** It is claimed to be unresolvable at this instrument's resolution, with the direct count of `slot_of` calls given instead.
 * **`rexxcps`' -38.8 million is not decomposed** into removed resolutions and drift.
+
+### Entry 33 -- corrections to entry 32: one multiple that does not hold, one caption, and a span this task measured and did not carry
+
+**Entry 32 overstated one quantifier and mis-captioned one table, and this entry says so rather than editing it.**
+The rule at the top of this file, which entries 29 and 31 exist to restate, is that an entry that turned out wrong is corrected by a later entry.
+Entry 32 is left exactly as committed at `866d07d1b`.
+Found by this task's review, and the arithmetic below was redone rather than taken from it.
+
+#### "thousands of times their spans" does not hold for every axis it was said of
+
+Entry 32 wrote, of the axes executing no bare-stem operation:
+
+> **Five axes execute no bare-stem operation at all and still moved**, by up to -38,000,321 instructions, thousands of times their spans.
+
+Against the spans entry 32's own table gives, the multiple of the larger of each axis's two spans is:
+
+| axis | move | spans | multiple |
+|---|---:|---:|---:|
+| `varlookup` | -38,000,321 | 495 / 1,576 | 24,112x |
+| `strings` | -15,000,396 | 1,025 / 1,354 | 11,079x |
+| `arith` | -2,499,761 | 924 / 746 | 2,705x |
+| `alloc4c` | -6,009,303 | 117,496 / 92,743 | **51x** |
+| `emptyloop` | -83 | 1,348 / 752 | **inside the span** |
+
+So the quantifier holds for three of the five and not for `alloc4c`, whose move is fifty times its span rather than thousands, and not for `emptyloop`, which entry 32 elsewhere correctly calls a bound.
+**Fifty times a span is still outside it**, so nothing in entry 32's disposition moves: those axes still moved by more than the instrument's resolution, and the attribution entry 32 declines to make is still declined.
+What is withdrawn is the word "thousands" as a claim about all of them.
+
+#### `strings` moved by less than a span this task itself measured, and entry 32 carries neither
+
+The `strings` row is the one worth having.
+Entry 32's spread table gives that axis 1,025 and 1,354, from the interleaved sitting, and its move of -15,000,396 is 11,079 times that.
+But **this task's own Step 1 base measurement, six runs of the one base binary, recorded a same-binary span of 36,000,462 on `strings`** -- larger than the move -- and entry 32 does not carry that figure or the caveat that goes with it.
+The large span is one run out of six coming back 36 million instructions high, the interference signature entry 29's reviewer and entry 30 both recorded on that axis.
+**So `strings` carries a bound and not a difference**, and its -15,000,396 should not have been grouped with `varlookup`'s.
+The honest statement is that `strings` is the axis on which this instrument has twice produced an excursion larger than any effect measured on it, and no signed figure for it survives.
+
+#### The spread table's caption names the wrong sitting
+
+Entry 32 captions its spread table "measured before any of the small figures were read".
+The figures in that table are the **Step 5** spans, from the same six interleaved rounds the differences come from.
+The spans measured before anything changed are the **Step 1** ones, taken on the base binary alone, and they are not in the entry: `stemloop` 1,236, `stemwrite` 1,076, `compound` 2,901,211, `alloc4c` 50,817, `rexxcps` 6,448,443, `arith` 3,216, `strings` 36,000,462, `varlookup` 1,508, `emptyloop` 622.
+Both sets were measured, and the Step 1 set was measured first; the caption attaches the second set's provenance to the first set's virtue.
+The discipline the caption is reaching for -- measure the instrument's spread before reading a difference off it -- was followed, and the evidence for that is the Step 1 row above, not the table the caption sits on.
+
+#### What entry 33 does not change
+
+Entry 32's instruction table, its accessor-probe attribution, its bucket table, its direct `slot_of` count, its `PARSE`-target successor and its disposition all stand.
+The `alloc4c` and `strings` rows are the only figures whose reading changes, and neither carries any part of the disposition.
