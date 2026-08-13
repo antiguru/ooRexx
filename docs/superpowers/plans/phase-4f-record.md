@@ -2706,3 +2706,71 @@ Those clauses cost more instructions than every intermediate echo op in the whol
 
 * **No compile-time assertion requires an echo op to be present.** All six are of the form "for each echo op present, check the op before it", so an echo dropped by accident is invisible to `compile.rs`, and the corpus sweep is the only net. Worth knowing before anything is built on top of the emission decision.
 * **The control span is wider than this record's stated resolution floor, on `arith`.** Entry 25 accepted a +3.96% regression on that axis at 0/9. That figure sits inside the range identical builds produced here for nothing. Entry 25's `strings` and `alloc4c` gains are far outside it and are not in question; its three regressions are, and the next measurement on these axes needs two do-nothing controls rather than one.
+
+### Entry 27 -- the condition-promotion plan measured: a billion instructions off `rexxcps`, and a wall clock that cannot say by how much
+
+`docs/superpowers/plans/2026-08-12-condition-promotion.md`, four tasks, `02c6b9b67..de6efa3b1`.
+Every `IF` and `WHEN` condition and every `DO`/`LOOP` header value used to compile to one `Op::EvalExpr` running the tree-walker's `eval`; they now compile to native ops, and `RETURN`/`EXIT`/`PUSH`/`QUEUE` have ops of their own.
+
+#### Why the plan aimed at `rexxcps` alone
+
+A temporary per-clause counter over `samples/rexxcps.rex` (entry in the plan document) found `IF` the most-executed clause kind in that program, with **every** execution running an `Op::EvalExpr` for its condition, `WHEN` fourth with its condition reaching `eval` inside `scan_when`, and a `DO` header running about one `EvalExpr` per header execution.
+No program in `rust/bench-programs/` holds an `IF`, a `WHEN`, a `SELECT` or a `CALL`, which the measuring agent confirmed by reading all six.
+So the loop axes are a control by construction: **this plan cannot make them faster, and any movement there is layout.**
+
+#### Four arms, two of which behave identically to another
+
+A (base), A' (base plus a trivial no-op edit), B (head), B' (head plus the same).
+Fifteen rounds, all four arms interleaved, order rotated through eight permutations, wall clock, `ulimit -v 8388608`, `REXX_ENGINE=ir`, fresh empty working directory per run, idle gate at 98.4% to 99.4%.
+`rexxcps` pinned at `count=100`/`averaging=100`, with every run's `Averaged: 100 x 100` line checked so self-calibration never fired.
+
+| axis | A to B | B won | control A/A' | control B/B' | against the rule |
+|---|---:|---|---:|---:|---|
+| `rexxcps` | **-2.97%** | 15/15 | 0.81% | 0.05% | exceeds both |
+| `arith` | -3.41% | 14/15 | -0.44% | 0.37% | exceeds both |
+| `emptyloop` | -5.12% | 15/15 | -0.35% | 0.23% | exceeds both |
+| `strings` | +4.55% | 0/15 | 1.15% | -0.01% | exceeds both |
+| `compound` | +3.27% | 1/15 | -0.31% | -1.71% | exceeds both |
+| `varlookup` | +1.29% | 1/15 | -0.15% | 0.24% | exceeds both |
+| `alloc4c` | +1.02% | 5/15 | 1.77% | 0.34% | inside a control spread |
+
+**`rexxcps` clears both control spreads, and so do five axes this plan cannot touch**, spanning -5.12% to +4.55%.
+A layout swing larger than the effect is the reason the wall-clock magnitude is not reportable, even though its direction was unanimous across all forty interleaved rounds of three sittings (-2.97%, -4.44%, -6.48%).
+
+**The A/A' controls turned out to bound the wrong thing.** Under `lto = "fat"` and `codegen-units = 1`, four different trivial source edits all produced **byte-identical loaded images**, so those arms measure run-to-run noise and not layout at all. What bounds layout here is the loop axes, and they do not clear `rexxcps`.
+
+#### Instructions, `perf stat -e instructions:u`, one run per arm
+
+| axis | A | B | A to B |
+|---|---:|---:|---:|
+| `rexxcps` | 29,605,462,015 | 28,594,977,579 | **-3.41%** |
+| `emptyloop` | 27,525,609,300 | 27,100,610,015 | -1.54% |
+| `alloc4c` | 9,342,657,574 | 9,392,748,982 | +0.54% |
+| `strings` | 44,565,576,116 | 44,787,576,200 | +0.50% |
+| `varlookup` | 44,384,636,468 | 44,574,636,225 | +0.43% |
+| `compound` | 37,064,852,737 | 37,163,438,975 | +0.27% |
+| `arith` | 20,349,640,032 | 20,397,974,269 | +0.24% |
+
+Arm-internal noise is at or below 0.005%, so this instrument sees the op stream rather than where it landed -- the same separation entry 26 found.
+`rexxcps` loses **1.010 billion instructions**, 2.2 times the largest movement on any axis the plan cannot touch, and it is the one program holding the constructs the plan promoted.
+
+**The cost side, which the wall clock hides.** Instructions rose 0.24% to 0.54% on four control axes: shared-driver codegen drift, paid by programs that gain nothing.
+
+#### Byte-identity
+
+All four arms produce byte-identical stdout, empty stderr and exit 0 on all six loop programs, including every `FailedN` guard and `NoValue` in `rexxcps` staying absent.
+`rexxcps` differs across arms only in the two lines carrying its own elapsed time and clauses-per-second figure.
+Nothing diverged and no timing was voided.
+
+#### A measurement artifact worth more than the result
+
+The first sitting's controls were contaminated by **the length of `argv[0]`**.
+Four byte-identical copies of one binary spanned **3.47%** on wall clock, splitting cleanly by whether the basename was ten characters or eleven, with instruction counts identical to 0.0000%.
+Staging every arm at one fixed path cut the control spread to 1.33%, and every number above comes from that re-run.
+**A benchmark harness that names its arms by path is measuring the names.**
+
+#### What this entry claims
+
+* **The plan's aim is supported by the instruction counter and unresolvable on the wall clock.** A billion instructions left `rexxcps`, specific to the program holding the promoted constructs; how much time that is worth cannot be stated at this resolution.
+* **It does not claim a wall-clock number for `rexxcps`.** The direction is unanimous over forty rounds; the magnitude sits under a layout swing that moved untouchable axes further.
+* The static coverage fact is independent of all of this and was checked separately: after Task 1 the `evalexpr IF` row is absent from the execution profile entirely.
