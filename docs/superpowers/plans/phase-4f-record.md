@@ -3014,3 +3014,125 @@ So the leftover work pays per iteration there and per statement elsewhere. **No 
 #### What entry 31 does not change
 
 Every measured figure in entry 30 -- the seven-row instruction table, the seven-row spread table, the bucket table and its members, and the disposition -- stands, and the four figures the task's reviewer re-took independently reproduce them (`compound` -9.87%, `alloc4c` -3.16%, `rexxcps` -2.17%, `arith` +0.059%).
+
+### Entry 32 -- a bare stem's slot: the family closes, and the obvious way to close it made every loop slower
+
+Plan: `docs/superpowers/plans/2026-08-13-bare-stem-slot.md`, one task.
+Base `50faeff88`, head `96d7a87a8`, both read back from `git log`.
+
+**This entry changes the wrapper, for entry 27's reason and in entry 28's way**, and says so rather than letting the difference pass as a result.
+The configuration block above fixes wall clock through `rexx-bench-suite`. This entry is `perf stat -e instructions:u`, **six interleaved runs per arm on every axis**, both arms staged at one fixed binary path so `argv[0]` is byte-identical.
+**No wall-clock figure is claimed by this entry**, and no wall-clock run was taken.
+
+#### Cause, stated by the plan before the task
+
+Three comments in the tree said a bare stem write has no slot to resolve ahead of it. Measured on both engines, it does: `Plan::bind` puts an `ExprKind::Stem` symbol's spelling and its id on one slot, and `stem_assign` then hashes that same spelling to arrive at that same number. Three sites still did it -- `stem_assign`, `replace_stem`, and `bind_control`'s stem arm, which pays **per iteration** of a stem-controlled `DO`.
+
+#### Two axes written for this, and why neither is joining `bench-programs/`
+
+No axis in this record has a stem-controlled `DO`, so the plan asked for a workload before the fix. Two were written, and their text is here rather than in `bench-programs/` for the reason entry 29's `INTERPRET` program is:
+
+```rexx
+n = 3000000                    n = 6000000
+do zs. = 1 to n                do i = 1 to n
+  nop                            zs. = i
+end                            end
+say 'done'                     say 'done'
+```
+
+A stem-controlled `DO` is close to nonexistent in real Rexx -- the control variable is a whole stem and the loop writes its *default* every pass -- so a permanent axis would give it a vote in every later entry that its share of real programs cannot justify. A bare stem write in a loop already has an axis: `samples/rexxcps.rex` writes `avar.=1.0''loop` fourteen times an iteration. Both were kept as diagnostic instruments for this task and are recorded here so they can be rebuilt.
+
+#### The result the task exists for is the one it nearly shipped
+
+The first design forwarded the loop's kept `control_slot` answer from `bind_control`'s stem arm into `Interp::assign_expr_target`, which is what the plan describes. It replaces a compile-time `None` at that call site with a value, and that alone costs **2 instructions on every pass of every controlled loop** -- including loops whose control variable is a plain simple variable and which never enter the stem arm. Why the generated code changes was not established; the effect was.
+
+| axis | base | first design | |
+|---|---:|---:|---:|
+| `emptyloop`, 25,000,000 passes | 27,150,813,233 | 27,200,813,245 | **+50,000,012** |
+| `varlookup`, 19,000,000 passes | 44,840,839,859 | 44,878,839,895 | **+38,000,036** |
+| `strings`, 3,000,000 passes | 44,928,791,773 | 44,934,791,309 | +5,999,536 |
+| `stemloop` | 11,402,819,601 | 9,695,819,491 | -14.97% |
+
+Exactly +2 a pass on three different programs, thousands of times each axis's own span. Isolated by partial revert, three runs each: reverting that **one line** puts `emptyloop` back on base exactly (27,150,813,214). Recomputing the slot inside the stem arm instead is worse still, `emptyloop` +100,000,000.
+
+**What shipped instead takes the slot from the plan's own `CompoundName` entry**, so that call site keeps its literal `None`. `Plan::bind` already assigned the slot; a stem-shaped name has no stem half distinct from itself, so it now records that slot on the entry it was already building, and `assign_expr_target`'s stem arm and the loop's re-test read it back. It works on **both** engines, where the compiled-op route would have worked on one.
+
+#### Measured movement
+
+Minimum of six interleaved runs per arm.
+
+| axis | base `50faeff88` | head | difference |
+|---|---:|---:|---:|
+| `stemloop` | 11,402,819,545 | 9,743,819,810 | **-14.55%** |
+| `stemwrite` | 13,379,958,659 | 11,729,958,718 | **-12.33%** |
+| `rexxcps` | 25,298,108,095 | 25,259,319,732 | **-0.153%** |
+| `varlookup` | 44,840,840,190 | 44,802,839,869 | -0.085% |
+| `compound` | 25,052,694,664 | 25,028,455,741 | -0.097% |
+| `strings` | 44,928,791,694 | 44,913,791,298 | -0.033% |
+| `alloc4c` | 8,189,876,434 | 8,183,867,131 | -0.073% |
+| `arith` | 20,416,193,212 | 20,413,693,451 | -0.012% |
+| `emptyloop` | 27,150,812,848 | 27,150,812,765 | -83 instructions |
+
+Every `rexxcps` run of both arms self-calibrated to `100 x 100`. Every axis produces byte-identical stdout **and** stderr and exit 0 under both binaries on **both** engines, `rexxcps` excepted in its own two timing lines.
+
+#### The instrument's own spread, measured before any of the small figures were read
+
+| axis | same-binary span, base | same-binary span, head |
+|---|---:|---:|
+| `stemloop` | 1,573 | 835 |
+| `stemwrite` | 1,227 | 834 |
+| `compound` | 1,599,903 | 2,598,819 |
+| `alloc4c` | 117,496 | 92,743 |
+| `rexxcps` | 6,428,894 | 7,160,383 |
+| `arith` | 924 | 746 |
+| `strings` | 1,025 | 1,354 |
+| `varlookup` | 495 | 1,576 |
+| `emptyloop` | 1,348 | 752 |
+
+`emptyloop`'s -83 is inside both spans and is a **bound, not a difference**. Every other arm pair is non-overlapping.
+
+#### What is attributable, and what is only a bound
+
+An accessor-level probe -- `stem_assign_at` and `read_stem_at` instrumented -- was run over every axis on both engines, which answer identically: `stemloop` 6,000,001 bare-stem operations, `stemwrite` 6,000,000, `rexxcps` 140,000, `compound` 1, and `alloc4c`, `arith`, `strings`, `varlookup` and `emptyloop` **zero**.
+
+* **`stemloop` and `stemwrite` are this change's semantics**: 6,000,001 and 6,000,000 name resolutions removed.
+* **Five axes execute no bare-stem operation at all and still moved**, by up to -38,000,321 instructions, thousands of times their spans. That is not this change's semantics, and **no attribution beyond that is offered** -- entry 31 is the standing correction for naming drift or layout without the control that separates them, and this task did not build one either. It happens to be favourable; that is luck, not a result.
+* **`rexxcps` is only partly attributable.** It executes 140,000 bare-stem writes and moved -38,788,363 with non-overlapping arms. 140,000 removed resolutions of a five-byte name cannot be 38 million instructions, so most of that figure is the same drift. **The direction and the bound are claimed; a per-write cost is not.**
+
+#### The bucket, and what is left in it
+
+`perf record -F 999`, `REXX_ENGINE=ir`, over `samples/rexxcps.rex`, both arms at the one fixed path, three runs per arm, one sitting, bucketed by self time.
+
+| | base `50faeff88` | head |
+|---|---|---|
+| bucket | 5.55% / 6.50% / 5.99% | 6.25% / 5.95% / 7.14% |
+| `hash_one::<&[u8]>` | 1.72 / 2.30 / 1.71 | 2.02 / 1.65 / 2.62 |
+| SipHash `write` | 2.13 / 1.81 / 1.75 | 1.90 / 2.20 / 1.94 |
+| `Interp::slot_of` | 0.57 / 1.06 / 0.98 | 1.02 / 0.74 / 1.15 |
+| `hash_one::<&SymbolId>` | 0.90 / 0.88 / 0.85 | 0.83 / 0.90 / 0.93 |
+
+**The bucket did not fall, and the arms overlap completely on it and on every member.** The instruction counter reads `rexxcps` down 38.8 million with non-overlapping arms; the sampled share cannot resolve that, because the within-arm spread on this instrument is over a percentage point and the work removed is 140,000 resolutions out of 25 billion instructions. **The sampled share is the wrong instrument for what is left**, which is a finding about the instrument rather than about the change.
+
+**What is left was then measured directly**, by instrumenting `Interp::slot_of` at head and running `rexxcps`: **3,080,203 calls, and not one is a stem or a compound.**
+
+| what | calls |
+|---|---:|
+| `PARSE` targets (`A1`..`A4`, `B1`..`B3`, `C1`..`C3`, `P1`..`P8`, `V1`, `V2`) | 2,800,003 |
+| `RESULT`, through `extra` | 140,199 |
+| `SIGL`, through `extra` | 139,999 |
+| one-offs at startup | 2 |
+
+**So the stem-and-compound family is finished on this path**, and its successor is named and measured. `parse_template.rs` passes `None` for every `PARSE` target because nothing promotes the instruction -- and with that arm instrumented, **2,800,003 of 2,800,003** `PARSE` writes on `rexxcps` come back `by_symbol=Some(n)` with `slot_of` computing that same `n`, on both engines. That is 91% of what is left and it is this family's finding one instruction further along. The rest is `RESULT`/`SIGL`, which start from a run-time byte string with no symbol to hang a slot on; `hash_one::<&SymbolId>` at 0.83-0.93%, the *precomputed* side, since `by_symbol` and `Code::slots` are `HashMap<SymbolId, usize>` and every slot this family saves is bought with a SipHash of a `u32`; and the stem's own tails map, which is the data structure and not a symbol lookup.
+
+**The lesson from this entry applies directly to the successor**: `parse_template.rs`'s call site passes a literal `None`, and replacing a literal `None` with a value at a call site is precisely what cost 2 instructions a pass here. Whoever takes it should measure `emptyloop` and `varlookup` before believing the win.
+
+#### Disposition
+
+**Accepted.** The two axes the change can reach fall 14.55% and 12.33%, no axis moved up, and the design that would have moved two axes up was measured and rejected rather than shipped.
+
+#### What this entry does not claim
+
+* **No time figure**, for entry 27's reason.
+* **No cause for the five compound-free axes' movement**, for entry 31's reason. A do-nothing control still does not exist, and this is the second entry in a row to say so.
+* **The bucket is not claimed to have fallen.** It is claimed to be unresolvable at this instrument's resolution, with the direct count of `slot_of` calls given instead.
+* **`rexxcps`' -38.8 million is not decomposed** into removed resolutions and drift.
