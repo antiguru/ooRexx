@@ -238,17 +238,32 @@ impl Interp {
         self.read_stem_at(name, None)
     }
 
-    /// [`Interp::read_stem`] with the slot already in hand, which is what
-    /// `crate::ir::Op::Load` carries and what a read reached from `eval.rs`
-    /// never has.
+    /// [`Interp::read_stem`] with the slot already in hand. Two callers have
+    /// one and they do not take it from the same place: `crate::ir::Op::Load`
+    /// carries the slot the chunk was compiled with, and a controlled loop's
+    /// re-test reads its stem control's off the entry `Code::compound` holds.
+    /// A read reached from `eval.rs` has none.
     ///
-    /// `at` is the same slot `slot_of` answers, resolved at compile time from
-    /// the `Plan` this activation runs with: `Plan::bind` puts a stem's own
-    /// `SymbolId` and its name on one slot together, so the id-keyed answer a
-    /// compiler took and the name-keyed one below cannot be two slots.
+    /// `at` is the same slot `slot_of` answers, resolved from the `Plan` this
+    /// activation runs with: `Plan::bind` puts a stem's own `SymbolId`, its
+    /// name and its entry's `stem_at` on one slot together, so neither
+    /// caller's answer and the name-keyed one below can be two slots.
     pub(crate) fn read_stem_at(&mut self, name: &[u8], at: Option<usize>) -> ObjRef {
         let slot = match at {
-            Some(slot) => slot,
+            Some(slot) => {
+                // `Interp::stem_slot`'s tripwire, on the reading side, for the
+                // same premise and against the same map: a slot reaches either
+                // caller because `Plan::slot_for` put this name in the plan's
+                // own name map, so a slot that plan cannot reproduce came from
+                // somewhere else and would read another variable's value
+                // rather than fail.
+                debug_assert_eq!(
+                    self.activation().plan.slot_of(name),
+                    Some(slot),
+                    "a stem read names a slot this activation's plan does not give its name"
+                );
+                slot
+            }
             None => self.slot_of(name),
         };
         let frame = self.activation().frame;
@@ -271,10 +286,16 @@ impl Interp {
     /// recorded on the entry, or the full three-source resolution of
     /// `stem_name` when the entry carries none.
     ///
-    /// **Where every `_at` accessor in this module decides it**, shared rather
-    /// than written out at each one, so a precomputed slot and a resolved one
-    /// cannot come to mean different things depending on which accessor was
-    /// entered.
+    /// **Where every `_at` accessor *below* this one decides it**, shared
+    /// rather than written out at each, so a precomputed slot and a resolved
+    /// one cannot come to mean different things depending on which accessor
+    /// was entered.
+    ///
+    /// **The two `_at` reads above it do not come through here**, because they
+    /// resolve a slot without any of the stem-object handling this file's
+    /// later accessors share. `read_stem_at` carries a copy of the tripwire
+    /// below for the same premise; `read_by_name_at` carries none, and
+    /// `join_tails` is where a tail piece's slot is checked instead.
     ///
     /// **Two different names arrive here and they resolve identically**, which
     /// is why one function serves both. A compound's *stem half* is a name with

@@ -668,20 +668,35 @@ sub: procedure expose zg
 /// ends it at `8`. An implementation that resolved `za.zi` once and reused it
 /// prints `4`. The oracle's own answer, measured on this program: `8 1 1 1 1`.
 ///
-/// **Neither of the two "answer for a compound as well" widenings reaches this
-/// test, and neither reddens anything else either.** Both were measured by
-/// running them rather than argued from the code.
+/// **Neither of the two "answer for a compound as well" widenings reddens this
+/// test or anything else in the suite**, both measured by running them. They
+/// are unobservable for different reasons, and only one of them is
+/// unobservable in the code rather than in this suite's contents.
 ///
-/// `write_slot` answering for a compound assignment target: nothing goes red,
-/// because `Plan::note_compound_name` registers the stem and each variable
-/// tail piece **by name** and binds the compound's own id to no slot at all,
-/// so the widened arm has nothing to answer with.
+/// `control_slot` answering for a compound control is unobservable in the
+/// code: `bind_control` and the loop's own re-test each select their arms by
+/// the same `shape_of`, and neither compound arm reads `at`, so the slot would
+/// be resolved and discarded whatever program ran.
 ///
-/// `control_slot` answering for a compound control: nothing goes red either,
-/// because `bind_control` and the loop's own re-test each select their arms by
-/// the same `shape_of` and neither compound arm reads `at` -- the slot would be
-/// resolved and discarded. Both filters are unobservable and are kept for what
-/// they say rather than for what they stop.
+/// `write_slot` answering for a compound assignment target is **not**. A
+/// compound-shaped name does reach `Plan::by_symbol`: `Plan::bind` puts every
+/// name it binds whole there, and `note_loop` and `note_parse` both call it
+/// with spellings that may be compound-shaped. So the widened arm has a number
+/// to answer with whenever such a spelling is also an assignment target.
+/// Measured, in a debug build: `zb = 1; do za.zb = 1 to 2; end; za.zb = 5`
+/// panics under `REXX_ENGINE=ir` at rc 101, and the `DO ... OVER` and `PARSE
+/// VAR` spellings of the same shape do too, through the tripwire `Op::Store`'s
+/// own arm carries. The
+/// tree-walker does not, because that tripwire guards an op it never reads.
+/// `parse value 'seven' with za.zb` does not either, because a `PARSE` target
+/// reaches the plan through `note_compound_name` and never gets a `by_symbol`
+/// entry. **No program in the suite has that shape**, which is why the
+/// mutation comes back green; it is a fact about the suite, not about the
+/// code.
+///
+/// `Interp::assign_expr_target`'s compound arm asserts that no caller handed
+/// it a slot, which is the check that does not depend on which engine ran or
+/// on which programs the suite holds.
 #[test]
 fn a_compound_control_resolves_its_tail_on_every_pass() {
     const A_MOVING_TAIL: &[u8] = b"\

@@ -3015,13 +3015,18 @@ impl Interp {
     /// their own slot on the entry `Code::compound` holds, which is the same
     /// answer on both engines where an op's is the compiled one's alone.
     ///
-    /// **The three arms write three different slots, which is why one number
-    /// could not serve them.** A simple variable writes the symbol's own slot.
-    /// A bare stem writes the symbol's own slot too -- its spelling *is* the
-    /// stem's, so `Plan::bind` records the id's slot as the entry's `stem_at`
-    /// and `stem_assign_at` takes it from there. A compound writes the
-    /// *stem's* slot, a different name on a different slot, which the entry
-    /// carries separately and `Code::stem` hands over.
+    /// **A simple variable and a bare stem write the same slot; a compound
+    /// writes a different one; and the reason `at` serves only the first is
+    /// different again for each.** A simple variable and a bare stem both
+    /// write the slot their own symbol is bound to, and for a bare stem `at`
+    /// would therefore be the *right* number -- it is not supplied because
+    /// supplying it was tried at `bind_control` and measured to cost more than
+    /// it saves ([`control_slot`]'s own doc has the figures), and because
+    /// `Plan::bind` records that same slot on the entry, which reaches both
+    /// engines where an op reaches one. A compound writes the *stem's* slot,
+    /// a different name on a different slot that the entry carries separately
+    /// and `Code::stem` hands over, so `at` would be the wrong number there.
+    /// Both of those arms assert that no caller passed one.
     ///
     /// **`None` is always correct.** The slot is then resolved by the write
     /// itself exactly as it was before any caller could supply one, which is
@@ -3059,6 +3064,16 @@ impl Interp {
             // produce a name this arm already has, allocating a tail vector to
             // throw away on every `INTERPRET`ed stem write.
             ExprKind::Stem(id) => {
+                // The tripwire `crate::ir::drive`'s `Op::Store` arm carries
+                // for the compiled side, here where **both** engines pass:
+                // a slot handed to this arm was resolved against the symbol's
+                // own id and is silently shadowed below, so a caller that
+                // started supplying one would write through the entry's slot
+                // and never learn that its own was ignored.
+                debug_assert!(
+                    at.is_none(),
+                    "a stem write was handed a slot, and the slot it writes comes from the entry"
+                );
                 let name = code.symbols.name(*id).as_bytes().to_vec();
                 let at = code.compound(*id).and_then(|entry| entry.stem_at);
                 self.stem_assign_at(&name, at, value);
@@ -3079,6 +3094,17 @@ impl Interp {
             // own, matching `stem_set`'s own convention) concatenated with
             // `key`.
             ExprKind::Compound(id) => {
+                // `read_symbol`'s own compound tripwire, on the writing
+                // side. A compound-shaped name **can** reach
+                // `Plan::by_symbol`: `Plan::bind` puts every name it binds
+                // whole there, and `note_loop` and `note_parse` both call it
+                // with spellings that may be compound-shaped. So a caller
+                // reaching for a slot by this symbol's id can find one, and it
+                // is not the slot this arm writes.
+                debug_assert!(
+                    at.is_none(),
+                    "a compound write was handed a slot, and the slot it writes is the stem's"
+                );
                 let tag = code.symbols.name(*id).as_bytes().to_vec();
                 let (stem_name, stem_at) = code.stem(*id);
                 let stem_name = stem_name.to_vec();
@@ -6856,10 +6882,11 @@ impl Interp {
                     span: 0..0,
                 };
                 let rendered = self.intermediate_text(value);
-                // `None`, and a literal one rather than the loop's kept slot:
-                // `assign_expr_target`'s `Stem` arm finds this stem's slot on
-                // its own entry, and a value here in place of the constant
-                // costs every controlled loop 2 instructions a pass.
+                // `None`, and a literal one rather than the loop's kept
+                // slot: `assign_expr_target`'s `Stem` arm finds this stem's
+                // slot on its own entry, and a value here in place of the
+                // constant costs every controlled loop 2 instructions a pass
+                // (`control_slot`'s doc has the measurement).
                 self.assign_expr_target(code, &target, value, rendered.as_deref(), indent, None)
             }
             NameShape::Compound => {
@@ -8553,12 +8580,16 @@ pub(crate) enum NameShape {
 /// **Carrying it here was measured, and it costs more than it saves.**
 /// Forwarding this answer from `bind_control`'s stem arm into
 /// `Interp::assign_expr_target` replaces a compile-time `None` at that call
-/// site with a value, and the inlining that turns on adds **2 instructions to
-/// every pass of every controlled loop** -- `perf stat -e instructions:u`,
-/// `do i = 1 to 25000000; nop; end` at +50,000,000 and `do i = 1 to 19000000`
-/// with two simple assignments at +38,000,000, against same-binary spans
-/// under 1,500. Taking the slot from the entry instead leaves both of those
-/// where they were and keeps the stem loop's own saving.
+/// site with a value, and **2 instructions then appear on every pass of every
+/// controlled loop**, simple controls included, which never enter that arm at
+/// all: `perf stat -e instructions:u`, `do i = 1 to 25000000; nop; end` at
+/// +50,000,000 and `do i = 1 to 19000000` with two simple assignments at
+/// +38,000,000, where the same binary against itself spans 1,348 and 1,576.
+/// **Attributed by partial revert and not by reading the assembly**: undoing
+/// that one line and nothing else puts the first back on base exactly, and
+/// recomputing the slot inside the arm instead costs +100,000,000. Why the
+/// generated code changes was not established. Taking the slot from the entry
+/// leaves both axes where they were and keeps the stem loop's own saving.
 ///
 /// **Declining the compound is unobservable, and it is written down as such
 /// rather than defended as a guard.** `bind_control` and the re-test both
@@ -10890,6 +10921,14 @@ mod tests {
     /// The oracle prints `4` for each of the three: a controlled `DO` writes
     /// the value that failed its `TO` test, and a bare stem write makes that
     /// value the stem's default, which is what an unwritten tail then answers.
+    ///
+    /// **This passes unchanged before the slot was taken, and that is what it
+    /// is for.** A fragment's `Code::plan` is `None` on both sides, so neither
+    /// side has a slot to get wrong. It guards the design that was **not**
+    /// shipped -- routing a fragment's own translated slot, which lives in the
+    /// activation's `extra` rather than in any plan, into a stem write -- and
+    /// under that design this program is the one the whole workspace suite
+    /// otherwise had no case for.
     #[test]
     fn a_stem_control_inside_a_fragment_writes_the_enclosing_frames_slot() {
         let mut interp = Interp::new();

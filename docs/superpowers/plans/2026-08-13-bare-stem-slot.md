@@ -1,23 +1,23 @@
 # A bare stem's slot already exists and nothing uses it
 
-**Goal:** Stop hashing a bare stem's name where the plan has already assigned it a slot, in the three places that still do -- and find a workload that can see the one which pays per iteration.
+**Goal:** Stop hashing a bare stem's name where the plan has already assigned it a slot, everywhere that still does -- and find a workload that can see the site which pays per iteration.
 
-**Status:** done, 2026-08-13. Found by the stem-slot task of `2026-08-13-stem-slot-resolution.md`, which corrected the comments that denied it and deliberately did not take the optimisation; the third site was found by that task's review. **Confirmed real by both**, and taken here.
+**Status:** done, 2026-08-13. Found by the stem-slot task of `2026-08-13-stem-slot-resolution.md`, which corrected the comments that denied it and deliberately did not take the optimisation; the per-iteration site was found by that task's review. **Confirmed real by both**, and taken here.
 
 **Corrected by the task, after measuring: Step 2's route is the wrong one, and taking it costs more than the whole optimisation is worth.**
-The obvious shape -- carrying the slot in `Option<usize>` from `control_slot` through `bind_control` into `assign_expr_target`, and from `write_slot` through `Op::Store` -- replaces a compile-time `None` at `bind_control`'s stem call site with a value, and that alone costs **2 instructions on every pass of every controlled loop**, stem-controlled or not: `emptyloop` +50,000,012, `varlookup` +38,000,036, against same-binary spans under 1,500. Reverting that one line puts `emptyloop` back on base exactly.
+The obvious shape -- carrying the slot in `Option<usize>` from `control_slot` through `bind_control` into `assign_expr_target`, and from `write_slot` through `Op::Store` -- replaces a compile-time `None` at `bind_control`'s stem call site with a value, and that alone costs **2 instructions on every pass of every controlled loop**, stem-controlled or not: `emptyloop` +50,000,012, `varlookup` +38,000,036, where the same binary against itself spans 1,348 and 1,576. Attributed by partial revert: undoing that one line and nothing else puts `emptyloop` back on base exactly, and recomputing the slot inside the arm instead costs +100,000,000. Why the generated code changes was not established.
 What works is to take the slot from the plan's own `CompoundName` entry -- `Plan::bind` records it there for a stem-shaped name, since such a name is its own stem half -- leaving every call site's argument constant. That serves **both** engines, where the compiled-op route serves one. See entry 32 of `phase-4f-record.md`.
 
 ## What was believed, and what is true
 
-Three comments in the tree said a bare stem write has no slot to resolve ahead of the write, so it must go by name.
+The comments in the tree said a bare stem write has no slot to resolve ahead of the write, so it must go by name.
 Measured on `zs. = 'one'`, both engines: `by_symbol[id]` is `Some(0)` and equals the slot `stem_assign` then hashes for.
 Measured on `do cv. = 1 to 3`, both engines: `by_symbol=Some(0)`, `slot_of=0`, on all four writes.
 The slot exists. `Plan::bind` assigned it when it walked the body; nothing reads it back.
 
-This is the same shape as the three applications already landed -- `compound_parts` re-splitting an interned name, a tail piece re-hashing its own, a stem half re-hashing its own -- and it is the last member of the family that is known about.
+This is the same shape as the applications already landed -- `compound_parts` re-splitting an interned name, a tail piece re-hashing its own, a stem half re-hashing its own -- and it is the last member of the family that is known about.
 
-## The three sites
+## The sites
 
 * **`stem_assign`**, reached from `run.rs`'s `assign_expr_target` for `zs. = value`. Per statement.
 * **`replace_stem`**, the other bare-stem operation `stem.rs` leaves resolving by name. Per statement.
@@ -27,11 +27,11 @@ The first two were named by the implementer; the third by its reviewer, and it i
 
 ## What makes this a task rather than a patch
 
-**Corrected 2026-08-13, after re-profiling: one existing axis does see two of the three sites.**
+**Corrected 2026-08-13, after re-profiling: one existing axis does see the two per-statement sites.**
 `samples/rexxcps.rex` writes `avar.=1.0''loop` inside its `do loop=1 to 14` body -- a bare stem write, fourteen times per iteration -- so it exercises `stem_assign` through `assign_expr_target`, which stands at 1.57% of that profile.
 The first version of this section said no axis could see any of it, which was wrong and was written without reading the program.
 
-**What still has no axis is the third site.** `bind_control`'s stem arm is reached only by a *stem-controlled* `DO`, and every loop in `rexxcps` and in `rust/bench-programs/` is controlled by a simple variable.
+**What still has no axis is `bind_control`'s.** `bind_control`'s stem arm is reached only by a *stem-controlled* `DO`, and every loop in `rexxcps` and in `rust/bench-programs/` is controlled by a simple variable.
 That one pays per iteration, so it is the site most worth measuring and the only one needing a workload written for it.
 
 The measurement discipline this project holds itself to says an axis that cannot see a change makes its result unstatable rather than zero -- which is why the workload comes before the fix rather than after it.
