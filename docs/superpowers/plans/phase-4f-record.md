@@ -2774,3 +2774,65 @@ Staging every arm at one fixed path cut the control spread to 1.33%, and every n
 * **The plan's aim is supported by the instruction counter and unresolvable on the wall clock.** A billion instructions left `rexxcps`, specific to the program holding the promoted constructs; how much time that is worth cannot be stated at this resolution.
 * **It does not claim a wall-clock number for `rexxcps`.** The direction is unanimous over forty rounds; the magnitude sits under a layout swing that moved untouchable axes further.
 * The static coverage fact is independent of all of this and was checked separately: after Task 1 the `evalexpr IF` row is absent from the execution profile entirely.
+
+### Entry 28 -- the compound-name plan measured: a quarter of `compound` gone, and four axes that did not move by a thousand instructions
+
+Plan: `docs/superpowers/plans/2026-08-13-compound-name-resolution.md`, two tasks.
+Base `cb4f27d1c`, head `a93bfb548` -- Task 1 is `b3e8cf4d2` and Task 2 is that head, both read back from `git log`.
+
+**This entry changes the wrapper, and says so rather than letting the difference pass as a result.**
+The configuration block above fixes wall clock through `rexx-bench-suite`. This entry is `perf stat -e instructions:u`, one run per arm, arms interleaved per axis, every arm staged at one fixed binary path.
+Entry 27 is why: on these axes the wall clock moved between -5.12% and +4.55% from layout alone, which is wider than anything this plan could produce, while the instruction counter's arm-internal spread stayed at or below 0.005%.
+**No wall-clock figure is claimed by this entry**, and no wall-clock run was taken.
+
+#### Cause, stated by the plan before either task
+
+`perf record` over `samples/rexxcps.rex` at `5dc12a403` put `rexx_parse::ast::compound_parts` at 3.38% of self time with the `CharSearcher` its `split('.')` drives at 3.80%, and `hash_one::<&[u8]>` at 4.43% with SipHash's `write` at 3.29% and `Interp::slot_of` at 1.72%.
+Both buckets are constants of the source text recomputed per execution: how a compound name splits, and which slot each variable tail piece resolves to.
+`Plan::note_compound_name` already computed both at build time and discarded them.
+Task 1 kept the split; Task 2 kept the slots.
+
+#### Measured movement
+
+| axis | base `cb4f27d1c` | head | difference |
+|---|---:|---:|---:|
+| `compound` | 37,163,096,047 | 27,800,230,124 | **-25.19%** |
+| `alloc4c` | 9,392,724,256 | 8,456,718,073 | **-9.97%** |
+| `rexxcps` | 28,594,847,258 | 25,865,205,907 | **-9.55%** |
+| `varlookup` | 44,574,614,522 | 44,840,637,363 | +0.60% |
+| `strings` | 44,787,587,435 | 44,928,589,222 | +0.31% |
+| `emptyloop` | 27,100,609,164 | 27,150,610,085 | +0.18% |
+| `arith` | 20,396,605,792 | 20,403,950,467 | +0.04% |
+
+Every `rexxcps` run self-calibrated to `100 x 100`, checked on each arm's own output, so both arms did the same work.
+
+**Split by task**, base to Task 1's head to Task 2's head, on the three axes that moved:
+
+| axis | `cb4f27d1c` to `b3e8cf4d2` (the split) | `b3e8cf4d2` to head (the slots) |
+|---|---:|---:|
+| `compound` | -17.70% | -9.12% |
+| `rexxcps` | -7.19% | -2.61% |
+| `alloc4c` | not measured by Task 1 | -3.19% |
+
+#### The control axes, and a correction to what "control" meant
+
+**All of the +0.04% to +0.60% above belongs to Task 1.** Measured separately, Task 2 moved the four axes holding no compound variable by **43 to 903 instructions** out of twenty to forty-five billion -- `strings` -48, `varlookup` +43, `emptyloop` -903, `arith` +505 -- which is the same op stream, not small drift.
+
+**The plan named `compound` as the only loop axis holding compound variables, and that was false.**
+`alloc4c`'s inner loop is `tab.i = i`: a compound with a variable tail piece, which is exactly what the plan changes.
+It was caught by measuring rather than by reading -- `alloc4c` moved 3.19% on Task 2 alone, which under the plan's own rule would have been reported as codegen drift three times larger than anything Task 1 saw -- and then confirmed by reading the program.
+Task 1's table does not carry an `alloc4c` row, which is why the claim survived it.
+The plan's text has been corrected in place with what was removed and why.
+**A control axis that is not a control invents a cost that is really a benefit**, and the only thing that separated the two here was reading the program the number came from.
+
+#### Disposition
+
+**Accepted, and the hypothesis is confirmed by route as well as by outcome.**
+The plan predicted movement on the programs holding compound variables and none elsewhere, and that is what the three subject axes and the four control axes read.
+`compound` and `alloc4c` are the two programs whose inner loops hold a compound with a variable tail; `rexxcps` references `acompound.key1.loop` in its own innermost loop.
+Nothing else moved by a measurable amount under Task 2, and only Task 1's shared-driver drift moved anything else at all.
+
+#### What this entry does not claim
+
+* **No time figure.** How much of a quarter of `compound`'s instruction stream is worth in seconds is not stated, for entry 27's reason.
+* **The remaining name hashing is not gone.** A compound's *stem* still resolves by name at every reference (`stem_get`/`stem_set` open with `slot_of`), and a compound `DO` control variable's tail pieces still do, because the whole dotted name holds the slot and giving its parts slots would move the body's frame layout. Both are named in Task 2's report as work this plan did not take.
