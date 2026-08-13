@@ -1265,12 +1265,15 @@ fn push_native<'a>(
 /// The slot one assignment *target* resolves to, or [`PlanSlot::UNRESOLVED`]
 /// for a target that does not write a slot by name.
 ///
-/// **Simple variables only, and the other two arms are not omissions.** A stem
-/// target is `stem_assign`, which replaces the whole stem under its name; a
-/// compound target resolves a tail key at the write site and mutates one tail
-/// through `stem_set`. Neither writes the symbol's own frame slot, so there is
-/// no slot here for them to carry -- the same asymmetry [`PlanSlot`]'s own doc
-/// comment records for a compound *read*.
+/// **Simple variables only, and the two other target shapes differ from each
+/// other.** A compound target resolves a tail key at the write site and
+/// mutates one tail through `stem_set`, which writes the *stem's* slot and not
+/// the symbol's own -- the same asymmetry [`PlanSlot`]'s own doc comment
+/// records for a compound *read*, and there is no slot here to carry. A stem
+/// target is `stem_assign`, which does write the symbol's own slot, resolved
+/// from the same spelling `Plan::bind` bound the symbol's id to; that one is
+/// unresolved here because nothing downstream uses it yet, not because it does
+/// not exist.
 ///
 /// The map is the plan's `by_symbol`, which is what `Code::slots` is a view of
 /// at run time, so the compiled answer and `Interp::slot_of`'s are one

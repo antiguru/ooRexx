@@ -3011,9 +3011,16 @@ impl Interp {
     /// compound tail and the `>=>` line stay one implementation -- a second
     /// store path executed in the driver would be the two-implementations
     /// defect the dual-engine gate exists to catch, however much faster it
-    /// measured. The three arms below are what makes that safe to widen: only
-    /// the first one writes a slot by name at all, so the other two ignore `at`
-    /// rather than needing a rule about it.
+    /// measured. What makes that safe to widen is that only the first arm
+    /// below writes **this symbol's** slot from `at`. The compound arm writes
+    /// the *stem's* slot, which is a different name and a different slot, so
+    /// `at` would be the wrong number there and it is ignored. The stem arm
+    /// ignores it too, and that one is a slot left on the table rather than a
+    /// slot that does not exist: `Plan::bind` puts an `ExprKind::Stem`
+    /// symbol's own spelling and its own id on one slot, and `stem_assign`
+    /// resolves that same spelling. Measured, `zs. = 'one'` on both engines:
+    /// `by_symbol` answers the slot `slot_of` then resolves. Using it would be
+    /// an optimisation, and it wants its own measurement.
     ///
     /// **`None` is always correct.** The slot is then resolved here exactly as
     /// it was before any caller could supply one, which is what
