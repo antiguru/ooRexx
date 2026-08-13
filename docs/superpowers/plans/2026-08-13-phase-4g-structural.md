@@ -57,6 +57,17 @@ So inline capacity is not the variable, and the conclusion is the one this unit 
 `smallvec` 1.15.2 resolves offline from the local registry cache if anyone revisits it.
 And entry's own reasoning against it stands independently and is stronger: on `strings`, `Number` allocations are reached *because* a counted answer arrives untagged and forces the general decimal path, so **removing the reason removes them wholesale where making each one cheaper leaves the path, the parse and the render in place.**
 
+**Where the storage lives is open, and Moritz named a candidate on 2026-08-13: a thread-local pool.**
+It answers the objection that makes a threaded scratch parameter unpalatable, which is that `rexx-num`'s API is value-typed and the executor calls into it from deep inside expression evaluation, so `&mut scratch` would rewrite every signature across a crate boundary.
+A per-thread pool also suits where this crate is going, since the oracle is thread-per-activity and per-thread storage has no contention to design around.
+Three things decide it and none is settled by reading:
+
+* **Arithmetic nests**, so a single shared buffer corrupts when an operand's own computation is arithmetic. It has to be take-and-return, which is a small allocator rather than one cell.
+* **The access may cost more than the reuse saves.** A non-`Copy` payload wants a `RefCell`, so every access pays a borrow check and a panic path, and lazy init adds a check unless the initializer is `const`. The `smallvec` result above is the standing warning: inline capacity that inlined every working length either workload produces was still 18% behind `Vec`, so cheaper-looking storage has already been wrong once on this code.
+* **It needs a ceiling to be read against.** A throwaway arm that threads `&mut` scratch through the operation measures what perfect reuse buys with no access overhead at all. Without it, a thread-local arm at any figure cannot be read as "the access is eating it" rather than "the reuse was not worth much".
+
+So the spike is three arms -- status quo, thread-local pool, threaded parameter -- on `arith` and on a digits-9 decimal loop, with the third arm existing only to bound the other two.
+
 **Unit 5 -- rooting.** Replace the per-clause and per-`eval`-site `RootSet` frame with a bump-pointer stack the collector scans in place. Biggest, riskiest, touches the collector's contract with every value, and `2026-08-11-value-representation-design.md` already sets out options for the value layer -- **that document is this unit's starting point and must not be re-derived.**
 
 ## The divergence licence, and how it is spent
