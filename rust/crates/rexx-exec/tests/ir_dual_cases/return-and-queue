@@ -1,17 +1,26 @@
 # What promoting `RETURN`, `EXIT`, `PUSH` and `QUEUE` has to keep.
 #
-# All four used to be one `Op::Generic` delegating the whole clause back to
+# Each used to be one `Op::Generic` delegating the whole clause back to
 # the tree-walker. Each is now a `Clause` region: its expression's own native
 # ops, then one op that consumes the value. `Op::Return` carries the keyword
 # that decides between `Flow::Return` and `Flow::Exit` and ends its region
 # with it; `Op::Queue` carries the end of the queue the line lands on and ends
 # no region, because a `PUSH` and a `QUEUE` answer `Flow::Next`.
 #
-# A bare form takes no register at all -- `src` is `None` and not a register
-# holding a null string, because the two are different instructions: a bare
-# `RETURN` leaves `RESULT` unset where `RETURN ''` sets it, and a bare
-# `RETURN`/`EXIT` traces no value line where a bare `PUSH`/`QUEUE` traces the
-# null string it queues.
+# A bare form takes no register at all -- `src` is `None` rather than a
+# register holding a null string -- and what that buys differs by keyword.
+# For `RETURN` it is a difference the language makes and a row here pins: a
+# bare `RETURN` leaves `RESULT` unset where `RETURN ''` sets it. For
+# `PUSH`/`QUEUE` it is not: measured on the oracle, a bare `QUEUE` and
+# `QUEUE ''` queue the same line and trace the same `>>>   ""`, differing only
+# in the clause echo of their own source text, so nothing here or anywhere in
+# the workspace can tell `Op::Queue { src: None }` from one handed an empty
+# register. The `Option` there is the shape `Op::Say` already had rather than
+# a discrimination this file pins.
+#
+# What both pairs do differ in, and rows below show: a bare `RETURN`/`EXIT`
+# traces no value line at all, where a bare `PUSH`/`QUEUE` traces the null
+# string it queues.
 #
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, on both
 # engines, before this file was written. Regenerate a row by running its
@@ -49,16 +58,17 @@
 # that unwound to the activation boundary instead of out of the program would
 # resume the caller, print `not reached` and exit 0. Measured to redden when
 # `compile` tags an `EXIT`'s op `ReturnKeyword::Return`, on stdout between the
-# engines -- **not a unique catch**: the two op-stream pins for this op read
-# the tag out of the compiled stream, and `run::tests::exit_inside_a_routine_
+# engines -- **not a unique catch**: the op-stream pins for this op read the
+# tag out of the compiled stream, and `run::tests::exit_inside_a_routine_
 # ends_the_routine_where_a_labels_exit_ends_the_program` and
 # `eval::tests::an_exit_inside_a_routine_reached_by_expression_call_ends_the_
 # whole_program` see the wrong flow in a program's own answer.
 # It reddens for the `>>>` line too, when `Interp::returned_value` stops
 # emitting it -- a mutation both engines take, so what sees it here is the
 # oracle-measured block rather than the engine comparison. That one is not
-# unique either: `tests/trace_oracle/exit_value.rex` and three `run::tests`
-# indent witnesses redden with it.
+# unique either: `tests/trace_oracle/exit_value.rex` reddens with it, and so
+# does `run::tests::a_returned_value_traces_in_the_callee_and_again_in_the_
+# caller`.
 program
 trace r
 call zsub
@@ -148,11 +158,11 @@ err>     12 *-* exit
 # Measured with this row as the only stanza in the directory: it reddens when
 # the compiled `Op::Return` drops the value it was handed, printing `after
 # empty: RESULT` where the oracle prints `after empty: `. Not a unique catch
-# -- that mutation reddens the extracted-program sweep, the branch-shape
-# table and a dozen `run::tests` besides. The degenerate implementation the
-# paragraph above describes was measured too, by giving the bare form a
-# register holding the null string: what catches that first is the arity
-# `debug_assert` in `Op::Return`'s own driver arm, not any row here.
+# -- that mutation reddens the extracted-program sweep and the branch-shape
+# table as well. The degenerate implementation the paragraph above describes
+# was measured too, by giving the bare form a register holding the null
+# string: what catches that first is the arity `debug_assert` in
+# `Op::Return`'s own driver arm, not any row here.
 program
 trace r
 call zempty

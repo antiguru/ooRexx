@@ -2846,17 +2846,20 @@ impl Interp {
     /// `exit 0` traces `>>>   "0"` after the `exit 0` echo -- so the line
     /// belongs to the instruction and not to anything around it.
     ///
-    /// **The rooting here is shorter than the value needs, and that is
-    /// `EXIT`'s window rather than a general one.** The temp is rooted for
-    /// exactly one clause, like every other `eval` result;
-    /// `step_in_temps_frame` pops it before `Flow::Exit` has even reached
-    /// `run_activation`, and from that pop, through the activation teardown,
-    /// to `execute`'s `exit_code_for` call, nothing on the temps stack names
-    /// this value. `root_exit_value` (`lib.rs`) is the root that survives it,
-    /// and its own doc has the measurement that says this is a real window
-    /// rather than a theoretical one. The compiled engine's own register is a
-    /// second root for the same value while its region runs, so this push is
-    /// redundant there and harmless.
+    /// **The rooting here is one clause's, which is shorter than a value that
+    /// ends the program needs**, and that is true of either keyword: a
+    /// top-level `RETURN` exits with its value exactly as an `EXIT` does
+    /// (measured, `return 5` as a whole program is rc 5), and
+    /// [`Interp::apply_flow`] takes the surviving root on its `Flow::Return`
+    /// arm and its `Flow::Exit` arm alike. The temp pushed here is rooted like
+    /// every other `eval` result and the clause's own frame is popped before
+    /// the `Flow` has reached `run_activation`, so from there through the
+    /// activation teardown to `execute`'s `exit_code_for` call nothing on the
+    /// temps stack names it; `root_exit_value` (`lib.rs`) is what does, and
+    /// its own doc has the measurement that says the window is real rather
+    /// than theoretical. The compiled engine's own register is a second root
+    /// for the same value while its region runs, so this push is redundant
+    /// there and harmless.
     pub(crate) fn returned_value(&mut self, value: Option<ObjRef>, keyword: ReturnKeyword) -> Flow {
         if let Some(value) = value {
             self.roots.push_temp(value);
