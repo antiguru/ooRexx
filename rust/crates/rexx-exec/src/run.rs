@@ -85,7 +85,7 @@ use rexx_num::{ArithError, CompareOp, Number, SettingsError, compare_decoded};
 use rexx_parse::{
     ConditionTrap, ControlExpr, DirectiveKind, EndStyle, Expr, ExprKind, Fragment, Instruction,
     InstructionKind, Loop, LoopConditional, LoopKind, NumericSetting, ProgramSource, Raise,
-    SymbolId, Trace, Use, UseTarget, VariableRef, compound_parts, parse_interpret,
+    SymbolId, Trace, Use, UseTarget, VariableRef, parse_interpret,
 };
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -1136,7 +1136,7 @@ impl Interp {
             body,
             symbols: &program.symbols,
             slots: &plan.by_symbol,
-            indents: Some(&plan),
+            plan: Some(&plan),
         };
         // The key this body's plan was cached under, and the key its chunk is
         // cached under. **They have to be the same key**, and nothing but this
@@ -3065,8 +3065,7 @@ impl Interp {
             // `key`.
             ExprKind::Compound(id) => {
                 let tag = code.symbols.name(*id).as_bytes().to_vec();
-                let (stem_name, _tails) = compound_parts(code.symbols.name(*id));
-                let stem_name = stem_name.as_bytes().to_vec();
+                let stem_name = code.stem_name(*id).to_vec();
                 let key = self.tail_key(code, *id);
                 self.stem_set(&stem_name, &key, value);
                 let mut resolved = stem_name;
@@ -5554,7 +5553,7 @@ impl Interp {
         // The table when this body has one, and the walk when it does not --
         // an `INTERPRET` fragment is the case with none, and its instruction
         // list is short enough that the walk is what it always was.
-        let base = match code.indents {
+        let base = match code.plan {
             Some(plan) => plan.indent_of(&code.body.instructions, target),
             None => static_indent(&code.body.instructions, target),
         };
@@ -6598,10 +6597,10 @@ impl Interp {
                         // so there is no fallible read to thread through.
                         NameShape::Stem => (self.read_stem(name), Novalue::Set, None),
                         NameShape::Compound => {
-                            let (stem_name, _tails) = compound_parts(code.symbols.name(*control));
+                            let stem_name = code.stem_name(*control);
                             let key = self.tail_key(code, *control);
-                            let (value, novalue) = self.stem_get(stem_name.as_bytes(), &key);
-                            let mut resolved = stem_name.as_bytes().to_vec();
+                            let (value, novalue) = self.stem_get(stem_name, &key);
+                            let mut resolved = stem_name.to_vec();
                             resolved.extend_from_slice(&key);
                             (value, novalue, Some(resolved))
                         }
@@ -7345,10 +7344,12 @@ impl Interp {
             body: &fragment.body,
             symbols: &fragment.symbols,
             slots: &slots,
-            // A fragment has no `Plan` of its own -- `fragment_plan` answers
-            // slots and nothing else -- so its clause indents are computed
-            // the way they always were.
-            indents: None,
+            // A fragment carries no plan of its own -- `fragment_plan` keeps
+            // only the id-to-enclosing-slot translation out of the one it
+            // builds, for the reason `Code::plan` gives -- so its clause
+            // indents and its compound splits are both computed the way they
+            // were before either table existed.
+            plan: None,
         };
 
         // `exit` inside `INTERPRET` ends the program, not the fragment, so
@@ -7498,9 +7499,9 @@ impl Interp {
             VariableRef::Direct(id) => {
                 let name = code.symbols.name(*id);
                 if shape_of(name.as_bytes()) == NameShape::Compound {
-                    let (stem_name, _tails) = compound_parts(name);
+                    let stem_name = code.stem_name(*id);
                     let key = self.tail_key(code, *id);
-                    self.stem_drop_tail(stem_name.as_bytes(), &key);
+                    self.stem_drop_tail(stem_name, &key);
                 } else {
                     self.drop_by_name(name.as_bytes());
                 }

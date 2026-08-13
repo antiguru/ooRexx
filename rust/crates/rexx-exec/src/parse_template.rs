@@ -555,8 +555,7 @@ impl Interp {
                 Ok(value)
             }
             crate::run::NameShape::Compound => {
-                let (stem_name, _tails) = rexx_parse::compound_parts(code.symbols.name(id));
-                let stem_name = stem_name.as_bytes().to_vec();
+                let stem_name = code.stem_name(id).to_vec();
                 let key = self.tail_key(code, id);
                 let mut resolved = stem_name.clone();
                 resolved.extend_from_slice(&key);

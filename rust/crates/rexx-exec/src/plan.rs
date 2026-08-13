@@ -83,6 +83,63 @@ pub(crate) struct BodyKey {
     pub(crate) directive: Option<usize>,
 }
 
+/// One tail piece of a compound's name, owned.
+///
+/// `rexx_parse::Tail` is the same two cases borrowed from the interned
+/// spelling, and it is what `CompoundName::split` classifies with. An owned
+/// copy is what a `Plan` can hold: the plan outlives no borrow of the
+/// `SymbolTable` -- it is an `Rc` cached on `Interp` while the table lives
+/// behind an `Rc<Program>` -- and owning the bytes is also what lets
+/// `Interp::tail_key` join a key without touching the symbol table at all.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum TailPiece {
+    /// A piece that is empty or starts with a digit, so it can never be a
+    /// variable name and stands for itself.
+    Constant(Box<[u8]>),
+    /// A simple variable whose value supplies this piece.
+    Variable(Box<[u8]>),
+}
+
+/// A compound's name, split into the pieces `Interp::tail_key` joins.
+///
+/// One of these per compound-shaped symbol in a body, keyed by that symbol's
+/// own id on `Plan::compounds`.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct CompoundName {
+    /// The stem half, its trailing period included (`compound_parts`' own
+    /// convention, matching `addCompound`, `LanguageParser.cpp:2153`).
+    pub(crate) stem: Box<[u8]>,
+    /// The tail pieces in source order.
+    pub(crate) tails: Box<[TailPiece]>,
+}
+
+impl CompoundName {
+    /// Splits one compound-shaped interned spelling.
+    ///
+    /// **The single definition of the split**, entered both by the upfront
+    /// pass that fills `Plan::compounds` and by `Interp::tail_key`'s fallback
+    /// for a body with no plan entry, so the two cannot come to disagree
+    /// about how a name decomposes.
+    ///
+    /// `name` must hold a period: `compound_parts` panics without one. Every
+    /// caller already guarantees it -- a `Compound` expression's own spelling
+    /// always has one (`ast.rs`), and `Plan::note_variable_ref` checks before
+    /// it calls.
+    pub(crate) fn split(name: &str) -> CompoundName {
+        let (stem, tails) = compound_parts(name);
+        CompoundName {
+            stem: stem.as_bytes().into(),
+            tails: tails
+                .into_iter()
+                .map(|tail| match tail {
+                    Tail::Constant(piece) => TailPiece::Constant(piece.as_bytes().into()),
+                    Tail::Variable(piece) => TailPiece::Variable(piece.as_bytes().into()),
+                })
+                .collect(),
+        }
+    }
+}
+
 /// One body's variable-resolution plan, built by one upfront pass at first
 /// execution (D16).
 ///
@@ -129,6 +186,43 @@ pub(crate) struct Plan {
     /// index instead costs the body's length per index, and made a
     /// 20,000-clause body placed after an `EXIT` go from 22 ms to 211 ms.
     pub(crate) indents: Box<[usize]>,
+    /// How a compound-shaped symbol this body names splits, by
+    /// `SymbolId::index`, `None` where this pass recorded nothing for it.
+    ///
+    /// The same move `indents` above is, for a different constant of the
+    /// source text. `Interp::tail_key` used to call `compound_parts` on the
+    /// interned name on **every** reference, re-splitting a string that
+    /// cannot change: measured by `perf record` over `samples/rexxcps.rex`
+    /// (`REXX_ENGINE=ir`, `count=100`/`averaging=100`, 999 Hz), that split
+    /// was 3.38% of self time with the `CharSearcher` its `split('.')`
+    /// drives at a further 3.80%, on a program whose innermost loop
+    /// references `acompound.key1.loop`.
+    ///
+    /// The upfront pass already had the answer and discarded it:
+    /// `note_compound_name` splits every compound name to assign its stem
+    /// and its variable pieces slots. It now keeps the split.
+    ///
+    /// **An entry is an optimisation and never a requirement**, which is what
+    /// makes filling this safe to reason about one call site at a time: a
+    /// symbol with no entry splits its own spelling at the reference, exactly
+    /// as every reference did before this field existed. `Code::compound` is
+    /// where the two meet.
+    ///
+    /// **A `Vec` indexed by id rather than a `HashMap` keyed by one**, which
+    /// is correct because `SymbolId::index` is dense and zero-based within
+    /// the table that interned it, and affordable because the id space is one
+    /// program's distinct symbols. Measured over the corpus, this crate's
+    /// bench programs and the oracle's `samples/` tree -- 381 programs that
+    /// parse -- the largest program-wide total of `symbols.len()` summed over
+    /// a program's code bodies is 2,244 entries, and the sum over all 381 is
+    /// 85,428.
+    ///
+    /// **Sized by the whole symbol table and not by the compounds in this
+    /// body**, so a body that names few compounds still carries an entry per
+    /// symbol. That is what buys the indexing: an id is only an index into
+    /// the table that interned it, and any denser addressing would need a
+    /// second map from id to position, which is the hash this replaces.
+    pub(crate) compounds: Box<[Option<CompoundName>]>,
 }
 
 impl Plan {
@@ -144,6 +238,18 @@ impl Plan {
             Some(indent) => *indent,
             None => crate::run::static_indent(instructions, target),
         }
+    }
+
+    /// How the compound `id` names splits, if this plan's pass saw it.
+    ///
+    /// **`id` must belong to the `SymbolTable` this plan was built against**,
+    /// and nothing here can check that: an id from another table is either out
+    /// of range, which answers `None`, or in range, which answers another
+    /// symbol's entry with no complaint (`SymbolId::index`'s own doc comment
+    /// on the two ways that goes wrong). `Code` is what pairs a plan with the
+    /// table whose ids index it, and `Code::compound` is the only caller.
+    pub(crate) fn compound(&self, id: SymbolId) -> Option<&CompoundName> {
+        self.compounds.get(id.index())?.as_ref()
     }
 
     /// Walks `body` once and returns a finished table (D16: "built by one
@@ -167,7 +273,15 @@ impl Plan {
     /// function nor a later task has to remember to revisit `plan.rs` the
     /// day one of them stops failing loudly.
     pub(crate) fn build(body: &CodeBody, symbols: &SymbolTable) -> Plan {
-        let mut plan = Plan::default();
+        // `compounds` is sized here rather than filled as names arrive,
+        // because `bind`/`note_compound_name` write into it by id and an id
+        // is only an index into a table of that table's own length.
+        let mut plan = Plan {
+            compounds: std::iter::repeat_with(|| None)
+                .take(symbols.len())
+                .collect(),
+            ..Plan::default()
+        };
         for instruction in &body.instructions {
             plan.note_instruction(&instruction.kind, symbols);
         }
@@ -288,7 +402,7 @@ impl Plan {
                             // interned symbol a bare `ExprKind::Stem` read
                             // is, so it gets the same treatment `note`
                             // gives one, id and all.
-                            Redirection::Stem(id) => self.bind(*id, symbols.name(*id).as_bytes()),
+                            Redirection::Stem(id) => self.bind(*id, symbols.name(*id)),
                             Redirection::Stream(expr) | Redirection::Using(expr) => {
                                 self.note(expr, symbols);
                             }
@@ -315,16 +429,13 @@ impl Plan {
     /// own `label` in `note_instruction`.
     fn note_loop(&mut self, loop_: &Loop, symbols: &SymbolTable) {
         if let Some(counter) = loop_.counter {
-            self.bind(counter, symbols.name(counter).as_bytes());
+            self.bind(counter, symbols.name(counter));
         }
         match &loop_.kind {
             LoopKind::Simple | LoopKind::Forever => {}
             LoopKind::Count(count) => self.note_opt(count, symbols),
             LoopKind::Controlled(controlled) => {
-                self.bind(
-                    controlled.control,
-                    symbols.name(controlled.control).as_bytes(),
-                );
+                self.bind(controlled.control, symbols.name(controlled.control));
                 self.note(&controlled.initial, symbols);
                 self.note_opt(&controlled.to, symbols);
                 self.note_opt(&controlled.by, symbols);
@@ -335,7 +446,7 @@ impl Plan {
                 target,
                 for_count,
             } => {
-                self.bind(*control, symbols.name(*control).as_bytes());
+                self.bind(*control, symbols.name(*control));
                 self.note(target, symbols);
                 self.note_opt(for_count, symbols);
             }
@@ -346,10 +457,10 @@ impl Plan {
                 for_count,
             } => {
                 if let Some(index) = index {
-                    self.bind(*index, symbols.name(*index).as_bytes());
+                    self.bind(*index, symbols.name(*index));
                 }
                 if let Some(item) = item {
-                    self.bind(*item, symbols.name(*item).as_bytes());
+                    self.bind(*item, symbols.name(*item));
                 }
                 self.note(target, symbols);
                 self.note_opt(for_count, symbols);
@@ -368,7 +479,7 @@ impl Plan {
     /// `Compound` node), so `note` alone is enough for them.
     fn note_parse(&mut self, parse: &Parse, symbols: &SymbolTable) {
         match &parse.source {
-            ParseSource::Var(id) => self.bind(*id, symbols.name(*id).as_bytes()),
+            ParseSource::Var(id) => self.bind(*id, symbols.name(*id)),
             ParseSource::Value(expr) => self.note_opt(expr, symbols),
             ParseSource::Arg
             | ParseSource::LineIn
@@ -415,9 +526,9 @@ impl Plan {
         let (VariableRef::Direct(id) | VariableRef::Indirect(id)) = *var_ref;
         let name = symbols.name(id);
         if name.contains('.') {
-            self.note_compound_name(name.as_bytes());
+            self.note_compound_name(id, name);
         } else {
-            self.bind(id, name.as_bytes());
+            self.bind(id, name);
         }
     }
 
@@ -429,30 +540,32 @@ impl Plan {
     /// `Procedure`/`Use Local` target's, once `note_variable_ref` has
     /// already established it is compound- or stem-shaped.
     ///
-    /// Registers by name alone, with no `SymbolId` to bind alongside:
-    /// neither the stem prefix nor a tail piece has one of its own --
-    /// `compound_parts` only ever hands back a borrowed slice of the one
-    /// interned spelling a `Compound` id carries, and a piece was never a
-    /// token the scanner saw (`ast.rs`'s own `Compound` doc comment says
-    /// so). That is exactly why `stem.rs`'s `tail_key`/`read_by_name`
+    /// Registers by name alone, with no slot bound to `id` and none to a
+    /// piece: neither the stem prefix nor a tail piece has a `SymbolId` of
+    /// its own -- `compound_parts` only ever hands back a borrowed slice of
+    /// the one interned spelling a `Compound` id carries, and a piece was
+    /// never a token the scanner saw (`ast.rs`'s own `Compound` doc comment
+    /// says so). That is exactly why `stem.rs`'s `tail_key`/`read_by_name`
     /// resolve both of these purely by name, which is what makes `names`,
     /// not `by_symbol`, the correct table for them to land on.
-    fn note_compound_name(&mut self, name: &[u8]) {
-        // `compound_parts` needs `&str` and panics on a name with no period
-        // at all; every caller here already guarantees one -- a `Compound`
-        // expression's own spelling always has one (`ast.rs`), and
-        // `note_variable_ref` checks first. A Rexx symbol's interned
-        // spelling is always ASCII (the scanner classifies only ASCII
-        // symbol characters as `Stem`/`Compound`), so the conversion itself
-        // cannot fail either.
-        let name = std::str::from_utf8(name).expect("an interned compound name is ASCII");
-        let (stem, tails) = compound_parts(name);
-        self.slot_for(stem.as_bytes());
-        for tail in tails {
-            if let Tail::Variable(piece) = tail {
-                self.slot_for(piece.as_bytes());
+    ///
+    /// `id` is the whole compound's own id, and it addresses `compounds`
+    /// rather than being bound to a slot. Every caller has one: `note`'s
+    /// `ExprKind::Compound` arm, and `note_variable_ref` for either shape of
+    /// `VariableRef`. In the `Indirect` case that id names the wrapper
+    /// variable, which reaches here only when the wrapper is *itself*
+    /// compound-shaped (`DROP (a.b)`) -- and then `run.rs`'s own
+    /// `drop_variable` reads it through `tail_key` under this same id, so
+    /// the entry is addressed by the id the reader will present.
+    fn note_compound_name(&mut self, id: SymbolId, name: &str) {
+        let entry = CompoundName::split(name);
+        self.slot_for(&entry.stem);
+        for piece in &entry.tails {
+            if let TailPiece::Variable(name) = piece {
+                self.slot_for(name);
             }
         }
+        self.compounds[id.index()] = Some(entry);
     }
 
     /// Assigns slots to every variable `expr` names, in source order.
@@ -474,9 +587,9 @@ impl Plan {
     fn note(&mut self, expr: &Expr, symbols: &SymbolTable) {
         match &expr.kind {
             ExprKind::Variable(id) | ExprKind::Stem(id) => {
-                self.bind(*id, symbols.name(*id).as_bytes());
+                self.bind(*id, symbols.name(*id));
             }
-            ExprKind::Compound(id) => self.note_compound_name(symbols.name(*id).as_bytes()),
+            ExprKind::Compound(id) => self.note_compound_name(*id, symbols.name(*id)),
             // A literal, a constant (its value is its own spelling, never a
             // variable) and a `.name` environment symbol (resolved through
             // the class/environment lookup, never `slot_of`) name nothing.
@@ -540,9 +653,26 @@ impl Plan {
     /// two ways: a second symbol spelling the same name must land on the slot
     /// the first one got, which is why the slot number comes from `names` and
     /// never from `by_symbol`'s length.
-    fn bind(&mut self, id: SymbolId, name: &[u8]) {
-        let slot = self.slot_for(name);
+    ///
+    /// **A compound-shaped spelling also gets its split recorded**, and here
+    /// rather than at the call sites that can produce one, so that recording
+    /// it is a property of binding a name at all. A `DO` control variable is
+    /// the shape that makes this worth doing: `do a.i = 1 to 5` binds one
+    /// whole dotted symbol, and `run.rs`'s controlled-loop step then resolves
+    /// its tail through `tail_key` on **every pass**, which is exactly the
+    /// per-reference split `compounds` exists to remove.
+    ///
+    /// The split is recorded and no slot is assigned to the stem or to a
+    /// piece, which is what separates this from `note_compound_name`: `name`
+    /// is bound whole above, and adding slots for its parts here would move
+    /// every later slot number in the body -- a change to frame layout, not
+    /// to how a name splits.
+    fn bind(&mut self, id: SymbolId, name: &str) {
+        let slot = self.slot_for(name.as_bytes());
         self.by_symbol.insert(id, slot);
+        if name.contains('.') {
+            self.compounds[id.index()] = Some(CompoundName::split(name));
+        }
     }
 
     /// Assigns `name` a slot, reusing one already assigned to the identical
@@ -700,7 +830,7 @@ impl Interp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Code;
+    use crate::planned_code;
     use rexx_parse::{Program, parse_interpret, parse_program};
 
     /// `indent_of` answers what `static_indent` answers, for every index.
@@ -867,6 +997,97 @@ mod tests {
         }
     }
 
+    /// `build` records a compound's split under **the compound's own id**,
+    /// in each of the three syntactic positions a compound-shaped symbol
+    /// reaches the pass through: an expression (`note`), a `DROP` target
+    /// (`note_variable_ref`), and a `DO` control variable (`bind`).
+    ///
+    /// **What this catches that no output comparison can.** A missing or
+    /// misaddressed entry is not a wrong answer -- `Code::compound` falls
+    /// back to splitting the spelling and produces the identical key -- so a
+    /// mutation that keys the table wrongly, or that never fills it for one
+    /// of these positions, leaves every corpus program and every `tail_key`
+    /// assertion green. Only reading the table back says so. The pieces are
+    /// spelled out here rather than compared against `CompoundName::split`,
+    /// which would be the same function on both sides of the assertion.
+    ///
+    /// The control-variable row is the one that was measured wrong: before
+    /// `bind` recorded a split, `do aa.ii = 1 to 2` reached `tail_key` with
+    /// no entry and re-split its name on every pass.
+    #[test]
+    fn build_records_a_compounds_split_under_the_compounds_own_id() {
+        let source = b"drop dd.jj; do aa.ii = 1 to 2; say v.i.7; end";
+        let program = parse_program(source.to_vec()).expect("test program parses");
+        let plan = Plan::build(&program.main, &program.symbols);
+
+        let variable = |text: &str| TailPiece::Variable(text.as_bytes().into());
+        let constant = |text: &str| TailPiece::Constant(text.as_bytes().into());
+
+        let mut found: Vec<(&str, &CompoundName)> = Vec::new();
+        for instruction in &program.main.instructions {
+            match &instruction.kind {
+                InstructionKind::Drop { variables } => {
+                    let (VariableRef::Direct(id) | VariableRef::Indirect(id)) = variables[0];
+                    found.push((symbols_name(&program, id), expect_entry(&plan, id)));
+                }
+                InstructionKind::Do(loop_) | InstructionKind::Loop(loop_) => {
+                    let LoopKind::Controlled(controlled) = &loop_.kind else {
+                        panic!("expected a controlled loop, got {:?}", loop_.kind);
+                    };
+                    let id = controlled.control;
+                    found.push((symbols_name(&program, id), expect_entry(&plan, id)));
+                }
+                InstructionKind::Say {
+                    expression: Some(expr),
+                } => {
+                    let ExprKind::Compound(id) = expr.kind else {
+                        panic!("expected a compound expression, got {:?}", expr.kind);
+                    };
+                    found.push((symbols_name(&program, id), expect_entry(&plan, id)));
+                }
+                _ => {}
+            }
+        }
+
+        let expected: Vec<(&str, CompoundName)> = vec![
+            (
+                "DD.JJ",
+                CompoundName {
+                    stem: b"DD.".as_slice().into(),
+                    tails: vec![variable("JJ")].into(),
+                },
+            ),
+            (
+                "AA.II",
+                CompoundName {
+                    stem: b"AA.".as_slice().into(),
+                    tails: vec![variable("II")].into(),
+                },
+            ),
+            (
+                "V.I.7",
+                CompoundName {
+                    stem: b"V.".as_slice().into(),
+                    tails: vec![variable("I"), constant("7")].into(),
+                },
+            ),
+        ];
+        let expected: Vec<(&str, &CompoundName)> = expected
+            .iter()
+            .map(|(name, entry)| (*name, entry))
+            .collect();
+        assert_eq!(found, expected);
+    }
+
+    fn symbols_name(program: &Program, id: SymbolId) -> &str {
+        program.symbols.name(id)
+    }
+
+    fn expect_entry(plan: &Plan, id: SymbolId) -> &CompoundName {
+        plan.compound(id)
+            .expect("the pass recorded this compound's split under its own id")
+    }
+
     #[test]
     fn a_tail_piece_and_a_plain_variable_share_one_slot() {
         // b = 2 ; say a.b -> A.2 ; a.2 = 'hit' ; say a.b -> hit
@@ -889,12 +1110,8 @@ mod tests {
         let frame = interp.activation().frame;
         interp.roots.set_slot(frame, b_slot, two);
 
-        let code = Code {
-            body: &program.main,
-            symbols: &program.symbols,
-            slots: &HashMap::new(),
-            indents: None,
-        };
+        let plan = Plan::build(&program.main, &program.symbols);
+        let code = planned_code(&program, &plan);
         let key = interp.tail_key(&code, id);
         assert_eq!(key, b"2");
         // `A.` shares its "2" slot with the plain variable `B`'s value,
@@ -984,12 +1201,8 @@ mod tests {
         let frame = interp.activation().frame;
         interp.roots.set_slot(frame, i_slot, abc);
 
-        let code = Code {
-            body: &program.main,
-            symbols: &program.symbols,
-            slots: &HashMap::new(),
-            indents: None,
-        };
+        let plan = Plan::build(&program.main, &program.symbols);
+        let code = planned_code(&program, &plan);
         let key = interp.tail_key(&code, id);
         // The tail VALUE "abc" survives verbatim, lowercase and all -- not
         // upcased to "ABC", which is the distinct rule D15a states.

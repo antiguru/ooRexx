@@ -1,0 +1,207 @@
+# How a compound variable's name splits, across every shape the split can take.
+#
+# `Plan::compounds` records the split of a compound-shaped name once, at plan
+# build time, and `Interp::tail_key` reads it instead of splitting the interned
+# spelling at every reference. A name splits into a stem and pieces; a piece is
+# a constant when it is empty or starts with a digit and a variable otherwise;
+# a variable piece contributes its *current value*, verbatim and
+# case-sensitively; and the pieces join with periods. These rows are one shape
+# of that per row.
+#
+# The rows a precomputed split can get wrong in a way nothing else notices:
+#
+# * **A tail variable whose value changes between references.** The split is a
+#   constant of the source; the key is not. A table that cached the resolved
+#   key rather than the split would print the first value twice.
+# * **A `DO` control variable that is itself compound.** Its tail is resolved on
+#   every pass, from the enclosing body's plan, and `zi = 'k'` with `do zb.zi`
+#   separates the piece's lowercase *value* from the upcased spelling `zb.k`.
+# * **A compound inside an `INTERPRET`, and an `INTERPRET` inside a loop.** A
+#   fragment carries its own `SymbolTable`, so its ids mean nothing against the
+#   enclosing body's plan and it must split its own spelling. The loop is what
+#   catches a fragment reading an entry addressed by an id from the wrong
+#   table, since a fresh parse renumbers.
+#
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Regenerate a
+# row by running its program under the oracle, never with REWRITE=1 --
+# ir_dual.rs refuses to run at all under REWRITE for that reason. Capture is:
+#
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+#
+# Expected lines are tagged so that no line of the block can be empty: an empty
+# line ends an expected block, and a program's own output may hold one.
+
+# a constant tail, set and unset
+# `zc.9` was never written, so it derives its own fully resolved spelling.
+program
+zc.5 = 'five'
+say zc.5
+say zc.9
+----
+rc> 0
+out> five
+out> ZC.9
+
+# a variable tail, read back through the variable and through the literal it
+# resolved to -- one tail, reached two ways
+program
+zi = 7
+zv.zi = 'val'
+say zv.zi
+say zv.7
+----
+rc> 0
+out> val
+out> val
+
+# several tails, and a mixed constant/variable tail that is NOT the same tail
+# `za.zi.3.zj` resolves to ZA.1.3.2, a different key from ZA.1.2, so the
+# period-joined pieces are a key rather than a nesting.
+program
+zi = 1
+zj = 2
+za.zi.zj = 'deep'
+say za.zi.zj
+say za.1.2
+say za.zi.3.zj
+----
+rc> 0
+out> deep
+out> deep
+out> ZA.1.3.2
+
+# an unset tail variable, which contributes its own upcased spelling, and the
+# constant piece with that same spelling, which is the same tail
+# `zu.` is a bare stem read and announces the stem's own name.
+program
+zu.zk = 'set'
+say zu.zk
+say zu.ZK
+say zu.
+----
+rc> 0
+out> set
+out> set
+out> ZU.
+
+# a tail variable whose value changes between references
+program
+zi = 1
+zm.zi = 'one'
+zi = 2
+zm.zi = 'two'
+zi = 1
+say zm.zi
+zi = 2
+say zm.zi
+----
+rc> 0
+out> one
+out> two
+
+# a bare stem: its default, a tail taking that default, a tail overriding it,
+# and an untouched stem deriving its own name
+program
+zs. = 'def'
+say zs.
+say zs.1
+zs.1 = 'x'
+say zs.1
+say zt.
+----
+rc> 0
+out> def
+out> def
+out> x
+out> ZT.
+
+# DROP of a compound, with and without a stem default underneath it
+# A dropped tail is a tombstone: it derives its own name rather than falling
+# back to the stem's default, while an untouched tail takes the default.
+program
+zi = 3
+zd.zi = 'gone'
+say zd.zi
+drop zd.zi
+say zd.zi
+zd. = 'dflt'
+zd.4 = 'four'
+drop zd.4
+say zd.4
+say zd.5
+----
+rc> 0
+out> gone
+out> ZD.3
+out> ZD.4
+out> dflt
+
+# a compound built inside an INTERPRET, and an INTERPRET inside a loop
+program
+zi = 1
+interpret "zp.zi = 'in'"
+say zp.1
+do zi = 1 to 3
+  interpret "zq.zi = zi * 10"
+  say zq.zi
+end
+say zq.1 zq.2 zq.3
+----
+rc> 0
+out> in
+out> 10
+out> 20
+out> 30
+out> 10 20 30
+
+# a fragment's compound read against the ENCLOSING body's split table
+#
+# The row that makes the cross-table hazard loud rather than quiet. A
+# fragment's ids belong to its own `SymbolTable`, so indexing the enclosing
+# body's split table with one is either out of range -- which answers nothing
+# and falls back -- or in range, which answers a different symbol's split and
+# says nothing at all. This program arranges the in-range case: `za.1` is the
+# enclosing body's first interned symbol, and the fragment's own first is its
+# compound, so a fragment reading the enclosing table finds `ZA.`'s split under
+# its own compound's id and writes through the wrong stem. Measured, a build
+# that hands the fragment the enclosing plan prints `ZB.5 / in / ZC.1 / ZC.2 /
+# 2` here: every line wrong, and every line right in the rows above it.
+program
+za.1 = 'first'
+zi = 5
+interpret "zb.zi = 'in'"
+say zb.5
+say za.1
+do zj = 1 to 2
+  interpret "zc.zj = zj"
+  say zc.zj
+end
+say za.1
+----
+rc> 0
+out> in
+out> first
+out> 1
+out> 2
+out> first
+
+# a DO control variable that is itself a compound, its tail re-resolved on
+# every pass
+# `zi = 'k'` makes the control write the tail keyed by the lowercase value,
+# which `zb.k`'s upcased constant piece does not name.
+program
+do za.zi = 1 to 3
+  say za.zi
+end
+zi = 'k'
+do zb.zi = 1 to 2
+  say zb.zi zb.k
+end
+----
+rc> 0
+out> 1
+out> 2
+out> 3
+out> 1 ZB.K
+out> 2 ZB.K

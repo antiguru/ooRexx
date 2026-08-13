@@ -64,9 +64,10 @@
 //! no `PROCEDURE EXPOSE` at all and is reachable in a two-line pure-4a
 //! program.
 
+use crate::plan::{CompoundName, TailPiece};
 use crate::{Code, Interp, Novalue};
 use rexx_core::{BehaviourId, Body, Decoded, ObjRef};
-use rexx_parse::{SymbolId, Tail, compound_parts};
+use rexx_parse::SymbolId;
 use std::collections::HashMap;
 
 /// Names a `Body` variant without printing it.
@@ -94,30 +95,49 @@ fn body_variant_name(body: &Body) -> &'static str {
 impl Interp {
     /// Resolves a compound's tail pieces into the one key its tails map is
     /// keyed by (D15a): each piece verbatim and case-sensitively, joined by
-    /// `.`. `Tail::Constant` stands for itself; `Tail::Variable` is a plain
-    /// variable name whose *current value* supplies the piece, read through
-    /// the ordinary variable path (deriving its own name if unset, the same
-    /// as any read) and rendered with `to_text`.
+    /// `.`. `TailPiece::Constant` stands for itself; `TailPiece::Variable` is
+    /// a plain variable name whose *current value* supplies the piece, read
+    /// through the ordinary variable path (deriving its own name if unset,
+    /// the same as any read) and rendered with `to_text`.
     ///
-    /// `id` is the *whole* compound's `SymbolId` (`ExprKind::Compound`'s
-    /// own id, whose name is the full dotted spelling) -- there is no
-    /// separate id for a piece, `compound_parts` only ever hands back a
-    /// borrowed slice of that same interned name, which is why this takes
-    /// `code: &Code<'_>` rather than the brief's `&Plan`/`frame`: turning
-    /// `id` into text needs `code.symbols`, and a piece's value needs the
-    /// ordinary slot machinery `self` already carries, neither of which a
-    /// bare `Plan`/`SlotFrame` pair reaches on its own.
+    /// `id` is the *whole* compound's `SymbolId` (`ExprKind::Compound`'s own
+    /// id, whose name is the full dotted spelling) -- a piece has no id of
+    /// its own, and never was a token the scanner saw, which is why this
+    /// takes `code: &Code<'_>` rather than the brief's `&Plan`/`frame`: the
+    /// split is addressed by `id` against `code`'s own body, and a piece's
+    /// value needs the ordinary slot machinery `self` already carries,
+    /// neither of which a bare `Plan`/`SlotFrame` pair reaches on its own.
+    ///
+    /// **How the name splits is not recomputed here.** It is a constant of
+    /// the source text, and `Code::compound` hands back the answer the
+    /// upfront pass over this body already reached. A body with no plan --
+    /// an `INTERPRET` fragment -- splits its own spelling instead, through
+    /// the same `CompoundName::split`, so the two paths join a key from
+    /// pieces produced by one function rather than two.
     pub(crate) fn tail_key(&mut self, code: &Code<'_>, id: SymbolId) -> Vec<u8> {
-        let (_stem, tails) = compound_parts(code.symbols.name(id));
+        match code.compound(id) {
+            Some(entry) => self.join_tails(&entry.tails),
+            None => self.join_tails(&CompoundName::split(code.symbols.name(id)).tails),
+        }
+    }
+
+    /// Joins one compound's tail pieces into the key its stem's tails map is
+    /// keyed by, resolving each `Variable` piece against the current frame.
+    ///
+    /// Split out of `tail_key` so that the precomputed pieces and the ones a
+    /// fragment splits for itself go through the identical join: whichever
+    /// produced them, a piece is joined, rendered and resolved here and
+    /// nowhere else.
+    fn join_tails(&mut self, tails: &[TailPiece]) -> Vec<u8> {
         let mut key = Vec::new();
-        for (index, tail) in tails.iter().enumerate() {
+        for (index, piece) in tails.iter().enumerate() {
             if index > 0 {
                 key.push(b'.');
             }
-            match tail {
-                Tail::Constant(text) => key.extend_from_slice(text.as_bytes()),
-                Tail::Variable(name) => {
-                    let value = self.read_by_name(name.as_bytes());
+            match piece {
+                TailPiece::Constant(text) => key.extend_from_slice(text),
+                TailPiece::Variable(name) => {
+                    let value = self.read_by_name(name);
                     key.extend_from_slice(&self.to_text(value));
                 }
             }
@@ -543,6 +563,7 @@ impl Interp {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::plan::Plan;
     use crate::{Activation, BodyKey, ProgramId};
     use rexx_num::{Form, Number};
     use rexx_parse::{ExprKind, InstructionKind, Program, parse_program};
@@ -773,12 +794,8 @@ mod tests {
         let mut interp = Interp::new();
         let (program, id) = compound_id(&mut interp, b"say v.i");
 
-        let code = Code {
-            body: &program.main,
-            symbols: &program.symbols,
-            slots: &HashMap::new(),
-            indents: None,
-        };
+        let plan = Plan::build(&program.main, &program.symbols);
+        let code = crate::planned_code(&program, &plan);
         let key = interp.tail_key(&code, id);
         assert_eq!(key, b"I");
 
@@ -805,12 +822,8 @@ mod tests {
         let frame = interp.activation().frame;
         interp.roots.set_slot(frame, i_slot, abc);
 
-        let code = Code {
-            body: &program.main,
-            symbols: &program.symbols,
-            slots: &HashMap::new(),
-            indents: None,
-        };
+        let plan = Plan::build(&program.main, &program.symbols);
+        let code = crate::planned_code(&program, &plan);
         let key = interp.tail_key(&code, id);
         assert_eq!(key, b"abc");
 
@@ -840,12 +853,8 @@ mod tests {
         let j_slot = interp.slot_of(b"J");
         interp.roots.set_slot(frame, j_slot, two);
 
-        let code = Code {
-            body: &program.main,
-            symbols: &program.symbols,
-            slots: &HashMap::new(),
-            indents: None,
-        };
+        let plan = Plan::build(&program.main, &program.symbols);
+        let code = crate::planned_code(&program, &plan);
         let key = interp.tail_key(&code, id);
         assert_eq!(key, b"1.2");
 
@@ -858,12 +867,8 @@ mod tests {
         // Parsed only, not activated: activating a second program would push
         // a second frame, shadowing the one `i`/`j` were just bound in.
         let (program2, id2) = parse_compound(b"say a.1.2");
-        let code2 = Code {
-            body: &program2.main,
-            symbols: &program2.symbols,
-            slots: &HashMap::new(),
-            indents: None,
-        };
+        let plan2 = Plan::build(&program2.main, &program2.symbols);
+        let code2 = crate::planned_code(&program2, &plan2);
         let key2 = interp.tail_key(&code2, id2);
         assert_eq!(key2, key);
 

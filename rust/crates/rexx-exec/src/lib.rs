@@ -39,7 +39,7 @@
 use rexx_core::{Heap, ObjRef, RootSet, SlotRef};
 use rexx_parse::{
     AnnotationTarget, CodeBody, Directive, DirectiveKind, ExprKind, InstructionKind, Operator,
-    Program, SymbolId, SymbolTable, parse_program,
+    Program, SymbolId, SymbolTable, compound_parts, parse_program,
 };
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -73,7 +73,7 @@ use input::Input;
 // plan cache, and the full name-resolution order (plan, then `extra`, then
 // growth).
 mod plan;
-use plan::{BodyKey, Plan, ProgramId};
+use plan::{BodyKey, CompoundName, Plan, ProgramId};
 
 // One activation: everything about the frame currently executing (D16).
 mod activation;
@@ -1268,14 +1268,71 @@ struct Code<'a> {
     /// why this is a field of `Code` rather than something read back off the
     /// activation.
     slots: &'a HashMap<SymbolId, usize>,
-    /// `Plan::indents` for **this** body, when there is one.
+    /// The upfront pass's answers about **this** body: its clause indents
+    /// (`Plan::indents`) and how each of its compound names splits
+    /// (`Plan::compounds`).
     ///
     /// A field here for the same reason `slots` is one: an `INTERPRET`
     /// fragment runs its own instruction list while the activation's plan
-    /// still describes the enclosing body, so the table cannot be read back
-    /// off the activation without being the wrong body's. `None` is that
-    /// case, and `printed_indent` falls back to computing the answer.
-    indents: Option<&'a Plan>,
+    /// still describes the enclosing body, so neither table can be read back
+    /// off the activation without being the wrong body's.
+    ///
+    /// **`None` means there is no upfront pass to consult**, and each reader
+    /// falls back to computing its own answer -- what `printed_indent` and
+    /// `Code::compound` both did before either table existed. An `INTERPRET`
+    /// fragment is that case, and it is `None` rather than the fragment's own
+    /// local plan on purpose: `Interp::fragment_plan` does build one, but its
+    /// slot numbers are local to the fragment and only its returned
+    /// translation means anything in the enclosing frame, so handing the local
+    /// plan over here would put a table whose slots are local beside a `slots`
+    /// map whose slots are not.
+    ///
+    /// **`symbols` and this field come from the same body**, which is what
+    /// makes indexing `Plan::compounds` by an id out of `symbols` mean
+    /// anything at all -- `SymbolId::index`'s own doc comment has what
+    /// happens when an id and a table are mismatched, and the quiet case is
+    /// the one to design against.
+    plan: Option<&'a Plan>,
+}
+
+impl<'a> Code<'a> {
+    /// How the compound `id` names splits, from the upfront pass when this
+    /// body had one, and by splitting the interned spelling when it did not.
+    ///
+    /// The returned borrow is `'a` and not the borrow of `self`, so a caller
+    /// can hold the pieces across the `&mut Interp` calls that read a
+    /// variable piece's value.
+    fn compound(&self, id: SymbolId) -> Option<&'a CompoundName> {
+        self.plan?.compound(id)
+    }
+
+    /// The stem half of the compound `id` names, its trailing period
+    /// included -- the name whose slot holds the stem object a tail is read
+    /// out of or written into.
+    fn stem_name(&self, id: SymbolId) -> &'a [u8] {
+        match self.compound(id) {
+            Some(entry) => &entry.stem,
+            None => compound_parts(self.symbols.name(id)).0.as_bytes(),
+        }
+    }
+}
+
+/// A program's main body as a `Code`, carrying the plan the upfront pass
+/// builds for it -- which is what `run.rs` hands every step.
+///
+/// Here rather than in each test module because a hand-written `Code` with
+/// `plan: None` takes `Code::compound`'s and `printed_indent`'s fallbacks
+/// instead of the tables, and so exercises the path only an `INTERPRET`
+/// fragment reaches. A test about what a compound resolves to wants the
+/// production path unless it says otherwise.
+#[cfg(test)]
+fn planned_code<'a>(program: &'a Program, plan: &'a Plan) -> Code<'a> {
+    Code {
+        body: &program.main,
+        symbols: &program.symbols,
+        slots: &plan.by_symbol,
+        plan: Some(plan),
+    }
 }
 
 /// Whether a variable read found a value or derived one from the name.

@@ -76,7 +76,7 @@ use crate::value::{exact_small_int, within_digits};
 use crate::{Code, Failure, Interp, Loud, StackSpan};
 use rexx_core::{Decoded, NotNumeric, ObjRef};
 use rexx_num::{CompareOp, DivOp, Number, compare_decoded};
-use rexx_parse::{CallTarget, Expr, ExprKind, Operator, PrefixOp, SymbolId, compound_parts};
+use rexx_parse::{CallTarget, Expr, ExprKind, Operator, PrefixOp, SymbolId};
 
 /// D19's evaluation-depth limit: `eval`'s own recursion, one level per
 /// left-deep term, refuses anything past this depth with 11.1 ("Insufficient
@@ -396,17 +396,17 @@ impl Interp {
             }
             SymbolRead::Stem => Ok(self.read_stem_at(code.symbols.name(id).as_bytes(), at)),
             // `id` names the *whole* compound (its interned spelling is the
-            // full dotted text); `compound_parts` decomposes it into the
-            // stem's own name and the tail pieces `tail_key` (`stem.rs`)
-            // resolves into the one key `stem_get` looks up.
+            // full dotted text); the split decomposes it into the stem's own
+            // name and the tail pieces `tail_key` (`stem.rs`) resolves into
+            // the one key `stem_get` looks up.
             SymbolRead::Compound => {
                 debug_assert!(
                     at.is_none(),
                     "a compound read was handed a slot, and the slot it reads is the stem's"
                 );
-                let (stem_name, _tails) = compound_parts(code.symbols.name(id));
+                let stem_name = code.stem_name(id);
                 let key = self.tail_key(code, id);
-                let (value, novalue) = self.stem_get(stem_name.as_bytes(), &key);
+                let (value, novalue) = self.stem_get(stem_name, &key);
                 self.novalue_check(novalue)?;
                 Ok(value)
             }
@@ -432,7 +432,7 @@ impl Interp {
     /// directly): a compound read always announces the fully-resolved name it
     /// used before showing what is stored there, whether or not the tail
     /// actually resolves. The tag is the compound's own *unresolved* source
-    /// spelling (e.g. `A.I`); the resolved name is `compound_parts`' stem name
+    /// spelling (e.g. `A.I`); the resolved name is `Code::stem_name`'s answer
     /// -- the read site's own -- concatenated with `tail_key`'s output, which
     /// matches `stem_get`'s own answer exactly when the read site and the stem
     /// object's own name agree, and diverges from it only through aliasing: a
@@ -454,8 +454,7 @@ impl Interp {
         let indent = self.clause_state.current_value_indent;
         let tag = code.symbols.name(id).as_bytes().to_vec();
         if read == SymbolRead::Compound {
-            let (stem_name, _tails) = compound_parts(code.symbols.name(id));
-            let mut resolved = stem_name.as_bytes().to_vec();
+            let mut resolved = code.stem_name(id).to_vec();
             resolved.extend_from_slice(&self.tail_key(code, id));
             self.trace_compound_name(indent, &tag, &resolved);
         }
@@ -1461,7 +1460,7 @@ mod tests {
             body: &program.main,
             symbols: &program.symbols,
             slots: &HashMap::new(),
-            indents: None,
+            plan: None,
         };
         interp.eval(&code, expr)
     }
@@ -1496,7 +1495,7 @@ mod tests {
             body: &program.main,
             symbols: &program.symbols,
             slots: &HashMap::new(),
-            indents: None,
+            plan: None,
         };
         interp.eval(&code, expr)
     }
@@ -1779,7 +1778,7 @@ mod tests {
             body: &program.main,
             symbols: &program.symbols,
             slots: &HashMap::new(),
-            indents: None,
+            plan: None,
         };
         let value = interp.eval(&code, expr).unwrap();
         assert_eq!(&*interp.to_text(value), b"5");
@@ -1987,7 +1986,7 @@ mod tests {
             body: &program.main,
             symbols: &program.symbols,
             slots: &HashMap::new(),
-            indents: None,
+            plan: None,
         };
         let value = interp.eval(&code, expr).unwrap();
         assert_eq!(&*interp.to_text(value), b"ab");
@@ -2190,7 +2189,7 @@ mod tests {
             body: &program.main,
             symbols: &program.symbols,
             slots: &HashMap::new(),
-            indents: None,
+            plan: None,
         };
         let condition = match &program.main.instructions[0].kind {
             InstructionKind::If { condition, .. } => condition,
