@@ -367,8 +367,14 @@ struct Seen {
 /// `where_` names the program and the body, and it is on every message: a
 /// failure that did not say which of the corpus programs produced it would
 /// leave the reader running the sweep by hand.
-fn check_body(body: &CodeBody, symbols: &rexx_parse::SymbolTable, where_: &str, seen: &mut Seen) {
-    let plan = Plan::build(body, symbols);
+fn check_body(
+    body: &CodeBody,
+    symbols: &rexx_parse::SymbolTable,
+    source: &rexx_parse::ProgramSource,
+    where_: &str,
+    seen: &mut Seen,
+) {
+    let plan = Plan::build(body, symbols, Some(source));
     let chunk = match super::compile(body, &plan, ChunkTrace::of(TraceMode::NORMAL)) {
         Ok(chunk) => chunk,
         // The one error `compile` has is a machine width, and no corpus
@@ -650,7 +656,13 @@ fn sweep_every_corpus_body() {
         let program = parse_program(text)
             .unwrap_or_else(|e| panic!("{name}: a corpus program does not parse: {e:?}"));
         for (body, what) in bodies(&program) {
-            check_body(body, &program.symbols, &format!("{name} {what}"), &mut seen);
+            check_body(
+                body,
+                &program.symbols,
+                &program.source,
+                &format!("{name} {what}"),
+                &mut seen,
+            );
             bodies_checked += 1;
         }
     }

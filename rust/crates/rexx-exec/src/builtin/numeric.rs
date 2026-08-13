@@ -723,6 +723,7 @@ mod tests {
             },
             &program.main,
             &program.symbols,
+            &program.source,
         );
         let frame = interp.roots.push_slots(plan.len());
         let activation = interp.next_activation_id();

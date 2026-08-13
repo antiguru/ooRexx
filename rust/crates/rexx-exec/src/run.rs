@@ -4349,6 +4349,7 @@ impl Interp {
                     },
                     body,
                     &routine_program.symbols,
+                    &routine_program.source,
                 );
                 let frame = self.roots.push_slots(plan.len());
                 self.activations.push(Activation::routine(
@@ -4933,7 +4934,7 @@ impl Interp {
         // `ClauseEntry` this hands back is what `leave_stepped_clause` spends
         // on the matching half.
         let line = self
-            .clause_line(source, instruction)
+            .clause_line_at(code, index, instruction, source)
             .unwrap_or_else(|| self.clause_state.line());
         let entry = self.enter_clause(line);
         // **`Echo::Gated` asks whether the setting in force echoes this
@@ -6106,7 +6107,7 @@ impl Interp {
         // and the three measured transcripts.
         let mut header_clause = HeaderClause::Do;
         let end_line = self
-            .clause_line(source, &code.body.instructions[end_index])
+            .clause_line_at(code, end_index, &code.body.instructions[end_index], source)
             .unwrap_or(0);
         // Hoisted out of the loop body (review round 1, F2): the header's own
         // failure path needs it one statement *before* the body that used to
@@ -6136,7 +6137,7 @@ impl Interp {
             // fall-through, the `ITERATE` itself on an `ITERATE`. See
             // `HeaderClause`.
             let do_line = self
-                .clause_line(source, do_instruction)
+                .clause_line_at(code, do_index, do_instruction, source)
                 .unwrap_or_else(|| self.clause_state.line());
             let header_line = match &header_clause {
                 HeaderClause::Do => do_line,
@@ -8083,6 +8084,48 @@ impl Interp {
         )
     }
 
+    /// [`Interp::clause_line`] for a caller that knows the instruction's
+    /// **index**, which is what lets the answer come from `Plan::lines`
+    /// rather than from a search.
+    ///
+    /// The same rule as `clause_line` and the same `clause_line_override`
+    /// honoured the same way, so a fragment's clauses keep reporting the
+    /// enclosing `INTERPRET` clause's line; `Plan::line_at` is only reached
+    /// once the override has declined, and a body with no plan takes the
+    /// search exactly as it did before the table existed -- the shape
+    /// `printed_indent` already has for `Plan::indents`.
+    ///
+    /// **`index` and `instruction` must name the same clause**, since the
+    /// first indexes the table and the second supplies the span the fallback
+    /// and the tripwire search on. Every caller derives one from the other,
+    /// and the `debug_assert!` says so rather than trusting it: the two
+    /// coming apart is a wrong line number, which is silent in every program
+    /// that neither raises nor traces.
+    pub(crate) fn clause_line_at(
+        &self,
+        code: &Code<'_>,
+        index: usize,
+        instruction: &Instruction,
+        source: Option<&ProgramSource>,
+    ) -> Option<usize> {
+        let source = source?;
+        if let Some(line) = self.clause_line_override {
+            return Some(line);
+        }
+        debug_assert!(
+            code.body
+                .instructions
+                .get(index)
+                .is_some_and(|at| std::ptr::eq(at, instruction)),
+            "clause_line_at was given index {index} and an instruction that is not the one at \
+             that index, so the table would be read for a different clause"
+        );
+        Some(match code.plan {
+            Some(plan) => plan.line_at(instruction, source, index),
+            None => source.line_of(instruction.clause_span.start),
+        })
+    }
+
     // `fragment_plan` and `slot_of` live in `plan.rs` (Task 6), beside `Plan`
     // itself; `stem_assign`/`stem_set`/`stem_drop`/`stem_drop_tail`/
     // `tail_key` live in `stem.rs` (Task 5), beside the rest of the D15a
@@ -9246,6 +9289,7 @@ mod tests {
             },
             &program.main,
             &program.symbols,
+            &program.source,
         );
         let frame = interp.roots.push_slots(plan.len());
         let id = interp.next_activation_id();

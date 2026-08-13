@@ -750,6 +750,7 @@ mod tests {
             },
             &program.main,
             &program.symbols,
+            &program.source,
         );
         let frame = interp.roots.push_slots(plan.len());
         let id = interp.next_activation_id();
@@ -957,7 +958,7 @@ mod tests {
         let mut interp = Interp::new();
         let (program, id) = compound_id(&mut interp, b"say v.i");
 
-        let plan = Plan::build(&program.main, &program.symbols);
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = crate::planned_code(&program, &plan);
         let key = interp.tail_key(&code, id);
         assert_eq!(key, b"I");
@@ -985,7 +986,7 @@ mod tests {
         let frame = interp.activation().frame;
         interp.roots.set_slot(frame, i_slot, abc);
 
-        let plan = Plan::build(&program.main, &program.symbols);
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = crate::planned_code(&program, &plan);
         let key = interp.tail_key(&code, id);
         assert_eq!(key, b"abc");
@@ -1016,7 +1017,7 @@ mod tests {
         let j_slot = interp.slot_of(b"J");
         interp.roots.set_slot(frame, j_slot, two);
 
-        let plan = Plan::build(&program.main, &program.symbols);
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = crate::planned_code(&program, &plan);
         let key = interp.tail_key(&code, id);
         assert_eq!(key, b"1.2");
@@ -1030,7 +1031,7 @@ mod tests {
         // Parsed only, not activated: activating a second program would push
         // a second frame, shadowing the one `i`/`j` were just bound in.
         let (program2, id2) = parse_compound(b"say a.1.2");
-        let plan2 = Plan::build(&program2.main, &program2.symbols);
+        let plan2 = Plan::build(&program2.main, &program2.symbols, Some(&program2.source));
         let code2 = crate::planned_code(&program2, &plan2);
         let key2 = interp.tail_key(&code2, id2);
         assert_eq!(key2, key);

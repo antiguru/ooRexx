@@ -2222,6 +2222,7 @@ impl Interp {
             },
             &program.main,
             &program.symbols,
+            &program.source,
         );
 
         let frame = self.roots.push_slots(plan.len());

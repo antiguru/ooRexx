@@ -32,8 +32,8 @@ use crate::run::{NameShape, shape_of};
 use crate::trace::ChunkTrace;
 use rexx_parse::{
     Call, CodeBody, Expr, ExprKind, Fragment, Instruction, InstructionKind, Loop, LoopKind, Parse,
-    ParseSource, Redirection, Signal, SymbolId, SymbolTable, Tail, Trace, Use, VariableRef,
-    compound_parts,
+    ParseSource, ProgramSource, Redirection, Signal, SymbolId, SymbolTable, Tail, Trace, Use,
+    VariableRef, compound_parts,
 };
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -242,6 +242,42 @@ pub(crate) struct Plan {
     /// index instead costs the body's length per index, and made a
     /// 20,000-clause body placed after an `EXIT` go from 22 ms to 211 ms.
     pub(crate) indents: Box<[usize]>,
+    /// The 1-based source line every instruction in this body sits on, by
+    /// index -- empty for a body built without a source, which is the
+    /// fragment case `build`'s own parameter documents.
+    ///
+    /// `indents` above, for the other constant of the source text the same
+    /// upfront pass can know. `ProgramSource::line_of` is a `partition_point`
+    /// over the line starts and `enter_stepped_clause` asks for the answer on
+    /// **every** stepped clause, unconditionally, because `SIGL` has to stay
+    /// correct whether or not `TRACE` is on -- so the search ran once per
+    /// executed clause on both engines. Counted on this crate's own axes at
+    /// `9b2d416d3`, identically under `REXX_ENGINE=ir` and under the
+    /// tree-walker: 50,000,005 searches on `bench-programs/emptyloop.rex`,
+    /// 57,000,006 on `varlookup.rex`, and 10,161,437 on
+    /// `samples/rexxcps.rex`.
+    ///
+    /// **What the search cost tracks the body's line count**, measured on the
+    /// same axes by dividing each axis's instruction saving by its own count
+    /// above: 40.0 instructions per removed search on a 7-line program, 42.0
+    /// on an 8-line one, about 53 on the three 12-to-14-line ones, 75.3 on a
+    /// 51-line one and 94.7 on `rexxcps`' 198 lines. The planning spike
+    /// concluded the opposite from probe arms that returned deliberately
+    /// wrong line numbers, whose long-program arm the plan itself disowns as
+    /// contaminated; the depth is real and it is most of the spread.
+    ///
+    /// It changes nothing about the fix. A table is not chosen over a faster
+    /// search because the search is shallow -- it is chosen because a search
+    /// that is not made costs neither its call nor its depth, which is the
+    /// upper bound any faster search would be measured against.
+    ///
+    /// **Valid only for the source it was built from**, which is what the
+    /// `debug_assert_eq!` in [`Plan::line_at`] exists to hold: a plan is
+    /// cached by `BodyKey`, and a table of line numbers reached with another
+    /// program's source does not miss, it answers wrongly and silently --
+    /// `SIGL`, every condition's reported line and every `*-*` trace line at
+    /// once, in programs that raise nothing and trace nothing.
+    pub(crate) lines: Box<[usize]>,
     /// How a compound-shaped symbol this body names splits, by
     /// `SymbolId::index`, `None` where this pass recorded nothing for it.
     ///
@@ -296,6 +332,42 @@ impl Plan {
         }
     }
 
+    /// The 1-based source line `target`'s own clause starts on.
+    ///
+    /// `instruction` is `target`'s own instruction, which every caller
+    /// already holds; it supplies the fallback's span for a position this
+    /// plan has no entry for -- a body of the length the table was built from
+    /// cannot produce one, and a plan built with no source has no entries at
+    /// all.
+    ///
+    /// **The `debug_assert_eq!` is the whole safety argument for this field**
+    /// and is not decoration. A cached line that is merely absent falls back
+    /// and is right; a cached line that is *wrong* misreports `SIGL`, every
+    /// condition's line and every `*-*` trace line, in programs that observe
+    /// none of the three and so cannot fail a differential. Asserting the
+    /// cache against a recomputation at the accessor is what turns that into
+    /// a debug-build failure at the first clause.
+    pub(crate) fn line_at(
+        &self,
+        instruction: &Instruction,
+        source: &ProgramSource,
+        target: usize,
+    ) -> usize {
+        match self.lines.get(target) {
+            Some(line) => {
+                debug_assert_eq!(
+                    *line,
+                    source.line_of(instruction.clause_span.start),
+                    "the plan's line table answers {line} for instruction {target}, and the \
+                     source it is being read against puts that clause on another line -- so \
+                     this plan was built from a different source"
+                );
+                *line
+            }
+            None => source.line_of(instruction.clause_span.start),
+        }
+    }
+
     /// How the compound `id` names splits, if this plan's pass saw it.
     ///
     /// **`id` must belong to the `SymbolTable` this plan was built against**,
@@ -328,7 +400,19 @@ impl Plan {
     /// read (an unread slot is simply unread), and it means neither this
     /// function nor a later task has to remember to revisit `plan.rs` the
     /// day one of them stops failing loudly.
-    pub(crate) fn build(body: &CodeBody, symbols: &SymbolTable) -> Plan {
+    ///
+    /// **`source` is `None` for a body with no source of its own to index**,
+    /// and the only such caller is `fragment_plan`: an `INTERPRET` fragment's
+    /// clauses all report the enclosing `INTERPRET` clause's line through
+    /// `Interp::clause_line_override`, `Code::plan` is `None` for a fragment
+    /// so nothing would read the table, and a fragment's plan is discarded
+    /// with the fragment. Filling it there would be a table built once per
+    /// execution of the `INTERPRET` and read never.
+    pub(crate) fn build(
+        body: &CodeBody,
+        symbols: &SymbolTable,
+        source: Option<&ProgramSource>,
+    ) -> Plan {
         // `compounds` is sized here rather than filled as names arrive,
         // because `bind`/`note_compound_name` write into it by id and an id
         // is only an index into a table of that table's own length.
@@ -342,6 +426,13 @@ impl Plan {
             plan.note_instruction(&instruction.kind, symbols);
         }
         plan.indents = crate::run::all_indents(&body.instructions);
+        if let Some(source) = source {
+            plan.lines = body
+                .instructions
+                .iter()
+                .map(|instruction| source.line_of(instruction.clause_span.start))
+                .collect();
+        }
         plan
     }
 
@@ -798,16 +889,27 @@ impl Interp {
     /// "cached on `Interp`, not on the body", because an `Rc<Program>` gives
     /// shared immutable access and nothing can be written into a `CodeBody`
     /// reached through one).
+    ///
+    /// **`source` must be the source of the program `key` names**, and
+    /// nothing here can check it -- the plan is cached under `key` and handed
+    /// back to whatever asks for that key next, so a table of line numbers
+    /// built from another program's text would be answered with no complaint.
+    /// The two production callers both take the body, the symbols and the
+    /// source out of one `Rc<Program>` reached through the same id `key`
+    /// carries (`InstalledRoutine`'s own doc comment has that argument for
+    /// the routine caller), and `Plan::line_at`'s `debug_assert_eq!` is what
+    /// holds it at the read rather than at the build.
     pub(crate) fn plan_for(
         &mut self,
         key: BodyKey,
         body: &CodeBody,
         symbols: &SymbolTable,
+        source: &ProgramSource,
     ) -> Rc<Plan> {
         if let Some(plan) = self.plans.get(&key) {
             return Rc::clone(plan);
         }
-        let plan = Rc::new(Plan::build(body, symbols));
+        let plan = Rc::new(Plan::build(body, symbols, Some(source)));
         self.plans.insert(key, Rc::clone(&plan));
         plan
     }
@@ -901,7 +1003,7 @@ impl Interp {
         // numbers its names 0..n in walk order. Those numbers are local to the
         // fragment and mean nothing to the enclosing frame; the loop below is
         // what translates them.
-        let local = Plan::build(&fragment.body, &fragment.symbols);
+        let local = Plan::build(&fragment.body, &fragment.symbols, None);
 
         // Walk order, recovered from the local numbering rather than from
         // iterating the map, because a `HashMap`'s order varies run to run and
@@ -940,7 +1042,7 @@ mod tests {
     fn indent_of_answers_what_static_indent_answers_at_every_index() {
         let source = b"if 1 = 1 then\n  do i = 1 to 2\n    say i\n  end\nelse\n  nop\nselect\n  when 1 = 0 then nop\n  otherwise\n    say 'o'\nend\n";
         let program = parse_program(source.to_vec()).expect("test program parses");
-        let plan = Plan::build(&program.main, &program.symbols);
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let instructions = &program.main.instructions;
         assert!(instructions.len() > 8, "the program lost its shape");
 
@@ -971,6 +1073,172 @@ mod tests {
         );
     }
 
+    /// `line_at` answers what `ProgramSource::line_of` answers, for every
+    /// index.
+    ///
+    /// `line_at`'s own `debug_assert_eq!` compares the two on every read, so
+    /// most of what this test could assert is asserted by the accessor
+    /// already -- what it adds is the table itself. An accessor that quietly
+    /// recomputed, or a `build` that filled nothing, would satisfy every
+    /// caller and leave the field empty, and only reading `plan.lines`
+    /// directly says which of the two happened.
+    ///
+    /// Every clause below is on a line of its own, so a table shifted by one
+    /// entry answers a different number at every index rather than at some.
+    #[test]
+    fn line_at_answers_what_line_of_answers_at_every_index() {
+        let source = b"nop\nsay 1\nif 1 = 1 then\n  nop\nelse\n  nop\ndo i = 1 to 2\n  say i\nend\nsay 'done'\n";
+        let program = parse_program(source.to_vec()).expect("test program parses");
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let instructions = &program.main.instructions;
+        assert!(instructions.len() > 8, "the program lost its shape");
+
+        let expected: Vec<usize> = instructions
+            .iter()
+            .map(|instruction| program.source.line_of(instruction.clause_span.start))
+            .collect();
+        let answered: Vec<usize> = instructions
+            .iter()
+            .enumerate()
+            .map(|(index, instruction)| plan.line_at(instruction, &program.source, index))
+            .collect();
+        assert_eq!(answered, expected);
+        assert_eq!(
+            plan.lines.as_ref(),
+            expected.as_slice(),
+            "what the table actually holds"
+        );
+        // Not one line repeated, or a table that answered its first entry
+        // everywhere would pass the two assertions above.
+        assert!(
+            expected
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+                > 5,
+            "this program does not distinguish enough lines to test with: {expected:?}"
+        );
+    }
+
+    /// A plan built with no source carries no table, and `line_at` still
+    /// answers -- which is the fragment's case and the whole of why the
+    /// accessor has a fallback arm.
+    #[test]
+    fn line_at_falls_back_when_the_plan_was_built_without_a_source() {
+        let source = b"nop\nsay 1\nsay 2\n";
+        let program = parse_program(source.to_vec()).expect("test program parses");
+        let plan = Plan::build(&program.main, &program.symbols, None);
+        assert!(plan.lines.is_empty(), "no source, so no table");
+        for (index, instruction) in program.main.instructions.iter().enumerate() {
+            assert_eq!(
+                plan.line_at(instruction, &program.source, index),
+                program.source.line_of(instruction.clause_span.start),
+                "index {index}"
+            );
+        }
+    }
+
+    /// `clause_line_at` answers what `clause_line` answers, at every index,
+    /// with the override unset and with it set.
+    ///
+    /// This is the wiring the two accessors meet through, and the only place
+    /// the override's precedence over the table is stated as an assertion.
+    /// A table consulted *before* the override would give a fragment's
+    /// clauses the fragment's own line numbers instead of the enclosing
+    /// `INTERPRET` clause's -- which is a wrong `SIGL` and a wrong reported
+    /// line, in a construct the corpus exercises and no arithmetic notices.
+    #[test]
+    fn clause_line_at_answers_what_clause_line_answers_and_the_override_still_wins() {
+        let source = b"nop\nsay 1\nif 1 = 1 then\n  nop\nelse\n  nop\ndo i = 1 to 2\n  say i\nend\nsay 'done'\n";
+        let program = parse_program(source.to_vec()).expect("test program parses");
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+        let code = planned_code(&program, &plan);
+        let mut interp = Interp::new();
+
+        for (index, instruction) in program.main.instructions.iter().enumerate() {
+            assert_eq!(
+                interp.clause_line_at(&code, index, instruction, Some(&program.source)),
+                interp.clause_line(Some(&program.source), instruction),
+                "index {index}"
+            );
+        }
+
+        interp.clause_line_override = Some(4242);
+        for (index, instruction) in program.main.instructions.iter().enumerate() {
+            assert_eq!(
+                interp.clause_line_at(&code, index, instruction, Some(&program.source)),
+                Some(4242),
+                "the override outranks the table at index {index}"
+            );
+        }
+
+        // `source: None` answers `None` whatever the override says, exactly
+        // as `clause_line` does -- the two must not come apart on that arm
+        // either.
+        interp.clause_line_override = None;
+        for (index, instruction) in program.main.instructions.iter().enumerate() {
+            assert_eq!(
+                interp.clause_line_at(&code, index, instruction, None),
+                None,
+                "index {index}"
+            );
+        }
+    }
+
+    /// The table matches `ProgramSource::line_of` for every instruction of
+    /// every corpus program that parses.
+    ///
+    /// The counterpart of
+    /// `all_indents_fills_what_static_indent_computes_for_every_corpus_program`
+    /// for the other constant of the source text, and it exists for the same
+    /// reason: `build`'s fill and the accessor's fallback are two spellings
+    /// of one rule, and a transcription can be wrong where the original is
+    /// right. The corpus rather than examples written here, because it grows
+    /// when a construct lands.
+    #[test]
+    fn build_fills_what_line_of_computes_for_every_corpus_program() {
+        let corpus = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+        let mut compared = 0usize;
+        let mut positions = 0usize;
+        let mut directories = vec![corpus];
+        while let Some(directory) = directories.pop() {
+            for entry in std::fs::read_dir(&directory).expect("a readable corpus directory") {
+                let path = entry.expect("a readable directory entry").path();
+                if path.is_dir() {
+                    directories.push(path);
+                    continue;
+                }
+                if path.extension().and_then(|e| e.to_str()) != Some("rex") {
+                    continue;
+                }
+                let bytes = std::fs::read(&path).expect("a readable corpus program");
+                let Ok(program) = parse_program(bytes) else {
+                    continue;
+                };
+                let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
+                let expected: Vec<usize> = program
+                    .main
+                    .instructions
+                    .iter()
+                    .map(|instruction| program.source.line_of(instruction.clause_span.start))
+                    .collect();
+                assert_eq!(
+                    plan.lines.as_ref(),
+                    expected.as_slice(),
+                    "{} disagrees",
+                    path.display()
+                );
+                compared += 1;
+                positions += program.main.instructions.len();
+            }
+        }
+        assert!(
+            compared > 40 && positions > 500,
+            "only {compared} programs and {positions} positions were compared, \
+             which is too little of the corpus to have tested anything"
+        );
+    }
+
     /// Pushes a fresh top-level activation for `program`, the same setup
     /// `Interp::run` does, so these tests can drive `slot_of`/`Plan` through
     /// a live activation without running the whole instruction loop.
@@ -985,6 +1253,7 @@ mod tests {
             },
             &program.main,
             &program.symbols,
+            &program.source,
         );
         let frame = interp.roots.push_slots(plan.len());
         let id = interp.next_activation_id();
@@ -1039,7 +1308,7 @@ mod tests {
         ];
         for (source, expected_names) in cases {
             let program = parse_program(source.to_vec()).expect("test program parses");
-            let plan = Plan::build(&program.main, &program.symbols);
+            let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
             assert!(
                 !plan.names.is_empty(),
                 "{:?} must build a non-empty plan",
@@ -1076,7 +1345,7 @@ mod tests {
         let cases: &[(&[u8], &[&str])] = &[(b"leave lbl", &[]), (b"say .nil", &[])];
         for (source, expected_names) in cases {
             let program = parse_program(source.to_vec()).expect("test program parses");
-            let plan = Plan::build(&program.main, &program.symbols);
+            let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
 
             let mut actual: Vec<&[u8]> = plan.names.keys().map(|k| &**k).collect();
             actual.sort();
@@ -1139,7 +1408,7 @@ mod tests {
     fn build_records_a_compounds_split_under_the_compounds_own_id() {
         let source = b"drop dd.jj; do aa.ii = 1 to 2; say v.i.7; end";
         let program = parse_program(source.to_vec()).expect("test program parses");
-        let plan = Plan::build(&program.main, &program.symbols);
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
 
         let variable = |text: &str, at: Option<usize>| TailPiece::Variable {
             name: text.as_bytes().into(),
@@ -1240,7 +1509,7 @@ mod tests {
     fn a_control_variable_does_not_take_the_slots_off_a_compound_already_seen() {
         let source = b"say v.i; do v.i = 1 to 2; end";
         let program = parse_program(source.to_vec()).expect("test program parses");
-        let plan = Plan::build(&program.main, &program.symbols);
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
 
         let InstructionKind::Say {
             expression: Some(expr),
@@ -1296,7 +1565,7 @@ mod tests {
     fn a_compound_seen_after_the_control_variable_still_gets_its_slots() {
         let source = b"do v.i = 1 to 2; end; say v.i";
         let program = parse_program(source.to_vec()).expect("test program parses");
-        let plan = Plan::build(&program.main, &program.symbols);
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
 
         let (InstructionKind::Do(loop_) | InstructionKind::Loop(loop_)) =
             &program.main.instructions[0].kind
@@ -1370,7 +1639,7 @@ mod tests {
         };
         let id = controlled.control;
 
-        let plan = Plan::build(&program.main, &program.symbols);
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         assert_eq!(
             plan.slot_of(b"ZI"),
             None,
@@ -1385,7 +1654,7 @@ mod tests {
         );
 
         let program = activate(&mut interp, program);
-        let plan = Plan::build(&program.main, &program.symbols);
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = planned_code(&program, &plan);
         // Unset, so the piece derives its own spelling -- the ordinary
         // uninitialised read, reached here through `extra` and growth.
@@ -1434,7 +1703,7 @@ mod tests {
         };
         let id = controlled.control;
 
-        let plan = Plan::build(&program.main, &program.symbols);
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         assert_eq!(
             plan.slot_of(b"ZA."),
             None,
@@ -1443,7 +1712,7 @@ mod tests {
         assert_eq!(expect_entry(&plan, id).stem_at, None);
 
         let program = activate(&mut interp, program);
-        let plan = Plan::build(&program.main, &program.symbols);
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = planned_code(&program, &plan);
         let (stem_name, stem_at) = code.stem(id);
         assert_eq!(stem_name, b"ZA.");
@@ -1493,7 +1762,7 @@ mod tests {
     fn bind_keeps_a_stem_shaped_names_own_slot_as_its_stems() {
         let source = b"zt. = 'v'\ndo zs. = 1 to 2\nnop\nend\ndo aa.ii = 1 to 2\nnop\nend";
         let program = parse_program(source.to_vec()).expect("test program parses");
-        let plan = Plan::build(&program.main, &program.symbols);
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
 
         let mut found: Vec<(&str, Option<usize>)> = Vec::new();
         for instruction in &program.main.instructions {
@@ -1541,7 +1810,7 @@ mod tests {
         let frame = interp.activation().frame;
         interp.roots.set_slot(frame, b_slot, two);
 
-        let plan = Plan::build(&program.main, &program.symbols);
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = planned_code(&program, &plan);
         let key = interp.tail_key(&code, id);
         assert_eq!(key, b"2");
@@ -1632,7 +1901,7 @@ mod tests {
         let frame = interp.activation().frame;
         interp.roots.set_slot(frame, i_slot, abc);
 
-        let plan = Plan::build(&program.main, &program.symbols);
+        let plan = Plan::build(&program.main, &program.symbols, Some(&program.source));
         let code = planned_code(&program, &plan);
         let key = interp.tail_key(&code, id);
         // The tail VALUE "abc" survives verbatim, lowercase and all -- not
