@@ -1917,9 +1917,13 @@ fn a_trap_call_and_a_dynamic_call_stay_generic() {
 /// all three a number, and one that resolved none would give all three a dash
 /// -- and each of those is what one half of this test alone would still admit.
 ///
-/// The stem and compound arms of `Interp::assign_expr_target` write through a
-/// name and through a tail key resolved at the write site; neither writes the
-/// symbol's own frame slot, so a number here would be a slot they do not use.
+/// **The stem row is a dash for a different reason from the compound one, and
+/// it is the reason that changed.** A compound target writes a tail through
+/// the *stem's* slot, so the symbol's own slot is not what it writes and there
+/// is nothing to carry. A bare stem target does write the symbol's own slot,
+/// and `Interp::assign_expr_target` reads that slot off `Code::compound`'s
+/// entry instead of out of the op -- the same answer on the tree-walker, which
+/// has no op to read.
 #[test]
 fn a_compiled_write_names_a_slot_only_for_a_simple_target() {
     let simple = compile_for_test(b"zw = 'v'\n").expect("compiles");
@@ -1939,7 +1943,7 @@ fn a_compiled_write_names_a_slot_only_for_a_simple_target() {
              1: Const dst=0 konst=0\n\
              2: TraceLiteral src=0\n\
              3: Store index=0 at=- src=0\n",
-            "{} resolved a slot for a target that does not write one",
+            "{} resolved a slot for a target that does not read one",
             String::from_utf8_lossy(source)
         );
     }

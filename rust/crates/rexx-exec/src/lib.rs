@@ -1314,10 +1314,12 @@ impl<'a> Code<'a> {
     /// The name and the slot come back together rather than from separate
     /// methods, so that a caller reaching for the name has to say what it
     /// does about the slot.
-    /// `None` is the answer for a body with no plan, and for an entry
-    /// `Plan::bind` recorded, which assigns the stem no slot; it means
-    /// "resolve it the ordinary way", which is what every stem accessor did
-    /// before the slot was kept.
+    /// `None` is the answer for a body with no plan, and for the entry
+    /// `Plan::bind` records for a **compound**-shaped name, whose stem half is
+    /// a name of its own that the plan never bound; it means "resolve it the
+    /// ordinary way", which is what every stem accessor did before the slot
+    /// was kept. A stem-shaped name has no stem half distinct from itself, so
+    /// `bind` does record that one.
     fn stem(&self, id: SymbolId) -> (&'a [u8], Option<usize>) {
         match self.compound(id) {
             Some(entry) => (&entry.stem, entry.stem_at),

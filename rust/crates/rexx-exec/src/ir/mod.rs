@@ -975,15 +975,16 @@ impl NodePath {
 /// holding one. So the reserved value buys no width at all here, and anything
 /// resting on it has to rest on something else.
 ///
-/// **A compound never has one; a stem target has one and does not carry it
-/// here.** A compound's read goes through the *stem's* slot and a tail key
-/// resolved at the read site, so the symbol's own slot is not what it reads,
-/// and [`PlanSlot::UNRESOLVED`] is the honest answer. A stem *write* is
-/// `stem_assign`, which resolves the symbol's own spelling to the symbol's own
-/// slot -- measured on both engines, `by_symbol` already holds the number
-/// `slot_of` goes on to compute -- so `UNRESOLVED` there records that nothing
-/// downstream reads it yet rather than that there is nothing to read. Either
-/// way the run-time path resolves it, exactly as it does for the tree-walker.
+/// **A compound never has one; a stem read carries one and a stem write takes
+/// its own from elsewhere.** A compound's read goes through the *stem's* slot
+/// and a tail key resolved at the read site, so the symbol's own slot is not
+/// what it reads, and [`PlanSlot::UNRESOLVED`] is the honest answer. A bare
+/// stem *read* does go to the symbol's own slot, and [`Op::Load`] carries it.
+/// A bare stem *write* goes to that same slot -- but `Interp::
+/// assign_expr_target`, which both engines enter, reads it off the plan's own
+/// `CompoundName` entry, so an op carrying it would be a second source for one
+/// number and would serve one engine where the entry serves both. Either way
+/// the run-time path resolves what it was not given.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PlanSlot(u32);
 

@@ -28,6 +28,7 @@
 //! prints 8).
 
 use crate::Interp;
+use crate::run::{NameShape, shape_of};
 use crate::trace::ChunkTrace;
 use rexx_parse::{
     Call, CodeBody, Expr, ExprKind, Fragment, Instruction, InstructionKind, Loop, LoopKind, Parse,
@@ -132,11 +133,18 @@ pub(crate) struct CompoundName {
     ///
     /// **`None` is a stem the plan assigned no slot**, and it is an ordinary
     /// outcome rather than a gap, the same one `TailPiece::Variable`'s own
-    /// `at` records: `Plan::bind` records a split and assigns nothing, and
-    /// `CompoundName::split` is entered by an `INTERPRET` fragment with no
-    /// plan at all. `Interp::stem_slot` resolves the name the ordinary way
-    /// when there is none, exactly as every stem accessor did before this
-    /// field existed.
+    /// `at` records: `Plan::bind` binds a *compound*-shaped name whole and
+    /// gives its stem half nothing, and `CompoundName::split` is entered by an
+    /// `INTERPRET` fragment with no plan at all. `Interp::stem_slot` resolves
+    /// the name the ordinary way when there is none, exactly as every stem
+    /// accessor did before this field existed.
+    ///
+    /// **A stem-shaped name is its own stem half, and `Plan::bind` fills this
+    /// in for one.** `zs. = 'one'` and `do zs. = 1 to 3` bind `ZS.` whole, so
+    /// the slot bound to the symbol *is* the stem's slot and there is no
+    /// second name to assign. That is what lets `Interp::stem_assign_at` reach
+    /// a bare stem's slot on both engines, where a compiled `Op::Store` would
+    /// reach it on only one.
     ///
     /// A `Some` slot is never a *different* answer from resolving the name.
     /// `Interp::slot_of` reads the plan's own name map first and the
@@ -726,13 +734,20 @@ impl Plan {
     /// its tail through `tail_key` on **every pass**, which is exactly the
     /// per-reference split `compounds` exists to remove.
     ///
-    /// The split is recorded and no slot is assigned to the stem or to a
-    /// piece, which is what separates this from `note_compound_name`: `name`
-    /// is bound whole above, and adding slots for its parts here would move
-    /// every later slot number in the body -- a change to frame layout, not
-    /// to how a name splits. So the entry this writes has `stem_at: None` and
-    /// `at: None` on every variable piece, and `Interp::stem_slot` and
-    /// `Interp::join_tails` resolve those by name.
+    /// **No new name is assigned a slot here, which is what separates this
+    /// from `note_compound_name`**: `name` is bound whole above, and adding
+    /// slots for its parts would move every later slot number in the body -- a
+    /// change to frame layout, not to how a name splits. So the entry this
+    /// writes has `at: None` on every variable piece, and `Interp::join_tails`
+    /// resolves those by name.
+    ///
+    /// **`stem_at` is the exception, and it assigns nothing new.** A
+    /// stem-shaped `name` has no part that is not itself: its stem half is the
+    /// whole spelling, so the slot already bound to `id` above is the stem's
+    /// slot and recording it costs no name and moves no layout. A
+    /// compound-shaped `name` does have parts, so its stem stays `None` and
+    /// `Interp::stem_slot` resolves it -- `do a.i = 1 to 5` binds `A.I` and
+    /// nothing called `A.`.
     ///
     /// **An entry already recorded is left alone**, which matters when one id
     /// reaches `note_compound_name` as well -- `say v.i` and then `do v.i = 1
@@ -745,7 +760,13 @@ impl Plan {
         let slot = self.slot_for(name.as_bytes());
         self.by_symbol.insert(id, slot);
         if name.contains('.') {
-            self.compounds[id.index()].get_or_insert_with(|| CompoundName::split(name));
+            self.compounds[id.index()].get_or_insert_with(|| {
+                let mut entry = CompoundName::split(name);
+                if shape_of(name.as_bytes()) == NameShape::Stem {
+                    entry.stem_at = Some(slot);
+                }
+                entry
+            });
         }
     }
 
@@ -1106,10 +1127,14 @@ mod tests {
     /// **The slots are part of what is asserted, and `note_compound_name` and
     /// `bind` disagree about them.** `note_compound_name` puts the stem and
     /// each variable piece on the slot it assigned that name; `bind` assigns
-    /// none, so `AA.II`'s stem and piece both carry `None` while `DD.JJ`'s and
-    /// `V.I.7`'s carry a number. The numbers are spelled out rather than
-    /// looked back up out of `plan.names`, which would be the same map on both
-    /// sides of the assertion.
+    /// no name a slot beyond the one it binds whole, so `AA.II`'s stem and
+    /// piece both carry `None` while `DD.JJ`'s and `V.I.7`'s carry a number.
+    /// (A stem-*shaped* name bound by `bind` does carry one, because there the
+    /// name bound whole and the stem are the same name;
+    /// `bind_keeps_a_stem_shaped_names_own_slot_as_its_stems` is that pair.)
+    /// The numbers are spelled out rather than looked back up out of
+    /// `plan.names`, which would be the same map on both sides of the
+    /// assertion.
     #[test]
     fn build_records_a_compounds_split_under_the_compounds_own_id() {
         let source = b"drop dd.jj; do aa.ii = 1 to 2; say v.i.7; end";
@@ -1445,6 +1470,53 @@ mod tests {
     fn expect_entry(plan: &Plan, id: SymbolId) -> &CompoundName {
         plan.compound(id)
             .expect("the pass recorded this compound's split under its own id")
+    }
+
+    /// **`Plan::bind` records the stem's slot for a stem-shaped name and not
+    /// for a compound-shaped one**, and the pair is what makes that a decision
+    /// rather than a coincidence of one spelling.
+    ///
+    /// Both go through `bind` -- the assignment target and both `DO` control
+    /// variables -- and the split is recorded for all three. `ZT.` and `ZS.`
+    /// have no stem half distinct from themselves, so the slot bound to the
+    /// symbol *is* the stem's and the entry keeps it. `AA.II` does: `bind`
+    /// binds the whole dotted name to one slot and nothing called `AA.`, so
+    /// its stem carries `None` and `Interp::stem_slot` resolves it at every
+    /// reference.
+    ///
+    /// The numbers are spelled out rather than looked back up out of
+    /// `plan.names`, which is the map `slot_for` wrote them from and would be
+    /// the same map on both sides of the assertion. They are the pass's own,
+    /// in the order it assigned them: `ZT.` for the assignment, `ZS.` for the
+    /// first control variable, `AA.II` whole for the second.
+    #[test]
+    fn bind_keeps_a_stem_shaped_names_own_slot_as_its_stems() {
+        let source = b"zt. = 'v'\ndo zs. = 1 to 2\nnop\nend\ndo aa.ii = 1 to 2\nnop\nend";
+        let program = parse_program(source.to_vec()).expect("test program parses");
+        let plan = Plan::build(&program.main, &program.symbols);
+
+        let mut found: Vec<(&str, Option<usize>)> = Vec::new();
+        for instruction in &program.main.instructions {
+            let id = match &instruction.kind {
+                InstructionKind::Assignment { target, .. } => match target.kind {
+                    ExprKind::Stem(id) => id,
+                    ref other => panic!("expected a stem target, got {other:?}"),
+                },
+                InstructionKind::Do(loop_) | InstructionKind::Loop(loop_) => {
+                    let LoopKind::Controlled(controlled) = &loop_.kind else {
+                        panic!("expected a controlled loop, got {:?}", loop_.kind);
+                    };
+                    controlled.control
+                }
+                _ => continue,
+            };
+            found.push((symbols_name(&program, id), expect_entry(&plan, id).stem_at));
+        }
+
+        assert_eq!(
+            found,
+            vec![("ZT.", Some(0)), ("ZS.", Some(1)), ("AA.II", None)]
+        );
     }
 
     #[test]

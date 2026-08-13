@@ -271,44 +271,54 @@ impl Interp {
     /// recorded on the entry, or the full three-source resolution of
     /// `stem_name` when the entry carries none.
     ///
-    /// **Where the `_at` accessors below decide it**, shared rather than
-    /// written out at each one, so a precomputed slot and a resolved one
+    /// **Where every `_at` accessor in this module decides it**, shared rather
+    /// than written out at each one, so a precomputed slot and a resolved one
     /// cannot come to mean different things depending on which accessor was
-    /// entered. A bare stem's own operations do not come through here:
-    /// `stem_assign` and `replace_stem` take the whole spelling of an
-    /// `ExprKind::Stem` or of a run-time string, which is not a compound's
-    /// stem half, and no caller passes them a slot. A caller reached from an
-    /// `ExprKind::Stem` could: that spelling has one, and `run.rs`'s
-    /// `control_slot` has the measurement.
+    /// entered.
     ///
-    /// `at` is the same slot `slot_of` answers, taken by `Plan::
-    /// note_compound_name` from the `Plan` this activation runs with, so it
-    /// is one resolution made at two times rather than two resolutions --
-    /// the same relationship `read_stem_at` and `read_by_name_at` already
-    /// carry.
+    /// **Two different names arrive here and they resolve identically**, which
+    /// is why one function serves both. A compound's *stem half* is a name with
+    /// no `SymbolId` of its own, put on `CompoundName::stem_at` by
+    /// `Plan::note_compound_name`. A **bare stem** -- an `ExprKind::Stem`
+    /// spelling, which `stem_assign` and `replace_stem` write whole -- is its
+    /// own stem half, so `Plan::bind` puts it on the same field: the slot it
+    /// binds the id to *is* the stem's slot when the whole name is the stem.
+    /// Either way `Code::compound` is what hands the entry back, and every
+    /// caller of an `_at` accessor takes the slot from there.
+    ///
+    /// `at` is the same slot `slot_of` answers, taken by the upfront pass from
+    /// the `Plan` this activation runs with, so it is one resolution made at
+    /// two times rather than two resolutions -- the same relationship
+    /// `read_stem_at` and `read_by_name_at` already carry.
     ///
     /// **`None` is always correct**, and it is what a run-time name, an
-    /// `INTERPRET` fragment's own split and a `DO` control variable's entry
-    /// all pass: the slot is then resolved here exactly as it was before any
-    /// caller could supply one. That last case is not hypothetical -- `do
-    /// za.zi = 1 to 3` binds the whole `ZA.ZI` and nothing named `ZA.`, so
-    /// the stem grows into the activation's `extra` and is found there on
-    /// every pass.
+    /// `INTERPRET` fragment and a compound `DO` control variable's entry all
+    /// pass: the slot is then resolved here exactly as it was before any caller
+    /// could supply one. The last case is not hypothetical -- `do za.zi = 1 to
+    /// 3` binds the whole `ZA.ZI` and nothing named `ZA.`, so the stem grows
+    /// into the activation's `extra` and is found there on every pass. Nor is
+    /// the fragment one: `interpret "do zt. = 1 to 3; end"`, with `ZT.` written
+    /// in no clause of the enclosing body, grows `ZT.` into `extra` when the
+    /// fragment's plan is built and finds it there afterwards.
     fn stem_slot(&mut self, stem_name: &[u8], at: Option<usize>) -> usize {
-        // **The tripwire for an entry resolved against a plan that is not the
-        // running activation's.** A slot lands on a stem because
-        // `Plan::slot_for` put its name in that plan's own name map, and
-        // `Interp::slot_of` reads that map before it reads `extra` -- so the
-        // two agree for as long as the entry and the activation come from one
-        // plan, and `Code::plan` is what pairs them. Mismatched, this reads
-        // whatever else lives at that index rather than failing, which is a
-        // wrong value found by chasing it.
-        debug_assert!(
-            at.is_none() || self.activation().plan.slot_of(stem_name) == at,
-            "a compound's stem names a slot this activation's plan does not give its name"
-        );
         match at {
-            Some(slot) => slot,
+            Some(slot) => {
+                // **The tripwire for an entry resolved against a plan that is
+                // not the running activation's.** A slot lands on a
+                // `CompoundName` because `Plan::slot_for` put its name in that
+                // plan's own name map, and `Interp::slot_of` reads that map
+                // before it reads `extra` -- so the two agree for as long as
+                // the entry and the activation come from one plan, and
+                // `Code::plan` is what pairs them. Mismatched, this reads or
+                // writes whatever else lives at that index rather than
+                // failing, which is a wrong value found by chasing it.
+                debug_assert_eq!(
+                    self.activation().plan.slot_of(stem_name),
+                    Some(slot),
+                    "a stem names a slot this activation's plan does not give its name"
+                );
+                slot
+            }
             None => self.slot_of(stem_name),
         }
     }
@@ -513,12 +523,20 @@ impl Interp {
     /// Assigning anything that is not already a stem still wraps it as this
     /// stem's new default, same as `a. = 1`, `w. = 'wd'`.
     pub(crate) fn stem_assign(&mut self, stem_name: &[u8], value: ObjRef) {
+        self.stem_assign_at(stem_name, None, value);
+    }
+
+    /// [`Interp::stem_assign`] with the stem's slot already in hand, which is
+    /// what an `ExprKind::Stem` assignment target carries: the symbol whose
+    /// spelling `stem_name` is was bound to that slot by `Plan::bind`.
+    /// [`Interp::stem_slot`] is what `at` means here.
+    pub(crate) fn stem_assign_at(&mut self, stem_name: &[u8], at: Option<usize>, value: ObjRef) {
         if self.is_stem(value) {
-            let slot = self.slot_of(stem_name);
+            let slot = self.stem_slot(stem_name, at);
             let frame = self.activation().frame;
             self.roots.set_slot(frame, slot, value);
         } else {
-            self.replace_stem(stem_name, Some(value));
+            self.replace_stem(stem_name, at, Some(value));
         }
     }
 
@@ -588,7 +606,11 @@ impl Interp {
     /// and not because a test distinguishes it. There is no such test to
     /// write.
     pub(crate) fn stem_drop(&mut self, stem_name: &[u8]) {
-        self.replace_stem(stem_name, None);
+        // `None`: every caller reaches this from a plain string naming a
+        // variable -- `drop_by_name`, which serves an already-upcased `DROP`
+        // target and every word of an indirect subsidiary list alike -- and
+        // has no slot to hand over.
+        self.replace_stem(stem_name, None, None);
     }
 
     /// The shared half of `stem_assign`'s "wrap" branch and `stem_drop`:
@@ -596,8 +618,11 @@ impl Interp {
     /// variable to it, leaving any old object exactly where aliases into it
     /// already point (D15a's `r.`/`u` and `s.`/`t` transcripts, which need
     /// the *old* object left untouched rather than mutated).
-    fn replace_stem(&mut self, stem_name: &[u8], default: Option<ObjRef>) {
-        let slot = self.slot_of(stem_name);
+    ///
+    /// `at` is the slot to rebind, or `None` to resolve `stem_name`; see
+    /// [`Interp::stem_slot`].
+    fn replace_stem(&mut self, stem_name: &[u8], at: Option<usize>, default: Option<ObjRef>) {
+        let slot = self.stem_slot(stem_name, at);
         let frame = self.activation().frame;
         let stem = self.alloc_with(
             BehaviourId::STEM,

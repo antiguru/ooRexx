@@ -668,17 +668,20 @@ sub: procedure expose zg
 /// ends it at `8`. An implementation that resolved `za.zi` once and reused it
 /// prints `4`. The oracle's own answer, measured on this program: `8 1 1 1 1`.
 ///
-/// **It catches `write_slot` resolving every target shape** -- measured, that
-/// mutation reddens this test along with the corpus differential, the
-/// dual-engine sweep and eight others, through the tripwire `Op::Store`'s arm
-/// in `drive.rs` carries.
+/// **Neither of the two "answer for a compound as well" widenings reaches this
+/// test, and neither reddens anything else either.** Both were measured by
+/// running them rather than argued from the code.
 ///
-/// **It does not catch the same widening of `control_slot`, and nothing in the
-/// suite does** -- measured, by making that function answer for a compound
-/// control too: nothing goes red. `at` is read in `bind_control`'s `Simple` arm
-/// alone, selected by the same `shape_of` predicate, so a slot resolved for a
-/// compound control is computed and discarded. That filter is unobservable and
-/// is kept for what it says rather than for what it stops.
+/// `write_slot` answering for a compound assignment target: nothing goes red,
+/// because `Plan::note_compound_name` registers the stem and each variable
+/// tail piece **by name** and binds the compound's own id to no slot at all,
+/// so the widened arm has nothing to answer with.
+///
+/// `control_slot` answering for a compound control: nothing goes red either,
+/// because `bind_control` and the loop's own re-test each select their arms by
+/// the same `shape_of` and neither compound arm reads `at` -- the slot would be
+/// resolved and discarded. Both filters are unobservable and are kept for what
+/// they say rather than for what they stop.
 #[test]
 fn a_compound_control_resolves_its_tail_on_every_pass() {
     const A_MOVING_TAIL: &[u8] = b"\
