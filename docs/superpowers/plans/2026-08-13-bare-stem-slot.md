@@ -23,8 +23,14 @@ The first two were named by the implementer; the third by its reviewer, and it i
 
 ## What makes this a task rather than a patch
 
-**No current benchmark axis would show it.** `compound` and `alloc4c` hold compounds, not bare stem writes; nothing in `rust/bench-programs/` runs a stem-controlled `DO`.
-So the first step is a workload, and the measurement discipline this project now holds itself to says an axis that cannot see a change makes its result unstatable rather than zero.
+**Corrected 2026-08-13, after re-profiling: one existing axis does see two of the three sites.**
+`samples/rexxcps.rex` writes `avar.=1.0''loop` inside its `do loop=1 to 14` body -- a bare stem write, fourteen times per iteration -- so it exercises `stem_assign` through `assign_expr_target`, which stands at 1.57% of that profile.
+The first version of this section said no axis could see any of it, which was wrong and was written without reading the program.
+
+**What still has no axis is the third site.** `bind_control`'s stem arm is reached only by a *stem-controlled* `DO`, and every loop in `rexxcps` and in `rust/bench-programs/` is controlled by a simple variable.
+That one pays per iteration, so it is the site most worth measuring and the only one needing a workload written for it.
+
+The measurement discipline this project holds itself to says an axis that cannot see a change makes its result unstatable rather than zero -- which is why the workload comes before the fix rather than after it.
 
 - [ ] **Step 1: write the workload before the fix.** A stem-controlled `DO` over enough iterations to be measurable, and a bare-stem-write loop beside it. Decide whether either belongs in `rust/bench-programs/` permanently -- if it does, it is an axis every later entry inherits, so say why rather than adding it quietly. Measure the base with `perf stat -e instructions:u`, arms at one fixed binary path, and record each axis's own spread before quoting any difference.
 
