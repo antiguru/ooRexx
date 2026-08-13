@@ -3221,3 +3221,139 @@ Corrected in `control_slot`'s doc and in the plan file; entry 32's copy stands w
 
 Approved at `851b18fce`, gates re-run unpiped by the controller: `cargo fmt --all --check` 0, `cargo clippy --workspace --all-targets -- -D warnings` 0 with no warning lines, `cargo test --workspace --no-fail-fast` rc 0 at 1483 passed, 0 failed, 4 ignored.
 Entry 32's successor stands unchanged: `PARSE` targets, whose call site in `parse_template.rs` passes the literal `None` that this task measured the price of replacing.
+
+### Entry 35 -- the clause's line, from a table: the first structural unit, and a spike conclusion that did not survive its own fix
+
+Plan: `docs/superpowers/plans/2026-08-13-clause-line-table.md`, one task, Unit 1 of `2026-08-13-phase-4g-structural.md`.
+Base `9b2d416d3`, head `5b3be9536`, both read back from `git log`.
+
+**This entry changes the wrapper, for entry 27's reason and in entry 32's way**, and says so rather than letting the difference pass as a result.
+The configuration block above fixes wall clock through `rexx-bench-suite`; this entry is `perf stat -e instructions:u`, six interleaved rounds per arm on every axis, both arms staged at one fixed binary path so `argv[0]` is byte-identical, from a fresh empty directory, minimum of each arm quoted.
+**No wall-clock figure is claimed and no wall-clock run was taken.**
+
+#### Cause, stated by the plan before the task
+
+`ProgramSource::line_of` is a `partition_point` over the line starts, and `Interp::enter_stepped_clause` asked it for the answer on every stepped clause **unconditionally**, because `SIGL` has to stay correct whether or not `TRACE` is on.
+A loop's header asks again on every pass.
+The fix is the move `Plan::indents` already is: a constant of the source text computed once by the upfront pass that already walks the body.
+
+#### What the search was costing, counted before anything changed
+
+`Interp::clause_line`'s call into `line_of` instrumented with a counter, release build, both engines, at base.
+The two engines answer **identically on every axis**, which is the part worth having: the compiled engine's promoted clauses do not reach `Interp::step`, and they reach `enter_stepped_clause` anyway.
+
+| axis | searches at base | body lines |
+|---|---:|---:|
+| `emptyloop` | 50,000,005 | 7 |
+| `varlookup` | 57,000,006 | 8 |
+| `strings` | 18,000,007 | 12 |
+| `compound` | 15,001,011 | 14 |
+| `arith` | 4,000,006 | 14 |
+| `alloc4c` | 4,000,006 | 51 |
+| `rexxcps` | 10,161,437 | 198 |
+
+**No axis in this record executes none of it**, so this entry has no control axis and offers none.
+
+#### Measured movement
+
+| axis | base `9b2d416d3` | head `5b3be9536` | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `emptyloop` | 27,150,609,938 | 25,150,609,522 | -2,000,000,416 | **-7.366%** | 550 | 1,521 |
+| `varlookup` | 44,802,636,286 | 42,408,615,813 | -2,394,020,473 | **-5.343%** | 1,296 | 647 |
+| `rexxcps` | 25,259,112,106 | 24,296,505,166 | -962,606,940 | **-3.811%** | 11,497,720 | 4,212,461 |
+| `alloc4c` | 8,183,701,509 | 7,882,695,240 | -301,006,269 | **-3.678%** | 55,696 | 85,333 |
+| `compound` | 25,027,491,124 | 24,233,277,999 | -794,213,125 | **-3.173%** | 1,679,877 | 2,822,324 |
+| `strings` | 44,913,587,939 | 43,950,588,042 | -962,999,897 | **-2.144%** | 1,317 | 1,005 |
+| `arith` | 20,413,489,949 | 20,203,990,984 | -209,498,965 | **-1.026%** | 681 | 1,914 |
+
+Every arm pair is non-overlapping, by at least a factor of eighty against the wider of its two spans.
+Every `rexxcps` run of both arms self-calibrated to `100 x 100`, checked on each arm's own `Averaged:` line.
+**No axis moved up**, and no figure here is a bound: each axis executes the changed code and each moved past its own spread.
+
+The measurement was taken twice, because a comment-only correction after the first sitting changed the binary's bytes and this project has measured layout alone moving these axes.
+The two sittings agree to three decimal places on six of the seven axes and to 0.004 percentage points on `compound`; the table above is the second, taken with the binary that was committed, `sha256` checked against it.
+
+#### The spike's design conclusion did not survive the fix it justified
+
+The plan states, as the finding the unit turns on, that **the search depth is not the cost** -- from probe arms saving 105.0 instructions per pass on a 7-line program against 52.8 per clause on a 198-line one.
+Dividing each axis's saving by its own count above says the opposite:
+
+| body lines | saved per removed search |
+|---:|---:|
+| 7 | 40.0 |
+| 8 | 42.0 |
+| 12 | 53.5 |
+| 14 | 52.9 and 52.4 |
+| 51 | 75.3 |
+| 198 | 94.7 |
+
+Monotone in the body's line count and more than doubling across the range.
+The spike's contrary reading came from its `rexxcps` arm, which the plan **itself** disowns as contaminated: both probe arms returned deliberately wrong line numbers, which reach downstream consumers of the clause line.
+The plan disowned that arm's *table* and kept its *design conclusion*, and the conclusion was the part built on it.
+
+**The decision is unaffected and the reasoning for it is now different.**
+A table is not preferred to a faster search because the search is shallow; it is preferred because a search that is not made costs neither its call nor its depth, which bounds anything a faster search could return.
+A correct decision shipped with a reason that does not hold is a shape this record has caught before.
+What is new here is where the false reason was: in the plan the task was given, not in the change the task wrote.
+
+#### The tripwire, and what it is worth measured rather than assumed
+
+`Plan::line_at` carries a permanent `debug_assert_eq!(cached, source.line_of(span.start))`.
+Whole workspace, `--no-fail-fast`, under `memcap 8G`: **1487 passed, 0 failed, 4 ignored, zero firings.**
+Inverted to `debug_assert_ne!`, it fails **403 tests across 400 distinct names**, so the zero is a live zero.
+
+| mutation | result | distinct failing names |
+|---|---|---:|
+| the accessor tripwire inverted | 1084 passed, 403 failed | 400 |
+| the index/instruction pairing assert inverted | 1085 passed, 402 failed | 399 |
+| **T1** the table filled one line high | 1083 passed, 404 failed | 401 |
+| **T1'** the same, tripwire deleted | 1453 passed, 34 failed | 34 |
+| **T2** the table never filled at all | 1485 passed, **2** failed | 2 |
+| **T3** the table consulted before `clause_line_override` | 1486 passed, **1** failed | 1 |
+
+* **T1 minus T1' is 367 distinct names** that catch a wrong line table **only** because the tripwire is there. It is a net catcher by a wide margin, on this source as on the two the stem-and-compound family measured it on.
+* **T1' still fails 34**, `both_engines_agree_on_every_case_file` and `both_engines_agree_on_every_branch_shape` among them, so a wrong line is observable to the differential gates without the tripwire -- it is the *margin* the tripwire buys, not the whole catch.
+* **T2 is caught by this task's own two tests and nothing else**, which is the correct shape: a table that misses falls back and is right. Only a table that lies is dangerous.
+* **T3 is caught by this task's own wiring test and nothing else.** The override outranking the table has no other witness in the workspace, and the state it guards -- a body carrying a plan stepped while the override is in force -- was **not reached** by anything measured below. The test guards a future arrangement rather than a live defect, and says so.
+
+Every mutation was snapshotted from the live tree immediately before it was applied, restored, and verified against the `git diff` hash recorded once when the change was complete -- a derivation from `HEAD` plus the tree rather than from the backup the restore came out of.
+**That check caught a real leak**: a probe had modified `bin/rexx-run.rs`, which was clean when its snapshot was taken and so was never in it, and the restore left the file modified. A same-snapshot comparison would have passed.
+
+#### The `BodyKey` question, answered by running
+
+A table of line numbers is valid only for the source it was built from, and `plan_for` caches by `BodyKey`.
+`Plan` was given a probe field recording the `ProgramSource` address it was built from, and `plan_for` was made to assert on a cache hit that the source it is being asked with is that same one.
+
+* **381 corpus, bench and oracle-sample programs, both engines, plus the whole workspace suite: zero mismatches**, and `Interp::programs` never held more than one program on any of them.
+* **The probe is live**: inverted to `assert_ne!` it fires on a program that calls one `::ROUTINE` twice, on one that calls a routine from inside an `INTERPRET`, and on a nested-`INTERPRET`-plus-loop shape.
+* **The corpus is a weak witness for this and the numbers say so.** Inverted, only **2 of those 381 programs** and **7 of 1487 tests** reach the plan-cache hit path at all. The hand-written probes are what exercised it.
+* The two production `plan_for` callers take body, symbols and source out of one `Rc<Program>` reached through the id the key carries, so the pairing holds by construction as well as by measurement -- but `::REQUIRES` is a Phase 5 gap and an external routine file a Phase 7 one, and **both are routes by which a second program could be loaded**. The tripwire is what will still be standing when either lands.
+
+#### The profile
+
+`perf record -F 999`, `REXX_ENGINE=ir`, `samples/rexxcps.rex`, both arms at the one fixed path, three runs per arm, one sitting, self time.
+
+| | base | head |
+|---|---|---|
+| `Interp::run_ops::<false>` | 12.41 / 12.00 / 12.25% | 9.02 / 9.44 / 10.12% |
+| `Interp::step_in_temps_frame` | 2.56 / 2.77 / 2.13% | 1.10 / 1.51 / 1.21% |
+
+Both fall with non-overlapping ranges.
+**`ProgramSource::line_of` appears as a symbol in neither arm** -- it is inlined into both -- so the sampled instrument could never have named this cost, and the two driver symbols are where it was living. That is a finding about the instrument as much as about the change: the phase document attributes about 20% of `rexxcps` to "the driver", and a per-clause search inside it was invisible to the tool that produced that share.
+
+#### What a program observes
+
+Base and head binaries compared byte for byte on stdout, stderr and exit status, **both engines**, over the corpus, `bench-programs/` and the oracle's `samples/` tree.
+Identical everywhere except `samples/rexxcps.rex`, whose `Performance:` line is the clauses-per-second figure the program exists to print.
+Two infinitely recursive samples differed only in the PID inside `memcap`'s own kill message, which is the harness and not the interpreter; filtered, they are identical at rc 137.
+`tests/ir_dual.rs` and `tests/corpus.rs` are green at head. **This unit spends none of the phase's divergence licence.**
+
+#### Disposition
+
+**Accepted.** Seven axes down, none up, the smallest move eighty times its own spread, and the largest -- 7.366% on the clause-dispatch floor -- above the plan's own honest expectation of about 5.6%.
+
+#### What this entry does not claim
+
+* **No time figure**, for entry 27's reason. `rexxcps`' own printed clauses-per-second line moved and is reported above as an *output* difference, not as a measurement.
+* **No control axis.** Every axis executes the changed code, so there is nothing here that separates this change's semantics from drift the way entry 31 asks for. What stands in for it is that the saving is monotone in the search depth removed, on seven axes, which drift has no reason to be.
+* **No claim that a body with a plan is unreachable while `clause_line_override` is in force.** It was not reached by anything measured; that is not the same statement, and this project has been wrong about the difference before.

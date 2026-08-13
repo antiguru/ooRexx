@@ -2,7 +2,14 @@
 
 **Goal:** stop searching the line index on every executed clause, by keeping the answer beside the one the same upfront pass already keeps.
 
-**Status:** open, one task. Written 2026-08-13 after the spike below, which is what this plan is built on rather than on the phase document's one-line description of the unit.
+**Status:** done at `5b3be9536`, one task, accepted. Written 2026-08-13 after the spike below, which is what this plan is built on rather than on the phase document's one-line description of the unit.
+
+**One finding below did not survive the task, and it is left standing here with this pointer rather than rewritten**, because it is what the task was given.
+"What survives, and it is the design fact this unit turns on" concludes that the search *depth* is not the cost.
+The landed fix measures the opposite: dividing each axis's saving by its own count of removed searches gives 40.0 instructions on a 7-line program rising monotonically to 94.7 on `rexxcps`' 198 lines.
+The spike read otherwise from its `rexxcps` arm, which this plan itself disowns as contaminated two paragraphs earlier -- the arm's *table* was disowned and its *design conclusion* was kept, and the conclusion was the part built on it.
+The unit's decision is unaffected: a table is preferred to a faster search not because the search is shallow but because a search that is not made costs neither its call nor its depth.
+`phase-4f-record.md`'s entry 35 has the numbers.
 
 **Parent:** `docs/superpowers/plans/2026-08-13-phase-4g-structural.md`, Unit 1, ordered first for confidence rather than for size.
 
@@ -64,17 +71,17 @@ A fragment's clauses all read the enclosing `INTERPRET` clause's line through `c
 
 ## Steps
 
-- [ ] **Step 1: measure the base, and each axis's own spread, before any change.** Every axis, `perf stat -e instructions:u`, arms staged at one fixed binary path, from a fresh empty directory. Record the spread beside the base so a difference under a percent can be read later. Count the `line_of` calls per axis at base, the way the spike did for `rexxcps`, because an axis that never calls it makes its own result a bound rather than a zero.
+- [x] **Step 1: measure the base, and each axis's own spread, before any change.** Every axis, `perf stat -e instructions:u`, arms staged at one fixed binary path, from a fresh empty directory. Record the spread beside the base so a difference under a percent can be read later. Count the `line_of` calls per axis at base, the way the spike did for `rexxcps`, because an axis that never calls it makes its own result a bound rather than a zero.
 
-- [ ] **Step 2: add the table, in `indents`' own shape.** A `Box<[usize]>` on `Plan`, one entry per instruction, filled by a walk in `Plan::build`, read through an accessor that falls back to `source.line_of` when there is no plan. Read `plan.rs:244` through `plan.rs:300` for the pattern and follow it rather than inventing a second one. `Plan::build` needs the source; give it the source rather than moving the answer into `rexx-parse`, which would put a field on `Instruction` and touch every construction site for a constant only the executor reads.
+- [x] **Step 2: add the table, in `indents`' own shape.** A `Box<[usize]>` on `Plan`, one entry per instruction, filled by a walk in `Plan::build`, read through an accessor that falls back to `source.line_of` when there is no plan. Read `plan.rs:244` through `plan.rs:300` for the pattern and follow it rather than inventing a second one. `Plan::build` needs the source; give it the source rather than moving the answer into `rexx-parse`, which would put a field on `Instruction` and touch every construction site for a constant only the executor reads.
 
-- [ ] **Step 3: put the tripwire in the accessor, then invert it to prove it fires.** `debug_assert_eq!(cached, source.line_of(span.start))` inside the accessor, whole workspace green, then inverted and re-run so the zero is a live zero. This is the technique that has caught this family twice and it is not optional here: a wrong line is silent in every program that does not raise a condition or trace.
+- [x] **Step 3: put the tripwire in the accessor, then invert it to prove it fires.** `debug_assert_eq!(cached, source.line_of(span.start))` inside the accessor, whole workspace green, then inverted and re-run so the zero is a live zero. This is the technique that has caught this family twice and it is not optional here: a wrong line is silent in every program that does not raise a condition or trace.
 
-- [ ] **Step 4: answer the `BodyKey` question above by running.** Construct the case if you can -- an external routine, a `::ROUTINE`, an `INTERPRET`, the same body reached from two programs -- and say what happened. If you cannot construct it, say that instead of concluding it cannot happen.
+- [x] **Step 4: answer the `BodyKey` question above by running.** Construct the case if you can -- an external routine, a `::ROUTINE`, an `INTERPRET`, the same body reached from two programs -- and say what happened. If you cannot construct it, say that instead of concluding it cannot happen.
 
-- [ ] **Step 5: measure, on every axis, and say what the profile looks like afterwards.** If the result is below this phase's resolution floor on every axis that can see it, **say so and do not take the change**: a unit that cannot be measured is not banked, and the phase document's order is about confidence, which a null result also supplies.
+- [x] **Step 5: measure, on every axis, and say what the profile looks like afterwards.** If the result is below this phase's resolution floor on every axis that can see it, **say so and do not take the change**: a unit that cannot be measured is not banked, and the phase document's order is about confidence, which a null result also supplies.
 
-- [ ] **Step 6: record it as the next entry of `phase-4f-record.md`, appended.** Carry the spike's contaminated-arm finding into the entry rather than only the clean numbers, because the next unit will want to know that a wrong-answer probe arm is not a bound.
+- [x] **Step 6: record it as the next entry of `phase-4f-record.md`, appended.** Carry the spike's contaminated-arm finding into the entry rather than only the clean numbers, because the next unit will want to know that a wrong-answer probe arm is not a bound.
 
 ## What this task must not do
 
