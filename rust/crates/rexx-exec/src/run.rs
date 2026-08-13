@@ -7080,8 +7080,7 @@ impl Interp {
     /// rather than one that would have raised the wrong number. A single,
     /// non-list expression never passes through `eval_logical_list` at all
     /// (there is no list to iterate), so nothing has checked it yet, and
-    /// `raise` is the keyword-specific raiser for that case (34.1 `IF`, 34.2
-    /// `WHEN`).
+    /// `raise` is the keyword-specific raiser for that case.
     ///
     /// **What the two numbers distinguish is where the raise happened, and
     /// that is measured**: `if 'x', 1 then` is 34.6 on the oracle, from inside
@@ -7109,7 +7108,7 @@ impl Interp {
     /// `checked` is whether whatever produced `value` has already validated it
     /// as exactly `0`/`1`, in which case the answer is read back rather than
     /// checked again. `raise` is the keyword-specific raiser for the unchecked
-    /// case (34.1 `IF`, 34.2 `WHEN`).
+    /// case, chosen by whichever caller had the condition in hand.
     ///
     /// **The flag decides an answer for the compiled caller and not for the
     /// tree-walker.** `crate::ir::Op::Condition` hands over a value it read out

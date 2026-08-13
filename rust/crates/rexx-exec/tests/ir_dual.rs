@@ -18,10 +18,10 @@
 //!
 //! **The one thing it cannot see is work the two engines share.** An
 //! instruction the compiler has not promoted delegates its clause back to the
-//! tree-walker's own clause unit, and a construct resolved by one function
-//! entered from both arms -- `Interp::run_loop`, `Interp::assign_evaluated`,
-//! `Interp::say_evaluated`, `Interp::invoke_call` -- answers identically on
-//! both by construction. So
+//! tree-walker's own clause unit, and a construct that both arms resolve by
+//! calling the same `Interp` function answers identically on both by
+//! construction. Every promotion that shares its tail instead of
+//! re-implementing it widens that blind spot rather than narrowing it, so
 //! this comparison is not evidence that any of *those* is right; that is what
 //! the oracle harnesses are for, and the two halves compose.
 //!

@@ -350,11 +350,11 @@ fn listed_whens(body: &CodeBody) -> Vec<usize> {
 struct Seen {
     constructs: BTreeMap<&'static str, usize>,
     roots: BTreeMap<Root, usize>,
-    /// How many promoted clauses carry an `Op::Condition`, keyed by the
-    /// keyword the op is tagged with. Keyed rather than counted in one number,
-    /// because a corpus holding a native `IF` condition and no native `WHEN`
-    /// one would leave the `WHEN` row below vacuous while the total still
-    /// looked healthy.
+    /// How many `Op::Condition` ops the sweep saw, keyed by the keyword each
+    /// is tagged with. Keyed rather than counted in one number, because a
+    /// corpus holding a native `IF` condition and no native `WHEN` one would
+    /// leave the `WHEN` row below vacuous while the total still looked
+    /// healthy.
     native_conditions: BTreeMap<&'static str, usize>,
     /// How many `DO`/`LOOP` header slots compiled to something other than one
     /// `Op::EvalExpr`.

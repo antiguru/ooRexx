@@ -9,9 +9,10 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The in-process external data queue (I15) that `PUSH` and `QUEUE` write to
-//! (`run.rs`'s own arms for both). One per `Interp`, held as a plain field
-//! rather than anything IPC-backed -- see "Why not cross-process" below.
+//! The in-process external data queue (I15) that `PUSH` and `QUEUE` write to,
+//! through `Interp::queue_evaluated` (`run.rs`), which both engines enter.
+//! One per `Interp`, held as a plain field rather than anything IPC-backed --
+//! see "Why not cross-process" below.
 //!
 //! `PULL` and `PARSE PULL` read it back, through `Interp::pull_line`
 //! (`input.rs`), which is where the "queue first, then `.input`" rule lives
@@ -25,11 +26,10 @@
 //! `tests::push_and_queue_actually_write_into_the_running_interpreters_queue`,
 //! which runs a program through a real `Interp` and reads `Interp::queue`
 //! back the same way. The second exists because the first two cannot see
-//! whether `run.rs`'s `step` arms ever call `Queue::push`/`Queue::queue` at
-//! all -- review round 1's I3 found that deleting just those two call sites
-//! (keeping the evaluation and the trace) left every other gate green,
-//! because nothing ran a program through the interpreter and then read the
-//! queue back.
+//! whether the running interpreter ever calls `Queue::push`/`Queue::queue` at
+//! all: those calls are `Interp::queue_evaluated`'s, and a `Queue` a test
+//! builds for itself reaches none of it. That test's own doc comment has the
+//! measurement.
 //!
 //! # LIFO and FIFO, and which end is which
 //!
@@ -169,8 +169,8 @@ mod tests {
     /// This test constructs a `Queue` and calls its methods directly, so it
     /// can only ever prove `push_front`/`push_back` are wired to the right
     /// keyword -- collapsing either to the other end, or dropping the
-    /// argument entirely, fails it. It says nothing about whether `run.rs`'s
-    /// `step` arms actually call these methods (that is
+    /// argument entirely, fails it. It says nothing about whether the running
+    /// interpreter actually calls these methods (that is
     /// `push_and_queue_actually_write_into_the_running_interpreters_queue`,
     /// below) or whether the expression reaching them was evaluated and
     /// traced correctly (that is `corpus/lang/push_queue.rex`, under
@@ -270,17 +270,20 @@ mod tests {
 
     /// **I3 (review round 1): the reader `Queue`'s own tests above cannot
     /// be.** Both tests above construct a `Queue` and call its methods
-    /// directly, so neither can see whether `step`'s `Push`/`Queue` arms
-    /// (`run.rs`) ever call `Queue::push`/`Queue::queue` at all. Measured:
-    /// deleting just those two call sites -- keeping the expression's
-    /// evaluation and its trace, discarding only the rendered line --
-    /// left `cargo test --workspace` at 978 passed / 0 failed and the
-    /// STRICT corpus at 39 of 39, because nothing ran a program through the
-    /// interpreter and then read `Interp::queue` back afterward. This test
-    /// is that reader: it runs the module doc's own 4c-shaped probe (minus
-    /// the three `PULL`s 4c has not implemented yet) through
-    /// `Interp::run_activation`, the same entry point `Interp::run` uses in
-    /// production, and inspects the queue afterward through the same
+    /// directly, so neither can see whether the running interpreter ever
+    /// calls `Queue::push`/`Queue::queue` at all. Those calls are
+    /// `Interp::queue_evaluated`'s (`run.rs`), which `step`'s own
+    /// `Push`/`Queue` arm and `crate::ir::Op::Queue` both enter, so a
+    /// deletion of them -- keeping the expression's evaluation and its trace,
+    /// discarding only the rendered line -- takes the write away from both
+    /// engines at once. Measured at review round 1, when the write sat in
+    /// `step`'s arm alone: that deletion left `cargo test --workspace` at 978
+    /// passed / 0 failed and the STRICT corpus at 39 of 39, because nothing
+    /// ran a program through the interpreter and then read `Interp::queue`
+    /// back afterward. This test is that reader: it runs the module doc's own
+    /// probe -- the three `PUSH`/`QUEUE` clauses, without the `PULL`s --
+    /// through `Interp::run_activation`, the same entry point `Interp::run`
+    /// uses in production, and inspects the queue afterward through the same
     /// private field the type-level tests above use.
     #[test]
     fn push_and_queue_actually_write_into_the_running_interpreters_queue() {

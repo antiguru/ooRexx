@@ -555,9 +555,10 @@ fn precedence_decides_which_operator_is_the_inner_one() {
 /// environment symbol has.
 ///
 /// `ExprKind::Logical`, the comma list, is out of the native set too and is
-/// not a row here: it appears only in a condition, and a condition is compiled
-/// to `Op::EvalExpr` whatever its shape, so a row for it would pass under
-/// every implementation of this function's subject.
+/// not a row here: it appears only in a condition, and `native_shape` has no
+/// `ExprKind::Logical` arm, so a comma list declines wherever it sits and a
+/// row for it would pass under every implementation of this function's
+/// subject.
 ///
 /// **One row holds a call, and that is what it is for.** A call has an op of
 /// its own and an address that reaches it there, so it is the one term where

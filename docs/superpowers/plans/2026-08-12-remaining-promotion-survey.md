@@ -49,6 +49,14 @@ An implementation that compiled a list to `Op::Binary { op: And }` would evaluat
 
 ## Task B: the value-returning instructions
 
+**Landed, and not in the shape sketched below: two ops, each with a keyword tag** -- `Op::Return { index, src, keyword: ReturnKeyword }` and `Op::Queue { index, src, keyword: QueueKeyword }` -- rather than the four this section asks for, and rather than the one tagged op the plan offered as the alternative.
+Four ops were rejected because `RETURN`/`EXIT` share a tail but for the `Flow` constructor, and `PUSH`/`QUEUE` share one but for which end of the queue takes the line, so inside each pair the keyword is the only difference.
+One op was rejected because its premise is false in the code: between the two pairs the trace rule differs (`result_text` only when there is a value, against `to_text` always, with the bare form tracing a null string), the side effect differs, and the region end differs, since a `PUSH` answers `Flow::Next` and does not end its region.
+`Interp::returned_value` and `Interp::queue_evaluated` are the shared halves, with `ReturnKeyword` and `QueueKeyword` beside them in `run.rs`.
+`2026-08-12-condition-promotion.md`'s Task 4 records the decision and points at the table it was read off, including a third option rejected there: folding `PUSH`/`QUEUE` into `Op::Say` with a sink tag.
+
+**The rest of this section stays: it is the sketch the members still in Part 2's "one expression then a `Flow`" row take.**
+
 `RETURN`, `EXIT`, `PUSH` and `QUEUE` are one shape: evaluate an optional expression, root it, trace it, and produce a `Flow`.
 They are `SAY`'s arm with a different tail, and `SAY` is already promoted.
 
@@ -56,7 +64,7 @@ They are `SAY`'s arm with a different tail, and `SAY` is already promoted.
 * `EXIT` ends every program.
 * `PUSH`/`QUEUE` share `SAY`'s own `evaluateStringExpression` in the C++ and share its trace line here.
 
-Each becomes `<ops for the expression -> dst>` followed by `Op::Return { index, src: Option<u16> }` (and its three siblings), whose driver arm calls the same `Interp` half `step`'s arm calls and then breaks the region with the `Flow` that arm returns.
+Each becomes `<ops for the expression -> dst>` followed by an op carrying the instruction index and `src: Option<u16>`, whose driver arm calls the same `Interp` half `step`'s arm calls and then breaks the region with the `Flow` that arm returns.
 `Op::Say`'s arm is the template, including `src: Option<u16>` for the bare form -- which for `RETURN` is a real distinction (`RETURN` with no expression leaves `RESULT` unset, `RETURN ''` sets it).
 
 `NUMERIC DIGITS expr` has the same shape with a different tail and can ride along if the register discipline stays identical; `TRACE`, having no expression, should not -- see the survey.
@@ -67,13 +75,13 @@ Each becomes `<ops for the expression -> dst>` followed by `Op::Return { index, 
 
 ## Already promoted
 
-`DO`, `LOOP`, `IF`, `SELECT`, a listed `WHEN`/`WHEN CASE`, assignment, `SAY`, `CALL name`.
-Expressions: literals, constant symbols, the three bare-symbol reads, every prefix operator, every binary operator, and -- once Task 4 lands -- a call at any depth the path carries.
+`DO`, `LOOP`, `IF`, `SELECT`, a listed `WHEN`/`WHEN CASE`, assignment, `SAY`, `CALL name`, `RETURN`, `EXIT`, `PUSH`, `QUEUE`.
+Expressions: literals, constant symbols, the three bare-symbol reads, every prefix operator, every binary operator, and a call at any depth the path carries.
 
 ## Promotable, and the sketch is the same each time
 
-**One expression then a `Flow`**: `RETURN`, `EXIT`, `PUSH`, `QUEUE`, `NUMERIC` with a computed setting, `INTERPRET`'s own expression (see below for the fragment), `SIGNAL VALUE`'s.
-Part 1's Task B is the pattern; each is an op carrying the instruction index and an optional source register.
+**One expression then a `Flow`**: `NUMERIC` with a computed setting, `INTERPRET`'s own expression (see below for the fragment), `SIGNAL VALUE`'s.
+Part 1's Task B is the pattern and is where `RETURN`, `EXIT`, `PUSH` and `QUEUE` left this row; each one still here is an op carrying the instruction index and an optional source register.
 
 **A list of expressions**: `DROP`, `PROCEDURE EXPOSE`, `USE ARG`, `RAISE`'s several expression positions, `PARSE`'s source expression where it has one.
 Each is Task A's shape -- ops per element, then an op that consumes them -- but the payoff is much smaller, because these run once per activation rather than once per iteration.

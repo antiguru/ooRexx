@@ -180,13 +180,15 @@ fn the_ir_engine_steps_a_simple_blocks_body_from_the_chunk() {
 /// An `IF`'s chosen branch is stepped from the chunk, on both paths.
 ///
 /// **The only observable that separates a promoted `IF` from an unpromoted
-/// one**, and that is why it is a count. Both engines print the same bytes
-/// for every program -- the condition is evaluated by the same
-/// `eval_if_condition` either way -- so what changes is whether the branch's
-/// clauses reach the compiled stream at all. With the branch left on the
-/// tree-walker the count is 2 on each path: the `IF` clause and the one
-/// clause after the whole construct, with everything inside the branch
-/// reached through `run_bounded`'s tree-walker arm and counted nowhere.
+/// one**, and that is why it is a count. An `IF`'s own condition reaches the
+/// same `Interp::condition_value` on either engine -- whether it gets there
+/// through `eval_if_condition` or through the ops `crate::ir::Op::Condition`
+/// ends -- so both engines print the same bytes for every program, and what
+/// changes is whether the branch's clauses reach the compiled stream at all.
+/// With the branch left on the tree-walker the count is 2 on each path: the
+/// `IF` clause and the one clause after the whole construct, with everything
+/// inside the branch reached through `run_bounded`'s tree-walker arm and
+/// counted nowhere.
 ///
 /// Both paths, because they are different mechanisms: the true path falls
 /// into the branch and leaves it by the branch-end jump, and the false path

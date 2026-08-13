@@ -37,13 +37,13 @@
 use rexx_core::{Decoded, FrameId, ObjRef};
 use rexx_parse::{Call, ExprKind, Instruction, InstructionKind, ProgramSource, SymbolId};
 
-use super::{BodyEngine, Chunk, Op};
+use super::{BodyEngine, Chunk, ConditionKeyword, Op};
 use crate::clause::{ClauseOutcome, ClauseValue};
 use crate::eval::call_target_name;
 use crate::run::{
-    Absorbed, ConditionTrace, Echo, Ended, Flow, LoopHeaderValues, SelectEscape, SelectResume,
-    absorb, otherwise_range, otherwise_resume, select_escape, select_parts, when_resume,
-    when_targets,
+    Absorbed, ConditionTrace, Echo, Ended, Flow, LoopHeaderValues, QueueKeyword, ReturnKeyword,
+    SelectEscape, SelectResume, absorb, otherwise_range, otherwise_resume, select_escape,
+    select_parts, when_resume, when_targets,
 };
 use crate::{Code, Failure, Interp, Loud};
 
@@ -1058,6 +1058,18 @@ impl Interp {
                                         "a Return op names an instruction that is not a RETURN or \
                                          an EXIT of matching arity"
                                     );
+                                    debug_assert!(
+                                        matches!(
+                                            (&clause.kind, keyword),
+                                            (InstructionKind::Return { .. }, ReturnKeyword::Return)
+                                                | (
+                                                    InstructionKind::Exit { .. },
+                                                    ReturnKeyword::Exit
+                                                )
+                                        ),
+                                        "a Return op's keyword names the other half of the pair \
+                                         from the clause it ends"
+                                    );
                                     let value = src.map(|register| {
                                         debug_assert!(
                                             chunk.holds_register(register),
@@ -1089,6 +1101,18 @@ impl Interp {
                                         ),
                                         "a Queue op names an instruction that is not a PUSH or a \
                                          QUEUE of matching arity"
+                                    );
+                                    debug_assert!(
+                                        matches!(
+                                            (&clause.kind, keyword),
+                                            (InstructionKind::Push { .. }, QueueKeyword::Push)
+                                                | (
+                                                    InstructionKind::Queue { .. },
+                                                    QueueKeyword::Queue
+                                                )
+                                        ),
+                                        "a Queue op's keyword names the other half of the pair \
+                                         from the clause it writes for"
                                     );
                                     let value = src.map(|register| {
                                         debug_assert!(
@@ -1183,6 +1207,18 @@ impl Interp {
                                         *index,
                                         clause,
                                         "Condition",
+                                    );
+                                    debug_assert!(
+                                        matches!(
+                                            (&clause.kind, keyword),
+                                            (InstructionKind::If { .. }, ConditionKeyword::If)
+                                                | (
+                                                    InstructionKind::When { .. },
+                                                    ConditionKeyword::When
+                                                )
+                                        ),
+                                        "a Condition op's keyword does not name the clause whose \
+                                         condition it is validating"
                                     );
                                     let value = self.roots.temp_at(registers, *reg as usize);
                                     // Read live rather than compiled in, for
