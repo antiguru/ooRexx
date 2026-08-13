@@ -2888,3 +2888,89 @@ The cheap form, if it is ever worth taking, is a build mode that skips the compo
 #### What entry 29 does not change
 
 Entry 28's three subject-axis figures, its split-by-task table apart from the `rexxcps` cell above, its correction of what "control" meant on `alloc4c`, and its disposition all stand, and all were reproduced independently by Task 2's reviewer at -25.20%, -9.97% and -9.56%.
+
+### Entry 30 -- the stem's slot: the hashing bucket finally falls, and one control axis that is not one
+
+Plan: `docs/superpowers/plans/2026-08-13-stem-slot-resolution.md`, one task.
+Base `9513c8b13`, head `5eaa3c8e8`, both read back from `git log`.
+
+**This entry changes the wrapper, for entry 27's reason and in entry 28's way**, and says so rather than letting the difference pass as a result.
+The configuration block above fixes wall clock through `rexx-bench-suite`. This entry is `perf stat -e instructions:u`, **three interleaved runs per arm** on the subject axes and **six** on the control axes, every arm staged at one fixed binary path so `argv[0]` is byte-identical between them.
+**No wall-clock figure is claimed by this entry**, and no wall-clock run was taken.
+
+#### Cause, stated by the plan before the task
+
+`perf record` over `samples/rexxcps.rex` after the compound-name plan showed its compound-name bucket down from 8.85% to 2.51% of self time while the symbol-lookup hashing bucket went **up**, 8.61% to 9.33%.
+That plan removed the name hashing for a compound's *tail pieces* and left its *stem*: `stem_get`, `stem_set` and `stem_drop_tail` each opened with `slot_of(stem_name)`, so every read and every write of `acompound.key1.loop` hashed `ACOMPOUND.`.
+`Plan::note_compound_name` already called `slot_for` on the stem to assign exactly that slot, and dropped it.
+
+#### Predicted movement
+
+The programs whose inner loops hold a compound (`compound`, `alloc4c`, `rexxcps`), and nothing else; the hashing bucket down.
+
+#### Measured movement
+
+Minimum of each arm's runs.
+
+| axis | base `9513c8b13` | head `5eaa3c8e8` | difference |
+|---|---:|---:|---:|
+| `compound` | 27,798,509,899 | 25,052,491,453 | **-9.88%** |
+| `alloc4c` | 8,456,675,211 | 8,189,737,101 | **-3.16%** |
+| `rexxcps` | 25,858,071,136 | 25,297,898,179 | **-2.17%** |
+| `arith` | 20,403,949,862 | 20,415,989,999 | **+0.06%** |
+| `strings` | 44,928,588,505 | 44,928,588,385 | -120 instructions |
+| `varlookup` | 44,840,637,218 | 44,840,636,876 | -342 instructions |
+| `emptyloop` | 27,150,610,000 | 27,150,610,122 | +122 instructions |
+
+`rexxcps` self-calibrated to `100 x 100` on every arm, checked on each arm's own `Averaged:` line.
+`compound`, `alloc4c`, `varlookup`, `emptyloop`, `arith` and `strings` produce byte-identical stdout **and** stderr and exit 0 under both binaries on both engines.
+
+#### The instrument's own spread, measured before any of the small figures were read
+
+| axis | same-binary span, base | same-binary span, head |
+|---|---:|---:|
+| `compound` | 1,370,916 | 1,571,750 |
+| `alloc4c` | 58,490 | 14,892 |
+| `rexxcps` | 4,075,851 | 11,206,860 |
+| `arith` | 1,439 | 1,250 |
+| `strings` | 1,999 | 1,036 |
+| `varlookup` | 607 | 954 |
+| `emptyloop` | 1,430 | 1,456 |
+
+So `strings`, `varlookup` and `emptyloop` carry a **bound and not a difference**: this change moves them by under about a thousand instructions out of twenty-seven to forty-five billion, which is this instrument's resolution there, and no signed figure survives.
+Three `strings` runs came back 36 to 51 million instructions high -- two on the base arm and one on the head arm, the same signature entry 29's reviewer recorded on that axis -- and are excluded as external interference; every other run of every axis is used.
+
+#### `arith` is not inside the spread, and that is the cost side
+
+`arith` moved **+12,040,137 instructions**, about eight thousand times its own 1,250-to-1,439 span, with the six runs of each arm not overlapping at all.
+It holds no compound variable, and that was measured rather than read: an accessor-level probe built for the correctness check fires on `compound`, `alloc4c` and `rexxcps` and is **silent** on `arith`, `strings`, `varlookup` and `emptyloop` under both engines.
+So this is codegen drift on a program the change cannot otherwise touch, and it is recorded as the cost side rather than explained.
+**No attribution beyond that is offered**: entry 27 measured layout alone moving these axes between -5.12% and +4.55% on wall clock, and separating drift from layout needs a do-nothing control this entry did not build.
+
+#### The bucket the task existed for
+
+`perf record -F 999`, `REXX_ENGINE=ir`, over `samples/rexxcps.rex`, both arms staged at the one fixed path, **three runs per arm**, one sitting, bucketed by self time.
+The bucket is named rather than counted: `hash_one::<&[u8]>`, SipHash's own `write`, `Interp::slot_of`, `hash_one::<&SymbolId>` and `HashMap<&str, ()>::contains_key::<str>`.
+
+| | base `9513c8b13` | head `5eaa3c8e8` |
+|---|---|---|
+| bucket, three runs | 7.56% / 7.42% / 7.75% | 5.34% / 4.68% / 5.24% |
+| `hash_one::<&[u8]>` | 2.56% / 2.66% / 3.04% | 2.07% / 1.61% / 2.06% |
+| SipHash `write` | 2.79% / 2.49% / 2.48% | 1.63% / 1.25% / 1.43% |
+| `Interp::slot_of` | 1.47% / 1.55% / 1.25% | 0.73% / 1.04% / 0.92% |
+
+The two arms' ranges do not overlap on the bucket or on any of its three largest members.
+**These shares are not comparable with the plan's 8.61%/9.33% table**, which was taken at a different sitting with a different `perf` invocation; the comparison that means anything is base against head above, measured in one sitting with one method.
+A share is a share of a total that itself fell 2.17%, so the absolute hashing work fell by rather more than the share difference suggests.
+
+#### Disposition
+
+**Accepted, and the hypothesis is confirmed by route as well as by outcome.**
+The three axes whose inner loops hold a compound moved and no other axis moved by more than its own spread except `arith`, which holds none and is drift.
+The bucket that did not fall last time fell.
+
+#### What this entry does not claim
+
+* **No time figure**, for entry 27's reason.
+* **`arith`'s +0.06% is not attributed.** It is reported, and the control that would separate drift from layout was not built.
+* **The stem is not the last name-keyed lookup on this path.** `stem_assign` and `replace_stem` -- a bare stem's own write and `DROP` of a whole stem -- still open with `slot_of`, and the slot they want is already in the plan's `by_symbol` under the `ExprKind::Stem` symbol's own id; a compound `DO` control variable's stem and tail pieces still resolve by name, because the whole dotted name holds the slot. Both are named in the task's report as work this plan did not take.
