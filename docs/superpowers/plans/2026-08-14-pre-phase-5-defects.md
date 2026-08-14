@@ -125,13 +125,15 @@ Break the fix deliberately (re-admit the instruction) and confirm the new test g
 - Consumes: nothing from Task 1.
 - Produces: nothing Task 3 consumes, but **both tasks change trace output and both touch `run.rs`**, so Task 3 starts from this task's committed tree.
 
-**Instance one, verified on `328c51fcf`:** `trace r`, `signal on syntax name bad`, a `call sub` whose callee raises. The handler's clauses echo **four spaces too deep**:
+**Instance one, verified on `328c51fcf`:** `trace r`, `signal on syntax name bad`, a `call sub` whose callee raises. The handler's clauses echo **two spaces too deep**:
 
 ```
 oracle                          this crate
-   11 *-* bad:                     11 *-*     bad:
-   12 *-* say 'trapped'            12 *-*     say 'trapped'
+    7 *-* bad:                       7 *-*   bad:
+    8 *-* say 'in handler'           8 *-*   say 'in handler'
 ```
+
+**The depth is one level per enclosing call, and this plan said four.** That figure came from a controller probe carrying two call levels -- `call sub`, then `sub:` calling `inner:`, which raises -- and was written beside a description of the one-level program, which measures two. Corrected after Task 2 measured the minimal form; the four-column shape is real and needs the raise a further call down.
 
 **It needs the callee.** The same trap raised in the main program agrees byte for byte on both engines. Both engines emit identical bytes here, so it is not the compiled form.
 
