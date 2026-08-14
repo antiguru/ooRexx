@@ -57,9 +57,14 @@
 #     `G ran 6`. The `END` is an instruction the oracle executes and this crate
 #     never steps -- it echoes it and jumps past it.
 #
-# Both are the elided-instruction family `task-4bp-report.md` catalogues: the
-# oracle runs a clause boundary at a position where this crate has no instruction
-# to run one at. They are recorded here rather than in a report because this is
+# **They have two different causes, not one.** The `UNTIL` one is the
+# elided-instruction family `task-4bp-report.md` catalogues: the oracle runs a
+# clause boundary at a position where this crate has no instruction to run one
+# at. The zero-pass one is not, and its own bullet already names the cause --
+# this crate's `DO` clause encloses the whole loop, so its boundary runs after
+# the loop rather than before the body. `G ran 3` names the `DO`'s own line,
+# which says that boundary exists and carries the right line; what is wrong is
+# where it sits. They are recorded here rather than in a report because this is
 # the file the next reader of a loop-header boundary opens.
 #
 # Expected lines are tagged so that no line of the block can be empty: an empty
@@ -221,10 +226,48 @@ out> after
 # program ending `say 'after' zv sigl` -- which produces the identical oracle
 # transcript and a *different* crate one, `after set 6`. Measured both ways.
 #
-# `do label zl` behaves the same and `if ... then` is clean on this route. It
-# belongs to the elided-boundary family this file's header block already
-# describes -- the oracle runs a clause boundary at a position where this crate
-# has no instruction to run one at -- and not to the indent quantities above.
+# `do label zl` behaves the same and `if ... then` is clean on this route.
+#
+# **The boundary is not missing. It is in the wrong place.** The tree-walker
+# steps a `DO` through `step_in_temps_frame` -> `in_stepped_clause`, whose
+# clause unit wraps `step`; `step`'s own `Do` arm calls `run_loop`, which
+# resolves the whole loop before returning. So the `DO`'s clause stays open
+# across the body, the body's clauses nest inside it, and `leave_clause` -- the
+# boundary that delivers -- does not run until the loop is over. The oracle's
+# `RexxInstructionSimpleDo::execute` returns once it has opened the block, so
+# its clause ends before any body instruction runs. Delivery then goes to
+# whichever boundary arrives first: with a body that is the body's first
+# clause, and with no body it is the `DO`'s own.
+#
+# **An empty body agrees, and that is what pins it.** The same program with the
+# body's `say` removed:
+#
+#   call on user zx name h  | raiser1:
+#   call on user zy name g  | raise user zx return 5
+#   zv = 'unset'            | h:
+#   zn = raiser1()          | raise user zy return 1
+#   do                      | g:
+#   end                     | zv = 'set'
+#   say 'after' zv zn       | say 'G ran' sigl
+#   exit                    | return
+#
+# read down the left column then the right, so `do` is line 5 and `end` is
+# line 6:
+#
+#   oracle       G ran 5 / after set 5
+#   this crate   G ran 5 / after set 5     <- agrees, both engines
+#
+# `SIGL` is 5 rather than 6 or 7, so this crate's `DO` clause boundary exists,
+# carries the right line and delivers. Adding one clause to the body is what
+# moves the delivery. That is the discriminator between "no boundary" and
+# "boundary too late", and it comes out too late.
+#
+# **Which is why this and the plain `SELECT` above it are two defects and not
+# one.** `Select`'s own arm wraps just the `CASE` evaluation in `in_clause` and
+# closes it before the `WHEN`s run, so that boundary is correctly placed --
+# plain `SELECT` gets `SIGL` right and only the indent wrong. `DO`'s is
+# misplaced instead: measured under `trace r`, its handler's own lines are
+# byte-identical to the oracle's, and only their position and `SIGL` differ.
 program
 call on user zx name h
 do i = 1 to raiser()
