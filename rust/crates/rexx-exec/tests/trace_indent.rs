@@ -146,42 +146,93 @@ fn read_case(name: &str, extension: &str) -> Vec<u8> {
     std::fs::read(&path).unwrap_or_else(|e| panic!("{}: unreadable ({e})", path.display()))
 }
 
-/// Runs one case under one engine and asserts all three descriptors against
+/// Renders a mismatch between two byte strings for a failure message.
+///
+/// The comparison that decides is always on `&[u8]`; this is the *report* of
+/// one that already failed, so a lossy rendering costs nothing and is what a
+/// reader can actually read.
+fn describe(label: &str, actual: &[u8], expected: &[u8]) -> String {
+    format!(
+        "  {label}\n    actual:   {:?}\n    expected: {:?}",
+        String::from_utf8_lossy(actual),
+        String::from_utf8_lossy(expected)
+    )
+}
+
+/// Runs one case under one engine and compares all three descriptors against
 /// the oracle's own bytes, with **no normalisation on any of them**.
-fn check_case(name: &str, engine: Engine) {
+///
+/// **Answers rather than asserts, and that is what makes a run readable.** A
+/// `#[test]` that asserts inside a loop over the cases stops at the first
+/// failure, so a change that breaks one case is indistinguishable in the
+/// output from one that breaks every case after it in sorted order -- and the
+/// cases this file holds fall into two families that are meant to fail
+/// separately. Measured: under a mutation of the loop-header rule, the first
+/// case in sorted order is a loop case, so an asserting loop never ran the
+/// `signal_*` cases at all and "only the loop cases went red" was not
+/// something the run said. The callers collect these and assert once.
+///
+/// **stdout and stderr compare as `&[u8]`.** This file's premise is byte for
+/// byte, and `String::from_utf8_lossy` maps every invalid sequence to one
+/// replacement character, so two different non-UTF-8 stderrs would compare
+/// equal through it. Today's transcripts are ASCII and it would not bite yet;
+/// the premise is what has to stay true.
+fn check_case(name: &str, engine: Engine) -> Vec<String> {
     let expected = parse_expected(&read_case(name, "expected"), name);
     let source = read_case(name, "rex");
     let outcome = run_program(CASE_PATH, source, Invocation::none().with_engine(engine));
 
-    assert_eq!(
-        String::from_utf8_lossy(&outcome.stdout),
-        String::from_utf8_lossy(&expected.stdout),
-        "{name} ({engine:?}): stdout"
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&outcome.stderr),
-        String::from_utf8_lossy(&expected.stderr),
-        "{name} ({engine:?}): stderr, raw -- this comparison is the whole point \
-         of this file and does not go through DEVIATION 0"
-    );
-    assert_eq!(
-        outcome.exit_code, expected.rc,
-        "{name} ({engine:?}): exit code"
+    let mut mismatches = Vec::new();
+    if outcome.stdout != expected.stdout {
+        mismatches.push(describe(
+            &format!("{name} ({engine:?}): stdout"),
+            &outcome.stdout,
+            &expected.stdout,
+        ));
+    }
+    if outcome.stderr != expected.stderr {
+        mismatches.push(describe(
+            &format!("{name} ({engine:?}): stderr, raw"),
+            &outcome.stderr,
+            &expected.stderr,
+        ));
+    }
+    if outcome.exit_code != expected.rc {
+        mismatches.push(format!(
+            "  {name} ({engine:?}): exit code\n    actual:   {}\n    expected: {}",
+            outcome.exit_code, expected.rc
+        ));
+    }
+    mismatches
+}
+
+/// Every case under one engine, each one run whatever the ones before it did,
+/// with every mismatch named in a single failure.
+fn check_every_case(engine: Engine) {
+    let names = case_names();
+    let mismatches: Vec<String> = names
+        .iter()
+        .flat_map(|name| check_case(name, engine))
+        .collect();
+    assert!(
+        mismatches.is_empty(),
+        "{} of {} cases disagree with the oracle under {engine:?}, compared raw -- \
+         this comparison is the whole point of this file and does not go through \
+         DEVIATION 0:\n{}",
+        mismatches.len(),
+        names.len(),
+        mismatches.join("\n")
     );
 }
 
 #[test]
 fn every_case_matches_the_oracle_on_the_tree_walker() {
-    for name in case_names() {
-        check_case(&name, Engine::TreeWalker);
-    }
+    check_every_case(Engine::TreeWalker);
 }
 
 #[test]
 fn every_case_matches_the_oracle_on_the_compiled_engine() {
-    for name in case_names() {
-        check_case(&name, Engine::Ir);
-    }
+    check_every_case(Engine::Ir);
 }
 
 /// The blindness this file exists to reach around, measured per case.
@@ -191,32 +242,46 @@ fn every_case_matches_the_oracle_on_the_compiled_engine() {
 /// says the comparison above has something to catch; the second says neither
 /// `corpus.rs` nor `trace_oracle.rs` could catch it, which is why the
 /// comparison above is raw.
+/// Collected per case and asserted once, for the reason [`check_case`] gives:
+/// a loop that asserts reports only the first case that fails, and the answer
+/// worth having here is which cases do.
 #[test]
 fn deviation_0_collapses_every_wrong_answer_this_file_holds() {
+    let mut findings = Vec::new();
     for name in case_names() {
         let expected = parse_expected(&read_case(&name, "expected"), &name);
         let wrong = read_case(&name, "wrong");
-        assert_ne!(
-            String::from_utf8_lossy(&wrong),
-            String::from_utf8_lossy(&expected.stderr),
-            "{name}: the wrong answer is the right one, so this case pins nothing"
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&support::normalize_stderr(&wrong)),
-            String::from_utf8_lossy(&support::normalize_stderr(&expected.stderr)),
-            "{name}: DEVIATION 0 does not collapse this difference, so the shared \
-             harnesses can see it and this file is not what should be pinning it"
-        );
+        if wrong == expected.stderr {
+            findings.push(format!(
+                "  {name}: the wrong answer is the right one, so this case pins nothing"
+            ));
+        }
+        if support::normalize_stderr(&wrong) != support::normalize_stderr(&expected.stderr) {
+            findings.push(describe(
+                &format!(
+                    "{name}: DEVIATION 0 does not collapse this difference, so the shared \
+                     harnesses can see it and this file is not what should be pinning it"
+                ),
+                &support::normalize_stderr(&wrong),
+                &support::normalize_stderr(&expected.stderr),
+            ));
+        }
     }
+    assert!(findings.is_empty(), "{}", findings.join("\n"));
 }
 
 /// A case is three files, and a missing one is a case that half-runs.
 #[test]
 fn every_case_ships_all_three_files() {
-    for name in case_names() {
-        for extension in ["rex", "expected", "wrong"] {
-            let path = case_dir().join(format!("{name}.{extension}"));
-            assert!(path.is_file(), "{}: missing", path.display());
-        }
-    }
+    let missing: Vec<String> = case_names()
+        .iter()
+        .flat_map(|name| {
+            ["rex", "expected", "wrong"]
+                .iter()
+                .map(move |extension| case_dir().join(format!("{name}.{extension}")))
+        })
+        .filter(|path| !path.is_file())
+        .map(|path| format!("  {}: missing", path.display()))
+        .collect();
+    assert!(missing.is_empty(), "{}", missing.join("\n"));
 }
