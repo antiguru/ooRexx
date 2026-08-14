@@ -1516,30 +1516,22 @@ struct Interp {
     /// needed: an inner build gets its own buffer rather than corrupting an
     /// outer one.
     key_buffer: Vec<u8>,
-    /// A buffer lent out for one call's evaluated arguments, and handed back.
+    /// A buffer lent out for a builtin call's evaluated argument values.
     ///
-    /// **Every call allocates one of these and frees it on the way out**, and
-    /// a builtin call allocates a second for [`Interp::value_buffer`] beside
-    /// it. Measured with `heaptrack` on `bench-programs/strings.rex`, whose
-    /// loop makes four builtin calls: the pair was eight of the ten
-    /// allocations that program made per iteration.
+    /// **Every builtin call allocated one of these and freed it on the way
+    /// out.** Measured with `heaptrack` on `bench-programs/strings.rex`, whose
+    /// loop makes four builtin calls, that was eight of the ten allocations
+    /// the program made per iteration -- this buffer and a second one, since
+    /// the arguments were built as `Argument`s first and copied into values to
+    /// hand over. The builtin path builds the values directly now, so this is
+    /// the only one left.
     ///
     /// **Lent and returned rather than borrowed in place**, for
     /// [`Interp::key_buffer`]'s reason: the argument loop calls back into
     /// `&mut self` for every argument it evaluates, which a live borrow of a
-    /// field would forbid.
-    ///
-    /// **Losing it is safe and costs only the reuse**, and it is lost on
-    /// every non-builtin call: a label or routine callee is handed the
-    /// arguments and keeps them. The next builtin call builds in the empty
-    /// `Vec` left behind, allocating once, and hands back the capacity for
-    /// the one after it.
-    argument_buffer: Vec<Option<Argument>>,
-    /// A buffer lent out for the values a builtin's arguments carry.
-    ///
-    /// Separate from [`Interp::argument_buffer`] because the two hold
-    /// different types and are both live at once: `builtin::dispatch` reads a
-    /// slice of values while the arguments they came from are still rooted.
+    /// field would forbid. Losing it is safe and costs only the reuse -- a
+    /// call that returns early through `?` leaves this empty and the next
+    /// taker allocates.
     value_buffer: Vec<Option<ObjRef>>,
     /// A buffer lent out for building a builtin's result, and handed back.
     ///
@@ -2256,7 +2248,6 @@ impl Interp {
             heap: Heap::new(),
             roots: RootSet::new(),
             key_buffer: Vec::new(),
-            argument_buffer: Vec::new(),
             value_buffer: Vec::new(),
             result_buffer: std::cell::Cell::new(Vec::new()),
             activations: Vec::new(),

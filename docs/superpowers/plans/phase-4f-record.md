@@ -4343,3 +4343,37 @@ A probe over the search primitives -- ten needles against a haystack chosen to r
 That is a real divergence and it is not this entry's to fix -- it is recorded here because this probe is what found it, and because `find_backward`'s own doc comment carries the *opposite* rule for `LASTPOS`, measured against the oracle at the time: "the match has to end within the window, not merely begin there". The two builtins do not share a rule, and only one of them has it right.
 
 **And the probe was shown to fail before being trusted.** Dropping the full comparison and keeping only the two end-byte tests makes fourteen of its lines diverge. The source was then restored from the backup, re-verified with `sha256sum -c`, rebuilt, and the probe re-run to the byte.
+
+### Entry 55 -- the builtin call path stops building arguments it never wanted
+
+Base `52104500b`. Entry 54 moved `changestr` from 12.48% of `strings` samples to 6.50% and took `memcmp` out of the profile entirely; what surfaced underneath was `invoke_call` at **14.76%**, above every builtin it dispatches.
+
+#### The change
+
+Every call built a `Vec<Option<Argument>>`, and the builtin arm then copied it into a `Vec<Option<ObjRef>>` to hand over. **A builtin has no use for an `Argument`**: its `Reference` variant carries the caller's slot and the variable's spelling for `USE ARG >`, which no builtin has. So the builtin path was building a larger value, moving it into a buffer, walking the buffer, and copying the one field it needed out of each.
+
+The builtin path now has its own loop, evaluating straight into the value buffer and returning before the general path starts. The per-argument step -- evaluate, root, trace -- is shared as `eval_traced_argument`, so the `>A>` lines and the `>O>` line a `>p` reference argument traces are the same on both paths by construction rather than by two copies agreeing.
+
+**And `argument_buffer` is gone with it.** Entry 48 lent that buffer to every call; only the builtin arm ever handed it back, because a label or routine callee keeps the arguments it is given. With the builtin path no longer building `Argument`s at all, nothing returned it, so the general path was taking an always-empty `Vec` and allocating into it -- a pool with no source. It is a plain `Vec::with_capacity` again, and the field, its two accessors and their doc comments are removed. The lending that entry 48 measured was two buffers; one of them is now unnecessary rather than merely unused.
+
+#### Instructions
+
+Five interleaved rounds per arm, both arms staged at one fixed binary path, minimum of each.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `strings` | 32,925,639,585 | 32,571,639,859 | -353,999,726 | **-1.075%** | 542 | 1,038 |
+| `alloc4c` | 6,909,807,492 | 6,862,793,486 | -47,014,006 | **-0.680%** | 143,207 | 119,009 |
+| `rexxcps` | 20,758,919,921 | 20,717,500,441 | -41,419,480 | -0.200% | 7,030 | 11,481,785 |
+| `compound` | 18,238,627,980 | 18,237,904,979 | -723,001 | bound | 2,556,500 | 2,459,290 |
+| `arith` | 19,337,465,223 | 19,341,750,679 | **+4,285,456** | +0.022% | 717 | 932 |
+| `emptyloop` | 24,975,609,086 | 24,975,608,981 | -105 | bound | 956 | 592 |
+| `varlookup` | 42,123,633,398 | 42,123,633,803 | +405 | bound | 907 | 776 |
+
+**Smaller than 14.76% of the axis would suggest, and that is the point of measuring rather than reading a profile share**: most of what `invoke_call` costs is evaluating the argument expressions, which this change does not touch -- it removes the container they were being put into.
+
+`arith` calls no builtin and regressed outside its spans, the third entry running to show a movement of that size with no mechanism on that axis. The do-nothing control this record has wanted since entry 31 is now the single most useful measurement not yet made.
+
+#### Behaviour
+
+Six probes re-run against this binary: the argument probe (entry 48, omitted positions, nested calls, `USE ARG >` references, `TRACE I`), the string probe (entry 50), the `NUMERIC` probe (entry 51), the arithmetic sweep (entry 52, 63,504 lines), the resolution probe (entry 53) and the search probe (entry 54, 518 lines). **All six are identical to the oracle**, except the search probe's one known line -- `pos('an', h, 6, 4)`, the divergence entry 54 recorded, which is present in every build tested and is not this change's.

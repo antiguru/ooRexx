@@ -4169,25 +4169,6 @@ impl Interp {
     ///
     /// `code` is the body the **argument expressions** are written in, which
     /// is the caller's own and is not what `resolve_call` searched.
-    /// Takes the shared argument buffer, empty and ready to build into.
-    ///
-    /// **Cleared here rather than where it is handed back**, matching
-    /// [`Interp::take_key_buffer`]. What it holds between the two is a run of
-    /// `ObjRef` handles the collector does not scan, which is what makes the
-    /// delay safe: nothing keeps them alive and nothing reads them, and
-    /// dropping them here frees the one small allocation an
-    /// `Argument::Reference` carries.
-    fn take_argument_buffer(&mut self) -> Vec<Option<Argument>> {
-        let mut buffer = std::mem::take(&mut self.argument_buffer);
-        buffer.clear();
-        buffer
-    }
-
-    /// Hands the argument buffer back for the next call.
-    fn give_argument_buffer(&mut self, buffer: Vec<Option<Argument>>) {
-        self.argument_buffer = buffer;
-    }
-
     /// Takes the shared value buffer, empty and ready to build into.
     fn take_value_buffer(&mut self) -> Vec<Option<ObjRef>> {
         let mut buffer = std::mem::take(&mut self.value_buffer);
@@ -4232,7 +4213,43 @@ impl Interp {
         // argument's callee's. Measured (`trace i`): `call sub 1,,3` traces
         // `>A>   "1"`, `>A>   ""`, `>A>   "3"`, in that order, each right
         // after its own argument's `>L>`/`>V>` lines.
-        let mut arguments = self.take_argument_buffer();
+        // **The builtin path evaluates into its own buffer and returns from
+        // here**, before an `Argument` is ever built. A builtin wants the
+        // values and nothing else: the `Reference` half of an `Argument`
+        // exists for `USE ARG >`, which no builtin has, so the general path
+        // below used to build a `Vec<Option<Argument>>` and then copy it into
+        // a `Vec<Option<ObjRef>>` to hand over. Measured with `perf` on
+        // `bench-programs/strings.rex`, whose loop makes four builtin calls,
+        // `invoke_call` was 14.76% of samples -- more than any builtin it
+        // dispatches.
+        //
+        // The evaluation itself is shared with the general path
+        // (`eval_traced_argument`), so the `>p` reference form still traces
+        // its `>O>` line here exactly as it does for a label call.
+        if let Resolved::Builtin(target) = resolved {
+            let mut values = self.take_value_buffer();
+            for arg in args {
+                match arg {
+                    None => {
+                        self.trace_argument(self.clause_state.current_value_indent, b"");
+                        values.push(None);
+                    }
+                    Some(expr) => {
+                        values.push(Some(self.eval_traced_argument(code, expr)?.value()));
+                    }
+                }
+            }
+            let outcome = builtin::run(self, name, target, &values);
+            // Back before the outcome is read, so the raised-condition path
+            // keeps the buffer as the ordinary one does.
+            self.give_value_buffer(values);
+            return Ok(Ended::Returned(Some(outcome?)));
+        }
+
+        // A fresh `Vec` and not a lent one: this path always hands the
+        // arguments to the callee, which keeps them, so there is nothing to
+        // give back and a pool would allocate on every call anyway.
+        let mut arguments: Vec<Option<Argument>> = Vec::with_capacity(args.len());
         for arg in args {
             match arg {
                 None => {
@@ -4242,14 +4259,7 @@ impl Interp {
                     self.trace_argument(self.clause_state.current_value_indent, b"");
                     arguments.push(None);
                 }
-                Some(expr) => {
-                    let argument = self.eval_argument(code, expr)?;
-                    self.roots.push_temp(argument.value());
-                    if let Some(rendered) = self.intermediate_text(argument.value()) {
-                        self.trace_argument(self.clause_state.current_value_indent, &rendered);
-                    }
-                    arguments.push(Some(argument));
-                }
+                Some(expr) => arguments.push(Some(self.eval_traced_argument(code, expr)?)),
             }
         }
 
@@ -4262,24 +4272,8 @@ impl Interp {
         // reachable, and the value handed back is rooted by whichever caller
         // receives it exactly as a callee's `RETURN` value already is.
         let entered = match resolved {
-            Resolved::Builtin(target) => {
-                let mut values = self.take_value_buffer();
-                values.extend(
-                    arguments
-                        .iter()
-                        .map(|argument| argument.as_ref().map(Argument::value)),
-                );
-                let outcome = builtin::run(self, name, target, &values);
-                // Both buffers go back before the outcome is read, so the
-                // raised-condition path keeps them as the ordinary one does.
-                self.give_value_buffer(values);
-                self.give_argument_buffer(arguments);
-                // **No second resolution and no arm for the two disagreeing.**
-                // Resolution handed over which builtin this is, so the case
-                // that used to need a loud answer here -- the name resolving
-                // one way and dispatching another -- cannot be stated.
-                return Ok(Ended::Returned(Some(outcome?)));
-            }
+            // Answered above, before the loop that just ran.
+            Resolved::Builtin(_) => unreachable!("the builtin path returns before this"),
             Resolved::Label(target) => Entered::Label(target),
             Resolved::Routine(installed) => Entered::Routine(installed),
         };
@@ -4668,6 +4662,23 @@ impl Interp {
             value,
             name,
         })
+    }
+
+    /// One call argument, evaluated, rooted and traced -- the step both call
+    /// paths share.
+    ///
+    /// The builtin path keeps only [`Argument::value`] and drops the rest at
+    /// once; the label and routine path keeps the whole thing, because a
+    /// `USE ARG >` target needs the slot a `Reference` carries. Sharing the
+    /// step is what keeps `>A>` and the `>O>` line a `>p` argument traces
+    /// identical on both.
+    fn eval_traced_argument(&mut self, code: &Code<'_>, expr: &Expr) -> Result<Argument, Failure> {
+        let argument = self.eval_argument(code, expr)?;
+        self.roots.push_temp(argument.value());
+        if let Some(rendered) = self.intermediate_text(argument.value()) {
+            self.trace_argument(self.clause_state.current_value_indent, &rendered);
+        }
+        Ok(argument)
     }
 
     /// Runs one named `CALL`: `resolve_call`, then [`Interp::invoke_named_call`].
