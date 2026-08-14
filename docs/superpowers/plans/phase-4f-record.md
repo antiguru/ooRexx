@@ -3731,3 +3731,39 @@ Not a defect and no change is proposed here. It is recorded because the two widt
 Total on that run is 20,015,402, from 29,775,401 before entry 38.
 Named: 19 bytes at 4,220,217 (entry 42), 40 bytes at 1,670,604 (here).
 **Unnamed: the 1, 2, 3, 7, 24 and 33-byte widths**, which together are of the same order as the two named ones. None has been attributed, and on this record's experience none should be guessed at.
+
+### Entry 44 -- the small widths are builtin results, allocated to be copied and dropped
+
+Moritz asked why the 1-byte allocations were not simply avoidable. They are, and so are several widths beside them.
+Measured, not inferred; **no code changed here**.
+
+#### What they are
+
+`builtin::string::substr` (`string.rs`), reached through `builtin::run` and `Interp::invoke_call`, caught on a `malloc` breakpoint conditioned on 1 inside a loop calling `substr(1234, 1, 1)`.
+
+Every such builtin builds its answer in an owned `Vec<u8>` from the shared `buffer(len)` helper and hands it to `Interp::text_owned`.
+**`Bytes::from_vec` then copies anything of `INLINE_BYTES` or less into the inline buffer and drops the `Vec`.** `INLINE_BYTES` is 54.
+So for every short builtin result the sequence is: allocate, fill, copy into the object, free.
+
+The widths line up with what `samples/rexxcps.rex` asks for in its inner loop, and each is its own bucket in the histogram:
+
+| width | count | what the program asks for |
+|---:|---:|---|
+| 1 | 1,960,482 | `substr(1234,1,1)` |
+| 2 | 1,120,188 | `substr(1234"5678",6,2)` |
+| 3 | 970,381 | `word(key1,1)` giving `Key` |
+| 7 | 980,088 | `key1` itself, `Key Bee` |
+
+That correspondence is a reading of the program beside the histogram, not a measurement of each width -- only the 1-byte case was caught in the debugger. The mechanism is measured; the per-width attribution of the other three is not, and this record has been wrong about exactly that before.
+
+#### The probe, and the skip that hid it
+
+The first attempt ignored the first 400 hits and never fired, on a program whose one-byte allocations are all parse-time and number fewer than that.
+**A skip large enough to pass the whole population reads exactly like an absence.** Re-running with no skip fired immediately, in `SymbolTable::intern` -- parse-time, a handful, and not the answer either.
+What identified it was a program written to isolate the suspect: a loop calling `substr` and nothing else.
+
+#### The fix this points at
+
+The lending discipline already in the tree for `Interp::key_buffer`, applied to builtin results: take a buffer, build into it, and either hand a slice to `Interp::text` for the inline case or give the buffer up with `text_owned` when the result exceeds `INLINE_BYTES`.
+
+That is 34 `text_owned` call sites across the builtin modules, all funnelling through one `buffer(len)` helper, and each is independent -- so it can be taken a module at a time rather than as one change.
