@@ -762,7 +762,14 @@ pub(crate) fn changestr(
     // Sized before anything is written: `changes` occurrences of `needle`
     // each become `replacement`, and nothing else moves.
     let grown = haystack.len() + changes * replacement.len();
-    let mut out = Vec::with_capacity(grown.saturating_sub(changes * needle.len()));
+    // **The lent buffer, like every other sized result in this module.** A
+    // fresh `Vec` here was not merely one allocation: `text_built` hands
+    // whatever it is given back to the pool, so a fresh one *replaced* the
+    // shared buffer with a tighter one on every call, and the next caller
+    // wanting a byte more grew it again. Measured on
+    // `bench-programs/strings.rex`, that pair was the whole of what the
+    // program still allocated.
+    let mut out = buffer(interp, grown.saturating_sub(changes * needle.len()))?;
     let mut next = 0;
     for _ in 0..changes {
         let found = find_forward(haystack, needle, next, haystack.len());

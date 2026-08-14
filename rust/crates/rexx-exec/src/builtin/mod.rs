@@ -968,9 +968,23 @@ fn fresh_buffer(len: usize) -> Result<Vec<u8>, Failure> {
     Ok(out)
 }
 
+/// **`try_reserve`, not `try_reserve_exact`, and the difference is the whole
+/// point of lending the buffer.** An exact reservation resizes the shared
+/// buffer to precisely one call's need, so two callers wanting different
+/// lengths reallocate on every alternation and the lending buys nothing:
+/// measured on `bench-programs/strings.rex`, whose loop asks `changestr` for
+/// 43 bytes and then joins 46, the buffer was reallocated twice per iteration
+/// and that was the whole of what the program still allocated. Growing
+/// amortised lets the capacity settle at the longest result a program asks
+/// for and stay there.
+///
+/// The guarantee `fresh_buffer` beside this exists for is untouched: this
+/// still reserves fallibly, so a result sized from user input raises 5.1
+/// rather than aborting, and a request larger than the buffer's own capacity
+/// is still a single reservation of what was asked for.
 fn buffer(interp: &Interp, len: usize) -> Result<Vec<u8>, Failure> {
     let mut out = interp.take_result_buffer();
-    out.try_reserve_exact(len)
+    out.try_reserve(len)
         .map_err(|_| Failure::from(Raised::system_resources()))?;
     Ok(out)
 }

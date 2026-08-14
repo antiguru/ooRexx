@@ -4049,3 +4049,59 @@ So a stem written once per tail and never revisited is slower, and a stem revisi
 A probe over the tail-write shapes -- a fresh tail, the same tail overwritten, a tail dropped and then revived, a compound tail with a variable index, a nested tail, a loop that fills tails and a second loop that updates them, a whole-stem reassignment, `DROP` of the stem, and `SYMBOL()` afterwards, all under `TRACE R` -- is **identical to the oracle on stdout, on stderr, and in exit status**, compared stream by stream.
 
 **And the probe was shown to fail before being trusted.** Making the hit arm do nothing, so an overwrite silently keeps the old value, makes that probe exit 215 and diverge from its first line. The source was then restored from the backup, re-verified with `sha256sum -c`, rebuilt, and the probe re-run against the oracle.
+
+### Entry 50 -- the shared buffer, and the two callers that were defeating it
+
+Base `010e741be`. Entry 48 left `strings` at two allocations per iteration and entry 49 did not touch them.
+Both were the *same* buffer, taken and given back correctly, and reallocated on every pass anyway.
+
+#### Three changes, one mechanism
+
+`concat_values` built its join in a fresh `Vec::with_capacity` and finished with `text_owned`. A join that fits `INLINE_BYTES` is copied into the object and the `Vec` dropped, so the allocation was pure waste; it now builds in the lent buffer and finishes with `text_built`, which is entry 45's shape reaching a function entry 45 did not touch.
+
+That alone moved `strings` by **nothing at all**, and the reason is the second change.
+`builtin::buffer` reserved with `try_reserve_exact`, which resizes the shared buffer to precisely one call's need. `strings` asks `changestr` for 43 bytes and then joins 46, so the buffer was resized down and grown again on every iteration and the lending bought nothing. It reserves with `try_reserve` now, so the capacity settles at the longest result the program asks for.
+
+The third is `changestr` itself, which built in a fresh `Vec::with_capacity`. That was not one allocation but two: `text_built` hands whatever it is given back to the pool, so a fresh buffer *replaced* the shared one at a tighter capacity, and the next caller wanting one byte more grew it again.
+
+**Reading the histogram would not have found the second or third of these.** The site attribution named `changestr` and a `RawVec` grow; what connected them was that removing the first allocation changed the count by zero.
+
+#### Allocations
+
+| axis | base | head | |
+|---|---:|---:|---:|
+| `strings` | 120,550 | 552 | **-99.5%** |
+| `alloc4c` | 150,521 | 100,523 | -33.2% |
+| `rexxcps` (pinned) | 595,069 | 539,066 | -9.4% |
+| `compound` | 1,012 | 1,012 | unchanged |
+| `arith` | 528,794 | 528,794 | unchanged |
+
+`strings` began this session at 600,548 and runs 60,000 iterations. It is now inside the few hundred allocations `emptyloop` and `varlookup` sit at, which is the whole of what a program costs before it starts.
+
+Its temporary allocations fell from 120,092 to 93 -- and the `try_reserve` change is what did that, before `changestr` was touched at all: a buffer reallocated to a different exact size every pass is freed with nothing allocated in between, which is heaptrack's definition of temporary.
+
+#### Instructions
+
+Five interleaved rounds per arm, both arms staged at one fixed binary path, minimum of each. The head binary was rebuilt from the restored sources and compared byte for byte with the copy measured.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `strings` | 40,290,587,151 | 40,017,586,486 | -273,000,665 | **-0.678%** | 935 | 640 |
+| `alloc4c` | 7,210,779,797 | 7,165,829,774 | -44,950,023 | **-0.623%** | 179,109 | 230,363 |
+| `rexxcps` | 21,189,081,392 | 21,127,484,961 | -61,596,431 | **-0.291%** | 4,070,430 | 5,522,603 |
+| `compound` | 18,238,268,125 | 18,238,725,943 | +457,818 | bound | 4,918,852 | 2,821,357 |
+| `arith` | 20,176,736,922 | 20,176,737,336 | +414 | bound | 858 | 573 |
+| `emptyloop` | 25,025,609,180 | 25,025,608,921 | -259 | bound | 1,310 | 887 |
+| `varlookup` | 42,123,633,786 | 42,123,633,699 | -87 | bound | 652 | 933 |
+
+**An allocation removed is worth about 45 instructions here, and that is worth writing down** because this series has been chasing allocation counts as a proxy. `strings` lost six million allocations across its full run for 273 million instructions. Entry 49's `compound` figure gives 138 for the same trade. The proxy is real but the exchange rate is small, and a change that removes allocations while adding a probe can come out behind -- entry 49 is the instance.
+
+#### A process abort, removed on the way past
+
+`changestr` sized its result with `Vec::with_capacity`, which is an infallible reservation of a length computed from user input. Measured at the project's own `ulimit -v 1048576`, `changestr('a', copies('a',200000000), 'bb')` **aborts the interpreter** at `010e741be`: `memory allocation of 400000000 bytes failed`, rc 134. Through `buffer` it raises 5.1 at rc 251 instead.
+
+At a 2 GB cap both binaries answer `400000000`, as the oracle does at 1 GB. The remaining gap is that this program needs more memory in this representation than in the oracle's, which is a footprint difference and not a new one.
+
+#### Behaviour
+
+A probe over `changestr` at every shape -- no occurrence, a replacement shorter and longer than the needle, a count limit, an empty needle, an empty replacement, a result crossing `INLINE_BYTES` in both directions, and joins of operands on either side of that boundary -- is **identical to the oracle on stdout, on stderr, and in exit status**, compared stream by stream.

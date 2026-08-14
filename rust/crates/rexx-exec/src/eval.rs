@@ -918,11 +918,23 @@ impl Interp {
         let right_rendered = self.render(right_value);
         let left_bytes = left_rendered.text(self);
         let right_bytes = right_rendered.text(self);
-        let mut bytes = Vec::with_capacity(left_bytes.len() + separator.len() + right_bytes.len());
+        //
+        // **Built in the lent buffer and finished with `text_built`**, which
+        // is what makes the one remaining allocation conditional rather than
+        // certain. A join of two short operands fits `INLINE_BYTES` and is
+        // copied into the object, so the buffer comes straight back and the
+        // next join reuses it; only a result too long to live inline keeps
+        // the buffer, which is the same trade `text_built` always makes.
+        // Measured with `heaptrack` on `bench-programs/strings.rex`, where
+        // this was one of the two allocations left per iteration and 99.6% of
+        // what that program allocated was freed with nothing allocated in
+        // between.
+        let mut bytes = self.take_result_buffer();
+        bytes.reserve(left_bytes.len() + separator.len() + right_bytes.len());
         bytes.extend_from_slice(left_bytes);
         bytes.extend_from_slice(separator);
         bytes.extend_from_slice(right_bytes);
-        let joined = self.text_owned(bytes);
+        let joined = self.text_built(bytes);
 
         Ok(joined)
     }
