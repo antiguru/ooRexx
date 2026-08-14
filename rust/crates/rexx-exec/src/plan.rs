@@ -222,7 +222,7 @@ impl CompoundName {
 #[derive(Debug, Default)]
 pub(crate) struct Plan {
     pub(crate) names: HashMap<Box<[u8]>, usize>,
-    pub(crate) by_symbol: HashMap<SymbolId, usize>,
+    pub(crate) by_symbol: Vec<Option<usize>>,
     /// The static clause indent of every instruction in this body, by index.
     ///
     /// `static_indent` walks the flat instruction list from position zero to
@@ -418,6 +418,12 @@ impl Plan {
         // is only an index into a table of that table's own length.
         let mut plan = Plan {
             compounds: std::iter::repeat_with(|| None)
+                .take(symbols.len())
+                .collect(),
+            // Sized here for the reason `compounds` above is, and indexed the
+            // same way: `bind` writes it by `SymbolId::index()`, and an id is
+            // only an index into a table of that table's own length.
+            by_symbol: std::iter::repeat_with(|| None)
                 .take(symbols.len())
                 .collect(),
             ..Plan::default()
@@ -849,7 +855,7 @@ impl Plan {
     /// the body, in whichever order the pass happened to reach them.
     fn bind(&mut self, id: SymbolId, name: &str) {
         let slot = self.slot_for(name.as_bytes());
-        self.by_symbol.insert(id, slot);
+        self.by_symbol[id.index()] = Some(slot);
         if name.contains('.') {
             self.compounds[id.index()].get_or_insert_with(|| {
                 let mut entry = CompoundName::split(name);
@@ -866,6 +872,16 @@ impl Plan {
     /// compound's stem prefix and tail-piece variables have no `SymbolId`
     /// to bind alongside them (`note_compound_name`'s own doc comment says
     /// why) and so go through this directly.
+    /// The slot this pass bound `id` to, or `None` when it bound it none.
+    ///
+    /// The compile-time half of `Code::slot_for`, which carries the tripwire:
+    /// this side holds no symbol table, so it has no name to check the answer
+    /// against. Both read the one table, so the compiled answer and the
+    /// run-time one stay one resolution made at two times.
+    pub(crate) fn slot_for_symbol(&self, id: SymbolId) -> Option<usize> {
+        self.by_symbol.get(id.index()).copied().flatten()
+    }
+
     fn slot_for(&mut self, name: &[u8]) -> usize {
         let next = self.names.len();
         *self.names.entry(name.into()).or_insert(next)
@@ -998,7 +1014,7 @@ impl Interp {
     ///
     /// The result is returned rather than cached, for the reason `BodyKey`
     /// gives.
-    pub(crate) fn fragment_plan(&mut self, fragment: &Fragment) -> HashMap<SymbolId, usize> {
+    pub(crate) fn fragment_plan(&mut self, fragment: &Fragment) -> Vec<Option<usize>> {
         // The same upfront pass, run against the fragment's own body, which
         // numbers its names 0..n in walk order. Those numbers are local to the
         // fragment and mean nothing to the enclosing frame; the loop below is
@@ -1019,7 +1035,7 @@ impl Interp {
         local
             .by_symbol
             .iter()
-            .map(|(id, local_slot)| (*id, enclosing[*local_slot]))
+            .map(|entry| entry.map(|local_slot| enclosing[local_slot]))
             .collect()
     }
 }
@@ -1921,12 +1937,18 @@ mod tests {
 
         let fragment = parse_interpret(b"newvar = 7".to_vec()).expect("fragment parses");
         let slots = interp.fragment_plan(&fragment);
-        assert_eq!(slots.len(), 1, "the fragment names exactly one variable");
+        // The table is sized by the fragment's own symbol table and is mostly
+        // `None`; what the fragment *names* is the count of bound entries.
+        assert_eq!(
+            slots.iter().flatten().count(),
+            1,
+            "the fragment names exactly one variable"
+        );
 
         let enclosing_slot = interp.slot_of(b"NEWVAR");
-        let (_id, fragment_slot) = slots.iter().next().expect("one entry");
+        let fragment_slot = slots.iter().flatten().next().copied().expect("one entry");
         assert_eq!(
-            *fragment_slot, enclosing_slot,
+            fragment_slot, enclosing_slot,
             "the fragment's own id must resolve to the SAME slot the \
              enclosing body would use for the same name"
         );

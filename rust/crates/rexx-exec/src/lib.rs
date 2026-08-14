@@ -1267,7 +1267,7 @@ struct Code<'a> {
     /// ids are the fragment's, resolved against the enclosing frame, which is
     /// why this is a field of `Code` rather than something read back off the
     /// activation.
-    slots: &'a HashMap<SymbolId, usize>,
+    slots: &'a [Option<usize>],
     /// The upfront pass's answers about **this** body: its clause indents
     /// (`Plan::indents`), the line each of its clauses sits on
     /// (`Plan::lines`), and how each of its compound names splits
@@ -1298,6 +1298,44 @@ struct Code<'a> {
 }
 
 impl<'a> Code<'a> {
+    /// The slot this body's upfront pass bound `id` to, or `None` when it
+    /// bound it none.
+    ///
+    /// **An indexed load where this was a `HashMap` lookup.** `SymbolId` is a
+    /// dense, table-local, zero-based index (`SymbolId::index()`), and
+    /// `Plan::by_symbol` is sized by the table it belongs to, so the id the
+    /// AST already carries addresses the answer directly. What that removes is
+    /// not the resolution -- the plan did that once, upfront -- but the
+    /// `SipHash` of a `u32` that reading the answer used to cost, on a path
+    /// every compiled read and write goes through.
+    ///
+    /// **`None` is safe and a wrong `Some` is not**, which is what the
+    /// tripwire below checks and why it checks in one direction only. A `None`
+    /// falls through to `Interp::slot_of`, which resolves the name and answers
+    /// the same number. A `Some` is used as-is: were it another symbol's slot,
+    /// every read and write of this name would silently address another
+    /// variable, and no program that does not already know the answer could
+    /// notice. `Plan::bind` fills this table and `Plan::names` from one
+    /// `slot_for` call, so the name map is an independent recomputation of the
+    /// same fact rather than a second copy of this one.
+    ///
+    /// The check is one-directional because the reverse does not hold and its
+    /// failing is not a defect: `Plan::note_compound_name` puts a stem and its
+    /// variable tail pieces in `names` without binding their ids here, so a
+    /// name can carry a slot that no symbol's entry does.
+    pub(crate) fn slot_for(&self, id: SymbolId) -> Option<usize> {
+        let at = self.slots.get(id.index()).copied().flatten();
+        debug_assert!(
+            at.is_none()
+                || self.plan.is_none_or(|plan| {
+                    plan.names.get(self.symbols.name(id).as_bytes()).copied() == at
+                }),
+            "the plan's slot for {} is {at:?}, which its own name map does not agree with",
+            self.symbols.name(id),
+        );
+        at
+    }
+
     /// How the compound `id` names splits, from the upfront pass when this
     /// body had one, and by splitting the interned spelling when it did not.
     ///
@@ -2380,8 +2418,8 @@ impl Interp {
     ) -> (ObjRef, Novalue) {
         let slot = match at {
             Some(slot) => slot,
-            None => match code.slots.get(&id) {
-                Some(slot) => *slot,
+            None => match code.slot_for(id) {
+                Some(slot) => slot,
                 None => self.slot_of(code.symbols.name(id).as_bytes()),
             },
         };

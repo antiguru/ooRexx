@@ -1411,7 +1411,6 @@ mod tests {
     use crate::plan::{BodyKey, ProgramId};
     use crate::{Activation, error::Failure};
     use rexx_parse::{InstructionKind, Program, parse_program};
-    use std::collections::HashMap;
     use std::rc::Rc;
 
     /// Pushes a fresh top-level activation for `program`, the same setup
@@ -1463,7 +1462,7 @@ mod tests {
         let code = Code {
             body: &program.main,
             symbols: &program.symbols,
-            slots: &HashMap::new(),
+            slots: &[],
             plan: None,
         };
         interp.eval(&code, expr)
@@ -1498,7 +1497,7 @@ mod tests {
         let code = Code {
             body: &program.main,
             symbols: &program.symbols,
-            slots: &HashMap::new(),
+            slots: &[],
             plan: None,
         };
         interp.eval(&code, expr)
@@ -1781,7 +1780,7 @@ mod tests {
         let code = Code {
             body: &program.main,
             symbols: &program.symbols,
-            slots: &HashMap::new(),
+            slots: &[],
             plan: None,
         };
         let value = interp.eval(&code, expr).unwrap();
@@ -1989,7 +1988,7 @@ mod tests {
         let code = Code {
             body: &program.main,
             symbols: &program.symbols,
-            slots: &HashMap::new(),
+            slots: &[],
             plan: None,
         };
         let value = interp.eval(&code, expr).unwrap();
@@ -2192,7 +2191,7 @@ mod tests {
         let code = Code {
             body: &program.main,
             symbols: &program.symbols,
-            slots: &HashMap::new(),
+            slots: &[],
             plan: None,
         };
         let condition = match &program.main.instructions[0].kind {

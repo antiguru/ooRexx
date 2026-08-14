@@ -1272,9 +1272,8 @@ fn push_native<'a>(
 fn write_slot(plan: &Plan, target: &Expr) -> PlanSlot {
     match &target.kind {
         ExprKind::Variable(id) => plan
-            .by_symbol
-            .get(id)
-            .map_or(PlanSlot::UNRESOLVED, |at| PlanSlot::of(*at)),
+            .slot_for_symbol(*id)
+            .map_or(PlanSlot::UNRESOLVED, PlanSlot::of),
         _ => PlanSlot::UNRESOLVED,
     }
 }
@@ -1300,9 +1299,8 @@ fn write_slot(plan: &Plan, target: &Expr) -> PlanSlot {
 fn push_read(ops: &mut Vec<Op>, plan: &Plan, read: SymbolRead, symbol: SymbolId, dst: u16) {
     let at = match read {
         SymbolRead::Simple | SymbolRead::Stem => plan
-            .by_symbol
-            .get(&symbol)
-            .map_or(PlanSlot::UNRESOLVED, |at| PlanSlot::of(*at)),
+            .slot_for_symbol(symbol)
+            .map_or(PlanSlot::UNRESOLVED, PlanSlot::of),
         SymbolRead::Compound => PlanSlot::UNRESOLVED,
     };
     ops.push(Op::Load {

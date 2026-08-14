@@ -745,7 +745,7 @@ impl Interp {
                                     // than fail, which is a wrong value found by
                                     // chasing it.
                                     debug_assert!(
-                                        at.is_none() || code.slots.get(symbol).copied() == at,
+                                        at.is_none() || code.slot_for(*symbol) == at,
                                         "a compiled read names a slot this body's plan does not \
                                          give its symbol"
                                     );
@@ -989,7 +989,7 @@ impl Interp {
                                             || matches!(
                                                 &target.kind,
                                                 ExprKind::Variable(id)
-                                                    if code.slots.get(id).copied() == at
+                                                    if code.slot_for(*id) == at
                                             ),
                                         "a compiled write names a slot this body's plan does not \
                                          give its target"

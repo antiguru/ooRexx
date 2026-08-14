@@ -4582,8 +4582,8 @@ impl Interp {
             ExprKind::Variable(id) | ExprKind::Stem(id) => *id,
             other => return Err(Loud::expression(other).into()),
         };
-        let slot = match code.slots.get(&id) {
-            Some(slot) => *slot,
+        let slot = match code.slot_for(id) {
+            Some(slot) => slot,
             None => self.slot_of(code.symbols.name(id).as_bytes()),
         };
         let frame = self.activation().frame;
@@ -8657,7 +8657,7 @@ pub(crate) enum NameShape {
 /// `slot_of(name)` cannot disagree for a name the plan holds.
 fn control_slot(code: &Code<'_>, control: SymbolId) -> Option<usize> {
     match shape_of(code.symbols.name(control).as_bytes()) {
-        NameShape::Simple => code.slots.get(&control).copied(),
+        NameShape::Simple => code.slot_for(control),
         NameShape::Stem | NameShape::Compound => None,
     }
 }

@@ -3357,3 +3357,69 @@ Two infinitely recursive samples differed only in the PID inside `memcap`'s own 
 * **No time figure**, for entry 27's reason. `rexxcps`' own printed clauses-per-second line moved and is reported above as an *output* difference, not as a measurement.
 * **No control axis.** Every axis executes the changed code, so there is nothing here that separates this change's semantics from drift the way entry 31 asks for. What stands in for it is that the saving is monotone in the search depth removed, on seven axes, which drift has no reason to be.
 * **No claim that a body with a plan is unreachable while `clause_line_override` is in force.** It was not reached by anything measured; that is not the same statement, and this project has been wrong about the difference before.
+
+### Entry 36 -- the map the slot family was buying its answers from
+
+Plan: `docs/superpowers/plans/2026-08-13-parse-target-slots.md`, Task 1 of two.
+Base `8c54b17cd`.
+Taken by the controller directly rather than by an implementer, after two dispatched agents stopped without writing anything; that is a note about this session's tooling and not about the change.
+
+#### Cause
+
+Every application in the stem-and-compound family replaced a hash of a name's bytes with a slot the plan already held.
+The slot was then read out of `Plan::by_symbol`, a `HashMap<SymbolId, usize>`, so **each saved byte-string hash was bought with a SipHash of a `u32`**.
+Entry 32 measured that side at 0.83-0.93% of `rexxcps` self time, the same order as `Interp::slot_of` itself.
+`plan.rs` has carried the fix as a comment since `180875a9`: `SymbolId` is a dense, table-local, zero-based index, `SymbolId::index()` exposes it, and the field wants an array.
+
+#### The change
+
+`Plan::by_symbol` is now `Vec<Option<usize>>` sized by the body's symbol table and indexed by `SymbolId::index()`, in the shape `Plan::compounds` beside it already had.
+`Code::slots` is a slice rather than a map reference.
+Both resolutions go through accessors: `Code::slot_for` at run time, `Plan::slot_for_symbol` at compile time.
+
+**The compiler found a site that reading for it did not.**
+The surface was mapped by reading first, and the build then rejected a `debug_assert!` inside a `matches!` guard at `ir/drive.rs` that no search had surfaced.
+That is the standing instruction working on its first application: change the field, build, and take the error list as the answer.
+
+#### The tripwire, and why it checks one way
+
+`Code::slot_for` asserts that when it answers `Some(at)`, `Plan::names` maps that symbol's own spelling to that same `at`.
+`Plan::bind` fills both from one `slot_for` call, so the name map is an independent recomputation rather than a second copy.
+
+**A `None` is safe and a wrong `Some` is not**, which is why the check is one-directional.
+A `None` falls through to `Interp::slot_of`, which resolves the name and answers the same number.
+A wrong `Some` would silently address another variable on every read and write of the name, and no program that does not already know the answer could notice.
+The reverse implication does not hold and its failing would not be a defect: `note_compound_name` puts a stem and its variable tail pieces in `names` without binding their ids, so `say v.i` leaves a name carrying a slot that no symbol's entry does.
+
+Inverted, the assert reddens **191 tests across 124 distinct names**; restored and verified with `sha256sum -c`, the workspace is green at 1487 passed, 0 failed.
+
+#### Measurement
+
+`perf stat -e instructions:u`, six interleaved rounds per arm, both arms staged at one fixed binary path, from a fresh empty directory, minimum of each arm.
+
+| axis | base `8c54b17cd` | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `strings` | 43,950,587,952 | 41,904,585,446 | -2,046,002,506 | **-4.655%** | 874 | 685 |
+| `alloc4c` | 7,882,703,252 | 7,727,714,204 | -154,989,048 | **-1.966%** | 12,018,171 | 64,260 |
+| `rexxcps` | 24,296,501,015 | 23,989,877,961 | -306,623,054 | **-1.262%** | 15,950,319 | 7,577,086 |
+| `varlookup` | 42,408,615,575 | 42,123,633,031 | -284,982,544 | -0.672% | 1,694 | 1,487 |
+| `compound` | 24,232,438,164 | 24,157,429,618 | -75,008,546 | -0.310% | 2,870,174 | 1,680,096 |
+| `emptyloop` | 25,150,609,391 | 25,075,608,842 | -75,000,549 | -0.298% | 1,642 | 748 |
+| `arith` | 20,203,990,946 | 20,178,736,951 | -25,253,995 | -0.125% | 858 | 931 |
+
+**No axis moved up**, and every difference is outside both of its arms' spans -- the tightest ratio is `rexxcps` at 19.2 times its wider span, and `alloc4c` at 12.9.
+
+**Behaviour**: every axis produces identical stdout, identical stderr and identical exit status under both arms, on **both engines**, checked with the engine names the binary actually accepts.
+The first attempt at that check used a spelling the binary rejects, and both arms failed identically at rc 2 -- a comparison that cannot fail, caught only because the exit status was read.
+
+#### What this entry does not claim
+
+**No control axis exists.** Every axis resolves variables, so nothing here executes none of the changed code, and entry 31's ask cannot be discharged by an axis that sees nothing.
+The differences are stated as differences because each is outside its own spans by more than an order of magnitude, not because drift has been excluded.
+
+**Why `strings` is four times the next axis is not established.** It is the axis that reads the most distinct variables per clause, which is a hypothesis and not a measurement, and this entry does not decompose it.
+
+#### What is left
+
+Task 2 is the `PARSE` target's own slot, which is what this plan exists for: `parse_template.rs` passes a literal `None` for 2,800,003 of the 3,080,203 `slot_of` calls entry 32 counted on `rexxcps`.
+That call site now reads a slice rather than a map, so the win Task 2 measures is the removal of the name hash alone.
