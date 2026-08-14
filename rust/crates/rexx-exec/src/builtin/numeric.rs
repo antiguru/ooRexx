@@ -80,7 +80,7 @@ use std::cmp::Ordering;
 use rexx_core::ObjRef;
 use rexx_num::{CompareOp, Form, Number, compare_decoded};
 
-use super::{arg, buffer, required_string, whole_number};
+use super::{arg, fresh_buffer, required_string, whole_number};
 use crate::Interp;
 use crate::error::{Failure, Raised};
 
@@ -159,7 +159,7 @@ fn non_negative(value: Option<i64>, method_position: usize) -> Result<Option<i64
 /// is one buffer of this size rather than two.
 fn padding_width(value: i64) -> Result<u32, Failure> {
     let width = u32::try_from(value).map_err(|_| Failure::from(Raised::system_resources()))?;
-    buffer(width as usize)?;
+    fresh_buffer(width as usize)?;
     Ok(width)
 }
 
@@ -222,7 +222,7 @@ pub(crate) fn trunc(
     let places = whole_number(interp, name, args, 2)?;
     let value = target_number(interp, name, args)?;
     let places = padding_width(non_negative(places, 1)?.unwrap_or(0))?;
-    Ok(interp.text_owned(value.trunc(digits, places).into_bytes()))
+    Ok(interp.text_built(value.trunc(digits, places).into_bytes()))
 }
 
 /// `FORMAT(number, before, after, expp, expt)`.
@@ -301,7 +301,7 @@ pub(crate) fn format(
     let text = value
         .format_with(digits, form, before, after, expp, expt)
         .map_err(|error| Failure::from(Raised::from(error)))?;
-    Ok(interp.text_owned(text.into_bytes()))
+    Ok(interp.text_built(text.into_bytes()))
 }
 
 // ---- MAX and MIN ----
@@ -646,7 +646,7 @@ pub(crate) fn random(
     // `12345`, where a value carrying the D15 pair would render `1.23E+4` --
     // and `say random(12345,12345) + 0` at the same setting *is* `1.23E+4`,
     // because that is the addition's own result rather than this one.
-    Ok(interp.text_owned(low.to_string().into_bytes()))
+    Ok(interp.text_built(low.to_string().into_bytes()))
 }
 
 /// `RexxActivation::getRandomSeed`: install a supplied seed, then advance the

@@ -237,14 +237,14 @@ pub(crate) fn center(
 
     let len = string.len();
     if width == len {
-        return Ok(interp.text_owned(string));
+        return Ok(interp.text_built(string));
     }
     if width == 0 {
         return Ok(interp.text(b""));
     }
     let out = if width > len {
         let left = (width - len) / 2;
-        let mut out = buffer(width)?;
+        let mut out = buffer(interp, width)?;
         push_pad(&mut out, pad, left);
         out.extend_from_slice(&string);
         push_pad(&mut out, pad, width - len - left);
@@ -252,7 +252,7 @@ pub(crate) fn center(
     } else {
         string[(len - width) / 2..][..width].to_vec()
     };
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 /// `LEFT(string, length [,pad])`: the leading `length` bytes, padded on the
@@ -271,10 +271,10 @@ pub(crate) fn left(
         return Ok(interp.text(b""));
     }
     let kept = string.len().min(size);
-    let mut out = buffer(size)?;
+    let mut out = buffer(interp, size)?;
     out.extend_from_slice(&string[..kept]);
     push_pad(&mut out, pad, size - kept);
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 /// `RIGHT(string, length [,pad])`: the trailing `length` bytes, padded on the
@@ -293,10 +293,10 @@ pub(crate) fn right(
         return Ok(interp.text(b""));
     }
     let kept = string.len().min(size);
-    let mut out = buffer(size)?;
+    let mut out = buffer(interp, size)?;
     push_pad(&mut out, pad, size - kept);
     out.extend_from_slice(&string[string.len() - kept..]);
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 /// `SUBSTR(string, n [,length] [,pad])`.
@@ -326,10 +326,10 @@ pub(crate) fn substr(
         return Ok(interp.text(b""));
     }
     let kept = length.min(string.len().saturating_sub(start));
-    let mut out = buffer(length)?;
+    let mut out = buffer(interp, length)?;
     out.extend_from_slice(&string[start.min(string.len())..][..kept]);
     push_pad(&mut out, pad, length - kept);
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 /// `DELSTR(string [,n] [,length])`.
@@ -360,7 +360,7 @@ pub(crate) fn delstr(
     };
 
     if start > string.len() {
-        return Ok(interp.text_owned(string));
+        return Ok(interp.text_built(string));
     }
     if start == 1 && deleted >= string.len() {
         return Ok(interp.text(b""));
@@ -371,7 +371,7 @@ pub(crate) fn delstr(
     if tail < string.len() {
         out.extend_from_slice(&string[tail..]);
     }
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 /// `INSERT(new, target [,n] [,length] [,pad])`.
@@ -414,13 +414,13 @@ pub(crate) fn insert(
         .checked_add(insert_len)
         .and_then(|size| size.checked_add(lead_pad))
         .ok_or_else(|| Failure::from(Raised::system_resources()))?;
-    let mut out = buffer(total)?;
+    let mut out = buffer(interp, total)?;
     out.extend_from_slice(&target[..front]);
     push_pad(&mut out, pad, lead_pad);
     out.extend_from_slice(&new[..copied]);
     push_pad(&mut out, pad, insert_len - copied);
     out.extend_from_slice(&target[front..front + back]);
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 /// `OVERLAY(new, target [,n] [,length] [,pad])`.
@@ -472,7 +472,7 @@ pub(crate) fn overlay(
     }
 
     let total = front + back + front_pad + overlay_len;
-    let mut out = buffer(total)?;
+    let mut out = buffer(interp, total)?;
     out.extend_from_slice(&target[..front]);
     push_pad(&mut out, pad, front_pad);
     out.extend_from_slice(&new[..copied]);
@@ -483,7 +483,7 @@ pub(crate) fn overlay(
         // is no tail, so the index is only ever formed when it is in range.
         out.extend_from_slice(&target[span_end..span_end + back]);
     }
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 /// `POS(needle, haystack [,start] [,range])`.
@@ -558,7 +558,7 @@ pub(crate) fn reverse(
 ) -> Result<ObjRef, Failure> {
     let mut string = required_string(interp, args, 1);
     string.reverse();
-    Ok(interp.text_owned(string))
+    Ok(interp.text_built(string))
 }
 
 /// `STRIP(string [,option] [,chars])`.
@@ -619,14 +619,14 @@ pub(crate) fn space(
         .checked_mul(words.len() - 1)
         .and_then(|padding| padding.checked_add(content))
         .ok_or_else(|| Failure::from(Raised::system_resources()))?;
-    let mut out = buffer(total)?;
+    let mut out = buffer(interp, total)?;
     for (index, word) in words.iter().enumerate() {
         if index > 0 {
             push_pad(&mut out, pad, gap);
         }
         out.extend_from_slice(word);
     }
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 /// `COPIES(string, n)`.
@@ -646,11 +646,11 @@ pub(crate) fn copies(
         .len()
         .checked_mul(count)
         .ok_or_else(|| Failure::from(Raised::system_resources()))?;
-    let mut out = buffer(total)?;
+    let mut out = buffer(interp, total)?;
     for _ in 0..count {
         out.extend_from_slice(&string);
     }
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 /// `ABBREV(information, info [,length])`: whether `info` is a prefix of
@@ -757,7 +757,7 @@ pub(crate) fn changestr(
         // code owned them already and paid the same copy on every call
         // instead of only on this branch, which no benchmark here takes.
         let unchanged = haystack.to_vec();
-        return Ok(interp.text_owned(unchanged));
+        return Ok(interp.text_built(unchanged));
     }
     // Sized before anything is written: `changes` occurrences of `needle`
     // each become `replacement`, and nothing else moves.
@@ -771,7 +771,7 @@ pub(crate) fn changestr(
         next = found - 1 + needle.len();
     }
     out.extend_from_slice(&haystack[next..]);
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 /// `TRANSLATE(string [,tableout] [,tablein] [,pad] [,start] [,range])`.
@@ -831,7 +831,7 @@ pub(crate) fn translate(
         None => string.len().saturating_sub(start) + 1,
     };
     if start > string.len() || range == 0 {
-        return Ok(interp.text_owned(string));
+        return Ok(interp.text_built(string));
     }
     let range = range.min(string.len() - start + 1);
 
@@ -845,7 +845,7 @@ pub(crate) fn translate(
             *byte = out_table.get(index).copied().unwrap_or(pad);
         }
     }
-    Ok(interp.text_owned(result))
+    Ok(interp.text_built(result))
 }
 
 /// `VERIFY(string, reference [,option] [,start] [,range])`.
@@ -966,7 +966,7 @@ fn case_shifted(
     for byte in &mut result[start..start + range] {
         *byte = shift(byte);
     }
-    Ok(interp.text_owned(result))
+    Ok(interp.text_built(result))
 }
 
 #[cfg(test)]

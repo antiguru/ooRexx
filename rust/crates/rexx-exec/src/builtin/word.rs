@@ -359,10 +359,10 @@ pub(crate) fn delword(
     scan.skip_blanks();
     let rest = scan.next;
 
-    let mut out = buffer(front + (string.len() - rest))?;
+    let mut out = buffer(interp, front + (string.len() - rest))?;
     out.extend_from_slice(&string[..front]);
     out.extend_from_slice(&string[rest..]);
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 /// `WORDPOS(phrase, string [,start])`: which word of `string` begins a run

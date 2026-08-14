@@ -3767,3 +3767,49 @@ What identified it was a program written to isolate the suspect: a loop calling 
 The lending discipline already in the tree for `Interp::key_buffer`, applied to builtin results: take a buffer, build into it, and either hand a slice to `Interp::text` for the inline case or give the buffer up with `text_owned` when the result exceeds `INLINE_BYTES`.
 
 That is 34 `text_owned` call sites across the builtin modules, all funnelling through one `buffer(len)` helper, and each is independent -- so it can be taken a module at a time rather than as one change.
+
+### Entry 45 -- the builtin result buffer, and the prediction it did not meet
+
+Base `519618b02`. Entry 44 predicted that the 1, 2, 3 and 7-byte widths were builtin results and together about a quarter of every allocation. **The change removed 420,000, not five million.**
+
+#### The change
+
+`Interp::result_buffer`, lent to `builtin::buffer` and handed back by `Interp::text_built` when the finished result is `INLINE_BYTES` or less -- the case where `Bytes::from_vec` copies into the object and drops the `Vec` anyway.
+
+**A `Cell` where the key buffer is a plain field**, and that is the design's one real constraint: a builtin reads its argument's bytes out of the heap first, which borrows the `Interp`, so a take needing `&mut self` is refused while that borrow is live. `Cell::take` needs only `&self`.
+
+Two callers keep a fresh allocation. `pack_hex` has no `Interp`, and **`padding_width` uses the reservation itself as the resource check and then drops it** -- a lent buffer that already had the capacity would make that check succeed without asking the allocator anything, which is the one place reuse would be a defect rather than a saving.
+
+#### What the histogram says, against what entry 44 predicted
+
+| size | before | after | delta |
+|---:|---:|---:|---:|
+| 1 | 1,960,482 | 1,680,481 | -280,001 |
+| 2 | 1,120,188 | 980,189 | -139,999 |
+| 3 | 970,381 | 970,381 | **unchanged** |
+| 7 | 980,088 | 980,088 | **unchanged** |
+
+Total 20,015,402 to 19,595,402.
+
+**Entry 44's correspondence between widths and program text was wrong, and it said so in advance.** It marked the 2, 3 and 7-byte attributions as a reading beside the histogram rather than a measurement, because only the 1-byte case had been caught in the debugger. The 3 and 7-byte widths do not come through `buffer` at all, and even the 1-byte width is mostly something else: 1,680,481 of it survives.
+
+So **the largest remaining widths are unidentified again**, and the method that works is the one entry 42 used -- a breakpoint with a control that fires, on a program written to isolate one suspect.
+
+#### Instructions
+
+Four axes, five interleaved rounds per arm, minimum of each.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `strings` | 41,865,584,723 | 41,679,584,559 | -186,000,164 | -0.444% | 54,000,556 | 830 |
+| `rexxcps` | 21,998,632,970 | 21,967,951,137 | -30,681,833 | -0.139% | 25,990 | 4,090,468 |
+| `compound` | 18,912,523,312 | 18,933,361,767 | **+20,838,455** | +0.110% | 2,438,551 | 2,060,660 |
+| `arith` | 20,178,260,479 | 20,184,260,167 | **+5,999,688** | +0.030% | 1,172 | 948 |
+
+Every difference is outside both spans. **Two axes improved and two regressed**, for a net of about 190 million across the four, and the regression is on `compound`, which is the axis this phase has moved furthest.
+
+**Kept on that net, and the entry records the mixed sign rather than the total alone.** No cause is offered for either regression: the change adds a field to a struct every path reaches, and the do-nothing control that would separate layout from semantics still does not exist.
+
+#### Behaviour
+
+A sweep over `substr`, `word`, `words`, `delstr`, `c2x`, `x2c`, `d2x`, `x2d`, `b2x`, `left`, `right`, `copies`, `translate`, `reverse`, `strip`, `format`, `trunc`, `abs`, `sign`, `insert`, `overlay`, `space`, `d2c`, `c2d`, `bitand`, `lower`, `upper` and `compare` is **identical to the oracle**, and the two engines agree.

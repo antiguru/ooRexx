@@ -1516,6 +1516,28 @@ struct Interp {
     /// needed: an inner build gets its own buffer rather than corrupting an
     /// outer one.
     key_buffer: Vec<u8>,
+    /// A buffer lent out for building a builtin's result, and handed back.
+    ///
+    /// **The same lending as [`Interp::key_buffer`], for a waste of the same
+    /// shape.** A builtin builds its answer into an owned `Vec` and hands it
+    /// to `text_owned`, and `Bytes::from_vec` copies anything of
+    /// `INLINE_BYTES` or less into the object's own inline buffer and drops
+    /// the `Vec`. So every short result allocated, filled, copied, and freed.
+    /// Measured with `heaptrack` on `samples/rexxcps.rex`, whose inner loop
+    /// asks for `substr` and `word`: the 1, 2, 3 and 7-byte widths together
+    /// were about a quarter of every allocation the interpreter made.
+    ///
+    /// Losing it is safe and costs only the reuse, exactly as for the key
+    /// buffer: a builtin that returns early through `?` between the take and
+    /// the give leaves this empty and the next taker allocates.
+    ///
+    /// **A `Cell` where the key buffer is a plain field**, and that is not a
+    /// style choice. A builtin reads its argument's bytes out of the heap
+    /// first, which borrows the `Interp`, and then wants the buffer -- so a
+    /// take that needed `&mut self` would be refused while that borrow is
+    /// live. `Cell::take` needs only `&self` and leaves the default behind,
+    /// which is exactly the lending this wants.
+    result_buffer: std::cell::Cell<Vec<u8>>,
     activations: Vec<Activation>,
     /// The next [`ActivationId`] to hand out. Monotonic, never reset, never
     /// reused -- see that type for the two defects that needed an identity a
@@ -2209,6 +2231,7 @@ impl Interp {
             heap: Heap::new(),
             roots: RootSet::new(),
             key_buffer: Vec::new(),
+            result_buffer: std::cell::Cell::new(Vec::new()),
             activations: Vec::new(),
             programs: Vec::new(),
             plans: HashMap::new(),

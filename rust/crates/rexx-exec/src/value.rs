@@ -33,7 +33,8 @@
 
 use crate::Interp;
 use rexx_core::{
-    BehaviourId, Body, Bytes, Decoded, NotNumeric, ObjRef, SMALL_INT_MAX, SMALL_INT_MIN,
+    BehaviourId, Body, Bytes, Decoded, INLINE_BYTES, NotNumeric, ObjRef, SMALL_INT_MAX,
+    SMALL_INT_MIN,
 };
 use rexx_num::{Form, Number};
 use std::borrow::Cow;
@@ -134,6 +135,35 @@ impl Interp {
     /// are large, which are exactly the ones that stay on the heap arm.
     ///
     /// [`text`]: Interp::text
+    /// Takes the shared builtin-result buffer, empty and ready to build into.
+    pub(crate) fn take_result_buffer(&self) -> Vec<u8> {
+        let mut buffer = self.result_buffer.take();
+        buffer.clear();
+        buffer
+    }
+
+    /// Hands the result buffer back for the next builtin.
+    pub(crate) fn give_result_buffer(&self, buffer: Vec<u8>) {
+        self.result_buffer.set(buffer);
+    }
+
+    /// A builtin's finished result, keeping the buffer it was built in when
+    /// keeping it is free.
+    ///
+    /// **The branch is `Bytes::from_vec`'s own.** At `INLINE_BYTES` or less it
+    /// copies into the object and drops the `Vec`, so the buffer is handed
+    /// back here instead and the next builtin builds in it. Above that the
+    /// `Vec` becomes the object's own storage, so it is given up and the next
+    /// taker allocates -- which is the same trade `text_owned` always made.
+    pub(crate) fn text_built(&mut self, bytes: Vec<u8>) -> ObjRef {
+        if bytes.len() <= INLINE_BYTES {
+            let value = self.text(&bytes);
+            self.give_result_buffer(bytes);
+            return value;
+        }
+        self.text_owned(bytes)
+    }
+
     pub(crate) fn text_owned(&mut self, bytes: Vec<u8>) -> ObjRef {
         self.text_bytes(Bytes::from_vec(bytes))
     }
@@ -668,7 +698,6 @@ fn small_int_for(value: &Number, created_digits: u32) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rexx_core::{INLINE_BYTES, SMALL_INT_MAX, SMALL_INT_MIN};
     use rexx_num::DivOp;
     use std::collections::HashMap;
 

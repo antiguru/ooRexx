@@ -954,8 +954,22 @@ fn count_of(value: i64, method_position: usize) -> Result<usize, Failure> {
 ///
 /// See `Raised::system_resources` for why the refusal is asked of the
 /// allocator rather than of a size limit.
-fn buffer(len: usize) -> Result<Vec<u8>, Failure> {
+/// A buffer that is not the lent one.
+///
+/// Two callers need this. `pack_hex` has no `Interp` to lend from, and
+/// `padding_width` uses the reservation *itself* as the resource check and then
+/// drops it -- a lent buffer that already had the capacity would make that
+/// check succeed without asking the allocator anything, which is the one place
+/// where reuse would be a defect rather than a saving.
+fn fresh_buffer(len: usize) -> Result<Vec<u8>, Failure> {
     let mut out = Vec::new();
+    out.try_reserve_exact(len)
+        .map_err(|_| Failure::from(Raised::system_resources()))?;
+    Ok(out)
+}
+
+fn buffer(interp: &Interp, len: usize) -> Result<Vec<u8>, Failure> {
+    let mut out = interp.take_result_buffer();
     out.try_reserve_exact(len)
         .map_err(|_| Failure::from(Raised::system_resources()))?;
     Ok(out)

@@ -109,7 +109,9 @@
 
 use rexx_core::ObjRef;
 
-use super::{arg, buffer, length_of, optional_string, pad_byte, required_string, whole_number};
+use super::{
+    arg, buffer, fresh_buffer, length_of, optional_string, pad_byte, required_string, whole_number,
+};
 use crate::Interp;
 use crate::error::{Failure, Notation, Raised};
 
@@ -221,7 +223,7 @@ fn pack_hex(text: &[u8]) -> Result<Vec<u8>, Failure> {
         return Ok(Vec::new());
     }
     let nibbles = validate_grouped(text, Notation::Hex)?;
-    let mut out = buffer(nibbles.div_ceil(2))?;
+    let mut out = fresh_buffer(nibbles.div_ceil(2))?;
     let mut digits = digits_of(text, Notation::Hex);
     let mut remaining = nibbles;
     if remaining % 2 == 1 {
@@ -270,7 +272,7 @@ fn bit_operation(
     } else {
         (&first, &second)
     };
-    let mut out = buffer(long.len())?;
+    let mut out = buffer(interp, long.len())?;
     out.extend_from_slice(long);
     for (index, byte) in out.iter_mut().enumerate() {
         *byte = match short.get(index) {
@@ -278,7 +280,7 @@ fn bit_operation(
             None => operation(*byte, pad),
         };
     }
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 /// `BITAND(string1 [,string2] [,pad])`, whose default pad is `'ff'x`.
@@ -319,12 +321,12 @@ pub(crate) fn c2x(
     let string = required_string(interp, args, 1);
     // Saturating rather than checked: a length that doubles past `usize` can
     // only be refused, and `buffer` is what refuses it.
-    let mut out = buffer(string.len().saturating_mul(2))?;
+    let mut out = buffer(interp, string.len().saturating_mul(2))?;
     for byte in string {
         out.push(HEX_DIGITS[usize::from(byte >> 4)]);
         out.push(HEX_DIGITS[usize::from(byte & 0x0f)]);
     }
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 /// `X2C(string)`: hexadecimal digits packed into bytes.
@@ -335,7 +337,7 @@ pub(crate) fn x2c(
 ) -> Result<ObjRef, Failure> {
     let string = required_string(interp, args, 1);
     let packed = pack_hex(&string)?;
-    Ok(interp.text_owned(packed))
+    Ok(interp.text_built(packed))
 }
 
 /// `X2B(string)`: four `0`/`1` bytes per hexadecimal digit, with no padding.
@@ -349,13 +351,13 @@ pub(crate) fn x2b(
         return Ok(interp.text(b""));
     }
     let nibbles = validate_grouped(&string, Notation::Hex)?;
-    let mut out = buffer(nibbles.saturating_mul(4))?;
+    let mut out = buffer(interp, nibbles.saturating_mul(4))?;
     for value in digits_of(&string, Notation::Hex) {
         for bit in (0..4).rev() {
             out.push(b'0' + ((value >> bit) & 1));
         }
     }
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 /// `B2X(string)`: one hexadecimal digit per four bits, with the first group
@@ -370,7 +372,7 @@ pub(crate) fn b2x(
         return Ok(interp.text(b""));
     }
     let bits = validate_grouped(&string, Notation::Binary)?;
-    let mut out = buffer(bits.div_ceil(4))?;
+    let mut out = buffer(interp, bits.div_ceil(4))?;
     let mut digits = digits_of(&string, Notation::Binary);
     let mut remaining = bits;
     while remaining > 0 {
@@ -384,7 +386,7 @@ pub(crate) fn b2x(
         out.push(HEX_DIGITS[usize::from(value)]);
         remaining -= take;
     }
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 // ---- the numeric four ----
@@ -514,7 +516,7 @@ fn x2d_c2d(
 
     // A copy, because both the negation and the mask write into it. The
     // oracle copies here too, and for the same reason.
-    let mut window = buffer(bytes.len() - window_start)?;
+    let mut window = buffer(interp, bytes.len() - window_start)?;
     window.extend_from_slice(&bytes[window_start..]);
     if negative {
         for byte in window.iter_mut() {
@@ -537,6 +539,7 @@ fn x2d_c2d(
     // The oracle asks for this buffer before it accumulates anything, so an
     // absurd `NUMERIC DIGITS` is refused rather than computed.
     drop(buffer(
+        interp,
         usize::try_from(digits)
             .unwrap_or(usize::MAX)
             .saturating_add(OVERFLOW_SPACE + 1),
@@ -556,7 +559,7 @@ fn x2d_c2d(
         }
     }
     let rendered = render_decimal(&accumulator, negative);
-    Ok(interp.text_owned(rendered))
+    Ok(interp.text_built(rendered))
 }
 
 /// `C2D(string [,n])`: the argument's bytes read as a binary integer.
@@ -795,7 +798,7 @@ fn d2x_d2c(
         Some(size) => size.max(usize::try_from(digits).unwrap_or(usize::MAX)),
         None => usize::try_from(digits).unwrap_or(usize::MAX),
     };
-    drop(buffer(working.saturating_add(OVERFLOW_SPACE))?);
+    drop(buffer(interp, working.saturating_add(OVERFLOW_SPACE))?);
 
     // Only the integer digits are accumulated; a fraction that got this far is
     // all zeros within the precision and contributes nothing.
@@ -838,7 +841,7 @@ fn d2x_d2c(
 
     let hex_length = digit_count(&accumulator);
     let result_size = result_size.unwrap_or(hex_length);
-    let mut out = buffer(result_size)?;
+    let mut out = buffer(interp, result_size)?;
     // Padded on the left, or truncated on the left when the length asks for
     // fewer digits than the value has: measured, `d2x(4096,2)` is `00`.
     for _ in hex_length..result_size {
@@ -851,9 +854,9 @@ fn d2x_d2c(
 
     if character {
         let packed = pack_hex(&out)?;
-        return Ok(interp.text_owned(packed));
+        return Ok(interp.text_built(packed));
     }
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 /// `D2X(number [,n])`: a whole number as hexadecimal digits.
@@ -999,19 +1002,19 @@ pub(crate) fn xrange(
         // before: measured, `xrange('digit','z')` is 134 bytes with no digits
         // among them, where the three-argument form keeps them.
         if count <= 2 {
-            let mut out = buffer(length)?;
+            let mut out = buffer(interp, length)?;
             Piece::Range(start, length).write(&mut out);
-            return Ok(interp.text_owned(out));
+            return Ok(interp.text_built(out));
         }
         pieces.push(Piece::Range(start, length));
     }
 
     let total: usize = pieces.iter().map(Piece::length).sum();
-    let mut out = buffer(total)?;
+    let mut out = buffer(interp, total)?;
     for piece in &pieces {
         piece.write(&mut out);
     }
-    Ok(interp.text_owned(out))
+    Ok(interp.text_built(out))
 }
 
 #[cfg(test)]

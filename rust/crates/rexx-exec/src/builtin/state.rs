@@ -296,7 +296,7 @@ pub(crate) fn sourceline(
         .line(requested)
         .expect("a line number within the count")
         .to_vec();
-    Ok(interp.text_owned(line))
+    Ok(interp.text_built(line))
 }
 
 /// `TRACE()` / `TRACE(setting)`: the setting in force, and optionally a new
@@ -487,12 +487,12 @@ pub(crate) fn condition(
         (b'C' | b'D' | b'E' | b'I' | b'S', None) => Ok(interp.text(b"")),
         (b'C', Some(condition)) => {
             let name = condition.name.to_vec();
-            Ok(interp.text_owned(name))
+            Ok(interp.text_built(name))
         }
         (b'D', Some(condition)) => match (&condition.description, &condition.name[..]) {
             (Some(description), _) => {
                 let description = description.clone();
-                Ok(interp.text_owned(description))
+                Ok(interp.text_built(description))
             }
             // The one pair this crate cannot answer: the oracle's `NOVALUE`
             // description is the variable's own derived name (measured,
