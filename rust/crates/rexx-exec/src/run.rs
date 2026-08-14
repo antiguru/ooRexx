@@ -11372,14 +11372,12 @@ mod tests {
     /// **The oracle's own bytes for `DO OVER ... FOR`'s count**, captured
     /// 2026-08-14 under both `TRACE I` and `TRACE R`, from a fresh oracle run
     /// wrapped exactly as `rust/CLAUDE.md` specifies. The oracle prints
-    /// `>K>   "FOR" => "1"` for the count and, before this test's own fix,
-    /// `HeaderRole::OverFor::keyword()` answered `None` and this crate
-    /// printed nothing for it. Nothing else in the tree pins this line:
-    /// `trace_oracle.rs` carries no witness for this shape, and
-    /// `ir_dual_cases/loop-header-values` compares the two engines to each
-    /// other rather than to the oracle -- the same reason
-    /// `task_9s_two_new_indents_are_the_oracles_own_and_normalisation_
-    /// cannot_see_them` exists for its own two indents.
+    /// `>K>   "FOR" => "1"` for the count, and
+    /// `HeaderRole::OverFor::keyword()` is what decides whether this crate
+    /// emits it.
+    ///
+    /// **What this pins is that the bytes are the oracle's**, which is the
+    /// whole of its job.
     #[test]
     fn a_do_over_for_echoes_the_for_keyword_the_oracle_prints() {
         let mut interp = Interp::new();

@@ -30,10 +30,10 @@
 //!
 //! ## What the cases pin
 //!
-//! Both quantities are the oracle's own `settings.traceIndent`, a counter this
-//! crate has no equivalent of: it derives a clause's indent from that clause's
-//! lexical nesting plus an activation base. The two places the derivation
-//! parts company with the counter are what these cases hold:
+//! Every quantity below is the oracle's own `settings.traceIndent`, a counter
+//! this crate has no equivalent of: it derives a clause's indent from that
+//! clause's lexical nesting plus an activation base. Where that derivation
+//! parts company with the counter is what these cases hold:
 //!
 //! * **A `SIGNAL` resets the counter to zero** (`RexxActivation::signalTo`),
 //!   including a `SIGNAL` that a `SIGNAL ON` trap performs, and including one

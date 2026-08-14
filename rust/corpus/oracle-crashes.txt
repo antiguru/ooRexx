@@ -12,10 +12,10 @@
 # run from a fresh empty directory (the scratchpad root is on the oracle's
 # own external-routine search path and must never be the run directory).
 #
-# Three of the four are deterministic memory-safety defects in the C++
-# (SIGSEGV, rc 139) and one is a resource-exhaustion hazard (unbounded
-# allocation, OOM-killed) rather than a crash in that sense -- the two
-# failure modes are recorded as what they are, not folded into one label.
+# The failure modes are not folded into one label: an entry is either a
+# deterministic memory-safety defect in the C++ (SIGSEGV, rc 139) or a
+# resource-exhaustion hazard (unbounded allocation, OOM-killed), which is not
+# a crash in that sense, and each entry below says which it is.
 
 ## 1. `select; when 1 = 0 then; when 2 = 2 then nop; end`
 

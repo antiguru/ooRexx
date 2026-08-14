@@ -14,13 +14,13 @@
 # it is delivered, because a promoted clause that opens a boundary and does not
 # discharge it is invisible to every test that only asks what a loop computes.
 #
-# Two rows are about a boundary leaving MORE work behind it. A delivered
+# The requeue rows are about a boundary leaving MORE work behind it. A delivered
 # handler can itself RAISE ... RETURN, queueing a second trap, and a clause
 # boundary delivers at most one without re-checking -- so the boundary that
 # delivered the first is not the last one with work, and the SIGL of the second
 # delivery is what says which boundary took it.
 #
-# Three rows are about the header's own ordering rather than its boundaries,
+# Other rows are about the header's own ordering rather than its boundaries,
 # and they are here because the compiled form is what makes the ordering a
 # thing that can break: each header value is evaluated, echoed and validated
 # before the next value is evaluated at all.
@@ -28,7 +28,7 @@
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every row
 # was measured to produce the identical bytes on both engines at `de05ea58`,
 # before the header was flattened -- which is what says a row can tell whether
-# it would ever have failed. One row differs from the oracle and says so in its
+# it would ever have failed. A row that differs from the oracle says so in its
 # own comment. Regenerate a row by running its program under the oracle, never
 # with REWRITE=1 -- ir_dual.rs refuses to run at all under REWRITE for that
 # reason. Capture is:
@@ -36,11 +36,10 @@
 #   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
 #     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
 #
-# TWO LOOP-HEADER BOUNDARIES DIVERGE FROM THE ORACLE AND ARE NOT ROWS HERE,
-# because a row's expected block is what this crate prints and these two are
-# places where that is not what the oracle prints. Both were measured on both
-# engines, and the engines agree on each; neither moved when the header was
-# flattened.
+# LOOP-HEADER BOUNDARIES THAT DIVERGE FROM THE ORACLE ARE NOT ROWS HERE,
+# because a row's expected block is what this crate prints and these are places
+# where that is not what the oracle prints. Each was measured on both engines,
+# and the engines agree on each; none moved when the header was flattened.
 #
 #   * **A zero-pass loop whose requeued handler has no body clause behind it.**
 #     `do i = 1 to raiser()` with `raiser` returning 0 and its handler raising a
@@ -54,8 +53,11 @@
 #     mention rather than being covered by it.
 #   * **An `UNTIL` requeue.** The oracle delivers the second trap at the `END`'s
 #     own clause, `G ran 5`; this crate delivers it at the clause after the loop,
-#     `G ran 6`. The `END` is an instruction the oracle executes and this crate
-#     never steps -- it echoes it and jumps past it.
+#     `G ran 6`. **This bullet names no program, so its observation cannot be
+#     re-run and its cause is not established -- read the withdrawal below
+#     before relying on any of it.** (What stood here attributed it to the
+#     `END` being an instruction the oracle executes and this crate never
+#     steps.)
 #
 # **They do not share a cause, and only one of the two has an established one.**
 # The zero-pass bullet names its own: this crate's `DO` clause encloses the
@@ -66,9 +68,9 @@
 #
 # **The `UNTIL` bullet's cause is NOT established, and the bullet cannot be
 # checked, because it does not name its program.** It was filed under the
-# elided-instruction family `task-4bp-report.md` catalogues -- the oracle runs
-# a clause boundary at a position where this crate has no instruction to run
-# one at. **That attribution is withdrawn rather than replaced**: nothing
+# elided-instruction family -- the oracle runs a clause boundary at a position
+# where this crate has no instruction to run one at. **That attribution is
+# withdrawn rather than replaced**: nothing
 # anyone can run supports it. Reconstructing a program from the bullet's own
 # words has been tried by three readers and produced three different results,
 # none of them the bullet's. The bullet stays, because it records a real
@@ -257,21 +259,24 @@ out> after
 # **The boundary is not missing. It is in the wrong place.** The tree-walker
 # steps a `DO` through `step_in_temps_frame` -> `in_stepped_clause`, whose
 # clause unit wraps `step`; `step`'s own `Do` arm calls `run_loop`, which
-# resolves the whole loop before returning. So the `DO`'s clause stays open
-# across the body, the body's clauses nest inside it, and `leave_clause` -- the
-# boundary that delivers -- does not run until the loop is over.
+# resolves the whole loop before returning. So **this crate's** `DO` clause
+# stays open across the body, the body's clauses nest inside it, and
+# `leave_clause` -- the boundary that delivers -- does not run until the loop is
+# over. **This crate therefore delivers at whichever boundary arrives first**:
+# with a body that is the body's first clause, and with no body it is the
+# `DO`'s own.
+#
+# **The oracle's `RexxInstructionSimpleDo::execute` returns as soon as it has
+# opened the block**, so **the oracle's** clause ends before any body
+# instruction runs and **the oracle always delivers at the `DO`'s own
+# boundary** -- which is what the transcript below shows, `G ran 5` ahead of
+# `body`.
 #
 # **The compiled path is different code and the same shape**, which is why this
 # is on both engines rather than one: `crate::ir::Op::LoopRun` sits inside the
 # header's own `Op::Clause` region -- `close_region` is pushed after it -- and
 # calls `run_loop_with_header`, which resolves the loop before that region
 # closes. Fixing one engine and measuring the other would look like a fix.
-#
-# The oracle's
-# `RexxInstructionSimpleDo::execute` returns once it has opened the block, so
-# its clause ends before any body instruction runs. Delivery then goes to
-# whichever boundary arrives first: with a body that is the body's first
-# clause, and with no body it is the `DO`'s own.
 #
 # **An empty body agrees, and that is what pins it.** The same program with the
 # body's `say` removed:
