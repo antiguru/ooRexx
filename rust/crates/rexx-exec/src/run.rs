@@ -5492,11 +5492,10 @@ impl Interp {
         // both boundaries are past this line.
         //
         // **A `SELECT` with no `CASE` opens the same block and never reaches
-        // here, and no program run so far tells the difference.** Its clause
-        // evaluates nothing, so it has nothing to queue a condition its own
-        // boundary could deliver; probed for anyway with a condition raised
-        // inside a handler, which the oracle delivers at the handler's own
-        // clause rather than carrying it forward to the `SELECT`.
+        // here**, so nothing settles its boundary. That is not a gap: its
+        // clause has nothing that could have queued a condition for the
+        // boundary to deliver, which is the same fact `Select`'s own arm
+        // states where it enters the clause `CASE` or no `CASE`.
         self.settle_block_indent(true, indent);
         Ok(value)
     }
@@ -6233,7 +6232,7 @@ impl Interp {
     /// in**: measured, a `WHEN`'s own condition sits two columns in from its
     /// `SELECT` and a loop body two in from its `DO`. Taking the deeper
     /// indent as a second argument would put two same-typed indents side by
-    /// side at every call site, and handing them over the wrong way round is
+    /// side at a call site, and handing them over the wrong way round is
     /// exactly the two-column answer this function exists to stop.
     ///
     /// **Nothing but the boundary reads what this writes.** Whatever runs

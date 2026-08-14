@@ -134,6 +134,18 @@ out> after
 # quantity rather than a transfer one -- the line above it, the handler's own
 # clause, agrees byte for byte.
 #
+# **A `SELECT CASE` diverges the same way, in the same single line.** Measured
+# on both engines, `call on user zx name h` / `select case raiser()` with a
+# handler that divides by zero, the enclosing frame's traceback line:
+#
+#   oracle       3 *-*   select case raiser()
+#   this crate   3 *-* select case raiser()
+#
+# The handler's own two lines above it agree byte for byte, so this is the same
+# family and the same reason: the `SELECT`'s block is still open where the
+# oracle's traceback reads the counter, and this crate's recorded failure site
+# carries no block level.
+#
 # **A `SELECT CASE`'s clause boundary is the same rule one construct over.**
 # `SELECT` is a block instruction too, so the oracle's counter is already one
 # deeper when that clause ends, and `Interp::settle_block_indent` is what both
