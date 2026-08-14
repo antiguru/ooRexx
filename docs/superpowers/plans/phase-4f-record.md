@@ -3860,3 +3860,45 @@ A probe over every guard -- the `DIGITS 9` rounding case, a non-zero `FUZZ`, `>>
 The first attempt at the table above ran `cd rust` in a shell whose directory had already been reset, so the `cargo build --release` behind the `&&` never ran and `target/release/` still held the **mutated** binary from the witness above.
 It reported `rexxcps` at **-99.973%**, because a build with comparisons inverted fails `rexxcps`' own self-checks and exits early.
 The absurdity is what exposed it; a smaller mutation would have produced a plausible number. **A stale binary outliving its revert is a hazard this record already knew about, and knowing it did not prevent it** -- what did was reading the shell's own error line rather than only the figures beneath it.
+
+### Entry 47 -- the `PARSE` source read, borrowed instead of copied
+
+Base `9f5ae5fbc`. Found by taking the 33-byte width to the debugger, as entry 46 said the next one should be.
+
+#### Locating it
+
+Neither a compound-heavy program nor a decimal-loop program produced a single 33-byte allocation, with the probe run unskipped so that "never fired" meant something.
+`samples/rexxcps.rex` itself did: `Interp::read_parse_var`, on the `PARSE` path, which those probe programs had no reason to reach.
+
+That is the third width in a row where the site was found by writing a program to isolate a suspect and the first two guesses were wrong.
+
+#### The change
+
+`read_parse_var` copied the symbol's spelling with `to_vec()`, and its compound arm additionally copied the stem name, cloned it, joined it to a freshly built tail key, and rendered the value -- all before handing them to `trace_variable` and `trace_compound_name`, which return at once unless intermediates are on.
+
+The name is now borrowed, for the reason it can be: `SymbolTable::name` answers with the `Code`'s lifetime, which is the program and not the `Interp`. The renderings and the joined name are built only when a line will print them, and the tail key uses the lent buffer.
+**Every one of these is a shape already fixed elsewhere in this record** -- entry 38 for the copies and the gating, entry 40 for the key buffer -- reaching a function those entries did not touch.
+
+#### Allocations
+
+`heaptrack`, `samples/rexxcps.rex` at 20/20: **19,015,400 to 17,335,400**, a fall of 1,680,000.
+
+#### Instructions
+
+Five interleaved rounds per arm, minimum of each.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `rexxcps` | 21,589,027,950 | 21,366,715,796 | -222,312,154 | **-1.030%** | 23,800 | 8,125,190 |
+| `arith` | 20,184,260,716 | 20,185,260,540 | **+999,824** | +0.005% | 331 | 921 |
+| `compound` | 18,932,524,693 | 18,932,901,230 | +376,537 | bound | 2,406,505 | 1,302,517 |
+| `strings` | 41,682,584,516 | 41,682,584,306 | -210 | bound | 126,000,102 | 1,056 |
+| `emptyloop` | 25,025,609,073 | 25,025,609,045 | -28 | bound | 1,197 | 1,741 |
+
+`arith` executes no `PARSE` and regressed by about a million instructions, outside its spans. No cause is offered; the do-nothing control this record has wanted since entry 31 would be what earns one.
+
+#### Behaviour, and a probe whose first reading was wrong
+
+A `TRACE R` program parsing from a simple variable, a compound and a bare stem is identical to the oracle.
+
+**The first comparison said it differed.** It redirected both streams into one file, and trace goes to stderr while `SAY` goes to stdout, so the two sides interleaved differently and the diff showed lines moved rather than changed. Compared stream by stream, **stdout and stderr are each identical to the oracle**, and the base and head binaries are byte-identical on that program anyway -- which is the check that settled it, since this change could not have caused a difference that base also shows.

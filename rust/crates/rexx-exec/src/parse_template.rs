@@ -537,34 +537,50 @@ impl Interp {
         id: rexx_parse::SymbolId,
         indent: usize,
     ) -> Result<ObjRef, Failure> {
-        let name = code.symbols.name(id).as_bytes().to_vec();
-        match crate::run::shape_of(&name) {
+        // Borrowed: `SymbolTable::name` answers with the `Code`'s lifetime,
+        // which is the program and not this `Interp`, so it survives the
+        // `&mut self` calls below. The renderings beneath are taken only when
+        // a line will print them -- `trace_variable` and
+        // `trace_compound_name` both return at once unless intermediates are
+        // on, and this function is on the `PARSE` path, which
+        // `samples/rexxcps.rex` runs on every clause of its inner loop.
+        let name = code.symbols.name(id).as_bytes();
+        match crate::run::shape_of(name) {
             crate::run::NameShape::Simple => {
                 let (value, novalue) = self.read(code, id);
                 self.novalue_check(novalue)?;
-                let text = self.to_text(value).to_vec();
-                self.trace_variable(indent, &name, &text);
+                if self.tracing_intermediates() {
+                    let text = self.to_text(value).to_vec();
+                    self.trace_variable(indent, name, &text);
+                }
                 Ok(value)
             }
             // A bare stem read raises no `NOVALUE` (`eval_node`'s own arm has
             // the measured pair) and announces no resolved name.
             crate::run::NameShape::Stem => {
-                let value = self.read_stem(&name);
-                let text = self.to_text(value).to_vec();
-                self.trace_variable(indent, &name, &text);
+                let value = self.read_stem(name);
+                if self.tracing_intermediates() {
+                    let text = self.to_text(value).to_vec();
+                    self.trace_variable(indent, name, &text);
+                }
                 Ok(value)
             }
             crate::run::NameShape::Compound => {
                 let (stem_name, stem_at) = code.stem(id);
-                let stem_name = stem_name.to_vec();
-                let key = self.tail_key(code, id);
-                let mut resolved = stem_name.clone();
-                resolved.extend_from_slice(&key);
-                self.trace_compound_name(indent, &name, &resolved);
-                let (value, novalue) = self.stem_get_at(&stem_name, stem_at, &key);
+                let mut key = self.take_key_buffer();
+                self.tail_key_into(code, id, &mut key);
+                if self.tracing_intermediates() {
+                    let mut resolved = stem_name.to_vec();
+                    resolved.extend_from_slice(&key);
+                    self.trace_compound_name(indent, name, &resolved);
+                }
+                let (value, novalue) = self.stem_get_at(stem_name, stem_at, &key);
+                self.give_key_buffer(key);
                 self.novalue_check(novalue)?;
-                let text = self.to_text(value).to_vec();
-                self.trace_variable(indent, &name, &text);
+                if self.tracing_intermediates() {
+                    let text = self.to_text(value).to_vec();
+                    self.trace_variable(indent, name, &text);
+                }
                 Ok(value)
             }
         }
