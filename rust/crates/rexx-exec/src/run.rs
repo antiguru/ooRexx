@@ -7996,20 +7996,37 @@ impl Interp {
     ) -> Result<(), Failure> {
         match setting {
             NumericSetting::Digits => {
-                let default = rexx_num::DEFAULT_DIGITS.to_string();
-                let text = self.numeric_operand(code, expression, "DIGITS", &default)?;
-                self.activation_mut()
-                    .settings
-                    .set_digits_str(&text)
-                    .map_err(raised_from_settings)?;
+                // **The default is built in the arm that uses it.** It used
+                // to be built before the call, so `numeric digits 20` --
+                // which never reads it -- allocated a `String` for the
+                // restore value it was overriding.
+                match self.numeric_operand(code, expression, "DIGITS")? {
+                    Some(text) => {
+                        let parsed = String::from_utf8_lossy(&text);
+                        let outcome = self.activation_mut().settings.set_digits_str(&parsed);
+                        self.give_result_buffer(text);
+                        outcome.map_err(raised_from_settings)?;
+                    }
+                    None => self
+                        .activation_mut()
+                        .settings
+                        .set_digits_str(&rexx_num::DEFAULT_DIGITS.to_string())
+                        .map_err(raised_from_settings)?,
+                }
             }
-            NumericSetting::Fuzz => {
-                let text = self.numeric_operand(code, expression, "FUZZ", "0")?;
-                self.activation_mut()
+            NumericSetting::Fuzz => match self.numeric_operand(code, expression, "FUZZ")? {
+                Some(text) => {
+                    let parsed = String::from_utf8_lossy(&text);
+                    let outcome = self.activation_mut().settings.set_fuzz_str(&parsed);
+                    self.give_result_buffer(text);
+                    outcome.map_err(raised_from_settings)?;
+                }
+                None => self
+                    .activation_mut()
                     .settings
-                    .set_fuzz_str(&text)
-                    .map_err(raised_from_settings)?;
-            }
+                    .set_fuzz_str("0")
+                    .map_err(raised_from_settings)?,
+            },
             NumericSetting::FormDefault | NumericSetting::FormScientific => {
                 self.activation_mut()
                     .settings
@@ -8089,23 +8106,28 @@ impl Interp {
     /// `setup_controlled` already traces `TO`/`BY`/`FOR` before validating
     /// them: measured, `numeric digits 'x'` under `trace r` emits `>K>
     /// "DIGITS" => "x"` and *then* raises 26.5, not the reverse.
+    /// **The lent result buffer, and the caller hands it back.** The operand
+    /// used to be copied into an owned `Vec` and then copied again into an
+    /// owned `String` for `set_digits_str`, which takes `&str`. The buffer is
+    /// taken *after* the expression is evaluated, so a builtin call inside
+    /// that expression gets the buffer for its own result first.
+    /// `from_utf8_lossy` borrows in the caller for every operand that is
+    /// valid UTF-8, which is every operand that can parse as a count.
     fn numeric_operand(
         &mut self,
         code: &Code<'_>,
         expression: &Option<Expr>,
         keyword: &str,
-        default: &str,
-    ) -> Result<String, Failure> {
-        match expression {
-            Some(expression) => {
-                let value = self.eval(code, expression)?;
-                self.roots.push_temp(value);
-                let text = self.to_text(value).to_vec();
-                self.trace_keyword(self.clause_state.current_value_indent, keyword, &text);
-                Ok(String::from_utf8_lossy(&text).into_owned())
-            }
-            None => Ok(default.to_string()),
-        }
+    ) -> Result<Option<Vec<u8>>, Failure> {
+        let Some(expression) = expression else {
+            return Ok(None);
+        };
+        let value = self.eval(code, expression)?;
+        self.roots.push_temp(value);
+        let mut text = self.take_result_buffer();
+        text.extend_from_slice(&self.to_text(value));
+        self.trace_keyword(self.clause_state.current_value_indent, keyword, &text);
+        Ok(Some(text))
     }
 
     /// `instruction`'s own clause text and the 1-based line to print it against,

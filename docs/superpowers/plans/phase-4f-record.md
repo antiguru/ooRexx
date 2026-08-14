@@ -4105,3 +4105,71 @@ At a 2 GB cap both binaries answer `400000000`, as the oracle does at 1 GB. The 
 #### Behaviour
 
 A probe over `changestr` at every shape -- no occurrence, a replacement shorter and longer than the needle, a count limit, an empty needle, an empty replacement, a result crossing `INLINE_BYTES` in both directions, and joins of operands on either side of that boundary -- is **identical to the oracle on stdout, on stderr, and in exit status**, compared stream by stream.
+
+### Entry 51 -- what `arith` actually allocates, and it is not arithmetic
+
+Base `d865fefba`. `arith` was the last axis entry 48 left untouched, at 26.4 allocations per iteration.
+
+#### Twelve programs, one operation each
+
+Rather than read the site attribution and guess -- which this series has now done wrongly three times -- each operation was isolated in its own program at a fixed 20,000 iterations and profiled alone. The empty-loop baseline is 432.
+
+| program | allocations | per iteration |
+|---|---:|---:|
+| baseline | 432 | 0.02 |
+| `numeric digits` switched twice | 160,402 | **8.02** |
+| `+` at DIGITS 9 or 20 | 441 | 0.02 |
+| `*` at DIGITS 9 or 20 | 441 | 0.02 |
+| `**` at DIGITS 20 | 440 | 0.02 |
+| `//` at DIGITS 20 | 441 | 0.02 |
+| `/` at DIGITS 9 | 60,459 | 3.02 |
+| `/` at DIGITS 20 | 100,459 | 5.02 |
+| `*` on two 20-digit operands | 80,464 | 4.02 |
+| `/` on two 20-digit operands | 120,461 | 6.02 |
+
+**Addition, multiplication, power and remainder on operands that fit `INLINE_DIGITS` allocate nothing at all.** Only two things allocate: division, at three to six per operation, and the `NUMERIC` clause -- which is not arithmetic and was the single largest item on the axis.
+
+That also settles the standing question about `rexx-num`: it does not allocate per operation, it allocates per *spill*, and a spill happens when a working value needs more than the twenty digits that fit inline. A 20-digit multiply produces forty digits before rounding, which is why that row is the one that moves.
+
+#### The change
+
+`exec_numeric` built `rexx_num::DEFAULT_DIGITS.to_string()` before every `NUMERIC DIGITS` clause, including the ones that supply an expression and never read it -- the restore value, allocated to be discarded.
+`numeric_operand` then copied the operand's rendered bytes into an owned `Vec`, and copied that again into an owned `String` because `set_digits_str` takes `&str`.
+
+The default is now built only in the arm that uses it; the operand is built in the lent result buffer, taken *after* the expression is evaluated so a builtin inside that expression gets the buffer for its own result first; and the `&str` comes from `String::from_utf8_lossy` borrowing in the caller, which allocates only for an operand that is not valid UTF-8 and therefore cannot parse as a count anyway.
+
+#### Allocations
+
+| axis | base | head | |
+|---|---:|---:|---:|
+| `numeric digits` switched twice | 160,402 | 40,403 | **-74.8%** |
+| `arith` | 528,794 | 408,795 | -22.7% |
+| `/` at DIGITS 20 | 100,459 | 100,457 | unchanged |
+
+The division control is unchanged, which is what says the fall came from the clause and not from the arithmetic beside it.
+
+#### Instructions
+
+Five interleaved rounds per arm, both arms staged at one fixed binary path, minimum of each. The head binary was rebuilt from the restored source and compared byte for byte with the copy measured.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `arith` | 20,176,737,115 | 19,859,504,395 | -317,232,720 | **-1.572%** | 1,904 | 419 |
+| `emptyloop` | 25,025,608,957 | 24,975,609,204 | -49,999,753 | **-0.200%** | 1,458 | 973 |
+| `rexxcps` | 21,127,489,866 | 21,113,344,315 | -14,145,551 | -0.067% | 4,071,352 | 2,933,494 |
+| `strings` | 40,017,586,533 | 40,017,586,317 | -216 | bound | 1,059 | 956 |
+| `alloc4c` | 7,165,786,401 | 7,165,795,683 | +9,282 | bound | 164,281 | 194,714 |
+| `compound` | 18,238,265,805 | 18,238,218,880 | -46,925 | bound | 2,102,057 | 2,148,841 |
+| `varlookup` | 42,123,633,183 | 42,123,633,502 | +319 | bound | 857 | 851 |
+
+**`emptyloop` executes no `NUMERIC` clause and moved by 49,999,753 on a loop of 25,000,000 passes**, which is exactly two instructions per pass. That is the same signature the bare-stem task measured for a change to a call site's constant argument, and it is codegen rather than this path. It went the favourable way this time; entries 47 and 48 recorded the same size of movement going the other way on `arith`. The do-nothing control remains the thing that would settle all three.
+
+#### Behaviour
+
+A probe over `NUMERIC DIGITS` with an expression, bare (restore), from a variable, from an expression, `NUMERIC FUZZ` both ways, `NUMERIC FORM` both ways, and the three error shapes (26.5 on a non-whole operand, on zero, and on a fuzz not below digits) trapped by `SIGNAL ON SYNTAX`, all under `TRACE R` so every `>K>` line is compared, is **identical to the oracle on stdout, on stderr, and in exit status**, compared stream by stream.
+
+**And the probe was shown to fail before being trusted.** Truncating the operand buffer to one byte makes it exit 223 and report `2 0.33` where the first line should read `20 0.33333333333333333333`. The source was then restored from the backup, re-verified with `sha256sum -c`, rebuilt, and the probe re-run against the oracle.
+
+#### Where this leaves the axis
+
+`arith` is at 20.4 allocations per iteration, and what remains is division (three to six per operation) plus one per `NUMERIC` clause. Division allocates working buffers that outlive `INLINE_DIGITS`, and removing those needs a scratch buffer inside `rexx-num` -- a crate with no `Interp` to lend from, so the lending shape used everywhere in this series does not carry across without a thread-local or an explicit scratch parameter. That is its own design question.
