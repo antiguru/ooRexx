@@ -135,8 +135,9 @@ out> after
 # clause, agrees byte for byte.
 #
 # **A `SELECT CASE` diverges the same way, in the same single line.** Measured
-# on both engines, `call on user zx name h` / `select case raiser()` with a
-# handler that divides by zero, the enclosing frame's traceback line:
+# on both engines, `trace r` / `call on user zx name h` / `select case
+# raiser()` with a handler that divides by zero -- so `select case` is line 3
+# -- the enclosing frame's traceback line:
 #
 #   oracle       3 *-*   select case raiser()
 #   this crate   3 *-* select case raiser()
@@ -152,6 +153,41 @@ out> after
 # constructs reach. A trap queued by a `WHEN` condition settles at the level
 # its clause echoed at instead, because a `WHEN` is not a block instruction.
 # Both are held against the oracle's own bytes in `tests/trace_indent.rs`.
+#
+# **A plain `SELECT`'s own boundary is still two columns short, and it is this
+# same defect on the construct that has no `CASE`.** A boundary delivers
+# whatever is pending rather than only what its own clause queued: a `CALL ON`
+# handler ending in `raise ... return` leaves a second condition for the next
+# boundary to take, and a plain `select` standing there is what takes it.
+# Measured under `trace r` on both engines, `SIGL` naming the `select` clause's
+# own line, so it is that boundary delivering:
+#
+#   oracle       15 *-*     g:
+#   this crate   15 *-*   g:
+#
+# `select case 1` is the same program with a scrutinee that queues nothing
+# either, and it agrees, because `Interp::select_case` settles the boundary and
+# a caseless `SELECT` never reaches it. **So what decides is whether anything
+# settled the boundary, never what the clause queued** -- which is why "its
+# clause queues nothing" is not a reason to leave a block instruction's
+# boundary unsettled.
+#
+# **A DIFFERENT FAMILY, AND THE ONE NOT TO FILE BESIDE THESE.** The same
+# requeue route pointed at a plain `do` / `end` is not an indent and not a
+# trace quantity: the oracle delivers the second handler at the `do` clause's
+# own boundary, before the body runs, and this crate runs the body's first
+# clause first and delivers at that clause's boundary instead. Wrong order and
+# a different `SIGL`, on **stdout**, with no `TRACE` anywhere in the program --
+# which is what makes it worse than everything else recorded here rather than
+# another entry on the list:
+#
+#   oracle       G ran 5 / body / after set 5
+#   this crate   body / G ran 6 / after set 5
+#
+# `do label zl` behaves the same and `if ... then` is clean on this route. It
+# belongs to the elided-boundary family this file's header block already
+# describes -- the oracle runs a clause boundary at a position where this crate
+# has no instruction to run one at -- and not to the indent quantities above.
 program
 call on user zx name h
 do i = 1 to raiser()

@@ -1787,8 +1787,11 @@ impl Interp {
                 // `when 'SV' then say ...` on line 4 reports `SIGL` 3 on the
                 // oracle and reported 4 here. Entered unconditionally, `CASE`
                 // or no `CASE`, because the oracle's boundary is after the
-                // instruction rather than after the expression -- a plain
-                // `SELECT` simply has nothing that could have queued.
+                // instruction rather than after the expression. **A plain
+                // `SELECT`'s clause queues nothing itself and its boundary
+                // still has work**: a condition an earlier clause queued and
+                // that clause's handler requeued is delivered here, measured
+                // under `trace r` on both engines.
                 let select_line = self.clause_state.line();
                 let mut case_value: Option<ObjRef> = None;
                 match self.in_clause(code, select_line, |it| {
@@ -5491,11 +5494,17 @@ impl Interp {
         // one `crate::ir::Op::EvalExpr` of the header's clause region, and
         // both boundaries are past this line.
         //
-        // **A `SELECT` with no `CASE` opens the same block and never reaches
-        // here**, so nothing settles its boundary. That is not a gap: its
-        // clause has nothing that could have queued a condition for the
-        // boundary to deliver, which is the same fact `Select`'s own arm
-        // states where it enters the clause `CASE` or no `CASE`.
+        // **A `SELECT` with no `CASE` never reaches here, so nothing settles
+        // its boundary -- and that is a gap rather than an absence.** A
+        // boundary delivers whatever is pending, not only what its own clause
+        // queued: a `CALL ON` handler ending in `raise ... return` leaves a
+        // second condition for the next boundary to take. Measured under
+        // `trace r` on both engines, a plain `select` reached that way echoes
+        // the second handler two columns short of the oracle, while `select
+        // case 1` -- the same program with a scrutinee that queues nothing
+        // either -- agrees, because this line runs for it. So what decides is
+        // whether anything settled the boundary, never what the clause
+        // queued. Recorded in `tests/ir_dual_cases/loop-header-boundaries`.
         self.settle_block_indent(true, indent);
         Ok(value)
     }
