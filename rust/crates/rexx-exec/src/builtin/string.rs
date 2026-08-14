@@ -155,9 +155,24 @@ fn find_forward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> u
         return 0;
     }
     let window = &haystack[start..start + range];
+    // **The ends are compared before the whole**, and that is what the naive
+    // form costs: `candidate == needle` on byte slices is a `memcmp` call, and
+    // without a guard it is made at every position the needle could start at.
+    // Measured with `perf` on `bench-programs/strings.rex`, whose loop runs
+    // `pos` and `changestr` over a 43-byte haystack for a 3-byte needle,
+    // `__memcmp_evex_movbe` was 4.98% of samples -- more than `pos` itself.
+    //
+    // The first byte alone would do; the last is included because it costs
+    // one more load on the candidates that pass the first test and rules out
+    // the needles whose interior repeats, which is the shape a match-heavy
+    // haystack has.
+    let first = needle[0];
+    let last = needle.len() - 1;
     window
         .windows(needle.len())
-        .position(|candidate| candidate == needle)
+        .position(|candidate| {
+            candidate[0] == first && candidate[last] == needle[last] && candidate == needle
+        })
         .map_or(0, |offset| start + offset + 1)
 }
 

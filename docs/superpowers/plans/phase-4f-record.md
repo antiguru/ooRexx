@@ -4309,3 +4309,37 @@ The first draft of that probe also called `STREAM` and `RXFUNCADD`, and this cra
 #### Where the axis stands
 
 `strings` against the oracle, three interleaved rounds, wall clock and therefore orientation rather than this phase's instrument: **3.57x to 3.05x**. `changestr` and `pos` themselves are the next thing on it, at 12.48% and 3.14% of samples.
+
+### Entry 54 -- a `memcmp` at every position, and a `POS` divergence found beside it
+
+Base `5b632d60b`.
+
+#### The change
+
+`find_forward` is `window.windows(needle.len()).position(|candidate| candidate == needle)`.
+On byte slices `==` is a `memcmp` call, so the naive form makes one **at every position the needle could start at**. `perf` on `bench-programs/strings.rex` put `__memcmp_evex_movbe` at 4.98% of samples, above `pos` itself at 3.14%.
+
+The candidate's first and last bytes are compared before the whole. The first alone would do; the last costs one more load only on candidates that pass the first test, and rules out the needles whose interior repeats.
+
+`find_backward` beside it has the identical shape and is not changed, because nothing measured here reaches it.
+
+#### Instructions
+
+Five interleaved rounds per arm, both arms staged at one fixed binary path, minimum of each.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `strings` | 36,870,642,238 | 32,925,639,260 | -3,945,002,978 | **-10.700%** | 615 | 1,694 |
+| `rexxcps` | 20,758,925,894 | 20,758,922,067 | -3,827 | bound | 4,080,650 | 7,386,242 |
+
+Three lines, and the largest single figure in this series.
+
+#### Behaviour, and what the probe found that was not this change
+
+A probe over the search primitives -- ten needles against a haystack chosen to repeat them, each with `POS`, `LASTPOS`, `COUNTSTR` and two `CHANGESTR` forms, swept across eight start positions and five ranges, plus the empty needle, the empty haystack, overlapping needles, a replacement longer and shorter than the needle, a count limit of zero, `WORDPOS` and `VERIFY` -- is **518 lines, and identical to this entry's base on every one of them**, which is what says this change is behaviour-neutral.
+
+**Against the oracle it differs on one line, and the base differs on the same line.** `pos('an', 'banana bandana abracadabra', 6, 4)` is 9 on the oracle and 0 here. The window is positions 6 through 9, `"a ba"`; the match at 9 runs into position 10, outside it. **The oracle bounds where a match may begin; this crate requires the match to fit.**
+
+That is a real divergence and it is not this entry's to fix -- it is recorded here because this probe is what found it, and because `find_backward`'s own doc comment carries the *opposite* rule for `LASTPOS`, measured against the oracle at the time: "the match has to end within the window, not merely begin there". The two builtins do not share a rule, and only one of them has it right.
+
+**And the probe was shown to fail before being trusted.** Dropping the full comparison and keeping only the two end-byte tests makes fourteen of its lines diverge. The source was then restored from the backup, re-verified with `sha256sum -c`, rebuilt, and the probe re-run to the byte.
