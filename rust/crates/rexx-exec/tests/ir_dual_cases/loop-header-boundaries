@@ -158,9 +158,23 @@ out> after
 # same defect on the construct that has no `CASE`.** A boundary delivers
 # whatever is pending rather than only what its own clause queued: a `CALL ON`
 # handler ending in `raise ... return` leaves a second condition for the next
-# boundary to take, and a plain `select` standing there is what takes it.
-# Measured under `trace r` on both engines, `SIGL` naming the `select` clause's
-# own line, so it is that boundary delivering:
+# boundary to take, and a plain `select` standing there is what takes it. The
+# program, whole, because a transcript without one cannot be regenerated:
+#
+#   trace r                       | say 'after' zn
+#   call on user zx name h        | exit
+#   call on user zy name g        | raiser1:
+#   zn = raiser1()                | raise user zx return 5
+#   select                        | h:
+#     when 1 = 1 then say 'w'     | raise user zy return 1
+#     otherwise say 'o'           | g:
+#   end                           | say 'G ran' sigl
+#                                 | return
+#
+# read down the left column then the right, so `select` is line 5 and `g:` is
+# line 15. Both engines print `G ran 5` -- `SIGL` naming the `select` clause's
+# own line, which is what says it is that boundary delivering -- and stdout and
+# `rc 0` agree throughout. The stderr line that does not:
 #
 #   oracle       15 *-*     g:
 #   this crate   15 *-*   g:
@@ -172,17 +186,36 @@ out> after
 # clause queues nothing" is not a reason to leave a block instruction's
 # boundary unsettled.
 #
-# **A DIFFERENT FAMILY, AND THE ONE NOT TO FILE BESIDE THESE.** The same
+# **A DIFFERENT FAMILY, RECORDED HERE BUT NOT RANKED WITH THESE.** The same
 # requeue route pointed at a plain `do` / `end` is not an indent and not a
 # trace quantity: the oracle delivers the second handler at the `do` clause's
 # own boundary, before the body runs, and this crate runs the body's first
 # clause first and delivers at that clause's boundary instead. Wrong order and
-# a different `SIGL`, on **stdout**, with no `TRACE` anywhere in the program --
-# which is what makes it worse than everything else recorded here rather than
-# another entry on the list:
+# a different `SIGL`, on **stdout**, with no `TRACE` anywhere in the program.
+# The program:
+#
+#   call on user zx name h        | raiser1:
+#   call on user zy name g        | raise user zx return 5
+#   zv = 'unset'                  | h:
+#   zn = raiser1()                | raise user zy return 1
+#   do                            | g:
+#     say 'body'                  | zv = 'set'
+#   end                           | say 'G ran' sigl
+#   say 'after' zv zn             | return
+#   exit                          |
+#
+# read down the left column then the right, so `do` is line 5 and the body's
+# `say` is line 6:
 #
 #   oracle       G ran 5 / body / after set 5
 #   this crate   body / G ran 6 / after set 5
+#
+# **The `5` ending the third line is `zn`, the value `raiser1` returned, and
+# not a `SIGL`.** Naming that matters here more than usual: `raise user zx
+# return 5` happens to return the same number as the `do` clause's own line, so
+# a reader who takes that `5` for the delivering clause's `SIGL` reconstructs a
+# program ending `say 'after' zv sigl` -- which produces the identical oracle
+# transcript and a *different* crate one, `after set 6`. Measured both ways.
 #
 # `do label zl` behaves the same and `if ... then` is clean on this route. It
 # belongs to the elided-boundary family this file's header block already
