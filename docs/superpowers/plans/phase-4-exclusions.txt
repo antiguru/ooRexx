@@ -644,6 +644,41 @@ DEVIATIONS -- permanent, chosen
      expression reaches depth 100,000, and that is precisely the depth the
      oracle handles.
 
+  3. POS's window overrun can match the haystack's NUL terminator; this
+     crate declines to invent that byte.
+
+     IMPLEMENTED by the pre-Phase-5 defect round: `find_forward`
+     (`rust/crates/rexx-exec/src/builtin/string.rs`) reproduces
+     `StringUtil::pos`'s own window overrun (`classes/support/
+     StringUtil.cpp:206-253`) -- a rescan that recomputes its search length
+     from a rejected candidate's own position rather than from where it
+     resumes, so the search may run exactly one byte past where the whole
+     needle would fit. Licensed by Moritz, 2026-08-14, narrowly.
+
+     THE BOUND, stated as the arithmetic gives it rather than as a hedge.
+     `range` is capped at `haystack.len() - start` before any of this runs,
+     so the overrun reaches at most one byte past the end of the haystack.
+     One byte can only supply a needle's LAST byte, so only a needle whose
+     last byte would need inventing can be affected. So: the divergence can
+     only manifest for a needle whose last byte is `'00'x`, searched with a
+     window that reaches the end of the haystack.
+
+     Measured: `pos('a'||'00'x,'aa')` is 2 on the oracle, which reads the
+     `RexxString`'s own NUL terminator as that invented byte and matches
+     through it. This crate does not synthesise a byte past the haystack and
+     answers 0 there.
+
+     WHY EXACT AGREEMENT IS NOT AVAILABLE. Matching the oracle's 2 here does
+     not make the two sides agree, it moves the divergence one call further
+     out: `count_occurrences` and `changestr` both walk forward from
+     whatever `find_forward` answers, and a match that runs past the
+     haystack's own bytes is exactly what the oracle's `changestr` copies
+     through -- `changestr('a'||'00'x,'aa','ZZZ')` dies on the oracle with
+     **SIGSEGV, rc 139**. There is no oracle behaviour to reproduce on the
+     other side of that crash. Answering 0 at `pos` is the only place in
+     this chain where "what the oracle does" and "a byte this crate can
+     produce without inventing one" are still the same question.
+
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------

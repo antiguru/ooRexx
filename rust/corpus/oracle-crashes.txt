@@ -1,0 +1,96 @@
+# Programs known to crash or exhaust the C++ oracle interpreter
+# (/home/moritz/dev/repos/ooRexx/build/bin/rexx), so nobody has to
+# rediscover them by running them. This file exists precisely so a sweep,
+# a probe, or a corpus generator can exclude these by reference rather
+# than by folklore passed between sessions -- do not run any of the
+# programs below to "confirm" the entry still holds; that is the failure
+# mode this file exists to end.
+#
+# Every entry was measured under the standard oracle wrapper:
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=/home/moritz/dev/repos/ooRexx/build/lib \
+#     /home/moritz/dev/repos/ooRexx/build/bin/rexx /abs/path/FILE )
+# run from a fresh empty directory (the scratchpad root is on the oracle's
+# own external-routine search path and must never be the run directory).
+#
+# Three of the four are deterministic memory-safety defects in the C++
+# (SIGSEGV, rc 139) and one is a resource-exhaustion hazard (unbounded
+# allocation, OOM-killed) rather than a crash in that sense -- the two
+# failure modes are recorded as what they are, not folded into one label.
+
+## 1. `select; when 1 = 0 then; when 2 = 2 then nop; end`
+
+    select
+      when 1 = 0 then
+      when 2 = 2 then nop
+    end
+
+Effect: SIGSEGV, rc 139, deterministic.
+
+Cause: upstream SourceForge **SF #2018**, filed and commented with the
+crash site and a verified guard. An orphaned `WHEN` (a `WHEN` clause with
+no body, immediately followed by another `WHEN`) reaches a null-pointer
+dereference in the C++ parser/interpreter's `SELECT` handling. Not a
+oorexx-rust-rewrite bug and not something this crate needs to reproduce --
+`rust/CLAUDE.md` and every phase plan already carry "never run this" for
+the same reason this file now carries the account.
+
+## 2. `say date('M','0','D')`
+
+    say date('M','0','D')
+
+Effect: SIGSEGV, rc 139, deterministic (measured 3 runs of 3).
+
+Cause: `DATE`'s day-of-year range check
+(`interpreter/expression/BuiltinFunctions.cpp:1163`) is
+`yearday < 0 || yearday > YEAR_DAYS + 1 || ...`, so `0` passes it -- day
+zero is not the day-of-year range's lower bound, it is one below the
+first valid day, and the check only rejects strictly negative values.
+`RexxDateTime::setDay` (`classes/support/RexxDateTime.cpp:457-475`) then
+computes `month = 0` for a zero day count, and the `'M'` output style
+reads `monthNames[month - 1]` (`RexxDateTime.cpp:526`) -- `monthNames[-1]`,
+one element before the array, whose stored bytes happen to form an
+invalid pointer that a subsequent string read dereferences. Other output
+styles derived from the same `month == 0` state (`D`, `B`, `W`, `F`, `T`)
+read a different out-of-bounds slot (`monthStarts[-1]`) that happens to
+hold `0` on this build and so return stable, wrong-looking-but-harmless
+numbers instead of crashing -- `'M'` is the one that dies because it is
+the one whose out-of-bounds read is dereferenced as a pointer rather than
+used as an integer. Found 2026-08-07 building this project's differential
+corpus; not filed upstream (filing is Moritz's call, not this project's).
+
+## 3. `changestr('a'||'00'x,'aa','ZZZ')`
+
+    say changestr('a'||'00'x, 'aa', 'ZZZ')
+
+Effect: SIGSEGV, rc 139, deterministic.
+
+Cause: the tail of `StringUtil::pos`'s own window-overrun defect
+(DEVIATION 3, `docs/superpowers/plans/phase-4-exclusions.txt`, and
+`find_forward`'s own doc comment in
+`rust/crates/rexx-exec/src/builtin/string.rs` for the full mechanism).
+`POS`'s search can match one byte past the end of the haystack, where the
+C++ reads the `RexxString`'s own NUL terminator -- so a needle ending in
+`'00'x`, searched to the end of the haystack, can match through that
+terminator (`pos('a'||'00'x,'aa')` is 2 on the oracle, a match "ending"
+one byte past a two-byte haystack). `POS` and `COUNTSTR` merely report
+that position and survive; `CHANGESTR` copies the haystack up to and
+including the matched needle, and copying "through" a match that runs
+past the buffer's own bytes is what walks off the end of the allocation
+and crashes. Found 2026-08-14 while fixing the Rust port's own `POS`;
+not filed upstream.
+
+## 4. `NUMERIC DIGITS` above 1000, used in an arithmetic operation
+
+    numeric digits 1001
+    say 1 + 1
+
+Effect: **not a SIGSEGV** -- runaway allocation, OOM-killed by the host
+(or by the `ulimit -v` wrapper's own address-space cap, which is what
+turns an otherwise slower failure into an immediate one under the
+standard oracle invocation above). Recorded here as a hazard rather than
+a defect: raising `NUMERIC DIGITS` widens the precision every arithmetic
+operation carries, and at four figures and above the C++ allocates
+proportionally to that precision on a scale this project has not
+characterised further, so the safe rule is the blanket one already in
+`rust/CLAUDE.md` and every phase plan -- never set it above 1000 in a
+probe, full stop, rather than searching for the exact boundary.

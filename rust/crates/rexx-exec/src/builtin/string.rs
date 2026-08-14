@@ -175,10 +175,12 @@ fn push_pad(out: &mut Vec<u8>, byte: u8, len: usize) {
 /// regardless, because what this crate is measured against is what the oracle
 /// prints.
 ///
-/// **One thing the oracle does here that this deliberately does not.** The
-/// overrun position can be the byte one past the end of the haystack, where
-/// the C++ reads the `RexxString`'s NUL terminator and matches a needle whose
-/// last byte is `'00'x`: measured, `pos('a'||'00'x,'aa')` is 2 over a two-byte
+/// **One thing the oracle does here that this deliberately does not, and it
+/// is DEVIATION 3 in `docs/superpowers/plans/phase-4-exclusions.txt`,
+/// licensed by Moritz rather than decided by this crate.** The overrun
+/// position can be the byte one past the end of the haystack, where the C++
+/// reads the `RexxString`'s NUL terminator and matches a needle whose last
+/// byte is `'00'x`: measured, `pos('a'||'00'x,'aa')` is 2 over a two-byte
 /// haystack, a match running past the string. This declines to invent that
 /// byte and answers 0. There is no oracle behaviour to agree with past `pos`
 /// itself -- measured the same day, `changestr('a'||'00'x,'aa','ZZZ')` copies
@@ -245,10 +247,20 @@ fn find_forward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> u
 /// The 1-based offset of the last `needle` that ends at or before `start`
 /// and begins no earlier than `range` bytes before that end, or 0.
 ///
-/// **The match has to end within the window, not merely begin there**, which
-/// is the rule a one-character needle cannot show: measured,
-/// `lastpos('abc','xxabc',5)` is 3 while `lastpos('abc','xxabc',4)` and
-/// `lastpos('abc','xxabc',3)` are both 0.
+/// **The whole match must fall inside the window -- both ends, not "begins
+/// there" alone and not "ends there" alone.** `StringUtil::lastPos`
+/// (`classes/support/StringUtil.cpp:341-403`) clips the window once, before
+/// scanning (`startPoint = stringData + haystackLen - range`), and its
+/// primitive then walks backward with a fixed candidate count and a plain
+/// `memcmp` per position -- no `memchr` fast path, nothing that recomputes
+/// its own search length from a rejected candidate. **Do not infer
+/// `find_forward`'s rescan here**: it has no counterpart in this function,
+/// which is why this crate's code was already correct and needed no fix
+/// alongside POS's. Measured, a decoy sharing the needle's first byte
+/// inside the window changes nothing: `lastpos('345','Y3Y345YYYYYY',8,4)` is
+/// 0 and `lastpos('345','Y3Y345YYYYYY',8,5)` is 4, exactly where "must fully
+/// fit" places the boundary and one range short of where `find_forward`'s
+/// overrun would have let the same decoy through.
 fn find_backward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> usize {
     if needle.is_empty() || haystack.is_empty() || needle.len() > range {
         return 0;
@@ -1260,6 +1272,17 @@ mod tests {
         assert_eq!(answer(b"POS", &[b"a", b"zza", b"1", b"2"]), b"0");
         assert_eq!(answer(b"POS", &[b"a", b"zza", b"1", b"3"]), b"3");
 
+        // DEVIATION 3 (`docs/superpowers/plans/phase-4-exclusions.txt`),
+        // licensed by Moritz 2026-08-14: the overrun above can land one byte
+        // past the haystack, where the oracle reads the `RexxString` NUL
+        // terminator and matches a needle ending in `'00'x` -- measured, the
+        // oracle's own answer here is 2, not this crate's 0. Pinned so a
+        // future change to the overrun cannot silently start inventing that
+        // byte; `find_forward`'s own doc has the full account and the reason
+        // exact agreement is not available (`changestr` on the same needle
+        // dies on the oracle at rc 139).
+        assert_eq!(answer(b"POS", &[b"a\0", b"aa"]), b"0");
+
         assert_eq!(answer(b"LASTPOS", &[b"an", b"banana"]), b"4");
         assert_eq!(answer(b"LASTPOS", &[b"an", b"banana", b"4"]), b"2");
         assert_eq!(answer(b"LASTPOS", &[b"an", b"banana", b"3"]), b"2");
@@ -1280,6 +1303,18 @@ mod tests {
         // to see the difference, and the explicit range is the other half.
         assert_eq!(answer(b"LASTPOS", &[b"b", b"banana", b"5"]), b"1");
         assert_eq!(answer(b"LASTPOS", &[b"b", b"banana", b"5", b"2"]), b"0");
+        // The pair that rules out `find_forward`'s rescan here: a decoy
+        // sharing the needle's first byte, at the same position a POS window
+        // this size would have let it reach one range further back.
+        // `find_backward`'s own doc has the oracle source citation.
+        assert_eq!(
+            answer(b"LASTPOS", &[b"345", b"Y3Y345YYYYYY", b"8", b"4"]),
+            b"0"
+        );
+        assert_eq!(
+            answer(b"LASTPOS", &[b"345", b"Y3Y345YYYYYY", b"8", b"5"]),
+            b"4"
+        );
 
         assert_eq!(answer(b"COUNTSTR", &[b"a", b"banana"]), b"3");
         assert_eq!(answer(b"COUNTSTR", &[b"an", b"banana"]), b"2");
