@@ -27,10 +27,9 @@
 # promotion's contract: the bytes do not move.
 #
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, on both
-# engines, before this file was written -- except the one row whose own comment
-# says which line the oracle prints and this crate does not. Regenerate a row
-# by running its program under the oracle, never with REWRITE=1 -- ir_dual.rs
-# refuses to run at all under REWRITE for that reason. Capture is:
+# engines, before this file was written. Regenerate a row by running its
+# program under the oracle, never with REWRITE=1 -- ir_dual.rs refuses to run
+# at all under REWRITE for that reason. Capture is:
 #
 #   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
 #     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
@@ -183,22 +182,13 @@ err>        >=>     ZI <= "3"
 
 # trace i over a DO OVER ... FOR
 #
-# **This row's expected block is not the oracle's.** The oracle prints
-# `       >K>   "FOR" => "1"` after the `>L>   "1"` line, and this crate prints
-# nothing for that value: `HeaderRole::OverFor::keyword()` answers `None`.
-# Measured 2026-08-12 on both engines and under `trace r` as well as `trace i`,
-# with `do qq over 4.5 for 2` giving the same one-line gap -- so it is neither
-# this promotion's nor this program's. The row pins our own answer while the
-# gap is open: the OVER target's `>K>` follows its value's own lines, and the
-# FOR count's absence is a single line rather than a shifted block.
-#
-# **It is also the only trace-level record of a `DO OVER ... FOR` in this
-# crate** -- no other test or case file runs that shape under trace at all --
-# which is why the gap has nothing else holding it.
-#
-# `docs/superpowers/plans/2026-08-13-over-for-keyword.md` is the open task for
-# printing that line. Its Step 4 has to rewrite this block, because closing the
-# gap changes what this crate prints here.
+# This row is the only trace-level record of a `DO OVER ... FOR` in this
+# crate -- no other test or case file runs that shape under trace at all.
+# Re-captured against the live oracle 2026-08-14 (`docs/superpowers/plans/
+# 2026-08-13-over-for-keyword.md`): the count now carries its own
+# `>K>   "FOR" => "1"`, immediately behind the `>L>   "1"` that evaluates it
+# and ahead of the `>=>` that binds the control variable, the same position
+# the OVER target's own `>K>` takes relative to its value.
 program
 trace i
 zs = 'abc'
@@ -216,6 +206,7 @@ err>      3 *-* do qq over zs for 1
 err>        >V>   ZS => "abc"
 err>        >K>   "OVER" => "abc"
 err>        >L>   "1"
+err>        >K>   "FOR" => "1"
 err>        >=>     QQ <= "abc"
 err>      4 *-*   say qq
 err>        >V>     QQ => "abc"

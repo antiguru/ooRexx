@@ -796,14 +796,12 @@ fn a_traced_counted_loop_echoes_its_do_clause_from_the_stream() {
 /// A `DO` block has **no header expression at all**, so its region is the
 /// `LoopRun` op alone -- an empty region rather than none, because the clause
 /// and its boundary are owed either way. A `DO OVER ... FOR` has an expression
-/// for the target and one for the count, and emits a `TraceKeyword` for the
-/// target alone, which is `HeaderRole::OverFor::keyword()` answering `None`.
-///
-/// **That answer diverges from the oracle**, and that doc comment carries the
-/// measurement; the stream here is this crate's, not the oracle's, for that one
-/// line.
+/// for the target and one for the count, and emits a `TraceKeyword` for each
+/// -- `HeaderRole::Over::keyword()` answers `Some("OVER")` and
+/// `HeaderRole::OverFor::keyword()` answers `Some("FOR")`, both measured
+/// against the oracle (`HeaderRole::OverFor`'s own doc has the bytes).
 #[test]
-fn a_block_has_an_empty_header_region_and_a_do_over_echoes_only_its_target() {
+fn a_block_has_an_empty_header_region_and_a_do_over_for_echoes_both_its_target_and_count() {
     let block = compile_for_test(b"do\n  nop\nend\n").expect("compiles");
     assert_eq!(
         render(&block),
@@ -817,17 +815,18 @@ fn a_block_has_an_empty_header_region_and_a_do_over_echoes_only_its_target() {
     let over = compile_for_test(b"do qq over 4.5 for 2\n  nop\nend\n").expect("compiles");
     assert_eq!(
         render(&over),
-        "0: Clause index=0 end=9\n\
+        "0: Clause index=0 end=10\n\
          1: LoadConstant dst=0\n\
          2: TraceLiteral src=0\n\
          3: TraceKeyword role=Over src=0\n\
          4: LoopHeaderValue role=Over src=0\n\
          5: LoadConstant dst=1\n\
          6: TraceLiteral src=1\n\
-         7: LoopHeaderValue role=OverFor src=1\n\
-         8: LoopRun index=0\n\
-         9: Generic index=1\n\
-         10: Generic index=2\n"
+         7: TraceKeyword role=OverFor src=1\n\
+         8: LoopHeaderValue role=OverFor src=1\n\
+         9: LoopRun index=0\n\
+         10: Generic index=1\n\
+         11: Generic index=2\n"
     );
     assert_eq!(over.registers, 2);
 }

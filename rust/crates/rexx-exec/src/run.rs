@@ -734,32 +734,23 @@ pub(crate) enum HeaderRole {
     Count,
     /// `DO name OVER expr`'s target, echoed under the `OVER` tag.
     Over,
-    /// `DO name OVER expr FOR expr`'s count, which this crate echoes nothing
-    /// for.
-    ///
-    /// **That is a divergence rather than a match, measured 2026-08-12**: the
-    /// oracle prints `>K>   "FOR" => "1"` for `do qq over zs for 1`, on both
-    /// `trace i` and `trace r`, where this crate prints nothing. Both engines
-    /// here agree with each other, so it is a keyword this table withholds and
-    /// not anything the compiled form does. `ir_dual_cases/loop-header-values`
-    /// holds the transcript, which is what stops the gap moving unnoticed.
+    /// `DO name OVER expr FOR expr`'s count, **echoed under the `FOR` tag**
+    /// (measured against the oracle: `do qq over zs for 1` prints
+    /// `>K>   "FOR" => "1"`, on both `trace i` and `trace r` -- the same tag
+    /// a controlled loop's own `FOR` and a bare `DO`'s repeat count carry).
     OverFor,
 }
 
 impl HeaderRole {
-    /// The `>K>` tag this value's own echo carries, or `None` for the roles
-    /// this table withholds one from.
-    ///
-    /// **A `None` here is not one answer**, and each variant's own doc says
-    /// which it is: `Initial` is measured to match the oracle, which echoes no
-    /// `>K>` for a control variable's starting value, and `OverFor` is measured
-    /// not to.
+    /// The `>K>` tag this value's own echo carries, or `None` for the one
+    /// role the oracle echoes nothing for: `Initial`, a control variable's
+    /// own starting value (its own doc has the measurement).
     pub(crate) fn keyword(self) -> Option<&'static str> {
         match self {
-            HeaderRole::Initial | HeaderRole::OverFor => None,
+            HeaderRole::Initial => None,
             HeaderRole::To => Some("TO"),
             HeaderRole::By => Some("BY"),
-            HeaderRole::For | HeaderRole::Count => Some("FOR"),
+            HeaderRole::For | HeaderRole::Count | HeaderRole::OverFor => Some("FOR"),
             HeaderRole::Over => Some("OVER"),
         }
     }
@@ -11328,6 +11319,61 @@ mod tests {
         assert_eq!(
             say_output(&mut interp, b"do x over 'hello' for 5\nsay x\nend"),
             b"hello\n".to_vec()
+        );
+    }
+
+    /// **The oracle's own bytes for `DO OVER ... FOR`'s count**, captured
+    /// 2026-08-14 under both `TRACE I` and `TRACE R`, from a fresh oracle run
+    /// wrapped exactly as `rust/CLAUDE.md` specifies. The oracle prints
+    /// `>K>   "FOR" => "1"` for the count and, before this test's own fix,
+    /// `HeaderRole::OverFor::keyword()` answered `None` and this crate
+    /// printed nothing for it. Nothing else in the tree pins this line:
+    /// `trace_oracle.rs` carries no witness for this shape, and
+    /// `ir_dual_cases/loop-header-values` compares the two engines to each
+    /// other rather than to the oracle -- the same reason
+    /// `task_9s_two_new_indents_are_the_oracles_own_and_normalisation_
+    /// cannot_see_them` exists for its own two indents.
+    #[test]
+    fn a_do_over_for_echoes_the_for_keyword_the_oracle_prints() {
+        let mut interp = Interp::new();
+        run_source(
+            &mut interp,
+            b"trace i\nzs = 'abc'\ndo qq over zs for 1\n  leave\nend\n",
+        )
+        .expect("the program runs");
+        assert_eq!(
+            String::from_utf8(interp.trace.clone()).expect("trace is UTF-8"),
+            concat!(
+                "     2 *-* zs = 'abc'\n",
+                "       >L>   \"abc\"\n",
+                "       >>>   \"abc\"\n",
+                "       >=>   ZS <= \"abc\"\n",
+                "     3 *-* do qq over zs for 1\n",
+                "       >V>   ZS => \"abc\"\n",
+                "       >K>   \"OVER\" => \"abc\"\n",
+                "       >L>   \"1\"\n",
+                "       >K>   \"FOR\" => \"1\"\n",
+                "       >=>     QQ <= \"abc\"\n",
+                "     4 *-*   leave\n",
+            )
+        );
+
+        let mut interp = Interp::new();
+        run_source(
+            &mut interp,
+            b"trace r\nzs = 'abc'\ndo qq over zs for 1\n  leave\nend\n",
+        )
+        .expect("the program runs");
+        assert_eq!(
+            String::from_utf8(interp.trace.clone()).expect("trace is UTF-8"),
+            concat!(
+                "     2 *-* zs = 'abc'\n",
+                "       >>>   \"abc\"\n",
+                "     3 *-* do qq over zs for 1\n",
+                "       >K>   \"OVER\" => \"abc\"\n",
+                "       >K>   \"FOR\" => \"1\"\n",
+                "     4 *-*   leave\n",
+            )
         );
     }
 
