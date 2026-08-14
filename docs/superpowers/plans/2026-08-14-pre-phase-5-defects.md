@@ -352,3 +352,62 @@ The existing search probe is a starting point but was written before this was kn
 - [ ] **Step 5: run the full search sweep against the oracle** and confirm every row agrees, including the rows that already agreed.
 
 - [ ] **Step 6: the mutation witness**, then gates, corpus sweep and commit, as Task 1 Steps 7 and 8.
+
+---
+
+### Task 6: a plain `DO`'s clause boundary is never run, so a requeued condition is delivered late
+
+**Files:**
+- Modify: `rust/crates/rexx-exec/src/run.rs`, the `Instruction::Do` arm and whatever it shares with `Instruction::Select`
+- Test: `rust/crates/rexx-exec/tests/` -- **not** `trace_indent.rs`. This defect is observable on stdout with no `TRACE` in the program, so it belongs with the ordinary behavioural tests, and a test that needs tracing to see it has tested the wrong thing.
+- Re-capture: the `DO` entry added to `rust/crates/rexx-exec/tests/ir_dual_cases/loop-header-boundaries` by Task 5's fix round 2 records this as open; it becomes false when this closes.
+
+**Interfaces:**
+- Consumes: Task 5's recording of the defect and the requeue probe shape it names. **Do not start before Task 5 has landed.**
+
+**Found during Task 5's re-review, out of that task's scope, and the only defect in this plan that needs no `TRACE` to see.** Every other task here moves a trace column. This one moves program output.
+
+A `CALL ON` handler that ends in `raise ... return` leaves a second trapped condition pending, and the next clause boundary delivers it. The oracle delivers it at the plain `DO`'s own boundary, before the body runs. This crate has no boundary there -- it echoes the `do` clause and jumps past it, per the elided-boundary family this file's header describes -- so the body's first clause runs first and delivers at *that* clause's boundary instead.
+
+```rexx
+call on user zx name h
+call on user zy name g
+zv = 'unset'
+zw = raiser()
+do
+  say 'body'
+end
+say 'after' zv zw
+exit
+raiser:
+raise user zx return 5
+h:
+zv = 'set'
+raise user zy return 1
+g:
+say 'G ran' sigl
+return
+```
+
+```
+oracle          this crate (both engines)
+G ran 5         body
+body            G ran 6
+after set 5     after set 5
+```
+
+Wrong delivery order and a different `SIGL`, on stdout, `rc 0` on both sides. `do label zl` behaves the same. `if ... then` is clean on this route, and a plain `SELECT` is *not* -- see below.
+
+**The last line of that transcript is the trap in this task.** `after set 5` agrees on both sides because its `5` is `zw`, what `raiser()` returned, not a `SIGL`. A reviewer reconstructing this program with `say 'after' zv sigl` as the last statement reproduces the oracle's transcript exactly and gets `after set 6` from this crate -- and correctly reported the record as wrong. Two programs, one oracle transcript, two crate transcripts. Name the program in anything you record.
+
+- [ ] **Step 1: capture the baseline** for the program above and for the `sigl` variant of it, both engines, all three descriptors, with and without `trace r`, before changing anything. The two variants are what tell a fix that moved delivery from one that moved only the printed value.
+
+- [ ] **Step 2: decide whether the plain `SELECT` case is the same fix or a different one.** A plain `SELECT` on this route diverges by two columns in the trace stream only, and its `SIGL` already names the right clause -- so it settles its boundary in the wrong *place* while `DO` runs no boundary at all. Task 5 recorded both. **These may be one defect or two, and Task 5's own experience is that the "same defect one construct over" hypothesis was refuted once already.** Measure before assuming; if they are one, both transcripts must move together, and if they are two, say which this task closes.
+
+- [ ] **Step 3: write the failing test**, comparing stdout and exit status with no `TRACE` in the program. Run it and confirm it fails.
+
+- [ ] **Step 4: fix, and confirm `if ... then` and the `WHEN`-condition case did not move.** They are the adjacent successes for this route.
+
+- [ ] **Step 5: correct the two records** -- the `DO` entry in `ir_dual_cases/loop-header-boundaries`, and the plain-`SELECT` entry if Step 2 closed it too. They state open divergences and become false.
+
+- [ ] **Step 6: the mutation witness, the raw blast-radius sweep and the gates.** The sweep here must include stdout, not only stderr: this is the one defect in this plan whose blast radius is program output.
