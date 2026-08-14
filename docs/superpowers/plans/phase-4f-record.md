@@ -3813,3 +3813,50 @@ Every difference is outside both spans. **Two axes improved and two regressed**,
 #### Behaviour
 
 A sweep over `substr`, `word`, `words`, `delstr`, `c2x`, `x2c`, `d2x`, `x2d`, `b2x`, `left`, `right`, `copies`, `translate`, `reverse`, `strip`, `format`, `trunc`, `abs`, `sign`, `insert`, `overlay`, `space`, `d2c`, `c2d`, `bitand`, `lower`, `upper` and `compare` is **identical to the oracle**, and the two engines agree.
+
+### Entry 46 -- two small integers answer their own comparison
+
+Base `f76e6f134`. The change entry 42 identified and specified.
+
+#### The change
+
+`Interp::compare_values` rendered both operands to text before knowing whether the comparison would be numeric. When both are tagged small integers the integers settle it, and `small_int_compare` answers from them.
+
+The guards are the substance, and each is a case where comparing the integers would give a different answer from what the general path compares:
+
+* **`NUMERIC FUZZ` must be zero**, since fuzz compares fewer significant digits and can make distinct integers equal.
+* **Both magnitudes must sit inside `NUMERIC DIGITS`**, since a numeric comparison rounds first: at `DIGITS 9`, `1000000001 = 1000000002` is **true**.
+* **The strict ordering operators are excluded**, because they compare strings: `9 >> 10` is true where `9 > 10` is false. Strict equality is included, because a small integer renders canonically, so equal renderings and equal values imply each other.
+
+#### Allocations, and the prediction again overshooting
+
+`heaptrack` on `samples/rexxcps.rex` at `count=20`/`averaging=20`: **19,595,402 to 19,015,400**, a fall of 580,002.
+
+Entry 42 named 4,220,217 allocations of nineteen bytes as this site. The fall is an eighth of that, and the reason is visible in the program: `rexxcps` compares `flag` against a compound (`flag` is unset, so a string) and `j` against a compound (`j` is `1.1`), and neither pair is two small integers. **What was measured was the site; what the fast path can take is the subset where both operands qualify.** That distinction was not made in entry 42 and is made here.
+
+#### Instructions
+
+Five interleaved rounds per arm, both arms staged at one fixed binary path, minimum of each.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `rexxcps` | 21,967,950,082 | 21,589,027,590 | -378,922,492 | **-1.725%** | 14,505 | 24,709 |
+| `compound` | 18,932,520,676 | 18,932,524,574 | +3,898 | bound | 3,742,352 | 837,807 |
+| `strings` | 41,679,584,746 | 41,682,584,267 | +2,999,521 | bound | 54,000,139 | 669 |
+| `varlookup` | 42,123,632,954 | 42,123,633,496 | +542 | bound | 852 | 1,198 |
+| `arith` | 20,184,260,395 | 20,184,260,573 | +178 | bound | 1,300 | 826 |
+| `emptyloop` | 25,025,608,795 | 25,025,608,762 | -33 | bound | 1,360 | 736 |
+
+`rexxcps` moved 15,335 times its wider span and **every other axis moved less than its own spread**, so each is a bound and none is a regression. That is the cleanest shape any entry in this allocation series has produced.
+
+#### Behaviour, and the witness that the path is taken
+
+A probe over every guard -- the `DIGITS 9` rounding case, a non-zero `FUZZ`, `>>` against `>`, `<<` against `<`, strict equality, negative values, zero, both ends of the tagged range, and numeric-looking strings such as `'09' = 9` and `' 9 ' = 9` -- is **identical to the oracle** and the two engines agree.
+
+**And the probe was shown to reach the new code before being trusted.** Inverting the fast path's equality arm changes eight lines of that probe's output, so a green run of it is evidence about this change rather than about the general path.
+
+#### A measurement that was taken with the wrong binary, and caught
+
+The first attempt at the table above ran `cd rust` in a shell whose directory had already been reset, so the `cargo build --release` behind the `&&` never ran and `target/release/` still held the **mutated** binary from the witness above.
+It reported `rexxcps` at **-99.973%**, because a build with comparisons inverted fails `rexxcps`' own self-checks and exits early.
+The absurdity is what exposed it; a smaller mutation would have produced a plausible number. **A stale binary outliving its revert is a hazard this record already knew about, and knowing it did not prevent it** -- what did was reading the shell's own error line rather than only the figures beneath it.
