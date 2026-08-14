@@ -133,6 +133,14 @@ out> after
 # failure site instead, which carries no block level. That is a traceback
 # quantity rather than a transfer one -- the line above it, the handler's own
 # clause, agrees byte for byte.
+#
+# **The one sibling boundary still off by the same two columns is a `SELECT
+# CASE`'s.** `SELECT` is a block instruction too, so the oracle's counter is
+# already one deeper when that clause ends: measured, `call on user zx name h`
+# / `select case raiser()` echoes the handler at `    11 *-*     h:` there and
+# `    11 *-*   h:` here, on both engines. A trap queued by a `WHEN`
+# condition instead agrees, because a `WHEN` is not a block instruction and
+# its clause ends at the level it echoed.
 program
 call on user zx name h
 do i = 1 to raiser()
