@@ -3476,3 +3476,57 @@ Every other axis was compared byte for byte under entry 36 and is untouched here
 #### What this entry does not claim
 
 The saving divided by the resolutions removed is not quoted, because the count at this base was measured only at head; entry 32's 2,800,003 was taken at a different commit, and dividing one entry's numerator by another's denominator is the arithmetic this record has already corrected once.
+
+### Entry 38 -- two copies taken for lines that do not print
+
+Base `08c3e3d64`.
+The first work directed by `heaptrack` rather than by `perf`, following the Unit 4 premise check recorded in the phase document.
+
+#### Cause
+
+Both sites build something on every execution and hand it to a formatter that returns at once unless a trace setting is on.
+
+* `assign_expr_target`'s compound arm copied the symbol's spelling with `to_vec()` and copied the stem name, then joined stem to tail key to make a resolved name, for `trace_compound_name` -- which returns unless intermediates are on. The *value* beside it was already gated: `rendered` arrives as `None` when no line would print it, and `trace.rs` carries the reasoning for the value half. The name half never got it.
+* `Interp::condition_value` rendered the condition's value and copied it with `to_vec()` on **every condition evaluated**, for `trace_result`/`trace_keyword` -- both of which return unless `results` is on. `heaptrack` named this the largest single allocation site in the interpreter.
+
+**Neither copy in the compound arm was necessary at all**, which is the part reading for it would have missed. `Code::stem` and `SymbolTable::name` answer with the lifetime of the `Code` -- the program -- and not of the `Interp`, so both survive the `&mut self` calls that appeared to force the copies. The `Variable` arm above has always passed its name borrowed.
+
+In `condition_value` the copy is real but conditional: it exists only because `to_text` borrows `self` while the formatters need it mutably, so off the tracing path the borrow suffices and the answer is decided from it. The decision now happens before `pop_frame` rather than after, which is what lets that arm hold the borrow; it touches neither `self` nor the roots, so no answer and no lifetime changes.
+
+#### Allocations, which is the instrument this entry is measured on first
+
+`heaptrack`, `samples/rexxcps.rex` at `count=20`/`averaging=20`, which is 400,000 clauses.
+
+| | allocations | temporary |
+|---|---:|---:|
+| base | 29,775,401 | 10,902,311 |
+| head | 24,475,400 | 7,822,310 |
+| | **-17.80%** | **-28.25%** |
+
+#### Instructions
+
+`perf stat -e instructions:u`, six interleaved rounds per arm, both arms staged at one fixed binary path, from a fresh empty directory, minimum of each arm.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `compound` | 24,157,811,838 | 21,827,976,772 | -2,329,835,066 | **-9.644%** | 1,678,737 | 1,710,667 |
+| `alloc4c` | 7,727,671,785 | 7,372,628,404 | -355,043,381 | **-4.594%** | 59,970 | 86,032 |
+| `rexxcps` | 23,242,133,514 | 22,619,173,459 | -622,960,055 | **-2.680%** | 4,086,394 | 8,145,126 |
+| `varlookup` | 42,123,633,699 | 42,009,633,877 | -113,999,822 | -0.271% | 997 | 572 |
+| `arith` | 20,178,736,662 | 20,171,236,302 | -7,500,360 | -0.037% | 1,109 | 1,814 |
+| `strings` | 41,904,584,654 | 41,859,584,939 | -44,999,715 | **bound** | 1,098 | 126,000,263 |
+| `emptyloop` | 25,075,608,884 | 25,075,609,575 | +691 | **bound** | 947 | 754 |
+
+**`strings` is a bound and not a difference**, and the reason is its own arm rather than the change: one head run came in 126 million high, which is larger than the difference itself. That axis has carried this interference signature in entries 29, 30, 32 and 36. The direction is favourable and nothing is claimed from it.
+
+`emptyloop` moved inside both spreads, which is what an axis with no compound write and no condition evaluated should do.
+
+#### Behaviour
+
+Every axis produces identical stdout, identical stderr and identical exit status under both arms on **both engines**.
+
+**And the paths this change gates were exercised rather than assumed.** A `TRACE R` program with a compound write and an `IF` inside a loop -- the two gated sites together -- produces identical output on both engines, and that output is **identical to the oracle's**, byte for byte.
+
+#### What this entry does not claim
+
+No attribution of the instruction differences to the removed allocations specifically. Every moving axis executes both changed sites, so there is no control axis here, and `compound`'s -9.6% is not decomposed into the two cuts.

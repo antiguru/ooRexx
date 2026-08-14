@@ -3105,16 +3105,32 @@ impl Interp {
                     at.is_none(),
                     "a compound write was handed a slot, and the slot it writes is the stem's"
                 );
-                let tag = code.symbols.name(*id).as_bytes().to_vec();
+                // **Borrowed, not copied.** `Code::stem` and `SymbolTable::
+                // name` both answer with the lifetime of the `Code`, which is
+                // the program rather than this `Interp`, so neither needs an
+                // owned copy to survive the `&mut self` calls below. The
+                // `Variable` arm above has always passed its name borrowed;
+                // this arm copied both, and measured with `heaptrack` on
+                // `samples/rexxcps.rex` that cost two allocations per compound
+                // write.
+                let tag = code.symbols.name(*id).as_bytes();
                 let (stem_name, stem_at) = code.stem(*id);
-                let stem_name = stem_name.to_vec();
                 let key = self.tail_key(code, *id);
-                self.stem_set_at(&stem_name, stem_at, &key, value);
-                let mut resolved = stem_name;
-                resolved.extend_from_slice(&key);
-                self.trace_compound_name(indent, &tag, &resolved);
+                self.stem_set_at(stem_name, stem_at, &key, value);
+                // **The resolved name is built only when a line will print
+                // it.** `trace_compound_name` returns at once unless
+                // intermediates are on, so joining the stem to the tail key
+                // ahead of that check allocated a name to discard. This is the
+                // rule `rendered` below already follows -- `trace.rs`'s own
+                // doc comment gives the reasoning for the value half, and the
+                // name half is the same argument.
+                if self.tracing_intermediates() {
+                    let mut resolved = stem_name.to_vec();
+                    resolved.extend_from_slice(&key);
+                    self.trace_compound_name(indent, tag, &resolved);
+                }
                 if let Some(rendered) = rendered {
-                    self.trace_assignment(indent, &tag, rendered);
+                    self.trace_assignment(indent, tag, rendered);
                 }
             }
             other => return Err(Loud::expression(other).into()),
@@ -7196,32 +7212,63 @@ impl Interp {
         // truncation, as `pop_frame`'s own doc describes.
         let frame = self.roots.push_frame();
         self.roots.push_temp(value);
-        let text = self.to_text(value).to_vec();
-        match trace {
-            // `IF`/plain `WHEN`'s own `>>>` (`IfInstruction.cpp:140`, and
-            // `select` / `when 1 = 1 then` measured to show the identical
-            // shape) -- measured, `WHILE`/`UNTIL` never get this (this
-            // task's report: `trace r` over a `DO WHILE` shows only `>K>
-            // "WHILE" => ...`, no bare `>>>` alongside it), which is why
-            // this is a variant a caller picks rather than something
-            // `eval_condition` decides on its own. `SELECT CASE`'s own
-            // `WHEN`/`WhenCase` comparison never reaches this function at
-            // all -- see `test_case_when`'s own trace calls instead.
-            ConditionTrace::Result(indent) => self.trace_result(indent, &text),
-            // `WHILE`/`UNTIL`'s own `>K>` (`DoBlockComponents.cpp`'s
-            // `traceKeywordResult(WHILE, ...)`/`(UNTIL, ...)`) -- re-fires
-            // every pass because the oracle re-evaluates the condition every
-            // pass too, which `run_repeating`'s own call site already does
-            // without any change from this task.
-            ConditionTrace::Keyword(indent, keyword) => {
-                self.trace_keyword(indent, keyword, &text);
+        // **The owned copy is taken only when a line will print it.** Both
+        // formatters below return at once unless `results` is on, and the copy
+        // exists only because `to_text` borrows `self` while they need it
+        // mutably -- so off that path the borrow is enough and the answer is
+        // decided from it directly. Measured with `heaptrack` on
+        // `samples/rexxcps.rex`: this was the largest single allocation site
+        // in the interpreter, one copy per condition evaluated.
+        let decided = if self.trace_mode().results {
+            let text = self.to_text(value).to_vec();
+            match trace {
+                // `IF`/plain `WHEN`'s own `>>>` (`IfInstruction.cpp:140`, and
+                // `select` / `when 1 = 1 then` measured to show the identical
+                // shape) -- measured, `WHILE`/`UNTIL` never get this (this
+                // task's report: `trace r` over a `DO WHILE` shows only `>K>
+                // "WHILE" => ...`, no bare `>>>` alongside it), which is why
+                // this is a variant a caller picks rather than something
+                // `eval_condition` decides on its own. `SELECT CASE`'s own
+                // `WHEN`/`WhenCase` comparison never reaches this function at
+                // all -- see `test_case_when`'s own trace calls instead.
+                ConditionTrace::Result(indent) => self.trace_result(indent, &text),
+                // `WHILE`/`UNTIL`'s own `>K>` (`DoBlockComponents.cpp`'s
+                // `traceKeywordResult(WHILE, ...)`/`(UNTIL, ...)`) -- re-fires
+                // every pass because the oracle re-evaluates the condition every
+                // pass too, which `run_repeating`'s own call site already does
+                // without any change from this task.
+                ConditionTrace::Keyword(indent, keyword) => {
+                    self.trace_keyword(indent, keyword, &text);
+                }
             }
-        }
+            Self::condition_holds(checked, &text, raise)
+        } else {
+            let text = self.to_text(value);
+            Self::condition_holds(checked, &text, raise)
+        };
+        // After the rendering above is out of scope, so the borrow it may hold
+        // on `self` has ended. The decision itself touches neither `self` nor
+        // the roots, so making it before this pop rather than after changes no
+        // answer and no lifetime.
         self.roots.pop_frame(frame);
+        decided
+    }
+
+    /// Whether a condition's rendered text holds, and the failure when it is
+    /// neither `0` nor `1`.
+    ///
+    /// A free function rather than a method because both arms of
+    /// [`Interp::condition_value`] call it while a rendering borrows `self` --
+    /// which is the whole point of the arm that does not copy.
+    fn condition_holds(
+        checked: bool,
+        text: &[u8],
+        raise: fn(&[u8]) -> Raised,
+    ) -> Result<bool, Failure> {
         if checked {
             Ok(text == b"1")
         } else {
-            logical_value(&text).ok_or_else(|| raise(&text).into())
+            logical_value(text).ok_or_else(|| raise(text).into())
         }
     }
 
