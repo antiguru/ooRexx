@@ -4157,6 +4157,37 @@ impl Interp {
     ///
     /// `code` is the body the **argument expressions** are written in, which
     /// is the caller's own and is not what `resolve_call` searched.
+    /// Takes the shared argument buffer, empty and ready to build into.
+    ///
+    /// **Cleared here rather than where it is handed back**, matching
+    /// [`Interp::take_key_buffer`]. What it holds between the two is a run of
+    /// `ObjRef` handles the collector does not scan, which is what makes the
+    /// delay safe: nothing keeps them alive and nothing reads them, and
+    /// dropping them here frees the one small allocation an
+    /// `Argument::Reference` carries.
+    fn take_argument_buffer(&mut self) -> Vec<Option<Argument>> {
+        let mut buffer = std::mem::take(&mut self.argument_buffer);
+        buffer.clear();
+        buffer
+    }
+
+    /// Hands the argument buffer back for the next call.
+    fn give_argument_buffer(&mut self, buffer: Vec<Option<Argument>>) {
+        self.argument_buffer = buffer;
+    }
+
+    /// Takes the shared value buffer, empty and ready to build into.
+    fn take_value_buffer(&mut self) -> Vec<Option<ObjRef>> {
+        let mut buffer = std::mem::take(&mut self.value_buffer);
+        buffer.clear();
+        buffer
+    }
+
+    /// Hands the value buffer back for the next builtin call.
+    fn give_value_buffer(&mut self, buffer: Vec<Option<ObjRef>>) {
+        self.value_buffer = buffer;
+    }
+
     pub(crate) fn invoke_call(
         &mut self,
         code: &Code<'_>,
@@ -4189,7 +4220,7 @@ impl Interp {
         // argument's callee's. Measured (`trace i`): `call sub 1,,3` traces
         // `>A>   "1"`, `>A>   ""`, `>A>   "3"`, in that order, each right
         // after its own argument's `>L>`/`>V>` lines.
-        let mut arguments: Vec<Option<Argument>> = Vec::with_capacity(args.len());
+        let mut arguments = self.take_argument_buffer();
         for arg in args {
             match arg {
                 None => {
@@ -4220,11 +4251,18 @@ impl Interp {
         // receives it exactly as a callee's `RETURN` value already is.
         let entered = match resolved {
             Resolved::Builtin => {
-                let values: Vec<Option<ObjRef>> = arguments
-                    .iter()
-                    .map(|argument| argument.as_ref().map(Argument::value))
-                    .collect();
-                let Some(result) = builtin::dispatch(self, name, &values) else {
+                let mut values = self.take_value_buffer();
+                values.extend(
+                    arguments
+                        .iter()
+                        .map(|argument| argument.as_ref().map(Argument::value)),
+                );
+                let outcome = builtin::dispatch(self, name, &values);
+                // Both buffers go back before the outcome is read, so the
+                // raised-condition path keeps them as the ordinary one does.
+                self.give_value_buffer(values);
+                self.give_argument_buffer(arguments);
+                let Some(result) = outcome else {
                     // `is_builtin` said yes above and `dispatch` reads the
                     // same set, so the two cannot actually disagree -- and
                     // this is an ordinary loud answer rather than a panic

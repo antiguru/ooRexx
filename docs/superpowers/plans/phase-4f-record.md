@@ -3902,3 +3902,97 @@ Five interleaved rounds per arm, minimum of each.
 A `TRACE R` program parsing from a simple variable, a compound and a bare stem is identical to the oracle.
 
 **The first comparison said it differed.** It redirected both streams into one file, and trace goes to stderr while `SAY` goes to stdout, so the two sides interleaved differently and the diff showed lines moved rather than changed. Compared stream by stream, **stdout and stderr are each identical to the oracle**, and the base and head binaries are byte-identical on that program anyway -- which is the check that settled it, since this change could not have caused a difference that base also shows.
+
+### Entry 48 -- the call path's two buffers, and the instrument that was measuring a moving workload
+
+Base `6de24daa6`.
+The first entry in this series to profile every benchmark program rather than `samples/rexxcps.rex` alone, and the widening is what found both of the things below.
+
+#### The instrument was wrong, and every allocation figure entries 38 to 47 quote is affected
+
+`samples/rexxcps.rex` **adjusts its own workload to the speed of the interpreter running it**.
+Line 163 is `count=(1%total + 1) * count`, inside `do trial=1 to 2`: if the first trial takes under a second, the count is scaled and the whole measurement is run again.
+
+Under `heaptrack` the run is slow enough that the scaling lands differently from one run to the next.
+Three runs of one binary on one program, `count=20`/`averaging=20`:
+
+| run | count reached | allocations |
+|---|---:|---:|
+| 1 | 60 | 2,775,674 |
+| 2 | 60 | 2,775,676 |
+| 3 | 40 | 2,082,427 |
+
+**A third of the figure, from nothing but the machine's load.**
+Every step in the series entries 38 to 47 report -- 5.7%, 13%, 3%, 8.8% -- is smaller than that swing.
+The direction of those changes is still supported by the instruction counts, which are a separate instrument and were not affected; what is withdrawn is the precision of the allocation *deltas*, not the finding that each change removed allocations.
+
+**The instruction axis is not affected, and that was checked rather than assumed.** At the default `count=100`/`averaging=100` the first trial takes 2.287788 seconds, so the `total>1` arm leaves at once: one trial, count still 100, workload fixed. The adaptation only fires when a trial comes in under a second, which at 100/100 it does not.
+
+The instrument from here is the same program with `do trial=1 to 1`, which pins the workload. Two runs of it: 695,620 and 695,620.
+
+#### What the widening shows
+
+`heaptrack` on every benchmark program, each scaled down so the profiled run is short, at this entry's base:
+
+| axis | allocations | iterations | per iteration |
+|---|---:|---:|---:|
+| `emptyloop` | 383 | 500,000 | ~0 |
+| `varlookup` | 417 | 400,000 | ~0 |
+| `compound` | 100,512 | 100,000 | 1.0 |
+| `alloc4c` | 250,519 | 50,000 | 5.0 |
+| `strings` | 600,548 | 60,000 | 10.0 |
+| `arith` | 528,794 | 20,000 | **26.4** |
+
+**The clause loop itself is allocation-free**, which `emptyloop` and `varlookup` settle: two axes that run 500,000 and 400,000 iterations allocate a few hundred times between them, nearly all of it before the program starts.
+Everything in this series is therefore about what a *clause's work* allocates, not about the loop.
+
+Folding the stacks and attributing each to the deepest frame in this workspace's own crates:
+
+* `strings`: `invoke_call` 480,000, `changestr` 60,000, `concat_values` 60,000. **Exactly eight per iteration from `invoke_call` for four builtin calls** -- two per call, in the call machinery rather than in any builtin.
+* `alloc4c`: `invoke_call` 100,000, `stem_set_at` 50,001, `concat_values` 50,000.
+* `compound`: `stem_set_at` 100,000, one per iteration and essentially the whole of it.
+* `arith`: `arith_general` 178,318, `rexx_num::muldiv::mul` 94,271, `numeric_operand` 80,000, `rexx_num::digits::spill` 56,414, then `round_to`, `add_signed`, `truncated_to`. **`rexx-num` allocates heavily here**, which is worth stating plainly because the Unit 4 premise check concluded it allocated seven times in a whole run -- that check was run against `rexxcps`, whose arithmetic is on tagged small integers, and it does not carry to an axis that runs `NUMERIC DIGITS 20`.
+
+#### The change
+
+`invoke_call` allocated a `Vec<Option<Argument>>` for the evaluated arguments, and on the builtin path a second `Vec<Option<ObjRef>>` collected from it for `builtin::dispatch`. Both were freed on the way out.
+Both are now lent from the `Interp` and handed back, in the shape `key_buffer` and `result_buffer` already use.
+
+The buffers are given back **before the outcome is read**, so a builtin that raises keeps them for the next call rather than losing them to the error path.
+A non-builtin call still gives its argument buffer up, because the callee is handed the arguments and keeps them -- the next builtin call allocates once into the empty `Vec` left behind and hands the capacity back for the one after it.
+
+#### Allocations
+
+Each program at the same scale as the table above, base against head:
+
+| axis | base | head | |
+|---|---:|---:|---:|
+| `strings` | 600,548 | 120,550 | **-79.9%** |
+| `alloc4c` | 250,519 | 150,521 | -39.9% |
+| `rexxcps` (pinned) | 695,620 | 617,056 | -11.3% |
+| `compound` | 100,512 | 100,512 | unchanged |
+| `arith` | 528,794 | 528,794 | unchanged |
+
+`compound` and `arith` are unchanged **exactly**, and that is the control this change wants: neither program calls a builtin, so neither can reach the changed lines.
+
+#### Instructions
+
+Five interleaved rounds per arm, both arms staged at one fixed binary path, minimum of each. The head binary was rebuilt from the restored sources and compared byte for byte with the copy measured, so the arm measured is the arm described.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `strings` | 41,682,584,760 | 40,290,587,659 | -1,391,997,101 | **-3.340%** | 1,368 | 792 |
+| `alloc4c` | 7,098,726,800 | 6,985,764,469 | -112,962,331 | **-1.591%** | 54,866 | 71,495 |
+| `rexxcps` | 21,366,758,338 | 21,263,611,609 | -103,146,729 | **-0.483%** | 10,515 | 2,388,480 |
+| `arith` | 20,185,260,462 | 20,176,736,907 | -8,523,555 | -0.042% | 1,460 | 706 |
+| `compound` | 18,933,360,889 | 18,932,523,451 | -837,438 | bound | 2,523,132 | 1,219,087 |
+| `emptyloop` | 25,025,609,624 | 25,025,608,928 | -696 | bound | 349 | 993 |
+| `varlookup` | 42,123,633,794 | 42,123,633,706 | -88 | bound | 568 | 1,395 |
+
+`arith` moved outside its own spans again and in the opposite direction from entry 47, on an axis whose allocation count this change leaves *exactly* unchanged and which executes no builtin call at all. Both movements are the size this record has measured a do-nothing control producing. That control still does not exist, and this is now the second consecutive entry that would have used it.
+
+#### Behaviour, and the witness that the probe reaches the change
+
+A probe over the argument shapes this path carries -- nested builtin calls, an omitted interior position, a builtin with fewer arguments than the call before it, `ARG()`, a `USE ARG >` reference argument, a builtin raising 40.x into `SIGNAL ON SYNTAX`, and `TRACE I` so every `>A>` line is compared -- is **identical to the oracle on stdout, on stderr, and in exit status**, compared stream by stream rather than merged.
+
+**And the probe was shown to fail before being trusted.** Dropping the `clear()` from `take_value_buffer`, so a call sees the previous call's trailing values, makes that probe exit 216 and diverge from its second line. The sources were then restored from the backup, re-verified with `sha256sum -c`, rebuilt, and the probe re-run against the oracle.
