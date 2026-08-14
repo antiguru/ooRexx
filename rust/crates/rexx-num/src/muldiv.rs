@@ -207,7 +207,7 @@ impl Number {
         // Long-divide the digit strings, generating one more digit than
         // DIGITS so the final rounding has something to look at.
         let want = crate::working_length(digits);
-        let (mut q, rem, shift) = long_divide(&left.digits, &right.digits, want);
+        let (mut q, shift) = long_divide(&left.digits, &right.digits, want);
 
         // value = q * 10^(left.exponent - right.exponent - shift). Same
         // believed-unreachable guard as the two above.
@@ -287,7 +287,6 @@ impl Number {
                 // on the arithmetic side.
                 let exact_extra =
                     (left.digits.len() + right.digits.len() + int_digits.digits.len() + 10) as u64;
-                let _ = rem;
                 let exact = digits.saturating_add(exact_extra);
                 let product = int_digits.mul(&right, exact)?;
                 let mut r = left.sub(&product, exact)?;
@@ -300,7 +299,7 @@ impl Number {
 
 /// Divides two digit strings, returning `want` quotient digits, the residue,
 /// and how many powers of ten the quotient was scaled by.
-fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Digits, Vec<u8>, i32) {
+fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Digits, i32) {
     // The live remainder is `rem[start..]`: leading zeros are skipped by
     // advancing `start` instead of draining them out, which cost a memmove
     // on every subtraction pass. The dead prefix stays zero, so slicing from
@@ -388,7 +387,18 @@ fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Digits, Vec<u8>, i32) {
             break;
         }
     }
-    (q, rem.split_off(start), shift)
+    // The residue is not returned: its one caller discarded it, because a
+    // remainder good enough to report has to be recomputed at exact
+    // precision rather than read off the division (see `DivOp::Remainder`
+    // above). Building it cost a `split_off`, which allocates.
+    //
+    // **`rem` stays a `Vec` and that was measured, not assumed.** Holding it
+    // in `Digits` -- the inline type beside it -- removes three allocations
+    // per division at `NUMERIC DIGITS 9` and costs 3.104% of `arith`, because
+    // `push` and `as_mut_slice` branch on the arm inside the per-digit inner
+    // loop where a vector hands out a pointer. The allocations were the
+    // cheaper side of that trade.
+    (q, shift)
 }
 
 pub(crate) fn strip_leading(v: &mut Vec<u8>) {

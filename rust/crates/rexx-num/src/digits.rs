@@ -47,7 +47,15 @@
 /// _the_language_asks_for` holds both ends of that.
 ///
 /// [`Number::from_i64`]: crate::Number::from_i64
-pub(crate) const INLINE_DIGITS: usize = 20;
+/// **Thirty rather than twenty, and the difference is free.** `Digits` is an
+/// enum over a 24-byte `Vec`, so its width is set by that arm until the
+/// inline buffer passes it: measured with `size_of`, every capacity from
+/// twenty to thirty gives `Digits` 32 bytes and `Number` 40, and thirty-one
+/// is where `Number` reaches 48. Twenty spilled every intermediate that ran
+/// one digit past it, and at `NUMERIC DIGITS 20` -- which works at
+/// `digits + 1` -- that is every kept product and every division working
+/// value.
+pub(crate) const INLINE_DIGITS: usize = 30;
 
 /// Most significant digit first, each value 0..=9 -- the same contract
 /// [`Number::digits`] always had, with the storage decided by length.
@@ -467,6 +475,10 @@ mod tests {
         // The layout ceiling: past 40 bytes a `Number` widens `rexx-core`'s
         // `Body` and with it every arena slot.
         assert!(size_of::<Number>() <= 40);
+        // The capacity sits at that ceiling rather than below it: `Digits`
+        // is 32 bytes for every capacity up to thirty, so anything smaller
+        // spills sooner for nothing.
+        assert_eq!(size_of::<Digits>(), 32);
     }
 
     #[test]

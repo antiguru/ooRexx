@@ -4173,3 +4173,76 @@ A probe over `NUMERIC DIGITS` with an expression, bare (restore), from a variabl
 #### Where this leaves the axis
 
 `arith` is at 20.4 allocations per iteration, and what remains is division (three to six per operation) plus one per `NUMERIC` clause. Division allocates working buffers that outlive `INLINE_DIGITS`, and removing those needs a scratch buffer inside `rexx-num` -- a crate with no `Interp` to lend from, so the lending shape used everywhere in this series does not carry across without a thread-local or an explicit scratch parameter. That is its own design question.
+
+### Entry 52 -- ten digits of inline capacity for nothing, and a stack buffer that cost more than it saved
+
+Base `569381852`. Entry 51 left `arith` at division, and the question that opened this was whether the multiply's working width is gated on the operands' real width or assumed to be the inline capacity.
+
+#### It is gated on the real width, and that was not where the spill came from
+
+`mul_magnitudes` sizes its product from the operands' own lengths. The spill came from somewhere narrower: a division and a multiply both keep `digits + 1` digits, and at `NUMERIC DIGITS 20` that is **21** against an `INLINE_DIGITS` of 20. Every kept product and every division working value at that setting missed the inline buffer by one digit.
+
+#### The capacity was ten below its own ceiling
+
+`INLINE_DIGITS`' doc gave the layout bound: `Number` must stay at 40 bytes or it widens `rexx-core`'s `Body` and with it every arena slot.
+What it did not say is that the bound is not tight at twenty. `Digits` is an enum over a 24-byte `Vec`, so the vector arm sets its width until the inline buffer passes it. Measured with `size_of` across candidate capacities:
+
+| `INLINE_DIGITS` | `Digits` | `Number` |
+|---:|---:|---:|
+| 20 | 32 | 40 |
+| 23 | 32 | 40 |
+| 24 | 32 | 40 |
+| 30 | 32 | 40 |
+
+**Twenty through thirty are the same object.** The capacity is now thirty, and the layout assertion in `the_capacity_is_the_one_the_language_asks_for` is joined by one pinning `size_of::<Digits>()` at 32, so a future capacity that does cost a word fails the test rather than passing quietly.
+
+#### The residue nobody read
+
+`long_divide` returned its remainder as a third value built with `split_off`, which allocates. Its one caller bound it and then discarded it with `let _ = rem;`, because a remainder good enough to report is recomputed at exact precision rather than read off the division -- the comment beside that line has always said so. The return value is gone.
+
+#### The change that was measured and then taken out again
+
+The obvious next step was to hold the division's working remainder in `Digits` rather than a `Vec`: it is scratch that never leaves the function, grown one digit at a time from empty, so a vector reallocates up its capacity ladder on every division. That change works, and it removes every allocation division makes at `DIGITS 9` and `DIGITS 20`:
+
+| program | before | with `Digits` |
+|---|---:|---:|
+| `/` at DIGITS 9 | 3.02 | **0.02** |
+| `/` at DIGITS 20 | 5.02 | **0.02** |
+| `/` on two 20-digit operands | 6.02 | 2.02 |
+
+**And it costs 3.104% of `arith`.** Four arms, five interleaved rounds each, minimum of each, on `arith`:
+
+| arm | instructions | against base |
+|---|---:|---:|
+| base | 19,859,503,963 | -- |
+| inline capacity only | 19,585,536,031 | **-1.380%** |
+| `Digits` remainder only | 20,475,943,361 | **+3.104%** |
+| both | 20,097,910,660 | +1.200% |
+
+`Digits::push` and `Digits::as_mut_slice` branch on which arm holds the value, and the division's inner loop touches both per digit, where a vector hands out a pointer. **The allocations were the cheaper side of that trade**, and the combined arm would have shipped a 1.200% regression while removing 57% of the axis's allocations -- which is the clearest instance yet of the exchange rate entry 50 measured at about 45 instructions per allocation.
+
+The remainder stays a `Vec`, and the reason is now a comment beside it so the next reader does not repeat the experiment.
+
+#### What shipped
+
+The inline capacity and the residue removal. `arith` falls **408,795 allocations to 253,128**.
+
+Five interleaved rounds per arm, both arms staged at one fixed binary path, minimum of each. The head binary was rebuilt from the restored sources and compared byte for byte with the copy measured.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `arith` | 19,859,503,529 | 19,337,465,546 | -522,037,983 | **-2.629%** | 992 | 1,222 |
+| `rexxcps` | 21,113,341,332 | 21,100,854,525 | -12,486,807 | -0.059% | 7,151 | 7,977,905 |
+| `compound` | 18,237,906,046 | 18,238,726,672 | +820,626 | bound | 2,461,285 | 3,279,943 |
+| `strings` | 40,017,586,636 | 40,017,586,055 | -581 | bound | 984 | 928 |
+| `alloc4c` | 7,165,806,721 | 7,165,775,664 | -31,057 | bound | 217,487 | 202,788 |
+| `emptyloop` | 24,975,609,250 | 24,975,609,180 | -70 | bound | 958 | 603 |
+| `varlookup` | 42,123,633,904 | 42,123,633,093 | -811 | bound | 1,024 | 1,424 |
+
+`rexxcps`' move is only 1.6 times its own wider span, which is the weakest claim in this table and is reported as the number rather than as a finding.
+
+#### Behaviour
+
+A sweep of every ordered pair from twenty-one values -- including 20-digit integers, values at both exponent extremes, halves that round either way, and zero -- across `/ * % // + -`, both signs, and twelve `NUMERIC DIGITS` settings from 1 to 100, with each operation trapped so an error becomes a printed line rather than an exit: **63,504 lines, byte-identical to the oracle on stdout, on stderr, and in exit status.**
+
+**And the sweep was shown to fail before being trusted.** Seeding the division's working remainder with a stray digit makes it exit 101 and diverge on essentially every line. The sources were then restored from the backups, re-verified with `sha256sum -c`, rebuilt, and the sweep re-run against the oracle.
