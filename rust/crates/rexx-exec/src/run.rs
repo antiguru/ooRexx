@@ -3115,7 +3115,8 @@ impl Interp {
                 // write.
                 let tag = code.symbols.name(*id).as_bytes();
                 let (stem_name, stem_at) = code.stem(*id);
-                let key = self.tail_key(code, *id);
+                let mut key = self.take_key_buffer();
+                self.tail_key_into(code, *id, &mut key);
                 self.stem_set_at(stem_name, stem_at, &key, value);
                 // **The resolved name is built only when a line will print
                 // it.** `trace_compound_name` returns at once unless
@@ -3132,6 +3133,7 @@ impl Interp {
                 if let Some(rendered) = rendered {
                     self.trace_assignment(indent, tag, rendered);
                 }
+                self.give_key_buffer(key);
             }
             other => return Err(Loud::expression(other).into()),
         }

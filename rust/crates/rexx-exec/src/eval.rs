@@ -405,8 +405,14 @@ impl Interp {
                     "a compound read was handed a slot, and the slot it reads is the stem's"
                 );
                 let (stem_name, stem_at) = code.stem(id);
-                let key = self.tail_key(code, id);
+                // Borrowed and handed back, rather than a fresh key per read
+                // -- see `Interp::key_buffer`. The `?` below is why the return
+                // is placed before it: an early exit there would lose the
+                // buffer, which is safe but forfeits the reuse.
+                let mut key = self.take_key_buffer();
+                self.tail_key_into(code, id, &mut key);
                 let (value, novalue) = self.stem_get_at(stem_name, stem_at, &key);
+                self.give_key_buffer(key);
                 self.novalue_check(novalue)?;
                 Ok(value)
             }

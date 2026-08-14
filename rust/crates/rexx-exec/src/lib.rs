@@ -1494,6 +1494,27 @@ struct PendingTrap {
 struct Interp {
     heap: Heap,
     roots: RootSet,
+    /// A buffer lent out for building a compound's tail key, and handed back.
+    ///
+    /// **A tail key is built, read once, and dropped**, and on a compound-heavy
+    /// program that is the largest allocation the interpreter makes: measured
+    /// with `heaptrack` on `samples/rexxcps.rex`, whose inner loop references
+    /// `acompound.key1.loop`, allocations of the exact width of that resolved
+    /// name dominated every other size.
+    ///
+    /// **Lent and returned rather than borrowed in place**, because every
+    /// caller uses the key while calling back into `&mut self` -- to read a
+    /// stem, to set one -- which a live borrow of a field would forbid.
+    /// [`Interp::take_key_buffer`] moves it out and
+    /// [`Interp::give_key_buffer`] moves it back.
+    ///
+    /// **Losing it is safe and costs only the reuse.** A caller that returns
+    /// early between the two leaves this empty, and the next taker allocates a
+    /// fresh one; nothing observes the difference. That property is what makes
+    /// this sound under nesting too, which is why no reentrancy guard is
+    /// needed: an inner build gets its own buffer rather than corrupting an
+    /// outer one.
+    key_buffer: Vec<u8>,
     activations: Vec<Activation>,
     /// The next [`ActivationId`] to hand out. Monotonic, never reset, never
     /// reused -- see that type for the two defects that needed an identity a
@@ -2186,6 +2207,7 @@ impl Interp {
         Interp {
             heap: Heap::new(),
             roots: RootSet::new(),
+            key_buffer: Vec::new(),
             activations: Vec::new(),
             programs: Vec::new(),
             plans: HashMap::new(),

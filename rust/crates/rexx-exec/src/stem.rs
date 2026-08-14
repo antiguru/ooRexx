@@ -114,6 +114,38 @@ impl Interp {
     /// an `INTERPRET` fragment -- splits its own spelling instead, through
     /// the same `CompoundName::split`, so the two paths join a key from
     /// pieces produced by one function rather than two.
+    /// Takes the shared key buffer, empty and ready to build into.
+    ///
+    /// Pair every call with [`Interp::give_key_buffer`]. Failing to is safe --
+    /// see the field's own doc comment -- but it costs the reuse this exists
+    /// for.
+    pub(crate) fn take_key_buffer(&mut self) -> Vec<u8> {
+        let mut buffer = std::mem::take(&mut self.key_buffer);
+        buffer.clear();
+        buffer
+    }
+
+    /// Hands the buffer back for the next builder.
+    pub(crate) fn give_key_buffer(&mut self, buffer: Vec<u8>) {
+        self.key_buffer = buffer;
+    }
+
+    /// [`Interp::tail_key`], building into a caller's buffer rather than a
+    /// fresh one. The buffer is cleared first, so a caller may pass one that
+    /// still holds an earlier key.
+    pub(crate) fn tail_key_into(&mut self, code: &Code<'_>, id: SymbolId, out: &mut Vec<u8>) {
+        out.clear();
+        self.append_tail_key(code, id, out);
+    }
+
+    /// [`Interp::tail_key`]'s body, appending to a caller's buffer.
+    fn append_tail_key(&mut self, code: &Code<'_>, id: SymbolId, out: &mut Vec<u8>) {
+        match code.compound(id) {
+            Some(entry) => self.append_tails(&entry.tails, out),
+            None => self.append_tails(&CompoundName::split(code.symbols.name(id)).tails, out),
+        }
+    }
+
     pub(crate) fn tail_key(&mut self, code: &Code<'_>, id: SymbolId) -> Vec<u8> {
         match code.compound(id) {
             Some(entry) => self.join_tails(&entry.tails),
@@ -134,6 +166,16 @@ impl Interp {
     /// reads and what it derives when unset are one implementation either way.
     fn join_tails(&mut self, tails: &[TailPiece]) -> Vec<u8> {
         let mut key = Vec::new();
+        self.append_tails(tails, &mut key);
+        key
+    }
+
+    /// [`Interp::join_tails`], appending to a caller's buffer.
+    ///
+    /// The loop is here and the owning form above delegates to it, so the two
+    /// cannot drift into building different keys -- which for this function
+    /// would not be a slow path but a wrong variable.
+    fn append_tails(&mut self, tails: &[TailPiece], key: &mut Vec<u8>) {
         for (index, piece) in tails.iter().enumerate() {
             if index > 0 {
                 key.push(b'.');
@@ -157,11 +199,10 @@ impl Interp {
                          give its name"
                     );
                     let value = self.read_by_name_at(name, *at);
-                    self.write_text(value, &mut key);
+                    self.write_text(value, key);
                 }
             }
         }
-        key
     }
 
     /// Reads a variable by name alone, the same slot machinery `read` uses

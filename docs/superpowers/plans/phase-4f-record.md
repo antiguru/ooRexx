@@ -3581,3 +3581,56 @@ Bench axes: identical stdout, stderr and exit status under both arms on both eng
 A compound-tail probe covering a positive tail, a negative one, zero, a fourteen-digit tail, a defaulted tail, a loop-driven tail and a two-piece tail is **identical to the oracle**, byte for byte, on both engines.
 
 **The first version of that probe was wrong and is recorded because it looked right.** It wrote `say zz.-3` intending a negative tail; that parses as `zz. - 3`, a subtraction against the stem's default, and the program failed at error 41 on both the oracle and here. The arms still agreed, so a check that had stopped there would have reported success while never testing a negative tail at all.
+
+### Entry 40 -- a buffer lent for a tail key, and two axes that paid for it
+
+Base `dbc0b79a2`, entry 39's head.
+Found by the allocation-size histogram rather than by the call-site attribution the previous two entries used.
+
+#### Cause, and how it was located
+
+The call-site attribution had stopped being useful: at that head the largest remaining site was `step_in_temps_frame`'s own closure, which is where every clause's work inlines, so it names a region and not a cause.
+
+The size histogram named one instead. Allocations of **exactly 19 bytes numbered 4,220,217**, more than any other width, on a 400,000-clause run.
+Nineteen bytes is the width of `ACOMPOUND.Key Bee.14`, and `samples/rexxcps.rex` references `acompound.key1.loop` throughout its inner loop.
+`INLINE_BYTES` is 54, so this never went through `Bytes` at all: it was `Interp::tail_key`'s own `Vec`, built for one lookup and dropped, about ten times a clause.
+
+#### The change
+
+`Interp` gains a `key_buffer` that the compound read and the compound write borrow and hand back, through `take_key_buffer` and `give_key_buffer`.
+
+**Lent and returned rather than borrowed in place**, because every caller uses the key while calling back into `&mut self` -- to read a stem, to set one -- which a live borrow of a field forbids.
+
+**Losing it is safe and costs only the reuse**, which is what makes this sound with no reentrancy guard: a caller that returns early leaves the field empty and the next taker allocates a fresh one, so an inner build gets its own buffer rather than corrupting an outer one. The compound read's `?` sits after the return for exactly that reason.
+
+`join_tails` was split so the owning form delegates to the appending one rather than the loop existing twice. For this function two copies drifting apart would not be a slow path but a wrong variable.
+
+#### Allocations
+
+`heaptrack`, `samples/rexxcps.rex` at `count=20`/`averaging=20`: **23,075,399 to 20,015,402**.
+
+Across entries 38, 39 and 40 the same measurement reads **29,775,401 to 20,015,402**, a fall of 32.8%.
+
+#### Instructions
+
+`perf stat -e instructions:u`, six interleaved rounds per arm, both arms staged at one fixed binary path, minimum of each arm.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `compound` | 20,397,597,897 | 18,912,520,891 | -1,485,077,006 | **-7.281%** | 3,739,274 | 2,059,761 |
+| `alloc4c` | 7,235,726,882 | 7,086,704,717 | -149,022,165 | **-2.060%** | 59,634 | 112,552 |
+| `rexxcps` | 22,412,094,340 | 21,998,634,495 | -413,459,845 | **-1.845%** | 4,071,957 | 4,061,286 |
+| `arith` | 20,171,239,065 | 20,178,260,558 | **+7,021,493** | +0.035% | 735 | 1,294 |
+| `strings` | 41,859,586,953 | 41,865,584,696 | **+5,997,743** | +0.014% | 1,385 | 1,062 |
+| `varlookup` | 42,009,636,058 | 42,009,633,592 | -2,466 | -0.000% | 845 | 756 |
+| `emptyloop` | 25,075,611,272 | 25,075,608,874 | -2,398 | -0.000% | 1,161 | 1,151 |
+
+**Two axes regressed, well outside their spans, and neither executes any of the changed code.**
+`arith` and `strings` contain no dotted name, so they build no tail key and never reach `take_key_buffer`.
+The regressions are also proportional rather than fixed -- about 14 instructions per iteration on `arith`'s 500,000 and about 2 on `strings`' 3,000,000 -- so they are not a one-time startup cost either.
+
+**What is offered is the observation and no cause.** A field was added to a struct every hot path reaches, which changes its layout, and this record has wanted a do-nothing control since entry 31 precisely so a claim like "layout, not semantics" could be earned rather than asserted. That control still does not exist. What can be said is that the axes that regressed cannot see this change's semantics, and that the trade is heavily favourable: the three axes that do see it fall by between 149 million and 1.49 billion, against a combined 13 million elsewhere.
+
+#### Behaviour
+
+The compound-tail probe of entry 39 -- positive, negative, zero, fourteen-digit, defaulted, loop-driven and two-piece tails -- is **identical to the oracle** on both engines at this head.
