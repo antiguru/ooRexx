@@ -549,6 +549,14 @@ enum HeaderOutcome {
     Stop,
 }
 
+impl HeaderOutcome {
+    /// Whether the loop's block is still open once this header clause has
+    /// finished -- what [`Interp::settle_block_indent`] takes.
+    fn entered(&self) -> bool {
+        matches!(self, HeaderOutcome::Continue)
+    }
+}
+
 impl ClauseValue for HeaderOutcome {
     /// Nothing to root: a loop header produces a decision, never a value
     /// whose only root was this clause's own temps frame.
@@ -1325,7 +1333,35 @@ impl Interp {
             // already resolved against this activation's own body
             // (`resolve_signal_target`), which is exactly the body `code` is
             // bound to.
-            Flow::Signal(target) => self.activation_mut().pc = target,
+            //
+            // **The transfer resets this activation's trace indent to the
+            // program's**, which is `RexxActivation::signalTo`'s own
+            // `settings.traceIndent = 0` read directly, beside the
+            // `blockNest = 0` that discards the block state this crate has
+            // no counter for. Both addends of [`Interp::printed_indent`] go,
+            // because the oracle's is one absolute counter rather than a
+            // base and an elevation: a `SIGNAL` out of an escaped `WHEN`
+            // would otherwise keep the elevation the escape put there.
+            //
+            // **Setting the base to `0` rather than restoring a saved one is
+            // the whole of it, and a label's own lexical indent is why that
+            // is enough.** The oracle refuses a label inside any block
+            // instruction -- measured, 47.2 inside a `DO`/`LOOP`, 47.3
+            // inside an `IF`, 47.4 inside a `SELECT` -- so a `SIGNAL`
+            // target's `static_indent` is always `0` and the sum is `0` with
+            // both addends cleared.
+            //
+            // Cleared on *this* activation, and `Interp::invoke_call`'s own
+            // save/restore is what keeps it there: a `SIGNAL` inside a
+            // `CALL`ed label echoes the rest of that label at the program's
+            // indent (measured, oracle `6 *-* onward:` where this crate read
+            // `6 *-*   onward:`), and the caller's own indent comes back
+            // when the callee returns.
+            Flow::Signal(target) => {
+                self.activation_mut().pc = target;
+                self.activation_indent = 0;
+                self.indent_offset = 0;
+            }
             // **The one place an activation's value stops being a clause's
             // temporary**, which is why the root that outlives the temps
             // stack is taken here rather than at each of the half-dozen
@@ -6143,6 +6179,46 @@ impl Interp {
         )
     }
 
+    /// Leaves `current_value_indent` at the indent a `DO`/`LOOP` header
+    /// clause's own **boundary** runs at: the body's when the block is still
+    /// open once the header has decided, the `DO` clause's when the loop is
+    /// over.
+    ///
+    /// **The header clause echoes at one indent and ends at another, and only
+    /// the boundary can see the difference.** In the oracle
+    /// `RexxInstructionBaseLoop::execute` traces the clause, evaluates the
+    /// control expressions in `setup`, and only then calls
+    /// `newBlockInstruction`, whose `settings.traceIndent++` is the block's
+    /// own level; an iteration test that fails calls `terminate`, which pops
+    /// the block and takes the level back off again. So the counter at the
+    /// end of that one instruction reads one deeper than its own echo
+    /// exactly when the body is about to run.
+    ///
+    /// What observes it is a `CALL ON` handler delivered at this boundary,
+    /// since `internalCallTrap` bases the handler's own activation on
+    /// whatever the counter reads then. Measured under `trace r` with a
+    /// handler `h:`, both directions of each header shape, because a fix
+    /// that moved the entered case alone would have broken the rest. The
+    /// oracle's own first handler line, with the line number each program
+    /// happened to put `h:` on:
+    ///
+    /// ```text
+    /// do zi = 1 to raiser()      raiser returns 1 -> 10 *-*     h:
+    /// do zi = 1 to raiser()      raiser returns 0 -> 10 *-*   h:
+    /// do while raiser() < 1      test false       -> 10 *-*   h:
+    /// do while raiser() < 1      test true        -> 12 *-*     h:
+    /// do until raiser() > 0      test true        -> 10 *-*   h:
+    /// do until raiser() > 0      test false       -> 13 *-*     h:
+    /// ```
+    ///
+    /// **Nothing but the boundary reads what this writes.** The body's own
+    /// first clause and the clause the loop resumes at each set the field
+    /// again through `step_in_temps_frame` before anything traces, so this
+    /// is not a value that survives the clause it belongs to.
+    fn settle_block_indent(&mut self, entered: bool, do_indent: usize, loop_indent: usize) {
+        self.clause_state.current_value_indent = if entered { loop_indent } else { do_indent };
+    }
+
     /// The shared driver for every repeating `LoopKind` (everything but
     /// `Simple`, which never repeats and runs through `run_loop`'s own
     /// arm directly): advance-test-run-test-advance, in the order the
@@ -6281,48 +6357,52 @@ impl Interp {
                 // The first pass is deliberately left alone: it is reached
                 // from the `DO` clause itself, which is exactly what the
                 // enclosing `step_in_temps_frame` already blames.
-                let advanced = match it.loop_advance(code, &mut state, do_indent, loop_indent) {
-                    Ok(advanced) => advanced,
-                    Err(failure) => {
-                        match &header_clause {
-                            HeaderClause::Do => {}
-                            HeaderClause::End => {
-                                it.record_failure_at(source, end_instruction, loop_indent);
-                            }
-                            HeaderClause::Iterate { site, .. } => {
-                                it.record_failure_site_at(site.clone(), loop_indent);
-                            }
-                        }
-                        return Err(failure);
-                    }
-                };
-                if !advanced {
-                    return Ok(HeaderOutcome::Stop);
-                }
-                if let Some(cond) = conditional
-                    && !cond.until
-                {
-                    // Overrides `step_in_temps_frame`'s own setting of
-                    // `current_value_indent` (to `do_indent`, from stepping
-                    // the `DO`/`LOOP` instruction itself) -- `WHILE`'s own
-                    // condition is evaluated here, inside that same `step`
-                    // call, never through a `step_in_temps_frame` of its own.
-                    it.clause_state.current_value_indent = loop_indent;
-                    match it.eval_condition(
-                        code,
-                        &cond.condition,
-                        ConditionTrace::Keyword(loop_indent, "WHILE"),
-                        raised_while_not_logical,
-                    ) {
-                        Ok(true) => {}
-                        Ok(false) => return Ok(HeaderOutcome::Stop),
+                let outcome = 'header: {
+                    let advanced = match it.loop_advance(code, &mut state, do_indent, loop_indent) {
+                        Ok(advanced) => advanced,
                         Err(failure) => {
-                            it.record_failure_at(source, do_instruction, loop_indent);
+                            match &header_clause {
+                                HeaderClause::Do => {}
+                                HeaderClause::End => {
+                                    it.record_failure_at(source, end_instruction, loop_indent);
+                                }
+                                HeaderClause::Iterate { site, .. } => {
+                                    it.record_failure_site_at(site.clone(), loop_indent);
+                                }
+                            }
                             return Err(failure);
                         }
+                    };
+                    if !advanced {
+                        break 'header HeaderOutcome::Stop;
                     }
-                }
-                Ok(HeaderOutcome::Continue)
+                    if let Some(cond) = conditional
+                        && !cond.until
+                    {
+                        // Overrides `step_in_temps_frame`'s own setting of
+                        // `current_value_indent` (to `do_indent`, from stepping
+                        // the `DO`/`LOOP` instruction itself) -- `WHILE`'s own
+                        // condition is evaluated here, inside that same `step`
+                        // call, never through a `step_in_temps_frame` of its own.
+                        it.clause_state.current_value_indent = loop_indent;
+                        match it.eval_condition(
+                            code,
+                            &cond.condition,
+                            ConditionTrace::Keyword(loop_indent, "WHILE"),
+                            raised_while_not_logical,
+                        ) {
+                            Ok(true) => {}
+                            Ok(false) => break 'header HeaderOutcome::Stop,
+                            Err(failure) => {
+                                it.record_failure_at(source, do_instruction, loop_indent);
+                                return Err(failure);
+                            }
+                        }
+                    }
+                    HeaderOutcome::Continue
+                };
+                it.settle_block_indent(outcome.entered(), do_indent, loop_indent);
+                Ok(outcome)
             })?;
             match header {
                 ClauseOutcome::Ended(exit) => return Ok(Flow::Exit(exit.value())),
@@ -6422,12 +6502,17 @@ impl Interp {
                 // clause_then_to_the_end_clause` and `a_loop_retest_after_
                 // an_iterate_belongs_to_the_iterate_clause` fail on.
                 let tested = self.in_clause(code, until_line, |it| {
-                    it.eval_condition(
+                    let held = it.eval_condition(
                         code,
                         &cond.condition,
                         ConditionTrace::Keyword(loop_indent, "UNTIL"),
                         raised_until_not_logical,
-                    )
+                    )?;
+                    // An `UNTIL` that held ends the loop, so this clause's
+                    // own boundary sits outside the block -- the mirror of
+                    // the top-of-loop test's, and the same call.
+                    it.settle_block_indent(!held, do_indent, loop_indent);
+                    Ok(held)
                 })?;
                 match tested {
                     ClauseOutcome::Ended(exit) => return Ok(Flow::Exit(exit.value())),

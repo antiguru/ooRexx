@@ -1,0 +1,19 @@
+RC 0
+===STDOUT===
+in h
+after
+===STDERR===
+     2 *-* call on user zx name h
+     3 *-* do while raiser() < 1
+     8 *-*     raiser:
+     9 *-*     raise user zx return 5
+       >K>       "RESULT" => "5"
+       >K>     "WHILE" => "0"
+    10 *-*   h:
+    11 *-*   say 'in h'
+       >>>     "in h"
+    12 *-*   return
+     6 *-* say 'after'
+       >>>   "after"
+     7 *-* exit 0
+       >>>   "0"

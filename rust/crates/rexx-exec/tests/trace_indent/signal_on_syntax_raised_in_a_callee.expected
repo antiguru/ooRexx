@@ -1,0 +1,11 @@
+RC 0
+===STDOUT===
+in handler
+===STDERR===
+     2 *-* signal on syntax
+     3 *-* call sub
+     6 *-*   sub:
+     7 *-*   return 1/0
+     8 *-* syntax:
+     9 *-* say 'in handler'
+       >>>   "in handler"

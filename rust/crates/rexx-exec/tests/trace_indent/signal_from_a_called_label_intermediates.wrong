@@ -1,0 +1,11 @@
+     2 *-* call sub
+     4 *-*   sub:
+     5 *-*   signal onward
+     6 *-*   onward:
+     7 *-*   zz = 1 / 0
+       >L>     "1"
+       >L>     "0"
+     7 *-*   zz = 1 / 0
+     2 *-* call sub
+Error 42 running /nonexistent/trace-indent-case.rex line 7:  Arithmetic overflow/underflow.
+Error 42.3:  Arithmetic overflow; divisor must not be zero.

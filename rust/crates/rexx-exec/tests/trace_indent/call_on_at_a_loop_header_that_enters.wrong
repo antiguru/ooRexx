@@ -1,0 +1,20 @@
+     2 *-* call on user zx name h
+     3 *-* do zi = 1 to raiser()
+     8 *-*   raiser:
+     9 *-*   raise user zx return 1
+       >K>     "RESULT" => "1"
+       >K>   "TO" => "1"
+    10 *-*   h:
+    11 *-*   say 'in h'
+       >>>     "in h"
+    12 *-*   return
+     4 *-*   say zi
+       >>>     "1"
+     5 *-* end
+     3 *-* do zi = 1 to raiser()
+       >>>     "1"
+       >>>     "2"
+     6 *-* say 'after'
+       >>>   "after"
+     7 *-* exit 0
+       >>>   "0"

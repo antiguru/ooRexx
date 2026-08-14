@@ -1,0 +1,42 @@
+RC 0
+===STDOUT===
+in h
+after 2
+===STDERR===
+     2 *-* call on user zx name h
+     3 *-* zn = 0
+       >>>   "0"
+     4 *-* do until raiser() > 0
+     5 *-*   zn = zn + 1
+       >>>     "1"
+     6 *-* end
+     4 *-* do until raiser() > 0
+     9 *-*     raiser:
+    10 *-*     zn = zn + 0
+       >>>       "1"
+    11 *-*     if zn < 2 
+       >>>       "1"
+    11 *-*       then
+    11 *-*         raise user zx return 0
+       >K>           "RESULT" => "0"
+       >K>     "UNTIL" => "0"
+    13 *-*     h:
+    14 *-*     say 'in h'
+       >>>       "in h"
+    15 *-*     return
+     5 *-*   zn = zn + 1
+       >>>     "2"
+     6 *-* end
+     4 *-* do until raiser() > 0
+     9 *-*     raiser:
+    10 *-*     zn = zn + 0
+       >>>       "2"
+    11 *-*     if zn < 2 
+       >>>       "0"
+    12 *-*     return 5
+       >>>       "5"
+       >K>     "UNTIL" => "1"
+     7 *-* say 'after' zn
+       >>>   "after 2"
+     8 *-* exit 0
+       >>>   "0"

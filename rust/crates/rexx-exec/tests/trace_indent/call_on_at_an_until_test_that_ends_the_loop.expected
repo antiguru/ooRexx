@@ -1,0 +1,24 @@
+RC 0
+===STDOUT===
+body
+in h
+after
+===STDERR===
+     2 *-* call on user zx name h
+     3 *-* do until raiser() > 0
+     4 *-*   say 'body'
+       >>>     "body"
+     5 *-* end
+     3 *-* do until raiser() > 0
+     8 *-*     raiser:
+     9 *-*     raise user zx return 5
+       >K>       "RESULT" => "5"
+       >K>     "UNTIL" => "1"
+    10 *-*   h:
+    11 *-*   say 'in h'
+       >>>     "in h"
+    12 *-*   return
+     6 *-* say 'after'
+       >>>   "after"
+     7 *-* exit 0
+       >>>   "0"
