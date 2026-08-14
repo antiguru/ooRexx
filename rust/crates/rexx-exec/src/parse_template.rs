@@ -617,15 +617,25 @@ impl Interp {
         // the conversion that can fail: `integerTrigger`
         // (`ParseTrigger.cpp:143`-`153`) traces and only then converts, so
         // the operand's own value line is emitted even on the 26.4 path.
-        let rendered = self.to_text(value).to_vec();
-        self.trace_result(indent, &rendered);
+        // **Copied only where a copy is needed**, which is neither of the two
+        // arms below. `trace_result` returns at once unless `results` is on,
+        // and a search reads the bytes where they already are: `Cursor` is a
+        // local of `exec_parse` rather than a field, so a shared borrow of
+        // the value can be live while it is written to. The unconditional
+        // `to_vec` here was 5.2% of every allocation `samples/rexxcps.rex`
+        // made -- one per trigger, on a program whose templates are mostly
+        // numeric triggers that never look at the bytes at all.
+        if self.trace_mode().results {
+            let rendered = self.to_text(value).to_vec();
+            self.trace_result(indent, &rendered);
+        }
         match trigger.kind {
             TriggerKind::String => {
-                cursor.search(&rendered);
+                cursor.search(&self.to_text(value));
                 Ok(())
             }
             TriggerKind::Mixed => {
-                cursor.caseless_search(&rendered);
+                cursor.caseless_search(&self.to_text(value));
                 Ok(())
             }
             _ => {
@@ -639,7 +649,9 @@ impl Interp {
                 // `found "1E2"` for `+(1e2)`, which is D15's rule showing
                 // through rather than a re-rendering here.
                 let Some(offset) = self.whole_nonneg(value) else {
-                    return Err(Raised::syntax(26, 4, vec![rendered]).into());
+                    // The one place the operand's own rendering is still
+                    // owned, and it is the raise's substitution.
+                    return Err(Raised::syntax(26, 4, vec![self.to_text(value).to_vec()]).into());
                 };
                 // Clamped rather than checked: an offset past `usize` is
                 // indistinguishable from one past the string's own end, and

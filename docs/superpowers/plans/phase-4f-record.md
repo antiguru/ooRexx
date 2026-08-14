@@ -4377,3 +4377,47 @@ Five interleaved rounds per arm, both arms staged at one fixed binary path, mini
 #### Behaviour
 
 Six probes re-run against this binary: the argument probe (entry 48, omitted positions, nested calls, `USE ARG >` references, `TRACE I`), the string probe (entry 50), the `NUMERIC` probe (entry 51), the arithmetic sweep (entry 52, 63,504 lines), the resolution probe (entry 53) and the search probe (entry 54, 518 lines). **All six are identical to the oracle**, except the search probe's one known line -- `pos('an', h, 6, 4)`, the divergence entry 54 recorded, which is present in every build tested and is not this change's.
+
+### Entry 56 -- the `PARSE` trigger operand, copied for a line that rarely prints
+
+Base `7ecd6f510`. `PARSE` is the largest identifiable cause of allocation in `samples/rexxcps.rex`: at that base, of 539,048 allocations, `exec_parse` accounted for about 123,000 -- 95,205 through `parse_strings` and 28,001 through `apply_trigger`.
+
+#### The change
+
+`apply_trigger` copied the operand's rendering with `to_vec()` on **every** trigger, then handed it to `trace_result`, which returns at once unless `results` is on, and to `Cursor::search` for the two string-shaped kinds.
+
+The copy is now made only where one is needed, which is neither of the hot arms:
+
+* the trace is behind `self.trace_mode().results`, the same gate `trace_result` itself applies;
+* a search reads the bytes where they already are, because `Cursor` is a local of `exec_parse` rather than a field of the `Interp`, so a shared borrow of the value can be live while the cursor is written to;
+* the one owned rendering left is the 26.4 raise's substitution, on a path that ends the clause.
+
+**`rexxcps`' templates are mostly numeric triggers**, which never looked at the bytes at all.
+
+#### Allocations and instructions
+
+`heaptrack` on the pinned program: **539,048 to 505,447**.
+
+Five interleaved rounds per arm, both arms staged at one fixed binary path, minimum of each.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `rexxcps` | 20,717,483,212 | 20,602,987,622 | -114,495,590 | **-0.553%** | 8,523 | 4,064,252 |
+| `compound` | 18,238,265,878 | 18,237,905,198 | -360,680 | bound | 1,283,157 | 1,642,936 |
+| `strings` | 32,571,639,348 | 32,571,639,794 | +446 | bound | 1,260 | 713 |
+| `alloc4c` | 6,862,811,139 | 6,862,813,371 | +2,232 | bound | 113,453 | 111,420 |
+| `arith` | 19,341,750,901 | 19,341,750,872 | -29 | bound | 1,154 | 1,343 |
+| `emptyloop` | 24,975,608,710 | 24,975,609,628 | +918 | bound | 1,183 | 420 |
+| `varlookup` | 42,123,633,376 | 42,123,632,994 | -382 | bound | 1,335 | 1,421 |
+
+Every axis that executes no `PARSE` is a bound, which is the control this change wants.
+
+#### Behaviour
+
+A probe over the trigger kinds -- a string pattern, a caseless one, absolute, relative forward and back, both length forms, a parenthesised variable operand in two positions, the placeholder period, a comma fence, `UPPER` and `LOWER`, `PARSE VALUE`/`VAR`/`SOURCE`/`VERSION`/`ARG` with an omitted argument, and the 26.4 raise -- was run **twice, once plain and once under `TRACE R`**, because the gate this change adds is exactly the difference between those two runs. Both are identical to the oracle on stdout, on stderr and in exit status, the traced arm across 162 lines of trace output.
+
+#### What is left on this path, and it is the larger half
+
+`parse_strings` allocates twice per `PARSE` clause and neither is touched here: an owned copy of the source string, which `Cursor` holds across the calls back into `&mut self` that the assignments make, and the one-element `Vec` returned to carry it. About 95,000 of the pinned program's remaining 505,447.
+
+The copy could be lent and handed back at the end of the clause, and the outer `Vec` could be a lent buffer indexed rather than consumed by `into_iter`. Both are real changes to `exec_parse`'s shape rather than gating, and neither is attempted here.
