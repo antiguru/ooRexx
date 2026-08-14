@@ -136,7 +136,40 @@ oracle                          this crate
 
 **Instance two, recorded since phase 4e** in `phase-4e-gate.md` and `2026-08-09-phase-4e-ir.md`: a `CALL ON` handler delivered at a promoted loop header's boundary indents its own clauses **two spaces less** than the oracle -- `13 *-*   h:` against `13 *-*     h:`.
 
-**The two instances are in opposite directions**, which is why they are one investigation and not two fixes.
+**Instance three, found by Task 1 and reproduced independently on `3cf9fcaba`: no trap is needed at all.** A plain `SIGNAL` inside a `CALL`ed label, with no condition handler anywhere in the program:
+
+```rexx
+trace r
+call sub
+exit 0
+sub:
+signal onward
+onward:
+zz = 1 / 0
+```
+
+Both engines echo the clauses after the `SIGNAL` **two spaces too deep**, and agree with the oracle on stdout and on `rc 214`:
+
+```
+oracle                          this crate
+    6 *-* onward:                   6 *-*   onward:
+    7 *-* zz = 1 / 0                7 *-*   zz = 1 / 0
+```
+
+**This is the sharpest form of the defect and it reframes Step 3's hypothesis**: handlers are not the subject. A `SIGNAL` that leaves a called label does not restore the indent, whether or not a condition raised it. Start from this case -- it has the fewest moving parts of the three.
+
+**The instances are in different directions**, which is why they are one investigation and not separate fixes.
+
+### The harnesses cannot see this defect, and that governs how the task is tested
+
+`phase-4-exclusions.txt`'s **DEVIATION 0** is the one normalisation the differential harnesses apply to `stderr`, shared by `tests/corpus.rs` and `tests/trace_oracle.rs`: it collapses the run of ASCII spaces between a trace line's prefix marker and its content down to a single space. **That is exactly this defect's signature.**
+
+Two consequences, both binding:
+
+* **The test for this fix must compare raw, un-normalised `stderr`.** A test that goes through the shared harness will pass before the fix and after it, which is the "test that cannot fail" this project treats as a defect.
+* **The corpus-sweep count in Step 5 will read zero changed programs even if the fix moves many transcripts.** Report the raw count as well, by comparing un-normalised bytes across the corpus before and after. A sweep count taken through the normalising harness is not evidence here and must not be reported as though it were.
+
+Do not change DEVIATION 0 or its normalisation in this task. It is a recorded, accepted deviation with its own justification; whether it should survive this fix is a question for the report, not an edit.
 
 - [ ] **Step 1: reproduce both, side by side, and write the transcripts down before changing anything.**
 
