@@ -3634,3 +3634,45 @@ The regressions are also proportional rather than fixed -- about 14 instructions
 #### Behaviour
 
 The compound-tail probe of entry 39 -- positive, negative, zero, fourteen-digit, defaulted, loop-driven and two-piece tails -- is **identical to the oracle** on both engines at this head.
+
+### Entry 41 -- entry 40 named the wrong allocations
+
+Correcting entry 40 by appending, in the shape entries 33 and 34 use.
+**The change stands and every figure in that entry stands. What it identified as the cause is wrong.**
+
+#### What was claimed
+
+Entry 40 says the histogram named the tail key: allocations of **exactly 19 bytes numbered 4,220,217**, nineteen being the width of `ACOMPOUND.Key Bee.14`, and concludes "it was `Interp::tail_key`'s own `Vec`".
+
+#### What the same instrument says after the change
+
+The 19-byte bucket is **unchanged**, to the allocation: 4,220,217 before, 4,220,217 after.
+A change that removed the tail-key `Vec` did not touch it, so it was never the tail-key `Vec`.
+
+Differencing the two histograms, the whole of the fall is two other widths:
+
+| size | before | after | delta |
+|---:|---:|---:|---:|
+| 8 bytes | 2,500,637 | 560,640 | **-1,939,997** |
+| 16 bytes | 1,400,406 | 280,408 | **-1,119,998** |
+
+That sums to 3,059,995 against a total fall of 3,059,997.
+**A tail key is built by pushing into an empty `Vec`**, so it takes an 8-byte allocation and then a 16-byte one as it grows through the first capacity -- two allocations per key, at the two smallest capacities, and nothing at the finished key's own width.
+
+#### Why the reasoning failed, since the arithmetic was right
+
+Nineteen *is* the width of that resolved name, and a resolved name *is* built on that path.
+The step that was never taken is the one that would have falsified it: **the histogram was read once, before the change, and never differenced against itself afterwards.**
+A single reading can only suggest a cause; the difference is what tests it, and it was available for the price of the run that was already made.
+
+This is the shape this record has recorded before -- a correct decision carrying a false reason, which passes review on the decision's merits.
+
+#### What is still true
+
+The change removed 3,059,997 allocations and moved `compound` by -7.281%, `alloc4c` by -2.060% and `rexxcps` by -1.845%, and the two regressions entry 40 reports stand as reported.
+`Interp::key_buffer`'s doc comment carried the same false identification and is corrected at this entry's commit.
+
+#### What this opens
+
+**The largest single allocation width in the interpreter is unidentified**, and it is 4,220,217 allocations of 19 bytes on a 400,000-clause run -- more than any other width, and untouched by every entry so far.
+Naming it is the next allocation question, and the method is now differencing rather than reading.

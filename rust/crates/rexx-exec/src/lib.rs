@@ -1496,11 +1496,12 @@ struct Interp {
     roots: RootSet,
     /// A buffer lent out for building a compound's tail key, and handed back.
     ///
-    /// **A tail key is built, read once, and dropped**, and on a compound-heavy
-    /// program that is the largest allocation the interpreter makes: measured
-    /// with `heaptrack` on `samples/rexxcps.rex`, whose inner loop references
-    /// `acompound.key1.loop`, allocations of the exact width of that resolved
-    /// name dominated every other size.
+    /// **A tail key is built, read once, and dropped**, once per compound
+    /// reference. Measured with `heaptrack` on `samples/rexxcps.rex`, whose
+    /// inner loop references `acompound.key1.loop`, lending this buffer
+    /// removed 1,939,997 allocations of 8 bytes and 1,119,998 of 16 -- a key
+    /// built by pushing into an empty `Vec` takes both, growing through the
+    /// first capacity into the second.
     ///
     /// **Lent and returned rather than borrowed in place**, because every
     /// caller uses the key while calling back into `&mut self` -- to read a
