@@ -70,13 +70,21 @@
 # checked, because it does not name its program.** It was filed under the
 # elided-instruction family -- the oracle runs a clause boundary at a position
 # where this crate has no instruction to run one at. **That attribution is
-# withdrawn rather than replaced**: nothing
-# anyone can run supports it. Reconstructing a program from the bullet's own
-# words has been tried by three readers and produced three different results,
-# none of them the bullet's. The bullet stays, because it records a real
-# observation someone made; its numbers are left alone, because choosing which
-# program produced them would be inventing a fourth reconstruction and
-# recording it as the third.
+# withdrawn rather than replaced, and the reason is narrow: nothing reproduces
+# this bullet's own observation.** Reconstructing a program from its words has
+# been tried repeatedly and produced a different answer every time, none of
+# them the bullet's, so there is no run to attribute a cause to.
+#
+# **The elided-instruction mechanism itself is real, and is not what is being
+# withdrawn.** Task 6's Step 1c names a program that demonstrates it on a
+# different construct: an empty `do` / `end` with a double requeue, where the
+# oracle delivers the second condition at the `END`'s own boundary (`K ran 6`)
+# and this crate has no boundary there to deliver it at. What is unsupported is
+# this bullet, not the mechanism it was filed under.
+#
+# The bullet stays, because it records a real observation someone made; its
+# numbers are left alone, because choosing which program produced them would be
+# adding one more reconstruction and filing it as the bullet's own.
 #
 # **One of those reconstructions is worth knowing about in its own right,
 # because it runs the other way.** Every other shape recorded in this file has
@@ -268,9 +276,17 @@ out> after
 #
 # **The oracle's `RexxInstructionSimpleDo::execute` returns as soon as it has
 # opened the block**, so **the oracle's** clause ends before any body
-# instruction runs and **the oracle always delivers at the `DO`'s own
-# boundary** -- which is what the transcript below shows, `G ran 5` ahead of
-# `body`.
+# instruction runs and **the oracle delivers the condition that was pending
+# when the `DO` ran at the `DO`'s own boundary** -- which is what the transcript
+# above shows, `G ran 5` ahead of `body`.
+#
+# **Bounded to that one condition deliberately.** A *second* condition, requeued
+# by that first delivery, is owed at the `END`'s own boundary instead: measured
+# on an empty `do` / `end` with a double requeue, the oracle prints `G ran 5`
+# then `K ran 6`, naming the `END`, and this crate has no boundary there at all
+# and lands it past `say 'after'`. That is a different mechanism and a second
+# defect -- a boundary genuinely absent, where this entry's is merely late --
+# and Task 6's Step 1c names its program.
 #
 # **The compiled path is different code and the same shape**, which is why this
 # is on both engines rather than one: `crate::ir::Op::LoopRun` sits inside the
