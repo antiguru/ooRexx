@@ -68,6 +68,33 @@ Three things decide it and none is settled by reading:
 
 So the spike is three arms -- status quo, thread-local pool, threaded parameter -- on `arith` and on a digits-9 decimal loop, with the third arm existing only to bound the other two.
 
+**Measured 2026-08-14, before any of that was built, and it refutes this unit's premise.**
+Moritz proposed validating the allocation story with `heaptrack` before spiking storage. Run on `samples/rexxcps.rex` at `count=20`/`averaging=20`, which is 400,000 clauses: **29,775,401 allocations**, of which 10,902,311 are temporary.
+So allocation is worth chasing. It is not in `rexx-num`.
+
+Attributing each allocation to the innermost frame in this workspace's own crates, of the calls so attributed, **`rexx-num` accounts for six**: `muldiv.rs:329`, and nothing else.
+The inline digit buffer already did what `FAST_BUFFER` does. `INLINE_DIGITS` is 20, `Digits` is `Inline { len, buf }` below that, `Number` is 40 bytes with a `const` assertion defending it, and `from_i64`'s own comment states it never allocates.
+**A thread-local pool for `rexx-num` would therefore be storage for a cost that is already gone**, and this unit is not that work.
+
+Where the allocations actually are, by innermost frame in our crates:
+
+| calls | site |
+|---:|---|
+| 2,950,000 | `ir/drive.rs:1228`, the condition-value path in the op driver |
+| 2,660,000 | `run.rs:4760`, `in_stepped_clause`'s closure |
+| 1,680,000 | `eval.rs:644`, `invoke_call` |
+| 980,000 | `value.rs:339`, `to_text` producing an owned rendering |
+| 840,000 | `stem.rs:160`, building a tail key |
+| 690,000 | `run.rs:3114`, resolving a compound name |
+| 270,000 | `eval.rs:850`, the arithmetic operator dispatch |
+
+**One of those is a plain waste and is the cheapest thing this phase has found.**
+`assign_expr_target`'s compound arm builds `tag` with `to_vec()` and `resolved` by extending the stem name with the tail key, then hands both to `Interp::trace_compound_name` -- which returns immediately unless intermediate tracing is on.
+The *value* beside it is already gated: `rendered` arrives as `None` when no trace line would print it, and `trace.rs` carries a doc comment explaining exactly that reasoning for values.
+The name half never got the same treatment, so a non-tracing run allocates twice per compound write to feed a function that discards both.
+
+So Unit 4 is re-scoped by measurement: **the arithmetic storage question is closed, and what replaces it is the allocation behaviour of the executor** -- the clause machinery, the call path, rendering, and the names built for trace lines that do not print.
+
 **Unit 5 -- rooting.** Replace the per-clause and per-`eval`-site `RootSet` frame with a bump-pointer stack the collector scans in place. Biggest, riskiest, touches the collector's contract with every value, and `2026-08-11-value-representation-design.md` already sets out options for the value layer -- **that document is this unit's starting point and must not be re-derived.**
 
 ## The divergence licence, and how it is spent
