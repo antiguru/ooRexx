@@ -200,6 +200,49 @@ impl Interp {
     /// inline -- the two calls cannot overlap their borrows of `self.heap`,
     /// which is why the redirect is decided and the first borrow dropped
     /// before the second call is ever made.
+    /// Appends `value`'s rendering to `out`, without the intermediate
+    /// allocation [`to_text`] would need for a value whose bytes are not
+    /// already in the heap.
+    ///
+    /// **The case this exists for is the tagged small integer.** `to_text`
+    /// answers `Cow::Borrowed` for `Body::Text` and for `Body::Num` (whose
+    /// rendering it caches on the object), so those cost nothing to copy from
+    /// -- but a small integer carries no object to borrow from, and `to_text`
+    /// has to build a `String` for it and hand it back owned. A caller that
+    /// only wants the bytes appended somewhere then allocates that `String`,
+    /// copies it, and drops it. Measured with `heaptrack` on
+    /// `samples/rexxcps.rex`, whose compound tails are small integers: that
+    /// was the whole of the tail-key path's allocation.
+    ///
+    /// [`to_text`]: Interp::to_text
+    pub(crate) fn write_text(&mut self, value: ObjRef, out: &mut Vec<u8>) {
+        if let Decoded::SmallInt(n) = value.decode() {
+            // Same digits `i64`'s own `Display` produces, including for
+            // `i64::MIN`, whose magnitude has no positive form -- which is why
+            // this goes through `unsigned_abs` rather than negating. Pinned
+            // against `to_string` by `write_text_writes_what_to_text_renders`
+            // below, over the boundary values and a spread between them.
+            let mut buffer = [0u8; 20];
+            let mut at = buffer.len();
+            let mut magnitude = n.unsigned_abs();
+            loop {
+                at -= 1;
+                buffer[at] = b'0' + (magnitude % 10) as u8;
+                magnitude /= 10;
+                if magnitude == 0 {
+                    break;
+                }
+            }
+            if n < 0 {
+                at -= 1;
+                buffer[at] = b'-';
+            }
+            out.extend_from_slice(&buffer[at..]);
+            return;
+        }
+        out.extend_from_slice(&self.to_text(value));
+    }
+
     #[allow(
         clippy::wrong_self_convention,
         reason = "the interface name is D15's, and `&mut self` is load-bearing \
@@ -625,9 +668,55 @@ fn small_int_for(value: &Number, created_digits: u32) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rexx_core::INLINE_BYTES;
+    use rexx_core::{INLINE_BYTES, SMALL_INT_MAX, SMALL_INT_MIN};
     use rexx_num::DivOp;
     use std::collections::HashMap;
+
+    /// `write_text` must append exactly the bytes `to_text` renders, for every
+    /// value that reaches its hand-written formatter.
+    ///
+    /// **The formatter is the risk, not the dispatch.** `write_text` writes
+    /// `i64` digits itself rather than calling `Display`, so this pins it
+    /// against `to_string` at both ends of the tagged range, at both ends of
+    /// `i64` itself, and across the sign and single-digit boundaries -- and
+    /// it appends to a non-empty buffer, because appending is what every
+    /// caller does and a formatter that overwrote instead would pass a test
+    /// that started from empty.
+    #[test]
+    fn write_text_writes_what_to_text_renders() {
+        let mut interp = Interp::new();
+        let cases: [i64; 13] = [
+            0,
+            1,
+            -1,
+            9,
+            -9,
+            10,
+            -10,
+            99,
+            -100,
+            i64::from(u32::MAX),
+            -i64::from(u32::MAX),
+            SMALL_INT_MAX,
+            SMALL_INT_MIN,
+        ];
+        for case in cases {
+            let value = ObjRef::small_int(case).expect("inside the tagged range");
+            let expected = interp.to_text(value).to_vec();
+            assert_eq!(
+                expected,
+                case.to_string().into_bytes(),
+                "the case itself must render as its own decimal spelling: {case}"
+            );
+            let mut out = b"KEY.".to_vec();
+            interp.write_text(value, &mut out);
+            assert_eq!(
+                out,
+                [b"KEY.".as_slice(), &expected].concat(),
+                "write_text must append what to_text renders, for {case}"
+            );
+        }
+    }
 
     /// A test-only shorthand: every literal here is a number by construction,
     /// so a parse failure is this test's own bug, not a case to handle.

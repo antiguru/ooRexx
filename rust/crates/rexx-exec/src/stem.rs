@@ -157,7 +157,7 @@ impl Interp {
                          give its name"
                     );
                     let value = self.read_by_name_at(name, *at);
-                    key.extend_from_slice(&self.to_text(value));
+                    self.write_text(value, &mut key);
                 }
             }
         }

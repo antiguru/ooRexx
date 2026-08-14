@@ -3530,3 +3530,54 @@ Every axis produces identical stdout, identical stderr and identical exit status
 #### What this entry does not claim
 
 No attribution of the instruction differences to the removed allocations specifically. Every moving axis executes both changed sites, so there is no control axis here, and `compound`'s -9.6% is not decomposed into the two cuts.
+
+### Entry 39 -- a small integer's digits, written where they are wanted
+
+Base `d73b24310`, entry 38's head.
+The second piece of `heaptrack`-directed work, from re-attributing the profile at that head rather than reusing the one entry 38 started from.
+
+#### Cause
+
+`Interp::to_text` answers `Cow::Borrowed` for `Body::Text` and for `Body::Num`, whose rendering it caches on the object.
+A tagged small integer has no object to borrow from, so that arm builds a `String` and hands it back owned.
+A caller that only wants the bytes appended somewhere therefore allocated that `String`, copied it, and dropped it.
+
+`Interp::tail_key` is exactly such a caller and it is on the compound path: `key.extend_from_slice(&self.to_text(value))`, once per tail piece of every compound reference.
+`samples/rexxcps.rex` writes `acompound.key1.loop` in its innermost loop, whose tails are small integers, so that was the whole of that path's allocation.
+
+`Interp::write_text` renders the digits into the caller's buffer instead, through `unsigned_abs` so `i64::MIN` has a form, and falls back to `to_text` for everything else.
+
+#### Allocations
+
+`heaptrack`, `samples/rexxcps.rex` at `count=20`/`averaging=20`, 400,000 clauses: **24,475,400 to 23,075,399**.
+
+The temporary count rose, 7,822,310 to 9,922,309, and that is an artifact of the instrument rather than a regression: heaptrack calls an allocation temporary when it is freed with no other allocation in between, so removing allocations reclassifies their neighbours into that bucket.
+The total is the figure this entry claims.
+
+#### Instructions
+
+`perf stat -e instructions:u`, six interleaved rounds per arm, both arms staged at one fixed binary path, minimum of each arm.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `compound` | 21,828,005,970 | 20,398,359,587 | -1,429,646,383 | **-6.550%** | 2,983,697 | 1,298,286 |
+| `alloc4c` | 7,372,614,362 | 7,235,717,916 | -136,896,446 | **-1.857%** | 117,106 | 117,305 |
+| `rexxcps` | 22,619,175,433 | 22,412,088,593 | -207,086,840 | **-0.916%** | 4,071,669 | 29,559 |
+| `emptyloop` | 25,075,608,929 | 25,075,611,643 | +2,714 | up | 1,104 | 860 |
+| `varlookup` | 42,009,633,106 | 42,009,635,313 | +2,207 | up | 1,109 | 1,539 |
+| `arith` | 20,171,236,535 | 20,171,238,613 | +2,078 | up | 1,052 | 1,198 |
+| `strings` | 41,859,584,993 | 41,859,586,941 | +1,948 | up | 1,017 | 1,090 |
+
+**Four axes moved up, and the entry states it rather than rounding it away.**
+Each is outside its own spread, so each is a difference and not a bound.
+Each is also about two thousand instructions against runs of twenty to forty-two billion, and **the size does not scale with the axis's length** -- `emptyloop` runs 25,000,000 passes and `varlookup` 19,000,000, and they moved by the same couple of thousand.
+A per-pass cost would differ between them by millions.
+So this is a fixed cost paid once, not a per-clause one, and **no further attribution is offered**: separating a one-time startup difference from binary layout needs the do-nothing control this record has wanted since entry 31 and still does not have.
+
+#### Behaviour
+
+Bench axes: identical stdout, stderr and exit status under both arms on both engines.
+
+A compound-tail probe covering a positive tail, a negative one, zero, a fourteen-digit tail, a defaulted tail, a loop-driven tail and a two-piece tail is **identical to the oracle**, byte for byte, on both engines.
+
+**The first version of that probe was wrong and is recorded because it looked right.** It wrote `say zz.-3` intending a negative tail; that parses as `zz. - 3`, a subtraction against the stem's default, and the program failed at error 41 on both the oracle and here. The arms still agreed, so a check that had stopped there would have reported success while never testing a negative tail at all.
