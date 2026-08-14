@@ -655,21 +655,16 @@ pub(crate) fn is_excluded_builtin(name: &[u8]) -> bool {
     std::str::from_utf8(name).is_ok_and(|name| wholly_excluded().contains(name))
 }
 
-/// Runs the builtin `name` over already-evaluated arguments.
+/// [`resolve`] composed with [`run`], for the unit tests in this module's
+/// children.
 ///
-/// `None` means **`name` is not a builtin**, which is the answer that lets
-/// resolution carry on to a `::routine` and then to external resolution.
-/// `Some(Err(..))` is a raised condition -- the 40.x incorrect-call family
-/// among them -- or this crate's own declared gap for a builtin it does not
-/// run yet.
-///
-/// **Arguments arrive evaluated, and an omitted interior position arrives as
-/// `None`.** A trailing omission is not a position at all by the time it
-/// gets here: `rexx-parse` drops those (`ExprKind::List`'s own doc comment),
-/// matching the oracle, where `q(1,,2,,)` reports `arg()` as 3.
-///
-/// See the module doc for what this path deliberately does *not* do that the
-/// label path does -- `SIGL`, and the activation level.
+/// **Test-only, because resolution and dispatch are one step apart in
+/// production now.** `Interp::resolve_call` resolves the name and
+/// `Resolved::Builtin` carries the row to `run`, so nothing outside a test
+/// arrives here holding only a name. A test that wants to exercise a builtin
+/// by name is the one caller left, and `None` still means what it always did:
+/// the name is not a builtin.
+#[cfg(test)]
 pub(crate) fn dispatch(
     interp: &mut Interp,
     name: &[u8],
@@ -750,6 +745,19 @@ pub(crate) fn resolve(name: &[u8]) -> Option<BuiltinTarget> {
 /// `name` is the call site's own spelling and is used only to report the
 /// declared gap; the row's own [`Builtin::name`] is what a running builtin is
 /// handed, which is what keeps `CENTER` and `CENTRE` one function.
+///
+/// **Arguments arrive evaluated, and an omitted interior position arrives as
+/// `None`.** A trailing omission is not a position at all by the time it
+/// gets here: `rexx-parse` drops those (`ExprKind::List`'s own doc comment),
+/// matching the oracle, where `q(1,,2,,)` reports `arg()` as 3.
+///
+/// **There is no "not a builtin" answer here.** `Interp::resolve_call` decided
+/// that and handed over the row; this used to be reached through a `dispatch`
+/// that re-resolved the name and could report a miss the resolution had
+/// already ruled out.
+///
+/// See the module doc for what this path deliberately does *not* do that the
+/// label path does -- `SIGL`, and the activation level.
 pub(crate) fn run(
     interp: &mut Interp,
     name: &[u8],

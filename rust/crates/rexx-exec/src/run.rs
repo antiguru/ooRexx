@@ -360,11 +360,17 @@ pub(crate) struct SteppedClause {
 pub(crate) enum Resolved {
     /// A label in the *running activation's* body, at this instruction index.
     Label(usize),
-    /// A builtin function name. Which builtin is `builtin::dispatch`'s own
-    /// lookup rather than something carried here: the arity check and the
-    /// code live on one row there, and splitting the row across a resolution
-    /// result would be the second copy that drifts.
-    Builtin,
+    /// A builtin function name, and **which** builtin -- a row index, not a
+    /// copy of the row, so nothing here can drift from the arity check and
+    /// the code that live on that row together.
+    ///
+    /// Carrying it is what lets a call site keep its answer, which is the
+    /// property [`crate::builtin::BuiltinTarget`] was introduced for and did
+    /// not have while this variant was empty: resolution hashed the name to
+    /// decide it was a builtin, and the dispatch behind it hashed the same
+    /// name again to decide which one. A compiled call site resolves once and
+    /// hashes never again.
+    Builtin(crate::builtin::BuiltinTarget),
     /// A `::ROUTINE` this program installed. `InstalledRoutine::directive` is
     /// the same integer `Activation::body` and `BodyKey::directive` carry.
     Routine(InstalledRoutine),
@@ -4101,7 +4107,13 @@ impl Interp {
         // at all.
         let resolved = match label {
             Some(target) => Resolved::Label(target),
-            None if builtin::is_builtin(name) => Resolved::Builtin,
+            // **`resolve` rather than `is_builtin`, and it answers the same
+            // question.** Every row's name is in scope
+            // (`every_implemented_row_names_an_in_scope_builtin`) and a name in
+            // scope with no row comes back `Gap`, so `resolve(name).is_some()`
+            // and `is_builtin(name)` agree on every name. It costs the same
+            // one lookup and keeps which builtin it found.
+            None if let Some(target) = builtin::resolve(name) => Resolved::Builtin(target),
             // A builtin Phase 4 excludes outright is still a builtin, so it
             // sits here rather than behind the routine lookup -- see
             // `builtin::is_excluded_builtin`'s own doc for why neither the
@@ -4250,27 +4262,23 @@ impl Interp {
         // reachable, and the value handed back is rooted by whichever caller
         // receives it exactly as a callee's `RETURN` value already is.
         let entered = match resolved {
-            Resolved::Builtin => {
+            Resolved::Builtin(target) => {
                 let mut values = self.take_value_buffer();
                 values.extend(
                     arguments
                         .iter()
                         .map(|argument| argument.as_ref().map(Argument::value)),
                 );
-                let outcome = builtin::dispatch(self, name, &values);
+                let outcome = builtin::run(self, name, target, &values);
                 // Both buffers go back before the outcome is read, so the
                 // raised-condition path keeps them as the ordinary one does.
                 self.give_value_buffer(values);
                 self.give_argument_buffer(arguments);
-                let Some(result) = outcome else {
-                    // `is_builtin` said yes above and `dispatch` reads the
-                    // same set, so the two cannot actually disagree -- and
-                    // this is an ordinary loud answer rather than a panic
-                    // because failing loudly is the rule even where the
-                    // reasoning says the arm is dead.
-                    return Err(Loud::unresolved_call(name).into());
-                };
-                return Ok(Ended::Returned(Some(result?)));
+                // **No second resolution and no arm for the two disagreeing.**
+                // Resolution handed over which builtin this is, so the case
+                // that used to need a loud answer here -- the name resolving
+                // one way and dispatching another -- cannot be stated.
+                return Ok(Ended::Returned(Some(outcome?)));
             }
             Resolved::Label(target) => Entered::Label(target),
             Resolved::Routine(installed) => Entered::Routine(installed),

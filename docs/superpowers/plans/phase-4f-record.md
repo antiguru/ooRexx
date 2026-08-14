@@ -4246,3 +4246,66 @@ Five interleaved rounds per arm, both arms staged at one fixed binary path, mini
 A sweep of every ordered pair from twenty-one values -- including 20-digit integers, values at both exponent extremes, halves that round either way, and zero -- across `/ * % // + -`, both signs, and twelve `NUMERIC DIGITS` settings from 1 to 100, with each operation trapped so an error becomes a printed line rather than an exit: **63,504 lines, byte-identical to the oracle on stdout, on stderr, and in exit status.**
 
 **And the sweep was shown to fail before being trusted.** Seeding the division's working remainder with a stray digit makes it exit 101 and diverge on essentially every line. The sources were then restored from the backups, re-verified with `sha256sum -c`, rebuilt, and the sweep re-run against the oracle.
+
+### Entry 53 -- the builtin name, resolved twice per call
+
+Base `19f381125`. `strings` was the axis furthest from the oracle, and by this point it was allocation-free, so the cost had to be work rather than churn.
+
+#### What the profile said
+
+`perf record` on `bench-programs/strings.rex`, samples over 1.2%:
+
+| | |
+|---:|---|
+| 17.94% | `run_ops::<false>` |
+| 12.48% | `builtin::string::changestr` |
+| 11.93% | `invoke_call` |
+| 4.98% | `__memcmp_evex_movbe` |
+| 3.48% | `hash_one::<&[u8]>` |
+| 3.21% | `eval_node` |
+| 3.14% | `builtin::string::pos` |
+| 1.95% | `sip::Hasher::write` |
+
+**Five percent in SipHash over byte slices, on a program that touches no stem and no symbol table at run time.** The only thing it hashes is builtin names.
+
+#### Two lookups per call, and a doc that described the fix as already made
+
+`Interp::resolve_call` asked `builtin::is_builtin(name)` -- a hash into the in-scope set -- and answered `Resolved::Builtin`, **a variant carrying nothing**. `builtin::dispatch` behind it then called `builtin::resolve(name)`, hashing the same name a second time into the row map, to decide which builtin.
+
+`BuiltinTarget`'s own doc has said since it landed that a row index "names the one row and cannot disagree with it, and it is what lets a call site keep its answer". Nothing ever carried it. `Resolved`'s own doc stated the opposite as a design decision: "Which builtin is `builtin::dispatch`'s own lookup rather than something carried here". Both doc comments are now true of the same code.
+
+`Resolved::Builtin` carries a `BuiltinTarget`. Resolution calls `resolve` instead of `is_builtin` -- **the same one lookup**, since every row's name is in scope (`every_implemented_row_names_an_in_scope_builtin`) and a name in scope with no row answers `Gap`, so `resolve(name).is_some()` and `is_builtin(name)` agree on every name -- and keeps what it found.
+
+**A compiled call site records its `Resolved` against the op position**, so the second and every later execution of a builtin call now hashes the name **not at all**, where before it hashed once no matter how many times the site ran.
+
+Two things fell out. `builtin::dispatch` had no production caller left and is now `#[cfg(test)]`, kept because six modules' unit tests reach builtins by name. And the arm in `invoke_call` that handled resolution and dispatch disagreeing about whether a name is a builtin is gone: with the row carried over, that case cannot be stated.
+
+#### Instructions
+
+Five interleaved rounds per arm, both arms staged at one fixed binary path, minimum of each.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `strings` | 40,017,586,271 | 36,870,641,821 | -3,146,944,450 | **-7.864%** | 1,409 | 1,171 |
+| `alloc4c` | 7,165,837,984 | 6,909,768,300 | -256,069,684 | **-3.573%** | 127,800 | 102,455 |
+| `rexxcps` | 21,100,844,360 | 20,758,930,368 | -341,913,992 | **-1.620%** | 4,076,567 | 4,205,617 |
+| `compound` | 18,238,265,030 | 18,237,907,657 | -357,373 | bound | 3,742,356 | 1,641,927 |
+| `arith` | 19,337,465,592 | 19,337,467,747 | +2,155 | +0.00001% | 917 | 1,590 |
+| `emptyloop` | 24,975,609,380 | 24,975,611,114 | +1,734 | +0.00001% | 733 | 1,054 |
+| `varlookup` | 42,123,633,279 | 42,123,635,594 | +2,315 | +0.00001% | 2,261 | 1,747 |
+
+The last three exceed their own spans and are reported rather than called bounds, but each is about one part in ten million and none of those axes calls a builtin.
+
+**The largest single change in this series**, and it removed no allocation at all -- which is worth setting beside entry 52, where removing 57% of an axis's allocations cost 3.104%.
+
+#### Behaviour
+
+A probe over the resolution order this touched -- a builtin called as a function and as a `CALL`, a `::ROUTINE` sharing a builtin's name, the quoted lowercase and uppercase spellings that select the routine and the builtin respectively, an unknown name reaching 43.1, and two builtins sharing one row (`CENTER`/`CENTRE`) -- is **identical to the oracle on stdout, on stderr, and in exit status**. The string and argument probes from entries 48 and 50 were re-run against this binary and are identical too.
+
+The first draft of that probe also called `STREAM` and `RXFUNCADD`, and this crate exits loudly on a Phase 4 declared gap rather than raising a condition a `SIGNAL ON SYNTAX` could trap, so it stopped there. Every line it did produce matched the oracle. The gap is Phase 7's and not this entry's; the two calls were removed rather than worked around.
+
+**And the probe was shown to fail before being trusted.** Making resolution carry `BuiltinTarget::Gap` instead of the row it found makes it exit 120 on the first line with `routine "MAX" is not implemented (4c)`.
+
+#### Where the axis stands
+
+`strings` against the oracle, three interleaved rounds, wall clock and therefore orientation rather than this phase's instrument: **3.57x to 3.05x**. `changestr` and `pos` themselves are the next thing on it, at 12.48% and 3.14% of samples.
