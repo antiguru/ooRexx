@@ -1,0 +1,33 @@
+RC 0
+===STDOUT===
+other
+after set
+===STDERR===
+     2 *-* call on user zx name h
+     3 *-* zv = 'unset'
+       >>>   "unset"
+     4 *-* do zi = 1 to 1
+       >K>   "TO" => "1"
+     5 *-*   select case raiser()
+    12 *-*     raiser:
+    13 *-*     raise user zx return 2
+       >K>       "RESULT" => "2"
+       >K>     "CASE" => "2"
+    14 *-*       h:
+    15 *-*       zv = 'set'
+       >>>         "set"
+    16 *-*       return
+     6 *-*     when 1 
+       >>>       "1"
+       >>>       "0"
+     7 *-*     otherwise
+     7 *-*       say 'other'
+       >>>         "other"
+     8 *-*   end
+     9 *-* end
+     4 *-* do zi = 1 to 1
+       >>>     "1"
+       >>>     "2"
+    10 *-* say 'after' zv
+       >>>   "after set"
+    11 *-* exit

@@ -1,0 +1,22 @@
+     2 *-* call on user zx name h
+     3 *-* zv = 'unset'
+       >>>   "unset"
+     4 *-* select case raiser()
+    10 *-*   raiser:
+    11 *-*   raise user zx return 2
+       >K>     "RESULT" => "2"
+       >K>   "CASE" => "2"
+    12 *-*   h:
+    13 *-*   zv = 'set'
+       >>>     "set"
+    14 *-*   return
+     5 *-*   when 1 
+       >>>     "1"
+       >>>     "0"
+     6 *-*   otherwise
+     6 *-*     say 'other'
+       >>>       "other"
+     7 *-* end
+     8 *-* say 'after' zv
+       >>>   "after set"
+     9 *-* exit

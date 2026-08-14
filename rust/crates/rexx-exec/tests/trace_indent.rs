@@ -46,6 +46,13 @@
 //!   (`terminate` takes it back off). A `CALL ON` handler delivered at that
 //!   boundary is based on whichever it is, so the two directions are one rule
 //!   and a case each way is what says so.
+//! * **A `SELECT`'s own clause ends one level deeper than it echoed** too, in
+//!   the same order: `RexxInstructionSelectCase::execute` evaluates its `CASE`
+//!   scrutinee and traces the `>K>` for it before calling
+//!   `newBlockInstruction`. A `WHEN`'s condition is the adjacent success --
+//!   a `WHEN` is not a block instruction, so its clause ends at the level it
+//!   echoed, and a case each way is what pins the rule to *block
+//!   instructions* rather than to `SELECT`.
 //!
 //! ## Regeneration
 //!
@@ -63,6 +70,13 @@
 //! [`deviation_0_collapses_every_wrong_answer_this_file_holds`] a concrete
 //! wrong answer per case, so that the claim "only a raw comparison can hold
 //! this" is measured on each case rather than asserted once for the file.
+//!
+//! A case whose indent this crate has never got wrong takes its `.wrong` from
+//! a build deliberately broken for that one case:
+//! `call_on_at_a_when_condition_boundary`'s came from one that settled
+//! a `WHEN`'s boundary the way a block instruction's is settled. That is the
+//! case's own mutation witness written down, and having to construct a wrong
+//! answer at all is the property the case exists to hold.
 
 mod support;
 

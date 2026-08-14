@@ -5476,6 +5476,28 @@ impl Interp {
         // at the same indent as `select case ...` itself, not the `WHEN`-scan
         // level a `WhenCase`'s own comparison lines are indented to.
         self.trace_keyword(indent, "CASE", &text);
+        // **The block opens after this**, so the header clause's own boundary
+        // runs one level in -- `newBlockInstruction` is the next thing
+        // `RexxInstructionSelectCase::execute` does once the scrutinee has
+        // been evaluated and its `>K>` traced, and a `CALL ON` handler
+        // delivered at that boundary is based on whatever the counter reads
+        // then. Measured: the handler `h:` of a `select case raiser()` at top
+        // level echoes at `12 *-*     h:` on the oracle, where the `SELECT`
+        // clause itself echoes unindented.
+        //
+        // Here rather than at either engine's own call site because this
+        // function is the shared one: the tree-walker calls it inside the
+        // header's `in_clause` and the compiled stream reaches it from the
+        // one `crate::ir::Op::EvalExpr` of the header's clause region, and
+        // both boundaries are past this line.
+        //
+        // **A `SELECT` with no `CASE` opens the same block and never reaches
+        // here, and no program run so far tells the difference.** Its clause
+        // evaluates nothing, so it has nothing to queue a condition its own
+        // boundary could deliver; probed for anyway with a condition raised
+        // inside a handler, which the oracle delivers at the handler's own
+        // clause rather than carrying it forward to the `SELECT`.
+        self.settle_block_indent(true, indent);
         Ok(value)
     }
 
@@ -6170,20 +6192,24 @@ impl Interp {
         )
     }
 
-    /// Leaves `current_value_indent` at the indent a `DO`/`LOOP` header
-    /// clause's own **boundary** runs at: the body's when the block is still
-    /// open once the header has decided, the `DO` clause's when the loop is
-    /// over.
+    /// Leaves `current_value_indent` at the indent a **block instruction's**
+    /// own clause **boundary** runs at: one level in when that instruction's
+    /// block is still open once the clause has finished, the clause's own
+    /// indent when it is not.
     ///
-    /// **The header clause echoes at one indent and ends at another, and only
-    /// the boundary can see the difference.** In the oracle
-    /// `RexxInstructionBaseLoop::execute` traces the clause, evaluates the
-    /// control expressions in `setup`, and only then calls
-    /// `newBlockInstruction`, whose `settings.traceIndent++` is the block's
-    /// own level; an iteration test that fails calls `terminate`, which pops
-    /// the block and takes the level back off again. So the counter at the
-    /// end of that one instruction reads one deeper than its own echo
-    /// exactly when the body is about to run.
+    /// **The clause echoes at one indent and ends at another, and only the
+    /// boundary can see the difference.** In the oracle a block instruction
+    /// traces its clause, evaluates whatever expressions that clause carries,
+    /// and only then calls `newBlockInstruction`, whose
+    /// `settings.traceIndent++` is the block's own level --
+    /// `RexxInstructionBaseLoop::execute` evaluates its control expressions
+    /// in `setup` first, and `RexxInstructionSelectCase::execute` evaluates
+    /// its `CASE` scrutinee and traces the `>K>` for it first. So the counter
+    /// at the end of that one instruction reads one deeper than its own echo.
+    /// A loop's iteration test that fails then calls `terminate`, which pops
+    /// the block and takes the level back off again; a `SELECT`'s clause has
+    /// no such path, so `open` is what each caller knows and this cannot
+    /// work out for itself.
     ///
     /// What observes it is a `CALL ON` handler delivered at this boundary,
     /// since `internalCallTrap` bases the handler's own activation on
@@ -6200,14 +6226,27 @@ impl Interp {
     /// do while raiser() < 1      test true        -> 12 *-*     h:
     /// do until raiser() > 0      test true        -> 10 *-*   h:
     /// do until raiser() > 0      test false       -> 13 *-*     h:
+    /// select case raiser()       always open      -> 12 *-*     h:
     /// ```
     ///
-    /// **Nothing but the boundary reads what this writes.** The body's own
-    /// first clause and the clause the loop resumes at each set the field
-    /// again through `step_in_temps_frame` before anything traces, so this
-    /// is not a value that survives the clause it belongs to.
-    fn settle_block_indent(&mut self, entered: bool, do_indent: usize, loop_indent: usize) {
-        self.clause_state.current_value_indent = if entered { loop_indent } else { do_indent };
+    /// **A level is two columns, and it is derived here rather than passed
+    /// in**: measured, a `WHEN`'s own condition sits two columns in from its
+    /// `SELECT` and a loop body two in from its `DO`. Taking the deeper
+    /// indent as a second argument would put two same-typed indents side by
+    /// side at every call site, and handing them over the wrong way round is
+    /// exactly the two-column answer this function exists to stop.
+    ///
+    /// **Nothing but the boundary reads what this writes.** Whatever runs
+    /// next -- a loop body's first clause, the clause a loop resumes at, a
+    /// `SELECT`'s own first `WHEN` -- sets the field again through
+    /// `step_in_temps_frame` before anything traces, so this is not a value
+    /// that survives the clause it belongs to.
+    fn settle_block_indent(&mut self, open: bool, clause_indent: usize) {
+        self.clause_state.current_value_indent = if open {
+            clause_indent + 2
+        } else {
+            clause_indent
+        };
     }
 
     /// The shared driver for every repeating `LoopKind` (everything but
@@ -6392,7 +6431,7 @@ impl Interp {
                     }
                     HeaderOutcome::Continue
                 };
-                it.settle_block_indent(outcome.entered(), do_indent, loop_indent);
+                it.settle_block_indent(outcome.entered(), do_indent);
                 Ok(outcome)
             })?;
             match header {
@@ -6502,7 +6541,7 @@ impl Interp {
                     // An `UNTIL` that held ends the loop, so this clause's
                     // own boundary sits outside the block -- the mirror of
                     // the top-of-loop test's, and the same call.
-                    it.settle_block_indent(!held, do_indent, loop_indent);
+                    it.settle_block_indent(!held, do_indent);
                     Ok(held)
                 })?;
                 match tested {
