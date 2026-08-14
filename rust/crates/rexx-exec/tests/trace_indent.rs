@@ -208,20 +208,31 @@ fn check_case(name: &str, engine: Engine) -> Vec<String> {
 
 /// Every case under one engine, each one run whatever the ones before it did,
 /// with every mismatch named in a single failure.
+///
+/// **Two counts, because one case can contribute up to three mismatches** --
+/// stdout, stderr and exit code are compared separately and each answers for
+/// itself. A single number over the flattened list is a descriptor count
+/// wearing a case count's words, and it can exceed the number of cases.
 fn check_every_case(engine: Engine) {
     let names = case_names();
-    let mismatches: Vec<String> = names
+    let failed: Vec<(&String, Vec<String>)> = names
         .iter()
-        .flat_map(|name| check_case(name, engine))
+        .map(|name| (name, check_case(name, engine)))
+        .filter(|(_, mismatches)| !mismatches.is_empty())
+        .collect();
+    let descriptors: usize = failed.iter().map(|(_, m)| m.len()).sum();
+    let detail: Vec<&str> = failed
+        .iter()
+        .flat_map(|(_, m)| m.iter().map(String::as_str))
         .collect();
     assert!(
-        mismatches.is_empty(),
-        "{} of {} cases disagree with the oracle under {engine:?}, compared raw -- \
-         this comparison is the whole point of this file and does not go through \
-         DEVIATION 0:\n{}",
-        mismatches.len(),
+        failed.is_empty(),
+        "{} of {} cases disagree with the oracle under {engine:?}, in {descriptors} \
+         descriptors, compared raw -- this comparison is the whole point of this file \
+         and does not go through DEVIATION 0:\n{}",
+        failed.len(),
         names.len(),
-        mismatches.join("\n")
+        detail.join("\n")
     );
 }
 
