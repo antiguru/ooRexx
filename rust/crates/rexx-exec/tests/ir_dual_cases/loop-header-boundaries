@@ -57,14 +57,40 @@
 #     `G ran 6`. The `END` is an instruction the oracle executes and this crate
 #     never steps -- it echoes it and jumps past it.
 #
-# **They have two different causes, not one.** The `UNTIL` one is the
-# elided-instruction family `task-4bp-report.md` catalogues: the oracle runs a
-# clause boundary at a position where this crate has no instruction to run one
-# at. The zero-pass one is not, and its own bullet already names the cause --
-# this crate's `DO` clause encloses the whole loop, so its boundary runs after
-# the loop rather than before the body. `G ran 3` names the `DO`'s own line,
-# which says that boundary exists and carries the right line; what is wrong is
-# where it sits. They are recorded here rather than in a report because this is
+# **They do not share a cause, and only one of the two has an established one.**
+# The zero-pass bullet names its own: this crate's `DO` clause encloses the
+# whole loop, so its boundary runs after the loop rather than before the body.
+# `G ran 3` names the `DO`'s own line, which says that boundary exists and
+# carries the right line; what is wrong is where it sits. Re-measured, and both
+# engines still print what that bullet records.
+#
+# **The `UNTIL` bullet's cause is NOT established, and the bullet cannot be
+# checked, because it does not name its program.** It was filed under the
+# elided-instruction family `task-4bp-report.md` catalogues -- the oracle runs
+# a clause boundary at a position where this crate has no instruction to run
+# one at. **That attribution is withdrawn rather than replaced**: nothing
+# anyone can run supports it. Reconstructing a program from the bullet's own
+# words has been tried by three readers and produced three different results,
+# none of them the bullet's. The bullet stays, because it records a real
+# observation someone made; its numbers are left alone, because choosing which
+# program produced them would be inventing a fourth reconstruction and
+# recording it as the third.
+#
+# **One of those reconstructions is worth knowing about in its own right,
+# because it runs the other way.** Every other shape recorded in this file has
+# this crate delivering *later* than the oracle. This one delivers *earlier*,
+# on both engines:
+#
+#   oracle       after unset / G ran 7
+#   this crate   G ran 6 / after set
+#
+# Its program is named in Task 6's Step 1b, in
+# `docs/superpowers/plans/2026-08-14-pre-phase-5-defects.md`, and reconstructing
+# it from there reproduces those transcripts exactly -- which is the difference
+# between that description and this bullet's. **It is not the `UNTIL` bullet's
+# program and is not offered as one.**
+#
+# They are recorded here rather than in a report because this is
 # the file the next reader of a loop-header boundary opens.
 #
 # Expected lines are tagged so that no line of the block can be empty: an empty
@@ -233,7 +259,15 @@ out> after
 # clause unit wraps `step`; `step`'s own `Do` arm calls `run_loop`, which
 # resolves the whole loop before returning. So the `DO`'s clause stays open
 # across the body, the body's clauses nest inside it, and `leave_clause` -- the
-# boundary that delivers -- does not run until the loop is over. The oracle's
+# boundary that delivers -- does not run until the loop is over.
+#
+# **The compiled path is different code and the same shape**, which is why this
+# is on both engines rather than one: `crate::ir::Op::LoopRun` sits inside the
+# header's own `Op::Clause` region -- `close_region` is pushed after it -- and
+# calls `run_loop_with_header`, which resolves the loop before that region
+# closes. Fixing one engine and measuring the other would look like a fix.
+#
+# The oracle's
 # `RexxInstructionSimpleDo::execute` returns once it has opened the block, so
 # its clause ends before any body instruction runs. Delivery then goes to
 # whichever boundary arrives first: with a body that is the body's first
