@@ -172,6 +172,18 @@ lang/builtin_argument_range.rex
 # the oracle's own doing rather than something the program prints.
 lang/routine_dispatch.rex
 
+# New for the pre-Phase-5 defect round -- POS's fourth argument, and the one
+# position its search reaches past the window that argument names. The window
+# does not simply bound where a match may fit, and its own header states, per
+# block, which wrong answer each of the two positional readings would print.
+# Its B block is the pair that rules both out: two haystacks differing only in
+# a decoy byte that is not a match and cannot be one, under the same start and
+# range, answering differently. Nothing else in the suite reaches this --
+# measured, removing the overrun reddens one test in the workspace and it is
+# the transcribed table in builtin/string.rs, which is why a witness the
+# oracle re-measures on every run belongs here too.
+lang/pos_window.rex
+
 # New for the pre-Phase-5 defect round -- which entries admit a PROCEDURE.
 # A ::ROUTINE is entered by a call and is not an INTERNAL one, so 17.1 is the
 # oracle's answer there in both directions, and this program pins that against

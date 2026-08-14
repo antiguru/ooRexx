@@ -1,0 +1,61 @@
+count 60
+/* POS's fourth argument, and the one position the search reaches past it.
+
+   The window does NOT simply bound where a match may fit. StringUtil::pos
+   scans for the needle's first byte up to the last position at which the
+   whole needle fits, and on a candidate whose first byte matched but whose
+   whole did not, it rescans with a length measured from the candidate it just
+   rejected rather than from where it resumes -- so the scan runs one byte
+   further, and a match may begin one position past the window. Every block
+   below pairs a case with the case one step away that answers differently,
+   because no positional rule fits: an engine bounding where a match may FIT
+   prints 0 for A2, B1, C2 and D1, and one bounding where a match may BEGIN
+   prints 2 for A4, 9 for A3, 3 for B2 and 5 for C1.
+
+   NOT HERE, and deliberately: a needle whose last byte is '00'x searched to
+   the end of the haystack. The position past the window is then the byte past
+   the string, where the C++ reads the RexxString terminator and matches. This
+   crate declines to invent that byte, and the oracle has no behaviour to
+   compare against beyond POS itself -- changestr('a'||'00'x,'aa','ZZZ')
+   copies through the match and the interpreter exits 139. */
+
+zh = 'banana bandana abracadabra'
+
+/* A: the window widened one step at a time over a fixed start. A2 is the
+   position past the window; A1 is the same window one narrower. A3 and A4
+   hold the same match under a start that sits on it, where a range below the
+   needle's own length is refused before any of this. */
+say 'A1' pos('an', zh, 6, 3)
+say 'A2' pos('an', zh, 6, 4)
+say 'A3' pos('an', zh, 9, 1)
+say 'A4' pos('an', zh, 9, 2)
+
+/* B: the pair that rules out every positional rule. The two haystacks differ
+   only in the decoy 'a' at B2's first byte, which is not a match and cannot
+   be one -- and it is what makes the position past the window reachable. */
+say 'B1' pos('an', 'zxan', 1, 3)
+say 'B2' pos('an', 'axan', 1, 3)
+
+/* C: the overrun is one position and does not grow with the number of
+   rejected candidates, because each rescan measures its length afresh. Two
+   decoys here, and C2 still stops one past the window. */
+say 'C1' pos('an', 'axaxan', 1, 5)
+say 'C2' pos('an', 'axaxan', 1, 4)
+
+/* D: the same shape for a three-byte needle, so the rule is not a property of
+   a two-byte one. */
+say 'D1' pos('abc', 'axxabc', 1, 5)
+say 'D2' pos('abc', 'zxxabc', 1, 5)
+
+/* E: a one-byte needle returns before the rescan exists and cannot overrun,
+   so E1 answers 0 where the blocks above would have answered. E2 is its
+   adjacent success. */
+say 'E1' pos('a', 'zza', 1, 2)
+say 'E2' pos('a', 'zza', 1, 3)
+
+/* F: the plain forms, so a change that broke ordinary POS while keeping the
+   blocks above would still be caught here. */
+say 'F1' pos('an', zh)
+say 'F2' pos('an', zh, 3)
+say 'F3' pos('zz', zh)
+say 'F4' pos('an', 'banana', 1, 2)

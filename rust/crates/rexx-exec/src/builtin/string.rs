@@ -141,11 +141,51 @@ fn push_pad(out: &mut Vec<u8>, byte: u8, len: usize) {
 
 // ---- the shared search primitives ----
 
-/// The 1-based offset of the first `needle` inside `haystack[start..]` that
-/// lies wholly within `range` bytes of `start`, or 0 for no match.
+/// The 1-based offset of the first `needle` at or after `start` that
+/// `StringUtil::pos` finds within `range` bytes of `start`, or 0 for no match.
 ///
 /// `start` is 0-based here, as `StringUtil::pos`'s own parameter is.
 /// A null needle never matches, measured: `pos('','banana')` is 0.
+///
+/// **The window is not "the match has to fit inside it", and no positional
+/// rule describes what the oracle does.** `StringUtil::pos` sets `endpointer`
+/// to one past the last position at which the whole needle would fit, finds
+/// the needle's first byte with `memchr` over `endpointer - haypointer` bytes,
+/// and on a candidate whose first byte matched but whose whole did not,
+/// rescans from `haypointer + 1` **with that same length** -- recomputed from
+/// the candidate it just rejected rather than from the position it resumes at.
+/// Every rescan therefore ends at `endpointer + 1`, so a match may begin one
+/// byte later than the window allows, but only once the scan has already hit
+/// the first byte inside the window.
+///
+/// Measured 2026-08-14, and the pair is what rules a positional rule out:
+/// `pos('an','axan',1,3)` is 3 while `pos('an','zxan',1,3)` is 0, and those
+/// two haystacks differ only in a decoy `a` inside the window. The overrun is
+/// one byte and does not accumulate, because each rescan measures its length
+/// from the candidate it rejected and so ends at `endpointer + 1` however many
+/// it has rejected: `pos('an','axaxan',1,4)` is 0 and `pos('an','axaxan',1,5)`
+/// is 5. It also holds for a longer needle -- `pos('abc','axxabc',1,5)` is 4
+/// and `pos('abc','zxxabc',1,5)` is 0.
+///
+/// **It is an upstream defect and not a documented extension**, and the
+/// oracle's own caseless twin is the evidence: `caselessPos` walks
+/// `_range - needle_length + 1` probes one at a time and cannot overrun, so
+/// measured, `'axan'~caselessPos('an',1,3)` is 0 where `'axan'~pos('an',1,3)`
+/// is 3 -- one search, one set of arguments, two answers. Reproduced here
+/// regardless, because what this crate is measured against is what the oracle
+/// prints.
+///
+/// **One thing the oracle does here that this deliberately does not.** The
+/// overrun position can be the byte one past the end of the haystack, where
+/// the C++ reads the `RexxString`'s NUL terminator and matches a needle whose
+/// last byte is `'00'x`: measured, `pos('a'||'00'x,'aa')` is 2 over a two-byte
+/// haystack, a match running past the string. This declines to invent that
+/// byte and answers 0. There is no oracle behaviour to agree with past `pos`
+/// itself -- measured the same day, `changestr('a'||'00'x,'aa','ZZZ')` copies
+/// through that match and the interpreter dies with **SIGSEGV, rc 139**. The
+/// divergence is confined to a needle whose last byte is `'00'x` searched to
+/// the end of the haystack, which is the only way the overrun position can
+/// fall past it.
 fn find_forward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> usize {
     // `haystack.len() - start` underflows for a start past the end, which is
     // exactly the case the guard below rejects; taking the saturating
@@ -168,12 +208,38 @@ fn find_forward(haystack: &[u8], needle: &[u8], start: usize, range: usize) -> u
     // haystack has.
     let first = needle[0];
     let last = needle.len() - 1;
-    window
-        .windows(needle.len())
-        .position(|candidate| {
-            candidate[0] == first && candidate[last] == needle[last] && candidate == needle
-        })
-        .map_or(0, |offset| start + offset + 1)
+    if let Some(offset) = window.windows(needle.len()).position(|candidate| {
+        candidate[0] == first && candidate[last] == needle[last] && candidate == needle
+    }) {
+        return start + offset + 1;
+    }
+
+    // **The overrun the doc above describes, and the failure path is the only
+    // one that pays for it.** The scan just made covered every start at which
+    // the whole needle fits; this is the one position past them, and the
+    // oracle reaches it only after its own scan has found the first byte among
+    // those starts. `window[..range - last]` is exactly the slice that scan
+    // drew its candidates from, so asking whether the first byte is in it is
+    // asking whether the oracle's loop would have run at all.
+    //
+    // **A one-byte needle cannot get here**, which is why there is no guard
+    // for it: `last` is then `0`, the slice below is the whole window, and the
+    // scan above succeeds for any window holding the first byte -- so a
+    // failure means the test below is false. The C++ returns before its loop
+    // in that case and reaches the same answer by its own route.
+    if !window[..range - last].contains(&first) {
+        return 0;
+    }
+    let over = start + range - last;
+    // At most one byte past the haystack, since `range` is capped at what
+    // follows `start` -- and that byte is the terminator this declines to
+    // invent, so `get` answering `None` is the divergence the doc records and
+    // not a bound being papered over.
+    debug_assert!(over + needle.len() <= haystack.len() + 1);
+    match haystack.get(over..over + needle.len()) {
+        Some(candidate) if candidate == needle => over + 1,
+        _ => 0,
+    }
 }
 
 /// The 1-based offset of the last `needle` that ends at or before `start`
@@ -503,9 +569,11 @@ pub(crate) fn overlay(
 
 /// `POS(needle, haystack [,start] [,range])`.
 ///
-/// The two trailing arguments are ooRexx's own extension; `range` counts
-/// bytes from `start`, and a match has to fit inside it -- measured,
-/// `pos('an','banana',1,3)` is 2 and `pos('an','banana',1,2)` is 0.
+/// The two trailing arguments are ooRexx's own extension; `range` counts bytes
+/// from `start`, and roughly a match has to fit inside it -- measured,
+/// `pos('an','banana',1,3)` is 2 and `pos('an','banana',1,2)` is 0. Only
+/// roughly: [`find_forward`] carries the one position the oracle searches
+/// beyond that, and why.
 pub(crate) fn pos(
     interp: &mut Interp,
     name: &[u8],
@@ -1168,6 +1236,29 @@ mod tests {
         assert_eq!(answer(b"POS", &[b"a", b"BANANA"]), b"0");
         assert_eq!(answer(b"POS", &[b"e", b"abcdeeeeef", b"2", b"4"]), b"5");
         assert_eq!(answer(b"POS", &[b"eee", b"abcdeeeeef", b"5", b"2"]), b"0");
+
+        // The one position `StringUtil::pos` searches past the window, which
+        // `find_forward`'s own doc explains and transcribes the oracle for.
+        // **Each of these is paired with the case one step away that answers
+        // differently**, because the rule is not positional and a row without
+        // its neighbour pins nothing: the first pair differs only in a decoy
+        // `a` inside the window, the second in whether the position past the
+        // window is reached at all, and the third in the needle's length.
+        let zoo: &[u8] = b"banana bandana abracadabra";
+        assert_eq!(answer(b"POS", &[b"an", zoo, b"6", b"4"]), b"9");
+        assert_eq!(answer(b"POS", &[b"an", zoo, b"6", b"3"]), b"0");
+        assert_eq!(answer(b"POS", &[b"an", zoo, b"9", b"1"]), b"0");
+        assert_eq!(answer(b"POS", &[b"an", zoo, b"9", b"2"]), b"9");
+        assert_eq!(answer(b"POS", &[b"an", b"axan", b"1", b"3"]), b"3");
+        assert_eq!(answer(b"POS", &[b"an", b"zxan", b"1", b"3"]), b"0");
+        assert_eq!(answer(b"POS", &[b"an", b"axaxan", b"1", b"4"]), b"0");
+        assert_eq!(answer(b"POS", &[b"an", b"axaxan", b"1", b"5"]), b"5");
+        assert_eq!(answer(b"POS", &[b"abc", b"axxabc", b"1", b"5"]), b"4");
+        assert_eq!(answer(b"POS", &[b"abc", b"zxxabc", b"1", b"5"]), b"0");
+        // A one-byte needle takes the C++'s early return and never reaches its
+        // rescan, so the position past the window is unreachable for it.
+        assert_eq!(answer(b"POS", &[b"a", b"zza", b"1", b"2"]), b"0");
+        assert_eq!(answer(b"POS", &[b"a", b"zza", b"1", b"3"]), b"3");
 
         assert_eq!(answer(b"LASTPOS", &[b"an", b"banana"]), b"4");
         assert_eq!(answer(b"LASTPOS", &[b"an", b"banana", b"4"]), b"2");
