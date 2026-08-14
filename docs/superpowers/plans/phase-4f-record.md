@@ -3996,3 +3996,56 @@ Five interleaved rounds per arm, both arms staged at one fixed binary path, mini
 A probe over the argument shapes this path carries -- nested builtin calls, an omitted interior position, a builtin with fewer arguments than the call before it, `ARG()`, a `USE ARG >` reference argument, a builtin raising 40.x into `SIGNAL ON SYNTAX`, and `TRACE I` so every `>A>` line is compared -- is **identical to the oracle on stdout, on stderr, and in exit status**, compared stream by stream rather than merged.
 
 **And the probe was shown to fail before being trusted.** Dropping the `clear()` from `take_value_buffer`, so a call sees the previous call's trailing values, makes that probe exit 216 and diverge from its second line. The sources were then restored from the backup, re-verified with `sha256sum -c`, rebuilt, and the probe re-run against the oracle.
+
+### Entry 49 -- the tail key, looked up before it is inserted, and the axis that pays for it
+
+Base `7964f9d1c`. Entry 48's widening named `stem_set_at` as the whole of what `bench-programs/compound.rex` allocates: one per iteration, five million of them.
+
+#### The change
+
+`tails.insert(key.to_vec(), Some(value))` allocated an owned key on **every** compound assignment.
+`insert` needs an owned key whether or not it keeps one, so on a tail that already exists the copy is made, handed over, found redundant and dropped again.
+The write now probes with `get_mut` first and only builds an owned key when the tail is new.
+
+#### Allocations
+
+Same scaled programs as entry 48:
+
+| axis | base | head | |
+|---|---:|---:|---:|
+| `compound` | 100,512 | 1,012 | **-99.0%** |
+| `rexxcps` (pinned) | 617,056 | 595,069 | -3.6% |
+| `alloc4c` | 150,521 | 150,521 | unchanged |
+| `strings` | 120,550 | 120,550 | unchanged |
+
+`compound` is now within a thousand allocations of the allocation-free floor `emptyloop` and `varlookup` sit at.
+
+**`alloc4c` is unchanged for a reason worth stating**, because it is the reason for the regression below: that program writes a *fresh* tail every iteration, so every write is a genuine insert and no allocation can be removed from it at all.
+
+#### Instructions, and a regression that was predicted before it was measured
+
+Five interleaved rounds per arm, both arms staged at one fixed binary path, minimum of each. The head binary was rebuilt from the restored sources and compared byte for byte with the copy measured.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `compound` | 18,932,521,974 | 18,239,083,646 | -693,438,328 | **-3.663%** | 2,519,987 | 1,954,591 |
+| `rexxcps` | 21,263,610,188 | 21,189,086,260 | -74,523,928 | **-0.350%** | 7,977,459 | 2,099,434 |
+| `alloc4c` | 6,985,682,651 | 7,210,799,815 | +225,117,164 | **+3.223%** | 110,742 | 156,093 |
+| `strings` | 40,290,587,263 | 40,290,587,445 | +182 | bound | 907 | 963 |
+| `arith` | 20,176,736,400 | 20,176,737,053 | +653 | bound | 1,642 | 214 |
+| `emptyloop` | 25,025,609,505 | 25,025,608,671 | -834 | bound | 897 | 1,641 |
+| `varlookup` | 42,123,633,490 | 42,123,633,736 | +246 | bound | 573 | 534 |
+
+**This is a trade, not a win, and both halves are mechanism rather than layout.**
+A hit pays one probe and no allocation where it used to pay one probe and an allocation: `compound` saves 138 instructions per iteration, which is about what a `malloc`/`free` pair of a short key costs.
+A miss pays *two* probes: `alloc4c` loses 225 per iteration, which is a hash plus a second random access into a table that by then holds a million entries and does not fit in cache.
+
+So a stem written once per tail and never revisited is slower, and a stem revisited -- an accumulator, a counter, anything indexed in a loop that runs longer than the index's range -- is faster. `rexxcps`, the most mixed program measured here, is faster.
+
+**The shape that would win both is a key that stores a short tail inline**, so that the miss path allocates nothing either and there is nothing to trade. `rexx-core`'s `Bytes` is that shape already and would need `Hash`, `Eq` and `Borrow<[u8]>` to serve as a map key; at `INLINE_BYTES` it also makes each entry 72 bytes against 40, which on a million-tail stem is its own regression in a dimension this table does not measure. That is a change with its own design question and its own measurement, and it is not this entry's.
+
+#### Behaviour
+
+A probe over the tail-write shapes -- a fresh tail, the same tail overwritten, a tail dropped and then revived, a compound tail with a variable index, a nested tail, a loop that fills tails and a second loop that updates them, a whole-stem reassignment, `DROP` of the stem, and `SYMBOL()` afterwards, all under `TRACE R` -- is **identical to the oracle on stdout, on stderr, and in exit status**, compared stream by stream.
+
+**And the probe was shown to fail before being trusted.** Making the hit arm do nothing, so an overwrite silently keeps the old value, makes that probe exit 215 and diverge from its first line. The source was then restored from the backup, re-verified with `sha256sum -c`, rebuilt, and the probe re-run against the oracle.

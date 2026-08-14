@@ -518,7 +518,25 @@ impl Interp {
                         body_variant_name(&object.body)
                     );
                 };
-                tails.insert(key.to_vec(), Some(value));
+                // **Looked up before it is inserted, because the key is
+                // already there on all but the first write to a tail.**
+                // `insert` needs an owned key whether or not it keeps it, so
+                // an unconditional one allocates a copy on every assignment
+                // and drops it again the moment the map finds the key it
+                // already holds. Measured with `heaptrack` on
+                // `bench-programs/compound.rex`, which writes 500 tails five
+                // million times: this was one allocation per iteration and
+                // essentially the whole of what that program allocated.
+                //
+                // The miss path hashes twice, and that is the trade: a tail
+                // is written once and then written again for the rest of the
+                // program.
+                match tails.get_mut(key) {
+                    Some(existing) => *existing = Some(value),
+                    None => {
+                        tails.insert(key.to_vec(), Some(value));
+                    }
+                }
             }
             None => {
                 let mut tails = HashMap::new();
