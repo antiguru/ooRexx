@@ -431,16 +431,9 @@ pub(crate) struct Activation {
     ///
     /// [`frame`]: Activation::frame
     pub(crate) owns_frame: bool,
-    /// Whether this activation was entered by a `CALL` or a function call, as
-    /// opposed to being the program's top-level activation.
-    ///
-    /// Read only by `PROCEDURE` and `USE LOCAL`, which are the two
-    /// instructions whose legality depends on how their activation was
-    /// entered. Measured on the oracle, and the two do not agree on what they
-    /// want -- `PROCEDURE` is legal in a called routine and error 17.1 at top
-    /// level, while `USE LOCAL` is error 99.910 in a called routine and error
-    /// 98.993 at top level.
-    pub(crate) entered_by_call: bool,
+    /// How this activation was entered -- what an instruction whose legality
+    /// depends on the entry reads. [`Entry`] carries the oracle's own table.
+    pub(crate) entry: Entry,
     /// Whether no instruction has yet been executed in this activation --
     /// where a label does not count as an instruction.
     ///
@@ -457,7 +450,7 @@ pub(crate) struct Activation {
     ///
     /// The second and third together are why this is cleared per instruction
     /// *kind* rather than at the label the call jumped to, and the fourth is
-    /// why [`entered_by_call`] is a separate field: a body's text cannot say
+    /// why [`entry`] is a separate field: a body's text cannot say
     /// whether its `PROCEDURE` is reachable, because the same instruction is
     /// legal when called and not when fallen into.
     ///
@@ -467,7 +460,7 @@ pub(crate) struct Activation {
     /// `Interp::procedure_permitted` carries the value across the one step
     /// that is allowed to use it.
     ///
-    /// [`entered_by_call`]: Activation::entered_by_call
+    /// [`entry`]: Activation::entry
     pub(crate) first_instruction_pending: bool,
     /// How far this activation is past the point where a `>I>` could still be
     /// announced -- `RexxActivation::traceEntryAllowed` and `traceEntryDone`
@@ -613,6 +606,52 @@ pub(crate) struct Activation {
     pub(crate) clock_stale: bool,
 }
 
+/// How control arrived at an activation.
+///
+/// **The kinds are kept apart rather than reduced to "was it called"**,
+/// because the instructions that ask disagree about which entries they want
+/// and neither wants the split that question draws. Measured on the oracle,
+/// one program per cell in a clean directory, with the instruction as the
+/// entered body's first executed one:
+///
+/// ```text
+/// entered by                       PROCEDURE first   USE LOCAL first
+/// the program itself               17.1, rc 239      98.993, rc 158
+/// an internal label, by CALL       runs, rc 0        99.910 at parse time
+/// an internal label, as a function runs, rc 0        99.910 at parse time
+/// a ::ROUTINE, by CALL             17.1, rc 239      98.993, rc 158
+/// a ::ROUTINE, as a function       17.1, rc 239      98.993, rc 158
+/// a ::METHOD                       17.1, rc 239      runs, rc 0
+/// ```
+///
+/// **A `::ROUTINE` is not an internal call**, which is what the `PROCEDURE`
+/// column turns on. 17.1's own sentence is "the first instruction executed
+/// after an internal CALL or function invocation"; a `::ROUTINE` body is
+/// neither, however it was reached, and neither is a `::METHOD`. Admitting
+/// a `PROCEDURE` there pushes a second frame onto an activation that
+/// already owns one, which is a corrupted frame stack rather than a wrong
+/// answer.
+///
+/// The `USE LOCAL` column is a different question -- "is this a method
+/// invocation" -- and the rows where it says 99.910 never reach the executor
+/// at all, since `rexx-parse` refuses a `USE LOCAL` that is not its body's
+/// first instruction (`exec_use`'s own doc has the shapes that were tried).
+///
+/// Every reader matches on this exhaustively and without a wildcard, so an
+/// entry kind added here cannot be left unanswered at any of them.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Entry {
+    /// The program's own activation, which [`Interp::run`] starts.
+    ///
+    /// [`Interp::run`]: crate::Interp::run
+    TopLevel,
+    /// A label in the running program's own source, reached by `CALL` or by
+    /// a function invocation -- the one entry a `PROCEDURE` is legal in.
+    InternalCall,
+    /// A `::ROUTINE` directive's body, reached either way.
+    Routine,
+}
+
 impl Activation {
     /// A fresh top-level activation: no run-time bindings yet, default
     /// `NUMERIC` settings, `TRACE` off. What `Interp::run` starts every
@@ -639,7 +678,7 @@ impl Activation {
             extra: HashMap::new(),
             frame,
             owns_frame: true,
-            entered_by_call: false,
+            entry: Entry::TopLevel,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,
@@ -745,7 +784,7 @@ impl Activation {
             extra: HashMap::new(),
             frame,
             owns_frame: false,
-            entered_by_call: true,
+            entry: Entry::InternalCall,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc,
@@ -797,7 +836,7 @@ impl Activation {
             extra: HashMap::new(),
             frame,
             owns_frame: true,
-            entered_by_call: true,
+            entry: Entry::Routine,
             first_instruction_pending: true,
             trace_entry: TraceEntry::Pending,
             pc: 0,

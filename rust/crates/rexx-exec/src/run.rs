@@ -64,7 +64,9 @@
 //! `clause_line_override` where the other *sets* it) is measured and stated
 //! at both.
 
-use crate::activation::{Activation, Inherited, TraceEntry, Trap, TrappedCondition, body_of};
+use crate::activation::{
+    Activation, Entry, Inherited, TraceEntry, Trap, TrappedCondition, body_of,
+};
 use crate::builtin;
 use crate::clause::{ClauseEntry, ClauseOutcome, ClauseValue, HandlerExit};
 use crate::error::{FailureSite, Raised, Search};
@@ -2372,11 +2374,34 @@ impl Interp {
     ) -> Result<(), Failure> {
         // 17.1 covers every shape but one: the first instruction executed
         // after an internal `CALL` or function invocation. Both halves are
-        // needed -- top level fails the second, and anything after another
-        // instruction fails the first.
-        if !(first_instruction && self.activation().entered_by_call) {
+        // needed -- every other entry fails the second, and anything after
+        // another instruction in the same activation fails the first.
+        //
+        // **A `::ROUTINE` is not an internal call**, measured on the oracle
+        // both ways round: `call sub` and `qq = sub()` into a `::routine sub`
+        // whose first instruction is `procedure` are 17.1 at rc 239, where
+        // the identical pair into an internal label runs. `Entry`'s own doc
+        // has the table, including the `::METHOD` row.
+        let entered_by_internal_call = match self.activation().entry {
+            Entry::InternalCall => true,
+            Entry::TopLevel | Entry::Routine => false,
+        };
+        if !(first_instruction && entered_by_internal_call) {
             return Err(Raised::procedure_out_of_place().into());
         }
+
+        // The swap at the end of this function gives the callee a frame of
+        // its own, and an activation that already owned one would be pushing
+        // a second onto the same stack. That is the state
+        // `RootSet::grow_slots` and `pop_slots` catch a step or two later,
+        // by which time the instruction that caused it has returned, so the
+        // invariant is asserted where it is established rather than where
+        // the damage surfaces. `Activation::nested` builds the entry kind
+        // admitted above, and it starts the callee sharing.
+        assert!(
+            !self.activation().owns_frame,
+            "a PROCEDURE admitted in an activation that already owns its frame"
+        );
 
         let names = self.expose_names(code, variables)?;
 
@@ -2488,27 +2513,31 @@ impl Interp {
 
     /// `USE ARG`, `USE STRICT ARG` and `USE LOCAL`.
     ///
-    /// `USE LOCAL` is never legal here -- this crate has no method
-    /// invocations at all -- so implementing it means implementing which of
-    /// its two refusals applies. Measured on the oracle: as a program's own
-    /// first instruction it is 98.993 ("may only be used from method
-    /// invocations"); as a program's second instruction, as a called
-    /// routine's first instruction, and after a `PROCEDURE`, it is 99.910
-    /// ("must be the first instruction executed after a method invocation").
+    /// `USE LOCAL` is never legal here -- no entry this crate can construct
+    /// is a method invocation -- so implementing it means implementing which
+    /// of its two refusals applies. Measured on the oracle, in a clean
+    /// directory:
     ///
-    /// **Only the 98.993 shape reaches this function, and the 99.910 arm is
-    /// unreached.** `rexx-parse` already enforces the placement rule
+    /// ```text
+    /// as the program's own first instruction    98.993, rc 158
+    /// as a ::ROUTINE's own first instruction    98.993, rc 158
+    /// anywhere else                             99.910, rc 157
+    /// ```
+    ///
+    /// 98.993 is "may only be used from method invocations" and 99.910 is
+    /// "must be the first instruction executed after a method invocation".
+    ///
+    /// **The 98.993 rows reach this function and the 99.910 arm does
+    /// not.** `rexx-parse` already enforces the placement rule
     /// at parse time (`instruction.rs`'s own `use_local`, error 99.910, and
     /// 99.915 for a fragment), so every shape that would take the second arm
-    /// fails before execution begins. Eight were tried and all were
-    /// intercepted: second instruction of a program, after a label on its own
-    /// line, after a label on the same line, after a `PROCEDURE`, inside a
-    /// `DO` block, inside an `IF`, and inside an `INTERPRET` in two
-    /// positions. Those cases already answer the oracle's own number; what
+    /// fails before execution begins: the second instruction of a program,
+    /// after a label on its own line, after a label on the same line, after a
+    /// `PROCEDURE`, inside a `DO` block, inside an `IF`, and inside an
+    /// `INTERPRET` in two positions were tried, and every one was
+    /// intercepted. Those cases already answer the oracle's own number; what
     /// they do not answer byte for byte is the clause echo, which is the
-    /// standing parse-error limitation `execute` documents (`lib.rs`) and is
-    /// unchanged by this task -- the baseline binary emits the identical
-    /// bytes for them.
+    /// standing parse-error limitation `execute` documents (`lib.rs`).
     ///
     /// The arm is kept rather than collapsed, on the same reasoning
     /// `Loud::missing_body` states for its own unreached arm: a rule the
@@ -2518,9 +2547,12 @@ impl Interp {
     /// for it would necessarily pass through the parse-time path instead and
     /// so could not fail if this arm were wrong.
     ///
-    /// The shape that would separate "is a method invocation" from "was not
-    /// entered by a call" cannot be written in this phase either: no method
-    /// invocation exists to write it with.
+    /// **The question the arm below asks is "is this a method invocation",
+    /// and not "was this entered by a call".** The two answers differ on a
+    /// `::ROUTINE`, which is entered by a call and is not a method
+    /// invocation: measured, `use local` first in one, reached by `CALL` and
+    /// as a function, is 98.993 both ways -- the top-level answer, not the
+    /// other one.
     fn exec_use(
         &mut self,
         code: &Code<'_>,
@@ -2529,7 +2561,16 @@ impl Interp {
     ) -> Result<(), Failure> {
         match use_ {
             Use::Local { .. } => {
-                if first_instruction && !self.activation().entered_by_call {
+                // 98.993 is "this is not a method invocation" and 99.910 is
+                // "it is one, but this is not its first instruction", so
+                // what decides between them is the entry kind rather than
+                // whether there was a call. Measured on the oracle: `use
+                // local` first in a `::ROUTINE` is 98.993 at rc 158, the
+                // same answer the top-level shape gets.
+                let method_invocation = match self.activation().entry {
+                    Entry::TopLevel | Entry::InternalCall | Entry::Routine => false,
+                };
+                if first_instruction && !method_invocation {
                     Err(Raised::use_local_outside_method().into())
                 } else {
                     Err(Raised::use_local_not_first().into())
@@ -13749,6 +13790,107 @@ mod tests {
         );
     }
 
+    /// A `::ROUTINE` is **not** an internal call, so a `PROCEDURE` first in
+    /// one is 17.1 -- reached by `CALL` here, and as a function below.
+    ///
+    /// **The exact stderr, because nothing else in the suite can see these
+    /// bytes.** `support::normalize_stderr` (DEVIATION 0) collapses the
+    /// space run between a trace line's marker and its content, so
+    /// `tests/corpus.rs` compares this program's two echoed clauses equal to
+    /// the same two echoed at any other indent. The ordering it does see:
+    /// the failing clause first, at the routine's own indent 0, and the
+    /// *calling* clause second.
+    ///
+    /// The expectation is the oracle's own transcript for this program, `cat
+    /// -A`'d in a clean directory, at rc 239 with an empty stdout -- the
+    /// `say zz` after the `call` never runs on either side.
+    #[test]
+    fn a_procedure_first_in_a_called_routine_is_17_1_with_the_calling_clause_second() {
+        const PATH: &str = "/tmp/proc-in-routine-call.rex";
+        let outcome = crate::run_program(
+            PATH,
+            b"call sub\n\
+              zz = 1\n\
+              say zz\n\
+              exit 0\n\
+              ::routine sub\n\
+              procedure\n\
+              say 'in sub'\n"
+                .to_vec(),
+            crate::Invocation::none(),
+        );
+        assert_eq!(outcome.exit_code, 239, "256 - 17");
+        assert_eq!(outcome.stdout, b"");
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stderr),
+            format!(
+                "\x20    6 *-* procedure\n\
+                 \x20    1 *-* call sub\n\
+                 Error 17 running {PATH} line 6:  Unexpected PROCEDURE.\n\
+                 Error 17.1:  PROCEDURE is valid only when it is the first \
+                 instruction executed after an internal CALL or function \
+                 invocation.\n"
+            )
+        );
+    }
+
+    /// The same routine reached as a **function** rather than by `CALL`.
+    ///
+    /// A separate test rather than a row in the one above, because the two
+    /// shapes corrupt the frame stack differently when the instruction is
+    /// admitted: the `CALL` shape leaves the caller's next unbound name
+    /// growing a frame that is no longer the top one, and this one fails on
+    /// the way out instead, popping a frame that is not the top. A program
+    /// containing both only ever reaches the first.
+    #[test]
+    fn a_procedure_first_in_a_routine_reached_as_a_function_is_17_1_too() {
+        const PATH: &str = "/tmp/proc-in-routine-function.rex";
+        let outcome = crate::run_program(
+            PATH,
+            b"qq = sub()\n\
+              say 'main' qq\n\
+              exit 0\n\
+              ::routine sub\n\
+              procedure\n\
+              return 'in sub'\n"
+                .to_vec(),
+            crate::Invocation::none(),
+        );
+        assert_eq!(outcome.exit_code, 239, "256 - 17");
+        assert_eq!(outcome.stdout, b"");
+        assert_eq!(
+            String::from_utf8_lossy(&outcome.stderr),
+            format!(
+                "\x20    5 *-* procedure\n\
+                 \x20    1 *-* qq = sub()\n\
+                 Error 17 running {PATH} line 5:  Unexpected PROCEDURE.\n\
+                 Error 17.1:  PROCEDURE is valid only when it is the first \
+                 instruction executed after an internal CALL or function \
+                 invocation.\n"
+            )
+        );
+    }
+
+    /// A `PROCEDURE` first in an internal label reached as a **function** is
+    /// legal, which is the neighbouring success the two refusals above are
+    /// paired with.
+    ///
+    /// Both routes into a label are separate admissions, and a rule keyed on
+    /// "was this a `CALL` instruction" rather than on the entry kind refuses
+    /// this one while leaving the `CALL` route working.
+    #[test]
+    fn a_procedure_first_in_a_label_reached_as_a_function_still_runs() {
+        let mut interp = Interp::new();
+        assert_eq!(
+            say_output(
+                &mut interp,
+                b"outer = 'caller'\nqq = sub()\nsay outer qq\nexit\n\
+                  sub: procedure\nouter = 'callee'\nreturn 'func-ok'\n",
+            ),
+            b"caller func-ok\n".to_vec()
+        );
+    }
+
     /// An isolated callee's frame is released on the way out, on the error
     /// path as well as the ordinary one.
     ///
@@ -14461,6 +14603,43 @@ mod tests {
                 ),
             "expected the oracle's own 98.993 report, got: {stderr}"
         );
+    }
+
+    /// `USE LOCAL` first in a `::ROUTINE` is 98.993 as well, and **not**
+    /// 99.910.
+    ///
+    /// The two numbers ask different questions, and a routine is the entry
+    /// that separates them: it is entered by a call, and it is not a method
+    /// invocation. Measured on the oracle in a clean directory, reached by
+    /// `CALL` and as a function alike -- rc 158, and the same message the
+    /// top-level shape gets.
+    #[test]
+    fn use_local_first_in_a_routine_raises_98_993_not_99_910() {
+        for (source, why) in [
+            (
+                &b"call sub\nsay 'main'\nexit 0\n::routine sub\nuse local\n"[..],
+                "reached by CALL",
+            ),
+            (
+                b"qq = sub()\nsay 'main' qq\nexit 0\n::routine sub\nuse local\n",
+                "reached as a function",
+            ),
+        ] {
+            let outcome = crate::run_program(
+                "/tmp/use-local-routine.rex",
+                source.to_vec(),
+                crate::Invocation::none(),
+            );
+            assert_eq!(outcome.exit_code, 158, "256 - 98, {why}");
+            let stderr = String::from_utf8_lossy(&outcome.stderr);
+            assert!(
+                stderr.contains("Error 98.993:")
+                    && stderr.contains(
+                        "The USE LOCAL instruction may only be used from method invocations."
+                    ),
+                "{why}: expected the oracle's own 98.993 report, got: {stderr}"
+            );
+        }
     }
 
     /// `PROCEDURE EXPOSE` of a single compound tail fails loudly rather than

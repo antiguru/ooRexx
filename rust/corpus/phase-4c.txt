@@ -171,3 +171,15 @@ lang/builtin_argument_range.rex
 # path on stderr is the one exception to the no-paths rule above, and it is
 # the oracle's own doing rather than something the program prints.
 lang/routine_dispatch.rex
+
+# New for the pre-Phase-5 defect round -- which entries admit a PROCEDURE.
+# A ::ROUTINE is entered by a call and is not an INTERNAL one, so 17.1 is the
+# oracle's answer there in both directions, and this program pins that against
+# the two internal shapes that are legal. Its C and D blocks trap the refusal
+# and then assign a fresh variable in the CALLER, which is the half a fatal
+# program cannot reach: an engine that admits the instruction has pushed a
+# second frame onto an activation that already owned one, and it is the
+# caller's next unbound name that lands on a frame no longer at the top. Its E
+# block leaves the same refusal untrapped for the exit status and the clause
+# echo, so that block is fatal and last.
+lang/procedure_entry_rule.rex

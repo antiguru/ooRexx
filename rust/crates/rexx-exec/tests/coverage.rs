@@ -678,6 +678,7 @@ const EXPECTED_SUBSET_4C: &[&str] = &[
     "lang/state_builtins.rex",
     "lang/builtin_argument_range.rex",
     "lang/routine_dispatch.rex",
+    "lang/procedure_entry_rule.rex",
 ];
 
 #[test]
