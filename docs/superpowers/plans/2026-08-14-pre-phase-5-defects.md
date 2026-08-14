@@ -355,10 +355,10 @@ The existing search probe is a starting point but was written before this was kn
 
 ---
 
-### Task 6: a plain `DO`'s clause boundary is never run, so a requeued condition is delivered late
+### Task 6: a plain `DO`'s clause boundary runs after its body, so a requeued condition is delivered late
 
 **Files:**
-- Modify: `rust/crates/rexx-exec/src/run.rs`, the `Instruction::Do` arm and whatever it shares with `Instruction::Select`
+- Modify: `rust/crates/rexx-exec/src/run.rs`, the `InstructionKind::Do` arm and whatever it shares with `InstructionKind::Select`
 - Test: `rust/crates/rexx-exec/tests/` -- **not** `trace_indent.rs`. This defect is observable on stdout with no `TRACE` in the program, so it belongs with the ordinary behavioural tests, and a test that needs tracing to see it has tested the wrong thing.
 - Re-capture: the `DO` entry added to `rust/crates/rexx-exec/tests/ir_dual_cases/loop-header-boundaries` by Task 5's fix round 2 records this as open; it becomes false when this closes.
 
@@ -369,7 +369,7 @@ The existing search probe is a starting point but was written before this was kn
 
 A `CALL ON` handler that ends in `raise ... return` leaves a second trapped condition pending, and the next clause boundary delivers it. The oracle delivers it at the plain `DO`'s own boundary, before the body runs. This crate's boundary for that clause is not missing -- it is open across the body, so the body's first clause reaches its own boundary first and delivers there instead.
 
-**The cause, traced rather than inferred, because the first attribution written here was wrong.** `step`'s `InstructionKind::Do` arm calls `run_loop`, which runs the whole loop before returning, and it is called from inside the clause unit `step_in_temps_frame` opened -- so `leave_clause`, the boundary that delivers, does not run until after `END`. The oracle's `RexxInstructionDo::execute` returns as soon as it has opened the block, ending its clause before any body instruction runs. The fix shape follows from that and is not the one the first draft of this task implied: close the header clause before the body runs, the way `Instruction::Select`'s arm already does. That clause currently owns the body's temps frame, so this is larger than it sounds.
+**The cause, traced rather than inferred, because the first attribution written here was wrong.** `step`'s `InstructionKind::Do` arm calls `run_loop`, which runs the whole loop before returning, and it is called from inside the clause unit `step_in_temps_frame` opened -- so `leave_clause`, the boundary that delivers, does not run until after `END`. The oracle's `RexxInstructionSimpleDo::execute` (`interpreter/instructions/SimpleDoInstruction.cpp:71`) traces the instruction, opens the block, handles the debug pause and returns -- it never runs the body -- so its clause ends before any body instruction does. **This account is written from the tree-walker's path and the defect is on both engines**; the compiled path is different code and the same shape, `crate::ir::Op::LoopRun` sitting inside the clause region and calling `run_loop_with_header`, which resolves the loop before that region closes. Fix and measure both. The fix shape follows and is not the one the first draft of this task implied: close the header clause before the body runs, the way `InstructionKind::Select`'s arm already does. That clause currently owns the body's temps frame, so this is larger than it sounds.
 
 ```rexx
 call on user zx name h
@@ -403,6 +403,10 @@ Wrong delivery order and a different `SIGL`, on stdout, `rc 0` on both sides. `d
 **The last line of that transcript is the trap in this task.** `after set 5` agrees on both sides because its `5` is `zw`, what `raiser()` returned, not a `SIGL`. A reviewer reconstructing this program with `say 'after' zv sigl` as the last statement reproduces the oracle's transcript exactly and gets `after set 6` from this crate -- and correctly reported the record as wrong. Two programs, one oracle transcript, two crate transcripts. Name the program in anything you record.
 
 - [ ] **Step 1: capture the baseline** for the program above, for the `sigl` variant of it, and for the **empty-body variant** (`do` / `end` with nothing between), both engines, all three descriptors, with and without `trace r`, before changing anything. The `sigl` variant tells a fix that moved delivery from one that moved only the printed value. The empty-body variant is the control that pins the cause and it **agrees with the oracle today** -- `G ran 5` on both sides, `SIGL` naming the `do` line rather than the `end` line or the one after it. A fix that breaks this one has moved the boundary somewhere new rather than earlier.
+
+- [ ] **Step 1b: a second instance of the mechanism, and a shape that runs the other way.** Nested plain `DO`s -- `do` / `do` / `end` / `end` and nothing else, outer on line 5 and inner on line 6 -- give oracle `G ran 5` and this crate `G ran 6` on both engines. That is the outer `DO`'s boundary arriving after the inner one, and it excludes both alternatives on its own: an absent boundary would deliver at the `say` after the loop, and a correctly placed one would deliver at line 5. Capture it.
+
+  **A `DO UNTIL` whose condition raises delivers EARLIER here than on the oracle, which no other shape in this plan does.** With `do until raiser1() > 0` on line 4, `nop` on 5, `end` on 6 and `say 'after' zv` on 7, where `raiser1` raises the first trapped condition and its handler requeues a second: the oracle prints `after unset` then `G ran 7`, and both engines here print `G ran 6` then `after set`. Not the same direction as everything above, so do not assume one fix moves it -- measure it, and if this task does not close it, say so.
 
 - [ ] **Step 2: decide whether the plain `SELECT` case is the same fix or a different one.** The two are inverted, which is why they are probably two fixes: a plain `SELECT` has its boundary in the right *place* and settles it at the wrong *level* (`SIGL` already names the right clause; only the indent moves), because `settle_block_indent` lives in `Interp::select_case` and a caseless `SELECT` never reaches it. A plain `DO` has the right level and the wrong place. Task 5 recorded both. **These may be one defect or two, and Task 5's own experience is that the "same defect one construct over" hypothesis was refuted once already.** Measure before assuming; if they are one, both transcripts must move together, and if they are two, say which this task closes.
 
