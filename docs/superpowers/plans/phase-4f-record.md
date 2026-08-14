@@ -3676,3 +3676,40 @@ The change removed 3,059,997 allocations and moved `compound` by -7.281%, `alloc
 
 **The largest single allocation width in the interpreter is unidentified**, and it is 4,220,217 allocations of 19 bytes on a 400,000-clause run -- more than any other width, and untouched by every entry so far.
 Naming it is the next allocation question, and the method is now differencing rather than reading.
+
+### Entry 42 -- the 19-byte allocations, named
+
+Entry 41 left the largest single allocation width in the interpreter unidentified: 4,220,217 allocations of 19 bytes on a 400,000-clause `samples/rexxcps.rex` run, untouched by every change before it.
+This entry names them. **No code changed; this is a measurement.**
+
+#### The site
+
+`Interp::render` (`value.rs`), reached from `Interp::compare_values` (`eval.rs`), reached from `apply_binary`.
+
+Comparing a tagged small integer renders it to a `String` first, through `to_string`, and 19 is the width that pre-sizes: `SMALL_INT_MAX` is 2,305,843,009,213,693,951, which is nineteen digits.
+`compare_values` renders **both** operands unconditionally, before knowing whether the comparison will be numeric -- and when both operands are small integers, the rendering is never read for anything but a comparison the integers themselves could answer.
+
+#### How it was found, including the probe that was void
+
+`heaptrack`'s call-site attribution could not answer it: the largest site was `step_in_temps_frame`'s closure, which is where every clause's work inlines, and it names a region rather than a cause. The size histogram named a width, not a place. The per-stack flamegraph export tops out at 980,000 for a single stack, so the width is spread across many.
+
+A conditional breakpoint on the allocator answered it, but **only after the first three attempts were discovered to be void**:
+
+* `break *0x4e780` -- the binary is position-independent, so a raw address from `nm` is not where the code loads. Rejected outright by gdb, which is the harmless failure.
+* `break __rust_alloc if $rdi == 19` on `samples/rexxcps.rex` -- ran to completion, never fired, and **that proved nothing**: the same breakpoint with the condition `$rdi == 8` also never fired, on a program that certainly makes 8-byte allocations. The symbol exists but link-time optimisation left no call site reaching it.
+* `break __rust_realloc if $rcx == 19` -- same, and void for the same reason.
+
+**The control is what turned a conclusion into a non-conclusion.** Two "never fired" results had already been read as evidence that the allocation was neither an alloc nor a realloc. Breaking on `malloc` in libc, where the control does fire, produced the stack above on the first hit.
+
+The first hit on a small program is parse-time -- `SymbolTable::intern` upcasing a symbol, through `to_ascii_uppercase` -- which is a one-off and cannot account for millions. Ignoring the first hits and catching a later one, inside the loop, gives `render`.
+
+#### The fix this points at, and what it must not get wrong
+
+Both operands being tagged small integers means the answer is available from the integers.
+It is **not** simply "compare the two `i64`s", and the guards are the substance:
+
+* **`NUMERIC FUZZ` must be zero.** Fuzz makes a numeric comparison compare fewer digits, so two distinct integers can be equal under it.
+* **Both magnitudes must sit inside `NUMERIC DIGITS`.** A numeric comparison rounds to significant digits first, so at `DIGITS 9` two distinct ten-digit integers can compare equal.
+* **The strict *ordering* operators must be excluded.** `>>` and `<<` compare strings, not numbers: `9 >> 10` is true where `9 > 10` is false. Strict *equality* is safe, because a small integer renders canonically and two equal renderings mean equal values.
+
+So the fast path is: both `Decoded::SmallInt`, `fuzz` zero, both magnitudes below ten to the `digits`, and the operator outside the strict ordering family.
