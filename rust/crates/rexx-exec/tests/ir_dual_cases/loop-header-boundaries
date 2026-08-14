@@ -174,10 +174,14 @@ out> after
 # read down the left column then the right, so `select` is line 5 and `g:` is
 # line 15. Both engines print `G ran 5` -- `SIGL` naming the `select` clause's
 # own line, which is what says it is that boundary delivering -- and stdout and
-# `rc 0` agree throughout. The stderr line that does not:
+# `rc 0` agree throughout. What does not is the handler's activation, every
+# line of it two columns short:
 #
-#   oracle       15 *-*     g:
-#   this crate   15 *-*   g:
+#   oracle                            this crate
+#       15 *-*     g:                     15 *-*   g:
+#       16 *-*     say 'G ran' sigl       16 *-*   say 'G ran' sigl
+#          >>>       "G ran 5"               >>>     "G ran 5"
+#       17 *-*     return                 17 *-*   return
 #
 # `select case 1` is the same program with a scrutinee that queues nothing
 # either, and it agrees, because `Interp::select_case` settles the boundary and
