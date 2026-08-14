@@ -139,18 +139,37 @@ const SUBSET_FILES: &[&str] = &["phase-4a.txt", "phase-4b.txt", "phase-4c.txt"];
 /// The subset programs that allocate nothing, so collect-on-every-allocation
 /// has nothing to fire on.
 ///
-/// Every value these four produce is a literal spelling a canonical small
-/// integer, and `Interp::literal` inlines those into the handle rather than
-/// the heap. `deep_nested_expr.rex` is the clearest case: three thousand
-/// terms, all of them the literal `1`, and not one allocation between them.
+/// **Two inline representations put programs here, not one.**
+/// `Interp::literal` inlines a literal spelling a canonical small integer,
+/// and `Interp::text_bytes` inlines any byte string short enough to travel
+/// in the handle. `deep_nested_expr.rex` is the clearest case of the first:
+/// three thousand terms, all of them the literal `1`, and not one allocation
+/// between them. The second is why the list is long -- short strings are
+/// most strings, so a program has to produce a wide one, a stem, or a
+/// non-integral number before the heap hears about it at all.
 ///
 /// A program belongs here because of what it contains, not because it was
 /// inconvenient -- see the both-directions assertion at the use site.
 const NO_ALLOCATION_PROGRAMS: &[&str] = &[
+    "lang/comparison_families.rex",
+    "lang/comparison_operators_remaining.rex",
     "lang/deep_nested_expr.rex",
+    "lang/do_loop_forms.rex",
+    "lang/exit_no_value.rex",
+    "lang/exit_with_value.rex",
+    "lang/if_else_chain.rex",
+    "lang/iterate_from_select.rex",
     "lang/mutation_controlled_order.rex",
     "lang/no_trailing_newline.rex",
+    "lang/prefix_dotvar_logical_over_label.rex",
+    "lang/raise_array_substitution.rex",
+    "lang/select_when.rex",
+    "lang/select_when_absorption.rex",
+    "lang/select_when_bodies.rex",
     "lang/trace_numeric_request.rex",
+    "lang/trace_output.rex",
+    "lang/trace_results.rex",
+    "num/comparison.rex",
 ];
 
 /// The phase subset files that exist in the corpus directory, sorted.
@@ -422,15 +441,20 @@ fn values_compound_write_roots_the_old_value_before_the_stems_first_allocation()
             "s.='d'\nsay s.9\n",
             "d\n",
         ),
+        // **The stem name is long on purpose.** These two rows need the
+        // derived compound name to be a value the heap actually holds, and a
+        // string short enough travels in the handle with no slot and no
+        // allocation -- which leaves the stress mode nothing to collect on
+        // and the row unable to see the defect it exists for.
         (
             "VALUE's read-only form on the same never-touched compound",
-            "j=3\nsay value('a.j')\n",
-            "A.3\n",
+            "j=3\nsay value('abcdefgh.j')\n",
+            "ABCDEFGH.3\n",
         ),
         (
             "the failing shape: VALUE's write on a never-touched compound",
-            "j=3\nsay value('a.j','new')\n",
-            "A.3\n",
+            "j=3\nsay value('abcdefgh.j','new')\n",
+            "ABCDEFGH.3\n",
         ),
     ];
     let mut total_collections: u64 = 0;
@@ -508,14 +532,18 @@ fn a_loops_per_pass_roots_outlive_the_pass_and_not_the_loop() {
         },
         Row {
             name: "a WHILE test whose value is a heap object, with an allocating body",
-            program: "k = 0\ndo while k < 3\n  k = k + 1\n  zz = 'x' || k\nend\nsay zz k\n",
-            stdout: "x3 3\n",
+            // Wide enough to need a slot: a shorter concatenation is carried
+            // in the handle, and then the body this row is named for does not
+            // allocate at all.
+            program: "k = 0\ndo while k < 3\n  k = k + 1\n  zz = 'xxxxxxxx' || k\nend\nsay zz k\n",
+            stdout: "xxxxxxxx3 3\n",
             allocates: true,
         },
         Row {
             name: "the same for UNTIL",
-            program: "n = 0\ndo until n >= 2\n  n = n + 1\n  q = n || 'p'\nend\nsay q n\n",
-            stdout: "2p 2\n",
+            // Wide for the reason the WHILE row above gives.
+            program: "n = 0\ndo until n >= 2\n  n = n + 1\n  q = n || 'pppppppp'\nend\nsay q n\n",
+            stdout: "2pppppppp 2\n",
             allocates: true,
         },
         Row {

@@ -33,18 +33,26 @@ use rexx_exec::{Invocation, run_program};
 
 /// A program with a large live set, dropped, then a long tail of churn.
 ///
-/// The tails are `'v' || i` rather than `i` because a small integer is a
-/// tagged immediate and never reaches the heap at all -- a stem of 200,000 of
-/// those would occupy one slot for the stem and none for its contents, and
-/// this file would be measuring nothing.
+/// The tails are a string built from `i` rather than `i` because a small
+/// integer is a tagged immediate and never reaches the heap at all -- a stem
+/// of 200,000 of those would occupy one slot for the stem and none for its
+/// contents, and this file would be measuring nothing.
+///
+/// **The same hazard bit a second time, from a second immediate.** The tails
+/// read `'v' || i` and the churn value `'abc'` until short byte strings began
+/// travelling in the handle too, at which point both went the way of the
+/// small integer and this file collected nothing at all -- caught by these
+/// tests failing, which is what they are for. Every literal here is now wider
+/// than `ObjRef`'s inline capacity, and the reason is written down rather
+/// than the widths merely being what they are.
 const TRANSIENT_THEN_CHURN: &str = "\
 s. = 0
 do i = 1 to 200000
-  s.i = 'v' || i
+  s.i = 'vvvvvvvv' || i
 end
 drop s.
 do 1000000
-  yy = 'abc'
+  yy = 'abcdefghij'
 end
 say 'ok' yy
 ";
@@ -59,10 +67,10 @@ say 'ok' yy
 const LIVE_STAYS_LIVE: &str = "\
 s. = 0
 do i = 1 to 200000
-  s.i = 'v' || i
+  s.i = 'vvvvvvvv' || i
 end
 do 1000000
-  yy = 'abc'
+  yy = 'abcdefghij'
 end
 say 'ok' yy s.199999
 ";
@@ -92,7 +100,7 @@ fn run(text: &str) -> rexx_exec::Outcome {
 fn a_dead_transients_slots_are_reused_before_the_collector_runs_again() {
     let outcome = run(TRANSIENT_THEN_CHURN);
     assert_eq!(outcome.exit_code, 0);
-    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "ok abc\n");
+    assert_eq!(String::from_utf8_lossy(&outcome.stdout), "ok abcdefghij\n");
     assert!(
         outcome.collections > 0,
         "the program allocates 1.2 million values and collected nothing, so \
@@ -121,7 +129,7 @@ fn a_live_set_that_does_not_die_still_collects_as_it_grows() {
     assert_eq!(outcome.exit_code, 0);
     assert_eq!(
         String::from_utf8_lossy(&outcome.stdout),
-        "ok abc v199999\n",
+        "ok abcdefghij vvvvvvvv199999\n",
         "the stem must still be readable, which is what says the collector \
          did not sweep a live tail"
     );

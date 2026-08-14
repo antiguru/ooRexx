@@ -1864,13 +1864,19 @@ mod tests {
 
         // The adjacent success, and it is what pins the rule to *counted*
         // answers rather than to "anything that looks like a number": a
-        // substring of digits keeps its own bytes and stays a heap string,
-        // because those bytes are the value and no integer stands behind
-        // them. `SUBSTR('012345',1,3)` is `012`, which no `SmallInt` renders.
+        // substring of digits keeps its own bytes, because those bytes are
+        // the value and no integer stands behind them.
+        // `SUBSTR('012345',1,3)` is `012`, which no `SmallInt` renders.
+        //
+        // **Asserted as "not a `SmallInt`" rather than as "a heap object"**,
+        // which is what it used to say. Three bytes now travel in the handle
+        // itself, so the old spelling pinned the storage rather than the
+        // rule, and would have failed for a value that is still exactly as
+        // correct.
         let (handle, bytes) = call_handle(b"SUBSTR", &[b"012345", b"1", b"3"]);
         assert!(
-            matches!(handle.decode(), Decoded::Heap { .. }),
-            "a substring is not a counted answer"
+            !matches!(handle.decode(), Decoded::SmallInt(_)),
+            "a substring is not a counted answer, it is its own bytes"
         );
         assert_eq!(bytes, b"012");
     }

@@ -4532,3 +4532,75 @@ Four probes, all byte-identical to the oracle on stdout, on stderr and in exit s
 #### What is left on this path
 
 `PARSE ARG` still allocates its `Vec` and a copy per argument, and that is the one source where the `Vec` is doing real work. The source copy is still made for every clause; it is not obviously worth removing, and the arm that removed it is measured above.
+
+### Entry 59 -- the last free tag, and two thirds of every string leaving the heap
+
+Base `91b80a608`. The largest single movement in this series, and it came from asking what the heap is actually asked to hold rather than from making any part of it faster.
+
+#### What the measurement found first
+
+Every allocation on every axis, instrumented and counted by `Body` variant and by text length:
+
+| axis | allocated | Text | Num | Stem | text p50 | p90 | max | over `INLINE_BYTES` |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `rexxcps` | 515,444 | 92.5% | 6.4% | 1.1% | 3 | 21 | 65 | 7 |
+| `strings` | 18,000,001 | 100% | -- | -- | 3 | 46 | 46 | 0 |
+| `alloc4c` | 2,000,001 | 100% | -- | 1 | 4 | 10 | 11 | 0 |
+| `arith` | 3,469,314 | -- | 100% | -- | -- | -- | 20 digits | 0 |
+| `compound` | 1 | -- | -- | 1 | -- | -- | -- | 0 |
+
+The arena is 65,536 slots, 6.29 MB, on every one of them.
+
+**Two readings, and the second is the change.** The spill path barely exists -- seven values out of 476,598 exceed the inline capacity on `rexxcps` and none do anywhere else, so the uniform slot is not paying for long strings. It is paying **96 bytes to hold a three-byte median payload**. And the distribution is bimodal rather than smooth: `strings` produces texts of 3 bytes and of 46, nothing between.
+
+#### The change
+
+`ObjRef`'s tag had three kinds and four values. `0b11` named nothing, and now names a byte string carried in the handle: three bits of length and seven bytes of payload, with three bits over. **Nothing is taken from the slot index or the generation**, so neither budget moves.
+
+`Interp::text_bytes` is the single point a `Body::Text` is built, so the interception is one branch in one function. A string short enough costs no slot, no mark byte and no sweep pass.
+
+**The three sites that had to change were named by the compiler, not by a search.** There are 34 `Decoded::` matches in the tree; making the enum non-exhaustive broke `to_text`, `try_text` and `to_number`, and nothing else.
+
+* `try_text` answers `None`, for the reason it already answers `None` for a small integer: there is nothing outliving the call to borrow from.
+* `render`/`Rendered` already existed for exactly that case, so a caller wanting two operands' bytes at once copies into its own `Rendered`. Its `owned: Option<Vec<u8>>` becomes a three-arm `Carried`, and the inline arm allocates nothing.
+* `to_text` copies into a scratch field and hands back a borrow of it. **One slot is enough because `to_text` takes `&mut self`**: the borrow it returns holds the interpreter exclusively, so no second call can run to overwrite it while the first is live. The signature that makes that function awkward to call is the same one that makes a single slot sound, and the compiler enforces it rather than a convention.
+
+What is given up is the `num` parse cache, because a handle is `Copy` and has no shared mutable home for a lazy fill. That was measured before it was given up: `to_number` on a `Body::Text` is called 117,205 times on `rexxcps` and **zero times on `strings`, `arith`, `compound` and `varlookup`**, and of those 117,205 only 22,400 hit a cache the other 94,805 had filled.
+
+#### Instructions
+
+Five interleaved rounds per arm, both arms staged at one fixed binary path, minimum of each.
+
+| axis | base | head | difference | | span base | span head |
+|---|---:|---:|---:|---:|---:|---:|
+| `strings` | 32,571,638,992 | 30,471,323,584 | **-2,100,315,408** | **-6.448%** | 1,962 | 274 |
+| `rexxcps` | 20,512,852,132 | 19,250,488,265 | **-1,262,363,867** | **-6.154%** | 3,345,895 | 4,093,074 |
+| `alloc4c` | 6,862,773,537 | 6,466,233,994 | -396,539,543 | **-5.778%** | 194,977 | 200,100 |
+| `varlookup` | 42,123,633,322 | 41,800,633,586 | -322,999,736 | -0.767% | 1,185 | 694 |
+| `compound` | 18,238,266,421 | 18,073,255,843 | -165,010,578 | -0.905% | 823,277 | 2,101,343 |
+| `emptyloop` | 24,975,608,723 | 24,925,608,275 | -50,000,448 | -0.200% | 1,072 | 1,307 |
+| `arith` | 19,341,751,036 | 19,314,768,132 | -26,982,904 | -0.140% | 944 | 874 |
+
+**Every axis improves, including the four that were bounds for every change in this series.** `varlookup` and `emptyloop` move 323 million and 50 million instructions against spans of about a thousand -- and both were flat through entries 45 to 58.
+
+`arith` lands on a **third** state: entry 57 measured its two at 19,341,75x and 19,337,46x, and this reads 19,314,768,132, some 27 million below either. This change adds a field to `Interp`, so entry 57's 4.3 million artifact is inside this figure and cannot be separated from it; what can be said is that the movement is six times the artifact's size, not that all of it is work.
+
+`heaptrack` on the pinned `rexxcps` reads 466,244 to 410,615, and **that number understates the change by a lot**: a short `Bytes` was already inline in its slot, so it cost no `malloc` at all. What this removes is slots, mark bytes and sweep passes, which `heaptrack` does not count.
+
+#### Behaviour
+
+**1493 tests pass, and six had to be restated first -- every one of them asserting the old representation.**
+
+Three used "this is a heap object" as a proxy for something else. `a_counted_answer_is_tagged_rather_than_a_heap_string` is the clearest: it pins that `SUBSTR('012345',1,3)` is *not* a counted answer, because `012` is its own bytes and no `SmallInt` renders it. That rule is untouched; the spelling asserted the storage, so it now asserts "not a `SmallInt`" instead.
+
+Three said "this program allocates" and no longer did. **The GC stress fixtures went quiet rather than red** -- `zz = 'x' || k`, `value('a.j')`, `yy = 'abc'` all stopped reaching the heap, so collect-on-every-allocation had nothing to fire on. `collect_policy.rs` had already been bitten by this once and says so in its own header: the tails are `'v' || i` rather than `i` "because a small integer is a tagged immediate and never reaches the heap at all -- this file would be measuring nothing." Same hazard, second immediate. Every literal in those fixtures is now wider than the handle's capacity, each new expected output checked against the oracle, and the reason is written beside the widths.
+
+The committed list of subset programs that allocate nothing grew from four entries to nineteen. That assertion exists to force a decision when it moves, and the decision is that short strings are most strings.
+
+Five probes against the oracle are byte-identical on stdout, stderr and exit status: the `PARSE` probe plain and traced, the nesting probe plain and traced, and the argument, number, stem and string probes. The search probe differs on **one** line, `pos('an', h, 6, 4)` -- entry 54's divergence, and the base arm was run on the same probe and differs identically, which is what says it is not this change's.
+
+**Two mutation witnesses, and the second is the one worth having.** Decoding the length as the capacity rather than reading the field fails 337 tests and takes an allocation unbounded, which `memcap 8G` caught at rc 137 rather than the machine. Refusing the last admissible length -- `>` to `>=`, so a seven-byte string takes a slot again -- **changes no output anywhere** and is still caught, by the encoding's boundary test, by `a_value_short_enough_is_the_handle_and_has_no_slot`, and by the zero-collection list. A representation change that no behaviour can see is exactly what this series risks shipping unnoticed, and those three assertions are what see it.
+
+#### What is deliberately not done
+
+The other free space is `0b10`: `NIL` is one value occupying a whole 62-bit tag, and tightening `decode` to "zero payload is `NIL`" would open a second inline kind -- five bytes plus a seventeen-bit value, which is the widest split that lets the value field cover any string the byte field can hold. That would restore a parse cache for short numeric strings. It is not built here because the cache it would restore was measured at 22,400 hits on one axis and none on four, and because this change is worth measuring alone before a second one is laid on top of it.

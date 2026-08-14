@@ -1533,6 +1533,21 @@ struct Interp {
     /// call that returns early through `?` leaves this empty and the next
     /// taker allocates.
     value_buffer: Vec<Option<ObjRef>>,
+    /// Where an inline string's bytes are put so that [`Interp::to_text`]
+    /// can hand back a borrow of them.
+    ///
+    /// **A `Cow::Owned` here would undo the encoding it serves.** An inline
+    /// string is the commonest value there is, and `to_text` is how most of
+    /// them are read; allocating a `Vec` per read would give back everything
+    /// carrying the bytes in the handle saves.
+    ///
+    /// **One slot is enough because `to_text` takes `&mut self`.** The borrow
+    /// it returns holds the interpreter exclusively, so no second call can
+    /// run to overwrite this while the first result is live -- the compiler
+    /// enforces the invariant rather than a convention doing it. A reader
+    /// that wants two values' bytes at once goes through `render`, which
+    /// copies into its own `Rendered` and never touches this.
+    text_scratch: [u8; rexx_core::INLINE_TEXT],
     /// A buffer lent out for building a builtin's result, and handed back.
     ///
     /// **The same lending as [`Interp::key_buffer`], for a waste of the same
@@ -2249,6 +2264,7 @@ impl Interp {
             roots: RootSet::new(),
             key_buffer: Vec::new(),
             value_buffer: Vec::new(),
+            text_scratch: [0; rexx_core::INLINE_TEXT],
             result_buffer: std::cell::Cell::new(Vec::new()),
             activations: Vec::new(),
             programs: Vec::new(),

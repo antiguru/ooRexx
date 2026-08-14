@@ -33,7 +33,7 @@
 
 use crate::Interp;
 use rexx_core::{
-    BehaviourId, Body, Bytes, Decoded, INLINE_BYTES, NotNumeric, ObjRef, SMALL_INT_MAX,
+    BehaviourId, Body, Bytes, Decoded, INLINE_BYTES, InlineText, NotNumeric, ObjRef, SMALL_INT_MAX,
     SMALL_INT_MIN,
 };
 use rexx_num::{Form, Number};
@@ -170,7 +170,23 @@ impl Interp {
 
     /// The one place a `Body::Text` is built, so the `num` cache's initial
     /// state is stated once.
+    ///
+    /// **A string short enough is not built at all.** `ObjRef::inline_text`
+    /// carries up to `INLINE_TEXT` bytes in the handle, so those values cost
+    /// no slot, no mark byte and no sweep. Measured over the benchmark axes,
+    /// that is about two thirds to three quarters of every string this
+    /// interpreter creates -- the length distribution is bimodal, a median of
+    /// three bytes with the next cluster far above the inline capacity.
+    ///
+    /// The one thing given up is the `num` cache: a handle is `Copy`, so
+    /// there is no shared mutable home for a lazy parse. Measured on the only
+    /// axis that asks a string for a number at all, that cache was serving
+    /// 22,400 repeat asks against 94,805 first ones, so what is lost is a
+    /// fifth of a quarter of the calls on one axis and nothing on four.
     fn text_bytes(&mut self, bytes: Bytes) -> ObjRef {
+        if let Some(inline) = ObjRef::inline_text(&bytes) {
+            return inline;
+        }
         self.alloc_with(BehaviourId::STRING, Body::Text { bytes, num: None })
     }
 
@@ -282,6 +298,21 @@ impl Interp {
         match value.decode() {
             Decoded::Nil => return Cow::Borrowed(b"The NIL object"),
             Decoded::SmallInt(n) => return Cow::Owned(n.to_string().into_bytes()),
+            // Copied into a scratch field and borrowed back out, rather than
+            // returned as an owned `Vec`, because a short string is the most
+            // common value there is and an allocation here would give back
+            // everything inlining them saves.
+            //
+            // **One buffer is enough, and `&mut self` is what makes that
+            // sound.** The borrow this returns holds `self` exclusively, so
+            // no second call can run to overwrite it while it is live -- the
+            // signature that makes this function awkward to call is the same
+            // one that makes a single slot safe.
+            Decoded::Text(inline) => {
+                let len = inline.len();
+                self.text_scratch[..len].copy_from_slice(&inline);
+                return Cow::Borrowed(&self.text_scratch[..len]);
+            }
             Decoded::Heap { .. } => {}
         }
 
@@ -371,6 +402,10 @@ impl Interp {
         match value.decode() {
             Decoded::Nil => return Some(b"The NIL object"),
             Decoded::SmallInt(_) => return None,
+            // A third cause of `None`, and the same one as a small integer:
+            // the bytes live in the handle, which is a `Copy` local here, so
+            // there is nothing outliving this call to borrow from.
+            Decoded::Text(_) => return None,
             Decoded::Heap { .. } => {}
         }
 
@@ -406,14 +441,27 @@ impl Interp {
     /// [`try_text`]: Interp::try_text
     /// [`to_text`]: Interp::to_text
     pub(crate) fn render(&mut self, value: ObjRef) -> Rendered {
-        if self.try_text(value).is_some() {
-            return Rendered { value, owned: None };
+        // Checked before `try_text`, because an inline string is the one
+        // value whose bytes are neither borrowable nor worth an allocation:
+        // they are copied into the `Rendered` itself, which the caller
+        // already owns.
+        if let Decoded::Text(inline) = value.decode() {
+            return Rendered {
+                value,
+                carried: Carried::Inline(inline),
+            };
         }
-        let owned = match self.to_text(value) {
-            Cow::Borrowed(_) => None,
-            Cow::Owned(bytes) => Some(bytes),
+        if self.try_text(value).is_some() {
+            return Rendered {
+                value,
+                carried: Carried::Borrowable,
+            };
+        }
+        let carried = match self.to_text(value) {
+            Cow::Borrowed(_) => Carried::Borrowable,
+            Cow::Owned(bytes) => Carried::Owned(bytes),
         };
-        Rendered { value, owned }
+        Rendered { value, carried }
     }
 
     /// Converts any value to a `Number`, or `NotNumeric` if it can never be
@@ -460,6 +508,13 @@ impl Interp {
         match value.decode() {
             Decoded::Nil => Err(NotNumeric),
             Decoded::SmallInt(n) => Ok(Number::from_i64(n)),
+            // Parsed on every ask, where a `Body::Text` parses once and
+            // caches it. See `text_bytes` for what that trade was measured
+            // at, and why the cache turned out to be worth so little.
+            Decoded::Text(inline) => match std::str::from_utf8(&inline) {
+                Ok(text) => Number::parse(text).ok_or(NotNumeric),
+                Err(_) => Err(NotNumeric),
+            },
             Decoded::Heap { .. } => {
                 // Mirrors `to_text`'s own stem redirect above: decided, and
                 // the borrow on `self.heap` dropped, before the recursive
@@ -669,7 +724,19 @@ pub(crate) fn exact_small_int(value: i64, digits: u64) -> Option<ObjRef> {
 /// twice.
 pub(crate) struct Rendered {
     value: ObjRef,
-    owned: Option<Vec<u8>>,
+    carried: Carried,
+}
+
+/// What [`Interp::render`] had to take a copy of, if anything.
+enum Carried {
+    /// Nothing: the bytes are where they were and `try_text` reaches them.
+    Borrowable,
+    /// A rendering that existed nowhere before -- a small integer's digits.
+    Owned(Vec<u8>),
+    /// Bytes that live in the handle. Copied here rather than allocated,
+    /// which is what keeps an inline string free at a call site that needs
+    /// several operands' bytes at once.
+    Inline(InlineText),
 }
 
 impl Rendered {
@@ -679,9 +746,10 @@ impl Rendered {
     /// The shared borrow is the point: several of these can be live at once,
     /// which is what lets a caller read two operands without copying either.
     pub(crate) fn text<'a>(&'a self, interp: &'a Interp) -> &'a [u8] {
-        match &self.owned {
-            Some(bytes) => bytes,
-            None => interp
+        match &self.carried {
+            Carried::Owned(bytes) => bytes,
+            Carried::Inline(inline) => inline,
+            Carried::Borrowable => interp
                 .try_text(self.value)
                 .expect("`render` carried no bytes, so it left them borrowable"),
         }
@@ -698,6 +766,7 @@ fn small_int_for(value: &Number, created_digits: u32) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rexx_core::INLINE_TEXT;
     use rexx_num::DivOp;
     use std::collections::HashMap;
 
@@ -895,9 +964,22 @@ mod tests {
     /// fits is *not* a separate allocation -- checked by asking whether the
     /// bytes `to_text` hands back lie inside the arena slot they came from,
     /// which is the observable difference and the whole point of the change.
+    ///
+    /// **The sweep starts above `INLINE_TEXT`**, because below it there is no
+    /// slot to be in: those values are the handle. The boundary that rule
+    /// owns is pinned by
+    /// `a_value_short_enough_is_the_handle_and_has_no_slot` beside this, so
+    /// the two lengths are asserted separately rather than one test quietly
+    /// covering whichever arm the constants happen to select.
     #[test]
     fn a_short_value_holds_its_bytes_in_the_slot_and_a_long_one_does_not() {
-        for len in [0, 1, INLINE_BYTES - 1, INLINE_BYTES, INLINE_BYTES + 1, 400] {
+        for len in [
+            INLINE_TEXT + 1,
+            INLINE_BYTES - 1,
+            INLINE_BYTES,
+            INLINE_BYTES + 1,
+            400,
+        ] {
             let source: Vec<u8> = (0..len).map(|i| b'a' + (i % 26) as u8).collect();
             let mut interp = Interp::new();
 
@@ -1153,7 +1235,9 @@ mod tests {
             },
         );
         assert_eq!(interp.try_text(stem), None, "the default is a SmallInt");
-        let text = interp.text(b"held");
+        // Long enough to have a slot: a shorter one lives in the handle and
+        // so has nothing to borrow, which is the case asserted below.
+        let text = interp.text(b"held for long enough to need a slot");
         let stem_of_text = interp.alloc_with(
             BehaviourId::STEM,
             Body::Stem {
@@ -1162,7 +1246,55 @@ mod tests {
                 tails: HashMap::new(),
             },
         );
-        assert_eq!(interp.try_text(stem_of_text), Some(&b"held"[..]));
+        assert_eq!(
+            interp.try_text(stem_of_text),
+            Some(&b"held for long enough to need a slot"[..])
+        );
+
+        // The third cause of `None`, and the one this encoding adds: the
+        // bytes are in the handle, which is a `Copy` local, so a shared
+        // borrow has nothing to point at. `to_text` still answers.
+        let inline = interp.text(b"held");
+        assert!(matches!(inline.decode(), Decoded::Text(_)));
+        assert_eq!(interp.try_text(inline), None, "the bytes are the handle");
+        assert_eq!(&*interp.to_text(inline), b"held");
+    }
+
+    /// The other side of that boundary: a value short enough occupies no
+    /// slot at all.
+    ///
+    /// **Asserted on the arena's own count, not only on the tag.** A tag
+    /// check alone would pass for an encoding that also allocated, which is
+    /// the failure this change exists to avoid; `live_count` standing still
+    /// across the construction is the claim that matters.
+    #[test]
+    fn a_value_short_enough_is_the_handle_and_has_no_slot() {
+        for len in 0..=INLINE_TEXT {
+            let source: Vec<u8> = (0..len).map(|i| b'a' + (i % 26) as u8).collect();
+            let mut interp = Interp::new();
+            let before = interp.heap.live_count();
+
+            for value in [interp.text(&source), interp.text_owned(source.clone())] {
+                assert!(
+                    matches!(value.decode(), Decoded::Text(_)),
+                    "carried in the handle at {len}, got {:?}",
+                    value.decode()
+                );
+                assert_eq!(&*interp.to_text(value), &source[..], "bytes at {len}");
+            }
+            assert_eq!(
+                interp.heap.live_count(),
+                before,
+                "no slot taken at {len}, on either entry point"
+            );
+        }
+
+        // One byte more is a heap object again, which is what says the test
+        // above is reading a boundary rather than a constant.
+        let over: Vec<u8> = vec![b'z'; INLINE_TEXT + 1];
+        let mut interp = Interp::new();
+        let value = interp.text(&over);
+        assert!(matches!(value.decode(), Decoded::Heap { .. }));
     }
 
     #[test]
