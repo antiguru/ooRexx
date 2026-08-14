@@ -2,7 +2,11 @@
 
 **Goal:** remove the per-clause allocations `Interp::parse_strings` makes, which are the largest identifiable allocation cause left in `samples/rexxcps.rex`.
 
-**Status:** open, not started. Base `3aba1cacd`. Entry 56 of `phase-4f-record.md` took the smaller half of `PARSE` (the trigger operand) and named this as the larger one.
+**Status:** done, and half of it was reverted. Entry 58 of `phase-4f-record.md` carries the measurement; entry 57 carries the do-nothing control this file asked for below.
+
+Candidate B shipped and is worth **-0.437%** of `rexxcps`: the one-element `Vec` is gone, replaced by a `ParseStrings` enum whose `One` arm holds the string directly.
+Candidate A was built, measured and **reverted**: lending the source copy removed 33,600 more allocations and came out 8.5 million instructions behind the arm without it.
+The rest of this file is what was known before either was tried, and is kept because the traps in it are still true.
 
 ## What is measured, and by whom
 

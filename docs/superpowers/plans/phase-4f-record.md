@@ -4466,3 +4466,69 @@ So entry 55's `arith` line is **not attributable**, and this entry withdraws the
 The other six axes give their run-to-run spans and no second state: `strings`, `emptyloop` and `varlookup` resolve to about a thousand instructions in tens of billions, and `alloc4c`, `compound` and `rexxcps` are bounded by their own spans, which are large for their own reasons and were large before this control.
 
 **What this does not license.** A movement larger than an axis's floor is still not automatically the mechanism you have in mind -- the floor is a necessary bar, not a sufficient one. And this is one control of one shape: it says what a struct-width perturbation is worth, not what every layout perturbation is worth.
+
+### Entry 58 -- `PARSE`'s two allocations, one of which was worth having
+
+Base `e71794398`. Entry 56 named this the larger half of `PARSE` and `2026-08-14-parse-source-buffers.md` carries the plan: `parse_strings` allocated twice for every clause, an owned copy of the source string and the one-element `Vec` that carried it, together about 95,000 of the pinned `samples/rexxcps.rex`' 505,447 allocations.
+
+**Both halves were built, and only one of them is kept.**
+
+#### The half that ships: the container
+
+`parse_strings` returned `Vec<Vec<u8>>` and `exec_parse` consumed it through `into_iter`. **Every source but `ARG` produces exactly one string**, so that was an allocation per clause for a container never asked to hold a second element.
+
+It returns a `ParseStrings` now: `One(Option<Vec<u8>>)` for the single-string sources, `Many(std::vec::IntoIter<Vec<u8>>)` for `PARSE ARG`, which is the one source with more than one string and keeps the `Vec` it has to build anyway. A template past the first takes an emptied slot and gets `None`, which is exactly the null-string rule `next_template` already wanted from the iterator running out.
+
+#### The half that does not: lending the source copy
+
+A `parse_buffer` field on `Interp` in the shape `key_buffer` uses, taken in `parse_strings` after the source is evaluated, handed to the `Cursor`, and given back at the end of the clause and at every comma fence -- with `Cursor::into_string` added to get it out again.
+
+**It works, it removes the allocations it was built to remove, and it does not pay.** It is measured below and reverted.
+
+#### Allocations, `heaptrack` on the pinned program
+
+| arm | allocations | |
+|---|---:|---:|
+| base | 505,446 | |
+| container only | 466,246 | -39,200 |
+| container and lending | 432,646 | -33,600 |
+
+#### Instructions
+
+Five interleaved rounds per arm, all three arms staged at one fixed binary path, minimum of each. The two changes were measured **separately and in combination**, which is entry 52's rule and is what decided this entry.
+
+| axis | base | container | lending too | base to container | | container to lending | |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `rexxcps` | 20,602,982,072 | 20,512,857,013 | 20,521,367,273 | **-90,125,059** | **-0.437%** | +8,510,260 | +0.041% |
+| `compound` | 18,238,626,507 | 18,238,267,543 | 18,237,905,600 | -358,964 | bound | -361,943 | bound |
+| `alloc4c` | 6,862,847,429 | 6,862,714,945 | 6,862,722,412 | -132,484 | bound | +7,467 | bound |
+| `arith` | 19,341,750,662 | 19,341,751,078 | 19,337,465,189 | +416 | bound | **-4,285,889** | **artifact** |
+| `strings` | 32,571,639,072 | 32,571,639,419 | 32,571,639,729 | +347 | bound | +310 | bound |
+| `varlookup` | 42,123,633,548 | 42,123,633,317 | 42,123,633,936 | -231 | bound | +619 | bound |
+| `emptyloop` | 24,975,609,170 | 24,975,608,961 | 24,975,609,157 | -209 | bound | +196 | bound |
+
+Spans, in the same order of arms: `rexxcps` 1,474,888 / 3,327,572 / 5,424,389; `compound` 925,335 / 2,100,515 / 2,820,599; `alloc4c` 99,915 / 209,525 / 265,716; the other four are under 1,100 throughout.
+
+**The container is worth -0.437% of `rexxcps` and the lending is worth nothing.** The second arm removes 33,600 more allocations than the first and comes out 8.5 million instructions *behind* it. At entry 50's exchange rate those allocations were worth a few million; the take, the give, the `mem::replace` at the fence and the extra field cost at least that back.
+
+Whether the lending arm truly *costs* is not attributable, and the previous entry is why: it adds a field to `Interp`, and entry 57's control moved an axis 4.3 million instructions by adding a field to `Interp` and nothing else. The honest reading is that it does not pay, which is enough to revert it and is a smaller claim than saying it is slower.
+
+#### Entry 57's control predicting a reading before it was taken
+
+Entry 57 said the next `PARSE` change would add a field to `Interp`, would land `arith` in its low state, and that this would be a bound rather than a saving. **It did, and the split measurement shows it cleanly**: the container arm changes no struct and moves `arith` by +416; the lending arm adds the field and moves it by -4,285,889. The same 4.285 million, on the arm that has the mechanism the control identified and not on the arm that does not.
+
+That is the control being used the way it was built to be used, rather than a movement being explained after the fact.
+
+#### One refinement to entry 57, from a thing found here
+
+Entry 57 says a no-op edit measures nothing. **A doc-comment edit does change the binary** -- correcting one comment in this file gave a different `sha256` -- because `debug = true` puts line tables in and the comment moves every line after it. Its `.text` is byte-identical, which is why the claim about *instructions* stands and why `.text` rather than the file is what a control should be compared on.
+
+#### Behaviour
+
+Four probes, all byte-identical to the oracle on stdout, on stderr and in exit status: entry 56's `PARSE` probe plain and under `TRACE R`, and a new probe written for this change's own hazard -- a comma fence on a single-string source, a trigger operand whose expression calls a routine that itself parses, two levels of that nesting, a source expression that parses, the same clause repeated in a loop, a raise between a take and a give followed by a clause that has to work anyway, and a long source followed by a short one -- also plain and under `TRACE R`.
+
+**And the new probe was shown to be necessary, not merely able to fail.** Making `ParseStrings::One` clone its slot instead of taking it diverges on the new probe and its traced twin, and **entry 56's probe does not notice at all** -- `1[alpha][beta GAMMA delta 42 epsilon][alpha][beta GAMMA delta 42 epsilon]` where the oracle gives two null strings. The lending arm got its own witness while it existed: dropping the `clear()` from `take_parse_buffer` diverges on all four probes. Both mutations were reverted from a backup, `sha256sum -c`'d, rebuilt, and the probes re-run to the byte.
+
+#### What is left on this path
+
+`PARSE ARG` still allocates its `Vec` and a copy per argument, and that is the one source where the `Vec` is doing real work. The source copy is still made for every clause; it is not obviously worth removing, and the arm that removed it is measured above.

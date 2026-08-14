@@ -111,6 +111,35 @@ fn is_blank(byte: u8) -> bool {
     byte == b' ' || byte == b'\t'
 }
 
+/// The strings one `PARSE` clause will consume, in template order.
+///
+/// **Every source but `ARG` produces exactly one string**, and carrying that
+/// one string in a `Vec` cost an allocation per clause for a container that
+/// was never asked to hold a second element. Measured with `heaptrack` on
+/// `samples/rexxcps.rex`, whose loop parses on every iteration, removing it
+/// took the program from 505,446 allocations to 466,246.
+///
+/// `ARG` is the one source with more than one string, so it keeps the `Vec` it
+/// has to build anyway.
+enum ParseStrings {
+    /// A single-string source. The slot empties on the first take, so a
+    /// template past the first parses the null string -- which is the rule
+    /// [`Interp::next_template`] wants and gets here for free.
+    One(Option<Vec<u8>>),
+    /// `PARSE ARG`: one string per argument of the running activation.
+    Many(std::vec::IntoIter<Vec<u8>>),
+}
+
+impl ParseStrings {
+    /// The next string, or `None` once they are spent.
+    fn next(&mut self) -> Option<Vec<u8>> {
+        match self {
+            ParseStrings::One(string) => string.take(),
+            ParseStrings::Many(strings) => strings.next(),
+        }
+    }
+}
+
 /// One template's parse string and the five positions the triggers move.
 ///
 /// Owns its string because the comma fence replaces it wholesale and because
@@ -403,7 +432,7 @@ impl Interp {
     /// is the operand expression `rexx-parse` recorded.
     pub(crate) fn exec_parse(&mut self, code: &Code<'_>, parse: &Parse) -> Result<(), Failure> {
         let indent = self.clause_state.current_value_indent;
-        let mut strings = self.parse_strings(code, parse, indent)?.into_iter();
+        let mut strings = self.parse_strings(code, parse, indent)?;
         let mut cursor = self.next_template(&mut strings, parse, indent);
 
         for entry in &parse.template {
@@ -430,7 +459,7 @@ impl Interp {
     /// are unchanged by both, while `'61'x` upcases to `'41'x`.
     fn next_template(
         &mut self,
-        strings: &mut std::vec::IntoIter<Vec<u8>>,
+        strings: &mut ParseStrings,
         parse: &Parse,
         indent: usize,
     ) -> Cursor {
@@ -461,7 +490,7 @@ impl Interp {
         code: &Code<'_>,
         parse: &Parse,
         indent: usize,
-    ) -> Result<Vec<Vec<u8>>, Failure> {
+    ) -> Result<ParseStrings, Failure> {
         let (keyword, value) = match &parse.source {
             // `PARSE VALUE WITH template`, with no expression at all, is
             // legal and parses the null string.
@@ -502,7 +531,7 @@ impl Interp {
                     });
                 }
                 self.call_context.arguments = arguments;
-                return Ok(strings);
+                return Ok(ParseStrings::Many(strings.into_iter()));
             }
             // The two sources that read a line rather than evaluating a value.
             // The split between them is entirely in which reader is called --
@@ -520,7 +549,7 @@ impl Interp {
             ParseSource::LineIn => ("LINEIN", self.linein_line()),
         };
         self.trace_keyword(indent, keyword, &value);
-        Ok(vec![value])
+        Ok(ParseStrings::One(Some(value)))
     }
 
     /// `PARSE VAR`'s source: the variable read, in all three name shapes.
