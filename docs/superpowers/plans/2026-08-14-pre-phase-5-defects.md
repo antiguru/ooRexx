@@ -408,6 +408,38 @@ Wrong delivery order and a different `SIGL`, on stdout, `rc 0` on both sides. `d
 
   **A `DO UNTIL` whose condition raises delivers EARLIER here than on the oracle, which no other shape in this plan does.** With `do until raiser1() > 0` on line 4, `nop` on 5, `end` on 6 and `say 'after' zv` on 7, where `raiser1` raises the first trapped condition and its handler requeues a second: the oracle prints `after unset` then `G ran 7`, and both engines here print `G ran 6` then `after set`. Not the same direction as everything above, so do not assume one fix moves it -- measure it, and if this task does not close it, say so.
 
+- [ ] **Step 1c: the second mechanism, which has its own named program and is NOT the one above.** The whole-branch review found it and the controller reproduced it byte for byte. An empty `do` / `end` with a *double* requeue -- a handler that requeues, whose own handler requeues again -- with `do` on line 5, `end` on 6 and `say 'after' zn` on 7:
+
+```rexx
+call on user zx name h
+call on user zy name g
+call on user zw name k
+zn = raiser1()
+do
+end
+say 'after' zn
+exit
+raiser1:
+raise user zx return 5
+h:
+raise user zy return 1
+g:
+say 'G ran' sigl
+raise user zw return 1
+k:
+say 'K ran' sigl
+return
+```
+
+```
+oracle       G ran 5 / K ran 6 / after 5
+this crate   G ran 5 / after 5 / K ran 7     (both engines)
+```
+
+The first delivery agrees. The **second** is owed at the `END`'s own clause -- `K ran 6` names it -- and this crate has no boundary there at all, so it falls past `say 'after'` and lands at line 7, after that line has printed. **This is the elided-`END` mechanism: a boundary that is genuinely absent, not misplaced.** So `DO` carries two distinct defects, and the empty-body control in Step 1 pins only the first: it agrees for one requeue and diverges for two.
+
+Pre-existing, confirmed by a control build with every behavioural change of this plan reverted. **Decide whether this task closes one mechanism or both, and say which.** A fix for the header clause's position does nothing for a missing `END` boundary.
+
 - [ ] **Step 2: decide whether the plain `SELECT` case is the same fix or a different one.** The two are inverted, which is why they are probably two fixes: a plain `SELECT` has its boundary in the right *place* and settles it at the wrong *level* (`SIGL` already names the right clause; only the indent moves), because `settle_block_indent` lives in `Interp::select_case` and a caseless `SELECT` never reaches it. A plain `DO` has the right level and the wrong place. Task 5 recorded both. **These may be one defect or two, and Task 5's own experience is that the "same defect one construct over" hypothesis was refuted once already.** Measure before assuming; if they are one, both transcripts must move together, and if they are two, say which this task closes.
 
 - [ ] **Step 3: write the failing test**, comparing stdout and exit status with no `TRACE` in the program. Run it and confirm it fails.
