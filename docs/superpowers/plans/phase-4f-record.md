@@ -3423,3 +3423,56 @@ The differences are stated as differences because each is outside its own spans 
 
 Task 2 is the `PARSE` target's own slot, which is what this plan exists for: `parse_template.rs` passes a literal `None` for 2,800,003 of the 3,080,203 `slot_of` calls entry 32 counted on `rexxcps`.
 That call site now reads a slice rather than a map, so the win Task 2 measures is the removal of the name hash alone.
+
+### Entry 37 -- the `PARSE` target's own slot, and the first real control group
+
+Plan: `docs/superpowers/plans/2026-08-13-parse-target-slots.md`, Task 2 of two.
+Base `f803fbf96`, which is entry 36's head.
+
+#### The change
+
+`parse_template.rs`'s target arm passed a literal `None` for the slot and said in its own comment why: no compiler resolves a `PARSE` target, because nothing promotes the instruction.
+True about the compiler and false about the plan.
+`Plan::build` walks every instruction and binds the names each one writes, `note_parse` included, so the answer was already there and was being recomputed from the name on every firing.
+The arm now reads it, **for a `Variable`-shaped target only**: a stem-shaped or compound-shaped target takes its slot from the plan's `CompoundName` entry inside `assign_expr_target`, whose stem and compound arms assert this argument is `None`.
+Those asserts were landed by entry 33's fix round against exactly this call site, and they did not fire.
+
+#### Six axes that execute none of it, which is what makes this the cleanest measurement of the family
+
+Every earlier entry in this family had to say that no control axis existed, because every axis resolves variables.
+This change is reached only through `PARSE`, `ARG` and `PULL`, and of the workloads only `samples/rexxcps.rex` contains any.
+
+`perf stat -e instructions:u`, six interleaved rounds per arm, both arms staged at one fixed binary path, from a fresh empty directory, minimum of each arm.
+
+| axis | base `f803fbf96` | head | difference | | span base | span head |
+|---|---|---:|---:|---:|---:|---:|
+| `rexxcps` | 23,989,868,293 | 23,242,134,238 | -747,734,055 | **-3.117%** | 6,186,396 | 6,457,240 |
+| `emptyloop` | 25,075,609,140 | 25,075,609,257 | +117 | bound | 622 | 711 |
+| `varlookup` | 42,123,633,595 | 42,123,633,402 | -193 | bound | 995 | 651 |
+| `arith` | 20,178,736,547 | 20,178,736,720 | +173 | bound | 1,316 | 1,174 |
+| `strings` | 41,904,584,463 | 41,904,584,940 | +477 | bound | 1,851 | 865 |
+| `compound` | 24,157,809,748 | 24,158,269,459 | +459,711 | bound | 2,980,540 | 2,759,654 |
+| `alloc4c` | 7,727,666,884 | 7,727,682,076 | +15,192 | bound | 131,951 | 65,088 |
+
+**Every control axis moved less than its own same-binary spread**, so each is a bound and none is a difference, and the layout drift earlier entries had to leave unattributed does not appear here at all.
+`rexxcps` moved 115 times its wider span.
+
+**The trap this plan was written around did not recur.** Entry 32 measured a literal `None` replaced by a value at `bind_control`'s call site costing 2 instructions on every pass of every controlled loop, including loops that never entered the changed arm. `emptyloop` and `varlookup` were gates on this task for that reason, and both sat inside their spreads.
+
+#### The count afterwards, and what is left
+
+`Interp::slot_of` instrumented at head and run on `samples/rexxcps.rex` at `count=100`/`averaging=100`: the count lands between 280,000 and 281,000, against **3,080,203** when entry 32 measured it.
+Entry 32 predicted the remainder by naming its parts -- `RESULT` at 140,199 and `SIGL` at 139,999, plus the startup one-offs, which is 280,200.
+**The prediction and the measurement agree**, so what is gone is precisely the `PARSE` targets and nothing else went with them.
+
+What remains is the shape entry 32 called different in kind: `Interp::set_sigl` and the `CALL` return path reach `assign_by_name` from a run-time byte string with no symbol to hang a slot on.
+Removing those means giving the activation dedicated fields or well-known slots, which is not a member of this family.
+
+#### Behaviour
+
+`samples/rexxcps.rex` under both arms and **both engines** produces identical output once its own timing lines are excluded, identical stderr and identical exit status.
+Every other axis was compared byte for byte under entry 36 and is untouched here.
+
+#### What this entry does not claim
+
+The saving divided by the resolutions removed is not quoted, because the count at this base was measured only at head; entry 32's 2,800,003 was taken at a different commit, and dividing one entry's numerator by another's denominator is the arithmetic this record has already corrected once.

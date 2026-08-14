@@ -66,7 +66,7 @@
 use crate::error::{Failure, Raised};
 use crate::{Code, Interp, Loud};
 use rexx_core::ObjRef;
-use rexx_parse::{Parse, ParseSource, ParseTrigger, TriggerKind};
+use rexx_parse::{ExprKind, Parse, ParseSource, ParseTrigger, TriggerKind};
 
 /// The platform name `PARSE SOURCE`'s first word carries.
 ///
@@ -671,6 +671,27 @@ impl Interp {
             self.roots.push_temp(value);
             match target {
                 Some(target) => {
+                    // **The slot the upfront pass already bound this target
+                    // to.** No compiler resolves a `PARSE` target -- nothing
+                    // promotes the instruction -- but `Plan::build` walks
+                    // every instruction of the body and binds the names each
+                    // one writes, `note_parse` included, so the answer exists
+                    // here and used to be recomputed from the name on every
+                    // firing. Measured on `samples/rexxcps.rex` before this
+                    // changed: of the `slot_of` calls that program makes,
+                    // 2,800,003 were `PARSE` targets and every one of them
+                    // resolved to the slot `by_symbol` already held.
+                    //
+                    // **A `Variable` target only.** A stem-shaped or
+                    // compound-shaped target takes its slot from the plan's
+                    // own `CompoundName` entry inside `assign_expr_target`,
+                    // and those two arms assert that this argument is `None`
+                    // -- the guard exists because this is the call site most
+                    // likely to break it.
+                    let at = match &target.kind {
+                        ExprKind::Variable(id) => code.slot_for(*id),
+                        _ => None,
+                    };
                     // Always `Some`: this is a borrow of the parse source
                     // rather than a fresh copy of the assigned value, so
                     // there is nothing here for the `Option` to guard
@@ -682,10 +703,7 @@ impl Interp {
                         value,
                         Some(&cursor.string()[piece.clone()]),
                         indent,
-                        // No compiler resolved a `PARSE` target: nothing
-                        // promotes the instruction, so the write resolves its
-                        // own slot.
-                        None,
+                        at,
                     )?;
                     // The `TRACE R` half of the pair -- see this module's own
                     // `exec_parse` doc for why it is a choice of prefix and
