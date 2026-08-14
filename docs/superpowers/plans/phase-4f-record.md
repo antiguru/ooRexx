@@ -4421,3 +4421,48 @@ A probe over the trigger kinds -- a string pattern, a caseless one, absolute, re
 `parse_strings` allocates twice per `PARSE` clause and neither is touched here: an owned copy of the source string, which `Cursor` holds across the calls back into `&mut self` that the assignments make, and the one-element `Vec` returned to carry it. About 95,000 of the pinned program's remaining 505,447.
 
 The copy could be lent and handed back at the end of the clause, and the outer `Vec` could be a lent buffer indexed rather than consumed by `into_iter`. Both are real changes to `exec_parse`'s shape rather than gating, and neither is attempted here.
+
+### Entry 57 -- the do-nothing control, and what `arith` has been doing
+
+Base `34ded1fed`. Entries 47, 48 and 55 each recorded an axis moving outside its own spans with no mechanism on that axis, and each said so without being able to say what the movement was worth. This entry measures the floor those readings needed.
+
+#### What the control is
+
+**A field on `Interp` and its two accessors, present, initialised, and called from nowhere.** `parse_buffer: Vec<u8>` beside `result_buffer`, `take_parse_buffer`/`give_parse_buffer` beside the `PARSE` code, both `#[allow(dead_code)]`. It is the exact shape of every buffer-lending change in this series, with the lending removed: the struct grows, every field after it moves, the initialiser and the drop glue grow, and no instruction on any benchmark path is added or removed.
+
+**Two earlier controls are ruled out first, by measurement rather than by argument.**
+
+* **A rebuild is not a control.** Touching a source file and rebuilding gives a **byte-identical** binary -- `1b6c59bf085e788265ef571d633b8004da1ffed81da448cdbab640e53c6697b7` before and after, and again after the control edit was reverted. Under `lto = "fat"` with `codegen-units = 1` this build is reproducible, so a no-op *edit* measures nothing.
+* **The control edit does change codegen**, which is what makes it a control rather than a second copy of the same binary: `.text` goes from 994,921 to 995,001 bytes.
+
+Its stdout, stderr and exit status on `arith` are identical to the arm it is a control for, which is the claim that it does nothing.
+
+#### The floor, per axis
+
+Five interleaved rounds per arm, both arms staged at one fixed binary path, minimum of each.
+
+| axis | head | null control | difference | | span head | span null |
+|---|---:|---:|---:|---:|---:|---:|
+| `arith` | 19,341,750,567 | 19,337,465,108 | **-4,285,459** | **-0.022%** | 1,424 | 1,173 |
+| `alloc4c` | 6,862,766,886 | 6,862,701,437 | -65,449 | -0.001% | 146,760 | 182,706 |
+| `compound` | 18,237,906,590 | 18,238,265,993 | +359,403 | +0.002% | 3,179,477 | 2,459,291 |
+| `rexxcps` | 20,602,982,299 | 20,602,981,098 | -1,201 | bound | 7,144,790 | 4,072,693 |
+| `strings` | 32,571,639,760 | 32,571,639,126 | -634 | bound | 1,289 | 1,381 |
+| `emptyloop` | 24,975,608,923 | 24,975,609,326 | +403 | bound | 738 | 1,112 |
+| `varlookup` | 42,123,633,679 | 42,123,633,691 | +12 | bound | 462 | 1,283 |
+
+#### `arith` has two states and nothing semantic chooses between them
+
+The control's `arith` figure is not noise and it is not small: **-4,285,459 instructions against a within-arm span of about 1,200**, and it is the same on every round. Five rounds of the head arm all read 19,341,75x,xxx; five rounds of the control all read 19,337,46x,xxx. The axis is bimodal, deterministic per binary, and the two states are 4.285 million apart.
+
+**Entry 55 measured that difference and reported it as a regression.** Its `arith` line was base 19,337,465,223, head 19,341,750,679, **+4,285,456** -- the same two states, the same gap, to the last hundred thousand of the third significant figure. The control moves the identical distance in the opposite direction with no mechanism whatsoever.
+
+So entry 55's `arith` line is **not attributable**, and this entry withdraws the reading rather than the change: the change stands, and the sentence claiming a 0.022% cost on an axis that calls no builtin does not. Entries 47 and 48 recorded movements on the same axis at 4.3M and 1.0M; the first is this artifact and the second is inside the same floor.
+
+#### What the floor is for
+
+**On `arith`, nothing smaller than 4.3 million instructions means anything**, whichever direction it points, and a change that touches `Interp`'s size should be *expected* to move it. The next `PARSE` change adds a field to `Interp` and will land in the low state; that is a bound and not a saving.
+
+The other six axes give their run-to-run spans and no second state: `strings`, `emptyloop` and `varlookup` resolve to about a thousand instructions in tens of billions, and `alloc4c`, `compound` and `rexxcps` are bounded by their own spans, which are large for their own reasons and were large before this control.
+
+**What this does not license.** A movement larger than an axis's floor is still not automatically the mechanism you have in mind -- the floor is a necessary bar, not a sufficient one. And this is one control of one shape: it says what a struct-width perturbation is worth, not what every layout perturbation is worth.
