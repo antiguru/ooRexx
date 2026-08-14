@@ -3713,3 +3713,21 @@ It is **not** simply "compare the two `i64`s", and the guards are the substance:
 * **The strict *ordering* operators must be excluded.** `>>` and `<<` compare strings, not numbers: `9 >> 10` is true where `9 > 10` is false. Strict *equality* is safe, because a small integer renders canonically and two equal renderings mean equal values.
 
 So the fast path is: both `Decoded::SmallInt`, `fuzz` zero, both magnitudes below ten to the `digits`, and the operator outside the strict ordering family.
+
+### Entry 43 -- the 40-byte allocations, named
+
+The second-largest width at entry 41's head, measured the same way entry 42's was, and stated here because the previous two entries show what happens when a width is attributed by reading instead.
+
+**`Box<Number>`, filled by `Interp::to_number` into `Body::Text`'s `num` cache** (`value.rs`), caught on a `malloc` breakpoint conditioned on 40 with the control that fires.
+
+`Number` is 40 bytes, defended by a `const` assertion in `rexx-num`, and it is boxed here rather than held inline because `Body`'s width is every arena slot's width -- `Body::Num` already carries a `Number` inline, and a second one inside `Body::Text` would widen every slot in the heap.
+
+So **the price of the parse cache is one heap allocation per string that is ever asked for its numeric value**, and the cache is what makes the second such question free. The trade is deliberate and documented on the field; what was not measured until now is what the boxing side of it costs, which on `samples/rexxcps.rex` at 400,000 clauses is 1,670,604 allocations.
+
+Not a defect and no change is proposed here. It is recorded because the two widths above it are now named and this is the next one down, and because any future attempt to widen `Body` or to inline this `Number` has a figure to be measured against.
+
+#### The state of the allocation profile at this head
+
+Total on that run is 20,015,402, from 29,775,401 before entry 38.
+Named: 19 bytes at 4,220,217 (entry 42), 40 bytes at 1,670,604 (here).
+**Unnamed: the 1, 2, 3, 7, 24 and 33-byte widths**, which together are of the same order as the two named ones. None has been attributed, and on this record's experience none should be guessed at.
