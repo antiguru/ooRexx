@@ -28,6 +28,7 @@ Every task's requirements implicitly include this section.
 * **A test that cannot fail is a defect.** Every fix needs a witness: break it deliberately, confirm the check goes red, restore from backup, verify, rebuild.
 * **Fix the defect, not the check that noticed it.** Where an assertion caught corruption, keep the assertion.
 * **Do not fix any other divergence a task happens to find.** Write it down in the report and leave it.
+* **The exception, and its limit.** Where the assigned fix *mechanically* forces a second site to change -- a shared field whose meaning you are correcting, a reader that must now answer for a new type -- correcting that site is part of the fix, not a second one. Preserving a known-wrong answer in a reader you are actively rewriting is not in scope discipline's gift. **What the rule is protecting is attribution**, so the test is whether the differential still says which programs saw what: give each half its own test and its own mutation witness, and say plainly in the report that you did. A divergence you could have left untouched, in a site the fix does not force, still goes on the found-and-not-fixed list.
 
 ---
 
