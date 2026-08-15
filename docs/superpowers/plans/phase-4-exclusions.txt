@@ -1994,7 +1994,7 @@ above.
   on, and it is why unbounded growth survived three phases of differential
   testing green.
 
-  A HANDLER REQUEUED AT AN ITERATE IS DELIVERED BEFORE THE LOOP'S RE-TEST HERE
+  A REQUEUED HANDLER DELIVERED AT AN ITERATE RUNS BEFORE THE LOOP'S RE-TEST HERE
   AND AFTER IT ON THE ORACLE. Both engines agree with each other and diverge from the
   oracle on stdout only; rc 0 and empty stderr on the oracle and on both
   engines. Measured 2026-08-15 at 9c465989a, under the standard oracle wrapper
@@ -2029,26 +2029,30 @@ above.
   descriptors above cannot place a delivery against a clause that prints
   nothing, which is what the loop's re-test is; `trace i` can, because it
   interleaves the *-* clause echoes with the handler's own. Run at 9c465989a on
-  the same program with `trace i` as a new first line, which moves every line
-  number up by one, the echoes around the first ITERATE are:
+  the program above with `trace i` as a new first line. Every echo below is
+  quoted from that run rather than derived, and in it the DO WHILE echoes at 6,
+  the ITERATE at 9, h2: at 15, h3: at 16 and the SAY at 11. The first pass's
+  ITERATE onwards, with each handler's own body clauses elided. READ EACH COLUMN
+  DOWN ITS OWN SIDE: the rows are not pairs, and the interleaving is the finding.
 
     oracle                        this crate, both engines
      9 *-*   iterate               9 *-*   iterate
-     6 *-* do while zn < 2        18 *-*     h2:
-    18 *-*     h2:                 6 *-* do while zn < 2
+     6 *-* do while zn < 2        15 *-*     h2:
+    15 *-*     h2:                 6 *-* do while zn < 2
+     7 *-*   zn = zn + 1          16 *-*     h3:
+    16 *-*     h3:                 7 *-*   zn = zn + 1
 
   The oracle evaluates the re-test -- the value traces the re-test emits all
   precede h2's echo -- and only then enters h2. This crate enters h2 first and
   evaluates the re-test afterwards. So the two put h2's delivery on OPPOSITE
   SIDES of the loop's re-test.
 
-  THE DIRECTION MATTERS, and an earlier version of this row had it backwards. It
-  is the ORACLE that carries nothing past the re-test: the re-test has already
-  run by the time h2 executes, so the third condition h2 queues is queued after
-  it, and the next thing the oracle does is the following pass's first body
-  clause. It is THIS CRATE that queues the third condition before the re-test and
-  delivers it after, which the trace shows as `6 *-* do while zn < 2` followed by
-  `21 *-* h3:`.
+  THE DIRECTION IS EASY TO GET BACKWARDS. It is the ORACLE that carries nothing
+  past the re-test: the re-test has already run by the time h2 executes, so the
+  third condition h2 queues is queued after it, and the next thing the oracle
+  does is the following pass's first body clause. It is THIS CRATE that queues
+  the third condition before the re-test and delivers it after, which the trace
+  above shows as `6 *-* do while zn < 2` followed by `16 *-* h3:`.
 
   WHY THE SHIFT IS INVISIBLE ON h2 AND VISIBLE ON h3. Both interpreters report
   the ITERATE's own line as the requeued handler's SIGL and agree on the number:
@@ -2058,7 +2062,7 @@ above.
   reaches the following pass's first body clause (SIGL 6, or 7 traced) and, on
   the last pass where there is none, the clause after the loop (SIGL 10, or 11
   traced, after "after 5" has printed); this crate reaches the re-test's echo and
-  reports the ITERATE's line, SIGL 8, both times.
+  reports the ITERATE's line, SIGL 8, or 9 traced, both times.
 
   WHAT REMAINS UNOBSERVABLE. Which clause OWNS either delivery is not settled by
   any of these instruments. `trace i` places a delivery between two clause
