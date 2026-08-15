@@ -6,11 +6,45 @@ of the standard that phase designs against, taken while the `DO` clause-boundary
 roadmap's Phase 7 entry summarises its consequences and points here for the quotes.
 
 **The bar for this project remains ooRexx, not ANSI.** Where the two disagree, this crate matches
-ooRexx and the disagreement is recorded rather than treated as a defect. Known disagreements: 8.2.4
-drains a boundary where ooRexx and this crate deliver one condition and do not re-check; and
+ooRexx and the disagreement is recorded rather than treated as a defect. Known disagreement:
 8.3.6/8.3.6.1 **read as** putting a `DO UNTIL`'s test in the re-entered `DO` clause, where both
-interpreters attribute it to `END` -- that second one is inference from the notation plus the tracing
+interpreters attribute it to `END` -- that one is inference from the notation plus the tracing
 rules, not from any sentence saying so, and Q5 below says exactly how far the text goes.
+
+**This list used to carry a second entry, and it rested on a false premise about ooRexx.** It read
+that 8.2.4 drains a boundary where ooRexx and this crate deliver one condition and do not re-check.
+ooRexx drains, so on the question 8.2.4 answers -- may one clause boundary run more than one
+handler -- **ANSI 8.2.4 and ooRexx agree**, and the entry is removed rather than restated.
+Measured 2026-08-15 at `9c465989a`, under the standard oracle wrapper from a fresh empty directory,
+`rc 0` and empty stderr on the oracle and on both engines:
+
+```rexx
+call on user c1 name h1
+call on user c2 name h2
+call on user c3 name h3
+do zi = 1 to 2
+  zr = raiser()
+end
+say 'after' zr
+exit
+raiser: raise user c1 return 5
+h1: say 'h1' sigl; raise user c2 return
+h2: say 'h2' sigl; raise user c3 return
+h3: say 'h3' sigl; return
+```
+
+stdout, identical on the oracle, `REXX_ENGINE=tree-walker` and `REXX_ENGINE=ir`:
+`h1 5` / `h2 6` / `h3 5` / `h1 5` / `h2 6` / `after 5` / `h3 7`. The third and fourth lines are one
+boundary running two handlers: on the loop's second pass the clause at line 5 delivers `h3`, left
+over from the previous pass's `END`, and then `h1`, queued by that same clause, both reporting
+`SIGL 5`.
+
+**What that measurement does and does not settle.** `RAISE` and `USER` are ooRexx extensions, so the
+program above measures ooRexx and this crate rather than conformance (see the scope limit below).
+What it settles is that neither interpreter has a one-per-boundary rule, which is the premise the
+removed entry rested on. Whether ooRexx sweeps the four conditions ANSI *does* define in 8.2.4's
+fixed `HALT FAILURE ERROR NOTREADY` order rather than in arrival order is a separate question, not
+measured here, and it stays open as the delivery-order item in the adversarial list below.
 
 **Scope limit, stated first because it is easy to miss.** The transcripts that prompted this read use
 `RAISE` and a `USER` condition. Neither exists in the standard, so those programs are rejected before
@@ -269,13 +303,17 @@ No errata item changes the answers to Q1, Q3, Q4 or Q5.
 
 Each of these is checkable with **ANSI conditions only** -- no `RAISE`, no `USER` -- so they are
 inside the standard's scope, unlike A-D. I did not run any of them; the brief forbade running the
-interpreter.
+interpreter. **The first item below has had its premise measured since**, by a later task on
+2026-08-15, using a `RAISE`/`USER` program rather than an ANSI condition; that item carries the date
+and the commit. The ANSI-condition shapes themselves are all still unrun.
 
-1. **"At most one delivery per boundary" contradicts 8.2.4.** If the crate's rule from transcript C is
-   general, then a clause that leaves two *different* ANSI conditions pending (say a failing command
-   raising ERROR and a stream operation raising NOTREADY in the same clause) must deliver **both** at
-   that clause's termination under 8.2.4's `do t=1 to 4`. A one-per-boundary engine will run the
-   second handler one clause too late. This is the single most likely real divergence.
+1. **This item read "at most one delivery per boundary contradicts 8.2.4", and the premise is
+   measured false.** It said that an engine delivering at most one condition per boundary would run a
+   second handler one clause too late. Measured 2026-08-15 at `9c465989a`, on the program in this
+   document's opening, the oracle and both engines each run two handlers at one boundary, so neither is
+   a one-per-boundary engine. What is still unrun is the same shape built from the conditions ANSI
+   defines -- a clause leaving both ERROR and NOTREADY pending -- because that needs command issuance
+   and streams, which are Phase 7's.
 2. **Delivery order is fixed by name, not by arrival.** 8.2.4 sweeps `HALT FAILURE ERROR NOTREADY` in
    that order. An engine that delivers in raise order, or FIFO, diverges when two names are pending
    together.

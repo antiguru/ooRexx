@@ -460,11 +460,14 @@ impl Interp {
         //
         // **And what it exempts a third time, which is not a construct at
         // all**: a trap queued by a *handler* this activation delivered at an
-        // earlier boundary. That boundary had already taken one -- this
-        // function delivers at most one and does not re-check -- so the wait
-        // is the design rather than a missing call, and the oracle waits too.
-        // Measured with no construct in the program at all, which is what
-        // says this is not the defect above wearing different clothes.
+        // earlier boundary. That boundary drains, but it drains only the
+        // entries that were queued when it began, so a handler's own requeue
+        // lands beyond the prefix that boundary owes and waits for the next
+        // one -- `Interp::pending_traps` carries the measurement behind that
+        // bound. The wait is therefore the design rather than a missing call,
+        // and the oracle waits too. Measured with no construct in the program
+        // at all, which is what says this is not the defect above wearing
+        // different clothes.
         //
         // So this catches the wrong-`SIGL` half and says so; a delivery that
         // is late in *time* but lands on the same line is invisible to it,

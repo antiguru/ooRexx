@@ -1477,9 +1477,10 @@ struct PendingTrap {
     /// begins as a construct having run an instruction without ending its
     /// header clause first, and for a trap the clause itself queued that is
     /// what it means. A trap queued *during* a delivery is not: the boundary
-    /// that would have taken it had already taken one, `in_clause` delivers at
-    /// most one and does not re-check, and the oracle defers it to the next
-    /// boundary too. Measured with no construct anywhere in the program --
+    /// running that delivery drains only the entries that were queued when it
+    /// began, so this trap lands beyond the prefix that boundary owes, and the
+    /// oracle defers it to the next boundary too. Measured with no
+    /// construct anywhere in the program --
     /// `zq = raiser()` on line 3 whose handler itself raises a second trapped
     /// condition -- the oracle prints `after` and then the second handler's
     /// `SIGL` 4, and this crate agrees; the assertion fired on it regardless.

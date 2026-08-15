@@ -317,11 +317,11 @@ bound it rather than deleting it.
 
 ---
 
-### Task 5: the ANSI spec's premise, the `clause.rs` comment the drain falsified, and the `ITERATE` shape
+### Task 5: the ANSI spec's premise, the `clause.rs` comment the drain falsified, and the shapes to record
 
 Review finding **N2**. Its first half, two conditions pending at one boundary losing one, was closed
-by `56d9d1c86`, which replaced the single `Option` with a `VecDeque` drained at the boundary. Three
-things are left.
+by `56d9d1c86`, which replaced the single `Option` with a `VecDeque` drained at the boundary. What
+is left is the items below, none of which changes behaviour.
 
 #### 1. The ANSI spec records the wrong side of the disagreement
 
@@ -376,10 +376,31 @@ Reproduce it at the tree you find, on both engines and all three descriptors, an
 this project records found-and-not-fixed divergences. **Do not fix it.** If `56d9d1c86`'s drain
 changed it, that is the news: report the new transcripts rather than the ones above.
 
+#### 4. The bare `OPTIONS` instruction, to record and not to fix
+
+ADDED 2026-08-15 by the controller, after the three items above were written, and written into the
+plan rather than only into the dispatch so that a regenerated brief carries it. **Decided by Moritz
+on 2026-08-15 not to be fixed.**
+
+`docs/superpowers/plans/phase-4-exclusions.txt` records the `::OPTIONS` **directive** and its reason,
+which is the directive's own. The bare `OPTIONS` **instruction** is a different case that no row
+covered, and refusing it rejects a program the oracle runs:
+
+```
+program: `options 'nothing'` then `say 'ran'`
+oracle          rc 0, stdout "ran", stderr empty
+both engines    rc 120, stdout empty, stderr "rexx-exec: OPTIONS is not implemented (Phase 5)"
+```
+
+Re-measure at the tree you find and record it beside the `ITERATE` shape. **Do not implement
+`OPTIONS`.** If the re-measurement disagrees with the transcript above, report that rather than
+reconciling it.
+
 #### Steps
 
-1. Re-measure all three items at the tree you find. Report every transcript.
-2. Correct the spec, correct the `clause.rs` comment, record the `ITERATE` divergence.
+1. Re-measure all four items at the tree you find. Report every transcript.
+2. Correct the spec, correct the `clause.rs` comment, record the `ITERATE` shape and the `OPTIONS`
+   over-refusal.
 3. Gates as in Global Constraints.
 
 ---

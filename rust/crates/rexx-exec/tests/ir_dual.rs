@@ -648,10 +648,11 @@ const BRANCH_CASES: &[InlineCase] = &[
     InlineCase {
         // **A boundary case, and the one a review found that this table's own
         // author had argued was unreachable.** The premise it was missing:
-        // a delivered handler can *leave a new trap queued behind it*, and
-        // `in_clause` delivers at most one without re-checking. So the last
-        // member clause's boundary is not the last boundary with work, which
-        // is the assumption a flattened construct's single boundary rests on.
+        // a delivered handler can *leave a new trap queued behind it*, and a
+        // boundary drains only what was queued when it began, so that new trap
+        // is not one it owes. So the last member clause's boundary is not the
+        // last boundary with work, which is the assumption a flattened
+        // construct's single boundary rests on.
         //
         // `h` runs at the body clause's boundary and its own `RAISE ... RETURN`
         // queues `zy`; the boundary that delivers `g` is the one the oracle

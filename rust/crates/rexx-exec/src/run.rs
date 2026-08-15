@@ -5514,9 +5514,10 @@ impl Interp {
     /// ```
     ///
     /// `h` runs at the body clause's own boundary and its `RAISE ... RETURN`
-    /// **leaves a new trap queued behind it**; [`Interp::in_clause`] delivers
-    /// at most one and does not re-check. So the last member clause's boundary
-    /// is not the last boundary with work to do, and without this one `g` runs
+    /// **leaves a new trap queued behind it**, and a boundary drains only the
+    /// entries that were queued when it began, so that new trap is not one
+    /// that boundary owes. The last member clause's boundary
+    /// is therefore not the last boundary with work to do, and without this one `g` runs
     /// after `say 'after'` instead of before it, at the wrong `SIGL`. Oracle
     /// and tree-walker print `G ran 4` then `after`; the compiled stream
     /// printed `after` then `G ran 6`, and in debug tripped `in_clause`'s own

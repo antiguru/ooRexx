@@ -1994,6 +1994,93 @@ above.
   on, and it is why unbounded growth survived three phases of differential
   testing green.
 
+  THIS CRATE REPORTS SIGL AT AN ITERATE'S OWN LINE FOR A HANDLER THE ORACLE
+  CARRIES PAST THE LOOP'S RE-TEST. Both engines agree with each other and diverge from the
+  oracle on stdout only; rc 0 and empty stderr on the oracle and on both
+  engines. Measured 2026-08-15 at 9c465989a, under the standard oracle wrapper
+  from a fresh empty directory, REXX_ENGINE=tree-walker and REXX_ENGINE=ir:
+
+     1  call on user c1 name h1
+     2  call on user c2 name h2
+     3  call on user c3 name h3
+     4  zn = 0
+     5  do while zn < 2
+     6    zn = zn + 1
+     7    zr = raiser()
+     8    iterate
+     9  end
+    10  say 'after' zr
+    11  exit
+    12  raiser: raise user c1 return 5
+    13  h1: say 'h1' sigl; raise user c2 return
+    14  h2: say 'h2' sigl; raise user c3 return
+    15  h3: say 'h3' sigl; return
+
+    oracle            this crate, both engines
+    h1 7              h1 7
+    h2 8              h2 8
+    h3 6              h3 8
+    h1 7              h1 7
+    h2 8              h2 8
+    after 5           h3 8
+    h3 10             after 5
+
+  WHAT THE TWO DO DIFFERENTLY. h2 runs at the ITERATE clause's boundary and its
+  own RAISE queues the third condition there. The oracle does not deliver that
+  condition at the boundary that queued it: it carries it past the loop's
+  re-test to the next pass's first body clause, which is why the handler reports
+  SIGL 6, and on the last pass, where there is no next pass, it carries the
+  condition out of the loop altogether and the SAY at line 10 delivers it, after
+  "after 5" has printed. This crate reports SIGL 8 for that condition on both
+  passes, the ITERATE's own line, and its second delivery prints before
+  "after 5" rather than after. Where exactly this crate's delivery sits is
+  not observable from these three descriptors, so this row claims only the SIGL
+  and the ordering; SIGL 8 is what the transcript shows and SIGL 6 and 10 are
+  what the oracle shows.
+
+  WHAT THIS ROW MEASURED AND WHAT IT TAKES FROM ELSEWHERE. The transcripts above
+  were taken at 9c465989a and at no other commit. That this shape is
+  pre-existing -- byte-identical before and after e74780054, and unchanged by
+  56d9d1c86's drain -- is recorded by
+  docs/superpowers/plans/2026-08-15-task-6-review-and-run-split.md and is that
+  document's measurement rather than this row's.
+
+  NOT FIXED, AND NOBODY IS ASSIGNED. It was found by the task correcting the
+  prose around the drain, which owns no behaviour, so recording it was that
+  task's whole disposition.
+
+  THE BARE OPTIONS INSTRUCTION IS REFUSED WHERE THE ORACLE RUNS THE PROGRAM.
+  This row has an owner, which is why it says so rather than reading as a
+  divergence nobody has assigned: instruction_owner in rexx-exec/src/lib.rs
+  gives InstructionKind::Options the Phase 5 owner, and the refusal is loud, at
+  NOT_IMPLEMENTED_EXIT with a message naming the phase. It is here because the
+  EXCLUSIONS section above covers the ::OPTIONS DIRECTIVE only, and the reason
+  recorded there is the directive's own -- its whole effect is to change package
+  settings, so there is no unused ::OPTIONS. That reason does not carry to the
+  instruction, and this row is where the instruction is recorded.
+
+  Measured 2026-08-15 at 9c465989a, under the standard oracle wrapper from a
+  fresh empty directory, on a two-line program whose first line is
+  options 'nothing' and whose second is say 'ran':
+
+    oracle               rc 0, stdout "ran", stderr empty
+    tree-walker and ir   rc 120, stdout empty, stderr
+                         "rexx-exec: OPTIONS is not implemented (Phase 5)"
+
+  WHY THE ORACLE RUNS IT. RexxInstructionOptions::execute
+  (interpreter/instructions/OptionsInstruction.cpp) traces the instruction and
+  evaluates its expression as a string, so an error inside that expression still
+  raises. The word scan that would act on the resulting string sits inside
+  #ifdef _DEBUG, under a comment saying processing is currently disabled. So in
+  the build this project measures against, an OPTIONS instruction whose
+  expression evaluates has no effect beyond the tracing and the interactive
+  pause that execute performs for it, and refusing the program is an
+  over-refusal in the sense the directives section above defines: it rejects a
+  program the oracle runs.
+
+  NOT FIXED, decided by Moritz on 2026-08-15. Recorded so that a reader meeting
+  the loud message does not conclude the oracle refuses it too.
+
 CLOSED DEFECTS -- measured wrong, measured again, now matching
 -------------------------------------------------------------
 

@@ -286,9 +286,10 @@ rc> 0
 out> set V
 
 # **A boundary case.** a handler that queues again at an assignment's boundary
-# `h` runs at line 3's boundary and its own RAISE queues `zy`. `in_clause`
-# delivers at most one and does not re-check, so `g` waits for the *next*
-# clause's boundary -- SIGL 4, after `after` has already printed.
+# `h` runs at line 3's boundary and its own RAISE queues `zy`. Line 3's
+# boundary drains only what was queued when it began, so `zy` lands beyond the
+# prefix that boundary owes and `g` waits for the *next* clause's boundary --
+# SIGL 4, after `after` has already printed.
 program
 call on user zx name h
 call on user zy name g
