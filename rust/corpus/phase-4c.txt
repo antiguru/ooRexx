@@ -58,13 +58,16 @@
 #   under a rebuild. A run on a platform whose default differs would need the
 #   expected byte changed, which is true of `LINUX COMMAND` already.
 #
-#   ::ROUTINE, and calls into one (4c Task 13). No other directive: the other
-#   eight are Phase 5's, and the ones whose installation the oracle performs
-#   before `main` fail loudly here -- phase-4-exclusions.txt's directive
-#   section has the transcript per form. tests/coverage.rs's
-#   assert_program_has_only_routine_directives admits ::ROUTINE and keeps the
-#   panic for the rest, and its walker descends into a routine's body, so a
-#   construct used only inside one still counts toward criterion 1.
+#   ::ROUTINE, and calls into one (4c Task 13). No other directive belongs in
+#   a program listed here: the other eight are Phase 5's, and the ones whose
+#   installation the oracle performs before `main` fail loudly here --
+#   phase-4-exclusions.txt's directive section has the transcript per form.
+#   tests/coverage.rs's assert_program_has_only_admitted_directives admits
+#   ::ROUTINE, ::CLASS and ::METHOD (Phase 5a's own widening) without
+#   panicking, and keeps the panic for every other directive kind; only
+#   ::ROUTINE's body is descended into, so a construct used only inside one
+#   still counts toward criterion 1 -- this file's own subset still admits no
+#   directive but ::ROUTINE regardless of what the walker tolerates.
 #
 # WHAT IT STILL EXCLUDES. Everything phase-4b.txt excludes except builtin
 # function calls, PARSE, ADDRESS's environment forms and ::ROUTINE, which is

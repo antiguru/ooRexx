@@ -654,11 +654,23 @@ const PREFIX_COVERAGE: &[(&str, Coverage)] = &[
 /// What this cannot check is the *bytes*: that is link 2's job, and it is
 /// where the absolute package path stops being a problem, because both
 /// interpreters get the same one.
+///
+/// **This literal has no directory-listing guard**, unlike the `SUBSET_FILES`
+/// pinned against `phase_subset_files_on_disk()` in `corpus.rs`, `coverage.rs`,
+/// `ir_dual.rs` and `collect_stress.rs`: this file is the one call site those
+/// four do not cover, and a phase subset file added and forgotten *here* would
+/// silently keep this check measuring the union as it stood before. A future
+/// phase's file must be added to this literal by hand for that reason.
 #[test]
 fn every_live_witness_emits_its_prefix_and_is_run_by_the_corpus() {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
     let mut listed = String::new();
-    for name in ["phase-4a.txt", "phase-4b.txt", "phase-4c.txt"] {
+    for name in [
+        "phase-4a.txt",
+        "phase-4b.txt",
+        "phase-4c.txt",
+        "phase-5a.txt",
+    ] {
         let path = corpus_dir.join(name);
         listed.push_str(
             &std::fs::read_to_string(&path)

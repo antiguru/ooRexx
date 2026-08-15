@@ -287,6 +287,25 @@ pub fn wrapped_exit_code(code: i32) -> i32 {
     i32::from(code as u8)
 }
 
+/// How `stderr` is compared: [`descriptor_diffs`]'s DEVIATION 0 normalisation
+/// (the default every corpus program gets unless it opts out), or raw bytes.
+///
+/// **Opt-in per program, not a global switch.** Phase 5a's own task brief asks
+/// for a way to "claim a byte-for-byte stderr comparison" -- a stricter claim
+/// than DEVIATION 0 makes -- without disturbing the normalised path everything
+/// else still relies on. `docs/superpowers/plans/phase-4-exclusions.txt`'s
+/// Deviation 0 stays the default and is pinned by
+/// `tests/support/mod.rs`'s own committed tests; this enum only adds a second,
+/// stricter mode a caller can select for one program at a time.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum StderrComparison {
+    /// DEVIATION 0: both sides' `stderr` run through [`super::normalize_stderr`]
+    /// first. The default.
+    Normalized,
+    /// Byte-for-byte, no normalisation at all.
+    Raw,
+}
+
 /// Which of the three observable channels disagree, in a fixed order.
 /// Empty means the two interpreters agree.
 ///
@@ -294,16 +313,92 @@ pub fn wrapped_exit_code(code: i32) -> i32 {
 /// trace-line indent run, not byte-exact -- see [`super`]'s module doc for
 /// the scope and `docs/superpowers/plans/phase-4-exclusions.txt` for why.
 /// Exit status, stdout, and every other byte of stderr stay byte-exact.
+///
+/// Thin wrapper over [`descriptor_diffs_with`] at [`StderrComparison::Normalized`],
+/// kept as its own function so every existing call site stays untouched.
 pub fn descriptor_diffs(rust: &Outcome, cpp: &CppOutcome) -> Vec<&'static str> {
+    descriptor_diffs_with(rust, cpp, StderrComparison::Normalized)
+}
+
+/// [`descriptor_diffs`], with the caller choosing how `stderr` is compared.
+/// See [`StderrComparison`] for the two modes and why raw is opt-in rather
+/// than the default.
+pub fn descriptor_diffs_with(
+    rust: &Outcome,
+    cpp: &CppOutcome,
+    stderr_mode: StderrComparison,
+) -> Vec<&'static str> {
     let mut diffs = Vec::new();
     if rust.stdout != cpp.stdout {
         diffs.push("stdout");
     }
-    if super::normalize_stderr(&rust.stderr) != super::normalize_stderr(&cpp.stderr) {
+    let stderr_differs = match stderr_mode {
+        StderrComparison::Normalized => {
+            super::normalize_stderr(&rust.stderr) != super::normalize_stderr(&cpp.stderr)
+        }
+        StderrComparison::Raw => rust.stderr != cpp.stderr,
+    };
+    if stderr_differs {
         diffs.push("stderr");
     }
     if wrapped_exit_code(rust.exit_code) != cpp.exit_code {
         diffs.push("exit code");
     }
     diffs
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CppOutcome, StderrComparison, descriptor_diffs_with};
+    use rexx_exec::{Outcome, StackSpan};
+
+    fn outcome(stderr: &[u8]) -> Outcome {
+        Outcome {
+            exit_code: 0,
+            stdout: Vec::new(),
+            stderr: stderr.to_vec(),
+            stack: StackSpan::default(),
+            collections: 0,
+            chunks_refused: 0,
+        }
+    }
+
+    fn cpp_outcome(stderr: &[u8]) -> CppOutcome {
+        CppOutcome {
+            stdout: Vec::new(),
+            stderr: stderr.to_vec(),
+            exit_code: 0,
+        }
+    }
+
+    /// Both directions of [`StderrComparison`], on a transcript pair whose
+    /// only difference is two columns of trace indent -- exactly the shape
+    /// DEVIATION 0 exists to absorb (`tests/support/mod.rs`'s own
+    /// `two_clause_lines_differing_only_in_indent_width_normalise_equal`
+    /// pins the same pair through `normalize_stderr` directly). Task 1's own
+    /// brief requires both directions or the new mode is unwitnessed: a mode
+    /// that only ever fails, or only ever passes, would not distinguish
+    /// "wired in" from "inert".
+    #[test]
+    fn raw_fails_where_normalized_passes_on_a_two_column_indent_difference() {
+        let rust = outcome(b"     4 *-* say 1/0\n");
+        let oracle = cpp_outcome(b"     4 *-*   say 1/0\n");
+
+        let raw = descriptor_diffs_with(&rust, &oracle, StderrComparison::Raw);
+        assert_eq!(
+            raw,
+            vec!["stderr"],
+            "raw comparison must FAIL (report a stderr diff) on a two-column \
+             indent difference -- that is the whole point of adding a mode \
+             DEVIATION 0 does not apply to"
+        );
+
+        let normalized = descriptor_diffs_with(&rust, &oracle, StderrComparison::Normalized);
+        assert!(
+            normalized.is_empty(),
+            "normalized comparison (the default) must PASS on the identical \
+             pair, or this is not demonstrating two different modes at all: \
+             got {normalized:?}"
+        );
+    }
 }

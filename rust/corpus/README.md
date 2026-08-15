@@ -105,8 +105,23 @@ a program's answer outside what any harness here can compare.
   `docs/superpowers/plans/phase-4-exclusions.txt` and is out of scope through
   the end of Phase 4.
 * **No `::` directive but `::ROUTINE`.**
-  The other eight fail loudly here, and `tests/coverage.rs`'s
-  `assert_program_has_only_routine_directives` is what refuses them.
+  A `phase-4c.txt` program still admits none of the other eight, even though
+  `tests/coverage.rs`'s `assert_program_has_only_admitted_directives` (Phase
+  5a's widening) no longer panics on `::CLASS`/`::METHOD` -- this file's own
+  subset rule is narrower than what the walker merely tolerates.
+
+## Phase 5a subset
+
+`phase-5a.txt` is the same format again, read alongside the three earlier
+files. It is committed **empty** as of Task 1: Phase 5a's own scope --
+`::CLASS`/`::METHOD` installation, Rexx method-body invocation, `EXPOSE` and
+class-scope instance variables, up to `CoreClasses.orx`'s prologue completing
+-- is not implemented by any task yet, so there is nothing a corpus program
+could run to agreement with the oracle. `tests/coverage.rs`'s directive
+walker admits `::CLASS` and `::METHOD` without panicking (Task 1), but does
+not descend into either body, so a construct used only inside one is not yet
+counted toward criterion 1's coverage. Each later 5a task appends its own
+witness to the file as its own construct starts agreeing with the oracle.
 
 ## Current programs
 

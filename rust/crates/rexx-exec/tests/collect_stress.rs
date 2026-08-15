@@ -134,7 +134,12 @@ fn read_subset(list_paths: &[&Path]) -> Vec<String> {
 /// as well over a smaller union. Measured by deleting the subject: with
 /// `phase-4c.txt` removed from this list, the whole workspace stays green and
 /// byte-identical, and the builtins leave the collector's reach silently.
-const SUBSET_FILES: &[&str] = &["phase-4a.txt", "phase-4b.txt", "phase-4c.txt"];
+const SUBSET_FILES: &[&str] = &[
+    "phase-4a.txt",
+    "phase-4b.txt",
+    "phase-4c.txt",
+    "phase-5a.txt",
+];
 
 /// The subset programs that allocate nothing, so collect-on-every-allocation
 /// has nothing to fire on.

@@ -102,9 +102,10 @@
 //! subset's *programs* construct, not about running them -- the differential
 //! half in `tests/corpus.rs` is what proves they execute correctly. The walk
 //! below is `rexx-parse/tests/gate_walk`'s shared module, trimmed to what the
-//! subset actually contains (`::ROUTINE` and no other directive --
-//! `assert_program_has_only_routine_directives` guards that assumption rather
-//! than silently ignoring one) and reproduced
+//! subset actually contains (`::ROUTINE`, `::CLASS` and `::METHOD` and no
+//! other directive -- `assert_program_has_only_admitted_directives` guards
+//! that assumption rather than silently ignoring one, and only `::ROUTINE`'s
+//! body is actually walked) and reproduced
 //! here rather than imported, because an integration test cannot reach
 //! another crate's `tests/` module and this crate's own `Cargo.toml`
 //! deliberately keeps `rexx-parse` as a normal, not dev, dependency for
@@ -143,26 +144,63 @@ use owners::{
 
 // ---------------------------------------------------------------------------
 // The walk. Trimmed from `rexx-parse/tests/gate_walk/mod.rs` to what the
-// subset actually contains: `::ROUTINE` bodies and no other directive kind.
-// `assert_program_has_only_routine_directives` guards that assumption at every
-// parse rather than silently under-walking a program that gained one.
+// subset actually contains: `::ROUTINE` bodies, plus `::CLASS` and `::METHOD`
+// directives admitted but not descended into (Phase 5a).
+// `assert_program_has_only_admitted_directives` guards that assumption at
+// every parse rather than silently under-walking a program that gained a
+// directive kind this walker does not know about.
 // ---------------------------------------------------------------------------
 
-fn assert_program_has_only_routine_directives(path: &Path, p: &Program) {
+/// Directive keywords this walker admits without panicking. `ROUTINE` is
+/// walked into (`each_instruction` descends into a `::ROUTINE` body); `CLASS`
+/// and `METHOD` are Phase 5a's, admitted here so a subset program carrying
+/// one does not panic, but their bodies are **not** descended into by
+/// `each_instruction` below -- coverage inside a `::CLASS` or `::METHOD` body
+/// is not this criterion's concern until a later task extends the walk to
+/// match.
+const ADMITTED_DIRECTIVE_KEYWORDS: &[&str] = &["ROUTINE", "CLASS", "METHOD"];
+
+fn assert_program_has_only_admitted_directives(path: &Path, p: &Program) {
     let others: Vec<&str> = p
         .directives
         .iter()
         .map(|d| d.kind.keyword())
-        .filter(|keyword| *keyword != "ROUTINE")
+        .filter(|keyword| !ADMITTED_DIRECTIVE_KEYWORDS.contains(keyword))
         .collect();
     assert!(
         others.is_empty(),
-        "{} has a `::` directive this walker does not follow into ({others:?}) -- \
-         only ::ROUTINE is admitted, because `each_instruction` descends into a \
-         routine's body and into no other kind of directive body; either the \
-         subset gained one by mistake or this walker needs widening",
+        "{} has a `::` directive this walker does not admit ({others:?}) -- \
+         only {ADMITTED_DIRECTIVE_KEYWORDS:?} are, and only `::ROUTINE`'s body \
+         is actually descended into by `each_instruction`; either the subset \
+         gained a directive kind by mistake or this walker needs widening",
         path.display()
     );
+}
+
+/// Phase 5a Task 1's own demonstration: `::CLASS K` is an inline literal
+/// here, not a `phase-5a.txt` corpus entry, because `::CLASS` is not
+/// implemented and committing it would redden the corpus differential (see
+/// `docs/superpowers/plans/2026-08-15-phase-5a-native-layer.md`'s Task 1
+/// brief).
+///
+/// **Measured before this task widened the walker:** run against the
+/// then-named `assert_program_has_only_routine_directives`, this exact
+/// program panicked with `has a \`::\` directive this walker does not follow
+/// into (["CLASS"])`. Task 1's report carries the full transcript.
+#[test]
+fn a_class_directive_is_admitted_without_panicking() {
+    let p = parse_program(b"::CLASS K\n".to_vec()).expect("::CLASS K parses");
+    assert_program_has_only_admitted_directives(Path::new("<phase-5a-task-1-demo>"), &p);
+}
+
+/// Pairs with the success above: a directive kind still outside
+/// [`ADMITTED_DIRECTIVE_KEYWORDS`] must still panic, or the widening silently
+/// removed the guard rather than widening it.
+#[test]
+#[should_panic(expected = "has a `::` directive this walker does not admit")]
+fn an_unadmitted_directive_still_panics() {
+    let p = parse_program(b"::ATTRIBUTE k\n".to_vec()).expect("::ATTRIBUTE k parses");
+    assert_program_has_only_admitted_directives(Path::new("<phase-5a-task-1-demo>"), &p);
 }
 
 /// Every direct child expression of `expr`, in source order. Exhaustive so a
@@ -387,11 +425,15 @@ fn exprs_of_loop<'a>(l: &'a Loop, f: &mut impl FnMut(&'a Expr)) {
 /// Every instruction of the main body **and of every `::ROUTINE` body**.
 ///
 /// Descending into a routine is what lets
-/// `assert_program_has_only_routine_directives` admit one at all: the guard
-/// exists to stop a subset program hiding constructs from criterion 1 inside
-/// a body nothing walks, so admitting a directive and not walking it would
-/// have opened exactly the hole the guard names. No other directive kind is
-/// descended into, and none is admitted.
+/// `assert_program_has_only_admitted_directives` admit `::ROUTINE` without
+/// also admitting a hole: the guard exists to stop a subset program hiding
+/// constructs from criterion 1 inside a body nothing walks, and `::ROUTINE`
+/// is the one directive kind whose body this function actually visits.
+/// `::CLASS` and `::METHOD` are admitted by that guard too (Phase 5a), but
+/// their bodies are **not** descended into here -- a construct that appears
+/// only inside one is not yet counted toward criterion 1's coverage, which is
+/// a fact about this walker's current reach rather than a claim that nothing
+/// else is admitted.
 fn each_instruction<'a>(p: &'a Program, visit: &mut impl FnMut(&'a Instruction)) {
     for i in &p.main.instructions {
         visit(i);
@@ -510,7 +552,12 @@ fn corpus_dir() -> PathBuf {
 /// the dropped phase still owning a variant no earlier phase witnesses. It is
 /// a property of the corpus as it stands, not an invariant: the moment those
 /// variants gain a witness elsewhere, the file can be dropped silently.
-const SUBSET_FILES: &[&str] = &["phase-4a.txt", "phase-4b.txt", "phase-4c.txt"];
+const SUBSET_FILES: &[&str] = &[
+    "phase-4a.txt",
+    "phase-4b.txt",
+    "phase-4c.txt",
+    "phase-5a.txt",
+];
 
 /// The phase subset files that exist in the corpus directory, sorted.
 ///
@@ -750,7 +797,7 @@ fn every_in_scope_variant_is_witnessed_by_the_phase_subsets() {
         let text = fs::read(&abs).unwrap_or_else(|e| panic!("cannot read {}: {e}", abs.display()));
         let p = parse_program(text)
             .unwrap_or_else(|e| panic!("{} failed to parse: {e:?}", abs.display()));
-        assert_program_has_only_routine_directives(&abs, &p);
+        assert_program_has_only_admitted_directives(&abs, &p);
 
         each_instruction(&p, &mut |i| {
             instructions.seen.insert(instruction_tag(&i.kind).0);

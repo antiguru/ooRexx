@@ -1178,7 +1178,12 @@ const CORPUS_POPULATION: &str = "corpus";
 /// A literal here and a directory listing on the other side of the
 /// assertion, never two literals: that asymmetry is the whole of what the pin
 /// is worth.
-const SUBSET_FILES: &[&str] = &["phase-4a.txt", "phase-4b.txt", "phase-4c.txt"];
+const SUBSET_FILES: &[&str] = &[
+    "phase-4a.txt",
+    "phase-4b.txt",
+    "phase-4c.txt",
+    "phase-5a.txt",
+];
 
 fn corpus_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus")

@@ -165,6 +165,15 @@
 //! nesting depth, which is what DEVIATION 0's own "must still fail"
 //! requirement asks for; nothing pinned here exercises the counter gap
 //! itself, and no claim to the contrary should be read into their names.
+//!
+//! # Opting a program out of DEVIATION 0
+//!
+//! [`RAW_STDERR_COMPARISON`] names corpus programs compared byte-for-byte on
+//! `stderr`, through `support::oracle::StderrComparison::Raw`, rather than
+//! through DEVIATION 0's normalisation. Empty as of Phase 5a's Task 1, which
+//! only builds the mechanism; a later task adds a program's path here the
+//! moment it needs to claim a stricter comparison than the default gives
+//! every other entry.
 
 mod support;
 
@@ -177,7 +186,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use rexx_exec::Outcome;
-use support::oracle::{Oracle, descriptor_diffs, wrapped_exit_code};
+use support::oracle::{Oracle, StderrComparison, descriptor_diffs_with, wrapped_exit_code};
 
 /// Env var that flips this test from a progress report into the phase gate.
 /// See the module doc's "REPORT vs STRICT" section.
@@ -269,6 +278,11 @@ fn excerpt(bytes: &[u8]) -> String {
     }
 }
 
+/// Corpus programs compared byte-for-byte on `stderr` rather than through
+/// DEVIATION 0's normalisation. See the module doc's "Opting a program out
+/// of DEVIATION 0".
+const RAW_STDERR_COMPARISON: &[&str] = &[];
+
 /// Runs one corpus entry under both interpreters and compares all three
 /// observable channels. `None` when they agree.
 fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mismatch> {
@@ -279,10 +293,16 @@ fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mism
     let cpp = oracle.run(&abs);
     let rust_exit = wrapped_exit_code(rust.exit_code);
 
-    // DEVIATION 0 applies to the stderr comparison inside `descriptor_diffs`
-    // -- see this file's own module doc for the scope and
-    // `tests/support/mod.rs` for the normalising function itself.
-    let diffs = descriptor_diffs(&rust, &cpp);
+    // DEVIATION 0 applies to the stderr comparison unless `rel_path` opted
+    // out via `RAW_STDERR_COMPARISON` -- see this file's own module doc for
+    // the scope and `tests/support/mod.rs` for the normalising function
+    // itself.
+    let stderr_mode = if RAW_STDERR_COMPARISON.contains(&rel_path) {
+        StderrComparison::Raw
+    } else {
+        StderrComparison::Normalized
+    };
+    let diffs = descriptor_diffs_with(&rust, &cpp, stderr_mode);
     if diffs.is_empty() {
         return None;
     }
@@ -467,7 +487,12 @@ fn emit_uncaptured(text: &str) {
 /// report's own "N of M matching" line, from 50 of 50 to 42 of 42. A number a
 /// reader might eyeball is not a check, and criterion 1 of the 4c gate rests
 /// on this figure.
-const SUBSET_FILES: &[&str] = &["phase-4a.txt", "phase-4b.txt", "phase-4c.txt"];
+const SUBSET_FILES: &[&str] = &[
+    "phase-4a.txt",
+    "phase-4b.txt",
+    "phase-4c.txt",
+    "phase-5a.txt",
+];
 
 /// The phase subset files that exist in the corpus directory, sorted.
 ///
