@@ -510,6 +510,22 @@ than trusting the transcription below, which the controller took on 2026-08-15.
 
 #### What the controller already measured, so you do not rediscover it
 
+CORRECTED 2026-08-15, twice, and both errors were the controller's. This paragraph first said the
+pass covered "42 of timely's warn-level lints" and gave its figures as violation counts.
+
+* **The set is 54 active warns, not 42.** The controller's reading came from a summarised fetch and
+  was short by twelve. Two independent re-fetches, one by the implementer and one by the reviewer,
+  both parsed the upstream table programmatically and agree: 60 entries, 5 `allow` plus 54 active
+  `warn` plus `as_conversions` commented out, and zero set difference against what this workspace
+  now carries. The twelve the controller never tested contribute no violations.
+* **The figures below are WARNING counts, not sites.** Under `--all-targets`, code compiled into
+  both a lib and a lib-test target is counted twice. Distinct primary spans are `as_conversions`
+  **299**, `shadow_unrelated` **314**, `needless_pass_by_ref_mut` **10**. The controller re-verified
+  this by counting distinct `(file, line, column)` primary spans. Moritz took the allow-versus-fix
+  decision on the inflated numbers; it stands on the corrected ones, since 299 casts each needing a
+  truncation-and-sign judgement and 314 renames across files under differential work are both still
+  out of this plan's scope.
+
 One `cargo clippy --workspace --all-targets` pass over this tree with 42 of timely's warn-level
 lints enabled, counted from `--message-format=json` by lint code:
 
