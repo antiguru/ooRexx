@@ -1,0 +1,85 @@
+64ce92fe Record that criterion 1's denominator is pinned
+80ff9c1f Pin which subset files the corpus and coverage runs read
+d0102460 Record criterion 4's pin, and refresh the mutation baseline
+e04fb46f Correct two Step 0 figures the base/bif extraction disproved
+70be78e2 Pin which subset files the stress collector reads
+89debc85 Write the Phase 4c exit gate
+1c94e50b Add mutate-4c.sh, with a truncation guard and a timeout
+8ac61371 Extract and run base/bif's assertions
+f0426f09 Put the 4c subset under the allocation-stress collector
+284ef543 Refresh Task 15's citations and fold in four debts from Tasks 9-14
+1c519dfc Fix round 1 for Task 14: a stem test that couldn't fail, the hang's body, and three restored facts
+d372dcdf Bind compound and stem DO control variables, not just simple ones
+1c2300d9 Correct Task 14: seven exempt bodies, and no parse change needed
+34eca951 Spend the >I> entry permission per clause, not per top-level instruction
+fb99355b Record that ::REQUIRES runs the required file's prolog
+88b3701f Stop rendering a value no trace line will print
+622f7198 Announce a ::routine's entry and exit, and end it on its own EXIT
+3aa457e1 Refuse a directive this crate cannot install, and only those
+e00528df Dispatch a call to a same-file ::routine, third in the resolution order
+bf272e63 Re-address Task 13's four stale citations
+9404ff0b Pin the two DATE/TIME fixes round 1 left untested
+c0596259 Fix DATE/TIME review findings: OOB panic, NUL separators, R's lazy reset
+20205641 Correct DATE's determinism split: the axis is the argument, not the letter
+7891fd4b Implement DATE and TIME (Phase 4c Task 12)
+760e3abc Give Task 12 both option sets and the empty-option rendering
+f11c55aa State the VALUE gap's status-row reasoning as a policed property
+9c3d96df Fix round 1 for Task 11: 40.26 case bug, an unrooted VALUE write, and the environment gap
+d6e8a8c7 Implement DATATYPE, SYMBOL, VALUE and VAR (4c Task 11)
+67382f88 Fix 40.14's found doc, and record the family's rendered/converted split
+9dc97da1 Give Task 11 the omitted-option case and the Phase 7 owner spelling
+9b4ee92a Substitute the converted integer in a builtin's range message
+f03d69f1 Answer the eleven builtins that read interpreter state
+af608f82 Add the S series: ANSI X3.274 compliance as an audit axis
+236ebeff Say which count the truncation guard compares, since two honest ones differ
+011589c1 Make --no-fail-fast mandatory for mutation runs, and say what it cost
+cc83ee83 Fix the ADDRESS statements a correction round left behind
+9a260d2f Record that Task 15's Step 4 is two thirds done, and why waiting was wrong
+27606888 Track the ADDRESS environment, and give phase-4c.txt a runner
+2070cd9d Pin the line-reading sources' trace shape, and close three vacuity gaps
+87b762b0 Write Task 8's queue-witness closure into Task 15's criteria
+81944c76 Implement the input model: ARG, PULL, PARSE PULL, PARSE LINEIN
+8eb5a402 Supply a top-level program's argument string
+0f427f61 Drop an unasserted count from parse_version_oracle's module doc
+73802e7b Guard PARSE VERSION against the oracle instead of against itself
+c20c6d7f Correct Task 7's two false trace claims in the plan, not just the report
+26fb60d9 Correct three wrong-answer claims in the PARSE witness headers
+da86c106 Implement the PARSE template engine
+f322477f Record that the oracle carries a local fix, and that results have no build identity
+2472fd8a Stop FORMAT aborting on a wide expp, and fix RANDOM's rendering
+510a070e Implement the seven numeric builtins
+ebbdaea7 Finish the surveys: VALUE's arity split, the per-clause clock, DATATYPE
+679ce886 Bound the two-forms defect: survey prose only, not the L1 infrastructure
+46e09768 Withdraw a Task 13 instruction that would have shipped a regression
+05659394 Size the CONDITION hole at two fields, and record ADDRESS's two traps
+1f532985 Answer Task 8's open design question, and pin the input model to .input
+cc1b8df6 Give Task 7 the PARSE template semantics, measured
+7916cb86 Give Task 6 the numeric behaviours, and the family's untested half
+c8f33d9c Pin the per-gap residue check, and drop two claims that would rot
+56c73fe1 Correct four survey claims Task 5 measured wrong, two of them mine to own
+ca0b63f9 Implement the twelve conversion builtins
+add307c7 Give Task 5 the eight convert behaviours the reference does not state
+2a96766b Correct four comments Task 4's review found false or unfalsifiable
+f74869c5 Measure what the base/bif extractor must model before writing it
+3af26b60 Implement the seven word builtins
+f10cd368 Sharpen the grep hazard, and record that the tab corpus has no literal tabs
+a403f6ef Settle expectSyntax's coupling in base/bif, and fix my own scan while doing it
+5872513f Record four oracle behaviours that documentation does not carry
+cf3beb79 Require corpora to cross their axes, not widen one
+53ba18b5 Split VERIFY's two branch tests apart, and sanitise live trace lines
+41fc5474 Withdraw two claims I committed without re-running their measurements
+6f4d0745 Say what ulimit -v cannot measure, and price the redundant copy in RSS
+f1db85b6 Give the large-result abort an owner, and split it by cause
+c0889d74 Carry error substitutions as bytes, and stop copying a builtin's result
+d90d5443 Require a byte-string alphabet in every probe set
+63a9ea9f Implement the 22 remaining string builtins
+0c58926e Say that check_arity counts arguments rather than checking their shape
+fc23d6ca Correct the argument-error families before the seven builtin tasks run
+c10e40df Build the builtin dispatch, the arity checks, and LENGTH
+3a51a3b0 Make the shared builtin block a controller obligation, not a false claim
+9746be64 Make four probes able to fail, and count the +++ sites not the functions
+420f5921 Say why Task 13 must land after every builtin task
+0786973b Cite the exclusions file by phrase, and withdraw a false claim in D-R
+aa7b3505 Record the builtin boundary by measuring it, and fix four attributions
+7d8c43db Revise the 4c plan against four adversarial reviews: eleven blockers
+c22b9124 Write the Phase 4c plan, settling five deferred decisions and two new ones

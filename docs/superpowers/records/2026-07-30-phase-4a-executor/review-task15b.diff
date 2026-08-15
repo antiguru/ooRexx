@@ -1,0 +1,1392 @@
+# Review package: Task 15b (assertion harness), commit 7eeb309d
+
+## Stat
+7eeb309d Add the base/expressions assertion-table harness (Task 15, consuming half)
+ rust/Cargo.lock                                    |   1 +
+ rust/crates/rexx-exec/Cargo.toml                   |   6 +
+ rust/crates/rexx-exec/tests/assertions.rs          | 819 +++++++++++++++++++++
+ rust/crates/rexx-extract/src/lib.rs                | 122 ++-
+ .../rexx-extract/tests/extract_assertions.rs       | 181 ++++-
+ 5 files changed, 1124 insertions(+), 5 deletions(-)
+
+## Full diff
+commit 7eeb309de6134740ad03422f029afbdf150d3e54
+Author: Moritz Hoffmann <antiguru@gmail.com>
+Date:   Sat Aug 1 02:23:15 2026 +0200
+
+    Add the base/expressions assertion-table harness (Task 15, consuming half)
+    
+    rexx-exec/tests/assertions.rs runs every AssertionRow rexx-extract's
+    extract_assertions lifts out of ootest/ooRexx/base/expressions/ through
+    rexx_exec's public entry point, comparing byte for byte rather than
+    numerically so the created-digits/created-form rendering story (D15) can't
+    hide behind a numeric equality. Two falsification proofs (value rows and
+    raise-expectation rows) confirm the table can actually fail; a third test
+    confirms it is sensitive to each row's own carried NUMERIC DIGITS/FORM
+    rather than a shared default.
+    
+    Running the harness for real found a second extractor modeling gap beyond
+    the CONCATENATION prelude trap 15a already caught: self~expectSyntax defers
+    a raise-check to a later statement in the same method, so a self~assertSame
+    that follows one is not testing "expr equals expected", it's testing
+    "evaluating expr raises major.sub" -- 184 of 4,259 extracted rows were
+    mis-modeled as value comparisons. Fixed in rexx-extract by converting those
+    rows (AssertionRow::expect_raise, carried sequentially like digits/form)
+    rather than dropping them, since they are the table's only coverage of the
+    raise path; self~assertSyntaxError/assertRuntimeError check their own raise
+    inline and don't defer, so they're left alone, and self~expectCondition
+    (a named, non-numeric condition) blocks rather than being silently
+    mismodeled the same way.
+    
+    Measured result: 4,224 of 4,259 rows pass. The remaining 35 are genuine
+    runtime gaps, all in Literals.testGroup, named and attributed to their
+    owning sub-phase (33 message sends, Phase 5; 2 function calls, 4b) rather
+    than folded into an unattributed blocked bucket.
+    
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+    Claude-Session: https://claude.ai/code/session_01ViT6Yj4Cj2jAsfB7RwUb6U
+
+diff --git a/rust/Cargo.lock b/rust/Cargo.lock
+index 3ae662b1..7e1ba320 100644
+--- a/rust/Cargo.lock
++++ b/rust/Cargo.lock
+@@ -424,20 +424,21 @@ version = "0.1.0"
+ dependencies = [
+  "criterion",
+  "rexx-num",
+ ]
+ 
+ [[package]]
+ name = "rexx-exec"
+ version = "0.1.0"
+ dependencies = [
+  "rexx-core",
++ "rexx-extract",
+  "rexx-inventory",
+  "rexx-num",
+  "rexx-parse",
+ ]
+ 
+ [[package]]
+ name = "rexx-extract"
+ version = "0.1.0"
+ 
+ [[package]]
+diff --git a/rust/crates/rexx-exec/Cargo.toml b/rust/crates/rexx-exec/Cargo.toml
+index 3cfa9e86..a5afabf4 100644
+--- a/rust/crates/rexx-exec/Cargo.toml
++++ b/rust/crates/rexx-exec/Cargo.toml
+@@ -18,12 +18,18 @@ rexx-parse = { path = "../rexx-parse" }
+ # what turns one into text.
+ rexx-num = { path = "../rexx-num" }
+ 
+ # The message catalogue. Phase 0 already generates `errors.rs` from
+ # `interpreter/messages/rexxmsg.xml`, 704 messages, and criterion 1 compares
+ # stderr byte for byte -- so the text an error prints is looked up here rather
+ # than hand-transcribed. Leaving this crate out of the dependency list is the
+ # omission spec revision 4 was made to correct.
+ rexx-inventory = { path = "../rexx-inventory" }
+ 
++[dev-dependencies]
++# `extract_assertions`, the row extractor `tests/assertions.rs` runs against
++# `ootest/ooRexx/base/expressions/`. Test-only: nothing in `src/` produces or
++# consumes an `AssertionRow`.
++rexx-extract = { path = "../rexx-extract" }
++
+ [lints]
+ workspace = true
+diff --git a/rust/crates/rexx-exec/tests/assertions.rs b/rust/crates/rexx-exec/tests/assertions.rs
+new file mode 100644
+index 00000000..438240b1
+--- /dev/null
++++ b/rust/crates/rexx-exec/tests/assertions.rs
+@@ -0,0 +1,819 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! Task 15's consuming half: runs every `AssertionRow` `rexx-extract`'s
++//! `extract_assertions` lifts out of `ootest/ooRexx/base/expressions/` (Task
++//! 15a) through `rexx_exec`'s public entry point and checks it the way the
++//! oracle's own test framework does.
++//!
++//! # Why two `SAY`s and not `==`
++//!
++//! For a row with no raise expectation (below): `OOREXXUNIT.CLS`'s
++//! `assertSame` is `if \ (expected == actual) then … fail`, and Rexx `==` is
++//! exact-string identity, no padding, no coercion. This harness reproduces
++//! that by turning each row into a two-line program -- `SAY <expr>` then
++//! `SAY <expected>` -- and comparing the two output lines **byte for byte**
++//! rather than asking `rexx_exec` to evaluate `==` itself.
++//! That is deliberate and not merely equivalent: criterion 2 is a byte-for-
++//! byte comparison to catch the created-digits/created-form rendering story
++//! (D15), and asking the executor's own `==` operator to be the judge would
++//! make the harness depend on the very code path it exists to check. Two
++//! independent `SAY`s and a `Vec<u8>` comparison in the test binary itself
++//! have no such circularity.
++//!
++//! # `NUMERIC DIGITS`/`FORM` per row, not once per file
++//!
++//! Every row carries the `DIGITS`/`FORM` in force at the point its assertion
++//! ran (Task 15a scanned each `.testGroup` file sequentially to compute
++//! this, from 1 to 100 and `SCIENTIFIC`/`ENGINEERING`). This harness emits
++//! both as the first two lines of that row's own program, never a shared
++//! default, and [`digits_and_form_are_carried_not_defaulted`] is a
++//! regression test for the failure mode named in Task 15's brief: a row
++//! evaluated at the wrong precision can render an answer that still happens
++//! to match and passes while testing the wrong thing.
++//!
++//! # `CONCATENATION`'s prelude
++//!
++//! `AssertionRow::prelude` (Task 15a) carries the method's `a`..`g`
++//! assignment lines verbatim; this harness's program builder ([`program_for`])
++//! writes them out before the two `SAY`s, so `expr`/`expected` see the same
++//! bindings the original method body would have given them. Nothing here
++//! substitutes a made-up prelude or leaves it out: a row whose prelude Task
++//! 15a could not represent is in `AssertionExtraction::blocked`, not among
++//! the rows this file runs.
++//!
++//! # Rows that expect a raise, not a value
++//!
++//! `AssertionRow::expect_raise` (`rexx-extract`) is `Some(major.sub)` for a
++//! row that follows a `self~expectSyntax` in its own method: the ooTest
++//! framework defers a raise-check to whatever runs next, so that row is not
++//! testing "expr equals expected" at all, it is testing "evaluating expr
++//! raises major.sub" -- and `expected` is never even reached under the
++//! oracle, since Rexx evaluates a message send's arguments left to right and
++//! the raise happens while evaluating the first one. [`program_for`] builds
++//! such a row's program with `expected` left out entirely, matching that
++//! evaluation order rather than printing a second line nothing would ever
++//! read; [`RowOutcome::RaiseMismatch`] is what a row like this produces
++//! instead of [`RowOutcome::Mismatch`], and [`the_raise_falsification_proof`]
++//! is the mismatch-shaped falsification proof for it, matching item 3's own
++//! concern (major and sub are checked, not major alone -- `26.11` and `26.2`
++//! must not be confused for each other).
++//!
++//! # Rows this harness cannot run yet
++//!
++//! A row is **runtime-blocked** if its program hits
++//! [`rexx_exec::NOT_IMPLEMENTED_EXIT`] -- some `ExprKind` the row's `expr` or
++//! `expected` text constructs is outside 4a's scope. Measured over the full
++//! 4,259-row set (see [`assertions_differential`]'s own report and
++//! `task-15b-report.md`): 35 rows, all in `Literals.testGroup` (2 `a function
++//! call`, 33 `a message send`), none anywhere else -- `base/expressions`
++//! otherwise constructs only the arithmetic, comparison, concatenation and
++//! logical forms 4a already evaluates, plus plain literals and variables.
++//! [`owning_subphase`] names the sub-phase for the two constructs actually
++//! observed (`a function call` is 4b's, `a message send` is Phase 5's, both
++//! per the design spec's own split table); anything else falls to an
++//! honestly-unknown fallback rather than a guess, since this harness has
++//! never measured it. The classification exists at all because "measured
++//! today" is a fact about this corpus at this commit, not a property that
++//! should be assumed going forward: a later task landing a new group of
++//! `.testGroup` files, or 4a itself narrowing its scope, could change this
++//! set, and a harness that could not even name what it hit would be the
++//! silent-vacuous-harness shape this project keeps finding in its own
++//! instruments.
++//!
++//! # REPORT vs STRICT, and why the report reaches the terminal
++//!
++//! Modelled directly on `tests/corpus.rs`, which solved both problems first:
++//! [`GATE_ENV`] switches between an always-green progress report and the
++//! phase gate, and [`emit_uncaptured`] pipes the report through a child
++//! process whose stderr is inherited, because a `println!`/`eprintln!`
++//! inside a `#[test]` writes to libtest's thread-local capture sink and
++//! never reaches the terminal under a plain `cargo test`. See
++//! `corpus.rs`'s own module doc for the fuller argument and the measurement
++//! that motivated it; nothing about the mechanism differs here, so it is
++//! not re-derived.
++
++use rexx_exec::{NOT_IMPLEMENTED_EXIT, Outcome, run_program};
++use rexx_extract::{
++    AssertionRow, BlockedMethod, Form, RaiseExpectation, extract_assertions, find_test_groups,
++};
++use std::collections::BTreeMap;
++use std::env;
++use std::fmt::Write as _;
++use std::fs;
++use std::io::Write as _;
++use std::path::{Path, PathBuf};
++use std::process::{Command, Stdio};
++
++/// The path every row's synthetic program is reported under. There is no
++/// real file backing a row -- its program is assembled from the row's own
++/// fields -- so this is a label, not a location, in the same spirit as
++/// `spike.rs`'s `SPIKE_PATH`.
++const ROW_PATH: &str = "/nonexistent/assertion-row.rex";
++
++/// Env var that flips this test from a progress report into the phase gate.
++/// Named separately from `corpus.rs`'s `REXX_CORPUS_GATE` because the two
++/// gate independent things -- the L0 corpus and this L1 assertion table --
++/// and a caller should be able to run one without the other.
++const GATE_ENV: &str = "REXX_ASSERTIONS_GATE";
++
++fn gate_mode() -> bool {
++    match env::var(GATE_ENV) {
++        Ok(value) => !value.is_empty() && value != "0",
++        Err(_) => false,
++    }
++}
++
++/// `ootest/ooRexx/base/expressions/`, hardcoded relative to this crate.
++///
++/// Not an env var: unlike `corpus.rs`'s oracle, this is checked-in test data
++/// in the same repository, not an external build a machine might be missing
++/// -- there is nothing here for a configurable path to usefully point at
++/// instead.
++fn suite_root() -> PathBuf {
++    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../ootest/ooRexx/base/expressions")
++}
++
++/// Every `AssertionRow` and `BlockedMethod` in the suite, group by group in
++/// sorted file order (`find_test_groups` already sorts).
++///
++/// This does **not** re-pin the row/blocked counts against a hardcoded
++/// number: `rexx-extract`'s own tests (`base_expressions_yields_the_measured_
++/// row_and_blocked_counts`) already do that for the extractor's output, and
++/// duplicating the pin here would just be two places that can go stale
++/// against each other. What this function's caller does check is that the
++/// count is nonzero and matches what the extractor's own invariant assertion
++/// (rows + dropped == assertSame calls, enforced inside `extract_assertions`'s
++/// caller in `rexx-extract-assertions`) implies -- recomputed independently
++/// below in `assertions_differential` from `count_assert_same`, so a future
++/// regression in either crate's counting is still caught from this side too.
++fn collect_all() -> (Vec<AssertionRow>, Vec<BlockedMethod>) {
++    let dir = suite_root();
++    let mut groups = find_test_groups(&dir);
++    groups.sort();
++    assert!(
++        !groups.is_empty(),
++        "no .testGroup files under {} -- suite_root points at the wrong \
++         directory, or the checkout is missing base/expressions entirely",
++        dir.display()
++    );
++
++    let mut rows = Vec::new();
++    let mut blocked = Vec::new();
++    for path in &groups {
++        let bytes =
++            fs::read(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
++        let source = String::from_utf8_lossy(&bytes);
++        let group_name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("group");
++        let extraction = extract_assertions(group_name, &source);
++        rows.extend(extraction.rows);
++        blocked.extend(extraction.blocked);
++    }
++    (rows, blocked)
++}
++
++/// The keyword `NUMERIC FORM` takes for a row's [`Form`].
++fn form_keyword(form: Form) -> &'static str {
++    match form {
++        Form::Scientific => "SCIENTIFIC",
++        Form::Engineering => "ENGINEERING",
++    }
++}
++
++/// Turns one row into a standalone program: the `DIGITS`/`FORM` in force,
++/// the method's assignment prelude verbatim, then `expr`.
++///
++/// A value-comparison row (`expect_raise: None`) gets a second `SAY
++/// <expected>` after it, exactly as captured. A raise-expectation row
++/// (`expect_raise: Some(_)`) does not: `expected` is never evaluated under
++/// the oracle either, since Rexx evaluates a message send's arguments left
++/// to right and the raise happens while evaluating `expr`, the first one --
++/// printing a second line for it here would test something the row never
++/// actually claims.
++///
++/// `expected` is wrapped in nothing here -- when it is written at all, it
++/// is written out exactly as `rexx-extract` captured it, a bare `SAY
++/// <expected>`. [`the_falsification_proof`] is the one place a row's
++/// `expected` text is ever wrapped, and it wraps a *copy*, never this
++/// function's own row.
++fn program_for(row: &AssertionRow) -> Vec<u8> {
++    let mut text = String::new();
++    writeln!(text, "numeric digits {}", row.digits).unwrap();
++    writeln!(text, "numeric form {}", form_keyword(row.form)).unwrap();
++    for line in &row.prelude {
++        writeln!(text, "{line}").unwrap();
++    }
++    writeln!(text, "say {}", row.expr).unwrap();
++    if row.expect_raise.is_none() {
++        writeln!(text, "say {}", row.expected).unwrap();
++    }
++    text.into_bytes()
++}
++
++/// What running one row's program decided.
++enum RowOutcome {
++    /// The two `SAY` lines were byte-identical (a value-comparison row), or
++    /// the expected condition was raised with the exact major and sub (a
++    /// raise-expectation row).
++    Pass,
++    /// Both lines rendered; they differ. A real divergence between
++    /// `rexx_exec` and what the oracle's own test suite asserts.
++    Mismatch { actual: Vec<u8>, expected: Vec<u8> },
++    /// A raise-expectation row where the program did not raise the expected
++    /// condition: either it did not raise at all (`actual: None`), or it
++    /// raised a *different* major.sub (`actual: Some(_)`) -- checked as a
++    /// pair, not major alone, so a row expecting `26.11` cannot be
++    /// satisfied by `26.2`.
++    RaiseMismatch {
++        expect: RaiseExpectation,
++        actual: Option<(u32, u32)>,
++    },
++    /// The program hit `NOT_IMPLEMENTED_EXIT`: some form in `expr` or
++    /// `expected` is outside 4a's scope. `construct` is whatever
++    /// `Loud`'s message named, taken verbatim off stderr.
++    RuntimeBlocked { construct: String },
++    /// None of the above: for a value-comparison row, a real Rexx condition
++    /// escaped one that the oracle's own suite asserts passes, or the
++    /// program did not print exactly two lines; for a raise-expectation
++    /// row, it raised *something* but this harness could not parse a
++    /// `major.sub` back out of its stderr, or the parsed major disagreed
++    /// with the exit code's own `256 - major`. Reported with full detail
++    /// rather than folded into `Mismatch`/`RaiseMismatch`, since neither of
++    /// those is really what happened.
++    Anomaly { detail: String },
++}
++
++/// Pulls `X` out of a `rexx-exec: X is not implemented` line. Identical in
++/// shape to `corpus.rs`'s `owner_from_stderr`; both harnesses classify the
++/// same loud-failure marker, so the pattern is duplicated deliberately
++/// rather than pulled into a shared helper neither crate is a natural home
++/// for (`rexx-exec/tests/` cannot depend on itself, and `rexx-extract`
++/// has never run a program).
++fn construct_from_stderr(stderr: &[u8]) -> Option<String> {
++    let text = String::from_utf8_lossy(stderr);
++    const MARKER: &str = "rexx-exec: ";
++    const SUFFIX: &str = " is not implemented";
++    let after_marker = &text[text.find(MARKER)? + MARKER.len()..];
++    let end = after_marker.find(SUFFIX)?;
++    Some(after_marker[..end].to_string())
++}
++
++/// Which sub-phase owns a runtime-blocked construct, for the two this
++/// harness has actually measured -- see the module doc's "Rows this
++/// harness cannot run yet". `None` for anything else: an honest "not yet
++/// attributed" rather than a guess, since nothing here has measured a third
++/// construct.
++///
++/// * `"a function call"` is `ExprKind::Call` -- the design spec's split
++///   table assigns `Call` to 4b ("routine resolution, which is handover
++///   1").
++/// * `"a message send"` is `ExprKind::Message` -- the same table assigns
++///   `Message` to Phase 5 ("4a has no general message dispatch", `value.rs`'s
++///   own words), alongside `Guard`/`Reply`/`Forward`/every directive.
++fn owning_subphase(construct: &str) -> Option<&'static str> {
++    match construct {
++        "a function call" => Some("4b"),
++        "a message send" => Some("Phase 5"),
++        _ => None,
++    }
++}
++
++/// Runs one row's program and classifies what happened.
++fn evaluate_row(row: &AssertionRow) -> RowOutcome {
++    let outcome = run_program(ROW_PATH, program_for(row));
++    classify(row, outcome)
++}
++
++/// The classification step on its own, apart from running the program, so
++/// the falsification tests can reuse it against a hand-built `Outcome`-
++/// producing run without duplicating the exit-code logic. Dispatches on
++/// `row.expect_raise` to one of the two shapes a row can test.
++fn classify(row: &AssertionRow, outcome: Outcome) -> RowOutcome {
++    match row.expect_raise {
++        Some(expect) => classify_raise(expect, outcome),
++        None => classify_value(outcome),
++    }
++}
++
++/// The original, value-comparison classification: two `SAY` lines, compared
++/// byte for byte.
++fn classify_value(outcome: Outcome) -> RowOutcome {
++    if outcome.exit_code == NOT_IMPLEMENTED_EXIT {
++        let construct =
++            construct_from_stderr(&outcome.stderr).unwrap_or_else(|| "<unnamed>".to_string());
++        return RowOutcome::RuntimeBlocked { construct };
++    }
++    if outcome.exit_code != 0 {
++        return RowOutcome::Anomaly {
++            detail: format!(
++                "exit {} (a real condition escaped a row the oracle's own suite asserts \
++                 passes); stderr={:?}",
++                outcome.exit_code,
++                String::from_utf8_lossy(&outcome.stderr)
++            ),
++        };
++    }
++    // Exactly two `SAY` lines are expected: `expr`'s rendering, then
++    // `expected`'s. `strip_suffix` rather than a trailing-empty-element
++    // filter on `split`, so a program that printed a third line (which
++    // nothing in `program_for` should ever cause, but a future change to
++    // it might) is caught as an anomaly instead of silently comparing the
++    // wrong two lines.
++    let trimmed = outcome
++        .stdout
++        .strip_suffix(b"\n")
++        .unwrap_or(&outcome.stdout);
++    let parts: Vec<&[u8]> = trimmed.split(|&b| b == b'\n').collect();
++    if parts.len() != 2 {
++        return RowOutcome::Anomaly {
++            detail: format!(
++                "expected exactly 2 SAY lines, got {}: {:?}",
++                parts.len(),
++                String::from_utf8_lossy(&outcome.stdout)
++            ),
++        };
++    }
++    let (actual, expected) = (parts[0].to_vec(), parts[1].to_vec());
++    if actual == expected {
++        RowOutcome::Pass
++    } else {
++        RowOutcome::Mismatch { actual, expected }
++    }
++}
++
++/// The raise-expectation classification: `expr` alone must raise exactly
++/// `expect.major`.`expect.sub`.
++///
++/// `Raised` (the payload that would carry `major`/`sub` directly) is
++/// `pub(crate)` inside `rexx-exec` and this is an integration test outside
++/// the crate, so the two pieces come from the only channel a public caller
++/// has: `Outcome::exit_code` (`256 - major`, `error.rs`'s own rule) and the
++/// oracle-format report on `Outcome::stderr`, whose second line is always
++/// `Error <major>.<sub>:  <message>.` (`parse_condition_number`). Both are
++/// read and cross-checked against each other rather than trusting either
++/// alone -- see that function's own doc for why the *first* report line
++/// (`Error <major> running <path> line <n>:  ...`) never parses as a
++/// `major.sub` pair by accident even though it also starts with `Error `.
++fn classify_raise(expect: RaiseExpectation, outcome: Outcome) -> RowOutcome {
++    if outcome.exit_code == NOT_IMPLEMENTED_EXIT {
++        let construct =
++            construct_from_stderr(&outcome.stderr).unwrap_or_else(|| "<unnamed>".to_string());
++        return RowOutcome::RuntimeBlocked { construct };
++    }
++    if outcome.exit_code == 0 {
++        return RowOutcome::RaiseMismatch {
++            expect,
++            actual: None,
++        };
++    }
++    let Some((major, sub)) = parse_condition_number(&outcome.stderr) else {
++        return RowOutcome::Anomaly {
++            detail: format!(
++                "exit {} but no parseable \"Error major.sub:\" line in stderr: {:?}",
++                outcome.exit_code,
++                String::from_utf8_lossy(&outcome.stderr)
++            ),
++        };
++    };
++    let major_from_exit = 256 - outcome.exit_code;
++    if i64::from(major) != i64::from(major_from_exit) {
++        return RowOutcome::Anomaly {
++            detail: format!(
++                "exit code {} implies major {major_from_exit} (256 - major), but stderr's own \
++                 report line says {major}.{sub}: {:?}",
++                outcome.exit_code,
++                String::from_utf8_lossy(&outcome.stderr)
++            ),
++        };
++    }
++    if major == expect.major && sub == expect.sub {
++        RowOutcome::Pass
++    } else {
++        RowOutcome::RaiseMismatch {
++            expect,
++            actual: Some((major, sub)),
++        }
++    }
++}
++
++/// Finds `major`/`sub` in the oracle-format report's second line, `Error
++/// <major>.<sub>:  <message>.`.
++///
++/// Scans every line for one starting `Error `, splits the rest at the first
++/// `:`, and tries to parse *that* as `<major>.<sub>` (both plain integers).
++/// The report's *first* line, `Error <major> running <path> line <n>:  ...`,
++/// also starts with `Error ` but never parses this way by construction: its
++/// segment before the first `:` is `<major> running <path> line <n>`, and
++/// `<path>` is `ROW_PATH`, which itself contains a `.` (`assertion-row.rex`)
++/// -- so `split_once('.')`'s first half there is non-numeric text, not a
++/// bare major, and the whole parse fails on that line and falls through to
++/// the second. Verified directly rather than assumed: every stderr this
++/// harness has produced so far has exactly this two-line shape, and the
++/// function returns the *first* line it can parse rather than picking one
++/// by position, so it does not depend on that continuing to hold.
++fn parse_condition_number(stderr: &[u8]) -> Option<(u32, u32)> {
++    let text = String::from_utf8_lossy(stderr);
++    for line in text.lines() {
++        let Some(rest) = line.strip_prefix("Error ") else {
++            continue;
++        };
++        let Some(colon) = rest.find(':') else {
++            continue;
++        };
++        let code = &rest[..colon];
++        let Some((major, sub)) = code.split_once('.') else {
++            continue;
++        };
++        if let (Ok(major), Ok(sub)) = (major.trim().parse::<u32>(), sub.trim().parse::<u32>()) {
++            return Some((major, sub));
++        }
++    }
++    None
++}
++
++/// Bounds a byte string to a short, readable excerpt for the report.
++fn excerpt(bytes: &[u8]) -> String {
++    const BOUND: usize = 200;
++    let text = String::from_utf8_lossy(bytes);
++    if text.chars().count() > BOUND {
++        format!("{}...", text.chars().take(BOUND).collect::<String>())
++    } else {
++        text.into_owned()
++    }
++}
++
++/// One row that did not pass, with enough of its identity to find it again
++/// in the `.testGroup` source.
++struct Reported {
++    group: String,
++    method: String,
++    expr: String,
++    expected: String,
++    detail: String,
++}
++
++fn describe(row: &AssertionRow, outcome: &RowOutcome) -> Option<Reported> {
++    let detail = match outcome {
++        RowOutcome::Pass => return None,
++        RowOutcome::Mismatch { actual, expected } => format!(
++            "MISMATCH: expr rendered {:?}, expected rendered {:?}",
++            excerpt(actual),
++            excerpt(expected)
++        ),
++        RowOutcome::RaiseMismatch { expect, actual } => {
++            let actual = match actual {
++                Some((major, sub)) => format!("{major}.{sub}"),
++                None => "did not raise at all (exit 0)".to_string(),
++            };
++            format!(
++                "RAISE-MISMATCH: expected {}.{}, got {actual}",
++                expect.major, expect.sub
++            )
++        }
++        RowOutcome::RuntimeBlocked { construct } => match owning_subphase(construct) {
++            Some(phase) => format!("RUNTIME-BLOCKED: {construct} is not implemented ({phase})"),
++            None => format!(
++                "RUNTIME-BLOCKED: {construct} is not implemented (sub-phase not attributed)"
++            ),
++        },
++        RowOutcome::Anomaly { detail } => format!("ANOMALY: {detail}"),
++    };
++    Some(Reported {
++        group: row.group.clone(),
++        method: row.method.clone(),
++        expr: row.expr.clone(),
++        expected: row.expected.clone(),
++        detail,
++    })
++}
++
++/// Builds the report text, in the same "always visible, caveated top and
++/// bottom in REPORT mode" shape as `corpus.rs::build_report`.
++fn build_report(
++    total: usize,
++    passed: usize,
++    reported: &[Reported],
++    extraction_blocked: &[BlockedMethod],
++    gate: bool,
++) -> String {
++    let banner = "=".repeat(78);
++    let mut report = String::new();
++    let w = &mut report;
++    writeln!(w, "{banner}").unwrap();
++    writeln!(
++        w,
++        "rexx-exec assertion-table report -- ootest/ooRexx/base/expressions"
++    )
++    .unwrap();
++    if gate {
++        writeln!(w, "mode: STRICT (the gate) -- {GATE_ENV} is set").unwrap();
++    } else {
++        writeln!(
++            w,
++            "*** REPORT MODE -- NOT THE GATE. Set {GATE_ENV}=1 to run this as the gate. ***"
++        )
++        .unwrap();
++    }
++    let not_the_gate = if gate {
++        ""
++    } else {
++        " -- REPORT MODE, NOT THE GATE"
++    };
++    writeln!(w, "{passed} of {total} rows passing{not_the_gate}").unwrap();
++
++    writeln!(
++        w,
++        "extraction-blocked (Task 15a, unsupported prelude shape): {} methods, {} assertSame \
++         calls dropped before ever becoming a row",
++        extraction_blocked.len(),
++        extraction_blocked.iter().map(|b| b.dropped).sum::<usize>()
++    )
++    .unwrap();
++    for blocked in extraction_blocked {
++        writeln!(
++            w,
++            "  extraction-blocked: {}::{} -- {} ({} dropped)",
++            blocked.group, blocked.method, blocked.reason, blocked.dropped
++        )
++        .unwrap();
++    }
++
++    if !reported.is_empty() {
++        writeln!(w, "not passing ({}):", reported.len()).unwrap();
++        for r in reported {
++            writeln!(
++                w,
++                "  [{}::{}] expr={:?} expected={:?}: {}",
++                r.group, r.method, r.expr, r.expected, r.detail
++            )
++            .unwrap();
++        }
++
++        let mut by_kind: BTreeMap<&str, usize> = BTreeMap::new();
++        for r in reported {
++            let kind = r.detail.split(':').next().unwrap_or("UNKNOWN");
++            *by_kind.entry(kind).or_insert(0) += 1;
++        }
++        writeln!(w, "by kind:").unwrap();
++        for (kind, count) in &by_kind {
++            writeln!(w, "  {kind}: {count}").unwrap();
++        }
++    }
++
++    if !gate {
++        writeln!(
++            w,
++            "*** REPORT MODE -- NOT THE GATE. {passed} of {total} matching means {} rows are \
++             not passing yet; it is a progress signal, not a claim that criterion 2 is met. ***",
++            total - passed
++        )
++        .unwrap();
++    }
++    writeln!(w, "{banner}").unwrap();
++    report
++}
++
++/// Writes `text` to the real, process-level stderr. Identical mechanism to
++/// `corpus.rs::emit_uncaptured` -- see that file's own doc comment for why
++/// `println!`/`eprintln!` cannot do this from inside a `#[test]` and how
++/// this was verified. Not shared as a library function because both are
++/// integration tests in different crates' `tests/` directories, which
++/// cannot depend on each other.
++fn emit_uncaptured(text: &str) {
++    let mut child = Command::new("sh")
++        .arg("-c")
++        .arg("cat >&2")
++        .stdin(Stdio::piped())
++        .stderr(Stdio::inherit())
++        .spawn()
++        .expect("spawning `sh -c 'cat >&2'` to bypass libtest's output capture");
++    child
++        .stdin
++        .take()
++        .expect("stdin was requested as piped")
++        .write_all(text.as_bytes())
++        .expect("writing the report to the uncaptured-output child's stdin");
++    let status = child
++        .wait()
++        .expect("waiting for the uncaptured-output child");
++    assert!(
++        status.success(),
++        "the uncaptured-output child (`sh -c 'cat >&2'`) exited abnormally: {status}"
++    );
++}
++
++/// The runner. See the module doc for REPORT vs STRICT, and
++/// `task-15b-report.md` for the measured counts.
++#[test]
++fn assertions_differential() {
++    let (rows, blocked) = collect_all();
++    assert!(
++        !rows.is_empty(),
++        "extract_assertions produced no rows at all -- that is an extraction \
++         defect, not an empty pass"
++    );
++
++    let total = rows.len();
++    let mut passed = 0usize;
++    let mut reported = Vec::new();
++    for row in &rows {
++        let outcome = evaluate_row(row);
++        match describe(row, &outcome) {
++            None => passed += 1,
++            Some(r) => reported.push(r),
++        }
++    }
++
++    let gate = gate_mode();
++    emit_uncaptured(&build_report(total, passed, &reported, &blocked, gate));
++
++    assert!(
++        !gate || reported.is_empty(),
++        "STRICT ({GATE_ENV}) mode: {} of {total} assertion-table rows are not passing; see \
++         the report above for which and why.",
++        reported.len()
++    );
++}
++
++/// The falsification proof Task 15's brief requires: perturbing one row's
++/// `expected` value must make exactly that row's comparison fail, and must
++/// not touch anything else.
++///
++/// Wraps the original `expected` text in parens before appending the
++/// concatenation, `({expected}) || 'ZZZ-FALSIFICATION-MARKER'`, rather than
++/// appending to the raw text directly: concatenation binds *tighter* than
++/// comparison in Rexx precedence, so appending straight onto text that
++/// happens to contain a top-level comparison (several `CONCATENATION` rows
++/// do) would silently regroup the expression instead of just perturbing its
++/// value. The parens are grouping only -- confirmed in `rexx-parse`
++/// (`expr.rs`'s `subterm`, `LeftParen` arm: "the parenthesised expression is
++/// returned unchanged, so there is no node for the parentheses") -- so this
++/// changes nothing about how the original text evaluates and only adds the
++/// marker on top.
++#[test]
++fn the_falsification_proof() {
++    let (rows, _) = collect_all();
++    let row = rows.first().expect(
++        "collect_all's own non-empty assertion covers this too, restated for a \
++                 reader of just this test",
++    );
++
++    let honest = evaluate_row(row);
++    assert!(
++        matches!(honest, RowOutcome::Pass),
++        "the row picked for falsification does not even pass unperturbed, so a failure below \
++         would prove nothing about the harness's sensitivity"
++    );
++
++    let mut perturbed = row.clone();
++    perturbed.expected = format!("({}) || 'ZZZ-FALSIFICATION-MARKER'", row.expected);
++    let falsified = evaluate_row(&perturbed);
++    assert!(
++        matches!(falsified, RowOutcome::Mismatch { .. }),
++        "perturbing this row's expected value did not make it fail -- the comparison is not \
++         sensitive to the expected text, which is exactly the vacuous-table shape criterion 2 \
++         already had once"
++    );
++
++    // The other direction: an *unperturbed* second row (there are thousands;
++    // any other suffices) must still be unaffected by having built and run
++    // the perturbed clone above -- `Interp` is fresh per `run_program` call,
++    // so there is no shared mutable state a stray perturbation could leak
++    // through, but this is the cheap, direct check of that rather than an
++    // appeal to the architecture.
++    if let Some(other) = rows.get(1) {
++        assert!(
++            matches!(evaluate_row(other), RowOutcome::Pass),
++            "a second, unperturbed row stopped passing after the perturbed clone ran -- \
++             something is leaking state across rows"
++        );
++    }
++}
++
++/// Task 15's brief, item 3: a row evaluated under the wrong `NUMERIC
++/// DIGITS`/`FORM` can render an answer that still happens to match and pass
++/// while testing the wrong precision. This is the row `task-15a-report.md`
++/// names as the pre-flight finding that added `FORM` to the row schema:
++/// `ADDITION.testGroup`'s `test_198`, `Numeric Form ENGINEERING` + `Numeric
++/// Digits 5`, `self~assertSame(9999999999999 + 9999999999999, 20.000E+12)`
++/// -- `20.000E+12` is only the right answer in engineering notation at 5
++/// digits.
++///
++/// Proves the harness is actually *sensitive* to the row's own
++/// `digits`/`form` fields, not merely that Task 15a computed them
++/// correctly (its own tests already cover that): running this row's real
++/// `expr`/`expected` at the *default* settings (`DIGITS 9`, `FORM
++/// SCIENTIFIC`) must render a different pair of lines and must not pass,
++/// which is the direct, measured version of "silently tests the wrong
++/// precision and still passes" not holding here.
++#[test]
++fn digits_and_form_are_carried_not_defaulted() {
++    let (rows, _) = collect_all();
++    let row = rows
++        .iter()
++        .find(|r| r.group == "ADDITION" && r.method == "test_198")
++        .expect(
++            "ADDITION.testGroup's test_198 is a fixed row this test names by hand; if it is \
++             gone, the source file changed underneath this test and it needs a new witness, \
++             not a relaxed assertion",
++        );
++    assert_eq!(row.digits, 5, "test_198's own Numeric Digits 5");
++    assert_eq!(
++        row.form,
++        Form::Engineering,
++        "test_198's own Numeric Form ENGINEERING"
++    );
++
++    let honest = evaluate_row(row);
++    assert!(
++        matches!(honest, RowOutcome::Pass),
++        "test_198 at its real digits/form did not pass: {}",
++        describe(row, &honest).map(|r| r.detail).unwrap_or_default()
++    );
++
++    let mut defaulted = row.clone();
++    defaulted.digits = 9;
++    defaulted.form = Form::Scientific;
++    let wrong = evaluate_row(&defaulted);
++    assert!(
++        matches!(wrong, RowOutcome::Mismatch { .. }),
++        "test_198 evaluated at the *default* digits/form (9, SCIENTIFIC) instead of its own \
++         (5, ENGINEERING) still passed -- carrying these fields per row would not have been \
++         load-bearing for this witness, which defeats the point of picking it"
++    );
++}
++
++/// The falsification proof for the other row shape: a raise-expectation row
++/// must fail if it does not raise at all, and -- the sharper case -- it
++/// must fail if it raises the *wrong* condition, even one with the same
++/// major. `DIVISION.testGroup`'s `test_262` (`self~expectSyntax(26.11)`,
++/// `self~assertSame("-5678932" % "-37", 1)`) is the same witness
++/// `task-15b-report.md` used to find the `expectSyntax` gap in the first
++/// place, found by hand rather than by scanning `rows` for the first
++/// `expect_raise: Some(_)` entry, so this test does not depend on which
++/// row that happens to be.
++#[test]
++fn the_raise_falsification_proof() {
++    let (rows, _) = collect_all();
++    let row = rows
++        .iter()
++        .find(|r| r.group == "DIVISION" && r.method == "test_262")
++        .expect(
++            "DIVISION.testGroup's test_262 is a fixed row this test names by hand; if it is \
++             gone, the source file changed underneath this test and it needs a new witness, \
++             not a relaxed assertion",
++        );
++    let expect = row
++        .expect_raise
++        .expect("test_262 follows a self~expectSyntax(26.11) in its own method");
++    assert_eq!(expect, RaiseExpectation { major: 26, sub: 11 });
++
++    let honest = evaluate_row(row);
++    assert!(
++        matches!(honest, RowOutcome::Pass),
++        "test_262 did not pass at its real expectation: {}",
++        describe(row, &honest).map(|r| r.detail).unwrap_or_default()
++    );
++
++    // Did-not-raise: the sharpest possible perturbation, an expectation the
++    // row's own `expr` cannot ever satisfy since it always raises 26.11.
++    let mut impossible = row.clone();
++    impossible.expect_raise = Some(RaiseExpectation { major: 1, sub: 1 });
++    assert!(
++        matches!(
++            evaluate_row(&impossible),
++            RowOutcome::RaiseMismatch {
++                actual: Some((26, 11)),
++                ..
++            }
++        ),
++        "perturbing the expected condition to one the row's own expr cannot raise did not fail"
++    );
++
++    // The sharper case item 3 asks for by name: the *same major*, a
++    // different sub. `26.2` is a real, distinct catalogue entry (a `DO`
++    // repetitor error) from `26.11` ("Result of % operation did not result
++    // in a whole number") -- a harness that only checked the major would
++    // wave this one through.
++    let mut wrong_sub = row.clone();
++    wrong_sub.expect_raise = Some(RaiseExpectation { major: 26, sub: 2 });
++    assert!(
++        matches!(
++            evaluate_row(&wrong_sub),
++            RowOutcome::RaiseMismatch {
++                actual: Some((26, 11)),
++                ..
++            }
++        ),
++        "perturbing only the sub-number (26.11 -> 26.2) did not fail -- the comparison is not \
++         sensitive to sub, which is exactly the confusable-error-numbers hazard item 3 names"
++    );
++}
+diff --git a/rust/crates/rexx-extract/src/lib.rs b/rust/crates/rexx-extract/src/lib.rs
+index 043c3935..7d5679a8 100644
+--- a/rust/crates/rexx-extract/src/lib.rs
++++ b/rust/crates/rexx-extract/src/lib.rs
+@@ -122,42 +122,91 @@ fn touches_fixture(body: &str) -> bool {
+ }
+ 
+ /// `NUMERIC FORM` at the point an assertion runs. Defaults to `Scientific`,
+ /// exactly as a fresh method activation does.
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+ pub enum Form {
+     Scientific,
+     Engineering,
+ }
+ 
++/// A condition an assertion's expression is expected to **raise**, in place
++/// of a value it is expected to equal.
++///
++/// `self~expectSyntax(major.sub)` does not check anything itself -- it sets
++/// a flag (`OOREXXUNIT.CLS`: `self~conditionExpected = .true; self~
++/// conditionName = "SYNTAX"; self~conditionCode = major.sub`) that the
++/// framework's own per-method condition trap consults *later*, whenever
++/// something in the rest of that method actually raises. So a
++/// `self~assertSame` seen after one is not testing "expr equals expected"
++/// at all: it is testing "evaluating expr raises major.sub", and `expected`
++/// (its second argument) is never even reached under the oracle, because
++/// Rexx evaluates a message send's arguments left to right and the raise
++/// happens while evaluating the first one.
++///
++/// Measured, `DIVISION.testGroup`'s `test_262`:
++///
++/// ```text
++/// self~expectSyntax(26.11)
++/// Numeric Digits 5
++/// self~assertSame("-5678932" % "-37", 1)
++/// ```
++///
++/// running `"-5678932" % "-37"` under `DIGITS 5` raises the oracle's own
++/// Error 26.11 ("Result of % operation did not result in a whole number"),
++/// which is what this row is actually checking -- not that the quotient
++/// equals `1`. Note `expectSyntax` is not even the *immediately* preceding
++/// line here; `NUMERIC DIGITS` sits between it and the assertion, which is
++/// why this is carried as state (below) rather than checked one line back.
++///
++/// **Carried sequentially, exactly like `digits`/`form`**, and for the same
++/// reason: a second `self~expectSyntax` in the same method (none occur in
++/// `base/expressions` today -- checked -- but nothing about the mechanism
++/// is specific to there being only one) would set a new expectation for
++/// whatever follows it, the same way a second `NUMERIC DIGITS` would. This
++/// struct is `Copy` so carrying it costs nothing extra in the scan.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub struct RaiseExpectation {
++    pub major: u32,
++    pub sub: u32,
++}
++
+ /// One `self~assertSame` call, together with everything about its method's
+ /// prior statements that decides what it means: `NUMERIC DIGITS`/`FORM` in
+-/// force, and any assignment lines earlier in the same method.
++/// force, any assignment lines earlier in the same method, and whether a
++/// `self~expectSyntax` earlier in the method turns this row into a
++/// raise-expectation rather than a value comparison.
+ ///
+ /// `expr` and `expected` are `assertSame`'s two positional arguments,
+ /// verbatim source text, unparsed. Both are ordinary Rexx expressions --
+ /// method-call arguments always are, so a quoted literal and a bare signed
+ /// number are both just expressions that happen to be constant -- and
+ /// deciding what either one evaluates to needs a real evaluator, which is a
+-/// later harness's job, not this extractor's.
++/// later harness's job, not this extractor's. When `expect_raise` is
++/// `Some`, `expected` is still the raw text `assertSame` was called with,
++/// kept for provenance, but it is not meaningful to compare against: see
++/// `RaiseExpectation`'s own doc for why.
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub struct AssertionRow {
+     pub group: String,
+     pub method: String,
+     /// Assignment statements from earlier in the same method, verbatim and
+     /// in source order. Empty for every assertion except the few that need
+     /// one (`CONCATENATION`'s `a`..`g` variables, as of this writing).
+     pub prelude: Vec<String>,
+     pub expr: String,
+     pub expected: String,
+     pub digits: u32,
+     pub form: Form,
++    /// `Some` when a `self~expectSyntax` earlier in this method means this
++    /// row tests a raise rather than a value. See [`RaiseExpectation`].
++    pub expect_raise: Option<RaiseExpectation>,
+ }
+ 
+ /// One method whose remaining `assertSame` calls could not become rows, and
+ /// why, and how many were dropped.
+ ///
+ /// Assertions from *before* the blocking statement in the same method still
+ /// become rows: nothing about them was actually invalidated, only the
+ /// state after that point stopped being trustworthy.
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub struct BlockedMethod {
+@@ -191,20 +240,21 @@ pub fn extract_assertions(group: &str, source: &str) -> AssertionExtraction {
+ 
+ fn scan_method_for_assertions(
+     group: &str,
+     method: &str,
+     body: &str,
+     out: &mut AssertionExtraction,
+ ) {
+     let mut digits: u32 = 9;
+     let mut form = Form::Scientific;
+     let mut prelude: Vec<String> = Vec::new();
++    let mut expect_raise: Option<RaiseExpectation> = None;
+     let mut blocked_reason: Option<String> = None;
+     let mut dropped = 0usize;
+ 
+     let block = |reason: &mut Option<String>, line: &str| {
+         if reason.is_none() {
+             *reason = Some(format!("unsupported statement: {}", line.trim()));
+         }
+     };
+ 
+     for line in body.lines() {
+@@ -252,34 +302,75 @@ fn scan_method_for_assertions(
+             if blocked_reason.is_none() {
+                 match parsed {
+                     Some((expr, expected)) => out.rows.push(AssertionRow {
+                         group: group.to_string(),
+                         method: method.to_string(),
+                         prelude: prelude.clone(),
+                         expr,
+                         expected,
+                         digits,
+                         form,
++                        expect_raise,
+                     }),
+                     None => {
+                         block(&mut blocked_reason, trimmed);
+                         dropped += 1;
+                     }
+                 }
+             } else {
+                 dropped += 1;
+             }
+             continue;
+         }
++        // `self~expectSyntax(major.sub)` defers a raise-check to whatever
++        // in the rest of this method actually raises -- see
++        // `RaiseExpectation`'s own doc. Checked, and blocked on parse
++        // failure, *before* the generic `self~expect` fallback just below,
++        // which would otherwise treat this exact prefix as inert and
++        // silently keep emitting ordinary value-comparison rows for
++        // whatever `self~assertSame` follows.
++        if let Some(rest) = lower.strip_prefix("self~expectsyntax") {
++            match parse_raise_expectation(rest.trim()) {
++                Some(expectation) => {
++                    if blocked_reason.is_none() {
++                        expect_raise = Some(expectation);
++                    }
++                }
++                None => block(&mut blocked_reason, trimmed),
++            }
++            continue;
++        }
++        // `self~expectCondition(name)` defers the same way, but for an
++        // arbitrary named condition rather than a numbered `SYNTAX` one --
++        // this row schema has nowhere to carry a bare condition name, so
++        // rather than silently fall into the generic inert branch below
++        // (which would keep emitting ordinary value rows exactly as
++        // wrongly as the `expectSyntax` gap this struct exists to close),
++        // block. Zero occurrences of `self~expectCondition` anywhere near
++        // an `assertSame` in `base/expressions` today -- checked -- so
++        // this is a forward guard against the corpus growing, not a
++        // measured case.
++        if lower.starts_with("self~expectcondition") {
++            block(&mut blocked_reason, trimmed);
++            continue;
++        }
+         if lower.starts_with("self~assert") || lower.starts_with("self~expect") {
+-            // A different assertion kind: no variables assigned, so nothing
+-            // to extract and nothing that invalidates later state.
++            // A different assertion kind: no variables assigned, and
++            // (unlike `expectSyntax`/`expectCondition` above) it does not
++            // defer anything to a later statement either -- `assertSyntaxError`
++            // and `assertRuntimeError` both call `expectSyntax` and then
++            // perform their own check *within the same call*, so nothing
++            // is left pending by the time this method's next line runs.
++            // Confirmed for this corpus: no `self~assertSame` ever follows
++            // one of these two in the same method (checked, 0 occurrences),
++            // matching the framework's own self-contained behaviour rather
++            // than coincidence.
+             continue;
+         }
+         if blocked_reason.is_none()
+             && let Some(assign) = simple_assignment(trimmed)
+         {
+             prelude.push(assign.to_string());
+             continue;
+         }
+         block(&mut blocked_reason, trimmed);
+     }
+@@ -354,20 +445,43 @@ fn parse_assert_same(line: &str) -> Option<(String, String)> {
+     let close = close?;
+     if !rest[close + 1..].trim().is_empty() {
+         return None; // trailing text after the call
+     }
+     let comma = top_comma?;
+     let expr = rest[open + 1..comma].trim().to_string();
+     let expected = rest[comma + 1..close].trim().to_string();
+     Some((expr, expected))
+ }
+ 
++/// Parses `self~expectSyntax`'s argument, already known (case-insensitively)
++/// to follow that prefix. `rest` is everything after `self~expectSyntax`,
++/// trimmed -- expected to be exactly `(major.sub)` with nothing else, which
++/// is the shape every one of the 19 occurrences preceding an `assertSame`
++/// in `base/expressions` uses.
++///
++/// `None` for anything else, including `expectSyntax`'s own array form
++/// (`(major.sub, message inserts...)`, which the method also accepts but
++/// none of these 19 use) or a trailing `msg` argument. Rather than guess
++/// which comma-separated item is the code, or discard the inserts, this
++/// blocks the method -- the same conservative choice `parse_assert_same`
++/// makes for an `assertSame` shape it has not seen either.
++fn parse_raise_expectation(rest: &str) -> Option<RaiseExpectation> {
++    let inner = rest.strip_prefix('(')?.strip_suffix(')')?.trim();
++    if inner.contains(',') {
++        return None;
++    }
++    let (major, sub) = inner.split_once('.')?;
++    let major = major.trim().parse::<u32>().ok()?;
++    let sub = sub.trim().parse::<u32>().ok()?;
++    Some(RaiseExpectation { major, sub })
++}
++
+ /// A whole-line, single-clause assignment: a symbol (letters, digits, `_`,
+ /// `.`, `!`, `?` -- covers plain and compound variable names) followed by
+ /// `=` (not `==`). Rejects a line carrying an unquoted `;`, since that is a
+ /// second clause this scanner cannot safely fold into one prelude line
+ /// verbatim. Returns `line` verbatim on a match.
+ fn simple_assignment(line: &str) -> Option<&str> {
+     let is_symbol_char = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '!' | '?');
+     let ident_len: usize = line
+         .char_indices()
+         .take_while(|&(_, c)| is_symbol_char(c))
+diff --git a/rust/crates/rexx-extract/tests/extract_assertions.rs b/rust/crates/rexx-extract/tests/extract_assertions.rs
+index 2c0cf2ae..52e9d247 100644
+--- a/rust/crates/rexx-extract/tests/extract_assertions.rs
++++ b/rust/crates/rexx-extract/tests/extract_assertions.rs
+@@ -1,11 +1,11 @@
+-use rexx_extract::{Form, extract_assertions, find_test_groups};
++use rexx_extract::{Form, RaiseExpectation, extract_assertions, find_test_groups};
+ use std::path::Path;
+ 
+ /// Two `assertSame` calls in one method, a `NUMERIC DIGITS` change between
+ /// them -- the exact shape `SUBTRACTION.testGroup`'s `test_2` uses. This is
+ /// the brief's own named risk: if the extractor read the file's settings in
+ /// isolation rather than carrying state sequentially, both rows could come
+ /// out with the same (wrong) digits and this test would not catch it, so it
+ /// asserts the two values are *different* and each matches its own call.
+ #[test]
+ fn digits_changing_mid_method_is_carried_sequentially_not_read_in_isolation() {
+@@ -164,20 +164,159 @@ fn other_assertion_kinds_are_ignored_without_blocking_or_changing_state() {
+    numeric digits 5
+    self~assertSame(1/3, '0.33333')
+    self~expectSyntax(42.3)
+ "#;
+     let out = extract_assertions("M", source);
+     assert_eq!(out.rows.len(), 1);
+     assert_eq!(out.rows[0].digits, 5);
+     assert!(out.blocked.is_empty());
+ }
+ 
++/// `DIVISION.testGroup`'s own `test_262` shape: `self~expectSyntax` is not
++/// even the line immediately before the assertion (`Numeric Digits 5` sits
++/// between them), so a row after it must still pick up the expectation --
++/// a same-line or previous-line check would have missed this.
++#[test]
++fn an_expect_syntax_marker_turns_the_following_row_into_a_raise_expectation() {
++    let source = r#"
++::class "S.testGroup" subclass ooTestCase public
++
++::method "test_262"
++   self~expectSyntax(26.11)
++   Numeric Digits 5
++   self~assertSame("-5678932" % "-37", 1)
++"#;
++    let out = extract_assertions("S", source);
++    assert_eq!(out.rows.len(), 1);
++    assert_eq!(
++        out.rows[0].expect_raise,
++        Some(RaiseExpectation { major: 26, sub: 11 })
++    );
++    assert_eq!(out.rows[0].digits, 5, "NUMERIC DIGITS is still carried too");
++    assert!(out.blocked.is_empty());
++}
++
++/// A row before any `expectSyntax` in the same method is an ordinary value
++/// row; only what follows the marker changes meaning. Mirrors
++/// `an_unsupported_statement_blocks_only_what_follows_it`'s own shape for
++/// blocking, but this marker does not block -- it converts.
++#[test]
++fn a_row_before_the_expect_syntax_marker_is_unaffected() {
++    let source = r#"
++::class "T.testGroup" subclass ooTestCase public
++
++::method "test_1"
++   self~assertSame(1 + 1, '2')
++   self~expectSyntax(26.11)
++   self~assertSame(1 % 0, 1)
++"#;
++    let out = extract_assertions("T", source);
++    assert_eq!(out.rows.len(), 2);
++    assert_eq!(out.rows[0].expect_raise, None);
++    assert_eq!(
++        out.rows[1].expect_raise,
++        Some(RaiseExpectation { major: 26, sub: 11 })
++    );
++}
++
++/// Carried sequentially, exactly like `digits`/`form`: a second
++/// `expectSyntax` changes the expectation for whatever follows *it*, rather
++/// than the first marker sticking for the rest of the method. No method in
++/// `base/expressions` does this today (checked), but the state-carrying
++/// mechanism is the same one `digits`/`form` already need to get right, so
++/// it is proven directly rather than left as an unexercised claim.
++#[test]
++fn a_second_expect_syntax_marker_replaces_the_first_for_what_follows_it() {
++    let source = r#"
++::class "U.testGroup" subclass ooTestCase public
++
++::method "test_1"
++   self~expectSyntax(26.11)
++   self~assertSame(1 % 0, 1)
++   self~expectSyntax(42.3)
++   self~assertSame(1 % 0, 1)
++"#;
++    let out = extract_assertions("U", source);
++    assert_eq!(out.rows.len(), 2);
++    assert_eq!(
++        out.rows[0].expect_raise,
++        Some(RaiseExpectation { major: 26, sub: 11 })
++    );
++    assert_eq!(
++        out.rows[1].expect_raise,
++        Some(RaiseExpectation { major: 42, sub: 3 })
++    );
++}
++
++/// `expectSyntax`'s array form (`(major.sub, message inserts...)`) is not
++/// one of the 19 real shapes this scanner was built against, and rather
++/// than guess which comma-separated item is the code, it blocks -- the
++/// same conservative choice `parse_assert_same` makes for an `assertSame`
++/// shape it does not recognise.
++#[test]
++fn expect_syntax_with_message_inserts_blocks_rather_than_guesses() {
++    let source = r#"
++::class "V.testGroup" subclass ooTestCase public
++
++::method "test_1"
++   self~expectSyntax((15.1, 1))
++   self~assertSame(1, 1)
++"#;
++    let out = extract_assertions("V", source);
++    assert!(out.rows.is_empty());
++    assert_eq!(out.blocked.len(), 1);
++    assert_eq!(out.blocked[0].dropped, 1);
++}
++
++/// `self~assertSyntaxError`/`self~assertRuntimeError` call `expectSyntax`
++/// internally but check the raise *within that same call* -- confirmed by
++/// reading `OOREXXUNIT.CLS` -- so unlike a bare `self~expectSyntax`, they
++/// leave nothing pending for a later `self~assertSame` in the same method.
++/// This is the existing "other assertion kinds are inert" behaviour and
++/// must not regress into treating them like `expectSyntax`.
++#[test]
++fn assert_syntax_error_does_not_leave_a_pending_raise_expectation() {
++    let source = r#"
++::class "W.testGroup" subclass ooTestCase public
++
++::method "test_1"
++   self~assertSyntaxError(15.1, self~hex(" "))
++   self~assertSame(1 + 1, '2')
++"#;
++    let out = extract_assertions("W", source);
++    assert_eq!(out.rows.len(), 1);
++    assert_eq!(out.rows[0].expect_raise, None);
++    assert!(out.blocked.is_empty());
++}
++
++/// `self~expectCondition` defers a raise-check the same way `expectSyntax`
++/// does, but for an arbitrary condition *name* rather than a numbered
++/// `SYNTAX` one -- this row schema has nowhere to carry a bare name, so it
++/// blocks rather than silently falling into the generic "other assertion
++/// kind, inert" branch, which would reproduce the exact bug this file's
++/// other tests exist to close. Not a case `base/expressions` has today
++/// (checked); this is a forward guard.
++#[test]
++fn expect_condition_blocks_rather_than_silently_passing_through() {
++    let source = r#"
++::class "X.testGroup" subclass ooTestCase public
++
++::method "test_1"
++   self~expectCondition("USER SOMETHING")
++   self~assertSame(1, 1)
++"#;
++    let out = extract_assertions("X", source);
++    assert!(out.rows.is_empty());
++    assert_eq!(out.blocked.len(), 1);
++    assert_eq!(out.blocked[0].dropped, 1);
++}
++
+ /// A method whose name is not `test`-prefixed is not run by the ooTest
+ /// framework at all (matching `extract`'s own existing filter), so an
+ /// `assertSame` inside one must not produce a row.
+ #[test]
+ fn a_non_test_method_produces_no_rows() {
+     let source = r#"
+ ::class "N.testGroup" subclass ooTestCase public
+ 
+ ::method helper
+    self~assertSame(1, '1')
+@@ -273,10 +412,50 @@ fn base_expressions_yields_the_measured_row_and_blocked_counts() {
+         rows_by_group.insert(group_name, out.rows.len());
+     }
+     assert_eq!(total_rows, 4259);
+     assert_eq!(total_dropped, 10);
+     assert_eq!(rows_by_group["PRECEDENCE"], 1226);
+     assert_eq!(rows_by_group["CONCATENATION"], 388);
+     assert_eq!(rows_by_group["MULTIPLICATION"], 1048);
+     assert_eq!(rows_by_group["Literals"], 39);
+     assert_eq!(rows_by_group["SPECIAL"], 27);
+ }
++
++/// The measured extent of the `self~expectSyntax` conversion: 184 of the
++/// 4,259 rows are raise-expectations rather than value comparisons -- 60 in
++/// `DIVISION`, 6 in `EXPONENT`, 118 in `REMAINDER`, zero everywhere else
++/// (in particular, `PRECEDENCE`'s 139 `self~assertSyntaxError` calls are
++/// all self-contained wrapping calls, never followed by a separate
++/// `assertSame`, so none of its rows convert). The row/dropped totals
++/// themselves are unchanged from the previous test -- converting a row
++/// changes what it means, not whether it exists -- pinning that here too
++/// makes it explicit that this is not a second, competing count.
++#[test]
++fn base_expressions_expect_syntax_conversion_counts() {
++    let suite =
++        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../ootest/ooRexx/base/expressions");
++    let groups = find_test_groups(&suite);
++    let mut raising_by_group = std::collections::HashMap::new();
++    let mut total_rows = 0usize;
++    let mut total_raising = 0usize;
++    for path in &groups {
++        let bytes = std::fs::read(path).expect("readable .testGroup file");
++        let source = String::from_utf8_lossy(&bytes);
++        let group_name = path
++            .file_stem()
++            .and_then(|s| s.to_str())
++            .unwrap()
++            .to_string();
++        let out = extract_assertions(&group_name, &source);
++        total_rows += out.rows.len();
++        let raising = out.rows.iter().filter(|r| r.expect_raise.is_some()).count();
++        total_raising += raising;
++        raising_by_group.insert(group_name, raising);
++    }
++    assert_eq!(total_rows, 4259, "conversion must not change the row count");
++    assert_eq!(total_raising, 184);
++    assert_eq!(raising_by_group["DIVISION"], 60);
++    assert_eq!(raising_by_group["EXPONENT"], 6);
++    assert_eq!(raising_by_group["REMAINDER"], 118);
++    assert_eq!(raising_by_group["PRECEDENCE"], 0);
++    assert_eq!(raising_by_group["Literals"], 0);
++}

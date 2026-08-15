@@ -1,0 +1,343 @@
+# Review package: Task 13 fix round, b3e2e112..be7cc8ef
+
+## Commits
+be7cc8ef Fix round: an absorbed WHEN's raising condition escaped silently, plus F1
+4f282fdc Correct the CONCATENATION silent/loud split: 106 and 282, not 56 and 332
+90853346 Cost the Controlled-loop trace gap honestly, since my own row overstated it
+6539ac11 Record the Controlled-loop trace gap where it will be found again
+
+## Stat
+ .../plans/2026-07-30-phase-4a-executor.md          |   2 +-
+ docs/superpowers/plans/phase-4-exclusions.txt      |  30 ++++
+ rust/crates/rexx-exec/src/run.rs                   | 168 +++++++++++++++++++--
+ 3 files changed, 184 insertions(+), 16 deletions(-)
+
+## Diff
+diff --git a/docs/superpowers/plans/2026-07-30-phase-4a-executor.md b/docs/superpowers/plans/2026-07-30-phase-4a-executor.md
+index 264e8641..0c48290c 100644
+--- a/docs/superpowers/plans/2026-07-30-phase-4a-executor.md
++++ b/docs/superpowers/plans/2026-07-30-phase-4a-executor.md
+@@ -979,21 +979,21 @@ Start with a 4a-only cut of `do_variants.rex`, which is excluded today by the si
+ **Why:** `rexx-extract`'s current rendering produces programs whose main body is empty, so they execute nothing at all — verified under the oracle, which prints nothing and exits 0. The route is data, not programs.
+ 
+ - [ ] **Step 1: Add an extraction mode emitting one row per assertion** — the expression text, the expected value, and the `NUMERIC DIGITS` in force.
+ 
+ Those files change the setting throughout, from 1 to 100, so the extractor **scans sequentially and carries the setting**. Getting this wrong silently tests the wrong precision and still passes, which is the worst available outcome, so it gets its own test against a file that changes the setting mid-way.
+ 
+ - [ ] **Step 2: Include `PRECEDENCE` (1,226), which is self-contained literal arithmetic.** Phase 2 excluded it because it had no parser; 4a has one.
+ 
+ - [ ] **Step 3: `CONCATENATION` (388) needs a prelude, and adding it naively passes while testing nothing**
+ 
+-Every assertion in that group references variables `a` through `g` assigned at the top of its test method. A row of (expression, expected, digits) cannot carry them, and **part** of the resulting failure is silent: with `a`..`g` unset, each renders as a distinct single-character name, so any row whose expected value happens to match that all-distinct pattern passes while testing nothing. Measured, that is the 56 strict `==` and `\==` rows of the 388. The other 332 use non-strict `=` and turn on real blank-padding equalities between different variables, so they fail visibly instead — line 71 expects `0 0 1 1 0 1 0`, which unset operands do not produce.
++Every assertion in that group references variables `a` through `g` assigned at the top of its test method. A row of (expression, expected, digits) cannot carry them, and **part** of the resulting failure is silent: with `a`..`g` unset, each renders as a distinct single-character name, so any row whose expected value happens to match that all-distinct pattern passes while testing nothing. Measured, that is **106** of the 388, not the 56 an earlier version of this paragraph claimed; the remaining **282** turn on real blank-padding equalities between different variables and so fail visibly instead — line 71 expects `0 0 1 1 0 1 0`, which unset operands do not produce.
+ 
+ Every row still needs the real prelude to mean anything. The reason to state the split precisely is that "all 388 would pass silently" was the original claim, and it is wrong: a reader who checks it, finds 332 loud failures, and concludes the hazard was imagined would then add the group naively.
+ 
+ So a row carries the method's **assignment prelude**, and any assertion whose prelude cannot be represented is listed as blocked rather than quietly included.
+ 
+ - [ ] **Step 4: Compare byte for byte, never numerically** — a numeric comparison would hide the entire created-digits and created-form story across thousands of rows.
+ 
+ - [ ] **Step 5: Prove the table can fail.** Perturb an expected value and confirm that row fails. A table that cannot fail is exactly the defect this criterion already had once, when it quantified over extracted programs that executed nothing.
+ 
+ - [ ] **Step 6: Report the row count and list rows blocked on 4b or 4c** with the sub-phase that unblocks each.
+diff --git a/docs/superpowers/plans/phase-4-exclusions.txt b/docs/superpowers/plans/phase-4-exclusions.txt
+index 960bf216..6d1e7947 100644
+--- a/docs/superpowers/plans/phase-4-exclusions.txt
++++ b/docs/superpowers/plans/phase-4-exclusions.txt
+@@ -175,10 +175,40 @@ above.
+   instruction loop inside another was the INTERPRET fragment spike, which 4b
+   deletes and which run_program does not expose. TASK 10 FALSIFIED THAT
+   REASON (commit addf89b1): IF and SELECT now resolve their whole construct
+   inside their own step arm through a nested bounded loop, so nesting is
+   ordinary rather than exotic. The gap itself still does not surface, because
+   4a has no construct that both nests and traps a condition, but the stated
+   reason was wrong and a reader who checked it would have found it false. Closing it means giving Raised::report a
+   stack of sites rather than one, so whoever implements 4b's real INTERPRET or
+   4b's CALL should decide the shape then rather than inheriting a single-site
+   signature by default.
++
++  A Controlled (TO-style) loop's re-tested pass omits two >>> value lines that
++  the oracle emits for its control variable. Measured, and read from the C++
++  rather than inferred: DoBlock::checkControl (DoBlock.cpp:182) traces the
++  control variable's current value and then the computed value+by on every
++  pass AFTER the first, the first pass being skipped explicitly because the
++  initial assignment was already traced during setup. Our loop_advance/loop_step
++  split has the increment already computed by the time loop_advance would need
++  the pre-increment value, so emitting the pair means moving the
++  increment into loop_advance behind a not-first-pass flag, mirroring
++  checkControl's own shape. COSTED, because an earlier version of this row said
++  "restructuring a split that review rounds and a mutation suite have certified"
++  and that overstates it enough to deter someone who should simply do it: the
++  edit is roughly twenty lines, and the real cost is re-verifying
++  bound-before-test, FOR and ITERATE semantics against the existing suite. Half
++  a day, not a rewrite.
++
++  Everything else about loop tracing is complete and byte-identical: the
++  DO/LOOP clause re-echoes every pass, END re-echoes only on a pass that falls
++  through the bottom and not on the pass where LEAVE fires, >K> fires once for
++  TO/BY/FOR/COUNTER and every pass for WHILE/UNTIL, and DO OVER and DO FOREVER
++  both match.
++
++  Recorded here rather than left in a report because the implementer could not
++  write to this file and flagged it, and because a measured divergence that
++  lives only in a source comment and a task report is one nobody meets again.
++  The committed >K> witness (keyword_while.rex) is a complete answer for a
++  different LoopKind, chosen because it fully exercises re-echo and per-pass
++  >K>. It is NOT a witness selected to avoid this gap: the gap is stated here,
++  and criterion 3's assessment should say the Controlled pair is unwitnessed.
+diff --git a/rust/crates/rexx-exec/src/run.rs b/rust/crates/rexx-exec/src/run.rs
+index 38bc7297..0a0a9cdc 100644
+--- a/rust/crates/rexx-exec/src/run.rs
++++ b/rust/crates/rexx-exec/src/run.rs
+@@ -928,35 +928,85 @@ impl Interp {
+                     }
+                     // Landing exactly on `END` is deliberate: that is what
+                     // makes 7.3's clause echo the `END`'s and not the
+                     // `SELECT`'s (`End`'s own arm, below, is where it
+                     // raises). No body ran, so there is nothing for a
+                     // `LEAVE`/`ITERATE` to have escaped from here.
+                     None => Ok(Flow::Goto(end.unwrap_or(len))),
+                 }
+             }
+ 
+-            // Pure markers, exactly like `Then`/`Else`: real dispatch lives
+-            // entirely in `Select`'s own arm above, which reads a
+-            // `When`/`WhenCase` node as data rather than stepping it. A
+-            // `When`/`WhenCase` reached here at all is either inside a
+-            // bounded sub-loop (the winning branch's body, where it is
+-            // inert filler) or is the absorbed-`WHEN` shape -- a `WHEN`
+-            // whose own `THEN` consequence is itself a `WHEN` clause, which
+-            // `Select.whens` never collects (`ast.rs`'s own doc comment on
+-            // `whens`, `select_when_absorption.rex`) -- and in neither case
+-            // does it get to decide anything on its own: measured against
+-            // the oracle, `select / when 1 = 1 then / when 2 = 2 then n = 42
+-            // / otherwise / n = 99 / end / say n` prints `0`, not `42`, so
+-            // the absorbed `WHEN`'s own condition being true must not run
+-            // its own consequence.
+-            InstructionKind::When { .. } | InstructionKind::WhenCase { .. } => Ok(Flow::Next),
++            // **Fixed after review: this used to be a bare `Ok(Flow::Next)`,
++            // and that was a silently wrong answer, not a formatting gap.**
++            // A `When`/`WhenCase` is only ever reached here through the
++            // absorbed-`WHEN` shape -- a `WHEN` whose own `THEN` consequence
++            // is itself a `WHEN`/`WHEN CASE` clause, which the enclosing
++            // `SELECT`'s own `whens` never collects (`ast.rs`'s own doc
++            // comment on `whens`, `LanguageParser.cpp:1319`) -- since a
++            // *listed* `When`/`WhenCase` is always fully handled by
++            // `Select`'s own explicit arm, above, without ever calling
++            // `step` on itself (its own body range never contains another
++            // listed sibling's index).
++            //
++            // The old comment's own measurement was real but its conclusion
++            // was wrong: `select / when 1=1 then / when 2=2 then n=42 /
++            // otherwise / n=99 / end / say n` prints `0`, and that alone is
++            // consistent with *never evaluating* condition B just as much
++            // as with *evaluating it and discarding the answer*. The
++            // measurement that tells the two apart is a raising absorbed
++            // condition: `select / when 1=1 then / when 1/0 then nop / end`
++            // is rc **214**, `Error 42.3`, on the oracle -- so B's condition
++            // *is* evaluated for real, and simply never gets to take its
++            // own branch (confirmed the other direction too: `when 2=2
++            // then say 'x'` with no `otherwise` prints nothing but `after`,
++            // not `x` -- true or false, the absorbed consequence never
++            // runs). `Select`'s own arm already reasons this exactly right
++            // for a *listed* `WHEN`'s condition (raise first, decide
++            // second); this arm was the one place that reasoning did not
++            // reach, because nothing before this task's own review probed
++            // a raising absorbed condition -- every prior probe used a
++            // side-effect-free true one, which cannot distinguish the two
++            // models.
++            //
++            // `current_value_indent` is already correct here without any
++            // extra work: this instruction *is* being stepped through the
++            // ordinary `step_in_temps_frame` path (unlike a listed `WHEN`,
++            // which `Select`'s own arm overrides it for explicitly), so the
++            // clause echo and this trace both land at this absorbed
++            // clause's own static indent.
++            InstructionKind::When { condition, .. } => {
++                self.eval_condition(
++                    code,
++                    condition,
++                    ConditionTrace::Result(self.current_value_indent),
++                    raised_when_not_logical,
++                )?;
++                Ok(Flow::Next)
++            }
++            // `SELECT CASE`'s own absorbed form. Evaluates every `values`
++            // expression, for the identical reason (side effects, and a
++            // raise must escape) -- **known gap, not attempted**: with no
++            // access to the enclosing `SELECT CASE`'s own `case` text here
++            // (nothing threads it to an absorbed node, unlike a listed
++            // `WhenCase`, which `Select`'s own arm already has it in hand
++            // for), this cannot reproduce `test_case_when`'s own two-line
++            // `>>>` comparison pair for the absorbed case, only evaluate
++            // and trace each value on its own. No corpus or spec example
++            // exercises an absorbed `WHEN CASE`; this is deliberately
++            // proportionate to that, not a claim that it is fully correct.
++            InstructionKind::WhenCase { values, .. } => {
++                for value in values {
++                    let v = self.eval(code, value)?;
++                    self.roots.push_temp(v);
++                }
++                Ok(Flow::Next)
++            }
+             InstructionKind::Otherwise => Ok(Flow::Next),
+ 
+             // `DO`/`LOOP`, every kind but `DO WITH` (the loud path,
+             // `run_loop`'s own doc comment) -- Task 11. Resolves the whole
+             // construct itself, every iteration, exactly the discipline
+             // `If`/`Select` already established: see `Flow::Leave`'s own
+             // doc comment for why `Do`'s own arm never returns until the
+             // entire loop is over, one way or another.
+             InstructionKind::Do(body) | InstructionKind::Loop(body) => {
+                 self.run_loop(code, index, instruction, body, source)
+@@ -1439,20 +1489,33 @@ impl Interp {
+                 body.conditional.as_ref(),
+                 source,
+                 LoopState::Forever,
+             ),
+             LoopKind::Count(count_expr) => {
+                 let remaining = match count_expr {
+                     Some(expr) => {
+                         let value = self.eval(code, expr)?;
+                         self.roots.push_temp(value);
+                         let text = self.to_text(value).to_vec();
++                        // `>K>   "FOR" => "2"`, once, at the `DO`'s own
++                        // level -- measured, this task's own report (F1,
++                        // found by review): the oracle traces a bare
++                        // repeat count under the `FOR` tag, the same as
++                        // an explicit `DO ... FOR n`'s own. Fires before
++                        // the `whole_nonneg` check below, matching every
++                        // other `>K>` site in this function (the value is
++                        // traced as evaluated, not as validated).
++                        self.trace_keyword(
++                            static_indent(&code.body.instructions, index),
++                            "FOR",
++                            &text,
++                        );
+                         self.whole_nonneg(value)
+                             .ok_or_else(|| raised_repetition_count_not_whole(&text))?
+                     }
+                     // Defensive, not measured: `count_loop`'s own parser
+                     // (`instruction.rs`) always calls `opt_expr`, which can
+                     // answer `None`, but nothing in this crate's own tests
+                     // reaches `DO` with truly nothing after it and no
+                     // recognised keyword either -- `create_loop`'s own
+                     // `at_end()` check catches a bare `DO` first and builds
+                     // `LoopKind::Simple` instead. A single pass, matching
+@@ -3883,20 +3946,64 @@ mod tests {
+         assert_eq!(
+             run_source(
+                 &mut interp,
+                 b"select\n  when 1 = 1 then\n    when 2 = 2 then nop\nend"
+             )
+             .expect("accepted, rc 0"),
+             None
+         );
+     }
+ 
++    /// **Critical, found by review, not by this task's own probes.** The
++    /// mutation this kills is exactly the one the old `Ok(Flow::Next)`
++    /// arm *was*: treating an absorbed `WHEN`'s own condition as never
++    /// evaluated at all, rather than evaluated and discarded. A version
++    /// that reverts `InstructionKind::When`'s arm to a bare `Ok(Flow::
++    /// Next)` makes this test hang around `run_source` returning `Ok`
++    /// (prints `after`, rc 0) where the oracle raises 42.3 at rc 214 --
++    /// `an_absorbed_when_runs_neither_its_own_consequence_nor_otherwise`,
++    /// just above, cannot distinguish the two models (both give `n = 0`
++    /// for a side-effect-free true condition), which is exactly why every
++    /// probe before this review used one and missed this.
++    #[test]
++    fn an_absorbed_whens_raising_condition_escapes_even_though_its_own_consequence_never_runs() {
++        let mut interp = Interp::new(false);
++        let failure = run_source(
++            &mut interp,
++            b"select\n  when 1 = 1 then\n    when 1 / 0 then nop\n  otherwise nop\nend\nsay 'after'",
++        )
++        .unwrap_err();
++        let Failure::Raised(raised) = failure else {
++            panic!("expected Raised, got {failure:?}");
++        };
++        assert_eq!((raised.number, raised.sub), (42, 3));
++    }
++
++    /// The companion half: a **true** absorbed condition with a printable
++    /// side effect still never runs its own consequence (matching the
++    /// existing `n = 0` test, restated with `SAY` so a wrong "the
++    /// absorbed WHEN's branch is taken" model would be caught by output
++    /// content rather than only by a variable's final value) -- measured,
++    /// this task's own report: `ABSORBED-RAN` never prints, only `after`.
++    #[test]
++    fn an_absorbed_whens_true_condition_still_never_runs_its_own_consequence() {
++        let mut interp = Interp::new(false);
++        assert_eq!(
++            say_output(
++                &mut interp,
++                b"select\n  when 1 = 1 then\n    when 2 = 2 then say 'ABSORBED-RAN'\nend\nsay 'after'"
++            ),
++            b"after\n".to_vec(),
++            "a reverted fix would print ABSORBED-RAN first"
++        );
++    }
++
+     #[test]
+     fn select_with_no_when_true_and_no_otherwise_raises_7_3() {
+         let mut interp = Interp::new(false);
+         let failure = run_source(&mut interp, b"select\n  when 1 = 0 then nop\nend").unwrap_err();
+         let Failure::Raised(raised) = failure else {
+             panic!("expected Raised, got {failure:?}");
+         };
+         assert_eq!((raised.number, raised.sub), (7, 3));
+         assert_eq!(raised.additional, Vec::<String>::new());
+     }
+@@ -4214,20 +4321,51 @@ mod tests {
+             b"3\n".to_vec()
+         );
+         // Zero repetitions is legal and runs the body no times at all.
+         let mut interp = Interp::new(false);
+         assert_eq!(
+             say_output(&mut interp, b"n = 0\ndo 0\nn = n + 1\nend\nsay n"),
+             b"0\n".to_vec()
+         );
+     }
+ 
++    /// F1, found by review: a bare count `DO n` traced no `>K>` line at
++    /// all, where the oracle traces it tagged `FOR` -- the same tag an
++    /// explicit `DO ... FOR n` gets, measured (this task's own report).
++    /// The mutation this kills is exactly the gap: deleting the new
++    /// `trace_keyword` call in `run_loop`'s `LoopKind::Count` arm makes
++    /// `interp.trace` empty instead of carrying the `>K>` line, with
++    /// every other assertion in this file untouched -- this is the one
++    /// test that would have caught the omission, since the report's own
++    /// verification claimed `>K>` was checked while never actually
++    /// running a bare-count program through it.
++    #[test]
++    fn a_bare_repeat_count_traces_as_for_the_same_as_an_explicit_one() {
++        let mut interp = Interp::new(false);
++        interp.trace_mode = mode_from_setting(b"r").expect("R is a valid TRACE setting");
++        say_output(&mut interp, b"do 2\nnop\nend");
++        // `>K>` fires exactly once, on the first pass, matching every
++        // other single-evaluation control-setup keyword (`TO`/`BY`/
++        // `OVER`) -- the third `do 2` re-echo is the exit-check pass
++        // `run_repeating`'s own per-pass re-echo already covers, verified
++        // by running this exact assertion once and reading the bytes
++        // back rather than hand-composing them (`this file's own report
++        // has the trap: a hand-guessed expectation here was short by
++        // exactly this one pass on the first attempt).
++        assert_eq!(
++            interp.trace,
++            b"     1 *-* do 2\n       >K>   \"FOR\" => \"2\"\n     2 *-*   nop\n     \
++              3 *-* end\n     1 *-* do 2\n     2 *-*   nop\n     3 *-* end\n     1 *-* do 2\n"
++                .to_vec()
++        );
++    }
++
+     #[test]
+     fn do_with_takes_the_loud_path() {
+         let mut interp = Interp::new(false);
+         let failure = run_source(&mut interp, b"do with index i over 'x'\nsay i\nend").unwrap_err();
+         let Failure::Loud(_) = failure else {
+             panic!("expected Loud, got {failure:?}");
+         };
+     }
+ 
+     #[test]

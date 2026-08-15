@@ -1,0 +1,2740 @@
+From afdd3b1bd7f7f5f94f6497405b3a2938c7fa1209 Mon Sep 17 00:00:00 2001
+From: Moritz Hoffmann <antiguru@gmail.com>
+Date: Tue, 28 Jul 2026 15:16:14 +0200
+Subject: [PATCH] Preserve the D10 spike so its measurements can be audited
+
+The spike crate as it stood when the numbers in d10-decision.md were taken.
+Task 3.1 Step 5 says to delete it, and 43c4ba5f did, which left the LOC
+comparison, the throughput gap and the 27/27 error-fidelity result with nothing
+behind them. This branch exists only so a reader can re-run them; it is not
+merged and plan/rust-rewrite does not carry the crate.
+
+Reproduce, from the rust/ directory:
+
+  cargo test --offline -p rexx-parse-spike
+  cargo run --offline --release -p rexx-parse-spike --example throughput
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Lgr1Bubd4xCGLNC2igi6Ak
+---
+ rust/Cargo.lock                               | 113 ++++
+ rust/crates/rexx-parse-spike/Cargo.toml       |  13 +
+ .../rexx-parse-spike/examples/throughput.rs   | 108 +++
+ rust/crates/rexx-parse-spike/src/ast.rs       | 207 ++++++
+ rust/crates/rexx-parse-spike/src/comb.rs      | 466 +++++++++++++
+ rust/crates/rexx-parse-spike/src/eval.rs      | 194 ++++++
+ rust/crates/rexx-parse-spike/src/hand.rs      | 345 ++++++++++
+ rust/crates/rexx-parse-spike/src/lib.rs       |  22 +
+ rust/crates/rexx-parse-spike/src/shared.rs    | 112 +++
+ rust/crates/rexx-parse-spike/src/token.rs     | 636 ++++++++++++++++++
+ rust/crates/rexx-parse-spike/tests/corpus.rs  | 332 +++++++++
+ 11 files changed, 2548 insertions(+)
+ create mode 100644 rust/crates/rexx-parse-spike/Cargo.toml
+ create mode 100644 rust/crates/rexx-parse-spike/examples/throughput.rs
+ create mode 100644 rust/crates/rexx-parse-spike/src/ast.rs
+ create mode 100644 rust/crates/rexx-parse-spike/src/comb.rs
+ create mode 100644 rust/crates/rexx-parse-spike/src/eval.rs
+ create mode 100644 rust/crates/rexx-parse-spike/src/hand.rs
+ create mode 100644 rust/crates/rexx-parse-spike/src/lib.rs
+ create mode 100644 rust/crates/rexx-parse-spike/src/shared.rs
+ create mode 100644 rust/crates/rexx-parse-spike/src/token.rs
+ create mode 100644 rust/crates/rexx-parse-spike/tests/corpus.rs
+
+diff --git a/rust/Cargo.lock b/rust/Cargo.lock
+index 42536ddc..a3b4e782 100644
+--- a/rust/Cargo.lock
++++ b/rust/Cargo.lock
+@@ -20,6 +20,12 @@ dependencies = [
+  "cc",
+ ]
+ 
++[[package]]
++name = "allocator-api2"
++version = "0.2.21"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
++
+ [[package]]
+ name = "anes"
+ version = "0.1.6"
+@@ -32,6 +38,15 @@ version = "1.0.14"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
+ 
++[[package]]
++name = "ar_archive_writer"
++version = "0.5.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4087686b4b0a3427190bae57a1d9a478dbb2d40c5dc1bd6e2b6d797913bdd348"
++dependencies = [
++ "object",
++]
++
+ [[package]]
+ name = "autocfg"
+ version = "1.5.1"
+@@ -66,6 +81,20 @@ version = "1.0.4"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
+ 
++[[package]]
++name = "chumsky"
++version = "0.13.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e0d2bfadce76f963d776feff99db6dc33783829539258314776383b33e2a00f8"
++dependencies = [
++ "hashbrown",
++ "regex-automata",
++ "serde",
++ "stacker",
++ "unicode-ident",
++ "unicode-segmentation",
++]
++
+ [[package]]
+ name = "ciborium"
+ version = "0.2.2"
+@@ -190,12 +219,24 @@ version = "1.16.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e"
+ 
++[[package]]
++name = "equivalent"
++version = "1.0.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
++
+ [[package]]
+ name = "find-msvc-tools"
+ version = "0.1.9"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
+ 
++[[package]]
++name = "foldhash"
++version = "0.1.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
++
+ [[package]]
+ name = "futures-core"
+ version = "0.3.32"
+@@ -231,6 +272,17 @@ dependencies = [
+  "zerocopy",
+ ]
+ 
++[[package]]
++name = "hashbrown"
++version = "0.15.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
++dependencies = [
++ "allocator-api2",
++ "equivalent",
++ "foldhash",
++]
++
+ [[package]]
+ name = "itertools"
+ version = "0.13.0"
+@@ -278,6 +330,15 @@ dependencies = [
+  "autocfg",
+ ]
+ 
++[[package]]
++name = "object"
++version = "0.37.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
++dependencies = [
++ "memchr",
++]
++
+ [[package]]
+ name = "once_cell"
+ version = "1.21.4"
+@@ -343,6 +404,16 @@ dependencies = [
+  "unicode-ident",
+ ]
+ 
++[[package]]
++name = "psm"
++version = "0.1.31"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "645dbe486e346d9b5de3ef16ede18c26e6c70ad97418f4874b8b1889d6e761ea"
++dependencies = [
++ "ar_archive_writer",
++ "cc",
++]
++
+ [[package]]
+ name = "quick-xml"
+ version = "0.37.5"
+@@ -448,6 +519,14 @@ dependencies = [
+ name = "rexx-oracle"
+ version = "0.1.0"
+ 
++[[package]]
++name = "rexx-parse-spike"
++version = "0.1.0"
++dependencies = [
++ "chumsky",
++ "rexx-num",
++]
++
+ [[package]]
+ name = "rustversion"
+ version = "1.0.22"
+@@ -518,6 +597,19 @@ version = "0.4.12"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
+ 
++[[package]]
++name = "stacker"
++version = "0.1.24"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "640c8cdd92b6b12f5bcb1803ca3bbf5ab96e5e6b6b96b9ab77dabe9e880b3190"
++dependencies = [
++ "cc",
++ "cfg-if",
++ "libc",
++ "psm",
++ "windows-sys",
++]
++
+ [[package]]
+ name = "syn"
+ version = "2.0.119"
+@@ -556,6 +648,12 @@ version = "1.0.24"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
+ 
++[[package]]
++name = "unicode-segmentation"
++version = "1.13.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
++
+ [[package]]
+ name = "walkdir"
+ version = "2.5.0"
+@@ -652,6 +750,21 @@ version = "0.4.0"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
+ 
++[[package]]
++name = "windows-link"
++version = "0.2.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "45e46c0661abb7180e7b9c281db115305d49ca1709ab8242adf09666d2173c65"
++
++[[package]]
++name = "windows-sys"
++version = "0.61.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "6f109e41dd4a3c848907eb83d5a42ea98b3769495597450cf6d153507b166f0f"
++dependencies = [
++ "windows-link",
++]
++
+ [[package]]
+ name = "zerocopy"
+ version = "0.8.52"
+diff --git a/rust/crates/rexx-parse-spike/Cargo.toml b/rust/crates/rexx-parse-spike/Cargo.toml
+new file mode 100644
+index 00000000..d9f3fa3f
+--- /dev/null
++++ b/rust/crates/rexx-parse-spike/Cargo.toml
+@@ -0,0 +1,13 @@
++[package]
++name = "rexx-parse-spike"
++version = "0.1.0"
++edition.workspace = true
++rust-version.workspace = true
++license.workspace = true
++
++[dependencies]
++chumsky = { version = "0.13.0", features = ["pratt"] }
++rexx-num = { path = "../rexx-num" }
++
++[lints]
++workspace = true
+diff --git a/rust/crates/rexx-parse-spike/examples/throughput.rs b/rust/crates/rexx-parse-spike/examples/throughput.rs
+new file mode 100644
+index 00000000..8f42c926
+--- /dev/null
++++ b/rust/crates/rexx-parse-spike/examples/throughput.rs
+@@ -0,0 +1,108 @@
++//! Axis 3: parse throughput on `CoreClasses.orx`.
++//!
++//! The spike parses expressions, not instructions, so this cannot be a whole-file
++//! parse and therefore cannot be the cold-start figure D2 asks for. What it is:
++//! every line of the real file is offered to both arms as an expression, and the
++//! lines both arms accept are then timed. Both arms see identical input, so the
++//! ratio is meaningful even though the absolute number is not D2's.
++
++use std::time::{Duration, Instant};
++
++use chumsky::Parser as _;
++use rexx_parse_spike::hand::Terminators;
++use rexx_parse_spike::{comb, hand, token};
++
++/// Enough repetitions that timer resolution is irrelevant.
++const REPS: usize = 50;
++
++fn timed(label: &str, bytes: usize, mut body: impl FnMut()) -> Duration {
++    // One untimed pass, so no arm pays for a cold cache another avoided.
++    body();
++    let start = Instant::now();
++    for _ in 0..REPS {
++        body();
++    }
++    let per_pass = start.elapsed() / REPS as u32;
++    println!(
++        "{label:24} {per_pass:>12?} per pass = {:>5.1} MB/s",
++        bytes as f64 * 1e-6 / per_pass.as_secs_f64()
++    );
++    per_pass
++}
++
++fn main() {
++    let path = std::env::args()
++        .nth(1)
++        .unwrap_or_else(|| "../interpreter/RexxClasses/CoreClasses.orx".to_string());
++    let text = std::fs::read_to_string(&path).expect("the oracle's own source is readable");
++
++    let mut accepted: Vec<&str> = Vec::new();
++    let mut hand_only = 0usize;
++    let mut comb_only = 0usize;
++    for line in text.lines() {
++        if line.trim().is_empty() {
++            continue;
++        }
++        match (hand::parse(line).is_ok(), comb::parse(line).is_ok()) {
++            (true, true) => accepted.push(line),
++            (true, false) => hand_only += 1,
++            (false, true) => comb_only += 1,
++            (false, false) => {}
++        }
++    }
++    let bytes: usize = accepted.iter().map(|l| l.len()).sum();
++    println!(
++        "{} of {} non-blank lines parse as expressions under both arms, {bytes} bytes",
++        accepted.len(),
++        text.lines().filter(|l| !l.trim().is_empty()).count()
++    );
++    println!("disagreements: hand-only {hand_only}, comb-only {comb_only}");
++
++    // Scanning is shared, so it is timed separately and subtracted below.
++    let scan = timed("scan (shared)", bytes, || {
++        for line in &accepted {
++            let _ = token::scan(line);
++        }
++    });
++
++    let streams: Vec<Vec<token::Token>> = accepted
++        .iter()
++        .map(|l| token::scan(l).expect("already scanned once"))
++        .collect();
++    let bodies: Vec<&[token::Token]> = streams.iter().map(|s| &s[..s.len() - 1]).collect();
++
++    let hand_total = timed("hand, scan included", bytes, || {
++        for line in &accepted {
++            let _ = hand::parse(line);
++        }
++    });
++
++    // Built once. The grammar depends on a terminator set, so in production there
++    // would be one built parser per set rather than one per parse.
++    let built = comb::expression(Terminators::EOC).then_ignore(chumsky::prelude::end());
++    let comb_built = timed("comb, parser prebuilt", bytes, || {
++        for b in &bodies {
++            let _ = built.parse(b);
++        }
++    });
++
++    let comb_total = timed("comb, rebuilt per parse", bytes, || {
++        for line in &accepted {
++            let _ = comb::parse(line);
++        }
++    });
++
++    let hand_layer = hand_total.saturating_sub(scan);
++    println!();
++    println!("grammar layer alone, shared scanner subtracted:");
++    println!("  hand                 {hand_layer:?}");
++    println!("  comb, prebuilt       {comb_built:?}");
++    println!(
++        "  ratio                {:.1}x",
++        comb_built.as_secs_f64() / hand_layer.as_secs_f64()
++    );
++    println!(
++        "  rebuilding costs     {:.1}x on top of prebuilt",
++        comb_total.saturating_sub(scan).as_secs_f64() / comb_built.as_secs_f64()
++    );
++}
+diff --git a/rust/crates/rexx-parse-spike/src/ast.rs b/rust/crates/rexx-parse-spike/src/ast.rs
+new file mode 100644
+index 00000000..3f880526
+--- /dev/null
++++ b/rust/crates/rexx-parse-spike/src/ast.rs
+@@ -0,0 +1,207 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! The AST and error type both spike arms produce.
++//!
++//! Shared so that the two arms are compared on how hard they were to write,
++//! not on what they emitted.
++
++use crate::token::{Loc, Op};
++
++/// What a symbol token turned out to denote.
++///
++/// The classification is positional in Rexx and cannot live in the scanner: a
++/// bare `IF` is a variable here and a keyword at the head of a clause.
++#[derive(Clone, PartialEq, Eq, Debug)]
++pub enum Symbol {
++    /// A numeric constant, kept as written because `1.50` prints as `1.50`.
++    Number(String),
++    /// A simple variable.
++    Simple(String),
++    /// A stem, meaning a name ending in a single trailing period.
++    Stem(String),
++    /// A compound variable: a stem plus one tail element per period.
++    Compound { stem: String, tails: Vec<String> },
++    /// An environment symbol, meaning a name with a leading period.
++    Environment(String),
++}
++
++#[derive(Copy, Clone, PartialEq, Eq, Debug)]
++pub enum UnOp {
++    Plus,
++    Minus,
++    Not,
++}
++
++#[derive(Clone, PartialEq, Eq, Debug)]
++pub enum Expr {
++    Literal(String),
++    Symbol(Symbol),
++    Unary(UnOp, Box<Expr>),
++    Binary(Op, Box<Expr>, Box<Expr>),
++    /// `NAME(...)`, with no blank before the parenthesis.
++    Call { name: String, args: Vec<Option<Expr>> },
++    /// `target~name(...)` or `target~~name(...)`.
++    Message {
++        target: Box<Expr>,
++        name: String,
++        args: Vec<Option<Expr>>,
++        cascade: bool,
++    },
++    /// `target[...]`, which is a `[]` message.
++    Index {
++        target: Box<Expr>,
++        args: Vec<Option<Expr>>,
++    },
++    /// A parenthesised comma list, which builds an array.
++    List(Vec<Option<Expr>>),
++}
++
++impl Expr {
++    /// A canonical parenthesised rendering, used to compare an arm's output
++    /// against the shape the oracle's evaluated answer implies.
++    pub fn render(&self) -> String {
++        match self {
++            Expr::Literal(s) => format!("'{s}'"),
++            Expr::Symbol(Symbol::Number(s)) => s.clone(),
++            Expr::Symbol(Symbol::Simple(s)) => s.clone(),
++            Expr::Symbol(Symbol::Stem(s)) => format!("stem:{s}"),
++            Expr::Symbol(Symbol::Compound { stem, tails }) => {
++                format!("compound:{stem}[{}]", tails.join(","))
++            }
++            Expr::Symbol(Symbol::Environment(s)) => format!("env:{s}"),
++            Expr::Unary(op, e) => {
++                let name = match op {
++                    UnOp::Plus => "u+",
++                    UnOp::Minus => "u-",
++                    UnOp::Not => "u\\",
++                };
++                format!("({name} {})", e.render())
++            }
++            Expr::Binary(op, l, r) => {
++                let name = match op {
++                    Op::Abuttal => "abut",
++                    Op::Blank => "blank",
++                    other => other.spelling(),
++                };
++                format!("({name} {} {})", l.render(), r.render())
++            }
++            Expr::Call { name, args } => format!("(call {name}{})", render_args(args)),
++            Expr::Message {
++                target,
++                name,
++                args,
++                cascade,
++            } => {
++                let twiddle = if *cascade { "~~" } else { "~" };
++                format!(
++                    "(msg{twiddle} {} {name}{})",
++                    target.render(),
++                    render_args(args)
++                )
++            }
++            Expr::Index { target, args } => {
++                format!("(index {}{})", target.render(), render_args(args))
++            }
++            Expr::List(args) => format!("(list{})", render_args(args)),
++        }
++    }
++}
++
++fn render_args(args: &[Option<Expr>]) -> String {
++    let mut out = String::new();
++    for a in args {
++        out.push(' ');
++        match a {
++            Some(e) => out.push_str(&e.render()),
++            None => out.push('_'),
++        }
++    }
++    out
++}
++
++/// A syntax error, carrying everything the oracle's message needs.
++///
++/// `major` and `sub` are the two numbers a program can trap on, and `subs` are
++/// the substitution values the message text interpolates. `loc` is the offending
++/// token's own location, which is where errors 36.901 and 36.902 get their
++/// position and line from.
++#[derive(Clone, PartialEq, Eq, Debug)]
++pub struct ParseError {
++    pub major: u16,
++    pub sub: u16,
++    pub subs: Vec<String>,
++    pub loc: Loc,
++}
++
++impl ParseError {
++    pub fn at(major: u16, sub: u16, subs: Vec<String>, loc: Loc) -> Self {
++        ParseError {
++            major,
++            sub,
++            subs,
++            loc,
++        }
++    }
++
++    /// The error as `major.sub` plus substitutions, in the order the message
++    /// text uses them. This is the string the fidelity axis compares.
++    pub fn signature(&self) -> String {
++        format!("{}.{} [{}]", self.major, self.sub, self.subs.join("|"))
++    }
++}
++
++/// One instruction in a code body.
++///
++/// Step 3b's decision, made concrete: instructions form a **chain**, and the
++/// chain is flattened into one arena `Vec` per code body with `next` as an
++/// index. Nesting lives in the indices a block instruction holds, not in owned
++/// children, which is what lets `THEN`, `ELSE`, `OTHERWISE`, `WHEN` and `END`
++/// each stay an instruction with its own `clause_span`.
++#[derive(Clone, Debug)]
++pub struct Instruction {
++    pub kind: InstructionKind,
++    /// The byte range of the clause this instruction came from, which is what
++    /// `trace` echoes after the `*-*` marker.
++    pub clause_span: (usize, usize),
++    /// The next instruction in source order, or `None` at the end of the body.
++    pub next: Option<InstructionId>,
++}
++
++#[derive(Copy, Clone, PartialEq, Eq, Debug)]
++pub struct InstructionId(pub u32);
++
++/// A stand-in for the 35 real instruction kinds, holding only the five that
++/// Step 3b constrains plus enough others to show the shape works.
++#[derive(Clone, Debug)]
++pub enum InstructionKind {
++    Say(Option<Expr>),
++    Assignment { target: Symbol, value: Expr },
++    If { condition: Expr, then_part: InstructionId },
++    /// Its own instruction, never absorbed into `If`, because the oracle traces
++    /// it as a separate `*-*` clause (`ThenInstruction.cpp:76`).
++    Then { body: InstructionId },
++    Else { body: InstructionId },
++    Select { end: InstructionId },
++    When { condition: Expr, then_part: InstructionId },
++    Otherwise { body: Option<InstructionId> },
++    End,
++}
++
++/// One code body: a `::method`, a `::routine`, or the main program.
++///
++/// The arena half of D13. Every instruction lives in this one `Vec`, and every
++/// reference between instructions is an index into it.
++#[derive(Clone, Debug, Default)]
++pub struct CodeBody {
++    pub instructions: Vec<Instruction>,
++    pub first: Option<InstructionId>,
++}
+diff --git a/rust/crates/rexx-parse-spike/src/comb.rs b/rust/crates/rexx-parse-spike/src/comb.rs
+new file mode 100644
+index 00000000..d7d9bf5d
+--- /dev/null
++++ b/rust/crates/rexx-parse-spike/src/comb.rs
+@@ -0,0 +1,466 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! D10 arm A: the same expression grammar with `chumsky` 0.13 combinators.
++
++use chumsky::error::LabelError;
++use chumsky::pratt::{infix, left, prefix};
++use chumsky::prelude::*;
++use chumsky::util::MaybeRef;
++
++use crate::ast::{Expr, ParseError, UnOp};
++use crate::shared::{Terminators, classify, unmatched};
++use crate::token::{Kind, Loc, Op, Token};
++
++/// A `chumsky` error that can carry a fully formed interpreter error.
++///
++/// The default error types describe a failure as an expected-set plus a found
++/// token, which is enough for 35.1 but not for 36.901, whose substitutions come
++/// from the *opening* parenthesis rather than from the token that failed. So
++/// specific sites build the `ParseError` themselves and this type carries it
++/// through; everything else falls back to the found token.
++#[derive(Clone, Debug)]
++pub struct CombErr {
++    // Boxed because a `CombErr` is the error half of every `try_map` result in
++    // the grammar, and an inline `ParseError` makes each of those `Result`s
++    // large enough for clippy to reject.
++    pub explicit: Option<Box<ParseError>>,
++    pub found: Option<Token>,
++}
++
++impl<'a, I: Input<'a, Token = Token>> chumsky::error::Error<'a, I> for CombErr {
++    fn merge(self, other: Self) -> Self {
++        // An explicit interpreter error is always more specific than a
++        // generated expected-set, so it wins.
++        match (&self.explicit, &other.explicit) {
++            (Some(_), None) => self,
++            (None, Some(_)) => other,
++            (None, None) => self,
++            (Some(a), Some(b)) => {
++                // Both sites built a real error, and the oracle reports the
++                // *innermost* unmatched opener. There is no nesting depth here
++                // to compare, so this compares the openers' own positions and
++                // takes the later one, which is the innermost whenever the two
++                // are nested. That is a heuristic, not a derivation: two errors
++                // from sibling subexpressions would compare the same way and
++                // there is nothing in the merge to tell the cases apart.
++                let key = |e: &ParseError| (e.loc.start_line, e.loc.start_offset);
++                if key(b) > key(a) { other } else { self }
++            }
++        }
++    }
++}
++
++impl<'a, I, L> LabelError<'a, I, L> for CombErr
++where
++    I: Input<'a, Token = Token>,
++{
++    fn expected_found<E: IntoIterator<Item = L>>(
++        _expected: E,
++        found: Option<MaybeRef<'a, Token>>,
++        _span: I::Span,
++    ) -> Self {
++        CombErr {
++            explicit: None,
++            found: found.map(|f| f.into_inner()),
++        }
++    }
++}
++
++impl CombErr {
++    fn explicit(err: ParseError) -> Self {
++        CombErr {
++            explicit: Some(Box::new(err)),
++            found: None,
++        }
++    }
++
++    /// The interpreter error this failure corresponds to.
++    ///
++    /// Without an explicit error the only information available is the token
++    /// that was found, which maps onto exactly the three errors the oracle
++    /// raises from a bad token in expression position.
++    pub fn to_parse_error(&self) -> ParseError {
++        if let Some(e) = &self.explicit {
++            return (**e).clone();
++        }
++        match &self.found {
++            Some(t) => match t.kind {
++                Kind::RightParen => ParseError::at(37, 2, vec![], t.loc),
++                Kind::SqRight => ParseError::at(37, 901, vec![], t.loc),
++                _ => ParseError::at(35, 1, vec![t.text()], t.loc),
++            },
++            None => ParseError::at(35, 918, vec![], Loc::default()),
++        }
++    }
++}
++
++type Extra = extra::Err<CombErr>;
++type In<'a> = &'a [Token];
++
++/// A boxed expression parser, needed because the grammar is assembled by
++/// functions rather than written as one expression.
++type Ex<'a> = Boxed<'a, 'a, In<'a>, Expr, Extra>;
++
++fn tok<'a>(kind: Kind) -> impl Parser<'a, In<'a>, Token, Extra> + Clone {
++    any().filter(move |t: &Token| t.kind == kind)
++}
++
++/// True when this token could begin a term, prefix operators included.
++fn can_start_term(t: &Token) -> bool {
++    t.starts_term() || matches!(t.kind, Kind::Operator(Op::Plus | Op::Subtract | Op::Backslash))
++}
++
++/// Requires a term to follow an operator, reporting the operator itself when
++/// none does.
++///
++/// `pratt` parses the right-hand side itself, so its failure is a plain
++/// "unexpected end of input" that names no operator, and the furthest-error rule
++/// then makes it beat everything else. The only way to name the operator is to
++/// check for the term before `pratt` ever gets there.
++fn require_term<'a>(
++    op: impl Parser<'a, In<'a>, Token, Extra> + Clone,
++    major: u16,
++    sub: u16,
++) -> impl Parser<'a, In<'a>, Token, Extra> + Clone {
++    op.then(any().rewind().or_not()).try_map(move |(op, next), _| {
++        // A blank is never emitted after an operator token, so whatever comes
++        // next is where the term should have been.
++        match next {
++            Some(t) if can_start_term(&t) => Ok(op),
++            // A token that cannot start a term but is not a terminator is what
++            // the oracle names: `a + * b` reports `*`, not `+`.
++            Some(t)
++                if !matches!(
++                    t.kind,
++                    Kind::Comma | Kind::RightParen | Kind::SqRight | Kind::Eoc
++                ) =>
++            {
++                Err(CombErr::explicit(ParseError::at(
++                    35,
++                    1,
++                    vec![t.text()],
++                    t.loc,
++                )))
++            }
++            // Nothing at all follows, so the operator itself is named.
++            _ => Err(CombErr::explicit(ParseError::at(
++                major,
++                sub,
++                vec![op.text()],
++                op.loc,
++            ))),
++        }
++    })
++}
++
++/// The dyadic operators at one precedence level, excluding the two that have no
++/// token of their own.
++fn plain_op<'a>(level: u8) -> impl Parser<'a, In<'a>, Op, Extra> + Clone {
++    require_term(
++        select! {
++            t @ Token { kind: Kind::Operator(op), .. }
++                if op.precedence() == level && op != Op::Backslash => t
++        },
++        35,
++        1,
++    )
++    .map(|t| match t.kind {
++        Kind::Operator(op) => op,
++        _ => unreachable!("the selector only accepts operator tokens"),
++    })
++}
++
++/// The blank operator, which is not an operator when the token after it is a
++/// terminator.
++///
++/// This is the `nextReal` lookahead in `LanguageParser.cpp:2896`, and it is why
++/// `do i = 1 to 3` does not concatenate `3` with `TO`.
++fn blank_op<'a>(term: Terminators) -> impl Parser<'a, In<'a>, Op, Extra> + Clone {
++    tok(Kind::Blank)
++        .then_ignore(
++            any()
++                .filter(move |t: &Token| !term.matches(t))
++                .rewind(),
++        )
++        .to(Op::Blank)
++}
++
++/// The abuttal operator, which has no token at all.
++///
++/// The oracle synthesises a zero-length operator token when a term appears
++/// where an operator was expected (`LanguageParser.cpp:2878`), so this parser
++/// must consume nothing and only succeed when a term follows.
++fn abuttal_op<'a>() -> impl Parser<'a, In<'a>, Op, Extra> + Clone {
++    any()
++        .filter(|t: &Token| t.starts_term())
++        .rewind()
++        .to(Op::Abuttal)
++}
++
++fn bin(op: Op, l: Expr, r: Expr) -> Expr {
++    Expr::Binary(op, Box::new(l), Box::new(r))
++}
++
++/// An argument list: comma-separated, each argument optional.
++fn args<'a>(inner: Ex<'a>, open: Kind, close: Kind) -> impl Parser<'a, In<'a>, (Token, Vec<Option<Expr>>), Extra> + Clone
++where
++{
++    let bracket = open == Kind::SqLeft;
++    tok(open)
++        .then(
++            choice((inner.map(Some), omitted()))
++                .separated_by(tok(Kind::Comma))
++                .collect::<Vec<_>>(),
++        )
++        .then(tok(close).or_not())
++        .try_map(move |((opener, items), closer), _span| match closer {
++            Some(_) => {
++                // A list of exactly one omitted argument is an empty list: the
++                // `or_not` above always contributes one element.
++                let items = if items.len() == 1 && items[0].is_none() {
++                    Vec::new()
++                } else {
++                    items
++                };
++                Ok((opener, items))
++            }
++            None => Err(CombErr::explicit(unmatched(opener.loc, bracket))),
++        })
++}
++
++/// One step of a message cascade: `~name(...)`, `~~name(...)` or `[...]`.
++enum Cascade {
++    Message {
++        name: String,
++        args: Vec<Option<Expr>>,
++        cascade: bool,
++    },
++    Index(Vec<Option<Expr>>),
++}
++
++fn cascade_step<'a>(inner: Ex<'a>) -> impl Parser<'a, In<'a>, Cascade, Extra> + Clone {
++    let name = select! {
++        Token { kind: Kind::Symbol(s), .. } => s,
++        Token { kind: Kind::Literal(s), .. } => s,
++    };
++    let twiddle = tok(Kind::Tilde).to(false).or(tok(Kind::DTilde).to(true));
++    let message = twiddle
++        // Blanks are allowed between the twiddle and the name: `"abc" ~ length`.
++        .then(tok(Kind::Blank).or_not())
++        .then(name.or_not())
++        .then(args(inner.clone(), Kind::LeftParen, Kind::RightParen).or_not())
++        .try_map(|(((cascade, _), name), argl), _span| match name {
++            Some(name) => Ok(Cascade::Message {
++                name,
++                args: argl.map(|(_, a)| a).unwrap_or_default(),
++                cascade,
++            }),
++            // The twiddle's own location is what 19.909 needs, and it is no
++            // longer reachable here, so the span is the best available stand-in.
++            None => Err(CombErr::explicit(ParseError::at(
++                19,
++                909,
++                vec![],
++                Loc::default(),
++            ))),
++        });
++    let index = args(inner, Kind::SqLeft, Kind::SqRight).map(|(_, a)| Cascade::Index(a));
++    message.or(index)
++}
++
++/// The atoms, plus any message cascade attached to them.
++fn atom<'a>(inner: Ex<'a>) -> Ex<'a> {
++    let symbol = select! { Token { kind: Kind::Symbol(s), .. } => s };
++    let literal = select! { Token { kind: Kind::Literal(s), .. } => s };
++
++    // A call is a name with an *immediately* adjacent parenthesis. Nothing here
++    // skips whitespace, so the `Blank` token in `f (x)` makes this alternative
++    // fail and the abuttal path take over.
++    let call = symbol
++        .or(literal)
++        .then(args(inner.clone(), Kind::LeftParen, Kind::RightParen))
++        .map(|(name, (_, args))| Expr::Call { name, args });
++
++    let paren = tok(Kind::LeftParen)
++        .then(
++            choice((inner.clone().map(Some), omitted()))
++                .separated_by(tok(Kind::Comma))
++                .at_least(1)
++                .collect::<Vec<_>>(),
++        )
++        .then(tok(Kind::RightParen).or_not())
++        .try_map(|((opener, mut items), closer), _span| {
++            if closer.is_none() {
++                return Err(CombErr::explicit(unmatched(opener.loc, false)));
++            }
++            if items.len() == 1 {
++                return match items.pop().expect("length checked") {
++                    Some(e) => Ok(e),
++                    None => Err(CombErr::explicit(ParseError::at(
++                        35,
++                        1,
++                        vec!["(".to_string()],
++                        opener.loc,
++                    ))),
++                };
++            }
++            Ok(Expr::List(items))
++        });
++
++    let base = choice((
++        call,
++        paren,
++        symbol.map(|s| Expr::Symbol(classify(&s))),
++        literal.map(Expr::Literal),
++    ));
++
++    base.foldl(cascade_step(inner).repeated(), |target, step| match step {
++        Cascade::Message {
++            name,
++            args,
++            cascade,
++        } => Expr::Message {
++            target: Box::new(target),
++            name,
++            args,
++            cascade,
++        },
++        Cascade::Index(args) => Expr::Index {
++            target: Box::new(target),
++            args,
++        },
++    })
++    .boxed()
++}
++
++/// Assembles the whole precedence chain for one terminator context.
++fn build<'a>(term: Terminators, inner: Ex<'a>) -> Ex<'a> {
++    let prefix_op = require_term(
++        select! {
++            t @ Token { kind: Kind::Operator(Op::Plus | Op::Subtract | Op::Backslash), .. } => t
++        },
++        35,
++        901,
++    )
++    .map(|t| match t.kind {
++        Kind::Operator(Op::Plus) => UnOp::Plus,
++        Kind::Operator(Op::Subtract) => UnOp::Minus,
++        _ => UnOp::Not,
++    });
++    // Prefix binds at 9, above `**` at 7, which is what makes `-2 ** 2` four
++    // rather than minus four.
++    atom(inner)
++        .pratt((
++            prefix(9, prefix_op, |op, rhs, _| Expr::Unary(op, Box::new(rhs))),
++            infix(left(7), plain_op(7), |l, op, r, _| bin(op, l, r)),
++            infix(left(6), plain_op(6), |l, op, r, _| bin(op, l, r)),
++            infix(left(5), plain_op(5), |l, op, r, _| bin(op, l, r)),
++            infix(
++                left(4),
++                choice((plain_op(4), blank_op(term), abuttal_op())),
++                |l, op, r, _| bin(op, l, r),
++            ),
++            infix(left(3), plain_op(3), |l, op, r, _| bin(op, l, r)),
++            infix(left(2), plain_op(2), |l, op, r, _| bin(op, l, r)),
++            infix(left(1), plain_op(1), |l, op, r, _| bin(op, l, r)),
++        ))
++        .boxed()
++}
++
++/// The grammar used inside parentheses, brackets and argument lists.
++///
++/// Parenthesised subexpressions deliberately drop the enclosing terminator set
++/// (`LanguageParser.cpp:3777`), so one instance serves every nested context.
++fn nested<'a>() -> Ex<'a> {
++    recursive(|me| build(Terminators::NESTED, me.boxed())).boxed()
++}
++
++/// An argument that was left out, recognised by what follows rather than by
++/// failing to parse an expression.
++///
++/// `or_not` cannot be used for this: it rewinds and succeeds with `None`,
++/// throwing away the error, so `x = a +` came back as "no expression at all"
++/// instead of 35.1 at `+`.
++fn omitted<'a>() -> impl Parser<'a, In<'a>, Option<Expr>, Extra> + Clone {
++    any()
++        .filter(|t: &Token| {
++            matches!(
++                t.kind,
++                Kind::Comma | Kind::RightParen | Kind::SqRight | Kind::Eoc
++            )
++        })
++        .rewind()
++        .to(None)
++        .or(end().to(None))
++}
++
++/// The whole expression for one terminator context, comma list included.
++pub fn expression<'a>(term: Terminators) -> impl Parser<'a, In<'a>, Option<Expr>, Extra> {
++    choice((build(term, nested()).map(Some), omitted()))
++        .separated_by(tok(Kind::Comma))
++        .at_least(1)
++        .collect::<Vec<_>>()
++        .map(|mut items| {
++            if items.len() == 1 {
++                items.pop().expect("length checked")
++            } else {
++                Some(Expr::List(items))
++            }
++        })
++}
++
++/// Finds the innermost unmatched `(` or `[` in a token stream.
++///
++/// This is a hand-written pre-pass, and it is here because the combinators
++/// cannot produce error 36 themselves. `repeated()`, `or_not()` and `choice()`
++/// all rewind a partially-consumed alternative and discard its error, and
++/// chumsky 0.13 has no cut or commit combinator to stop that, so the bracket
++/// error raised inside a message cascade never reaches the caller: `(a[1`
++/// reported the outer parenthesis instead of the inner bracket. Balancing the
++/// stream up front sidesteps the grammar entirely.
++fn unmatched_opener(toks: &[Token]) -> Option<ParseError> {
++    let mut stack: Vec<&Token> = Vec::new();
++    for t in toks {
++        match t.kind {
++            Kind::LeftParen | Kind::SqLeft => stack.push(t),
++            Kind::RightParen | Kind::SqRight => {
++                stack.pop();
++            }
++            _ => {}
++        }
++    }
++    stack
++        .pop()
++        .map(|t| unmatched(t.loc, matches!(t.kind, Kind::SqLeft)))
++}
++
++/// Parses one expression from source, for tests and for the throughput axis.
++pub fn parse(src: &str) -> Result<Expr, ParseError> {
++    let toks = crate::token::scan(src)?;
++    // The trailing `Eoc` is not part of the grammar, so it is trimmed rather
++    // than made a token every alternative has to stop before.
++    let body = &toks[..toks.len() - 1];
++    let result = expression(Terminators::EOC).then_ignore(end()).parse(body);
++    if result.has_errors()
++        && let Some(err) = unmatched_opener(body)
++    {
++        return Err(err);
++    }
++    match result.into_result() {
++        Ok(Some(e)) => Ok(e),
++        Ok(None) => Err(ParseError::at(35, 918, vec![], toks[0].loc)),
++        Err(errs) => Err(errs
++            .first()
++            .map(CombErr::to_parse_error)
++            .unwrap_or_else(|| ParseError::at(35, 1, vec![], toks[0].loc))),
++    }
++}
+diff --git a/rust/crates/rexx-parse-spike/src/eval.rs b/rust/crates/rexx-parse-spike/src/eval.rs
+new file mode 100644
+index 00000000..bc2b5bd1
+--- /dev/null
++++ b/rust/crates/rexx-parse-spike/src/eval.rs
+@@ -0,0 +1,194 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! A minimal evaluator, shared by both arms.
++//!
++//! Its only job is to turn an AST back into the string the oracle printed, so
++//! that each arm is checked against `build/bin/rexx` rather than against the
++//! other arm. It covers operators, symbols and the handful of calls the corpus
++//! uses; anything object-related returns `Unsupported`, and those corpus cases
++//! are checked on their rendered shape instead.
++
++use rexx_num::{CompareOp, DivOp, Number};
++
++use crate::ast::{Expr, Symbol, UnOp};
++use crate::token::Op;
++
++/// NUMERIC DIGITS 9, the default the corpus runs under.
++const DIGITS: u64 = 9;
++
++#[derive(Debug, PartialEq, Eq)]
++pub enum EvalError {
++    /// The AST uses something outside this evaluator's subset.
++    Unsupported,
++}
++
++/// Looks a variable up the way the corpus programs set them.
++///
++/// An unset simple variable evaluates to its own name in upper case, which is
++/// how `f (1)` becomes `F 1`.
++fn lookup(name: &str) -> String {
++    match name {
++        "A" => "2".to_string(),
++        "B" => "3".to_string(),
++        "C" => "4".to_string(),
++        "P" => "x".to_string(),
++        "Q" => "y".to_string(),
++        "R" => "z".to_string(),
++        "X" => "2".to_string(),
++        "AA" => "2".to_string(),
++        "BB" => "2".to_string(),
++        "CC" => "1".to_string(),
++        "I" => "1".to_string(),
++        "J" => "2".to_string(),
++        other => other.to_string(),
++    }
++}
++
++fn compound(stem: &str, tails: &[String]) -> String {
++    // Tail elements are variable values when they are symbols, and the literal
++    // digits when they are numbers.
++    let resolved: Vec<String> = tails
++        .iter()
++        .map(|t| {
++            if t.starts_with(|c: char| c.is_ascii_digit()) {
++                t.clone()
++            } else {
++                lookup(t)
++            }
++        })
++        .collect();
++    let key = format!("{stem}{}", resolved.join("."));
++    match key.as_str() {
++        "S.1" => "one".to_string(),
++        "S.2" => "two".to_string(),
++        "N.1.2" => "nested".to_string(),
++        other => other.to_string(),
++    }
++}
++
++fn number(text: &str) -> Result<Number, EvalError> {
++    Number::parse(text.trim()).ok_or(EvalError::Unsupported)
++}
++
++fn arith(op: Op, l: &str, r: &str) -> Result<String, EvalError> {
++    let a = number(l)?;
++    let b = number(r)?;
++    let out = match op {
++        Op::Plus => a.add(&b, DIGITS),
++        Op::Subtract => a.sub(&b, DIGITS),
++        Op::Multiply => a.mul(&b, DIGITS),
++        Op::Divide => a.div(&b, DIGITS, DivOp::Divide),
++        Op::IntDiv => a.div(&b, DIGITS, DivOp::IntegerDivide),
++        Op::Remainder => a.div(&b, DIGITS, DivOp::Remainder),
++        Op::Power => a.pow(&b, DIGITS),
++        _ => return Err(EvalError::Unsupported),
++    };
++    Ok(out.map_err(|_| EvalError::Unsupported)?.format(DIGITS))
++}
++
++/// Delegates the whole comparison family to `rexx_num`, which already
++/// implements the blank stripping and the strict/loose split.
++fn compare(op: CompareOp, l: &str, r: &str) -> Result<String, EvalError> {
++    let out = rexx_num::compare(l, r, DIGITS, 0, op).map_err(|_| EvalError::Unsupported)?;
++    Ok(boolean(out))
++}
++
++fn boolean(b: bool) -> String {
++    if b { "1".to_string() } else { "0".to_string() }
++}
++
++fn truthy(s: &str) -> Result<bool, EvalError> {
++    match s.trim() {
++        "1" => Ok(true),
++        "0" => Ok(false),
++        _ => Err(EvalError::Unsupported),
++    }
++}
++
++pub fn eval(e: &Expr) -> Result<String, EvalError> {
++    match e {
++        Expr::Literal(s) => Ok(s.clone()),
++        Expr::Symbol(Symbol::Number(s)) => Ok(s.clone()),
++        Expr::Symbol(Symbol::Simple(s)) => Ok(lookup(s)),
++        Expr::Symbol(Symbol::Compound { stem, tails }) => Ok(compound(stem, tails)),
++        Expr::Symbol(Symbol::Stem(_)) | Expr::Symbol(Symbol::Environment(_)) => {
++            Err(EvalError::Unsupported)
++        }
++        Expr::Unary(op, inner) => {
++            let v = eval(inner)?;
++            match op {
++                UnOp::Plus => arith(Op::Plus, "0", &v),
++                UnOp::Minus => arith(Op::Subtract, "0", &v),
++                UnOp::Not => Ok(boolean(!truthy(&v)?)),
++            }
++        }
++        Expr::Binary(op, l, r) => {
++            let a = eval(l)?;
++            let b = eval(r)?;
++            match op {
++                Op::Abuttal | Op::Concatenate => Ok(format!("{a}{b}")),
++                Op::Blank => Ok(format!("{a} {b}")),
++                Op::Plus
++                | Op::Subtract
++                | Op::Multiply
++                | Op::Divide
++                | Op::IntDiv
++                | Op::Remainder
++                | Op::Power => arith(*op, &a, &b),
++                Op::Equal => compare(CompareOp::Equal, &a, &b),
++                Op::BackslashEqual => compare(CompareOp::NotEqual, &a, &b),
++                Op::LessGreater | Op::GreaterLess => compare(CompareOp::NotEqual, &a, &b),
++                Op::GreaterThan => compare(CompareOp::Greater, &a, &b),
++                Op::LessThan => compare(CompareOp::Less, &a, &b),
++                Op::GreaterEqual => compare(CompareOp::GreaterEqual, &a, &b),
++                Op::LessEqual => compare(CompareOp::LessEqual, &a, &b),
++                Op::BackslashGreaterThan => compare(CompareOp::LessEqual, &a, &b),
++                Op::BackslashLessThan => compare(CompareOp::GreaterEqual, &a, &b),
++                Op::StrictEqual => compare(CompareOp::StrictEqual, &a, &b),
++                Op::StrictBackslashEqual => compare(CompareOp::StrictNotEqual, &a, &b),
++                Op::StrictGreaterThan => compare(CompareOp::StrictGreater, &a, &b),
++                Op::StrictLessThan => compare(CompareOp::StrictLess, &a, &b),
++                Op::StrictGreaterEqual => compare(CompareOp::StrictGreaterEqual, &a, &b),
++                Op::StrictLessEqual => compare(CompareOp::StrictLessEqual, &a, &b),
++                Op::And => Ok(boolean(truthy(&a)? && truthy(&b)?)),
++                Op::Or => Ok(boolean(truthy(&a)? || truthy(&b)?)),
++                Op::Xor => Ok(boolean(truthy(&a)? != truthy(&b)?)),
++                Op::Backslash => Err(EvalError::Unsupported),
++            }
++        }
++        Expr::Call { name, args } => call(name, args),
++        Expr::Message { .. } | Expr::Index { .. } | Expr::List(_) => Err(EvalError::Unsupported),
++    }
++}
++
++/// The four callables the corpus uses. `F` and `G` are the corpus's own
++/// `::routine`s.
++fn call(name: &str, args: &[Option<Expr>]) -> Result<String, EvalError> {
++    let mut values = Vec::new();
++    for a in args {
++        match a {
++            Some(e) => values.push(eval(e)?),
++            None => return Err(EvalError::Unsupported),
++        }
++    }
++    match (name, values.len()) {
++        ("F", 1) => Ok(format!("R{}", values[0])),
++        ("G", 1) => arith(Op::Plus, &values[0], "10"),
++        ("ABS", 1) => {
++            let n = number(&values[0])?;
++            let text = n.format(DIGITS);
++            Ok(text.strip_prefix('-').unwrap_or(&text).to_string())
++        }
++        ("LENGTH", 1) => Ok(values[0].len().to_string()),
++        _ => Err(EvalError::Unsupported),
++    }
++}
+diff --git a/rust/crates/rexx-parse-spike/src/hand.rs b/rust/crates/rexx-parse-spike/src/hand.rs
+new file mode 100644
+index 00000000..f3847d95
+--- /dev/null
++++ b/rust/crates/rexx-parse-spike/src/hand.rs
+@@ -0,0 +1,345 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! D10 arm B: the expression grammar by hand, recursive descent.
++
++use crate::ast::{Expr, ParseError, UnOp};
++pub use crate::shared::Terminators;
++use crate::shared::{classify, unmatched};
++use crate::token::{Kind, Loc, Op, Token};
++
++pub struct Parser<'a> {
++    toks: &'a [Token],
++    pos: usize,
++}
++
++impl<'a> Parser<'a> {
++    pub fn new(toks: &'a [Token]) -> Self {
++        Parser { toks, pos: 0 }
++    }
++
++    fn peek(&self) -> &'a Token {
++        // `scan` always appends an `Eoc`, so the last token repeats forever
++        // rather than running off the end.
++        self.toks
++            .get(self.pos)
++            .unwrap_or_else(|| self.toks.last().expect("scan emits at least one token"))
++    }
++
++    fn next(&mut self) -> &'a Token {
++        let t = self.peek();
++        if self.pos < self.toks.len() {
++            self.pos += 1;
++        }
++        t
++    }
++
++    fn back(&mut self) {
++        self.pos -= 1;
++    }
++
++    /// The next token, skipping any blank operator. Used where the oracle calls
++    /// `nextReal`, which is only for lookahead that must see past whitespace.
++    fn peek_real(&self) -> &'a Token {
++        let mut i = self.pos;
++        while matches!(self.toks.get(i).map(|t| &t.kind), Some(Kind::Blank)) {
++            i += 1;
++        }
++        self.toks
++            .get(i)
++            .unwrap_or_else(|| self.toks.last().expect("scan emits at least one token"))
++    }
++
++    /// Parses a whole expression, where a top-level comma list builds an array.
++    pub fn expression(&mut self, term: Terminators) -> Result<Option<Expr>, ParseError> {
++        let mut parts = Vec::new();
++        loop {
++            parts.push(self.sub_expression(term)?);
++            if matches!(self.peek().kind, Kind::Comma) {
++                self.next();
++            } else {
++                break;
++            }
++        }
++        if parts.len() == 1 {
++            return Ok(parts.pop().expect("just checked the length"));
++        }
++        Ok(Some(Expr::List(parts)))
++    }
++
++    /// Precedence climbing over the operator table in `Op::precedence`.
++    ///
++    /// Every Rexx dyadic operator is left-associative, including `**`, which is
++    /// why `2 ** 3 ** 2` is 64 and not 512, and why `a = b = c` with `2 2 1` is
++    /// 1 and not 0. The loop therefore recurses at `prec + 1` on the right.
++    fn sub_expression(&mut self, term: Terminators) -> Result<Option<Expr>, ParseError> {
++        let Some(left) = self.message_subterm(term)? else {
++            return Ok(None);
++        };
++        self.binary_rest(left, 1, term).map(Some)
++    }
++
++    fn binary_rest(
++        &mut self,
++        mut left: Expr,
++        min_prec: u8,
++        term: Terminators,
++    ) -> Result<Expr, ParseError> {
++        loop {
++            let tok = self.peek();
++            if term.matches(tok) {
++                return Ok(left);
++            }
++            let (op, op_loc) = match &tok.kind {
++                // A term where an operator was expected is an abuttal: the
++                // oracle synthesises a zero-length operator token here
++                // (`LanguageParser.cpp:2878`).
++                Kind::Symbol(_) | Kind::Literal(_) | Kind::LeftParen => {
++                    let mut loc = tok.loc;
++                    loc.end_offset = loc.start_offset;
++                    (Op::Abuttal, loc)
++                }
++                Kind::Blank => {
++                    // A blank before a terminator is not an operator. This is
++                    // what keeps `do i = 1 to 3 while x` from concatenating
++                    // `3` with `WHILE`.
++                    let after = {
++                        let save = self.pos;
++                        self.pos += 1;
++                        let t = self.peek_real();
++                        self.pos = save;
++                        t
++                    };
++                    if term.matches(after) {
++                        return Ok(left);
++                    }
++                    (Op::Blank, tok.loc)
++                }
++                Kind::Operator(Op::Backslash) => {
++                    // `\` is prefix-only, so it cannot appear here. This is why
++                    // `x = a \(1 = 2)` is error 35.1 and not a concatenation.
++                    return Err(ParseError::at(35, 1, vec!["\\".to_string()], tok.loc));
++                }
++                Kind::Operator(op) => (*op, tok.loc),
++                Kind::Tilde | Kind::DTilde | Kind::SqLeft => {
++                    // A message send binds tighter than every operator, so it
++                    // reattaches to the term just parsed rather than going
++                    // through the precedence loop.
++                    left = self.cascade(left, term)?;
++                    continue;
++                }
++                Kind::RightParen => {
++                    return Err(ParseError::at(37, 2, vec![], tok.loc));
++                }
++                Kind::SqRight => {
++                    return Err(ParseError::at(37, 901, vec![], tok.loc));
++                }
++                _ => {
++                    return Err(ParseError::at(35, 1, vec![tok.text()], tok.loc));
++                }
++            };
++            let prec = op.precedence();
++            if prec < min_prec {
++                return Ok(left);
++            }
++            // Abuttal consumes nothing, because the token it was synthesised
++            // from is the start of the right-hand term.
++            if op != Op::Abuttal {
++                self.next();
++            }
++            let right = self.message_subterm(term)?;
++            let Some(right) = right else {
++                return Err(ParseError::at(35, 1, vec![op.spelling().to_string()], op_loc));
++            };
++            let right = self.binary_rest(right, prec + 1, term)?;
++            left = Expr::Binary(op, Box::new(left), Box::new(right));
++        }
++    }
++
++    /// A term with any prefix operators, followed by any message cascade.
++    fn message_subterm(&mut self, term: Terminators) -> Result<Option<Expr>, ParseError> {
++        let tok = self.peek();
++        if term.matches(tok) {
++            return Ok(None);
++        }
++        if let Kind::Operator(op) = tok.kind {
++            let unop = match op {
++                Op::Plus => UnOp::Plus,
++                Op::Subtract => UnOp::Minus,
++                Op::Backslash => UnOp::Not,
++                _ => return Err(ParseError::at(35, 1, vec![tok.text()], tok.loc)),
++            };
++            let loc = tok.loc;
++            let spelling = op.spelling().to_string();
++            self.next();
++            // Recursing on the whole subterm, not on the atom, is what makes a
++            // prefix operator bind tighter than `**`: `-x ** 2` is `(-x) ** 2`,
++            // which is 4, not -4.
++            let Some(inner) = self.message_subterm(term)? else {
++                return Err(ParseError::at(35, 901, vec![spelling], loc));
++            };
++            return Ok(Some(Expr::Unary(unop, Box::new(inner))));
++        }
++        let Some(atom) = self.sub_term(term)? else {
++            return Ok(None);
++        };
++        Ok(Some(self.cascade(atom, term)?))
++    }
++
++    /// Applies every message and index operator that follows a term.
++    fn cascade(&mut self, mut target: Expr, _term: Terminators) -> Result<Expr, ParseError> {
++        loop {
++            let tok = self.peek();
++            match tok.kind {
++                Kind::SqLeft => {
++                    let open = tok.loc;
++                    self.next();
++                    let args = self.arg_list(open, Kind::SqRight)?;
++                    target = Expr::Index {
++                        target: Box::new(target),
++                        args,
++                    };
++                }
++                Kind::Tilde | Kind::DTilde => {
++                    let cascade = matches!(tok.kind, Kind::DTilde);
++                    let twiddle = tok.loc;
++                    self.next();
++                    target = self.message(target, cascade, twiddle)?;
++                }
++                _ => return Ok(target),
++            }
++        }
++    }
++
++    fn message(&mut self, target: Expr, cascade: bool, twiddle: Loc) -> Result<Expr, ParseError> {
++        // The message name may be separated from the twiddle by blanks:
++        // `"abc" ~ length` is 3.
++        while matches!(self.peek().kind, Kind::Blank) {
++            self.next();
++        }
++        let tok = self.next();
++        let name = match &tok.kind {
++            Kind::Symbol(s) => s.clone(),
++            Kind::Literal(s) => s.clone(),
++            _ => {
++                self.back();
++                return Err(ParseError::at(19, 909, vec![], twiddle));
++            }
++        };
++        // Only an immediately adjacent parenthesis is an argument list.
++        let args = if matches!(self.peek().kind, Kind::LeftParen) {
++            let open = self.next().loc;
++            self.arg_list(open, Kind::RightParen)?
++        } else {
++            Vec::new()
++        };
++        Ok(Expr::Message {
++            target: Box::new(target),
++            name,
++            args,
++            cascade,
++        })
++    }
++
++    /// The atoms: parenthesised subexpressions, symbols, literals, and calls.
++    fn sub_term(&mut self, term: Terminators) -> Result<Option<Expr>, ParseError> {
++        let tok = self.peek();
++        if term.matches(tok) {
++            return Ok(None);
++        }
++        match &tok.kind {
++            Kind::LeftParen => {
++                let open = tok.loc;
++                self.next();
++                let inner = self.expression(Terminators::RIGHT)?;
++                let Some(inner) = inner else {
++                    return Err(ParseError::at(35, 1, vec!["(".to_string()], open));
++                };
++                if !matches!(self.peek().kind, Kind::RightParen) {
++                    return Err(unmatched(open, false));
++                }
++                self.next();
++                Ok(Some(inner))
++            }
++            Kind::Symbol(name) => {
++                let name = name.clone();
++                self.next();
++                if matches!(self.peek().kind, Kind::LeftParen) {
++                    let open = self.next().loc;
++                    let args = self.arg_list(open, Kind::RightParen)?;
++                    return Ok(Some(Expr::Call { name, args }));
++                }
++                Ok(Some(Expr::Symbol(classify(&name))))
++            }
++            Kind::Literal(value) => {
++                let value = value.clone();
++                self.next();
++                if matches!(self.peek().kind, Kind::LeftParen) {
++                    let open = self.next().loc;
++                    let args = self.arg_list(open, Kind::RightParen)?;
++                    return Ok(Some(Expr::Call { name: value, args }));
++                }
++                Ok(Some(Expr::Literal(value)))
++            }
++            // A prefix operator here is not this function's business: the caller
++            // handles it, so report nothing found rather than an error.
++            Kind::Operator(Op::Plus | Op::Subtract | Op::Backslash) => Ok(None),
++            Kind::RightParen => Err(ParseError::at(37, 2, vec![], tok.loc)),
++            Kind::SqRight => Err(ParseError::at(37, 901, vec![], tok.loc)),
++            Kind::Blank => {
++                self.next();
++                self.sub_term(term)
++            }
++            _ => Err(ParseError::at(35, 1, vec![tok.text()], tok.loc)),
++        }
++    }
++
++    /// An argument list, where an omitted argument is a real possibility:
++    /// `f(,)` parses and passes two omitted arguments.
++    fn arg_list(&mut self, open: Loc, closer: Kind) -> Result<Vec<Option<Expr>>, ParseError> {
++        let inner = if closer == Kind::RightParen {
++            Terminators::RIGHT
++        } else {
++            Terminators::SQRIGHT
++        };
++        let mut args = Vec::new();
++        // An empty list is zero arguments, but `f(,)` is two omitted ones, which
++        // falls out of the loop below because a comma terminates a
++        // subexpression that then yields nothing.
++        if self.peek().kind == closer {
++            self.next();
++            return Ok(args);
++        }
++        loop {
++            args.push(self.sub_expression(inner)?);
++            let tok = self.peek();
++            if matches!(tok.kind, Kind::Comma) {
++                self.next();
++                continue;
++            }
++            if tok.kind == closer {
++                self.next();
++                return Ok(args);
++            }
++            return Err(unmatched(open, closer == Kind::SqRight));
++        }
++    }
++}
++
++/// Parses one expression from source, for tests and for the throughput axis.
++pub fn parse(src: &str) -> Result<Expr, ParseError> {
++    let toks = crate::token::scan(src)?;
++    let mut p = Parser::new(&toks);
++    match p.expression(Terminators::EOC)? {
++        Some(e) => Ok(e),
++        None => Err(ParseError::at(35, 918, vec![], toks[0].loc)),
++    }
++}
+diff --git a/rust/crates/rexx-parse-spike/src/lib.rs b/rust/crates/rexx-parse-spike/src/lib.rs
+new file mode 100644
+index 00000000..a772f456
+--- /dev/null
++++ b/rust/crates/rexx-parse-spike/src/lib.rs
+@@ -0,0 +1,22 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! The D10 spike: the Rexx expression grammar written twice over one shared
++//! token stream, so the two constructions can be measured against each other.
++//!
++//! Deleted once `d10-decision.md` records the result.
++
++pub mod ast;
++pub mod comb;
++pub mod eval;
++pub mod hand;
++pub mod shared;
++pub mod token;
+diff --git a/rust/crates/rexx-parse-spike/src/shared.rs b/rust/crates/rexx-parse-spike/src/shared.rs
+new file mode 100644
+index 00000000..f6156f69
+--- /dev/null
++++ b/rust/crates/rexx-parse-spike/src/shared.rs
+@@ -0,0 +1,112 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! The pieces both arms need, kept out of either arm's line count.
++
++use crate::ast::{ParseError, Symbol};
++use crate::token::{Kind, Loc, Token};
++
++/// Which tokens end the expression currently being parsed.
++///
++/// A runtime set rather than a type, because the same grammar is entered from
++/// contexts that stop on different tokens: a parenthesised subexpression stops
++/// on `)`, a `DO` control expression stops on `TO`, `BY`, `FOR`, `WHILE` and
++/// `UNTIL`, and a bare assignment stops only at end of clause.
++#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
++pub struct Terminators {
++    pub right_paren: bool,
++    pub sq_right: bool,
++    pub do_keywords: bool,
++}
++
++impl Terminators {
++    pub const EOC: Terminators = Terminators {
++        right_paren: false,
++        sq_right: false,
++        do_keywords: false,
++    };
++    pub const RIGHT: Terminators = Terminators {
++        right_paren: true,
++        sq_right: false,
++        do_keywords: false,
++    };
++    pub const SQRIGHT: Terminators = Terminators {
++        right_paren: false,
++        sq_right: true,
++        do_keywords: false,
++    };
++    /// Inside parentheses, brackets or an argument list. Both closers are
++    /// terminators because the enclosing context's set is dropped, and which
++    /// closer is required is checked by the caller.
++    pub const NESTED: Terminators = Terminators {
++        right_paren: true,
++        sq_right: true,
++        do_keywords: false,
++    };
++    pub const DO: Terminators = Terminators {
++        right_paren: false,
++        sq_right: false,
++        do_keywords: true,
++    };
++
++    /// True when this token ends the expression being parsed.
++    pub fn matches(self, tok: &Token) -> bool {
++        match &tok.kind {
++            Kind::Eoc | Kind::Comma => true,
++            Kind::RightParen => self.right_paren,
++            Kind::SqRight => self.sq_right,
++            Kind::Symbol(name) => {
++                self.do_keywords
++                    && matches!(
++                        name.as_str(),
++                        "TO" | "BY" | "FOR" | "WHILE" | "UNTIL" | "OVER"
++                    )
++            }
++            _ => false,
++        }
++    }
++}
++
++/// Error 36's two sub-numbers, both substituting the opener's own position and
++/// line. The opener reported is the innermost one still unmatched, which falls
++/// out of reporting the `open` of whichever call is unwinding.
++pub fn unmatched(open: Loc, bracket: bool) -> ParseError {
++    ParseError::at(
++        36,
++        if bracket { 902 } else { 901 },
++        vec![
++            (open.start_offset + 1).to_string(),
++            open.start_line.to_string(),
++        ],
++        open,
++    )
++}
++
++/// Decides what a symbol denotes from its spelling alone.
++pub fn classify(name: &str) -> Symbol {
++    if name.starts_with('.') {
++        return Symbol::Environment(name.to_string());
++    }
++    if name.starts_with(|c: char| c.is_ascii_digit()) {
++        return Symbol::Number(name.to_string());
++    }
++    if let Some(dot) = name.find('.') {
++        let stem = name[..=dot].to_string();
++        let rest = &name[dot + 1..];
++        if rest.is_empty() {
++            return Symbol::Stem(stem);
++        }
++        let tails = rest.split('.').map(str::to_string).collect();
++        return Symbol::Compound { stem, tails };
++    }
++    Symbol::Simple(name.to_string())
++}
++
+diff --git a/rust/crates/rexx-parse-spike/src/token.rs b/rust/crates/rexx-parse-spike/src/token.rs
+new file mode 100644
+index 00000000..77271101
+--- /dev/null
++++ b/rust/crates/rexx-parse-spike/src/token.rs
+@@ -0,0 +1,636 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! The token stream both spike arms parse.
++//!
++//! This is written once and shared, so the D10 comparison measures the layer
++//! above the tokens and nothing else.
++
++use crate::ast::ParseError;
++
++/// A token's extent in the source.
++///
++/// `offset` is a 0-based **byte** offset within its own physical line, and
++/// `line` is 1-based. Error 36.901 substitutes `offset + 1` and `line`
++/// (`LanguageParser::errorPosition`, `LanguageParser.cpp:4114`), and the
++/// oracle counts bytes rather than characters: `x = "ää" || (a` reports
++/// position 15, where the `(` is the 13th character but the 15th byte.
++#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
++pub struct Loc {
++    pub start_line: usize,
++    pub start_offset: usize,
++    pub end_line: usize,
++    pub end_offset: usize,
++}
++
++/// A dyadic or prefix operator.
++#[derive(Copy, Clone, PartialEq, Eq, Debug)]
++pub enum Op {
++    Or,
++    Xor,
++    And,
++    Equal,
++    BackslashEqual,
++    GreaterThan,
++    BackslashGreaterThan,
++    LessThan,
++    BackslashLessThan,
++    GreaterEqual,
++    LessEqual,
++    StrictEqual,
++    StrictBackslashEqual,
++    StrictGreaterThan,
++    StrictLessThan,
++    StrictGreaterEqual,
++    StrictLessEqual,
++    LessGreater,
++    GreaterLess,
++    Abuttal,
++    Concatenate,
++    Blank,
++    Plus,
++    Subtract,
++    Multiply,
++    Divide,
++    IntDiv,
++    Remainder,
++    Power,
++    Backslash,
++}
++
++impl Op {
++    /// The binding power, straight from `RexxToken::precedence`
++    /// (`Token.cpp:111`). Higher binds tighter.
++    pub fn precedence(self) -> u8 {
++        match self {
++            Op::Or | Op::Xor => 1,
++            Op::And => 2,
++            Op::Equal
++            | Op::BackslashEqual
++            | Op::GreaterThan
++            | Op::BackslashGreaterThan
++            | Op::LessThan
++            | Op::BackslashLessThan
++            | Op::GreaterEqual
++            | Op::LessEqual
++            | Op::StrictEqual
++            | Op::StrictBackslashEqual
++            | Op::StrictGreaterThan
++            | Op::StrictLessThan
++            | Op::StrictGreaterEqual
++            | Op::StrictLessEqual
++            | Op::LessGreater
++            | Op::GreaterLess => 3,
++            Op::Abuttal | Op::Concatenate | Op::Blank => 4,
++            Op::Plus | Op::Subtract => 5,
++            Op::Multiply | Op::Divide | Op::IntDiv | Op::Remainder => 6,
++            Op::Power => 7,
++            Op::Backslash => 8,
++        }
++    }
++
++    /// The spelling the oracle quotes back in error 35.1.
++    ///
++    /// `x = a %% b` reports `"%"`, not `"%%"`, because the scanner had already
++    /// split the second `%` into its own token.
++    pub fn spelling(self) -> &'static str {
++        match self {
++            Op::Or => "|",
++            Op::Xor => "&&",
++            Op::And => "&",
++            Op::Equal => "=",
++            Op::BackslashEqual => "\\=",
++            Op::GreaterThan => ">",
++            Op::BackslashGreaterThan => "\\>",
++            Op::LessThan => "<",
++            Op::BackslashLessThan => "\\<",
++            Op::GreaterEqual => ">=",
++            Op::LessEqual => "<=",
++            Op::StrictEqual => "==",
++            Op::StrictBackslashEqual => "\\==",
++            Op::StrictGreaterThan => ">>",
++            Op::StrictLessThan => "<<",
++            Op::StrictGreaterEqual => ">>=",
++            Op::StrictLessEqual => "<<=",
++            Op::LessGreater => "<>",
++            Op::GreaterLess => "><",
++            Op::Abuttal => "",
++            Op::Concatenate => "||",
++            Op::Blank => " ",
++            Op::Plus => "+",
++            Op::Subtract => "-",
++            Op::Multiply => "*",
++            Op::Divide => "/",
++            Op::IntDiv => "%",
++            Op::Remainder => "//",
++            Op::Power => "**",
++            Op::Backslash => "\\",
++        }
++    }
++}
++
++/// What a token is.
++///
++/// `Blank` exists as a token of its own because that is how the oracle keeps
++/// `f(x)` and `f (x)` apart: the scanner emits it only when the following real
++/// character can start a term (`Scanner.cpp:754`), and the parser above never
++/// skips it. Every whitespace question in D10 is settled here rather than in
++/// either arm.
++#[derive(Clone, PartialEq, Eq, Debug)]
++pub enum Kind {
++    /// A symbol: variable, number, environment symbol, compound or stem name.
++    /// The value is already upper-cased, as the oracle upper-cases symbols.
++    Symbol(String),
++    /// A quoted literal, with quote doubling resolved and any `x`/`b` suffix
++    /// already decoded.
++    Literal(String),
++    Blank,
++    Operator(Op),
++    Tilde,
++    DTilde,
++    LeftParen,
++    RightParen,
++    SqLeft,
++    SqRight,
++    Comma,
++    Colon,
++    /// End of clause.
++    Eoc,
++}
++
++#[derive(Clone, PartialEq, Eq, Debug)]
++pub struct Token {
++    pub kind: Kind,
++    pub loc: Loc,
++}
++
++impl Token {
++    pub fn is_symbol(&self) -> bool {
++        matches!(self.kind, Kind::Symbol(_))
++    }
++
++    pub fn is_literal(&self) -> bool {
++        matches!(self.kind, Kind::Literal(_))
++    }
++
++    /// True for the three tokens that continue a message cascade.
++    pub fn is_message_operator(&self) -> bool {
++        matches!(self.kind, Kind::Tilde | Kind::DTilde | Kind::SqLeft)
++    }
++
++    /// True when this token can begin a term, which is the condition under
++    /// which an abuttal operator is synthesised in operator position.
++    pub fn starts_term(&self) -> bool {
++        matches!(
++            self.kind,
++            Kind::Symbol(_) | Kind::Literal(_) | Kind::LeftParen
++        )
++    }
++
++    pub fn text(&self) -> String {
++        match &self.kind {
++            Kind::Symbol(s) => s.clone(),
++            Kind::Literal(s) => s.clone(),
++            Kind::Blank => " ".to_string(),
++            Kind::Operator(op) => op.spelling().to_string(),
++            Kind::Tilde => "~".to_string(),
++            Kind::DTilde => "~~".to_string(),
++            Kind::LeftParen => "(".to_string(),
++            Kind::RightParen => ")".to_string(),
++            Kind::SqLeft => "[".to_string(),
++            Kind::SqRight => "]".to_string(),
++            Kind::Comma => ",".to_string(),
++            Kind::Colon => ":".to_string(),
++            Kind::Eoc => "".to_string(),
++        }
++    }
++}
++
++fn is_symbol_start(b: u8) -> bool {
++    b.is_ascii_alphabetic() || b.is_ascii_digit() || matches!(b, b'.' | b'_' | b'!' | b'?')
++}
++
++fn is_symbol_char(b: u8) -> bool {
++    is_symbol_start(b)
++}
++
++/// Scans one clause's worth of source into tokens.
++///
++/// The scanner tracks physical lines so that every token's `Loc` names the
++/// line and byte offset the oracle would report, including across a comma
++/// continuation, where the reported line is the token's own physical line and
++/// not the clause's first line.
++struct Scanner<'a> {
++    src: &'a [u8],
++    pos: usize,
++    /// Byte offset at which the current physical line starts.
++    line_start: usize,
++    line: usize,
++}
++
++impl<'a> Scanner<'a> {
++    fn new(src: &'a str) -> Self {
++        Scanner {
++            src: src.as_bytes(),
++            pos: 0,
++            line_start: 0,
++            line: 1,
++        }
++    }
++
++    fn peek(&self) -> Option<u8> {
++        self.src.get(self.pos).copied()
++    }
++
++    fn at(&self, n: usize) -> Option<u8> {
++        self.src.get(self.pos + n).copied()
++    }
++
++    fn loc_here(&self, len: usize) -> Loc {
++        Loc {
++            start_line: self.line,
++            start_offset: self.pos - self.line_start,
++            end_line: self.line,
++            end_offset: self.pos - self.line_start + len,
++        }
++    }
++
++    fn newline(&mut self) {
++        self.pos += 1;
++        self.line += 1;
++        self.line_start = self.pos;
++    }
++
++    /// Consumes whitespace and comments, returning true if anything at all was
++    /// skipped. A `--` line comment runs to the end of the line, which is why
++    /// `1 --1` is `1` and not `2`.
++    fn skip_trivia(&mut self) -> Result<bool, ParseError> {
++        let mut skipped = false;
++        loop {
++            match self.peek() {
++                Some(b' ') | Some(b'\t') => {
++                    self.pos += 1;
++                    skipped = true;
++                }
++                Some(b'/') if self.at(1) == Some(b'*') => {
++                    let open = self.loc_here(2);
++                    self.pos += 2;
++                    let mut depth = 1usize;
++                    loop {
++                        match self.peek() {
++                            None => {
++                                return Err(ParseError::at(6, 1, vec![], open));
++                            }
++                            Some(b'\n') => self.newline(),
++                            Some(b'*') if self.at(1) == Some(b'/') => {
++                                self.pos += 2;
++                                depth -= 1;
++                                if depth == 0 {
++                                    break;
++                                }
++                            }
++                            Some(b'/') if self.at(1) == Some(b'*') => {
++                                self.pos += 2;
++                                depth += 1;
++                            }
++                            Some(_) => self.pos += 1,
++                        }
++                    }
++                    skipped = true;
++                }
++                Some(b'-') if self.at(1) == Some(b'-') => {
++                    while !matches!(self.peek(), None | Some(b'\n')) {
++                        self.pos += 1;
++                    }
++                    skipped = true;
++                }
++                _ => return Ok(skipped),
++            }
++        }
++    }
++
++    /// True when the character at the cursor can start a term, which is the
++    /// oracle's test for a blank being significant.
++    fn at_term_start(&self) -> bool {
++        match self.peek() {
++            Some(b) => is_symbol_start(b) || matches!(b, b'"' | b'\'' | b'(' | b'['),
++            None => false,
++        }
++    }
++
++    fn scan_symbol(&mut self) -> Token {
++        let start = self.pos;
++        let start_offset = self.pos - self.line_start;
++        while matches!(self.peek(), Some(b) if is_symbol_char(b)) {
++            self.pos += 1;
++        }
++        // A number may carry an exponent, whose sign is part of the symbol
++        // even though `+`/`-` are not symbol characters.
++        let text = &self.src[start..self.pos];
++        let mut end = self.pos;
++        if text.first().is_some_and(u8::is_ascii_digit)
++            && matches!(text.last(), Some(b'e') | Some(b'E'))
++            && matches!(self.peek(), Some(b'+') | Some(b'-'))
++            && self.at(1).is_some_and(|b| b.is_ascii_digit())
++        {
++            self.pos += 1;
++            while matches!(self.peek(), Some(b) if b.is_ascii_digit()) {
++                self.pos += 1;
++            }
++            end = self.pos;
++        }
++        let value = String::from_utf8_lossy(&self.src[start..end]).to_uppercase();
++        Token {
++            kind: Kind::Symbol(value),
++            loc: Loc {
++                start_line: self.line,
++                start_offset,
++                end_line: self.line,
++                end_offset: end - self.line_start,
++            },
++        }
++    }
++
++    fn scan_literal(&mut self) -> Result<Token, ParseError> {
++        let quote = self.peek().expect("caller checked for a quote");
++        let open = self.loc_here(1);
++        let start_offset = self.pos - self.line_start;
++        self.pos += 1;
++        let mut value = Vec::new();
++        loop {
++            match self.peek() {
++                None | Some(b'\n') => {
++                    let sub = if quote == b'\'' { 2 } else { 3 };
++                    return Err(ParseError::at(6, sub, vec![], open));
++                }
++                Some(b) if b == quote => {
++                    if self.at(1) == Some(quote) {
++                        value.push(quote);
++                        self.pos += 2;
++                    } else {
++                        self.pos += 1;
++                        break;
++                    }
++                }
++                Some(b) => {
++                    value.push(b);
++                    self.pos += 1;
++                }
++            }
++        }
++        // A single `x` or `b` immediately after the closing quote makes the
++        // literal hexadecimal or binary. This is why `a''b` is `a` abutted
++        // with an empty binary literal and never reads the variable `b`.
++        let mut kind = 0u8;
++        if matches!(self.peek(), Some(b'x') | Some(b'X') | Some(b'b') | Some(b'B'))
++            && !self.at(1).is_some_and(is_symbol_char)
++        {
++            kind = self.peek().expect("just matched").to_ascii_lowercase();
++            self.pos += 1;
++        }
++        let text = String::from_utf8_lossy(&value).to_string();
++        let decoded = match kind {
++            b'x' => decode_hex(&text),
++            b'b' => decode_binary(&text),
++            _ => text,
++        };
++        Ok(Token {
++            kind: Kind::Literal(decoded),
++            loc: Loc {
++                start_line: self.line,
++                start_offset,
++                end_line: self.line,
++                end_offset: self.pos - self.line_start,
++            },
++        })
++    }
++
++    /// Consumes a continuation and the line break after it, repeatedly.
++    ///
++    /// Both `,` and `-` continue a clause (`Scanner.cpp:307`), and a `-` at end
++    /// of line is therefore not a subtraction: `x = 5 -` then `3` on the next
++    /// line yields `5 3`, the blank operator, not `2`. Returns true if at least
++    /// one was consumed, because a continuation counts as a blank for the
++    /// significant-blank test.
++    fn skip_continuation(&mut self) -> Result<bool, ParseError> {
++        let mut any = false;
++        loop {
++            if !matches!(self.peek(), Some(b',') | Some(b'-')) {
++                return Ok(any);
++            }
++            // Look past trivia for a line break. Without one this is a real
++            // comma, an argument separator, and must not be swallowed.
++            let mark_pos = self.pos;
++            let mark_line = self.line;
++            let mark_start = self.line_start;
++            self.pos += 1;
++            self.skip_trivia()?;
++            if self.peek() == Some(b'\n') {
++                self.newline();
++                self.skip_trivia()?;
++                any = true;
++            } else {
++                self.pos = mark_pos;
++                self.line = mark_line;
++                self.line_start = mark_start;
++                return Ok(any);
++            }
++        }
++    }
++
++    fn simple(&mut self, len: usize, kind: Kind) -> Token {
++        let loc = self.loc_here(len);
++        self.pos += len;
++        Token { kind, loc }
++    }
++}
++
++fn decode_hex(text: &str) -> String {
++    let digits: String = text.chars().filter(|c| !c.is_whitespace()).collect();
++    let mut out = Vec::new();
++    let bytes = digits.as_bytes();
++    // Hex literals group from the right, so an odd count leaves a short first
++    // group rather than a short last one.
++    let lead = bytes.len() % 2;
++    let mut i = 0;
++    if lead == 1 {
++        out.push(hex_val(bytes[0]));
++        i = 1;
++    }
++    while i < bytes.len() {
++        out.push(hex_val(bytes[i]) * 16 + hex_val(bytes[i + 1]));
++        i += 2;
++    }
++    String::from_utf8_lossy(&out).to_string()
++}
++
++fn hex_val(b: u8) -> u8 {
++    match b {
++        b'0'..=b'9' => b - b'0',
++        b'a'..=b'f' => b - b'a' + 10,
++        b'A'..=b'F' => b - b'A' + 10,
++        _ => 0,
++    }
++}
++
++fn decode_binary(text: &str) -> String {
++    let digits: String = text.chars().filter(|c| !c.is_whitespace()).collect();
++    let bytes = digits.as_bytes();
++    let mut out = Vec::new();
++    let lead = bytes.len() % 8;
++    let mut i = 0;
++    if lead != 0 {
++        let mut v = 0u8;
++        for &b in &bytes[..lead] {
++            v = v * 2 + (b - b'0');
++        }
++        out.push(v);
++        i = lead;
++    }
++    while i < bytes.len() {
++        let mut v = 0u8;
++        for &b in &bytes[i..i + 8] {
++            v = v * 2 + (b - b'0');
++        }
++        out.push(v);
++        i += 8;
++    }
++    String::from_utf8_lossy(&out).to_string()
++}
++
++/// Tokenises one clause's expression, ending at end of input or end of line.
++///
++/// The result always ends with exactly one `Eoc` token, which both arms use as
++/// the outermost terminator.
++pub fn scan(src: &str) -> Result<Vec<Token>, ParseError> {
++    let mut sc = Scanner::new(src);
++    let mut out: Vec<Token> = Vec::new();
++    loop {
++        // Record where the run of trivia begins, because a significant blank
++        // takes its location from the first blank character rather than from
++        // the token that follows it.
++        let blank_loc = sc.loc_here(1);
++        let skipped = sc.skip_trivia()?;
++        // A trailing comma continues the clause onto the next line and is
++        // functionally a blank (`Scanner.cpp:340`). It is consumed rather than
++        // emitted, so the tokens after it report their own physical line.
++        let continued = sc.skip_continuation()?;
++        // A continuation with no leading blank has no blank character to point
++        // at, so the synthesised token points at the term that follows. No
++        // measured error reads a blank token's location, so this is the one
++        // place the spike does not match the oracle byte for byte.
++        let blank_loc = if skipped { blank_loc } else { sc.loc_here(0) };
++        let skipped = skipped || continued;
++        let blank_significant = out.last().is_some_and(Token::is_blank_significant);
++        if skipped && blank_significant && sc.at_term_start() {
++            out.push(Token {
++                kind: Kind::Blank,
++                loc: blank_loc,
++            });
++        }
++        let Some(b) = sc.peek() else { break };
++        // A bare newline ends the clause. Only a continuation crosses one, and
++        // that was already handled above.
++        if b == b'\n' {
++            break;
++        }
++        let tok = match b {
++            b'"' | b'\'' => sc.scan_literal()?,
++            _ if is_symbol_start(b) => sc.scan_symbol(),
++            b'(' => sc.simple(1, Kind::LeftParen),
++            b')' => sc.simple(1, Kind::RightParen),
++            b'[' => sc.simple(1, Kind::SqLeft),
++            b']' => sc.simple(1, Kind::SqRight),
++            b':' => sc.simple(1, Kind::Colon),
++            b',' => sc.simple(1, Kind::Comma),
++            b'~' if sc.at(1) == Some(b'~') => sc.simple(2, Kind::DTilde),
++            b'~' => sc.simple(1, Kind::Tilde),
++            _ => scan_operator(&mut sc),
++        };
++        out.push(tok);
++    }
++    out.push(Token {
++        kind: Kind::Eoc,
++        loc: sc.loc_here(0),
++    });
++    Ok(out)
++}
++
++impl Token {
++    /// True when a blank following this token could be the blank operator.
++    ///
++    /// Straight from `RexxToken::isBlankSignificant` (`Token.hpp:595`): only
++    /// four token classes can end a term, and a blank after anything else is
++    /// pure whitespace.
++    fn is_blank_significant(&self) -> bool {
++        matches!(
++            self.kind,
++            Kind::Symbol(_) | Kind::Literal(_) | Kind::RightParen | Kind::SqRight
++        )
++    }
++}
++
++fn scan_operator(sc: &mut Scanner<'_>) -> Token {
++    let two = (sc.peek(), sc.at(1));
++    let three = sc.at(2);
++    // Longest match first, since `\==` must not be read as `\=` then `=`.
++    if let (Some(a), Some(b)) = two {
++        if let Some(c) = three {
++            let op = match (a, b, c) {
++                (b'\\', b'=', b'=') | (b'^', b'=', b'=') => Some(Op::StrictBackslashEqual),
++                (b'>', b'>', b'=') => Some(Op::StrictGreaterEqual),
++                (b'<', b'<', b'=') => Some(Op::StrictLessEqual),
++                _ => None,
++            };
++            if let Some(op) = op {
++                return sc.simple(3, Kind::Operator(op));
++            }
++        }
++        let op = match (a, b) {
++            (b'*', b'*') => Some(Op::Power),
++            (b'/', b'/') => Some(Op::Remainder),
++            (b'|', b'|') => Some(Op::Concatenate),
++            (b'&', b'&') => Some(Op::Xor),
++            (b'=', b'=') => Some(Op::StrictEqual),
++            (b'\\', b'=') | (b'^', b'=') => Some(Op::BackslashEqual),
++            (b'\\', b'>') | (b'^', b'>') => Some(Op::BackslashGreaterThan),
++            (b'\\', b'<') | (b'^', b'<') => Some(Op::BackslashLessThan),
++            (b'>', b'=') => Some(Op::GreaterEqual),
++            (b'<', b'=') => Some(Op::LessEqual),
++            (b'>', b'<') => Some(Op::GreaterLess),
++            (b'<', b'>') => Some(Op::LessGreater),
++            (b'>', b'>') => Some(Op::StrictGreaterThan),
++            (b'<', b'<') => Some(Op::StrictLessThan),
++            _ => None,
++        };
++        if let Some(op) = op {
++            return sc.simple(2, Kind::Operator(op));
++        }
++    }
++    let op = match two.0 {
++        Some(b'+') => Op::Plus,
++        Some(b'-') => Op::Subtract,
++        Some(b'*') => Op::Multiply,
++        Some(b'/') => Op::Divide,
++        Some(b'%') => Op::IntDiv,
++        Some(b'=') => Op::Equal,
++        Some(b'>') => Op::GreaterThan,
++        Some(b'<') => Op::LessThan,
++        Some(b'&') => Op::And,
++        Some(b'|') => Op::Or,
++        Some(b'\\') | Some(b'^') => Op::Backslash,
++        // Anything else is not an operator at all. The oracle reports it
++        // through error 13, which is outside this spike's scope, so it becomes
++        // a one-byte operator token that both arms then reject identically.
++        _ => Op::Backslash,
++    };
++    sc.simple(1, Kind::Operator(op))
++}
+diff --git a/rust/crates/rexx-parse-spike/tests/corpus.rs b/rust/crates/rexx-parse-spike/tests/corpus.rs
+new file mode 100644
+index 00000000..dbcd27ac
+--- /dev/null
++++ b/rust/crates/rexx-parse-spike/tests/corpus.rs
+@@ -0,0 +1,332 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.          */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++
++//! The D10 corpus, with the oracle's own answers as the expected values.
++//!
++//! Every expression is padded with four spaces so that its byte offsets match
++//! the line `x = <expr>` that produced the oracle's answer. That matters for
++//! errors 36.901 and 36.902, whose substitution values are a byte position
++//! within the line.
++//!
++//! Ground truth came from `build/bin/rexx` for values and `build/bin/rexxc` for
++//! the syntax errors. The variable environment is fixed:
++//! `a=2 b=3 c=4 p=x q=y r=z x=2 aa=2 bb=2 cc=1 i=1 j=2 s.1=one s.2=two
++//! n.1.2=nested`, plus routines `f(n)` returning `Rn` and `g(n)` returning
++//! `n+10`.
++
++use rexx_parse_spike::eval::{EvalError, eval};
++use rexx_parse_spike::{comb, hand};
++
++/// One corpus case: the expression, what the oracle printed, and the AST shape
++/// the oracle's answer implies. The shape is only asserted where the evaluator
++/// cannot reach the answer, which is every case involving an object.
++struct Case {
++    src: &'static str,
++    oracle: &'static str,
++    shape: Option<&'static str>,
++}
++
++const fn c(src: &'static str, oracle: &'static str) -> Case {
++    Case {
++        src,
++        oracle,
++        shape: None,
++    }
++}
++
++const fn s(src: &'static str, oracle: &'static str, shape: &'static str) -> Case {
++    Case {
++        src,
++        oracle,
++        shape: Some(shape),
++    }
++}
++
++const VALUES: &[Case] = &[
++    c("a + b * c", "14"),
++    c("(a + b) * c", "20"),
++    c("p q r", "x y z"),
++    c("p || q", "xy"),
++    c("p''q", "xy"),
++    // `''b` is an empty binary literal, so the variable b is never read.
++    c("p''b", "x"),
++    c("p\"\"b", "x"),
++    c("p\"y\"q", "xyy"),
++    c("p'41'x", "xA"),
++    c("\"0100 0001\"b", "A"),
++    // Prefix minus binds tighter than `**`, so this is 4 and not -4.
++    c("-2 ** 2", "4"),
++    c("-x ** 2", "4"),
++    // `**` is left-associative: right would give 512.
++    c("2 ** 3 ** 2", "64"),
++    // Left-associative comparison: right would give 0.
++    c("aa = bb = cc", "1"),
++    c("f(1)", "R1"),
++    // The blank turns the call into an abuttal of the variable F and (1).
++    c("f (1)", "F 1"),
++    c("abs('2.5')", "2.5"),
++    c("abs ('2.5')", "ABS 2.5"),
++    c("f(g(1))", "R11"),
++    c("s.i", "one"),
++    c("s.1", "one"),
++    c("n.i.j", "nested"),
++    s("arr[2]", "B", "(index ARR 2)"),
++    s("m[2,2]", "Q", "(index M 2 2)"),
++    s(
++        "\"abcdef\"~substr(2,3)",
++        "bcd",
++        "(msg~ 'abcdef' SUBSTR 2 3)",
++    ),
++    s(
++        ".array~new~~append(\"A\")~~append(\"B\")~items",
++        "2",
++        "(msg~ (msg~~ (msg~~ (msg~ env:.ARRAY NEW) APPEND 'A') APPEND 'B') ITEMS)",
++    ),
++    s("\"abc\"~reverse~upper", "CBA", "(msg~ (msg~ 'abc' REVERSE) UPPER)"),
++    c("\\(1 = 2)", "1"),
++    c("a > b & c > a", "0"),
++    c("a < b | c < a", "1"),
++    c("\"2\" == 2", "1"),
++    c("\"2\" \\== 2", "0"),
++    c("a+1 b+1", "3 4"),
++    c("- - 2", "2"),
++    s("\"abc\" ~ length", "3", "(msg~ 'abc' LENGTH)"),
++    s("arr~at(3)", "C", "(msg~ ARR AT 3)"),
++    c("1 + 2 * 3 ** 2 - 4", "15"),
++    c("\"a\" \"b\" || \"c\" \"d\"", "a bc d"),
++    c("3 // 2", "1"),
++    c("7 % 2", "3"),
++    c("a \\< b", "0"),
++    c("a >< b", "1"),
++    c("1 && 1", "0"),
++    s("\"abc\"[2]", "b", "(index 'abc' 2)"),
++    s("(arr)[2]", "B", "(index ARR 2)"),
++    c("010 + 1", "11"),
++    c("1e2 + 1", "101"),
++    // The stem A. was never assigned, so the compound variable is its own name.
++    c("a.1", "A.1"),
++    c("3 = \"3.0\"", "1"),
++    c("\\\\1", "1"),
++    c("2 ** -1", "0.5"),
++    c("-2 ** -2", "0.25"),
++    s(
++        "\"abc\"~substr(2)~upper 1",
++        "BC 1",
++        "(blank (msg~ (msg~ 'abc' SUBSTR 2) UPPER) 1)",
++    ),
++    s("(1+1)~class~id", "String", "(msg~ (msg~ (+ 1 1) CLASS) ID)"),
++    s(".array~id", "Array", "(msg~ env:.ARRAY ID)"),
++    c("f(1) f (1)", "R1 F 1"),
++    c("length(\"abc\")", "3"),
++    c("length (\"abc\")", "LENGTH abc"),
++    s("\"abc\"~length 5", "3 5", "(blank (msg~ 'abc' LENGTH) 5)"),
++];
++
++/// The malformed expressions, with the number, sub-number and substitution
++/// values `build/bin/rexxc` reports for each.
++///
++/// The line numbers here are the spike's own, which start at 1 for the
++/// expression; the oracle files put the clause on line 2 or 3.
++const ERRORS: &[(&str, &str)] = &[
++    (")", "37.2 []"),
++    ("a +", "35.1 [+]"),
++    ("(a", "36.901 [5|1]"),
++    ("a~", "19.909 []"),
++    ("a || || b", "35.1 [||]"),
++    ("'unterminated", "6.2 []"),
++    ("a \\(1 = 2)", "35.1 [\\]"),
++    ("**2", "35.1 [**]"),
++    ("a[", "36.902 [6|1]"),
++    ("a[1", "36.902 [6|1]"),
++    ("1 2 3)", "37.2 []"),
++    ("a~b~", "19.909 []"),
++    ("a~~", "19.909 []"),
++    ("a~\"b", "6.3 []"),
++    ("~a", "35.1 [~]"),
++    ("a %% b", "35.1 [%]"),
++    ("a ||", "35.1 [||]"),
++    ("()", "35.1 [(]"),
++    ("a b )", "37.2 []"),
++    ("\\", "35.901 [\\]"),
++    ("((a)", "36.901 [5|1]"),
++    ("(a[1", "36.902 [7|1]"),
++    ("]", "37.901 []"),
++    ("a[1]]", "37.901 []"),
++    ("a + * b", "35.1 [*]"),
++    ("f(a b", "36.901 [6|1]"),
++    // A comma continuation: the reported line is the token's own physical line,
++    // not the clause's first.
++    ("1 + ,\n    (a", "36.901 [5|2]"),
++];
++
++/// Expressions `build/bin/rexxc` accepts, kept separate because their value
++/// depends on state the evaluator does not model. They are the negative
++/// direction of the fidelity axis: an arm must not reject what the oracle
++/// accepts, and only `rexxc` can answer that question without running the file.
++const ACCEPTED: &[&str] = &[
++    // A bare stem reference.
++    "a.",
++    // Two omitted arguments.
++    "f(,)",
++    // A number is a valid message name.
++    "a~1",
++    // Keywords are not reserved, so IF here is just a variable.
++    "a b if",
++    "1 ~ 2",
++    // A trailing comma is a continuation, so this is just `a`.
++    "a,\n    b",
++    // A trailing minus is also a continuation, and acts as a blank operator.
++    "a-\n    b",
++];
++
++/// Four spaces, so that a byte offset in the spike matches the same expression
++/// written after `x = ` in a `.rex` file.
++fn padded(src: &str) -> String {
++    format!("    {src}")
++}
++
++#[test]
++fn hand_matches_the_oracle() {
++    let mut failures = Vec::new();
++    for case in VALUES {
++        match hand::parse(&padded(case.src)) {
++            Ok(ast) => check(case, &ast.render(), eval(&ast), &mut failures, "hand"),
++            Err(e) => failures.push(format!("hand {:?}: parse failed {}", case.src, e.signature())),
++        }
++    }
++    assert!(failures.is_empty(), "{}", failures.join("\n"));
++}
++
++#[test]
++fn combinators_match_the_oracle() {
++    let mut failures = Vec::new();
++    for case in VALUES {
++        match comb::parse(&padded(case.src)) {
++            Ok(ast) => check(case, &ast.render(), eval(&ast), &mut failures, "comb"),
++            Err(e) => failures.push(format!("comb {:?}: parse failed {}", case.src, e.signature())),
++        }
++    }
++    assert!(failures.is_empty(), "{}", failures.join("\n"));
++}
++
++fn check(
++    case: &Case,
++    rendered: &str,
++    evaluated: Result<String, EvalError>,
++    failures: &mut Vec<String>,
++    arm: &str,
++) {
++    if let Some(shape) = case.shape
++        && shape != rendered
++    {
++        failures.push(format!(
++            "{arm} {:?}: shape {rendered} wanted {shape}",
++            case.src
++        ));
++    }
++    match evaluated {
++        Ok(value) => {
++            if value != case.oracle {
++                failures.push(format!(
++                    "{arm} {:?}: value {value:?} wanted {:?} (as {rendered})",
++                    case.src, case.oracle
++                ));
++            }
++        }
++        Err(EvalError::Unsupported) => {
++            if case.shape.is_none() {
++                failures.push(format!(
++                    "{arm} {:?}: evaluator cannot reach this and no shape was recorded (as {rendered})",
++                    case.src
++                ));
++            }
++        }
++    }
++}
++
++#[test]
++fn neither_arm_rejects_what_the_oracle_accepts() {
++    let mut failures = Vec::new();
++    for src in ACCEPTED {
++        if let Err(e) = hand::parse(&padded(src)) {
++            failures.push(format!("hand {src:?}: rejected with {}", e.signature()));
++        }
++        if let Err(e) = comb::parse(&padded(src)) {
++            failures.push(format!("comb {src:?}: rejected with {}", e.signature()));
++        }
++    }
++    assert!(failures.is_empty(), "{}", failures.join("\n"));
++}
++
++#[test]
++fn both_arms_agree() {
++    let mut failures = Vec::new();
++    for case in VALUES {
++        let a = hand::parse(&padded(case.src)).map(|e| e.render());
++        let b = comb::parse(&padded(case.src)).map(|e| e.render());
++        if a != b {
++            failures.push(format!("{:?}: hand {a:?} comb {b:?}", case.src));
++        }
++    }
++    assert!(failures.is_empty(), "{}", failures.join("\n"));
++}
++
++#[test]
++fn hand_reports_the_oracles_errors() {
++    let mut failures = Vec::new();
++    for (src, want) in ERRORS {
++        match hand::parse(&padded(src)) {
++            Err(e) if e.signature() == *want => {}
++            Err(e) => failures.push(format!("hand {src:?}: got {} wanted {want}", e.signature())),
++            Ok(ast) => failures.push(format!("hand {src:?}: parsed as {}", ast.render())),
++        }
++    }
++    assert!(failures.is_empty(), "{}", failures.join("\n"));
++}
++
++#[test]
++fn combinators_report_the_oracles_errors() {
++    let mut failures = Vec::new();
++    for (src, want) in ERRORS {
++        match comb::parse(&padded(src)) {
++            Err(e) if e.signature() == *want => {}
++            Err(e) => failures.push(format!("comb {src:?}: got {} wanted {want}", e.signature())),
++            Ok(ast) => failures.push(format!("comb {src:?}: parsed as {}", ast.render())),
++        }
++    }
++    assert!(failures.is_empty(), "{}", failures.join("\n"));
++}
++
++/// The `DO` control expression stops on its keywords, which is the one place the
++/// expression grammar depends on a terminator set supplied by the caller.
++#[test]
++fn do_keywords_terminate_both_arms() {
++    let toks = rexx_parse_spike::token::scan("1 to 3 while x").expect("scans");
++    let mut p = hand::Parser::new(&toks);
++    let got = p
++        .expression(hand::Terminators::DO)
++        .expect("parses")
++        .expect("has a value");
++    assert_eq!(got.render(), "1");
++
++    let body = &toks[..toks.len() - 1];
++    // `lazy()` is needed because chumsky's `parse` insists on consuming the
++    // whole input, while a Rexx expression must stop at its terminator and hand
++    // the rest back to the instruction parser.
++    let got = chumsky::Parser::parse(
++        &chumsky::Parser::lazy(comb::expression(hand::Terminators::DO)),
++        body,
++    )
++    .into_output()
++    .expect("parses")
++    .expect("has a value");
++    assert_eq!(got.render(), "1");
++}
+-- 
+2.53.0
+

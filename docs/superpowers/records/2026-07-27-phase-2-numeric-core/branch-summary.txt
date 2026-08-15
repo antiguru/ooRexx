@@ -1,0 +1,178 @@
+=== commits on this branch ===
+5ab9b1c0 Keep error substitutions as values, not spliced text
+c61e2fab Assess the Phase 2 exit gate honestly
+881a01cb Check the exponent width again after a rounding carry
+4f022ad2 Give the arithmetic errors their real sub-messages
+64190235 Add a case set for the exponent check after a rounding carry
+2654fbe7 Stop the default test run needing 12.5 GB
+5de2d330 Render numeric errors from the generated message table
+aace6762 Record the arithmetic gap as debt at 1.22x
+ec5f5626 Estimate quotient digits instead of finding them by subtraction
+b9faa2d0 Cap NUMERIC DIGITS, and stop two casts wrapping above it
+579dfdc5 Say plainly that two captured case sets are reconstructions
+e4fb4ed1 Stop FORMAT and TRUNC overflowing on large width arguments
+8aaa1ed9 Make the arithmetic benchmark prove it still replays arith.rex
+e15e9b64 Benchmark the arithmetic against the C++ baseline, and miss parity
+5b2642fe Make the FORMAT harness reject a malformed argument field
+0052b434 Correct the error number the FORMAT harness expects for a non-number
+e79f6fb7 Let the FORMAT harness reach ENGINEERING form
+e9fb7c1d Implement the FORMAT and TRUNC builtins
+f360bb35 Capture the curated case generators and the FORMAT oracle driver
+a09f7bd5 Record why the comparison fast-path omission is safe
+35e04071 Implement the comparison operators
+42615ac7 Record why the C++ power loop reads and behaves differently
+84e05ce8 Port dividePower and close the power residuals
+31ba5fe8 Ignore the subagent-driven-development scratch directory
+c4405534 Implement power; 2 known residual divergences on negative exponents
+aae4cbbe Add randomised differential testing; it found five defects
+e85ec57a Port division and the remainder operators; 0 of 34,920
+c6233250 Port multiplication; 0 divergences on 8,106 cases
+1ebbd847 Port addition and subtraction; 0 divergences on 17,360 cases
+4289a206 Record that addSub must be transliterated, not derived
+a7005a64 Start addition and subtraction; the first attempt is wrong
+bba96590 Name the no-rounding constant instead of a min that does nothing
+8bfd3883 Add the NUMERIC settings with their measured constraints
+d7a26c55 Add Number parsing and display, matching the oracle on 1674 inputs
+8529be2b Fix the behaviour list numbering in the Phase 2 plan
+2beed253 Measure the E-notation thresholds and number canonicalisation
+db1155b3 Plan Phase 2 and write its corpus first
+538686e3 Assess the Phase 1 exit gate: all five criteria met
+4d14855b Close D1: the arena holds, with the pause recorded as a debt
+f3f0b31a Look up methods through behaviours and the superclass chain
+c9a36847 Clear dead weak references, then resurrect objects pending UNINIT
+3d8e44dd Collect unreachable objects with mark and sweep over the arena
+0e0311db Add an explicit, enumerable GC root set
+c37748b1 Trace object references with a single exhaustive match
+2af6ad6a Add the arena heap with a free list and generation-checked slots
+4516f9e4 Add tagged object handles with inline small integers
+ef75d803 Separate the L1 corpus from the L0 corpus, and assess the Phase 0 gate
+80105343 Record the C++ performance baseline on Linux
+13ed7b8b Close D8: L1 extraction is viable at 86.2%
+b67ae1ba Record the C++ conformance baseline on Linux
+40099337 Close D7: bridge to the C++ rxapi rather than porting it
+16b6c431 Record that the conformance suite needs its own stdin
+b71979ac Pre-register the string-representation risk in D1
+f6f7c20a Measure the suite's Sys* surface now that it is checked out
+25d3a451 Fix a stale heading count in the corpus README
+af593325 Verify the whitespace rule against the interpreter and pin it
+c81f959f Close D13: the AST is a private implementation detail
+6de44043 Generate the error and builtin tables from the C++ tree
+072e9d88 Add the differential runner and a deterministic seed corpus
+42d2352d Normalise interpreter output and diff two runs
+5308b8d9 Add a Rust workspace and an oracle runner for the C++ interpreter
+cd142212 Review the decision blocks; the AST turns out to be GC-managed
+0b45cd8f Render message markup the way the oracle does
+6bfaa061 Correct the plan against external review
+e55265b9 Make the image optional, forbid unsafe by default, and add the parser decision
+953b7604 Add a phased plan for a clean-room Rust reimplementation of ooRexx
+
+=== stat ===
+ .gitignore                                         |   19 +
+ .../plans/2026-07-27-phase-2-numeric-core.md       |  188 ++
+ docs/superpowers/plans/2026-07-27-rust-rewrite.md  | 2426 ++++++++++++++++++++
+ docs/superpowers/plans/conformance-baseline.md     |  115 +
+ docs/superpowers/plans/d1-decision.md              |  109 +
+ docs/superpowers/plans/l1-coverage.md              |  515 +++++
+ docs/superpowers/plans/perf-baseline.md            |  190 ++
+ docs/superpowers/plans/phase-2-gate.md             |  149 ++
+ docs/superpowers/plans/rxapi-protocol.md           |  259 +++
+ rust/.gitignore                                    |    1 +
+ rust/Cargo.lock                                    |  679 ++++++
+ rust/Cargo.toml                                    |   11 +
+ rust/bench-programs/README.md                      |   36 +
+ rust/bench-programs/alloc.rex                      |   10 +
+ rust/bench-programs/arith.rex                      |   14 +
+ rust/bench-programs/compound.rex                   |   14 +
+ rust/bench-programs/dispatch.rex                   |   18 +
+ rust/bench-programs/heapshape.rex                  |   37 +
+ rust/bench-programs/startup.rex                    |    2 +
+ rust/bench-programs/strings.rex                    |   12 +
+ rust/bench-programs/varlookup.rex                  |    8 +
+ rust/corpus/README.md                              |   78 +
+ rust/corpus/lang/arith_digits.rex                  |   13 +
+ rust/corpus/lang/call_procedure.rex                |   22 +
+ rust/corpus/lang/condition_syntax.rex              |    4 +
+ rust/corpus/lang/do_variants.rex                   |   27 +
+ rust/corpus/lang/interpret_dynamic.rex             |    8 +
+ rust/corpus/lang/parse_template.rex                |   15 +
+ rust/corpus/lang/primitive_classes.rex             |   33 +
+ rust/corpus/lang/select_when.rex                   |   13 +
+ rust/corpus/lang/source_arg.rex                    |   13 +
+ rust/corpus/lang/stem_compound.rex                 |   18 +
+ rust/corpus/lang/string_builtins.rex               |   21 +
+ rust/corpus/lang/trace_output.rex                  |    6 +
+ rust/corpus/lang/whitespace_significant.rex        |   43 +
+ rust/corpus/num/canonical_form.rex                 |   17 +
+ rust/corpus/num/comparison.rex                     |    8 +
+ rust/corpus/num/datatype_num.rex                   |    5 +
+ rust/corpus/num/digits_rounding.rex                |   13 +
+ rust/corpus/num/errors.rex                         |   18 +
+ rust/corpus/num/exponential.rex                    |   11 +
+ rust/corpus/num/form_notation.rex                  |   13 +
+ rust/corpus/num/format_trunc.rex                   |   10 +
+ rust/corpus/num/fuzz.rex                           |   10 +
+ rust/corpus/num/notation_thresholds.rex            |   29 +
+ rust/corpus/num/operators.rex                      |   11 +
+ rust/corpus/num/settings.rex                       |   38 +
+ rust/crates/rexx-bench/Cargo.toml                  |   19 +
+ rust/crates/rexx-bench/benches/interpreter.rs      |   50 +
+ rust/crates/rexx-bench/src/bin/rexx-time.rs        |  108 +
+ rust/crates/rexx-bench/src/lib.rs                  |   55 +
+ rust/crates/rexx-core/Cargo.toml                   |   16 +
+ rust/crates/rexx-core/benches/heap.rs              |   94 +
+ rust/crates/rexx-core/src/behaviour.rs             |   84 +
+ rust/crates/rexx-core/src/body.rs                  |   73 +
+ rust/crates/rexx-core/src/handle.rs                |   87 +
+ rust/crates/rexx-core/src/heap.rs                  |  251 ++
+ rust/crates/rexx-core/src/lib.rs                   |   24 +
+ rust/crates/rexx-core/src/roots.rs                 |   63 +
+ rust/crates/rexx-core/tests/behaviour.rs           |   49 +
+ rust/crates/rexx-core/tests/collect.rs             |   70 +
+ rust/crates/rexx-core/tests/handle.rs              |   39 +
+ rust/crates/rexx-core/tests/heap.rs                |   37 +
+ rust/crates/rexx-core/tests/roots.rs               |   42 +
+ rust/crates/rexx-core/tests/trace.rs               |   24 +
+ rust/crates/rexx-core/tests/uninit.rs              |   54 +
+ rust/crates/rexx-extract/Cargo.toml                |    9 +
+ rust/crates/rexx-extract/src/bin/rexx-extract.rs   |  224 ++
+ rust/crates/rexx-extract/src/lib.rs                |   93 +
+ rust/crates/rexx-extract/tests/extract.rs          |   35 +
+ rust/crates/rexx-inventory/Cargo.toml              |   12 +
+ rust/crates/rexx-inventory/build.rs                |  227 ++
+ rust/crates/rexx-inventory/src/lib.rs              |   21 +
+ rust/crates/rexx-inventory/tests/builtins.rs       |   17 +
+ rust/crates/rexx-inventory/tests/errors.rs         |   39 +
+ .../rexx-inventory/tests/oracle_agreement.rs       |   81 +
+ rust/crates/rexx-num/Cargo.toml                    |   19 +
+ rust/crates/rexx-num/benches/arith.rs              |  104 +
+ rust/crates/rexx-num/src/addsub.rs                 |  247 ++
+ rust/crates/rexx-num/src/bin/addsub.rs             |   27 +
+ rust/crates/rexx-num/src/bin/canon.rs              |   15 +
+ rust/crates/rexx-num/src/bin/fmt-check.rs          |   64 +
+ rust/crates/rexx-num/src/bin/gen-cases.rs          |  105 +
+ rust/crates/rexx-num/src/bin/muldiv.rs             |   67 +
+ rust/crates/rexx-num/src/compare.rs                |  198 ++
+ rust/crates/rexx-num/src/format.rs                 |  654 ++++++
+ rust/crates/rexx-num/src/lib.rs                    |  576 +++++
+ rust/crates/rexx-num/src/muldiv.rs                 |  324 +++
+ rust/crates/rexx-num/src/pow.rs                    |  239 ++
+ rust/crates/rexx-num/src/settings.rs               |  185 ++
+ rust/crates/rexx-num/tests/addsub.rs               |   70 +
+ rust/crates/rexx-num/tests/compare.rs              |  175 ++
+ rust/crates/rexx-num/tests/data-addsub-oracle.rex  |   15 +
+ rust/crates/rexx-num/tests/data-canon-oracle.rex   |   14 +
+ rust/crates/rexx-num/tests/data-format-oracle.rex  |   38 +
+ rust/crates/rexx-num/tests/errors.rs               |  174 ++
+ rust/crates/rexx-num/tests/format.rs               |  665 ++++++
+ rust/crates/rexx-num/tests/gen-curated-sets.py     |  169 ++
+ rust/crates/rexx-num/tests/muldiv.rs               |  100 +
+ rust/crates/rexx-num/tests/parse.rs                |  103 +
+ rust/crates/rexx-num/tests/pow.rs                  |   82 +
+ rust/crates/rexx-num/tests/settings.rs             |  149 ++
+ rust/crates/rexx-oracle/Cargo.toml                 |    9 +
+ rust/crates/rexx-oracle/src/bin/rexx-diff.rs       |  101 +
+ rust/crates/rexx-oracle/src/lib.rs                 |   51 +
+ rust/crates/rexx-oracle/src/normalize.rs           |   62 +
+ rust/crates/rexx-oracle/tests/normalize.rs         |   23 +
+ rust/rust-toolchain.toml                           |   11 +
+ 108 files changed, 12141 insertions(+)

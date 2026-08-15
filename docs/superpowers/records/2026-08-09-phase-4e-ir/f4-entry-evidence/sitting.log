@@ -1,0 +1,9 @@
+2026-08-11T12:40:40+02:00 block 1 arm ir start loadavg 1.19 0.78 0.68
+2026-08-11T12:47:38+02:00 block 1 arm ir done rc=0 loadavg 1.18 1.03 0.85
+2026-08-11T12:47:38+02:00 block 2 arm tree-walker start loadavg 1.18 1.03 0.85
+2026-08-11T12:54:34+02:00 block 2 arm tree-walker done rc=0 loadavg 1.08 1.10 0.96
+2026-08-11T12:54:34+02:00 block 3 arm tree-walker start loadavg 1.08 1.10 0.96
+2026-08-11T13:01:30+02:00 block 3 arm tree-walker done rc=0 loadavg 1.05 1.05 1.00
+2026-08-11T13:01:30+02:00 block 4 arm ir start loadavg 1.05 1.05 1.00
+2026-08-11T13:08:27+02:00 block 4 arm ir done rc=0 loadavg 1.15 1.14 1.07
+2026-08-11T13:08:27+02:00 ALL BLOCKS DONE

@@ -1,0 +1,1287 @@
+=== commit under review ===
+9d263b22 Make program-versus-interpret a property of the source, not of the scan
+
+=== stat ===
+ rust/crates/rexx-parse/src/bin/scan-check.rs |  16 +--
+ rust/crates/rexx-parse/src/lib.rs            |   4 +-
+ rust/crates/rexx-parse/src/scanner.rs        |  33 ++---
+ rust/crates/rexx-parse/src/source.rs         |  76 +++++++++--
+ rust/crates/rexx-parse/tests/scanner.rs      | 181 ++++++++++++++++++---------
+ rust/crates/rexx-parse/tests/sourceline.rs   |  74 ++++++++---
+ 6 files changed, 267 insertions(+), 117 deletions(-)
+
+=== diff ===
+diff --git a/rust/crates/rexx-parse/src/bin/scan-check.rs b/rust/crates/rexx-parse/src/bin/scan-check.rs
+index e6a2cd72..75ee286a 100644
+--- a/rust/crates/rexx-parse/src/bin/scan-check.rs
++++ b/rust/crates/rexx-parse/src/bin/scan-check.rs
+@@ -1,45 +1,45 @@
+ //! Differential harness for the scanner: scans each file named on the command
+ //! line and prints one line per file, for diffing against `build/bin/rexxc`.
+ //!
+ //! `ok` corresponds to `rexxc` exiting 0 as far as scanning is concerned, and
+ //! `E<code>.<sub> line <n>` to the `Error <code>.<sub>` and reported line it
+ //! writes to stderr. `rexxc` also rejects programs this scanner accepts,
+ //! because it goes on to parse them; a difference is only a scanner difference
+ //! when the error number is one the scanner raises at all.
+-use rexx_parse::{ProgramSource, ScanMode, TokenKind, scan};
++use rexx_parse::{ProgramSource, SourceKind, TokenKind, scan};
+ 
+ fn main() {
+     let mut args = std::env::args().skip(1).peekable();
+     // With --tokens, also dump the token stream, which is what makes a
+     // disagreement diagnosable rather than merely visible.
+     let dump = args.peek().map(String::as_str) == Some("--tokens");
+     if dump {
+         args.next();
+     }
+-    // With --interpret, scan each file the way INTERPRET scans its argument,
+-    // which differs in that a `#!` first line is not skipped.
+-    let mode = if args.peek().map(String::as_str) == Some("--interpret") {
++    // With --interpret, treat each file's bytes the way INTERPRET treats its
++    // argument: one line from end to end, no Ctrl-Z truncation, no `#!` skip.
++    let kind = if args.peek().map(String::as_str) == Some("--interpret") {
+         args.next();
+-        ScanMode::Interpret
++        SourceKind::Interpret
+     } else {
+-        ScanMode::Program
++        SourceKind::Program
+     };
+     for path in args {
+         let bytes = std::fs::read(&path).expect("readable input file");
+-        let source = ProgramSource::new(bytes);
+-        match scan(&source, mode) {
++        let source = ProgramSource::new(bytes, kind);
++        match scan(&source) {
+             Ok(scanned) => {
+                 // Symbol occurrences against distinct symbols is the ratio
+                 // interning trades allocations for, so the harness reports it.
+                 let mut distinct = std::collections::BTreeSet::new();
+                 let mut occurrences = 0usize;
+                 for token in &scanned.tokens {
+                     if let TokenKind::Symbol { id, .. } = token.kind {
+                         occurrences += 1;
+                         distinct.insert(id);
+                     }
+                 }
+                 println!(
+                     "{path}: ok {} tokens, {occurrences} symbol occurrences over {} distinct, \
+                      {} interned, {} resources",
+                     scanned.tokens.len(),
+diff --git a/rust/crates/rexx-parse/src/lib.rs b/rust/crates/rexx-parse/src/lib.rs
+index 62a3573b..f2749fba 100644
+--- a/rust/crates/rexx-parse/src/lib.rs
++++ b/rust/crates/rexx-parse/src/lib.rs
+@@ -7,21 +7,21 @@
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The Rexx parser: source retention, scanning, and the grammar.
+ //!
+ //! The behaviour reproduced here was measured against `build/bin/rexx`
+ //! rather than taken from the ANSI standard; where they differ, the
+ //! interpreter wins.
+ 
+ mod scanner;
+ mod source;
+ mod token;
+ 
+-pub use scanner::{ResourceBody, ScanMode, Scanned, scan};
+-pub use source::ProgramSource;
++pub use scanner::{ResourceBody, Scanned, scan};
++pub use source::{ProgramSource, SourceKind};
+ pub use token::{
+     KeywordSet, Keywords, Operator, ParseCtx, ParseError, SymbolClass, SymbolId, SymbolTable, Tag,
+     Token, TokenCursor, TokenKind,
+ };
+diff --git a/rust/crates/rexx-parse/src/scanner.rs b/rust/crates/rexx-parse/src/scanner.rs
+index 8e651b06..8ad63e38 100644
+--- a/rust/crates/rexx-parse/src/scanner.rs
++++ b/rust/crates/rexx-parse/src/scanner.rs
+@@ -28,34 +28,34 @@
+ //! * A clause terminator is never emitted twice in a row and never for an
+ //!   empty final clause, so a blank line or a stray `;;` produces no tokens.
+ //!   This is the effect of `nextClause`'s null-clause skipping
+ //!   (`LanguageParser.cpp:1009`) without reproducing the separate
+ //!   `CLAUSEEND_EOL`/`CLAUSEEND_EOF` subclasses, which nothing in this phase
+ //!   needs to tell apart.
+ //! * The interpreter interleaves scanning with parsing, so a scan error later
+ //!   in the file is never reached if an earlier clause fails to parse.
+ //!   Measured: a file whose line 1 is `say )` and whose line 3 is
+ //!   `x = 'unclosed` reports 37.2 on line 1, where an eager scan reports 6.2
+ //!   on line 3. Both are errors and both are refusals; only the number
+ //!   differs.
+ 
+ use std::ops::Range;
+ 
+-use crate::ProgramSource;
+ use crate::token::{
+     Keywords, Operator, ParseError, SymbolClass, SymbolId, SymbolTable, Tag, Token, TokenKind,
+ };
++use crate::{ProgramSource, SourceKind};
+ 
+ /// The longest symbol the interpreter accepts
+ /// (`LanguageParser::MAX_SYMBOL_LENGTH`). Measured: a 250-character name
+ /// works, 251 raises error 30.1.
+ const MAX_SYMBOL_LENGTH: usize = 250;
+ 
+ /// The end marker a `::RESOURCE` directive uses when it names none
+ /// (`GlobalNames::DEFAULT_RESOURCE_END`).
+ const DEFAULT_RESOURCE_END: &[u8] = b"::END";
+ 
+ /// One `::RESOURCE` body, copied verbatim rather than tokenised.
+ ///
+ /// The body is not Rexx and must not be scanned as Rexx. Measured: a resource
+ /// holding `this is 'unmatched and /* unclosed` gets rc 0 from `rexxc`, so a
+ /// scanner that tokenised it would invent errors 6.2 and 6.1 that the
+@@ -90,51 +90,42 @@ pub struct Scanned {
+     /// Three invariants a clause splitter may rely on. No two clause
+     /// terminators are adjacent, and none is first, so every `Eoc` closes a
+     /// clause that holds at least one token. If there is any token at all the
+     /// last one is an `Eoc`, because end of file terminates the final clause.
+     /// A program with no clauses, whether empty, all blank lines, all
+     /// comments or only semicolons, produces no tokens at all rather than a
+     /// lone terminator.
+     pub tokens: Vec<Token>,
+     pub symbols: SymbolTable,
+     pub keywords: Keywords,
+     /// The `::RESOURCE` bodies, in source order. Empty for almost every
+     /// program.
+     pub resources: Vec<ResourceBody>,
+ }
+ 
+-/// What the text being scanned is, which the scanner needs because a `#!`
+-/// first line is skipped in a program and is not skipped in an `INTERPRET`.
+-///
+-/// This is a parameter rather than a second entry point so that no caller can
+-/// arrive at the wrong behaviour by leaving something out.
+-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+-pub enum ScanMode {
+-    /// A whole program, from a file or a buffer.
+-    Program,
+-    /// The string an `INTERPRET` is about to run.
+-    Interpret,
+-}
+-
+ /// Tokenises `source`.
+ ///
+ /// A clause terminator is emitted for each `;`, each uncontinued line end and
+ /// for end of file, with consecutive terminators collapsed.
+-pub fn scan(source: &ProgramSource, mode: ScanMode) -> Result<Scanned, ParseError> {
++///
++/// Whether this is a program or `INTERPRET` text is `source.kind()`, decided
++/// when the source was built, so there is no way to construct one and scan it
++/// as the other.
++pub fn scan(source: &ProgramSource) -> Result<Scanned, ParseError> {
+     let mut symbols = SymbolTable::default();
+     let keywords = Keywords::new(&mut symbols);
+-    let mut scanner = Scanner::new(source, symbols, mode);
++    let mut scanner = Scanner::new(source, symbols);
+     scanner.run()?;
+     Ok(Scanned {
+         tokens: scanner.tokens,
+         symbols: scanner.symbols,
+         keywords,
+         resources: scanner.resources,
+     })
+ }
+ 
+ /// `LanguageParser::isSymbolCharacter` (`LanguageParser.hpp:415`): whether
+ /// `byte` may appear in a symbol.
+ ///
+ /// The C++ reads this out of `characterTable` (`Scanner.cpp:60`), whose
+ /// non-zero entry for a byte is that byte *upcased*. Nothing here needs the
+ /// upcased value, because `SymbolTable::intern` upcases what it is given and
+@@ -149,32 +140,34 @@ fn is_symbol_char(byte: u8) -> bool {
+ /// The line scanning starts on: 2 when a program opens with a `#!` line,
+ /// 1 otherwise.
+ ///
+ /// `BufferProgramSource::buildDescriptors` (`ProgramSource.cpp:448`) sets
+ /// `firstLine` and `LanguageParser::translate` positions there
+ /// (`LanguageParser.cpp:764`). The line is skipped by the parser but kept by
+ /// `SOURCELINE`, so this belongs to the scan and not to the line index. Found
+ /// by differential testing: 494 of 790 files under `ootest/` and `samples/`
+ /// open with `#!/usr/bin/env rexx`, and without this every one of them is
+ /// error 13.1 on line 1 here and rc 0 under `rexxc`.
+ ///
+ /// An `INTERPRET` does not get the skip. `ArrayProgramSource::setup`
+ /// (`ProgramSource.cpp:594`) guards it with `interpretAdjust == 0`, and
+ /// measured, `interpret "#! nothing here"` is error 13.1 on `#` ('23'X) while
+ /// the identical text as line 1 of a file is accepted and the program runs on.
+-fn first_line(source: &ProgramSource, mode: ScanMode) -> usize {
+-    if mode == ScanMode::Program && source.line(1).is_some_and(|line| line.starts_with(b"#!")) {
++fn first_line(source: &ProgramSource) -> usize {
++    if source.kind() == SourceKind::Program
++        && source.line(1).is_some_and(|line| line.starts_with(b"#!"))
++    {
+         2
+     } else {
+         1
+     }
+ }
+ 
+ /// What `locateToken` found, folding the C++'s `CharacterClass` return and
+ /// its out-parameter into one value.
+ enum Located {
+     /// A character that starts a token. The scan position is on it.
+     Normal(u8),
+     /// A blank in a context where a blank may be an operator. The scan
+     /// position is on it.
+     SignificantBlank,
+     ClauseEof,
+@@ -231,52 +224,52 @@ struct Scanner<'a> {
+ 
+     /// Whether the token just produced makes a following blank significant.
+     /// False at a clause start, which is what the C++ gets by passing a null
+     /// previous token to `sourceNextToken`.
+     prev_blank_significant: bool,
+     /// Byte offset a scanner error is reported against: the current clause's
+     /// start, or the position scanning began if the clause has no tokens yet.
+     clause_start: usize,
+     /// Whether the current clause has produced a token yet.
+     clause_started: bool,
+     /// Index in `tokens` of the current clause's first token.
+     clause_first: usize,
+ }
+ 
+ impl<'a> Scanner<'a> {
+-    fn new(source: &'a ProgramSource, mut symbols: SymbolTable, mode: ScanMode) -> Self {
++    fn new(source: &'a ProgramSource, mut symbols: SymbolTable) -> Self {
+         let text_end = source.line_span(source.line_count()).map_or(0, |s| s.end);
+         let resource_id = symbols.intern("RESOURCE");
+         let end_id = symbols.intern("END");
+         let mut scanner = Scanner {
+             source,
+             line: &[],
+             line_start: 0,
+             line_number: 1,
+             line_offset: 0,
+             text_end,
+             symbols,
+             tokens: Vec::new(),
+             resources: Vec::new(),
+             resource_id,
+             end_id,
+             prev_blank_significant: false,
+             clause_start: 0,
+             clause_started: false,
+             clause_first: 0,
+         };
+-        scanner.position(first_line(source, mode), 0);
++        scanner.position(first_line(source), 0);
+         scanner
+     }
+ 
+     // Scanning position primitives, mirroring `LanguageParser.hpp:152`-`162`.
+ 
+     /// `LanguageParser::position`: move to a line and offset, loading that
+     /// line. A line number past the end leaves an empty line at `text_end`,
+     /// which is how `moreLines` and `moreChars` both go false.
+     fn position(&mut self, line: usize, offset: usize) {
+         self.line_number = line;
+         self.line_offset = offset;
+         match (self.source.line_span(line), self.source.line(line)) {
+             (Some(span), Some(bytes)) => {
+                 self.line_start = span.start;
+                 self.line = bytes;
+diff --git a/rust/crates/rexx-parse/src/source.rs b/rust/crates/rexx-parse/src/source.rs
+index e08b6890..d29f5fd7 100644
+--- a/rust/crates/rexx-parse/src/source.rs
++++ b/rust/crates/rexx-parse/src/source.rs
+@@ -7,68 +7,112 @@
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! Retained program source and physical line lookup (`SOURCELINE`).
+ //!
+ //! Ported from `BufferProgramSource::buildDescriptors`
+ //! (`ProgramSource.cpp:348`). A Rexx source file is bytes, not text: a
+ //! literal may hold arbitrary bytes that are not valid UTF-8 (measured: a
+ //! literal containing a raw `FF FE` runs fine, `c2x` reports `FFFE`), so the
+ //! retained source is `Vec<u8>` and lines are `&[u8]`, never `String`/`&str`.
+ 
+ use std::ops::Range;
+ 
++/// Where a `ProgramSource`'s text came from, which decides how it is divided
++/// into lines.
++///
++/// Every one of `ProgramSource::new`'s behaviours is program-only: splitting
++/// on CR and LF, truncating at a Ctrl-Z, and the `#!` first line the scanner
++/// skips. So this is a property of the source, fixed at construction, and not
++/// of a particular parse. Expressing it in one place is what makes it
++/// impossible to build a source one way and read it the other.
++#[derive(Copy, Clone, PartialEq, Eq, Debug)]
++pub enum SourceKind {
++    /// A whole program, from a file or a buffer
++    /// (`BufferProgramSource`).
++    Program,
++    /// The string an `INTERPRET` is about to run. Exactly one physical line:
++    /// the interpreter wraps the string in a one-element array
++    /// (`LanguageParser.cpp:450`, `new ArrayProgramSource(new_array(
++    /// interpretString), lineNumber)`), so nothing inside it can start a
++    /// second line.
++    Interpret,
++}
++
+ /// The retained text of one Rexx program, indexed by physical line.
+ ///
+ /// Built once at construction; `line` and `line_of` are read-only lookups
+ /// over that index, never a re-scan, because error reporting calls
+ /// `line_of` on every diagnostic (see later tasks) and parse throughput is
+ /// measured (Task 3.10).
+ pub struct ProgramSource {
+-    /// The program text. Truncated at the first Ctrl-Z (0x1A) byte, if any --
+-    /// see `new` for why.
++    /// The program text. For a `Program`, truncated at the first Ctrl-Z (0x1A)
++    /// byte, if any -- see `new` for why.
+     text: Vec<u8>,
+     /// Byte range of each physical line's content, in order, with any line
+     /// terminator excluded. Index 0 holds line 1 (`SOURCELINE` is 1-based).
+     /// Starts are strictly increasing, which is what makes `line_of`'s
+     /// binary search valid.
+     lines: Vec<(usize, usize)>,
++    kind: SourceKind,
+ }
+ 
+ impl ProgramSource {
+     /// Builds the line index for `text`.
+     ///
+-    /// A line ends at a `\r`, a `\n`, or end of input, whichever comes
+-    /// first; a `\r` immediately followed by `\n` is one terminator (CRLF),
+-    /// not two. This means a bare `\r` (no `\n`) ends a line on its own, and
+-    /// a `\n` immediately followed by `\r` is two terminators, producing an
+-    /// empty line between them -- both verified against `build/bin/rexx`
+-    /// (`ProgramSource.cpp:387`-`441` scans for either byte and only
+-    /// special-cases `\r` followed by `\n`).
++    /// For a `SourceKind::Program`, a line ends at a `\r`, a `\n`, or end of
++    /// input, whichever comes first; a `\r` immediately followed by `\n` is
++    /// one terminator (CRLF), not two. This means a bare `\r` (no `\n`) ends a
++    /// line on its own, and a `\n` immediately followed by `\r` is two
++    /// terminators, producing an empty line between them -- both verified
++    /// against `build/bin/rexx` (`ProgramSource.cpp:387`-`441` scans for
++    /// either byte and only special-cases `\r` followed by `\n`).
+     ///
+     /// The interpreter also treats a Ctrl-Z (0x1A) byte as an end-of-file
+     /// mark, a legacy DOS/CP-M artifact: everything at and after the first
+     /// occurrence is discarded before line scanning even starts
+     /// (`ProgramSource.cpp:373`-`377`), including a partial line up to that
+     /// byte. Verified: `build/bin/rexx` on a file with a mid-line 0x1A
+     /// truncates the line's text at that byte and reports a shorter
+     /// `sourceline()` count; a comment left unclosed by the truncation
+     /// raises the ordinary unmatched-comment error, confirming the bytes
+     /// after 0x1A are never parsed at all.
+-    pub fn new(mut text: Vec<u8>) -> Self {
++    ///
++    /// A `SourceKind::Interpret` gets neither rule. Its text is one line from
++    /// end to end, because `ArrayProgramSource` holds it as a single array
++    /// element, so a `\n`, a `\r` or a `0x1A` inside it is just a byte on that
++    /// line and the scanner rejects it as error 13.1 the way it rejects any
++    /// other character that cannot appear in a program. Measured, all five:
++    /// `interpret "say 1" || '0a'x || "say 2"` is error 13.1, and so are the
++    /// same with `'0d'x`, with `'0d0a'x`, with `'1a'x` in the middle and with
++    /// `'1a'x` at the very end. For contrast `interpret "say 1; say 2"` prints
++    /// 1 and 2, so a `;` still separates clauses, and
++    /// `interpret "say c2x('" || '1a'x || "')"` prints `1A`, so a Ctrl-Z
++    /// inside a literal survives as data.
++    ///
++    /// Empty text is one empty line under `Interpret` and no lines at all
++    /// under `Program`, because the interpreter's array always has its one
++    /// element. Both scan to no tokens, and measured, `interpret ""` is
++    /// accepted and the program runs on.
++    pub fn new(mut text: Vec<u8>, kind: SourceKind) -> Self {
++        if kind == SourceKind::Interpret {
++            let lines = vec![(0, text.len())];
++            return ProgramSource { text, lines, kind };
++        }
++
+         let scan_len = text.iter().position(|&b| b == 0x1a).unwrap_or(text.len());
+         text.truncate(scan_len);
+         let len = text.len();
+ 
+         let mut lines = Vec::new();
+         let mut pos = 0;
+         while pos < len {
+             let start = pos;
+             match text[pos..].iter().position(|&b| b == b'\r' || b == b'\n') {
+                 None => {
+                     // No terminator: the remainder of the file is the last line.
+                     lines.push((start, len));
+                     pos = len;
+                 }
+                 Some(rel) => {
+@@ -78,37 +122,45 @@ impl ProgramSource {
+                         let mut next = delim + 1;
+                         // Pair a CR with an immediately following LF into one
+                         // terminator; a lone CR (or a CR followed by anything
+                         // else) ends the line by itself.
+                         if next < len && text[next] == b'\n' {
+                             next += 1;
+                         }
+                         pos = next;
+                     } else {
+                         pos = delim + 1;
+                     }
+                 }
+             }
+         }
+ 
+-        ProgramSource { text, lines }
++        ProgramSource { text, lines, kind }
++    }
++
++    /// What this source holds, which the scanner needs because a `#!` first
++    /// line is skipped in a program and is an invalid character in an
++    /// `INTERPRET`.
++    pub fn kind(&self) -> SourceKind {
++        self.kind
+     }
+ 
+     /// The number of physical lines, as `SOURCELINE()` with no argument
+     /// reports it. A completely empty program has zero lines (verified via
+     /// `ProgramSource.cpp:387`'s `while (bufferLength != 0)`, which never
+-    /// runs for an empty buffer, so `lineCount` stays 0).
++    /// runs for an empty buffer, so `lineCount` stays 0). Empty `INTERPRET`
++    /// text still has its one line.
+     pub fn line_count(&self) -> usize {
+         self.lines.len()
+     }
+ 
+     /// The text of physical line `n` (1-based), with its terminator
+     /// excluded, or `None` if `n` is 0 or past `line_count()`.
+     ///
+     /// The interpreter does not return an empty string out of range:
+     /// `sourceline(0)` raises error 40.14 and `sourceline(99)` past the end
+     /// raises 40.34 (both verified against `build/bin/rexx`). `None` is how
+     /// this crate reports that; a later task turns it into the right error
+     /// number. Do not let it render as `""`.
+     pub fn line(&self, n: usize) -> Option<&[u8]> {
+         let index = n.checked_sub(1)?;
+         let &(start, end) = self.lines.get(index)?;
+diff --git a/rust/crates/rexx-parse/tests/scanner.rs b/rust/crates/rexx-parse/tests/scanner.rs
+index 1d9d9ce9..564d9feb 100644
+--- a/rust/crates/rexx-parse/tests/scanner.rs
++++ b/rust/crates/rexx-parse/tests/scanner.rs
+@@ -1,31 +1,32 @@
+ //! Scanner behaviour, pinned against `build/bin/rexx` and
+ //! `build/bin/rexxc`.
+ //!
+ //! Every expectation here that names an interpreter behaviour was measured,
+ //! not inferred. `rexxc` gives the parse verdict without executing, which is
+ //! the only way to assert the negative direction (*this file parses*);
+ //! `rexx`'s output is used where both spellings parse and only the printed
+ //! result distinguishes them, as with `say a/*c*/b` against `say a b`.
+ 
+ use rexx_parse::{
+-    Operator, ProgramSource, ScanMode, Scanned, SymbolClass, SymbolId, Tag, Token, TokenKind, scan,
++    Operator, ProgramSource, Scanned, SourceKind, SymbolClass, SymbolId, Tag, Token, TokenKind,
++    scan,
+ };
+ 
+ fn scan_all(text: &str) -> Scanned {
+-    let source = ProgramSource::new(text.as_bytes().to_vec());
+-    scan(&source, ScanMode::Program).expect("scans without error")
++    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
++    scan(&source).expect("scans without error")
+ }
+ 
+ fn scan_ok(text: &str) -> Vec<Token> {
+     scan_all(text).tokens
+ }
+ 
+ fn kinds(toks: &[Token]) -> Vec<Tag> {
+     toks.iter().map(|t| t.kind.tag()).collect()
+ }
+ 
+ /// The decoded value of the first literal token.
+ fn literal_text(toks: &[Token]) -> String {
+     String::from_utf8(literal_bytes(toks, 0)).expect("literal is text in this test")
+ }
+ 
+@@ -50,32 +51,32 @@ fn operators(toks: &[Token]) -> Vec<Operator> {
+         .collect()
+ }
+ 
+ /// The symbols, in order, as (id, class).
+ fn symbols(toks: &[Token]) -> Vec<(SymbolId, SymbolClass)> {
+     toks.iter()
+         .filter_map(|t| match t.kind {
+             TokenKind::Symbol { id, class } => Some((id, class)),
+             _ => None,
+         })
+         .collect()
+ }
+ 
+ /// Scans `text` expecting a refusal, and answers `(code, sub, line)`.
+ fn scan_err(text: &str) -> (u16, u16, usize) {
+-    let source = ProgramSource::new(text.as_bytes().to_vec());
+-    let error = scan(&source, ScanMode::Program).expect_err("does not scan");
++    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
++    let error = scan(&source).expect_err("does not scan");
+     (error.code, error.sub, source.line_of(error.byte))
+ }
+ 
+ #[test]
+ fn block_comments_nest() {
+     // `1` is a symbol in Rexx, and the blank between `say` and `1` is
+     // significant: previous token is a symbol, next character starts a symbol.
+     let toks = scan_ok("/* a /* b */ c */ say 1");
+     assert_eq!(
+         kinds(&toks),
+         [Tag::Symbol, Tag::Blank, Tag::Symbol, Tag::Eoc]
+     );
+ }
+ 
+ #[test]
+@@ -426,31 +427,31 @@ fn one_symbol_has_one_id_and_as_many_spans_as_occurrences() {
+     assert_eq!(scanned.symbols.name(ids[0].0), "ABC");
+ 
+     let spans: Vec<_> = scanned
+         .tokens
+         .iter()
+         .filter(|t| matches!(t.kind, TokenKind::Symbol { id, .. } if id == ids[0].0))
+         .map(|t| t.span.clone())
+         .collect();
+     assert_eq!(spans, [0..3, 12..15, 20..23]);
+ 
+     // The span, not the id, is what recovers the source spelling, and it does
+     // so through `span_bytes`, because a span is an absolute offset and cannot
+     // be sliced out of a line. Two of these three are not on line 1, which is
+     // the case that matters: `spans[1]` starts at byte 12 while line 1 is 7
+     // bytes long.
+-    let source = ProgramSource::new(b"aBc = 1\nsay ABC\nsay aBc".to_vec());
++    let source = ProgramSource::new(b"aBc = 1\nsay ABC\nsay aBc".to_vec(), SourceKind::Program);
+     let spellings: Vec<&[u8]> = spans
+         .iter()
+         .map(|span| source.span_bytes(span.clone()).expect("a scanner span"))
+         .collect();
+     assert_eq!(spellings, [&b"aBc"[..], &b"ABC"[..], &b"aBc"[..]]);
+     assert_eq!(source.line_of(spans[1].start), 2);
+     assert_eq!(source.line_of(spans[2].start), 3);
+     // A span from anywhere else may be out of range, and then there are no
+     // bytes rather than a panic or a silently clamped answer.
+     assert_eq!(source.span_bytes(0..24), None);
+     // Including one a caller assembled from two offsets the wrong way round.
+     let (start, end) = (3usize, 1usize);
+     assert_eq!(source.span_bytes(start..end), None);
+ }
+ 
+@@ -463,32 +464,32 @@ fn doubled_quotes_are_one_quote() {
+ fn a_literals_value_is_decoded_rather_than_sliced() {
+     // Measured: `s = 'it''s'` then `say length(s)` prints 4, and
+     // `say "a""b"` prints `a"b` as one string while `say "a" "b"` prints
+     // `a b` as two.
+     assert_eq!(literal_text(&scan_ok("\"a\"\"b\"")), "a\"b");
+     assert_eq!(kinds(&scan_ok("\"a\"\"b\""))[0], Tag::Literal);
+     assert_eq!(
+         kinds(&scan_ok("\"a\" \"b\"")),
+         [Tag::Literal, Tag::Blank, Tag::Literal, Tag::Eoc]
+     );
+     // The other delimiter is just text.
+     assert_eq!(literal_text(&scan_ok("'a\"b'")), "a\"b");
+     assert_eq!(literal_text(&scan_ok("''")), "");
+     // A literal may hold bytes that are not text at all, which is why the
+     // value is bytes.
+-    let source = ProgramSource::new(b"'\xff\xfe'".to_vec());
+-    let toks = scan(&source, ScanMode::Program).expect("scans").tokens;
++    let source = ProgramSource::new(b"'\xff\xfe'".to_vec(), SourceKind::Program);
++    let toks = scan(&source).expect("scans").tokens;
+     assert_eq!(literal_bytes(&toks, 0), b"\xff\xfe");
+ }
+ 
+ #[test]
+ fn hex_and_binary_literals_pack_down_to_bytes() {
+     // Measured: `say c2x('41 42'x)` prints 4142, `say c2x(''x)` prints
+     // nothing, `say c2x('1000 0001'b)` prints 81, `say c2x('1'b)` prints 01
+     // and `say c2x('101 0101'b)` prints 55. `say 'A'x` prints an empty line,
+     // because `'a'x` is the single byte 0A.
+     assert_eq!(literal_bytes(&scan_ok("'41 42'x"), 0), b"\x41\x42");
+     assert_eq!(literal_bytes(&scan_ok("'A'x"), 0), b"\x0a");
+     assert_eq!(literal_bytes(&scan_ok("'a'X"), 0), b"\x0a");
+     assert_eq!(literal_bytes(&scan_ok("''x"), 0), b"");
+     assert_eq!(literal_bytes(&scan_ok("''b"), 0), b"");
+     assert_eq!(literal_bytes(&scan_ok("'1000 0001'b"), 0), b"\x81");
+@@ -541,119 +542,181 @@ fn a_clause_terminator_is_emitted_once_however_the_clause_ends() {
+     assert!(scan_ok(";;;").is_empty());
+     assert!(scan_ok("").is_empty());
+     assert!(scan_ok("\n\n").is_empty());
+     assert!(scan_ok("/* just a comment */").is_empty());
+     // End of file terminates the last clause even with no newline after it.
+     assert_eq!(kinds(&scan_ok("say 1")).last(), Some(&Tag::Eoc));
+     assert_eq!(kinds(&scan_ok("say 1\n")).last(), Some(&Tag::Eoc));
+ }
+ 
+ #[test]
+ fn a_shebang_line_is_skipped_by_the_scanner_but_kept_by_the_line_index() {
+     // Found by differential testing: 494 of 790 files under `ootest/` and
+     // `samples/` open with `#!/usr/bin/env rexx`, which `rexxc` accepts. The
+     // line stays visible to `sourceline`.
+     let text = "#!/usr/bin/env rexx\nsay 1";
+-    let source = ProgramSource::new(text.as_bytes().to_vec());
+-    let toks = scan(&source, ScanMode::Program).expect("scans").tokens;
++    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
++    let toks = scan(&source).expect("scans").tokens;
+     assert_eq!(
+         kinds(&toks),
+         [Tag::Symbol, Tag::Blank, Tag::Symbol, Tag::Eoc]
+     );
+     assert_eq!(toks[0].span, 20..23, "scanning starts on line 2");
+     assert_eq!(source.line_count(), 2);
+     assert_eq!(source.line(1), Some(&b"#!/usr/bin/env rexx"[..]));
+     // Only `#!` at the very start counts. `#` is not a program character, so
+     // measured, `x = 1` then `y = #` is error 13.1 on line 2.
+     assert_eq!(scan_err("x = 1\ny = #"), (13, 1, 2));
+ }
+ 
++/// Scans `text` as `INTERPRET` would see it, which is as one physical line.
++fn scan_interpret(text: &str) -> Result<Vec<Token>, (u16, u16)> {
++    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Interpret);
++    assert_eq!(source.line_count(), 1, "interpret text is one line");
++    match scan(&source) {
++        Ok(scanned) => Ok(scanned.tokens),
++        Err(error) => Err((error.code, error.sub)),
++    }
++}
++
++#[test]
++fn interpret_text_is_one_line_so_a_line_terminator_in_it_is_an_invalid_character() {
++    // The interpreter wraps the string in a one-element array
++    // (`LanguageParser.cpp:450`), so nothing inside it starts a second line.
++    // Measured, every one of these is error 13.1:
++    //   interpret "say 1" || '0a'x || "say 2"   =>  13.1, ('0A'X)
++    //   interpret "say 1" || '0d'x || "say 2"   =>  13.1, ('0D'X)
++    //   interpret "say 1" || '0d0a'x || "say 2" =>  13.1, ('0D'X)
++    //   interpret "say 1" || '1a'x || "say 2"   =>  13.1, ('1A'X)
++    //   interpret "say 1" || '1a'x              =>  13.1, ('1A'X)
++    // so a Ctrl-Z is neither a terminator nor an end-of-file mark here.
++    for text in [
++        "say 1\nsay 2",
++        "say 1\rsay 2",
++        "say 1\r\nsay 2",
++        "say 1\x1asay 2",
++        "say 1\x1a",
++        "say 1\n",
++    ] {
++        assert_eq!(scan_interpret(text), Err((13, 1)), "{text:?}");
++    }
++
++    // The same bytes as a program split and truncate as they always have, so
++    // this is a difference in the source and not in the scanner.
++    assert_eq!(kinds(&scan_ok("say 1\nsay 2")).len(), 8);
++    assert_eq!(kinds(&scan_ok("say 1\rsay 2")).len(), 8);
++    assert_eq!(
++        kinds(&scan_ok("say 1\x1asay 2")).len(),
++        4,
++        "truncated at 0x1A"
++    );
++    assert_eq!(kinds(&scan_ok("say 1\x1a")).len(), 4);
++}
++
++#[test]
++fn a_semicolon_still_separates_interpret_clauses() {
++    // This is the case that has to keep working while the four above start
++    // failing. Measured: `interpret "say 1; say 2"` prints 1 then 2.
++    assert_eq!(
++        scan_interpret("say 1; say 2").map(|t| kinds(&t)),
++        Ok(vec![
++            Tag::Symbol,
++            Tag::Blank,
++            Tag::Symbol,
++            Tag::Eoc,
++            Tag::Symbol,
++            Tag::Blank,
++            Tag::Symbol,
++            Tag::Eoc
++        ])
++    );
++    // And a Ctrl-Z inside a literal is data, not a terminator. Measured:
++    // `interpret "say c2x('" || '1a'x || "')"` prints 1A.
++    let toks = scan_interpret("say c2x('\x1a')").expect("scans");
++    assert_eq!(literal_bytes(&toks, 0), b"\x1a");
++    // Empty interpret text is accepted and yields no tokens. Measured:
++    // `interpret ""` runs and the program continues.
++    assert_eq!(scan_interpret("").map(|t| t.len()), Ok(0));
++}
++
+ #[test]
+ fn an_interpret_does_not_skip_a_shebang_line() {
+     // `ArrayProgramSource::setup` (`ProgramSource.cpp:594`) guards the skip
+     // with `interpretAdjust == 0`. Measured both directions:
+     // `interpret "#! nothing here"` is error 13 with
+     // `Incorrect character in program "#" ('23'X)`, while the identical text
+     // as line 1 of a file is accepted and `say "after"` on line 2 prints
+     // `after`. Skipping unconditionally would silently accept an empty
+     // program.
+-    let text = "#! nothing here";
+-    let source = ProgramSource::new(text.as_bytes().to_vec());
+-    let error = scan(&source, ScanMode::Interpret).expect_err("does not scan");
+-    assert_eq!((error.code, error.sub), (13, 1));
+-    assert_eq!(source.line_of(error.byte), 1);
++    assert_eq!(scan_interpret("#! nothing here"), Err((13, 1)));
++    assert_eq!(scan_interpret("#!"), Err((13, 1)));
++    let source = ProgramSource::new(b"#! nothing here".to_vec(), SourceKind::Program);
+     assert!(
+-        scan(&source, ScanMode::Program)
+-            .expect("scans")
+-            .tokens
+-            .is_empty(),
++        scan(&source).expect("scans").tokens.is_empty(),
+         "as a program the whole thing is the skipped line"
+     );
++    assert_eq!(source.kind(), SourceKind::Program);
+ 
+-    // The two modes agree on everything else, including a `#` that is not at
+-    // the start of line 1.
+-    for text in ["say 1", "#!\nsay 1\nsay 2", "say 1\n#! not line one"] {
+-        let source = ProgramSource::new(text.as_bytes().to_vec());
+-        let program = scan(&source, ScanMode::Program);
+-        let interpret = scan(&source, ScanMode::Interpret);
+-        let same = match (&program, &interpret) {
+-            (Ok(a), Ok(b)) => kinds(&a.tokens) == kinds(&b.tokens),
+-            (Err(a), Err(b)) => a == b,
+-            _ => false,
+-        };
+-        // The first of these three differs by construction; the other two must
+-        // not.
+-        assert_eq!(same, !text.starts_with("#!"), "{text:?}");
++    // The two kinds agree on everything that is neither a `#!` first line nor
++    // a byte only one of them can see.
++    for text in ["say 1", "x = 'abc", "say abs (2.5)", ";;;", "say a/*c*/b"] {
++        let program = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
++        let interpret = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Interpret);
++        match (scan(&program), scan(&interpret)) {
++            (Ok(a), Ok(b)) => assert_eq!(kinds(&a.tokens), kinds(&b.tokens), "{text:?}"),
++            (Err(a), Err(b)) => assert_eq!(a, b, "{text:?}"),
++            (a, b) => panic!("{text:?} disagrees: {a:?} against {b:?}"),
++        }
+     }
+ }
+ 
+ #[test]
+ fn spans_stay_absolute_across_every_line_terminator() {
+     // `ProgramSource` resolves CRLF as one terminator and a bare CR as one,
+     // so a span's absolute offset has to skip a different number of bytes on
+     // each line. This is the invariant `span_bytes` and `TRACE` both rest on.
+     let text = "say 1\r\nsay 22\rsay 333";
+-    let source = ProgramSource::new(text.as_bytes().to_vec());
+-    let scanned = scan(&source, ScanMode::Program).expect("scans");
++    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
++    let scanned = scan(&source).expect("scans");
+     let last: Vec<(usize, &[u8])> = scanned
+         .tokens
+         .iter()
+         .filter(|t| t.kind.tag() == Tag::Symbol)
+         .map(|t| {
+             (
+                 source.line_of(t.span.start),
+                 source.span_bytes(t.span.clone()).expect("a scanner span"),
+             )
+         })
+         .collect();
+     assert_eq!(
+         last,
+         [
+             (1, &b"say"[..]),
+             (1, &b"1"[..]),
+             (2, &b"say"[..]),
+             (2, &b"22"[..]),
+             (3, &b"say"[..]),
+             (3, &b"333"[..]),
+         ]
+     );
+     // A `\n` followed by a `\r` is two terminators with an empty line
+     // between them, and an empty line yields no tokens, so the offsets after
+     // it must still land.
+     let text = "say 1\n\rsay 2";
+-    let source = ProgramSource::new(text.as_bytes().to_vec());
+-    let scanned = scan(&source, ScanMode::Program).expect("scans");
++    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
++    let scanned = scan(&source).expect("scans");
+     let after: Vec<(usize, &[u8])> = scanned
+         .tokens
+         .iter()
+         .filter(|t| t.kind.tag() == Tag::Symbol)
+         .skip(2)
+         .map(|t| {
+             (
+                 source.line_of(t.span.start),
+                 source.span_bytes(t.span.clone()).expect("a scanner span"),
+             )
+         })
+         .collect();
+     // Line 2 is the empty one, so the second clause is on line 3.
+     assert_eq!(after, [(3, &b"say"[..]), (3, &b"2"[..])]);
+ }
+@@ -689,93 +752,93 @@ fn every_error_the_scanner_raises_matches_the_interpreters_number_and_line() {
+         assert_eq!(scan_err(text), expected, "{text:?}");
+     }
+     // A 250-character name is fine and 251 is error 30.1, measured both ways.
+     let name = "x".repeat(250);
+     assert_eq!(kinds(&scan_ok(&format!("{name} = 1")))[0], Tag::Symbol);
+     assert_eq!(scan_err(&format!("{name}x = 1")), (30, 1, 1));
+ }
+ 
+ #[test]
+ fn a_resource_body_is_copied_verbatim_rather_than_scanned() {
+     // Measured: this file gets rc 0 from `rexxc` and the resource holds two
+     // lines, so the unmatched quote and unclosed comment inside it are data.
+     // A scanner that tokenised the body would raise 6.2 and 6.1.
+     let text =
+         "say 1\nexit\n::resource data\nthis is 'unmatched and /* unclosed\nline two\n::END\n";
+-    let source = ProgramSource::new(text.as_bytes().to_vec());
+-    let scanned = scan(&source, ScanMode::Program).expect("scans");
++    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
++    let scanned = scan(&source).expect("scans");
+     assert_eq!(scanned.resources.len(), 1);
+     let body = &scanned.resources[0];
+     assert_eq!(scanned.tokens[body.directive].kind.tag(), Tag::DColon);
+     let lines: Vec<&[u8]> = body
+         .lines
+         .iter()
+         .map(|span| &text.as_bytes()[span.clone()])
+         .collect();
+     assert_eq!(
+         lines,
+         [&b"this is 'unmatched and /* unclosed"[..], &b"line two"[..]]
+     );
+     // The body produces no tokens, so the last token is the directive
+     // clause's terminator.
+     assert_eq!(kinds(&scanned.tokens).last(), Some(&Tag::Eoc));
+ }
+ 
+ #[test]
+ fn a_resource_end_marker_is_a_prefix_match_on_the_upcased_value() {
+     // Measured: with `::resource d2 end stop`, a body line
+     // `stop is lowercase, no match` does not end the resource but a later
+     // `STOP` line does, and the resource then holds one line. The marker came
+     // from a symbol, so it is upcased; a literal marker would not be.
+     let text = "say 1\nexit\n::resource d2 end stop\nstop is lowercase, no match\nSTOP\n";
+-    let source = ProgramSource::new(text.as_bytes().to_vec());
+-    let scanned = scan(&source, ScanMode::Program).expect("scans");
++    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
++    let scanned = scan(&source).expect("scans");
+     assert_eq!(scanned.resources.len(), 1);
+     assert_eq!(scanned.resources[0].lines.len(), 1);
+ 
+     // Measured: with `end 'STOP'`, a line beginning `STOPPING?` ends it, so
+     // the test is a prefix and not an equality.
+     let prefix = "exit\n::resource d2 end 'STOP'\n::END is just data here\nSTOPPING? yes\n";
+-    let source = ProgramSource::new(prefix.as_bytes().to_vec());
+-    let scanned = scan(&source, ScanMode::Program).expect("scans");
++    let source = ProgramSource::new(prefix.as_bytes().to_vec(), SourceKind::Program);
++    let scanned = scan(&source).expect("scans");
+     assert_eq!(scanned.resources[0].lines.len(), 1);
+ 
+     // A malformed `::RESOURCE` is left alone: the interpreter rejects it in
+     // the directive parser before it reads a line, so the lines after it are
+     // ordinary Rexx there too.
+     // Measured: `::resource data junk` is error 25.926 on line 2, which is a
+     // parse error and not the scanner's to raise.
+     let malformed = "exit\n::resource data junk\nsay 2\n::END\n";
+     let scanned = scan_all(malformed);
+     assert!(scanned.resources.is_empty());
+     assert!(
+         scanned
+             .tokens
+             .iter()
+             .any(|t| matches!(&t.kind, TokenKind::Symbol { .. })
+                 && &malformed.as_bytes()[t.span.clone()] == b"say"),
+         "the line after the directive was tokenised"
+     );
+ }
+ 
+ #[test]
+ fn a_ctrl_z_ends_the_program_before_the_scanner_sees_it() {
+     // `ProgramSource` truncates there, so what follows cannot raise a scan
+     // error. Measured: `say 1` then a line beginning with 0x1A followed by
+     // `say 'unclosed` gets rc 0 from `rexxc`.
+-    let source = ProgramSource::new(b"say 1\n\x1asay 'unclosed\n".to_vec());
+-    let scanned = scan(&source, ScanMode::Program).expect("scans");
++    let source = ProgramSource::new(b"say 1\n\x1asay 'unclosed\n".to_vec(), SourceKind::Program);
++    let scanned = scan(&source).expect("scans");
+     assert_eq!(
+         kinds(&scanned.tokens),
+         [Tag::Symbol, Tag::Blank, Tag::Symbol, Tag::Eoc]
+     );
+ }
+ 
+ #[test]
+ fn a_double_colon_is_one_token_and_a_single_colon_is_another() {
+     assert_eq!(
+         kinds(&scan_ok("::routine r")),
+         [Tag::DColon, Tag::Symbol, Tag::Blank, Tag::Symbol, Tag::Eoc]
+     );
+     // No blank after the colon: a colon is not one of the four classes that
+     // make a following blank significant.
+     assert_eq!(
+@@ -828,51 +891,51 @@ fn the_comparison_operators_scan_to_their_own_kinds() {
+     ];
+     for (text, op) in cases {
+         assert_eq!(operators(&scan_ok(text)), [op], "{text}");
+     }
+     // Measured: `say 7 % 2` prints 3, `say 7 // 2` prints 1, `say 2 ** 3`
+     // prints 8, `say \1` prints 0, `say 1 \= 2` prints 1 and
+     // `say 1 \== 2` prints 1.
+ }
+ 
+ #[test]
+ fn the_alternative_logical_not_bytes_are_accepted() {
+     // The interpreter takes 0xAA and 0xAC as alternative spellings of `\`
+     // (`Scanner.cpp:1110`), which is why they are not error 13.1 the way
+     // every other byte above 0x7F is.
+     for byte in [0xAAu8, 0xACu8] {
+-        let source = ProgramSource::new(vec![byte, b'a']);
+-        let toks = scan(&source, ScanMode::Program).expect("scans").tokens;
++        let source = ProgramSource::new(vec![byte, b'a'], SourceKind::Program);
++        let toks = scan(&source).expect("scans").tokens;
+         assert_eq!(kinds(&toks), [Tag::Operator, Tag::Symbol, Tag::Eoc]);
+         assert_eq!(operators(&toks), [Operator::Backslash]);
+     }
+     // And the same three-way look-ahead applies.
+-    let source = ProgramSource::new(b"a \xac= b".to_vec());
+-    let toks = scan(&source, ScanMode::Program).expect("scans").tokens;
++    let source = ProgramSource::new(b"a \xac= b".to_vec(), SourceKind::Program);
++    let toks = scan(&source).expect("scans").tokens;
+     assert_eq!(operators(&toks), [Operator::BackslashEqual]);
+ }
+ 
+ #[test]
+ fn every_token_span_lies_inside_the_source_and_is_ordered() {
+     // A span is what `TRACE` and `SOURCELINE` slice, so a span that runs past
+     // the text or backwards would be a silent corruption rather than a
+     // failure. The one span that may overlap its neighbour is a blank made by
+     // a line continuation: the interpreter records it after stepping to the
+     // next line, so it covers that line's first byte.
+     let text = "say 'a',\n'b' || abs(2.5) -- tail\n/* c */ x = .5\n";
+-    let source = ProgramSource::new(text.as_bytes().to_vec());
+-    let scanned = scan(&source, ScanMode::Program).expect("scans");
++    let source = ProgramSource::new(text.as_bytes().to_vec(), SourceKind::Program);
++    let scanned = scan(&source).expect("scans");
+     let end = text.len();
+     let mut previous_start = 0;
+     for token in &scanned.tokens {
+         assert!(token.span.start <= token.span.end, "{token:?}");
+         assert!(token.span.end <= end, "{token:?} past {end}");
+         assert!(
+             token.span.start >= previous_start,
+             "{token:?} went backwards"
+         );
+         previous_start = token.span.start;
+     }
+ }
+ 
+ /// Every string over `alphabet` of length up to `max`, applied to `f`.
+ fn for_every_string(alphabet: &[u8], max: usize, mut f: impl FnMut(&[u8])) {
+@@ -893,60 +956,60 @@ fn for_every_string(alphabet: &[u8], max: usize, mut f: impl FnMut(&[u8])) {
+ 
+ #[test]
+ fn scan_always_answers_with_tokens_or_an_error_number() {
+     // The literal packers index by position and rely on their own validation
+     // pass having accounted for every character, so a mis-ported bound would
+     // be a panic rather than a wrong answer. `scan` must always answer, with
+     // tokens or with an error number.
+     //
+     // The alphabet is the characters that steer the scanner: both quotes, both
+     // literal markers, hex and non-hex digits, both whitespace kinds, both
+     // continuation characters, the comment delimiters, and a line end.
+     let steering = b"'\"xb4g10 \t-,/*\n";
+     let mut count = 0;
+     for_every_string(steering, 4, |bytes| {
+         count += 1;
+-        let source = ProgramSource::new(bytes.to_vec());
++        let source = ProgramSource::new(bytes.to_vec(), SourceKind::Program);
+         // Either outcome is fine. Not panicking is the property.
+-        let _ = scan(&source, ScanMode::Program);
++        let _ = scan(&source);
+     });
+     assert!(count > 50_000, "the sweep actually ran: {count}");
+ 
+     // And the same for the operator and punctuation characters, which drive
+     // the multi-character look-ahead.
+     let punctuation = b"=<>\\~:|&%+-*/[](),;.";
+     let mut count = 0;
+     for_every_string(punctuation, 3, |bytes| {
+         count += 1;
+-        let source = ProgramSource::new(bytes.to_vec());
+-        let _ = scan(&source, ScanMode::Program);
++        let source = ProgramSource::new(bytes.to_vec(), SourceKind::Program);
++        let _ = scan(&source);
+     });
+     assert!(count > 8_000, "the sweep actually ran: {count}");
+ 
+     // The packers only run on a complete literal, and a complete one is at
+     // least six characters, so they need their own sweep over the content.
+     let nibbles = b"4g1 \t0";
+     let mut count = 0;
+     for_every_string(nibbles, 5, |bytes| {
+         for marker in [b'x', b'b'] {
+             count += 1;
+             let mut text = vec![b'\''];
+             text.extend_from_slice(bytes);
+             text.push(b'\'');
+             text.push(marker);
+-            let source = ProgramSource::new(text);
+-            let _ = scan(&source, ScanMode::Program);
++            let source = ProgramSource::new(text, SourceKind::Program);
++            let _ = scan(&source);
+         }
+     });
+     assert!(count > 15_000, "the sweep actually ran: {count}");
+ 
+     // Arbitrary bytes, including the ones that are error 13.1 and the ones
+     // that are an alternative logical not.
+     for byte in 0u8..=255 {
+         for prefix in [&b""[..], b"'", b"/*", b"a", b"1e", b"'41'"] {
+             let mut bytes = prefix.to_vec();
+             bytes.push(byte);
+-            let source = ProgramSource::new(bytes);
+-            let _ = scan(&source, ScanMode::Program);
++            let source = ProgramSource::new(bytes, SourceKind::Program);
++            let _ = scan(&source);
+         }
+     }
+ }
+diff --git a/rust/crates/rexx-parse/tests/sourceline.rs b/rust/crates/rexx-parse/tests/sourceline.rs
+index d9179dc2..eb09791b 100644
+--- a/rust/crates/rexx-parse/tests/sourceline.rs
++++ b/rust/crates/rexx-parse/tests/sourceline.rs
+@@ -1,177 +1,219 @@
+-use rexx_parse::ProgramSource;
++use rexx_parse::{ProgramSource, SourceKind};
+ 
+ #[test]
+ fn sourceline_returns_lines_without_terminators() {
+-    let src = ProgramSource::new(b"say 1\nsay 2\n".to_vec());
++    let src = ProgramSource::new(b"say 1\nsay 2\n".to_vec(), SourceKind::Program);
+     assert_eq!(src.line_count(), 2);
+     assert_eq!(src.line(1), Some(&b"say 1"[..]));
+     assert_eq!(src.line(2), Some(&b"say 2"[..]));
+     // Out of range is an ERROR in the interpreter, not an empty answer:
+     // sourceline(0) raises 40.14 and sourceline(99) raises 40.34. Verified.
+     // `line` returning None is how this crate reports that; Task 3.8 turns
+     // it into the right error number. Do not let it render as "".
+     assert_eq!(src.line(3), None);
+     assert_eq!(src.line(0), None);
+ }
+ 
+ #[test]
+ fn line_of_is_one_based() {
+-    let src = ProgramSource::new(b"say 1\nsay 2\n".to_vec());
++    let src = ProgramSource::new(b"say 1\nsay 2\n".to_vec(), SourceKind::Program);
+     assert_eq!(src.line_of(0), 1);
+     assert_eq!(src.line_of(4), 1);
+     assert_eq!(src.line_of(6), 2);
+ }
+ 
+ #[test]
+ fn source_may_hold_bytes_that_are_not_utf8() {
+     // A Rexx literal may contain arbitrary bytes. Verified against the oracle:
+     // a file holding a raw FF FE inside a literal runs, and c2x reports FFFE.
+     // A String-typed source would refuse to construct here.
+-    let src = ProgramSource::new(b"s = '\xff\xfe'\n".to_vec());
++    let src = ProgramSource::new(b"s = '\xff\xfe'\n".to_vec(), SourceKind::Program);
+     assert_eq!(src.line(1), Some(&b"s = '\xff\xfe'"[..]));
+     assert_eq!(src.line_count(), 1);
+ }
+ 
+ #[test]
+ fn final_line_without_trailing_newline_still_counts() {
+     // Verified: build/bin/rexx on this exact two-line, no-trailing-newline
+     // file reports sourceline() == 2, and sourceline(1) has no newline in it.
+-    let src = ProgramSource::new(b"say sourceline()\nsay 2".to_vec());
++    let src = ProgramSource::new(b"say sourceline()\nsay 2".to_vec(), SourceKind::Program);
+     assert_eq!(src.line_count(), 2);
+     assert_eq!(src.line(1), Some(&b"say sourceline()"[..]));
+     assert_eq!(src.line(2), Some(&b"say 2"[..]));
+ }
+ 
+ #[test]
+ fn crlf_terminators_are_excluded_from_line_content() {
+     // Verified against build/bin/rexx: a CRLF file's sourceline(n) contains
+     // neither the \r nor the \n, and the line count matches an LF-only file.
+-    let src = ProgramSource::new(b"say 1\r\nsay 2\r\n".to_vec());
++    let src = ProgramSource::new(b"say 1\r\nsay 2\r\n".to_vec(), SourceKind::Program);
+     assert_eq!(src.line_count(), 2);
+     assert_eq!(src.line(1), Some(&b"say 1"[..]));
+     assert_eq!(src.line(2), Some(&b"say 2"[..]));
+ }
+ 
+ #[test]
+ fn crlf_pair_is_one_terminator_but_lone_cr_ends_a_line_on_its_own() {
+     // Verified against build/bin/rexx: a file using bare \r (no \n) as its
+     // only line terminator (old Mac style) still reports the right line
+     // count and content, matching ProgramSource.cpp's line_delimiters scan,
+     // which treats \r and \n as equally valid terminators and only pairs a
+     // \r immediately followed by \n into a single CRLF terminator.
+-    let src = ProgramSource::new(b"say 1\rsay 2\r".to_vec());
++    let src = ProgramSource::new(b"say 1\rsay 2\r".to_vec(), SourceKind::Program);
+     assert_eq!(src.line_count(), 2);
+     assert_eq!(src.line(1), Some(&b"say 1"[..]));
+     assert_eq!(src.line(2), Some(&b"say 2"[..]));
+ 
+     // Both halves of this test's name, in one place: the CRLF pair collapses
+     // to a single terminator, so the same two lines come out of a CRLF file.
+     // Asserting the CONTENT and not only the count, because a count alone
+     // cannot distinguish one terminator from two.
+-    let crlf = ProgramSource::new(b"say 1\r\nsay 2\r\n".to_vec());
++    let crlf = ProgramSource::new(b"say 1\r\nsay 2\r\n".to_vec(), SourceKind::Program);
+     assert_eq!(crlf.line_count(), 2);
+     assert_eq!(crlf.line(1), Some(&b"say 1"[..]));
+     assert_eq!(crlf.line(2), Some(&b"say 2"[..]));
+ 
+     // And the asymmetry that a CRLF-only rule gets wrong: \n\r is TWO
+     // terminators, so an empty line sits between them. Oracle: sourceline()
+     // reports 3 for this shape where \r\n reports 2.
+-    let lfcr = ProgramSource::new(b"a\n\rb\n".to_vec());
++    let lfcr = ProgramSource::new(b"a\n\rb\n".to_vec(), SourceKind::Program);
+     assert_eq!(lfcr.line_count(), 3);
+     assert_eq!(lfcr.line(1), Some(&b"a"[..]));
+     assert_eq!(lfcr.line(2), Some(&b""[..]));
+     assert_eq!(lfcr.line(3), Some(&b"b"[..]));
+ }
+ 
+ #[test]
+ fn line_of_holds_at_terminators_at_the_end_and_on_an_empty_source() {
+     // The boundary class the brief flags as highest-risk, and the one an
+     // off-by-one here would propagate into every later task's spans.
+-    let src = ProgramSource::new(b"ab\ncd\n".to_vec());
++    let src = ProgramSource::new(b"ab\ncd\n".to_vec(), SourceKind::Program);
+ 
+     // A byte on a terminator belongs to the line that terminator ends.
+     assert_eq!(src.line_of(2), 1, "the \\n closing line 1");
+     assert_eq!(src.line_of(5), 2, "the \\n closing line 2");
+ 
+     // First and last content bytes of each line.
+     assert_eq!(src.line_of(0), 1);
+     assert_eq!(src.line_of(1), 1);
+     assert_eq!(src.line_of(3), 2);
+     assert_eq!(src.line_of(4), 2);
+ 
+     // Exactly len, and past it: clamp to the last line rather than panic.
+     // 6 is b"ab\ncd\n".len(); ProgramSource exposes no length accessor and
+     // this test has no business adding one.
+     assert_eq!(src.line_of(6), 2, "one past the last byte");
+     assert_eq!(src.line_of(usize::MAX), 2, "far past the end");
+ 
+     // An empty source has no lines, and line_of is still total.
+-    let empty = ProgramSource::new(Vec::new());
++    let empty = ProgramSource::new(Vec::new(), SourceKind::Program);
+     assert_eq!(empty.line_count(), 0);
+     assert_eq!(empty.line_of(0), 1, "total even with nothing to point at");
+     assert_eq!(empty.line(1), None, "and line() disagrees, deliberately");
+ }
+ 
+ #[test]
+ fn a_source_of_only_terminators_is_all_empty_lines() {
+-    let src = ProgramSource::new(b"\n\n\n".to_vec());
++    let src = ProgramSource::new(b"\n\n\n".to_vec(), SourceKind::Program);
+     assert_eq!(src.line_count(), 3);
+     for n in 1..=3 {
+         assert_eq!(src.line(n), Some(&b""[..]), "line {n}");
+     }
+     assert_eq!(src.line_of(0), 1);
+     assert_eq!(src.line_of(2), 3);
+ }
+ 
+ #[test]
+ fn lf_then_cr_is_two_terminators_producing_an_empty_line() {
+     // Verified against build/bin/rexx: unlike CR-then-LF, LF-then-CR is NOT
+     // collapsed into one terminator, so it produces an empty line between
+     // the two real lines. sourceline() reported 3 for this exact layout.
+-    let src = ProgramSource::new(b"say 1\n\rsay 2\n".to_vec());
++    let src = ProgramSource::new(b"say 1\n\rsay 2\n".to_vec(), SourceKind::Program);
+     assert_eq!(src.line_count(), 3);
+     assert_eq!(src.line(1), Some(&b"say 1"[..]));
+     assert_eq!(src.line(2), Some(&b""[..]));
+     assert_eq!(src.line(3), Some(&b"say 2"[..]));
+ }
+ 
+ #[test]
+ fn ctrl_z_truncates_the_source_including_a_partial_line() {
+     // Verified against build/bin/rexx: a 0x1A (Ctrl-Z) byte marks end of
+     // file, DOS/CP-M style. Everything at and after it is discarded before
+     // line scanning, even mid-line: sourceline() dropped from 3 to 1 for a
+     // file with a mid-second-line 0x1A, and the truncated first line kept
+     // exactly the bytes before the 0x1A.
+-    let src = ProgramSource::new(b"say 1\nsay 2\x1a more\nsay 3\n".to_vec());
++    let src = ProgramSource::new(
++        b"say 1\nsay 2\x1a more\nsay 3\n".to_vec(),
++        SourceKind::Program,
++    );
+     assert_eq!(src.line_count(), 2);
+     assert_eq!(src.line(1), Some(&b"say 1"[..]));
+     assert_eq!(src.line(2), Some(&b"say 2"[..]));
+ }
+ 
+ #[test]
+ fn empty_source_has_no_lines() {
+-    let src = ProgramSource::new(Vec::new());
++    let src = ProgramSource::new(Vec::new(), SourceKind::Program);
+     assert_eq!(src.line_count(), 0);
+     assert_eq!(src.line(1), None);
+     assert_eq!(src.line(0), None);
+ }
+ 
+ #[test]
+ fn line_span_indexes_the_same_bytes_line_returns() {
+     // The scanner needs absolute offsets, so `line_span` must agree with
+     // `line` byte for byte, including for the CRLF and bare-CR cases the
+     // terminator rules cover.
+-    let src = ProgramSource::new(b"say 1\r\nsay 22\rsay 333".to_vec());
++    let src = ProgramSource::new(b"say 1\r\nsay 22\rsay 333".to_vec(), SourceKind::Program);
+     assert_eq!(src.line_count(), 3);
+     for n in 1..=3 {
+         let span = src.line_span(n).expect("line exists");
+         assert_eq!(src.line(n).expect("line exists").len(), span.len());
+     }
+     assert_eq!(src.line_span(1), Some(0..5));
+     // Line 2 starts after CRLF, both bytes consumed as one terminator.
+     assert_eq!(src.line_span(2), Some(7..13));
+     // Line 3 starts after a bare CR.
+     assert_eq!(src.line_span(3), Some(14..21));
+     assert_eq!(src.line_span(0), None);
+     assert_eq!(src.line_span(4), None);
+ }
++
++#[test]
++fn interpret_text_is_one_line_from_end_to_end() {
++    // `ArrayProgramSource` holds the interpret string as a single array
++    // element (`LanguageParser.cpp:450`), so neither of `new`'s program rules
++    // applies: nothing splits it and nothing truncates it. Measured against
++    // the oracle: `interpret "say 1" || '0a'x || "say 2"` is error 13.1 on the
++    // 0A byte, and so are the `'0d'x`, `'0d0a'x` and `'1a'x` versions, which
++    // can only happen if those bytes are still on the line.
++    let src = ProgramSource::new(b"say 1\n\rsay 2\x1amore".to_vec(), SourceKind::Interpret);
++    assert_eq!(src.kind(), SourceKind::Interpret);
++    assert_eq!(src.line_count(), 1);
++    assert_eq!(src.line(1), Some(&b"say 1\n\rsay 2\x1amore"[..]));
++    assert_eq!(src.line_span(1), Some(0..17));
++    assert_eq!(src.line(2), None);
++    // Every byte is on line 1, including the ones a program would have used as
++    // terminators.
++    for byte in 0..17 {
++        assert_eq!(src.line_of(byte), 1, "byte {byte}");
++    }
++    assert_eq!(src.span_bytes(6..12), Some(&b"\rsay 2"[..]));
++
++    // The identical bytes as a program split into three lines and truncate at
++    // the Ctrl-Z, which is what makes this a property of the source.
++    let program = ProgramSource::new(b"say 1\n\rsay 2\x1amore".to_vec(), SourceKind::Program);
++    assert_eq!(program.line_count(), 3);
++    assert_eq!(program.line(2), Some(&b""[..]));
++    assert_eq!(program.line(3), Some(&b"say 2"[..]));
++
++    // Empty interpret text still has its one line, where an empty program has
++    // none. Measured: `interpret ""` is accepted and the program runs on.
++    let empty = ProgramSource::new(Vec::new(), SourceKind::Interpret);
++    assert_eq!(empty.line_count(), 1);
++    assert_eq!(empty.line(1), Some(&b""[..]));
++    assert_eq!(
++        ProgramSource::new(Vec::new(), SourceKind::Program).line_count(),
++        0
++    );
++}

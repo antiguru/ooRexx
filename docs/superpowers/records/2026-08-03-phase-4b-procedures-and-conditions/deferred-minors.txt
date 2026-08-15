@@ -1,0 +1,53 @@
+# GENERATED, THEN CORRECTED BY HAND -- read this header before regenerating.
+#
+# The 16 rows below the header were produced by, and are byte-identical to:
+#
+#     grep -n 'minor (deferred)' progress.md
+#
+# That command MISSES DEFERRED ITEMS, in two independent ways, and both bit
+# this file. Do not regenerate with it and overwrite the tail.
+#
+#   1. CASE. Task 7's two blocks head with "**Minor (deferred), ...**", capital
+#      M. The grep above finds 16 lines; `grep -in` finds 18. The two extra are
+#      exactly those block headers.
+#   2. SHAPE. Even case-insensitively, those two are PROSE BLOCKS spanning
+#      several lines, carrying three and two items respectively inside running
+#      text. A line-grep recovers the header, never the items. There is no
+#      one-line command that produces the tail of this file; it was read out by
+#      hand.
+#
+# Both blocks are addressed to the final whole-branch review in their own
+# words ("to be triaged by the final whole-branch review"), so the omission
+# was not a judgement that they did not belong here.
+#
+# Found by the Phase 4b final whole-branch review, finding I5
+# (phase-4b-final-review.md). That review's triage table carries a ruling for
+# every row in this file, including these five.
+#
+# FORMAT: <progress.md line or range>:<source>: <finding>
+
+49:Task 0: minor (deferred): M1 Step 5's block sits at the end of the file, not in the module doc it claims to be in.
+50:Task 0: minor (deferred): M2 `expand_for_witnesses` is not exhaustiveness-checked against `rexx_parse::Call`/`Signal`.
+51:Task 0: minor (deferred): M3 `the_two_harnesses_include_this_exact_file` is defeated by the regression it names.
+52:Task 0: minor (deferred): M4 `instruction_arm` returns `String` where `&'static str` suffices.
+53:Task 0: minor (deferred): M5 the "unavoidably a third copy" claim overstates the constraint.
+54:Task 0: minor (deferred): M6 the reported `cargo fmt --edition 2024 --check` invocation does not run -- `error: unexpected argument '--edition'`. The working form is `cargo fmt --all --check`. **This affects every task's brief**, which tells implementers to use the broken form.
+55:Task 0: minor (deferred): M7 two comments describe a stderr shape that no longer exists (fold into I2's fix if free).
+197:Task 1: minor (deferred): two provably-no-op `record_leave_failure` calls in `run_fragment`.
+198:Task 1: minor (deferred): 16 lines duplicated from `run_activation`'s arms.
+199:Task 1: minor (deferred): a mutation-kill note naming a mutation that cannot be typed.
+200:Task 1: minor (deferred): a verbatim-preserved doc now false in the present tense.
+201:Task 1: minor (deferred): an ungrammatical `Outcome::collections` rewrite.
+202:Task 1: minor (deferred): nothing pins `phase-4b.txt`'s line list, unlike `EXPECTED_SUBSET` for 4a.
+203:Task 1: minor (deferred): Step 4's test duplicates an existing assertion without saying so.
+204:Task 1: minor (deferred): a tripwire cost claim that relies on dead-code elimination.
+205:Task 1: minor (deferred): the report says "1 ignored" where the workspace has 4.
+
+# --- appended by hand, Phase 4b final fix round (review finding I5) ---
+# The five below are NOT reproducible by the grep at the top of this file.
+
+962-967:Task 7 report: minor (deferred): T7-a `RAISE PROPAGATE`'s `active_condition` is never cleared, so a `PROPAGATE` reached after a handler has finished re-raises that handler's condition (unmeasured either way).
+962-967:Task 7 report: minor (deferred): T7-b non-`SYNTAX` `RAISE ... RETURN` searches exactly one level out rather than outward, so a grandparent trap is missed (unmeasured).
+962-967:Task 7 report: minor (deferred): T7-c `RAISE PROPAGATE`'s report rendering rests on four transcripts rather than a family.
+998-999:Task 7 review: minor (deferred): T7-d `run_activated`'s `_program` parameter is dead.
+998-999:Task 7 review: minor (deferred): T7-e `trap_for` is `pub(crate)` with no cross-module caller.

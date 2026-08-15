@@ -1,0 +1,1617 @@
+=== commits ===
+5ab9b1c0 Keep error substitutions as values, not spliced text
+
+=== stat ===
+ rust/crates/rexx-num/src/format.rs     | 112 ++++++++++++--------
+ rust/crates/rexx-num/src/lib.rs        | 181 +++++++++++++++++++++++----------
+ rust/crates/rexx-num/src/muldiv.rs     |  24 ++---
+ rust/crates/rexx-num/src/pow.rs        |  27 ++---
+ rust/crates/rexx-num/src/settings.rs   | 106 +++++++++++--------
+ rust/crates/rexx-num/tests/errors.rs   |  52 ++++++++--
+ rust/crates/rexx-num/tests/format.rs   |  62 ++++++++---
+ rust/crates/rexx-num/tests/settings.rs |  50 +++++++--
+ 8 files changed, 407 insertions(+), 207 deletions(-)
+
+=== diff ===
+diff --git a/rust/crates/rexx-num/src/format.rs b/rust/crates/rexx-num/src/format.rs
+index 52cbe0e4..25522585 100644
+--- a/rust/crates/rexx-num/src/format.rs
++++ b/rust/crates/rexx-num/src/format.rs
+@@ -14,48 +14,89 @@
+ //! `Number::format` (in `lib.rs`) renders SCIENTIFIC form and must stay exactly
+ //! as it is -- it is verified across ~150,000 differential cases. Everything
+ //! here is new: a form-aware sibling for ENGINEERING, and the two builtins
+ //! layered on top of it. Measured against ooRexx 5.3.0; see
+ //! `rust/corpus/num/form_notation.rex` and `format_trunc.rex`.
+ 
+ use crate::{Form, Number};
+ 
+ /// What `FORMAT` can fail with. Both are error 93 (`Incorrect call to
+ /// method`); the interpreter further distinguishes 93.941/93.942, but this
+ /// crate follows `ArithError`'s lead and exposes only the number a trapped
+ /// Rexx program actually sees in `RC`, using the variant itself to carry the
+-/// finer distinction for Rust callers. Unlike `ArithError`, every raise site
+-/// lives in this file, so each variant also carries the interpreter's fully
+-/// rendered message text -- there is no ambiguity here to fall back from.
++/// finer distinction for Rust callers. Every raise site lives in this file,
++/// so each variant carries the substitution *values* directly rather than
++/// pre-rendered text -- `message()` renders from the generated table on
++/// demand, and `additional()` exposes those same values in the
++/// interpreter's own order (what `condition('o')~additional` would return).
+ #[derive(Clone, PartialEq, Eq, Debug)]
+ pub enum FormatError {
+     /// `before` is too narrow for the integer part actually produced (which,
+     /// in exponential form, means the mantissa's integer digits). Error
+-    /// 93.942.
+-    BeforeOversize(String),
+-    /// `expp` is too narrow to hold the exponent's digits. Error 93.941.
+-    ExponentOversize(String),
++    /// 93.942; `additional()` is `[value.format(digits), before]`. `value`
++    /// is `self` rounded to `digits` -- *not* the reframed mantissa this
++    /// error's own padding works with, and not affected by which `form`/
++    /// `expt` the call uses. Confirmed by provoking the exponential-mantissa
++    /// case (ENGINEERING, before too narrow for a reframed "123.456789")
++    /// and getting back the un-reframed "123456.789" instead, and separately
++    /// by lowering DIGITS until rounding changes the value and seeing *that*
++    /// show up rather than the original literal text.
++    BeforeOversize { value: Number, digits: u32, before: u32 },
++    /// `expp` is too narrow to hold the exponent's digits. Error 93.941;
++    /// `additional()` is `[render(mantissa), width]`, where `render` is a
++    /// plain (no `before`/`after`) rendering of `mantissa` -- see the two
++    /// call sites (`format_with`'s inline check, and
++    /// `post_carry_exponent_error`) for what `mantissa` is reframed to and
++    /// why there are two of them.
++    ExponentOversize { mantissa: Number, width: u32 },
+ }
+ 
+ impl FormatError {
+     pub fn code(self) -> u16 {
+         93
+     }
+ 
+-    /// The interpreter's exact message text, substitutions already filled.
+-    pub fn message(&self) -> &str {
++    /// The sub-message identifying this failure's exact table row -- see
++    /// `ArithError::sub_code`'s doc comment for why `code()` alone isn't
++    /// enough (here it would be, since both variants share major 93, but
++    /// the pattern matches the crate's other two error types).
++    fn sub(&self) -> u16 {
+         match self {
+-            FormatError::BeforeOversize(m) | FormatError::ExponentOversize(m) => m,
++            FormatError::BeforeOversize { .. } => 942,
++            FormatError::ExponentOversize { .. } => 941,
+         }
+     }
++
++    /// The substitution values in the interpreter's own order -- what
++    /// `condition('o')~additional` would return for this failure.
++    pub fn additional(&self) -> Vec<String> {
++        match self {
++            FormatError::BeforeOversize { value, digits, before } => {
++                vec![value.format(*digits), before.to_string()]
++            }
++            FormatError::ExponentOversize { mantissa, width } => {
++                let rendered = render_integer_padded(mantissa, None, None, mantissa, 0)
++                    .expect("`before` is None, so the width check cannot fail");
++                vec![rendered, width.to_string()]
++            }
++        }
++    }
++
++    /// The interpreter's exact message text, rendered from the generated
++    /// table on demand.
++    pub fn message(&self) -> String {
++        let subs = self.additional();
++        let refs: Vec<&str> = subs.iter().map(String::as_str).collect();
++        crate::error_text(93, self.sub(), &refs)
++    }
+ }
+ 
+ impl Number {
+     /// Renders the number the way automatic-conversion display and `FORMAT`'s
+     /// defaults do, honouring `NUMERIC FORM`. `Number::format` only ever
+     /// produces SCIENTIFIC; this is the form-aware entry point the brief
+     /// asks for, implemented as the all-defaults case of [`Number::format_with`]
+     /// so the two can never drift apart.
+     pub fn format_form(&self, digits: u32, form: Form) -> String {
+         self.format_with(digits, form, None, None, None, None)
+             .expect("no `before`/`expp` supplied, so no width check can fail")
+     }
+@@ -95,34 +136,28 @@ impl Number {
+         form: Form,
+         before: Option<u32>,
+         after: Option<u32>,
+         expp: Option<u32>,
+         expt: Option<u32>,
+     ) -> Result<String, FormatError> {
+         // Every FORMAT call rounds to the *current* DIGITS first, regardless
+         // of what `expt` says -- `expt` only moves the exponential-form
+         // trigger, it does not add or remove precision. Confirmed with a
+         // 15-significant-digit literal at DIGITS 9: it always renders as if
+         // it had been rounded to 9 digits first, however `expt` is set.
+         let n1 = self.round_to(digits);
+-        // What `BeforeOversize`'s message substitutes for &1, if it fires:
+-        // `n1`'s own SCIENTIFIC-form rendering at `digits` -- *not* the
+-        // reframed mantissa `render_integer_padded` actually pads, and not
+-        // affected by which `form`/`expt` this call uses. Confirmed by
+-        // provoking the exponential-mantissa case (ENGINEERING, before too
+-        // narrow for a reframed "123.456789") and getting back the
+-        // un-reframed "123456.789" instead, and separately by lowering
+-        // DIGITS until rounding changes the value and seeing *that* show up
+-        // rather than the original literal text.
+-        let oversize_value = n1.format(digits);
++        // `BeforeOversize`'s &1 comes from `(n1, digits)` -- see its doc
++        // comment for what exactly that renders and why. Stored as the
++        // `Number` and the `digits` it needs, not pre-rendered, since
++        // `additional()` does the rendering on demand.
+ 
+         // `expp == 0` is not "no padding": it suppresses exponential form
+         // altogether, so a number that would otherwise trigger it renders in
+         // full plain digits instead (verified with 1E100 at expp 0, which
+         // prints all 101 digits). Everything else about it -- notably the
+         // `before` check -- then operates on that plain rendering.
+         let expt = if expp == Some(0) {
+             None
+         } else {
+             Some(expt.map(|e| e as i64).unwrap_or(digits as i64))
+         };
+ 
+@@ -139,31 +174,25 @@ impl Number {
+         // decimals) while `expp` is too narrow for either: the reported
+         // mantissa is `"9.996"` (reframed at the pre-carry 20), not
+         // `"0.9996"` (reframed at the post-carry 21).
+         let initial_eng_exp = expt.and_then(|expt| {
+             let a = adjusted(&n1);
+             let triggered = a as i64 >= expt || (a < 0 && (n1.exponent as i64).abs() > 2 * expt);
+             triggered.then(|| group(form, a))
+         });
+         if let Some(width) = expp {
+             if let Some(exp0) = initial_eng_exp {
+                 let needed = exp0.unsigned_abs().to_string().len() as u32;
+                 if needed > width {
+-                    let mantissa_text = render_integer_padded(&reframe(&n1, exp0), None, None, "")
+-                        .expect("`before` is None, so the width check cannot fail");
+-                    return Err(FormatError::ExponentOversize(crate::error_text(
+-                        93,
+-                        941,
+-                        &[&mantissa_text, &width.to_string()],
+-                    )));
++                    return Err(FormatError::ExponentOversize { mantissa: reframe(&n1, exp0), width });
+                 }
+             }
+             // The C++ redoes the whole trigger/width check a *second* time,
+             // right after the decimal-rounding carry that the first check
+             // couldn't have known about (`NumberStringClass.cpp:2126-2193`,
+             // a kludge the comment there attributes to [bugs:#1474]). Two
+             // shapes need it: a carry that grows an *already* -triggered
+             // exponent's digit count (`9.996E+99` rounded to 0 decimals at
+             // DIGITS 9, `expp` 2 -- pre-carry exponent 99 fits, post-carry
+             // 100 does not), and a carry that triggers exponential form for
+             // the first time on a value that started plain (`9999999999.6`
+             // at DIGITS 15, `expt` 10, `after` 0, `expp` 1 -- adjusted
+@@ -171,30 +200,30 @@ impl Number {
+             // ".6" carries it to 10, which does). Both confirmed against
+             // `build/bin/rexx`; the first was this crate's own regression,
+             // caught by review, not by any of the 21,296 cases the four
+             // curated FORMAT sets already ran.
+             if let Some(err) = post_carry_exponent_error(&n1, initial_eng_exp, form, expt, after, width) {
+                 return Err(err);
+             }
+         }
+ 
+         let (eng_exp, rounded) = resolve_exponential_state(&n1, form, expt, after);
+ 
+         match eng_exp {
+-            None => render_integer_padded(&rounded, before, after, &oversize_value),
++            None => render_integer_padded(&rounded, before, after, &n1, digits),
+             Some(exp) => {
+                 // The exponent check comes before the `before` check -- an
+                 // exponent that doesn't fit is reported even when `before`
+                 // would have been wide enough for the mantissa.
+-                let mantissa = render_integer_padded(&rounded, before, after, &oversize_value)?;
++                let mantissa = render_integer_padded(&rounded, before, after, &n1, digits)?;
+ 
+                 if exp == 0 {
+                     // A displayed exponent of exactly zero is never written
+                     // as `E+0` -- confirmed with `format(3.14159,,,,0)` at
+                     // DIGITS 5 (adjusted exponent 0 exactly), which prints
+                     // `3.1416`, not `3.1416E+0`, and with ENGINEERING
+                     // grouping an adjusted exponent of 1 or 2 down to a
+                     // displayed 0 the same way. If `expp` was explicit, the
+                     // field it would have taken is reserved as blanks
+                     // instead of vanishing outright.
+                     return Ok(match expp {
+                         Some(width) => format!("{mantissa}{}", " ".repeat(width as usize + 2)),
+@@ -209,26 +238,26 @@ impl Number {
+                 Ok(format!("{mantissa}E{e_sign}{exp_digits}"))
+             }
+         }
+     }
+ 
+     /// Implements `TRUNC(number, places)`. Truncates, does not round, and
+     /// -- unlike `FORMAT` -- never produces exponential form: `TRUNC(1E10)`
+     /// is the eleven-digit integer, not `1E+10`.
+     pub fn trunc(&self, digits: u32, places: u32) -> String {
+         let n = self.round_to(digits);
+         let truncated = truncate_to_places(&n, places);
+         // `before` is always `None` here, so the oversize check can never
+-        // run and the substitution text is never read.
+-        render_integer_padded(&truncated, None, Some(places), "")
++        // run and the placeholder `value`/`digits` are never read.
++        render_integer_padded(&truncated, None, Some(places), &truncated, 0)
+             .expect("`before` is None, so the width check cannot fail")
+     }
+ }
+ 
+ /// Chooses ENGINEERING's exponent for a value whose most significant digit
+ /// sits at `adjusted`: the largest multiple of 3 not exceeding it. Found by
+ /// sweeping literal `12eK` across `-30..=30` and comparing engineering to
+ /// scientific at each `K` -- `div_euclid` is exactly this floor division,
+ /// including on the negative side (`-25 -> -27`, not `-24`).
+ fn group(form: Form, adjusted: i32) -> i32 {
+     match form {
+         Form::Scientific => adjusted,
+@@ -400,31 +429,25 @@ fn post_carry_exponent_error(
+             expt,
+             Some(expt) if adjusted2 as i64 >= expt
+                 || (adjusted2 < 0 && (true_scale.exponent as i64).abs() > 2 * expt)
+         );
+     if !triggered {
+         return None;
+     }
+     let exp2 = group(form, adjusted2);
+     let needed = exp2.unsigned_abs().to_string().len() as u32;
+     if needed <= width {
+         return None;
+     }
+-    let mantissa_text = render_integer_padded(&reframe(&true_scale, exp2), None, None, "")
+-        .expect("`before` is None, so the width check cannot fail");
+-    Some(FormatError::ExponentOversize(crate::error_text(
+-        93,
+-        941,
+-        &[&mantissa_text, &width.to_string()],
+-    )))
++    Some(FormatError::ExponentOversize { mantissa: reframe(&true_scale, exp2), width })
+ }
+ 
+ /// Rounds (half up) `n` to exactly `places` digits after the decimal point --
+ /// the cut FORMAT's `after` and TRUNC both make, just at a fixed decimal
+ /// position rather than a fixed significant-digit count. `Number::round_to`
+ /// cannot be reused here: its `digits == 0` is a documented no-op sentinel
+ /// (there is no `NUMERIC DIGITS 0`), whereas `places == 0` is an ordinary,
+ /// meaningful cut for this crate's callers (`FORMAT(x, , 0)`), and must
+ /// still round a `0.6` up to `1`.
+ ///
+ /// When `n` already has at most `places` decimal digits, this returns `n`
+ /// **unchanged** rather than padding it with the missing zeros -- `places`
+@@ -552,25 +575,26 @@ fn truncate_to_places(n: &Number, places: u32) -> Number {
+ /// interpreter really does accept that (`TRUNC(1, 2147483648)` is a
+ /// ~2.1-billion-character result) -- far more than `Number::exponent`'s
+ /// `i32` could ever hold. Doing this arithmetic here, in `u64`/`usize`
+ /// against the original value, instead of against a `Number` that would
+ /// have had to encode it as an exponent, is what stays correct at that
+ /// scale. By the time `n` gets here it has already been rounded/truncated
+ /// down to at most `after` decimal digits if it had more, so `extra` below
+ /// is only ever adding, never needing to trim.
+ fn render_integer_padded(
+     n: &Number,
+     before: Option<u32>,
+     after: Option<u32>,
+-    oversize_value: &str,
++    oversize_value: &Number,
++    oversize_digits: u32,
+ ) -> Result<String, FormatError> {
+     let sign = if n.negative { "-" } else { "" };
+     let d: String = n.digits.iter().map(|x| (b'0' + x) as char).collect();
+ 
+     let (int_part, natural_dec) = if n.exponent >= 0 {
+         (format!("{d}{}", "0".repeat(n.exponent as usize)), None)
+     } else {
+         let point = n.digits.len() as i32 + n.exponent;
+         if point > 0 {
+             let point = point as usize;
+             (d[..point].to_string(), Some(d[point..].to_string()))
+         } else {
+@@ -599,29 +623,29 @@ fn render_integer_padded(
+             // and returns the three-billion-character result), and casting
+             // it to `i32` first can turn it negative, producing a spurious
+             // oversize error instead of the huge space-padding the
+             // interpreter actually shows.
+             //
+             // The error text substitutes the requested `before` itself, not
+             // the space actually available after the sign -- confirmed with
+             // `format(-123.456, 3)`, which reports "too large for 3 spaces"
+             // even though only 2 of those 3 are usable once the sign is set
+             // aside.
+             let available = i64::from(before) - i64::from(n.negative);
+             if available < needed {
+-                return Err(FormatError::BeforeOversize(crate::error_text(
+-                    93,
+-                    942,
+-                    &[oversize_value, &before.to_string()],
+-                )));
++                return Err(FormatError::BeforeOversize {
++                    value: oversize_value.clone(),
++                    digits: oversize_digits,
++                    before,
++                });
+             }
+             (available - needed) as usize
+         }
+     };
+ 
+     let mut out = String::with_capacity(pad + sign.len() + int_part.len() + 1 + dec_part.as_ref().map_or(0, String::len));
+     out.push_str(&" ".repeat(pad));
+     out.push_str(sign);
+     out.push_str(&int_part);
+     if let Some(dp) = dec_part {
+         out.push('.');
+         out.push_str(&dp);
+diff --git a/rust/crates/rexx-num/src/lib.rs b/rust/crates/rexx-num/src/lib.rs
+index 963758e1..b923e726 100644
+--- a/rust/crates/rexx-num/src/lib.rs
++++ b/rust/crates/rexx-num/src/lib.rs
+@@ -32,113 +32,191 @@ pub use format::FormatError;
+ 
+ /// Rexx's default `NUMERIC DIGITS`.
+ pub const DEFAULT_DIGITS: u32 = 9;
+ 
+ /// The largest adjusted exponent a Rexx number may have. Beyond this a
+ /// literal will not convert (error 41) and an arithmetic result overflows
+ /// (error 42). `Numerics.hpp:113`.
+ pub const MAX_EXPONENT: i32 = 999_999_999;
+ pub const MIN_EXPONENT: i32 = -999_999_999;
+ 
+ /// What arithmetic can fail with, carrying the interpreter's error numbers.
+ ///
++/// Each variant carries its substitution *values*, typed naturally, rather
++/// than pre-rendered text: `message()` renders from the generated table on
++/// demand, and `additional()` exposes those same values in the interpreter's
++/// own order -- what `condition('o')~additional` would return for this
++/// failure. That is not a style choice: a Rexx program that reads
++/// `condition('o')~additional` directly needs the raw values back, and they
++/// cannot be recovered from spliced text once it has been joined into a
++/// sentence.
++///
+ /// Originally two of these (`Overflow`, `NotWholeNumber`) were bare unit
+ /// variants covering several distinct C++ sub-messages at once, because
+ /// `muldiv.rs`/`pow.rs` were off limits when the message table was first
+-/// wired up. Now that they are not, each raise site gets its own variant
+-/// carrying its own confirmed text -- see `message`'s doc comment for the
+-/// one case (`PowerOverflow`/`PowerExponentNotWhole`) that still cannot be
+-/// made byte-exact, and why.
++/// wired up. Now every raise site has its own variant -- see `message`'s
++/// doc comment for the one case (`PowerOverflow`/`PowerExponentNotWhole`)
++/// whose *values* still cannot be made byte-exact, and why.
+ #[derive(Clone, PartialEq, Eq, Debug)]
+ pub enum ArithError {
+-    /// Result exponent outside +/- MAX_EXPONENT, from `mul`/`div`/`add`/
+-    /// `sub`/`pow`'s shared final range check (`check_range`, below). Error
+-    /// 42.901 (over) or 42.902 (under).
+-    Overflow(String),
++    /// Result exponent above `MAX_EXPONENT`, from `mul`/`div`/`add`/`sub`/
++    /// `pow`'s shared final range check (`check_range`, below). Error
++    /// 42.901; `additional()` is `[adjusted_exponent, "9"]`.
++    Overflow { adjusted_exponent: i32 },
++    /// Result exponent below `MIN_EXPONENT`, same call sites as `Overflow`.
++    /// Error 42.902; `additional()` is `[exponent, "9"]` -- the *raw*
++    /// exponent, not the adjusted one `Overflow` uses.
++    Underflow { exponent: i32 },
+     /// Zero raised to a negative power: an underflow, not infinity. Error
+     /// 42.903, no substitution. Raised only by `pow.rs`.
+     ZeroToNegativePower,
+     /// `**`'s own upfront magnitude check, refusing a hopeless computation
+-    /// before attempting it. Error 42.001. Raised only by `pow.rs`.
+-    PowerOverflow(String),
++    /// before attempting it. Error 42.001; `additional()` is `[base, "**",
++    /// exponent]`. Raised only by `pow.rs`.
++    PowerOverflow { base: Number, exponent: Number },
+     /// A zero divisor, for `/`, `%`, or `//` alike. Error 42.003, no
+     /// substitution.
+     DivideByZero,
++    /// Three `checked_add`/`checked_sub` guards in `muldiv.rs`, believed
++    /// unreachable (both operand exponents are already bounded to
++    /// +/-`MAX_EXPONENT`, so their sum/difference cannot overflow `i32` in
++    /// practice). No substitution, because there is no valid exponent left
++    /// to report if this ever does fire -- that is the failure itself.
++    /// Falls back to the bare 42.000 text, which the interpreter itself
++    /// never emits (grepped: no `reportException` call uses bare
++    /// `Error_Overflow`).
++    ExponentComputationOverflow,
+     /// `%`'s quotient needs more digits than DIGITS allows. Error 26.011,
+     /// no substitution. Raised only by `muldiv.rs`'s `div`.
+     IntegerDivideNotWhole,
+     /// `//`'s quotient needs more digits than DIGITS allows. Error 26.012,
+     /// no substitution. Raised only by `muldiv.rs`'s `div`.
+     RemainderNotWhole,
+     /// `**`'s exponent, after rounding to DIGITS, is not a whole number.
+-    /// Error 26.008. Raised only by `pow.rs`.
+-    PowerExponentNotWhole(String),
++    /// Error 26.008; `additional()` is `[exponent]`. Raised only by
++    /// `pow.rs`.
++    PowerExponentNotWhole { exponent: Number },
+ }
+ 
+ impl ArithError {
+     pub fn code(self) -> u16 {
+         match self {
+-            ArithError::Overflow(_)
++            ArithError::Overflow { .. }
++            | ArithError::Underflow { .. }
+             | ArithError::ZeroToNegativePower
+-            | ArithError::PowerOverflow(_)
+-            | ArithError::DivideByZero => 42,
++            | ArithError::PowerOverflow { .. }
++            | ArithError::DivideByZero
++            | ArithError::ExponentComputationOverflow => 42,
+             ArithError::IntegerDivideNotWhole
+             | ArithError::RemainderNotWhole
+-            | ArithError::PowerExponentNotWhole(_) => 26,
++            | ArithError::PowerExponentNotWhole { .. } => 26,
+         }
+     }
+ 
+-    /// The interpreter's message text for this failure, each sub-message
+-    /// verified against `build/bin/rexx`.
++    /// The `(major, sub)` pair identifying this failure's exact entry in
++    /// the generated message table -- `code()` only ever exposes `major`
++    /// (the interpreter number a trapped Rexx program sees in `RC`), so
++    /// `message`/`additional` need this to pick the right table row.
++    fn sub_code(&self) -> (u16, u16) {
++        match self {
++            ArithError::Overflow { .. } => (42, 901),
++            ArithError::Underflow { .. } => (42, 902),
++            ArithError::ZeroToNegativePower => (42, 903),
++            ArithError::PowerOverflow { .. } => (42, 1),
++            ArithError::DivideByZero => (42, 3),
++            ArithError::ExponentComputationOverflow => (42, 0),
++            ArithError::IntegerDivideNotWhole => (26, 11),
++            ArithError::RemainderNotWhole => (26, 12),
++            ArithError::PowerExponentNotWhole { .. } => (26, 8),
++        }
++    }
++
++    /// The substitution values in the interpreter's own order -- what
++    /// `condition('o')~additional` returns for this failure: `[5, 10]` for
++    /// a `FuzzNotBelowDigits`-shaped 33.001, `[]` (an *empty* array, not
++    /// absent) for a no-substitution message like `DivideByZero`.
++    ///
++    /// `PowerOverflow`/`PowerExponentNotWhole` render `base`/`exponent` at
++    /// their own full stored precision (`digits.len()` significant digits,
++    /// via `full_precision`) rather than this crate's usual 9-digit
++    /// default -- see `message`'s doc comment for why even that is not
++    /// exact in general.
++    pub fn additional(&self) -> Vec<String> {
++        match self {
++            ArithError::Overflow { adjusted_exponent } => {
++                vec![adjusted_exponent.to_string(), "9".to_string()]
++            }
++            ArithError::Underflow { exponent } => vec![exponent.to_string(), "9".to_string()],
++            ArithError::PowerOverflow { base, exponent } => {
++                vec![full_precision(base), "**".to_string(), full_precision(exponent)]
++            }
++            ArithError::PowerExponentNotWhole { exponent } => vec![full_precision(exponent)],
++            ArithError::ZeroToNegativePower
++            | ArithError::DivideByZero
++            | ArithError::ExponentComputationOverflow
++            | ArithError::IntegerDivideNotWhole
++            | ArithError::RemainderNotWhole => vec![],
++        }
++    }
++
++    /// The interpreter's message text for this failure, rendered from the
++    /// generated table on demand -- every sub-message verified against
++    /// `build/bin/rexx`.
+     ///
+     /// `DivideByZero` (42.003), `IntegerDivideNotWhole` (26.011),
+     /// `RemainderNotWhole` (26.012), and `ZeroToNegativePower` (42.903) take
+     /// no substitution and are exact: confirmed with `1 / 0`, `123456 % 2`
+-    /// and `123456 // 2` at DIGITS 3, and `0 ** -1`.
+-    ///
+-    /// `Overflow`'s text is built where it is raised, in `check_range`
+-    /// below, because both substitutions come from the out-of-range
+-    /// `Number` itself and that is the only place that still has it.
++    /// and `123456 // 2` at DIGITS 3, and `0 ** -1`. `Overflow`/`Underflow`
++    /// are exact too -- confirmed with a mul overflow and a div underflow,
++    /// and separately that &2 stays the literal `"9"` at DIGITS 9, 15, and
++    /// 20 alike (`Numerics::DEFAULT_DIGITS` is a fixed C++ constant, not the
++    /// active `NUMERIC DIGITS`).
+     ///
+     /// `PowerOverflow` (42.001, "...detected at: \"BASE**EXP\".") and
+     /// `PowerExponentNotWhole` (26.008, "...found \"EXP\".") substitute the
+     /// base and/or exponent **as originally written in the Rexx source**,
+     /// not this crate's canonical rendering of them -- confirmed two ways:
+     /// `1e10 ** 200000000000` reports the base as `"1E10"` (no `+`, the
+     /// literal's own spelling) where this crate's `Number::format` would
+     /// print `"1E+10"`; and `123.456789012345678 ** 999999999` at DIGITS 15
+     /// reports the base at its full 18-digit original precision, not
+     /// rounded to the active DIGITS. A `Number` has already discarded that
+     /// original spelling by the time `pow.rs` sees it (`Number::parse`
+-    /// normalises sign/digits/exponent and nothing else survives), and nothing
+-    /// in this task's scope threads the source text through, so these two
+-    /// render the base/exponent at full stored precision
+-    /// (`digits.len()` significant digits, not the default 9) rather than
+-    /// DIGITS-rounded -- closer than the alternative, but still provably
+-    /// wrong whenever the original had a leading zero, no `+` after `E`, a
++    /// normalises sign/digits/exponent and nothing else survives), and
++    /// nothing in this crate's scope threads the source text through, so
++    /// `additional()` renders the base/exponent at full stored precision
++    /// instead -- closer than the 9-digit default, but still provably wrong
++    /// whenever the original had a leading zero, no `+` after `E`, a
+     /// different exponent-marker case, or other spelling `Number` does not
+-    /// preserve.
++    /// preserve. This is a limitation of the *value*, not just its text --
++    /// there is no exact `Number`/text to hand back through `additional()`
++    /// either, because the exact one was never kept.
+     pub fn message(&self) -> String {
+-        match self {
+-            ArithError::Overflow(m) | ArithError::PowerOverflow(m) | ArithError::PowerExponentNotWhole(m) => {
+-                m.clone()
+-            }
+-            ArithError::ZeroToNegativePower => error_text(42, 903, &[]),
+-            ArithError::DivideByZero => error_text(42, 3, &[]),
+-            ArithError::IntegerDivideNotWhole => error_text(26, 11, &[]),
+-            ArithError::RemainderNotWhole => error_text(26, 12, &[]),
+-        }
++        let (major, sub) = self.sub_code();
++        let subs = self.additional();
++        let refs: Vec<&str> = subs.iter().map(String::as_str).collect();
++        error_text(major, sub, &refs)
+     }
+ }
+ 
++/// Renders `n` using every digit it stores, rather than the `DEFAULT_DIGITS`
++/// (9) `Number::format`/`Display` uses. Only for `ArithError` substitutions
++/// that echo an operand back -- see `ArithError::message`'s doc comment for
++/// why even this cannot be byte-exact against the interpreter in general
++/// (it fixes needless rounding, not a `Number`'s already-lost original
++/// spelling: no `+` after `E`, leading zeros, and so on).
++fn full_precision(n: &Number) -> String {
++    n.format(n.digits.len() as u32)
++}
++
+ /// Fills `&1`, `&2`, … placeholders in a generated-table message with
+ /// `subs`, in the order the interpreter's own substitution positions use.
+ /// `rexx-inventory`'s table keeps them literal -- see its build script's
+ /// `<Sub position="N"/>` rendering rule -- so filling them in is this
+ /// crate's job, not the generator's.
+ ///
+ /// A single left-to-right pass over `text`, copying `subs` in without ever
+ /// re-scanning what was just copied. Doing this with `str::replace` per
+ /// placeholder instead (as an earlier version did) re-scans the whole
+ /// string on every call, so a substitution value that itself contains `&2`
+ /// gets mangled by the very next replacement: `substitute("… &1 … &2",
+ /// &["&2", "X"])` should read `"… &2 … X"`, but sequential replacement first
+@@ -350,46 +428,43 @@ impl Number {
+     ///
+     /// The two ends are tested against different exponents, which is the same
+     /// asymmetry the display thresholds use. The most significant digit sits
+     /// at the *adjusted* exponent and must not exceed the maximum; the least
+     /// significant sits at the *raw* exponent and must not fall below the
+     /// minimum. Testing one exponent at both ends accepts numbers the
+     /// interpreter rejects -- `123456789e999999999` at the top,
+     /// `.96329e-999999995` at the bottom.
+     pub(crate) fn in_range(&self) -> bool {
+         self.adjusted_exponent() <= MAX_EXPONENT && self.exponent >= MIN_EXPONENT
+     }
+ 
+-    /// Fails with `Overflow` when an arithmetic result has run outside the
+-    /// representable range, which the interpreter reports as error 42.
++    /// Fails with `Overflow`/`Underflow` when an arithmetic result has run
++    /// outside the representable range, which the interpreter reports as
++    /// error 42.
+     ///
+     /// Mirrors `NumberStringBase::checkOverflow` (`NumberStringClass.cpp:316`)
+-    /// exactly, including its priority (the upper bound is checked first)
+-    /// and one easy-to-miss detail: &2 in both 42.901 and 42.902 is always
+-    /// the literal `"9"` -- `Numerics::DEFAULT_DIGITS`, a fixed compile-time
+-    /// constant in the C++, not the active `NUMERIC DIGITS` setting.
+-    /// Confirmed by provoking the same overflow at DIGITS 9 and DIGITS 15
+-    /// and getting back identical text both times ("...exceeds 9 digits."
+-    /// either way). &1 is the adjusted exponent for the overflow case
+-    /// (42.901) but the *raw* exponent for underflow (42.902) -- confirmed
+-    /// with a division that underflows, whose message substitutes the raw
+-    /// exponent, not the adjusted one.
++    /// exactly, including its priority (the upper bound is checked first).
++    /// See `ArithError::Overflow`/`Underflow`'s doc comments for the &2 ==
++    /// `"9"` detail and the adjusted-vs-raw exponent distinction between the
++    /// two -- this only needs to pick the variant and hand it the one field
++    /// each carries; the message rendering that used to happen here now
++    /// happens on demand, in `ArithError::message`.
+     pub(crate) fn check_range(self) -> Result<Self, ArithError> {
+         if self.is_zero() || self.in_range() {
+             return Ok(self);
+         }
+         if self.adjusted_exponent() > MAX_EXPONENT {
+-            Err(ArithError::Overflow(error_text(42, 901, &[&self.adjusted_exponent().to_string(), "9"])))
++            Err(ArithError::Overflow { adjusted_exponent: self.adjusted_exponent() })
+         } else {
+-            Err(ArithError::Overflow(error_text(42, 902, &[&self.exponent.to_string(), "9"])))
++            Err(ArithError::Underflow { exponent: self.exponent })
+         }
+     }
+ 
+     /// Strips leading zeros and collapses any zero to the canonical form.
+     pub(crate) fn assemble(negative: bool, mut digits: Vec<u8>, exponent: i32) -> Self {
+         if digits.iter().all(|d| *d == 0) {
+             return Number::zero();
+         }
+         let lead = digits.iter().take_while(|d| **d == 0).count();
+         digits.drain(..lead);
+         Number { negative, digits, exponent }
+     }
+diff --git a/rust/crates/rexx-num/src/muldiv.rs b/rust/crates/rexx-num/src/muldiv.rs
+index ed8ace00..d077f007 100644
+--- a/rust/crates/rexx-num/src/muldiv.rs
++++ b/rust/crates/rexx-num/src/muldiv.rs
+@@ -33,36 +33,33 @@ impl Number {
+ 
+         // Anything beyond DIGITS + 1 digits is dropped from the low end and
+         // its count folded into the exponent; the extra digit is what the
+         // final rounding then looks at.
+         let (kept, extra) = if product.len() > digits_usize {
+             let keep = digits_usize + 1;
+             (product[..keep.min(product.len())].to_vec(), product.len() - keep)
+         } else {
+             (product, 0)
+         };
+ 
+         // Checked, not wrapping: two operands near the exponent limit
+-        // multiply to something well outside i32. Both operand exponents
+-        // are already bounded to +/-MAX_EXPONENT by `Number::parse`/
+-        // `check_range`, so their sum plus a handful of shifted digits
+-        // stays comfortably inside i32 -- this is believed unreachable in
+-        // practice. If it ever does fire there is no valid exponent left to
+-        // report (that is the failure itself), so this reports the bare
+-        // major-code text rather than inventing a number for it.
++        // multiply to something well outside i32. See
++        // `ArithError::ExponentComputationOverflow`'s doc comment for why
++        // this is believed unreachable, and what it falls back to if it
++        // ever isn't.
+         let exponent = left
+             .exponent
+             .checked_add(right.exponent)
+             .and_then(|e| e.checked_add(extra as i32))
+-            .ok_or_else(|| ArithError::Overflow(crate::error_text(42, 0, &[])))?;
++            .ok_or(ArithError::ExponentComputationOverflow)?;
+         let negative = left.negative != right.negative;
+         let raw = Number { negative, digits: kept, exponent };
+         let rounded = raw.round_to(digits);
+         Number::assemble(rounded.negative, rounded.digits, rounded.exponent).check_range()
+     }
+ }
+ 
+ /// Exact product of two digit vectors, most significant first.
+ ///
+ /// Leading zeros are stripped. The C++ derives its accumulator length from a
+ /// pointer to the first significant digit, so a product that does not carry
+ /// into the top position simply has one fewer digit -- unlike subtraction,
+@@ -104,58 +101,57 @@ impl Number {
+         if other.is_zero() {
+             return Err(ArithError::DivideByZero);
+         }
+         if self.is_zero() {
+             return Ok(Number::zero());
+         }
+ 
+         let left = self.truncated_to(digits as usize + 1);
+         let right = other.truncated_to(digits as usize + 1);
+         let negative = left.negative != right.negative;
+ 
+         // The interpreter's estimate of where the quotient's first digit
+-        // lands, from the operand exponents and lengths. Same "believed
+-        // unreachable, no valid exponent to report if it ever fires" case
+-        // as `mul`'s guard above.
++        // lands, from the operand exponents and lengths. Same believed-
++        // unreachable guard as `mul`'s above.
+         let calc_exp = left
+             .exponent
+             .checked_sub(right.exponent)
+             .and_then(|e| e.checked_add(left.digits.len() as i32 - right.digits.len() as i32))
+-            .ok_or_else(|| ArithError::Overflow(crate::error_text(42, 0, &[])))?;
++            .ok_or(ArithError::ExponentComputationOverflow)?;
+ 
+         // A quotient below 1 has no integer part, so % is zero and // is the
+         // left operand unchanged.
+         if calc_exp < 0 && op != DivOp::Divide {
+             return Ok(match op {
+                 DivOp::IntegerDivide => Number::zero(),
+                 _ => {
+                     let mut r = left.clone();
+                     r.negative = self.negative && !r.is_zero();
+                     r
+                 }
+             });
+         }
+ 
+         // Long-divide the digit strings, generating one more digit than
+         // DIGITS so the final rounding has something to look at.
+         let want = digits as usize + 1;
+         let (mut q, rem, shift) = long_divide(&left.digits, &right.digits, want);
+ 
+         // value = q * 10^(left.exponent - right.exponent - shift). Same
+-        // "believed unreachable" guard as the two above.
++        // believed-unreachable guard as the two above.
+         let q_exp = left
+             .exponent
+             .checked_sub(right.exponent)
+             .and_then(|e| e.checked_sub(shift))
+-            .ok_or_else(|| ArithError::Overflow(crate::error_text(42, 0, &[])))?;
++            .ok_or(ArithError::ExponentComputationOverflow)?;
+ 
+         if op == DivOp::Divide {
+             let raw = Number { negative, digits: q, exponent: q_exp };
+             // The range check goes after rounding but BEFORE the trailing
+             // zeros come off. Those zeros are significant to the check: a
+             // quotient of 1.0120 sits one power of ten lower than the 1.012
+             // it prints as, and that is the difference between representable
+             // and not.
+             let mut rounded = raw.round_to(digits).check_range()?;
+             // Division strips trailing zeros; `1 / 7.7` at DIGITS 3 is 0.13,
+             // not 0.130. Addition and the remainder operators do the
+             // opposite and keep them -- `1.50 + 0.50` is 2.00 and
+diff --git a/rust/crates/rexx-num/src/pow.rs b/rust/crates/rexx-num/src/pow.rs
+index 1cc30f04..710c3b42 100644
+--- a/rust/crates/rexx-num/src/pow.rs
++++ b/rust/crates/rexx-num/src/pow.rs
+@@ -7,34 +7,24 @@
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! The `**` operator.
+ //!
+ //! Ported from `NumberString::power` (`NumberStringMath2.cpp:811`).
+ 
+ use crate::muldiv::{strip_leading, subtract_multiple};
+ use crate::{ArithError, MAX_EXPONENT, Number};
+ 
+-/// Renders `n` using every digit it stores, rather than the `DEFAULT_DIGITS`
+-/// (9) `Number::format`/`Display` uses. Only for `ArithError` substitutions
+-/// that echo an operand back -- see `ArithError::message`'s doc comment for
+-/// why even this cannot be byte-exact against the interpreter in general
+-/// (it fixes needless rounding, not a `Number`'s already-lost original
+-/// spelling: no `+` after `E`, leading zeros, and so on).
+-fn full_precision(n: &Number) -> String {
+-    n.format(n.digits.len() as u32)
+-}
+-
+ impl Number {
+     /// The value one.
+     pub fn one() -> Number {
+         Number::parse("1").expect("1 is a number")
+     }
+ 
+     /// Interprets this number as a whole number expressible within `digits`
+     /// significant digits, which is what `**` requires of its exponent.
+     ///
+     /// The value is **rounded to `digits` first**, and only then required to
+     /// be whole. That is why `2 ** 2.5` is error 26 at DIGITS 9 but `8` at
+     /// DIGITS 1, where 2.5 rounds to 3.
+@@ -67,61 +57,56 @@ impl Number {
+             value = value.checked_mul(10)?.checked_add(*d as i64)?;
+         }
+         for _ in 0..self_.exponent.max(0) {
+             value = value.checked_mul(10)?;
+         }
+         for _ in 0..(-self_.exponent).max(0) {
+             value /= 10;
+         }
+         Some(if self_.negative { -value } else { value })
+     }
+ 
+     pub fn pow(&self, exponent: &Number, digits: u32) -> Result<Number, ArithError> {
+-        // 26.008 substitutes the exponent as originally written, which this
+-        // crate cannot reproduce exactly (see `ArithError::message`'s doc
+-        // comment) -- `full_precision` is the closest approximation, using
+-        // every digit `exponent` stores rather than this crate's usual
+-        // 9-digit default.
++        // `additional()` renders 26.008's substitution from `exponent` at
++        // its own full precision, which is the closest this crate can get
++        // to the interpreter's "as originally written" text -- see
++        // `ArithError::message`'s doc comment.
+         let power = exponent
+             .as_whole(digits)
+-            .ok_or_else(|| ArithError::PowerExponentNotWhole(crate::error_text(26, 8, &[&full_precision(exponent)])))?;
++            .ok_or_else(|| ArithError::PowerExponentNotWhole { exponent: exponent.clone() })?;
+         let negative_power = power < 0;
+         let power = power.unsigned_abs();
+ 
+         let left = self.truncated_to(digits as usize + 1);
+ 
+         if left.is_zero() {
+             // Zero to a negative power is an underflow, not infinity. Error
+             // 42.903, no substitution -- confirmed with `0 ** -1`.
+             if negative_power {
+                 return Err(ArithError::ZeroToNegativePower);
+             }
+             // Rexx defines 0**0 as 1, though mathematically it is undefined.
+             return Ok(if power == 0 { Number::one() } else { Number::zero() });
+         }
+ 
+         // The magnitude of the result is knowable up front, so a hopeless
+         // computation is refused before it is attempted. Error 42.001,
+         // substituting the base, the literal "**", and the exponent --
+         // confirmed with `100 ** 999999999` and, to catch the base/exponent
+         // getting rounded to this crate's default precision instead of
+         // their own, `123456789012345678 ** 999999999` at DIGITS 15 (which
+         // still reports the base at its full 18-digit precision).
+         let magnitude = (left.adjusted_exponent().unsigned_abs() as u64).saturating_mul(power);
+         if magnitude > MAX_EXPONENT as u64 {
+-            return Err(ArithError::PowerOverflow(crate::error_text(
+-                42,
+-                1,
+-                &[&full_precision(self), "**", &full_precision(exponent)],
+-            )));
++            return Err(ArithError::PowerOverflow { base: self.clone(), exponent: exponent.clone() });
+         }
+ 
+         if power == 0 {
+             return Ok(Number::one());
+         }
+ 
+         // Working precision is raised by the number of decimal digits in the
+         // exponent, plus one, so the repeated squaring does not accumulate
+         // visible error.
+         let extra = power.to_string().len() as u32;
+         let work = digits + extra + 1;
+ 
+diff --git a/rust/crates/rexx-num/src/settings.rs b/rust/crates/rexx-num/src/settings.rs
+index e2ff355b..dcc65534 100644
+--- a/rust/crates/rexx-num/src/settings.rs
++++ b/rust/crates/rexx-num/src/settings.rs
+@@ -15,57 +15,89 @@
+ //! `rust/corpus/num/settings.rex`.
+ 
+ use crate::Number;
+ 
+ #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+ pub enum Form {
+     Scientific,
+     Engineering,
+ }
+ 
+ #[derive(Clone, PartialEq, Eq, Debug)]
+ pub enum SettingsError {
+-    /// Not a positive whole number (`DIGITS`), or negative (`FUZZ`). Carries
+-    /// the interpreter's exact message text -- DIGITS and FUZZ get
+-    /// different sub-messages for the same code (26.005 vs 26.006, confirmed
+-    /// by provoking `NUMERIC DIGITS abc` and `NUMERIC FUZZ -1`), which the
+-    /// shared variant name alone can't tell apart, so each raise site below
+-    /// renders its own.
+-    NotWholeNumber(String),
++    /// `DIGITS` was not a positive whole number. Error 26.005; `additional()`
++    /// is `[found]`. Confirmed with `NUMERIC DIGITS abc`.
++    DigitsNotWhole { found: String },
++    /// `FUZZ` was negative, or not a whole number -- the same code as
++    /// `DigitsNotWhole` (26) but a different sub-message (26.006 vs 26.005),
++    /// which is exactly why this is its own variant rather than one shared
++    /// `NotWholeNumber` with no way to tell the two apart. `additional()` is
++    /// `[found]`. Confirmed with `NUMERIC FUZZ -1`.
++    FuzzNotWhole { found: String },
+     /// `FUZZ` would not be strictly less than `DIGITS`. Raised whichever of
+-    /// the two is the one being set. Error 33.001.
+-    FuzzNotBelowDigits(String),
+-    /// A `FORM` that is neither `SCIENTIFIC` nor `ENGINEERING`. Error 25.011.
+-    InvalidForm(String),
++    /// the two is the one being set. Error 33.001; `additional()` is
++    /// `[digits, fuzz]` -- the pending pair the setting would end up with
++    /// (the just-rejected candidate for whichever is being set, the
++    /// unchanged stored value for the other), not necessarily either's
++    /// current field on `self`.
++    FuzzNotBelowDigits { digits: u32, fuzz: u32 },
++    /// A `FORM` that is neither `SCIENTIFIC` nor `ENGINEERING`. Error 25.011;
++    /// `additional()` is `[found]`.
++    InvalidForm { found: String },
+ }
+ 
+ impl SettingsError {
+     /// The interpreter's error number. These are part of the contract, not an
+     /// implementation detail -- programs trap on them.
+     pub fn code(&self) -> u16 {
+         match self {
+-            SettingsError::InvalidForm(_) => 25,
+-            SettingsError::NotWholeNumber(_) => 26,
+-            SettingsError::FuzzNotBelowDigits(_) => 33,
++            SettingsError::InvalidForm { .. } => 25,
++            SettingsError::DigitsNotWhole { .. } | SettingsError::FuzzNotWhole { .. } => 26,
++            SettingsError::FuzzNotBelowDigits { .. } => 33,
+         }
+     }
+ 
+-    /// The interpreter's exact message text, substitutions already filled.
+-    pub fn message(&self) -> &str {
++    /// The `(major, sub)` pair identifying this failure's exact table row --
++    /// see `ArithError::sub_code`'s doc comment for why `code()` alone
++    /// isn't enough.
++    fn sub_code(&self) -> (u16, u16) {
+         match self {
+-            SettingsError::NotWholeNumber(m)
+-            | SettingsError::FuzzNotBelowDigits(m)
+-            | SettingsError::InvalidForm(m) => m,
++            SettingsError::InvalidForm { .. } => (25, 11),
++            SettingsError::DigitsNotWhole { .. } => (26, 5),
++            SettingsError::FuzzNotWhole { .. } => (26, 6),
++            SettingsError::FuzzNotBelowDigits { .. } => (33, 1),
+         }
+     }
++
++    /// The substitution values in the interpreter's own order -- what
++    /// `condition('o')~additional` would return for this failure.
++    pub fn additional(&self) -> Vec<String> {
++        match self {
++            SettingsError::DigitsNotWhole { found }
++            | SettingsError::FuzzNotWhole { found }
++            | SettingsError::InvalidForm { found } => vec![found.clone()],
++            SettingsError::FuzzNotBelowDigits { digits, fuzz } => {
++                vec![digits.to_string(), fuzz.to_string()]
++            }
++        }
++    }
++
++    /// The interpreter's message text, rendered from the generated table on
++    /// demand.
++    pub fn message(&self) -> String {
++        let (major, sub) = self.sub_code();
++        let subs = self.additional();
++        let refs: Vec<&str> = subs.iter().map(String::as_str).collect();
++        crate::error_text(major, sub, &refs)
++    }
+ }
+ 
+ #[derive(Clone, PartialEq, Eq, Debug)]
+ pub struct Settings {
+     digits: u32,
+     fuzz: u32,
+     form: Form,
+ }
+ 
+ impl Default for Settings {
+     fn default() -> Self {
+         Settings { digits: crate::DEFAULT_DIGITS, fuzz: 0, form: Form::Scientific }
+@@ -91,71 +123,63 @@ impl Settings {
+         self.digits
+     }
+ 
+     pub fn fuzz(&self) -> u32 {
+         self.fuzz
+     }
+ 
+     pub fn form(&self) -> Form {
+         self.form
+     }
+ 
+     pub fn set_digits_str(&mut self, text: &str) -> Result<(), SettingsError> {
+-        // 26.005 substitutes the raw text the caller passed, unmodified --
+-        // confirmed with a lowercase variable (`x = "abc"`) that the
+-        // interpreter echoes back without uppercasing it.
+-        let not_whole = || SettingsError::NotWholeNumber(crate::error_text(26, 5, &[text]));
++        // `found` is the raw text the caller passed, unmodified -- confirmed
++        // with a lowercase variable (`x = "abc"`) that the interpreter
++        // echoes back without uppercasing it.
++        let not_whole = || SettingsError::DigitsNotWhole { found: text.to_string() };
+         let value = whole_number(text).ok_or_else(not_whole)?;
+         if value < 1 || value > crate::MAX_EXPONENT as i64 {
+             return Err(not_whole());
+         }
+         let value = u32::try_from(value).map_err(|_| not_whole())?;
+         if value <= self.fuzz {
+-            // 33.001 substitutes the DIGITS/FUZZ pair the setting would end
+-            // up with, not necessarily either's stored value: the candidate
+-            // here (not yet committed to `self.digits`) and the unchanged
+-            // `self.fuzz` -- confirmed with `NUMERIC FUZZ 5` then `NUMERIC
+-            // DIGITS 3`, which reports "(\"3\") ... (\"5\")".
+-            return Err(SettingsError::FuzzNotBelowDigits(crate::error_text(
+-                33,
+-                1,
+-                &[&value.to_string(), &self.fuzz.to_string()],
+-            )));
++            // The pending DIGITS/FUZZ pair, not necessarily either's stored
++            // value: the candidate here (not yet committed to `self.digits`)
++            // and the unchanged `self.fuzz` -- confirmed with `NUMERIC FUZZ
++            // 5` then `NUMERIC DIGITS 3`, which reports "(\"3\") ...
++            // (\"5\")".
++            return Err(SettingsError::FuzzNotBelowDigits { digits: value, fuzz: self.fuzz });
+         }
+         self.digits = value;
+         Ok(())
+     }
+ 
+     pub fn set_fuzz_str(&mut self, text: &str) -> Result<(), SettingsError> {
+-        let not_whole = || SettingsError::NotWholeNumber(crate::error_text(26, 6, &[text]));
++        let not_whole = || SettingsError::FuzzNotWhole { found: text.to_string() };
+         let value = whole_number(text).ok_or_else(not_whole)?;
+         if value < 0 {
+             return Err(not_whole());
+         }
+         let value = u32::try_from(value).map_err(|_| not_whole())?;
+         if value >= self.digits {
+             // Same substitution rule as `set_digits_str`, mirrored: the
+             // unchanged `self.digits` and the rejected candidate fuzz --
+             // confirmed with `NUMERIC DIGITS 5` then `NUMERIC FUZZ 10`,
+             // which reports "(\"5\") ... (\"10\")".
+-            return Err(SettingsError::FuzzNotBelowDigits(crate::error_text(
+-                33,
+-                1,
+-                &[&self.digits.to_string(), &value.to_string()],
+-            )));
++            return Err(SettingsError::FuzzNotBelowDigits { digits: self.digits, fuzz: value });
+         }
+         self.fuzz = value;
+         Ok(())
+     }
+ 
+     pub fn set_form_str(&mut self, text: &str) -> Result<(), SettingsError> {
+         // The interpreter accepts any unambiguous case; these are the only
+         // two spellings it takes.
+         self.form = match text.to_ascii_uppercase().as_str() {
+             "SCIENTIFIC" => Form::Scientific,
+             "ENGINEERING" => Form::Engineering,
+-            // 25.011 substitutes the raw text too, same rule as 26.005/.006.
+-            _ => return Err(SettingsError::InvalidForm(crate::error_text(25, 11, &[text]))),
++            // `found` substitutes the raw text too, same rule as DIGITS/FUZZ.
++            _ => return Err(SettingsError::InvalidForm { found: text.to_string() }),
+         };
+         Ok(())
+     }
+ }
+diff --git a/rust/crates/rexx-num/tests/errors.rs b/rust/crates/rexx-num/tests/errors.rs
+index 83a52ec3..93751e58 100644
+--- a/rust/crates/rexx-num/tests/errors.rs
++++ b/rust/crates/rexx-num/tests/errors.rs
+@@ -1,144 +1,174 @@
+-//! `ArithError::message` -- the generated-table wiring for `lib.rs`'s error
+-//! type. Every sub-message is confirmed against `build/bin/rexx`, except
+-//! where noted: `PowerOverflow` and `PowerExponentNotWhole` substitute the
+-//! base/exponent as originally written in Rexx source, which this crate's
+-//! `Number` cannot reproduce exactly (see `ArithError::message`'s doc
+-//! comment) -- those two tests pin the closest achievable approximation,
+-//! not a byte-exact match.
++//! `ArithError::message`/`additional` -- the generated-table wiring for
++//! `lib.rs`'s error type. Every sub-message and substitution *value* is
++//! confirmed against `build/bin/rexx`, except where noted: `PowerOverflow`
++//! and `PowerExponentNotWhole` substitute the base/exponent as originally
++//! written in Rexx source, which this crate's `Number` cannot reproduce
++//! exactly (see `ArithError::message`'s doc comment) -- those two tests pin
++//! the closest achievable approximation, not a byte-exact match.
+ 
+ use rexx_num::{ArithError, DivOp, Number};
+ 
+ fn n(s: &str) -> Number {
+     Number::parse(s).unwrap()
+ }
+ 
+ #[test]
+ fn divide_by_zero_message_is_42_003() {
+     // Provoked with `signal on syntax name oops; r = 1 / 0`.
+     let err = n("1").div(&n("0"), 9, DivOp::Divide).unwrap_err();
+     assert_eq!(err, ArithError::DivideByZero);
+     assert_eq!(err.message(), "Arithmetic overflow; divisor must not be zero.");
++    assert_eq!(err.additional(), Vec::<String>::new());
+ }
+ 
+ #[test]
+ fn divide_by_zero_message_is_the_same_for_all_three_operators() {
+     // `NumberStringMath2.cpp:355` reports `Error_Overflow_zero` before
+     // branching on `/`, `%`, or `//`, so all three share this crate's single
+     // `DivideByZero` variant and therefore the same message.
+     for op in [DivOp::Divide, DivOp::IntegerDivide, DivOp::Remainder] {
+         assert_eq!(
+             n("1").div(&n("0"), 9, op).unwrap_err().message(),
+             "Arithmetic overflow; divisor must not be zero."
+         );
+     }
+ }
+ 
+ #[test]
+ fn general_overflow_message_is_42_901_substituting_the_adjusted_exponent_and_the_constant_9() {
+     // Provoked with `numeric digits 9; r = 9e999999999 * 9e999999999`.
+     let err = n("9e999999999").mul(&n("9e999999999"), 9).unwrap_err();
+-    assert!(matches!(err, ArithError::Overflow(_)));
++    assert!(matches!(err, ArithError::Overflow { adjusted_exponent: 1999999999 }));
++    assert_eq!(err.additional(), vec!["1999999999", "9"]);
+     assert_eq!(err.message(), "Arithmetic overflow; exponent (\"1999999999\") exceeds 9 digits.");
+ }
+ 
+ #[test]
+ fn general_overflow_message_uses_9_regardless_of_the_active_digits_setting() {
+     // &2 is `Numerics::DEFAULT_DIGITS`, a fixed C++ constant, not the active
+     // `NUMERIC DIGITS` -- confirmed by provoking the same overflow at DIGITS
+     // 9 and DIGITS 15 and getting back identical text ("...exceeds 9
+     // digits.") either way.
+     let err = n("9e999999999").mul(&n("9e999999999"), 15).unwrap_err();
++    assert_eq!(err.additional()[1], "9");
+     assert_eq!(err.message(), "Arithmetic overflow; exponent (\"1999999999\") exceeds 9 digits.");
+ }
+ 
+ #[test]
+ fn general_underflow_message_is_42_902_substituting_the_raw_exponent_not_the_adjusted_one() {
+     // Provoked with `numeric digits 9; r = 1e-999999990 / 1e20`.
+     let err = n("1e-999999990").div(&n("1e20"), 9, DivOp::Divide).unwrap_err();
+-    assert!(matches!(err, ArithError::Overflow(_)));
++    assert!(matches!(err, ArithError::Underflow { exponent: -1000000010 }));
++    assert_eq!(err.additional(), vec!["-1000000010", "9"]);
+     assert_eq!(err.message(), "Arithmetic underflow; exponent (\"-1000000010\") exceeds 9 digits.");
+ }
+ 
+ #[test]
+ fn zero_to_a_negative_power_message_is_42_903_no_substitution() {
+     // Provoked with `r = 0 ** -1`.
+     let err = n("0").pow(&n("-1"), 9).unwrap_err();
+     assert_eq!(err, ArithError::ZeroToNegativePower);
++    assert_eq!(err.additional(), Vec::<String>::new());
+     assert_eq!(err.message(), "Arithmetic underflow; zero raised to a negative power.");
+ }
+ 
+ #[test]
+ fn power_magnitude_precheck_message_is_42_001() {
+     // Provoked with `r = 100 ** 999999999`.
+     let err = n("100").pow(&n("999999999"), 9).unwrap_err();
+-    assert!(matches!(err, ArithError::PowerOverflow(_)));
++    assert!(matches!(err, ArithError::PowerOverflow { .. }));
++    assert_eq!(err.additional(), vec!["100", "**", "999999999"]);
+     assert_eq!(err.message(), "Arithmetic overflow detected at:  \"100**999999999\".");
+ }
+ 
+ #[test]
+ fn power_magnitude_precheck_message_renders_full_stored_precision_not_the_9_digit_default() {
+     // Provoked with `numeric digits 15; r = 123456789012345678 ** 999999999`
+     // -- the interpreter's own text keeps every one of the base's 18 digits
+     // (not rounded to the active DIGITS, and not truncated to this crate's
+     // usual 9-digit default rendering either). `Number` has already lost
+     // the base's *original spelling* (there is no exponential form or
+     // leading zero here to expose that), so this is the closest achievable
+     // match, not a claim of exactness in general -- see
+     // `ArithError::message`'s doc comment.
+     let base = n("123456789012345678");
+     let err = base.pow(&n("999999999"), 15).unwrap_err();
++    assert_eq!(err.additional()[0], "123456789012345678");
+     assert_eq!(
+         err.message(),
+         "Arithmetic overflow detected at:  \"123456789012345678**999999999\"."
+     );
+ }
+ 
+ #[test]
+ fn integer_divide_not_whole_message_is_26_011_no_substitution() {
+     // Provoked with `numeric digits 3; r = 123456 % 2`.
+     let err = n("123456").div(&n("2"), 3, DivOp::IntegerDivide).unwrap_err();
+     assert_eq!(err, ArithError::IntegerDivideNotWhole);
++    assert_eq!(err.additional(), Vec::<String>::new());
+     assert_eq!(err.message(), "Result of % operation did not result in a whole number.");
+ }
+ 
+ #[test]
+ fn remainder_not_whole_message_is_26_012_no_substitution() {
+     // Provoked with `numeric digits 3; r = 123456 // 2`.
+     let err = n("123456").div(&n("2"), 3, DivOp::Remainder).unwrap_err();
+     assert_eq!(err, ArithError::RemainderNotWhole);
++    assert_eq!(err.additional(), Vec::<String>::new());
+     assert_eq!(err.message(), "Result of // operation did not result in a whole number.");
+ }
+ 
+ #[test]
+ fn power_exponent_not_whole_message_is_26_008_substituting_the_exponent() {
+     // Provoked with `r = 2 ** 2.5`.
+     let err = n("2").pow(&n("2.5"), 9).unwrap_err();
+-    assert!(matches!(err, ArithError::PowerExponentNotWhole(_)));
++    assert!(matches!(err, ArithError::PowerExponentNotWhole { .. }));
++    assert_eq!(err.additional(), vec!["2.5"]);
+     assert_eq!(
+         err.message(),
+         "Operand to the right of the power operator (**) must be a whole number; found \"2.5\"."
+     );
+ }
+ 
+ #[test]
+ fn power_exponent_not_whole_message_substitutes_the_original_exponent_not_the_rounded_one() {
+     // Provoked with `numeric digits 3; r = 2 ** 1.23456` -- the message
+     // shows the full "1.23456", not "1.23" (what `as_whole` rounds to
+     // before checking wholeness).
+     let err = n("2").pow(&n("1.23456"), 3).unwrap_err();
++    assert_eq!(err.additional(), vec!["1.23456"]);
+     assert_eq!(
+         err.message(),
+         "Operand to the right of the power operator (**) must be a whole number; found \"1.23456\"."
+     );
+ }
+ 
+ #[test]
+ fn code_still_matches_every_variant_after_the_split() {
+     assert_eq!(n("1").div(&n("0"), 9, DivOp::Divide).unwrap_err().code(), 42);
+     assert_eq!(n("9e999999999").mul(&n("9e999999999"), 9).unwrap_err().code(), 42);
++    assert_eq!(n("1e-999999990").div(&n("1e20"), 9, DivOp::Divide).unwrap_err().code(), 42);
+     assert_eq!(n("0").pow(&n("-1"), 9).unwrap_err().code(), 42);
+     assert_eq!(n("100").pow(&n("999999999"), 9).unwrap_err().code(), 42);
+     assert_eq!(n("123456").div(&n("2"), 3, DivOp::IntegerDivide).unwrap_err().code(), 26);
+     assert_eq!(n("123456").div(&n("2"), 3, DivOp::Remainder).unwrap_err().code(), 26);
+     assert_eq!(n("2").pow(&n("2.5"), 9).unwrap_err().code(), 26);
+ }
++
++#[test]
++fn additional_and_message_agree_on_every_placeholder() {
++    // additional()'s values, joined into message()'s own text, must appear
++    // there verbatim -- the two are not allowed to drift apart. Covers
++    // every variant that carries substitutions.
++    let cases: Vec<ArithError> = vec![
++        n("9e999999999").mul(&n("9e999999999"), 9).unwrap_err(),
++        n("1e-999999990").div(&n("1e20"), 9, DivOp::Divide).unwrap_err(),
++        n("100").pow(&n("999999999"), 9).unwrap_err(),
++        n("2").pow(&n("2.5"), 9).unwrap_err(),
++    ];
++    for err in cases {
++        for sub in err.additional() {
++            assert!(err.message().contains(&sub), "{sub:?} missing from {:?}", err.message());
++        }
++    }
++}
+diff --git a/rust/crates/rexx-num/tests/format.rs b/rust/crates/rexx-num/tests/format.rs
+index 918aa810..0b018675 100644
+--- a/rust/crates/rexx-num/tests/format.rs
++++ b/rust/crates/rexx-num/tests/format.rs
+@@ -113,43 +113,43 @@ fn before_only_pads_or_rejects_the_integer_part() {
+     assert_eq!(fmt("-3.14159", 9, Form::Scientific, Some(6), None, None, None).unwrap(), "    -3.14159");
+     // Exact fit: no padding at all.
+     assert_eq!(fmt("123.456", 9, Form::Scientific, Some(3), None, None, None).unwrap(), "123.456");
+     assert_eq!(fmt("-123.456", 9, Form::Scientific, Some(4), None, None, None).unwrap(), "-123.456");
+ }
+ 
+ #[test]
+ fn before_zero_always_errors_even_for_a_single_integer_digit() {
+     // Zero itself still needs one digit of room; `before == 0` can never
+     // succeed.
+     assert!(matches!(
+         fmt("0", 9, Form::Scientific, Some(0), None, None, None),
+-        Err(FormatError::BeforeOversize(_))
++        Err(FormatError::BeforeOversize { .. })
+     ));
+     assert!(matches!(
+         fmt("0.5", 9, Form::Scientific, Some(0), None, None, None),
+-        Err(FormatError::BeforeOversize(_))
++        Err(FormatError::BeforeOversize { .. })
+     ));
+ }
+ 
+ #[test]
+ fn before_too_narrow_for_the_integer_part_is_error_93() {
+     assert!(matches!(
+         fmt("123.456", 9, Form::Scientific, Some(2), None, None, None),
+-        Err(FormatError::BeforeOversize(_))
++        Err(FormatError::BeforeOversize { .. })
+     ));
+-    assert_eq!(FormatError::BeforeOversize(String::new()).code(), 93);
++    assert_eq!(FormatError::BeforeOversize { value: n("0"), digits: 9, before: 1 }.code(), 93);
+     // A negative number needs one extra slot for the sign.
+     assert!(matches!(
+         fmt("-123.456", 9, Form::Scientific, Some(3), None, None, None),
+-        Err(FormatError::BeforeOversize(_))
++        Err(FormatError::BeforeOversize { .. })
+     ));
+     assert!(fmt("-123.456", 9, Form::Scientific, Some(4), None, None, None).is_ok());
+ }
+ 
+ #[test]
+ fn after_only_rounds_or_pads_the_decimal_part() {
+     assert_eq!(fmt("3.14159", 9, Form::Scientific, None, Some(2), None, None).unwrap(), "3.14");
+     assert_eq!(fmt("3.14159", 9, Form::Scientific, None, Some(0), None, None).unwrap(), "3");
+     assert_eq!(fmt("3", 9, Form::Scientific, None, Some(2), None, None).unwrap(), "3.00");
+     assert_eq!(fmt("3.1", 9, Form::Scientific, None, Some(5), None, None).unwrap(), "3.10000");
+     // Half-up rounding, not banker's rounding.
+     assert_eq!(fmt("3.145", 9, Form::Scientific, None, Some(2), None, None).unwrap(), "3.15");
+@@ -175,25 +175,25 @@ fn after_rounding_underflow_still_shows_the_requested_decimal_places() {
+     // empty digit vector to the canonical zero and loses `after`.
+     assert_eq!(fmt("0.001", 5, Form::Scientific, None, Some(2), None, None).unwrap(), "0.00");
+     assert_eq!(fmt("0.000012345", 5, Form::Scientific, None, Some(4), None, None).unwrap(), "0.0000");
+ }
+ 
+ #[test]
+ fn after_rounding_carry_can_grow_the_integer_part_before_before_is_checked() {
+     // 9.996 rounded to 2 decimals is 10.00 -- the `before` check sees the
+     // grown integer part, not the original.
+     assert_eq!(fmt("9.996", 9, Form::Scientific, Some(2), Some(2), None, None).unwrap(), "10.00");
+     assert!(matches!(
+         fmt("99.996", 9, Form::Scientific, Some(2), Some(2), None, None),
+-        Err(FormatError::BeforeOversize(_))
++        Err(FormatError::BeforeOversize { .. })
+     ));
+     assert_eq!(fmt("99.996", 9, Form::Scientific, Some(3), Some(2), None, None).unwrap(), "100.00");
+ }
+ 
+ #[test]
+ fn zero_never_goes_exponential_but_still_takes_before_and_after() {
+     assert_eq!(fmt("0", 9, Form::Scientific, Some(5), None, None, None).unwrap(), "    0");
+     assert_eq!(fmt("0", 9, Form::Scientific, Some(5), Some(2), None, None).unwrap(), "    0.00");
+     assert_eq!(fmt("0", 9, Form::Scientific, None, None, None, Some(0)).unwrap(), "0");
+ }
+ 
+ #[test]
+@@ -288,41 +288,41 @@ fn engineering_grouping_can_also_produce_a_displayed_exponent_of_zero() {
+ 
+ // ---- FORMAT: expp controls exponent width, and expp == 0 forces plain -----
+ 
+ #[test]
+ fn expp_pads_the_exponent_with_leading_zeros() {
+     assert_eq!(fmt("1e10", 9, Form::Scientific, None, None, Some(5), None).unwrap(), "1E+00010");
+ }
+ 
+ #[test]
+ fn expp_too_narrow_for_the_exponent_is_error_93() {
+     assert!(matches!(
+         fmt("1e10", 9, Form::Scientific, None, None, Some(1), None),
+-        Err(FormatError::ExponentOversize(_))
++        Err(FormatError::ExponentOversize { .. })
+     ));
+-    assert_eq!(FormatError::ExponentOversize(String::new()).code(), 93);
++    assert_eq!(FormatError::ExponentOversize { mantissa: n("0"), width: 1 }.code(), 93);
+     assert!(matches!(
+         fmt("1e100", 9, Form::Scientific, None, None, Some(2), None),
+-        Err(FormatError::ExponentOversize(_))
++        Err(FormatError::ExponentOversize { .. })
+     ));
+ }
+ 
+ #[test]
+ fn exponent_oversize_is_reported_before_before_oversize() {
+     // before=1 would be exactly enough for a one-digit mantissa, so this
+     // only fails on the exponent -- confirming the exponent check runs
+     // first, not merely that both would fail.
+     assert!(matches!(
+         fmt("1e100", 9, Form::Scientific, Some(1), None, Some(1), None),
+-        Err(FormatError::ExponentOversize(_))
++        Err(FormatError::ExponentOversize { .. })
+     ));
+ }
+ 
+ #[test]
+ fn expp_zero_overrides_expt_zero() {
+     // expp=0 (force plain) and expt=0 (force exponential) directly conflict;
+     // expp wins, exactly as the doc comment on `format_with` says it should.
+     assert_eq!(fmt("123", 9, Form::Scientific, None, None, Some(0), Some(0)).unwrap(), "123");
+     assert_eq!(
+         fmt("1e10", 9, Form::Scientific, None, None, Some(0), Some(0)).unwrap(),
+         "10000000000"
+     );
+@@ -330,47 +330,47 @@ fn expp_zero_overrides_expt_zero() {
+ 
+ #[test]
+ fn expp_zero_forces_plain_form_no_matter_how_large() {
+     assert_eq!(fmt("1e10", 9, Form::Scientific, None, None, Some(0), None).unwrap(), "10000000000");
+     assert_eq!(
+         fmt("1e100", 9, Form::Scientific, None, None, Some(0), None).unwrap(),
+         "1".to_string() + &"0".repeat(100)
+     );
+     // The `before` check still applies, against the *plain* integer width.
+     assert_eq!(fmt("1e10", 9, Form::Scientific, Some(11), None, Some(0), None).unwrap(), "10000000000");
+     assert!(matches!(
+         fmt("1e10", 9, Form::Scientific, Some(1), None, Some(0), None),
+-        Err(FormatError::BeforeOversize(_))
++        Err(FormatError::BeforeOversize { .. })
+     ));
+ }
+ 
+ // ---- FORMAT: before/after inside exponential (mantissa) form --------------
+ 
+ #[test]
+ fn before_and_after_apply_to_the_mantissa_in_exponential_form() {
+     assert_eq!(fmt("1e10", 9, Form::Scientific, Some(5), None, None, None).unwrap(), "    1E+10");
+     assert_eq!(fmt("1e10", 9, Form::Scientific, Some(5), Some(2), None, None).unwrap(), "    1.00E+10");
+     assert_eq!(
+         fmt("123456789012345", 9, Form::Scientific, Some(20), Some(3), None, None).unwrap(),
+         "                   1.235E+14"
+     );
+ }
+ 
+ #[test]
+ fn before_oversize_in_exponential_form_reports_the_engineering_mantissa() {
+     // 1.2E+11 in ENGINEERING is `120E+9` -- a 3-digit mantissa integer part
+     // -- so `before` needs to fit 3 digits, not the 1 SCIENTIFIC would need.
+     assert!(matches!(
+         fmt("1.2e11", 9, Form::Engineering, Some(2), None, None, None),
+-        Err(FormatError::BeforeOversize(_))
++        Err(FormatError::BeforeOversize { .. })
+     ));
+     assert_eq!(fmt("1.2e11", 9, Form::Engineering, Some(3), None, None, None).unwrap(), "120E+9");
+ }
+ 
+ // ---- FORMAT: error message text, each confirmed against `build/bin/rexx` --
+ 
+ #[test]
+ fn before_oversize_message_substitutes_n1_not_the_padded_mantissa() {
+     let err = fmt("-123.456", 9, Form::Scientific, Some(3), None, None, None).unwrap_err();
+     assert_eq!(err.message(), "Integer part of \"-123.456\" is too large for 3 spaces.");
+ }
+ 
+@@ -453,24 +453,62 @@ fn exponent_oversize_can_be_triggered_for_the_first_time_by_a_post_carry_exponen
+     // Confirmed against the interpreter. The substitution keeps the
+     // mid-computation trailing zeros from the interpreter's own rounding
+     // step (`mathRound`, which -- like `Number::round_to`, and unlike
+     // `round_to_places` -- carries by bumping the exponent and holding the
+     // digit count fixed): "1.000000000", not the trimmed "1"
+     // `resolve_exponential_state`'s rounder would produce for the same
+     // value.
+     let err =
+         fmt("9999999999.6", 15, Form::Scientific, None, Some(0), Some(1), Some(10)).unwrap_err();
+     assert_eq!(err.message(), "Exponent of \"1.000000000\" is too large for 1 spaces.");
+ }
+ 
++// ---- additional(): the raw substitution values, in interpreter order ------
++
++#[test]
++fn additional_carries_the_before_oversize_value_and_width_as_two_entries() {
++    let err = fmt("-123.456", 9, Form::Scientific, Some(3), None, None, None).unwrap_err();
++    assert_eq!(err.additional(), vec!["-123.456", "3"]);
++}
++
++#[test]
++fn additional_carries_the_exponent_oversize_mantissa_and_width_as_two_entries() {
++    let err = fmt("1e10", 9, Form::Scientific, None, None, Some(1), None).unwrap_err();
++    assert_eq!(err.additional(), vec!["1", "1"]);
++}
++
++#[test]
++fn additional_matches_message_for_the_post_carry_case_too() {
++    // The regression case from above: `additional()`'s rendering must go
++    // through the same mid-computation (mathRound-style) carry as
++    // `message()`, not `resolve_exponential_state`'s trimmed one.
++    let err =
++        fmt("9999999999.6", 15, Form::Scientific, None, Some(0), Some(1), Some(10)).unwrap_err();
++    assert_eq!(err.additional(), vec!["1.000000000", "1"]);
++}
++
++#[test]
++fn additional_and_message_agree_on_every_placeholder() {
++    let cases: Vec<Result<String, FormatError>> = vec![
++        fmt("-123.456", 9, Form::Scientific, Some(3), None, None, None),
++        fmt("1e10", 9, Form::Scientific, None, None, Some(1), None),
++    ];
++    for result in cases {
++        let err = result.unwrap_err();
++        for sub in err.additional() {
++            assert!(err.message().contains(&sub), "{sub:?} missing from {:?}", err.message());
++        }
++    }
++}
++
+ // ---- FORMAT: carry re-derives the exponential form -------------------------
+ 
+ #[test]
+ fn after_rounding_carry_can_bump_the_exponent_itself() {
+     // 9.996E+20 rounded to 0 decimals is 1E+21, not 10E+20: SCIENTIFIC
+     // tolerates only one integer digit, so the carry must move the exponent.
+     assert_eq!(fmt("9.996e20", 9, Form::Scientific, None, Some(0), None, None).unwrap(), "1E+21");
+     assert_eq!(fmt("9.996e20", 9, Form::Scientific, None, Some(1), None, None).unwrap(), "1.0E+21");
+ }
+ 
+ #[test]
+ fn engineering_carry_stays_in_the_same_group_when_it_fits() {
+diff --git a/rust/crates/rexx-num/tests/settings.rs b/rust/crates/rexx-num/tests/settings.rs
+index 24afa77c..4483578c 100644
+--- a/rust/crates/rexx-num/tests/settings.rs
++++ b/rust/crates/rexx-num/tests/settings.rs
+@@ -2,73 +2,73 @@ use rexx_num::{Form, Settings, SettingsError};
+ 
+ #[test]
+ fn the_defaults_are_the_ones_the_interpreter_starts_with() {
+     let s = Settings::default();
+     assert_eq!(s.digits(), 9);
+     assert_eq!(s.fuzz(), 0);
+     assert_eq!(s.form(), Form::Scientific);
+ }
+ 
+ #[test]
+ fn digits_must_be_a_positive_whole_number() {
+     let mut s = Settings::default();
+-    assert!(matches!(s.set_digits_str("0"), Err(SettingsError::NotWholeNumber(_))));
+-    assert!(matches!(s.set_digits_str("-1"), Err(SettingsError::NotWholeNumber(_))));
+-    assert!(matches!(s.set_digits_str("1.5"), Err(SettingsError::NotWholeNumber(_))));
+-    assert!(matches!(s.set_digits_str("abc"), Err(SettingsError::NotWholeNumber(_))));
++    assert!(matches!(s.set_digits_str("0"), Err(SettingsError::DigitsNotWhole { .. })));
++    assert!(matches!(s.set_digits_str("-1"), Err(SettingsError::DigitsNotWhole { .. })));
++    assert!(matches!(s.set_digits_str("1.5"), Err(SettingsError::DigitsNotWhole { .. })));
++    assert!(matches!(s.set_digits_str("abc"), Err(SettingsError::DigitsNotWhole { .. })));
+     assert!(s.set_digits_str("1").is_ok());
+     // any expression yielding a whole number is fine, including 1e3
+     assert!(s.set_digits_str("1e3").is_ok());
+     assert_eq!(s.digits(), 1000);
+ }
+ 
+ #[test]
+ fn digits_is_capped_at_max_exponent() {
+     let mut s = Settings::default();
+     assert!(s.set_digits_str("999999999").is_ok());
+     assert_eq!(s.digits(), 999_999_999);
+ 
+     let mut s = Settings::default();
+-    assert!(matches!(s.set_digits_str("1000000000"), Err(SettingsError::NotWholeNumber(_))));
++    assert!(matches!(s.set_digits_str("1000000000"), Err(SettingsError::DigitsNotWhole { .. })));
+     // Values that would not even fit a u32, let alone the cap, fail the
+     // same way rather than a different one.
+-    assert!(matches!(s.set_digits_str("2147483647"), Err(SettingsError::NotWholeNumber(_))));
+-    assert!(matches!(s.set_digits_str("4294967296"), Err(SettingsError::NotWholeNumber(_))));
++    assert!(matches!(s.set_digits_str("2147483647"), Err(SettingsError::DigitsNotWhole { .. })));
++    assert!(matches!(s.set_digits_str("4294967296"), Err(SettingsError::DigitsNotWhole { .. })));
+ }
+ 
+ #[test]
+ fn fuzz_must_be_non_negative() {
+     let mut s = Settings::default();
+-    assert!(matches!(s.set_fuzz_str("-1"), Err(SettingsError::NotWholeNumber(_))));
++    assert!(matches!(s.set_fuzz_str("-1"), Err(SettingsError::FuzzNotWhole { .. })));
+     assert!(s.set_fuzz_str("0").is_ok());
+ }
+ 
+ #[test]
+ fn fuzz_must_stay_below_digits_whichever_of_the_two_is_being_set() {
+     let mut s = Settings::default();
+     s.set_digits_str("5").unwrap();
+-    assert!(matches!(s.set_fuzz_str("5"), Err(SettingsError::FuzzNotBelowDigits(_))));
++    assert!(matches!(s.set_fuzz_str("5"), Err(SettingsError::FuzzNotBelowDigits { .. })));
+     assert!(s.set_fuzz_str("4").is_ok());
+     // and lowering digits to meet fuzz fails the same way
+-    assert!(matches!(s.set_digits_str("4"), Err(SettingsError::FuzzNotBelowDigits(_))));
++    assert!(matches!(s.set_digits_str("4"), Err(SettingsError::FuzzNotBelowDigits { .. })));
+ }
+ 
+ #[test]
+ fn form_accepts_only_the_two_spellings_case_insensitively() {
+     let mut s = Settings::default();
+     assert!(s.set_form_str("ENGINEERING").is_ok());
+     assert_eq!(s.form(), Form::Engineering);
+     assert!(s.set_form_str("scientific").is_ok());
+     assert_eq!(s.form(), Form::Scientific);
+-    assert!(matches!(s.set_form_str("BOGUS"), Err(SettingsError::InvalidForm(_))));
++    assert!(matches!(s.set_form_str("BOGUS"), Err(SettingsError::InvalidForm { .. })));
+ }
+ 
+ #[test]
+ fn each_error_carries_the_interpreters_number() {
+     assert_eq!(Settings::default().set_digits_str("abc").unwrap_err().code(), 26);
+     assert_eq!(Settings::default().set_fuzz_str("-1").unwrap_err().code(), 26);
+     let mut s = Settings::default();
+     s.set_digits_str("5").unwrap();
+     assert_eq!(s.set_fuzz_str("5").unwrap_err().code(), 33);
+     assert_eq!(Settings::default().set_form_str("BOGUS").unwrap_err().code(), 25);
+ }
+ 
+@@ -110,12 +110,40 @@ fn fuzz_not_below_digits_message_substitutes_the_pending_pair_not_the_stored_one
+ 
+     // Setting DIGITS too low: FUZZ is unchanged (still 5), DIGITS shows the
+     // rejected candidate (3) -- confirmed with `NUMERIC FUZZ 5` then
+     // `NUMERIC DIGITS 3`.
+     let mut s = Settings::default();
+     s.set_fuzz_str("5").unwrap();
+     let err = s.set_digits_str("3").unwrap_err();
+     assert_eq!(
+         err.message(),
+         "Value of NUMERIC DIGITS (\"3\") must exceed value of NUMERIC FUZZ (\"5\")."
+     );
+ }
++
++// ---- additional(): the raw substitution values, in interpreter order ------
++
++#[test]
++fn additional_carries_the_raw_found_text_for_the_not_whole_errors() {
++    assert_eq!(Settings::default().set_digits_str("abc").unwrap_err().additional(), vec!["abc"]);
++    assert_eq!(Settings::default().set_fuzz_str("-1").unwrap_err().additional(), vec!["-1"]);
++    assert_eq!(
++        Settings::default().set_form_str("bogus form").unwrap_err().additional(),
++        vec!["bogus form"]
++    );
++}
++
++#[test]
++fn additional_carries_the_pending_digits_fuzz_pair_as_two_values() {
++    let mut s = Settings::default();
++    s.set_digits_str("5").unwrap();
++    assert_eq!(s.set_fuzz_str("10").unwrap_err().additional(), vec!["5", "10"]);
++}
++
++#[test]
++fn additional_and_message_agree_on_every_placeholder() {
++    // additional()'s values, substituted into message()'s own text, must
++    // reproduce message() exactly -- the two are not allowed to drift.
++    let err = Settings::default().set_digits_str("abc").unwrap_err();
++    let subs = err.additional();
++    assert!(err.message().contains(&subs[0]));
++}

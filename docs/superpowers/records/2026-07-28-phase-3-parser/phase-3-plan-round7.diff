@@ -1,0 +1,850 @@
+=== commits under review ===
+a9bbb2a1 Intern symbols in Task 3.3, and rule out hash-consing the AST
+b61d586a Close the round-6 conditions on the Phase 3 plan
+
+=== stat ===
+ .../superpowers/plans/2026-07-28-phase-3-parser.md | 294 +++++++++++++++++----
+ 1 file changed, 242 insertions(+), 52 deletions(-)
+
+=== diff ===
+diff --git a/docs/superpowers/plans/2026-07-28-phase-3-parser.md b/docs/superpowers/plans/2026-07-28-phase-3-parser.md
+index f0406aa6..1f15a3fc 100644
+--- a/docs/superpowers/plans/2026-07-28-phase-3-parser.md
++++ b/docs/superpowers/plans/2026-07-28-phase-3-parser.md
+@@ -41,41 +41,42 @@ lines mostly because of the *sub*-keyword tables, which the 35 figure hides:
+ `subKeywords` 50, `subDirectives` 40, `parseOptions` 10, `conditionKeywords`
+ 12. Size Task 3.6 and Task 3.7 by those, not by the instruction count.
+ 
+ ## The number this phase must beat
+ 
+ C++ cold start is **5.1 ms** from a memory-mapped image (`perf-baseline.md`).
+ Under D2 the Rust build parses `CoreClasses.orx` (4,193 lines) and
+ `StreamClasses.orx` (1,010 lines) — **5,203 lines** — at every interpreter
+ start. Total cold start must stay inside **~55 ms**, so parse throughput on
+ those two files *is* cold-start time. Measure on them specifically, never on
+ synthetic input.
+ 
+ ## File structure
+ 
+ ```
+ rust/crates/rexx-parse/
+     src/
+         lib.rs          # public API: parse_program -> Program,
+                         # parse_interpret -> Fragment, ParseError
+         source.rs       # ProgramSource: the retained text, line index, SOURCELINE
+-        token.rs        # Token, TokenKind, Span, ParseCtx, TokenCursor
++        token.rs        # Token, TokenKind, Span, ParseCtx, TokenCursor,
++                        # SymbolId, SymbolTable, Keywords
+         scanner.rs      # source -> tokens; comments, continuations, literals
+         clause.rs       # tokens -> clauses; the `;`/EOC and label rules,
+                         # clause spans, ClauseCursor
+         expr.rs         # expression grammar (construction per D10)
+         instruction.rs  # 35 keyword instructions + assignment/command/message/label
+         directive.rs    # the 9 directives: annotate attribute class constant
+                         # method options requires resource routine
+         ast.rs          # the node types Phase 4 consumes
+         error.rs        # ParseError -> error number, sub-number, line, substitutions
+     tests/
+         scanner.rs  clause.rs  expr.rs  instruction.rs  directive.rs
+         sourceline.rs  errors.rs
+     benches/
+         parse.rs        # throughput on CoreClasses.orx + StreamClasses.orx
+ ```
+ 
+ `ast.rs` is the interface Phase 4 consumes; keep it free of parsing concerns
+ so the D10 choice does not leak past it.
+ 
+ ---
+@@ -181,51 +182,65 @@ belongs in the same document because it decides the same question.
+    packages**; the hand-written arm pulls **zero**. `chumsky`'s `default`
+    feature set is `["std", "stacker"]`, and `stacker` depends on `psm`, which
+    has a `build.rs` with `cc` in its `[build-dependencies]`. So choosing
+    `chumsky` puts **a C compiler on the Rust build path**. This branch's CI
+    builds five platforms including OpenBSD (`ci/platforms`), so that is a
+    portability cost, not a convenience cost. Record it as a fact in
+    `d10-decision.md` alongside the three measurements; do not re-derive it.
+ 
+ - [ ] **Step 3b: Decide the AST's shape — tree or flat instruction chain**
+ 
+ The spike builds an AST either way, so settle this while it is cheap. The C++
+ links instructions into a **chain** (each node points to the next) rather than
+ nesting them in a tree, and D13's text says "plain owned Rust data inside one
+ arena object per code body" — the arena half of which an earlier draft of this
+ plan dropped.
+ 
+ The two shapes give Phase 4 different dispatch loops: a chain walks a `next`
+ pointer, a tree recurses. Getting it wrong is not a parser fix, it is a Phase 4
+ rewrite. Record the choice and the reason with the D10 decision.
+ 
+-**One constraint binds the decision, whichever shape wins.** `THEN`, `ELSE` and
+-`OTHERWISE` must remain instructions of their own, each carrying its own
+-`clause_span`. They cannot be absorbed into a parent node. The oracle traces each
+-as a separate `*-*` clause — `RexxInstructionThen` sets its location to the
+-`THEN` token's own (`ThenInstruction.cpp:76`), and `trace r` on
+-`if 1 = 1 then say "a"` prints three `*-*` lines for one source line. Gate
+-criterion 6 gates on reconstructing each of them byte-identically, and Task 3.7b
+-keeps no separate clause list, so an absorbed keyword would leave those bytes
+-with nowhere to live. This is a constraint on the choice, not the choice itself,
+-and it is stated here rather than nine tasks downstream because that is where it
+-is cheap to honour.
++**One constraint binds the decision, whichever shape wins.** All five of `THEN`,
++`ELSE`, `OTHERWISE`, `END` and `WHEN` must remain instructions of their own, each
++carrying its own `clause_span`. **None of the five may be absorbed into a parent
++node**, however tempting that is under the tree outcome.
++
++The reason is that the oracle traces each as a separate `*-*` clause, so each
++needs somewhere to keep its own span, and Task 3.7b keeps no separate clause
++list — an absorbed keyword would leave those bytes with nowhere to live.
++Measured, all five: `RexxInstructionThen` sets its location to the `THEN` token's
++own (`ThenInstruction.cpp:76`), and `trace r` on `if 1 = 1 then say "a"` prints
++three `*-*` lines for one source line; `end` prints its own line; `otherwise`
++prints alone with no trailing blank; `when 0 = 1 ` prints with its trailing
++blanks.
++
++Two of the five are gated directly, and the other three are not, so do not look
++for all five in gate criterion 6: `THEN` appears via `trace_output.rex` and `END`
++via Task 3.9 Step 1's probe A. `ELSE`, `OTHERWISE` and `WHEN` fall outside
++criterion 6's three-file scope but are bound by the same rule, because Task 3.6
++Step 4 needs a node named for each of the 35 keywords and the `samples/`
++round-trip criterion parses all five in quantity.
++
++This is a constraint on the choice, not the choice itself, and it is stated here
++rather than nine tasks downstream because this is where it is cheap to honour.
++Task 3.1 is the first task executed, so a shape chosen without it is a shape that
++fails Task 3.6 Step 4 five tasks later.
+ 
+ - [ ] **Step 4: Write `d10-decision.md`**
+ 
+ Record the three measurements, the dependency cost from axis 4, which stop
+ condition ended each arm, the Step 3b shape decision, the overall decision, and
+ — importantly — what would change it. The parent plan's starting position is
+ (a): hand-written scanner and clause splitter with `chumsky` above the token
+ stream. State plainly if the measurements contradict that.
+ 
+ - [ ] **Step 5: Delete the spike crate and commit**
+ 
+ `rust/Cargo.toml` has `members = ["crates/*"]`, so creating and deleting the
+ spike crate never touches it. The decision document is the only file to stage.
+ 
+ ```bash
+ rm -rf rust/crates/rexx-parse-spike
+ git add docs/superpowers/plans/d10-decision.md
+ git commit -m "Decide D10 with measurements"
+ ```
+ 
+@@ -297,59 +312,74 @@ Build a line-start index once at construction. `position` is a binary search
+ over it — not a scan, because error reporting calls it and Task 3.10 measures
+ throughput.
+ 
+ - [ ] **Step 5: Handle the line-terminator cases the probe found**
+ 
+ CRLF and a final line without a terminator both need explicit tests, with the
+ expected values taken from Step 1's probe rather than from intuition.
+ 
+ - [ ] **Step 6: Commit**
+ 
+ ---
+ 
+ ## Task 3.3: Scanner and tokens
+ 
+ **Files:**
+ - Create: `rust/crates/rexx-parse/src/token.rs`, `src/scanner.rs`
+ - Test: `rust/crates/rexx-parse/tests/scanner.rs`
+ 
+ **Interfaces:**
+ - Consumes: `ProgramSource` from Task 3.2.
+-- Produces: `Token { kind: TokenKind, span: Range<usize> }`, and
+-  `scan(&ProgramSource) -> Result<Vec<Token>, ParseError>`. `TokenKind`
+-  mirrors the C++ 19 classes in `interpreter/parser/Token.hpp`.
++- Produces: `Token { kind: TokenKind, span: Range<usize> }`, where
++  `TokenKind::Symbol` carries a `SymbolId` rather than text; `SymbolId`,
++  `SymbolTable` and `Keywords`; `ParseCtx` and `TokenCursor`; and
++  `scan(&ProgramSource) -> Result<Scanned, ParseError>` where
++  `Scanned { tokens: Vec<Token>, symbols: SymbolTable, keywords: Keywords }`.
++  `scan` returns the table because it owns interning; it cannot borrow one it is
++  still filling. `TokenKind` mirrors the C++ 19 classes in
++  `interpreter/parser/Token.hpp`.
+ 
+ **`ParseError` is created here, not in Task 3.8.** Every task from this one on
+ returns it, so define the minimum now — `{ code: u16, sub: u16, byte: usize,
+ subs: Vec<String> }` — and let Task 3.8 *complete* it with the line
+ resolution, the message table and the per-error numbers. A plan that defers
+ the type to 3.8 leaves 3.3 through 3.7 unable to compile.
+ 
+ **Later tasks need the token vector as well as the clause.** `Clause` holds a
+ `Range<usize>` into this `Vec<Token>`, so a function given only a `Clause`
+ cannot reach the tokens. Introduce the context struct here and thread it
+ through:
+ 
+ ```rust
+ pub(crate) struct ParseCtx<'a> {
+     pub source: &'a ProgramSource,
+     pub tokens: &'a [Token],
++    /// Read-only by the time parsing starts: `scan` has already interned every
++    /// symbol in the program. Tasks 3.6 and 3.7 need it to compare a clause's
++    /// first symbol against the pre-interned keyword ids, and Task 3.8 needs it
++    /// to put a symbol's name in an error message's substitutions.
++    pub symbols: &'a SymbolTable,
++    /// The 35 keyword spellings and the sub-keywords, interned by `scan`
++    /// before it reads any source, so their ids are fixed and a keyword test
++    /// is an integer comparison. Keywords are NOT reserved words, so this is
++    /// only ever consulted positionally — see Task 3.6.
++    pub keywords: &'a Keywords,
+ }
+ ```
+ 
+ Every `parse_*` in Tasks 3.5–3.7 takes `&ParseCtx` plus its own cursor. Naming
+ it now avoids each task inventing a different way to reach the same two things.
+ 
+ **`TokenCursor` is defined here too**, because the token vector lives here and
+ Task 3.5's `parse_expr(&ParseCtx, &mut TokenCursor)` is the only other place it
+ is named. It is a position inside one clause's token range, not inside the whole
+ vector, so an expression parser cannot walk off the end of its clause:
+ 
+ ```rust
+ pub(crate) struct TokenCursor {
+     /// Index range into `ParseCtx::tokens` that this cursor may visit.
+     range: Range<usize>,
+     /// Next index to yield; always inside `range` or equal to `range.end`.
+     pos: usize,
+ }
+ 
+ impl TokenCursor {
+@@ -363,40 +393,147 @@ impl TokenCursor {
+     /// with this signature, and gate criterion 8 runs clippy with
+     /// `-D warnings`.
+     pub fn advance(&mut self) -> Option<usize> {
+         let i = self.peek()?;
+         self.pos += 1;
+         Some(i)
+     }
+     /// Step back one token. Panics if nothing has been yielded yet, because
+     /// that is a parser bug rather than a source error.
+     pub fn back(&mut self) {
+         assert!(self.pos > self.range.start, "TokenCursor::back before start");
+         self.pos -= 1;
+     }
+     pub fn position(&self) -> usize { self.pos }
+ }
+ ```
+ 
+ Tasks 3.5–3.7 build one of these over the clause they are parsing, with
+ `TokenCursor::new(clause.tokens.clone())`.
+ 
++**Symbols are interned here, and this is the one decision in this task that is
++not a port.** A `Symbol` token carries a `SymbolId`, not its text.
++
++```rust
++/// A symbol's identity: the upcased spelling, interned. Two symbols with the
++/// same `SymbolId` name the same variable, method or label.
++#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
++pub struct SymbolId(u32);
++
++/// Interns upcased symbol spellings. Owned by `ProgramSource`'s parse, handed
++/// to `Program` so Phase 4 can resolve a `SymbolId` back to text for error
++/// messages and `SIGNAL`'s label lookup.
++#[derive(Default, Debug)]
++pub struct SymbolTable {
++    by_name: std::collections::HashMap<Box<str>, SymbolId>,
++    names: Vec<Box<str>>,
++}
++
++impl SymbolTable {
++    /// Intern `text`, upcasing it. Returns the same id for every spelling that
++    /// differs only in case.
++    pub fn intern(&mut self, text: &str) -> SymbolId {
++        // Upcase only when the text is not already upper, so the common case
++        // in machine-generated and conventionally-written Rexx allocates
++        // nothing on lookup.
++        let upper: Box<str> = if text.bytes().any(|b| b.is_ascii_lowercase()) {
++            text.to_ascii_uppercase().into()
++        } else {
++            text.into()
++        };
++        if let Some(&id) = self.by_name.get(&upper) {
++            return id;
++        }
++        let id = SymbolId(u32::try_from(self.names.len()).expect("symbols fit u32"));
++        self.names.push(upper.clone());
++        self.by_name.insert(upper, id);
++        id
++    }
++
++    /// The upcased spelling. Panics on an id from a different table, which is
++    /// a parser bug rather than a source error.
++    pub fn name(&self, id: SymbolId) -> &str {
++        &self.names[id.0 as usize]
++    }
++
++    /// Look up an already-interned symbol **without upcasing and without
++    /// interning**. `None` means no symbol with that exact spelling exists.
++    ///
++    /// This exists for `SIGNAL VALUE`, whose label name is computed at run time
++    /// and matched literally. Verified: with a label spelled `target:`,
++    /// `signal value 'TARGET'` reaches it but `signal value 'target'` raises
++    /// error 16.1 quoting `"target"`, while the static `signal TaRgEt` reaches
++    /// it because the static form goes through `intern` and is therefore
++    /// case-insensitive. Do not upcase here or the two forms stop differing.
++    pub fn get(&self, exact_upper_name: &str) -> Option<SymbolId> {
++        self.by_name.get(exact_upper_name).copied()
++    }
++}
++```
++
++**Why upcased, and why the span still matters.** Rexx folds symbol case:
++verified, `abc = 1` then `say ABC` and `say aBc` both print 1, and
++`Mixed.Case = 5` then `say MIXED.CASE` prints 5. But the *source* spelling is
++observable and must survive: `sourceline(1)` returns `abc = 1`, and `trace r` on
++`aBc = 2` prints `aBc = 2`, not the upcased form. The C++ makes exactly this
++split — `Scanner.cpp:1492-1511` copies the symbol upcased into the token's value
++and calls `setUpperOnly()`, while `tokenLocation` keeps the source position.
++So interning the upcased spelling is faithful to the oracle, not a deviation
++from it.
++
++**This means `Token` keeps its `span` regardless.** The `SymbolId` is the
++*identity*; the `span` is the *occurrence*. `TRACE` and `SOURCELINE` read the
++span, name resolution reads the id, and neither substitutes for the other.
++
++**What this buys.** Symbol occurrences in the two bootstrap files outnumber
++distinct upcased symbols by roughly an order of magnitude, so this replaces
++about ten thousand short-string allocations with that many hash probes plus a
++few hundred `Box<str>`. It also turns keyword recognition and variable lookup
++into integer comparisons: pre-intern the 35 keyword spellings once and the
++positional check in Task 3.6 becomes a `SymbolId` equality test rather than a
++case-insensitive string compare.
++
++Deliberately not measured more precisely than "roughly an order of magnitude".
++Four crude counts over those files gave ratios from 10× to 16×, and they
++disagree because stripping `/* */` comments, `--` line comments and quoted
++literals correctly requires the very scanner this task builds. The first attempt
++reported `THE` as the most frequent symbol, which is the tell that it was
++counting English prose out of the licence header. Record the real ratio in the
++Step 5 report once the scanner exists, and treat any number quoted before then
++as an estimate.
++
++**Interning symbols is not hash-consing the AST, and the plan does not do the
++latter.** Two structurally identical subtrees at different source positions have
++different spans, so they are not equal terms and cannot share a node without
++moving spans into a side table keyed by the node identity that sharing destroys.
++Beyond that, a content hash per node would sit on the parse hot path, which is
++cold-start time under D2. A term graph is the right shape for an optimiser IR
++built *from* this AST, and that belongs to Phase 4 alongside the value-trace
++decision, which constrains folding and fusion anyway. Not this phase.
++
++Add to Step 2's tests: `abc`, `ABC` and `aBc` intern to one `SymbolId` while
++keeping three distinct spans; a symbol containing a compound tail
++(`stem.i.j`) interns as one symbol, matching the C++, which scans the whole
++dotted name as a single token and resolves the tail at run time; and
++`SymbolTable::name` round-trips to the upcased spelling, not the source
++spelling.
++
+ **The significant-blank rule, stated once.** This is the rule that makes `f (x)`
+ a concatenation and `f(x)` a call, so it is the deciding case for D10 and the
+ single most important thing in this task. The C++ emits `TOKEN_BLANK` only when
+ **both** hold (`Scanner.cpp:726` and `Scanner.cpp:755–771`,
+ `Token.hpp:595–596`):
+ 
+ 1. the **previous** token is a symbol, a literal, `)` or `]` —
+    `RexxToken::isBlankSignificant()`; and
+ 2. the next non-blank character starts a symbol, starts a quoted literal, or is
+    `(` or `[`.
+ 
+ Otherwise the run of blanks is discarded and scanning continues. Two
+ consequences the rest of this plan depends on:
+ 
+ - **A `,` or `-` line continuation becomes a significant blank**, not nothing.
+   `Scanner.cpp:342–348` returns `SIGNIFICANT_BLANK` from the continuation path
+   when the previous token made blanks significant. Verified: `say "a"-` then
+   `"b"` prints `a b`, while `say "a"||-` then `"b"` prints `ab` — in the second
+   the previous token is the `||` operator, so the continuation's blank is
+   dropped. A scanner that merely erases a continuation produces a silently wrong
+@@ -627,42 +764,49 @@ the instruction parser rather than from `nextClause`. Verified with `trace r`:
+ **(4) `THEN`, `ELSE` and `OTHERWISE` end a clause mid-line.** Also driven from
+ the instruction parser: `trimClause()` at `LanguageParser.cpp:1378`, `:1403`,
+ `:1465` and `:1494`. `RexxClause::trim` (`Clause.cpp:138`) moves the clause's
+ *start* forward to the current token and leaves the end alone, and the
+ instruction that just ended narrows its own end separately — `RexxInstructionIf`
+ sets its end to the **start offset** of the `THEN` token
+ (`IfInstruction.cpp:58–66`), which is why the traced text is `if y > 5 ` with the
+ trailing blank and stops before `then`.
+ 
+ Because those are two independent adjustments, **some bytes end up in no clause
+ at all**: in `if 1 = 1   then    say "a"` the condition keeps its three trailing
+ blanks, `then` carries none on either side, and `say "a"` starts at `say`, so the
+ four blanks after `then` belong to neither neighbour. Task 3.6's `split_before`
+ therefore takes an end byte and a restart token separately rather than one cut
+ point. Gate criterion 1's property 2 already permits whitespace between one
+ clause span and the next, which is exactly this.
+ 
+ **This task implements rules 1, 2 and 3. Rule 4 is Task 3.6's**, and the split of
+ work is not the C++'s: see the note after the tests for why rule 3 moves down a
+ layer and rule 4 cannot. So `split_clauses` must produce clauses that Task 3.6's
+-cursor can cut further — `tokens` is a range, `span` is derivable from any
+-sub-range of it, and nothing in `Clause` is shared or interned.
++cursor can cut further — `tokens` is a range and nothing in `Clause` is shared or
++interned, so a sub-range is always constructible.
++
++**`span` is NOT derivable from a token sub-range**, and this is the one place it
++would be tempting to assume otherwise. The two move independently, per rule 4. On
++the worked example in Task 3.6, the `THEN` clause's tokens are `6..8` while its
++span stops at token 6's *end*: deriving the span from the token range would give
++`then ` with a trailing blank the oracle does not print. Carry `span` explicitly
++and let the caller set its end.
+ 
+ - [ ] **Step 2: Write the failing tests**
+ 
+ ```rust
+ #[test]
+ fn a_trailing_comma_continues_the_clause() {
+     assert_eq!(clause_count("say 1,\n  + 2"), 1);
+     assert_eq!(clause_count("say 1\nsay 2"), 2);
+ }
+ 
+ #[test]
+ fn a_colon_makes_a_label_clause() {
+     let cs = clauses("here: say 1");
+     assert_eq!(cs.len(), 2);
+     assert!(cs[0].label.is_some());
+ }
+ 
+ #[test]
+ fn a_clause_span_includes_its_terminating_semicolon() {
+     // build/bin/rexx, trace r:  `nop;` is traced with the semicolon.
+@@ -902,40 +1046,46 @@ default. None of these appears in the 35:
+ | `Clause::label` is set — Task 3.4 already split it | `Label` | `LabelInstruction` |
+ | a standalone message send, e.g. `q~append(1)` | `Message` | `MessageInstruction` |
+ | a keyword from the 35 | the 35 nodes | `interpreter/instructions/` |
+ | **anything else** | `Command` | `CommandInstruction` |
+ 
+ `Command` is the fallback, and it is not exotic: a bare `"echo hi"` clause is
+ a command dispatched through `ADDRESS`. Verified — `address system` then
+ `"echo hello-from-command"` runs it and sets `rc`. Dispatch must try the
+ others and fall through to `Command`, never fail.
+ 
+ `KeywordConstants.cpp` has 36 keyword constants and 35 keyword→instruction
+ mappings; `interpreter/instructions/` has 52 classes. **`keywordInstructions[]`
+ is alphabetical and `resolveKeyword` (`KeywordConstants.cpp:417`) binary-searches
+ it**; each entry stores its instruction code explicitly, so nothing depends on
+ position. Sorting it is not merely safe, it is required.
+ 
+ This is the opposite of Phase 0's *builtin-function* table, which is positional
+ and must not be reordered. Two drafts of this plan carried that warning across
+ to this table, where it is wrong. Check which kind you are looking at.
+ 
++**Those two paragraphs describe the C++ and matter only for reading it and for
++the Step 1 extraction. Do not build a sorted string table in Rust.** Task 3.3
++pre-interns the keyword spellings before scanning, so `ParseCtx::keywords` holds
++their `SymbolId`s and recognition is an integer comparison against the clause's
++first token. There is nothing to sort and nothing to binary-search at parse time.
++
+ - [ ] **Step 1: Extract the keyword list**
+ 
+ ```bash
+ grep -oE '"[A-Z]+", *KEYWORD_[A-Z_]+' interpreter/parser/KeywordConstants.cpp
+ ```
+ 
+ Assert the count is 35 in a test, so a mis-extraction fails loudly.
+ 
+ - [ ] **Step 2: Write a failing test per instruction family**
+ 
+ Five families. This is the extracted list, not a remembered one — the first
+ draft of this plan invented an `ASSIGN` keyword that does not exist and missed
+ `LOOP`, which does. All 35, each in exactly one family:
+ 
+ 1. control flow (11) — `DO`, `LOOP`, `IF`, `THEN`, `ELSE`, `SELECT`, `WHEN`,
+    `OTHERWISE`, `LEAVE`, `ITERATE`, `END`
+ 2. data (8) — `DROP`, `EXPOSE`, `PARSE`, `PULL`, `PUSH`, `QUEUE`, `SAY`, `ARG`
+ 3. procedure (11) — `CALL`, `RETURN`, `PROCEDURE`, `SIGNAL`, `EXIT`,
+    `INTERPRET`, `GUARD`, `REPLY`, `FORWARD`, `RAISE`, `USE`
+ 4. settings (4) — `NUMERIC`, `ADDRESS`, `TRACE`, `OPTIONS`
+@@ -1044,46 +1194,45 @@ const KEYWORD_CLAUSES: &[(&str, &str)] = &[
+     ("PROCEDURE", "procedure"),
+     ("LEAVE",     "leave"),
+     ("ITERATE",   "iterate"),
+     // ... one legal clause per keyword, all 35
+ ];
+ 
+ #[test]
+ fn every_keyword_reaches_its_instruction_node() {
+     assert_eq!(KEYWORD_CLAUSES.len(), 35, "a keyword lost its clause");
+     for (kw, src) in KEYWORD_CLAUSES {
+         assert!(parses_to_node_named(src, kw), "{kw} unhandled");
+     }
+ }
+ ```
+ 
+ The length assertion is the load-bearing half: it fails when a keyword is
+ added to the extraction but nobody wrote a clause for it.
+ 
+ **All 35 rows are writable, including the five keyword clauses.** `THEN`,
+ `ELSE`, `END`, `WHEN` and `OTHERWISE` each get a node of their own regardless of
+-which shape Task 3.1 Step 3b chose, because Step 3b is constrained to keep
+-`THEN`, `ELSE` and `OTHERWISE` as separate instructions carrying their own
+-`clause_span` — see that step. `END` and `WHEN` follow the same rule for the
+-same reason: the oracle traces each as its own `*-*` clause. Task 3.1 is the
+-first task in this phase, so the shape is already known by the time you write
+-this table; there is nothing to defer.
++which shape Task 3.1 Step 3b chose, because Step 3b is explicitly constrained to
++keep **all five** as separate instructions carrying their own `clause_span` — see
++that step, which names the same five and gives the measurement for each. Task 3.1
++is the first task in this phase, so the shape is already known by the time you
++write this table; there is nothing to defer.
+ 
+ - [ ] **Step 5: Commit**
+ 
+ ---
+ 
+ ## Task 3.7: Directives
+ 
+ **Files:**
+ - Create: `rust/crates/rexx-parse/src/directive.rs`
+ - Test: `rust/crates/rexx-parse/tests/directive.rs`
+ 
+ **Interfaces:**
+ - Consumes: `ParseCtx` from Task 3.3, `ClauseCursor` from Task 3.6.
+ - Produces: `Directive` in `ast.rs`, and
+   `parse_directive(&ParseCtx, &mut ClauseCursor) -> Result<Directive, ParseError>`.
+ 
+ Same reason as Task 3.6: a `::method` body spans many clauses, so a function
+ handed one clause cannot parse it. An earlier draft of this plan fixed the
+ signature in 3.6 and left 3.7 with the one that cannot work.
+ 
+@@ -1181,48 +1330,54 @@ throughput number depends on the whole file parsing.
+ ---
+ 
+ ## Task 3.7b: The public entry point
+ 
+ **Files:**
+ - Create: `rust/crates/rexx-parse/src/lib.rs`
+ - Test: `rust/crates/rexx-parse/tests/program.rs`
+ 
+ **Interfaces:**
+ - Consumes: everything from Tasks 3.2–3.7.
+ - Produces:
+ 
+   ```rust
+   pub fn parse_program(text: String) -> Result<Program, ParseError>;
+   pub fn parse_interpret(text: String) -> Result<Fragment, ParseError>;
+ 
+   pub struct Program {
+       pub source: ProgramSource,
+       pub instructions: Vec<Instruction>,
+       pub directives: Vec<Directive>,
+-      pub labels: BTreeMap<String, usize>,
++      pub labels: BTreeMap<SymbolId, usize>,
++      /// Retained because a `SymbolId` is meaningless without it: Phase 4
++      /// resolves names for error substitutions and `SIGNAL`'s label lookup.
++      pub symbols: SymbolTable,
+   }
+ 
+   /// What `INTERPRET` produces. Carries its own source for the same reason
+-  /// `Program` does: the instruction spans index it and nothing else.
++  /// `Program` does: the instruction spans index it and nothing else. It carries
++  /// its own `SymbolTable` for the same reason, and the ids in it are NOT
++  /// comparable with the enclosing `Program`'s — see Task 3.7b.
+   pub struct Fragment {
+       pub source: ProgramSource,
+       pub instructions: Vec<Instruction>,
++      pub symbols: SymbolTable,
+   }
+   ```
+ 
+   These two are the only entry points Phase 4 uses; everything else stays
+   `pub(crate)` so the D10 choice cannot leak into the executor.
+ 
+ **Both return types retain their own source, and that is not optional.** The
+ architecture is "the program source is retained as one `String`; every AST node
+ holds a byte range into it". An earlier draft had `parse_interpret` take ownership
+ of `text` and return only `Vec<Instruction>`, which leaves every span in the
+ result indexing a `String` that no longer exists.
+ 
+ It is not a theoretical defect. Interpreted clauses are traced with the
+ *fragment's* own text while `SOURCELINE` inside the fragment still resolves
+ against the enclosing program, so Phase 4 needs both strings at once. Verified
+ under `trace r`:
+ 
+ ```
+      2 *-* interpret "say 1+1; say sourceline(1)"
+        >>>   "say 1+1; say sourceline(1)"
+@@ -1261,47 +1416,59 @@ reviewer must be able to reject the composition independently of the parts.
+ #[test]
+ fn a_program_with_directives_separates_them_from_instructions() {
+     let p = parse_program("say 1\n::routine r\n  return 2\n".to_string()).unwrap();
+     assert_eq!(p.instructions.len(), 1);
+     assert_eq!(p.directives.len(), 1);
+     assert_eq!(p.source.line(1), Some("say 1"));
+ }
+ ```
+ 
+ - [ ] **Step 2: Run it and watch it fail**
+ - [ ] **Step 3: Implement the composition**
+ 
+ The first `::` directive ends the main instruction stream. An instruction
+ appearing *after* a directive is **not** an error — it joins that directive's
+ body. Verified: a file of `say "main"` / `::routine r` / `return 2` /
+ `say "after directive"` runs rc 0 and prints only `main`, because the trailing
+ instruction became part of routine `r`. An earlier draft of this plan asserted
+ it was a syntax error and told Task 3.8 to record a number that does not exist.
+ 
+ **The token vector and the `ParseCtx` do not outlive this function, and must not
+-try to.** `ParseCtx` borrows the `ProgramSource` and the `Vec<Token>`, so the
+-order is: build `ProgramSource`, `scan` it, build `ParseCtx` borrowing both,
+-`split_clauses`, `ClauseCursor::new`, parse everything, drop the context, then
+-move the `ProgramSource` into `Program`. That works precisely because every span
+-that survives is a **byte** range into the source rather than a token index — so
+-no `Instruction` or `Expr` may hold a token index. If one does, this composition
+-does not compile, which is the correct outcome.
++try to.** `ParseCtx` borrows the `ProgramSource`, the `Vec<Token>`, the
++`SymbolTable` and the `Keywords`, so the order is: build `ProgramSource`, `scan`
++it into a `Scanned`, build `ParseCtx` borrowing all four, `split_clauses`,
++`ClauseCursor::new`, parse everything, drop the context, then move the
++`ProgramSource` **and the `SymbolTable`** into `Program`. That works precisely
++because every span that survives is a **byte** range into the source rather than
++a token index — so no `Instruction` or `Expr` may hold a token index. If one
++does, this composition does not compile, which is the correct outcome. A
++`SymbolId` is not a token index and may be retained.
++
++**A `Fragment`'s `SymbolId`s are not comparable with the enclosing `Program`'s.**
++`parse_interpret` builds its own `SymbolTable`, so id 7 in a fragment and id 7 in
++the program that ran the `INTERPRET` are unrelated. Phase 4 must resolve a
++fragment symbol through the fragment's own table, and if it ever needs to match a
++fragment name against a program variable it must go through the text with
++`Program::symbols.get(fragment.symbols.name(id))`. Sharing one table across
++`INTERPRET` calls would need `&mut` at execution time and is deliberately not
++done. Task 3.9 does not care, because `TRACE` reads spans and each carries its
++own source.
+ 
+ - [ ] **Step 4: Parse every `rust/corpus/lang/` program through this entry point**
+ 
+ Fourteen today. Gate criterion 2 permits adding more, so count the directory
+ rather than hard-coding a number.
+ - [ ] **Step 5: Commit**
+ 
+ ---
+ 
+ ## Task 3.8: Errors with number, sub-number, line and substitutions
+ 
+ **Files:**
+ - Create: `rust/crates/rexx-parse/src/error.rs`
+ - Test: `rust/crates/rexx-parse/tests/errors.rs`
+ 
+ **Interfaces:**
+ - Consumes: `ProgramSource::position` from Task 3.2, `rexx-inventory`'s message table.
+ - Produces: the completed `ParseError { code: u16, sub: u16, byte: usize, subs: Vec<String> }` — the same shape Task 3.3 defined, no field added or removed —
+   with `message(&self) -> String` rendered from the generated table.
+ 
+@@ -1407,47 +1574,50 @@ else.
+ The AST must retain whatever `TRACE` displays; discovering later that it does not
+ is a rework of every node type.
+ 
+ `TRACE` indents by nesting depth, but **do not store a depth on each node.**
+ Measured: indentation is static nesting within a code body plus one level per
+ call frame, so the static half is derivable from the AST's own structure and
+ the dynamic half is the executor's stack depth. Storing it would be an AST tax
+ that buys nothing and has to be kept correct forever.
+ 
+ Scope this task to `*-*` and stop. That marker is the *source* clause, so it
+ needs no evaluated value and no executor. It is **not** free, though: it needs
+ the clause spans that Task 3.4 produces and Task 3.6 splits, which are a
+ different thing from what `SOURCELINE` and error reporting need. `SOURCELINE`
+ slices whole lines out of the retained source and error reporting resolves a
+ single byte offset to a line, and neither can express `if y > 5 then say "big"`
+ as three separate texts. An earlier draft of this plan claimed the clause spans
+ came free with those two, and Task 3.4 consequently had no rule producing them.
+ 
+ **The value traces are deliberately out of scope for Phase 3, and for this
+ plan.** **Every marker except `*-*`** carries an evaluated value, so all of them
+-can only be produced by an executor. Do not enumerate them: the obvious list
+-`>L> >O> >V> >>> >=>` is incomplete, and measured against
+-`ootest/ooRexx/base/keyword/TRACE.testGroup` the file also contains `>K>`, `>I>`,
+-`>A>`, `>M>`, `>F>`, `>E>`, `>R>`, `>N>`, `>C>` and `>P>` — fifteen distinct
+-markers in all. `>K>` alone appears 33 times, and once in a two-line probe
+-(`>K> "TO" => "2"` from `do i = 1 to 2`). "Everything except `*-*`" cannot go
+-stale; a list can.
++can only be produced by an executor. Do not enumerate them, and this is the third
++attempt at that enumeration to be wrong. The obvious list `>L> >O> >V> >>> >=>`
++is incomplete; so is any list built by matching `>X>`, because two of the
++eighteen non-`*-*` prefixes are `<I<` and `+++`, and `>.>` defeats a
++`[A-Za-z=]` class just as `>>>` does. The authority is the interpreter's own
++table: **nineteen prefixes**, `*-*` plus eighteen
++(`RexxActivation.hpp:92-110`), and `TRACE.testGroup` exercises all nineteen.
++`>L>` leads at 58 occurrences and `>>>` follows at 49; `>K>` appears 33 times,
++once in a two-line probe (`>K> "TO" => "2"` from `do i = 1 to 2`).
++"Everything except `*-*`" cannot go stale; a list can, and did.
+ 
+ They are a real conformance item — that testGroup is 1,338 lines with **135**
+ lines carrying `*-*` and **243** carrying a value marker — but committing to them
+ shapes the executor, because emitting an event per evaluation step is what forbids
+ constant folding, operation fusion and skipping intermediate materialisation.
+ 
+ That tension belongs in a Phase 4 decision block, made deliberately, not
+ inherited from a Phase 3 plan that had no business deciding it. The one thing
+ Phase 3 owes Phase 4 is that the AST can *reconstruct* clause source; whether
+ the executor emits per-operation values is Phase 4's call, and the natural
+ answer is a separate traced path since `TRACE` is off by default.
+ 
+ - [ ] **Step 1: Capture `TRACE` output from the interpreter**
+ 
+ Run `rust/corpus/lang/trace_output.rex` under `build/bin/rexx` and record it
+ through `cat -A`, so trailing blanks are visible. They matter: the file's own
+ output is
+ 
+ ```
+      2 *-* x = 1 + 1$
+@@ -1463,43 +1633,45 @@ Task 3.4's rule 4 and Task 3.6's `split_before` observed from the outside.
+ 
+ `trace_output.rex` contains **no** `;` and no label, so it does not exercise Task
+ 3.4's rule 2 or rule 3. Record two scratch probes as well — put them in the
+ session scratchpad, do not edit the corpus, which Phase 4 also depends on:
+ 
+ ```rexx
+ /* probe A: terminators are inside the clause span */
+ trace r
+ nop;
+ do i = 1 to 2; say i; end
+ trace off
+ ```
+ 
+ ```rexx
+ /* probe B: a label is its own clause, colon included */
+ trace r
+ here: nop; say "two"
+ trace off
+ ```
+ 
+-Measured, probe A traces `nop;`, `do i = 1 to 2;` and `say i;` **with their
+-semicolons** (the loop body indented one level, which acceptance strips), and
+-probe B traces `here:` / `nop;` / `say "two"` as three clauses.
++Measured, probe A traces `nop;`, `do i = 1 to 2;`, `say i;` **with their
++semicolons** (the loop body indented one level, which acceptance strips) **and
++`end`**, which is a clause of its own and easy to leave off the list. Those four
++clauses produce more than four `*-*` lines, per the per-line acceptance above.
++Probe B traces `here:` / `nop;` / `say "two"` as three clauses.
+ 
+ - [ ] **Step 2: Write a failing test that reconstructs that text from the AST**
+ - [ ] **Step 3: Implement, adjusting *clause* spans if reconstruction is impossible**
+ 
+ Acceptance: for every `*-*` line the interpreter prints for `trace_output.rex`
+ and for both Step 1 probes, the text reconstructed from the clause that line came
+ from is **byte-identical** to it, after stripping the line number, the marker and
+ the leading indentation — and **nothing else**. In particular a terminating `;`
+ and a trailing blank before a `then` are part of the expected text, not
+ whitespace to be trimmed. Reconstruct from `Instruction::clause_span`, not from
+ the node's own extent; the two differ exactly where this task is hardest.
+ 
+ **This is a per-line comparison, not a comparison of two sequences**, and the
+ distinction is not pedantic. `trace r` re-traces a loop body once per iteration,
+ so the `*-*` lines outnumber the clauses. Measured: a `do i = 1 to 2` loop over
+ one `say` prints **seven** `*-*` lines for **three** clauses, because the header,
+ body and `end` repeat per iteration and the header prints once more for the
+ exit test. Asserting equal counts would fail on any program containing a loop.
+ 
+ `*-*` is the *source* marker and is the only one Phase 3 can produce. Under
+@@ -1661,44 +1833,51 @@ fits.
+       Verified — 27 items for `do_variants.rex`, matching `wc -l`. Constructing the
+       package **runs the file's prolog**, so its output interleaves with the
+       driver's; give the driver's lines a unique prefix and filter on it.
+ 
+       ```rexx
+       /* srclines.rex -- run as: rexx srclines.rex corpus/lang/do_variants.rex */
+       parse arg f
+       a = .Package~new(f)~source
+       say "SRCLINES:" a~items
+       do i = 1 to a~items
+         say "SRC" i "[" || a[i] || "]"
+       end
+       ```
+ - [ ] `TRACE`'s `*-*` source lines are reconstructible from the AST for
+       `trace_output.rex` and for Task 3.9 Step 1's two probes, including a
+       terminating `;` and the trailing blank before a mid-line `then`. **Every
+       marker except `*-*`** is explicitly **not** gated here — all of them carry
+       an evaluated value, so they need an executor, and committing to them shapes
+       Phase 4's optimisation choices. The exclusion is phrased as "everything
+       except `*-*`" rather than as a list because the list is longer than it
+-      looks: `TRACE.testGroup` alone contains **fifteen** distinct value markers,
+-      and the obvious five are not even the five most frequent. When counting
+-      them, note that a character class of `[A-Za-z=]` silently misses `>>>`,
+-      which is one of the fifteen and the second most frequent of all.
++      looks. The interpreter's prefix table has **nineteen** entries
++      (`RexxActivation.hpp:92-110`, strings in `RexxActivation.cpp`): `*-*` plus
++      eighteen others, and `TRACE.testGroup` exercises all nineteen. The obvious
++      five are not even the five most frequent.
++
++      **Count these from the table, never by matching a shape.** Three separate
++      attempts to count them by regex were wrong, each time because the pattern
++      excluded a marker it was looking for: `[A-Za-z=]` between two `>` misses
++      both `>>>` and `>.>`, and any `>…>` shape misses `<I<` and `+++` entirely.
++      Sixteen of the eighteen have the `>X>` shape, which is exactly why matching
++      on it looks like it works.
+ 
+       **This narrows the parent plan's criterion, deliberately.** The parent asks
+       for `TRACE`'s `*-*` source lines to match the oracle byte-for-byte,
+       unscoped; this criterion scopes that to `trace_output.rex` plus Task 3.9
+       Step 1's two probes. Recorded here rather than left implicit, because a
+       phase plan that narrows its parent's gate must say so — the principle round
+       4 established when it caught the `samples/` criterion going missing. The
+       narrowing is sound: three files chosen to cover every clause-splitting rule
+       buy more than reconstructing every clause of all 301 samples, and the
+       `samples/` round-trip criterion already covers breadth.
+ - [ ] Parse throughput on the 5,203 bootstrap lines is recorded against the
+       ~55 ms cold-start budget, with a plain statement of whether it fits.
+ - [ ] `cargo clippy --offline --workspace --all-targets -- -D warnings` clean;
+       zero `unsafe`.
+ - [ ] Phase 2's twelve differential sets still at 0 — 128,368 cases.
+ 
+ ## Notes carried in
+ 
+ - **Write the gate criteria so this phase can satisfy them.** Phase 2's gate
+   asked for things needing an interpreter that did not exist until Phase 4;
+@@ -1732,34 +1911,45 @@ fits.
+   position. This is the *opposite* of the builtin-function table in Phase 0,
+   which is positional and must not be sorted — an earlier draft of this plan
+   carried the Phase 0 warning across, and it does not transfer. Check which kind
+   of table you are looking at before assuming either.
+ - **Keywords are not reserved.** `if = 2; say if` prints 2, and
+   `if if = 2 then say if` parses with the same spelling as both keyword and
+   variable. A symbol is a keyword only by position — first token of a clause
+   that is not an assignment — so keyword recognition cannot live in the
+   scanner. Getting this wrong is not a bug to fix later; it is a rewrite of
+   the scanner and every instruction parser. `corpus/lang/keyword_as_variable.rex`
+   exists to catch it; before it was written, nothing in the corpus did.
+ - **The AST must not discard source.** `SOURCELINE`, error reporting and
+   `TRACE` all expose original text. Nodes hold byte ranges into one retained
+   `String`, and the retained `String` travels in the same struct as the nodes —
+   `Program` and `Fragment` both, which is why `parse_interpret` cannot return a
+   bare `Vec<Instruction>`.
+ - **A clause span is not a node span.** `Instruction::clause_span` runs to the end
+   of the clause's terminating token, so `nop;` includes its `;` and `here:`
+   includes its `:`, while `if y > 5 then say "big"` is three clauses whose first
+   ends at the `THEN` token's start byte and therefore carries a trailing blank.
+-  `TRACE`'s `*-*` line prints `clause_span`; error reporting and `SOURCELINE` use
+-  the retained source directly. Task 3.4 produces these spans, Task 3.6 splits them, Task 3.7b retains
++  `TRACE`'s `*-*` line prints `clause_span` **for an unbroken clause**; error
++  reporting and `SOURCELINE` use the retained source directly. Task 3.4 produces
++  these spans, Task 3.6 splits them, Task 3.7b retains
+   them and Task 3.9 checks them — a defect here surfaces four tasks downstream as
+   a rework of every node type, which is why it is front-loaded.
++- **A continued clause's traced text is not a contiguous byte range**, so
++  `clause_span` alone cannot reproduce it. Measured: `say "x",` / newline /
++  `    "y"` traces as `say "x","y"` — the comma is kept, the newline is removed,
++  and the continuation line's four leading blanks are kept. So it is neither a
++  slice nor a simple trim-and-join. This is **out of scope for this phase's gate**,
++  verified: `trace_output.rex` and both Task 3.9 probes contain no continuations,
++  so criterion 6 is unaffected. It is recorded because the note above would
++  otherwise read as a general claim, and because whatever gates continued clauses
++  later needs a representation richer than one range.
+ - **Clause spans do not tile the source.** The mid-line split makes two
+   independent adjustments, so interstitial blanks belong to no clause: in
+   `if 1 = 1   then    say "a"` the condition keeps three trailing blanks, `then`
+   carries none, and the four blanks after `then` are in neither. Anything that
+   assumes clause spans are a partition is wrong, which is why `split_before`
+   takes an end byte and a restart token rather than one cut point.
+-- **`THEN`, `ELSE` and `OTHERWISE` stay separate instructions** whichever AST
+-  shape Task 3.1 Step 3b picks, because each is its own traced clause and there is
+-  no other place to keep its span. That constraint is stated at Step 3b, not
+-  discovered at Task 3.9.
++- **`THEN`, `ELSE`, `OTHERWISE`, `END` and `WHEN` stay separate instructions**
++  whichever AST shape Task 3.1 Step 3b picks, because each is its own traced
++  clause and there is no other place to keep its span. That constraint is stated
++  at Step 3b, not discovered at Task 3.9. Note that only the first three end a
++  clause *mid-line*, which is Task 3.4's rule 4 and a different property.

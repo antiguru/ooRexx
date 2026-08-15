@@ -1,0 +1,583 @@
+=== commit ===
+7f664aa7 Accept blanks after a sign, and fail division the way the interpreter does
+
+=== stat ===
+ rust/crates/rexx-num/src/lib.rs                | 67 +++++++++++++++++++-------
+ rust/crates/rexx-num/src/muldiv.rs             | 38 ++++++++++++++-
+ rust/crates/rexx-num/tests/errors.rs           | 15 ++++++
+ rust/crates/rexx-num/tests/gen-curated-sets.py | 26 ++++++++++
+ rust/crates/rexx-num/tests/muldiv.rs           | 37 ++++++++++++++
+ rust/crates/rexx-num/tests/parse.rs            | 43 +++++++++++++++++
+ 6 files changed, 207 insertions(+), 19 deletions(-)
+
+=== diff ===
+diff --git a/rust/crates/rexx-num/src/lib.rs b/rust/crates/rexx-num/src/lib.rs
+index 6a7e9fa9..0c7c29c4 100644
+--- a/rust/crates/rexx-num/src/lib.rs
++++ b/rust/crates/rexx-num/src/lib.rs
+@@ -90,56 +90,67 @@ pub enum ArithError {
+     /// `Error_Overflow`).
+     ExponentComputationOverflow,
+     /// `%`'s quotient needs more digits than DIGITS allows. Error 26.011,
+     /// no substitution. Raised only by `muldiv.rs`'s `div`.
+     IntegerDivideNotWhole,
+     /// `//`'s quotient needs more digits than DIGITS allows. Error 26.012,
+     /// no substitution. Raised only by `muldiv.rs`'s `div`.
+     RemainderNotWhole,
+     /// `**`'s exponent, after rounding to DIGITS, is not a whole number.
+     /// Error 26.008; `additional()` is `[exponent]`. Raised only by
+     /// `pow.rs`.
+     PowerExponentNotWhole { exponent: Number },
++    /// Division's up-front working-storage reservation failed. Division is
++    /// the one operation whose buffers are sized by DIGITS itself rather
++    /// than by its operands, so a huge -- and, since the u64 widening,
++    /// perfectly legal -- DIGITS fails here before any arithmetic starts.
++    /// Error 5, no substitution; raised only by `muldiv.rs`'s `div`, whose
++    /// reservation site documents the interpreter mechanics this mirrors.
++    SystemResources,
+ }
+ 
+ impl ArithError {
+     pub fn code(self) -> u16 {
+         match self {
+             ArithError::Overflow { .. }
+             | ArithError::Underflow { .. }
+             | ArithError::ZeroToNegativePower
+             | ArithError::PowerOverflow { .. }
+             | ArithError::DivideByZero
+             | ArithError::ExponentComputationOverflow => 42,
+             ArithError::IntegerDivideNotWhole
+             | ArithError::RemainderNotWhole
+             | ArithError::PowerExponentNotWhole { .. } => 26,
++            ArithError::SystemResources => 5,
+         }
+     }
+ 
+     /// The `(major, sub)` pair identifying this failure's exact entry in
+     /// the generated message table -- `code()` only ever exposes `major`
+     /// (the interpreter number a trapped Rexx program sees in `RC`), so
+     /// `message`/`additional` need this to pick the right table row.
+     fn sub_code(&self) -> (u16, u16) {
+         match self {
+             ArithError::Overflow { .. } => (42, 901),
+             ArithError::Underflow { .. } => (42, 902),
+             ArithError::ZeroToNegativePower => (42, 903),
+             ArithError::PowerOverflow { .. } => (42, 1),
+             ArithError::DivideByZero => (42, 3),
+             ArithError::ExponentComputationOverflow => (42, 0),
+             ArithError::IntegerDivideNotWhole => (26, 11),
+             ArithError::RemainderNotWhole => (26, 12),
+             ArithError::PowerExponentNotWhole { .. } => (26, 8),
++            // The bare major: `Error_System_resources` is message number 5
++            // itself, entered in the table as sub 0.
++            ArithError::SystemResources => (5, 0),
+         }
+     }
+ 
+     /// The substitution values in the interpreter's own order -- what
+     /// `condition('o')~additional` returns for this failure: `[5, 10]` for
+     /// a `FuzzNotBelowDigits`-shaped 33.001, `[]` (an *empty* array, not
+     /// absent) for a no-substitution message like `DivideByZero`.
+     ///
+     /// `PowerOverflow`/`PowerExponentNotWhole` render `base`/`exponent` at
+     /// their own full stored precision (`digits.len()` significant digits,
+     /// via `full_precision`) rather than this crate's usual 9-digit
+     /// default -- see `message`'s doc comment for why even that is not
+@@ -149,25 +160,26 @@ impl ArithError {
+             ArithError::Overflow { adjusted_exponent } => {
+                 vec![adjusted_exponent.to_string(), "9".to_string()]
+             }
+             ArithError::Underflow { exponent } => vec![exponent.to_string(), "9".to_string()],
+             ArithError::PowerOverflow { base, exponent } => {
+                 vec![full_precision(base), "**".to_string(), full_precision(exponent)]
+             }
+             ArithError::PowerExponentNotWhole { exponent } => vec![full_precision(exponent)],
+             ArithError::ZeroToNegativePower
+             | ArithError::DivideByZero
+             | ArithError::ExponentComputationOverflow
+             | ArithError::IntegerDivideNotWhole
+-            | ArithError::RemainderNotWhole => vec![],
++            | ArithError::RemainderNotWhole
++            | ArithError::SystemResources => vec![],
+         }
+     }
+ 
+     /// The interpreter's message text for this failure, rendered from the
+     /// generated table on demand -- every sub-message verified against
+     /// `build/bin/rexx`.
+     ///
+     /// `DivideByZero` (42.003), `IntegerDivideNotWhole` (26.011),
+     /// `RemainderNotWhole` (26.012), and `ZeroToNegativePower` (42.903) take
+     /// no substitution and are exact: confirmed with `1 / 0`, `123456 % 2`
+     /// and `123456 // 2` at DIGITS 3, and `0 ** -1`. `Overflow`/`Underflow`
+     /// are exact too -- confirmed with a mul overflow and a div underflow,
+@@ -321,47 +333,62 @@ impl Number {
+     /// The canonical zero. Every spelling of zero collapses to this: the
+     /// oracle prints `0` for `-0`, `0.0` and `00.00` alike.
+     pub fn zero() -> Self {
+         Number { negative: false, digits: vec![0], exponent: 0 }
+     }
+ 
+     pub fn is_zero(&self) -> bool {
+         self.digits.iter().all(|d| *d == 0)
+     }
+ 
+     /// Parses a Rexx number, or `None` if the string is not one.
+     ///
+-    /// Accepts surrounding whitespace, an optional sign, digits with an
+-    /// optional decimal point, and an optional exponent. Rejects everything
+-    /// else -- notably a bare sign, a bare exponent marker, and hex literals,
+-    /// which are strings in Rexx rather than numbers.
++    /// Accepts surrounding blanks, an optional sign (itself followed by
++    /// optional blanks), digits with an optional decimal point, and an
++    /// optional exponent. Rejects everything else -- notably a bare sign, a
++    /// bare exponent marker, and hex literals, which are strings in Rexx
++    /// rather than numbers.
++    ///
++    /// Blank handling mirrors `numberStringScan`
++    /// (`NumberStringClass.cpp:1264-1296`) exactly: a blank is a space or a
++    /// tab -- those two bytes, not Unicode whitespace -- and blanks are
++    /// legal at either end and between a sign and its first digit, nowhere
++    /// else. Confirmed against `build/bin/rexx`: `'+ 3'`, `'  +   3  '`,
++    /// `'+ .5'` and tab variants all convert, while `'+ 3 e2'`, `'3 4'`,
++    /// `'3e 2'` and a LF/VT/FF/CR anywhere are all error 41.
+     pub fn parse(text: &str) -> Option<Self> {
+-        let s = text.trim();
+-        if s.is_empty() {
++        fn is_blank(byte: u8) -> bool {
++            byte == b' ' || byte == b'\t'
++        }
++        let bytes = text.as_bytes();
++        let mut i = 0;
++        while i < bytes.len() && is_blank(bytes[i]) {
++            i += 1;
++        }
++        if i == bytes.len() {
+             return None;
+         }
+-        let bytes = s.as_bytes();
+-        let mut i = 0;
+ 
+-        let negative = match bytes[i] {
+-            b'+' => {
++        let signed = bytes[i] == b'+' || bytes[i] == b'-';
++        let negative = bytes[i] == b'-';
++        if signed {
++            i += 1;
++            // Blanks are allowed between the sign and the digits -- the sign
++            // branch of `numberStringScan` has its own skip loop. Without a
++            // sign there is nothing to skip: the leading skip above already
++            // ran, so a blank here is simply not part of a number.
++            while i < bytes.len() && is_blank(bytes[i]) {
+                 i += 1;
+-                false
+             }
+-            b'-' => {
+-                i += 1;
+-                true
+-            }
+-            _ => false,
+-        };
++        }
+ 
+         let mut digits: Vec<u8> = Vec::new();
+         let mut seen_digit = false;
+         let mut decimals: i32 = 0;
+         let mut seen_point = false;
+ 
+         while i < bytes.len() {
+             match bytes[i] {
+                 b'0'..=b'9' => {
+                     seen_digit = true;
+                     digits.push(bytes[i] - b'0');
+                     if seen_point {
+@@ -408,24 +435,28 @@ impl Number {
+             // The exponent as *written* must itself be in range, separately
+             // from the range check on the assembled number. Without this,
+             // `.235468758140e1000000000` looks fine once the twelve decimal
+             // places are folded in, but the interpreter never gets that far.
+             // Zero is exempt: `0e1000000996` is simply 0.
+             written_exponent = Some(signed);
+             exponent = exponent.saturating_add(signed.clamp(
+                 MIN_EXPONENT as i64 * 2,
+                 MAX_EXPONENT as i64 * 2,
+             ) as i32);
+         }
+ 
++        // Trailing blanks are legal; anything else after them is not.
++        while i < bytes.len() && is_blank(bytes[i]) {
++            i += 1;
++        }
+         if i != bytes.len() {
+             return None; // trailing junk: "1.2.3", "1 2", "0x1f"
+         }
+ 
+         let assembled = Self::assemble(negative, digits, exponent);
+         // A literal outside the representable range is not a number at all:
+         // the interpreter reports error 41 rather than an overflow. Zero is
+         // exempt from both checks -- it has no magnitude to be out of range.
+         if !assembled.is_zero() {
+             if let Some(written) = written_exponent
+                 && !(MIN_EXPONENT as i64..=MAX_EXPONENT as i64).contains(&written)
+             {
+diff --git a/rust/crates/rexx-num/src/muldiv.rs b/rust/crates/rexx-num/src/muldiv.rs
+index cbd69172..fc34000f 100644
+--- a/rust/crates/rexx-num/src/muldiv.rs
++++ b/rust/crates/rexx-num/src/muldiv.rs
+@@ -7,24 +7,29 @@
+ /* distribution. A copy is also available at the following address:           */
+ /* https://www.oorexx.org/license.html                                        */
+ /*                                                                            */
+ /*----------------------------------------------------------------------------*/
+ 
+ //! Multiplication and division.
+ //!
+ //! Ported from `NumberString::Multiply` (`NumberStringMath2.cpp:106`) and
+ //! `NumberString::Division` (`:331`), which serves `/`, `%` and `//`.
+ 
+ use crate::{ArithError, Number};
+ 
++/// `NumberString::FAST_BUFFER` (`NumberStringClass.hpp:414`): below this
++/// working size the C++ divides in stack buffers and can never fail an
++/// allocation, so the reservation probe in `div` is skipped the same way.
++const FAST_BUFFER: u64 = 48;
++
+ impl Number {
+     pub fn mul(&self, other: &Number, digits: u64) -> Result<Number, ArithError> {
+         // checkNumber truncates an over-long operand to DIGITS + 1 and does
+         // NOT round it. Rounding operands here instead would turn
+         // `2 * 1.5` at DIGITS 1 into `2 * 2` = 4, where the answer is 3.
+         let left = self.truncated_to(crate::working_length(digits));
+         let right = other.truncated_to(crate::working_length(digits));
+ 
+         if left.is_zero() || right.is_zero() {
+             return Ok(Number::zero());
+         }
+ 
+@@ -124,24 +129,50 @@ impl Number {
+         // left operand unchanged.
+         if calc_exp < 0 && op != DivOp::Divide {
+             return Ok(match op {
+                 DivOp::IntegerDivide => Number::zero(),
+                 _ => {
+                     let mut r = left.clone();
+                     r.negative = self.negative && !r.is_zero();
+                     r
+                 }
+             });
+         }
+ 
++        // Division is the one operation whose working storage is sized by
++        // DIGITS itself rather than by its operands: `NumberString::Division`
++        // allocates `3 * ((digits + 1) * 2 + 1)` bytes up front, before the
++        // first quotient digit (`NumberStringMath2.cpp:401-417`), and a
++        // failed allocation is error 5, "System resources exhausted"
++        // (`RexxMemory.cpp:1266`). That allocation *is* the whole bound --
++        // there is no fixed threshold. Confirmed against `build/bin/rexx`:
++        // `4.0 / 2` and `123456.0 % 2` both fail with 5.0 at DIGITS
++        // 999999999999999999 even though their results are tiny, because the
++        // buffer is sized before anyone looks at the operands; `1 / 7`
++        // computes at DIGITS 1e10 but is 5.0 at 1e11 on the same machine
++        // (the boundary is what malloc will grant, so it moves with the
++        // machine). Mirrored here with a fallible reservation of the same
++        // request, so the same boundary falls out of the same cause -- and,
++        // like the C++ (`FAST_BUFFER`), only past a small-size cutoff, so
++        // ordinary divisions never pay for an allocation probe. This sits
++        // after the `calc_exp < 0` early returns above because the C++
++        // allocates after its equivalent ones: a `%`/`//` whose quotient
++        // has no integer part never reaches the allocation at all.
++        let total_digits = digits.saturating_add(1).saturating_mul(2).saturating_add(1);
++        if total_digits > FAST_BUFFER {
++            let request = usize::try_from(total_digits.saturating_mul(3)).unwrap_or(usize::MAX);
++            let mut probe: Vec<u8> = Vec::new();
++            probe.try_reserve_exact(request).map_err(|_| ArithError::SystemResources)?;
++        }
++
+         // Long-divide the digit strings, generating one more digit than
+         // DIGITS so the final rounding has something to look at.
+         let want = crate::working_length(digits);
+         let (mut q, rem, shift) = long_divide(&left.digits, &right.digits, want);
+ 
+         // value = q * 10^(left.exponent - right.exponent - shift). Same
+         // believed-unreachable guard as the two above.
+         let q_exp = left
+             .exponent
+             .checked_sub(right.exponent)
+             .and_then(|e| e.checked_sub(shift))
+             .ok_or(ArithError::ExponentComputationOverflow)?;
+@@ -284,25 +315,30 @@ fn long_divide(n: &[u8], d: &[u8], want: usize) -> (Vec<u8>, Vec<u8>, i32) {
+                 break;
+             };
+             // A zero guess gets wrapped to 1.
+             let m = (multiplier * 10 / div_char).max(1);
+             count += m as u8;
+             subtract_multiple(&mut rem[start..], d, m);
+             while rem.len() - start > 1 && rem[start] == 0 {
+                 start += 1;
+             }
+         }
+         if q.is_empty() && count == 0 {
+             // Not yet reached the first significant quotient digit.
+-            if i > n.len() + want + d.len() {
++            // Saturating: `want` is itself saturated (`working_length`), so
++            // this bound must stay huge rather than wrap -- producer-side
++            // saturation needs matching consumer-side arithmetic, or the
++            // sum overflows in debug at exactly the values the saturation
++            // was added for.
++            if i > n.len().saturating_add(want).saturating_add(d.len()) {
+                 break;
+             }
+             continue;
+         }
+         q.push(count);
+         // The interpreter stops as soon as the division comes out even
+         // rather than padding to the full width, so 1 / 1 is `1` and not
+         // `1.00000000`.
+         if rem[start..].iter().all(|x| *x == 0) && i >= n.len() {
+             break;
+         }
+     }
+diff --git a/rust/crates/rexx-num/tests/errors.rs b/rust/crates/rexx-num/tests/errors.rs
+index 93751e58..17b8e4aa 100644
+--- a/rust/crates/rexx-num/tests/errors.rs
++++ b/rust/crates/rexx-num/tests/errors.rs
+@@ -134,24 +134,39 @@ fn power_exponent_not_whole_message_is_26_008_substituting_the_exponent() {
+ fn power_exponent_not_whole_message_substitutes_the_original_exponent_not_the_rounded_one() {
+     // Provoked with `numeric digits 3; r = 2 ** 1.23456` -- the message
+     // shows the full "1.23456", not "1.23" (what `as_whole` rounds to
+     // before checking wholeness).
+     let err = n("2").pow(&n("1.23456"), 3).unwrap_err();
+     assert_eq!(err.additional(), vec!["1.23456"]);
+     assert_eq!(
+         err.message(),
+         "Operand to the right of the power operator (**) must be a whole number; found \"1.23456\"."
+     );
+ }
+ 
++#[test]
++fn system_resources_message_is_the_bare_error_5_no_substitution() {
++    // Provoked with `numeric digits 999999999999999999; r = 4.0 / 2`, which
++    // reports rc 5. The message text is the table's own
++    // (`Error_System_resources`, message number 5): the *interpreter's*
++    // rendering for this one is visibly broken -- `condition('o')~message`
++    // came back as "The NIL object" -- so the rc and table text are the
++    // contract here, not what the interpreter happens to print.
++    let err = n("4.0").div(&n("2"), 999_999_999_999_999_999, DivOp::Divide).unwrap_err();
++    assert_eq!(err, ArithError::SystemResources);
++    assert_eq!(err.clone().code(), 5);
++    assert_eq!(err.additional(), Vec::<String>::new());
++    assert_eq!(err.message(), "System resources exhausted.");
++}
++
+ #[test]
+ fn code_still_matches_every_variant_after_the_split() {
+     assert_eq!(n("1").div(&n("0"), 9, DivOp::Divide).unwrap_err().code(), 42);
+     assert_eq!(n("9e999999999").mul(&n("9e999999999"), 9).unwrap_err().code(), 42);
+     assert_eq!(n("1e-999999990").div(&n("1e20"), 9, DivOp::Divide).unwrap_err().code(), 42);
+     assert_eq!(n("0").pow(&n("-1"), 9).unwrap_err().code(), 42);
+     assert_eq!(n("100").pow(&n("999999999"), 9).unwrap_err().code(), 42);
+     assert_eq!(n("123456").div(&n("2"), 3, DivOp::IntegerDivide).unwrap_err().code(), 26);
+     assert_eq!(n("123456").div(&n("2"), 3, DivOp::Remainder).unwrap_err().code(), 26);
+     assert_eq!(n("2").pow(&n("2.5"), 9).unwrap_err().code(), 26);
+ }
+ 
+diff --git a/rust/crates/rexx-num/tests/gen-curated-sets.py b/rust/crates/rexx-num/tests/gen-curated-sets.py
+index bce1940e..4cdaba19 100644
+--- a/rust/crates/rexx-num/tests/gen-curated-sets.py
++++ b/rust/crates/rexx-num/tests/gen-curated-sets.py
+@@ -139,31 +139,57 @@ def fmtcarry():
+     exps = ["", "E9", "E99", "E999", "E-9", "E-99", "E-999", "E10", "E100"]
+     out = []
+     for d in ["9", "15", "9E", "15E"]:
+         for c in carriers:
+             for e in exps:
+                 n = c + e
+                 for after in ["", "0", "1", "2"]:
+                     for expp in ["", "1", "2", "3", "4"]:
+                         out.append(f"{d}|FORMAT|{n}||{after}|{expp}|")
+                         out.append(f"{d}|FORMAT|{n}||{after}|{expp}|10")
+     return out
+ 
++SIGNBLANK_A = ["+ 3","- 3","+  3","-   3","  + 3  ","+ .5","- .5","+ 3.","+ 0","- 0",
++               "+ 1e2","- 1e-2","+ 12345678901","+\t3","\t+ 3\t","3\t","+ 3.14",
++               "+ 999999999","- 0.000001","+ 3 e2","3 4","+ - 3","++ 3","3e 2","3e+ 2",
++               "+ ","+","- .","+ abc"]
++
++def signblank():
++    """Blanks between a sign and its digits, and blank/tab edge handling.
++
++    `numberStringScan` (NumberStringClass.cpp:1289-1295) skips blanks and
++    tabs after a sign, so `'+ 3'` is the number 3 -- legal there, at either
++    end, and nowhere else. None of the other ten sets can see this: no
++    generator above emits a blank after a sign, which is how a parser that
++    rejected `'+ 3'` outright sat at 0 divergences across all 126,048 of
++    their cases. The invalid spellings (`'+ 3 e2'`, `'3 4'`, `'++ 3'`, a
++    bare or blank-followed sign) matter as much as the valid ones -- both
++    directions were wrong before the fix. `**` is deliberately absent from
++    the operator list: a non-numeric power operand raises through a
++    different path than the <E41> this harness models for the other
++    operators.
++    """
++    ops = ["+","-","*","/","%","//","=","==","<","<<"]
++    return [f"{d}|{a}|{op}|{b}"
++            for d in [3, 9] for a in SIGNBLANK_A for op in ops
++            for b in ["0","2","+ 2","- 1.5"]]
++
+ SETS = {
+     "addsub":  lambda: binary(ARITH_A, ["+","-"], [1,3,9,15]),
+     "addsub2": lambda: binary(ARITH_B, ["+","-"], [2,4,6,7,11,20]),
+     "muldiv":  lambda: binary(MULDIV_A, ["*","/","%","//"], [1,3,9,15]),
+     "md2":     lambda: binary(ARITH_B + ["13","17","0"], ["*","/","%","//"], [2,4,6,7,11,20]),
+     "pow":     lambda: [f"{d}|{a}|**|{b}" for d in [1,3,9,15] for a in POW_BASES for b in POW_EXPS],
+     "cmp":     lambda: binary(CMP_VALS, CMP_OPS, [1,9]),
+     "fmt":     lambda: fmt([5,9], ["","1","4","10"], ["","0","2","4"], ["0","2","4"], ["","0","2"], ["","0","1","2","3"]),
+     "fmt2":    lambda: fmt([1,3,9,15], ["","0","1","2","6","12"], ["","0","1","3","8"],
+                            ["","0","1","2","5"], ["","0","1","4"], ["","0","1","2","5","9"]),
+     "fmt3":    fmt3,
+     "fmtedge": fmtedge,
+     "fmtcarry": fmtcarry,
++    "signblank": signblank,
+ }
+ 
+ if __name__ == "__main__":
+     if len(sys.argv) != 2 or sys.argv[1] not in SETS:
+         sys.exit(f"usage: {sys.argv[0]} <{'|'.join(SETS)}>")
+     print("\n".join(SETS[sys.argv[1]]()))
+diff --git a/rust/crates/rexx-num/tests/muldiv.rs b/rust/crates/rexx-num/tests/muldiv.rs
+index 551f01ba..3d63e12f 100644
+--- a/rust/crates/rexx-num/tests/muldiv.rs
++++ b/rust/crates/rexx-num/tests/muldiv.rs
+@@ -59,24 +59,61 @@ fn dividing_by_zero_is_error_42_for_all_three_operators() {
+     }
+ }
+ 
+ #[test]
+ fn a_quotient_too_wide_to_be_whole_is_error_26() {
+     // 1 % 1e-9 would need ten digits at DIGITS 9.
+     assert_eq!(div("1", "1e-9", 9, DivOp::IntegerDivide), Err(26));
+     assert_eq!(div("1", "1e-9", 9, DivOp::Remainder), Err(26));
+     // but / is fine with it
+     assert_eq!(div("1", "1e-9", 9, DivOp::Divide).unwrap(), "1E+9");
+ }
+ 
++#[test]
++fn a_digits_too_large_to_reserve_working_storage_for_is_error_5() {
++    // Division sizes its working storage from DIGITS alone --
++    // `3 * ((digits + 1) * 2 + 1)` bytes, requested before the first
++    // quotient digit -- so a huge DIGITS fails up front with error 5,
++    // however small the operands and quotient are. Confirmed against
++    // `build/bin/rexx` at DIGITS 999999999999999999: `4.0 / 2` and
++    // `123456.0 % 2` are both error 5 (rc 5, "System resources
++    // exhausted"), while `1 / 7` at DIGITS 1e9 instead computes and
++    // underflows (42.902) -- the boundary is what the allocator grants,
++    // and ~6e18 bytes is beyond any 64-bit machine.
++    let max_legal = 999_999_999_999_999_999; // Numerics::MAX_WHOLENUMBER
++    assert_eq!(div("4.0", "2", max_legal, DivOp::Divide), Err(5));
++    assert_eq!(div("1", "7", max_legal, DivOp::Divide), Err(5));
++    assert_eq!(div("123456.0", "2", max_legal, DivOp::IntegerDivide), Err(5));
++    // A bare u64::MAX (not reachable through `Settings`) saturates into the
++    // same reservation failure rather than wrapping any of the sums on the
++    // way -- this exact call used to panic in debug ("attempt to add with
++    // overflow") inside `long_divide`'s give-up bound.
++    assert_eq!(div("123456", "2", u64::MAX, DivOp::IntegerDivide), Err(5));
++    // The `%`/`//` no-integer-part early returns sit before the
++    // reservation, exactly as the C++ orders them, so these stay cheap
++    // successes at the same DIGITS.
++    assert_eq!(div("0.001", "7", max_legal, DivOp::Remainder).unwrap(), "0.001");
++    assert_eq!(div("0.001", "7", max_legal, DivOp::IntegerDivide).unwrap(), "0");
++}
++
++#[test]
++fn a_digits_past_the_fast_buffer_still_divides_via_the_reservation_path() {
++    // DIGITS 24 pushes the working size past FAST_BUFFER (48), so the
++    // reservation probe actually runs and succeeds -- the bound must only
++    // ever reject what cannot be allocated, not tax ordinary big-DIGITS
++    // divisions.
++    assert_eq!(div("1", "8", 24, DivOp::Divide).unwrap(), "0.125");
++    assert_eq!(div("1", "3", 24, DivOp::Divide).unwrap(), "0.333333333333333333333333");
++}
++
+ #[test]
+ fn a_result_outside_the_representable_range_is_error_42() {
+     assert_eq!(
+         n("1e999999999").mul(&n("1e999999999"), 9).map_err(ArithError::code),
+         Err(42)
+     );
+     // and the operation must not panic on the way there
+     assert_eq!(
+         n("9e999999999").mul(&n("9e999999999"), 9).map_err(ArithError::code),
+         Err(42)
+     );
+ }
+diff --git a/rust/crates/rexx-num/tests/parse.rs b/rust/crates/rexx-num/tests/parse.rs
+index 7b25e29b..0b035ee5 100644
+--- a/rust/crates/rexx-num/tests/parse.rs
++++ b/rust/crates/rexx-num/tests/parse.rs
+@@ -67,24 +67,67 @@ fn exponential_form_is_used_past_the_measured_thresholds() {
+ fn a_multi_digit_mantissa_keeps_its_point_in_exponential_form() {
+     assert_eq!(Number::parse("1234567890").unwrap().format(9), "1.23456789E+9");
+     assert_eq!(Number::parse("-1234567890").unwrap().format(9), "-1.23456789E+9");
+ }
+ 
+ #[test]
+ fn things_that_are_not_numbers_are_rejected() {
+     for bad in ["abc", "", "   ", "1e", "1.2.3", "--1", "1 2", "+", "-", "e5", "1e+", "0x1f"] {
+         assert!(Number::parse(bad).is_none(), "{bad:?} should not parse");
+     }
+ }
+ 
++#[test]
++fn blanks_are_legal_between_a_sign_and_its_digits() {
++    // `numberStringScan` (NumberStringClass.cpp:1289-1295) skips blanks and
++    // tabs after a sign. All confirmed against `build/bin/rexx` via `v + 0`.
++    for (input, expected) in [
++        ("+ 3", "3"),
++        ("- 3", "-3"),
++        ("  +   3  ", "3"),
++        ("+ .5", "0.5"),
++        ("- .5", "-0.5"),
++        ("+ 3.", "3"),
++        ("+\t3", "3"),
++        ("\t+ 3\t", "3"),
++    ] {
++        let n = Number::parse(input).unwrap_or_else(|| panic!("{input:?} should parse"));
++        assert_eq!(&n.format(9), expected, "input {input:?}");
++    }
++}
++
++#[test]
++fn blanks_anywhere_else_are_still_rejected() {
++    // The sign gap and the two ends are the only places: after the digits
++    // start, a blank ends the number and anything further is junk. All
++    // confirmed error 41 against `build/bin/rexx`.
++    for bad in ["+ 3 e2", "3 4", "3 e2", "3e 2", "3e+ 2", "+ - 3", "++ 3", "+ ", "- ."] {
++        assert!(Number::parse(bad).is_none(), "{bad:?} should not parse");
++    }
++}
++
++#[test]
++fn only_space_and_tab_are_blanks_not_unicode_whitespace() {
++    // The interpreter's skip loops test for exactly ch_SPACE and ch_TAB;
++    // LF, VT, FF and CR around an otherwise fine number are all error 41
++    // (confirmed with '0a'x||'3' etc.). `str::trim`, which this parser
++    // used for its ends before the fix, silently accepts every one of
++    // these.
++    for bad in ["\n3", "3\n", "\x0b3", "\x0c3", "\r3", "+\n3"] {
++        assert!(Number::parse(bad).is_none(), "{bad:?} should not parse");
++    }
++    // ... while the two real blanks still trim.
++    assert_eq!(Number::parse(" \t 3 \t ").unwrap().format(9), "3");
++}
++
+ #[test]
+ fn format_does_not_overflow_at_extreme_digits() {
+     // `digits` is a bare u64 here, not the `Settings`-bounded value the
+     // interpreter would ever pass, so `format` itself has to stay well
+     // defined for the whole range. `2 * digits` narrowed to i32 overflows
+     // above 1073741823 and, before this was fixed, panicked in debug and
+     // silently picked the wrong display form in release; the u64 widening
+     // adds the same hazard at 2^63, so the top of the new range is pinned
+     // here too.
+     assert_eq!(Number::parse("1e-30").unwrap().format(2147483647), "0.000000000000000000000000000001");
+     assert_eq!(
+         Number::parse("1e-30").unwrap().format(u64::from(u32::MAX)),
