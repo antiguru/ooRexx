@@ -740,11 +740,33 @@ DEVIATIONS -- permanent, chosen
          null-operand short circuit, and `parse_template.rs` builds every
          piece with `self.text`.
 
-     THE SECOND FAMILY IS WORTH CLOSING and the first is not. Closing it also
-     removes allocations, so it pays twice. It CANNOT be derived from a
-     principle -- `left` and `right` disagree, as do `substr(s,1,length(s))`
-     and `delstr(s,length(s)+1)` -- so the set is copied from the C++ per
-     builtin or it is wrong.
+     THE IDENTITY-PRESERVING NO-OPS ARE NOT REPRODUCED, and that is a
+     deliberate narrowing added 2026-08-15 after Moritz observed that ooRexx's
+     OO extensions may simply have bugs. Three things say this one is upstream
+     accident rather than design, and none of them alone would be enough:
+
+       - the behaviour is INCONSISTENT in a way no rule explains. `left` and
+         `right` disagree at the same argument, and so do
+         `substr(s,1,length(s))` and `delstr(s,length(s)+1)`. A designed
+         property does not split a symmetric pair.
+       - the conformance suite DOES NOT PIN IT. `assertIdentical` appears in
+         the whole of ootest only in METHOD, ROUTINE, StackFrame,
+         IdentityTable, MutableBuffer/setText and String/iif -- none of the
+         BIF groups, and none over a no-op transformation. So reproducing it
+         buys no conformance.
+       - the neighbouring identity machinery is upstream-flagged already:
+         CoreClasses.orx:1305's `compareTo` fallback carries the comment
+         "see discussion in [bugs:1406]".
+
+     So this family is covered by the same licence as the first: identity is
+     not modelled. The alternative -- copying the identity-preserving set from
+     the C++ per builtin, since it cannot be derived -- would encode an
+     upstream inconsistency into this crate at a cost measured in per-builtin
+     special cases, to pass no test that exists.
+
+     WHAT IS STILL WORTH CLOSING is the literal-pooling half, because that one
+     IS consistent, IS what the oracle does deliberately at every length, and
+     removes allocations while it aligns us.
 
      CONSTRAINTS ON THE LITERAL-POOLING FIX, each measured rather than
      assumed. Pool per COMPILED UNIT, not globally: two identical literals in
@@ -767,7 +789,7 @@ DEVIATIONS -- permanent, chosen
 
      THE L2 COST, measured at the checked-out suite rather than guessed.
      `svn checkout https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest`,
-     r13198, checked out 2026-08-15 at the worktree root, which is where
+     last changed r13169, working copy r13178, checked out 2026-08-15 at the worktree root, which is where
      rust/CLAUDE.md's read-only list already says `ootest/` lives. Not tracked
      by git; it is a working copy of a different repository.
      `ooRexx/base/class/IdentityTable.testGroup` builds its whole fixture on
