@@ -702,17 +702,50 @@ DEVIATIONS -- permanent, chosen
      slots. "Interned" is the right intuition and the wrong rule -- real
      interning shares every equal string, and this shares only the short ones.
 
-     MEASURED, oracle, from a fresh empty directory, three descriptors:
+     MEASURED, oracle, from a fresh empty directory, three descriptors,
+     under `numeric digits 18`. `.IdentityTable` item counts:
 
-       a = "abc"; b = "ab" || "c"
-       .IdentityTable with a and b   ->  2 items      (.Table -> 1 item)
-       16-byte pair, same shape      ->  2 items
-       i = 1; j = 0 + 1              ->  1 item
+       a = "abc";  b = "ab" || "c"      ->  2      (.Table -> 1)
+       16-byte literal vs computed      ->  2
+       a = "abc";  c = "abc"            ->  1
+       two identical 16-byte LITERALS   ->  1
+       b = a  (alias)                   ->  1
+       one literal evaluated in a loop  ->  1
+       equal literals in two routines   ->  1
+       i = 1;  j = 0 + 1                ->  1
 
-     So the oracle shares small INTEGERS and shares no strings at all. This
-     crate's `SmallInt` tagged immediates match the integer row by luck of
-     the same design; the string row is the whole divergence and it is
-     confined to the inline range.
+     SO THE ORACLE DOES INTERN, BY LITERAL, AT EVERY LENGTH. An earlier
+     draft of this row said it "shares no strings at all"; that is false and
+     is withdrawn. The rule the measurements give is: a literal's TEXT
+     determines its object, and a COMPUTED string is a fresh object.
+
+     WHICH MEANS THERE ARE TWO DIVERGENCES, IN OPPOSITE DIRECTIONS, and only
+     one of them is this deviation.
+
+       (a) A COMPUTED string of seven bytes or fewer, equal to an existing
+           one, is one object here and two on the oracle. That is this
+           deviation, it follows from entry 59, and it is accepted.
+
+       (b) A LITERAL is a fresh object on every evaluation here and one
+           object per distinct text on the oracle. Two identical long
+           literals are two objects here and one there; so is one literal
+           evaluated twice. This is NOT accepted and is NOT entry 59's --
+           it is that we pool literal BYTES and not literal VALUES.
+
+     (b) IS FIXABLE AND FIXING IT ALIGNS US. `ir.rs`'s `consts` table is
+     already keyed "one entry per distinct literal", and its own doc says
+     `Op::Const` "reads the bytes and builds a fresh value from them through
+     `Interp::literal` every time it runs, so two occurrences of one literal
+     share a table entry and share no value". `eval.rs`'s `ExprKind::Literal`
+     arm does the same. That doc also states the safety argument --
+     "interning is invisible to a running program, which is the property that
+     makes it safe" -- and THAT PROPERTY EXPIRES IN PHASE 5, because identity
+     is exactly what makes sharing visible. Phase 5 pools the value, not just
+     the bytes, which is what the oracle does.
+
+     So this crate's `SmallInt` immediates match the integer row by luck of
+     the same design; short LITERALS match by accident of entry 59 doing what
+     literal pooling would have done anyway; and what is left over is (a).
 
      `~identityHash` IS ADDRESS-DERIVED AND VARIES BETWEEN RUNS. Measured:
      `"abc"~identityHash` printed -140497609849889 and -139929843694625 on

@@ -528,13 +528,21 @@ a = "abc" ; b = "ab" || "c"
 i = 1 ; j = 0 + 1             -> 1 item
 ```
 
-The oracle shares small integers and shares no strings. This crate's `SmallInt` immediates match the
-integer row; entry 59's inline strings do not match the string row, and that is the whole divergence,
-confined to the inline range. Reverting entry 59 is not an option -- it improved every benchmark axis.
+**The oracle interns by literal, at every length**, which the first probe missed: two identical
+16-byte literals are one object, an alias is one object, one literal evaluated in a loop is one
+object, and equal literals in two routines are one object. A **computed** string is always fresh.
 
-**"Interned" is the right intuition and the wrong rule**, so do not write it that way: real interning
-shares every equal string, and this shares only the short ones. The boundary is testable and the
-deviation row states it.
+So there are two divergences, in opposite directions, and only the first is licensed:
+
+* **(a) a computed string of seven bytes or fewer** equal to an existing one is one object here and
+  two on the oracle. Entry 59's consequence; accepted as deviation 4.
+* **(b) a literal is a fresh object on every evaluation here** and one object per distinct text on the
+  oracle. **Not accepted, and not entry 59's** -- `ir.rs`'s `consts` table pools literal *bytes*, and
+  `Op::Const` builds a fresh value from them on every run. Phase 5 pools the **value**. Its doc's own
+  safety argument, "interning is invisible to a running program, which is the property that makes it
+  safe", **expires in this phase**, because identity is what makes sharing visible.
+
+Reverting entry 59 is not an option -- it improved every benchmark axis.
 
 **The L2 cost is bounded and named rather than assumed.** `ooRexx/base/class/IdentityTable.testGroup`
 (ootest r13198) builds its fixture as `.array~of("22", "2"||"2", .object~new, .array~new)` and asserts
@@ -762,8 +770,13 @@ fails criterion 2 on its first `~`.
   reproducing the deletion; keeping them is a divergence any corpus program can see.
 * **D41.** Object identity is **split**: a value small enough to live in its handle has value identity,
   everything else reference identity. Licensed 2026-08-15; deviation 4 in `phase-4-exclusions.txt`, with
-  its L2 cost measured at ootest r13198. `~identityHash` may be any deterministic value, since the
-  oracle's own varies between runs.
+  its L2 cost measured at ootest r13198. **`identityHash` is the slot index for a heap value and the
+  handle's own bits for an inline one** -- total, deterministic, and cheap. The oracle's is
+  address-derived and varies between runs, so no value is wrong; what matters is that equal handles
+  hash equal and distinct slots hash distinct.
+* **D42.** **Literals are pooled by value, not only by bytes.** One object per distinct literal text per
+  package, matching the oracle at every length. This closes a divergence running the *opposite* way from
+  D41 and is not a concession -- it is alignment. `ir.rs`'s `consts` table already has the right key.
 * **D40.** `Body::Instance`'s flat association list is **replaced**: instance variables are scoped by
   defining class, measured. `EXPOSE` reaches a scope's dictionary, and its shape is an early task rather
   than a discovery.
