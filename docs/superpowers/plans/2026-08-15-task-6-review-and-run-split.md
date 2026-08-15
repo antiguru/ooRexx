@@ -529,7 +529,7 @@ pass covered "42 of timely's warn-level lints" and gave its figures as violation
 One `cargo clippy --workspace --all-targets` pass over this tree with 42 of timely's warn-level
 lints enabled, counted from `--message-format=json` by lint code:
 
-| lint | violations |
+| lint | warnings (not sites; see the correction above) |
 |---|---|
 | `clippy::as_conversions` | 574 |
 | `clippy::shadow_unrelated` | 380 |
