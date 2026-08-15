@@ -9,11 +9,11 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
-//! The differential corpus runner: every program named in the phase subset
-//! files -- `rust/corpus/phase-4a.txt`, `phase-4b.txt` and `phase-4c.txt`,
-//! read as a union -- run under both interpreters, compared byte for byte on stdout
-//! and exit code, and on stderr up to DEVIATION 0's own narrow indent
-//! normalisation (see the "DEVIATION 0" section below).
+//! The differential corpus runner: every program named in [`SUBSET_FILES`] --
+//! every phase subset file `rust/corpus/` has, read as a union -- run under
+//! both interpreters, compared byte for byte on stdout and exit code, and on
+//! stderr up to DEVIATION 0's own narrow indent normalisation (see the
+//! "DEVIATION 0" section below).
 //!
 //! **Every phase's subset file is read, not only the current phase's.** A
 //! construct a later phase implements cannot have its witness in
@@ -283,6 +283,48 @@ fn excerpt(bytes: &[u8]) -> String {
 /// of DEVIATION 0".
 const RAW_STDERR_COMPARISON: &[&str] = &[];
 
+/// Every entry in [`RAW_STDERR_COMPARISON`] is a line some phase subset file
+/// actually names.
+///
+/// **`check_case` matches by exact string equality against `rel_path`**
+/// (`RAW_STDERR_COMPARISON.contains(&rel_path)`), and nothing else checks
+/// that an entry corresponds to a real subset program. A path with any
+/// spelling difference from its subset line -- a typo, a missing `lang/`
+/// prefix, a stray trailing character -- would silently fail that equality
+/// check and fall through to the `else` branch, so `check_case` would give
+/// it the *normalised* comparison it never asked for: a green run reporting
+/// a byte-for-byte claim that was never actually checked byte for byte,
+/// which is the exact failure this whole mechanism exists to prevent, one
+/// level up. Without this test, only a human reading the diff would catch
+/// that.
+///
+/// **This test is vacuous today, and that is expected, not decoration.**
+/// `RAW_STDERR_COMPARISON` is empty as of Task 1 -- no program has opted out
+/// of DEVIATION 0 yet -- so this iterates zero rows and passes trivially. It
+/// becomes load-bearing the moment a later task adds the first entry: had
+/// that entry been misspelled relative to its subset line, this test would
+/// fail with the exact path named, where today (and without this test) the
+/// same typo would compile, run, and report a passing byte-for-byte
+/// comparison that silently used the normalised path instead.
+#[test]
+fn raw_stderr_comparison_only_names_programs_the_subset_actually_runs() {
+    let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../corpus");
+    let paths: Vec<PathBuf> = SUBSET_FILES
+        .iter()
+        .map(|name| corpus_dir.join(name))
+        .collect();
+    let subset = read_subset(&paths.iter().map(PathBuf::as_path).collect::<Vec<_>>());
+    for raw_path in RAW_STDERR_COMPARISON {
+        assert!(
+            subset.iter().any(|entry| entry == raw_path),
+            "{raw_path} is listed in RAW_STDERR_COMPARISON but is not a line in \
+             any phase subset file -- check_case would silently give it the \
+             normalised comparison instead of the raw one it is supposed to opt \
+             into"
+        );
+    }
+}
+
 /// Runs one corpus entry under both interpreters and compares all three
 /// observable channels. `None` when they agree.
 fn check_case(oracle: &Oracle, corpus_dir: &Path, rel_path: &str) -> Option<Mismatch> {
@@ -347,8 +389,8 @@ fn build_report(matched: usize, total: usize, mismatches: &[Mismatch], gate: boo
     writeln!(w, "{banner}").unwrap();
     writeln!(
         w,
-        "rexx-exec differential corpus report -- rust/corpus/phase-4a.txt + \
-         phase-4b.txt + phase-4c.txt"
+        "rexx-exec differential corpus report -- rust/corpus/{}",
+        SUBSET_FILES.join(" + ")
     )
     .unwrap();
     if gate {

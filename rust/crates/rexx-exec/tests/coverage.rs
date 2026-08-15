@@ -151,30 +151,104 @@ use owners::{
 // directive kind this walker does not know about.
 // ---------------------------------------------------------------------------
 
-/// Directive keywords this walker admits without panicking. `ROUTINE` is
-/// walked into (`each_instruction` descends into a `::ROUTINE` body); `CLASS`
-/// and `METHOD` are Phase 5a's, admitted here so a subset program carrying
-/// one does not panic, but their bodies are **not** descended into by
+/// Whether `kind` is one of the directive kinds this walker admits without
+/// panicking: `::ROUTINE` (walked into -- `each_instruction` descends into a
+/// `::ROUTINE` body) and `::CLASS`/`::METHOD` (Phase 5a's, admitted so a
+/// subset program carrying one does not panic, but **not** descended into by
 /// `each_instruction` below -- coverage inside a `::CLASS` or `::METHOD` body
 /// is not this criterion's concern until a later task extends the walk to
-/// match.
-const ADMITTED_DIRECTIVE_KEYWORDS: &[&str] = &["ROUTINE", "CLASS", "METHOD"];
+/// match).
+///
+/// **Exhaustive over `DirectiveKind`'s own nine variants**
+/// (`rexx-parse/src/ast.rs:1353`-`1368`), not a string comparison against a
+/// hand-typed table. A tenth variant added to that enum is a compile error
+/// here until this match says whether it is admitted, and there is no string
+/// for a typo to hide in: the previous version of this function compared
+/// `d.kind.keyword()` against a `&[&str]` literal, which nothing checked was
+/// even a real directive keyword, let alone in sync with the enum it meant
+/// to track.
+fn is_admitted_directive_kind(kind: &DirectiveKind) -> bool {
+    match kind {
+        DirectiveKind::Routine(_) | DirectiveKind::Class(_) | DirectiveKind::Method(_) => true,
+        DirectiveKind::Annotate(_)
+        | DirectiveKind::Attribute(_)
+        | DirectiveKind::Constant(_)
+        | DirectiveKind::Options(_)
+        | DirectiveKind::Requires(_)
+        | DirectiveKind::Resource(_) => false,
+    }
+}
 
 fn assert_program_has_only_admitted_directives(path: &Path, p: &Program) {
     let others: Vec<&str> = p
         .directives
         .iter()
+        .filter(|d| !is_admitted_directive_kind(&d.kind))
         .map(|d| d.kind.keyword())
-        .filter(|keyword| !ADMITTED_DIRECTIVE_KEYWORDS.contains(keyword))
         .collect();
     assert!(
         others.is_empty(),
         "{} has a `::` directive this walker does not admit ({others:?}) -- \
-         only {ADMITTED_DIRECTIVE_KEYWORDS:?} are, and only `::ROUTINE`'s body \
-         is actually descended into by `each_instruction`; either the subset \
-         gained a directive kind by mistake or this walker needs widening",
+         only ::ROUTINE, ::CLASS and ::METHOD are (see `is_admitted_directive_kind`), \
+         and only `::ROUTINE`'s body is actually descended into by \
+         `each_instruction`; either the subset gained a directive kind by \
+         mistake or this walker needs widening",
         path.display()
     );
+}
+
+/// Every one of `DirectiveKind`'s nine keywords, checked against
+/// [`is_admitted_directive_kind`]'s real answer for a real parsed instance of
+/// that kind -- not only `::ATTRIBUTE`, which `an_unadmitted_directive_still_panics`
+/// below covers alone.
+///
+/// **What this catches that the single-keyword negative control does not.**
+/// Measured: mutating `is_admitted_directive_kind` to also admit
+/// `DirectiveKind::Constant(_)` (moving it into the `true` arm) left every
+/// other test in this file green, `an_unadmitted_directive_still_panics`
+/// included, because that test only ever constructs `::ATTRIBUTE`. This test
+/// instead parses one minimal instance of every directive kind -- the same
+/// nine literals `rexx-parse/src/directive/tests.rs`'s own
+/// `every_directive_keyword_reaches_its_node` uses, reproduced here rather
+/// than imported for the reason this file's own module doc gives (an
+/// integration test cannot reach another crate's `tests/` module) -- and
+/// checks each one against a committed true/false expectation, so moving
+/// *any* one of the six refused variants into the admitted set (or vice
+/// versa) reddens here specifically, with the wrong keyword named in the
+/// failure.
+#[test]
+fn every_directive_keyword_is_correctly_admitted_or_refused() {
+    let cases: &[(&str, &str, bool)] = &[
+        ("::annotate package\n", "ANNOTATE", false),
+        ("::attribute a\n", "ATTRIBUTE", false),
+        ("::class c\n", "CLASS", true),
+        ("::constant k 1\n", "CONSTANT", false),
+        ("::method m\n  return 1\n", "METHOD", true),
+        ("::options noprolog\n", "OPTIONS", false),
+        ("::requires \"nosuch\"\n", "REQUIRES", false),
+        ("::resource d\nbody\n::END\n", "RESOURCE", false),
+        ("::routine r\n  return 1\n", "ROUTINE", true),
+    ];
+    for (text, expected_keyword, expected_admitted) in cases {
+        let p = parse_program(text.as_bytes().to_vec())
+            .unwrap_or_else(|e| panic!("{text:?} failed to parse: {e:?}"));
+        assert_eq!(
+            p.directives.len(),
+            1,
+            "{text:?} did not produce exactly one directive"
+        );
+        let kind = &p.directives[0].kind;
+        assert_eq!(
+            kind.keyword(),
+            *expected_keyword,
+            "{text:?} parsed to the wrong directive kind"
+        );
+        assert_eq!(
+            is_admitted_directive_kind(kind),
+            *expected_admitted,
+            "{expected_keyword} admission disagrees with the committed expectation"
+        );
+    }
 }
 
 /// Phase 5a Task 1's own demonstration: `::CLASS K` is an inline literal
@@ -193,9 +267,9 @@ fn a_class_directive_is_admitted_without_panicking() {
     assert_program_has_only_admitted_directives(Path::new("<phase-5a-task-1-demo>"), &p);
 }
 
-/// Pairs with the success above: a directive kind still outside
-/// [`ADMITTED_DIRECTIVE_KEYWORDS`] must still panic, or the widening silently
-/// removed the guard rather than widening it.
+/// Pairs with the success above: a directive kind [`is_admitted_directive_kind`]
+/// still marks `false` must still panic, or the widening silently removed the
+/// guard rather than widening it.
 #[test]
 #[should_panic(expected = "has a `::` directive this walker does not admit")]
 fn an_unadmitted_directive_still_panics() {
