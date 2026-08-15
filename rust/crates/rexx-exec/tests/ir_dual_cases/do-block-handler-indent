@@ -11,9 +11,9 @@
 # **The settled indent is not the column a handler's clauses echo at.** A
 # handler activation echoes a level in from the block indent it inherits --
 # visible in every row below -- so each row's handler sits two columns deeper
-# than the value its boundary settled. Each row's own note gives the columns to
-# check it against, each of them a count of the spaces between `*-*` and the
-# clause text.
+# than the value its boundary settled. Column 0 is where the `call on` clauses
+# at the top of each row echo, outside every block, and the columns each row's
+# note names are read against those.
 #
 # **What each row is for.** The two top-level rows separate the arguments: each
 # is built so that only its own boundary delivers a handler, and measured,
@@ -42,10 +42,13 @@
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Regenerate a
 # row by running its program under the oracle, never with REWRITE=1 --
 # `both_engines_agree_on_every_case_file` refuses to run under REWRITE for that
-# reason. Capture the three descriptors separately, never merged:
+# reason. Run from a fresh empty directory, use an absolute path for the program
+# and for every redirect, and capture the three descriptors separately, never
+# merged:
 #
 #   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
-#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null ) >out 2>err
+#     <ooRexx>/build/bin/rexx <absdir>/PROGRAM.rex </dev/null ) \
+#     > <absdir>/out 2> <absdir>/err
 #
 # and write the block as `rc> <exit status>`, then every line of `out` tagged
 # `out>`, then every line of `err` tagged `err>`.
