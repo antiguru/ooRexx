@@ -428,6 +428,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "rexx-classes"
+version = "0.1.0"
+dependencies = [
+ "rexx-core",
+]
+
+[[package]]
 name = "rexx-core"
 version = "0.1.0"
 dependencies = [
