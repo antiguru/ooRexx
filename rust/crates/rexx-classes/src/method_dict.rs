@@ -115,7 +115,7 @@ impl MethodDict {
     /// Overlay `source`'s methods on top of this dictionary's own -- the
     /// oracle's `MethodDictionary::mergeMethods`. Iterating `source` in
     /// reverse priority order and folding each entry in through
-    /// [`add_method`] is what preserves `source`'s own relative priority
+    /// [`Self::add_method`] is what preserves `source`'s own relative priority
     /// after the merge: the oracle does the identical reversal
     /// (`ReverseTableIterator`) for the identical reason, stated in its own
     /// comment -- "so the methods get added to our directory in the same

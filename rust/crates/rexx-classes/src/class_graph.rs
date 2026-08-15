@@ -335,7 +335,7 @@ impl ClassGraph {
     /// scope, folds them into `class`'s own instance dictionary, then
     /// rebuilds `class`'s instance behaviour in place -- **no superclass
     /// edge** (`class`'s `superclasses` is untouched) and **no cascade**
-    /// to `class`'s own subclasses (unlike [`define`] and [`inherit`], the
+    /// to `class`'s own subclasses (unlike [`Self::define`] and [`Self::inherit`], the
     /// oracle function's body has no call to either `updateSubClasses` or
     /// `updateInstanceSubClasses`).
     ///
@@ -361,7 +361,7 @@ impl ClassGraph {
 
     /// The ancestor chain a class-graph assertion reads -- oracle's
     /// `~superClasses`. Two classes can answer identically here despite
-    /// [`inherit_instance_methods`] having donated different methods to
+    /// [`Self::inherit_instance_methods`] having donated different methods to
     /// each: that is the exact blind spot this crate's tests are built to
     /// demonstrate.
     pub fn ancestors(&self, class: ObjRef) -> &[ObjRef] {
@@ -417,7 +417,7 @@ impl ClassGraph {
     }
 
     /// The monotonic version D29 asks for -- bumped once per
-    /// [`rebuild_behaviour`](Self::rebuild_behaviour) call against this
+    /// `rebuild_behaviour` call against this
     /// handle.
     pub fn version_at(&self, handle: BehaviourHandle) -> u64 {
         self.behaviours[handle.0].version
