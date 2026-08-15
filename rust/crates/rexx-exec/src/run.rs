@@ -1673,12 +1673,32 @@ impl Interp {
                 let saved_base = std::mem::replace(&mut self.activation_indent, base_indent);
                 let saved_offset = std::mem::take(&mut self.indent_offset);
                 let saved_line = std::mem::replace(&mut self.clause_line_override, base_line);
+                // **The fragment's own condition queue**, which the depth is
+                // the key to rather than a second collection --
+                // `Interp::fragment_depth` has why the oracle has one and what
+                // was measured on either side of it. Incremented rather than
+                // replaced the way the values saved above are, because a
+                // nested fragment inherits each of those and needs a level of
+                // its own here.
+                self.fragment_depth += 1;
                 // `saved_line` read before the replace above is also the
                 // answer to "is a fragment already running", which is the one
                 // extra thing `enter_fragment` needs and the only place it is
                 // in hand. Nothing new is tracked for it.
                 let saved_entry = self.enter_fragment(saved_line.is_some());
                 let flow = self.run_fragment(text);
+                // **A condition still queued at this depth dies with the
+                // fragment**, on the failing path as well as this one, because
+                // the activation whose queue it was in is what ends. Measured,
+                // `interpret 'zq = raiser()'` with a handler that requeues: the
+                // oracle runs the first handler and never runs the second, and
+                // the enclosing clause's own boundary does not pick it up.
+                // Dropping the entries also keeps a program that runs
+                // `INTERPRET` in a loop from accumulating undeliverable ones.
+                let depth = self.fragment_depth;
+                self.pending_traps
+                    .retain(|pending| pending.fragment_depth != depth);
+                self.fragment_depth -= 1;
                 self.leave_fragment(saved_entry);
                 self.activation_indent = saved_base;
                 self.indent_offset = saved_offset;
@@ -3546,7 +3566,9 @@ impl Interp {
     /// `Interp::pending_traps` carries the transcripts for both halves.
     /// Entries belonging to another activation are stepped over rather than
     /// blocking the ones this activation owes; `PendingTrap::activation` has
-    /// why that identity is the right key.
+    /// why that identity is the right key. Entries queued in a different
+    /// `INTERPRET` fragment are stepped over the same way, for the reason
+    /// `PendingTrap::fragment_depth` states.
     pub(crate) fn deliver_pending_traps(
         &mut self,
         code: &Code<'_>,
@@ -3560,11 +3582,16 @@ impl Interp {
             // comment has the three transcripts this identity check answers,
             // including the two a stack depth got wrong.
             let here = self.activation().id;
-            let Some(at) = self
-                .pending_traps
-                .iter()
-                .take(owed)
-                .position(|pending| pending.activation == here)
+            // Both keys, and they answer different questions: the identity
+            // says which activation's trap table matched, the depth says which
+            // `INTERPRET` fragment's queue the condition is sitting in. A
+            // fragment is an activation in the oracle and is not one here, so
+            // the second is what the first cannot see.
+            let depth = self.fragment_depth;
+            let Some(at) =
+                self.pending_traps.iter().take(owed).position(|pending| {
+                    pending.activation == here && pending.fragment_depth == depth
+                })
             else {
                 return Ok(None);
             };
@@ -4025,6 +4052,12 @@ impl Interp {
                     // been queued while a handler was running, which is not
                     // knowable here: this is the raise, not the delivery.
                     queued_during_delivery: false,
+                    // Which `INTERPRET` fragment's queue this joins. The
+                    // raising activation is about to be popped and the depth
+                    // is not its own -- a fragment does not push an activation
+                    // here -- so it is read straight off `Interp`, where the
+                    // `Interpret` arm maintains it.
+                    fragment_depth: self.fragment_depth,
                 });
                 Ok(Flow::Return(result))
             }

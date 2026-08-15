@@ -1487,6 +1487,26 @@ struct PendingTrap {
     /// Nothing else reads it. Delivery order, the identity check and `SIGL`
     /// are all unchanged by it.
     queued_during_delivery: bool,
+    /// [`Interp::fragment_depth`] as it stood when this was queued: which
+    /// `INTERPRET` fragment, if any, was running.
+    ///
+    /// **A condition is delivered only at a boundary reached at the same
+    /// depth**, which is this crate's stand-in for the oracle running a
+    /// fragment in an activation whose condition queue is its own. Both
+    /// directions are measured, on a `CALL ON USER` handler that requeues a
+    /// second trapped condition:
+    ///
+    /// * queued *before* the fragment, `interpret 'do; say ''body''; end'`:
+    ///   the oracle prints `body` and then the second handler, so the
+    ///   fragment's own clauses offer that condition no boundary and the
+    ///   enclosing `INTERPRET` clause's boundary is where it lands;
+    /// * queued *inside* the fragment, `interpret 'zq = raiser(); do; say
+    ///   ''body''; end'`: the oracle prints the second handler and *then*
+    ///   `body`, so a fragment clause's boundary does take it.
+    ///
+    /// One field answers both, where suppressing the boundary itself answers
+    /// only the first and moves the second handler after `body`.
+    fragment_depth: usize,
 }
 
 /// The interpreter. Owns the heap, the root set, the activation stack, the
@@ -1929,6 +1949,30 @@ struct Interp {
     /// `run_fragment` by the `Interpret` arm, not cleared afterwards, so a
     /// nested fragment cannot strand the outer one's value.
     clause_line_override: Option<usize>,
+    /// How many `INTERPRET` fragments are running, counted from zero outside
+    /// any of them.
+    ///
+    /// **The key a clause boundary matches a queued condition against**
+    /// ([`PendingTrap::fragment_depth`], which has the transcripts): the
+    /// oracle runs a fragment in an activation whose condition queue is its
+    /// own, so a condition queued outside the fragment gets no boundary
+    /// inside it and one queued inside gets no boundary outside.
+    ///
+    /// A depth rather than an `Option`, because a fragment inside a fragment
+    /// is a third queue again -- measured, `interpret 'interpret "zq =
+    /// raiser()"'` with a requeueing handler: the oracle runs the first
+    /// handler and drops the requeue entirely, so the inner fragment's leftover
+    /// reaches neither the outer fragment nor the program.
+    ///
+    /// Separate from `clause_line_override`, which the `Interpret` arm sets
+    /// beside it: that one is *inherited* by a nested fragment (the oracle
+    /// prints the outermost `INTERPRET`'s line for every clause inside), where
+    /// this one has to distinguish the nesting levels it deliberately
+    /// flattens. Not saved across a call either, where `clause_line_override`
+    /// is cleared: a callee's clauses run in the fragment that called them,
+    /// and a condition the callee raises is owed to the caller's own next
+    /// boundary, which is inside that fragment.
+    fragment_depth: usize,
     /// Task 16's collect-on-every-allocation gate criterion (4a exit gate,
     /// criterion 4): when true, [`Interp::alloc_with`] calls `Heap::collect`
     /// after every allocation instead of never. Off by default, and the off
@@ -2304,6 +2348,7 @@ impl Interp {
             failure_site: None,
             failure_sites: Vec::new(),
             clause_line_override: None,
+            fragment_depth: 0,
             stress_collect: false,
             collect_at: COLLECT_FLOOR,
             depth: 0,

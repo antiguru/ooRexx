@@ -56,6 +56,12 @@
 //! queued by the `INTERPRET` clause's own expression is *not* delivered
 //! inside the fragment).
 //!
+//! **The fragment's separate queue is reconstructed at the delivery rather
+//! than by withholding boundaries**, and it has to be: the fragment's clauses
+//! do offer boundaries to a condition queued *inside* the fragment, and
+//! `PendingTrap::fragment_depth` is the key that tells the two apart. Its own
+//! doc comment carries the transcripts.
+//!
 //! `Interp::in_clause`'s own `debug_assert` is what makes a fifth such site
 //! announce itself rather than being found by a reviewer's probe: a clause
 //! that begins while an earlier clause of the same activation still owes a

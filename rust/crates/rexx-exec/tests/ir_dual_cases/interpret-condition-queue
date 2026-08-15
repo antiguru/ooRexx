@@ -1,0 +1,202 @@
+# Which clause boundaries a queued CALL ON condition is offered when an
+# INTERPRET fragment is running, pinned on the tree-walker's own bytes.
+#
+# The oracle runs a fragment in an activation whose condition queue is its own,
+# and this crate runs it inside the creating activation. So the queue is shared
+# here and the separation has to be reconstructed. The rule these rows pin has
+# three parts, and each row needs a different one:
+#
+#   * a condition queued BEFORE the fragment is offered no boundary inside it,
+#     however many clauses the fragment has and whatever they are;
+#   * a condition queued INSIDE the fragment is offered the fragment's own
+#     boundaries, and the first of them, not the enclosing INTERPRET's;
+#   * a condition still queued when the fragment ends dies with it, and the
+#     enclosing INTERPRET clause's own boundary does not pick it up.
+#
+# A rule stated only as the first part is satisfied by suppressing the fragment
+# clauses' boundaries, which is what the second row is here to refuse: measured,
+# that suppression prints `body` before the second handler where the oracle
+# prints the second handler first.
+#
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Regenerate a
+# row by running its program under the oracle, never with REWRITE=1 --
+# ir_dual.rs refuses to run at all under REWRITE for that reason. Capture is:
+#
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+
+# A plain DO in the fragment, with a condition already queued when the
+# INTERPRET clause begins. The DO has a header clause and an END clause -- both
+# boundaries the oracle has for a DO in a program -- and neither of them may
+# take this condition: the oracle prints `body` first and only then the second
+# handler, whose SIGL is the INTERPRET clause's line 4.
+program
+call on user c1 name h1
+call on user c2 name h2
+zr = raiser()
+interpret 'do; say ''body''; end'
+say 'after' zr
+exit 0
+raiser:
+raise user c1 return 5
+h1:
+say 'h1' sigl
+raise user c2 return 1
+h2:
+say 'h2' sigl
+return
+----
+rc> 0
+out> h1 3
+out> body
+out> h2 4
+out> after 5
+
+# The same fragment, with the condition raised INSIDE it instead. Now the DO's
+# header clause is exactly where the oracle delivers, ahead of `body`, so the
+# fragment's boundaries are live rather than suppressed. SIGL is 3 for both
+# handlers, because every clause of a fragment reports the enclosing INTERPRET
+# clause's own line.
+program
+call on user c1 name h1
+call on user c2 name h2
+interpret 'zq = raiser(); do; say ''body''; end'
+say 'after' zq
+exit 0
+raiser:
+raise user c1 return 5
+h1:
+say 'h1' sigl
+raise user c2 return 1
+h2:
+say 'h2' sigl
+return
+----
+rc> 0
+out> h1 3
+out> h2 3
+out> body
+out> after 5
+
+# No construct in the fragment at all, which is what says the rule is about the
+# fragment rather than about DO. Two SAY clauses, and the condition queued
+# before the INTERPRET waits past both of them.
+program
+call on user c1 name h1
+call on user c2 name h2
+zr = raiser()
+interpret 'say ''a''; say ''b'''
+say 'after' zr
+exit 0
+raiser:
+raise user c1 return 5
+h1:
+say 'h1' sigl
+raise user c2 return 1
+h2:
+say 'h2' sigl
+return
+----
+rc> 0
+out> h1 3
+out> a
+out> b
+out> h2 4
+out> after 5
+
+# A controlled loop in the fragment, whose header and re-test clauses are more
+# boundaries again and are reached through a different path on the compiled
+# engine than a plain DO's are.
+program
+call on user c1 name h1
+call on user c2 name h2
+zr = raiser()
+interpret 'do zi = 1 to 1; say ''body''; end'
+say 'after' zr
+exit 0
+raiser:
+raise user c1 return 5
+h1:
+say 'h1' sigl
+raise user c2 return 1
+h2:
+say 'h2' sigl
+return
+----
+rc> 0
+out> h1 3
+out> body
+out> h2 4
+out> after 5
+
+# A condition left queued when the fragment ends. The fragment's only clause
+# queues the first, its own boundary delivers it, and the handler requeues --
+# with no fragment clause left to take the requeue. The oracle never runs the
+# second handler at all: the queue it is sitting in ends with the fragment, and
+# the enclosing INTERPRET clause does not inherit it.
+program
+call on user c1 name h1
+call on user c2 name h2
+interpret 'zq = raiser()'
+say 'after' zq
+exit 0
+raiser:
+raise user c1 return 5
+h1:
+say 'h1' sigl
+raise user c2 return 1
+h2:
+say 'h2' sigl
+return
+----
+rc> 0
+out> h1 3
+out> after 5
+
+# A second fragment after the one that left a condition queued, which is what
+# says the leftover is discarded rather than merely unreachable. The two
+# fragments run at the same nesting, so an implementation that only declines to
+# deliver would hand the first fragment's leftover to the second one's clause
+# and print the second handler after `second`.
+program
+call on user c1 name h1
+call on user c2 name h2
+interpret 'zq = raiser()'
+interpret 'say ''second'''
+say 'after' zq
+exit 0
+raiser:
+raise user c1 return 5
+h1:
+say 'h1' sigl
+raise user c2 return 1
+h2:
+say 'h2' sigl
+return
+----
+rc> 0
+out> h1 3
+out> second
+out> after 5
+
+# The same, one fragment deeper. The requeue is left in the INNER fragment's
+# queue, and neither the outer fragment nor the program picks it up -- which is
+# what makes this a depth rather than a flag.
+program
+call on user c1 name h1
+call on user c2 name h2
+interpret 'interpret "zq = raiser()"'
+say 'after' zq
+exit 0
+raiser:
+raise user c1 return 5
+h1:
+say 'h1' sigl
+raise user c2 return 1
+h2:
+say 'h2' sigl
+return
+----
+rc> 0
+out> h1 3
+out> after 5
