@@ -2116,6 +2116,41 @@ above.
   NOT FIXED, decided by Moritz on 2026-08-15. Recorded so that a reader meeting
   the loud message does not conclude the oracle refuses it too.
 
+  A ::CONSTANT DIRECTIVE'S PARENTHESISED EXPRESSION IS NEVER EVALUATED, AND THE
+  ORACLE EVALUATES IT WHEN THE DIRECTIVE INSTALLS. The simple form runs on both
+  sides. The expression form is accepted here and silently does nothing, where
+  the oracle evaluates it before the program starts, so an error inside the
+  expression stops the oracle and not us. This is the opposite shape from the
+  row above: not an over-refusal but a silent under-refusal, which is the worse
+  of the two because nothing is loud.
+
+  Measured 2026-08-15 with the release rexx-run built from b029abe77, whose
+  code is HEAD's -- git diff --name-only b029abe77..HEAD names nothing outside
+  docs/. Under the standard oracle wrapper from a fresh empty directory, three
+  descriptors read separately, on a program whose
+  prologue is say "prolog" followed by exit, then ::CLASS K and
+  ::CONSTANT c (.NoSuchClass~m):
+
+    oracle               rc 159, stdout empty, stderr naming the ::CONSTANT
+                         line and then the ::CLASS line
+    ir (default engine)  rc 0, stdout "prolog", stderr empty
+
+  A well-formed expression hides the difference: ::CONSTANT c (.K~m) with a
+  class method m returning 7 is rc 0 with stdout "prolog" on BOTH sides, which
+  is why a probe over valid programs alone cannot see this. The discriminating
+  probe has to make the expression fail.
+
+  WHY IT IS PHASE 5'S AND WHY IT MATTERS THERE. StreamClasses.orx:548-549 are
+  this exact form -- ::constant separator (.File~getSeparator) -- and their
+  targets at :546-:547 are external natives, so the bootstrap CALLS a native
+  while installing a directive. A Phase 5 that installs that file without
+  evaluating the constants passes the install and leaves .File without either
+  of them.
+
+  NOT FIXED. Found 2026-08-15 by the adversarial review of the Phase 5 design
+  spec, which put it in criterion 1's own path;
+  docs/superpowers/specs/2026-08-15-phase-5-object-model.md records it as D38.
+
 CLOSED DEFECTS -- measured wrong, measured again, now matching
 -------------------------------------------------------------
 

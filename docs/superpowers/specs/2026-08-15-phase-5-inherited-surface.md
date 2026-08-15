@@ -49,7 +49,15 @@ empty directory created for this session. Counts stated below were taken with `/
 > `::class`/`::method`/`::routine`/`::requires` work; security manager interception points in place
 > (D12); cold start measured and recorded against C++ (D2) | L2 |
 
-The three assets that gate names, measured at the oracle checkout this session:
+**Marked correction, 2026-08-15, after the Phase 5 design spec's review panel.** "The three assets that
+gate names" is wrong and the paragraph below inherits the error. The **Phase 5** gate row quoted just above
+names `CoreClasses.orx` and nothing else; `StreamClasses.orx` is named by the roadmap's **Phase 7** row
+("`StreamClasses.orx` runs"), and the crate-layout line at `:518` says `rexx-lib` *loads* the two files, not
+that Phase 5 runs both. The measurements in the paragraph are sound; the ownership claim in its first six
+words is not. See `2026-08-15-phase-5-object-model.md`, "What the bootstrap actually reaches", which found
+that `StreamClasses.orx` binds Phase 7's natives eagerly at directive-install time and cannot run here.
+
+The three assets, measured at the oracle checkout this session:
 `interpreter/RexxClasses/CoreClasses.orx` is 4,193 lines by `wc -l` and holds 32 lines matching
 `^::class`/`^::CLASS` by `/bin/grep -c`; `interpreter/RexxClasses/StreamClasses.orx` is 1,010 lines.
 The roadmap's line 82 makes the consequence explicit: "a Rust core that can execute `CoreClasses.orx`
