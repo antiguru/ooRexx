@@ -1698,6 +1698,20 @@ impl Interp {
                 let depth = self.fragment_depth;
                 self.pending_traps
                     .retain(|pending| pending.fragment_depth != depth);
+                // **Nothing deeper than the fragment just left may survive
+                // it**, which is the invariant that lets the delivery key be
+                // an equality rather than a comparison: a deeper entry would
+                // belong to a fragment that already ran this same discard on
+                // its own way out, and a boundary out here would then have to
+                // decide whether it inherits one. Asserted rather than
+                // reasoned about, because the discard runs inside a
+                // `deliver_pending_traps` that a handler can have re-entered.
+                debug_assert!(
+                    self.pending_traps
+                        .iter()
+                        .all(|pending| pending.fragment_depth < depth),
+                    "a condition queued inside a fragment outlived that fragment's own exit"
+                );
                 self.fragment_depth -= 1;
                 self.leave_fragment(saved_entry);
                 self.activation_indent = saved_base;

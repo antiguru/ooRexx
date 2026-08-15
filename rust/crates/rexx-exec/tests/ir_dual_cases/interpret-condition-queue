@@ -3,20 +3,29 @@
 #
 # The oracle runs a fragment in an activation whose condition queue is its own,
 # and this crate runs it inside the creating activation. So the queue is shared
-# here and the separation has to be reconstructed. The rule these rows pin has
-# three parts, and each row needs a different one:
+# here and the separation has to be reconstructed. The parts of the rule these
+# rows pin, each row needing a different one:
 #
 #   * a condition queued BEFORE the fragment is offered no boundary inside it,
 #     however many clauses the fragment has and whatever they are;
 #   * a condition queued INSIDE the fragment is offered the fragment's own
 #     boundaries, and the first of them, not the enclosing INTERPRET's;
 #   * a condition still queued when the fragment ends dies with it, and the
-#     enclosing INTERPRET clause's own boundary does not pick it up.
+#     enclosing INTERPRET clause's own boundary does not pick it up;
+#   * a condition queued in an OUTER fragment survives an inner fragment and is
+#     offered no boundary inside it either, so what separates the queues is a
+#     nesting level rather than "a fragment is running".
 #
 # A rule stated only as the first part is satisfied by suppressing the fragment
-# clauses' boundaries, which is what the second row is here to refuse: measured,
-# that suppression prints `body` before the second handler where the oracle
-# prints the second handler first.
+# clauses' boundaries, which is what the `zq = raiser(); do; say 'body'; end`
+# row is here to refuse: measured, that suppression prints `body` before the
+# second handler where the oracle prints the second handler first.
+#
+# A rule stated without the fourth part is satisfied by a boolean "in a
+# fragment" flag, and that is a narrower gap than it looks: the flag design was
+# built and run against every row here, and only the `interpret "say 1; say 2"`
+# row tells it from a nesting level. The rest, the nested-fragment row included,
+# produce identical bytes under both.
 #
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Regenerate a
 # row by running its program under the oracle, never with REWRITE=1 --
@@ -104,9 +113,33 @@ out> b
 out> h2 4
 out> after 5
 
-# A controlled loop in the fragment, whose header and re-test clauses are more
-# boundaries again and are reached through a different path on the compiled
-# engine than a plain DO's are.
+# An IF in the fragment, whose condition clause ends before the THEN branch
+# runs and is therefore another boundary the fragment offers ahead of `body`.
+program
+call on user c1 name h1
+call on user c2 name h2
+zr = raiser()
+interpret 'if 1 = 1 then say ''body'''
+say 'after' zr
+exit 0
+raiser:
+raise user c1 return 5
+h1:
+say 'h1' sigl
+raise user c2 return 1
+h2:
+say 'h2' sigl
+return
+----
+rc> 0
+out> h1 3
+out> body
+out> h2 4
+out> after 5
+
+# A controlled loop in the fragment, whose header clause and per-pass re-test
+# clause are boundaries a plain DO does not have, opened by `run_repeating`
+# rather than by the `Simple` arm.
 program
 call on user c1 name h1
 call on user c2 name h2
@@ -180,8 +213,10 @@ out> second
 out> after 5
 
 # The same, one fragment deeper. The requeue is left in the INNER fragment's
-# queue, and neither the outer fragment nor the program picks it up -- which is
-# what makes this a depth rather than a flag.
+# queue, and neither the outer fragment nor the program picks it up. Measured
+# against a built boolean-flag design, this row agrees with it: a flag drops the
+# leftover at the inner fragment's exit exactly as a depth does, so what this
+# row pins is the discard reaching a nested fragment, not the choice of key.
 program
 call on user c1 name h1
 call on user c2 name h2
@@ -199,4 +234,40 @@ return
 ----
 rc> 0
 out> h1 3
+out> after 5
+
+# The row that says the key is a nesting level and not a "some fragment is
+# running" flag, and the only one here that does. The condition is queued in the
+# OUTER fragment and an inner fragment runs while it waits: the oracle prints
+# both of the inner fragment's clauses and only then the second handler, so the
+# inner fragment's boundaries are no more available to it than the program's
+# are. A flag makes the inner fragment's boundaries match, delivering after `1`
+# and ahead of `2` -- built and run, that is the byte difference.
+#
+# The inner fragment needs more than one clause for this to be visible at all.
+# With one, a delivery at its first boundary and a delivery at the enclosing
+# clause's boundary both land after that clause has printed, and the two designs
+# are indistinguishable: `interpret 'zq = raiser(); interpret "say 1"; say 2'`
+# was measured under both and prints `h1 3 / 1 / h2 3 / 2 / after 5` either way.
+program
+call on user c1 name h1
+call on user c2 name h2
+interpret 'zq = raiser(); interpret "say 1; say 2"; say 3'
+say 'after' zq
+exit 0
+raiser:
+raise user c1 return 5
+h1:
+say 'h1' sigl
+raise user c2 return 1
+h2:
+say 'h2' sigl
+return
+----
+rc> 0
+out> h1 3
+out> 1
+out> 2
+out> h2 3
+out> 3
 out> after 5
