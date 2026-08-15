@@ -101,17 +101,29 @@ queue is separate, so a condition pending when the `INTERPRET` clause runs is of
 1. **Reproduce** the program above on both engines and confirm the divergence still stands at the
    tree you find. If it does not, stop and report that instead of fixing nothing.
 
-2. **Fix it** by giving the new header and `END` clauses no boundary when a fragment's
-   `clause_line_override` is in force. The suppression must reach both engines: the compiled engine
+2. **Fix it.** CORRECTED 2026-08-15, after Task 1 built the mechanism this step first named and
+   measured it wrong. This step read "give the new header and `END` clauses no boundary when a
+   fragment's `clause_line_override` is in force". That suppression is too broad: it regresses
+   `interpret 'zq = raiser(); do; say ''body''; end'`, where the oracle **does** deliver at the
+   `DO` header inside the fragment. Measured by the controller at `11638b91e`, oracle and both
+   engines, `rc 0`: `h1 3` / `h2 3` / `body` / `after 5`. The distinction is not whether the
+   boundary is inside a fragment, it is **which fragment queued the condition**: a condition
+   pending when the `INTERPRET` clause ran waits for that clause's own boundary, and a condition
+   queued inside the fragment is delivered at the fragment's own boundaries. The suppression must
+   reach both engines: the compiled engine
    never calls `run_loop`, `Op::LoopRun` enters `run_loop_with_header` directly
    (`crates/rexx-exec/src/ir/drive.rs:1337`), which is why `e74780054`'s own step suppression had to
    go in `leave_stepped_clause`.
 
-3. **Measure the suppression against the empty-fragment shape before you keep it.** The reviewer
-   established that `interpret 'do; end'` under a double requeue diverges *identically* before and
-   after `e74780054`, so a suppression that is right for the bodied shape may be wrong there.
-   Construct that program, measure it on the oracle and on both engines before and after your
-   change, and report all three. A suppression that breaks it is the wrong suppression.
+3. **Measure the suppression against the empty-fragment shape before you keep it.** Construct
+   `interpret 'do; end'` under a double requeue, measure it on the oracle and on both engines
+   before and after your change, and report all three. A suppression that breaks it is the wrong
+   suppression.
+
+   CORRECTED 2026-08-15: this step was written from the reviewer's statement that the shape
+   "diverges *identically* before and after `e74780054`". Task 1 measured it and it does not
+   diverge at all: the oracle and both engines agree, before and after. The step stands as a
+   control that must keep agreeing; its stated premise does not.
 
 4. **Measure the two siblings** the reviewer identified as pre-existing divergences of the same
    family, unchanged by `e74780054`:
