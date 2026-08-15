@@ -231,98 +231,119 @@ out> after
 # clause queues nothing" is not a reason to leave a block instruction's
 # boundary unsettled.
 #
-# **A DIFFERENT FAMILY, RECORDED HERE BUT NOT RANKED WITH THESE.** The same
-# requeue route pointed at a plain `do` / `end` is not an indent and not a
-# trace quantity: the oracle delivers the second handler at the `do` clause's
-# own boundary, before the body runs, and this crate runs the body's first
-# clause first and delivers at that clause's boundary instead. Wrong order and
-# a different `SIGL`, on **stdout**, with no `TRACE` anywhere in the program.
-# The program:
+# **A DIFFERENT FAMILY, AND IT IS CLOSED.** The same requeue route pointed at a
+# plain `do` / `end` is not an indent and not a trace quantity: it is the
+# printed order and the printed `SIGL`, on **stdout**, with no `TRACE` anywhere
+# in the program.
 #
-#   call on user zx name h        | raiser1:
-#   call on user zy name g        | raise user zx return 5
-#   zv = 'unset'                  | h:
-#   zn = raiser1()                | raise user zy return 1
-#   do                            | g:
-#     say 'body'                  | zv = 'set'
-#   end                           | say 'G ran' sigl
-#   say 'after' zv zn             | return
-#   exit                          |
+# **A plain `DO` has a clause at its header and a clause at its `END`, and the
+# oracle ends each where this crate now does.**
+# `RexxInstructionSimpleDo::execute` traces the instruction, opens the block
+# and returns without running the body, so the header's clause ends before any
+# body instruction does; `END` is an instruction of its own, so it reaches a
+# boundary of its own. A condition pending when the `DO` runs is therefore owed
+# to the `DO`'s line, and one requeued inside the block is owed to the `END`'s.
 #
-# read down the left column then the right, so `do` is line 5 and the body's
-# `say` is line 6:
+# **The step that spans the whole construct is this crate's own scaffolding and
+# owes no boundary at all.** A `DO`/`LOOP` resolves every pass inside one
+# `step`, and a boundary at the end of that step is a boundary the oracle does
+# not have. It shows on a `DO UNTIL`, whose `END` boundary the `UNTIL` test has
+# already served: the requeue is owed to the clause *after* the loop, and a
+# boundary belonging to the step delivers it early instead. That shape runs the
+# opposite way to every other one here, which is why it is named rather than
+# left to follow from the others.
 #
-#   oracle       G ran 5 / body / after set 5
-#   this crate   body / G ran 6 / after set 5
+# `corpus/lang/do_clause_boundaries.rex` holds the family against the live
+# oracle -- the header, the `END`, the empty-body control that separates them,
+# the `DO UNTIL`, and the loops and neighbouring constructs the rule must not
+# move. The stanzas below pin the tree-walker's own bytes for the same shapes,
+# which the corpus runner does not: it runs this crate at its default engine.
 #
-# **The `5` ending the third line is `zn`, the value `raiser1` returned, and
-# not a `SIGL`.** Naming that matters here more than usual: `raise user zx
-# return 5` happens to return the same number as the `do` clause's own line, so
-# a reader who takes that `5` for the delivering clause's `SIGL` reconstructs a
-# program ending `say 'after' zv sigl` -- which produces the identical oracle
-# transcript and a *different* crate one, `after set 6`. Measured both ways.
-#
-# `do label zl` behaves the same and `if ... then` is clean on this route.
-#
-# **The boundary is not missing. It is in the wrong place.** The tree-walker
-# steps a `DO` through `step_in_temps_frame` -> `in_stepped_clause`, whose
-# clause unit wraps `step`; `step`'s own `Do` arm calls `run_loop`, which
-# resolves the whole loop before returning. So **this crate's** `DO` clause
-# stays open across the body, the body's clauses nest inside it, and
-# `leave_clause` -- the boundary that delivers -- does not run until the loop is
-# over. **This crate therefore delivers at whichever boundary arrives first**:
-# with a body that is the body's first clause, and with no body it is the
-# `DO`'s own.
-#
-# **The oracle's `RexxInstructionSimpleDo::execute` returns as soon as it has
-# opened the block**, so **the oracle's** clause ends before any body
-# instruction runs and **the oracle delivers the condition that was pending
-# when the `DO` ran at the `DO`'s own boundary** -- which is what the transcript
-# above shows, `G ran 5` ahead of `body`.
-#
-# **Bounded to that one condition deliberately.** A *second* condition, requeued
-# by that first delivery, is owed at the `END`'s own boundary instead: measured
-# on an empty `do` / `end` with a double requeue, the oracle prints `G ran 5`
-# then `K ran 6`, naming the `END`, and this crate has no boundary there at all
-# and lands it past `say 'after'`. That is a different mechanism and a second
-# defect -- a boundary genuinely absent, where this entry's is merely late --
-# and Task 6's Step 1c names its program.
-#
-# **The compiled path is different code and the same shape**, which is why this
-# is on both engines rather than one: `crate::ir::Op::LoopRun` sits inside the
-# header's own `Op::Clause` region -- `close_region` is pushed after it -- and
-# calls `run_loop_with_header`, which resolves the loop before that region
-# closes. Fixing one engine and measuring the other would look like a fix.
-#
-# **An empty body agrees, and that is what pins it.** The same program with the
-# body's `say` removed:
-#
-#   call on user zx name h  | raiser1:
-#   call on user zy name g  | raise user zx return 5
-#   zv = 'unset'            | h:
-#   zn = raiser1()          | raise user zy return 1
-#   do                      | g:
-#   end                     | zv = 'set'
-#   say 'after' zv zn       | say 'G ran' sigl
-#   exit                    | return
-#
-# read down the left column then the right, so `do` is line 5 and `end` is
-# line 6:
-#
-#   oracle       G ran 5 / after set 5
-#   this crate   G ran 5 / after set 5     <- agrees, both engines
-#
-# `SIGL` is 5 rather than 6 or 7, so this crate's `DO` clause boundary exists,
-# carries the right line and delivers. Adding one clause to the body is what
-# moves the delivery. That is the discriminator between "no boundary" and
-# "boundary too late", and it comes out too late.
-#
-# **Which is why this and the plain `SELECT` above it are two defects and not
-# one.** `Select`'s own arm wraps just the `CASE` evaluation in `in_clause` and
-# closes it before the `WHEN`s run, so that boundary is correctly placed --
-# plain `SELECT` gets `SIGL` right and only the indent wrong. `DO`'s is
-# misplaced instead: measured under `trace r`, its handler's own lines are
-# byte-identical to the oracle's, and only their position and `SIGL` differ.
+# **`if ... then` and `SELECT` are on this route and are NOT this defect.**
+# `Select`'s own arm wraps just the `CASE` evaluation in `in_clause` and closes
+# it before the `WHEN`s run, so that boundary is correctly placed. The plain
+# `SELECT` entry above stands as written: measured, its handler activation is
+# still two columns short of the oracle's on both engines, and the rule above
+# does not reach it.
+program
+call on user zx name h
+call on user zy name g
+zv = 'unset'
+zw = raiser()
+do
+say 'body'
+end
+say 'after' zv zw
+exit
+raiser:
+raise user zx return 5
+h:
+zv = 'set'
+raise user zy return 1
+g:
+say 'G ran' sigl
+return
+----
+rc> 0
+out> G ran 5
+out> body
+out> after set 5
+
+# The `END`'s own boundary, which only a second requeue reaches. The first
+# delivery is owed to the `do` on line 5 and the second to the `end` on line 6,
+# so both land before the `say` that follows the block.
+program
+call on user zx name h
+call on user zy name g
+call on user zw name k
+zn = raiser1()
+do
+end
+say 'after' zn
+exit
+raiser1:
+raise user zx return 5
+h:
+raise user zy return 1
+g:
+say 'G ran' sigl
+raise user zw return 1
+k:
+say 'K ran' sigl
+return
+----
+rc> 0
+out> G ran 5
+out> K ran 6
+out> after 5
+
+# The `DO UNTIL`, which runs the other way. The `UNTIL` test is the `END`'s own
+# clause and takes the first delivery at line 6; the requeue is owed to the
+# `say` on line 7, so that line prints before its handler rather than after.
+program
+call on user zx name h
+call on user zy name g
+zv = 'unset'
+do until raiser1() > 0
+nop
+end
+say 'after' zv
+exit
+raiser1:
+raise user zx return 5
+h:
+say 'H ran' sigl
+zv = 'set'
+raise user zy return 1
+g:
+say 'G ran' sigl
+return
+----
+rc> 0
+out> H ran 6
+out> after set
+out> G ran 7
+
 program
 call on user zx name h
 do i = 1 to raiser()

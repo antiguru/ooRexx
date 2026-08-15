@@ -195,3 +195,16 @@ lang/pos_window.rex
 # block leaves the same refusal untrapped for the exit status and the clause
 # echo, so that block is fatal and last.
 lang/procedure_entry_rule.rex
+
+# Where a plain DO offers a queued condition its boundary. A CALL ON handler
+# ending in `raise ... return` leaves a second condition pending, so the
+# printed order and the printed SIGL read back directly which clauses the
+# construct ends and when -- on stdout, with no TRACE, which is what puts this
+# here rather than in the trace harness. A plain DO is two clauses, the header
+# and END, and the program pairs each with the shape that answers differently:
+# an empty body agrees under one requeue whichever way the header is placed and
+# separates only under two, and a DO UNTIL runs the other way, owing its
+# requeue to the clause AFTER the loop. Its adjacent successes are the loops
+# whose header is already a clause of its own and the two neighbouring
+# constructs, which this subject must not move.
+lang/do_clause_boundaries.rex

@@ -514,6 +514,38 @@ impl Interp {
         }
     }
 
+    /// Closes the clause `entry` opened **without running its boundary**.
+    ///
+    /// For a construct this crate resolves entirely inside one step, where the
+    /// oracle has no clause at all. A `DO`/`LOOP` is the case: the oracle's
+    /// own `DO` instruction ends when its header does, and `END` is an
+    /// instruction of its own, so the boundaries the oracle offers a queued
+    /// condition are the header's and `END`'s -- both of which `run_loop`
+    /// opens as clauses in their own right. The step that spans the whole
+    /// construct is this crate's own scaffolding, and a boundary here is a
+    /// boundary the oracle does not have: it delivers a condition that is
+    /// owed to a later clause, at whichever line the construct's last inner
+    /// clause happened to leave behind.
+    ///
+    /// Measured, `do until raiser1() > 0` with `nop` for a body and a handler
+    /// that requeues: the oracle runs the requeued handler at the clause
+    /// *after* the loop, reporting that clause's `SIGL`; with a boundary here
+    /// it ran at `END`'s line, ahead of the clause the oracle blames, on both
+    /// engines.
+    ///
+    /// The `entry` is still consumed, so a clause that takes this exit is a
+    /// clause that opened and closed -- the line and the tripwire in
+    /// [`Interp::enter_clause`] are unaffected.
+    #[inline(always)]
+    pub(crate) fn leave_clause_without_boundary<T: ClauseValue>(
+        &mut self,
+        entry: ClauseEntry,
+        ran: Result<T, Failure>,
+    ) -> Result<ClauseOutcome<T>, Failure> {
+        let ClauseEntry(()) = entry;
+        Ok(ClauseOutcome::Ran(ran))
+    }
+
     /// Takes a copy of the clause state for `Interp::invoke_call` to put
     /// back after the callee has run.
     ///

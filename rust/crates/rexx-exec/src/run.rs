@@ -5140,7 +5140,17 @@ impl Interp {
         if ran.is_err() {
             self.record_failure_site(code, index, source, instruction);
         }
-        let outcome = self.leave_clause(entry.entry, code, ran);
+        // **A `DO`/`LOOP`'s step is not a clause the oracle has, so it owes no
+        // boundary** -- `Interp::leave_clause_without_boundary` has the
+        // mechanism and the transcript. Every boundary the construct does owe
+        // is opened by `run_loop`: the header's, once before the body runs,
+        // and `END`'s, on the pass that reaches it.
+        let outcome = match &instruction.kind {
+            InstructionKind::Do(_) | InstructionKind::Loop(_) => {
+                self.leave_clause_without_boundary(entry.entry, ran)
+            }
+            _ => self.leave_clause(entry.entry, code, ran),
+        };
         // The clause's *own* failure came back as `Ran(Err(_))` and was
         // recorded just above; this `Err` is the boundary's, and it is the
         // same clause that owes the site. Recording it twice is harmless --
@@ -6099,6 +6109,37 @@ impl Interp {
             // labelled simple block is leavable but an unlabelled one is
             // 28.1 on a bare `LEAVE` reaching it.
             LoopKind::Simple => {
+                // Captured before the body runs, for the same reason
+                // `run_repeating` captures it: this is the `DO`'s own indent,
+                // and `current_value_indent` holds whatever the last body
+                // clause left once `run_bounded` has returned.
+                let do_indent = self.clause_state.current_value_indent;
+                // **The block's own clause, opened and ended before any body
+                // instruction runs.** The oracle's
+                // `RexxInstructionSimpleDo::execute` traces the instruction,
+                // opens the block and returns -- it never runs the body -- so
+                // a condition queued before the `DO` is delivered here, at the
+                // `DO`'s own line and with the block open. Measured, a handler
+                // that requeues ahead of `do` / `say 'body'` / `end`: the
+                // oracle runs the requeued handler with `SIGL` naming the `DO`
+                // and prints its output ahead of `body`.
+                //
+                // Entered whether or not anything is queued, exactly as
+                // `InstructionKind::Select`'s own clause is: what decides is
+                // whether the boundary exists, never what the clause queued.
+                let do_line = self
+                    .clause_line_at(code, index, instruction, source)
+                    .unwrap_or_else(|| self.clause_state.line());
+                match self.in_clause(code, do_line, |it| {
+                    // A block that opened, so the boundary's own handler runs
+                    // one level in -- the `select case raiser()` row of
+                    // `settle_block_indent`'s table, and the same call.
+                    it.settle_block_indent(true, do_indent);
+                    Ok(())
+                })? {
+                    ClauseOutcome::Ended(exit) => return Ok(Flow::Exit(exit.value())),
+                    ClauseOutcome::Ran(ran) => ran?,
+                }
                 let flow = self.run_bounded(code, body_start, end_index, source, engine)?;
                 return match self.do_body_outcome(code, index, label, false, resume, flow)? {
                     DoOutcome::Escaped(escape) => Ok(escape),
@@ -6123,22 +6164,50 @@ impl Interp {
                     // `END` once, which is what a fall-through does, rather
                     // than aborting.
                     DoOutcome::FellThrough | DoOutcome::Iterated { .. } => {
-                        if self.trace_mode().all
-                            && let Some((line, text)) =
-                                self.clause_site(source, &code.body.instructions[end_index])
-                        {
-                            // A fresh computation, not `current_value_
-                            // indent` -- `run_bounded`, just above, has
-                            // already stepped this block's own body, so
-                            // that field now holds whatever the *last*
-                            // body instruction left it at, not this `DO`'s
-                            // own. `+ self.indent_offset` for the same
-                            // reason every other site on this page has it:
-                            // consistency if this `Simple` block's own
-                            // `END` is ever itself the direct landing
-                            // point of an escape (untested, but cheap to
-                            // keep uniform rather than silently exempt).
-                            self.trace_clause(line, self.printed_indent(code, index), &text);
+                        // **`END` is a clause of its own, and its boundary is
+                        // where a condition queued by the block's last body
+                        // clause is delivered.** The oracle executes `END` as
+                        // an instruction, so a handler requeued inside the
+                        // block runs there rather than after the whole
+                        // construct. Measured, `do` / `end` with a handler
+                        // that requeues twice: the oracle reports the second
+                        // handler's `SIGL` as `END`'s line, ahead of the
+                        // `SAY` that follows the block; without this clause
+                        // it ran after that `SAY` had already printed, on
+                        // both engines.
+                        //
+                        // Only on the pass that reaches `END`: an escape
+                        // returns above, and the oracle's `END` is jumped
+                        // straight over by a `LEAVE`.
+                        let end_instruction = &code.body.instructions[end_index];
+                        let end_line = self
+                            .clause_line_at(code, end_index, end_instruction, source)
+                            .unwrap_or_else(|| self.clause_state.line());
+                        // A fresh computation, not `current_value_indent` --
+                        // `run_bounded`, just above, has already stepped this
+                        // block's own body, so that field now holds whatever
+                        // the *last* body instruction left it at, not this
+                        // `DO`'s own. `printed_indent` for the same reason
+                        // every other site on this page uses it: consistency
+                        // if this `Simple` block's own `END` is ever itself
+                        // the direct landing point of an escape (untested,
+                        // but cheap to keep uniform rather than silently
+                        // exempt).
+                        let end_indent = self.printed_indent(code, index);
+                        match self.in_clause(code, end_line, |it| {
+                            if it.trace_mode().all
+                                && let Some((line, text)) = it.clause_site(source, end_instruction)
+                            {
+                                it.trace_clause(line, end_indent, &text);
+                            }
+                            // The block is closed by the time this clause's
+                            // boundary runs, so its handler sits back out at
+                            // the `DO`'s own level.
+                            it.settle_block_indent(false, do_indent);
+                            Ok(())
+                        })? {
+                            ClauseOutcome::Ended(exit) => return Ok(Flow::Exit(exit.value())),
+                            ClauseOutcome::Ran(ran) => ran?,
                         }
                         Ok(Flow::Goto(resume))
                     }
