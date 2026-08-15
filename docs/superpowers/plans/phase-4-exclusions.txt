@@ -1994,8 +1994,8 @@ above.
   on, and it is why unbounded growth survived three phases of differential
   testing green.
 
-  THIS CRATE REPORTS SIGL AT AN ITERATE'S OWN LINE FOR A HANDLER THE ORACLE
-  CARRIES PAST THE LOOP'S RE-TEST. Both engines agree with each other and diverge from the
+  A HANDLER REQUEUED AT AN ITERATE IS DELIVERED BEFORE THE LOOP'S RE-TEST HERE
+  AND AFTER IT ON THE ORACLE. Both engines agree with each other and diverge from the
   oracle on stdout only; rc 0 and empty stderr on the oracle and on both
   engines. Measured 2026-08-15 at 9c465989a, under the standard oracle wrapper
   from a fresh empty directory, REXX_ENGINE=tree-walker and REXX_ENGINE=ir:
@@ -2025,25 +2025,56 @@ above.
     after 5           h3 8
     h3 10             after 5
 
-  WHAT THE TWO DO DIFFERENTLY. h2 runs at the ITERATE clause's boundary and its
-  own RAISE queues the third condition there. The oracle does not deliver that
-  condition at the boundary that queued it: it carries it past the loop's
-  re-test to the next pass's first body clause, which is why the handler reports
-  SIGL 6, and on the last pass, where there is no next pass, it carries the
-  condition out of the loop altogether and the SAY at line 10 delivers it, after
-  "after 5" has printed. This crate reports SIGL 8 for that condition on both
-  passes, the ITERATE's own line, and its second delivery prints before
-  "after 5" rather than after. Where exactly this crate's delivery sits is
-  not observable from these three descriptors, so this row claims only the SIGL
-  and the ordering; SIGL 8 is what the transcript shows and SIGL 6 and 10 are
-  what the oracle shows.
+  WHAT THE TWO DO DIFFERENTLY, AND THE INSTRUMENT THAT SAYS SO. The three
+  descriptors above cannot place a delivery against a clause that prints
+  nothing, which is what the loop's re-test is; `trace i` can, because it
+  interleaves the *-* clause echoes with the handler's own. Run at 9c465989a on
+  the same program with `trace i` as a new first line, which moves every line
+  number up by one, the echoes around the first ITERATE are:
+
+    oracle                        this crate, both engines
+     9 *-*   iterate               9 *-*   iterate
+     6 *-* do while zn < 2        18 *-*     h2:
+    18 *-*     h2:                 6 *-* do while zn < 2
+
+  The oracle evaluates the re-test -- the value traces the re-test emits all
+  precede h2's echo -- and only then enters h2. This crate enters h2 first and
+  evaluates the re-test afterwards. So the two put h2's delivery on OPPOSITE
+  SIDES of the loop's re-test.
+
+  THE DIRECTION MATTERS, and an earlier version of this row had it backwards. It
+  is the ORACLE that carries nothing past the re-test: the re-test has already
+  run by the time h2 executes, so the third condition h2 queues is queued after
+  it, and the next thing the oracle does is the following pass's first body
+  clause. It is THIS CRATE that queues the third condition before the re-test and
+  delivers it after, which the trace shows as `6 *-* do while zn < 2` followed by
+  `21 *-* h3:`.
+
+  WHY THE SHIFT IS INVISIBLE ON h2 AND VISIBLE ON h3. Both interpreters report
+  the ITERATE's own line as the requeued handler's SIGL and agree on the number:
+  h2 reads SIGL 9 on the oracle and on both engines under the traced program, and
+  SIGL 8 under the untraced one above. Neither delivers the third condition at
+  the point where h2 ran. Where they then put it is what stdout sees: the oracle
+  reaches the following pass's first body clause (SIGL 6, or 7 traced) and, on
+  the last pass where there is none, the clause after the loop (SIGL 10, or 11
+  traced, after "after 5" has printed); this crate reaches the re-test's echo and
+  reports the ITERATE's line, SIGL 8, both times.
+
+  WHAT REMAINS UNOBSERVABLE. Which clause OWNS either delivery is not settled by
+  any of these instruments. `trace i` places a delivery between two clause
+  echoes and SIGL names a line, and neither says which clause's boundary ran it:
+  a boundary of the re-test clause reporting the ITERATE's line and a second
+  boundary of the ITERATE clause look identical from outside. This row claims the
+  interleaving and the SIGL, which are measured, and not that.
 
   WHAT THIS ROW MEASURED AND WHAT IT TAKES FROM ELSEWHERE. The transcripts above
-  were taken at 9c465989a and at no other commit. That this shape is
-  pre-existing -- byte-identical before and after e74780054, and unchanged by
-  56d9d1c86's drain -- is recorded by
-  docs/superpowers/plans/2026-08-15-task-6-review-and-run-split.md and is that
-  document's measurement rather than this row's.
+  were taken at 9c465989a and at no other commit. They are byte-identical to the
+  ones docs/superpowers/plans/2026-08-15-task-6-review-and-run-split.md records,
+  and that document says its transcripts were taken at 56d9d1c86, so this row's
+  own evidence is that nothing between 56d9d1c86 and 9c465989a moved the shape.
+  Anything earlier is that document's measurement rather than this row's: it
+  records the shape as byte-identical before and after e74780054, which is the
+  commit before the drain, and no commit older than 9c465989a was run here.
 
   NOT FIXED, AND NOBODY IS ASSIGNED. It was found by the task correcting the
   prose around the drain, which owns no behaviour, so recording it was that

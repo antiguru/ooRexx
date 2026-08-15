@@ -3432,7 +3432,7 @@ impl Interp {
     /// error: `call on any name uh` with `say 1/0` is **not** trapped, it is
     /// the ordinary fatal 42.3 at rc 214. So a `call` trap declines here and
     /// the failure keeps unwinding. Every condition a `CALL ON` trap really
-    /// does catch reaches it through `Interp::pending_trap` instead, without
+    /// does catch reaches it through `Interp::pending_traps` instead, without
     /// ever becoming a failure.
     ///
     /// Returns a `Flow` rather than a bare target so that
@@ -5515,10 +5515,10 @@ impl Interp {
     ///
     /// `h` runs at the body clause's own boundary and its `RAISE ... RETURN`
     /// **leaves a new trap queued behind it**, and a boundary drains only the
-    /// entries that were queued when it began, so that new trap is not one
-    /// that boundary owes. The last member clause's boundary
-    /// is therefore not the last boundary with work to do, and without this one `g` runs
-    /// after `say 'after'` instead of before it, at the wrong `SIGL`. Oracle
+    /// entries that were queued when it began, so that new trap is not one that
+    /// boundary owes. The last member clause's boundary is therefore not the
+    /// last boundary with work to do, and without this one `g` runs after
+    /// `say 'after'` instead of before it, at the wrong `SIGL`. Oracle
     /// and tree-walker print `G ran 4` then `after`; the compiled stream
     /// printed `after` then `G ran 6`, and in debug tripped `in_clause`'s own
     /// assertion. The `IF` spelling of the same program is the same defect.

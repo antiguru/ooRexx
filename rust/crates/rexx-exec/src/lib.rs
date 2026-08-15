@@ -1479,8 +1479,8 @@ struct PendingTrap {
     /// what it means. A trap queued *during* a delivery is not: the boundary
     /// running that delivery drains only the entries that were queued when it
     /// began, so this trap lands beyond the prefix that boundary owes, and the
-    /// oracle defers it to the next boundary too. Measured with no
-    /// construct anywhere in the program --
+    /// oracle defers it to the next boundary too. Measured with no construct
+    /// anywhere in the program --
     /// `zq = raiser()` on line 3 whose handler itself raises a second trapped
     /// condition -- the oracle prints `after` and then the second handler's
     /// `SIGL` 4, and this crate agrees; the assertion fired on it regardless.

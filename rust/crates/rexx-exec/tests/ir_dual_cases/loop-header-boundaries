@@ -16,9 +16,10 @@
 #
 # The requeue rows are about a boundary leaving MORE work behind it. A delivered
 # handler can itself RAISE ... RETURN, queueing a second trap, and a clause
-# boundary delivers at most one without re-checking -- so the boundary that
-# delivered the first is not the last one with work, and the SIGL of the second
-# delivery is what says which boundary took it.
+# boundary drains only the entries that were queued when it began -- so that
+# second trap is not one the boundary that delivered the first owes, that
+# boundary is not the last one with work, and the SIGL of the second delivery is
+# what says which boundary took it.
 #
 # Other rows are about the header's own ordering rather than its boundaries,
 # and they are here because the compiled form is what makes the ordering a
