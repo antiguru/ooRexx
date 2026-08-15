@@ -41,16 +41,6 @@
 # where that is not what the oracle prints. Each was measured on both engines,
 # and the engines agree on each; none moved when the header was flattened.
 #
-#   * **A zero-pass loop whose requeued handler has no body clause behind it.**
-#     `do i = 1 to raiser()` with `raiser` returning 0 and its handler raising a
-#     second trapped condition: the oracle prints `after` and then `G ran 6`,
-#     delivering the second trap at the next real clause, and this crate prints
-#     `G ran 3` and then `after`, delivering it at the `DO` clause's own boundary.
-#     The `DO` clause encloses the whole loop here, so its boundary runs after
-#     the loop rather than before the body -- and with zero passes there is no
-#     body clause in between to take the delivery instead. The row above with one
-#     pass reports `G ran 4` on both sides, which is why this shape needs its own
-#     mention rather than being covered by it.
 #   * **An `UNTIL` requeue.** The oracle delivers the second trap at the `END`'s
 #     own clause, `G ran 5`; this crate delivers it at the clause after the loop,
 #     `G ran 6`. **This bullet names no program, so its observation cannot be
@@ -58,13 +48,6 @@
 #     before relying on any of it.** (What stood here attributed it to the
 #     `END` being an instruction the oracle executes and this crate never
 #     steps.)
-#
-# **They do not share a cause, and only one of the two has an established one.**
-# The zero-pass bullet names its own: this crate's `DO` clause encloses the
-# whole loop, so its boundary runs after the loop rather than before the body.
-# `G ran 3` names the `DO`'s own line, which says that boundary exists and
-# carries the right line; what is wrong is where it sits. Re-measured, and both
-# engines still print what that bullet records.
 #
 # **The `UNTIL` bullet's cause is NOT established, and the bullet cannot be
 # checked, because it does not name its program.** It was filed under the
@@ -86,19 +69,11 @@
 # numbers are left alone, because choosing which program produced them would be
 # adding one more reconstruction and filing it as the bullet's own.
 #
-# **One of those reconstructions is worth knowing about in its own right,
-# because it runs the other way.** Every other shape recorded in this file has
-# this crate delivering *later* than the oracle. This one delivers *earlier*,
-# on both engines:
-#
-#   oracle       after unset / G ran 7
-#   this crate   G ran 6 / after set
-#
-# Its program is named in Task 6's Step 1b, in
-# `docs/superpowers/plans/2026-08-14-pre-phase-5-defects.md`, and reconstructing
-# it from there reproduces those transcripts exactly -- which is the difference
-# between that description and this bullet's. **It is not the `UNTIL` bullet's
-# program and is not offered as one.**
+# **The `DO UNTIL` row below is not this bullet's program and is not offered as
+# one.** That row prints `H ran 6`, `after set` and `G ran 7`, which is what the
+# oracle prints for it; this bullet records `G ran 5` for the oracle against
+# `G ran 6` for this crate. So a `DO UNTIL` row agreeing below neither confirms
+# this bullet nor closes it.
 #
 # They are recorded here rather than in a report because this is
 # the file the next reader of a loop-header boundary opens.
@@ -160,6 +135,32 @@ return
 rc> 0
 out> G ran 4
 out> after
+
+# the same requeue with zero passes
+# The row above with `raiser` returning 0 instead of 1, so the loop runs no
+# pass and no body clause stands between the two deliveries. SIGL 6 names the
+# `say` after the loop, not the `end` on line 5 and not the `do` on line 3, and
+# `after` prints before `G ran 6` rather than after it. The row above, with one
+# pass, reports `G ran 4` and prints it first, so it does not cover this shape.
+program
+call on user zx name h
+call on user zy name g
+do i = 1 to raiser()
+  nop
+end
+say 'after'
+exit
+raiser:
+raise user zx return 0
+h:
+raise user zy return 1
+g:
+say 'G ran' sigl
+return
+----
+rc> 0
+out> after
+out> G ran 6
 
 # a call on handler failing at a DO header's own boundary
 # The failure the handler raises is attributed to the clause whose boundary ran
