@@ -892,7 +892,7 @@ fn get_number_capped(date: &[u8], start: usize, len: usize, max: i64) -> Option<
 }
 
 /// A Rexx number's own whole-number conversion, under `Numerics::
-/// ARGUMENT_DIGITS` -- the same precision `whole_number` (`builtin/mod.rs`)
+/// ARGUMENT_DIGITS` -- the same precision `whole_number` (`builtin.rs`)
 /// converts a typed builtin argument under, reused here because `DATE`'s
 /// `B`/`F`/`T`/`D` and `TIME`'s `H`/`S`/`M`/`F`/`T`/`O` input styles convert
 /// their own `indate`/`intime` the identical way -- `RexxString::
@@ -1921,7 +1921,7 @@ mod tests {
     /// `date('S',,'S')` -- position 2 omitted, position 3 supplied -- is
     /// 40.5, because supplying `option2` without `indate` is meaningless;
     /// `check_arity`'s own `(min, max)` model cannot express this, so
-    /// `date` checks its own positions (`builtin/mod.rs`'s own module doc
+    /// `date` checks its own positions (`builtin.rs`'s own module doc
     /// names this exact probe). Paired with the adjacent success: `date()`
     /// and `date('S')` both succeed with **no** second argument at all.
     #[test]

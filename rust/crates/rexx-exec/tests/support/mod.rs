@@ -12,9 +12,9 @@
 //! This file stays `mod.rs`, not `support.rs`, because `tests/` is Cargo's
 //! integration-test root: a bare `tests/support.rs` would be auto-discovered
 //! as its own test binary in addition to being pulled in as a module by the
-//! seven files that declare `mod support;`, compiling these helpers
-//! standalone for no reason. Renaming it to `support.rs` would add that
-//! extra binary back.
+//! files that declare `mod support;`, compiling these helpers standalone
+//! for no reason. Renaming it to `support.rs` would add that extra binary
+//! back.
 //!
 //! DEVIATION 0 (`docs/superpowers/plans/phase-4-exclusions.txt`): the one
 //! normalisation the differential harnesses are allowed to apply to
@@ -26,11 +26,7 @@
 //! `error.rs`'s `report` used to hold a second copy of `push_clause`'s four
 //! lines, and the two drifted until a clamp had to be added to both by
 //! hand. This function is compared against on two call sites and must give
-//! the identical answer on both, so it is written once here. `tests/` files
-//! that are not direct children of this directory are not auto-discovered
-//! by Cargo as their own integration-test binaries, so `mod support;` in
-//! each of the two consuming files pulls this in without adding a third
-//! test target.
+//! the identical answer on both, so it is written once here.
 //!
 //! **Scope, matching DEVIATION 0's own wording exactly.** Collapse the run
 //! of ASCII space bytes between a trace line's 3-byte prefix marker and its

@@ -16,7 +16,7 @@
 //! # They read the *running activation*, which is not the calling clause's
 //!
 //! Every reader below takes its answer from `Interp::activation()`, and a
-//! builtin adds no activation of its own (`builtin/mod.rs`'s module doc has
+//! builtin adds no activation of its own (`builtin.rs`'s module doc has
 //! the three measured observables for that). So `DIGITS()` inside an
 //! internal routine reports the routine's own `NUMERIC DIGITS`, not the
 //! caller's, and `CONDITION('S')` reports the trap table of whichever frame
@@ -27,7 +27,7 @@
 //! `ADDRESS`, `DIGITS`, `FORM`, `FUZZ` and `QUEUED` open with `check_args`
 //! and a maximum of 0 in `BuiltinFunctions.cpp`, so one argument is 40.4 --
 //! measured, `say address(1)` is `Too many arguments in invocation of
-//! ADDRESS; maximum expected is 0.` at rc 216. `builtin/mod.rs`'s table is
+//! ADDRESS; maximum expected is 0.` at rc 216. `builtin.rs`'s table is
 //! where each row's own `(min, max)` lives; nothing here restates it.
 //!
 //! # An option letter is one byte, upcased, and the null string is not one
@@ -563,7 +563,7 @@ pub(crate) fn condition(
 /// errortext(z)` reports `found "0.333"`, the rendering captured at
 /// creation, and `errortext(99999999999999999999)` reports all twenty
 /// digits. The range checks below it are raised *after* a successful
-/// conversion, and they report the result of it. `builtin/mod.rs`'s
+/// conversion, and they report the result of it. `builtin.rs`'s
 /// `length_of`, `position_of` and `count_of` already had it right for the
 /// same reason: measured, `numeric digits 3; word('a b', -(999999+1))` is
 /// 93.924 `found "-1000000"`.

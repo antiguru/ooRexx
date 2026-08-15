@@ -11,7 +11,7 @@
 
 //! The golden op-stream serialiser, for the golden tests in
 //! `golden_tests.rs` alone. `#[cfg(test)]` at the `mod` declaration
-//! (`ir/mod.rs`), not a `#[allow(dead_code)]` here: no task in the plan ever
+//! (`ir.rs`), not a `#[allow(dead_code)]` here: no task in the plan ever
 //! gives `render` a non-test caller, so an `allow` would be permanent rather
 //! than a placeholder for one.
 
