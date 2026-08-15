@@ -104,9 +104,10 @@ fn the_tree_walker_drives_no_chunk_at_all() {
 ///
 /// **This is the only observable that separates a promoted `DO`/`LOOP` from
 /// an unpromoted one**, and that is why it is a count rather than a
-/// comparison of output. The construct is resolved by the same `run_loop`
-/// either way, so both engines print the same bytes on every program; what
-/// changes is whether the body's clauses reach the compiled stream at all.
+/// comparison of output. The construct is resolved by the same
+/// `run_loop_with_header` either way, so both engines print the same bytes on
+/// every program; what changes is whether the body's clauses reach the
+/// compiled stream at all.
 /// With the body left on the tree-walker the count is 1 -- the `DO` clause
 /// alone -- and every promotion after this one would then silently skip
 /// anything written inside a loop.

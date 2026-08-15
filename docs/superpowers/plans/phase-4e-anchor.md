@@ -378,6 +378,16 @@ straight into the tree-walker's clause unit.
 The construct itself is resolved by the same `Interp::run_loop` under both engines, so the two arms
 agree by construction and this is a measurement about cost only.
 
+> **Correction, 2026-08-15: the function named here stopped being the shared one the day after this
+> was written, and the sentence's point survives the rename.** `Interp::run_loop` was the shared
+> entry when this paragraph landed (`b6531a680`, 2026-08-09). `08137f3ae` ("Flatten a loop header
+> into the compiled stream", 2026-08-10) split the header off, and from that commit the compiled
+> stream reaches `Interp::run_loop_with_header` directly from `ir::Op::LoopRun`. It still does at
+> this tree, where it names `Interp::run_loop` nowhere at all. What the two arms share is
+> `run_loop_with_header` and everything below
+> it, which is still the whole construct below the header, so "the two arms agree by construction"
+> is as true now as it was then. The figures below are untouched by this and are not re-measured.
+
 ### The prediction
 
 Recorded before measuring: **no movement, or a regression of up to about 2%** on both `emptyloop` and

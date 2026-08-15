@@ -527,12 +527,13 @@ impl Interp {
     /// as `LoopKind::Simple`, `run_loop_with_header`'s own arm opens each of
     /// those as a clause in its own right. A repeating loop's clauses are
     /// opened by `run_repeating` instead, and there `END` has no clause of
-    /// its own: the header re-test on the following pass carries `END`'s
-    /// line (`HeaderClause::End`). The step that spans the whole construct
-    /// is this crate's own scaffolding, and a boundary here is a
-    /// boundary the oracle does not have: it delivers a condition that is
-    /// owed to a later clause, at whichever line the construct's last inner
-    /// clause happened to leave behind.
+    /// its own: the header re-test that follows the body carries `END`'s
+    /// line (`HeaderClause::End`), the re-test that ends the loop included.
+    /// The step that spans the whole construct is this crate's own
+    /// scaffolding, and a boundary here is a boundary the oracle does not
+    /// have: it delivers a condition that is owed to a later clause, at
+    /// whichever line the construct's last inner clause happened to leave
+    /// behind.
     ///
     /// Measured, `do until raiser1() > 0` with `nop` for a body and a handler
     /// that requeues: the oracle runs the requeued handler at the clause

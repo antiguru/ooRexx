@@ -611,8 +611,8 @@ enum HeaderClause {
 
 /// What drives one repeating `DO`/`LOOP`'s own iteration, once its header
 /// has already been evaluated and validated -- everything `LoopKind` can be
-/// except `Simple` (a block, never repeats, and `run_loop`'s own `Simple`
-/// arm never builds one of these at all) and `With` (the loud path).
+/// except `Simple` (a block, never repeats, and `run_loop_with_header`'s own
+/// `Simple` arm never builds one of these at all) and `With` (the loud path).
 ///
 /// `Count`, `OverOnce` and `Controlled` all decrement whatever budget the
 /// oracle is measured to decrement once per candidate iteration, including
@@ -625,11 +625,11 @@ enum LoopState {
         remaining: u64,
     },
     /// `DO name OVER expr`, a **non-stem** target only (Deviation 1: a stem
-    /// target takes the loud path in `run_loop` before one of these is ever
-    /// built): iterates exactly once, binding `control` to `value` itself
-    /// (measured, the brief's own framing: "a string and a number each
-    /// iterate once, yielding themselves"). `remaining` is `FOR`'s own
-    /// budget, already validated, independent of `done`.
+    /// target takes the loud path in `run_loop_with_header` before one of
+    /// these is ever built): iterates exactly once, binding `control` to
+    /// `value` itself (measured, the brief's own framing: "a string and a
+    /// number each iterate once, yielding themselves"). `remaining` is
+    /// `FOR`'s own budget, already validated, independent of `done`.
     OverOnce {
         control: SymbolId,
         /// [`control_slot`], taken once when this loop was entered.
@@ -728,9 +728,9 @@ pub(crate) enum HeaderRole {
     /// A controlled loop's `FOR`.
     For,
     /// A bare `DO expr`'s repeat count, **echoed under the `FOR` tag**
-    /// (`run_loop`'s own measurement: the oracle traces a bare repeat count
-    /// under `FOR`, the same as an explicit `DO ... FOR n`), and validated
-    /// against 26.2 where a `FOR` is 26.3.
+    /// (measured: the oracle traces a bare repeat count under `FOR`, the
+    /// same as an explicit `DO ... FOR n`), and validated against 26.2 where
+    /// a `FOR` is 26.3.
     Count,
     /// `DO name OVER expr`'s target, echoed under the `OVER` tag.
     Over,
@@ -5227,11 +5227,10 @@ impl Interp {
         }
         // **A `DO`/`LOOP`'s step is not a clause the oracle has, so it owes no
         // boundary** -- `Interp::leave_clause_without_boundary` has the
-        // mechanism and the transcript. Every boundary the construct does owe
-        // is opened under `run_loop_with_header`, which is where both engines
-        // resolve the construct: a plain `DO`'s header and `END` clauses are
-        // opened in that function's own `LoopKind::Simple` arm, and a
-        // repeating loop's clauses are opened in `run_repeating`.
+        // mechanism and the transcript. The boundaries the construct does owe
+        // are opened elsewhere: a plain `DO`'s header and `END` clauses in
+        // `run_loop_with_header`'s own `LoopKind::Simple` arm, and a
+        // repeating loop's clauses in `run_repeating`.
         let outcome = match &instruction.kind {
             InstructionKind::Do(_) | InstructionKind::Loop(_) => {
                 self.leave_clause_without_boundary(entry.entry, ran)
@@ -6147,7 +6146,7 @@ impl Interp {
         Ok(round_via_unary_plus(&operand, entry_digits).map_err(Raised::from)?)
     }
 
-    /// `run_loop` past its header: the construct itself, driven from the
+    /// A `DO`/`LOOP` past its header: the construct itself, driven from the
     /// values whichever engine evaluated that header produced.
     ///
     /// **This is the whole of the loop that is not its header**, and it is one
@@ -6414,9 +6413,10 @@ impl Interp {
     }
 
     /// The shared driver for every repeating `LoopKind` (everything but
-    /// `Simple`, which never repeats and runs through `run_loop`'s own
-    /// arm directly): advance-test-run-test-advance, in the order the
-    /// oracle is measured to use it in (`report`'s own transcripts) --
+    /// `Simple`, which never repeats and runs through
+    /// `run_loop_with_header`'s own arm directly):
+    /// advance-test-run-test-advance, in the order the oracle is measured to
+    /// use it in (`report`'s own transcripts) --
     /// `WHILE` tested before the body, `UNTIL` after, and a `LEAVE`/
     /// `ITERATE` handled identically to falling off the bottom of the body
     /// normally, because that is what the oracle's own `ITERATE` does
@@ -6473,7 +6473,7 @@ impl Interp {
         // repetition inside one `step` call and so is stepped, and echoed,
         // exactly once (`step_in_temps_frame`'s own doc comment). `false`
         // on entry because the *first* pass's echo already happened there,
-        // before `run_loop` ever called into this function.
+        // before `run_loop_with_header` ever called into this function.
         //
         // **`UNTIL` gets no echo here at all, only its own further down.**
         // Measured (re-verifying this task's F4 fix rather than assuming
@@ -6729,7 +6729,8 @@ impl Interp {
     }
 
     /// What one repeating `Do`/`Loop`'s own body just produced, translated
-    /// into what `run_repeating`/`run_loop`'s own `Simple` arm does next.
+    /// into what `run_repeating`/`run_loop_with_header`'s own `Simple` arm
+    /// does next.
     ///
     /// `Ok(DoOutcome::FellThrough)`/`Ok(DoOutcome::Iterated(_))`: proceed to
     /// whatever bottom-of-iteration test/advance comes next. The two used to
@@ -6747,9 +6748,10 @@ impl Interp {
     /// `is_loop` is `false` -- 28.5, `ITERATE` never accepts a labelled
     /// block, only a loop (measured).
     ///
-    /// `is_loop` is `false` only for `LoopKind::Simple` (`run_loop`'s own
-    /// `Simple` arm passes it); every `LoopState` variant `run_repeating`
-    /// drives is a real, repetitive loop and passes `true`.
+    /// `is_loop` is `false` only for `LoopKind::Simple`
+    /// (`run_loop_with_header`'s own `Simple` arm passes it); every
+    /// `LoopState` variant `run_repeating` drives is a real, repetitive loop
+    /// and passes `true`.
     ///
     /// **Whether this construct "owns a search frame" (`LeaveOrigin`'s own
     /// doc comment has the rule and the oracle transcripts) is `is_loop ||
@@ -11087,13 +11089,11 @@ mod tests {
     /// F1, found by review: a bare count `DO n` traced no `>K>` line at
     /// all, where the oracle traces it tagged `FOR` -- the same tag an
     /// explicit `DO ... FOR n` gets, measured (this task's own report).
-    /// The mutation this kills is exactly the gap: deleting the new
-    /// `trace_keyword` call in `run_loop`'s `LoopKind::Count` arm makes
-    /// `interp.trace` empty instead of carrying the `>K>` line, with
-    /// every other assertion in this file untouched -- this is the one
-    /// test that would have caught the omission, since the report's own
-    /// verification claimed `>K>` was checked while never actually
-    /// running a bare-count program through it.
+    /// A bare count reaches that line through `HeaderRole::Count`'s `FOR`
+    /// answer in `HeaderRole::keyword`, which is what `echo_header_value`
+    /// hands `trace_keyword`. This is the one test that would have caught
+    /// the omission, since the report's own verification claimed `>K>` was
+    /// checked while never actually running a bare-count program through it.
     #[test]
     fn a_bare_repeat_count_traces_as_for_the_same_as_an_explicit_one() {
         let mut interp = Interp::new();
@@ -11605,7 +11605,7 @@ mod tests {
     /// a single parenthesised sub-expression collapses to that
     /// sub-expression's own `ExprKind` rather than wrapping it in
     /// `ExprKind::List`, so `(a.)` is already `ExprKind::Stem` by the time
-    /// `run_loop`'s own `matches!` check sees it, with nothing extra
+    /// `loop_header_plan`'s own `matches!` check sees it, with nothing extra
     /// needed. The safe direction either way (loud, never a silent
     /// divergence), but the comment was wrong about which one it is.
     #[test]
