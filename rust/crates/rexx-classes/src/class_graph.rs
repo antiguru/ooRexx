@@ -323,7 +323,7 @@ impl ClassGraph {
     /// instance created before this call sees the donated methods
     /// immediately, unlike [`define`](Self::define).
     ///
-    /// The four `assert!`s are this crate's own sanity checks standing in
+    /// The five `assert!`s are this crate's own sanity checks standing in
     /// for the oracle's validation (`:1298-1332`), each named for the
     /// `SYNTAX` condition it stands in for:
     /// * `Error_Execution_mixinclass` (`:1299`) -- `mixin` must actually be
