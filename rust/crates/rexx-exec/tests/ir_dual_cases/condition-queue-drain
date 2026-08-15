@@ -44,8 +44,11 @@ out> after 3
 # queues, its handler requeues, and that requeue waits for the `END`; the
 # `END`'s handler requeues again, so pass two's body clause owes **two**
 # handlers -- the one left over and the one it queued itself -- both at its own
-# line 4. An engine that drains without deferring runs `g` at line 4 on the
-# first pass; one that defers without draining never runs `k` at line 4 at all.
+# line. That clause is `zn = ra()`; the `do` above it and the `end` below it are
+# the neighbouring lines, which is what makes `h ran 5` / `g ran 6` read as body
+# clause then `END`. An engine that drains without deferring runs `g` at the
+# body clause's line on the first pass; one that defers without draining never
+# runs `k` there at all.
 program
 call on user zx name h
 call on user zy name g

@@ -6,9 +6,12 @@
    the count and the order directly, on stdout, with no TRACE.
 
    The rule has a second half: what a handler queues WHILE IT RUNS is owed to
-   the next boundary, never the one that delivered it. Blocks C and D are what
-   separate the two halves, because an engine that simply drained until the
-   queue emptied would run those handlers one clause too early.
+   the next boundary, never the one that delivered it. Blocks D and E are what
+   separate the two halves: they are the blocks that set zq nonzero, so they
+   are the ones whose handlers requeue at all, and an engine that simply
+   drained until the queue emptied would run those requeued handlers one
+   clause too early. Block C leaves zq at 0 and requeues nothing, so that
+   same drain-until-empty engine produces block C's output exactly.
 
    NOT HERE, and it is not an oversight: a clause that queues the SAME
    condition name twice. The oracle runs the first handler and then exits 139,

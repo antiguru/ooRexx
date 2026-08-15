@@ -109,7 +109,7 @@
 //! `error.rs` unit tests that assert an exact stderr string, which is
 //! outside either harness's comparison function, plus raw A/B probes in each
 //! task's own report. For Task 9's own two indents specifically that is
-//! `run.rs`'s `task_9s_two_new_indents_are_the_oracles_own_and_
+//! `run/tests.rs`'s `task_9s_two_new_indents_are_the_oracles_own_and_
 //! normalisation_cannot_see_them`, which asserts both transcripts byte for
 //! byte and goes red under exactly the mutation that leaves this file green.
 //! **A comment in this file must not claim otherwise**; two did, and this

@@ -974,7 +974,7 @@ fn form_name(kind: &ExprKind) -> String {
 /// construct plainly *is* implemented -- so this leaves the message
 /// without a suffix on that path, and is the only
 /// reason this function exists rather than a bare `format!` at each of the
-/// two call sites. `run.rs`'s `do_with_takes_the_loud_path`,
+/// two call sites. `run/tests.rs`'s `do_with_takes_the_loud_path`,
 /// `do_counter_takes_the_loud_path_regardless_of_which_other_kind_it_rides_on`,
 /// `do_over_a_stem_target_takes_the_loud_path` and
 /// `do_over_a_parenthesised_stem_target_is_also_caught` each assert the
@@ -1095,7 +1095,7 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
 /// The exception is `Do`/`Loop`, because `run_loop_with_header` reaches this
 /// function for them through the two edge cases described below, where the
 /// instruction is implemented and only the specific reason is not. Measured:
-/// giving that arm an owner turns `run.rs`'s `do_with_takes_the_loud_path`,
+/// giving that arm an owner turns `run/tests.rs`'s `do_with_takes_the_loud_path`,
 /// `do_counter_takes_the_loud_path_regardless_of_which_other_kind_it_rides_on`,
 /// `do_over_a_stem_target_takes_the_loud_path` and
 /// `do_over_a_parenthesised_stem_target_is_also_caught` red, all four

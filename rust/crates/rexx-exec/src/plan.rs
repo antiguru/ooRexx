@@ -1402,7 +1402,7 @@ mod tests {
     /// what this test is needed for.** Nothing falls back for one: the table
     /// answers, with another symbol's split, so it is a wrong answer rather
     /// than a slow path. Measured, shifting every entry one id along reddens
-    /// output-level tests in `run.rs` and the corpus sweep as well as this
+    /// output-level tests in `run/tests.rs` and the corpus sweep as well as this
     /// one.
     ///
     /// The control-variable row is the one that was measured wrong: before

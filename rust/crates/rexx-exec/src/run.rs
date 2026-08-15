@@ -166,7 +166,7 @@ pub(crate) enum Flow {
     /// own `run_bounded(body)` calls in an internal `loop {}` and only ever
     /// returns a `Flow` once there is truly nothing left for it to decide.
     /// `leave_and_iterate_survive_a_do_nested_in_an_ifs_then_iterating_repeatedly`
-    /// (this file's own tests) pins exactly this shape: a `DO` with an `ITERATE`
+    /// (`run/tests.rs`) pins exactly this shape: a `DO` with an `ITERATE`
     /// in its body, nested inside an `IF`'s `THEN`, run enough times that a
     /// version which instead returned a re-entry `Goto` to the loop's own
     /// top would either loop forever (the `IF`'s own `run_bounded` silently
@@ -228,7 +228,7 @@ pub(crate) enum Flow {
     /// because `there:` sits well past that one-instruction fragment's own
     /// length -- so that measurement alone was never evidence for this
     /// decision. `signal_out_of_a_fragment_does_not_collide_with_the_
-    /// fragments_own_index_space` (this file's own tests) is a program
+    /// fragments_own_index_space` (`run/tests.rs`) is a program
     /// built to collide instead (a label at index 2, a three-instruction
     /// fragment) and does fail under the reuse, printing a wrong branch's
     /// own output silently rather than crashing or hanging.
@@ -3550,8 +3550,18 @@ impl Interp {
         Ok(Flow::Signal(target))
     }
 
-    /// Runs a `CALL ON` trap's handler, at the clause boundary the condition
-    /// has been waiting for.
+    /// Runs every handler this clause boundary owes, in the order the
+    /// conditions were queued, and stops early only if one of them ends the
+    /// program.
+    ///
+    /// **Bounded to what was already queued when the boundary began**, which
+    /// is what defers a handler's own requeue to the next clause --
+    /// `Interp::pending_traps` carries the transcripts for both halves.
+    /// Entries belonging to another activation are stepped over rather than
+    /// blocking the ones this activation owes; `PendingTrap::activation` has
+    /// why that identity is the right key. Entries queued in a different
+    /// `INTERPRET` fragment are stepped over the same way, for the reason
+    /// `PendingTrap::fragment_depth` states.
     ///
     /// **The wait is the measured part.** `zres = one(1)`, where `one`
     /// raises a `CALL ON`-trapped condition and the handler assigns `zres`
@@ -3571,18 +3581,6 @@ impl Interp {
     /// re-insert before it. The two agree on everything but
     /// `CONDITION('S')`, which is why the change was needed and why nothing
     /// else in this function's behaviour moved with it.
-    /// Runs every handler this clause boundary owes, in the order the
-    /// conditions were queued, and stops early only if one of them ends the
-    /// program.
-    ///
-    /// **Bounded to what was already queued when the boundary began**, which
-    /// is what defers a handler's own requeue to the next clause --
-    /// `Interp::pending_traps` carries the transcripts for both halves.
-    /// Entries belonging to another activation are stepped over rather than
-    /// blocking the ones this activation owes; `PendingTrap::activation` has
-    /// why that identity is the right key. Entries queued in a different
-    /// `INTERPRET` fragment are stepped over the same way, for the reason
-    /// `PendingTrap::fragment_depth` states.
     pub(crate) fn deliver_pending_traps(
         &mut self,
         code: &Code<'_>,
@@ -4631,8 +4629,8 @@ impl Interp {
         //   identical way after shipping without it: without this line,
         //   `g`'s own `SIGL` (`set_sigl` reading `current_clause_line`)
         //   reads `f`'s own last line instead of the calling clause's.
-        //   `current_clause_line_is_restored_after_a_nested_call_or_signal`
-        //   (this file's own tests) is what fails if this one line is
+        //   `current_clause_line_is_restored_after_a_nested_expression_call`
+        //   (`run/tests.rs`) is what fails if this one line is
         //   ever removed a second time; `current_value_indent_is_restored_
         //   after_a_nested_expression_call` is its own sibling for the
         //   other field.
@@ -5466,29 +5464,6 @@ impl Interp {
         }
     }
 
-    /// Turns the `Flow` a `SELECT`'s own matched `WHEN` or `OTHERWISE` body
-    /// produced into this `SELECT`'s own answer.
-    ///
-    /// `Flow::Next` becomes `Goto(resume)`, exactly the shape every branch
-    /// gave before Task 11. A `LEAVE`/`ITERATE` naming this `SELECT`'s own
-    /// `label` (`Some` only for `SELECT LABEL name` -- an ordinary clause
-    /// label in front of a `SELECT` is a separate `Label` instruction and
-    /// never reaches `label` at all, measured 28.3/28.4 exactly as for an
-    /// unlabelled loop) is consumed here: a matching `LEAVE` resumes past
-    /// the whole `SELECT`; a matching `ITERATE` is **28.5**, because
-    /// `SELECT` is never a repetitive loop (`RexxInstructionSelect::isLoop`
-    /// answers `false` unconditionally, read directly in the report) --
-    /// measured, `ITERATE` never accepts a non-loop target even when the
-    /// name matches. Everything else -- an unnamed `LEAVE`/`ITERATE` (a
-    /// `SELECT` is never a bare target either, same reason), or one naming
-    /// something else -- is **not matched, but not untouched either**: a
-    /// `SELECT` always owns a search frame (unconditionally, labelled or
-    /// not -- unlike `Do`'s own unlabelled-`Simple` exception), so
-    /// forwarding it outward resets `origin.indent` to this `SELECT`'s own
-    /// `static_indent` first (`LeaveOrigin`'s own doc comment has the full
-    /// rule and the oracle transcripts that pin it). `Exit` and a `Goto`
-    /// that escaped `run_bounded`'s own range pass through with nothing
-    /// touched, same as always.
     /// The clause boundary a promoted construct owes once the branch it chose
     /// has finished -- **the one `step_in_temps_frame` runs for the
     /// tree-walker and flattening removed.**
@@ -5757,6 +5732,29 @@ impl Interp {
         self.leave_select(code, index, label, resume, flow)
     }
 
+    /// Turns the `Flow` a `SELECT`'s own matched `WHEN` or `OTHERWISE` body
+    /// produced into this `SELECT`'s own answer.
+    ///
+    /// `Flow::Next` becomes `Goto(resume)`, exactly the shape every branch
+    /// gave before Task 11. A `LEAVE`/`ITERATE` naming this `SELECT`'s own
+    /// `label` (`Some` only for `SELECT LABEL name` -- an ordinary clause
+    /// label in front of a `SELECT` is a separate `Label` instruction and
+    /// never reaches `label` at all, measured 28.3/28.4 exactly as for an
+    /// unlabelled loop) is consumed here: a matching `LEAVE` resumes past
+    /// the whole `SELECT`; a matching `ITERATE` is **28.5**, because
+    /// `SELECT` is never a repetitive loop (`RexxInstructionSelect::isLoop`
+    /// answers `false` unconditionally, read directly in the report) --
+    /// measured, `ITERATE` never accepts a non-loop target even when the
+    /// name matches. Everything else -- an unnamed `LEAVE`/`ITERATE` (a
+    /// `SELECT` is never a bare target either, same reason), or one naming
+    /// something else -- is **not matched, but not untouched either**: a
+    /// `SELECT` always owns a search frame (unconditionally, labelled or
+    /// not -- unlike `Do`'s own unlabelled-`Simple` exception), so
+    /// forwarding it outward resets `origin.indent` to this `SELECT`'s own
+    /// `static_indent` first (`LeaveOrigin`'s own doc comment has the full
+    /// rule and the oracle transcripts that pin it). `Exit` and a `Goto`
+    /// that escaped `run_bounded`'s own range pass through with nothing
+    /// touched, same as always.
     pub(crate) fn leave_select(
         &mut self,
         code: &Code<'_>,
@@ -8647,7 +8645,7 @@ impl Interp {
 /// impure.
 ///
 /// `the_indent_after_a_loop_has_already_exited_is_not_left_over_from_it`
-/// (this file's own tests) does not catch it, and the reason is worth
+/// (`run/tests.rs`) does not catch it, and the reason is worth
 /// keeping: it runs at top level, where the oracle's counter is already at 0
 /// and cannot go lower. That is the same "at indent 0 the base is 0" blind
 /// spot that hid two of four mutations in one round.
@@ -8665,7 +8663,7 @@ impl Interp {
 /// it twice for the same `target` on the same body always gives the same
 /// answer, computed the same way, whether the failure happens on a loop's
 /// first pass or its thousandth. `the_indent_after_a_loop_has_already_exited_
-/// is_not_left_over_from_it` (this file's own tests) is the test that would
+/// is_not_left_over_from_it` (`run/tests.rs`) is the test that would
 /// have caught a live counter's most likely failure mode -- a raise reached
 /// *after* a loop's own body has already run and exited, at a shallower
 /// lexical depth, where a counter not perfectly unwound on every path out of

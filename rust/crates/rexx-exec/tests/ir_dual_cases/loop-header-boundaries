@@ -28,10 +28,12 @@
 # thing that can break: each header value is evaluated, echoed and validated
 # before the next value is evaluated at all.
 #
-# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE, and every row
-# was measured to produce the identical bytes on both engines at `de05ea58`,
-# before the header was flattened -- which is what says a row can tell whether
-# it would ever have failed. A row that differs from the oracle says so in its
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. That the two
+# engines produce identical bytes for a row is asserted rather than written
+# down here: `both_engines_agree_on_every_case_file` (`tests/ir_dual.rs`) runs
+# every stanza of this directory on both and compares them, so a row that
+# stopped agreeing reddens instead of contradicting a sentence nobody rereads.
+# A row that differs from the oracle says so in its
 # own comment. Regenerate a row by running its program under the oracle, never
 # with REWRITE=1 -- ir_dual.rs refuses to run at all under REWRITE for that
 # reason. Capture is:

@@ -144,7 +144,7 @@
 //! 0 requires a small set of pinned witnesses, at nesting depth <= 3 with
 //! no completed loop, that are compared *without* normalisation. Those
 //! already existed before this comparison was written, as `rexx-exec/src/
-//! run.rs` unit tests asserting an exact `FailureSite`/trace indent --
+//! run/tests.rs` unit tests asserting an exact `FailureSite`/trace indent --
 //! normalisation cannot reach a unit test, since it lives only in this
 //! file's and `trace_oracle.rs`'s own comparison functions, so pinning
 //! them here is a matter of naming them rather than adding anything new:

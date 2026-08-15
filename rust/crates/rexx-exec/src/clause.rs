@@ -547,7 +547,10 @@ impl Interp {
     ///
     /// The `entry` is still consumed, so a clause that takes this exit is a
     /// clause that opened and closed -- the line and the tripwire in
-    /// [`Interp::enter_clause`] are unaffected.
+    /// [`Interp::enter_clause`] are unaffected. Taking `&self` and never
+    /// reading it is that same point and not a stub: spending the
+    /// [`ClauseEntry`] is the whole of the work here, and it leaves the
+    /// interpreter untouched by construction.
     #[inline(always)]
     pub(crate) fn leave_clause_without_boundary<T: ClauseValue>(
         &self,

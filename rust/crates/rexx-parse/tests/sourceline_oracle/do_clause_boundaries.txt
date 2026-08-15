@@ -1,4 +1,4 @@
-count 167
+count 170
 /* Where a plain DO offers a queued condition its boundary, on stdout.
 
    A CALL ON handler that ends in `raise ... return` leaves a second trapped
@@ -7,10 +7,13 @@ count 167
    construct ends and when -- with no TRACE anywhere, so nothing here depends
    on the trace stream or on DEVIATION 0's indent normalisation.
 
-   The oracle's rule, which every block below reads back: one delivery per
-   clause boundary, walking forward, and a plain DO is TWO clauses -- the
-   header, which RexxInstructionSimpleDo::execute ends as soon as it has
-   opened the block, and END, which is an instruction of its own.
+   The oracle's rule, which every block below reads back: what a handler
+   queues WHILE IT RUNS is owed to the next clause boundary and not to the one
+   that delivered it, and a plain DO is TWO clauses -- the header, which
+   RexxInstructionSimpleDo::execute ends as soon as it has opened the block,
+   and END, which is an instruction of its own. The rule's other half -- a
+   boundary takes everything the clause left pending, not one -- is
+   condition_queue_drain.rex's subject rather than this file's.
 
    Blocks A, C and K are the header: the condition pending when the DO runs is
    owed to the DO's own line, ahead of anything in the body. Blocks D and E are
