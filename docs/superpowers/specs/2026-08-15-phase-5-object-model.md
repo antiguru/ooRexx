@@ -517,42 +517,40 @@ scope's dictionary -- `CoreClasses.orx` has 112 `expose` clauses and `StreamClas
 not an edge case but the ordinary path. **`Body::Instance` is replaced, not extended**, and the plan owes
 its shape as an early task rather than discovering it at the first `expose`.
 
-**Object identity is split, decided 2026-08-15, and recorded as deviation 4 in
-`phase-4-exclusions.txt`.** A value small enough to live in its handle has **value** identity; everything
-else has **reference** identity. Measured on the oracle:
+**Object identity in ooRexx is a property of the C++ construction path, not of the value.** That is
+the finding, it is stronger than any boundary rule, and it is why deviation 4 licenses a *model*
+rather than a range. Measured, all on the oracle, `.IdentityTable` item counts under
+`numeric digits 18`:
 
-```
-a = "abc" ; b = "ab" || "c"
-.IdentityTable with a and b   -> 2 items      .Table with a and b -> 1 item
-16-byte pair, same shape      -> 2 items
-i = 1 ; j = 0 + 1             -> 1 item
-```
+| | |
+|---|---|
+| two identical literals, any length; an alias; a literal in a loop; equal literals in two routines | **1** |
+| a computed string equal to a literal | 2 |
+| `5+0` vs `3+2` | **1** -- the integer cache, `IntegerClass.hpp:185`, is exactly `-10..100` |
+| `101+0` vs `100+1` | 2 |
+| the same, via values from `parse arg` | **2** -- same arithmetic, same values, different path |
+| `strip` with nothing to strip, `s\|\|""`, `changestr` with no match, `right(s,length(s))`, `s~string` | **1** -- the argument itself comes back |
+| `left(s,length(s))`, `substr(s,1)`, `s~copy`, `translate(s,"","")` | 2 |
 
-**The oracle interns by literal, at every length**, which the first probe missed: two identical
-16-byte literals are one object, an alias is one object, one literal evaluated in a loop is one
-object, and equal literals in two routines are one object. A **computed** string is always fresh.
+`left` and `right` land on opposite sides. Two equal fives are one object or two depending on how
+they were produced. **No rule stated in terms of values can reproduce this**, so this crate does not
+try: identity here is handle equality, which is a function of the value alone.
 
-So there are two divergences, in opposite directions, and only the first is licensed:
+That diverges in **both directions**, and the plan must know which:
 
-* **(a) a computed string of seven bytes or fewer** equal to an existing one is one object here and
-  two on the oracle. Entry 59's consequence; accepted as deviation 4.
-* **(b) a literal is a fresh object on every evaluation here** and one object per distinct text on the
-  oracle. **Not accepted, and not entry 59's** -- `ir.rs`'s `consts` table pools literal *bytes*, and
-  `Op::Const` builds a fresh value from them on every run. Phase 5 pools the **value**. Its doc's own
-  safety argument, "interning is invisible to a running program, which is the property that makes it
-  safe", **expires in this phase**, because identity is what makes sharing visible.
+* **we merge where the oracle separates** -- a computed string of seven bytes or fewer equal to an
+  existing one, and any two equal integers inside `±2^61` but outside `-10..100`. The second is
+  `SmallInt`'s, which predates entry 59.
+* **we separate where the oracle merges** -- a literal of eight bytes or more that is not a canonical
+  decimal integer, re-evaluated; and every identity-preserving no-op in the table above, because
+  every string path in this crate ends at `Interp::text` or `text_built`.
 
-Reverting entry 59 is not an option -- it improved every benchmark axis.
+The second family is the one worth closing, because closing it also removes allocations. **It cannot
+be derived from a principle** -- the set has to be copied from the C++ per builtin, since `left` and
+`right` disagree.
 
-**The L2 cost is bounded and named rather than assumed.** `ooRexx/base/class/IdentityTable.testGroup`
-(ootest r13198) builds its fixture as `.array~of("22", "2"||"2", .object~new, .array~new)` and asserts
-the two strings are different index objects twice, by comment. 42 test methods in that file, 26 of which
-reference the fixture -- an upper bound on the affected set, not a failure count. That shape appears in
-no other testGroup, and `assertNotIdentical` is used nowhere in the suite.
-
-**`~identityHash` is address-derived and varies between runs**, so its value is not a differential test on
-any interpreter. Comparing two of them needs `numeric digits 18`; under the default 9 two different
-15-digit addresses compare equal, which is why `CoreClasses.orx:1305` sets it before differencing them.
+Licensed as deviation 4 in `phase-4-exclusions.txt`, which carries the measurements. See D41 and D42
+for what this phase builds and what it does not.
 
 **Behaviour is captured at creation for `~define` and shared for `~inherit`.** Measured on one class,
 two mutations, opposite answers:
@@ -663,13 +661,12 @@ says who builds it.
 4. **`>M>` and `>N>` are pinned by in-crate exact-stderr assertions**, expected bytes captured from the
    oracle rather than typed, and `trace_oracle.rs`'s `PREFIX_COVERAGE` rows updated. `ir_dual` is not
    evidence here.
-5. **The security manager's interception points are in place (D12).** The roadmap's Phase 5 exit row
-   requires this and the first draft dropped it to an open question without saying it was removing an
-   inherited criterion. D12 assigns this phase the manager object, its installation path, and the hooks in
-   dispatch, in `.local`/`.environment` lookup, and in external function resolution. The first two are
-   surfaces this phase builds, so omitting their hooks is exactly the retrofit D12 says costs touching
-   every path twice. **The third is Phase 7's** by `Loud::unresolved_call`'s own doc, so this phase fixes
-   the interception design there and Phase 7 adds the call site.
+5. **The security manager's interception seam is in place, and the manager is not** (D45). Dispatch
+   and `.local`/`.environment` lookup each route through exactly one chokepoint, asserted by a test that
+   fails if a second appears. External function resolution is Phase 7's by `Loud::unresolved_call`'s own
+   doc, so this phase fixes the seam's shape and Phase 7 adds that call site. **This amends the
+   roadmap's Phase 5 exit row**, which reads as though the manager object lands here; the amendment is
+   deliberate and the manager moves to a later phase.
 6. **No guard axis moved beyond the floor**, under the rule stated in the bar, with a two-build sitting per
    task that lands code in `rexx-exec`, `rexx-core` or `rexx-classes`. **The instrument is
    `instructions:u`**, not cycles: `rexx-arms` emits both, and the 1% floor is meaningless on cycles,
@@ -768,18 +765,55 @@ fails criterion 2 on its first `~`.
   reaches `CoreClasses.orx`'s `exit`. The oracle for the bootstrap is the **state** it leaves, checked by
   criterion 2. `rexx-classes` provides the two setup methods during the bootstrap and removes them after,
   reproducing the deletion; keeping them is a divergence any corpus program can see.
-* **D41.** Object identity is **split**: a value small enough to live in its handle has value identity,
-  everything else reference identity. Licensed 2026-08-15; deviation 4 in `phase-4-exclusions.txt`, with
-  its L2 cost measured at ootest r13198. **`identityHash` is the slot index for a heap value and the
-  handle's own bits for an inline one** -- total, deterministic, and cheap. The oracle's is
-  address-derived and varies between runs, so no value is wrong; what matters is that equal handles
-  hash equal and distinct slots hash distinct.
-* **D42.** **Literals are pooled by value, not only by bytes.** One object per distinct literal text per
-  package, matching the oracle at every length. This closes a divergence running the *opposite* way from
-  D41 and is not a concession -- it is alignment. `ir.rs`'s `consts` table already has the right key.
-* **D40.** `Body::Instance`'s flat association list is **replaced**: instance variables are scoped by
-  defining class, measured. `EXPOSE` reaches a scope's dictionary, and its shape is an early task rather
-  than a discovery.
+* **D41.** **Object identity is not modelled.** Identity here is handle equality; in the oracle it
+  follows the C++ construction path, which no value-level rule reproduces -- `left` and `right`
+  disagree, and two equal fives are one object or two depending on how they were made. Licensed as
+  deviation 4, which carries the measurements and the both-directions split. `identityHash` is the
+  slot index for a heap value and the handle's own bits for an inline one; the oracle's is
+  address-derived and varies between runs, so no value is wrong.
+* **D42.** **Literals are pooled by value**, one object per distinct literal per **compiled unit**,
+  which is what the oracle does. Three constraints, each measured rather than assumed:
+  * **not a global pool** -- two identical literals in two packages are two objects on the oracle, so
+    a global pool would convert today's agreement into a new divergence;
+  * **a fresh pool per `INTERPRET` execution**, for the same reason;
+  * **`.true`/`.false` and the environment symbols are built through the value path, not the literal
+    path**, because the oracle keeps them distinct from every spelling of `1` and `0`.
+
+  It changes fewer programs than it sounds: a literal of seven bytes or fewer is already the same
+  handle at every evaluation, and so is one whose text is a canonical decimal integer at any length.
+  **(b) is real only for literals of eight bytes or more that are not canonical integers**, so a gate
+  sampling literals without controlling for those two shapes will report the fix working when it has
+  not run.
+* **D40.** `Body::Instance`'s flat association list is **replaced by a scope-keyed variable pool**.
+  `RexxObject` carries a linked list of `VariableDictionary`s, one per scope, created lazily and found
+  by linear walk (`ObjectClass.cpp:2489`) -- and a dictionary is a full pool, so **an instance
+  variable can be a stem with tails**, measured. The Rust shape is a small association from scope to
+  the storage an activation already uses (`rexx_core::SlotFrame` plus `stem.rs`), walked linearly,
+  which is what the C++ does. **`EXPOSE` is therefore not new machinery**: it binds names in the
+  running method to that method's scope pool, structurally what `PROCEDURE EXPOSE` already performs.
+  One task, not two.
+* **D43.** **An object holds a behaviour reference, and that is the whole `~define`/`~inherit` rule.**
+  `RexxClass::defineMethod` (`ClassClass.cpp:819`) copies `instanceBehaviour` before mutating it --
+  its own comment is "so any previous objects aren't enhanced" -- then calls
+  `updateInstanceSubClasses`. `RexxClass::inherit` (`:1287`) does **no** copy: it appends to
+  `superClasses` and calls `updateSubClasses`, which rebuilds the existing behaviour object in place.
+  So `define` repoints the class at a fresh copy and leaves existing instances on the old one;
+  `inherit` mutates the object they already point at. **`rexx_core::Object`'s `behaviour: BehaviourId`
+  field survives unchanged** -- `define` allocates a new entry, `inherit` mutates entry N in place,
+  instances keep the id they were created with. Only `BehaviourTable`'s chain-walking lookup goes.
+* **D44.** **A class carries two behaviours**, its own metaclass-side one and its instances'. The two
+  update paths differ along exactly that line: `updateInstanceSubClasses` (`:1071`) rebuilds only the
+  instance behaviour and is what `defineMethod` calls; `updateSubClasses` (`:1036`) rebuilds both,
+  instance first because instance methods "may have an impact on metaclasses", and is what `inherit`
+  calls. **That is why `::class "Singleton" mixinclass class` reaches the metaclass side** -- it
+  arrives through `~inherit`. `phase-5.txt` needs a class-behaviour witness; an instance-method
+  diamond does not exercise it.
+* **D45.** The security manager is **seam only in this phase**, decided 2026-08-15. Dispatch and
+  `.local`/`.environment` lookup each pass through exactly one chokepoint a manager could later hook,
+  and a test asserts there is exactly one per site. No manager object, no installation path, no
+  Rexx-visible behaviour; those move to a later phase. This preserves what D12 actually warns about,
+  that Phase 7 would otherwise invent a second mechanism, and it amends the roadmap's Phase 5 exit
+  row, which reads as though the manager itself lands here.
 * **D38.** `::CONSTANT` is **Phase 5's**, specifically its parenthesised expression form, which this crate
   accepts and never evaluates where the oracle evaluates it at install time. Measured; recorded as a KNOWN
   GAP before it is fixed. Criterion 1 needs it, because `StreamClasses.orx:548` is one.
@@ -791,18 +825,12 @@ fails criterion 2 on its first `~`.
   Phase 6 owns the semantics; something has to happen in the meantime and this spec does not say what.
 * **D24's three surviving forward constraints** -- selectors interned at compile time, a `SmallInt`
   behaviour arm, a receiver in the calling convention. Each is this phase's and none is designed here.
-* **The security manager's interception shape (D12, Q14).** Criterion 5 requires the hooks. Their design is
-  still not fixed, and it must be before the first dispatch call site is written, or Phase 7 invents a
-  second mechanism.
 * **`::ANNOTATE`.** Unmeasured. The plan's first task measures it and decides whether it is in criterion 2.
 * **Whether the `createInstance()` order is load-bearing.** The order is quoted above; only four of its
   positions carry a stated reason.
 * **What plays the oracle for a native method.** A collection primitive implemented in Rust has one, through
   a Rexx program. A method `CoreClasses.orx` defines has one by construction. The plan should say there is
   no third case, rather than leave it implied.
-* **The mechanism behind the `~define`/`~inherit` visibility asymmetry**, read out of `ClassClass.cpp` and
-  `ObjectClass.cpp`. The observable rule is measured above; how the C++ produces it is not, and D29 has to
-  reproduce it rather than approximate it.
 * **Which `CoreClasses.orx` classes this phase leaves unexercisable.** D32 sends `REPLY`/`GUARD`'s
   concurrency half to Phase 6, and `Alarm` and `Ticker` use both, so a criterion-2 program that
   instantiates either cannot pass here. The list belongs in the plan.

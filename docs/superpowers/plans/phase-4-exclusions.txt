@@ -679,86 +679,91 @@ DEVIATIONS -- permanent, chosen
      this chain where "what the oracle does" and "a byte this crate can
      produce without inventing one" are still the same question.
 
-  4. OBJECT IDENTITY IS SPLIT: a value small enough to live in its handle has
-     VALUE identity, everything else has REFERENCE identity. Two equal short
-     strings are one object here and two on the oracle.
+  4. OBJECT IDENTITY IS NOT MODELLED. In this crate identity is handle
+     equality, a function of the value alone. In the oracle it follows the
+     C++ construction path, and no value-level rule reproduces that.
 
-     Licensed by Moritz, 2026-08-15. Recorded now rather than at Phase 5
-     because the cause already shipped and only the observability is new.
+     Licensed by Moritz, 2026-08-15, after an independent confirmation pass
+     of 95 probes widened the subject twice. An earlier draft of this row
+     stated a boundary ("seven bytes or fewer") and a two-way split; both were
+     too narrow and are withdrawn. What follows is the measured picture.
 
-     THE CAUSE, and it is not a defect. Phase 4f entry 59 gave `ObjRef`'s
-     last free tag a byte string carried in the handle itself -- three bits
-     of length and seven bytes of payload -- so a string short enough costs
-     no slot, no mark byte and no sweep pass. The handle IS the value there,
-     so two equal short strings are bit-identical handles by construction and
-     nothing downstream can separate them. Reverting is not on the table: the
-     change measured -6.448% on `strings`, -6.154% on `rexxcps` and -5.778%
-     on `alloc4c`, and improved every other axis (entry 59 of
-     phase-4f-record.md).
+     MEASURED, oracle, standard wrapper, fresh empty directory, three
+     descriptors, `numeric digits 18`. `.IdentityTable` item counts:
 
-     THE BOUNDARY, stated so it can be tested rather than described. Below or
-     at the handle's inline capacity: value identity. Above it: reference
-     identity, because the value takes a slot and two equal values take two
-     slots. "Interned" is the right intuition and the wrong rule -- real
-     interning shares every equal string, and this shares only the short ones.
+       two identical literals, any length              1
+       an alias; a literal in a loop; equal literals
+         in two routines                               1
+       a computed string equal to a literal            2
+       5 + 0   vs  3 + 2                               1
+       101 + 0 vs  100 + 1                             2
+       the same fives, from `parse arg` values         2
+       strip() with nothing to strip                   1
+       s || ""                                         1
+       changestr() with no match                       1
+       right(s, length(s))                             1
+       s~string                                        1
+       left(s, length(s))                              2
+       substr(s, 1)                                    2
+       s~copy                                          2
+       translate(s, "", "")                            2
+       two identical literals in two PACKAGES          2
 
-     MEASURED, oracle, from a fresh empty directory, three descriptors,
-     under `numeric digits 18`. `.IdentityTable` item counts:
+     `left` and `right` land on opposite sides. Two equal fives are one object
+     or two depending on how they were produced. The integer cache is exactly
+     -10..100 (`classes/IntegerClass.hpp:185-186`, and the 5/101 rows above).
 
-       a = "abc";  b = "ab" || "c"      ->  2      (.Table -> 1)
-       16-byte literal vs computed      ->  2
-       a = "abc";  c = "abc"            ->  1
-       two identical 16-byte LITERALS   ->  1
-       b = a  (alias)                   ->  1
-       one literal evaluated in a loop  ->  1
-       equal literals in two routines   ->  1
-       i = 1;  j = 0 + 1                ->  1
+     THE CONSEQUENCE, and it is the reason this row licenses a MODEL rather
+     than a range: identity in ooRexx is a property of how an object was
+     constructed, not of what it holds. This crate cannot express that,
+     because a handle IS the value for anything inline and is a slot index
+     otherwise. So the divergence runs BOTH WAYS.
 
-     SO THE ORACLE DOES INTERN, BY LITERAL, AT EVERY LENGTH. An earlier
-     draft of this row said it "shares no strings at all"; that is false and
-     is withdrawn. The rule the measurements give is: a literal's TEXT
-     determines its object, and a COMPUTED string is a fresh object.
+     WE MERGE WHERE THE ORACLE SEPARATES.
+       - a computed string of seven bytes or fewer equal to an existing one
+         (entry 59's inline text);
+       - any two equal integers inside +/-2^61 but outside -10..100
+         (`SmallInt`, which PREDATES entry 59 -- an earlier draft of this row
+         said the integer behaviour "matches by luck", which is true only for
+         the arguments in -10..100 that its probe happened to use).
 
-     WHICH MEANS THERE ARE TWO DIVERGENCES, IN OPPOSITE DIRECTIONS, and only
-     one of them is this deviation.
+     WE SEPARATE WHERE THE ORACLE MERGES.
+       - a literal of eight bytes or more that is not a canonical decimal
+         integer, re-evaluated. A literal of seven bytes or fewer is already
+         one handle at every evaluation, and so is one whose text is a
+         canonical integer at any length, so this is narrower than it sounds
+         and a probe that does not control for both shapes cannot see a fix;
+       - every identity-preserving no-op in the table above, because every
+         string path here ends at `Interp::text` or `text_built`:
+         `strip` ends `Ok(interp.text(kept))`, `changestr`'s no-match path
+         ends `Ok(interp.text_built(unchanged))`, `concat_values` has no
+         null-operand short circuit, and `parse_template.rs` builds every
+         piece with `self.text`.
 
-       (a) A COMPUTED string of seven bytes or fewer, equal to an existing
-           one, is one object here and two on the oracle. That is this
-           deviation, it follows from entry 59, and it is accepted.
+     THE SECOND FAMILY IS WORTH CLOSING and the first is not. Closing it also
+     removes allocations, so it pays twice. It CANNOT be derived from a
+     principle -- `left` and `right` disagree, as do `substr(s,1,length(s))`
+     and `delstr(s,length(s)+1)` -- so the set is copied from the C++ per
+     builtin or it is wrong.
 
-       (b) A LITERAL is a fresh object on every evaluation here and one
-           object per distinct text on the oracle. Two identical long
-           literals are two objects here and one there; so is one literal
-           evaluated twice. This is NOT accepted and is NOT entry 59's --
-           it is that we pool literal BYTES and not literal VALUES.
-
-     (b) IS FIXABLE AND FIXING IT ALIGNS US. `ir.rs`'s `consts` table is
-     already keyed "one entry per distinct literal", and its own doc says
-     `Op::Const` "reads the bytes and builds a fresh value from them through
-     `Interp::literal` every time it runs, so two occurrences of one literal
-     share a table entry and share no value". `eval.rs`'s `ExprKind::Literal`
-     arm does the same. That doc also states the safety argument --
-     "interning is invisible to a running program, which is the property that
-     makes it safe" -- and THAT PROPERTY EXPIRES IN PHASE 5, because identity
-     is exactly what makes sharing visible. Phase 5 pools the value, not just
-     the bytes, which is what the oracle does.
-
-     So this crate's `SmallInt` immediates match the integer row by luck of
-     the same design; short LITERALS match by accident of entry 59 doing what
-     literal pooling would have done anyway; and what is left over is (a).
+     CONSTRAINTS ON THE LITERAL-POOLING FIX, each measured rather than
+     assumed. Pool per COMPILED UNIT, not globally: two identical literals in
+     two packages are two objects on the oracle, so a global pool would turn
+     today's agreement into a new divergence. A fresh pool per `INTERPRET`
+     execution, for the same reason. And `.true`/`.false` and the environment
+     symbols go through the value path rather than the literal path, because
+     the oracle keeps them distinct from every spelling of `1` and `0`.
 
      `~identityHash` IS ADDRESS-DERIVED AND VARIES BETWEEN RUNS. Measured:
      `"abc"~identityHash` printed -140497609849889 and -139929843694625 on
-     two runs of one program. So its VALUE can never be a differential test
-     on any interpreter, and a corpus program that prints one is not a test.
-     What is testable is whether two things are the SAME object.
+     two runs of one program. So its VALUE is never a differential test on any
+     interpreter; what is testable is whether two things are the same object.
 
-     A TRAP THIS PROJECT ALREADY FELL INTO. Comparing two identity hashes
-     with `=` under the default NUMERIC DIGITS 9 answers 1 for two DIFFERENT
-     15-digit addresses that agree in their first nine significant digits.
+     A TRAP THIS PROJECT FELL INTO TWICE. Comparing two identity hashes with
+     `=` under the default NUMERIC DIGITS 9 answers 1 for two DIFFERENT
+     15-digit addresses agreeing in their first nine significant digits.
      `CoreClasses.orx:1305` sets `numeric digits 18` before differencing two
-     of them for exactly this reason. A probe that omits it measures the
-     rounding, not the identity.
+     of them for exactly this reason.
 
      THE L2 COST, measured at the checked-out suite rather than guessed.
      `svn checkout https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest`,
@@ -770,29 +775,22 @@ DEVIATIONS -- permanent, chosen
 
        indexes = .array~of("22", "2"||"2", .object~new, .array~new)
 
-     Both strings are two bytes, inside the inline range, and the file asserts
-     the distinction directly at two places -- `assertNull(coll~at("2"||"2"))`
-     and `assertNull(coll["2"||"2"])`, each commented "different index
-     object". Under this deviation the second `put` overwrites the first, so
-     the table has three entries where the fixture intends four.
+     Both strings are two bytes, and the file asserts the distinction directly
+     at two places -- `assertNull(coll~at("2"||"2"))` and
+     `assertNull(coll["2"||"2"])`, each commented "different index object".
+     That file has 42 test methods and 26 reference `indexes` or `buildTable`;
+     26 is an UPPER bound on the affected set, not a failure count, and
+     separating them needs a run, which needs Phase 5 and Phase 7 both. That
+     fixture shape appears in no other `.testGroup`, and `assertNotIdentical`
+     is used nowhere in the suite, so the framework's own identity assertions
+     are not a second vector.
 
-     THE BOUND: that file has 42 test methods and 26 of them reference
-     `indexes` or `buildTable`. 26 is an UPPER bound on the affected set, not
-     a failure count -- some of the 26 do not depend on the two short strings
-     being distinct, and separating them needs a run, which needs Phase 5 and
-     Phase 7 both. `/bin/grep` for that fixture shape across every
-     `.testGroup` finds it ONLY in this file, and `assertNotIdentical` is used
-     nowhere in the suite, so the framework's own identity assertions are not
-     a second vector.
-
-     WHY THE COST IS ACCEPTED ANYWAY. It is one test group, bounded and
-     named, against a change that improved every benchmark axis. The suite is
-     upstream's and is not edited. Phase 9's `phase-9-exclusions.txt` is the
-     precedent for naming excluded groups in a committed file; whatever L2
-     exemption file exists when L2 runs must carry this group with a pointer
+     WHY THIS IS ACCEPTED. Reverting entry 59 is not on the table -- it
+     improved every benchmark axis, by 6.448% on `strings` and 6.154% on
+     `rexxcps` -- and `SmallInt` predates the whole question. Whatever L2
+     exemption file exists when L2 runs must carry that group with a pointer
      to this row, because a group excluded without a reason is
      indistinguishable from a group nobody ran.
-
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
