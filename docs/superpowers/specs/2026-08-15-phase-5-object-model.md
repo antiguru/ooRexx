@@ -517,19 +517,34 @@ scope's dictionary -- `CoreClasses.orx` has 112 `expose` clauses and `StreamClas
 not an edge case but the ordinary path. **`Body::Instance` is replaced, not extended**, and the plan owes
 its shape as an early task rather than discovering it at the first `expose`.
 
-**Object identity is observable, and this crate's string representation collapses it.** Measured:
+**Object identity is split, decided 2026-08-15, and recorded as deviation 4 in
+`phase-4-exclusions.txt`.** A value small enough to live in its handle has **value** identity; everything
+else has **reference** identity. Measured on the oracle:
 
 ```
 a = "abc" ; b = "ab" || "c"
-.IdentityTable with a and b -> 2 items       .Table with a and b -> 1 item       (oracle rc 0)
+.IdentityTable with a and b   -> 2 items      .Table with a and b -> 1 item
+16-byte pair, same shape      -> 2 items
+i = 1 ; j = 0 + 1             -> 1 item
 ```
 
-Two equal strings are two objects. Phase 4f entry 59 made every string of seven bytes or fewer an inline
-tagged handle, so `a` and `b` are one `ObjRef` here and an `.IdentityTable` would hold one item. **This is
-a divergence created by an accepted optimisation and made observable by this phase**, not a defect in
-entry 59, which was correct for every question askable at the time. The plan owes a decision: an identity
-that survives the inline representation, or a recorded divergence. Nothing here decides it, and it is the
-one open item that can reach back into `rexx-core`'s value layer.
+The oracle shares small integers and shares no strings. This crate's `SmallInt` immediates match the
+integer row; entry 59's inline strings do not match the string row, and that is the whole divergence,
+confined to the inline range. Reverting entry 59 is not an option -- it improved every benchmark axis.
+
+**"Interned" is the right intuition and the wrong rule**, so do not write it that way: real interning
+shares every equal string, and this shares only the short ones. The boundary is testable and the
+deviation row states it.
+
+**The L2 cost is bounded and named rather than assumed.** `ooRexx/base/class/IdentityTable.testGroup`
+(ootest r13198) builds its fixture as `.array~of("22", "2"||"2", .object~new, .array~new)` and asserts
+the two strings are different index objects twice, by comment. 42 test methods in that file, 26 of which
+reference the fixture -- an upper bound on the affected set, not a failure count. That shape appears in
+no other testGroup, and `assertNotIdentical` is used nowhere in the suite.
+
+**`~identityHash` is address-derived and varies between runs**, so its value is not a differential test on
+any interpreter. Comparing two of them needs `numeric digits 18`; under the default 9 two different
+15-digit addresses compare equal, which is why `CoreClasses.orx:1305` sets it before differencing them.
 
 **Behaviour is captured at creation for `~define` and shared for `~inherit`.** Measured on one class,
 two mutations, opposite answers:
@@ -745,6 +760,10 @@ fails criterion 2 on its first `~`.
   reaches `CoreClasses.orx`'s `exit`. The oracle for the bootstrap is the **state** it leaves, checked by
   criterion 2. `rexx-classes` provides the two setup methods during the bootstrap and removes them after,
   reproducing the deletion; keeping them is a divergence any corpus program can see.
+* **D41.** Object identity is **split**: a value small enough to live in its handle has value identity,
+  everything else reference identity. Licensed 2026-08-15; deviation 4 in `phase-4-exclusions.txt`, with
+  its L2 cost measured at ootest r13198. `~identityHash` may be any deterministic value, since the
+  oracle's own varies between runs.
 * **D40.** `Body::Instance`'s flat association list is **replaced**: instance variables are scoped by
   defining class, measured. `EXPOSE` reaches a scope's dictionary, and its shape is an early task rather
   than a discovery.
@@ -768,9 +787,6 @@ fails criterion 2 on its first `~`.
 * **What plays the oracle for a native method.** A collection primitive implemented in Rust has one, through
   a Rexx program. A method `CoreClasses.orx` defines has one by construction. The plan should say there is
   no third case, rather than leave it implied.
-* **Object identity against the inline string representation.** Two equal short strings are two objects
-  on the oracle and one `ObjRef` here. An identity that survives entry 59's inline handles, or a recorded
-  divergence -- and it is the one open item that can reach back into `rexx-core`'s value layer.
 * **The mechanism behind the `~define`/`~inherit` visibility asymmetry**, read out of `ClassClass.cpp` and
   `ObjectClass.cpp`. The observable rule is measured above; how the C++ produces it is not, and D29 has to
   reproduce it rather than approximate it.

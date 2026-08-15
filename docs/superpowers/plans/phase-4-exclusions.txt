@@ -679,6 +679,87 @@ DEVIATIONS -- permanent, chosen
      this chain where "what the oracle does" and "a byte this crate can
      produce without inventing one" are still the same question.
 
+  4. OBJECT IDENTITY IS SPLIT: a value small enough to live in its handle has
+     VALUE identity, everything else has REFERENCE identity. Two equal short
+     strings are one object here and two on the oracle.
+
+     Licensed by Moritz, 2026-08-15. Recorded now rather than at Phase 5
+     because the cause already shipped and only the observability is new.
+
+     THE CAUSE, and it is not a defect. Phase 4f entry 59 gave `ObjRef`'s
+     last free tag a byte string carried in the handle itself -- three bits
+     of length and seven bytes of payload -- so a string short enough costs
+     no slot, no mark byte and no sweep pass. The handle IS the value there,
+     so two equal short strings are bit-identical handles by construction and
+     nothing downstream can separate them. Reverting is not on the table: the
+     change measured -6.448% on `strings`, -6.154% on `rexxcps` and -5.778%
+     on `alloc4c`, and improved every other axis (entry 59 of
+     phase-4f-record.md).
+
+     THE BOUNDARY, stated so it can be tested rather than described. Below or
+     at the handle's inline capacity: value identity. Above it: reference
+     identity, because the value takes a slot and two equal values take two
+     slots. "Interned" is the right intuition and the wrong rule -- real
+     interning shares every equal string, and this shares only the short ones.
+
+     MEASURED, oracle, from a fresh empty directory, three descriptors:
+
+       a = "abc"; b = "ab" || "c"
+       .IdentityTable with a and b   ->  2 items      (.Table -> 1 item)
+       16-byte pair, same shape      ->  2 items
+       i = 1; j = 0 + 1              ->  1 item
+
+     So the oracle shares small INTEGERS and shares no strings at all. This
+     crate's `SmallInt` tagged immediates match the integer row by luck of
+     the same design; the string row is the whole divergence and it is
+     confined to the inline range.
+
+     `~identityHash` IS ADDRESS-DERIVED AND VARIES BETWEEN RUNS. Measured:
+     `"abc"~identityHash` printed -140497609849889 and -139929843694625 on
+     two runs of one program. So its VALUE can never be a differential test
+     on any interpreter, and a corpus program that prints one is not a test.
+     What is testable is whether two things are the SAME object.
+
+     A TRAP THIS PROJECT ALREADY FELL INTO. Comparing two identity hashes
+     with `=` under the default NUMERIC DIGITS 9 answers 1 for two DIFFERENT
+     15-digit addresses that agree in their first nine significant digits.
+     `CoreClasses.orx:1305` sets `numeric digits 18` before differencing two
+     of them for exactly this reason. A probe that omits it measures the
+     rounding, not the identity.
+
+     THE L2 COST, measured at the checked-out suite rather than guessed.
+     `svn checkout https://svn.code.sf.net/p/oorexx/code-0/test/trunk ootest`,
+     r13198, checked out 2026-08-15 at the worktree root, which is where
+     rust/CLAUDE.md's read-only list already says `ootest/` lives. Not tracked
+     by git; it is a working copy of a different repository.
+     `ooRexx/base/class/IdentityTable.testGroup` builds its whole fixture on
+     this property:
+
+       indexes = .array~of("22", "2"||"2", .object~new, .array~new)
+
+     Both strings are two bytes, inside the inline range, and the file asserts
+     the distinction directly at two places -- `assertNull(coll~at("2"||"2"))`
+     and `assertNull(coll["2"||"2"])`, each commented "different index
+     object". Under this deviation the second `put` overwrites the first, so
+     the table has three entries where the fixture intends four.
+
+     THE BOUND: that file has 42 test methods and 26 of them reference
+     `indexes` or `buildTable`. 26 is an UPPER bound on the affected set, not
+     a failure count -- some of the 26 do not depend on the two short strings
+     being distinct, and separating them needs a run, which needs Phase 5 and
+     Phase 7 both. `/bin/grep` for that fixture shape across every
+     `.testGroup` finds it ONLY in this file, and `assertNotIdentical` is used
+     nowhere in the suite, so the framework's own identity assertions are not
+     a second vector.
+
+     WHY THE COST IS ACCEPTED ANYWAY. It is one test group, bounded and
+     named, against a change that improved every benchmark axis. The suite is
+     upstream's and is not edited. Phase 9's `phase-9-exclusions.txt` is the
+     precedent for naming excluded groups in a committed file; whatever L2
+     exemption file exists when L2 runs must carry this group with a pointer
+     to this row, because a group excluded without a reason is
+     indistinguishable from a group nobody ran.
+
 
 EXPRKIND OWNERSHIP -- the expression forms 4a/4b do not evaluate
 ---------------------------------------------------------------------
