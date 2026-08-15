@@ -46,6 +46,14 @@ speculatively for 5b.
 `init`, `FORWARD`, per-object `~setMethod`, and the collection classes' own Rexx method bodies.
 **5c** is the library classes and the corpus gate.
 
+**Two spec decisions are deliberately not 5a's, and saying so is the point.** **D41**'s
+`identityHash` rule and **D42**'s literal pooling are both observable only once `.IdentityTable` and
+`~identityHash` exist, which is 5c; 5a has no instrument that could witness either, so building them
+here would be unverifiable work. **One half of D42 does bind here**: `.true`/`.false` and the
+environment symbols go through the value path rather than the literal path, which is Task 6's, since
+that is where they are created. A later plan that finds these unassigned should read this paragraph
+rather than assume they were forgotten.
+
 ## Global Constraints
 
 **Differential correctness.** A change is right when output matches the C++ oracle byte for byte on
@@ -160,8 +168,8 @@ cascade to every subclass.
 
 **Build:** a behaviour holding a flat name-to-method map **plus scope ordering**, because
 `MethodDictionary` carries `scopeList` and `scopeOrders` beside the name map and a scope-override
-send cannot be answered without them; `define`, which **copies the behaviour first**
-(`ClassClass.cpp:819`: "make a copy of the instance behaviour so any previous objects aren't
+send cannot be answered without them; `define`, which **copies the behaviour first** (D43;
+`ClassClass.cpp:819`: "make a copy of the instance behaviour so any previous objects aren't
 enhanced") then cascades instance-side only; `inherit`, which does **not** copy and cascades both
 sides in place; **`inheritInstanceMethods`, which donates methods without creating a superclass
 edge**; and a per-behaviour monotonic version bumped by every cascade, which is what makes D28's
