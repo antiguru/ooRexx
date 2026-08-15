@@ -1,0 +1,137 @@
+# The trace indent a CALL ON handler is given when it is delivered at a plain
+# DO's own two clause boundaries, pinned on the tree-walker's own bytes.
+#
+# A plain `DO` has a header clause and an `END` clause, and a handler delivered
+# at either of them starts its activation at whatever the block indent reads
+# then. The two are not the same: the header clause has opened the block, so
+# its handler runs one level in; the `END` clause has closed it again, so its
+# handler runs back out at the `DO`'s own level. `Interp::settle_block_indent`
+# is what each boundary calls, and its `open` argument is the whole of the
+# difference -- a level being two columns.
+#
+# **One row per boundary, and each row is built so that only its own boundary
+# delivers anything.** The first row queues nothing inside the block, so its
+# `END` boundary has nothing to deliver; the second queues nothing before the
+# `DO`, so its header boundary has nothing to deliver. Measured, flipping
+# either `open` argument in `run_loop_with_header`'s `LoopKind::Simple` arm
+# moves that argument's own row by two columns and leaves the other row
+# byte-identical, on both engines.
+#
+# **The oracle differential cannot see this**, which is why the witness is
+# here: `tests/support/mod.rs` normalises the width of a trace line's indent,
+# and measured, `corpus_differential` in STRICT passes under either flip.
+#
+# What these rows do not pin: which argument carries the level. Only the
+# settled indent reaches the handler, so `settle_block_indent(false,
+# do_indent + 2)` at the header would produce these same bytes. Neither row
+# contains a repeating loop, so neither says anything about the block indent a
+# repeating `DO` settles.
+#
+# EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Regenerate a
+# row by running its program under the oracle, never with REWRITE=1 --
+# ir_dual.rs refuses to run at all under REWRITE for that reason. Capture is:
+#
+#   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+
+# Delivered at the DO's header clause. `zn = ra()` queues zx, its own boundary
+# runs `h`, and `h` requeues zy -- which the next boundary owes, and the next
+# boundary is the `DO`'s own. The block is open there, so `g:` echoes two
+# columns in from the `DO`, ahead of the body's `say`.
+program
+trace r
+call on user zx name h
+call on user zy name g
+zn = ra()
+do
+say 'body'
+end
+say 'after' zn
+exit 0
+ra:
+raise user zx return 1
+h:
+say 'h ran' sigl
+raise user zy return 1
+g:
+say 'g ran' sigl
+return
+----
+rc> 0
+out> h ran 4
+out> g ran 5
+out> body
+out> after 1
+err>      2 *-* call on user zx name h
+err>      3 *-* call on user zy name g
+err>      4 *-* zn = ra()
+err>     10 *-*   ra:
+err>     11 *-*   raise user zx return 1
+err>        >K>     "RESULT" => "1"
+err>        >>>   "1"
+err>     12 *-*   h:
+err>     13 *-*   say 'h ran' sigl
+err>        >>>     "h ran 4"
+err>     14 *-*   raise user zy return 1
+err>        >K>     "RESULT" => "1"
+err>      5 *-* do
+err>     15 *-*     g:
+err>     16 *-*     say 'g ran' sigl
+err>        >>>       "g ran 5"
+err>     17 *-*     return
+err>      6 *-*   say 'body'
+err>        >>>     "body"
+err>      7 *-* end
+err>      8 *-* say 'after' zn
+err>        >>>   "after 1"
+err>      9 *-* exit 0
+err>        >>>   "0"
+
+# Delivered at the END clause. Nothing is queued before the `DO`, so its header
+# boundary has nothing to deliver; the body clause queues zx, runs `h` at its
+# own boundary, and `h`'s requeue of zy is owed to the `END`. The block is
+# closed by then, so `g:` echoes at the `DO`'s own level rather than the body's.
+program
+trace r
+call on user zx name h
+call on user zy name g
+do
+zn = ra()
+end
+say 'after' zn
+exit 0
+ra:
+raise user zx return 1
+h:
+say 'h ran' sigl
+raise user zy return 1
+g:
+say 'g ran' sigl
+return
+----
+rc> 0
+out> h ran 5
+out> g ran 6
+out> after 1
+err>      2 *-* call on user zx name h
+err>      3 *-* call on user zy name g
+err>      4 *-* do
+err>      5 *-*   zn = ra()
+err>      9 *-*     ra:
+err>     10 *-*     raise user zx return 1
+err>        >K>       "RESULT" => "1"
+err>        >>>     "1"
+err>     11 *-*     h:
+err>     12 *-*     say 'h ran' sigl
+err>        >>>       "h ran 5"
+err>     13 *-*     raise user zy return 1
+err>        >K>       "RESULT" => "1"
+err>      6 *-* end
+err>     14 *-*   g:
+err>     15 *-*   say 'g ran' sigl
+err>        >>>     "g ran 6"
+err>     16 *-*   return
+err>      7 *-* say 'after' zn
+err>        >>>   "after 1"
+err>      8 *-* exit 0
+err>        >>>   "0"
