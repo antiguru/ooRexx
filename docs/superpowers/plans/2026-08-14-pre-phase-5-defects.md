@@ -454,14 +454,26 @@ Pre-existing, confirmed by a control build with every behavioural change of this
 
 **OUTCOME, `e74780054`. This task closed BOTH mechanisms, and the answer to Step 2 is that the plain `SELECT` is a different fix and is untouched.**
 
-The rule the fix lands: a plain `DO` has a clause at its header and a clause at its `END`, and the step that spans the whole construct has neither. `run_loop`'s `Simple` arm opens the header's clause and closes it before `run_bounded`, and opens `END`'s on the pass that reaches it; `leave_stepped_clause` gives a `DO`/`LOOP` step no boundary of its own, because a boundary there is one the oracle does not have and it delivers at whichever line the last inner clause left behind.
+The rule the fix lands: a plain `DO` has a clause at its header and a clause at its `END`, and the step that spans the whole construct has neither. `run_loop_with_header`'s `Simple` arm opens the header's clause and closes it before `run_bounded`, and opens `END`'s on the pass that reaches it; `leave_stepped_clause` gives a `DO`/`LOOP` step no boundary of its own, because a boundary there is one the oracle does not have and it delivers at whichever line the last inner clause left behind.
 
 **That third part is what the `DO UNTIL` needed, and Step 1b's prediction that it might not follow was right to make.** Its `END` boundary is already served by the `UNTIL` test, so the requeue is owed to the clause *after* the loop; only removing the step's own boundary moves it. The first two changes alone leave it wrong.
 
 **What the measurements said that this task's text did not.**
 
 * **The empty-body control in Step 1 agrees for a reason weaker than it looks.** With one requeue and an empty body the delivery lands on the `DO`'s own line because there is no body clause to update the clause line first, not because the boundary was correctly placed. The same block with one body clause reports the body's line. So the control pins "a boundary exists and carries a line", not "the header clause ends before the body".
-* **Repeating loops with a real header were never wrong on this route.** `do zi = 1 to 2`, `do while`, `do 2` and `do label` all agreed before the fix, because `run_repeating` already opens a per-pass clause at the `DO`'s line and drains the queue there. Only `Simple`, which has no such clause, and `DO UNTIL`, which refills the queue after it, diverged.
+* **Every loop shape measured on this route was wrong, not only `Simple`, and `run_repeating`'s per-pass clause is not what makes the repeating ones right.** Re-measured 2026-08-15 against the oracle, on both engines, every row diverging at `1f4176b47` and agreeing at `d0b7504a5`:
+
+  | program | oracle, and `d0b7504a5` on both engines | `1f4176b47`, both engines |
+  |---|---|---|
+  | `do zi = 1 to 1 / zr = raiser() / end / say 'after' zr` | `h1 5` `h2 6` `after 5` `h3 7` | `h1 5` `h2 6` `h3 6` `after 5` |
+  | `do 1 / zr = raiser() / end / say 'after' zr` | `h1 5` `h2 6` `after 5` `h3 7` | `h1 5` `h2 6` `h3 6` `after 5` |
+  | `do while zn < 1 / zn = zn + 1 / zr = raiser() / end / say 'after' zr` | `h1 7` `h2 8` `after 5` `h3 9` | `h1 7` `h2 8` `h3 8` `after 5` |
+  | `do forever / zr = raiser() / leave / end / say 'after' zr` | `h1 5` `h2 6` `after 5` `h3 8` | `h1 5` `h2 6` `h3 6` `after 5` |
+  | `zr = raiser() / do label zl / say 'body' / end / say 'after' zr` | `h1 3` `h2 4` `body` `after 5` | `h1 3` `body` `h2 5` `after 5` |
+
+  In the first four rows the raise happens inside the loop body, and `h2` leaves `c3` queued behind it. `run_repeating`'s per-pass clause is not what makes them right: it was already there at `1f4176b47`, in the shape it has now (`run_repeating`'s `header_line` match on `HeaderClause`), and those rows still diverged. A clause boundary drains what is queued when it runs, so the condition a handler requeues is owed to the *next* boundary -- and at `1f4176b47` that next boundary was the step's own, because `leave_stepped_clause` ran `leave_clause` for every construct. That is what those rows read back: `h3` lands on the line the loop's last inner clause left behind, ahead of the `SAY` the oracle delivers it at.
+
+  The last row is a different mechanism and is not a repeating loop at all. `do label zl` with no header parses as `LoopKind::Simple` through `create_loop`'s bare at-end-of-clause arm (`crates/rexx-parse/src/instruction.rs:908`), so it never reaches `run_repeating`. Its handler chain stops at `h2`, so the only delivery that moves is `h2`'s: the oracle owes it to the `DO`'s own line, and at `1f4176b47` the `Simple` arm opened no clause at all -- neither at the `DO`'s line nor at `END`'s -- so it fell through to the first clause inside the block.
 * **`if ... then do` diverged too, and it is this defect rather than a neighbour.** Both deliveries moved, and both now agree. Plain `if ... then` with no block, and `select` / `when ... then` / `end`, agreed before and after.
 
 **Found and NOT fixed, all confirmed pre-existing by a before/after control build.**

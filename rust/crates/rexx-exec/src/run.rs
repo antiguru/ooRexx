@@ -5228,8 +5228,10 @@ impl Interp {
         // **A `DO`/`LOOP`'s step is not a clause the oracle has, so it owes no
         // boundary** -- `Interp::leave_clause_without_boundary` has the
         // mechanism and the transcript. Every boundary the construct does owe
-        // is opened by `run_loop`: the header's, once before the body runs,
-        // and `END`'s, on the pass that reaches it.
+        // is opened under `run_loop_with_header`, which is where both engines
+        // resolve the construct: a plain `DO`'s header and `END` clauses are
+        // opened in that function's own `LoopKind::Simple` arm, and a
+        // repeating loop's clauses are opened in `run_repeating`.
         let outcome = match &instruction.kind {
             InstructionKind::Do(_) | InstructionKind::Loop(_) => {
                 self.leave_clause_without_boundary(entry.entry, ran)

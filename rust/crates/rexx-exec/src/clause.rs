@@ -523,9 +523,13 @@ impl Interp {
     /// oracle has no clause at all. A `DO`/`LOOP` is the case: the oracle's
     /// own `DO` instruction ends when its header does, and `END` is an
     /// instruction of its own, so the boundaries the oracle offers a queued
-    /// condition are the header's and `END`'s -- both of which `run_loop`
-    /// opens as clauses in their own right. The step that spans the whole
-    /// construct is this crate's own scaffolding, and a boundary here is a
+    /// condition are the header's and `END`'s. For a plain `DO`, which parses
+    /// as `LoopKind::Simple`, `run_loop_with_header`'s own arm opens each of
+    /// those as a clause in its own right. A repeating loop's clauses are
+    /// opened by `run_repeating` instead, and there `END` has no clause of
+    /// its own: the header re-test on the following pass carries `END`'s
+    /// line (`HeaderClause::End`). The step that spans the whole construct
+    /// is this crate's own scaffolding, and a boundary here is a
     /// boundary the oracle does not have: it delivers a condition that is
     /// owed to a later clause, at whichever line the construct's last inner
     /// clause happened to leave behind.
