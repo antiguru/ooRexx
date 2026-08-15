@@ -21,6 +21,92 @@ license = "CPL-1.0"
 # is what happened briefly on 2026-08-11 and was reverted.
 unsafe_code = "forbid"
 
+# Adopted from `TimelyDataflow/timely-dataflow`'s `Cargo.toml`, fetched
+# 2026-08-15. Levels follow that file except where a line below says otherwise.
+[workspace.lints.clippy]
+type_complexity = "allow"
+option_map_unit_fn = "allow"
+wrong_self_convention = "allow"
+should_implement_trait = "allow"
+module_inception = "allow"
+
+# Upstream carries this line commented out. Set explicitly here so the decision
+# is recorded rather than inherited by omission.
+#
+# Measured 2026-08-15 with this line set to `warn`, by `cargo clippy --workspace
+# --all-targets --message-format=json`, counted by `message.code.code`: 574
+# warnings over 299 distinct source spans. Set the line back to `warn` before
+# reproducing it; run against the tree as it stands, that command answers zero,
+# which is the `allow` working and not the number having rotted.
+#
+# Each span is a truncation-and-sign judgement inside a numeric interpreter
+# whose bar is byte-for-byte agreement with the C++ oracle, so a wrong rewrite
+# is a silent behavioural change and not a build failure.
+# What would close this: a checked cast helper in the shape of Materialize's
+# `CastFrom`/`CastLossy`, which this tree does not have.
+as_conversions = "allow"
+bool_comparison = "warn"
+borrow_interior_mutable_const = "warn"
+borrowed_box = "warn"
+builtin_type_shadow = "warn"
+clone_on_ref_ptr = "warn"
+crosspointer_transmute = "warn"
+dbg_macro = "warn"
+deref_addrof = "warn"
+disallowed_macros = "warn"
+disallowed_methods = "warn"
+disallowed_types = "warn"
+double_must_use = "warn"
+double_parens = "warn"
+duplicate_underscore_argument = "warn"
+excessive_precision = "warn"
+extra_unused_lifetimes = "warn"
+from_over_into = "warn"
+match_overlapping_arm = "warn"
+must_use_unit = "warn"
+mut_mutex_lock = "warn"
+needless_borrow = "warn"
+needless_pass_by_ref_mut = "warn"
+needless_question_mark = "warn"
+needless_return = "warn"
+no_effect = "warn"
+panicking_overflow_checks = "warn"
+partialeq_ne_impl = "warn"
+print_literal = "warn"
+redundant_closure = "warn"
+redundant_closure_call = "warn"
+redundant_field_names = "warn"
+redundant_pattern = "warn"
+redundant_slicing = "warn"
+redundant_static_lifetimes = "warn"
+same_item_push = "warn"
+# Upstream sets this to `warn`.
+#
+# Measured 2026-08-15 the same way, with this line set to `warn`: 380 warnings
+# over 314 distinct source spans, in files then under active differential work.
+# As of that date, clearing them meant a rename pass over exactly the code whose
+# output was being compared byte for byte against the oracle: churn in the diffs
+# that mattered most, and nothing else.
+shadow_unrelated = "allow"
+single_component_path_imports = "warn"
+suspicious_assignment_formatting = "warn"
+suspicious_else_formatting = "warn"
+suspicious_unary_op_formatting = "warn"
+todo = "warn"
+transmutes_expressible_as_ptr_casts = "warn"
+unnecessary_cast = "warn"
+unnecessary_lazy_evaluations = "warn"
+unnecessary_mut_passed = "warn"
+unnecessary_unwrap = "warn"
+unused_async = "warn"
+useless_asref = "warn"
+useless_conversion = "warn"
+useless_format = "warn"
+wildcard_in_or_patterns = "warn"
+write_literal = "warn"
+zero_divided_by_zero = "warn"
+zero_prefixed_literal = "warn"
+
 # Pinned rather than left to cargo's defaults, because both of this profile's
 # consumers are measurements and a default that moves is a measurement that
 # moves with it.

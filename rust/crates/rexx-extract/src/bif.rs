@@ -864,7 +864,7 @@ impl<'a> BodyScan<'a> {
     /// one whose right-hand side cannot be resolved, which blocks the body:
     /// every later assertion would run under state this scanner cannot
     /// reproduce.
-    fn assignment(&mut self, blank: &str) -> Result<Option<(String, String)>, DropReason> {
+    fn assignment(&self, blank: &str) -> Result<Option<(String, String)>, DropReason> {
         let is_name_char =
             |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '!' | '?');
         let text = blank.trim_end();

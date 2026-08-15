@@ -803,7 +803,7 @@ impl Interp {
     /// hint that arm reads decides only whether this is *tried*, never what it
     /// answers.
     pub(crate) fn arith_small_int(
-        &mut self,
+        &self,
         op: Operator,
         left_value: ObjRef,
         right_value: ObjRef,

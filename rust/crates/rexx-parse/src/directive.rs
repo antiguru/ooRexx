@@ -389,7 +389,7 @@ impl<'a> Dir<'a> {
 
     // ---- dispatch ----
 
-    fn dispatch(&mut self, cursor: &mut ClauseCursor) -> Result<DirectiveKind, ParseError> {
+    fn dispatch(&mut self, cursor: &ClauseCursor) -> Result<DirectiveKind, ParseError> {
         // `Error_Translation_bad_directive`. Measured on the other side of this
         // gate too: a lone `:` is not a directive at all but an expression, and
         // `:junk` is 35.1.
@@ -527,7 +527,7 @@ impl<'a> Dir<'a> {
     // ---- ::METHOD and ::ATTRIBUTE ----
 
     /// `methodDirective` (`DirectiveParser.cpp:629`).
-    fn method(&mut self, cursor: &mut ClauseCursor) -> Result<DirectiveKind, ParseError> {
+    fn method(&mut self, cursor: &ClauseCursor) -> Result<DirectiveKind, ParseError> {
         let name = self.require_name(19, 902)?;
         let mut method = MethodDirective {
             name,
@@ -633,7 +633,7 @@ impl<'a> Dir<'a> {
     }
 
     /// `attributeDirective` (`DirectiveParser.cpp:1457`).
-    fn attribute(&mut self, cursor: &mut ClauseCursor) -> Result<DirectiveKind, ParseError> {
+    fn attribute(&mut self, cursor: &ClauseCursor) -> Result<DirectiveKind, ParseError> {
         let name = self.require_name(19, 914)?;
         let mut attribute = AttributeDirective {
             name,
@@ -802,7 +802,7 @@ impl<'a> Dir<'a> {
     // ---- ::CONSTANT ----
 
     /// `constantDirective` (`DirectiveParser.cpp:1854`).
-    fn constant(&mut self, cursor: &mut ClauseCursor) -> Result<DirectiveKind, ParseError> {
+    fn constant(&mut self, cursor: &ClauseCursor) -> Result<DirectiveKind, ParseError> {
         let name = self.require_name(19, 915)?;
         let value = match self.peek_real() {
             // No value at all, whose value is the name as written. Measured:
@@ -1172,7 +1172,7 @@ impl<'a> Dir<'a> {
     // ---- ::ROUTINE ----
 
     /// `routineDirective` (`DirectiveParser.cpp:2565`).
-    fn routine(&mut self, cursor: &mut ClauseCursor) -> Result<DirectiveKind, ParseError> {
+    fn routine(&mut self, cursor: &ClauseCursor) -> Result<DirectiveKind, ParseError> {
         let name = self.require_name(19, 903)?;
         let mut routine = RoutineDirective {
             name,

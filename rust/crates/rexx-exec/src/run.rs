@@ -2891,7 +2891,7 @@ impl Interp {
     /// doc). Only the variable spellings are implemented, and a message term
     /// fails loudly through the same `Loud::expression` path every other
     /// unimplemented expression form uses rather than being approximated.
-    fn use_target_name(&mut self, code: &Code<'_>, target: &UseTarget) -> Result<Vec<u8>, Failure> {
+    fn use_target_name(&self, code: &Code<'_>, target: &UseTarget) -> Result<Vec<u8>, Failure> {
         match &target.target.kind {
             ExprKind::Variable(id) | ExprKind::Stem(id) | ExprKind::Compound(id) => {
                 Ok(code.symbols.name(*id).as_bytes().to_vec())
@@ -3400,7 +3400,7 @@ impl Interp {
     /// raised. `CALL ON NOVALUE` is a parse error anyway; the `call` half is
     /// reachable only through `CALL ON ANY`, which is measured not to catch
     /// a condition that has no resumption point.
-    pub(crate) fn novalue_check(&mut self, novalue: Novalue) -> Result<(), Failure> {
+    pub(crate) fn novalue_check(&self, novalue: Novalue) -> Result<(), Failure> {
         if novalue == Novalue::Set {
             return Ok(());
         }
@@ -4216,7 +4216,7 @@ impl Interp {
     /// directory, `call zorkolo` gives 43.1 rc 213 `Could not find routine
     /// "ZORKOLO".`
     pub(crate) fn resolve_call(
-        &mut self,
+        &self,
         name: &[u8],
         search_labels: bool,
     ) -> Result<Resolved, Failure> {

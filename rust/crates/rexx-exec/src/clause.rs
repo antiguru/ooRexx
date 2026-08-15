@@ -550,7 +550,7 @@ impl Interp {
     /// [`Interp::enter_clause`] are unaffected.
     #[inline(always)]
     pub(crate) fn leave_clause_without_boundary<T: ClauseValue>(
-        &mut self,
+        &self,
         entry: ClauseEntry,
         ran: Result<T, Failure>,
     ) -> Result<ClauseOutcome<T>, Failure> {
