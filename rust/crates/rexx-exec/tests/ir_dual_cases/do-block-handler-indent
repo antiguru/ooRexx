@@ -1,43 +1,59 @@
 # The trace indent a CALL ON handler is given when it is delivered at a plain
 # DO's own two clause boundaries, pinned on the tree-walker's own bytes.
 #
-# A plain `DO` has a header clause and an `END` clause, and a handler delivered
-# at either of them starts its activation at whatever the block indent reads
-# then. The two are not the same: the header clause has opened the block, so
-# its handler runs one level in; the `END` clause has closed it again, so its
-# handler runs back out at the `DO`'s own level. `Interp::settle_block_indent`
-# is what each boundary calls, and its `open` argument is the whole of the
-# difference -- a level being two columns.
+# A plain `DO` has a header clause and an `END` clause, and each settles the
+# block indent a handler delivered there inherits. The two settle different
+# values: the header clause has opened the block, so it settles a level in from
+# the `DO`'s own indent; the `END` clause has closed it again, so it settles the
+# `DO`'s own. `Interp::settle_block_indent` is what each calls, and its `open`
+# argument is the whole of the difference -- a level being two columns.
 #
-# **One row per boundary, and each row is built so that only its own boundary
-# delivers anything.** The first row queues nothing inside the block, so its
-# `END` boundary has nothing to deliver; the second queues nothing before the
-# `DO`, so its header boundary has nothing to deliver. Measured, flipping
-# either `open` argument in `run_loop_with_header`'s `LoopKind::Simple` arm
-# moves that argument's own row by two columns and leaves the other row
-# byte-identical, on both engines.
+# **The settled indent is not the column a handler's clauses echo at.** A
+# handler activation echoes a level in from the block indent it inherits --
+# visible in every row below -- so each row's handler sits two columns deeper
+# than the value its boundary settled. Each row's own note gives the columns to
+# check it against, each of them a count of the spaces between `*-*` and the
+# clause text.
 #
-# **The oracle differential cannot see this**, which is why the witness is
-# here: `tests/support/mod.rs` normalises the width of a trace line's indent,
-# and measured, `corpus_differential` in STRICT passes under either flip.
+# **What each row is for.** The two top-level rows separate the arguments: each
+# is built so that only its own boundary delivers a handler, and measured,
+# flipping either `open` argument in `run_loop_with_header`'s `LoopKind::Simple`
+# arm moves that argument's own row and leaves the other byte-identical, on both
+# engines. The nested row separates `do_indent` from the constant it happens to
+# equal at top level: its `DO` sits inside another block, so `do_indent` is 2
+# rather than 0, and a site that ignored `do_indent` and passed a literal `0`
+# would match both top-level rows. It delivers a handler at both boundaries, so
+# it is not selective between the two arguments; that is what the rows above it
+# are for.
 #
-# What these rows do not pin: which argument carries the level. Only the
-# settled indent reaches the handler, so `settle_block_indent(false,
-# do_indent + 2)` at the header would produce these same bytes. Neither row
-# contains a repeating loop, so neither says anything about the block indent a
+# **The oracle differential cannot see any of this**, which is why the witness
+# is here: `tests/support/mod.rs` normalises the width of a trace line's indent,
+# and measured, `corpus_differential` in STRICT passes under either `open` flip
+# and under a literal `0` at either site.
+#
+# What these rows do not pin: which argument carries the level. Only the settled
+# indent reaches the handler, so `settle_block_indent(false, do_indent + 2)` at
+# the header would produce these same bytes. Nor do they tell `do_indent` from
+# the `end_indent` computed for the `END`'s own echo -- measured, passing that
+# instead at the `END` site leaves every row below byte-identical. No row
+# contains a repeating loop, so none says anything about the block indent a
 # repeating `DO` settles.
 #
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Regenerate a
 # row by running its program under the oracle, never with REWRITE=1 --
-# ir_dual.rs refuses to run at all under REWRITE for that reason. Capture is:
+# `both_engines_agree_on_every_case_file` refuses to run under REWRITE for that
+# reason. Capture the three descriptors separately, never merged:
 #
 #   ( ulimit -v 1048576; LD_LIBRARY_PATH=<ooRexx>/build/lib \
-#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null )
+#     <ooRexx>/build/bin/rexx PROGRAM.rex </dev/null ) >out 2>err
+#
+# and write the block as `rc> <exit status>`, then every line of `out` tagged
+# `out>`, then every line of `err` tagged `err>`.
 
 # Delivered at the DO's header clause. `zn = ra()` queues zx, its own boundary
 # runs `h`, and `h` requeues zy -- which the next boundary owes, and the next
-# boundary is the `DO`'s own. The block is open there, so `g:` echoes two
-# columns in from the `DO`, ahead of the body's `say`.
+# boundary is the `DO`'s own. The block is open there, so that boundary settles
+# 2 and `g:` echoes at column 4, ahead of the body's `say` at column 2.
 program
 trace r
 call on user zx name h
@@ -90,7 +106,8 @@ err>        >>>   "0"
 # Delivered at the END clause. Nothing is queued before the `DO`, so its header
 # boundary has nothing to deliver; the body clause queues zx, runs `h` at its
 # own boundary, and `h`'s requeue of zy is owed to the `END`. The block is
-# closed by then, so `g:` echoes at the `DO`'s own level rather than the body's.
+# closed by then, so that boundary settles 0 -- the `DO`'s own -- and `g:`
+# echoes at column 2, the body clause's own column.
 program
 trace r
 call on user zx name h
@@ -134,4 +151,93 @@ err>     16 *-*   return
 err>      7 *-* say 'after' zn
 err>        >>>   "after 1"
 err>      8 *-* exit 0
+err>        >>>   "0"
+
+# The same two boundaries with a non-zero `do_indent`. The inner `DO` sits in an
+# outer block, so it echoes at column 2 and both of its boundaries settle from 2
+# rather than 0: the header settles 4 and `g:` echoes at column 6, the `END`
+# settles 2 and `m:` echoes at column 4. Measured, replacing `do_indent` with a
+# literal `0` at either site moves that site's own handler two columns out --
+# `g:` to 4, or `m:` to 2 -- and leaves the two rows above byte-identical.
+#
+# Two independent chains reach the two boundaries. zx is queued before the inner
+# `DO` and `h`'s requeue of zy lands at its header; zw is queued by the inner
+# body clause and `k`'s requeue of zv lands at the inner `END`. The outer block's
+# own two boundaries deliver nothing.
+program
+trace r
+call on user zx name h
+call on user zy name g
+call on user zw name k
+call on user zv name m
+do
+zn = ra()
+do
+zp = rb()
+end
+end
+say 'after' zn zp
+exit 0
+ra:
+raise user zx return 1
+rb:
+raise user zw return 1
+h:
+say 'h ran' sigl
+raise user zy return 1
+g:
+say 'g ran' sigl
+return
+k:
+say 'k ran' sigl
+raise user zv return 1
+m:
+say 'm ran' sigl
+return
+----
+rc> 0
+out> h ran 7
+out> g ran 8
+out> k ran 9
+out> m ran 10
+out> after 1 1
+err>      2 *-* call on user zx name h
+err>      3 *-* call on user zy name g
+err>      4 *-* call on user zw name k
+err>      5 *-* call on user zv name m
+err>      6 *-* do
+err>      7 *-*   zn = ra()
+err>     14 *-*     ra:
+err>     15 *-*     raise user zx return 1
+err>        >K>       "RESULT" => "1"
+err>        >>>     "1"
+err>     18 *-*     h:
+err>     19 *-*     say 'h ran' sigl
+err>        >>>       "h ran 7"
+err>     20 *-*     raise user zy return 1
+err>        >K>       "RESULT" => "1"
+err>      8 *-*   do
+err>     21 *-*       g:
+err>     22 *-*       say 'g ran' sigl
+err>        >>>         "g ran 8"
+err>     23 *-*       return
+err>      9 *-*     zp = rb()
+err>     16 *-*       rb:
+err>     17 *-*       raise user zw return 1
+err>        >K>         "RESULT" => "1"
+err>        >>>       "1"
+err>     24 *-*       k:
+err>     25 *-*       say 'k ran' sigl
+err>        >>>         "k ran 9"
+err>     26 *-*       raise user zv return 1
+err>        >K>         "RESULT" => "1"
+err>     10 *-*   end
+err>     27 *-*     m:
+err>     28 *-*     say 'm ran' sigl
+err>        >>>       "m ran 10"
+err>     29 *-*     return
+err>     11 *-* end
+err>     12 *-* say 'after' zn zp
+err>        >>>   "after 1 1"
+err>     13 *-* exit 0
 err>        >>>   "0"
