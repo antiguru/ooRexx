@@ -1959,15 +1959,13 @@ struct Interp {
     /// inside it and one queued inside gets no boundary outside.
     ///
     /// A depth rather than a "some fragment is running" flag, because a
-    /// fragment inside a fragment is a third queue again. The program that
-    /// separates the two designs needs a condition queued in the **outer**
-    /// fragment and an inner fragment with more than one clause, so that a
-    /// delivery inside the inner one lands between them: measured, `interpret
-    /// 'zq = raiser(); interpret "say 1; say 2"; say 3'` with a requeueing
-    /// handler prints `1`, `2`, the second handler, then `3` on the oracle,
-    /// where a flag delivers after `1`. Every shorter shape -- including a
-    /// nested fragment that queues and drops its own -- gives the same bytes
-    /// either way, which was established by building the flag and running it.
+    /// fragment inside a fragment is a third queue again. Measured against a
+    /// built flag design, with a condition queued in the **outer** fragment and
+    /// an inner fragment running while it waits: `interpret 'zq = raiser();
+    /// interpret "say 1; say 2"; say 3'` prints `1`, `2`, the second handler,
+    /// then `3` on the oracle and here, where the flag delivers after `1`.
+    /// `ir_dual_cases/interpret-condition-queue` holds that program, and beside
+    /// it the neighbouring shape that does **not** separate the two designs.
     ///
     /// Separate from `clause_line_override`, which the `Interpret` arm sets
     /// beside it: that one is *inherited* by a nested fragment (the oracle

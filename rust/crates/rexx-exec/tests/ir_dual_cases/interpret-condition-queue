@@ -4,7 +4,7 @@
 # The oracle runs a fragment in an activation whose condition queue is its own,
 # and this crate runs it inside the creating activation. So the queue is shared
 # here and the separation has to be reconstructed. The parts of the rule these
-# rows pin, each row needing a different one:
+# rows pin:
 #
 #   * a condition queued BEFORE the fragment is offered no boundary inside it,
 #     however many clauses the fragment has and whatever they are;
@@ -21,10 +21,10 @@
 # row is here to refuse: measured, that suppression prints `body` before the
 # second handler where the oracle prints the second handler first.
 #
-# A rule stated without the fourth part is satisfied by a boolean "in a
-# fragment" flag, and that is a narrower gap than it looks: the flag design was
-# built and run against every row here, and only the `interpret "say 1; say 2"`
-# row tells it from a nesting level. The rest, the nested-fragment row included,
+# A rule stated without the nesting-level part is satisfied by a boolean "in a
+# fragment" flag, and that is a narrower gap than it looks. The flag design was
+# built and run against every row below: only the `interpret "say 1; say 2"` row
+# tells it from a nesting level, and the rest, the nested-fragment row included,
 # produce identical bytes under both.
 #
 # EVERY EXPECTED BYTE BELOW WAS MEASURED AGAINST THE C++ ORACLE. Regenerate a
@@ -137,9 +137,9 @@ out> body
 out> h2 4
 out> after 5
 
-# A controlled loop in the fragment, whose header clause and per-pass re-test
-# clause are boundaries a plain DO does not have, opened by `run_repeating`
-# rather than by the `Simple` arm.
+# A controlled loop in the fragment, whose per-pass re-test clause is a boundary
+# a plain DO does not have, opened by `run_repeating` rather than by the
+# `Simple` arm.
 program
 call on user c1 name h1
 call on user c2 name h2
@@ -214,9 +214,9 @@ out> after 5
 
 # The same, one fragment deeper. The requeue is left in the INNER fragment's
 # queue, and neither the outer fragment nor the program picks it up. Measured
-# against a built boolean-flag design, this row agrees with it: a flag drops the
-# leftover at the inner fragment's exit exactly as a depth does, so what this
-# row pins is the discard reaching a nested fragment, not the choice of key.
+# green under the delivery-key mutation, under the discard mutation and under a
+# built boolean-flag design alike, so what this row holds is the oracle's answer
+# for a nested fragment rather than a mechanism the other rows leave uncovered.
 program
 call on user c1 name h1
 call on user c2 name h2
@@ -244,11 +244,9 @@ out> after 5
 # are. A flag makes the inner fragment's boundaries match, delivering after `1`
 # and ahead of `2` -- built and run, that is the byte difference.
 #
-# The inner fragment needs more than one clause for this to be visible at all.
-# With one, a delivery at its first boundary and a delivery at the enclosing
-# clause's boundary both land after that clause has printed, and the two designs
-# are indistinguishable: `interpret 'zq = raiser(); interpret "say 1"; say 2'`
-# was measured under both and prints `h1 3 / 1 / h2 3 / 2 / after 5` either way.
+# Neighbouring shapes do not all separate the designs, so do not shorten this
+# program by eye. Measured under both designs, `interpret 'zq = raiser();
+# interpret "say 1"; say 2'` prints `h1 3 / 1 / h2 3 / 2 / after 5` either way.
 program
 call on user c1 name h1
 call on user c2 name h2
