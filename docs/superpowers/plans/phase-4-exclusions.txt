@@ -2124,9 +2124,10 @@ above.
   row above: not an over-refusal but a silent under-refusal, which is the worse
   of the two because nothing is loud.
 
-  Measured 2026-08-15 with the release rexx-run built from b029abe77, whose
-  code is HEAD's -- git diff --name-only b029abe77..HEAD names nothing outside
-  docs/. Under the standard oracle wrapper from a fresh empty directory, three
+  Measured 2026-08-15 with the release rexx-run built from b029abe77. That
+  binary's code is this file's revision's code: every commit since b029abe77
+  touches only docs/ and rust/bench-baselines/, neither of which is compiled.
+  Under the standard oracle wrapper from a fresh empty directory, three
   descriptors read separately, on a program whose
   prologue is say "prolog" followed by exit, then ::CLASS K and
   ::CONSTANT c (.NoSuchClass~m):

@@ -1,6 +1,7 @@
 # Phase 5 -- the object model
 
-**Status:** design, revised once after a five-reviewer adversarial panel. Not planned.
+**Status:** design, revised twice -- after a five-reviewer adversarial panel, then after a two-reviewer
+re-review of that revision. Not planned.
 **Entry:** met. Phase 4f closed; `perf-baseline.md`'s "The pre-Phase-5 baseline" pins the standing at `b029abe77`.
 **Blocks:** Phases 6, 7 and 8, which are independent of each other and may run in parallel once this closes.
 **Decided:** 2026-08-15. Revised 2026-08-15 after review.
@@ -11,12 +12,18 @@ what is inherited; read this for what is decided. Where the two disagree, the su
 `11638b91e` and this is the decision. **One of the survey's own claims is withdrawn here** -- see
 [the bootstrap's reach](#what-the-bootstrap-actually-reaches).
 
-**What the review changed, and it was the shape of the phase rather than its details.** The first draft's
+**What review changed, and it was the shape of the phase rather than its details.** The first draft's
 headline criterion -- the three `.orx` files run to completion -- is not reachable by a phase scoped to the
-object model, because two of the three bind natives that belong to Phases 6 and 7 and they bind them
-*eagerly, at directive-install time*. The first draft also proposed a wiring check that could not fail, and
-claimed a byte-for-byte corpus comparison that the corpus harness does not perform. All three are fixed
-below and each is called out where it sits.
+object model, because two of the three bind natives belonging to Phases 6 and 7, *eagerly, at
+directive-install time*. The second draft's replacement was worse: it demanded a transcript
+byte-identical to an oracle that **cannot run the prologue at all**. The first draft also proposed a
+wiring check that could not fail, and claimed a byte-for-byte corpus comparison the harness does not
+perform. And neither draft designed **the object** -- instance variables are scoped by defining class,
+which the representation already committed in `rexx-core` cannot express.
+
+Every correction below is called out where it sits, with what was measured. The withdrawn sentences are
+left visible rather than quietly replaced: this document's errors are the most useful record it has of
+where the phase is easy to get wrong.
 
 ## The sentence the roadmap gets wrong, and what it changes
 
@@ -31,9 +38,11 @@ the primitive classes in C++ first, and *only then*, at `Setup.cpp:1785`, resolv
 `TheRexxPackage` as its single argument.
 
 `createImage()` is the **image-build** path, run by `rexximage` at C++ build time, not the startup path.
-That does not weaken the point: it is where the C++ decides what is native and what is sourced, which is
-the question this phase has to answer, and the ordering it fixes is the ordering the restored image
-reproduces.
+For the native/sourced question that is no weakness -- it is exactly where the C++ decides what is native
+and what is sourced, and the ordering it fixes is the ordering the restored image reproduces. **It is a
+severe weakness for anything wanting a transcript**, and the second draft's version of this sentence,
+"that does not weaken the point", is what let an unsatisfiable criterion 1 through. See
+[the bootstrap has no oracle transcript](#the-bootstrap-has-no-oracle-transcript-and-two-of-its-methods-do-not-exist-in-the-shipped-image).
 
 The classes it builds, **in the order it builds them**, which is `createInstance()`'s call order in that
 file and not an alphabetisation:
@@ -47,8 +56,10 @@ EventSemaphoreClass MutexSemaphoreClass
 ```
 
 `RexxClass` and `RexxInteger` come first because, as the file says, they "ha[ve] some special stuff";
-`RexxString` and `RexxObject` next because they are "fairly critical". The rest of the order has no comment
-on it and should not be assumed arbitrary.
+`RexxString` and `RexxObject` next because they are "fairly critical". `PointerClass` carries an explicit
+causal reason too -- "needs to be created early because other classes use the instances to store
+information" -- and `BufferClass` a weaker one. The remaining comments in `createImage()` are groupings
+rather than reasons, and the order should not be assumed arbitrary on that account.
 
 What is in `CoreClasses.orx`, read at it: its directives are `::METHOD`, `::CLASS` and `::ATTRIBUTE`, and
 nothing else. Its `::CLASS` directives define classes that are **not** primitives -- some declared
@@ -64,7 +75,9 @@ native layer has already created; the file's own comment calls them *"unattached
 the various enhanced objects created above"*.
 
 So **`CoreClasses.orx` is a target, not a bootstrap.** It is the acceptance test for the native layer, not
-the source of it. A native port of the file, Q1's option (b), would have been a category error.
+the source of it. Q1's option (b), a hand port of the file, was rejected on the trade rather than on
+principle: its prologue *is* model construction, so porting it is buildable and costs 4,193 lines with no
+oracle for any of them.
 
 ## What the bootstrap actually reaches
 
@@ -87,14 +100,19 @@ the phase must build:
 | `do name over publicClasses` | `DO OVER` a **collection object**, not an array |
 | `publicClasses[name]` | the `[]` index message |
 | `.environment~put(class, name)` | Directory `~put` |
+| `do name over "nl", "cr", ...` | `DO OVER` a comma-separated **expression list**, over a line continuation -- a different construct from the row above |
 | `.methods[("string_cls_" \|\| name)~upper]` | **`.methods`**, the package's unattached-method directory |
-| `.String~defineClassMethod(name~upper, ...)` | a class-side method that mutates behaviour after definition |
-| `.supplier~inheritInstanceMethods(.SupplierMixin)` and four more | method donation without a superclass edge |
-| `.string~inherit(.Comparable)` and fifteen more | real mixin edges, and the `updateSubClasses` cascade |
+| `.String~defineClassMethod(name~upper, ...)` | a class-side method that mutates behaviour after definition. **Image-build only** -- see below |
+| `.supplier~inheritInstanceMethods(.SupplierMixin)` and four more | method donation without a superclass edge. **Image-build only** -- see below |
+| `.string~inherit(.Comparable)` and the rest | real mixin edges, and the `updateSubClasses` cascade |
+| `.LocalServer`, `.SupplierMixin` and three more at `:47`-`:52` | environment symbols naming classes declared **later in the same file with no `PUBLIC`**, so `.NAME` must consult the running package's own class table before `.environment` |
 | `call 'StreamClasses.orx' rexxPackage` and the same for `PlatformObjects.orx` | a `CALL` on a **program name** |
 
-Two of those are not classes at all and are named nowhere in `Setup.cpp`'s `createInstance()` list:
-`.context` and `.methods`. Both exit 120 today with `an environment symbol is not implemented`. The
+Two of those are **environment symbols** rather than registry entries, and neither is satisfied by the
+class registry: `.context` and `.methods`. (`RexxContext` the *class* is in `Setup.cpp`'s list; `.context`
+the symbol is a live per-activation object, and `.methods` is a package's own directory.) Both exit 120
+today with `an environment symbol is not implemented`, against oracle rc 0 answering `a RexxContext` and
+`.METHODS`. The
 prologue is therefore not satisfied by the class registry alone, and D33's directory work is a hard
 prerequisite for it rather than a parallel track.
 
@@ -106,9 +124,17 @@ prologue is `say "prolog ran"` and which carries one `::METHOD zz EXTERNAL 'LIBR
 exits **166** with **empty stdout** and `Error 90.998: Unable to find external method "nosuchentry"`. The
 same file naming a real entry point (`alarm_startTimer`) exits 0 and prints.
 
-`::CONSTANT` with a parenthesised expression evaluates at install time too. Measured: a file whose
-prologue is `say "prolog ran"` and which carries `::CONSTANT sep (.NoSuchClass~getThing)` exits **159**
-with **empty stdout**.
+`::CONSTANT` with a parenthesised expression evaluates at install time too, and its two failure modes are
+different directives' business. Measured, on files whose prologue is `say "prolog ran"`:
+
+```
+::CONSTANT sep (.NoSuchClass~getThing)            rc 157, stdout empty
+                                                  99.906, "requires a matching ::CLASS directive"
+::CLASS K then ::CONSTANT sep (.NoSuchClass~m)    rc 159, stdout empty, 97.1 on the expression
+```
+
+The first is structural and the expression is never reached; **the second is the one that shows the
+evaluation**, and it is the shape `StreamClasses.orx` uses.
 
 Against that, what the three files carry:
 
@@ -139,6 +165,36 @@ invocation, which is where the later phase lands, and keeps install-time behavio
 Two entry points are pulled into Phase 5 as an explicit, stated scope addition, because `CoreClasses.orx`
 cannot reach its own `exit` without them: `file_separator` and `file_path_separator`. They return platform
 constants and nothing about them is a stream. Everything else in `StreamClasses.orx` stays Phase 7's.
+
+### The bootstrap has no oracle transcript, and two of its methods do not exist in the shipped image
+
+**`RexxClass::removeSetupMethods()` (`ClassClass.cpp:923`) deletes `DEFINECLASSMETHOD` and
+`INHERITINSTANCEMETHODS` from the image**, and `Setup.cpp:1809` calls it *after* `CoreClasses.orx` has run
+at `:1798` and *before* `saveImage`. Its own doc comment is "Remove the special class methods that are
+defined just for image building". Measured against the shipped oracle:
+
+```
+say .String~hasMethod("DEFINECLASSMETHOD")        0
+say .Supplier~hasMethod("INHERITINSTANCEMETHODS") 0
+say .Class~hasMethod("DEFINE")                    1
+.String~defineClassMethod("ZZ", ...)              rc 159, 97.1 "does not understand"
+```
+
+So the prologue's `~defineClassMethod` and `~inheritInstanceMethods` clauses can only run inside
+`rexximage`'s `createImage()`, in a process where those methods still exist. **There is no invocation of
+the shipped oracle in which `CoreClasses.orx`'s prologue reaches `exit`**: with no argument it dies at its
+first clause, and with a real Package object supplied it dies at the `~defineClassMethod` loop. Every
+reachable transcript is a traceback at rc 159.
+
+That kills "byte-identical to the oracle" for criterion 1, and the first draft's replacement asserted it
+anyway. It does not kill the phase, because **the bootstrap's oracle is its result, not its transcript**.
+The shipped interpreter answers `.Array~superClasses`, `.String~nl`, `.DateTime~new(...)` and everything
+else the bootstrap produces. That is criterion 2's subject and it is a stronger test than a transcript
+would have been: it checks what the bootstrap achieved rather than how it narrated itself.
+
+[D39](#decisions-recorded-here) settles the shape: `rexx-classes` provides the two setup methods during
+the bootstrap and **removes them afterwards**, reproducing `removeSetupMethods()`. Keeping them would be a
+divergence any corpus program can see the moment it sends `~defineClassMethod`.
 
 ## The three layers
 
@@ -286,7 +342,7 @@ All four become real objects in `rexx-classes` from the first task, because the 
 all four before any method body runs. Every consumer resolves through them: `.NAME` environment-symbol
 lookup, the class registry, and `VALUE`.
 
-**The `VALUE` gap is the two-argument form, and the first draft's decision named a different one.**
+**The `VALUE` gap is the one-argument form, and the first draft's decision named a different one.**
 `phase-4-exclusions.txt` keeps two separate KNOWN GAP rows and they are not interchangeable. Measured this
 session, both interpreters:
 
@@ -297,7 +353,8 @@ say value('.LOCAL',,'')   oracle rc 0 "..LOCAL"                this crate rc 120
 say .LOCAL                                                     this crate rc 120
 ```
 
-The **two-argument** form is the silently-wrong one and is what this phase closes: no selector, a
+The **one-argument** form -- `value(name)`, no new value and no selector -- is the silently-wrong one and
+is what this phase closes: a
 leading-dot name, correct fallback to the upcased spelling when undefined, but no package-environment
 lookup or reflection-name table in front of it. The **empty-selector** three-argument form is a loud
 refusal whose oracle answer is `..LOCAL`, and closing it does not touch the silent path at all;
@@ -338,13 +395,24 @@ package settings unconditionally with `digits` as its worked example, and the fi
 example into an enumeration of the whole.
 
 `::REQUIRES` stays in Phase 5 and lands **last**, after the bootstrap passes without it.
-**The first draft's reason was half wrong.** `ir.rs`'s `CallSite` argument does rest on `Interp::routines`
-being append-only and `::REQUIRES` does break that; the plan cache's `BodyKey` pairing does not depend on
-it in the way the first draft claimed, and that half of the sentence is withdrawn. The remaining reason
-stands, and `CoreClasses.orx` does not use `::REQUIRES`, so nothing is bought by landing it early.
+**Both of the first draft's reasons were wrong and both are withdrawn.** `ir.rs`'s `CallSite` doc says
+append-only is what the 99.903 duplicate-`::ROUTINE` refusal enforces and that *"append-only is enough"*;
+the property `::REQUIRES` would break is the stronger *"the map is written once"*, which that comment
+explicitly says is **not** the reason. The same comment names an external-file call **beside**
+`::REQUIRES` -- and `CoreClasses.orx:122` and `:124` are external-file calls, so criterion 1 meets that
+construct whatever `::REQUIRES` does. What makes it harmless there: **neither `.orx` file declares a
+`::ROUTINE`**, so the bootstrap's own external calls install nothing into that table. The plan cache is
+untouched either way; `ProgramId`s are never reused because `Interp::programs` holds an `Rc` for every id
+it issued, which is what loading more programs is built to survive.
 
-`::ANNOTATE naming a target` is the fourth `directive_gap` Phase 5 arm and **nothing in this project has
-measured what it does**. The plan's first task measures it; until then it is not in any criterion.
+The reason `::REQUIRES` lands last is plainer: **the bootstrap does not use it**, and it is the construct
+most likely to force a change to the resolution model, which should be settled by the time it arrives.
+
+`::ANNOTATE naming a target` is the fourth `directive_gap` Phase 5 arm, and it **is** measured -- twice,
+in `directive_gap`'s own arm comment and in `phase-4-exclusions.txt`'s "REFUSED BY THE ORACLE" list:
+`::annotate routine nosuchrtn` is 99.945 at rc 157. **The oracle refuses it too**, so it is not an
+over-refusal and retiring it closes no divergence; what this phase owes is matching the oracle's refusal
+bytes, not removing ours.
 
 **`REPLY` and `GUARD` are checked at RUN time, not translation time, and the first draft got this wrong
 from its own probe.** The error text says `Translation error` and the first draft read that as the
@@ -358,10 +426,48 @@ say "before" ; reply       rc 157, stdout "before", then Error 99.919
 
 `reportException` sits inside `RexxInstructionReply::execute`. So a translation-time refusal would
 **over-refuse programs the oracle runs**, and D32 is restated: Phase 5 implements the run-time legality
-check, reached only when the instruction executes, exiting 157 with the oracle's bytes. The concurrency
+check, reached only when the instruction executes, exiting 157 with the oracle's bytes.
+
+`GUARD` has a second, genuinely syntactic check that this crate half-built already and that diverges
+today: bare `guard` with no `ON`/`OFF` is oracle rc **231** with a three-line transcript ending
+`Error 25.913: GUARD must be followed by the keyword ON or OFF; found ";"`, against our rc 120 and a
+one-line `rexx-exec: 25.913: Invalid subkeyword found.` Two checks, two shapes, and only one of them is
+about methods. The concurrency
 behaviour of a `REPLY` that *is* inside a method is Phase 6's, and the plan must say what a Phase 5 method
 containing a `REPLY` does -- this spec does not, and that is an open question below rather than a silent
 gap.
+
+## The constructs, and the committed tables that have to move with them
+
+**`owners.rs`'s `EXPECTED_OUT_OF_SCOPE` is the committed list of what this phase owns at the AST**, and
+the sections above name only some of it. The rest, stated here so no task discovers it late:
+`InstructionKind::Expose`, `Forward`, `Message`, `Call::Qualified`, `Guard`, `Reply`, `Options`;
+`ExprKind::QualifiedCall`, `ClassResolver`, `List`, `Message`; `LoopKind::With`.
+
+**`EXPOSE` and `FORWARD` are not edge cases and neither is designed above.** `CoreClasses.orx` has 112
+clause-initial `expose` and 30 `forward`; `StreamClasses.orx` has 15 and 7. `EXPOSE` is how a method
+reaches its scope's variable dictionary, so it is inseparable from the object section's scoped instance
+variables. `FORWARD CLASS(SUPER)` is what forces `resolve`'s start-scope argument.
+
+**Phase 5 cannot land without editing several committed tables, each of which fails when a row starts
+passing.** That is the tree working as designed, and the plan owes an edit per table rather than a
+surprise:
+
+* `rexx-exec/tests/assertions.rs`'s `EXEMPT`, whose rows are unblocked only by this phase and whose test
+  asserts the set unconditionally, in every mode;
+* `corpus/bif-exempt.txt` -- its `Phase 5` rows and its `UNATTRIBUTED:an environment symbol` rows. That
+  attribution column changes too: `expr_owner` gives `ExprKind::DotVariable` no phase today, which is why
+  the refusal is unowned;
+* `trace_oracle.rs`'s `PREFIX_COVERAGE`, where `>M>` and `>N>` move from `Owned` to `Witnessed`;
+* `owners.rs`'s own five pinned items, which its module doc says move together --
+  `EXPECTED_OUT_OF_SCOPE`, `coverage.rs`'s `EXPECTED_SUBSET`, `variant_counts_match_the_audited_split`,
+  `loud.rs`'s witness tables, and `lib.rs`'s `instruction_owner`/`expr_owner`;
+* `corpus/builtin-status.txt`, derived from a live differential.
+
+**Adding `phase-5.txt` touches five harnesses, not one.** `corpus.rs`, `coverage.rs`, `ir_dual.rs` and
+`collect_stress.rs` each read the corpus directory and assert against their hardcoded subset list, so they
+redden until wired in -- good. **`trace_oracle.rs` has no such guard** and will silently keep measuring
+the 4a/4b/4c union.
 
 ## Trace: `>M>` and `>N>`
 
@@ -389,11 +495,68 @@ with `b.` untouched, both sides rc 215; the oracle's stderr opens with
 nothing in this section covers it, and any `phase-5.txt` program that touches it fails criterion 2 on
 stderr. The plan owes a task.
 
+## The object
+
+**The first two drafts designed the class graph and never designed the object.** Five properties are
+observable, all five are load-bearing for criteria 1 and 2, and `rexx-core` already commits a
+representation that cannot express the first of them. Each is measured against the oracle below.
+
+**Instance variables are scoped by their defining class.** One object of a subclass carries one `vv` per
+scope:
+
+```
+::CLASS Base   with setBase/getBase, both `expose vv`
+::CLASS Sub SUBCLASS Base   with setSub/getSub, both `expose vv`
+o = .Sub~new ; o~setBase(11) ; o~setSub(22)
+o~getBase -> 11        o~getSub -> 22        (oracle rc 0)
+```
+
+`Body::Instance(Vec<(String, ObjRef)>)` is a flat association list keyed by name. It cannot hold two
+`vv`s. The C++ carries a per-scope `VariableDictionary` chain, and `EXPOSE` is how a method reaches its
+scope's dictionary -- `CoreClasses.orx` has 112 `expose` clauses and `StreamClasses.orx` 15, so this is
+not an edge case but the ordinary path. **`Body::Instance` is replaced, not extended**, and the plan owes
+its shape as an early task rather than discovering it at the first `expose`.
+
+**Object identity is observable, and this crate's string representation collapses it.** Measured:
+
+```
+a = "abc" ; b = "ab" || "c"
+.IdentityTable with a and b -> 2 items       .Table with a and b -> 1 item       (oracle rc 0)
+```
+
+Two equal strings are two objects. Phase 4f entry 59 made every string of seven bytes or fewer an inline
+tagged handle, so `a` and `b` are one `ObjRef` here and an `.IdentityTable` would hold one item. **This is
+a divergence created by an accepted optimisation and made observable by this phase**, not a defect in
+entry 59, which was correct for every question askable at the time. The plan owes a decision: an identity
+that survives the inline representation, or a recorded divergence. Nothing here decides it, and it is the
+one open item that can reach back into `rexx-core`'s value layer.
+
+**Behaviour is captured at creation for `~define` and shared for `~inherit`.** Measured on one class,
+two mutations, opposite answers:
+
+| mutation on class `K` | instance created **before** it | instance created **after** |
+|---|---|---|
+| `~define("LATER", m)` | rc 159, 97.1 "does not understand" | works |
+| `~inherit(.M)` | **works** | works |
+
+A cascade that rebuilds one behaviour object in place gives `~inherit`'s answer to both. D29's cascade
+must reproduce the asymmetry, and **the plan owes the mechanism read out of `ClassClass.cpp` and
+`ObjectClass.cpp`** -- this spec records the observable rule and does not guess at how the C++ produces
+it.
+
+**Per-object methods and the class-behaviour side.** `~setMethod` puts a method on one object rather than
+its class; `MethodDictionary`'s `instanceMethods` table is where the C++ keeps it, which is why `resolve`
+takes a per-object table. And `::class "Singleton" mixinclass class` (`CoreClasses.orx:3974`) inherits
+into the **metaclass** side, built by `createClassBehaviour`, not the `createInstanceBehaviour` the
+flattening section cites. Both halves exist; only one is designed above.
+
 ## Value representation
 
 `Body` is asserted at **at most** 80 bytes and its own comment says **"Phase 5 adds variants and is
-expected to trip this"**. It trips deliberately or not at all: a new kind arrives boxed behind
-`Body::Instance` unless a measurement is recorded that says widening is worth it for that kind (Q4). The
+expected to trip this"**. It trips deliberately or not at all: a new kind arrives **boxed in its own variant**, `Body::Class(Box<..>)`
+and the like, unless a measurement is recorded that says widening is worth it for that kind (Q4).
+`Body::Instance` is not a boxing mechanism -- it is an association list, and the object section above
+replaces it. The
 measurement is a two-build `rexx-arms` sitting against the pinned baseline, and "worth it" means the
 movement exceeds the floor named in the bar below.
 
@@ -412,10 +575,12 @@ two things. The first is done: the standing is pinned at `b029abe77` in `perf-ba
 binary and `bench-baselines/pre-phase-5-arms.tsv`. The second is this phase's obligation.
 
 **The guard is the six benchmark axes `rexx-arms` measures**: `alloc4c`, `arith`, `compound`, `emptyloop`,
-`strings`, `varlookup`. The first draft omitted `emptyloop` and listed `rexxcps`; `rexxcps` is not an axis
-in `bench-programs/` and it self-calibrates its own workload from wall clock, so it cannot serve as a
-regression guard at all. It stays in `perf-baseline.md` as a standing figure and is not part of this
-criterion.
+`strings`, `varlookup`. The first draft omitted `emptyloop` and listed `rexxcps`. `rexxcps` is dropped because it
+**self-calibrates**: `samples/rexxcps.rex` doubles its count when a trial comes in at or under a second,
+so a change that crosses that boundary changes the workload rather than the reading. The hazard is latent
+rather than active -- it does not trigger at today's timings -- which is exactly why it is a bad guard: it
+would fire once, silently, on the change that mattered. It stays in `perf-baseline.md` as a standing
+figure. (`rexx-arms` could measure it by path; not being in `bench-programs/` is not the reason.)
 
 **The floor.** `bench-baselines/README.md` states that interleaving removes the machine's drift from an
 `across_builds` row and does not remove the code placement's, bounding the latter at ±0.74% on one axis
@@ -443,11 +608,17 @@ phase must add an object check to that path and its shape is about to change.
 Exit criteria. Each one names the instrument, and where the instrument does not exist today the criterion
 says who builds it.
 
-1. **`CoreClasses.orx` translates, installs, and its prologue runs to `exit`, on both engines**, byte-identical
-   to the oracle on all three descriptors. This is the phase's headline and it is now reachable: it needs
-   the native entry-point registry (D37), the two `file_separator` natives, `StreamClasses.orx` and
-   `PlatformObjects.orx` to *install*, and everything in the prologue table. **Executing
+1. **`CoreClasses.orx` translates, installs, and its prologue runs to `exit`, on both engines**, with
+   `StreamClasses.orx` and `PlatformObjects.orx` installed on the way. It needs the native entry-point
+   registry (D37), the two `file_separator` natives, and everything in the prologue table. **Executing
    `StreamClasses.orx`'s method bodies is Phase 7's**, per the roadmap's Phase 7 row.
+   `PlatformObjects.orx` on unix is one comment line and already exits 0 here, so that conjunct is
+   satisfied at the tree as committed.
+
+   **This criterion has no oracle transcript, and saying so is the point** -- see
+   [D39](#decisions-recorded-here). Every reachable oracle run of that prologue is a traceback. The
+   oracle for the bootstrap is criterion 2: the **state** it leaves behind, which the shipped
+   interpreter answers questions about all day.
 2. **The `phase-5.txt` corpus subset passes byte for byte against the oracle, on both engines.** Two pieces
    of harness work are prerequisites and the plan owes a task for each:
    * `corpus.rs`'s comparison runs stderr through `normalize_stderr`. Criterion 2 says *byte for byte*, so
@@ -459,7 +630,7 @@ says who builds it.
 
    The subset contains at minimum: an instance of each class the native layer creates; the wiring assertion
    of criterion 3 for each; one program per `MIXINCLASS` in `CoreClasses.orx` and one diamond that
-   discriminates merge order from a chain walk; the method-frame traceback divergence; the two-argument
+   discriminates merge order from a chain walk; the method-frame traceback divergence; the one-argument
    `VALUE` route and the `say .LOCAL` route; the `::CONSTANT` expression form; and each of `directive_gap`'s
    four Phase 5 arms -- `::REQUIRES`, `::OPTIONS`, `::CLASS naming another class`, and `::ANNOTATE naming a
    target` if the plan's first task finds it in scope.
@@ -472,26 +643,41 @@ says who builds it.
 5. **The security manager's interception points are in place (D12).** The roadmap's Phase 5 exit row
    requires this and the first draft dropped it to an open question without saying it was removing an
    inherited criterion. D12 assigns this phase the manager object, its installation path, and the hooks in
-   dispatch and in `.local`/`.environment` lookup -- both of which are surfaces this phase builds, so
-   omitting the hooks is exactly the retrofit D12 says costs touching every path twice.
+   dispatch, in `.local`/`.environment` lookup, and in external function resolution. The first two are
+   surfaces this phase builds, so omitting their hooks is exactly the retrofit D12 says costs touching
+   every path twice. **The third is Phase 7's** by `Loud::unresolved_call`'s own doc, so this phase fixes
+   the interception design there and Phase 7 adds the call site.
 6. **No guard axis moved beyond the floor**, under the rule stated in the bar, with a two-build sitting per
-   task that lands code in `rexx-exec`, `rexx-core` or `rexx-classes`.
+   task that lands code in `rexx-exec`, `rexx-core` or `rexx-classes`. **The instrument is
+   `instructions:u`**, not cycles: `rexx-arms` emits both, and the 1% floor is meaningless on cycles,
+   where a do-nothing control has read +6.98% on `varlookup`.
 7. **Every class `Setup.cpp` creates is either in the native layer or in the deferral table with a reason**,
-   where a reason names what would have to exist. Enforced as a test in `rexx-classes` over its own
-   registry, so the table cannot drift from the code.
+   where a reason names what would have to exist. **The class list is derived at build time from
+   `Setup.cpp`, not transcribed** -- `crates/rexx-inventory/build.rs` is the precedent and its own doc is
+   "The C++ tree is the source of truth. Nothing here is hand-maintained". A hand-copied list satisfies
+   this criterion while omitting whatever `Setup.cpp` gains. `/bin/grep -aE "createInstance\(\)"` over that
+   file is the enumeration's definition, and nothing there creates a class by another route.
 8. **The unsafe-block count and the list of crate roots carrying `deny` rather than `forbid` are reported**,
    per the roadmap's Global Constraints. Either growing without a Section 1 decision block fails the gate.
    This is inherited by every phase exit and the first draft omitted it.
 9. **Cold start measured and recorded against the C++ build (D2).** This is a measurement, not a pass/fail:
    D2's rule is to build the image cache only if bootstrapping from source costs more than ~50 ms over the
    C++ startup, and the point of the criterion is that the number exists and D2 closes. **`hyperfine` is
-   not installed on this machine**, so the instrument is `rexx-bench-suite`'s offset line, which measures
-   the same thing through the same wrapper on both sides and is already the committed method; the plan
-   records the substitution.
+   not installed and cannot be installed here**, and `perf-baseline.md` already settled the substitute:
+   `rexx-bench/src/bin/rexx-time.rs`, `--warmup 10 --runs 50`, against `build/bin/rexx`, whose median of
+   5.119 ms it names as *"the number D2's gate compares against"*. Use that, not `rexx-bench-suite`'s
+   offset line -- the same document says in as many words not to reach D2's answer by subtracting numbers
+   out of its own tables.
+
+   Two things the plan must handle when the bootstrap lands. `rexx-bench-suite`'s `Role::Offset` doc and
+   every report it prints say this crate "starts fast by not doing the work the oracle does at startup";
+   that becomes false and **nothing asserts it**, unlike the blocked-axis rows. And `write_axes` subtracts
+   each side's offset from **every** guarded axis, so once the offset is tens of milliseconds the guard's
+   figures become a small difference of two large numbers.
 
 **The L2 rung is reported, not gated.** The roadmap's phase table names it, and the roadmap also records at
-`2026-07-27-rust-rewrite.md:304` that the ooTest framework cannot start without `SysFileExists` and `.File`,
-which are Phase 7's. A gate criterion that cannot be reached is worse than no criterion.
+`2026-07-27-rust-rewrite.md:304` that the suite cannot start without `SysFileExists` and `.File`, and that
+the framework's own runner additionally needs `SysFileTree` -- all Phase 7's. A gate criterion that cannot be reached is worse than no criterion.
 
 **Criterion 2 is what makes criterion 1 mean something.** A bootstrap that completes proves the file did
 not raise; it does not prove a class responds. A registry of empty class objects satisfies criterion 1 and
@@ -524,8 +710,13 @@ fails criterion 2 on its first `~`.
   says the `Send` op caches the resolution. `ir.rs`'s `CallSite` is not extended to sends. Revisit only
   against a `dispatch` axis number, which does not exist yet.
 * **D29.** The method dictionary is **flattened at class-definition time**, **retaining scope ordering**,
-  and rebuilt through a cascade to subclasses. `BehaviourTable`'s chain walk is replaced, not extended. A
-  class's identity is an `ObjRef`; `BehaviourId` survives as an index for the primitive fast path.
+  and rebuilt through a cascade to subclasses, reproducing the measured `~define`/`~inherit` visibility
+  asymmetry. `BehaviourTable`'s chain walk is replaced, not extended. A class's identity is an `ObjRef`;
+  `BehaviourId` survives as an index for the primitive fast path. **Every behaviour carries a monotonic
+  version, bumped by the cascade** -- one field and one increment, and it is what makes D28 cheap to
+  revisit: a rebuilt-in-place dictionary leaves the id unchanged, so a future cache guarded on behaviour
+  identity would not notice a redefinition at all, and adding the stamp later means finding every site
+  that mutates a dictionary.
 * **D30.** `::REQUIRES` lands **last in this phase**. Its reason is the `CallSite` table's append-only
   argument; the plan-cache half of the first draft's reason is withdrawn.
 * **D31.** `::OPTIONS` and the `OPTIONS` instruction **stay in this phase**, sequenced independently of
@@ -534,8 +725,11 @@ fails criterion 2 on its first `~`.
 * **D32.** `REPLY` and `GUARD` get their **run-time** legality check, not a translation-time one, exiting
   157 with the oracle's bytes. What a `REPLY` inside a Phase 5 method does is an open question below.
 * **D33.** `.environment`, `.local`, `.context` and `.methods` are **real objects** from the first task,
-  and the class registry, environment-symbol lookup and `VALUE`'s **two-argument** form all resolve
-  through them. The three-argument empty-selector form is not this.
+  and the class registry, environment-symbol lookup and `VALUE`'s **one-argument** form all resolve
+  through them. The three-argument empty-selector form is not this. **`.NAME` resolution consults the
+  running package's own class table before `.environment`**, because the prologue names non-public
+  classes declared later in its own file. What each directory must *hold* is not enumerated here and some
+  of it is another phase's -- `.File` is Phase 7's by D11 -- so the plan draws that line.
 * **D34.** `ExprKind::List` is a **real Array** from the first commit that makes `~` work.
 * **D35.** The performance guard is `alloc4c`, `arith`, `compound`, `emptyloop`, `strings` and `varlookup`,
   under the stated 1% floor rule, run per task that lands code in `rexx-exec`, `rexx-core` or
@@ -546,6 +740,14 @@ fails criterion 2 on its first `~`.
   does not implement raises when **invoked**, naming its owning phase. `file_separator` and
   `file_path_separator` are implemented here, because `::CONSTANT` calls them at install time and
   `CoreClasses.orx` cannot reach `exit` without them. **This is a stated scope addition from Phase 7.**
+* **D39.** The bootstrap has **no oracle transcript**: `removeSetupMethods()` deletes
+  `DEFINECLASSMETHOD` and `INHERITINSTANCEMETHODS` before the image is saved, so no shipped-oracle run
+  reaches `CoreClasses.orx`'s `exit`. The oracle for the bootstrap is the **state** it leaves, checked by
+  criterion 2. `rexx-classes` provides the two setup methods during the bootstrap and removes them after,
+  reproducing the deletion; keeping them is a divergence any corpus program can see.
+* **D40.** `Body::Instance`'s flat association list is **replaced**: instance variables are scoped by
+  defining class, measured. `EXPOSE` reaches a scope's dictionary, and its shape is an early task rather
+  than a discovery.
 * **D38.** `::CONSTANT` is **Phase 5's**, specifically its parenthesised expression form, which this crate
   accepts and never evaluates where the oracle evaluates it at install time. Measured; recorded as a KNOWN
   GAP before it is fixed. Criterion 1 needs it, because `StreamClasses.orx:548` is one.
@@ -566,5 +768,17 @@ fails criterion 2 on its first `~`.
 * **What plays the oracle for a native method.** A collection primitive implemented in Rust has one, through
   a Rexx program. A method `CoreClasses.orx` defines has one by construction. The plan should say there is
   no third case, rather than leave it implied.
+* **Object identity against the inline string representation.** Two equal short strings are two objects
+  on the oracle and one `ObjRef` here. An identity that survives entry 59's inline handles, or a recorded
+  divergence -- and it is the one open item that can reach back into `rexx-core`'s value layer.
+* **The mechanism behind the `~define`/`~inherit` visibility asymmetry**, read out of `ClassClass.cpp` and
+  `ObjectClass.cpp`. The observable rule is measured above; how the C++ produces it is not, and D29 has to
+  reproduce it rather than approximate it.
+* **Which `CoreClasses.orx` classes this phase leaves unexercisable.** D32 sends `REPLY`/`GUARD`'s
+  concurrency half to Phase 6, and `Alarm` and `Ticker` use both, so a criterion-2 program that
+  instantiates either cannot pass here. The list belongs in the plan.
+* **The roadmap's first-listed reason for the IR.** `2026-07-27-rust-rewrite.md:482` says the IR "founds
+  OO dispatch for Phase 5 by making a call site a patchable slot". D28 sends no send through that slot.
+  The decision stands; the roadmap sentence needs amending or a recorded reason it survives.
 * **Where the `phase-5.txt` subset's programs come from.** Criterion 2 says "at minimum"; the rest is the
   plan's choice, and a subset chosen by the same person who wrote the implementation is a weak instrument.
