@@ -445,3 +445,105 @@ test name, or a line of `impl Interp` has exceeded its scope.
 Not a task. After Task 6, the final review runs over `e74780054..HEAD` on the most capable model, so
 that it covers Task 6 of the previous plan, the unreviewed drain commit `56d9d1c86`, and everything
 this plan lands. Moritz asked for this explicitly as the third item of the session.
+
+---
+
+### Task 7: rename `{name}/mod.rs` to `name.rs`, where that is what it means
+
+Requested by Moritz on 2026-08-15. The tree has exactly four `mod.rs` files, and **only two of them
+are in scope.** Confirm the set yourself with `find crates -name mod.rs` before starting.
+
+#### In scope
+
+* `crates/rexx-exec/src/builtin/mod.rs` becomes `crates/rexx-exec/src/builtin.rs`
+* `crates/rexx-exec/src/ir/mod.rs` becomes `crates/rexx-exec/src/ir.rs`
+
+Both keep their sibling directory. `name.rs` beside `name/` is the 2018 convention and is what
+`run.rs` beside `run/tests.rs` will already look like once Task 6 lands.
+
+#### Out of scope, and this is the point of the task rather than an omission
+
+* `crates/rexx-exec/tests/support/mod.rs`
+* `crates/rexx-parse/tests/gate_walk/mod.rs`
+
+**These must NOT be renamed.** Measured by the controller: `mod support;` is declared by seven test
+binaries (`builtin_status.rs`, `corpus.rs`, `input_oracle.rs`, `parse_version_oracle.rs`,
+`state_builtin_oracle.rs`, `trace_indent.rs`, `trace_oracle.rs`) and `mod gate_walk;` by
+`rexx-parse/tests/tiling.rs`. Renaming them to `tests/support.rs` and `tests/gate_walk.rs` would
+still resolve as modules, **and** cargo would additionally auto-discover each as an integration-test
+target, compiling the helpers standalone as a test binary that exists for no reason. The `mod.rs`
+form under `tests/` is the idiom that prevents exactly that.
+
+Record that reasoning where a future reader of those two files will find it, so the next person
+applying this convention does not undo it.
+
+#### Steps
+
+1. Confirm the four-file set and the eight declaring sites above. Report anything that has moved.
+2. Rename the two `src/` files with `git mv`, so the history follows.
+3. Build. Nothing else should need editing: `mod builtin;` and `mod ir;` resolve to either spelling.
+   If any other file needs a change, stop and report what and why before making it.
+4. Leave a note at the two `tests/` files saying why they keep `mod.rs`.
+5. Gates: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
+   `cargo test --release --workspace`, the corpus gate under `REXX_CORPUS_GATE=1`, and
+   `cargo doc --no-deps` read for warnings, since a module path changing is exactly what breaks an
+   intra-doc link.
+6. Report the test count before and after, binary by binary. A rename that silently drops a test
+   target is the failure this task must not produce.
+
+---
+
+### Task 8: adopt timely-dataflow's clippy lint set
+
+Requested by Moritz on 2026-08-15. Source: `https://github.com/TimelyDataflow/timely-dataflow`,
+`Cargo.toml`, its `[workspace.lints.clippy]` section. **Re-fetch it and use what you find**, rather
+than trusting the transcription below, which the controller took on 2026-08-15.
+
+#### What the controller already measured, so you do not rediscover it
+
+One `cargo clippy --workspace --all-targets` pass over this tree with 42 of timely's warn-level
+lints enabled, counted from `--message-format=json` by lint code:
+
+| lint | violations |
+|---|---|
+| `clippy::as_conversions` | 574 |
+| `clippy::shadow_unrelated` | 380 |
+| `clippy::needless_pass_by_ref_mut` | 20 |
+| every other lint tested | 0 |
+
+Re-measure before you act. If your numbers differ from these, that is a finding: report it.
+
+#### Decisions already taken, by Moritz on 2026-08-15
+
+* **`as_conversions` is `allow`, with a recorded reason.** Not because the lint is wrong but because
+  574 sites in a numeric interpreter each need a truncation-and-sign judgement, and a wrong one is a
+  silent behavioural change against a byte-for-byte oracle bar. The comment must say what would
+  close it: a cast helper in the shape of Materialize's `CastFrom`/`CastLossy`, which this tree does
+  not have. Do not write the helper.
+* **`shadow_unrelated` is `allow`, with a recorded reason.** 380 renames across files under active
+  differential work is churn, and the comment should say so.
+* **`needless_pass_by_ref_mut`'s 20 violations are fixed.** Each is a `&mut` parameter never used
+  mutably. Fix them by narrowing the parameter, not by silencing the lint.
+
+#### Steps
+
+1. Fetch timely's `[workspace.lints.clippy]` section and reproduce its full membership: the
+   allow-level entries and the warn-level entries. Record in your report anything that has changed
+   since the controller's reading.
+2. Add it to this workspace's `Cargo.toml` under `[workspace.lints.clippy]`, beside the existing
+   `[workspace.lints.rust]` block. **Do not touch `unsafe_code = "forbid"`** or the comment above it:
+   that line is the record of which crates have been granted an unsafe exception and relaxing it has
+   already been done once by mistake and reverted.
+3. Set `as_conversions` and `shadow_unrelated` to `allow` with the reasons above stated at the site.
+4. Fix the `needless_pass_by_ref_mut` violations. Each fix is a signature narrowing; report the
+   count you fixed and confirm it matches the count you measured.
+5. **Establish that the adopted lints are actually in force**, which a green build does not show. For
+   at least three lints that currently report zero violations, demonstrate the lint fires: introduce
+   the violation in a scratch copy, confirm `cargo clippy --workspace --all-targets -- -D warnings`
+   goes red, and revert. A lint set that is configured but not reaching the code reads exactly like
+   a clean tree.
+6. Gates, each exit status read on its own: `cargo fmt --all --check`, `cargo clippy --workspace
+   --all-targets -- -D warnings` **from a clean target directory**, `cargo test --release
+   --workspace`, and the corpus gate under `REXX_CORPUS_GATE=1`.
+7. Report the final lint membership, the three lints you proved live and how, and the violation
+   counts before and after.
