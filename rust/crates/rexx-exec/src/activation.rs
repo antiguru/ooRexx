@@ -92,7 +92,7 @@ pub(crate) struct Trap {
     /// matches a handler and queues it without asking whether it is delayed,
     /// and `processTraps` is what skips a delayed one. So a condition raised
     /// inside a handler by a routine the handler called is *matched*, then
-    /// dropped at the clause boundary when `deliver_pending_trap`'s own
+    /// dropped at the clause boundary when `deliver_pending_traps`'s own
     /// `trap_for` declines it. Measured, and both interpreters agree: a
     /// handler whose first run calls a routine raising the same condition
     /// runs **once**, and the program carries on. An earlier version of this

@@ -113,7 +113,7 @@
 //!   *stale* [`SavedClauseState`] at a moment other than the one it was
 //!   taken from, which sets a nonzero line with no boundary attached at
 //!   that moment -- measured: builds, passes clippy, and passes all 296 lib
-//!   tests, undetected. `deliver_pending_trap` is `pub(crate)` for the
+//!   tests, undetected. `deliver_pending_traps` is `pub(crate)` for the
 //!   mirror reason (a failed clause's own boundary runs from
 //!   `offer_to_trap`, not from `in_clause`), and nothing in the type system
 //!   stops it running a boundary paired with no line set at all. The
@@ -351,13 +351,13 @@ pub(crate) enum ClauseOutcome<T> {
 
 /// A delivered `CALL ON` handler ended the program with `EXIT`.
 ///
-/// **A type rather than an `Ended`** (fix round 4). `deliver_pending_trap`
+/// **A type rather than an `Ended`** (fix round 4). `deliver_pending_traps`
 /// only ever reports `Ended::Exited`: a handler that *returns* resumes the
 /// interrupted clause and reports `Ok(None)` instead. Round 2 said so with
 /// an `unreachable!("clause_boundary reports only Ended::Exited")`; round 3
 /// replaced that with six copies of `Ok(Flow::Exit(ended.value()))`, and
 /// `Ended::value()` collapses `Returned` and `Exited`, so a future
-/// `deliver_pending_trap` that reported `Returned` would silently turn a
+/// `deliver_pending_traps` that reported `Returned` would silently turn a
 /// `RETURN` into an `EXIT`. Now it cannot be built at all except from an
 /// `Ended::Exited`, at the single point that match already lives.
 pub(crate) struct HandlerExit(Option<ObjRef>);
@@ -464,12 +464,9 @@ impl Interp {
         // and to `SIGL`.
         debug_assert!(
             self.clause_state.current_clause_line == line
-                || self
-                    .pending_trap
-                    .as_ref()
-                    .is_none_or(|pending| pending.queued_during_delivery)
-                || self.pending_trap.as_ref().map(|pending| pending.activation)
-                    != Some(self.activation().id),
+                || !self.pending_traps.iter().any(|pending| {
+                    !pending.queued_during_delivery && pending.activation == self.activation().id
+                }),
             "a clause at line {} began while a condition queued by this activation's clause at \
              line {} was still waiting: some construct ran an instruction inside its own step \
              without ending its header clause first",
@@ -502,13 +499,13 @@ impl Interp {
             // delivers nothing.
             return Ok(ClauseOutcome::Ran(ran));
         };
-        if self.pending_trap.is_none() {
+        if self.pending_traps.is_empty() {
             return Ok(ClauseOutcome::Ran(ran));
         }
         if let Some(value) = value.rooted() {
             self.roots.push_temp(value);
         }
-        match self.deliver_pending_trap(code)? {
+        match self.deliver_pending_traps(code)? {
             Some(exit) => Ok(ClauseOutcome::Ended(exit)),
             None => Ok(ClauseOutcome::Ran(ran)),
         }

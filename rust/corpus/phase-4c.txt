@@ -208,3 +208,14 @@ lang/procedure_entry_rule.rex
 # whose header is already a clause of its own and the two neighbouring
 # constructs, which this subject must not move.
 lang/do_clause_boundaries.rex
+
+# What a clause boundary owes when more than one condition is waiting. The
+# oracle takes everything the clause left pending, in the order it was queued,
+# and defers only what a handler queues while it is running. A single-slot
+# queue answered the last condition and lost the rest, silently -- nothing in
+# the suite could see it, because every earlier program leaves at most one
+# pending at a time. The E block is the pairing that neither rule produces
+# alone: a pass whose body clause owes both a handler left over from the
+# previous pass's END and the one it queued itself, both at its own line.
+# Its header says why a repeated condition name is not in here.
+lang/condition_queue_drain.rex

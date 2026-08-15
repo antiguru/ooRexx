@@ -681,6 +681,7 @@ const EXPECTED_SUBSET_4C: &[&str] = &[
     "lang/pos_window.rex",
     "lang/procedure_entry_rule.rex",
     "lang/do_clause_boundaries.rex",
+    "lang/condition_queue_drain.rex",
 ];
 
 #[test]

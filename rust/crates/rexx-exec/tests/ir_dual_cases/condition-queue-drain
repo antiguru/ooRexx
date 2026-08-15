@@ -1,0 +1,77 @@
+# What a clause boundary owes when more than one condition is waiting, pinned
+# on the tree-walker's own bytes.
+#
+# `corpus/lang/condition_queue_drain.rex` holds the same subject against the
+# live oracle, and it reaches only the engine `rexx-run` defaults to. These
+# stanzas are what says the tree-walker produces the same thing.
+#
+# **The rule has two halves and each stanza needs both.** A boundary takes
+# everything the clause left pending, in the order it was queued; what a
+# handler queues *while it runs* is owed to the next boundary instead. Draining
+# without the deferral runs a requeued handler at the clause that delivered its
+# predecessor; deferring without the drain answers the last condition only and
+# loses the rest, which is what a single-slot `pending_trap` did.
+#
+# Every expected byte below was measured against the oracle before it was
+# written here.
+
+# Two conditions queued by one clause. Both handlers are owed to that clause's
+# own boundary, in the order the conditions were raised, and both report the
+# raising clause's line rather than their own.
+program
+call on user zx name h
+call on user zy name g
+zn = ra() + rb()
+say 'after' zn
+exit 0
+ra:
+raise user zx return 1
+rb:
+raise user zy return 2
+h:
+say 'h ran' sigl
+return
+g:
+say 'g ran' sigl
+return
+----
+rc> 0
+out> h ran 3
+out> g ran 3
+out> after 3
+
+# The pairing neither half of the rule produces alone. Pass one's body clause
+# queues, its handler requeues, and that requeue waits for the `END`; the
+# `END`'s handler requeues again, so pass two's body clause owes **two**
+# handlers -- the one left over and the one it queued itself -- both at its own
+# line 4. An engine that drains without deferring runs `g` at line 4 on the
+# first pass; one that defers without draining never runs `k` at line 4 at all.
+program
+call on user zx name h
+call on user zy name g
+call on user zw name k
+do zi = 1 to 2
+zn = ra()
+end
+say 'after' zn
+exit 0
+ra:
+raise user zx return 1
+h:
+say 'h ran' sigl
+raise user zy return 1
+g:
+say 'g ran' sigl
+raise user zw return 1
+k:
+say 'k ran' sigl
+return
+----
+rc> 0
+out> h ran 5
+out> g ran 6
+out> k ran 5
+out> h ran 5
+out> g ran 6
+out> after 1
+out> k ran 7

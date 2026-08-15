@@ -3510,7 +3510,7 @@ impl Interp {
         // failed -- while the same clause in a routine whose own `SIGNAL OFF`
         // sends the failure out of the activation entirely delivers nothing
         // at all. One completes here; the other never does.
-        if let Some(exit) = self.deliver_pending_trap(code)? {
+        if let Some(exit) = self.deliver_pending_traps(code)? {
             return Ok(Flow::Exit(exit.value()));
         }
         Ok(Flow::Signal(target))
@@ -3537,22 +3537,59 @@ impl Interp {
     /// re-insert before it. The two agree on everything but
     /// `CONDITION('S')`, which is why the change was needed and why nothing
     /// else in this function's behaviour moved with it.
-    pub(crate) fn deliver_pending_trap(
+    /// Runs every handler this clause boundary owes, in the order the
+    /// conditions were queued, and stops early only if one of them ends the
+    /// program.
+    ///
+    /// **Bounded to what was already queued when the boundary began**, which
+    /// is what defers a handler's own requeue to the next clause --
+    /// `Interp::pending_traps` carries the transcripts for both halves.
+    /// Entries belonging to another activation are stepped over rather than
+    /// blocking the ones this activation owes; `PendingTrap::activation` has
+    /// why that identity is the right key.
+    pub(crate) fn deliver_pending_traps(
         &mut self,
         code: &Code<'_>,
     ) -> Result<Option<HandlerExit>, Failure> {
-        // Only the activation whose trap table matched delivers, and only
-        // once it is running again -- `PendingTrap::activation`'s own doc
-        // comment has the three transcripts this identity check answers,
-        // including the two a stack depth got wrong.
-        if self.pending_trap.as_ref().map(|pending| pending.activation)
-            != Some(self.activation().id)
-        {
-            return Ok(None);
+        // Snapshotted rather than re-read, so that anything a handler queues
+        // lands beyond the prefix this boundary is answering for.
+        let mut owed = self.pending_traps.len();
+        while owed > 0 {
+            // Only the activation whose trap table matched delivers, and only
+            // once it is running again -- `PendingTrap::activation`'s own doc
+            // comment has the three transcripts this identity check answers,
+            // including the two a stack depth got wrong.
+            let here = self.activation().id;
+            let Some(at) = self
+                .pending_traps
+                .iter()
+                .take(owed)
+                .position(|pending| pending.activation == here)
+            else {
+                return Ok(None);
+            };
+            let pending = self
+                .pending_traps
+                .remove(at)
+                .expect("position answered an index inside the queue");
+            owed -= 1;
+            if let Some(exit) = self.deliver_one_pending_trap(code, pending)? {
+                return Ok(Some(exit));
+            }
         }
-        let Some(pending) = self.pending_trap.take() else {
-            return Ok(None);
-        };
+        Ok(None)
+    }
+
+    /// One queued condition's handler, run at the boundary that owes it.
+    ///
+    /// `Ok(None)` means the boundary may go on to the next entry: either the
+    /// handler returned, or this condition turned out to have no `CALL ON`
+    /// trap to run and is discarded.
+    fn deliver_one_pending_trap(
+        &mut self,
+        code: &Code<'_>,
+        pending: PendingTrap,
+    ) -> Result<Option<HandlerExit>, Failure> {
         let Some(trap) = self.trap_for(&pending.condition) else {
             return Ok(None);
         };
@@ -3625,11 +3662,12 @@ impl Interp {
             call: true,
             description: pending.description.clone(),
         });
+        let queued_before = self.pending_traps.len();
         let ended = self.resolve_and_run_call(code, &trap.label, true, &[]);
         // A trap queued by the handler that just ran is not one the
         // interrupted clause owes, and `in_clause`'s tripwire has to be able
         // to tell the two apart -- see the field's own doc comment.
-        if let Some(pending) = self.pending_trap.as_mut() {
+        for pending in self.pending_traps.iter_mut().skip(queued_before) {
             pending.queued_during_delivery = true;
         }
         self.activation_mut().condition = enclosing_condition;
@@ -3712,7 +3750,7 @@ impl Interp {
     /// does not filter [`Trap::delayed`].** Matching a delayed handler and
     /// then declining to run it is what the C++ does
     /// (`RexxActivation::raiseCondition` queues without asking;
-    /// `processTraps` skips), and `deliver_pending_trap`'s own `trap_for`
+    /// `processTraps` skips), and `deliver_pending_traps`'s own `trap_for`
     /// is the decline. Measured rather than argued: a `CALL ON` handler that
     /// calls a routine raising the same condition runs once on both
     /// interpreters, byte for byte.
@@ -3971,10 +4009,10 @@ impl Interp {
         };
         match self.caller_trap_for(&name) {
             // A `CALL ON` trap resumes, so the condition waits for the
-            // caller's current clause to finish -- `deliver_pending_trap`
+            // caller's current clause to finish -- `deliver_pending_traps`
             // has the two transcripts that pin the wait.
             Some(trap) if trap.call => {
-                self.pending_trap = Some(PendingTrap {
+                self.pending_traps.push_back(PendingTrap {
                     condition: name,
                     rc,
                     description: description.clone(),
@@ -3983,7 +4021,7 @@ impl Interp {
                     // that same activation's table. See the field's own doc
                     // comment for the three transcripts behind it.
                     activation: self.activations[self.activations.len() - 2].id,
-                    // Set by `deliver_pending_trap` if this turns out to have
+                    // Set by `deliver_pending_traps` if this turns out to have
                     // been queued while a handler was running, which is not
                     // knowable here: this is the raise, not the delivery.
                     queued_during_delivery: false,
@@ -4040,7 +4078,7 @@ impl Interp {
     /// after a handler has finished re-raises that handler's condition where
     /// the oracle *may well* answer 98.918. Nothing measured pins that shape
     /// either way." One probe pinned it: the oracle does answer 98.918, and
-    /// we answered silence at rc 0. `deliver_pending_trap` clears the field
+    /// we answered silence at rc 0. `deliver_pending_traps` clears the field
     /// in its `Ended::Returned` arm now.
     ///
     /// The clearing is deliberately *not* symmetric. A `SIGNAL ON` handler
@@ -15584,7 +15622,7 @@ mod tests {
 
     /// **4b's fix round 1, finding 3(a).** A `CALL ON` trap is held for its
     /// handler's duration and released afterwards, unlike a `SIGNAL ON`
-    /// trap, which is removed and stays removed. `deliver_pending_trap`
+    /// trap, which is removed and stays removed. `deliver_pending_traps`
     /// documented this and nothing tested it: deleting the release left the
     /// whole suite and the corpus gate green.
     ///

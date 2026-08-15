@@ -28,6 +28,7 @@ Each rule below has already cost this project a session, a wrong measurement, or
 * **Use absolute paths for every redirect.** A relative redirect inside a subshell that has `cd`'d writes where you did not intend; that produced three false mismatches against correct code and left stray files in the repository.
 * **Never instantiate `.Package~new` on a file inside the repository** -- it executes that file's prolog and has written untracked files into the tree.
 * **Never run `select; when 1 = 0 then; when 2 = 2 then nop; end`** -- it segfaults the oracle (upstream SF #2018).
+* **Never run a clause that queues the same `CALL ON` condition twice**, as in `zr = ra() + ra()` where `ra` ends `raise user c1 return 1` and `c1` is trapped. The oracle runs the handler once and then segfaults at rc 139, measured 2026-08-15. Two *differently* named conditions in the same clause are fine and are how the drain rule was measured; it is the same name arriving twice at one boundary that kills it. `corpus/oracle-crashes.txt` carries the whole program.
 * **Never set `NUMERIC DIGITS` above 1000** in a probe.
 * A symbol named `x` or `b` immediately followed by a quoted string parses as a hex or binary literal, so `say '['x']'` is error 15.3 rather than concatenation. Use other names.
 

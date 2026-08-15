@@ -94,3 +94,34 @@ proportionally to that precision on a scale this project has not
 characterised further, so the safe rule is the blanket one already in
 `rust/CLAUDE.md` and every phase plan -- never set it above 1000 in a
 probe, full stop, rather than searching for the exact boundary.
+
+## 5. One clause queuing the same `CALL ON` condition twice
+
+    call on user c1 name h1
+    zr = ra() + ra()
+    say 'after' zr
+    exit 0
+    ra:
+    raise user c1 return 1
+    h1:
+    say 'h1' sigl
+    return
+
+Effect: **SIGSEGV, rc 139**, after the handler has run once. The oracle
+prints `h1 2` on stdout and then dies, so what kills it is the boundary
+reaching the *second* copy of an already-delivered condition name, not
+the queuing of it.
+
+Found 2026-08-15 while measuring what a clause boundary does with more
+than one pending condition, and it bounds that measurement: the same
+clause with two *differently* named conditions answers cleanly and is
+how the rule was established -- `zr = ra() + rb()` gives `h1` then `h2`
+then `after`, both handlers reporting the raising clause's own line, and
+a three-name version gives all three in the order they were queued. So
+the oracle drains a boundary in queue order, and this program is the one
+shape in that family it cannot answer for.
+
+Consequence for this crate: a boundary that drains has to decide what to
+do with a repeated name, and there is **no oracle behaviour to match**.
+Whatever it does is unconstrained here, and must not be described as
+agreeing with the oracle. Not filed upstream.

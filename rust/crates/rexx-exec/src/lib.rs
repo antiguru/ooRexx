@@ -41,7 +41,7 @@ use rexx_parse::{
     AnnotationTarget, CodeBody, Directive, DirectiveKind, ExprKind, InstructionKind, Operator,
     Program, SymbolId, SymbolTable, compound_parts, parse_program,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
 // The value model: `text`/`number`/`to_text`/`to_number` on `Interp`, and the
@@ -1676,11 +1676,30 @@ struct Interp {
     /// has the rule, what the shape does and does not guarantee, and the
     /// residual.
     ///
-    /// One slot rather than a queue, which is what the oracle's own
-    /// behaviour describes: measured, a condition raised while a `CALL ON`
-    /// handler is running is dropped rather than delivered after the handler
-    /// returns.
-    pending_trap: Option<PendingTrap>,
+    /// **A queue, drained at a boundary in the order the conditions were
+    /// queued.** The oracle takes everything a clause left pending, not one:
+    /// measured, `zr = ra() + rb()` with both trapped runs `ra`'s handler and
+    /// then `rb`'s, both reporting the raising clause's own line, and the
+    /// three-condition version runs all three in that same order. A single
+    /// slot answered the last one only and lost the rest outright.
+    ///
+    /// **What a handler queues while it runs is owed to the next boundary,
+    /// not this one.** Measured over a two-pass loop whose body requeues: the
+    /// oracle defers the requeue past the boundary that delivered it and takes
+    /// it at the following clause -- which is what [`PendingTrap::
+    /// queued_during_delivery`] records, and why the drain is bounded to the
+    /// entries present when the boundary began.
+    ///
+    /// **Entries for another activation are stepped over, not blocking.**
+    /// Each activation owns its own queue in the oracle; here they share one
+    /// and [`PendingTrap::activation`] is what separates them.
+    ///
+    /// **One shape in this family has no oracle answer:** a clause queuing the
+    /// same condition name twice segfaults the oracle once the drain reaches
+    /// the second copy. `corpus/oracle-crashes.txt` carries the program and
+    /// the warning; nothing here may be described as agreeing with the oracle
+    /// on it.
+    pending_traps: VecDeque<PendingTrap>,
     /// The condition whose handler is running, for `RAISE PROPAGATE` to
     /// re-raise.
     ///
@@ -2276,7 +2295,7 @@ impl Interp {
             out: Vec::new(),
             trace: Vec::new(),
             clause_state: ClauseState::new(),
-            pending_trap: None,
+            pending_traps: VecDeque::new(),
             active_condition: None,
             next_activation_id: 0,
             current_case_text: None,
