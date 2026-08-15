@@ -395,15 +395,24 @@ fn inherit_instance_methods_donates_without_a_superclass_edge() {
 
 /// The brief's central hazard, independently re-verified against the
 /// oracle (`wiring_blind_spot.rex`): `.Set~superClasses` and
-/// `.Bag~superClasses` are byte-identical ("The Object class", "The
-/// MapCollection class", "The SetCollection class", in that order, on
-/// both) despite `.set~inheritInstanceMethods(.SetMixin)` and
+/// `.Bag~superClasses` are byte-identical -- three entries, "The Object
+/// class", "The MapCollection class", "The SetCollection class", in that
+/// order, on both -- despite `.set~inheritInstanceMethods(.SetMixin)` and
 /// `.bag~inheritInstanceMethods(.BagMixin)` (`CoreClasses.orx:85,87`)
-/// donating different content. This test reproduces the shape with toy
-/// classes: two classes with an **identical** ancestor chain, each
-/// receiving a **different** donation. A class-graph assertion
-/// (`ancestors`) cannot tell them apart; a method-SET assertion
-/// (`has_method`) can and must.
+/// donating different content.
+///
+/// `~superClasses` (`RexxClass::getSuperClasses`, `ClassClass.cpp:458-461`)
+/// answers a plain copy of the class's own `superClasses` field, not a
+/// flattened ancestor closure -- and reading `CoreClasses.orx:103-115`
+/// shows exactly how `.Set` ends up with three entries there: it is built
+/// in C++ with `superClasses = [Object]` alone, then
+/// `.set~inherit(.MapCollection)` (`:108`) and `.set~inherit(.SetCollection)`
+/// (`:114`) each append one more mixin, in that order, after the fact.
+/// This test reproduces that exact shape rather than a shallower one: two
+/// classes built the same way, ending up with the identical three-entry
+/// chain the oracle measures, each then receiving a **different**
+/// donation. A class-graph assertion (`ancestors`) cannot tell them apart;
+/// a method-SET assertion (`method_names_at`) can and must.
 #[test]
 fn two_classes_with_identical_ancestors_can_still_answer_to_different_method_sets() {
     let object = id(1);
@@ -416,30 +425,127 @@ fn two_classes_with_identical_ancestors_can_still_answer_to_different_method_set
 
     let mut g = ClassGraph::new();
     g.define_class(object, None, ClassKind::Regular);
-    g.define_class(map_collection, Some(object), ClassKind::Regular);
-    g.define_class(set_collection, Some(map_collection), ClassKind::Regular);
+    g.define_class(map_collection, Some(object), ClassKind::Mixin);
+    g.define_class(set_collection, Some(object), ClassKind::Mixin);
 
     g.define_class(set_mixin, Some(object), ClassKind::Regular);
     g.define(set_mixin, "SETONLY", MethodId(1));
     g.define_class(bag_mixin, Some(object), ClassKind::Regular);
     g.define(bag_mixin, "BAGONLY", MethodId(2));
 
-    // Identical ancestor chains: both subclass SetCollection directly.
-    g.define_class(set_like, Some(set_collection), ClassKind::Regular);
-    g.define_class(bag_like, Some(set_collection), ClassKind::Regular);
+    // Both start as a bootstrap SUBCLASS(Object), matching how the
+    // primitive .Set/.Bag are built in Setup.cpp, then each receives the
+    // same two ~inherit calls in the same order CoreClasses.orx does.
+    g.define_class(set_like, Some(object), ClassKind::Regular);
+    g.define_class(bag_like, Some(object), ClassKind::Regular);
+    g.inherit(set_like, map_collection);
+    g.inherit(set_like, set_collection);
+    g.inherit(bag_like, map_collection);
+    g.inherit(bag_like, set_collection);
 
     g.inherit_instance_methods(set_like, set_mixin);
     g.inherit_instance_methods(bag_like, bag_mixin);
 
     assert_eq!(
         g.ancestors(set_like),
+        [object, map_collection, set_collection],
+        "matches the measured .Set~superClasses shape: three entries, Object first"
+    );
+    assert_eq!(
+        g.ancestors(set_like),
         g.ancestors(bag_like),
         "the class graph is byte-identical, exactly like .Set~superClasses and .Bag~superClasses"
     );
-    assert!(g.has_method(set_like, "SETONLY"));
-    assert!(!g.has_method(bag_like, "SETONLY"));
-    assert!(g.has_method(bag_like, "BAGONLY"));
-    assert!(!g.has_method(set_like, "BAGONLY"));
+
+    let set_methods = g.method_names_at(g.instance_behaviour_handle(set_like));
+    let bag_methods = g.method_names_at(g.instance_behaviour_handle(bag_like));
+    assert!(set_methods.contains("SETONLY"));
+    assert!(!set_methods.contains("BAGONLY"));
+    assert!(bag_methods.contains("BAGONLY"));
+    assert!(!bag_methods.contains("SETONLY"));
+    assert_ne!(
+        set_methods, bag_methods,
+        "identical ancestors, disjoint method sets -- the exact blind spot \
+         a class-graph-only assertion cannot see"
+    );
+}
+
+// ---------------------------------------------------------------------
+// `inherit`'s validation guards -- not oracle probes (these panic; no
+// probe can run an invalid `inherit` against the built oracle without
+// first tripping the identical `SYNTAX` condition and exiting), but each
+// is a distinct check `RexxClass::inherit` (`ClassClass.cpp:1298-1332`)
+// makes that this crate's own code must refuse identically. One test per
+// guard, each stating what letting it through would have done.
+// ---------------------------------------------------------------------
+
+/// Guard: `mixin` must actually be declared `MIXINCLASS` -- oracle's
+/// `Error_Execution_mixinclass` (`ClassClass.cpp:1299`). Absent this
+/// guard, an ordinary (non-mixin) class would be silently accepted as an
+/// `INHERIT` target: `combo.superclasses` would gain `plain` as an
+/// ancestor the oracle would have refused outright, and every later
+/// cascade would merge `plain`'s methods into `combo` as if the
+/// relationship were legal.
+#[test]
+#[should_panic(expected = "is not a MIXINCLASS")]
+fn inherit_refuses_a_non_mixin_class() {
+    let object = id(1);
+    let plain = id(2);
+    let combo = id(3);
+
+    let mut g = ClassGraph::new();
+    g.define_class(object, None, ClassKind::Regular);
+    g.define_class(plain, Some(object), ClassKind::Regular);
+    g.define_class(combo, Some(object), ClassKind::Regular);
+
+    g.inherit(combo, plain);
+}
+
+/// Guard: `inherit` refuses a `mixin` that is already an ancestor of
+/// `class` -- oracle's `Error_Execution_recursive_inherit`
+/// (`ClassClass.cpp:1311`). Absent this guard, re-inheriting the same
+/// mixin would push a duplicate entry onto `class.superclasses` and a
+/// duplicate cascade registration onto `mixin.subclasses`;
+/// `cascade_build`'s own `has_scope` guard hides the method-merge
+/// consequence, but the graph itself would be wrong, and a later rebuild
+/// of `mixin` would redundantly rebuild `class` twice over.
+#[test]
+#[should_panic(expected = "re-inheriting it is a recursive inherit")]
+fn inherit_refuses_re_inheriting_the_same_mixin() {
+    let object = id(1);
+    let mixin1 = id(2);
+    let combo = id(3);
+
+    let mut g = ClassGraph::new();
+    g.define_class(object, None, ClassKind::Regular);
+    g.define_class(mixin1, Some(object), ClassKind::Mixin);
+    g.define_class(combo, Some(object), ClassKind::Regular);
+
+    g.inherit(combo, mixin1);
+    g.inherit(combo, mixin1); // already an ancestor
+}
+
+/// Guard: `inherit` refuses making `class` an ancestor of a `mixin` that
+/// is itself already an ancestor of `class` -- oracle's
+/// `Error_Execution_recursive_inherit`'s mirror check (`:1317`). Absent
+/// this guard: `define_class(b, Some(a), Mixin)` (`B mixinclass A`) then
+/// `inherit(a, b)` (`.A~inherit(.B)`) passes every other check (`B` is a
+/// genuine `MIXINCLASS`, `A` is not already `B`'s ancestor, the
+/// base-class checks hold trivially since `B`'s base is `A` itself),
+/// leaves `a.superclasses = [.., b]` and `b.superclasses = [a]`, and
+/// `update_sub_classes` (`class_graph.rs`) alternates `a -> b -> a`
+/// forever -- a stack overflow where the oracle raises a clean `98.943`.
+#[test]
+#[should_panic(expected = "would make each an ancestor of the other")]
+fn inherit_refuses_a_cycle_through_a_mixins_own_mixinclass_target() {
+    let a = id(1);
+    let b = id(2);
+
+    let mut g = ClassGraph::new();
+    g.define_class(a, None, ClassKind::Regular);
+    g.define_class(b, Some(a), ClassKind::Mixin); // B mixinclass A
+
+    g.inherit(a, b); // .A~inherit(.B) -- would cycle without the guard
 }
 
 // ---------------------------------------------------------------------

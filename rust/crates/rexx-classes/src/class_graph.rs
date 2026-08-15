@@ -33,13 +33,18 @@
 //!   fact.
 //!
 //! What this crate does not model: message dispatch, method bodies, error
-//! raising for an invalid `inherit` (the two `assert!`s below are this
-//! crate's own sanity checks, not the oracle's `SYNTAX` conditions -- that
-//! belongs to whichever later task wires `~inherit` to a raise), and a
-//! metaclass's own instance dictionary merging into a class's class-side
-//! behaviour (`RexxClass::createClassBehaviour`'s `metaClass->mergeInstanceBehaviour`
-//! branch) -- the class-behaviour cascade this crate builds is the
-//! `INHERIT`-list half of D44, which is what the brief's probe exercises.
+//! raising for an invalid `inherit` (the `assert!`s in [`ClassGraph::inherit`]
+//! are this crate's own sanity checks, not the oracle's `SYNTAX` conditions
+//! -- that belongs to whichever later task wires `~inherit` to a raise),
+//! and a metaclass's own instance dictionary merging into a class's
+//! class-side behaviour (`RexxClass::createClassBehaviour`'s
+//! `metaClass->mergeInstanceBehaviour` branch). By controller ruling, the
+//! metaclass merge and its `mixinclass class`/`METACLASS` probe belong to
+//! Task 3 ("class objects, the registry, and the metaclass graph"), not
+//! here -- `ClassDef` carries no metaclass field. The class-behaviour
+//! cascade this crate does build is the `INHERIT`-list half of D44 (an
+//! ordinary mixin's own class-side methods reaching the class object
+//! through a plain `INHERIT`, exercised in `tests/behaviour_wiring.rs`).
 
 use crate::method_dict::{MethodDict, MethodId};
 use rexx_core::ObjRef;
@@ -82,6 +87,10 @@ struct Behaviour {
 pub struct BehaviourHandle(usize);
 
 struct ClassDef {
+    /// `Regular` or `Mixin` -- oracle's `isMixinClass`. `inherit`'s
+    /// `Error_Execution_mixinclass` check reads this: only a `Mixin` may
+    /// be inherited.
+    kind: ClassKind,
     /// Cascade order: the explicit superclass first (if any), then every
     /// mixin `inherit` has folded in, in the order it was called --
     /// oracle's `superClasses`.
@@ -148,6 +157,7 @@ impl ClassGraph {
         self.classes.insert(
             id,
             ClassDef {
+                kind,
                 superclasses: superclass.into_iter().collect(),
                 subclasses: Vec::new(),
                 own_instance_methods: MethodDict::new(),
@@ -162,14 +172,6 @@ impl ClassGraph {
         }
         self.rebuild_behaviour(id, Side::Instance);
         self.rebuild_behaviour(id, Side::Class);
-    }
-
-    fn own_dict(&self, class: ObjRef, side: Side) -> &MethodDict {
-        let def = &self.classes[&class];
-        match side {
-            Side::Instance => &def.own_instance_methods,
-            Side::Class => &def.own_class_methods,
-        }
     }
 
     fn behaviour_handle(&self, class: ObjRef, side: Side) -> BehaviourHandle {
@@ -197,25 +199,39 @@ impl ClassGraph {
     /// is folded in *last* among the mixins (closest to `class`'s own
     /// scope in cascade order), and an explicit `SUBCLASS` target is
     /// folded in last of all the ancestors, so it outranks every mixin.
-    fn cascade_build(&self, class: ObjRef, target: &mut MethodDict, side: Side) {
-        let superclasses = self.classes[&class].superclasses.clone();
+    fn cascade_build(
+        classes: &HashMap<ObjRef, ClassDef>,
+        class: ObjRef,
+        target: &mut MethodDict,
+        side: Side,
+    ) {
+        let superclasses = classes[&class].superclasses.clone();
         for sup in superclasses.into_iter().rev() {
             if !target.has_scope(sup) {
-                self.cascade_build(sup, target, side);
+                Self::cascade_build(classes, sup, target, side);
             }
         }
         if !target.has_scope(class) {
-            target.merge_methods(self.own_dict(class, side));
+            let own = match side {
+                Side::Instance => &classes[&class].own_instance_methods,
+                Side::Class => &classes[&class].own_class_methods,
+            };
+            target.merge_methods(own);
             target.add_scope(class);
         }
     }
 
+    /// Oracle's `instanceBehaviour->clearMethodDictionary()` followed by
+    /// `createInstanceBehaviour(instanceBehaviour)` (or the class-side
+    /// equivalent): clear the *existing* dictionary in place, then cascade
+    /// into it, rather than building a separate dictionary and swapping it
+    /// in. The handle's identity is unaffected either way; this is the
+    /// literal oracle shape rather than an equivalent one.
     fn rebuild_behaviour(&mut self, class: ObjRef, side: Side) {
-        let mut fresh = MethodDict::new();
-        self.cascade_build(class, &mut fresh, side);
         let handle = self.behaviour_handle(class, side);
         let behaviour = &mut self.behaviours[handle.0];
-        behaviour.dict = fresh;
+        behaviour.dict.clear();
+        Self::cascade_build(&self.classes, class, &mut behaviour.dict, side);
         behaviour.version += 1;
     }
 
@@ -248,17 +264,6 @@ impl ClassGraph {
         }
     }
 
-    /// The class-side counterpart of [`update_instance_sub_classes`],
-    /// used by [`class_define`](Self::class_define) alone: rebuild only
-    /// the class behaviour, in place, then cascade.
-    fn update_class_sub_classes(&mut self, class: ObjRef) {
-        self.rebuild_behaviour(class, Side::Class);
-        let subclasses = self.classes[&class].subclasses.clone();
-        for sub in subclasses {
-            self.update_class_sub_classes(sub);
-        }
-    }
-
     /// `~define`. Oracle's `defineMethod` (`ClassClass.cpp:819`) copies
     /// `instanceBehaviour` *before* mutating it -- its own comment reads
     /// "make a copy of the instance behaviour so any previous objects
@@ -279,24 +284,37 @@ impl ClassGraph {
         self.update_instance_sub_classes(class);
     }
 
-    /// Install a class (static) method directly, no oracle-named
-    /// equivalent. There is no per-object "instance already created"
-    /// concern on the class side: exactly one object is ever an instance
-    /// of `class`'s own class-side behaviour, the class object itself, so
-    /// unlike [`define`](Self::define) this never allocates a fresh
-    /// handle -- it rebuilds `class`'s class behaviour in place and
-    /// cascades, the class-side half of `updateSubClasses`. The oracle
-    /// installs a `::METHOD ... CLASS` the same way, at class-definition
-    /// time, before anything could have observed the class object's old
-    /// state; this crate's own tests use it to seed a mixin's class-side
-    /// method before any class `inherit`s it.
+    /// Install a class (static) method directly -- oracle's
+    /// `RexxClass::defineClassMethod` (`ClassClass.cpp:883-895`), itself a
+    /// "special method to allow a class method to be added to a primitive
+    /// class during image build" (its own doc comment), and one of the two
+    /// methods `removeSetupMethods` strips before the oracle ships,
+    /// alongside `~inheritInstanceMethods` (`:923-941`, `DEFINECLASSMETHOD`).
+    /// It adds directly to `class`'s *current* class behaviour and to its
+    /// own `classMethodDictionary` (`own_class_methods` here) -- **no
+    /// clear, no rebuild-from-scratch, no cascade to subclasses**, unlike
+    /// every other mutator in this file (`behaviour->defineMethod(name,
+    /// addedMethod)` is a direct, unconditional `MethodDictionary::addMethod`
+    /// on the already-built behaviour, not a `createClassBehaviour`
+    /// rebuild). A class that already has subclasses when this is called
+    /// would leave them unaware of the new method until their own class
+    /// behaviour is next rebuilt for an unrelated reason -- the oracle has
+    /// this exact gap too, consistent with the doc comment's restriction to
+    /// image build, before any subclass yet exists. This crate's own tests
+    /// use it to seed a mixin's class-side method before any class
+    /// `inherit`s it, which is exactly that restriction in miniature.
     pub fn class_define(&mut self, class: ObjRef, name: &str, method: MethodId) {
-        self.classes
-            .get_mut(&class)
-            .expect("class_define: unknown class")
-            .own_class_methods
+        let handle = {
+            let def = self
+                .classes
+                .get_mut(&class)
+                .expect("class_define: unknown class");
+            def.own_class_methods.add_method(name, class, method);
+            def.class_behaviour
+        };
+        self.behaviours[handle.0]
+            .dict
             .add_method(name, class, method);
-        self.update_class_sub_classes(class);
     }
 
     /// `~inherit`. Oracle's `RexxClass::inherit` (`:1287`) does **no**
@@ -305,13 +323,40 @@ impl ClassGraph {
     /// instance created before this call sees the donated methods
     /// immediately, unlike [`define`](Self::define).
     ///
-    /// The two `assert!`s are this crate's own sanity checks standing in
-    /// for the oracle's `Error_Execution_baseclass` (`:1323`, `:1329`):
-    /// `mixin` can only be inherited by a class whose own two behaviours
-    /// already have `mixin`'s `base_class` in scope. Raising the oracle's
-    /// actual syntax condition on violation is later work; this crate
-    /// only refuses to build a graph the oracle itself would refuse.
+    /// The four `assert!`s are this crate's own sanity checks standing in
+    /// for the oracle's validation (`:1298-1332`), each named for the
+    /// `SYNTAX` condition it stands in for:
+    /// * `Error_Execution_mixinclass` (`:1299`) -- `mixin` must actually be
+    ///   a `MIXINCLASS`.
+    /// * `Error_Execution_recursive_inherit` (`:1311`, `mixin` already an
+    ///   ancestor of `class`) and its mirror (`:1317`, `class` already an
+    ///   ancestor of `mixin`). **The second of these is not decoration**:
+    ///   without it, `define_class(b, Some(a), Mixin)` (`B mixinclass A`)
+    ///   followed by `inherit(a, b)` (`.A~inherit(.B)`) passes every other
+    ///   check, leaves `a.superclasses = [.., b]` and `b.superclasses =
+    ///   [a]`, and `update_sub_classes` alternates `a -> b -> a` forever --
+    ///   a stack overflow where the oracle raises a clean `98.943`.
+    /// * `Error_Execution_baseclass` (`:1323`, `:1329`) -- `mixin` can only
+    ///   be inherited by a class whose own two behaviours already have
+    ///   `mixin`'s `base_class` in scope.
+    ///
+    /// Raising the oracle's actual syntax conditions on violation is later
+    /// work (dispatch wiring's, once `SIGNAL ON SYNTAX` exists to catch
+    /// them); this crate only refuses to build a graph the oracle itself
+    /// would refuse.
     pub fn inherit(&mut self, class: ObjRef, mixin: ObjRef) {
+        assert!(
+            matches!(self.classes[&mixin].kind, ClassKind::Mixin),
+            "inherit: {mixin:?} is not a MIXINCLASS"
+        );
+        assert!(
+            !self.behaviour_has_scope(class, Side::Class, mixin),
+            "inherit: {mixin:?} is already an ancestor of {class:?} -- re-inheriting it is a recursive inherit"
+        );
+        assert!(
+            !self.behaviour_has_scope(mixin, Side::Class, class),
+            "inherit: {class:?} is already an ancestor of {mixin:?} -- inheriting it would make each an ancestor of the other"
+        );
         let mixin_base = self.classes[&mixin].base_class;
         assert!(
             self.behaviour_has_scope(class, Side::Class, mixin_base),
@@ -331,13 +376,24 @@ impl ClassGraph {
     }
 
     /// `inheritInstanceMethods`. Oracle's `RexxClass::inheritInstanceMethods`
-    /// (`:558`) rewrites `donor`'s own instance methods to `class`'s own
-    /// scope, folds them into `class`'s own instance dictionary, then
+    /// (`:558-586`) takes `donor`'s own instance-method dictionary **by
+    /// pointer and rewrites it in place** (`MethodDictionary *sourceMethods
+    /// = source->instanceMethodDictionary; sourceMethods->setMethodScope(this);`,
+    /// `:560-562`), folds it into `class`'s own instance dictionary, then
     /// rebuilds `class`'s instance behaviour in place -- **no superclass
     /// edge** (`class`'s `superclasses` is untouched) and **no cascade**
-    /// to `class`'s own subclasses (unlike [`Self::define`] and [`Self::inherit`], the
-    /// oracle function's body has no call to either `updateSubClasses` or
-    /// `updateInstanceSubClasses`).
+    /// to `class`'s own subclasses (unlike [`Self::define`] and
+    /// [`Self::inherit`], the oracle function's body has no call to either
+    /// `updateSubClasses` or `updateInstanceSubClasses`).
+    ///
+    /// This crate does the identical in-place rewrite, not a clone: `donor`
+    /// really is left with its own instance methods bearing `class`'s scope
+    /// afterward, matching the oracle's aliasing exactly rather than a
+    /// behaviourally-similar approximation of it. (There is no accessor in
+    /// this crate's public API that can observe `donor`'s own dictionary
+    /// directly after the call -- only the flattened behaviours are
+    /// queryable -- so this fidelity is not independently exercised by a
+    /// test; it is verified by matching the C++ line by line.)
     ///
     /// This exact method cannot be oracle-probed by running a script:
     /// `removeSetupMethods` (`:923`) deletes `~inheritInstanceMethods` from
@@ -349,13 +405,20 @@ impl ClassGraph {
     /// `.Bag` let a running script measure, and `tests/behaviour_wiring.rs`
     /// is built around exactly that distinction.
     pub fn inherit_instance_methods(&mut self, class: ObjRef, donor: ObjRef) {
-        let mut donated = self.classes[&donor].own_instance_methods.clone();
-        donated.set_method_scope(class);
+        let mut donor_methods = std::mem::take(
+            &mut self
+                .classes
+                .get_mut(&donor)
+                .expect("inherit_instance_methods: unknown donor class")
+                .own_instance_methods,
+        );
+        donor_methods.set_method_scope(class);
         self.classes
             .get_mut(&class)
             .expect("inherit_instance_methods: unknown recipient class")
             .own_instance_methods
-            .merge_methods(&donated);
+            .merge_methods(&donor_methods);
+        self.classes.get_mut(&donor).unwrap().own_instance_methods = donor_methods;
         self.rebuild_behaviour(class, Side::Instance);
     }
 

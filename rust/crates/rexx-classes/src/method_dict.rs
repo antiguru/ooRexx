@@ -128,20 +128,6 @@ impl MethodDict {
         }
     }
 
-    /// Overlay `source`'s scope ordering on top of this dictionary's own --
-    /// the oracle's `MethodDictionary::mergeScopes`.
-    pub fn merge_scopes(&mut self, source: &MethodDict) {
-        for &scope in &source.scope_list {
-            self.add_scope(scope);
-        }
-    }
-
-    /// Both methods and scopes -- the oracle's `MethodDictionary::merge`.
-    pub fn merge(&mut self, source: &MethodDict) {
-        self.merge_methods(source);
-        self.merge_scopes(source);
-    }
-
     /// Rewrite every entry's scope to `scope` -- the oracle's
     /// `MethodDictionary::setMethodScope`, what `inheritInstanceMethods`
     /// uses to make a donor's methods present under the recipient's own
