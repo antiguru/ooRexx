@@ -11091,9 +11091,9 @@ mod tests {
     /// explicit `DO ... FOR n` gets, measured (this task's own report).
     /// A bare count reaches that line through `HeaderRole::Count`'s `FOR`
     /// answer in `HeaderRole::keyword`, which is what `echo_header_value`
-    /// hands `trace_keyword`. This is the one test that would have caught
-    /// the omission, since the report's own verification claimed `>K>` was
-    /// checked while never actually running a bare-count program through it.
+    /// hands `trace_keyword`. It is asserted here because the report's own
+    /// verification claimed `>K>` was checked while never actually running a
+    /// bare-count program through it.
     #[test]
     fn a_bare_repeat_count_traces_as_for_the_same_as_an_explicit_one() {
         let mut interp = Interp::new();

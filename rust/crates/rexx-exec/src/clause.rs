@@ -444,11 +444,12 @@ impl Interp {
         // Two clauses of this crate can carry one line legitimately, and in
         // both the oracle has a single clause there:
         //
-        // * A `DO`/`LOOP`'s control setup (`run_loop`) and its first header
-        //   test (`run_repeating`) are two clauses here and one instruction
-        //   -- `RexxInstructionControlledDo::execute` -- there. `do i = 1 to
-        //   sub()` queues in the first and delivers in the second, both at
-        //   the `DO` line, which is the line the oracle reports.
+        // * A `DO`/`LOOP`'s control setup (the header evaluation) and its
+        //   first header test (`run_repeating`) are two clauses here and one
+        //   instruction -- `RexxInstructionControlledDo::execute` -- there.
+        //   `do i = 1 to sub()` queues in the first and delivers in the
+        //   second, both at the `DO` line, which is the line the oracle
+        //   reports.
         // * Every clause of an `INTERPRET` fragment carries the enclosing
         //   `INTERPRET` clause's line (`clause_line_override`), which is this
         //   crate's stand-in for the oracle running fragment text in an

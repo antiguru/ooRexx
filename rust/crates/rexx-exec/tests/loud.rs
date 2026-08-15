@@ -482,9 +482,10 @@ fn every_out_of_scope_variant_fails_loudly() {
         // a test that is not in fact watching is worse than none -- it
         // stops the next reader looking. Measured: giving
         // `InstructionKind::Say` an owner leaves the whole workspace suite
-        // green. The one exception is `Do`/`Loop`, which `run_loop` does
-        // reach here, and whose four `run.rs` tests on the exact unsuffixed
-        // message go red; `lib.rs`'s `instruction_owner` names them.
+        // green. The one exception is `Do`/`Loop`, which
+        // `run_loop_with_header` does reach here, and whose four `run.rs`
+        // tests on the exact unsuffixed message go red; `lib.rs`'s
+        // `instruction_owner` names them.
         //
         // **Pins the exact trailing shape, not merely the owner's presence
         // (review finding I2).** An earlier version checked

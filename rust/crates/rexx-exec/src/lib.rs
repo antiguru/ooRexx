@@ -967,8 +967,8 @@ fn form_name(kind: &ExprKind) -> String {
 /// survives every later phase unchanged.
 ///
 /// `None` is reachable here only through two documented edge cases in
-/// `run.rs` (`run_loop`'s `DO`/`LOOP` COUNTER/`DO WITH` check, and its
-/// stem-target `DO OVER` deviation) where the outer `InstructionKind`/
+/// `run.rs` (`run_loop_with_header`'s `DO`/`LOOP` COUNTER/`DO WITH` check,
+/// and its stem-target `DO OVER` deviation) where the outer `InstructionKind`/
 /// `ExprKind` is implemented but the specific reason that call happened is
 /// not. Printing an owner there would read as self-contradictory -- the
 /// construct plainly *is* implemented -- so this leaves the message
@@ -1092,8 +1092,8 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
 /// unreachable -- but the reason is unreachability, not some other test
 /// standing guard, and an edit here should not expect one to.
 ///
-/// The exception is `Do`/`Loop`, because `run_loop` reaches this function
-/// for them through the two edge cases described below, where the
+/// The exception is `Do`/`Loop`, because `run_loop_with_header` reaches this
+/// function for them through the two edge cases described below, where the
 /// instruction is implemented and only the specific reason is not. Measured:
 /// giving that arm an owner turns `run.rs`'s `do_with_takes_the_loud_path`,
 /// `do_counter_takes_the_loud_path_regardless_of_which_other_kind_it_rides_on`,
