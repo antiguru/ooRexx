@@ -9,6 +9,13 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
+//! This file stays `mod.rs`, not `support.rs`, because `tests/` is Cargo's
+//! integration-test root: a bare `tests/support.rs` would be auto-discovered
+//! as its own test binary in addition to being pulled in as a module by the
+//! seven files that declare `mod support;`, compiling these helpers
+//! standalone for no reason. Renaming it to `support.rs` would add that
+//! extra binary back.
+//!
 //! DEVIATION 0 (`docs/superpowers/plans/phase-4-exclusions.txt`): the one
 //! normalisation the differential harnesses are allowed to apply to
 //! `stderr`, shared by `tests/corpus.rs` and `tests/trace_oracle.rs` rather

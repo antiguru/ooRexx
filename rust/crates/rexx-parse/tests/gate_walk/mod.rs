@@ -9,6 +9,12 @@
 /*                                                                            */
 /*----------------------------------------------------------------------------*/
 
+//! This file stays `mod.rs`, not `gate_walk.rs`, because `tests/` is Cargo's
+//! integration-test root: a bare `tests/gate_walk.rs` would be auto-discovered
+//! as its own test binary in addition to being pulled in as a module by
+//! `tiling.rs` and `variants.rs`, compiling this walk standalone for no
+//! reason. Renaming it to `gate_walk.rs` would add that extra binary back.
+//!
 //! The AST walk shared by the Phase 3 gate tests (`tiling.rs`, `variants.rs`).
 //!
 //! Every `match` in this module is exhaustive on purpose: a new `ExprKind`,
