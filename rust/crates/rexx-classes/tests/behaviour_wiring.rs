@@ -23,6 +23,14 @@ fn id(n: u32) -> ObjRef {
     ObjRef::heap(n, 0)
 }
 
+// `define_class`'s fourth argument (D44's metaclass, added for the metaclass
+// graph) is `object` (or, in the one test with no `object` local, its own
+// root) in every call below: every graph here descends from its own root,
+// so the ordinary ancestor walk always folds that root's scope in before a
+// class's own metaclass-merge check runs, making the merge a guaranteed
+// no-op -- these tests exercise the instance/class-side cascade these
+// mechanisms are not about, not the metaclass merge itself.
+
 // ---------------------------------------------------------------------
 // Probe: mixin_merge.rex / mixin_merge2.rex -- two mixins define one name.
 // ---------------------------------------------------------------------
@@ -38,13 +46,13 @@ fn first_listed_inherit_mixin_wins_a_name_conflict() {
     let combo = id(4);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
-    g.define_class(mixin1, Some(object), ClassKind::Mixin);
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(mixin1, Some(object), ClassKind::Mixin, object);
     g.define(mixin1, "METHODA", MethodId(1));
-    g.define_class(mixin2, Some(object), ClassKind::Mixin);
+    g.define_class(mixin2, Some(object), ClassKind::Mixin, object);
     g.define(mixin2, "METHODA", MethodId(2));
 
-    g.define_class(combo, Some(object), ClassKind::Regular);
+    g.define_class(combo, Some(object), ClassKind::Regular, object);
     g.inherit(combo, mixin1);
     g.inherit(combo, mixin2);
 
@@ -66,13 +74,13 @@ fn reversing_the_inherit_list_reverses_the_winner() {
     let combo = id(4);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
-    g.define_class(mixin1, Some(object), ClassKind::Mixin);
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(mixin1, Some(object), ClassKind::Mixin, object);
     g.define(mixin1, "METHODA", MethodId(1));
-    g.define_class(mixin2, Some(object), ClassKind::Mixin);
+    g.define_class(mixin2, Some(object), ClassKind::Mixin, object);
     g.define(mixin2, "METHODA", MethodId(2));
 
-    g.define_class(combo, Some(object), ClassKind::Regular);
+    g.define_class(combo, Some(object), ClassKind::Regular, object);
     g.inherit(combo, mixin2);
     g.inherit(combo, mixin1);
 
@@ -95,13 +103,13 @@ fn an_explicit_superclass_outranks_every_inherited_mixin() {
     let combo = id(4);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
-    g.define_class(base, Some(object), ClassKind::Regular);
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(base, Some(object), ClassKind::Regular, object);
     g.define(base, "METHODA", MethodId(1));
-    g.define_class(mixin1, Some(object), ClassKind::Mixin);
+    g.define_class(mixin1, Some(object), ClassKind::Mixin, object);
     g.define(mixin1, "METHODA", MethodId(2));
 
-    g.define_class(combo, Some(base), ClassKind::Regular);
+    g.define_class(combo, Some(base), ClassKind::Regular, object);
     g.inherit(combo, mixin1);
 
     assert_eq!(
@@ -130,21 +138,21 @@ fn a_diamond_still_prefers_the_first_listed_mixin_and_keeps_the_common_ancestors
     let combo = id(5);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
+    g.define_class(object, None, ClassKind::Regular, object);
 
-    g.define_class(mixin_base, Some(object), ClassKind::Mixin);
+    g.define_class(mixin_base, Some(object), ClassKind::Mixin, object);
     g.define(mixin_base, "METHODX", MethodId(1)); // BASE_X
     g.define(mixin_base, "METHODY", MethodId(2)); // BASE_Y
 
-    g.define_class(mixin_a, Some(object), ClassKind::Mixin);
+    g.define_class(mixin_a, Some(object), ClassKind::Mixin, object);
     g.inherit(mixin_a, mixin_base);
     g.define(mixin_a, "METHODX", MethodId(3)); // A_X
 
-    g.define_class(mixin_b, Some(object), ClassKind::Mixin);
+    g.define_class(mixin_b, Some(object), ClassKind::Mixin, object);
     g.inherit(mixin_b, mixin_base);
     g.define(mixin_b, "METHODX", MethodId(4)); // B_X
 
-    g.define_class(combo, Some(object), ClassKind::Regular);
+    g.define_class(combo, Some(object), ClassKind::Regular, object);
     g.inherit(combo, mixin_a);
     g.inherit(combo, mixin_b);
 
@@ -176,8 +184,8 @@ fn define_does_not_reach_an_instance_created_before_it() {
     let widget = id(2);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
-    g.define_class(widget, Some(object), ClassKind::Regular);
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(widget, Some(object), ClassKind::Regular, object);
 
     let old_handle = g.instance_behaviour_handle(widget); // "old = .Widget~new"
     g.define(widget, "FOO", MethodId(1));
@@ -206,9 +214,9 @@ fn define_on_a_superclass_still_reaches_an_existing_subclass_instance() {
     let sub = id(3);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
-    g.define_class(base, Some(object), ClassKind::Regular);
-    g.define_class(sub, Some(base), ClassKind::Regular);
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(base, Some(object), ClassKind::Regular, object);
+    g.define_class(sub, Some(base), ClassKind::Regular, object);
 
     let old_base = g.instance_behaviour_handle(base); // "oldBase = .Base~new"
     let old_sub = g.instance_behaviour_handle(sub); // "oldSub = .Sub~new"
@@ -241,9 +249,9 @@ fn inherit_reaches_an_instance_created_before_it() {
     let mixin1 = id(3);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
-    g.define_class(widget, Some(object), ClassKind::Regular);
-    g.define_class(mixin1, Some(object), ClassKind::Mixin);
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(widget, Some(object), ClassKind::Regular, object);
+    g.define_class(mixin1, Some(object), ClassKind::Mixin, object);
     g.define(mixin1, "BAR", MethodId(1));
 
     let old_handle = g.instance_behaviour_handle(widget); // "old = .Widget~new"
@@ -270,10 +278,10 @@ fn inherit_on_a_superclass_reaches_an_existing_subclass_instance_too() {
     let mixin1 = id(4);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
-    g.define_class(base, Some(object), ClassKind::Regular);
-    g.define_class(sub, Some(base), ClassKind::Regular);
-    g.define_class(mixin1, Some(object), ClassKind::Mixin);
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(base, Some(object), ClassKind::Regular, object);
+    g.define_class(sub, Some(base), ClassKind::Regular, object);
+    g.define_class(mixin1, Some(object), ClassKind::Mixin, object);
     g.define(mixin1, "BAZ", MethodId(1));
 
     let old_base = g.instance_behaviour_handle(base);
@@ -310,15 +318,15 @@ fn inherit_donates_a_mixins_class_side_methods_to_the_class_object_not_its_insta
     let my_class = id(3);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
-    g.define_class(greeter_mixin, Some(object), ClassKind::Mixin);
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(greeter_mixin, Some(object), ClassKind::Mixin, object);
 
     // `::method greet class` -- a CLASS method, installed via
     // `class_define` (this crate's own setup convenience for the class
     // side, see its doc comment) before `my_class` inherits the mixin.
     g.class_define(greeter_mixin, "GREET", MethodId(1));
 
-    g.define_class(my_class, Some(object), ClassKind::Regular);
+    g.define_class(my_class, Some(object), ClassKind::Regular, object);
     g.inherit(my_class, greeter_mixin);
 
     assert!(
@@ -355,9 +363,9 @@ fn inherit_instance_methods_donates_without_a_superclass_edge() {
     let donor = id(3);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
-    g.define_class(target, Some(object), ClassKind::Regular);
-    g.define_class(donor, Some(object), ClassKind::Regular);
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(target, Some(object), ClassKind::Regular, object);
+    g.define_class(donor, Some(object), ClassKind::Regular, object);
     g.define(donor, "DONATED", MethodId(1));
 
     let ancestors_before: Vec<ObjRef> = g.ancestors(target).to_vec();
@@ -424,20 +432,20 @@ fn two_classes_with_identical_ancestors_can_still_answer_to_different_method_set
     let bag_like = id(7);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
-    g.define_class(map_collection, Some(object), ClassKind::Mixin);
-    g.define_class(set_collection, Some(object), ClassKind::Mixin);
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(map_collection, Some(object), ClassKind::Mixin, object);
+    g.define_class(set_collection, Some(object), ClassKind::Mixin, object);
 
-    g.define_class(set_mixin, Some(object), ClassKind::Regular);
+    g.define_class(set_mixin, Some(object), ClassKind::Regular, object);
     g.define(set_mixin, "SETONLY", MethodId(1));
-    g.define_class(bag_mixin, Some(object), ClassKind::Regular);
+    g.define_class(bag_mixin, Some(object), ClassKind::Regular, object);
     g.define(bag_mixin, "BAGONLY", MethodId(2));
 
     // Both start as a bootstrap SUBCLASS(Object), matching how the
     // primitive .Set/.Bag are built in Setup.cpp, then each receives the
     // same two ~inherit calls in the same order CoreClasses.orx does.
-    g.define_class(set_like, Some(object), ClassKind::Regular);
-    g.define_class(bag_like, Some(object), ClassKind::Regular);
+    g.define_class(set_like, Some(object), ClassKind::Regular, object);
+    g.define_class(bag_like, Some(object), ClassKind::Regular, object);
     g.inherit(set_like, map_collection);
     g.inherit(set_like, set_collection);
     g.inherit(bag_like, map_collection);
@@ -494,9 +502,9 @@ fn inherit_refuses_a_non_mixin_class() {
     let combo = id(3);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
-    g.define_class(plain, Some(object), ClassKind::Regular);
-    g.define_class(combo, Some(object), ClassKind::Regular);
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(plain, Some(object), ClassKind::Regular, object);
+    g.define_class(combo, Some(object), ClassKind::Regular, object);
 
     g.inherit(combo, plain);
 }
@@ -517,9 +525,9 @@ fn inherit_refuses_re_inheriting_the_same_mixin() {
     let combo = id(3);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
-    g.define_class(mixin1, Some(object), ClassKind::Mixin);
-    g.define_class(combo, Some(object), ClassKind::Regular);
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(mixin1, Some(object), ClassKind::Mixin, object);
+    g.define_class(combo, Some(object), ClassKind::Regular, object);
 
     g.inherit(combo, mixin1);
     g.inherit(combo, mixin1); // already an ancestor
@@ -542,8 +550,8 @@ fn inherit_refuses_a_cycle_through_a_mixins_own_mixinclass_target() {
     let b = id(2);
 
     let mut g = ClassGraph::new();
-    g.define_class(a, None, ClassKind::Regular);
-    g.define_class(b, Some(a), ClassKind::Mixin); // B mixinclass A
+    g.define_class(a, None, ClassKind::Regular, a);
+    g.define_class(b, Some(a), ClassKind::Mixin, a); // B mixinclass A
 
     g.inherit(a, b); // .A~inherit(.B) -- would cycle without the guard
 }
@@ -566,9 +574,9 @@ fn resolve_super_scope_answers_the_immediate_ancestor_in_a_linear_chain() {
     let sub = id(3);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
-    g.define_class(base, Some(object), ClassKind::Regular);
-    g.define_class(sub, Some(base), ClassKind::Regular);
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(base, Some(object), ClassKind::Regular, object);
+    g.define_class(sub, Some(base), ClassKind::Regular, object);
 
     let handle = g.instance_behaviour_handle(sub);
     assert_eq!(
@@ -600,16 +608,16 @@ fn a_scope_rooted_lookup_can_disagree_with_the_ordinary_lookup() {
     let combo = id(5);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
-    g.define_class(mixin_base, Some(object), ClassKind::Mixin);
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(mixin_base, Some(object), ClassKind::Mixin, object);
     g.define(mixin_base, "METHODX", MethodId(1));
-    g.define_class(mixin_a, Some(object), ClassKind::Mixin);
+    g.define_class(mixin_a, Some(object), ClassKind::Mixin, object);
     g.inherit(mixin_a, mixin_base);
     g.define(mixin_a, "METHODX", MethodId(2));
-    g.define_class(mixin_b, Some(object), ClassKind::Mixin);
+    g.define_class(mixin_b, Some(object), ClassKind::Mixin, object);
     g.inherit(mixin_b, mixin_base);
     g.define(mixin_b, "METHODX", MethodId(3));
-    g.define_class(combo, Some(object), ClassKind::Regular);
+    g.define_class(combo, Some(object), ClassKind::Regular, object);
     g.inherit(combo, mixin_a);
     g.inherit(combo, mixin_b);
 
@@ -641,10 +649,10 @@ fn every_cascade_against_a_handle_bumps_its_version_by_exactly_one() {
     let mixin1 = id(4);
 
     let mut g = ClassGraph::new();
-    g.define_class(object, None, ClassKind::Regular);
-    g.define_class(base, Some(object), ClassKind::Regular);
-    g.define_class(sub, Some(base), ClassKind::Regular);
-    g.define_class(mixin1, Some(object), ClassKind::Mixin);
+    g.define_class(object, None, ClassKind::Regular, object);
+    g.define_class(base, Some(object), ClassKind::Regular, object);
+    g.define_class(sub, Some(base), ClassKind::Regular, object);
+    g.define_class(mixin1, Some(object), ClassKind::Mixin, object);
     g.define(mixin1, "X", MethodId(1));
 
     let sub_handle = g.instance_behaviour_handle(sub);

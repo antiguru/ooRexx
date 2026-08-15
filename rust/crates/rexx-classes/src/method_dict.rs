@@ -128,6 +128,27 @@ impl MethodDict {
         }
     }
 
+    /// Overlay `source`'s methods **and its already-folded scope order** on
+    /// top of this dictionary -- the oracle's `RexxBehaviour::merge`
+    /// (`RexxBehaviour.cpp:649`), which calls `MethodDictionary::merge`
+    /// (`:666`): `mergeMethods` (identical to [`Self::merge_methods`]) followed
+    /// by `mergeScopes`, which folds every scope already in `source`'s own
+    /// `scope_list`, in `source`'s order, into this one via [`Self::add_scope`].
+    /// This is distinct from [`Self::merge_methods`] alone: that merges methods
+    /// only, and is what an ordinary `INHERIT` mixin cascade uses
+    /// (`class_graph.rs`'s `cascade_build`) because a mixin's own ancestors are
+    /// walked independently by that same cascade. This method is for the one
+    /// case where the source's scope history has to come along wholesale
+    /// instead of being re-derived: `createClassBehaviour`'s metaclass merge
+    /// (D44, `ClassClass.cpp:1123-1127`), where a class's class-behaviour
+    /// absorbs its metaclass's already-built instance behaviour verbatim.
+    pub fn merge(&mut self, source: &MethodDict) {
+        self.merge_methods(source);
+        for &scope in &source.scope_list {
+            self.add_scope(scope);
+        }
+    }
+
     /// Rewrite every entry's scope to `scope` -- the oracle's
     /// `MethodDictionary::setMethodScope`, what `inheritInstanceMethods`
     /// uses to make a donor's methods present under the recipient's own

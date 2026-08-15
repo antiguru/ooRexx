@@ -24,9 +24,21 @@
 //! to `rexx-core::Object`. Message dispatch (`resolve`/`invoke`) and every
 //! other piece of interpreter wiring are later tasks -- this crate is the
 //! data structure and its own unit tests, nothing else.
+//!
+//! `registry.rs` adds `ClassRegistry`: class objects (an [`rexx_core::ObjRef`]
+//! identity plus an id string, over `ClassGraph`'s own behaviours/superclass/
+//! subclass lists) and the name-to-class registry. `native_classes.rs`
+//! bootstraps the primitive class set `interpreter/memory/Setup.cpp` builds
+//! before `CoreClasses.orx` ever runs, from `build.rs`'s derived per-class
+//! method tables, and records the deferral table for every derived class
+//! name this crate does not build.
 
 mod class_graph;
 mod method_dict;
+mod native_classes;
+mod registry;
 
 pub use class_graph::{BehaviourHandle, ClassGraph, ClassKind};
 pub use method_dict::{MethodDict, MethodId};
+pub use native_classes::{Deferral, deferred_classes, native_classes, setup_class_names};
+pub use registry::ClassRegistry;

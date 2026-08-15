@@ -32,19 +32,18 @@
 //!   cannot see at all: `tests/behaviour_wiring.rs` is built around that
 //!   fact.
 //!
-//! What this crate does not model: message dispatch, method bodies, error
+//! What this crate does not model: message dispatch, method bodies, and error
 //! raising for an invalid `inherit` (the `assert!`s in [`ClassGraph::inherit`]
 //! are this crate's own sanity checks, not the oracle's `SYNTAX` conditions
-//! -- that belongs to whichever later task wires `~inherit` to a raise),
-//! and a metaclass's own instance dictionary merging into a class's
-//! class-side behaviour (`RexxClass::createClassBehaviour`'s
-//! `metaClass->mergeInstanceBehaviour` branch). By controller ruling, the
-//! metaclass merge and its `mixinclass class`/`METACLASS` probe belong to
-//! Task 3 ("class objects, the registry, and the metaclass graph"), not
-//! here -- `ClassDef` carries no metaclass field. The class-behaviour
-//! cascade this crate does build is the `INHERIT`-list half of D44 (an
-//! ordinary mixin's own class-side methods reaching the class object
-//! through a plain `INHERIT`, exercised in `tests/behaviour_wiring.rs`).
+//! -- that belongs to whichever later task wires `~inherit` to a raise).
+//! A metaclass's own instance dictionary merging into a class's class-side
+//! behaviour (`RexxClass::createClassBehaviour`'s `metaClass->mergeInstanceBehaviour`
+//! branch, D44) **is** modelled, in [`ClassGraph::cascade_build`]'s
+//! `Side::Class` arm -- added by Task 3 ("class objects, the registry, and
+//! the metaclass graph") together with the `metaclass` field
+//! [`ClassGraph::define_class`] now takes, and exercised by
+//! `tests/native_classes_wiring.rs`'s `mixinclass class` and `.class`-is-an-
+//! instance-of-itself probes.
 
 use crate::method_dict::{MethodDict, MethodId};
 use rexx_core::ObjRef;
@@ -112,6 +111,14 @@ struct ClassDef {
     /// What `inherit`'s base-class compatibility check reads -- oracle's
     /// `baseClass` field.
     base_class: ObjRef,
+    /// The class whose *instance* behaviour gets merged into this class's
+    /// own class-behaviour by [`ClassGraph::cascade_build`] (D44,
+    /// `RexxClass::createClassBehaviour`'s `metaClass->mergeInstanceBehaviour`
+    /// branch, `ClassClass.cpp:1119-1127`) -- oracle's `metaClass` field.
+    /// Every class built by `interpreter/memory/Setup.cpp` has `.Class` here,
+    /// including `.Class` itself, self-referentially (measured:
+    /// `.class~metaclass~id` is `"Class"`).
+    metaclass: ObjRef,
 }
 
 /// The class graph and its behaviour storage.
@@ -144,7 +151,26 @@ impl ClassGraph {
     /// cascading from `superclass` -- oracle's `RexxClass::subclass`
     /// (`ClassClass.cpp:1562`). `superclass` is `None` only for a root
     /// class with no ancestor (a test's own stand-in for `.Object`).
-    pub fn define_class(&mut self, id: ObjRef, superclass: Option<ObjRef>, kind: ClassKind) {
+    ///
+    /// `metaclass` is oracle's `metaClass` field (D44): every class built by
+    /// `Setup.cpp` passes `.Class`'s own id here, `.Class` included,
+    /// self-referentially -- see [`ClassGraph::cascade_build`]'s metaclass
+    /// merge branch, which is what makes that self-reference observable at
+    /// all (`.class~hasmethod('SUBCLASS')` is `1`). A metaclass value that
+    /// does not yet have its own entry in this graph is accepted: nothing
+    /// dereferences it until a *later* class's class-behaviour cascade reads
+    /// it, and a root class (`superclass: None`) never reads its own
+    /// metaclass at all (the merge branch is skipped for it, matching
+    /// oracle's `TheObjectClass != this` guard) -- which is exactly what
+    /// bootstrapping `.Object` and `.Class`'s mutual reference requires: each
+    /// names the other before both exist.
+    pub fn define_class(
+        &mut self,
+        id: ObjRef,
+        superclass: Option<ObjRef>,
+        kind: ClassKind,
+        metaclass: ObjRef,
+    ) {
         let base_class = match kind {
             ClassKind::Regular => id,
             ClassKind::Mixin => {
@@ -165,6 +191,7 @@ impl ClassGraph {
                 instance_behaviour,
                 class_behaviour,
                 base_class,
+                metaclass,
             },
         );
         if let Some(sup) = superclass {
@@ -199,8 +226,25 @@ impl ClassGraph {
     /// is folded in *last* among the mixins (closest to `class`'s own
     /// scope in cascade order), and an explicit `SUBCLASS` target is
     /// folded in last of all the ancestors, so it outranks every mixin.
+    ///
+    /// **`Side::Class` only** (D44, `createClassBehaviour:1116-1129`): before
+    /// folding in this class's own class methods, and only once this class's
+    /// scope is not yet present, its metaclass's *instance* behaviour is
+    /// merged in wholesale (`MethodDict::merge`, not `merge_methods` --
+    /// oracle's `mergeInstanceBehaviour` carries the metaclass's own scope
+    /// history along, not just its methods) -- unless this class is the root
+    /// (empty `superclasses`, standing in for oracle's `TheObjectClass ==
+    /// this` guard: Object's class-behaviour never absorbs a metaclass).
+    /// This is the mechanism that makes `.class~hasmethod('SUBCLASS')` true
+    /// for every ordinary class (its metaclass is `.Class`, an instance
+    /// method there) and, self-referentially, for `.Class` itself -- and the
+    /// one `mixinclass class` (R6) depends on: it is the *only* path by
+    /// which a class's class-behaviour ever gets `.Class` into its own scope
+    /// list, which is what `inherit`'s base-class check for a `mixinclass
+    /// class` mixin reads.
     fn cascade_build(
         classes: &HashMap<ObjRef, ClassDef>,
+        behaviours: &[Behaviour],
         class: ObjRef,
         target: &mut MethodDict,
         side: Side,
@@ -208,10 +252,17 @@ impl ClassGraph {
         let superclasses = classes[&class].superclasses.clone();
         for sup in superclasses.into_iter().rev() {
             if !target.has_scope(sup) {
-                Self::cascade_build(classes, sup, target, side);
+                Self::cascade_build(classes, behaviours, sup, target, side);
             }
         }
         if !target.has_scope(class) {
+            if side == Side::Class && !classes[&class].superclasses.is_empty() {
+                let metaclass = classes[&class].metaclass;
+                if !target.has_scope(metaclass) {
+                    let meta_instance = classes[&metaclass].instance_behaviour;
+                    target.merge(&behaviours[meta_instance.0].dict);
+                }
+            }
             let own = match side {
                 Side::Instance => &classes[&class].own_instance_methods,
                 Side::Class => &classes[&class].own_class_methods,
@@ -227,11 +278,23 @@ impl ClassGraph {
     /// into it, rather than building a separate dictionary and swapping it
     /// in. The handle's identity is unaffected either way; this is the
     /// literal oracle shape rather than an equivalent one.
+    ///
+    /// The dictionary being rebuilt is [`std::mem::take`]n out of
+    /// `self.behaviours` before the cascade runs, rather than borrowed in
+    /// place: `cascade_build`'s metaclass-merge branch needs read access to
+    /// a *different* handle's dictionary (the metaclass's own instance
+    /// behaviour), and that handle is always a distinct `Vec` slot from the
+    /// one being rebuilt (a class's instance and class behaviours are always
+    /// two separate `alloc_behaviour` calls, even when the metaclass being
+    /// read is the class itself -- `.Class`'s own case), so this satisfies
+    /// the borrow checker without changing what gets read or written.
     fn rebuild_behaviour(&mut self, class: ObjRef, side: Side) {
         let handle = self.behaviour_handle(class, side);
+        let mut dict = std::mem::take(&mut self.behaviours[handle.0].dict);
+        dict.clear();
+        Self::cascade_build(&self.classes, &self.behaviours, class, &mut dict, side);
         let behaviour = &mut self.behaviours[handle.0];
-        behaviour.dict.clear();
-        Self::cascade_build(&self.classes, class, &mut behaviour.dict, side);
+        behaviour.dict = dict;
         behaviour.version += 1;
     }
 
@@ -429,6 +492,87 @@ impl ClassGraph {
     /// demonstrate.
     pub fn ancestors(&self, class: ObjRef) -> &[ObjRef] {
         &self.classes[&class].superclasses
+    }
+
+    /// Every class registered as a direct subclass or `INHERIT` recipient of
+    /// `class` -- oracle's `subClasses`, what a cascade (`update_sub_classes`
+    /// / `update_instance_sub_classes`) walks. Exposed for assertions that
+    /// need to see the cascade's own wiring, not just its effect.
+    pub fn subclasses(&self, class: ObjRef) -> &[ObjRef] {
+        &self.classes[&class].subclasses
+    }
+
+    /// `class`'s metaclass (D44) -- oracle's `~metaClass`. `.Class`'s own
+    /// entry answers itself.
+    pub fn metaclass(&self, class: ObjRef) -> ObjRef {
+        self.classes[&class].metaclass
+    }
+
+    /// Force a class-behaviour rebuild without adding a method -- a
+    /// bootstrap-only escape hatch [`ClassGraph::define`]/[`ClassGraph::class_define`]
+    /// don't need and don't provide. It exists for exactly one caller-side
+    /// situation: a class whose own metaclass is *itself* (`.Class`, D44's
+    /// self-reference). Every other class's metaclass merge
+    /// ([`ClassGraph::cascade_build`]'s `Side::Class` arm) reads an
+    /// *already-fully-built* different class's instance behaviour, because
+    /// bootstrap code builds a class's metaclass before the class itself.
+    /// `.Class` cannot receive that treatment: its own initial
+    /// `define_class` cascade merges its *own* (at that moment still empty)
+    /// instance behaviour into its class-behaviour, and every later
+    /// `define()` call that populates it rebuilds the instance side only
+    /// (`update_instance_sub_classes`), never the class side. Bootstrap code
+    /// must call this once after populating `.Class`'s own instance
+    /// methods, or `.class~hasmethod('SUBCLASS')`-shaped facts come out
+    /// false for `.Class` alone while every ordinary class gets them right --
+    /// exactly the trap this task's brief names.
+    pub fn refresh_class_behaviour(&mut self, class: ObjRef) {
+        self.rebuild_behaviour(class, Side::Class);
+    }
+
+    /// Merge `metaclass`'s *current* instance behaviour into `root`'s
+    /// class-behaviour, bypassing [`ClassGraph::cascade_build`]'s
+    /// `Side::Class` "is this the root" guard entirely.
+    ///
+    /// This is the one place that guard is wrong rather than merely
+    /// inapplicable: oracle's root class (`.Object`) empirically *does*
+    /// answer `~hasmethod('SUBCLASS')` (measured, `1`), because `.Object`
+    /// and `.Class` bootstrap through `buildFinalClassBehaviour`
+    /// (`ClassClass.cpp:654-748`), a dedicated path with its own
+    /// unconditional `behaviour->merge(TheClassBehaviour)` (`:701`) --
+    /// **not** through the general recursive `createClassBehaviour` cascade
+    /// every other class goes through, whose `TheObjectClass != this` guard
+    /// (this crate's `is_root` check) exists for a different reason: so
+    /// that when `.Object` is visited *as another class's ancestor* during
+    /// that class's own cascade, its own metaclass contribution is not
+    /// folded in twice. This crate has one unified cascade rather than the
+    /// oracle's two separate paths, so it cannot express "skip when
+    /// visited as an ancestor, but not when built for itself" through the
+    /// same guard `cascade_build` already uses -- bootstrap code calls this
+    /// once, directly, instead.
+    pub fn bootstrap_root_class_behaviour(&mut self, root: ObjRef, metaclass: ObjRef) {
+        let meta_instance = self.classes[&metaclass].instance_behaviour;
+        let meta_dict = self.behaviours[meta_instance.0].dict.clone();
+        let handle = self.behaviour_handle(root, Side::Class);
+        self.behaviours[handle.0].dict.merge(&meta_dict);
+        self.behaviours[handle.0].version += 1;
+    }
+
+    /// `class`'s own, unflattened instance-method names -- oracle's
+    /// `instanceMethodDictionary`, what `instance~instanceMethods(class)`
+    /// answers for a genuine instance (scope-filtered, so ancestor-donated
+    /// names are excluded) -- the exact-match target for a per-class
+    /// derivation, as opposed to [`Self::method_names_at`]'s flattened,
+    /// whole-ancestry set.
+    pub fn own_instance_method_names(&self, class: ObjRef) -> BTreeSet<String> {
+        self.classes[&class].own_instance_methods.method_names()
+    }
+
+    /// `class`'s own, unflattened class-method names -- oracle's
+    /// `classMethodDictionary`, what `class~instanceMethods(class)` answers
+    /// when sent to the class object itself (its own receiver behaviour is
+    /// its class-behaviour, filtered to its own scope).
+    pub fn own_class_method_names(&self, class: ObjRef) -> BTreeSet<String> {
+        self.classes[&class].own_class_methods.method_names()
     }
 
     /// `class`'s current instance-behaviour handle -- what a freshly
