@@ -5,7 +5,7 @@ Task 0.7. This is the number every later phase's D9 performance gate (Global Con
 than its C++ counterpart on this suite. Coming out worse than what is recorded here, on the
 platforms recorded here, is the definition of a gate failure.
 
-**Every "this crate" figure in this file is a tree-walker figure, and re-running the harness no longer produces one** (2026-08-11, `phase-4e-gate.md`). `rexx-run` defaulted to the tree-walker when these were measured and `rexx_bench::child::Side::rust` inherited that default; Phase 4e made the compiled stream the default and made the harness name the arm on every child and print it in its provenance block. So `rexx-bench-suite` with no arguments now measures the IR arm, and `--engine tree-walker` is what reproduces the arm these rows were taken on. Nothing here has been re-measured.
+**Every "this crate" figure in this file above the pre-Phase-5 section is a tree-walker figure, and re-running the harness no longer produces one** (2026-08-11, `phase-4e-gate.md`; amended 2026-08-15). `rexx-run` defaulted to the tree-walker when those were measured and `rexx_bench::child::Side::rust` inherited that default; Phase 4e made the compiled stream the default and made the harness name the arm on every child and print it in its provenance block. So `rexx-bench-suite` with no arguments now measures the IR arm, and `--engine tree-walker` is what reproduces the arm those rows were taken on. None of them has been re-measured. **"The pre-Phase-5 baseline" below is the first IR-arm section in this file**; its provenance block names the arm, as every section written after Phase 4e does.
 
 **Two later sections do not belong to Task 0.7 and are marked as such.** The `rexxcps` section
 records both interpreters on the Phase 4a design spec's own R1-R4 criteria, measured 2026-08-06;
@@ -849,6 +849,221 @@ labour is unattempted here and is Task 3's or Task 4's if it is wanted.
 
 No optimisation was attempted in this task and none is proposed here.
 The five commits that moved these numbers predate it.
+
+
+## The pre-Phase-5 baseline, measured 2026-08-15 at `b029abe77`
+
+**This is the standing the roadmap requires be pinned before Phase 5 changes anything.**
+`docs/superpowers/plans/2026-07-27-rust-rewrite.md` suspends performance work for the duration of
+Phase 5 and makes that suspension conditional on three things, the first of which is this section:
+*"Pin the standing as a recorded baseline before Phase 5 changes anything. [...] This cannot be
+reconstructed once the tree moves, and two non-interleaved suite runs have already invented a 5%
+regression that was really a 5% improvement."*
+
+**It is two records, because one instrument cannot serve both purposes it has to serve.**
+
+* **Against the oracle**, wall clock, interleaved -- the section immediately below. This is "the
+  standing": where this crate sits relative to the C++ interpreter on the classic axes, in the
+  units the D9 gate is written in.
+* **Against itself**, instruction counts, one pinned binary -- the section after it. This is the
+  regression guard. A wall-clock figure cannot be the guard: the ratios above carry a per-axis
+  spread of up to 4.12% on the oracle side alone, which is wider than most single changes this
+  project has accepted, and Phase 5 will land many.
+
+**The code is `b029abe77`'s.** Two commits landed while this ran (`aadf81804`, `32d86e689`);
+`git diff --name-only b029abe77..HEAD` names nothing outside `docs/`, so the binary the harness
+fingerprinted is the binary this commit's source produces. The harness read `b029abe77` for the
+provenance block and that is the commit the numbers describe.
+
+**Only the IR arm was measured against the oracle,** because `Invocation::none()` runs the compiled
+engine and that is what ships. The tree-walker's standing is recorded in the instruction-count
+section instead, as an `ir/tw` ratio per axis, which is the stronger form of that comparison anyway
+-- both arms are `REXX_ENGINE` settings of one binary, so no code-placement difference can enter it.
+
+### Standing against the oracle -- `rexx-bench-suite`, wall clock, interleaved
+
+Emitted verbatim by `rust/target/release/rexx-bench-suite` with no arguments, which is the wrapper
+every committed figure in this file was taken through: unpinned, no `perf stat`, `ulimit -v
+8388608` on both sides, each child in a fresh empty directory. A number here was not retyped.
+
+### Provenance
+
+| | |
+|---|---|
+| measured | 2026-08-15T18:24:42+02:00 |
+| repo commit | `b029abe77522f68e3694063fd3a0553238f08d5c` |
+| oracle `bin/rexx` | `/home/moritz/dev/repos/ooRexx/build/bin/rexx` -- size=62600 bytes, mtime=2026-08-05 16:02:20.172072564 +0200, sha256=bb5bb8ccbb96c376e329b91aafdad891f975ba06c941dbceba82c3848fa13019 |
+| oracle `lib/librexx.so.4` | size=17853856 bytes, mtime=2026-08-05 16:02:20.064306594 +0200, sha256=42136c4038004fe2d5104181e06873301f032ced97c54a0fe84042e006d9b6fb |
+| oracle `lib/librexxapi.so.4` | size=667792 bytes, mtime=2026-07-30 23:06:46.077533141 +0200, sha256=3536b76379c23fc7e3c4bce97b57d3c4812291ce5d68e71adc507ee690dc7d66 |
+| this crate `rexx-run` | `/home/moritz/dev/repos/ooRexx-rust-rewrite/rust/target/release/rexx-run` -- size=14191256 bytes, mtime=2026-08-15 17:41:55.587960829 +0200, sha256=14a819e4359d100234ad614e3afcd8c0d3f299dc3c5a843bf66201bc97e93c18 |
+| this crate's engine | `REXX_ENGINE=ir`, set by this harness on every run |
+| address-space cap | `ulimit -v 8388608` KiB, **both sides, every axis** |
+| pairs per axis | 9 sampled, 1 warm-up pair(s) discarded, oracle and this crate alternating |
+| pairs for the offset line | 51 sampled, 5 warm-up |
+| statistic | median; interval is the distribution-free sign-test interval for the median at a 95% target |
+| working directory of every child | a fresh empty temporary directory |
+
+### Fixed per-process offset (`startup.rex`)
+
+**Not comparable, and not a pass.** This crate has no `CoreClasses.orx` bootstrap yet (Phase 5), so it starts fast by not doing the work the oracle does at startup. The two numbers below are each side's own fixed cost, reported so every axis above can be read net of it -- not as a result about which interpreter starts faster.
+
+| side | median | min | max | 95.1% interval | spread |
+|---|---:|---:|---:|---|---:|
+| oracle | 5.823 ms | 4.196 ms | 7.822 ms | 5.597 - 6.203 ms | 62.3 % |
+| this crate | 1.587 ms | 1.162 ms | 2.802 ms | 1.446 - 1.762 ms | 103.3 % |
+
+Both offsets include one `/bin/sh` `exec` from the `ulimit` wrapper, on both sides equally.
+
+### Axes
+
+`iters/s` is the program's own loop bound divided by the median wall time. `iters/s net` divides by the median wall time less that side's per-process offset above.
+
+| axis | iterations | side | median | min | max | interval | spread | iters/s | iters/s net |
+|---|---:|---|---:|---:|---:|---|---:|---:|---:|
+| `alloc4c` | 1000000 | oracle | 1.0025 s | 0.9915 s | 1.0089 s | 0.9956 - 1.0059 s | 1.74 % | 997506 | 1003334 |
+| `alloc4c` | 1000000 | this crate | 0.8303 s | 0.8221 s | 0.8424 s | 0.8231 - 0.8390 s | 2.45 % | 1204345 | 1206651 |
+| `arith` | 500000 | oracle | 1.1574 s | 1.1467 s | 1.1670 s | 1.1496 - 1.1668 s | 1.75 % | 431991 | 434175 |
+| `arith` | 500000 | this crate | 2.1907 s | 2.1856 s | 2.2010 s | 2.1857 - 2.1973 s | 0.71 % | 228238 | 228403 |
+| `compound` | 5000000 | oracle | 1.1410 s | 1.1335 s | 1.1609 s | 1.1357 - 1.1544 s | 2.40 % | 4382281 | 4404761 |
+| `compound` | 5000000 | this crate | 1.1692 s | 1.1650 s | 1.1763 s | 1.1658 - 1.1737 s | 0.97 % | 4276378 | 4282192 |
+| `emptyloop` | 25000000 | oracle | 0.8794 s | 0.8640 s | 0.8997 s | 0.8675 - 0.8938 s | 4.05 % | 28429553 | 28619064 |
+| `emptyloop` | 25000000 | this crate | 1.3192 s | 1.3154 s | 1.3254 s | 1.3160 - 1.3253 s | 0.76 % | 18950898 | 18973729 |
+| `strings` | 3000000 | oracle | 0.8906 s | 0.8831 s | 0.9197 s | 0.8859 - 0.9109 s | 4.12 % | 3368364 | 3390531 |
+| `strings` | 3000000 | this crate | 2.2586 s | 2.2536 s | 2.2923 s | 2.2543 - 2.2918 s | 1.71 % | 1328248 | 1329183 |
+| `varlookup` | 19000000 | oracle | 1.1912 s | 1.1867 s | 1.2245 s | 1.1882 - 1.2020 s | 3.17 % | 15950926 | 16029286 |
+| `varlookup` | 19000000 | this crate | 2.3335 s | 2.3272 s | 2.3413 s | 2.3289 - 2.3400 s | 0.60 % | 8142221 | 8147763 |
+
+#### Ratios and the gate call
+
+The throughput ratio (oracle iters/s over this crate's) and the wall ratio (this crate's median over the oracle's) are the same number, because both sides run the same iteration count.
+
+**The ratio interval is indicative, and the verdict is not taken from it.** It divides one side's interval by the other's, so its joint coverage is at least 92.2% by Bonferroni -- one minus the two sides' miss probabilities added -- not the 96.1% either side carries alone. The verdict applies Global Constraints' rule directly: this crate's point estimate against the oracle's interval, slow side.
+
+| axis | oracle median | this crate median | ratio | ratio interval | verdict |
+|---|---:|---:|---:|---|---|
+| `alloc4c` | 1.0025 s | 0.8303 s | 0.83x | 0.82x - 0.84x | faster |
+| `arith` | 1.1574 s | 2.1907 s | 1.89x | 1.87x - 1.91x | SLOWER |
+| `compound` | 1.1410 s | 1.1692 s | 1.02x | 1.01x - 1.03x | SLOWER |
+| `emptyloop` | 0.8794 s | 1.3192 s | 1.50x | 1.47x - 1.53x | SLOWER |
+| `strings` | 0.8906 s | 2.2586 s | 2.54x | 2.47x - 2.59x | SLOWER |
+| `varlookup` | 1.1912 s | 2.3335 s | 1.96x | 1.94x - 1.97x | SLOWER |
+
+#### Same work on both sides
+
+A wall time is only about the workload if the workload ran. Every sampled run on each side printed the same bytes, and the two sides printed the same bytes as each other.
+
+| axis | stable within a side | identical across sides | stdout |
+|---|---|---|---|
+| `alloc4c` | yes | yes | `12888896` |
+| `arith` | yes | yes | `4629643519330627.7808` |
+| `compound` | yes | yes | `5000000` |
+| `emptyloop` | yes | yes | `done` |
+| `strings` | yes | yes | `138000000` |
+| `varlookup` | yes | yes | `19000000` |
+
+### `samples/rexxcps.rex`
+
+The oracle's own clauses-per-second benchmark, run from the read-only C++ tree. It self-calibrates: a trial that comes in at or under a second is run again at twice the count, so the two sides do **different amounts of work** and their wall times are not directly comparable. The clauses-per-second figure each side prints is per clause and is the comparable one. Each side's `Averaged:` line is quoted so the asymmetry is visible rather than inferred.
+
+| side | wall median | wall interval | `Averaged:` |
+|---|---:|---|---|
+| oracle | 1.7823 s | 1.7638 - 1.7838 s | `Averaged: 200 x 100 iterations of 1000 clauses (over 1.2s)` |
+| this crate | 2.1569 s | 2.1508 - 2.1702 s | `Averaged: 100 x 100 iterations of 1000 clauses (over 2.2s)` |
+
+| side | median cps | min | max | 96.1% interval | spread |
+|---|---:|---:|---:|---|---:|
+| oracle | 16968537 | 16787030 | 17168782 | 16898757 - 17140281 | 2.25 % |
+| this crate | 4647633 | 4590116 | 4683628 | 4620400 - 4661705 | 2.01 % |
+
+**Internal cps ratio: 3.65x** (oracle median over this crate's median), interval 3.63x - 3.71x.
+
+### Axes this crate cannot run
+
+Measured here rather than left out of the table, with the status and message each one actually produced. These belong to later tasks in this phase; what belongs to this one is that they are visible.
+
+| axis | exit status | message |
+|---|---:|---|
+| `alloc` | 120 | `rexx-exec: a message send is not implemented (Phase 5)` |
+| `dispatch` | 120 | `rexx-exec: a message send is not implemented (Phase 5)` |
+| `heapshape` | 120 | `rexx-exec: a message send is not implemented (Phase 5)` |
+
+
+### The regression guard -- a pinned binary and `rexx-arms` instruction counts
+
+**The binary itself is pinned, not just its numbers.** A Phase 5 comparison has to re-measure both
+sides interleaved in one sitting; a stored number compared against a number taken weeks later on a
+machine that has since been rebooted is the failure mode this whole file exists to prevent.
+
+| | |
+|---|---|
+| staged at | `rust/bench-baselines/pinned/rexx-run-pre-phase-5` |
+| sha256 | `14a819e4359d100234ad614e3afcd8c0d3f299dc3c5a843bf66201bc97e93c18` |
+| built from | `b029abe77`, `cargo build --release --bin rexx-run`, `rustc 1.96.1 (31fca3adb 2026-06-26)` |
+| tracked | no -- `rust/bench-baselines/pinned/` is in the shared repository's `info/exclude` |
+| rows | `rust/bench-baselines/pre-phase-5-arms.tsv`, `task` column `pre-phase-5-baseline` |
+
+It is deliberately not committed: it is a release binary with debuginfo. If it is lost, rebuild it
+from `b029abe77` and compare the sha above. **A rebuild that does not reproduce that sha is still
+usable, but its comparison carries the code-placement caveat below rather than being free of it.**
+
+The rows were taken with:
+
+```
+./target/release/rexx-arms --build pinned=bench-baselines/pinned/rexx-run-pre-phase-5 \
+    --axis alloc4c --axis arith --axis compound --axis emptyloop --axis strings --axis varlookup \
+    --rounds 5 --task pre-phase-5-baseline --commit b029abe77 \
+    --baseline bench-baselines/pre-phase-5-arms.tsv
+```
+
+Both problem sizes, both arms, both instruments, five interleaved rounds, median with its min and
+max beside it. `bench-baselines/README.md` says what each `scope` value means; the figures are not
+restated here, because restating a measurement is authorship rather than quotation and this
+project has carried a number forward wrong that way twice.
+
+#### How Phase 5 uses it
+
+```
+./target/release/rexx-arms --build pinned=bench-baselines/pinned/rexx-run-pre-phase-5 \
+                          --build head=target/release/rexx-run \
+    --axis ... --rounds 5 --task <task> --commit <commit> \
+    --baseline bench-baselines/pre-phase-5-arms.tsv
+```
+
+Two builds in one sitting produces `across_builds` rows, interleaved. **Read them against the
+floor, not against zero.** `bench-baselines/README.md` states the floor and where it came from:
+interleaving removes the machine's drift from an `across_builds` row and does not remove the code
+placement's, which Phase 4e's Task 8 bounded at ±0.74% on an axis the change it was measuring
+could not reach, and Task 4c read 7.8% between two builds of the same source differing by one
+comment. A sub-1% movement across builds is not a result. The `arm_ratio` rows do not have this
+problem and are the ones to trust when a change is expressible as one.
+
+#### Two things in the pinned rows worth knowing before Phase 5 starts
+
+* **The IR arm costs more instructions than the tree-walker on `emptyloop` and on `arith`** --
+  `ir/tw` is 1.134 on `emptyloop` at both sizes and 1.015-1.023 on `arith`, against 0.79-0.93 on
+  the other four. The compiled engine is not uniformly cheaper, and the two axes where it is not
+  are the ones with the least work per clause. This is a reading, not a defect report; nothing is
+  proposed about it here.
+* **`arith` is the one axis where this crate is nearly twice the oracle and the IR does not help.**
+  Its wall ratio above is 1.89x and its `ir/tw` is above 1. Phase 4f's entry 51 established that
+  what `arith` allocates is not arithmetic; whatever is left there is untouched by the compiled
+  stream.
+
+### What this baseline cannot tell you, and what Phase 5 owes it
+
+* **`dispatch`, `alloc` and `heapshape` have no Rust number at all.** All three exit 120 on a
+  message send, as the last table above records. They are the axes Phase 5 makes runnable, so the
+  suite's "axes this crate cannot run" table turns red by design the moment the refusal
+  disappears, and something has to decide whether a first `dispatch` reading is a new measurement
+  or a regression. The Phase 5 spec has that as an open question and it is not answered here.
+* **The `startup` line is not a comparison and never was.** This crate has no `CoreClasses.orx`
+  bootstrap, so it starts fast by not doing the work. **That is exactly the work Phase 5 adds**,
+  and it spends directly against D2, whose gate is an absolute delta: build the image cache only
+  if bootstrapping from source costs more than ~50 ms over the C++ startup. D2's C++ figure is
+  5.1 ms from hyperfine, not the 5.823 ms above -- that one is this suite's `/bin/sh` plus
+  `ulimit` wrapper and is comparable only to the 1.587 ms beside it. **Measure D2 with hyperfine
+  against `build/bin/rexx`, as D2 says, not by subtracting numbers out of this table.**
+* **One platform, as everywhere else in this file.** See "What is still missing" above.
 
 ## What is still missing
 
