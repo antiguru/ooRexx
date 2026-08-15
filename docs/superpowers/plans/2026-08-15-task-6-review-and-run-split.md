@@ -469,7 +469,15 @@ Both keep their sibling directory. `name.rs` beside `name/` is the 2018 conventi
 **These must NOT be renamed.** Measured by the controller: `mod support;` is declared by seven test
 binaries (`builtin_status.rs`, `corpus.rs`, `input_oracle.rs`, `parse_version_oracle.rs`,
 `state_builtin_oracle.rs`, `trace_indent.rs`, `trace_oracle.rs`) and `mod gate_walk;` by
-`rexx-parse/tests/tiling.rs`. Renaming them to `tests/support.rs` and `tests/gate_walk.rs` would
+`rexx-parse/tests/tiling.rs` and `rexx-parse/tests/variants.rs`.
+
+CORRECTED 2026-08-15, and the error was the controller's. This paragraph first named `tiling.rs`
+alone and the steps below said "eight declaring sites". There are nine: `variants.rs:28` declares
+`mod gate_walk;` too. The controller's probe piped its `grep` through `head -12`, and the cut fell
+exactly one line above `variants.rs`. A truncated search reads exactly like a complete one, which is
+the third time this plan has met that shape.
+
+Renaming them to `tests/support.rs` and `tests/gate_walk.rs` would
 still resolve as modules, **and** cargo would additionally auto-discover each as an integration-test
 target, compiling the helpers standalone as a test binary that exists for no reason. The `mod.rs`
 form under `tests/` is the idiom that prevents exactly that.
@@ -479,7 +487,8 @@ applying this convention does not undo it.
 
 #### Steps
 
-1. Confirm the four-file set and the eight declaring sites above. Report anything that has moved.
+1. Confirm the four-file set and the declaring sites above. Report anything that has moved, and do
+   not trust the list's completeness: run the search yourself, unpiped.
 2. Rename the two `src/` files with `git mv`, so the history follows.
 3. Build. Nothing else should need editing: `mod builtin;` and `mod ir;` resolve to either spelling.
    If any other file needs a change, stop and report what and why before making it.
