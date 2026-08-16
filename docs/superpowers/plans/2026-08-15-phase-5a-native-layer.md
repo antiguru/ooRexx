@@ -323,6 +323,11 @@ own), with expected bytes **captured from the oracle**, not typed.
 under no trace and under `TRACE I`, both engines, using Task 1's unnormalised mode for the traced
 cases.
 
+**Amended after the task ran: the instance-method half of that differential is unreachable here.**
+Reaching an instance method needs an instance, which needs `~new`, which is 5b's. The reachable
+surface is a class method plus a Rexx-bodied `::ATTRIBUTE GET`. **5b owes the instance-method
+differential** -- it is not satisfied by this task and must not be read as satisfied.
+
 **Done when** a Rexx method body runs and its trace matches the oracle byte for byte, indent
 included.
 
