@@ -265,8 +265,9 @@ impl ClassRegistry {
     /// `source`'s own *unflattened* dictionary). This crate has no reason to
     /// build a second donation mechanism: every donor a `Setup.cpp` class
     /// uses `InheritInstanceMethods` on (`Array`, donating to `Queue` at
-    /// `Setup.cpp:775`; `IdentityTable`, donating to `Table`/`Set`/`Relation`
-    /// at `:861,908,958`; `StringTable`, donating to `Directory` at `:933`;
+    /// `Setup.cpp:775`; `IdentityTable`, donating to `StringTable` at
+    /// `:881` and to `Table`/`Set`/`Relation` at `:861,908,958`;
+    /// `StringTable`, donating to `Directory` at `:933`;
     /// `Relation`, donating to `Bag` at `:988`) is itself a **direct**
     /// subclass of `.Object`, so its own flattened instance set is exactly
     /// "Object's methods plus its own" -- and the recipient already gets

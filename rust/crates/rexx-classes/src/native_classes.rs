@@ -51,7 +51,7 @@
 //!   `RexxInfo` is also `addToSystem`-only (`EndSpecialClassDefinition`);
 //!   only a pre-built *instance* is `addToEnvironment`'d
 //!   (`Setup.cpp:1737`). This registry models environment-reachable class
-//!   objects; none of these three is one.
+//!   objects; none of the classes above is one.
 //! * `QueueClass` -- Setup.cpp donates Array's instance methods
 //!   (`InheritInstanceMethods(Array)`) then removes several of them
 //!   (`Dimension`, `Dimensions`, `Fill`, `sort`, `sortWith`, `stableSort`,
@@ -93,9 +93,10 @@
 //! `MapCollection`, `SetCollection`, `Comparable`, `MessageNotification` and
 //! `AlarmNotification` (all `::CLASS MIXINCLASS` definitions **inside
 //! `CoreClasses.orx` itself**, confirmed by `grep`), plus
-//! `~inheritInstanceMethods(.SetMixin/.ManyItemMixin/.BagMixin/.SupplierMixin)`
-//! for `Set`/`Relation`/`Bag`/`Supplier`, none of which add a superclass
-//! edge.
+//! the `~inheritInstanceMethods` donations, none of which add a superclass
+//! edge: `.SupplierMixin` to `Supplier` (`:80`), `.ManyItemMixin` to
+//! `Relation` (`:82`) and to `Bag` (`:83`), `.SetMixin` to `Set` (`:85`),
+//! and `.BagMixin` to `Bag` again (`:87`) -- `Bag` receives two donors.
 //! Full post-prologue correctness for the classes R8 names -- their
 //! `~superClasses`, their complete flattened method set -- is explicitly
 //! **Task 13's**, not asserted here.
@@ -129,8 +130,8 @@ pub struct Deferral {
     pub reason: &'static str,
 }
 
-/// Checklist token -> `CLASS_DEFINITIONS` block name, for all thirty-one
-/// entries -- see the module doc comment for why this is hand-carried
+/// Checklist token -> `CLASS_DEFINITIONS` block name, for every checklist
+/// entry -- see the module doc comment for why this is hand-carried
 /// rather than derived.
 const CHECKLIST_TO_DEFINITION: &[(&str, &str)] = &[
     ("RexxClass", "Class"),
@@ -231,8 +232,8 @@ fn definition_for(block_name: &str) -> &'static ClassDefinition {
 }
 
 /// `Setup.cpp:1809`'s `TheClassClass->removeSetupMethods()`: `TheClassClass`
-/// specifically, applied at image-save time to delete exactly these two
-/// names from `.Class`'s own instance methods (D39). `MethodDict` has no
+/// specifically, applied at image-save time to delete exactly the names
+/// below from `.Class`'s own instance methods (D39). `MethodDict` has no
 /// removal primitive (Task 2's own scope decision), so this bootstrap
 /// reproduces the *deleted* state by never adding them in the first place,
 /// rather than adding then removing -- the same final answer

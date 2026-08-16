@@ -60,8 +60,8 @@ fn class_is_an_instance_of_itself_by_identity() {
 // real `native_classes()` bootstrap rather than this file's minimal
 // two-class helper (which adds no instance methods at all, so it cannot
 // witness a self-merge that has nothing to merge):
-// `every_native_class_answers_metaclass_class_and_isa_object` covers both
-// `.Class` and `.Object`, among the other twenty-three.
+// `every_native_class_answers_metaclass_class_and_isa_object` covers
+// `.Class` and `.Object` alongside every other native class.
 
 /// `MethodDict::merge`'s distinguishing half against `merge_methods` alone
 /// is that it carries the metaclass's *scope* into the class-behaviour, not
@@ -200,8 +200,8 @@ fn native_class_ids(r: &ClassRegistry) -> Vec<(&'static str, ObjRef)> {
 // `CoreClasses.orx` later touches it: metaclass, `~class`, and `~isA(.object)`
 // are never affected by an `~inherit` call (it only appends ancestors, never
 // changes `metaClass`, and `.Object` remains an ancestor once true). This is
-// the R8 boundary made concrete: these three hold for all twenty-five;
-// `~superClass`/`~superClasses` do not, for the twelve R8 classes, and are
+// the R8 boundary made concrete: those hold for every native class;
+// `~superClass`/`~superClasses` do not, for the R8 classes, and are
 // asserted separately, against `Setup.cpp`'s own pre-prologue state rather
 // than the live (post-prologue) oracle.
 // ---------------------------------------------------------------------
@@ -365,8 +365,7 @@ fn class_does_not_answer_the_two_setup_only_methods_remove_setup_methods_deletes
 }
 
 // ---------------------------------------------------------------------
-// `~id` and `~subClasses`: named parts of the class object (the brief), and
-// previously built but never asserted.
+// `~id` and `~subClasses`: named parts of the class object (the brief).
 // ---------------------------------------------------------------------
 
 /// `~id` for a sample spanning both groups above, recorded against the live
@@ -1182,10 +1181,10 @@ fn class_method_names_reads_the_flattened_class_side_set() {
 }
 
 // ---------------------------------------------------------------------
-// R8's measured subset: for prologue-mutated classes with an
-// `~inheritInstanceMethods` donor, this crate's flattened set is a subset
-// of what the live oracle answers, and the measured difference is
-// attributed to a specific `CoreClasses.orx` mixin. `Array` and `String`
+// R8's measured subset: for a prologue-mutated class, this crate's
+// flattened set is a subset of what the live oracle answers, and the
+// measured difference is attributed to a specific `CoreClasses.orx` mixin.
+// How that difference is measured depends on the donation. `Array` and `String`
 // (which receive an ordinary `~inherit`, not `~inheritInstanceMethods`) are
 // measured via `task3_fixround1.rex` Part C, a direct scope-exact query
 // against the mixin class. `Set`/`Bag`/`Relation`/`Supplier` cannot be
@@ -1194,7 +1193,7 @@ fn class_method_names_reads_the_flattened_class_side_set() {
 // empty, because `~inheritInstanceMethods` rescopes the donated methods to
 // the recipient (`RexxClass::inheritInstanceMethods`'s `setMethodScope`,
 // `ClassClass.cpp:563`) -- so their divergence is measured instead by
-// diffing Part A's recorded `OWN_INSTANCE` line (which, for these four,
+// diffing Part A's recorded `OWN_INSTANCE` line (which, for a recipient,
 // already contains the rescoped donation) against `own_instance_method_names`'s
 // `Setup.cpp`-derived value.
 // ---------------------------------------------------------------------
