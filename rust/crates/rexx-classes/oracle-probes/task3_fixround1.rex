@@ -58,15 +58,17 @@ call class_method_check 'Bag', 'OF'
 call class_method_check 'List', 'NEW'
 call class_method_check 'List', 'OF'
 call class_method_check 'Method', 'LOADEXTERNALMETHOD'
+call class_method_check 'Method', 'NEWFILE'
 call class_method_check 'Routine', 'LOADEXTERNALROUTINE'
+call class_method_check 'Routine', 'NEWFILE'
 call class_method_check 'Package', 'DEFAULTOPTIONS'
 
-/* Part C: R8's measured subset -- for four representative newly-native
- * classes, every derived (own) name is present on a live constructed
- * instance (the subset direction), and the mixin's own donated names are
- * enumerated exactly via a scope-exact query against the mixin class
- * itself, now `.NAME`-reachable because the prologue has already run in
- * the oracle we can probe. */
+/* Part C: R8's measured subset -- for representative newly-native classes,
+ * every derived (own) name is present on a live constructed instance (the
+ * subset direction), and the mixin's own donated names are enumerated
+ * exactly via a scope-exact query against the mixin class itself, now
+ * `.NAME`-reachable because the prologue has already run in the oracle we
+ * can probe. */
 arr = .array~new(1)
 call mixin_donation 'array_from_orderedcollection', arr, .orderedcollection
 
@@ -76,6 +78,14 @@ call mixin_donation 'string_from_comparable', str, .comparable
 st = .set~new
 call mixin_donation 'set_from_mapcollection', st, .mapcollection
 call mixin_donation 'set_from_setcollection', st, .setcollection
+call mixin_donation 'set_from_setmixin', st, .setmixin
+
+bg = .bag~new
+call mixin_donation 'bag_from_manyitemmixin', bg, .manyitemmixin
+call mixin_donation 'bag_from_bagmixin', bg, .bagmixin
+
+rl = .relation~new
+call mixin_donation 'relation_from_manyitemmixin', rl, .manyitemmixin
 
 sup = .supplier~new(.array~new(1), .array~new(1))
 call mixin_donation 'supplier_from_suppliermixin', sup, .suppliermixin

@@ -24,7 +24,7 @@
 //! `CLASS_CREATE(name)`'s `#name` stringification pass the identical token).
 //!
 //! [`CHECKLIST_TO_DEFINITION`] is this file's own hand-carried
-//! correspondence between the two (four of the thirty-one differ: `RexxClass`
+//! correspondence between the two (the irregular entries are `RexxClass`
 //! -> `Class`, `RexxInteger` -> `Integer`, `RexxString` -> `String`,
 //! `RexxObject` -> `Object`; every other checklist token is its own block
 //! name with a trailing `Class` stripped, or already identical). Not itself
@@ -63,23 +63,24 @@
 //!   `\==`, `<>`, `><` (`HideMethod`) so they redirect to `UNKNOWN`; the
 //!   same not-modelled removal/tombstone mechanism as `Queue`'s.
 //!
-//! **Ruling R8 (task review, 2026-08-16): the twelve classes `CoreClasses.orx`
-//! later mutates are built here, not deferred.** An earlier draft of this
-//! module deferred `RexxString`/`ArrayClass`/`TableClass`/`IdentityTable`/
-//! `RelationClass`/`StringTable`/`DirectoryClass`/`SetClass`/`BagClass`/
-//! `ListClass`/`MessageClass`/`SupplierClass` on the grounds that
-//! `CoreClasses.orx` changes what the *live, fully-booted* oracle answers for
-//! them. That reasoning was circular: `CoreClasses.orx` **mutates** these
-//! classes, which means they must already exist as native class objects
-//! before the prologue can touch them. What is unbuildable today is their
-//! *post-prologue* state, not the class itself, and deferring the class
-//! would leave whichever task runs the prologue (Task 13) also having to
-//! create twelve classes first -- work outside that task's scope. So all
-//! twelve are built here, from `Setup.cpp` alone, exactly like the other
-//! thirteen.
+//! **Ruling R8 (task review, 2026-08-16): the classes `CoreClasses.orx`
+//! later mutates are built here, not deferred.** `RexxString`/`ArrayClass`/
+//! `TableClass`/`IdentityTable`/`RelationClass`/`StringTable`/`DirectoryClass`/
+//! `SetClass`/`BagClass`/`ListClass`/`MessageClass`/`SupplierClass` are
+//! built, not on the grounds that `CoreClasses.orx` leaves what the *live,
+//! fully-booted* oracle answers for them unchanged from `Setup.cpp` alone --
+//! it does not -- but because deferring them on that basis is circular:
+//! `CoreClasses.orx` **mutates** these classes, which means they must
+//! already exist as native class objects before the prologue can touch
+//! them. What is unbuildable today is their *post-prologue* state, not the
+//! class itself, and deferring the class would leave whichever task runs
+//! the prologue (Task 13) also having to create them first -- work outside
+//! that task's scope. So every one of them is built here, from `Setup.cpp`
+//! alone, exactly like every other checklist entry not in [`DEFERRALS`].
 //!
-//! **The verification bar for these twelve is deliberately not the other
-//! thirteen's.** Byte-identity against the live oracle is impossible
+//! **The verification bar for the classes this ruling names is deliberately
+//! not the same as for the ones `CoreClasses.orx` never touches.** Byte-identity
+//! against the live oracle is impossible
 //! pre-prologue: the only oracle this crate can run is fully booted, past
 //! the point these classes are still in the state this module builds.
 //! `tests/native_classes_wiring.rs` instead: (a) asserts each one's derived
@@ -88,21 +89,23 @@
 //! must be in when the prologue starts; (b) *measures* (not assumes) that
 //! this crate's flattened set is a subset of the live oracle's for a
 //! representative sample, and records the measured difference against the
-//! `CoreClasses.orx` line that donates it (`~inherit`s of `OrderedCollection`,
-//! `MapCollection`, `SetCollection`, `Comparable`, `MessageNotification`,
-//! `AlarmNotification`, all `::CLASS MIXINCLASS` definitions **inside
-//! `CoreClasses.orx` itself**, confirmed by `grep`, plus `.Supplier`'s
-//! `~inheritInstanceMethods(.SupplierMixin)`, which adds no superclass edge).
-//! Full post-prologue correctness for these twelve -- their `~superClasses`,
-//! their complete flattened method set -- is explicitly **Task 13's**, not
-//! asserted here.
+//! `CoreClasses.orx` line that donates it: `~inherit`s of `OrderedCollection`,
+//! `MapCollection`, `SetCollection`, `Comparable`, `MessageNotification` and
+//! `AlarmNotification` (all `::CLASS MIXINCLASS` definitions **inside
+//! `CoreClasses.orx` itself**, confirmed by `grep`), plus
+//! `~inheritInstanceMethods(.SetMixin/.ManyItemMixin/.BagMixin/.SupplierMixin)`
+//! for `Set`/`Relation`/`Bag`/`Supplier`, none of which add a superclass
+//! edge.
+//! Full post-prologue correctness for the classes R8 names -- their
+//! `~superClasses`, their complete flattened method set -- is explicitly
+//! **Task 13's**, not asserted here.
 //!
 //! Every checklist entry not deferred is built: superclass `.Object` (root
 //! excepted), metaclass `.Class` (`.Class` itself excepted, self-
 //! referentially) -- `buildFinalClassBehaviour`'s own unconditional
 //! `metaClass = TheClassClass` and `superClasses->addLast(TheObjectClass)`
-//! (`ClassClass.cpp:713`, `:725`), the single bootstrap path every one of
-//! these twenty-five classes goes through. `InheritInstanceMethods(source)`
+//! (`ClassClass.cpp:713`, `:725`), the single bootstrap path every native
+//! class goes through. `InheritInstanceMethods(source)`
 //! operations replay through [`crate::ClassRegistry::inherit_instance_methods`]
 //! (`RexxClass::inheritInstanceMethods`'s donate-by-own-dictionary
 //! semantics) rather than `RexxBehaviour::inheritInstanceMethods`'s
