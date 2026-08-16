@@ -2698,7 +2698,16 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   crate already produces the oracle's bytes for that program on all three
   descriptors; refusing such a row is a regression, not a gap. A row REFUSES
   when it does not, and the oracle's answer needs a mechanism this crate has
-  no way to produce. Nothing else decides it.
+  no way to produce -- where REFUSES means the refusal is LOUD, at rc 120 with
+  a message naming the construct. Nothing else decides which of those two a
+  row is.
+
+  A row DIVERGES when it is neither: this crate answers, at rc 0, and the
+  answer is not the oracle's. That is a third status and the worst of them,
+  because rc and stderr both match and no gate that partitions failures by a
+  loud message can see it. A diverging row carries its own measurement and
+  its own owner immediately below the table, because unlike a refusal it
+  leaves nothing in the tree to name.
 
   IN PARTICULAR, "THE PRE-PHASE-5 BUILD REFUSED IT TOO" DECIDES NOTHING, and
   an earlier version of this table said it did. That build refused every
@@ -2751,17 +2760,50 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
     RAISE USER ADDITIONAL       stringValue()                 rc 0      agrees
     a message receiver          resolves the class behaviour  per meth. agrees
     SELF and SUPER, read        stringValue()                 rendering agrees
-    a method argument           nothing                       rendering agrees
+    a Rexx method's argument    nothing                       rendering agrees
     a method's RETURN value     nothing                       rendering agrees
+    -------------------------------------------------------------------------
+    a native method's argument  the method's own check        88.909    diverges
 
   THE ROWS A METHOD ACTIVATION ADDED, Phase 5a Task 7. A class object is a
   message receiver now, so a ::METHOD body runs, and that opens the positions
   above that no earlier task had: a receiver, SELF and SUPER, an argument and
-  a RETURN value. All of them agree, and all were measured rather than
-  reasoned about --
+  a RETURN value. Every one of them was measured rather than reasoned about --
   `trace i` over `say .K~m(.array)` into a class method that says SELF, says
   its argument and returns `.directory` is byte-identical on all three
   descriptors, on both engines, `>A>` and `>M>` lines included.
+
+  WHERE AN ARGUMENT'S ROW SPLITS, AND WHY THAT HALF DIVERGES. The measurement
+  above is a REXX body, which does nothing to its argument, and that half
+  agrees. A NATIVE method checks its own arguments, and this crate's natives
+  do not, so the argument row splits. Measured, both receiver shapes, both
+  engines:
+
+    say 'abc'~hasMethod(.String)   oracle 88.909 rc 168   crate 0 rc 0
+    say .k~hasMethod(.String)      oracle 88.909 rc 168   crate 0 rc 0
+      (the second with a `::class k`; the oracle's stderr for both is
+       `Error 88.909:  Argument 1 must have a string value.`, announced
+       against `Compiled method "HASMETHOD" with scope "Object"`)
+
+  and the same argument through a Rexx body is the agreeing half:
+
+    say .k~m(.String)  into `::method m class` / `use arg a` / `return a`
+                                   oracle `The String class` rc 0, crate same
+
+  The string-receiver form was already wrong before a method body could be
+  entered; the class-receiver form became reachable with the receiver row
+  above it. RULING R15: correct the record, do not build the coercion here.
+  A native method's argument check is BIF-ARGUMENT COERCION SURFACE, which is
+  this table's own domain rather than the message layer's -- the oracle's own
+  `hasMethod` is `RexxObject::hasMethodRexx` (`classes/ObjectClass.cpp:2892`),
+  whose first act is `stringArgument(message, ARG_ONE)`, exactly the check a
+  builtin applies to its own argument -- and building it inside the message
+  dispatch would re-open the boundary between the two that cost four fix
+  rounds to close. THE OWNER IS THE PHASE THAT GIVES THE NATIVE METHODS THEIR
+  ARGUMENT CHECKS, not Task 7 and not the builtin rows above; no task is
+  assigned to it here. What closes it is every native method on the message
+  path validating its arguments the way `builtin::` already does, which is a
+  surface rather than a fix.
 
   THE RECEIVER ROW IS NOT A COERCION AND SAYS SO. Nothing converts a receiver;
   what happens instead is that the send resolves against the class object's
@@ -2775,10 +2817,12 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   THE REST ARE THE "ASSIGNMENT THEN READ" ROW UNDER NEW NAMES, and they
   are written out rather than folded into it because the positions are new
   even though the conversion is not: SELF and SUPER are the first slots this
-  interpreter fills with an object of its own accord, an argument reaches a
-  callee's USE ARG through a message's argument list rather than a CALL's, and
-  a RETURN value flows on to `>M>` and to RESULT. Every one of them renders
-  through stringValue() and none of them converts.
+  interpreter fills with an object of its own accord, a REXX body's argument
+  reaches its USE ARG through a message's argument list rather than a CALL's,
+  and a RETURN value flows on to `>M>` and to RESULT. Every one of them
+  renders through stringValue() and none of them converts -- which is exactly
+  what a NATIVE method's argument does not do, and why that row is split off
+  above.
 
   WHY `RAISE` SPLITS THE WAY IT DOES, since it is the row that went wrong.
   `RaiseInstruction::execute` calls `requestArray` exactly once, on the
@@ -2935,6 +2979,69 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   Closing it needs `.nil` to be an object with an identity an operator can
   compare, which is D41's territory and 5c's by R3. No owner is assigned here.
   It is written down so it is not rediscovered as a Phase 5 regression.
+
+  KNOWN GAP: `PRIVATE` AND `GUARD` ON A ::METHOD ARE NOT MODELLED, AND WHAT
+  MAKES EACH ONE SAFE TODAY WILL NOT LAST. A ::METHOD body runs now, so its
+  directive options are reachable, and these two do not do what the oracle's
+  do. What matters to a later task is not that they are open but WHAT MAKES
+  EACH ONE CURRENTLY SAFE, since that is the thing that stops being true, so
+  each limb below says it. This entry is about those two by name and does not
+  claim to enumerate the ::METHOD options this crate leaves unmodelled.
+
+  `PRIVATE` IS MODELLED AS A REFUSAL, WHICH IS AN OVER-REFUSAL. The oracle
+  refuses the send only from outside the defining scope; from inside one of
+  the class's own methods it ALLOWS it. Measured, both engines:
+
+    say .K~m                 with `::method m class private`
+                             oracle 97.2 rc 159 (`Object "The K class" cannot
+                             accept private message "M" from this context.`)
+                             crate rc 120, `a PRIVATE ::METHOD is not
+                             implemented (Phase 5)`
+    say .K~pub  where `pub`  oracle rc 0, prints `private ran`
+    is a public class method crate rc 120, the same refusal
+    doing `return self~m`
+
+  So the refusal is in the safe direction and is LOUD in both rows: nothing
+  here is a wrong answer, and no gate reading rc or stderr can mistake it for
+  agreement. WHAT MAKES IT SAFE TODAY is only that no corpus program sends a
+  private message -- `corpus/errors/parse-errors.tsv` has the directive as a
+  parse case and never runs a send. The second row above is the shape that
+  ends it, and it
+  is in Phase 5's own acceptance test -- `interpreter/RexxClasses/
+  CoreClasses.orx:193` declares `::method getArrays private` and lines 179
+  and 188 send `self~getArrays` from inside the same class. The moment that
+  file is loaded, the over-refusal is a stop rather than a caveat.
+
+  `GUARD` IS MODELLED AS NOTHING. `rexx-parse` records the option on the
+  directive (`GuardOption`, `ast.rs`) and nothing in `rexx-exec` reads it, so
+  `GUARDED` and `UNGUARDED` and the default all run the same body the same
+  way. Measured, a class with one method of each option: both engines and the
+  oracle print the same lines at rc 0, which is agreement by the table's own
+  rule and says nothing about the guard.
+
+  WHAT MAKES IT UNOBSERVABLE is that `GUARD ON` reserves the object's scope,
+  and a reservation is only observable when a SECOND ACTIVITY can contend for
+  it. The routes to one that have been checked are loud. Measured on this
+  crate, both engines: `REPLY` inside a method body is rc 120; `.K~start('m')`
+  is rc 120 (`method "START" of class "Object" is not implemented`); the
+  `GUARD` INSTRUCTION is rc 120. Re-entry on a single activity is not a route
+  either: a `guarded` class method recursing into itself through `self~m`
+  answers at rc 0 on the oracle and identically here, so there is no
+  self-deadlock to reproduce.
+
+  THAT IS A LIST OF ROUTES CHECKED, NOT AN ENUMERATION OF ROUTES, and the
+  difference is load-bearing: nothing enumerates the ways a second activity
+  can come into existence, and the class library was not walked looking for
+  one. So the honest statement is that no route found so far can observe the
+  missing guard, not that none exists. Whichever task lands the first route
+  that can -- `REPLY`, `~start`, the `GUARD` instruction, or something in the
+  class library nobody has looked for -- owns making the guard real rather
+  than inheriting a silent no-op.
+
+  NEITHER LIMB HAS AN OWNER ASSIGNED. Both are recorded here rather than in a
+  task report because a report is not in the repository, so a later task
+  reading the tree would find `GuardOption` set by a parser and read by
+  nobody, with nothing saying whether that was decided or overlooked.
 
   KNOWN GAP: VALUE'S EXTERNAL-SELECTOR FORM MIXES TWO OWNERS BEHIND ONE
   ARGUMENT. A *present* third argument to VALUE selects the pool this
