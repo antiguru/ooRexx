@@ -695,8 +695,9 @@ impl Loud {
     }
 
     /// One of the objects [`Loud::operator_operand`] refuses, in a position
-    /// that is not an operator's operand: a `DO` header's value, or a
-    /// controlled loop's own control variable at the increment.
+    /// that is not an operator's operand: a `DO` header's value, `DO OVER`'s
+    /// target, a controlled loop's own control variable at the increment, or
+    /// a `RAISE SYNTAX` clause's `ADDITIONAL` value.
     ///
     /// **A separate constructor because the program contains no operator to
     /// name**, and naming one would send a reader looking for something that
@@ -710,7 +711,12 @@ impl Loud {
     ///   so each answers 97.1;
     /// * `DO OVER`'s target is handed to `requestArray`, which is 98.913 for a
     ///   class and an iteration of the entries for a directory or a string
-    ///   table -- neither of which this crate can produce.
+    ///   table -- neither of which this crate can produce;
+    /// * a `RAISE` clause's `ADDITIONAL` value reaches `requestArray` only
+    ///   under a `SYNTAX` condition (`RaiseInstruction.cpp:280-286`). Under
+    ///   any other condition, and for the `ARRAY (...)` form whose value is
+    ///   already an array, the elements are rendered by `stringValue()` and
+    ///   this crate matches -- which is why the refusal carries that guard.
     ///
     /// **`do i = 1 to .array` is why "the right operand always agrees" is not
     /// a rule.** It held for the binary operators, where the operand the

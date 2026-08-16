@@ -2769,19 +2769,47 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   `a. = .array; say a.zz + 1` was loud already, because a compound read yields
   the class handle itself.
 
-  FUTURE WORK -- `requestArray` SITES NOT REACHABLE TODAY. The oracle calls it
-  in four more places, none of which any program can reach with one of these
-  objects in this phase, so none is a silent wrong answer now. Whichever task
-  makes one reachable owes it a row above:
+  FUTURE WORK -- `requestArray` SITES NOT REACHABLE TODAY. The direct callers
+  below are not all of them: `MethodArguments.hpp`'s inline `arrayArgument`
+  (`:683`, `:711`) calls `requestArray` too, and it has its own callers across
+  `ObjectClass.cpp`, `MessageClass.cpp`, `SupplierClass.cpp`, `StemClass.cpp`,
+  `RoutineClass.cpp`, `PackageClass.cpp`, `HashCollection.cpp`,
+  `VariableReference.cpp` and `NativeActivation.cpp`. Do not read this list as
+  the closed set for that conversion; read it as the sites checked. What was
+  established is the substantive part: no program reached any of them with one
+  of these objects in this phase, so none is a silent wrong answer now --
+  `.methods~sendWith('ITEMS', .array)` is rc 120 "a message send ... is not
+  implemented", where the oracle answers 88.913. Whichever task makes one
+  reachable owes it a row above:
 
     ForwardInstruction.cpp:185        FORWARD ARGUMENTS -- a FORWARD in a
                                       ::METHOD body never executes yet
     CommandIOConfiguration.cpp:367    ADDRESS ... WITH INPUT USING (expr) --
                                       loud, Phase 7
-    ObjectClass.cpp:2136              ~sendWith / ~startWith -- no send to a
-                                      class object resolves yet
+    ObjectClass.cpp:2136              ~sendWith / ~startWith's message NAME
+                                      (decodeMessageName), not its arguments;
+                                      the arguments go through arrayArgument
+                                      at ObjectClass.cpp:1980 and :2051
     BaseExecutable.cpp:181            a Method or Routine built from a source
                                       array -- nothing constructs one yet
+
+  RAISE PROPAGATE IGNORES ITS OWN `ADDITIONAL` OPTION, FOR EVERY VALUE SHAPE.
+  Measured 2026-08-16, both engines, three descriptors read separately. With a
+  `SIGNAL ON SYNTAX` handler, `raise propagate additional (.array)` re-reports
+  the original condition instead of the new information: oracle rc 158 at
+  98.939, this crate rc 216 re-reporting the 40.1 it was already carrying. The
+  same program with a string, `raise propagate additional ('ZZZ')` after
+  `raise syntax 40.1 array ('AAA')`, gives the oracle `"ZZZ"` and this crate
+  `"AAA"` -- so the divergence is the option being dropped, not anything about
+  these objects.
+
+  NOT CAUSED BY PHASE 5a, established rather than assumed: a build carrying
+  the round-3 checks answers rc 216 identically, because `exec_raise` returns
+  to `exec_raise_propagate` at the top, before any option is evaluated. The
+  C++ takes the other path deliberately -- `RaiseInstruction.cpp:272-277`
+  reads the condition name off the condition object under a propagate rather
+  than from the clause. Recorded here so it is not rediscovered as a Phase 5
+  regression; closing it belongs to whichever task owns `RAISE`.
 
   WHAT THE TABLE STILL CANNOT SEE. `DO x OVER` a stem is loud for its own
   earlier reason and so cannot distinguish this gap from that one.
@@ -2794,8 +2822,9 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
 
   `rust/crates/rexx-exec/src/eval.rs`'s `object_operand_tests` pins the
   refusals and the agreements it can reach in-crate;
-  `rust/corpus/lang/environment_object_operands.rex` and
-  `environment_object_in_a_loop_header.rex` pin agreeing rows against the live
+  `rust/corpus/lang/environment_object_operands.rex`,
+  `environment_object_in_a_loop_header.rex` and
+  `environment_object_in_a_raise.rex` pin agreeing rows against the live
   oracle, the builtins among them. A refusal cannot be witnessed by a corpus
   file, which has to match.
 

@@ -3128,12 +3128,13 @@ mod object_operand_tests {
     /// test.**
     ///
     /// Every expected string below is the oracle's own output for that
-    /// program, and every one of them was **rc 120 for a while**: the first
-    /// version of the `RAISE` fix checked the `ARRAY` elements and checked
-    /// `ADDITIONAL` under every condition, which refused four programs this
-    /// crate had been matching byte for byte. It shipped with the whole suite
-    /// green, because the control standing in for it was a counted loop with
-    /// no `RAISE` in it.
+    /// program, and the `ARRAY` and `USER` ones were **rc 120 for a while**:
+    /// the first version of the `RAISE` fix checked the `ARRAY` elements and
+    /// checked `ADDITIONAL` under every condition, which refused four
+    /// programs this crate had been matching byte for byte. `DESCRIPTION` was
+    /// never refused and is here because the arm sits beside the two that
+    /// were. It all shipped with the whole suite green, because the control
+    /// standing in for it was a counted loop with no `RAISE` in it.
     #[test]
     fn a_raise_the_oracle_does_not_array_convert_still_answers() {
         let cases: &[(&[u8], i32, &str)] = &[

@@ -7,8 +7,8 @@
  * this crate refuses it -- a refusal cannot be witnessed by a corpus file,
  * and eval.rs's object_operand_tests carries that half.
  *
- * Everything here is the other side, and every line of it was rc 120 for a
- * while: the first version of that fix checked the ARRAY elements too, and
+ * Everything here is the other side. The ARRAY and USER lines were rc 120
+ * for a while: the first version of that fix checked ARRAY elements, and
  * checked ADDITIONAL under every condition. The ARRAY form builds a real
  * ArrayClass from its elements first, so the requestArray below it gets an
  * array and returns it unchanged; the elements are rendered, never

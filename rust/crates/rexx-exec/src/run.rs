@@ -4043,13 +4043,12 @@ impl Interp {
             // entry of the array the directory converts to -- and `raise user
             // zork additional (.array)` under a trap is rc 0 on both sides.
             //
-            // **A propagate is deliberately not refused.** The oracle reads
-            // the condition name off the condition object there rather than
-            // from the clause, which is not knowable here, and answering the
-            // rendering is what this crate already does for every non-SYNTAX
-            // condition.
+            // A propagate never reaches here: `exec_raise` returns to
+            // `exec_raise_propagate` before any option is evaluated, so the
+            // `ADDITIONAL` expression is not evaluated at all under one. The
+            // divergence that leaves is recorded in `phase-4-exclusions.txt`
+            // and predates this refusal.
             if raise.condition.eq_ignore_ascii_case(b"SYNTAX")
-                && !raise.propagate
                 && let Some(kind) = self.operator_operand_gap(value)
             {
                 return Err(Loud::object_position("a RAISE ADDITIONAL value", kind).into());
