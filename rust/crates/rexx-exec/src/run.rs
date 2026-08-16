@@ -2466,36 +2466,63 @@ impl Interp {
             // guarantee the type system does not carry must not abort.
             return Err(Loud::expression(&term.kind).into());
         };
-        // **`message_term` directly rather than through `eval`**, even for
-        // the form that is an ordinary expression. `eval`'s own
-        // `ExprKind::Message` arm now turns a valueless send into 91.999,
-        // which is the expression position's error and not this one's:
-        // measured, a whole-clause `.K~m` on a method ending in a bare
-        // `return` is rc 0. Reaching the term's own function is what keeps
-        // the two positions' answers apart.
+        // **`message_term` directly rather than through `Interp::eval`**,
+        // even for the form that is an ordinary expression: `eval`'s own
+        // `ExprKind::Message` arm turns a valueless send into 91.999, which
+        // is the expression position's error and not this one's -- measured,
+        // a whole-clause `.K~m` on a method ending in a bare `return` is
+        // rc 0.
+        //
+        // The `enter_eval_node` pair is the one thing `eval` did for this
+        // node that is kept rather than dropped: it is where
+        // `MAX_EVAL_DEPTH` counts from, and this arm should count the term
+        // at the depth an expression would. **No probe here separates the
+        // two.** Measured, `(...)~length` as a whole clause and as an
+        // assignment's right-hand side both run at 50,000 nested
+        // parentheses and both refuse at 50,001, with this pair present and
+        // with it deleted -- so it is here to leave the depth where it was,
+        // not on the strength of an observable. The assignment form below
+        // takes no level, which is likewise where it stood already.
+        // `eval`'s other contribution, `trace_intermediate`, is an empty arm
+        // for `ExprKind::Message` and nothing is lost by not calling it.
         let mut assigned_name;
-        let (name, assigned, cascade) = match value {
-            None => (&name[..], None, *cascade),
+        let result = match value {
+            None => {
+                let probe = 0u8;
+                self.enter_eval_node(&raw const probe)?;
+                let sent = self.message_term(
+                    code,
+                    &crate::dispatch::MessageTerm {
+                        target,
+                        name,
+                        super_class: super_class.as_deref(),
+                        args,
+                        cascade: *cascade,
+                        assigned: None,
+                    },
+                );
+                self.depth -= 1;
+                sent?
+            }
             Some(value) => {
                 assigned_name = name.to_vec();
                 assigned_name.push(b'=');
-                // The oracle builds this form as `KEYWORD_MESSAGE` whatever
-                // the term's own tilde count, so a `~~` written here is not
-                // a cascade.
-                (&assigned_name[..], Some(value), false)
+                self.message_term(
+                    code,
+                    &crate::dispatch::MessageTerm {
+                        target,
+                        name: &assigned_name,
+                        super_class: super_class.as_deref(),
+                        args,
+                        // The oracle builds this form as `KEYWORD_MESSAGE`
+                        // whatever the term's own tilde count, so a `~~`
+                        // written here is not a cascade.
+                        cascade: false,
+                        assigned: Some(value),
+                    },
+                )?
             }
         };
-        let result = self.message_term(
-            code,
-            &crate::dispatch::MessageTerm {
-                target,
-                name,
-                super_class: super_class.as_deref(),
-                args,
-                cascade,
-                assigned,
-            },
-        )?;
         let slot = self.slot_of(b"RESULT");
         let frame = self.activation().frame;
         // **A send that produced no value drops `RESULT`** rather than
