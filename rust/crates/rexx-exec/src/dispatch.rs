@@ -58,7 +58,7 @@
 //! working method, so a Rexx condition here would let a program expecting one
 //! pass against a gap.
 //!
-//! # Two kinds of invocable, one clearance
+//! # The invocable kinds, and the one clearance
 //!
 //! A resolved [`rexx_classes::MethodId`] names either a [`NativeMethod`] or a
 //! `::METHOD` directive's own Rexx body ([`Interp::method_bodies`]).
@@ -130,7 +130,7 @@ type NativeMethod = fn(&mut Interp, Cleared, ObjRef, &[Option<ObjRef>]) -> Resul
 
 /// What a resolved [`MethodId`] runs.
 ///
-/// The two kinds are not interchangeable and are kept apart rather than
+/// The kinds are not interchangeable and are kept apart rather than
 /// hidden behind one closure: only a Rexx body can produce a send with no
 /// value, only a native method has a declared arity to check, and only a
 /// native method contributes a `Compiled method` traceback line.
@@ -251,9 +251,9 @@ enum Primitive {
 
 /// The behaviour a receiver's messages resolve against.
 ///
-/// Two arms and not one `ObjRef`, because a class object's messages are
-/// answered by its **class** behaviour while every other receiver's are
-/// answered by its class's **instance** behaviour, and the two dictionaries
+/// An enum rather than a bare `ObjRef`, because a class object's messages
+/// are answered by its **class** behaviour while every other receiver's are
+/// answered by its class's **instance** behaviour, and those dictionaries
 /// hold different names for the same class.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum Behaviour {
@@ -581,7 +581,15 @@ impl Interp {
         args: &[Option<ObjRef>],
     ) -> Result<Option<ObjRef>, Failure> {
         let program = Rc::clone(&self.programs[installed.program.0]);
-        if let Some(gap) = crate::method_body_gap(&program.directives[installed.directive].kind) {
+        // Both reads are `get`, not an index: an `InstalledMethodBody` can
+        // only have come from `Interp::record_method_body` and so always
+        // names a real directive, but this crate's rule for an internal
+        // inconsistency is a loud refusal rather than a panic, and
+        // `body_of`'s own `?` already follows it.
+        let Some(directive) = program.directives.get(installed.directive) else {
+            return Err(Loud::missing_body().into());
+        };
+        if let Some(gap) = crate::method_body_gap(&directive.kind) {
             return Err(gap.into());
         }
         let Some(body) = body_of(&program, Some(installed.directive)) else {
@@ -641,7 +649,7 @@ impl Interp {
 
         // The same level state `Interp::invoke_call` saves and restores, set
         // to the same values its `::ROUTINE` arm uses -- that function's own
-        // comment enumerates the five pieces and carries the measurement for
+        // comment enumerates the pieces and carries the measurement for
         // each. A method's clause echoes are at indent 0 whatever the sending
         // clause's own indent was: measured, a send from inside two nested
         // `DO` blocks echoes the method's clauses at 0.
@@ -664,6 +672,11 @@ impl Interp {
 
         self.trace_invocation_exit();
         let callee = self.activations.pop().expect("the activation just pushed");
+        // Unconditionally, where `Interp::invoke_call` asks `owns_frame`
+        // first: a method activation always owns its frame and nothing can
+        // change that under it, because the one instruction that swaps a
+        // frame in is `PROCEDURE` and `Entry::Method` is 17.1 for it.
+        debug_assert!(callee.owns_frame, "a method activation owns its frame");
         self.roots.pop_slots(callee.frame);
         self.activation_indent = saved_base;
         self.indent_offset = saved_offset;

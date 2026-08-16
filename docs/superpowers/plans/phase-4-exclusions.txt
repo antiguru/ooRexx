@@ -2754,10 +2754,11 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
     a method argument           nothing                       rendering agrees
     a method's RETURN value     nothing                       rendering agrees
 
-  THE FOUR ROWS A METHOD ACTIVATION ADDED, Phase 5a Task 7. A class object is
-  a message receiver now, so a ::METHOD body runs, and that opens four
-  positions one of these objects can stand in that no earlier task had. All
-  four agree, and all four were measured rather than reasoned about --
+  THE ROWS A METHOD ACTIVATION ADDED, Phase 5a Task 7. A class object is a
+  message receiver now, so a ::METHOD body runs, and that opens the positions
+  above that no earlier task had: a receiver, SELF and SUPER, an argument and
+  a RETURN value. All of them agree, and all were measured rather than
+  reasoned about --
   `trace i` over `say .K~m(.array)` into a class method that says SELF, says
   its argument and returns `.directory` is byte-identical on all three
   descriptors, on both engines, `>A>` and `>M>` lines included.
@@ -2771,7 +2772,7 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   quoting the class's default name. That last one is a corpus witness,
   `method_class_side_lookup.rex`.
 
-  THE OTHER THREE ARE THE "ASSIGNMENT THEN READ" ROW UNDER NEW NAMES, and they
+  THE REST ARE THE "ASSIGNMENT THEN READ" ROW UNDER NEW NAMES, and they
   are written out rather than folded into it because the positions are new
   even though the conversion is not: SELF and SUPER are the first slots this
   interpreter fills with an object of its own accord, an argument reaches a

@@ -1254,8 +1254,8 @@ fn directive_gap(kind: &DirectiveKind) -> Option<Loud> {
 /// it pushes anything.
 ///
 /// **Exhaustive over the directive kinds a `MethodId` can name**, which are
-/// the two that `Interp::install_method` and `Interp::install_attribute` mint
-/// ids for. Anything else arriving here is an internal inconsistency and gets
+/// the ones `Interp::install_method` and `Interp::install_attribute` mint ids
+/// for. Anything else arriving here is an internal inconsistency and gets
 /// a refusal of its own rather than a panic, on the reasoning
 /// [`Loud::instruction`]'s doc gives.
 ///

@@ -82,7 +82,7 @@ lang/environment_object_in_a_raise.rex
 # ::METHOD body runs in, `self` and `super`, RETURN with and without a value,
 # EXIT, an untrapped condition inside a body, a `::ATTRIBUTE GET` whose
 # accessor is written in Rexx, and the `>I>`/`<I<` pair a method activation
-# adds around the callee's own clause echoes. The last two are compared raw
+# adds around the callee's own clause echoes. The traced pair is compared raw
 # (see corpus.rs's RAW_STDERR_COMPARISON), because the indents are the point.
 lang/method_class_body.rex
 lang/method_returns_no_value.rex

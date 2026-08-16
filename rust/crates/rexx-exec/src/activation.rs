@@ -442,7 +442,7 @@ pub(crate) struct Activation {
     ///
     /// Carried on the activation rather than recovered from
     /// [`Activation::body`], because neither substitution is in the directive:
-    /// [`MethodIdentity`]'s own doc has the two measurements.
+    /// [`MethodIdentity`]'s own doc has the measurements.
     pub(crate) method_identity: Option<MethodIdentity>,
     /// Whether no instruction has yet been executed in this activation --
     /// where a label does not count as an instruction.
@@ -666,7 +666,7 @@ pub(crate) enum Entry {
 
 /// What `>I>`/`<I<` name for a `::METHOD` activation.
 ///
-/// The two substitutions message 101018's method form takes
+/// The substitutions message 101018's method form takes
 /// (`rexxmsg.xml:6480`, `Method <q>&1</q> with scope <q>&2</q> in package
 /// <q>&3</q>.`), and neither is recoverable from the directive alone: the
 /// oracle's first substitution is `getMessageName()`, the name the *send*
@@ -988,9 +988,10 @@ pub(crate) struct Inherited {
 /// caller rather than abort the process here.
 ///
 /// A `::METHOD`'s and a `::ATTRIBUTE`'s bodies are here beside `::ROUTINE`'s
-/// because a method activation runs one: the directive kinds that own a
-/// [`CodeBody`] are exactly the three, and each field's own doc says when it
-/// is `None` (a generating option, for both method forms).
+/// because a method activation runs one: `::ROUTINE`, `::METHOD` and
+/// `::ATTRIBUTE` are the directive kinds that own a [`CodeBody`], and each
+/// field's own doc says when it is `None` (a generating option, for both
+/// method forms).
 pub(crate) fn body_of(program: &Program, selector: Option<usize>) -> Option<&CodeBody> {
     match selector {
         None => Some(&program.main),
