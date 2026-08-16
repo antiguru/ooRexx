@@ -38,8 +38,9 @@
    from an internal label that routine calls, so it appears once per route and
    reads whatever the ::routine that reached it reads -- a label inherits the
    context rather than answering for itself, which is also why D2 reads
-   COMMAND. An engine that renders one fixed word prints COMMAND on every D
-   line, at rc 0, with nothing on stderr to say so.
+   COMMAND. Three different words appear across these five lines, so an engine
+   that renders one fixed word prints that word on every D line and is wrong
+   at rc 0, with nothing on stderr to say so.
 
    PARSE VERSION is deliberately absent. Every field it carries is the
    interpreter's own build identity, the third one a build DATE, so a

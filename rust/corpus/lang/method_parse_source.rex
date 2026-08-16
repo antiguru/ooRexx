@@ -3,12 +3,11 @@
    the program's own absolute path, and corpus/lang/parse_sources.rex projects
    it away the same way and for the same reason.
 
-   The pair with that program is the point. It pins COMMAND for a program and
-   an internal label, and SUBROUTINE against FUNCTION for one ::routine body
-   reached both ways; this pins the word a method activation answers. An
-   engine that renders a single fixed word agrees with one of the two programs
-   and prints that program's word here, at rc 0, with nothing on stderr to say
-   so.
+   The pair with that program is the point. It reaches COMMAND, SUBROUTINE and
+   FUNCTION and cannot reach METHOD, because no ::METHOD body runs in it; this
+   program is the one that reaches METHOD. Between them no word is left that a
+   fixed constant could take, and every way of getting it wrong is rc 0 with
+   nothing on stderr to say so.
 
    M2 sends from inside a ::ROUTINE reached as a function, which is the
    context that would be inherited if a method activation inherited one: the
