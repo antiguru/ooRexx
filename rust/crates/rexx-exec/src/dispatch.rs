@@ -267,12 +267,14 @@ impl Interp {
 
     /// The rendering of a handle the arena does not hold.
     ///
-    /// **Exactly one such handle is reachable**: a class identity, which
-    /// `rexx_core::CLASS_SLOT_BASE` puts past every slot the arena can
+    /// **A class identity is what reaches this today**, because
+    /// `rexx_core::CLASS_SLOT_BASE` puts it past every slot the arena can
     /// allocate, so `Heap::resolve` answers `None` for it
     /// (`rexx-core/src/heap.rs:292`-`299`) with no test of its own. Anything
     /// else arriving here is a handle whose object is gone, which is the
-    /// `a live value` tripwire the callers used to carry alone.
+    /// `a live value` tripwire the callers used to carry alone -- so a later
+    /// phase adding another handle kind outside the arena has to widen the
+    /// assertion below rather than inherit it.
     ///
     /// **`Interp::to_text` and `Interp::try_text` reach this through the
     /// `None` their existing `Heap::get` already produces**, which is what

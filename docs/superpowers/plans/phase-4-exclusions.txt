@@ -2679,18 +2679,37 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   more. `.QUEUE`, whose class `rexx-classes` defers, and every entry of
   `.local` are in it today.
 
-  An OPERATOR whose left operand is one of these objects is loud too, and that
-  is a separate defect the fix round found: the oracle sends the operator to
-  that operand as a message, so `.array == "The Array class"` is 0 and
+  MOST OPERATORS ARE LOUD ON ONE OF THESE OBJECTS, and that is a separate
+  defect the fix rounds found. The oracle sends the operator to its LEFT
+  operand as a message, so `.array == "The Array class"` is 0 and
   `.methods == .routines` is 0 where both render `a StringTable`, while
   comparing renderings answers 1 for both. Ruling R12: refuse, do not model
-  handle equality. `rust/crates/rexx-exec/src/eval.rs`'s
-  `object_operand_tests` pins both halves -- the operators that refuse, and
-  the concatenation family, conditions and builtins that go on agreeing
-  because they reach the object through `stringValue()` on both sides. `environment.rs`'s
-  `ORACLE_ENVIRONMENT`/`ORACLE_LOCAL` are the two directories' contents read
-  off the oracle, and `every_name_the_oracle_answers_resolves_or_is_loud`
-  asserts each one either resolves or refuses.
+  handle equality.
+
+  The refusal is not the whole operator set, and the boundary was measured
+  spelling by spelling rather than swept. Loud: every comparison, every
+  arithmetic operator, `&`/`|`/`&&`, and the prefix operators, with the object
+  on the LEFT; and a controlled DO header's initial, TO and BY values, which
+  round through a real unary + on the oracle -- so `do i = 1 to .array` is
+  loud even though the object is on the right there, and "a right-hand object
+  agrees" is a fact about the binary operators rather than a rule. Still
+  agreeing, and refusing them would over-refuse programs the oracle runs: the
+  concatenation family whichever side the object is on, any operator the
+  object is merely the right operand of, IF/WHEN/WHILE/UNTIL conditions, FOR,
+  a bare DO's repeat count, NUMERIC DIGITS, and a builtin argument -- all of
+  which reach the object through `stringValue()` or read its text.
+
+  `rust/crates/rexx-exec/src/eval.rs`'s `object_operand_tests` pins the
+  refusals and the agreements it can reach in-crate;
+  `rust/corpus/lang/environment_object_operands.rex` and
+  `environment_object_in_a_loop_header.rex` pin the agreeing halves against
+  the live oracle, the builtins among them. A refusal cannot be witnessed by a
+  corpus file, which has to match.
+
+  `environment.rs`'s `ORACLE_ENVIRONMENT`/`ORACLE_LOCAL` are the two
+  directories' contents read off the oracle, and
+  `every_name_the_oracle_answers_resolves_or_is_loud` asserts each one either
+  resolves or refuses.
 
   Witnesses: `rust/corpus/lang/environment_symbols_through_value.rex` for this
   route and `environment_symbols.rex` for the expression one, both in
@@ -2738,6 +2757,30 @@ fix were removed. Removing a row here needs the same amendment a KNOWN GAP does.
   without this paragraph being reread, and the derivation test is what
   keeps the row honest either way.
 
+
+  KNOWN GAP: `.NIL` COMPARED AGAINST ITS OWN RENDERING ANSWERS THE WRONG WAY,
+  AND IT PREDATES PHASE 5. The oracle's `.nil` is an object whose string value
+  is `The NIL object`, and a comparison of it asks identity rather than text.
+  This crate's `.nil` is `ObjRef::NIL`, which every operator converts to that
+  same text. Measured on both engines, and on the pinned pre-Phase-5 build:
+
+    say (.nil == 'The NIL object')   oracle 0 rc 0   crate 1 rc 0   pinned 1 rc 0
+    say (.nil =  'The NIL object')   oracle 0 rc 0   crate 1 rc 0   pinned 1 rc 0
+    say (.nil + 1)                   oracle 97.1 rc 159   crate and pinned 41.1 rc 215
+
+  RECORDED, NOT FIXED, AND DELIBERATELY NOT PART OF RULING R12. R12 refuses an
+  operator whose operand is a class object or one of the interpreter's own
+  objects, and `.nil` is neither: the parser resolves it to a constant
+  (`SpecialDotVariable`, `parser/LanguageParser.cpp:782`) and the value that
+  reaches the operator is this crate's NIL handle, which every phase before
+  this one already had. The pinned column is what says so -- Phase 5a Task 6
+  did not change any of these three answers. `.true` and `.false` do not share
+  it, measured: they really are the one-byte strings on both sides, so
+  `.true == '1'` is 1 either way.
+
+  Closing it needs `.nil` to be an object with an identity an operator can
+  compare, which is D41's territory and 5c's by R3. No owner is assigned here.
+  It is written down so it is not rediscovered as a Phase 5 regression.
 
   KNOWN GAP: VALUE'S EXTERNAL-SELECTOR FORM MIXES TWO OWNERS BEHIND ONE
   ARGUMENT. A *present* third argument to VALUE selects the pool this

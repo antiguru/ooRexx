@@ -1,4 +1,4 @@
-count 35
+count 40
 /* What an operator, a condition and a builtin do with one of these objects
  * as an operand. Phase 5a Task 6, fix round 1.
  *
@@ -14,6 +14,11 @@ count 35
  * comparison here has the string first: with the object first the oracle
  * compares identities instead and this crate refuses the program, which a
  * corpus file cannot witness because a corpus file has to match.
+ *
+ * That is a fact about operators, not about right-hand operands generally: a
+ * DO header rounds every position through a unary operator of its own, so
+ * `do i = 1 to .ARRAY` is refused with the object on the right.
+ * environment_object_in_a_loop_header.rex carries that boundary.
  *
  * The concatenation family is the exception in the other direction: it calls
  * stringValue() on both sides whichever operand is the object, so all three

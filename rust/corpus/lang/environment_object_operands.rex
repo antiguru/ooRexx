@@ -14,6 +14,11 @@
  * compares identities instead and this crate refuses the program, which a
  * corpus file cannot witness because a corpus file has to match.
  *
+ * That is a fact about operators, not about right-hand operands generally: a
+ * DO header rounds every position through a unary operator of its own, so
+ * `do i = 1 to .ARRAY` is refused with the object on the right.
+ * environment_object_in_a_loop_header.rex carries that boundary.
+ *
  * The concatenation family is the exception in the other direction: it calls
  * stringValue() on both sides whichever operand is the object, so all three
  * spellings agree with the object on the left.

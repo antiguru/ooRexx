@@ -939,8 +939,11 @@ impl Interp {
     /// **The asymmetry is the oracle's and is measured**: `.array + 1` is 97.1
     /// where `1 + .array` is 41.1 quoting `"The Array class"`, which this
     /// crate already answers identically. So only the left operand -- and a
-    /// prefix operator's only one -- can carry this gap, and the right one
-    /// keeps the ordinary 41.1.
+    /// prefix operator's only one -- can carry this gap *for an operator*, and
+    /// the right one keeps the ordinary 41.1. A controlled `DO` header is not
+    /// an operator and does not follow that rule: `Interp::header_number`
+    /// checks every position, because each is rounded through a unary
+    /// operator of its own.
     ///
     /// Entirely on the failing path: an object of either shape is
     /// [`NotNumeric`] whatever this decides, so a program doing arithmetic on
@@ -1143,6 +1146,37 @@ impl Interp {
         Ok(result)
     }
 
+    /// The noun for an operand no operator here can take, or `None` for one
+    /// every operator can.
+    ///
+    /// The shapes are a class object and one of the interpreter's own
+    /// objects, and neither is a value the oracle treats as text when an
+    /// operator meets it. [`Loud::operator_operand`] carries the measurements
+    /// and [`Loud::header_operand`] the one surface that is not an operator.
+    ///
+    /// **Every caller reaches this on a path that was already failing, except
+    /// [`Interp::compare_values`] and `Interp::header_number`**: a comparison
+    /// of renderings always succeeds, so the first sits behind the
+    /// two-small-integer fast path where a loop bound never pays for it, and
+    /// the second runs once per loop entry rather than once per iteration.
+    ///
+    /// Takes one operand and allocates nothing, so it carries no rooting
+    /// precondition of its own.
+    pub(crate) fn operator_operand_gap(&self, value: ObjRef) -> Option<&'static str> {
+        // A small integer, an inline string and `.nil` all leave on this
+        // line: only a heap-tagged handle can be either shape.
+        let Decoded::Heap { slot, generation } = value.decode() else {
+            return None;
+        };
+        if is_class_slot(slot, generation) {
+            return Some("a class object");
+        }
+        match &self.heap.get(value)?.body {
+            Body::Native(_) => Some("one of the interpreter's own objects"),
+            _ => None,
+        }
+    }
+
     /// `left op right` for every binary operator whose two operands are just
     /// values by the time it runs -- concatenation, comparison and logical.
     ///
@@ -1158,33 +1192,6 @@ impl Interp {
     ///
     /// **Both operands must already be rooted by the caller**, for the reason
     /// [`Interp::concat_values`] states.
-    /// The noun for a **left** operand no operator here can take, or `None`
-    /// for one every operator can.
-    ///
-    /// Two shapes, both new in Phase 5a and neither of them a value the oracle
-    /// treats as text when an operator meets it: a class object, and one of
-    /// the interpreter's own objects. [`Loud::operator_operand`] carries the
-    /// measurements and the reason the right operand is not this.
-    ///
-    /// **Every caller reaches this on a path that was already failing, except
-    /// [`Interp::compare_values`]**, which cannot -- a comparison of
-    /// renderings always succeeds. There it sits behind the two-small-integer
-    /// fast path, so a loop bound never pays for it.
-    fn operator_operand_gap(&self, value: ObjRef) -> Option<&'static str> {
-        // A small integer, an inline string and `.nil` all leave on this
-        // line: only a heap-tagged handle can be either shape.
-        let Decoded::Heap { slot, generation } = value.decode() else {
-            return None;
-        };
-        if is_class_slot(slot, generation) {
-            return Some("a class object");
-        }
-        match &self.heap.get(value)?.body {
-            Body::Native(_) => Some("one of the interpreter's own objects"),
-            _ => None,
-        }
-    }
-
     pub(crate) fn apply_binary(
         &mut self,
         op: Operator,
@@ -2900,6 +2907,70 @@ mod object_operand_tests {
                 (code, stdout.as_str(), stderr.as_str()),
                 (120, "", expected.as_str()),
                 "{:?}",
+                String::from_utf8_lossy(source)
+            );
+        }
+    }
+
+    /// **R12 at the one numeric surface that is not an operator**: a
+    /// controlled `DO` header's `initial`, `TO` and `BY` values.
+    ///
+    /// `Interp::header_number` rounds each through what is a real unary `+` on
+    /// the oracle, so all three answer 97.1 -- and `do i = 1 to .array` is why
+    /// "the operand on the right always agrees" is a fact about the binary
+    /// operators and not a rule: here every position converts through an
+    /// operator of its own.
+    ///
+    /// Before this, each answered 41.1 at rc 215 quoting the object's
+    /// rendering, where the pre-Phase-5 build refused the whole program.
+    #[test]
+    fn an_object_in_a_do_headers_numeric_position_is_loud() {
+        let cases: &[(&[u8], &str, &str)] = &[
+            (b"do i = .array to 5\nend\n", "initial", "a class object"),
+            (b"do i = 1 to .array\nend\n", "TO", "a class object"),
+            (b"do i = 1 to 5 by .array\nend\n", "BY", "a class object"),
+            (
+                b"do i = .environment to 5\nend\n",
+                "initial",
+                "one of the interpreter's own objects",
+            ),
+        ];
+        for (source, role, kind) in cases {
+            let (code, stdout, stderr) = both_engines(source);
+            let expected = format!(
+                "rexx-exec: {kind} as a controlled DO header's {role} value is not implemented \
+                 (Phase 5)\n"
+            );
+            assert_eq!(
+                (code, stdout.as_str(), stderr.as_str()),
+                (120, "", expected.as_str()),
+                "{:?}",
+                String::from_utf8_lossy(source)
+            );
+        }
+    }
+
+    /// The header positions that read the value's **text** rather than
+    /// converting it, which both implementations answer alike.
+    ///
+    /// The control for the test above, in the shape the concatenation family
+    /// is the control for the operator one: `whole_nonneg` never asks for a
+    /// number, so `FOR`, a bare `DO`'s repeat count and `NUMERIC DIGITS`
+    /// answer 26.3, 26.2 and 26.5 from the object's rendering on both sides.
+    /// `corpus/lang/environment_object_in_a_loop_header.rex` is the same
+    /// property against the live oracle.
+    #[test]
+    fn a_header_position_that_reads_text_keeps_the_oracles_own_diagnostic() {
+        for (source, major) in [
+            (&b"do i = 1 to 5 for .array\nend\n"[..], "26.3"),
+            (b"do .array\nend\n", "26.2"),
+            (b"numeric digits .array\n", "26.5"),
+        ] {
+            let (code, _stdout, stderr) = both_engines(source);
+            assert_eq!(code, 230, "{:?}", String::from_utf8_lossy(source));
+            assert!(
+                stderr.contains(&format!("Error {major}:")),
+                "{:?} reported {stderr:?}",
                 String::from_utf8_lossy(source)
             );
         }

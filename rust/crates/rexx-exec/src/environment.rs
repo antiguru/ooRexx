@@ -10,8 +10,8 @@
 /*----------------------------------------------------------------------------*/
 
 //! `.environment`, `.local`, `.context` and `.methods` as objects, the order a
-//! `.NAME` resolves in, and the one chokepoint the two directories are read
-//! through.
+//! `.NAME` resolves in, and the one chokepoint `.environment` and `.local`
+//! are read through.
 //!
 //! # The order, and why the obvious one is wrong
 //!
@@ -53,19 +53,19 @@
 //! The fallback -- a name nothing resolves renders as its own uppercased text
 //! with a period in front -- is right for a name the oracle does not resolve
 //! either, and a **silent wrong answer** for one it does. [`ORACLE_ENVIRONMENT`]
-//! and [`ORACLE_LOCAL`] are the two directories' contents, read off the
-//! oracle, and every name in them that this crate cannot answer fails loudly
-//! instead of falling back.
+//! and [`ORACLE_LOCAL`] are what `.environment` and `.local` hold, read off
+//! the oracle, and every name in them that this crate cannot answer fails
+//! loudly instead of falling back.
 //!
-//! # The two object names that come from the prologue
+//! # The object names that come from the prologue
 //!
 //! `.environment` renders as `The Environment Directory` and `.local` as `The
 //! Local Directory`, and neither name is `Setup.cpp`'s: `CoreClasses.orx:55`
 //! and `:990` assign them with `~objectName=`. They are built in here because
-//! the only oracle this crate can run is one that has already executed those
-//! two assignments, so matching it byte for byte means carrying their result.
-//! The prologue assigning the same two strings again when Phase 5a runs it
-//! changes nothing.
+//! the only oracle this crate can run is one that has already executed both
+//! assignments, so matching it byte for byte means carrying their result. The
+//! prologue assigning the same strings again when Phase 5a runs it changes
+//! nothing.
 
 use std::collections::{HashMap, HashSet};
 
@@ -648,8 +648,8 @@ mod tests {
         assert_eq!(default_object_name("RexxContext"), "a RexxContext");
     }
 
-    /// Every name the oracle's two directories hold either resolves here or
-    /// fails loudly -- never the dotted-text fallback, which for one of these
+    /// Every name the oracle's `.environment` and `.local` hold either
+    /// resolves here or fails loudly -- never the dotted-text fallback, which for one of these
     /// names would be a silent wrong answer at rc 0.
     ///
     /// **The fallback's own direction is asserted beside it**, because a build

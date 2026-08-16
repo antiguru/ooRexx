@@ -672,12 +672,15 @@ impl Loud {
     /// answers `1`, `1` and `1` -- three wrong answers at rc 0, where this
     /// crate refused the whole program before `.NAME` resolved at all.
     ///
-    /// **The right operand is not this**, measured the same way: `1 + .array`
-    /// is 41.1 quoting `"The Array class"` and `"a StringTable" == .methods`
-    /// is `1`, both of which this crate already answers identically, because
-    /// the oracle sends the operator to the *left* operand and that operand
-    /// converts the right one through `stringValue()` exactly as this crate
-    /// does.
+    /// **An operator's right operand is not this**, measured the same way:
+    /// `1 + .array` is 41.1 quoting `"The Array class"` and
+    /// `"a StringTable" == .methods` is `1`, both of which this crate already
+    /// answers identically, because the oracle sends the operator to the
+    /// *left* operand and that operand converts the right one through
+    /// `stringValue()` exactly as this crate does. **That is a fact about
+    /// operators and not a rule about right-hand operands**: a controlled `DO`
+    /// header rounds every position through a unary operator of its own, so
+    /// [`Loud::header_operand`] refuses `do i = 1 to .array` too.
     ///
     /// `op` is spelled by the caller rather than taken as an `Operator`,
     /// because a prefix operator and a binary one are different types with
@@ -686,6 +689,30 @@ impl Loud {
         Loud {
             message: owned_message(
                 &format!("the operator `{op}` applied to {kind}"),
+                Some("Phase 5"),
+            ),
+        }
+    }
+
+    /// A controlled `DO` header's `initial`, `TO` or `BY` value being one of
+    /// the objects [`Loud::operator_operand`] refuses.
+    ///
+    /// **The same defect at a surface that is not an operator**, which is why
+    /// it is a separate constructor: the program contains no operator to name,
+    /// and naming one would send a reader looking for something that is not
+    /// there. `round_via_unary_plus` is a real unary `+` on the oracle, so all
+    /// three positions answer 97.1 -- measured, `do i = .array to 5`,
+    /// `do i = 1 to .array` and `do i = 1 to 5 by .array` alike.
+    ///
+    /// **`do i = 1 to .array` is why "the right operand always agrees" is not
+    /// a rule.** It held for the binary operators, where the operand the
+    /// operator was sent to converts the other through `stringValue()`; it
+    /// does not hold here, where every position is rounded through a unary
+    /// operator of its own.
+    fn header_operand(role: &str, kind: &str) -> Loud {
+        Loud {
+            message: owned_message(
+                &format!("{kind} as a controlled DO header's {role} value"),
                 Some("Phase 5"),
             ),
         }

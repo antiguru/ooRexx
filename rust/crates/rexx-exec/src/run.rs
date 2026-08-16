@@ -754,6 +754,22 @@ impl HeaderRole {
             HeaderRole::Over => Some("OVER"),
         }
     }
+
+    /// How a loud failure names the position this value sits in.
+    ///
+    /// Not [`HeaderRole::keyword`]: that answers `None` for `Initial`, which
+    /// is right for a `>K>` tag the oracle does not print and useless in a
+    /// message that has to say which of a header's expressions was refused.
+    pub(crate) fn value_name(self) -> &'static str {
+        match self {
+            HeaderRole::Initial => "initial",
+            HeaderRole::To => "TO",
+            HeaderRole::By => "BY",
+            HeaderRole::For | HeaderRole::OverFor => "FOR",
+            HeaderRole::Count => "repeat count",
+            HeaderRole::Over => "OVER",
+        }
+    }
 }
 
 /// The header expressions of one `DO`/`LOOP`, in **the order they are
@@ -6204,9 +6220,9 @@ impl Interp {
         values: &mut LoopHeaderValues,
     ) -> Result<(), Failure> {
         match role {
-            HeaderRole::Initial => values.initial = Some(self.header_number(value)?),
-            HeaderRole::To => values.to = Some(self.header_number(value)?),
-            HeaderRole::By => values.by = Some(self.header_number(value)?),
+            HeaderRole::Initial => values.initial = Some(self.header_number(role, value)?),
+            HeaderRole::To => values.to = Some(self.header_number(role, value)?),
+            HeaderRole::By => values.by = Some(self.header_number(role, value)?),
             HeaderRole::For | HeaderRole::OverFor => {
                 let text = self.to_text(value).to_vec();
                 values.for_remaining = Some(
@@ -6228,8 +6244,24 @@ impl Interp {
 
     /// One controlled-loop header value as the `Number` the loop runs on:
     /// numeric (41.1 if not) and rounded at the digits in force.
-    fn header_number(&mut self, value: ObjRef) -> Result<Number, Failure> {
+    ///
+    /// **R12 reaches here, and this is the one numeric surface it reaches that
+    /// is not an operator.** `round_via_unary_plus` is a real unary `+` on the
+    /// oracle too, so `do i = 1 to .array` sends `+` to the object and answers
+    /// 97.1 -- measured, and measured in all three positions, which is why the
+    /// check is here rather than on the left-hand one. `FOR`, a bare `DO`'s
+    /// repeat count and `NUMERIC DIGITS` do **not** reach it: they go through
+    /// `whole_nonneg`, which reads the value's text, and both implementations
+    /// answer 26.3/26.2/26.5 from that text alike.
+    ///
+    /// A test in front rather than a rewrite of the failing path, unlike every
+    /// other R12 site: a header value is evaluated once per loop entry, not
+    /// once per iteration, so there is no hot path here to keep clear of.
+    fn header_number(&mut self, role: HeaderRole, value: ObjRef) -> Result<Number, Failure> {
         let entry_digits = self.activation().settings.digits();
+        if let Some(kind) = self.operator_operand_gap(value) {
+            return Err(Loud::header_operand(role.value_name(), kind).into());
+        }
         let operand = self.arith_operand(value)?;
         Ok(round_via_unary_plus(&operand, entry_digits).map_err(Raised::from)?)
     }

@@ -61,3 +61,10 @@ lang/environment_methods_table_attached.rex
 # implementations agree on. The half they do not is loud, which a corpus file
 # cannot witness, and `eval.rs`'s `object_operand_tests` carries instead.
 lang/environment_object_operands.rex
+
+# Task 6 fix round 2: the DO header's numeric positions convert their value
+# through a unary operator, so R12 reaches them too. This is the boundary
+# either side of the three it refuses -- FOR, a bare repeat count, NUMERIC
+# DIGITS and a builtin argument all read the value's text instead and go on
+# agreeing.
+lang/environment_object_in_a_loop_header.rex

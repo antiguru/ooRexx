@@ -870,6 +870,7 @@ const EXPECTED_SUBSET_5A: &[&str] = &[
     "lang/environment_methods_table_unattached.rex",
     "lang/environment_methods_table_attached.rex",
     "lang/environment_object_operands.rex",
+    "lang/environment_object_in_a_loop_header.rex",
 ];
 
 #[test]
